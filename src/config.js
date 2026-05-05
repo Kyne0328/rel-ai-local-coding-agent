@@ -38,7 +38,8 @@ function makeDefaultConfig() {
       docker: false,
       command: false,
       patch: false,
-      write: false
+      write: false,
+      merge: true
     },
     dashboardEnabled: true,
     defaultTaskMode: "implement_and_test",
@@ -57,6 +58,13 @@ function makeDefaultConfig() {
       requireApprovalBeforePush: true
     },
     sandboxMode: "none",
+    multiAgent: {
+      enabled: true,
+      maxSubtasks: 12,
+      maxParallelSubtasks: 3,
+      requireReviewBeforeMerge: true,
+      defaultRoles: ["planner", "implementer", "tester", "reviewer"]
+    },
     workspaces: {}
   };
 }
@@ -117,6 +125,10 @@ function normalizeConfig(config) {
   next.dashboardEnabled = next.dashboardEnabled !== false;
   next.defaultTaskMode = String(next.defaultTaskMode || base.defaultTaskMode);
   next.sandboxMode = ["none", "docker", "docker_readonly_base"].includes(String(next.sandboxMode)) ? String(next.sandboxMode) : "none";
+  next.multiAgent = { ...base.multiAgent, ...((config && config.multiAgent) || {}) };
+  next.multiAgent.maxSubtasks = Math.min(Math.max(Number(next.multiAgent.maxSubtasks || base.multiAgent.maxSubtasks), 1), 50);
+  next.multiAgent.maxParallelSubtasks = Math.min(Math.max(Number(next.multiAgent.maxParallelSubtasks || base.multiAgent.maxParallelSubtasks), 1), 20);
+  next.multiAgent.defaultRoles = Array.isArray(next.multiAgent.defaultRoles) ? next.multiAgent.defaultRoles.map(String).slice(0, 20) : base.multiAgent.defaultRoles;
   next.taskRunner = { ...base.taskRunner, ...((config && config.taskRunner) || {}) };
   next.ciRepair = { ...base.ciRepair, ...((config && config.ciRepair) || {}) };
   next.approvalGates = { ...base.approvalGates, ...((config && config.approvalGates) || {}) };
@@ -207,6 +219,7 @@ function publicConfigSummary(config) {
     taskRunner: config.taskRunner,
     ciRepair: config.ciRepair,
     sandboxMode: config.sandboxMode,
+    multiAgent: config.multiAgent,
     workspaces: Object.entries(config.workspaces || {}).map(([alias, entry]) => ({
       alias,
       path: entry.path,

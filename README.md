@@ -19,7 +19,21 @@ ChatGPT
 
 ## Version
 
-Current version: `0.6.0`
+Current version: `0.7.0`
+
+## What v0.7 adds
+
+v0.7 is the multi-agent and review release. It adds persistent subtasks, role-based task splitting, per-subtask sessions/worktrees, dependency graphs, changed-file conflict detection, reviewer-agent diff/PR summaries, and merge-back preflights. This is the first version aimed at splitting a larger coding request into planner/implementer/tester/reviewer/CI-repair lanes instead of treating every request as one linear task.
+
+- Adds `relai_task_split` to split a parent task into role-based or user-defined subtasks.
+- Adds subtask tools: `relai_subtask_create`, `relai_subtask_list`, `relai_subtask_read`, `relai_subtask_run`, and `relai_subtask_merge_back`.
+- Adds `relai_task_graph` and `relai_multiagent_status` for task graph/dashboard views.
+- Adds `relai_conflict_check` to detect changed-file overlap across parallel subtasks before merge-back.
+- Adds reviewer-agent tools: `relai_agent_review_diff`, `relai_pr_review_summary`, and `relai_agent_review_pr`.
+- Adds merge-back preflight using git merge-base/merge-tree before a subtask branch is merged.
+- Adds `multiAgent` config fields for subtask limits, parallelism, and review-before-merge policy.
+- Adds HTTP `/api/task/graph` for dashboard task-graph views.
+- Adds `npm run test:v7`, covering task splitting, subtask run, review-agent output, conflict checks, merge preflight, and dashboard multi-agent status.
 
 ## What v0.6 adds
 
@@ -102,6 +116,7 @@ npm run test:workflow
 npm run test:v4
 npm run test:v5
 npm run test:v6
+npm run test:v7
 ```
 
 There are no runtime npm dependencies. `npm install` is mainly useful if you want a lockfile.
@@ -547,6 +562,26 @@ The server still does not silently browse arbitrary disk paths. Everything is sc
 ---
 
 ## Version history
+
+### 0.7.0
+
+- Adds multi-agent task splitting through `relai_task_split`, supporting role-based defaults or explicit user-defined subtasks.
+- Adds persistent subtask records under `stateDir/multiagent/subtasks`.
+- Adds subtask tools: `relai_subtask_create`, `relai_subtask_list`, `relai_subtask_read`, `relai_subtask_run`, and `relai_subtask_merge_back`.
+- Adds per-subtask session/worktree support so each agent lane can run in its own isolated git worktree.
+- Adds role defaults for planner, implementer, tester, reviewer, and CI-repair subtasks.
+- Adds dependency enforcement so subtasks can block on planner/implementer/tester/reviewer lanes before running.
+- Adds `relai_task_graph` for parent-session graph views with subtask dependency edges.
+- Adds `relai_multiagent_status` for dashboard and operational status summaries.
+- Adds `relai_conflict_check` to detect changed-file overlap across subtasks before merge-back.
+- Adds reviewer-agent diff analysis through `relai_agent_review_diff`, including changed files, diff stats, risk level, findings, and review checklist.
+- Adds PR review summary tools through `relai_pr_review_summary` and `relai_agent_review_pr` using GitHub CLI metadata, checks, and diff risk review.
+- Adds subtask merge-back dry-run/preflight using git merge-base, changed-file listing, and merge-tree conflict detection.
+- Adds the `merge` approval gate for non-dry-run subtask merge-back.
+- Adds `multiAgent` config fields for subtask limits, parallelism, default roles, and review-before-merge policy.
+- Expands dashboard summary output and HTTP `/api/dashboard` with multi-agent status.
+- Adds HTTP `/api/task/graph` for task graph consumers.
+- Adds `npm run test:v7`, covering task split, subtask run, review-agent summary, conflict check, merge preflight, and dashboard multi-agent status.
 
 ### 0.6.0
 

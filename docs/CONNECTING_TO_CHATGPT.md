@@ -112,3 +112,22 @@ Use the existing Rel.AI MCP task session. Read the relevant files, propose a uni
 ```
 
 For PR workflows, keep approval gates enabled and ask for a session export before cleanup.
+
+## v0.7 multi-agent smoke prompt
+
+After the basic read/write smoke passes, test the multi-agent layer on a disposable repo:
+
+```text
+Use Rel.AI MCP on workspace sandbox.
+Split the task "add a small helper and validate it" into planner, implementer, tester, and reviewer subtasks.
+Run the planner subtask in plan-only mode.
+Run the implementer subtask only after the planner completes.
+Run conflict check across the parent task.
+Run reviewer diff analysis and stop before merge-back.
+```
+
+For merge-back, prefer dry-run first:
+
+```text
+Use relai_subtask_merge_back with dryRun=true for the implementer subtask. Do not perform a real merge unless I approve it.
+```

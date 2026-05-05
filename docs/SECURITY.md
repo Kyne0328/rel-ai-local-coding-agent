@@ -140,3 +140,17 @@ Recommended defaults:
 - Use `relai_session_export` for audit/debug records before deleting a task worktree.
 
 `relai_ci_repair_run` only runs configured repair commands unless `allowArbitraryCommands` is explicitly enabled. Do not enable arbitrary commands for shared or untrusted workspaces.
+
+## v0.7 multi-agent security notes
+
+The multi-agent layer does not create independent unbounded agents. It stores subtask records and gives each subtask its own session/worktree when requested. Every subtask still uses the same permission profile, workspace path validation, approval gates, command allowlists, and Git protections as normal tools.
+
+Recommended defaults:
+
+- Keep `multiAgent.requireReviewBeforeMerge=true`.
+- Keep the `merge` approval gate enabled for non-dry-run `relai_subtask_merge_back`.
+- Use `relai_conflict_check` before merging subtask branches.
+- Use `relai_agent_review_diff` before commit/push/PR when multiple subtasks touched the same area.
+- Keep `maxParallelSubtasks` low until the repo has reliable tests and branch hygiene.
+
+Non-dry-run merge-back is intentionally gated because it modifies the target branch checkout. Prefer dry-run merge preflight first.

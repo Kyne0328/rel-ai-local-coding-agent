@@ -8,6 +8,7 @@ const { listJobs } = require("./jobs");
 const approvals = require("./approvals");
 const locks = require("./locks");
 const taskRunner = require("./taskRunner");
+const multiagent = require("./multiagent");
 const { workspaceFromSession } = require("./worktrees");
 const pkg = require("../package.json");
 
@@ -80,8 +81,20 @@ async function routeRequest(req, res, options) {
       sessions: sessionsStore.listSessions(config, { limit }),
       jobs: listJobs(config, { limit }),
       approvals: approvals.listApprovals(config, { limit }),
-      locks: locks.listLocks(config).locks
+      locks: locks.listLocks(config).locks,
+      multiAgent: multiagent.multiagentStatus(config, { limit })
     });
+    return;
+  }
+
+  if (req.method === "GET" && parsed.pathname === "/api/task/graph") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    const config = readConfig();
+    const payload = multiagent.taskGraph(config, {
+      sessionId: parsed.searchParams.get("sessionId") || undefined,
+      parentSessionId: parsed.searchParams.get("parentSessionId") || undefined
+    });
+    sendJson(res, 200, payload);
     return;
   }
 
@@ -165,6 +178,7 @@ async function routeRequest(req, res, options) {
       dashboard: "GET /dashboard",
       dashboardApi: "GET /api/dashboard",
       sessionDiffApi: "GET /api/session/diff?workspace=...&sessionId=...",
+      taskGraphApi: "GET /api/task/graph?sessionId=...",
       sessionExportApi: "GET /api/session/export?workspace=...&sessionId=...",
       streamableHttp: "POST /mcp",
       sse: "GET /sse then POST /messages?sessionId=..."

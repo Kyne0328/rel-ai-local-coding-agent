@@ -19,6 +19,10 @@ function printUsage() {
   relai-mcp-config set sessionLocksEnabled <true|false>
   relai-mcp-config set maxIndexFiles <number>
   relai-mcp-config set maxIndexFileBytes <number>
+  relai-mcp-config set multiAgent.enabled <true|false>
+  relai-mcp-config set multiAgent.maxSubtasks <number>
+  relai-mcp-config set multiAgent.maxParallelSubtasks <number>
+  relai-mcp-config set multiAgent.requireReviewBeforeMerge <true|false>
   relai-mcp-config approval-gate set <action> <true|false>
 
 Config path: ${getConfigPath()}`);
@@ -62,6 +66,9 @@ function main() {
     const config = readConfig({ allowMissing: true });
     if (["allowGitHubCli", "allowDocker", "allowArbitraryCommands", "allowDestructiveTools", "dashboardEnabled", "sessionLocksEnabled"].includes(key)) {
       config[key] = parseBool(value, key);
+    } else if (key === "multiAgent.enabled" || key === "multiAgent.requireReviewBeforeMerge") {
+      config.multiAgent = config.multiAgent || {};
+      config.multiAgent[key.split(".")[1]] = parseBool(value, key);
     } else if (key === "permissionProfile") {
       if (!["read-only", "patch", "test", "pr", "admin"].includes(value)) throw new Error("permissionProfile must be one of: read-only, patch, test, pr, admin.");
       config[key] = value;
@@ -72,11 +79,17 @@ function main() {
       const number = Number(value);
       if (!Number.isFinite(number) || number <= 0) throw new Error(`${key} must be a positive number.`);
       config[key] = number;
+    } else if (["multiAgent.maxSubtasks", "multiAgent.maxParallelSubtasks"].includes(key)) {
+      const number = Number(value);
+      if (!Number.isFinite(number) || number <= 0) throw new Error(`${key} must be a positive number.`);
+      config.multiAgent = config.multiAgent || {};
+      config.multiAgent[key.split(".")[1]] = number;
     } else {
       throw new Error(`Unsupported setting '${key}'.`);
     }
     writeConfig(config);
-    console.log(`Set ${key}=${config[key]}`);
+    const printed = key.startsWith("multiAgent.") ? config.multiAgent[key.split(".")[1]] : config[key];
+    console.log(`Set ${key}=${printed}`);
     return;
   }
 

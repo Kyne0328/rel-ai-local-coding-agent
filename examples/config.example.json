@@ -63,7 +63,8 @@
     "docker": false,
     "command": false,
     "patch": false,
-    "write": false
+    "write": false,
+    "merge": true
   },
   "defaultTaskMode": "implement_and_test",
   "taskRunner": {
@@ -80,5 +81,17 @@
     "intervalSeconds": 15,
     "requireApprovalBeforePush": true
   },
-  "sandboxMode": "none"
+  "sandboxMode": "none",
+  "multiAgent": {
+    "enabled": true,
+    "maxSubtasks": 12,
+    "maxParallelSubtasks": 3,
+    "requireReviewBeforeMerge": true,
+    "defaultRoles": [
+      "planner",
+      "implementer",
+      "tester",
+      "reviewer"
+    ]
+  }
 }

@@ -39,7 +39,7 @@ process.env.REL_AI_MCP_CONFIG = configPath;
 const { callTool } = await import(path.join(root, "src", "tools.js"));
 
 const version = await callTool("relai_version", {});
-assert.equal(version.version, "0.6.0");
+assert.equal(version.version, "0.7.0");
 assert.ok(version.capabilities.includes("high-level task runner"));
 assert.ok(version.toolCount >= 75);
 

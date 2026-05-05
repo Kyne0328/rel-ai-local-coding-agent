@@ -31,6 +31,7 @@ const indexer = require("./indexer");
 const locks = require("./locks");
 const orchestrator = require("./orchestrator");
 const taskRunner = require("./taskRunner");
+const multiagent = require("./multiagent");
 const { enforcePermission } = require("./permissions");
 const pkg = require("../package.json");
 
@@ -47,6 +48,35 @@ const toolSchemas = [
   tool("relai_task_status", "Read Codex-like Task Status", "Read task session status, related plans, and orchestration metadata.", { sessionId: stringProp() }, ["sessionId"]),
   tool("relai_task_stop", "Stop Codex-like Task", "Mark a task session as stopped and append a control step.", { sessionId: stringProp(), reason: stringProp() }, ["sessionId"]),
   tool("relai_task_resume", "Resume Codex-like Task", "Mark a stopped/paused task session as active again.", { sessionId: stringProp(), note: stringProp() }, ["sessionId"]),
+
+  tool("relai_task_split", "Split Task Into Agent Subtasks", "Create role-based or user-defined subtasks under a parent session for multi-agent execution.", {
+    workspace: stringProp(), sessionId: stringProp(), goal: stringProp(), task: stringProp(), strategy: stringProp(), count: numberProp(1, 12), maxSubtasks: numberProp(1, 50), subtasks: arrayProp("object", 0, 50), branchPrefix: stringProp(), createWorktrees: boolProp(), fromRef: stringProp()
+  }, ["workspace"]),
+  tool("relai_subtask_create", "Create Agent Subtask", "Create a persistent subtask with its own role, session, and optional isolated worktree.", {
+    workspace: stringProp(), parentSessionId: stringProp(), role: stringProp(), title: stringProp(), goal: stringProp(), dependsOn: arrayProp("string", 0, 50), branchName: stringProp(), createSession: boolProp(), createWorktree: boolProp(), fromRef: stringProp()
+  }, ["workspace", "title"]),
+  tool("relai_subtask_list", "List Agent Subtasks", "List multi-agent subtasks, optionally scoped by parent session or status.", { parentSessionId: stringProp(), status: stringProp(), limit: numberProp(1, 1000) }),
+  tool("relai_subtask_read", "Read Agent Subtask", "Read a persistent multi-agent subtask record.", { subtaskId: stringProp() }, ["subtaskId"]),
+  tool("relai_subtask_run", "Run Agent Subtask", "Run one subtask through the high-level task runner using the role's default mode or an explicit mode.", {
+    workspace: stringProp(), subtaskId: stringProp(), mode: stringProp(), createWorktree: boolProp(), buildIndex: boolProp(), branchName: stringProp(), fromRef: stringProp(), patches: arrayProp("string", 0, 20), testCommandKeys: arrayProp("string", 0, 30), stopOnFailure: boolProp(), commitMessage: stringProp(), push: boolProp(), createPr: boolProp(), ignoreDependencies: boolProp()
+  }, ["workspace", "subtaskId"]),
+  tool("relai_subtask_merge_back", "Merge Agent Subtask Back", "Preflight or merge a completed subtask branch back to a target branch. Dry-run is default.", {
+    workspace: stringProp(), subtaskId: stringProp(), sourceBranch: stringProp(), targetBranch: stringProp(), dryRun: boolProp(), message: stringProp(), approvalId: stringProp()
+  }, ["workspace", "subtaskId"]),
+  tool("relai_conflict_check", "Check Multi-Agent Conflicts", "Detect changed-file overlap across subtasks before merge-back.", {
+    workspace: stringProp(), parentSessionId: stringProp(), subtaskIds: arrayProp("string", 0, 100)
+  }, ["workspace"]),
+  tool("relai_agent_review_diff", "Agent Review Current Diff", "Run a reviewer-style heuristic pass over the current diff or a git revision.", {
+    workspace: stringProp(), sessionId: stringProp(), staged: boolProp(), rev: stringProp(), largeDiffThreshold: numberProp(1, 100000)
+  }, ["workspace"]),
+  tool("relai_pr_review_summary", "Summarize Pull Request For Review", "Use GitHub CLI to summarize PR metadata, checks, diff risk, and review checklist.", {
+    workspace: stringProp(), pr: stringProp(), sessionId: stringProp(), largeDiffThreshold: numberProp(1, 100000)
+  }, ["workspace"]),
+  tool("relai_agent_review_pr", "Agent Review Pull Request", "Record a reviewer-agent summary of a pull request and its checks.", {
+    workspace: stringProp(), pr: stringProp(), sessionId: stringProp(), largeDiffThreshold: numberProp(1, 100000)
+  }, ["workspace"]),
+  tool("relai_task_graph", "Read Multi-Agent Task Graph", "Return parent session, plans, subtasks, and dependency edges for dashboard/task graph views.", { sessionId: stringProp(), parentSessionId: stringProp() }),
+  tool("relai_multiagent_status", "Read Multi-Agent Status", "Return multi-agent subtask status counts and summaries.", { parentSessionId: stringProp(), status: stringProp(), limit: numberProp(1, 1000) }),
 
   tool("relai_approval_request", "Request Approval Gate", "Create a pending approval record for gated write, patch, command, Docker, commit, push, PR, reset, or worktree-removal actions.", {
     action: stringProp(), workspace: stringProp(), sessionId: stringProp(), summary: stringProp(), data: objectProp()
@@ -261,6 +291,32 @@ async function dispatchTool(config, name, args) {
       return taskRunner.taskStop(config, args);
     case "relai_task_resume":
       return taskRunner.taskResume(config, args);
+
+    case "relai_task_split":
+      return withWorkspace(config, args, (workspace) => multiagent.taskSplit(config, workspace, args));
+    case "relai_subtask_create":
+      return withWorkspace(config, args, (workspace) => multiagent.subtaskCreate(config, workspace, args));
+    case "relai_subtask_list":
+      return { subtasks: multiagent.listSubtasks(config, args) };
+    case "relai_subtask_read":
+      return multiagent.readSubtask(config, args.subtaskId);
+    case "relai_subtask_run":
+      return withWorkspace(config, args, (workspace) => multiagent.subtaskRun(config, workspace, args));
+    case "relai_subtask_merge_back":
+      approvals.requireApproval(config, "merge", args);
+      return withWorkspace(config, args, (workspace) => multiagent.subtaskMergeBack(config, workspace, args));
+    case "relai_conflict_check":
+      return withWorkspace(config, args, (workspace) => multiagent.conflictCheck(config, workspace, args));
+    case "relai_agent_review_diff":
+      return withWorkspace(config, args, (workspace) => multiagent.agentReviewDiff(config, workspace, args));
+    case "relai_pr_review_summary":
+      return withWorkspace(config, args, (workspace) => multiagent.prReviewSummary(config, workspace, args));
+    case "relai_agent_review_pr":
+      return withWorkspace(config, args, (workspace) => multiagent.agentReviewPr(config, workspace, args));
+    case "relai_task_graph":
+      return multiagent.taskGraph(config, args);
+    case "relai_multiagent_status":
+      return multiagent.multiagentStatus(config, args);
 
     case "relai_approval_request":
       return approvals.createApproval(config, args);
@@ -504,7 +560,13 @@ function versionInfo() {
       "CI watch and repair loop",
       "session diff/export tools",
       "repository relevance and test suggestion tools",
-      "approval grant/deny aliases"
+      "approval grant/deny aliases",
+      "multi-agent task splitting",
+      "agent subtask sessions and worktrees",
+      "subtask dependency graph",
+      "changed-file conflict detection",
+      "review-agent diff and PR summaries",
+      "subtask merge-back preflight"
     ]
   };
 }
@@ -518,7 +580,8 @@ function dashboardSummary(config, args = {}) {
     sessions: sessions.listSessions(config, { limit }),
     jobs: listJobs(config, { limit }),
     approvals: approvals.listApprovals(config, { limit }),
-    locks: locks.listLocks(config).locks
+    locks: locks.listLocks(config).locks,
+    multiAgent: multiagent.multiagentStatus(config, { limit })
   };
 }
 
