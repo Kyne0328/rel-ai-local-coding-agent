@@ -6,6 +6,8 @@ const { runProcess, summarizeCommand } = require("./process");
 const { logAudit, readAudit } = require("./audit");
 const sessions = require("./sessions");
 const {
+  runGit,
+  currentBranch,
   gitStatus,
   gitDiff,
   gitLog,
@@ -20,6 +22,10 @@ const {
   prChecksWithGh,
   runConfiguredCommand
 } = require("./git");
+const { createTaskWorktree, listWorktrees, removeTaskWorktree, workspaceFromSession } = require("./worktrees");
+const { startCommandJob, jobStatus, listJobs, cancelJob } = require("./jobs");
+const { runDocker } = require("./docker");
+const { enforcePermission } = require("./permissions");
 const pkg = require("../package.json");
 
 const toolSchemas = [
@@ -38,28 +44,37 @@ const toolSchemas = [
   tool("relai_task_update", "Update Task Session", "Update task session status, branch, or summary.", {
     sessionId: stringProp(), status: stringProp(), summary: stringProp(), branch: stringProp()
   }, ["sessionId"]),
-
-  tool("relai_workspace_tree", "Workspace Tree", "Return a safe filtered file tree for a configured workspace alias. Generated/cache folders and sensitive paths are skipped.", {
-    workspace: stringProp(), maxEntries: numberProp(1, 10000)
-  }, ["workspace"]),
-  tool("relai_workspace_profile", "Workspace Profile", "Detect common stack manifests and summarize likely package manager/test surface.", {
+  tool("relai_task_worktree_create", "Create Task Worktree", "Create an isolated git worktree for a task session and attach it to that session.", {
+    sessionId: stringProp(), workspace: stringProp(), branchName: stringProp(), fromRef: stringProp()
+  }, ["sessionId"]),
+  tool("relai_task_worktree_remove", "Remove Task Worktree", "Remove a task session worktree after review/merge. Requires admin permission profile.", {
+    sessionId: stringProp(), workspace: stringProp(), force: boolProp(), closeSession: boolProp()
+  }, ["sessionId"]),
+  tool("relai_worktree_list", "List Git Worktrees", "List git worktrees for a configured workspace.", {
     workspace: stringProp()
   }, ["workspace"]),
-  tool("relai_read_files", "Read Workspace Files", "Read specific safe text files. Rejects traversal, secret-looking paths, large files, binary files, and escaping symlinks.", {
-    workspace: stringProp(), paths: arrayProp("string", 1, 100), includeSha256: boolProp()
+
+  tool("relai_workspace_tree", "Workspace Tree", "Return a safe filtered file tree for a configured workspace alias or attached task worktree. Generated/cache folders and sensitive paths are skipped.", {
+    workspace: stringProp(), sessionId: stringProp(), maxEntries: numberProp(1, 20000)
+  }, ["workspace"]),
+  tool("relai_workspace_profile", "Workspace Profile", "Detect common stack manifests and summarize likely package manager/test surface.", {
+    workspace: stringProp(), sessionId: stringProp()
+  }, ["workspace"]),
+  tool("relai_read_files", "Read Workspace Files", "Read specific safe text files from a workspace or attached task worktree. Rejects traversal, secret-looking paths, large files, binary files, and escaping symlinks.", {
+    workspace: stringProp(), sessionId: stringProp(), paths: arrayProp("string", 1, 100), includeSha256: boolProp()
   }, ["workspace", "paths"]),
-  tool("relai_write_file", "Write Workspace Text File", "Create or replace a safe text file. Supports expectedSha256 optimistic locking.", {
-    workspace: stringProp(), path: stringProp(), content: stringProp(), expectedSha256: stringProp()
+  tool("relai_write_file", "Write Workspace Text File", "Create or replace a safe text file in a workspace or task worktree. Supports expectedSha256 optimistic locking.", {
+    workspace: stringProp(), sessionId: stringProp(), path: stringProp(), content: stringProp(), expectedSha256: stringProp()
   }, ["workspace", "path", "content"]),
   tool("relai_search", "Search Workspace Text", "Literal text search across safe text files.", {
-    workspace: stringProp(), query: stringProp(), maxMatches: numberProp(1, 500)
+    workspace: stringProp(), sessionId: stringProp(), query: stringProp(), maxMatches: numberProp(1, 500)
   }, ["workspace", "query"]),
   tool("relai_context_pack", "Build Focused Context Pack", "Build a focused coding context pack from explicit files plus search terms.", {
-    workspace: stringProp(), paths: arrayProp("string", 0, 100), searchTerms: arrayProp("string", 0, 20), maxSearchMatches: numberProp(1, 300), includeTree: boolProp()
+    workspace: stringProp(), sessionId: stringProp(), paths: arrayProp("string", 0, 100), searchTerms: arrayProp("string", 0, 20), maxSearchMatches: numberProp(1, 300), includeTree: boolProp()
   }, ["workspace"]),
 
   tool("relai_apply_patch", "Apply Unified Diff", "Validate and apply a unified diff with git apply. Use dryRun=true first for check-only mode.", {
-    workspace: stringProp(), diff: stringProp(), dryRun: boolProp()
+    workspace: stringProp(), sessionId: stringProp(), diff: stringProp(), dryRun: boolProp()
   }, ["workspace", "diff"]),
   tool("relai_apply_patch_and_run", "Apply Patch And Run Tests", "Apply a patch, then run selected allowlisted tests. This is the main Codex-like build/verify tool.", {
     workspace: stringProp(), diff: stringProp(), dryRun: boolProp(), testCommandKeys: arrayProp("string", 0, 20), stopOnFailure: boolProp(), sessionId: stringProp()
@@ -73,16 +88,34 @@ const toolSchemas = [
   tool("relai_run_command", "Run Configured Dev Command", "Run an allowlisted dev command by key, or an arbitrary command only if explicitly enabled in config.", {
     workspace: stringProp(), commandKey: stringProp(), command: stringProp(), sessionId: stringProp()
   }, ["workspace"]),
+  tool("relai_patch_test_loop", "Patch Test Loop", "Run a Codex-like patch/test cycle over one or more diffs, stopping at first patch or test failure.", {
+    workspace: stringProp(), sessionId: stringProp(), patches: arrayProp("string", 1, 10), testCommandKeys: arrayProp("string", 0, 30), stopOnFailure: boolProp()
+  }, ["patches"]),
+  tool("relai_job_start_command", "Start Background Command Job", "Start an allowlisted test or dev command as a background job and return a job id for polling.", {
+    workspace: stringProp(), sessionId: stringProp(), testCommandKey: stringProp(), commandKey: stringProp()
+  }, ["workspace"]),
+  tool("relai_job_status", "Read Background Job Status", "Read job metadata and stdout/stderr tails.", {
+    jobId: stringProp(), tailBytes: numberProp(0, 200000)
+  }, ["jobId"]),
+  tool("relai_job_list", "List Background Jobs", "List recent background jobs.", {
+    limit: numberProp(1, 500)
+  }),
+  tool("relai_job_cancel", "Cancel Background Job", "Send SIGTERM or SIGKILL to a live background job. Requires admin permission profile.", {
+    jobId: stringProp(), force: boolProp()
+  }, ["jobId"]),
+  tool("relai_docker_run", "Run Command In Docker Sandbox", "Run an allowlisted test/dev command inside an allowlisted Docker image with the workspace mounted at /workspace.", {
+    workspace: stringProp(), sessionId: stringProp(), image: stringProp(), testCommandKey: stringProp(), commandKey: stringProp(), network: stringProp()
+  }, ["workspace"]),
 
-  tool("relai_git_status", "Git Status", "Return git branch, cleanliness, and short status.", { workspace: stringProp() }, ["workspace"]),
+  tool("relai_git_status", "Git Status", "Return git branch, cleanliness, and short status.", { workspace: stringProp(), sessionId: stringProp() }, ["workspace"]),
   tool("relai_git_diff", "Git Diff", "Return current unstaged or staged git diff.", {
-    workspace: stringProp(), staged: boolProp(), path: stringProp()
+    workspace: stringProp(), sessionId: stringProp(), staged: boolProp(), path: stringProp()
   }, ["workspace"]),
   tool("relai_git_log", "Git Log", "Return recent commits, optionally for one file.", {
-    workspace: stringProp(), limit: numberProp(1, 100), path: stringProp()
+    workspace: stringProp(), sessionId: stringProp(), limit: numberProp(1, 100), path: stringProp()
   }, ["workspace"]),
   tool("relai_git_show", "Git Show", "Show one commit/ref with stat and patch.", {
-    workspace: stringProp(), rev: stringProp()
+    workspace: stringProp(), sessionId: stringProp(), rev: stringProp()
   }, ["workspace", "rev"]),
   tool("relai_create_branch", "Create Git Branch", "Create and switch to a feature branch. Refuses protected branch names.", {
     workspace: stringProp(), branchName: stringProp(), fromRef: stringProp(), sessionId: stringProp()
@@ -101,6 +134,12 @@ const toolSchemas = [
   }, ["workspace", "title"]),
   tool("relai_pr_checks", "Pull Request Checks Via GitHub CLI", "Read PR checks through gh pr checks. Disabled unless allowGitHubCli is true.", {
     workspace: stringProp(), pr: stringProp(), sessionId: stringProp()
+  }, ["workspace"]),
+  tool("relai_pr_watch_checks", "Watch Pull Request Checks", "Poll gh pr checks several times and return the timeline. Use this to repair CI failures after pushing.", {
+    workspace: stringProp(), pr: stringProp(), sessionId: stringProp(), attempts: numberProp(1, 20), intervalSeconds: numberProp(1, 120)
+  }, ["workspace"]),
+  tool("relai_git_reset_worktree", "Reset Task Worktree", "Hard reset and optionally clean a task worktree. Requires admin permission profile and a task session worktree unless destructive tools are enabled.", {
+    workspace: stringProp(), sessionId: stringProp(), clean: boolProp()
   }, ["workspace"])
 ];
 
@@ -108,6 +147,7 @@ async function callTool(name, args = {}) {
   const config = readConfig();
   const started = Date.now();
   try {
+    enforcePermission(config, name);
     const value = await dispatchTool(config, name, args || {});
     logAudit(config, { tool: name, ok: true, workspace: args && args.workspace, sessionId: args && args.sessionId, ms: Date.now() - started });
     return ok(value);
@@ -137,6 +177,18 @@ async function dispatchTool(config, name, args) {
       return sessions.appendStep(config, args);
     case "relai_task_update":
       return sessions.updateSession(config, args);
+    case "relai_task_worktree_create": {
+      const session = sessions.readSession(config, args.sessionId);
+      const base = resolveWorkspace(config, args.workspace || session.workspace);
+      return createTaskWorktree(config, base, { ...args, workspace: base.alias });
+    }
+    case "relai_task_worktree_remove": {
+      const session = sessions.readSession(config, args.sessionId);
+      const base = resolveWorkspace(config, args.workspace || session.workspace);
+      return removeTaskWorktree(config, base, args);
+    }
+    case "relai_worktree_list":
+      return withWorkspace(config, args, (workspace) => listWorktrees(workspace, config));
 
     case "relai_workspace_tree":
       return workspaceTree(config, args);
@@ -145,14 +197,14 @@ async function dispatchTool(config, name, args) {
     case "relai_read_files":
       return readFiles(config, args);
     case "relai_write_file":
-      return withWorkspace(config, args.workspace, (workspace) => writeTextFileSafe(workspace.path, args.path, args.content, { maxBytes: config.maxWriteFileBytes, expectedSha256: args.expectedSha256 }));
+      return withWorkspace(config, args, (workspace) => writeTextFileSafe(workspace.path, args.path, args.content, { maxBytes: config.maxWriteFileBytes, expectedSha256: args.expectedSha256 }));
     case "relai_search":
       return searchWorkspace(config, args);
     case "relai_context_pack":
       return contextPack(config, args);
 
     case "relai_apply_patch":
-      return withWorkspace(config, args.workspace, (workspace) => applyPatch(workspace, config, args.diff, { dryRun: Boolean(args.dryRun) }));
+      return withWorkspace(config, args, (workspace) => applyPatch(workspace, config, args.diff, { dryRun: Boolean(args.dryRun) }));
     case "relai_apply_patch_and_run":
       return recordMaybe(config, args, "patch_and_test", async (workspace) => applyPatchAndRun(workspace, config, args));
     case "relai_run_test":
@@ -161,21 +213,33 @@ async function dispatchTool(config, name, args) {
       return recordMaybe(config, args, "test_matrix", async () => runTestMatrix(config, args));
     case "relai_run_command":
       return recordMaybe(config, args, "command", async (workspace) => runConfiguredCommand(workspace, config, args));
+    case "relai_patch_test_loop":
+      return recordMaybe(config, args, "patch_test_loop", async (workspace) => patchTestLoop(workspace, config, args));
+    case "relai_job_start_command":
+      return withWorkspace(config, args, (workspace) => startCommandJob(config, workspace, args));
+    case "relai_job_status":
+      return jobStatus(config, args);
+    case "relai_job_list":
+      return { jobs: listJobs(config, { limit: args.limit }) };
+    case "relai_job_cancel":
+      return cancelJob(config, args);
+    case "relai_docker_run":
+      return recordMaybe(config, args, "docker", async (workspace) => runDocker(config, workspace, args));
 
     case "relai_git_status":
-      return withWorkspace(config, args.workspace, (workspace) => gitStatus(workspace, config));
+      return withWorkspace(config, args, (workspace) => gitStatus(workspace, config));
     case "relai_git_diff":
-      return withWorkspace(config, args.workspace, (workspace) => {
+      return withWorkspace(config, args, (workspace) => {
         const safePath = args.path ? resolveSafePath(workspace.path, args.path).relativePath : undefined;
         return gitDiff(workspace, config, { staged: Boolean(args.staged), path: safePath });
       });
     case "relai_git_log":
-      return withWorkspace(config, args.workspace, (workspace) => {
+      return withWorkspace(config, args, (workspace) => {
         const safePath = args.path ? resolveSafePath(workspace.path, args.path).relativePath : undefined;
         return gitLog(workspace, config, { limit: args.limit, path: safePath });
       });
     case "relai_git_show":
-      return withWorkspace(config, args.workspace, (workspace) => gitShow(workspace, config, args.rev));
+      return withWorkspace(config, args, (workspace) => gitShow(workspace, config, args.rev));
     case "relai_create_branch":
       return recordMaybe(config, args, "branch", async (workspace) => createBranch(workspace, config, args.branchName, { fromRef: args.fromRef }));
     case "relai_switch_branch":
@@ -188,13 +252,17 @@ async function dispatchTool(config, name, args) {
       return recordMaybe(config, args, "pr", async (workspace) => createPrWithGh(workspace, config, args));
     case "relai_pr_checks":
       return recordMaybe(config, args, "checks", async (workspace) => prChecksWithGh(workspace, config, args));
+    case "relai_pr_watch_checks":
+      return recordMaybe(config, args, "checks", async (workspace) => watchPrChecks(workspace, config, args));
+    case "relai_git_reset_worktree":
+      return recordMaybe(config, args, "reset", async (workspace) => resetWorktree(workspace, config, args));
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
 }
 
 async function recordMaybe(config, args, type, fn) {
-  const result = await withWorkspace(config, args.workspace, fn);
+  const result = await withWorkspace(config, args, fn);
   if (args.sessionId) {
     sessions.appendStep(config, {
       sessionId: args.sessionId,
@@ -208,7 +276,7 @@ async function recordMaybe(config, args, type, fn) {
 }
 
 function titleFromType(type) {
-  return ({ patch_and_test: "Applied patch and ran tests", test: "Ran test", test_matrix: "Ran test matrix", command: "Ran command", branch: "Created branch", commit: "Committed changes", push: "Pushed branch", pr: "Created PR", checks: "Read PR checks" })[type] || type;
+  return ({ patch_and_test: "Applied patch and ran tests", test: "Ran test", test_matrix: "Ran test matrix", command: "Ran command", branch: "Created branch", commit: "Committed changes", push: "Pushed branch", pr: "Created PR", checks: "Read PR checks", docker: "Ran Docker command", patch_test_loop: "Ran patch/test loop", reset: "Reset worktree" })[type] || type;
 }
 
 function compactData(result) {
@@ -216,8 +284,14 @@ function compactData(result) {
   return { ok: Boolean(result.ok), message: result.message, branch: result.branch, touchedPaths: result.touchedPaths };
 }
 
-async function withWorkspace(config, alias, fn) {
-  const workspace = resolveWorkspace(config, alias);
+async function withWorkspace(config, requestOrAlias, fn) {
+  const request = requestOrAlias && typeof requestOrAlias === "object" ? requestOrAlias : { workspace: requestOrAlias };
+  let alias = request.workspace;
+  if (!alias && request.sessionId) {
+    alias = sessions.readSession(config, request.sessionId).workspace;
+  }
+  const base = resolveWorkspace(config, alias);
+  const workspace = request.sessionId ? workspaceFromSession(config, base, request.sessionId) : base;
   return fn(workspace);
 }
 
@@ -237,13 +311,19 @@ function versionInfo() {
       "test matrix",
       "configured command runner",
       "git branch/diff/log/commit/push",
-      "GitHub CLI PR creation/checks"
+      "GitHub CLI PR creation/checks",
+      "worktree-per-task isolation",
+      "background job queue",
+      "Docker sandbox hooks",
+      "CI check watcher",
+      "permission profiles",
+      "task worktree reset/remove"
     ]
   };
 }
 
 function workspaceTree(config, args) {
-  const workspace = resolveWorkspace(config, args.workspace);
+  const workspace = resolveTargetWorkspace(config, args);
   const result = collectTextFiles(workspace.path, {
     maxEntries: args.maxEntries || config.maxTreeEntries,
     maxFileBytes: config.maxSearchFileBytes
@@ -259,7 +339,7 @@ function workspaceTree(config, args) {
 }
 
 function workspaceProfile(config, args) {
-  const workspace = resolveWorkspace(config, args.workspace);
+  const workspace = resolveTargetWorkspace(config, args);
   const manifests = [
     "package.json", "pnpm-lock.yaml", "yarn.lock", "package-lock.json", "bun.lockb",
     "pyproject.toml", "requirements.txt", "poetry.lock", "Pipfile",
@@ -291,7 +371,7 @@ function workspaceProfile(config, args) {
 }
 
 function readFiles(config, args) {
-  const workspace = resolveWorkspace(config, args.workspace);
+  const workspace = resolveTargetWorkspace(config, args);
   const paths = Array.isArray(args.paths) ? args.paths : [];
   if (paths.length === 0) throw new Error("paths must contain at least one file.");
   const files = [];
@@ -312,7 +392,7 @@ function readFiles(config, args) {
 }
 
 function searchWorkspace(config, args) {
-  const workspace = resolveWorkspace(config, args.workspace);
+  const workspace = resolveTargetWorkspace(config, args);
   const query = String(args.query || "");
   if (!query.trim()) throw new Error("query is required.");
   const maxMatches = Math.min(Math.max(Number(args.maxMatches || 50), 1), 500);
@@ -334,7 +414,7 @@ function searchWorkspace(config, args) {
 }
 
 function contextPack(config, args) {
-  const workspace = resolveWorkspace(config, args.workspace);
+  const workspace = resolveTargetWorkspace(config, args);
   const explicit = readFiles(config, { workspace: workspace.alias, paths: Array.isArray(args.paths) ? args.paths : [], includeSha256: true });
   const searches = [];
   for (const term of Array.isArray(args.searchTerms) ? args.searchTerms : []) {
@@ -346,7 +426,7 @@ function contextPack(config, args) {
 }
 
 async function runTest(config, args) {
-  const workspace = resolveWorkspace(config, args.workspace);
+  const workspace = resolveTargetWorkspace(config, args);
   const key = String(args.testCommandKey || "").trim();
   if (!key) throw new Error("testCommandKey is required.");
   const command = workspace.testCommands && workspace.testCommands[key];
@@ -365,6 +445,53 @@ async function runTestMatrix(config, args) {
     if (!result.ok && args.stopOnFailure !== false) break;
   }
   return { ok: results.every((item) => item.ok), workspace: args.workspace, results };
+}
+
+function resolveTargetWorkspace(config, args = {}) {
+  let alias = args.workspace;
+  if (!alias && args.sessionId) alias = sessions.readSession(config, args.sessionId).workspace;
+  const base = resolveWorkspace(config, alias);
+  return args.sessionId ? workspaceFromSession(config, base, args.sessionId) : base;
+}
+
+async function patchTestLoop(workspace, config, args = {}) {
+  const patches = Array.isArray(args.patches) ? args.patches : [];
+  if (patches.length === 0) throw new Error("patches must contain at least one diff.");
+  const cycles = [];
+  for (let i = 0; i < patches.length; i += 1) {
+    const result = await applyPatchAndRun(workspace, config, {
+      diff: patches[i],
+      testCommandKeys: Array.isArray(args.testCommandKeys) ? args.testCommandKeys : [],
+      stopOnFailure: args.stopOnFailure !== false
+    });
+    cycles.push({ index: i, ...result });
+    if (!result.ok && args.stopOnFailure !== false) break;
+  }
+  return { ok: cycles.every((cycle) => cycle.ok), workspace: workspace.alias, cycles };
+}
+
+async function watchPrChecks(workspace, config, args = {}) {
+  const attempts = Math.min(Math.max(Number(args.attempts || 3), 1), 20);
+  const intervalMs = Math.min(Math.max(Number(args.intervalSeconds || 5), 1), 120) * 1000;
+  const timeline = [];
+  for (let i = 0; i < attempts; i += 1) {
+    const result = await prChecksWithGh(workspace, config, args);
+    timeline.push({ attempt: i + 1, ts: new Date().toISOString(), ...result });
+    const text = `${result.result && result.result.stdout || ""}
+${result.result && result.result.stderr || ""}`;
+    if (result.ok && !/pending|queued|in_progress|waiting/i.test(text)) break;
+    if (i < attempts - 1) await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  return { ok: timeline.length > 0 && timeline[timeline.length - 1].ok, attempts: timeline.length, timeline };
+}
+
+async function resetWorktree(workspace, config, args = {}) {
+  if (!workspace.taskSessionId && !workspace.allowDestructiveTools) {
+    throw new Error("Hard reset is only allowed for attached task worktrees unless allowDestructiveTools is enabled.");
+  }
+  const reset = await runGit(["reset", "--hard"], workspace, config);
+  const clean = args.clean ? await runGit(["clean", "-fd"], workspace, config) : null;
+  return { ok: reset.exitCode === 0 && (!clean || clean.exitCode === 0), reset: summarizeCommand(reset), ...(clean ? { clean: summarizeCommand(clean) } : {}) };
 }
 
 function ok(value) {

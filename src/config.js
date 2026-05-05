@@ -16,9 +16,12 @@ function makeDefaultConfig() {
     maxSearchFileBytes: 300000,
     maxOutputBytes: 2 * 1024 * 1024,
     commandTimeoutMs: 20 * 60 * 1000,
-    maxTreeEntries: 5000,
-    maxSessionSteps: 300,
+    maxTreeEntries: 12000,
+    maxSessionSteps: 1000,
+    worktreeRoot: path.join(os.homedir(), ".rel-ai-mcp", "worktrees"),
+    permissionProfile: "pr",
     allowGitHubCli: false,
+    allowDocker: false,
     allowArbitraryCommands: false,
     allowDestructiveTools: false,
     workspaces: {}
@@ -66,11 +69,15 @@ function normalizeConfig(config) {
   if (!path.isAbsolute(next.stateDir)) next.stateDir = path.resolve(next.stateDir);
   next.auditLogPath = next.auditLogPath ? expandHome(next.auditLogPath) : path.join(next.stateDir, "audit.jsonl");
   if (!path.isAbsolute(next.auditLogPath)) next.auditLogPath = path.resolve(next.auditLogPath);
+  next.worktreeRoot = expandHome(next.worktreeRoot || path.join(next.stateDir, "worktrees"));
+  if (!path.isAbsolute(next.worktreeRoot)) next.worktreeRoot = path.resolve(next.worktreeRoot);
+  next.permissionProfile = String(next.permissionProfile || "pr");
 
   for (const key of ["maxReadFileBytes", "maxWriteFileBytes", "maxSearchFileBytes", "maxOutputBytes", "commandTimeoutMs", "maxTreeEntries", "maxSessionSteps"]) {
     if (!Number.isFinite(next[key]) || next[key] <= 0) next[key] = base[key];
   }
   next.allowGitHubCli = Boolean(next.allowGitHubCli);
+  next.allowDocker = Boolean(next.allowDocker);
   next.allowArbitraryCommands = Boolean(next.allowArbitraryCommands);
   next.allowDestructiveTools = Boolean(next.allowDestructiveTools);
 
@@ -89,6 +96,12 @@ function normalizeWorkspace(workspace) {
     defaultBaseBranch: workspace.defaultBaseBranch || "main",
     allowedRemotes: Array.isArray(workspace.allowedRemotes) ? workspace.allowedRemotes : ["origin"],
     repoSlug: workspace.repoSlug || "",
+    worktreeRoot: workspace.worktreeRoot || "",
+    defaultDockerImage: workspace.defaultDockerImage || "",
+    allowedDockerImages: Array.isArray(workspace.allowedDockerImages) ? workspace.allowedDockerImages : [],
+    dockerUser: workspace.dockerUser || "",
+    dockerNetworkNone: workspace.dockerNetworkNone !== false,
+    allowDocker: Boolean(workspace.allowDocker),
     allowArbitraryCommands: Boolean(workspace.allowArbitraryCommands),
     allowDestructiveTools: Boolean(workspace.allowDestructiveTools)
   };
@@ -114,6 +127,12 @@ function resolveWorkspace(config, alias) {
     defaultBaseBranch: entry.defaultBaseBranch || "main",
     allowedRemotes: entry.allowedRemotes || ["origin"],
     repoSlug: entry.repoSlug || "",
+    worktreeRoot: entry.worktreeRoot ? expandHome(entry.worktreeRoot) : config.worktreeRoot,
+    defaultDockerImage: entry.defaultDockerImage || "",
+    allowedDockerImages: entry.allowedDockerImages || [],
+    dockerUser: entry.dockerUser || "",
+    dockerNetworkNone: entry.dockerNetworkNone !== false,
+    allowDocker: Boolean(entry.allowDocker || config.allowDocker),
     allowArbitraryCommands: Boolean(entry.allowArbitraryCommands || config.allowArbitraryCommands),
     allowDestructiveTools: Boolean(entry.allowDestructiveTools || config.allowDestructiveTools)
   };
@@ -131,7 +150,10 @@ function publicConfigSummary(config) {
     commandTimeoutMs: config.commandTimeoutMs,
     maxTreeEntries: config.maxTreeEntries,
     maxSessionSteps: config.maxSessionSteps,
+    worktreeRoot: config.worktreeRoot,
+    permissionProfile: config.permissionProfile,
     allowGitHubCli: Boolean(config.allowGitHubCli),
+    allowDocker: Boolean(config.allowDocker),
     allowArbitraryCommands: Boolean(config.allowArbitraryCommands),
     allowDestructiveTools: Boolean(config.allowDestructiveTools),
     workspaces: Object.entries(config.workspaces || {}).map(([alias, entry]) => ({
@@ -143,6 +165,10 @@ function publicConfigSummary(config) {
       defaultBaseBranch: entry.defaultBaseBranch || "main",
       allowedRemotes: entry.allowedRemotes || ["origin"],
       repoSlug: entry.repoSlug || "",
+      worktreeRoot: entry.worktreeRoot || "",
+      defaultDockerImage: entry.defaultDockerImage || "",
+      allowedDockerImages: entry.allowedDockerImages || [],
+      allowDocker: Boolean(entry.allowDocker),
       allowArbitraryCommands: Boolean(entry.allowArbitraryCommands),
       allowDestructiveTools: Boolean(entry.allowDestructiveTools)
     })).sort((a, b) => a.alias.localeCompare(b.alias))

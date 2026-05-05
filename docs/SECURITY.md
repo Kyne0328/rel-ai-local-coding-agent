@@ -1,145 +1,92 @@
-# Rel.AI MCP Security Notes
+# Security model
 
-Rel.AI MCP is intentionally powerful. Treat it like a local coding agent with access to your configured projects.
+Rel.AI MCP is intentionally powerful. Treat it like a local coding agent with write access to configured repositories.
 
 ## Core boundaries
 
-- It can only access configured workspace aliases.
-- File paths must be relative to a workspace.
-- Traversal such as `../` is rejected.
-- Absolute paths are rejected.
-- Symlinks escaping the workspace are rejected.
-- Secret-looking paths are blocked.
+- Workspaces are explicit aliases in `~/.rel-ai-mcp/config.json`.
+- Tools cannot read arbitrary paths outside configured workspaces or attached task worktrees.
+- Paths must be relative and cannot contain traversal.
+- Secret-looking paths are blocked for reads, writes, and patches.
 - Binary-looking files are skipped.
-- Direct writes are text-only and size-limited.
-- `expectedSha256` can be used for optimistic locking before writing a file.
-- Unified diffs are path-validated before `git apply --check`.
-- Protected branch commits and pushes are blocked.
+- Text writes are size-limited.
+- Unified diffs are validated before `git apply --check` and `git apply`.
 
-## Blocked sensitive paths
+## Task worktrees
 
-Examples:
+v0.4 adds worktree-per-task isolation. The recommended flow is:
 
 ```text
-.env
-.ssh/
-id_rsa
-id_ed25519
-*.pem
-*.key
-.aws/
-.azure/
-gcloud/credentials
-service-account*.json
-firebase-adminsdk*.json
-.npmrc
-.pypirc
-.netrc
-.kube/
-kubeconfig
+base workspace main branch
+-> create task session
+-> create task worktree from main
+-> patch/test in worktree
+-> commit/push/PR from worktree
+-> remove worktree after review
 ```
+
+This prevents ChatGPT from dirtying your main local checkout during experiments. Destructive reset/remove tools require the `admin` permission profile.
+
+## Permission profiles
+
+```text
+read-only -> inspect only
+patch     -> edit/patch/branch
+test      -> patch + tests/jobs/Docker
+pr        -> test + commit/push/PR
+admin     -> pr + cleanup/destructive tools
+```
+
+Default: `pr`.
+
+Use `read-only` for repo exploration. Use `pr` for normal coding. Use `admin` briefly when cleaning worktrees or cancelling jobs.
 
 ## Commands
 
-Default behavior:
-
-- `relai_run_test` only runs commands configured in `testCommands`.
-- `relai_run_command` only runs commands configured in workspace `commands`.
-- Arbitrary commands are disabled.
-
-Advanced behavior:
+By default, ChatGPT can run only commands you configure by key:
 
 ```json
 {
-  "allowArbitraryCommands": true
-}
-```
-
-or workspace-level:
-
-```json
-{
-  "workspaces": {
-    "myapp": {
-      "allowArbitraryCommands": true
-    }
+  "testCommands": {
+    "unit": "npm test"
+  },
+  "commands": {
+    "build": "npm run build"
   }
 }
 ```
 
-Even then, Rel.AI MCP rejects high-risk command patterns such as `rm -rf`, `sudo`, `mkfs`, device writes, recursive `chown`, reboot/shutdown, and obvious production deploy patterns.
+Arbitrary shell commands require `allowArbitraryCommands: true` and still pass a basic command safety policy. Keep this disabled unless you understand the risk.
 
-## GitHub CLI
+## Docker
 
-PR tools require:
+Docker support is opt-in through `allowDocker`. Docker runs mount the active workspace at `/workspace` and run an allowlisted command inside an allowlisted image. The default behavior disables networking unless `dockerNetworkNone` is set to `false`.
+
+Recommended:
 
 ```json
 {
-  "allowGitHubCli": true
+  "allowDocker": true,
+  "defaultDockerImage": "node:22-alpine",
+  "allowedDockerImages": ["node:22-alpine"],
+  "dockerNetworkNone": true
 }
 ```
 
-The server uses your local `gh` authentication. Run:
+## Git and GitHub
 
-```bash
-gh auth status
-```
+- Protected branch commits and pushes are blocked.
+- Pushes are limited to allowlisted remotes.
+- PR creation/checks require `allowGitHubCli: true` and a working `gh auth status`.
+- No auto-merge tool is included.
+- No force-push tool is included.
 
-before enabling PR creation/checks.
+## HTTP/SSE transport
 
-## Remote HTTP/SSE server
+Remote transport requires `REL_AI_MCP_TOKEN` unless `REL_AI_MCP_ALLOW_NO_AUTH=1` is set. Never expose an unauthenticated server through a tunnel.
 
-Never expose the HTTP server without auth.
-
-Use:
-
-```bash
-REL_AI_MCP_TOKEN="long-random-token" npm run start:http
-```
-
-Avoid:
-
-```bash
-REL_AI_MCP_ALLOW_NO_AUTH=1
-```
-
-except for local-only testing on `127.0.0.1`.
+Use HTTPS in front of the server when connecting from ChatGPT Developer Mode.
 
 ## Audit logs
 
-Every tool call is logged to:
-
-```text
-~/.rel-ai-mcp/audit.jsonl
-```
-
-or the configured `auditLogPath`.
-
-The log redacts common secret/token/password field names and truncates very large strings.
-
-## Recommended production settings
-
-```json
-{
-  "allowGitHubCli": true,
-  "allowArbitraryCommands": false,
-  "allowDestructiveTools": false,
-  "maxReadFileBytes": 300000,
-  "maxWriteFileBytes": 600000,
-  "maxOutputBytes": 2097152,
-  "workspaces": {
-    "myapp": {
-      "protectedBranches": ["main", "master", "production"],
-      "allowedRemotes": ["origin"],
-      "testCommands": {
-        "unit": "npm test",
-        "lint": "npm run lint",
-        "typecheck": "npm run typecheck"
-      },
-      "commands": {
-        "build": "npm run build"
-      }
-    }
-  }
-}
-```
+Every MCP tool call is written to the configured audit log. The log includes tool name, workspace, session id, success/failure, duration, and error message when applicable. It does not intentionally include file contents.

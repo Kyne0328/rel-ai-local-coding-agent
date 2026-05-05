@@ -1,106 +1,98 @@
 # Connecting Rel.AI MCP to ChatGPT Developer Mode
 
-Rel.AI MCP v0.3 supports three transports:
+Rel.AI MCP supports local stdio and remote HTTP/SSE transport. ChatGPT Developer Mode needs a reachable HTTPS endpoint, so use the HTTP server plus a tunnel or reverse proxy.
 
-```text
-stdio
-streamable HTTP-style JSON-RPC: POST /mcp
-SSE compatibility: GET /sse + POST /messages?sessionId=...
-```
-
-For ChatGPT Developer Mode, use a remote HTTPS endpoint. The most practical local setup is:
-
-```text
-ChatGPT
--> HTTPS tunnel
--> http://127.0.0.1:3333/mcp
--> rel-ai-mcp
--> your local workspace
-```
-
-## 1. Start the HTTP server
+## Start local HTTP server
 
 ```bash
-REL_AI_MCP_TOKEN="paste-long-random-token" \
+REL_AI_MCP_TOKEN="paste-strong-token" \
 REL_AI_MCP_CONFIG="$HOME/.rel-ai-mcp/config.json" \
 npm run start:http -- --host 127.0.0.1 --port 3333
 ```
 
-Health check:
+Check locally:
 
 ```bash
 curl http://127.0.0.1:3333/health
-```
-
-Tool list check:
-
-```bash
 curl -H "Authorization: Bearer $REL_AI_MCP_TOKEN" \
   -H "content-type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
   http://127.0.0.1:3333/mcp
 ```
 
-## 2. Put it behind HTTPS
+## Expose through HTTPS
 
 Use one of:
 
 - Cloudflare Tunnel
 - Tailscale Funnel
-- ngrok
 - a private VPS reverse proxy
-- a deployed Node host if your workspace files exist there
+- another HTTPS tunnel you trust
 
-The public URL should point to:
-
-```text
-https://your-tunnel-or-domain.example.com/mcp
-```
-
-## 3. Create the connector in ChatGPT
-
-In ChatGPT Business Developer Mode:
+Target:
 
 ```text
-Settings / Workspace Settings
--> Apps & Connectors
--> Create custom connector
--> MCP server URL: https://your-domain.example.com/mcp
--> Auth: Bearer token
--> Token: REL_AI_MCP_TOKEN value
--> Save as draft
--> Test in a chat
+http://127.0.0.1:3333
 ```
 
-## 4. First safe prompt
+Recommended endpoint for ChatGPT:
 
 ```text
-Use Rel.AI MCP. Show relai_version, then list configured workspaces with relai_config. Do not read or modify any project files yet.
+https://your-domain.example.com/mcp
 ```
 
-## 5. First read-only project prompt
+Auth:
 
 ```text
-Use Rel.AI MCP on workspace myapp. Start a task session named "inspect project". Show the workspace profile and filtered tree. Do not modify files.
+Authorization: Bearer <REL_AI_MCP_TOKEN>
 ```
 
-## 6. First write test on a disposable repo
+## First safe test in ChatGPT
+
+```text
+Use Rel.AI MCP. Show relai_version, then show relai_config. Do not read files yet.
+```
+
+Then test read-only workspace access:
+
+```text
+Use Rel.AI MCP on workspace myapp. Show the workspace profile and the first 200 tree entries. Do not modify files.
+```
+
+Then test the Codex-like worktree flow on a disposable repo:
 
 ```text
 Use Rel.AI MCP on workspace sandbox.
-Start a task session.
-Create branch relai/smoke-test.
-Append one sentence to README.md using relai_write_file.
+Start a task session named "MCP smoke".
+Create a task worktree from main.
+Read README.md.
+Add one harmless line using a patch.
 Run the unit test command.
-Show git diff.
-Stop before commit.
+Show git diff and stop before committing.
 ```
 
-## 7. Full Codex-like prompt
+## Recommended production profile
 
-```text
-Use Rel.AI MCP on workspace myapp.
-Start a task session for this bug.
-Inspect profile/tree, read the smallest files needed, create a feature branch, patch the bug, run unit/lint/typecheck, patch again if tests fail, show final diff, commit, push, and create a draft PR.
-Never touch secrets, protected branches, or unrequested files.
+Use this for normal coding:
+
+```json
+{
+  "permissionProfile": "pr",
+  "allowGitHubCli": true,
+  "allowDocker": false,
+  "allowArbitraryCommands": false,
+  "allowDestructiveTools": false
+}
+```
+
+Temporarily switch to `admin` only for cleanup tools:
+
+```bash
+node bin/relai-mcp-config.js set permissionProfile admin
+```
+
+Then switch back:
+
+```bash
+node bin/relai-mcp-config.js set permissionProfile pr
 ```

@@ -1,65 +1,66 @@
 # Rel.AI MCP
 
-Rel.AI MCP is a full MCP-based Codex-like coding runner for ChatGPT. It lets ChatGPT inspect configured workspaces, read and write safe text files, create task sessions, apply patches, run allowlisted tests, inspect failures, patch again, commit, push, and create draft pull requests.
+Rel.AI MCP is a full MCP-based Codex-like coding runner for ChatGPT. It lets ChatGPT inspect configured workspaces, create isolated task worktrees, read/write safe text files, apply patches, run tests, inspect failures, patch again, track jobs, commit, push, create draft pull requests, and watch PR checks.
 
 This repo is the MCP successor to the original Rel.AI browser-extension/native-host flow.
 
 ```text
 ChatGPT
 -> MCP tool: create task session
--> MCP tool: inspect workspace tree/profile
+-> MCP tool: create isolated task worktree
+-> MCP tool: inspect workspace tree/profile/context
 -> MCP tool: read/search files
--> MCP tool: create feature branch
--> MCP tool: write files or apply validated patch
--> MCP tool: run allowlisted tests/test matrix
+-> MCP tool: apply patches or safe file writes
+-> MCP tool: run tests, Docker sandbox commands, or background jobs
 -> MCP tool: inspect failures and patch again
--> MCP tool: commit, push, create draft PR, inspect checks
+-> MCP tool: commit, push, create draft PR, watch checks
+-> MCP tool: reset/remove task worktree after review
 ```
 
 ## Version
 
-Current version: `0.3.0`
+Current version: `0.4.0`
 
-## What v0.3 adds
+## What v0.4 adds
 
-v0.3 turns the prototype into a full-fledged Codex-like runner instead of a patch-only bridge.
+v0.4 is the infrastructure release. It moves Rel.AI MCP from "tools that can edit a repo" toward a fuller Codex-style task system with isolated execution surfaces.
 
-- Adds persistent task sessions: start, list, read, append steps, and update status/summary.
-- Adds audit logging for every tool call, including timing and success/failure.
-- Adds safe direct text-file writes with path validation, size limits, secret blocking, and optional `expectedSha256` optimistic locking.
-- Adds a focused context pack tool: tree + selected files + search hits.
-- Adds workspace profile detection for common manifests and project stacks.
-- Adds apply-patch-and-run-tests in one tool for build/verify loops.
-- Adds test matrix execution across multiple allowlisted test commands.
-- Adds configured dev command execution via workspace `commands`.
-- Adds opt-in arbitrary command support for advanced users only, guarded by config and command policy.
-- Adds Git log/show/switch branch tools.
-- Adds GitHub CLI PR checks.
-- Adds richer PR creation support: labels, reviewers, base/head, draft mode.
-- Raises default tree/search/read/output limits for real projects.
-- Adds `relai_version` and `relai_audit_tail` tools.
-- Adds `test:workflow`, a real temporary Git repo smoke test covering task/session/branch/write/test behavior.
-- Expands README with original Rel.AI-style version history.
+- Adds worktree-per-task isolation through `relai_task_worktree_create`.
+- Lets normal read/search/write/patch/test/git tools operate on a session's attached task worktree automatically.
+- Adds guarded task worktree removal through `relai_task_worktree_remove`.
+- Adds `relai_worktree_list` to inspect Git worktrees.
+- Adds `relai_git_reset_worktree` for hard reset/clean of task worktrees after failed experiments.
+- Adds background job execution for allowlisted test/dev commands.
+- Adds `relai_job_start_command`, `relai_job_status`, `relai_job_list`, and `relai_job_cancel`.
+- Adds Docker sandbox hooks through `relai_docker_run` using allowlisted images and configured commands.
+- Adds permission profiles: `read-only`, `patch`, `test`, `pr`, and `admin`.
+- Adds PR check polling through `relai_pr_watch_checks`.
+- Adds a multi-cycle `relai_patch_test_loop` for iterative patch/test runs.
+- Adds config fields for `worktreeRoot`, `permissionProfile`, `allowDocker`, and Docker image allowlists.
+- Raises default tree/session limits for larger repositories.
+- Adds `npm run test:v4`, a smoke test that creates a Git repo, creates a task worktree, patches it, runs tests, starts a background job, resets, and removes the worktree.
+- Expands README version history in the original Rel.AI style.
 
-## What is still intentionally guarded
+## What remains guarded
 
 Full-fledged does not mean reckless. These are still blocked or opt-in:
 
+- No arbitrary disk browsing.
 - No secret-file reads or writes.
-- No full-disk access.
-- No unbounded command execution by default.
-- No direct commits to protected branches.
-- No protected branch pushes.
+- No binary writes.
+- No unbounded shell execution by default.
+- No direct commits or pushes to protected branches.
 - No force-push tool.
 - No auto-merge tool.
 - No deploy tool.
-- No destructive branch/file cleanup unless explicitly enabled in config.
+- Destructive reset/remove tools require the `admin` permission profile.
 
 ## Requirements
 
 - Node.js 18+
 - Git available on `PATH`
 - Optional: GitHub CLI `gh`, only if you enable PR creation/checks
+- Optional: Docker, only if you enable Docker sandbox commands
 - Optional: HTTPS tunnel/reverse proxy for ChatGPT Developer Mode remote MCP access
 
 ## Install
@@ -70,6 +71,7 @@ npm run check
 npm run test:smoke
 npm run test:http
 npm run test:workflow
+npm run test:v4
 ```
 
 There are no runtime npm dependencies. `npm install` is mainly useful if you want a lockfile.
@@ -107,11 +109,17 @@ npm run cmd:add -- myapp install "npm install"
 npm run cmd:add -- myapp build "npm run build"
 ```
 
-Enable GitHub CLI actions only when you want PR creation/checks:
+Enable optional capabilities deliberately:
 
 ```bash
+node bin/relai-mcp-config.js set permissionProfile pr
 node bin/relai-mcp-config.js set allowGitHubCli true
+node bin/relai-mcp-config.js set allowDocker true
+node bin/relai-mcp-config.js set allowArbitraryCommands false
+node bin/relai-mcp-config.js set allowDestructiveTools false
 ```
+
+Use `permissionProfile: "admin"` only when you want reset/remove/cancel tools available.
 
 Example config:
 
@@ -120,14 +128,17 @@ Example config:
   "version": 1,
   "stateDir": "/Users/you/.rel-ai-mcp",
   "auditLogPath": "",
+  "worktreeRoot": "/Users/you/.rel-ai-mcp/worktrees",
+  "permissionProfile": "pr",
   "maxReadFileBytes": 300000,
   "maxWriteFileBytes": 600000,
   "maxSearchFileBytes": 300000,
   "maxOutputBytes": 2097152,
   "commandTimeoutMs": 1200000,
-  "maxTreeEntries": 5000,
-  "maxSessionSteps": 300,
+  "maxTreeEntries": 12000,
+  "maxSessionSteps": 1000,
   "allowGitHubCli": false,
+  "allowDocker": false,
   "allowArbitraryCommands": false,
   "allowDestructiveTools": false,
   "workspaces": {
@@ -145,11 +156,32 @@ Example config:
       "commands": {
         "install": "npm install",
         "build": "npm run build"
-      }
+      },
+      "allowDocker": false,
+      "defaultDockerImage": "node:22-alpine",
+      "allowedDockerImages": ["node:22-alpine"],
+      "dockerNetworkNone": true,
+      "dockerUser": "node"
     }
   }
 }
 ```
+
+## Permission profiles
+
+Rel.AI MCP now has coarse permission profiles so the same server can be exposed in safer or more powerful modes.
+
+```text
+read-only -> inspect config, sessions, files, tree, search, git status/diff/log/show
+patch     -> read-only + task creation, worktree creation, safe writes, patching, branch creation
+ test     -> patch + allowlisted tests/dev commands, Docker runs, background jobs
+pr        -> test + commit, push, PR creation, PR checks
+admin     -> pr + reset worktree, remove worktree, cancel live jobs
+```
+
+Default: `pr`.
+
+For normal coding work, use `pr`. For safe repo exploration, use `read-only`. Temporarily switch to `admin` only when you need cleanup tools.
 
 ## Run as local stdio MCP server
 
@@ -225,7 +257,7 @@ ChatGPT
 -> HTTPS tunnel
 -> http://127.0.0.1:3333
 -> rel-ai-mcp
--> your configured workspace
+-> your configured workspace/worktrees
 ```
 
 Examples:
@@ -247,15 +279,16 @@ See [`docs/CONNECTING_TO_CHATGPT.md`](docs/CONNECTING_TO_CHATGPT.md).
 - `relai_config` - public config summary without secrets.
 - `relai_audit_tail` - recent tool-call audit entries.
 
-### Task session tools
+### Task/session/worktree tools
 
 - `relai_task_start` - create a persistent task session.
 - `relai_task_list` - list recent task sessions.
 - `relai_task_read` - read full task session details.
 - `relai_task_step` - append a plan/test/patch/PR note.
 - `relai_task_update` - update session status, branch, or summary.
-
-Use sessions to make long ChatGPT coding work behave more like Codex tasks.
+- `relai_task_worktree_create` - create and attach an isolated Git worktree to a task session.
+- `relai_task_worktree_remove` - remove a task worktree after review/merge.
+- `relai_worktree_list` - list Git worktrees for a workspace.
 
 ### Workspace/context tools
 
@@ -266,13 +299,21 @@ Use sessions to make long ChatGPT coding work behave more like Codex tasks.
 - `relai_search` - literal local text search.
 - `relai_context_pack` - focused context pack from paths and search terms.
 
-### Patch/test tools
+These tools accept `sessionId` where useful. If the session has an attached worktree, the operation targets the task worktree automatically.
+
+### Patch/test/job/sandbox tools
 
 - `relai_apply_patch` - check or apply unified diff.
 - `relai_apply_patch_and_run` - apply patch and run selected tests.
+- `relai_patch_test_loop` - run one or more patch/test cycles.
 - `relai_run_test` - run one allowlisted test command.
 - `relai_run_test_matrix` - run multiple allowlisted test commands.
 - `relai_run_command` - run configured dev command; arbitrary commands require explicit opt-in.
+- `relai_job_start_command` - start an allowlisted command as a background job.
+- `relai_job_status` - poll job status and log tails.
+- `relai_job_list` - list jobs.
+- `relai_job_cancel` - cancel a live job.
+- `relai_docker_run` - run an allowlisted command inside an allowlisted Docker image.
 
 ### Git/PR tools
 
@@ -282,23 +323,28 @@ Use sessions to make long ChatGPT coding work behave more like Codex tasks.
 - `relai_git_show` - show one commit/ref.
 - `relai_create_branch` - create and switch to feature branch.
 - `relai_switch_branch` - switch branches with guardrails.
+- `relai_git_reset_worktree` - hard reset/clean task worktree.
 - `relai_commit_all` - stage and commit all changes.
 - `relai_push_branch` - push feature branch to allowlisted remote.
 - `relai_create_pr` - create draft PR through GitHub CLI.
 - `relai_pr_checks` - inspect PR checks through GitHub CLI.
+- `relai_pr_watch_checks` - poll PR checks for CI repair loops.
 
 ## Recommended Codex-like workflow prompt
 
 ```text
 Use Rel.AI MCP on workspace myapp.
 Start a task session for this goal.
+Create a task worktree from main.
 Inspect the workspace profile and tree.
 Read the smallest set of files needed.
-Create a feature branch.
 Make the change using patches or safe file writes.
 Run unit, lint, and typecheck.
 If a test fails, inspect the failure and patch again.
-When tests pass, show the diff, commit, push, and create a draft PR.
+Show the final diff.
+Commit, push, and create a draft PR.
+Watch PR checks once.
+Do not remove the task worktree until I approve cleanup.
 Never touch secrets or protected branches.
 ```
 
@@ -307,15 +353,18 @@ Never touch secrets or protected branches.
 Rel.AI MCP uses layered safety checks:
 
 1. Workspace aliases are explicit. ChatGPT cannot browse arbitrary disk paths.
-2. All file paths are relative and validated against traversal and workspace escape.
-3. Secret-looking paths are blocked.
-4. Binary-looking files are skipped.
-5. Writes are text-only and size-limited.
-6. Tests and commands are allowlisted by default.
-7. Arbitrary commands are disabled unless explicitly enabled.
-8. GitHub CLI actions are disabled unless explicitly enabled.
-9. Protected branches are blocked for commits/pushes.
-10. Every tool call is written to an audit log.
+2. Task worktrees isolate edits from the base workspace.
+3. All file paths are relative and validated against traversal and workspace escape.
+4. Secret-looking paths are blocked.
+5. Binary-looking files are skipped.
+6. Writes are text-only and size-limited.
+7. Tests and commands are allowlisted by default.
+8. Arbitrary commands are disabled unless explicitly enabled.
+9. Docker images are allowlisted when Docker support is enabled.
+10. GitHub CLI actions are disabled unless explicitly enabled.
+11. Protected branches are blocked for commits/pushes.
+12. Destructive cleanup requires the `admin` permission profile.
+13. Every tool call is written to an audit log.
 
 See [`docs/SECURITY.md`](docs/SECURITY.md).
 
@@ -349,6 +398,33 @@ curl -H "Authorization: Bearer $REL_AI_MCP_TOKEN" \
 
 If local health works but ChatGPT cannot connect, the issue is your HTTPS tunnel or Developer Mode connector URL/token.
 
+### Worktree creation fails
+
+Check:
+
+```bash
+git status
+git worktree list
+```
+
+Common causes:
+
+- Branch already exists.
+- `fromRef` does not exist locally.
+- The repo has uncommitted changes that conflict with worktree setup.
+- `worktreeRoot` points somewhere unavailable.
+
+### Docker run fails
+
+Check:
+
+```bash
+docker version
+node bin/relai-mcp-config.js set allowDocker true
+```
+
+Also verify the image is listed in `allowedDockerImages` for the workspace.
+
 ### PR creation fails
 
 Check:
@@ -363,6 +439,27 @@ Also verify the workspace branch is pushed or pushable and the repo has an `orig
 ---
 
 ## Version history
+
+### 0.4.0
+
+- Adds worktree-per-task isolation through `relai_task_worktree_create`.
+- Adds session-aware workspace resolution: tools that accept `sessionId` automatically operate inside the attached task worktree instead of the base workspace.
+- Adds `relai_task_worktree_remove` for guarded task worktree cleanup.
+- Adds `relai_worktree_list` for inspecting Git worktrees.
+- Adds `relai_git_reset_worktree` for hard reset and optional clean of task worktrees.
+- Adds background job support: `relai_job_start_command`, `relai_job_status`, `relai_job_list`, and `relai_job_cancel`.
+- Adds a persistent `stateDir/jobs` store for background job metadata and log file paths.
+- Adds Docker sandbox hooks with `relai_docker_run`, using allowlisted images and configured test/dev commands only.
+- Adds `allowDocker`, `defaultDockerImage`, `allowedDockerImages`, `dockerNetworkNone`, and `dockerUser` config fields.
+- Adds permission profiles: `read-only`, `patch`, `test`, `pr`, and `admin`.
+- Adds `permissionProfile` to public config summaries and permission enforcement for every MCP tool call.
+- Adds `relai_patch_test_loop` for multi-cycle patch/test iteration.
+- Adds `relai_pr_watch_checks` for polling GitHub CLI PR checks and returning a timeline useful for CI repair loops.
+- Adds global and per-workspace `worktreeRoot` configuration.
+- Raises default `maxTreeEntries` from 5,000 to 12,000 and `maxSessionSteps` from 300 to 1,000.
+- Updates CLI `set` support for `allowDocker`, `allowDestructiveTools`, `permissionProfile`, and `worktreeRoot`.
+- Adds `npm run test:v4`, covering task session creation, worktree creation, session-aware file reads, patch/test loop, background job execution, worktree reset, and worktree removal.
+- Updates README, example config, and security guidance for task worktrees, jobs, Docker, and permission profiles.
 
 ### 0.3.0
 

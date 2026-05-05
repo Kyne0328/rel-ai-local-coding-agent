@@ -1,15 +1,18 @@
 {
   "version": 1,
-  "stateDir": "~/.rel-ai-mcp",
+  "stateDir": "/Users/you/.rel-ai-mcp",
   "auditLogPath": "",
+  "worktreeRoot": "/Users/you/.rel-ai-mcp/worktrees",
+  "permissionProfile": "pr",
   "maxReadFileBytes": 300000,
   "maxWriteFileBytes": 600000,
   "maxSearchFileBytes": 300000,
   "maxOutputBytes": 2097152,
   "commandTimeoutMs": 1200000,
-  "maxTreeEntries": 5000,
-  "maxSessionSteps": 300,
+  "maxTreeEntries": 12000,
+  "maxSessionSteps": 1000,
   "allowGitHubCli": false,
+  "allowDocker": false,
   "allowArbitraryCommands": false,
   "allowDestructiveTools": false,
   "workspaces": {
@@ -19,6 +22,7 @@
       "defaultBaseBranch": "main",
       "allowedRemotes": ["origin"],
       "repoSlug": "Kyne0328/myapp",
+      "worktreeRoot": "",
       "testCommands": {
         "unit": "npm test",
         "lint": "npm run lint",
@@ -27,7 +31,14 @@
       "commands": {
         "install": "npm install",
         "build": "npm run build"
-      }
+      },
+      "allowDocker": false,
+      "defaultDockerImage": "node:22-alpine",
+      "allowedDockerImages": ["node:22-alpine"],
+      "dockerNetworkNone": true,
+      "dockerUser": "node",
+      "allowArbitraryCommands": false,
+      "allowDestructiveTools": false
     }
   }
 }

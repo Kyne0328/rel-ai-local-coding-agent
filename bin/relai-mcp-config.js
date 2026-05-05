@@ -10,7 +10,11 @@ function printUsage() {
   relai-mcp-config test-command add <alias> <key> <command...>
   relai-mcp-config command add <alias> <key> <command...>
   relai-mcp-config set allowGitHubCli <true|false>
+  relai-mcp-config set allowDocker <true|false>
   relai-mcp-config set allowArbitraryCommands <true|false>
+  relai-mcp-config set allowDestructiveTools <true|false>
+  relai-mcp-config set permissionProfile <read-only|patch|test|pr|admin>
+  relai-mcp-config set worktreeRoot <absolute-path>
 
 Config path: ${getConfigPath()}`);
 }
@@ -51,10 +55,17 @@ function main() {
     const key = requireArg(subcommand, "setting key");
     const value = requireArg(action, "setting value");
     const config = readConfig({ allowMissing: true });
-    if (!["allowGitHubCli", "allowArbitraryCommands", "allowDestructiveTools"].includes(key)) {
+    if (["allowGitHubCli", "allowDocker", "allowArbitraryCommands", "allowDestructiveTools"].includes(key)) {
+      config[key] = parseBool(value, key);
+    } else if (key === "permissionProfile") {
+      if (!["read-only", "patch", "test", "pr", "admin"].includes(value)) throw new Error("permissionProfile must be one of: read-only, patch, test, pr, admin.");
+      config[key] = value;
+    } else if (key === "worktreeRoot") {
+      if (!path.isAbsolute(value)) throw new Error("worktreeRoot must be an absolute path.");
+      config[key] = value;
+    } else {
       throw new Error(`Unsupported setting '${key}'.`);
     }
-    config[key] = parseBool(value, key);
     writeConfig(config);
     console.log(`Set ${key}=${config[key]}`);
     return;

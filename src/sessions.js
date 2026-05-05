@@ -104,6 +104,9 @@ function updateSession(config, args) {
   if (args.status) session.status = String(args.status);
   if (Object.prototype.hasOwnProperty.call(args, "summary")) session.summary = truncate(String(args.summary || ""), 30000);
   if (Object.prototype.hasOwnProperty.call(args, "branch")) session.branch = args.branch ? String(args.branch) : null;
+  for (const key of ["worktreePath", "worktreeBaseWorkspace", "worktreeCreatedAt", "worktreeRemovedAt", "prUrl", "lastChecksAt"]) {
+    if (Object.prototype.hasOwnProperty.call(args, key)) session[key] = args[key];
+  }
   return writeSession(config, session);
 }
 
