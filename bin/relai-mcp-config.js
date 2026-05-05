@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 const path = require("node:path");
 const { readConfig, writeConfig, getConfigPath, makeDefaultConfig } = require("../src/config");
+const productUx = require("../src/productUx");
 
 function printUsage() {
   console.log(`Usage:
@@ -9,6 +10,11 @@ function printUsage() {
   relai-mcp-config workspace add <alias> <absolute-path>
   relai-mcp-config test-command add <alias> <key> <command...>
   relai-mcp-config command add <alias> <key> <command...>
+  relai-mcp-config doctor [--fix] [workspace-path]
+  relai-mcp-config setup [alias] [workspace-path]
+  relai-mcp-config import-relai [source-path]
+  relai-mcp-config state export <output-path>
+  relai-mcp-config state import <input-path> --confirm
   relai-mcp-config set allowGitHubCli <true|false>
   relai-mcp-config set allowDocker <true|false>
   relai-mcp-config set allowArbitraryCommands <true|false>
@@ -64,6 +70,42 @@ function main() {
 
   if (command === "show") {
     console.log(JSON.stringify(readConfig(), null, 2));
+    return;
+  }
+
+  if (command === "doctor") {
+    const config = readConfig({ allowMissing: true });
+    const fix = subcommand === "--fix";
+    const workspacePath = fix ? action : subcommand;
+    Promise.resolve(fix ? productUx.doctorFix(config, { workspacePath, overwrite: false }) : productUx.healthMonitor(config, {}))
+      .then((result) => console.log(JSON.stringify(result, null, 2)))
+      .catch((error) => { console.error(error instanceof Error ? error.message : String(error)); process.exit(1); });
+    return;
+  }
+
+  if (command === "setup") {
+    const result = productUx.setupWizard({ alias: subcommand || "myapp", workspacePath: action || "" });
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  if (command === "import-relai") {
+    const result = productUx.importOriginalRelAiConfig({ sourcePath: subcommand || undefined, dryRun: false });
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  if (command === "state" && subcommand === "export") {
+    const config = readConfig();
+    const result = productUx.stateExport(config, { outputPath: requireArg(action, "output path") });
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  if (command === "state" && subcommand === "import") {
+    const config = readConfig();
+    const result = productUx.stateImport(config, { inputPath: requireArg(action, "input path"), confirm: rest.includes("--confirm") });
+    console.log(JSON.stringify(result, null, 2));
     return;
   }
 

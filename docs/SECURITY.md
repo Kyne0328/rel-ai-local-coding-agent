@@ -169,3 +169,12 @@ v0.8 adds several safety-oriented layers intended for longer multi-agent runs:
 - PR reply tools remain behind the `pr` permission level and the PR approval gate.
 
 For remote ChatGPT Developer Mode use, keep `approvalGates.push`, `approvalGates.pr`, `approvalGates.merge`, and `approvalGates.reset` enabled.
+
+
+## v0.9 production UX notes
+
+- Use the dashboard only over localhost, a trusted tunnel, or HTTPS with a strong bearer token.
+- `/events` streams dashboard snapshots over SSE and should not be exposed without authentication.
+- `relai_cleanup_run`, `relai_doctor_fix`, `relai_state_import`, and original Rel.AI config import are admin-level operations.
+- Prefer `relai_cleanup_preview` before deleting generated state files.
+- Keep state exports private; they can contain task summaries, diffs, audit entries, and local path metadata.

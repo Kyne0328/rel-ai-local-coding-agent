@@ -41,6 +41,7 @@ const semantic = require("./semantic");
 const prWorkflow = require("./prWorkflow");
 const doctor = require("./doctor");
 const policy = require("./policy");
+const productUx = require("./productUx");
 const { enforcePermission } = require("./permissions");
 const pkg = require("../package.json");
 
@@ -50,6 +51,16 @@ const toolSchemas = [
   tool("relai_audit_tail", "Audit Log Tail", "Return recent rel-ai-mcp audit entries.", { limit: numberProp(1, 1000) }),
   tool("relai_dashboard_summary", "Dashboard Summary", "Return sessions, jobs, approvals, locks, and config summary for a lightweight web dashboard.", { limit: numberProp(1, 200) }),
   tool("relai_dashboard_open", "Dashboard Open Info", "Return dashboard and API URLs for a running Rel.AI MCP HTTP server.", { baseUrl: stringProp() }),
+  tool("relai_dashboard_data", "Dashboard Data", "Return rich v9 dashboard data: sessions, jobs, approvals, locks, health, multi-agent status, and audit tail.", { limit: numberProp(1, 500) }),
+  tool("relai_live_log_tail", "Live Log Tail", "Return recent audit entries for live-log/dashboard views.", { limit: numberProp(1, 1000) }),
+  tool("relai_health_monitor", "Health Monitor", "Check state directories, configured workspaces, stale jobs, stale locks, approvals, and worktree availability.", { limit: numberProp(1, 500) }),
+  tool("relai_cleanup_preview", "Cleanup Preview", "Preview old state files that cleanup would remove. Does not delete files.", { olderThanHours: numberProp(1, 8760), maxDeletes: numberProp(1, 5000), includeAudit: boolProp() }),
+  tool("relai_cleanup_run", "Cleanup Run", "Delete old generated state files. Requires confirm=true and admin permission profile.", { olderThanHours: numberProp(1, 8760), maxDeletes: numberProp(1, 5000), includeAudit: boolProp(), confirm: boolProp() }, ["confirm"]),
+  tool("relai_doctor_fix", "Doctor Fix", "Apply safe local fixes such as state directory creation and LF-normalization files for a workspace.", { workspacePath: stringProp(), overwrite: boolProp(), renormalize: boolProp() }),
+  tool("relai_setup_wizard", "Setup Wizard", "Generate a first-run setup plan, suggested config, token, and commands for onboarding.", { alias: stringProp(), workspacePath: stringProp(), generateToken: boolProp() }),
+  tool("relai_import_original_relai_config", "Import Original Rel.AI Config", "Import workspace aliases and test commands from the original ~/.rel-ai/opencode.json config.", { sourcePath: stringProp(), dryRun: boolProp() }),
+  tool("relai_state_export", "Export Rel.AI MCP State", "Export JSON state files for backup or migration.", { outputPath: stringProp(), maxFiles: numberProp(1, 20000), maxFileBytes: numberProp(1000, 10485760) }),
+  tool("relai_state_import", "Import Rel.AI MCP State", "Import a JSON state export. Requires confirm=true and admin permission profile.", { inputPath: stringProp(), payload: objectProp(), confirm: boolProp() }, ["confirm"]),
 
 
   tool("relai_scheduler_start", "Start Multi-Agent Scheduler", "Create a dependency-aware scheduler record and compute which subtasks can run now.", { parentSessionId: stringProp(), schedulerId: stringProp(), maxParallel: numberProp(1, 50), limit: numberProp(1, 1000) }),
@@ -331,6 +342,26 @@ async function dispatchTool(config, name, args) {
       return dashboardSummary(config, args);
     case "relai_dashboard_open":
       return taskRunner.dashboardOpen(config, args);
+    case "relai_dashboard_data":
+      return productUx.dashboardData(config, args);
+    case "relai_live_log_tail":
+      return productUx.liveLogTail(config, args);
+    case "relai_health_monitor":
+      return productUx.healthMonitor(config, args);
+    case "relai_cleanup_preview":
+      return productUx.cleanupPreview(config, args);
+    case "relai_cleanup_run":
+      return productUx.cleanupRun(config, args);
+    case "relai_doctor_fix":
+      return productUx.doctorFix(config, args);
+    case "relai_setup_wizard":
+      return productUx.setupWizard(args);
+    case "relai_import_original_relai_config":
+      return productUx.importOriginalRelAiConfig(args);
+    case "relai_state_export":
+      return productUx.stateExport(config, args);
+    case "relai_state_import":
+      return productUx.stateImport(config, args);
 
     case "relai_scheduler_start":
       return scheduler.startScheduler(config, args);
@@ -695,7 +726,13 @@ function versionInfo() {
       "semantic-ish local search",
       "PR requested-changes workflow",
       "doctor checks",
-      "policy evaluation"
+      "policy evaluation",
+      "rich dashboard data and live audit logs",
+      "health monitoring and stale-state detection",
+      "cleanup preview/run workflows",
+      "doctor --fix style line-ending normalization",
+      "setup wizard and original Rel.AI config import",
+      "state export/import for backups"
     ]
   };
 }

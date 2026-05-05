@@ -9,6 +9,7 @@ const approvals = require("./approvals");
 const locks = require("./locks");
 const taskRunner = require("./taskRunner");
 const multiagent = require("./multiagent");
+const productUx = require("./productUx");
 const { workspaceFromSession } = require("./worktrees");
 const pkg = require("../package.json");
 
@@ -84,6 +85,33 @@ async function routeRequest(req, res, options) {
       locks: locks.listLocks(config).locks,
       multiAgent: multiagent.multiagentStatus(config, { limit })
     });
+    return;
+  }
+
+  if (req.method === "GET" && parsed.pathname === "/api/dashboard/v9") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    const config = readConfig();
+    sendJson(res, 200, productUx.dashboardData(config, { limit: Number(parsed.searchParams.get("limit") || 100) }));
+    return;
+  }
+
+  if (req.method === "GET" && parsed.pathname === "/api/logs") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    const config = readConfig();
+    sendJson(res, 200, productUx.liveLogTail(config, { limit: Number(parsed.searchParams.get("limit") || 100) }));
+    return;
+  }
+
+  if (req.method === "GET" && parsed.pathname === "/api/health-monitor") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    const config = readConfig();
+    sendJson(res, 200, productUx.healthMonitor(config, { limit: Number(parsed.searchParams.get("limit") || 100) }));
+    return;
+  }
+
+  if (req.method === "GET" && parsed.pathname === "/events") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    openDashboardEvents(res, req, options);
     return;
   }
 
@@ -177,6 +205,10 @@ async function routeRequest(req, res, options) {
       health: "GET /health",
       dashboard: "GET /dashboard",
       dashboardApi: "GET /api/dashboard",
+      dashboardV9Api: "GET /api/dashboard/v9",
+      logsApi: "GET /api/logs",
+      healthMonitorApi: "GET /api/health-monitor",
+      events: "GET /events",
       sessionDiffApi: "GET /api/session/diff?workspace=...&sessionId=...",
       taskGraphApi: "GET /api/task/graph?sessionId=...",
       sessionExportApi: "GET /api/session/export?workspace=...&sessionId=...",
@@ -230,6 +262,27 @@ function openSseSession(res, req) {
     clearInterval(keepAlive);
     sessions.delete(sessionId);
   });
+}
+
+function openDashboardEvents(res, req, options) {
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-cache, no-transform",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no"
+  });
+  const sendSnapshot = () => {
+    try {
+      const config = readConfig();
+      sendSse(res, "dashboard", productUx.dashboardData(config, { limit: 100 }));
+    } catch (error) {
+      sendSse(res, "error", { ok: false, error: error instanceof Error ? error.message : String(error) });
+    }
+  };
+  sendSnapshot();
+  const intervalMs = Math.max(1000, Number(readConfig({ allowMissing: true }).productUx?.liveLogPollSeconds || 3) * 1000);
+  const timer = setInterval(sendSnapshot, intervalMs);
+  req.on("close", () => clearInterval(timer));
 }
 
 function sendSse(res, event, data) {
@@ -312,24 +365,50 @@ function renderDashboardHtml(options) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rel.AI MCP Dashboard</title>
-<style>body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;margin:2rem;line-height:1.45;max-width:1100px}pre{background:#111;color:#eee;padding:1rem;border-radius:.75rem;overflow:auto}button,input{font:inherit;padding:.55rem .75rem;border-radius:.5rem;border:1px solid #bbb}button{cursor:pointer}.row{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}.card{border:1px solid #ddd;border-radius:1rem;padding:1rem;margin:1rem 0}.muted{color:#666}</style>
+<style>
+:root{color-scheme:light dark;--bg:#0f1115;--card:#171a21;--muted:#8b95a7;--text:#edf2ff;--line:#2a3140;--ok:#4ade80;--warn:#fbbf24;--bad:#fb7185;--accent:#93c5fd}*{box-sizing:border-box}body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;margin:0;background:var(--bg);color:var(--text)}header{position:sticky;top:0;background:rgba(15,17,21,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:1rem 1.25rem;z-index:10}.wrap{max-width:1380px;margin:0 auto;padding:1rem}.row{display:flex;gap:.75rem;align-items:center;flex-wrap:wrap}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem}.card{background:var(--card);border:1px solid var(--line);border-radius:1rem;padding:1rem;box-shadow:0 10px 30px rgba(0,0,0,.18)}button,input,select{font:inherit;padding:.6rem .8rem;border-radius:.6rem;border:1px solid var(--line);background:#10131a;color:var(--text)}button{cursor:pointer;background:#1d2736}.muted{color:var(--muted)}.pill{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:.2rem .55rem;margin:.1rem}.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}pre{white-space:pre-wrap;word-break:break-word;background:#080a0f;border:1px solid var(--line);padding:.75rem;border-radius:.75rem;max-height:420px;overflow:auto}.list{display:grid;gap:.5rem}.item{border:1px solid var(--line);border-radius:.7rem;padding:.6rem;background:#11151d}a{color:var(--accent)}
+</style>
 </head>
 <body>
-<h1>Rel.AI MCP Dashboard</h1>
-<p class="muted">Local operational view for sessions, jobs, approvals, locks, config, and v6 task execution state. Mutations still happen through MCP tools; review actions should go through approval gates.</p>
-<div class="card">
-<div class="row"><input id="token" type="password" placeholder="Bearer token${hasToken ? "" : " not required"}"><button onclick="load()">Refresh</button></div>
-</div>
-<div class="card"><strong>v6 APIs</strong><p class="muted">Diff: <code>/api/session/diff?workspace=ALIAS&sessionId=TASK</code><br>Export: <code>/api/session/export?workspace=ALIAS&sessionId=TASK</code></p></div>
-<pre id="out">Click Refresh.</pre>
+<header>
+  <div class="row"><h1 style="margin:.1rem 1rem .1rem 0">Rel.AI MCP Dashboard</h1><span class="pill">v9 console</span><span id="status" class="muted">not connected</span></div>
+  <div class="row"><input id="token" type="password" placeholder="Bearer token${hasToken ? "" : " not required"}" style="min-width:280px"><button onclick="refresh()">Refresh</button><button onclick="toggleLive()" id="liveBtn">Start live logs</button><button onclick="loadHealth()">Health</button><button onclick="loadDiff()">Load diff</button><input id="workspace" placeholder="workspace"><input id="sessionId" placeholder="sessionId"></div>
+</header>
+<main class="wrap">
+  <section class="grid" id="summary"></section>
+  <section class="grid">
+    <div class="card"><h2>Sessions</h2><div class="list" id="sessions"></div></div>
+    <div class="card"><h2>Jobs</h2><div class="list" id="jobs"></div></div>
+    <div class="card"><h2>Approvals</h2><div class="list" id="approvals"></div></div>
+    <div class="card"><h2>Health findings</h2><div class="list" id="health"></div></div>
+  </section>
+  <section class="grid">
+    <div class="card"><h2>Audit / live logs</h2><pre id="logs">No logs loaded.</pre></div>
+    <div class="card"><h2>Diff viewer</h2><pre id="diff">Enter workspace/sessionId and click Load diff.</pre></div>
+  </section>
+  <section class="card"><h2>Raw dashboard data</h2><pre id="raw">Click Refresh.</pre></section>
+</main>
 <script>
-async function load(){
-  const token=document.getElementById('token').value;
-  const headers=token?{Authorization:'Bearer '+token}:{};
-  const res=await fetch('/api/dashboard?limit=100',{headers});
-  const text=await res.text();
-  try{document.getElementById('out').textContent=JSON.stringify(JSON.parse(text),null,2)}catch(e){document.getElementById('out').textContent=text}
+let eventSource=null;
+function headers(){const t=document.getElementById('token').value;return t?{Authorization:'Bearer '+t}:{}}
+async function fetchJson(url){const res=await fetch(url,{headers:headers()});const text=await res.text();try{return JSON.parse(text)}catch(e){return {ok:false,error:text}}}
+function esc(s){return String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
+function card(label,value,cls=''){return '<div class="card"><div class="muted">'+esc(label)+'</div><div class="'+cls+'" style="font-size:1.6rem;font-weight:700">'+esc(value)+'</div></div>'}
+function render(data){
+  document.getElementById('status').textContent=data.ok?'connected':'error';
+  const c=data.counts||{};document.getElementById('summary').innerHTML=card('Sessions',c.sessions||0)+card('Jobs',c.jobs||0)+card('Approvals',c.approvals||0)+card('Locks',c.locks||0)+card('Findings',(data.health&&data.health.counts&&data.health.counts.findings)||0,((data.health&&data.health.ok)?'ok':'warn'));
+  document.getElementById('sessions').innerHTML=(data.sessions||[]).slice(0,20).map(x=>'<div class="item"><b>'+esc(x.id)+'</b><br><span class="muted">'+esc(x.status)+' · '+esc(x.workspace)+' · '+esc(x.updatedAt||x.createdAt)+'</span></div>').join('')||'<span class="muted">none</span>';
+  document.getElementById('jobs').innerHTML=(data.jobs||[]).slice(0,20).map(x=>'<div class="item"><b>'+esc(x.id)+'</b><br><span class="muted">'+esc(x.status)+' · '+esc(x.workspace)+' · '+esc(x.commandKey||'')+'</span></div>').join('')||'<span class="muted">none</span>';
+  document.getElementById('approvals').innerHTML=(data.approvals||[]).slice(0,20).map(x=>'<div class="item"><b>'+esc(x.id)+'</b><br><span class="muted">'+esc(x.action)+' · '+esc(x.status||'pending')+'</span></div>').join('')||'<span class="muted">none</span>';
+  document.getElementById('health').innerHTML=((data.health&&data.health.findings)||[]).slice(0,20).map(x=>'<div class="item"><b class="'+(x.severity==='error'?'bad':x.severity==='warning'?'warn':'ok')+'">'+esc(x.severity)+'</b> '+esc(x.code)+'<br><span class="muted">'+esc(x.message)+'</span></div>').join('')||'<span class="ok">No findings</span>';
+  document.getElementById('logs').textContent=JSON.stringify((data.auditTail&&data.auditTail.entries)||[],null,2);
+  document.getElementById('raw').textContent=JSON.stringify(data,null,2);
 }
+async function refresh(){render(await fetchJson('/api/dashboard/v9?limit=100'))}
+async function loadHealth(){document.getElementById('raw').textContent=JSON.stringify(await fetchJson('/api/health-monitor'),null,2)}
+async function loadDiff(){const w=document.getElementById('workspace').value;const s=document.getElementById('sessionId').value;document.getElementById('diff').textContent=JSON.stringify(await fetchJson('/api/session/diff?workspace='+encodeURIComponent(w)+'&sessionId='+encodeURIComponent(s)),null,2)}
+function toggleLive(){if(eventSource){eventSource.close();eventSource=null;document.getElementById('liveBtn').textContent='Start live logs';return}const t=document.getElementById('token').value;eventSource=new EventSource('/events'+(t?'?token='+encodeURIComponent(t):''));eventSource.addEventListener('dashboard',e=>{try{render(JSON.parse(e.data))}catch(_){}});eventSource.addEventListener('error',()=>{document.getElementById('status').textContent='live stream error'});document.getElementById('liveBtn').textContent='Stop live logs'}
+refresh();
 </script>
 </body>
 </html>`;

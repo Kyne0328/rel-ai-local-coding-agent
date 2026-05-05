@@ -86,6 +86,13 @@ function makeDefaultConfig() {
       requireApprovalBeforePush: true,
       requireApprovalBeforeMergeBack: true
     },
+    productUx: {
+      dashboardRefreshSeconds: 5,
+      liveLogPollSeconds: 3,
+      staleHours: 24,
+      cleanupOlderThanHours: 168,
+      enableStateExport: true
+    },
     workspaces: {}
   };
 }
@@ -156,6 +163,7 @@ function normalizeConfig(config) {
   next.memory = { ...base.memory, ...((config && config.memory) || {}) };
   next.semanticIndex = { ...base.semanticIndex, ...((config && config.semanticIndex) || {}) };
   next.policies = { ...base.policies, ...((config && config.policies) || {}) };
+  next.productUx = { ...base.productUx, ...((config && config.productUx) || {}) };
   next.approvalGates = { ...base.approvalGates, ...((config && config.approvalGates) || {}) };
 
   for (const [alias, workspace] of Object.entries(next.workspaces)) {
@@ -249,6 +257,7 @@ function publicConfigSummary(config) {
     memory: config.memory,
     semanticIndex: config.semanticIndex,
     policies: config.policies,
+    productUx: config.productUx,
     workspaces: Object.entries(config.workspaces || {}).map(([alias, entry]) => ({
       alias,
       path: entry.path,

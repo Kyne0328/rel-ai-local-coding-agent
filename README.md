@@ -19,7 +19,23 @@ ChatGPT
 
 ## Version
 
-Current version: `0.8.0`
+Current version: `0.9.0`
+
+## What v0.9 adds
+
+v0.9 is the production UX and reliability release. It turns the v8 platform into a more usable local Codex console with a richer dashboard, live operational updates, health monitoring, cleanup workflows, doctor fixes, onboarding helpers, original Rel.AI config import, state backup/export, and installer scripts. This release focuses on making the system easier to run repeatedly on real machines.
+
+- Adds a richer browser dashboard with session, job, approval, lock, health, audit-log, and diff panels.
+- Adds dashboard APIs: `/api/dashboard/v9`, `/api/logs`, `/api/health-monitor`, and live SSE updates through `/events`.
+- Adds MCP dashboard/ops tools: `relai_dashboard_data`, `relai_live_log_tail`, `relai_health_monitor`, `relai_cleanup_preview`, and `relai_cleanup_run`.
+- Adds `relai_doctor_fix` for safe line-ending and state-directory fixes.
+- Adds `relai_setup_wizard` for first-run setup guidance, suggested config, and token generation.
+- Adds `relai_import_original_relai_config` to migrate workspace aliases and test commands from the original Rel.AI `~/.rel-ai/opencode.json`.
+- Adds `relai_state_export` and `relai_state_import` for JSON-based backup/migration of Rel.AI MCP state.
+- Adds CLI helpers: `relai-mcp-config doctor`, `doctor --fix`, `setup`, `import-relai`, and `state export/import`.
+- Adds installer/check scripts for Unix and Windows.
+- Adds `productUx` config fields for dashboard refresh, live-log polling, stale-state detection, cleanup age, and state export behavior.
+- Adds `npm run test:v9`, covering dashboard data, live log tail, health monitor, cleanup preview/run, doctor fix, setup wizard, original Rel.AI import, and state export/import.
 
 ## What v0.8 adds
 
@@ -134,6 +150,7 @@ npm run test:v5
 npm run test:v6
 npm run test:v7
 npm run test:v8
+npm run test:v9
 ```
 
 There are no runtime npm dependencies. `npm install` is mainly useful if you want a lockfile.
