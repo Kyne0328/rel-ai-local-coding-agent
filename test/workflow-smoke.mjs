@@ -12,6 +12,7 @@ const workspace = path.join(temp, 'workspace');
 const stateDir = path.join(temp, 'state');
 fs.mkdirSync(workspace, { recursive: true });
 fs.writeFileSync(path.join(workspace, 'README.md'), '# Smoke\n');
+fs.writeFileSync(path.join(workspace, '.gitattributes'), '* text=auto eol=lf\n', 'utf8');
 fs.writeFileSync(path.join(workspace, 'package.json'), JSON.stringify({ scripts: { test: 'node -e "console.log(\\"ok\\")"' } }, null, 2));
 execFileSync('git', ['init'], { cwd: workspace, stdio: 'ignore' });
 execFileSync('git', ['config', 'user.email', 'relai@example.test'], { cwd: workspace });

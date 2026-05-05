@@ -19,7 +19,23 @@ ChatGPT
 
 ## Version
 
-Current version: `0.7.0`
+Current version: `0.8.0`
+
+## What v0.8 adds
+
+v0.8 is the production-hardening and intelligence release. It adds dependency-aware scheduling, merge coordination, repository memory, review scoring, snapshots, optional semantic-ish search, PR requested-changes workflows, doctor checks, policy evaluation, and Windows-safe ESM/line-ending fixes. This version is aimed at making the multi-agent system safer to run repeatedly on real repositories.
+
+- Adds dependency-aware scheduler tools: `relai_scheduler_start`, `relai_scheduler_status`, `relai_scheduler_pause`, `relai_scheduler_resume`, and `relai_scheduler_stop`.
+- Adds merge coordination tools: `relai_merge_plan`, `relai_merge_execute`, `relai_merge_status`, and `relai_merge_abort`.
+- Adds safe local repository memory: `relai_memory_read`, `relai_memory_write`, `relai_memory_search`, and `relai_memory_clear`.
+- Adds review scoring tools: `relai_review_score`, `relai_review_security`, `relai_review_test_gaps`, and `relai_review_regression_risks`.
+- Adds snapshot/rollback records with `relai_snapshot_create`, `relai_snapshot_list`, `relai_snapshot_read`, `relai_snapshot_restore`, and `relai_snapshot_delete`.
+- Adds optional local semantic-ish indexing with `relai_semantic_index_build`, `relai_semantic_search`, and `relai_context_recommend`.
+- Adds PR requested-changes workflow helpers: `relai_pr_comments_read`, `relai_pr_requested_changes_plan`, and `relai_pr_reply_to_review`.
+- Adds `relai_doctor`, `relai_policy_summary`, and `relai_policy_evaluate`.
+- Adds `.gitattributes` and `.editorconfig` to normalize line endings and reduce Windows LF/CRLF warnings.
+- Fixes Windows ESM dynamic imports by converting absolute paths to `file://` URLs before `import()` in smoke tests.
+- Adds `npm run test:v8`, covering doctor, memory, semantic search, snapshots, review scoring, scheduler, merge planning, and policy checks.
 
 ## What v0.7 adds
 
@@ -117,6 +133,7 @@ npm run test:v4
 npm run test:v5
 npm run test:v6
 npm run test:v7
+npm run test:v8
 ```
 
 There are no runtime npm dependencies. `npm install` is mainly useful if you want a lockfile.
@@ -562,6 +579,22 @@ The server still does not silently browse arbitrary disk paths. Everything is sc
 ---
 
 ## Version history
+
+### 0.8.0
+
+- Adds dependency-aware scheduler tools for multi-agent subtasks: `relai_scheduler_start`, `relai_scheduler_status`, `relai_scheduler_pause`, `relai_scheduler_resume`, and `relai_scheduler_stop`.
+- Adds merge coordination tools: `relai_merge_plan`, `relai_merge_execute`, `relai_merge_status`, and `relai_merge_abort`.
+- Adds safe local repository memory stored under `stateDir/memory` with read, write, search, and clear tools.
+- Adds reviewer scoring tools for risk, security-sensitive changes, missing test coverage, and regression risks.
+- Adds workspace snapshots stored under `stateDir/snapshots` for capturing HEAD, status, staged diff, and unstaged diff before risky operations.
+- Adds optional semantic-ish local indexing stored under `stateDir/semantic-indexes` for better relevant-file retrieval without external embedding services.
+- Adds PR requested-changes workflow helpers for reading comments, creating a fix plan, and replying after changes.
+- Adds `relai_doctor` for Node/Git/GitHub/Docker/config/line-ending diagnostics.
+- Adds policy summary and policy evaluation tools for approval gates, command rules, destructive actions, and remote MCP safety checks.
+- Adds `.gitattributes` and `.editorconfig` so source, JSON, Markdown, and test fixtures stay LF-normalized across Windows/macOS/Linux.
+- Fixes Windows `ERR_UNSUPPORTED_ESM_URL_SCHEME` failures by using `pathToFileURL(...).href` for dynamic imports from absolute paths.
+- Updates example config, security docs, ChatGPT connection docs, and README version info.
+- Adds `npm run test:v8`, covering the production-hardening tools and Windows-safe path/line-ending behavior.
 
 ### 0.7.0
 

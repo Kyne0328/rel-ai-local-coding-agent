@@ -65,6 +65,27 @@ function makeDefaultConfig() {
       requireReviewBeforeMerge: true,
       defaultRoles: ["planner", "implementer", "tester", "reviewer"]
     },
+    scheduler: {
+      enabled: true,
+      maxRetries: 1,
+      stopOnFailure: true
+    },
+    memory: {
+      enabled: true,
+      maxNotesPerWorkspace: 500,
+      maxNoteChars: 20000
+    },
+    semanticIndex: {
+      enabled: false,
+      maxFiles: 8000,
+      maxFileBytes: 200000
+    },
+    policies: {
+      blockedPaths: [],
+      maxPatchFiles: 50,
+      requireApprovalBeforePush: true,
+      requireApprovalBeforeMergeBack: true
+    },
     workspaces: {}
   };
 }
@@ -131,6 +152,10 @@ function normalizeConfig(config) {
   next.multiAgent.defaultRoles = Array.isArray(next.multiAgent.defaultRoles) ? next.multiAgent.defaultRoles.map(String).slice(0, 20) : base.multiAgent.defaultRoles;
   next.taskRunner = { ...base.taskRunner, ...((config && config.taskRunner) || {}) };
   next.ciRepair = { ...base.ciRepair, ...((config && config.ciRepair) || {}) };
+  next.scheduler = { ...base.scheduler, ...((config && config.scheduler) || {}) };
+  next.memory = { ...base.memory, ...((config && config.memory) || {}) };
+  next.semanticIndex = { ...base.semanticIndex, ...((config && config.semanticIndex) || {}) };
+  next.policies = { ...base.policies, ...((config && config.policies) || {}) };
   next.approvalGates = { ...base.approvalGates, ...((config && config.approvalGates) || {}) };
 
   for (const [alias, workspace] of Object.entries(next.workspaces)) {
@@ -220,6 +245,10 @@ function publicConfigSummary(config) {
     ciRepair: config.ciRepair,
     sandboxMode: config.sandboxMode,
     multiAgent: config.multiAgent,
+    scheduler: config.scheduler,
+    memory: config.memory,
+    semanticIndex: config.semanticIndex,
+    policies: config.policies,
     workspaces: Object.entries(config.workspaces || {}).map(([alias, entry]) => ({
       alias,
       path: entry.path,

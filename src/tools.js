@@ -32,6 +32,15 @@ const locks = require("./locks");
 const orchestrator = require("./orchestrator");
 const taskRunner = require("./taskRunner");
 const multiagent = require("./multiagent");
+const scheduler = require("./scheduler");
+const mergeCoordinator = require("./mergeCoordinator");
+const memory = require("./memory");
+const snapshots = require("./snapshots");
+const review = require("./review");
+const semantic = require("./semantic");
+const prWorkflow = require("./prWorkflow");
+const doctor = require("./doctor");
+const policy = require("./policy");
 const { enforcePermission } = require("./permissions");
 const pkg = require("../package.json");
 
@@ -41,6 +50,46 @@ const toolSchemas = [
   tool("relai_audit_tail", "Audit Log Tail", "Return recent rel-ai-mcp audit entries.", { limit: numberProp(1, 1000) }),
   tool("relai_dashboard_summary", "Dashboard Summary", "Return sessions, jobs, approvals, locks, and config summary for a lightweight web dashboard.", { limit: numberProp(1, 200) }),
   tool("relai_dashboard_open", "Dashboard Open Info", "Return dashboard and API URLs for a running Rel.AI MCP HTTP server.", { baseUrl: stringProp() }),
+
+
+  tool("relai_scheduler_start", "Start Multi-Agent Scheduler", "Create a dependency-aware scheduler record and compute which subtasks can run now.", { parentSessionId: stringProp(), schedulerId: stringProp(), maxParallel: numberProp(1, 50), limit: numberProp(1, 1000) }),
+  tool("relai_scheduler_status", "Scheduler Status", "Read scheduler status and current runnable/blocked subtask sets.", { parentSessionId: stringProp(), schedulerId: stringProp(), maxParallel: numberProp(1, 50), limit: numberProp(1, 1000) }),
+  tool("relai_scheduler_pause", "Pause Scheduler", "Mark a scheduler record as paused.", { schedulerId: stringProp(), reason: stringProp() }),
+  tool("relai_scheduler_resume", "Resume Scheduler", "Mark a scheduler record as active.", { schedulerId: stringProp(), reason: stringProp() }),
+  tool("relai_scheduler_stop", "Stop Scheduler", "Mark a scheduler record as stopped.", { schedulerId: stringProp(), reason: stringProp() }),
+
+  tool("relai_merge_plan", "Plan Multi-Agent Merge", "Create a safe merge order for completed/reviewed subtasks and detect changed-file conflicts.", { workspace: stringProp(), parentSessionId: stringProp(), targetBranch: stringProp() }, ["workspace"]),
+  tool("relai_merge_execute", "Execute Multi-Agent Merge", "Execute the computed merge plan. Dry-run by default; non-dry-run requires merge approval.", { workspace: stringProp(), parentSessionId: stringProp(), targetBranch: stringProp(), dryRun: boolProp(), force: boolProp(), stopOnFailure: boolProp(), message: stringProp(), approvalId: stringProp() }, ["workspace"]),
+  tool("relai_merge_abort", "Abort Git Merge", "Run git merge --abort in a workspace or task worktree.", { workspace: stringProp(), sessionId: stringProp(), approvalId: stringProp() }, ["workspace"]),
+  tool("relai_merge_status", "Merge Status", "Show merge status and optional merge plan summary.", { workspace: stringProp(), sessionId: stringProp(), parentSessionId: stringProp() }, ["workspace"]),
+
+  tool("relai_memory_read", "Read Repository Memory", "Read safe local repository memory notes for a workspace.", { workspace: stringProp() }, ["workspace"]),
+  tool("relai_memory_write", "Write Repository Memory", "Append a safe local repository memory note such as conventions, architecture notes, or known flaky tests.", { workspace: stringProp(), type: stringProp(), title: stringProp(), text: stringProp(), tags: arrayProp("string", 0, 30) }, ["workspace", "title", "text"]),
+  tool("relai_memory_search", "Search Repository Memory", "Search safe local repository memory notes.", { workspace: stringProp(), query: stringProp(), limit: numberProp(1, 200) }, ["workspace"]),
+  tool("relai_memory_clear", "Clear Repository Memory", "Clear local repository memory for one workspace. Requires confirm=true.", { workspace: stringProp(), confirm: boolProp() }, ["workspace", "confirm"]),
+
+  tool("relai_review_score", "Review Risk Score", "Score the current diff for risk, changed-file breadth, secret-like tokens, and test coverage gaps.", { workspace: stringProp(), sessionId: stringProp(), staged: boolProp(), goal: stringProp(), includeDiff: boolProp() }, ["workspace"]),
+  tool("relai_review_security", "Review Security Risks", "Run security-focused heuristic review over the current diff.", { workspace: stringProp(), sessionId: stringProp(), staged: boolProp(), goal: stringProp(), includeDiff: boolProp() }, ["workspace"]),
+  tool("relai_review_test_gaps", "Review Test Gaps", "Detect likely missing test coverage from current diff and task goal.", { workspace: stringProp(), sessionId: stringProp(), staged: boolProp(), goal: stringProp(), includeDiff: boolProp() }, ["workspace"]),
+  tool("relai_review_regression_risks", "Review Regression Risks", "Detect likely regression risks from current diff.", { workspace: stringProp(), sessionId: stringProp(), staged: boolProp(), goal: stringProp(), includeDiff: boolProp() }, ["workspace"]),
+
+  tool("relai_snapshot_create", "Create Workspace Snapshot", "Capture HEAD, branch, status, staged diff, and unstaged diff before risky actions.", { workspace: stringProp(), sessionId: stringProp(), title: stringProp(), summary: stringProp() }, ["workspace"]),
+  tool("relai_snapshot_list", "List Workspace Snapshots", "List stored workspace snapshots.", { workspace: stringProp(), limit: numberProp(1, 1000) }),
+  tool("relai_snapshot_read", "Read Workspace Snapshot", "Read a stored workspace snapshot with diffs.", { snapshotId: stringProp() }, ["snapshotId"]),
+  tool("relai_snapshot_restore", "Restore Workspace Snapshot", "Restore a stored snapshot. Dry-run by default; non-dry-run requires reset approval.", { workspace: stringProp(), sessionId: stringProp(), snapshotId: stringProp(), dryRun: boolProp(), allowDifferentHead: boolProp(), approvalId: stringProp() }, ["workspace", "snapshotId"]),
+  tool("relai_snapshot_delete", "Delete Workspace Snapshot", "Delete a stored snapshot record.", { snapshotId: stringProp() }, ["snapshotId"]),
+
+  tool("relai_semantic_index_build", "Build Semantic-ish Index", "Build an optional local token-frequency index for better relevant-file retrieval without external embeddings.", { workspace: stringProp(), sessionId: stringProp(), maxFiles: numberProp(1, 100000), maxFileBytes: numberProp(1000, 5242880) }, ["workspace"]),
+  tool("relai_semantic_search", "Semantic-ish Search", "Search the optional local token-frequency index.", { workspace: stringProp(), sessionId: stringProp(), query: stringProp(), terms: stringProp(), limit: numberProp(1, 200) }, ["workspace"]),
+  tool("relai_context_recommend", "Recommend Context", "Recommend files to read for a task using the optional local semantic-ish index.", { workspace: stringProp(), sessionId: stringProp(), goal: stringProp(), task: stringProp(), terms: arrayProp("string", 0, 30), limit: numberProp(1, 200) }, ["workspace"]),
+
+  tool("relai_pr_comments_read", "Read PR Comments", "Read PR comments/reviews through GitHub CLI for requested-changes workflows.", { workspace: stringProp(), pr: stringProp(), sessionId: stringProp() }, ["workspace"]),
+  tool("relai_pr_requested_changes_plan", "Plan Requested Changes", "Turn PR review comments into a safe fix plan skeleton.", { workspace: stringProp(), pr: stringProp(), comments: objectProp(), review: objectProp(), sessionId: stringProp() }, ["workspace"]),
+  tool("relai_pr_reply_to_review", "Reply To PR Review", "Post a PR comment through GitHub CLI after applying requested changes.", { workspace: stringProp(), pr: stringProp(), body: stringProp(), message: stringProp(), sessionId: stringProp(), approvalId: stringProp() }, ["workspace"]),
+
+  tool("relai_doctor", "Run Rel.AI MCP Doctor", "Check Node/Git/GitHub/Docker availability, config safety, and optional line-ending setup.", { workspacePath: stringProp(), checkGh: boolProp(), checkDocker: boolProp() }),
+  tool("relai_policy_summary", "Policy Summary", "Return effective safety policy, approval gates, and recommendations.", {}),
+  tool("relai_policy_evaluate", "Evaluate Policy", "Evaluate whether a proposed action is allowed or approval-gated.", { action: stringProp(), workspace: stringProp(), sessionId: stringProp(), commandKey: stringProp() }, ["action"]),
 
   tool("relai_task_run", "Run Codex-like Task", "High-level task runner: create/resume a task session, create worktree, build index, create plan, apply supplied patches, run tests, and optionally prepare a PR.", {
     workspace: stringProp(), sessionId: stringProp(), goal: stringProp(), task: stringProp(), mode: stringProp(), title: stringProp(), branchName: stringProp(), fromRef: stringProp(), createWorktree: boolProp(), buildIndex: boolProp(), maxIndexFiles: numberProp(1, 100000), forceNewPlan: boolProp(), patches: arrayProp("string", 0, 20), testCommandKeys: arrayProp("string", 0, 30), stopOnFailure: boolProp(), commitMessage: stringProp(), push: boolProp(), remote: stringProp(), createPr: boolProp(), prTitle: stringProp(), prBody: stringProp(), prBodyExtra: stringProp(), base: stringProp(), head: stringProp(), draft: boolProp(), labels: arrayProp("string", 0, 20), reviewers: arrayProp("string", 0, 20), steps: arrayProp("object", 0, 200)
@@ -282,6 +331,77 @@ async function dispatchTool(config, name, args) {
       return dashboardSummary(config, args);
     case "relai_dashboard_open":
       return taskRunner.dashboardOpen(config, args);
+
+    case "relai_scheduler_start":
+      return scheduler.startScheduler(config, args);
+    case "relai_scheduler_status":
+      return { ...scheduler.readScheduler(config, args), schedule: scheduler.computeSchedule(config, args) };
+    case "relai_scheduler_pause":
+      return scheduler.pauseScheduler(config, args);
+    case "relai_scheduler_resume":
+      return scheduler.resumeScheduler(config, args);
+    case "relai_scheduler_stop":
+      return scheduler.stopScheduler(config, args);
+
+    case "relai_merge_plan":
+      return withWorkspace(config, args, (workspace) => mergeCoordinator.mergePlan(config, workspace, args));
+    case "relai_merge_execute":
+      if (args.dryRun === false) approvals.requireApproval(config, "merge", args);
+      return withWorkspace(config, args, (workspace) => mergeCoordinator.mergeExecute(config, workspace, args));
+    case "relai_merge_abort":
+      approvals.requireApproval(config, "reset", args);
+      return withWorkspace(config, args, (workspace) => mergeCoordinator.mergeAbort(config, workspace, args));
+    case "relai_merge_status":
+      return withWorkspace(config, args, (workspace) => mergeCoordinator.mergeStatus(config, workspace, args));
+
+    case "relai_memory_read":
+      return withWorkspace(config, args, (workspace) => memory.readMemory(config, workspace));
+    case "relai_memory_write":
+      return withWorkspace(config, args, (workspace) => memory.writeMemory(config, workspace, args));
+    case "relai_memory_search":
+      return withWorkspace(config, args, (workspace) => memory.searchMemory(config, workspace, args));
+    case "relai_memory_clear":
+      return withWorkspace(config, args, (workspace) => memory.clearMemory(config, workspace, args));
+
+    case "relai_review_score":
+    case "relai_review_security":
+    case "relai_review_test_gaps":
+    case "relai_review_regression_risks":
+      return withWorkspace(config, args, (workspace) => review.reviewCurrentDiff(config, workspace, args));
+
+    case "relai_snapshot_create":
+      return withWorkspace(config, args, (workspace) => snapshots.createSnapshot(config, workspace, args));
+    case "relai_snapshot_list":
+      return snapshots.listSnapshots(config, args);
+    case "relai_snapshot_read":
+      return snapshots.readSnapshot(config, args.snapshotId);
+    case "relai_snapshot_restore":
+      if (args.dryRun === false) approvals.requireApproval(config, "reset", args);
+      return withWorkspace(config, args, (workspace) => snapshots.restoreSnapshot(config, workspace, args));
+    case "relai_snapshot_delete":
+      return snapshots.deleteSnapshot(config, args);
+
+    case "relai_semantic_index_build":
+      return withWorkspace(config, args, (workspace) => semantic.buildSemanticIndex(config, workspace, args));
+    case "relai_semantic_search":
+      return withWorkspace(config, args, (workspace) => semantic.semanticSearch(config, workspace, args));
+    case "relai_context_recommend":
+      return withWorkspace(config, args, (workspace) => semantic.contextRecommend(config, workspace, args));
+
+    case "relai_pr_comments_read":
+      return withWorkspace(config, args, (workspace) => prWorkflow.prCommentsRead(config, workspace, args));
+    case "relai_pr_requested_changes_plan":
+      return withWorkspace(config, args, (workspace) => prWorkflow.requestedChangesPlan(config, workspace, args));
+    case "relai_pr_reply_to_review":
+      approvals.requireApproval(config, "pr", args);
+      return withWorkspace(config, args, (workspace) => prWorkflow.replyToReview(config, workspace, args));
+
+    case "relai_doctor":
+      return doctor.doctor(config, args);
+    case "relai_policy_summary":
+      return policy.policySummary(config);
+    case "relai_policy_evaluate":
+      return policy.evaluatePolicy(config, args);
 
     case "relai_task_run":
       return withWorkspace(config, args, (workspace) => taskRunner.taskRun(config, workspace, args));
@@ -566,7 +686,16 @@ function versionInfo() {
       "subtask dependency graph",
       "changed-file conflict detection",
       "review-agent diff and PR summaries",
-      "subtask merge-back preflight"
+      "subtask merge-back preflight",
+      "dependency-aware multi-agent scheduler",
+      "merge coordinator",
+      "local repository memory",
+      "review risk scoring",
+      "workspace snapshots and rollback",
+      "semantic-ish local search",
+      "PR requested-changes workflow",
+      "doctor checks",
+      "policy evaluation"
     ]
   };
 }

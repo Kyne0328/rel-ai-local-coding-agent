@@ -1,7 +1,7 @@
 {
   "name": "rel-ai-mcp",
-  "version": "0.7.0",
-  "description": "Full MCP-based Codex-like multi-agent coding task platform for ChatGPT with task runner, subtask orchestration, worktrees, plans, approvals, repo indexing, reviews, git, CI, and PR workflows.",
+  "version": "0.8.0",
+  "description": "Production-hardened MCP-based Codex-like multi-agent coding task platform for ChatGPT with scheduling, merge coordination, memory, snapshots, review scoring, semantic search, git, CI, and PR workflows.",
   "private": true,
   "license": "MIT",
   "engines": {
@@ -15,7 +15,7 @@
   "scripts": {
     "start": "node bin/rel-ai-mcp.js",
     "start:http": "node bin/rel-ai-mcp-http.js",
-    "check": "node --check bin/rel-ai-mcp.js && node --check bin/rel-ai-mcp-http.js && node --check bin/relai-mcp-config.js && node --check src/audit.js && node --check src/config.js && node --check src/docker.js && node --check src/git.js && node --check src/httpServer.js && node --check src/jobs.js && node --check src/permissions.js && node --check src/process.js && node --check src/safety.js && node --check src/server.js && node --check src/sessions.js && node --check src/tools.js && node --check src/worktrees.js && node --check src/approvals.js && node --check src/plans.js && node --check src/indexer.js && node --check src/locks.js && node --check src/orchestrator.js && node --check src/taskRunner.js && node --check src/multiagent.js",
+    "check": "node --check bin/rel-ai-mcp.js && node --check bin/rel-ai-mcp-http.js && node --check bin/relai-mcp-config.js && node --check src/approvals.js && node --check src/audit.js && node --check src/config.js && node --check src/docker.js && node --check src/doctor.js && node --check src/git.js && node --check src/httpServer.js && node --check src/indexer.js && node --check src/jobs.js && node --check src/locks.js && node --check src/memory.js && node --check src/mergeCoordinator.js && node --check src/multiagent.js && node --check src/orchestrator.js && node --check src/permissions.js && node --check src/plans.js && node --check src/policy.js && node --check src/prWorkflow.js && node --check src/process.js && node --check src/review.js && node --check src/safety.js && node --check src/scheduler.js && node --check src/semantic.js && node --check src/server.js && node --check src/sessions.js && node --check src/snapshots.js && node --check src/taskRunner.js && node --check src/tools.js && node --check src/worktrees.js",
     "init-config": "node bin/relai-mcp-config.js init",
     "workspace:add": "node bin/relai-mcp-config.js workspace add",
     "testcmd:add": "node bin/relai-mcp-config.js test-command add",
@@ -26,7 +26,8 @@
     "test:v4": "node test/v4-worktree-smoke.mjs",
     "test:v5": "node test/v5-orchestration-smoke.mjs",
     "test:v6": "node test/v6-task-runner-smoke.mjs",
-    "test:v7": "node test/v7-multiagent-smoke.mjs"
+    "test:v7": "node test/v7-multiagent-smoke.mjs",
+    "test:v8": "node test/v8-production-smoke.mjs"
   },
   "keywords": [
     "mcp",

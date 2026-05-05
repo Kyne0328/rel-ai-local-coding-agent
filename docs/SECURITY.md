@@ -154,3 +154,18 @@ Recommended defaults:
 - Keep `maxParallelSubtasks` low until the repo has reliable tests and branch hygiene.
 
 Non-dry-run merge-back is intentionally gated because it modifies the target branch checkout. Prefer dry-run merge preflight first.
+
+## v0.8 production-hardening notes
+
+v0.8 adds several safety-oriented layers intended for longer multi-agent runs:
+
+- `.gitattributes` and `.editorconfig` are included so source files, JSON, Markdown, and smoke-test fixtures stay LF-normalized across Windows/macOS/Linux.
+- `relai_doctor` checks local prerequisites and can detect missing line-ending normalization files in a workspace.
+- `relai_policy_summary` and `relai_policy_evaluate` expose the effective safety posture before high-risk actions.
+- `relai_snapshot_create` should be used before large patches, merge-back, commit, push, and CI-repair cycles.
+- `relai_snapshot_restore` stays approval-gated through the `reset` gate when actually restoring.
+- `relai_memory_*` stores local repository notes only inside `stateDir`; do not store secrets in memory notes.
+- Optional semantic-ish indexing is local and token-frequency based; it does not call an external embedding service.
+- PR reply tools remain behind the `pr` permission level and the PR approval gate.
+
+For remote ChatGPT Developer Mode use, keep `approvalGates.push`, `approvalGates.pr`, `approvalGates.merge`, and `approvalGates.reset` enabled.

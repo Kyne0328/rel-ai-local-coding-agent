@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -12,6 +12,7 @@ fs.mkdirSync(repo, { recursive: true });
 execFileSync("git", ["init", "-b", "main"], { cwd: repo });
 execFileSync("git", ["config", "user.email", "relai@example.com"], { cwd: repo });
 execFileSync("git", ["config", "user.name", "RelAI Smoke"], { cwd: repo });
+fs.writeFileSync(path.join(repo, ".gitattributes"), "* text=auto eol=lf\n", "utf8");
 fs.mkdirSync(path.join(repo, "src"));
 fs.writeFileSync(path.join(repo, "README.md"), "# Smoke\n", "utf8");
 fs.writeFileSync(path.join(repo, "src", "add.js"), "export function add(a, b) { return a + b; }\n", "utf8");
@@ -37,11 +38,11 @@ fs.writeFileSync(configPath, JSON.stringify({
 }, null, 2));
 process.env.REL_AI_MCP_CONFIG = configPath;
 
-const { callTool } = await import(path.join(root, "src", "tools.js"));
+const { callTool } = await import(pathToFileURL(path.join(root, "src", "tools.js")).href);
 
 const version = await callTool("relai_version", {});
 assert.equal(version.ok, true);
-assert.equal(version.version, "0.7.0");
+assert.equal(version.version, "0.8.0");
 assert.ok(version.capabilities.includes("persistent implementation plans"));
 assert.ok(version.toolCount >= 50);
 

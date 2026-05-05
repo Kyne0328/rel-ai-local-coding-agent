@@ -131,3 +131,33 @@ For merge-back, prefer dry-run first:
 ```text
 Use relai_subtask_merge_back with dryRun=true for the implementer subtask. Do not perform a real merge unless I approve it.
 ```
+
+## v0.8 Windows and line-ending notes
+
+v0.8 includes `.gitattributes` and `.editorconfig` to reduce warnings such as:
+
+```text
+warning: in the working copy of 'package.json', LF will be replaced by CRLF the next time Git touches it
+```
+
+For repositories you want Rel.AI MCP to work on, add a similar `.gitattributes` file:
+
+```gitattributes
+* text=auto
+*.js text eol=lf
+*.mjs text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.sh text eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+```
+
+If you see Windows ESM errors like `ERR_UNSUPPORTED_ESM_URL_SCHEME` with protocol `c:`, the fix is to convert absolute paths before dynamic import:
+
+```js
+import { pathToFileURL } from "node:url";
+await import(pathToFileURL(absolutePath).href);
+```
+
+The v0.8 smoke tests use this pattern.
