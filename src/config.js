@@ -9,12 +9,18 @@ function getConfigPath() {
 function makeDefaultConfig() {
   return {
     version: 1,
-    maxReadFileBytes: 200000,
-    maxSearchFileBytes: 200000,
-    maxOutputBytes: 1024 * 1024,
-    commandTimeoutMs: 15 * 60 * 1000,
-    maxTreeEntries: 1500,
+    stateDir: path.join(os.homedir(), ".rel-ai-mcp"),
+    auditLogPath: "",
+    maxReadFileBytes: 300000,
+    maxWriteFileBytes: 600000,
+    maxSearchFileBytes: 300000,
+    maxOutputBytes: 2 * 1024 * 1024,
+    commandTimeoutMs: 20 * 60 * 1000,
+    maxTreeEntries: 5000,
+    maxSessionSteps: 300,
     allowGitHubCli: false,
+    allowArbitraryCommands: false,
+    allowDestructiveTools: false,
     workspaces: {}
   };
 }
@@ -41,6 +47,13 @@ function writeConfig(config, options = {}) {
   return normalized;
 }
 
+function expandHome(value) {
+  const text = String(value || "");
+  if (text === "~") return os.homedir();
+  if (text.startsWith("~/")) return path.join(os.homedir(), text.slice(2));
+  return text;
+}
+
 function normalizeConfig(config) {
   const base = makeDefaultConfig();
   const next = {
@@ -48,20 +61,37 @@ function normalizeConfig(config) {
     ...(config || {}),
     workspaces: { ...((config && config.workspaces) || {}) }
   };
-  if (!Number.isFinite(next.maxReadFileBytes) || next.maxReadFileBytes <= 0) next.maxReadFileBytes = base.maxReadFileBytes;
-  if (!Number.isFinite(next.maxSearchFileBytes) || next.maxSearchFileBytes <= 0) next.maxSearchFileBytes = base.maxSearchFileBytes;
-  if (!Number.isFinite(next.maxOutputBytes) || next.maxOutputBytes <= 0) next.maxOutputBytes = base.maxOutputBytes;
-  if (!Number.isFinite(next.commandTimeoutMs) || next.commandTimeoutMs <= 0) next.commandTimeoutMs = base.commandTimeoutMs;
-  if (!Number.isFinite(next.maxTreeEntries) || next.maxTreeEntries <= 0) next.maxTreeEntries = base.maxTreeEntries;
+
+  next.stateDir = expandHome(next.stateDir || base.stateDir);
+  if (!path.isAbsolute(next.stateDir)) next.stateDir = path.resolve(next.stateDir);
+  next.auditLogPath = next.auditLogPath ? expandHome(next.auditLogPath) : path.join(next.stateDir, "audit.jsonl");
+  if (!path.isAbsolute(next.auditLogPath)) next.auditLogPath = path.resolve(next.auditLogPath);
+
+  for (const key of ["maxReadFileBytes", "maxWriteFileBytes", "maxSearchFileBytes", "maxOutputBytes", "commandTimeoutMs", "maxTreeEntries", "maxSessionSteps"]) {
+    if (!Number.isFinite(next[key]) || next[key] <= 0) next[key] = base[key];
+  }
+  next.allowGitHubCli = Boolean(next.allowGitHubCli);
+  next.allowArbitraryCommands = Boolean(next.allowArbitraryCommands);
+  next.allowDestructiveTools = Boolean(next.allowDestructiveTools);
 
   for (const [alias, workspace] of Object.entries(next.workspaces)) {
-    next.workspaces[alias] = {
-      path: workspace.path,
-      testCommands: workspace.testCommands || {},
-      protectedBranches: workspace.protectedBranches || ["main", "master"]
-    };
+    next.workspaces[alias] = normalizeWorkspace(workspace || {});
   }
   return next;
+}
+
+function normalizeWorkspace(workspace) {
+  return {
+    path: workspace.path,
+    testCommands: workspace.testCommands || {},
+    commands: workspace.commands || {},
+    protectedBranches: workspace.protectedBranches || ["main", "master"],
+    defaultBaseBranch: workspace.defaultBaseBranch || "main",
+    allowedRemotes: Array.isArray(workspace.allowedRemotes) ? workspace.allowedRemotes : ["origin"],
+    repoSlug: workspace.repoSlug || "",
+    allowArbitraryCommands: Boolean(workspace.allowArbitraryCommands),
+    allowDestructiveTools: Boolean(workspace.allowDestructiveTools)
+  };
 }
 
 function resolveWorkspace(config, alias) {
@@ -79,24 +109,42 @@ function resolveWorkspace(config, alias) {
     alias: key,
     path: realRoot,
     testCommands: entry.testCommands || {},
-    protectedBranches: entry.protectedBranches || ["main", "master"]
+    commands: entry.commands || {},
+    protectedBranches: entry.protectedBranches || ["main", "master"],
+    defaultBaseBranch: entry.defaultBaseBranch || "main",
+    allowedRemotes: entry.allowedRemotes || ["origin"],
+    repoSlug: entry.repoSlug || "",
+    allowArbitraryCommands: Boolean(entry.allowArbitraryCommands || config.allowArbitraryCommands),
+    allowDestructiveTools: Boolean(entry.allowDestructiveTools || config.allowDestructiveTools)
   };
 }
 
 function publicConfigSummary(config) {
   return {
     configPath: getConfigPath(),
+    stateDir: config.stateDir,
+    auditLogPath: config.auditLogPath,
     maxReadFileBytes: config.maxReadFileBytes,
+    maxWriteFileBytes: config.maxWriteFileBytes,
     maxSearchFileBytes: config.maxSearchFileBytes,
     maxOutputBytes: config.maxOutputBytes,
     commandTimeoutMs: config.commandTimeoutMs,
     maxTreeEntries: config.maxTreeEntries,
+    maxSessionSteps: config.maxSessionSteps,
     allowGitHubCli: Boolean(config.allowGitHubCli),
+    allowArbitraryCommands: Boolean(config.allowArbitraryCommands),
+    allowDestructiveTools: Boolean(config.allowDestructiveTools),
     workspaces: Object.entries(config.workspaces || {}).map(([alias, entry]) => ({
       alias,
       path: entry.path,
       testCommandKeys: Object.keys(entry.testCommands || {}).sort(),
-      protectedBranches: entry.protectedBranches || ["main", "master"]
+      commandKeys: Object.keys(entry.commands || {}).sort(),
+      protectedBranches: entry.protectedBranches || ["main", "master"],
+      defaultBaseBranch: entry.defaultBaseBranch || "main",
+      allowedRemotes: entry.allowedRemotes || ["origin"],
+      repoSlug: entry.repoSlug || "",
+      allowArbitraryCommands: Boolean(entry.allowArbitraryCommands),
+      allowDestructiveTools: Boolean(entry.allowDestructiveTools)
     })).sort((a, b) => a.alias.localeCompare(b.alias))
   };
 }
@@ -106,6 +154,8 @@ module.exports = {
   makeDefaultConfig,
   readConfig,
   writeConfig,
+  normalizeConfig,
+  expandHome,
   resolveWorkspace,
   publicConfigSummary
 };

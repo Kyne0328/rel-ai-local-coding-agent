@@ -1,7 +1,7 @@
 {
   "name": "rel-ai-mcp",
-  "version": "0.2.0",
-  "description": "MCP-based Codex-like local and remote coding runner for ChatGPT.",
+  "version": "0.3.0",
+  "description": "Full MCP-based Codex-like local and remote coding runner for ChatGPT.",
   "private": true,
   "license": "MIT",
   "engines": {
@@ -14,19 +14,22 @@
   },
   "scripts": {
     "start": "node bin/rel-ai-mcp.js",
-    "check": "node --check bin/rel-ai-mcp.js && node --check bin/rel-ai-mcp-http.js && node --check bin/relai-mcp-config.js && node --check src/config.js && node --check src/git.js && node --check src/httpServer.js && node --check src/process.js && node --check src/safety.js && node --check src/server.js && node --check src/tools.js",
+    "start:http": "node bin/rel-ai-mcp-http.js",
+    "check": "node --check bin/rel-ai-mcp.js && node --check bin/rel-ai-mcp-http.js && node --check bin/relai-mcp-config.js && node --check src/audit.js && node --check src/config.js && node --check src/git.js && node --check src/httpServer.js && node --check src/process.js && node --check src/safety.js && node --check src/server.js && node --check src/sessions.js && node --check src/tools.js",
     "init-config": "node bin/relai-mcp-config.js init",
     "workspace:add": "node bin/relai-mcp-config.js workspace add",
     "testcmd:add": "node bin/relai-mcp-config.js test-command add",
+    "cmd:add": "node bin/relai-mcp-config.js command add",
     "test:smoke": "node test/smoke.mjs",
-    "start:http": "node bin/rel-ai-mcp-http.js",
-    "test:http": "node test/http-smoke.mjs"
+    "test:http": "node test/http-smoke.mjs",
+    "test:workflow": "node test/workflow-smoke.mjs"
   },
   "keywords": [
     "mcp",
     "chatgpt",
     "coding-agent",
     "codex",
-    "git"
+    "git",
+    "pull-request"
   ]
 }

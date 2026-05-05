@@ -1,9 +1,10 @@
 {
   "name": "Rel.AI MCP",
-  "description": "Safe MCP coding runner for local workspaces, patches, tests, git branches, and draft PRs.",
-  "transport": "streamable-http",
-  "url": "https://your-public-https-domain.example.com/mcp",
-  "headers": {
-    "Authorization": "Bearer ${REL_AI_MCP_TOKEN}"
-  }
+  "description": "Full Codex-like MCP runner for ChatGPT: workspace read/write, patch/test loops, Git, PRs, sessions, and audit logs.",
+  "server_url": "https://your-domain.example.com/mcp",
+  "auth": {
+    "type": "bearer",
+    "token_env": "REL_AI_MCP_TOKEN"
+  },
+  "recommended_first_prompt": "Use Rel.AI MCP. Call relai_version and relai_config only. Do not read or modify files yet."
 }

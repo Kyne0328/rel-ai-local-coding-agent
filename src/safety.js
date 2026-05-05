@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const crypto = require("node:crypto");
 
 const SECRET_PATH_PATTERNS = [
   /(^|\/)\.env($|[./-])/i,
@@ -12,13 +13,15 @@ const SECRET_PATH_PATTERNS = [
   /(^|\/)service-account[^/]*\.json$/i,
   /(^|\/)\.aws\//i,
   /(^|\/)\.azure\//i,
-  /(^|\/)gcloud\/credentials/i
+  /(^|\/)gcloud\/credentials/i,
+  /(^|\/)(kubeconfig|\.kube)(\/|$)/i
 ];
 
 const DEFAULT_EXCLUDED_NAMES = new Set([
   ".git", "node_modules", "dist", "build", "coverage", ".next", ".nuxt", ".svelte-kit",
   ".turbo", ".cache", ".parcel-cache", ".vite", ".pytest_cache", "__pycache__",
-  ".venv", "venv", "target", "bin", "obj", "DerivedData", ".gradle", ".idea", ".vscode"
+  ".venv", "venv", "target", "bin", "obj", "DerivedData", ".gradle", ".idea", ".vscode",
+  "vendor", ".pnpm-store", ".yarn/cache", "storybook-static", ".nyc_output", "htmlcov"
 ]);
 
 function validateRelativePath(relativePath, label = "Path") {
@@ -112,8 +115,8 @@ function decodeGitOctalEscapes(value) {
 }
 
 function collectTextFiles(root, options = {}) {
-  const maxEntries = options.maxEntries || 1500;
-  const maxFileBytes = options.maxFileBytes || 200000;
+  const maxEntries = options.maxEntries || 5000;
+  const maxFileBytes = options.maxFileBytes || 300000;
   const files = [];
   const skipped = [];
   const realRoot = fs.realpathSync(root);
@@ -135,7 +138,7 @@ function collectTextFiles(root, options = {}) {
         skipped.push({ path: rel, reason: "blocked sensitive path" });
         continue;
       }
-      if (DEFAULT_EXCLUDED_NAMES.has(entry.name)) {
+      if (DEFAULT_EXCLUDED_NAMES.has(entry.name) || DEFAULT_EXCLUDED_NAMES.has(rel)) {
         skipped.push({ path: rel, reason: "excluded generated/cache folder" });
         continue;
       }
@@ -186,6 +189,52 @@ function readTextFileSafe(root, relativePath, maxBytes) {
   return data.toString("utf8");
 }
 
+function fileSha256(root, relativePath) {
+  const resolved = resolveSafePath(root, relativePath);
+  if (!fs.existsSync(resolved.absolutePath)) return null;
+  const stat = fs.statSync(resolved.absolutePath);
+  if (!stat.isFile()) throw new Error(`Not a file: ${resolved.relativePath}`);
+  return crypto.createHash("sha256").update(fs.readFileSync(resolved.absolutePath)).digest("hex");
+}
+
+function writeTextFileSafe(root, relativePath, content, options = {}) {
+  const resolved = resolveSafePath(root, relativePath);
+  const text = String(content ?? "");
+  const maxBytes = options.maxBytes || 600000;
+  if (Buffer.byteLength(text, "utf8") > maxBytes) {
+    throw new Error(`Refusing to write ${resolved.relativePath}; content exceeds ${maxBytes} bytes.`);
+  }
+  if (looksBinary(Buffer.from(text, "utf8"))) throw new Error("Refusing to write binary-looking content.");
+  if (options.expectedSha256) {
+    const current = fileSha256(root, resolved.relativePath);
+    if (current !== options.expectedSha256) {
+      throw new Error(`SHA mismatch for ${resolved.relativePath}. Expected ${options.expectedSha256}, got ${current || "missing"}.`);
+    }
+  }
+  fs.mkdirSync(path.dirname(resolved.absolutePath), { recursive: true });
+  fs.writeFileSync(resolved.absolutePath, text, "utf8");
+  return { path: resolved.relativePath, sha256: fileSha256(root, resolved.relativePath), bytes: Buffer.byteLength(text, "utf8") };
+}
+
+function safeCommandPolicy(command) {
+  const text = String(command || "");
+  const banned = [
+    /\brm\s+-rf\b/,
+    /\bsudo\b/,
+    /\bmkfs\b/,
+    /\bdd\s+if=/,
+    /:\(\)\s*\{\s*:\|:/,
+    />\s*\/dev\/sd[a-z]/,
+    /\bchmod\s+-R\s+777\b/,
+    /\bchown\s+-R\b/,
+    /\bshutdown\b|\breboot\b/,
+    /\bdeploy\b.*\bprod/i
+  ];
+  const hit = banned.find((pattern) => pattern.test(text));
+  if (hit) throw new Error(`Command rejected by safety policy: ${hit}`);
+  return text;
+}
+
 module.exports = {
   SECRET_PATH_PATTERNS,
   DEFAULT_EXCLUDED_NAMES,
@@ -197,5 +246,8 @@ module.exports = {
   extractPathsFromDiff,
   validateDiffPaths,
   collectTextFiles,
-  readTextFileSafe
+  readTextFileSafe,
+  writeTextFileSafe,
+  fileSha256,
+  safeCommandPolicy
 };

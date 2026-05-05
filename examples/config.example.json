@@ -1,19 +1,32 @@
 {
   "version": 1,
-  "maxReadFileBytes": 200000,
-  "maxSearchFileBytes": 200000,
-  "maxOutputBytes": 1048576,
-  "commandTimeoutMs": 900000,
-  "maxTreeEntries": 1500,
+  "stateDir": "~/.rel-ai-mcp",
+  "auditLogPath": "",
+  "maxReadFileBytes": 300000,
+  "maxWriteFileBytes": 600000,
+  "maxSearchFileBytes": 300000,
+  "maxOutputBytes": 2097152,
+  "commandTimeoutMs": 1200000,
+  "maxTreeEntries": 5000,
+  "maxSessionSteps": 300,
   "allowGitHubCli": false,
+  "allowArbitraryCommands": false,
+  "allowDestructiveTools": false,
   "workspaces": {
     "myapp": {
       "path": "/absolute/path/to/myapp",
       "protectedBranches": ["main", "master"],
+      "defaultBaseBranch": "main",
+      "allowedRemotes": ["origin"],
+      "repoSlug": "Kyne0328/myapp",
       "testCommands": {
         "unit": "npm test",
         "lint": "npm run lint",
         "typecheck": "npm run typecheck"
+      },
+      "commands": {
+        "install": "npm install",
+        "build": "npm run build"
       }
     }
   }

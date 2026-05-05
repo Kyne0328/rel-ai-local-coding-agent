@@ -2,18 +2,29 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { runProcess, summarizeCommand } = require("./process");
-const { validateDiffPaths } = require("./safety");
+const { validateDiffPaths, safeCommandPolicy } = require("./safety");
 
 function runGit(args, workspace, config) {
   return runProcess("git", args, { cwd: workspace.path, shell: false }, config);
 }
 
+async function currentBranch(workspace, config) {
+  const branch = await runGit(["branch", "--show-current"], workspace, config);
+  return branch.stdout.trim();
+}
+
+function isProtectedBranch(workspace, branch) {
+  return (workspace.protectedBranches || ["main", "master"]).includes(String(branch || "").trim());
+}
+
 async function gitStatus(workspace, config) {
   const branch = await runGit(["branch", "--show-current"], workspace, config);
   const status = await runGit(["status", "--short", "--branch"], workspace, config);
+  const porcelain = await runGit(["status", "--porcelain=v1"], workspace, config);
   return {
     ok: status.exitCode === 0,
     branch: branch.stdout || "",
+    clean: porcelain.exitCode === 0 && !porcelain.stdout.trim(),
     status: summarizeCommand(status)
   };
 }
@@ -22,7 +33,31 @@ async function gitDiff(workspace, config, options = {}) {
   const args = options.staged ? ["diff", "--staged"] : ["diff"];
   if (options.path) args.push("--", options.path);
   const diff = await runGit(args, workspace, config);
-  return { ok: diff.exitCode === 0, diff: summarizeCommand(diff) };
+  return { ok: diff.exitCode === 0, staged: Boolean(options.staged), diff: summarizeCommand(diff) };
+}
+
+async function gitLog(workspace, config, options = {}) {
+  const limit = Math.min(Math.max(Number(options.limit || 10), 1), 100);
+  const args = ["log", `-${limit}`, "--date=iso", "--pretty=format:%H%x09%an%x09%ad%x09%s"];
+  if (options.path) args.push("--", options.path);
+  const result = await runGit(args, workspace, config);
+  return {
+    ok: result.exitCode === 0,
+    commits: result.stdout ? result.stdout.split(/\r?\n/).map((line) => {
+      const [sha, author, date, ...subjectParts] = line.split("\t");
+      return { sha, author, date, subject: subjectParts.join("\t") };
+    }) : [],
+    result: summarizeCommand(result)
+  };
+}
+
+async function gitShow(workspace, config, rev) {
+  const ref = String(rev || "").trim();
+  if (!ref || ref.length > 120 || /[^A-Za-z0-9._\/-]/.test(ref) || ref.includes("..")) {
+    throw new Error(`Unsafe or empty git revision: ${ref}`);
+  }
+  const result = await runGit(["show", "--stat", "--patch", "--find-renames", ref], workspace, config);
+  return { ok: result.exitCode === 0, rev: ref, result: summarizeCommand(result) };
 }
 
 async function applyPatch(workspace, config, diff, options = {}) {
@@ -56,6 +91,24 @@ async function applyPatch(workspace, config, diff, options = {}) {
   }
 }
 
+async function applyPatchAndRun(workspace, config, args) {
+  const patch = await applyPatch(workspace, config, args.diff, { dryRun: Boolean(args.dryRun) });
+  const tests = [];
+  if (!patch.ok || args.dryRun) {
+    return { ok: patch.ok, patch, tests, message: args.dryRun ? "Dry run only; tests were not run." : "Patch failed; tests were not run." };
+  }
+  const keys = Array.isArray(args.testCommandKeys) ? args.testCommandKeys : [];
+  for (const key of keys) {
+    const command = workspace.testCommands && workspace.testCommands[key];
+    if (!command) throw new Error(`Test command key '${key}' is not configured for workspace '${workspace.alias}'.`);
+    const result = await runProcess(command, [], { cwd: workspace.path, shell: true, commandString: command }, config);
+    tests.push({ key, command, ...summarizeCommand(result) });
+    if (result.exitCode !== 0 && args.stopOnFailure !== false) break;
+  }
+  const ok = patch.ok && tests.every((test) => test.ok);
+  return { ok, patch, tests, message: ok ? "Patch applied and requested tests passed." : "Patch applied, but one or more tests failed." };
+}
+
 function writeTempDiff(diff) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rel-ai-mcp-diff-"));
   const file = path.join(dir, "patch.diff");
@@ -75,7 +128,7 @@ function validateBranchName(branchName) {
 
 async function createBranch(workspace, config, branchName, options = {}) {
   const name = validateBranchName(branchName);
-  if ((workspace.protectedBranches || []).includes(name)) {
+  if (isProtectedBranch(workspace, name)) {
     throw new Error(`Refusing to create/switch to protected branch '${name}'.`);
   }
   const args = options.fromRef ? ["switch", "-c", name, options.fromRef] : ["switch", "-c", name];
@@ -83,12 +136,20 @@ async function createBranch(workspace, config, branchName, options = {}) {
   return { ok: result.exitCode === 0, branch: name, result: summarizeCommand(result) };
 }
 
+async function switchBranch(workspace, config, branchName) {
+  const name = validateBranchName(branchName);
+  if (isProtectedBranch(workspace, name) && !workspace.allowDestructiveTools) {
+    throw new Error(`Refusing to switch to protected branch '${name}' unless allowDestructiveTools is enabled for the workspace.`);
+  }
+  const result = await runGit(["switch", name], workspace, config);
+  return { ok: result.exitCode === 0, branch: name, result: summarizeCommand(result) };
+}
+
 async function commitAll(workspace, config, message) {
   const commitMessage = String(message || "").trim();
   if (!commitMessage) throw new Error("commit message is required.");
-  const branch = await runGit(["branch", "--show-current"], workspace, config);
-  const current = branch.stdout.trim();
-  if ((workspace.protectedBranches || []).includes(current)) {
+  const current = await currentBranch(workspace, config);
+  if (isProtectedBranch(workspace, current)) {
     throw new Error(`Refusing to commit directly on protected branch '${current}'. Create a feature branch first.`);
   }
   const add = await runGit(["add", "-A"], workspace, config);
@@ -98,13 +159,22 @@ async function commitAll(workspace, config, message) {
 }
 
 async function pushBranch(workspace, config, remote = "origin", branchName = null) {
-  const branch = branchName || (await runGit(["branch", "--show-current"], workspace, config)).stdout.trim();
+  const branch = branchName || await currentBranch(workspace, config);
   validateBranchName(branch);
-  if ((workspace.protectedBranches || []).includes(branch)) {
+  if (isProtectedBranch(workspace, branch)) {
     throw new Error(`Refusing to push protected branch '${branch}' through rel-ai-mcp.`);
   }
-  const result = await runGit(["push", "-u", remote, branch], workspace, config);
-  return { ok: result.exitCode === 0, branch, remote, result: summarizeCommand(result) };
+  const safeRemote = validateRemote(workspace, remote);
+  const result = await runGit(["push", "-u", safeRemote, branch], workspace, config);
+  return { ok: result.exitCode === 0, branch, remote: safeRemote, result: summarizeCommand(result) };
+}
+
+function validateRemote(workspace, remote) {
+  const value = String(remote || "origin").trim();
+  if (!/^[A-Za-z0-9._-]{1,80}$/.test(value)) throw new Error(`Unsafe remote name: ${value}`);
+  const allowed = workspace.allowedRemotes || ["origin"];
+  if (!allowed.includes(value)) throw new Error(`Remote '${value}' is not allowlisted for workspace '${workspace.alias}'.`);
+  return value;
 }
 
 async function createPrWithGh(workspace, config, args) {
@@ -113,24 +183,64 @@ async function createPrWithGh(workspace, config, args) {
   }
   const title = String(args.title || "").trim();
   const body = String(args.body || "").trim();
-  const base = String(args.base || "main").trim();
-  const head = args.head ? String(args.head).trim() : (await runGit(["branch", "--show-current"], workspace, config)).stdout.trim();
+  const base = String(args.base || workspace.defaultBaseBranch || "main").trim();
+  const head = args.head ? String(args.head).trim() : await currentBranch(workspace, config);
   if (!title) throw new Error("title is required.");
   validateBranchName(head);
   validateBranchName(base);
   const ghArgs = ["pr", "create", "--title", title, "--body", body || "Created by rel-ai-mcp.", "--base", base, "--head", head];
   if (args.draft !== false) ghArgs.push("--draft");
+  if (Array.isArray(args.labels)) {
+    for (const label of args.labels) ghArgs.push("--label", String(label));
+  }
+  if (Array.isArray(args.reviewers)) {
+    for (const reviewer of args.reviewers) ghArgs.push("--reviewer", String(reviewer));
+  }
+  const result = await runProcess("gh", ghArgs, { cwd: workspace.path, shell: false }, config);
+  return { ok: result.exitCode === 0, base, head, result: summarizeCommand(result) };
+}
+
+async function prChecksWithGh(workspace, config, args = {}) {
+  if (!config.allowGitHubCli) throw new Error("GitHub CLI is disabled. Set allowGitHubCli: true in config.json.");
+  const selector = args.pr ? String(args.pr) : "";
+  const ghArgs = selector ? ["pr", "checks", selector, "--watch=false"] : ["pr", "checks", "--watch=false"];
   const result = await runProcess("gh", ghArgs, { cwd: workspace.path, shell: false }, config);
   return { ok: result.exitCode === 0, result: summarizeCommand(result) };
 }
 
+async function runConfiguredCommand(workspace, config, args = {}) {
+  let command;
+  let key = null;
+  if (args.commandKey) {
+    key = String(args.commandKey);
+    command = workspace.commands && workspace.commands[key];
+    if (!command) throw new Error(`Command key '${key}' is not configured for workspace '${workspace.alias}'.`);
+  } else if (args.command && workspace.allowArbitraryCommands) {
+    command = String(args.command);
+    key = "arbitrary";
+  } else {
+    throw new Error("Use commandKey for configured commands, or enable allowArbitraryCommands explicitly for this workspace.");
+  }
+  safeCommandPolicy(command);
+  const result = await runProcess(command, [], { cwd: workspace.path, shell: true, commandString: command }, config);
+  return { ok: result.exitCode === 0, commandKey: key, command, ...summarizeCommand(result) };
+}
+
 module.exports = {
   runGit,
+  currentBranch,
   gitStatus,
   gitDiff,
+  gitLog,
+  gitShow,
   applyPatch,
+  applyPatchAndRun,
+  validateBranchName,
   createBranch,
+  switchBranch,
   commitAll,
   pushBranch,
-  createPrWithGh
+  createPrWithGh,
+  prChecksWithGh,
+  runConfiguredCommand
 };
