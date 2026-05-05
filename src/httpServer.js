@@ -2,6 +2,11 @@ const http = require("node:http");
 const crypto = require("node:crypto");
 const { URL } = require("node:url");
 const { handleMessage } = require("./server");
+const { readConfig, publicConfigSummary } = require("./config");
+const sessionsStore = require("./sessions");
+const { listJobs } = require("./jobs");
+const approvals = require("./approvals");
+const locks = require("./locks");
 const pkg = require("../package.json");
 
 const DEFAULT_MAX_BODY_BYTES = 10 * 1024 * 1024;
@@ -52,6 +57,29 @@ async function routeRequest(req, res, options) {
   if (req.method === "OPTIONS") {
     res.writeHead(204);
     res.end();
+    return;
+  }
+
+  if (req.method === "GET" && parsed.pathname === "/dashboard") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    sendHtml(res, 200, renderDashboardHtml(options));
+    return;
+  }
+
+  if (req.method === "GET" && parsed.pathname === "/api/dashboard") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    const config = readConfig();
+    const limit = Math.min(Math.max(Number(parsed.searchParams.get("limit") || 50), 1), 200);
+    sendJson(res, 200, {
+      ok: true,
+      name: pkg.name,
+      version: pkg.version,
+      config: publicConfigSummary(config),
+      sessions: sessionsStore.listSessions(config, { limit }),
+      jobs: listJobs(config, { limit }),
+      approvals: approvals.listApprovals(config, { limit }),
+      locks: locks.listLocks(config).locks
+    });
     return;
   }
 
@@ -106,6 +134,8 @@ async function routeRequest(req, res, options) {
     error: "Not found.",
     endpoints: {
       health: "GET /health",
+      dashboard: "GET /dashboard",
+      dashboardApi: "GET /api/dashboard",
       streamableHttp: "POST /mcp",
       sse: "GET /sse then POST /messages?sessionId=..."
     }
@@ -213,6 +243,42 @@ function sendJson(res, status, payload) {
   if (res.headersSent) return;
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
   res.end(`${JSON.stringify(payload)}\n`);
+}
+
+function sendHtml(res, status, html) {
+  if (res.headersSent) return;
+  res.writeHead(status, { "Content-Type": "text/html; charset=utf-8" });
+  res.end(html);
+}
+
+function renderDashboardHtml(options) {
+  const hasToken = Boolean(options.token);
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rel.AI MCP Dashboard</title>
+<style>body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;margin:2rem;line-height:1.45;max-width:1100px}pre{background:#111;color:#eee;padding:1rem;border-radius:.75rem;overflow:auto}button,input{font:inherit;padding:.55rem .75rem;border-radius:.5rem;border:1px solid #bbb}button{cursor:pointer}.row{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}.card{border:1px solid #ddd;border-radius:1rem;padding:1rem;margin:1rem 0}.muted{color:#666}</style>
+</head>
+<body>
+<h1>Rel.AI MCP Dashboard</h1>
+<p class="muted">Local operational view for sessions, jobs, approvals, locks, and config. This dashboard is intentionally simple; all mutations still happen through MCP tools.</p>
+<div class="card">
+<div class="row"><input id="token" type="password" placeholder="Bearer token${hasToken ? "" : " not required"}"><button onclick="load()">Refresh</button></div>
+</div>
+<pre id="out">Click Refresh.</pre>
+<script>
+async function load(){
+  const token=document.getElementById('token').value;
+  const headers=token?{Authorization:'Bearer '+token}:{};
+  const res=await fetch('/api/dashboard?limit=100',{headers});
+  const text=await res.text();
+  try{document.getElementById('out').textContent=JSON.stringify(JSON.parse(text),null,2)}catch(e){document.getElementById('out').textContent=text}
+}
+</script>
+</body>
+</html>`;
 }
 
 module.exports = {

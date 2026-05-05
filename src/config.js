@@ -18,12 +18,29 @@ function makeDefaultConfig() {
     commandTimeoutMs: 20 * 60 * 1000,
     maxTreeEntries: 12000,
     maxSessionSteps: 1000,
+    maxPlanSteps: 200,
+    maxIndexFiles: 25000,
+    maxIndexFileBytes: 300000,
+    maxConcurrentSessionsPerWorkspace: 4,
+    sessionLocksEnabled: true,
     worktreeRoot: path.join(os.homedir(), ".rel-ai-mcp", "worktrees"),
     permissionProfile: "pr",
     allowGitHubCli: false,
     allowDocker: false,
     allowArbitraryCommands: false,
     allowDestructiveTools: false,
+    approvalGates: {
+      commit: false,
+      push: true,
+      pr: true,
+      reset: true,
+      "worktree-remove": true,
+      docker: false,
+      command: false,
+      patch: false,
+      write: false
+    },
+    dashboardEnabled: true,
     workspaces: {}
   };
 }
@@ -73,13 +90,16 @@ function normalizeConfig(config) {
   if (!path.isAbsolute(next.worktreeRoot)) next.worktreeRoot = path.resolve(next.worktreeRoot);
   next.permissionProfile = String(next.permissionProfile || "pr");
 
-  for (const key of ["maxReadFileBytes", "maxWriteFileBytes", "maxSearchFileBytes", "maxOutputBytes", "commandTimeoutMs", "maxTreeEntries", "maxSessionSteps"]) {
+  for (const key of ["maxReadFileBytes", "maxWriteFileBytes", "maxSearchFileBytes", "maxOutputBytes", "commandTimeoutMs", "maxTreeEntries", "maxSessionSteps", "maxPlanSteps", "maxIndexFiles", "maxIndexFileBytes", "maxConcurrentSessionsPerWorkspace"]) {
     if (!Number.isFinite(next[key]) || next[key] <= 0) next[key] = base[key];
   }
   next.allowGitHubCli = Boolean(next.allowGitHubCli);
   next.allowDocker = Boolean(next.allowDocker);
   next.allowArbitraryCommands = Boolean(next.allowArbitraryCommands);
   next.allowDestructiveTools = Boolean(next.allowDestructiveTools);
+  next.sessionLocksEnabled = next.sessionLocksEnabled !== false;
+  next.dashboardEnabled = next.dashboardEnabled !== false;
+  next.approvalGates = { ...base.approvalGates, ...((config && config.approvalGates) || {}) };
 
   for (const [alias, workspace] of Object.entries(next.workspaces)) {
     next.workspaces[alias] = normalizeWorkspace(workspace || {});
@@ -150,12 +170,19 @@ function publicConfigSummary(config) {
     commandTimeoutMs: config.commandTimeoutMs,
     maxTreeEntries: config.maxTreeEntries,
     maxSessionSteps: config.maxSessionSteps,
+    maxPlanSteps: config.maxPlanSteps,
+    maxIndexFiles: config.maxIndexFiles,
+    maxIndexFileBytes: config.maxIndexFileBytes,
+    maxConcurrentSessionsPerWorkspace: config.maxConcurrentSessionsPerWorkspace,
+    sessionLocksEnabled: Boolean(config.sessionLocksEnabled),
     worktreeRoot: config.worktreeRoot,
     permissionProfile: config.permissionProfile,
     allowGitHubCli: Boolean(config.allowGitHubCli),
     allowDocker: Boolean(config.allowDocker),
     allowArbitraryCommands: Boolean(config.allowArbitraryCommands),
     allowDestructiveTools: Boolean(config.allowDestructiveTools),
+    approvalGates: config.approvalGates,
+    dashboardEnabled: Boolean(config.dashboardEnabled),
     workspaces: Object.entries(config.workspaces || {}).map(([alias, entry]) => ({
       alias,
       path: entry.path,

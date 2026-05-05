@@ -23,6 +23,7 @@ const configPath = path.join(temp, 'config.json');
 fs.writeFileSync(configPath, JSON.stringify({
   version: 1,
   stateDir,
+  approvalGates: { reset: false, "worktree-remove": false, push: false, pr: false },
   allowGitHubCli: false,
   workspaces: {
     smoke: {

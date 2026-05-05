@@ -19,7 +19,22 @@ ChatGPT
 
 ## Version
 
-Current version: `0.4.0`
+Current version: `0.5.0`
+
+## What v0.5 adds
+
+v0.5 is the orchestration release. It moves Rel.AI MCP from a powerful tool backend into a fuller Codex-like task system with persistent plans, approval gates, repository indexing, issue-to-PR bootstrap, cooperative locks, CI repair snapshots, and a lightweight dashboard.
+
+- Adds persistent implementation plans through `relai_plan_create`, `relai_plan_read`, `relai_plan_update`, `relai_plan_step_update`, and `relai_plan_step_append`.
+- Adds approval gates through `relai_approval_request`, `relai_approval_resolve`, and `approvalId` support on gated actions.
+- Adds repository indexing through `relai_index_build`, `relai_index_stats`, and `relai_index_search`.
+- Adds `relai_task_bootstrap` to create a session, task worktree, repository index, and initial plan in one call.
+- Adds `relai_issue_to_pr_bootstrap` to read a GitHub issue with `gh`, create a worktree, build an index, and prepare a linked implementation plan.
+- Adds `relai_ci_repair_snapshot` to capture PR check state and create a repair-oriented session note.
+- Adds cooperative workspace locks with `relai_lock_acquire`, `relai_lock_release`, and `relai_lock_list`.
+- Adds `relai_dashboard_summary` and HTTP `/dashboard` + `/api/dashboard` endpoints for a simple operational view.
+- Adds config fields for `approvalGates`, index limits, dashboard enablement, and session lock behavior.
+- Adds `npm run test:v5`, covering bootstrap, plans, index search, locks, approval-gated commit, dashboard summary, and worktree cleanup.
 
 ## What v0.4 adds
 
@@ -38,7 +53,6 @@ v0.4 is the infrastructure release. It moves Rel.AI MCP from "tools that can edi
 - Adds a multi-cycle `relai_patch_test_loop` for iterative patch/test runs.
 - Adds config fields for `worktreeRoot`, `permissionProfile`, `allowDocker`, and Docker image allowlists.
 - Raises default tree/session limits for larger repositories.
-- Adds `npm run test:v4`, a smoke test that creates a Git repo, creates a task worktree, patches it, runs tests, starts a background job, resets, and removes the worktree.
 - Expands README version history in the original Rel.AI style.
 
 ## What remains guarded
@@ -72,6 +86,7 @@ npm run test:smoke
 npm run test:http
 npm run test:workflow
 npm run test:v4
+npm run test:v5
 ```
 
 There are no runtime npm dependencies. `npm install` is mainly useful if you want a lockfile.
@@ -137,6 +152,22 @@ Example config:
   "commandTimeoutMs": 1200000,
   "maxTreeEntries": 12000,
   "maxSessionSteps": 1000,
+  "maxPlanSteps": 200,
+  "maxIndexFiles": 25000,
+  "maxIndexFileBytes": 300000,
+  "sessionLocksEnabled": true,
+  "dashboardEnabled": true,
+  "approvalGates": {
+    "commit": false,
+    "push": true,
+    "pr": true,
+    "reset": true,
+    "worktree-remove": true,
+    "docker": false,
+    "command": false,
+    "patch": false,
+    "write": false
+  },
   "allowGitHubCli": false,
   "allowDocker": false,
   "allowArbitraryCommands": false,
@@ -438,7 +469,60 @@ Also verify the workspace branch is pushed or pushable and the repo has an `orig
 
 ---
 
+## v0.5 Codex-like workflow
+
+A normal full task flow now looks like this:
+
+```text
+relai_task_bootstrap
+-> relai_context_pack / relai_index_search
+-> relai_plan_step_update
+-> relai_apply_patch_and_run or relai_patch_test_loop
+-> relai_git_diff
+-> relai_approval_request when a configured gate requires it
+-> relai_commit_all
+-> relai_push_branch
+-> relai_create_pr
+-> relai_pr_watch_checks / relai_ci_repair_snapshot
+-> patch again if needed
+-> relai_task_worktree_remove after review
+```
+
+For issue-driven work:
+
+```text
+relai_issue_to_pr_bootstrap
+-> implement in the generated worktree
+-> run validation
+-> commit/push/create draft PR
+-> watch PR checks
+-> repair failures
+```
+
+The server still does not silently browse arbitrary disk paths. Everything is scoped to configured workspace aliases and task worktrees.
+
+---
+
 ## Version history
+
+### 0.5.0
+
+- Adds persistent implementation plans stored under `stateDir/plans`.
+- Adds plan tools: `relai_plan_create`, `relai_plan_list`, `relai_plan_read`, `relai_plan_update`, `relai_plan_step_update`, and `relai_plan_step_append`.
+- Adds approval gates stored under `stateDir/approvals`.
+- Adds approval tools: `relai_approval_request`, `relai_approval_read`, `relai_approval_list`, and `relai_approval_resolve`.
+- Adds configurable `approvalGates` for write, patch, command, Docker, commit, push, PR, reset, and worktree removal actions.
+- Adds one-time `approvalId` consumption for gated actions so a single approval cannot be reused accidentally.
+- Adds repository indexing stored under `stateDir/indexes`, including file hashes, line counts, extensions, and simple symbol extraction.
+- Adds index tools: `relai_index_build`, `relai_index_stats`, and `relai_index_search`.
+- Adds `relai_task_bootstrap` to create a task session, worktree, index, and plan in one call.
+- Adds `relai_issue_to_pr_bootstrap`, which uses GitHub CLI issue metadata to bootstrap an implementation session and branch.
+- Adds `relai_ci_repair_snapshot` to capture PR check output and attach repair guidance to the task session.
+- Adds cooperative locks stored under `stateDir/locks` with acquire/list/release tools.
+- Adds `relai_dashboard_summary` for ChatGPT-side operational status.
+- Adds HTTP `/dashboard` and `/api/dashboard` endpoints for a lightweight local dashboard.
+- Adds config fields: `maxPlanSteps`, `maxIndexFiles`, `maxIndexFileBytes`, `maxConcurrentSessionsPerWorkspace`, `sessionLocksEnabled`, `dashboardEnabled`, and `approvalGates`.
+- Adds `npm run test:v5`, covering bootstrap, plans, index search, locks, approvals, gated commit, dashboard summary, and worktree cleanup.
 
 ### 0.4.0
 

@@ -14,7 +14,7 @@ Rel.AI MCP is intentionally powerful. Treat it like a local coding agent with wr
 
 ## Task worktrees
 
-v0.4 adds worktree-per-task isolation. The recommended flow is:
+v0.5 keeps the v0.4 worktree-per-task isolation model. The recommended flow is:
 
 ```text
 base workspace main branch
@@ -26,6 +26,42 @@ base workspace main branch
 ```
 
 This prevents ChatGPT from dirtying your main local checkout during experiments. Destructive reset/remove tools require the `admin` permission profile.
+
+
+## Approval gates
+
+v0.5 adds backend approval records for high-risk actions. MCP clients may already show confirmation modals, but Rel.AI MCP can also require a one-time `approvalId` for configured actions.
+
+Default gates:
+
+```json
+{
+  "approvalGates": {
+    "commit": false,
+    "push": true,
+    "pr": true,
+    "reset": true,
+    "worktree-remove": true,
+    "docker": false,
+    "command": false,
+    "patch": false,
+    "write": false
+  }
+}
+```
+
+A gated flow is:
+
+```text
+relai_approval_request
+-> user or operator approves with relai_approval_resolve
+-> retry gated tool with approvalId
+-> approval is consumed once
+```
+
+## Plans, locks, and indexes
+
+Persistent plans, cooperative locks, and repository indexes are stored under `stateDir`. They are local operational metadata, not source-controlled project files. Locks are cooperative safety rails; they do not modify Git state.
 
 ## Permission profiles
 

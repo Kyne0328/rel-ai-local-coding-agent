@@ -21,6 +21,7 @@ const configPath = path.join(tmp, "config.json");
 const stateDir = path.join(tmp, "state");
 fs.writeFileSync(configPath, JSON.stringify({
   stateDir,
+  approvalGates: { reset: false, "worktree-remove": false, push: false, pr: false },
   permissionProfile: "admin",
   worktreeRoot: path.join(tmp, "worktrees"),
   workspaces: {
@@ -37,7 +38,7 @@ process.env.REL_AI_MCP_CONFIG = configPath;
 const { callTool } = await import(path.join(root, "src", "tools.js"));
 const version = await callTool("relai_version", {});
 assert.equal(version.ok, true);
-assert.equal(version.version, "0.4.0");
+assert.equal(version.version, "0.5.0");
 assert.ok(version.capabilities.includes("worktree-per-task isolation"));
 
 const task = await callTool("relai_task_start", { workspace: "smoke", goal: "smoke test", branch: "relai/smoke" });

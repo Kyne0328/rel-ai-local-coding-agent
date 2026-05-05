@@ -15,6 +15,11 @@ function printUsage() {
   relai-mcp-config set allowDestructiveTools <true|false>
   relai-mcp-config set permissionProfile <read-only|patch|test|pr|admin>
   relai-mcp-config set worktreeRoot <absolute-path>
+  relai-mcp-config set dashboardEnabled <true|false>
+  relai-mcp-config set sessionLocksEnabled <true|false>
+  relai-mcp-config set maxIndexFiles <number>
+  relai-mcp-config set maxIndexFileBytes <number>
+  relai-mcp-config approval-gate set <action> <true|false>
 
 Config path: ${getConfigPath()}`);
 }
@@ -55,7 +60,7 @@ function main() {
     const key = requireArg(subcommand, "setting key");
     const value = requireArg(action, "setting value");
     const config = readConfig({ allowMissing: true });
-    if (["allowGitHubCli", "allowDocker", "allowArbitraryCommands", "allowDestructiveTools"].includes(key)) {
+    if (["allowGitHubCli", "allowDocker", "allowArbitraryCommands", "allowDestructiveTools", "dashboardEnabled", "sessionLocksEnabled"].includes(key)) {
       config[key] = parseBool(value, key);
     } else if (key === "permissionProfile") {
       if (!["read-only", "patch", "test", "pr", "admin"].includes(value)) throw new Error("permissionProfile must be one of: read-only, patch, test, pr, admin.");
@@ -63,11 +68,26 @@ function main() {
     } else if (key === "worktreeRoot") {
       if (!path.isAbsolute(value)) throw new Error("worktreeRoot must be an absolute path.");
       config[key] = value;
+    } else if (["maxIndexFiles", "maxIndexFileBytes", "maxPlanSteps", "maxConcurrentSessionsPerWorkspace"].includes(key)) {
+      const number = Number(value);
+      if (!Number.isFinite(number) || number <= 0) throw new Error(`${key} must be a positive number.`);
+      config[key] = number;
     } else {
       throw new Error(`Unsupported setting '${key}'.`);
     }
     writeConfig(config);
     console.log(`Set ${key}=${config[key]}`);
+    return;
+  }
+
+  if (command === "approval-gate" && subcommand === "set") {
+    const gate = requireArg(action, "approval gate action");
+    const value = requireArg(rest[0], "approval gate value");
+    const config = readConfig({ allowMissing: true });
+    config.approvalGates = config.approvalGates || {};
+    config.approvalGates[gate] = parseBool(value, gate);
+    writeConfig(config);
+    console.log(`Set approval gate ${gate}=${config.approvalGates[gate]}`);
     return;
   }
 

@@ -18,9 +18,14 @@
   "workspaces": {
     "myapp": {
       "path": "/absolute/path/to/myapp",
-      "protectedBranches": ["main", "master"],
+      "protectedBranches": [
+        "main",
+        "master"
+      ],
       "defaultBaseBranch": "main",
-      "allowedRemotes": ["origin"],
+      "allowedRemotes": [
+        "origin"
+      ],
       "repoSlug": "Kyne0328/myapp",
       "worktreeRoot": "",
       "testCommands": {
@@ -34,11 +39,30 @@
       },
       "allowDocker": false,
       "defaultDockerImage": "node:22-alpine",
-      "allowedDockerImages": ["node:22-alpine"],
+      "allowedDockerImages": [
+        "node:22-alpine"
+      ],
       "dockerNetworkNone": true,
       "dockerUser": "node",
       "allowArbitraryCommands": false,
       "allowDestructiveTools": false
     }
+  },
+  "maxPlanSteps": 200,
+  "maxIndexFiles": 25000,
+  "maxIndexFileBytes": 300000,
+  "maxConcurrentSessionsPerWorkspace": 4,
+  "sessionLocksEnabled": true,
+  "dashboardEnabled": true,
+  "approvalGates": {
+    "commit": false,
+    "push": true,
+    "pr": true,
+    "reset": true,
+    "worktree-remove": true,
+    "docker": false,
+    "command": false,
+    "patch": false,
+    "write": false
   }
 }
