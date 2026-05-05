@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "maxReadFileBytes": 200000,
+  "maxSearchFileBytes": 200000,
+  "maxOutputBytes": 1048576,
+  "commandTimeoutMs": 900000,
+  "maxTreeEntries": 1500,
+  "allowGitHubCli": false,
+  "workspaces": {
+    "myapp": {
+      "path": "/absolute/path/to/myapp",
+      "protectedBranches": ["main", "master"],
+      "testCommands": {
+        "unit": "npm test",
+        "lint": "npm run lint",
+        "typecheck": "npm run typecheck"
+      }
+    }
+  }
+}

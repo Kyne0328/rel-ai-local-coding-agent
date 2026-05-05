@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "rel-ai-mcp": {
+      "command": "node",
+      "args": ["/absolute/path/to/rel-ai-mcp/bin/rel-ai-mcp.js"],
+      "env": {
+        "REL_AI_MCP_CONFIG": "/absolute/path/to/config.json"
+      }
+    }
+  }
+}
