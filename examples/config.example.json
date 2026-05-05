@@ -64,5 +64,21 @@
     "command": false,
     "patch": false,
     "write": false
-  }
+  },
+  "defaultTaskMode": "implement_and_test",
+  "taskRunner": {
+    "maxCycles": 3,
+    "requireWorktree": true,
+    "requireApprovalBeforeCommit": true,
+    "requireApprovalBeforePush": true,
+    "requireApprovalBeforePr": true
+  },
+  "ciRepair": {
+    "enabled": false,
+    "maxCycles": 3,
+    "watchAttempts": 5,
+    "intervalSeconds": 15,
+    "requireApprovalBeforePush": true
+  },
+  "sandboxMode": "none"
 }

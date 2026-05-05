@@ -41,6 +41,22 @@ function makeDefaultConfig() {
       write: false
     },
     dashboardEnabled: true,
+    defaultTaskMode: "implement_and_test",
+    taskRunner: {
+      maxCycles: 3,
+      requireWorktree: true,
+      requireApprovalBeforeCommit: true,
+      requireApprovalBeforePush: true,
+      requireApprovalBeforePr: true
+    },
+    ciRepair: {
+      enabled: false,
+      maxCycles: 3,
+      watchAttempts: 5,
+      intervalSeconds: 15,
+      requireApprovalBeforePush: true
+    },
+    sandboxMode: "none",
     workspaces: {}
   };
 }
@@ -99,6 +115,10 @@ function normalizeConfig(config) {
   next.allowDestructiveTools = Boolean(next.allowDestructiveTools);
   next.sessionLocksEnabled = next.sessionLocksEnabled !== false;
   next.dashboardEnabled = next.dashboardEnabled !== false;
+  next.defaultTaskMode = String(next.defaultTaskMode || base.defaultTaskMode);
+  next.sandboxMode = ["none", "docker", "docker_readonly_base"].includes(String(next.sandboxMode)) ? String(next.sandboxMode) : "none";
+  next.taskRunner = { ...base.taskRunner, ...((config && config.taskRunner) || {}) };
+  next.ciRepair = { ...base.ciRepair, ...((config && config.ciRepair) || {}) };
   next.approvalGates = { ...base.approvalGates, ...((config && config.approvalGates) || {}) };
 
   for (const [alias, workspace] of Object.entries(next.workspaces)) {
@@ -183,6 +203,10 @@ function publicConfigSummary(config) {
     allowDestructiveTools: Boolean(config.allowDestructiveTools),
     approvalGates: config.approvalGates,
     dashboardEnabled: Boolean(config.dashboardEnabled),
+    defaultTaskMode: config.defaultTaskMode,
+    taskRunner: config.taskRunner,
+    ciRepair: config.ciRepair,
+    sandboxMode: config.sandboxMode,
     workspaces: Object.entries(config.workspaces || {}).map(([alias, entry]) => ({
       alias,
       path: entry.path,

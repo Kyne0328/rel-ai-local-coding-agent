@@ -126,3 +126,17 @@ Use HTTPS in front of the server when connecting from ChatGPT Developer Mode.
 ## Audit logs
 
 Every MCP tool call is written to the configured audit log. The log includes tool name, workspace, session id, success/failure, duration, and error message when applicable. It does not intentionally include file contents.
+
+## v0.6 task runner security notes
+
+The high-level `relai_task_run` tool coordinates existing primitives; it does not bypass the same workspace, path, command, branch, and approval restrictions used by lower-level tools.
+
+Recommended defaults:
+
+- Keep `taskRunner.requireWorktree=true` so implementation happens in an isolated git worktree.
+- Keep approval gates enabled for push, PR, reset, and worktree removal.
+- Keep `ciRepair.enabled=false` until the repo has reliable allowlisted repair/build commands.
+- Keep `sandboxMode="none"` until Docker execution is deliberately configured; when Docker is enabled, prefer network-disabled test containers.
+- Use `relai_session_export` for audit/debug records before deleting a task worktree.
+
+`relai_ci_repair_run` only runs configured repair commands unless `allowArbitraryCommands` is explicitly enabled. Do not enable arbitrary commands for shared or untrusted workspaces.

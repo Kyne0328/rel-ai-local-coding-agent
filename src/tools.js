@@ -30,6 +30,7 @@ const plans = require("./plans");
 const indexer = require("./indexer");
 const locks = require("./locks");
 const orchestrator = require("./orchestrator");
+const taskRunner = require("./taskRunner");
 const { enforcePermission } = require("./permissions");
 const pkg = require("../package.json");
 
@@ -38,6 +39,14 @@ const toolSchemas = [
   tool("relai_config", "Rel.AI MCP Config Summary", "Return active config path, limits, workspace aliases, command keys, and safety switches. Does not reveal secrets.", {}),
   tool("relai_audit_tail", "Audit Log Tail", "Return recent rel-ai-mcp audit entries.", { limit: numberProp(1, 1000) }),
   tool("relai_dashboard_summary", "Dashboard Summary", "Return sessions, jobs, approvals, locks, and config summary for a lightweight web dashboard.", { limit: numberProp(1, 200) }),
+  tool("relai_dashboard_open", "Dashboard Open Info", "Return dashboard and API URLs for a running Rel.AI MCP HTTP server.", { baseUrl: stringProp() }),
+
+  tool("relai_task_run", "Run Codex-like Task", "High-level task runner: create/resume a task session, create worktree, build index, create plan, apply supplied patches, run tests, and optionally prepare a PR.", {
+    workspace: stringProp(), sessionId: stringProp(), goal: stringProp(), task: stringProp(), mode: stringProp(), title: stringProp(), branchName: stringProp(), fromRef: stringProp(), createWorktree: boolProp(), buildIndex: boolProp(), maxIndexFiles: numberProp(1, 100000), forceNewPlan: boolProp(), patches: arrayProp("string", 0, 20), testCommandKeys: arrayProp("string", 0, 30), stopOnFailure: boolProp(), commitMessage: stringProp(), push: boolProp(), remote: stringProp(), createPr: boolProp(), prTitle: stringProp(), prBody: stringProp(), prBodyExtra: stringProp(), base: stringProp(), head: stringProp(), draft: boolProp(), labels: arrayProp("string", 0, 20), reviewers: arrayProp("string", 0, 20), steps: arrayProp("object", 0, 200)
+  }, ["workspace"]),
+  tool("relai_task_status", "Read Codex-like Task Status", "Read task session status, related plans, and orchestration metadata.", { sessionId: stringProp() }, ["sessionId"]),
+  tool("relai_task_stop", "Stop Codex-like Task", "Mark a task session as stopped and append a control step.", { sessionId: stringProp(), reason: stringProp() }, ["sessionId"]),
+  tool("relai_task_resume", "Resume Codex-like Task", "Mark a stopped/paused task session as active again.", { sessionId: stringProp(), note: stringProp() }, ["sessionId"]),
 
   tool("relai_approval_request", "Request Approval Gate", "Create a pending approval record for gated write, patch, command, Docker, commit, push, PR, reset, or worktree-removal actions.", {
     action: stringProp(), workspace: stringProp(), sessionId: stringProp(), summary: stringProp(), data: objectProp()
@@ -47,6 +56,9 @@ const toolSchemas = [
   tool("relai_approval_resolve", "Resolve Approval Gate", "Approve, reject, or cancel an approval record.", {
     approvalId: stringProp(), status: stringProp(), note: stringProp()
   }, ["approvalId", "status"]),
+  tool("relai_approval_grant", "Grant Approval", "Approve a pending one-time approval gate.", { approvalId: stringProp(), note: stringProp() }, ["approvalId"]),
+  tool("relai_approval_deny", "Deny Approval", "Reject a pending one-time approval gate.", { approvalId: stringProp(), note: stringProp() }, ["approvalId"]),
+  tool("relai_approval_status", "Approval Status", "Read a pending/resolved approval gate status.", { approvalId: stringProp() }, ["approvalId"]),
 
   tool("relai_plan_create", "Create Task Plan", "Create a persistent multi-step implementation plan attached to an optional task session.", {
     sessionId: stringProp(), workspace: stringProp(), title: stringProp(), goal: stringProp(), steps: arrayProp("object", 0, 200), risks: arrayProp("string", 0, 100), validation: arrayProp("string", 0, 100)
@@ -121,6 +133,21 @@ const toolSchemas = [
   tool("relai_ci_repair_snapshot", "Capture CI Repair Snapshot", "Read PR checks through GitHub CLI and create a repair-oriented session note when checks fail.", {
     workspace: stringProp(), sessionId: stringProp(), pr: stringProp()
   }, ["workspace"]),
+  tool("relai_ci_watch", "Watch CI Checks", "Poll GitHub PR checks and classify pass/fail/pending state.", {
+    workspace: stringProp(), sessionId: stringProp(), pr: stringProp(), attempts: numberProp(1, 50), intervalSeconds: numberProp(1, 300)
+  }, ["workspace"]),
+  tool("relai_ci_repair_run", "Run CI Repair Loop", "Watch failing PR checks and optionally run an allowlisted repair command, commit, and push for a bounded number of cycles.", {
+    workspace: stringProp(), sessionId: stringProp(), pr: stringProp(), maxCycles: numberProp(1, 10), watchAttempts: numberProp(1, 20), repairCommandKey: stringProp(), repairCommand: stringProp(), commitMessage: stringProp(), push: boolProp(), remote: stringProp(), branchName: stringProp()
+  }, ["workspace"]),
+
+  tool("relai_session_diff", "Task Session Diff", "Return the current diff for a task session worktree or workspace.", { workspace: stringProp(), sessionId: stringProp(), staged: boolProp() }, ["workspace"]),
+  tool("relai_session_changed_files", "Task Session Changed Files", "Return changed files parsed from the current session/workspace diff.", { workspace: stringProp(), sessionId: stringProp(), staged: boolProp() }, ["workspace"]),
+  tool("relai_session_test_summary", "Task Session Test Summary", "Return recent test/CI/check steps recorded in a task session.", { sessionId: stringProp(), limit: numberProp(1, 100) }, ["sessionId"]),
+  tool("relai_session_export", "Export Task Session", "Export session, related plans, current diff, and audit entries for review/debugging.", { workspace: stringProp(), sessionId: stringProp(), auditLimit: numberProp(1, 1000) }, ["workspace", "sessionId"]),
+
+  tool("relai_repo_profile", "Repository Profile", "Detect repository stack, manifests, package managers, configured commands, and test surface.", { workspace: stringProp(), sessionId: stringProp() }, ["workspace"]),
+  tool("relai_repo_relevant_files", "Repository Relevant Files", "Rank likely relevant files from the cached index or safe file tree using search terms.", { workspace: stringProp(), sessionId: stringProp(), terms: arrayProp("string", 0, 30), limit: numberProp(1, 500), includeTests: boolProp() }, ["workspace"]),
+  tool("relai_repo_test_suggestions", "Repository Test Suggestions", "Suggest test command keys/commands from detected manifests and configured commands.", { workspace: stringProp(), sessionId: stringProp() }, ["workspace"]),
 
   tool("relai_apply_patch", "Apply Unified Diff", "Validate and apply a unified diff with git apply. Use dryRun=true first for check-only mode.", {
     workspace: stringProp(), sessionId: stringProp(), diff: stringProp(), dryRun: boolProp(), approvalId: stringProp()
@@ -223,6 +250,17 @@ async function dispatchTool(config, name, args) {
       return readAudit(config, { limit: args.limit });
     case "relai_dashboard_summary":
       return dashboardSummary(config, args);
+    case "relai_dashboard_open":
+      return taskRunner.dashboardOpen(config, args);
+
+    case "relai_task_run":
+      return withWorkspace(config, args, (workspace) => taskRunner.taskRun(config, workspace, args));
+    case "relai_task_status":
+      return taskRunner.taskStatus(config, args);
+    case "relai_task_stop":
+      return taskRunner.taskStop(config, args);
+    case "relai_task_resume":
+      return taskRunner.taskResume(config, args);
 
     case "relai_approval_request":
       return approvals.createApproval(config, args);
@@ -232,6 +270,12 @@ async function dispatchTool(config, name, args) {
       return { approvals: approvals.listApprovals(config, { status: args.status, limit: args.limit }) };
     case "relai_approval_resolve":
       return approvals.resolveApproval(config, args);
+    case "relai_approval_grant":
+      return approvals.resolveApproval(config, { ...args, status: "approved" });
+    case "relai_approval_deny":
+      return approvals.resolveApproval(config, { ...args, status: "rejected" });
+    case "relai_approval_status":
+      return approvals.readApproval(config, args.approvalId);
 
     case "relai_plan_create":
       return plans.createPlan(config, args);
@@ -297,6 +341,26 @@ async function dispatchTool(config, name, args) {
       return withWorkspace(config, args, (workspace) => orchestrator.issueToPrBootstrap(config, workspace, args));
     case "relai_ci_repair_snapshot":
       return recordMaybe(config, args, "ci", async (workspace) => orchestrator.ciRepairSnapshot(config, workspace, args));
+    case "relai_ci_watch":
+      return recordMaybe(config, args, "ci-watch", async (workspace) => taskRunner.ciWatch(config, workspace, args));
+    case "relai_ci_repair_run":
+      return recordMaybe(config, args, "ci-repair", async (workspace) => taskRunner.ciRepairRun(config, workspace, args));
+
+    case "relai_session_diff":
+      return withWorkspace(config, args, (workspace) => taskRunner.sessionDiff(config, workspace, args));
+    case "relai_session_changed_files":
+      return withWorkspace(config, args, (workspace) => taskRunner.sessionChangedFiles(config, workspace, args));
+    case "relai_session_test_summary":
+      return taskRunner.sessionTestSummary(config, args);
+    case "relai_session_export":
+      return withWorkspace(config, args, (workspace) => taskRunner.sessionExport(config, workspace, args));
+
+    case "relai_repo_profile":
+      return withWorkspace(config, args, (workspace) => taskRunner.repoProfile(config, workspace, args));
+    case "relai_repo_relevant_files":
+      return withWorkspace(config, args, (workspace) => taskRunner.repoRelevantFiles(config, workspace, args));
+    case "relai_repo_test_suggestions":
+      return withWorkspace(config, args, (workspace) => taskRunner.repoTestSuggestions(config, workspace, args));
 
     case "relai_apply_patch":
       approvals.requireApproval(config, "patch", args);
@@ -434,7 +498,13 @@ function versionInfo() {
       "issue-to-PR bootstrap",
       "CI repair snapshots",
       "cooperative workspace locks",
-      "dashboard summary"
+      "dashboard summary",
+      "high-level task runner",
+      "task execution modes",
+      "CI watch and repair loop",
+      "session diff/export tools",
+      "repository relevance and test suggestion tools",
+      "approval grant/deny aliases"
     ]
   };
 }

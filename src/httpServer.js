@@ -2,11 +2,13 @@ const http = require("node:http");
 const crypto = require("node:crypto");
 const { URL } = require("node:url");
 const { handleMessage } = require("./server");
-const { readConfig, publicConfigSummary } = require("./config");
+const { readConfig, publicConfigSummary, resolveWorkspace } = require("./config");
 const sessionsStore = require("./sessions");
 const { listJobs } = require("./jobs");
 const approvals = require("./approvals");
 const locks = require("./locks");
+const taskRunner = require("./taskRunner");
+const { workspaceFromSession } = require("./worktrees");
 const pkg = require("../package.json");
 
 const DEFAULT_MAX_BODY_BYTES = 10 * 1024 * 1024;
@@ -83,6 +85,32 @@ async function routeRequest(req, res, options) {
     return;
   }
 
+  if (req.method === "GET" && parsed.pathname === "/api/session/export") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    const config = readConfig();
+    const workspace = resolveApiWorkspace(config, parsed);
+    const payload = await taskRunner.sessionExport(config, workspace, {
+      workspace: parsed.searchParams.get("workspace") || undefined,
+      sessionId: parsed.searchParams.get("sessionId") || undefined,
+      auditLimit: Number(parsed.searchParams.get("auditLimit") || 200)
+    });
+    sendJson(res, 200, payload);
+    return;
+  }
+
+  if (req.method === "GET" && parsed.pathname === "/api/session/diff") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    const config = readConfig();
+    const workspace = resolveApiWorkspace(config, parsed);
+    const payload = await taskRunner.sessionDiff(config, workspace, {
+      workspace: parsed.searchParams.get("workspace") || undefined,
+      sessionId: parsed.searchParams.get("sessionId") || undefined,
+      staged: parsed.searchParams.get("staged") === "1"
+    });
+    sendJson(res, 200, payload);
+    return;
+  }
+
   if (req.method === "GET" && parsed.pathname === "/health") {
     sendJson(res, 200, {
       ok: true,
@@ -136,10 +164,21 @@ async function routeRequest(req, res, options) {
       health: "GET /health",
       dashboard: "GET /dashboard",
       dashboardApi: "GET /api/dashboard",
+      sessionDiffApi: "GET /api/session/diff?workspace=...&sessionId=...",
+      sessionExportApi: "GET /api/session/export?workspace=...&sessionId=...",
       streamableHttp: "POST /mcp",
       sse: "GET /sse then POST /messages?sessionId=..."
     }
   });
+}
+
+function resolveApiWorkspace(config, parsed) {
+  const workspaceAlias = parsed.searchParams.get("workspace") || "";
+  const sessionId = parsed.searchParams.get("sessionId") || "";
+  let baseAlias = workspaceAlias;
+  if (!baseAlias && sessionId) baseAlias = sessionsStore.readSession(config, sessionId).workspace;
+  const base = resolveWorkspace(config, baseAlias);
+  return sessionId ? workspaceFromSession(config, base, sessionId) : base;
 }
 
 async function handleJsonRpcPayload(payload) {
@@ -263,10 +302,11 @@ function renderDashboardHtml(options) {
 </head>
 <body>
 <h1>Rel.AI MCP Dashboard</h1>
-<p class="muted">Local operational view for sessions, jobs, approvals, locks, and config. This dashboard is intentionally simple; all mutations still happen through MCP tools.</p>
+<p class="muted">Local operational view for sessions, jobs, approvals, locks, config, and v6 task execution state. Mutations still happen through MCP tools; review actions should go through approval gates.</p>
 <div class="card">
 <div class="row"><input id="token" type="password" placeholder="Bearer token${hasToken ? "" : " not required"}"><button onclick="load()">Refresh</button></div>
 </div>
+<div class="card"><strong>v6 APIs</strong><p class="muted">Diff: <code>/api/session/diff?workspace=ALIAS&sessionId=TASK</code><br>Export: <code>/api/session/export?workspace=ALIAS&sessionId=TASK</code></p></div>
 <pre id="out">Click Refresh.</pre>
 <script>
 async function load(){

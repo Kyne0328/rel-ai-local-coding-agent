@@ -19,7 +19,21 @@ ChatGPT
 
 ## Version
 
-Current version: `0.5.0`
+Current version: `0.6.0`
+
+## What v0.6 adds
+
+v0.6 is the task-platform release. It adds the high-level Codex-style task runner and operational APIs needed to move from a bag of MCP tools toward a complete task execution platform. It can create/resume sessions, create worktrees, build indexes, create plans, apply supplied patches, run validation, prepare PRs, watch CI, export sessions, and expose richer dashboard APIs.
+
+- Adds `relai_task_run`, a high-level task runner with modes: `plan_only`, `implement_no_commit`, `implement_and_test`, `prepare_pr`, `ci_repair`, and `review_only`.
+- Adds task control tools: `relai_task_status`, `relai_task_stop`, and `relai_task_resume`.
+- Adds CI tools: `relai_ci_watch` and `relai_ci_repair_run`.
+- Adds approval aliases: `relai_approval_grant`, `relai_approval_deny`, and `relai_approval_status`.
+- Adds session review/export tools: `relai_session_diff`, `relai_session_changed_files`, `relai_session_test_summary`, and `relai_session_export`.
+- Adds repo intelligence tools: `relai_repo_profile`, `relai_repo_relevant_files`, and `relai_repo_test_suggestions`.
+- Adds `relai_dashboard_open` plus HTTP `/api/session/diff` and `/api/session/export` endpoints.
+- Adds config fields for `defaultTaskMode`, `taskRunner`, `ciRepair`, and `sandboxMode`.
+- Adds `npm run test:v6`, covering the high-level task runner, plans, repository intelligence, session diff/export, and task control.
 
 ## What v0.5 adds
 
@@ -87,6 +101,7 @@ npm run test:http
 npm run test:workflow
 npm run test:v4
 npm run test:v5
+npm run test:v6
 ```
 
 There are no runtime npm dependencies. `npm install` is mainly useful if you want a lockfile.
@@ -469,6 +484,34 @@ Also verify the workspace branch is pushed or pushable and the repo has an `orig
 
 ---
 
+## v0.6 Codex-like task runner
+
+For a one-shot task shell:
+
+```text
+relai_task_run(mode=plan_only)
+-> review plan and focused context
+-> relai_task_run(mode=implement_and_test, patches=[...], testCommandKeys=[...])
+-> relai_session_diff / relai_session_changed_files
+-> approval gate if needed
+-> relai_task_run(mode=prepare_pr, commitMessage=..., createPr=true)
+-> relai_ci_watch / relai_ci_repair_run
+-> relai_session_export
+```
+
+Supported task modes:
+
+```text
+plan_only
+implement_no_commit
+implement_and_test
+prepare_pr
+ci_repair
+review_only
+```
+
+The task runner still does not invent file access or shell access. It uses configured workspace aliases, task worktrees, allowlisted commands, and approval gates. Patches are supplied through MCP calls, and ChatGPT remains responsible for reasoning about the code change.
+
 ## v0.5 Codex-like workflow
 
 A normal full task flow now looks like this:
@@ -504,6 +547,21 @@ The server still does not silently browse arbitrary disk paths. Everything is sc
 ---
 
 ## Version history
+
+### 0.6.0
+
+- Adds high-level Codex-style task execution through `relai_task_run`.
+- Adds task execution modes: `plan_only`, `implement_no_commit`, `implement_and_test`, `prepare_pr`, `ci_repair`, and `review_only`.
+- Adds task control tools: `relai_task_status`, `relai_task_stop`, and `relai_task_resume`.
+- Adds CI watch and bounded repair-loop tools: `relai_ci_watch` and `relai_ci_repair_run`.
+- Adds approval management aliases: `relai_approval_grant`, `relai_approval_deny`, and `relai_approval_status`.
+- Adds session diff, changed-file, test-summary, and export tools.
+- Expands the HTTP dashboard API with `/api/session/diff` and `/api/session/export`.
+- Adds `relai_dashboard_open` to return dashboard URLs for the current HTTP server.
+- Adds repository profiling, relevant-file ranking, and test-command suggestion tools.
+- Adds config fields: `defaultTaskMode`, `taskRunner`, `ciRepair`, and `sandboxMode`.
+- Updates README, example config, and security guidance for task execution modes, CI repair loops, session exports, and dashboard APIs.
+- Adds `npm run test:v6`, covering high-level task run, repository intelligence, session diff/export, task stop/resume, and dashboard URL discovery.
 
 ### 0.5.0
 

@@ -96,3 +96,19 @@ Then switch back:
 ```bash
 node bin/relai-mcp-config.js set permissionProfile pr
 ```
+
+## v0.6 recommended first prompt
+
+After connecting the remote MCP server, start with a read/plan-only task:
+
+```text
+Use Rel.AI MCP on workspace myapp. Run relai_task_run in plan_only mode for this task: "Find where authentication refresh is handled and propose the smallest safe fix." Do not edit files yet.
+```
+
+Then move to implementation only after reviewing the plan and context:
+
+```text
+Use the existing Rel.AI MCP task session. Read the relevant files, propose a unified diff, then call relai_task_run in implement_and_test mode with that patch and the unit test key.
+```
+
+For PR workflows, keep approval gates enabled and ask for a session export before cleanup.
