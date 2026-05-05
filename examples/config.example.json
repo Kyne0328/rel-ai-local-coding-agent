@@ -121,5 +121,12 @@
     "staleHours": 24,
     "cleanupOlderThanHours": 168,
     "enableStateExport": true
+  },
+  "release": {
+    "minimumReadinessScore": 80,
+    "requireHttpToken": true,
+    "requireCleanWorktreeBeforePush": true,
+    "connectorProbeTimeoutMs": 5000,
+    "enableReleaseEndpoints": true
   }
 }

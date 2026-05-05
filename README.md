@@ -19,7 +19,21 @@ ChatGPT
 
 ## Version
 
-Current version: `0.9.0`
+Current version: `0.10.0`
+
+## What v0.10 adds
+
+v0.10 is the release-readiness and connector-verification release. It adds the checks needed before exposing Rel.AI MCP through ChatGPT Developer Mode or running it against real repositories repeatedly: release scoring, connector validation, workspace preflight, config migration planning, and package manifests.
+
+- Adds `relai_release_readiness` to score config, approval gates, command availability, state directories, token setup, and workspace readiness.
+- Adds `relai_connector_check` to validate ChatGPT Developer Mode endpoint/token setup and optionally probe `/health`.
+- Adds `relai_workspace_preflight` to check Git repo state, protected branch risk, line-ending files, dirty worktrees, and allowlisted test commands before agent execution.
+- Adds `relai_config_migration_plan` to compare the active config against the current default schema and return safe migration guidance.
+- Adds `relai_release_manifest` to generate a package manifest with file sizes and SHA-256 hashes.
+- Adds `relai_release_notes` for commit message, tag message, validation commands, and release-note bullets.
+- Adds dashboard APIs: `/api/dashboard/v10`, `/api/readiness`, `/api/release-manifest`, and `/api/workspace/preflight`.
+- Adds `release` config fields for minimum readiness score, token requirements, connector probe timeout, and release endpoint enablement.
+- Adds `npm run test:v10`, covering release readiness, connector validation, workspace preflight, migration planning, release manifest, and release notes.
 
 ## What v0.9 adds
 
@@ -151,6 +165,7 @@ npm run test:v6
 npm run test:v7
 npm run test:v8
 npm run test:v9
+npm run test:v10
 ```
 
 There are no runtime npm dependencies. `npm install` is mainly useful if you want a lockfile.
@@ -596,6 +611,17 @@ The server still does not silently browse arbitrary disk paths. Everything is sc
 ---
 
 ## Version history
+
+### 0.10.0
+
+- Adds release-readiness scoring for config, approval gates, state directories, command availability, token setup, and workspace configuration.
+- Adds ChatGPT connector validation with endpoint/token checks and optional `/health` probing.
+- Adds workspace preflight checks for Git repo state, dirty worktrees, protected branches, line-ending files, and allowlisted test commands.
+- Adds config migration planning against the current default schema.
+- Adds release manifest generation with file sizes and SHA-256 hashes for package review.
+- Adds release notes generation with commit message, tag message, validation commands, and release bullets.
+- Adds dashboard/API endpoints for v10 readiness and release data.
+- Adds `release` config fields and `npm run test:v10`.
 
 ### 0.8.0
 

@@ -170,3 +170,21 @@ The v0.8 smoke tests use this pattern.
 - `relai_cleanup_run`, `relai_doctor_fix`, `relai_state_import`, and original Rel.AI config import are admin-level operations.
 - Prefer `relai_cleanup_preview` before deleting generated state files.
 - Keep state exports private; they can contain task summaries, diffs, audit entries, and local path metadata.
+
+## v0.10 release-readiness checks
+
+Before exposing the connector, run these MCP tools or dashboard APIs:
+
+- `relai_release_readiness` to score config, approval gates, token setup, state directories, command availability, and workspaces.
+- `relai_connector_check` with your public `/mcp` endpoint to validate URL/auth settings and optionally probe `/health`.
+- `relai_workspace_preflight` for each workspace before running real coding tasks.
+
+HTTP equivalents when the server is running:
+
+```text
+GET /api/readiness
+GET /api/release-manifest
+GET /api/workspace/preflight?workspace=myapp
+```
+
+Keep bearer auth enabled when using these endpoints through a tunnel.

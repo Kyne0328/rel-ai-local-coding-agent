@@ -42,7 +42,7 @@ const { callTool } = await import(pathToFileURL(path.join(root, "src", "tools.js
 
 const version = await callTool("relai_version", {});
 assert.equal(version.ok, true);
-assert.equal(version.version, "0.9.0");
+assert.equal(version.version, "0.10.0");
 assert.ok(version.capabilities.includes("persistent implementation plans"));
 assert.ok(version.toolCount >= 50);
 

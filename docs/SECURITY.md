@@ -178,3 +178,11 @@ For remote ChatGPT Developer Mode use, keep `approvalGates.push`, `approvalGates
 - `relai_cleanup_run`, `relai_doctor_fix`, `relai_state_import`, and original Rel.AI config import are admin-level operations.
 - Prefer `relai_cleanup_preview` before deleting generated state files.
 - Keep state exports private; they can contain task summaries, diffs, audit entries, and local path metadata.
+
+## v0.10 release hardening
+
+Use `relai_release_readiness` before exposing Rel.AI MCP through ChatGPT Developer Mode. It checks for common unsafe states such as missing bearer token, disabled approval gates, globally enabled arbitrary commands, globally enabled destructive tools, missing state directories, and missing workspace tests.
+
+Use `relai_workspace_preflight` before agent execution on a real project. It checks whether the workspace is a Git repository, whether it is on a protected branch, whether it has uncommitted changes, and whether line-ending normalization files exist.
+
+Use `relai_connector_check` to validate that the public connector endpoint is HTTPS, points at `/mcp`, and is configured with bearer-token authentication.

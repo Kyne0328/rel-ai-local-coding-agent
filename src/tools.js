@@ -42,6 +42,7 @@ const prWorkflow = require("./prWorkflow");
 const doctor = require("./doctor");
 const policy = require("./policy");
 const productUx = require("./productUx");
+const release = require("./release");
 const { enforcePermission } = require("./permissions");
 const pkg = require("../package.json");
 
@@ -62,6 +63,12 @@ const toolSchemas = [
   tool("relai_state_export", "Export Rel.AI MCP State", "Export JSON state files for backup or migration.", { outputPath: stringProp(), maxFiles: numberProp(1, 20000), maxFileBytes: numberProp(1000, 10485760) }),
   tool("relai_state_import", "Import Rel.AI MCP State", "Import a JSON state export. Requires confirm=true and admin permission profile.", { inputPath: stringProp(), payload: objectProp(), confirm: boolProp() }, ["confirm"]),
 
+  tool("relai_release_readiness", "Release Readiness", "Score release readiness for config, approval gates, state directories, command availability, and workspace setup.", { requireHttpToken: boolProp() }),
+  tool("relai_connector_check", "Connector Check", "Validate ChatGPT Developer Mode connector endpoint/token settings and optionally probe /health.", { endpoint: stringProp(), baseUrl: stringProp(), token: stringProp(), probe: boolProp(), timeoutMs: numberProp(500, 60000) }),
+  tool("relai_config_migration_plan", "Config Migration Plan", "Compare the active config against the current default schema and return safe migration guidance.", { fromVersion: stringProp() }),
+  tool("relai_workspace_preflight", "Workspace Preflight", "Check a workspace before agent execution: Git repo state, protected branch, line-ending files, and configured test commands.", { workspace: stringProp(), requireClean: boolProp() }, ["workspace"]),
+  tool("relai_release_manifest", "Release Manifest", "Generate a package file manifest with sizes and SHA-256 hashes for release review.", { maxFiles: numberProp(1, 50000), maxFileBytes: numberProp(1000, 10485760) }),
+  tool("relai_release_notes", "Release Notes", "Return suggested release notes, commit message, tag message, and validation commands for the current version.", { version: stringProp() }),
 
   tool("relai_scheduler_start", "Start Multi-Agent Scheduler", "Create a dependency-aware scheduler record and compute which subtasks can run now.", { parentSessionId: stringProp(), schedulerId: stringProp(), maxParallel: numberProp(1, 50), limit: numberProp(1, 1000) }),
   tool("relai_scheduler_status", "Scheduler Status", "Read scheduler status and current runnable/blocked subtask sets.", { parentSessionId: stringProp(), schedulerId: stringProp(), maxParallel: numberProp(1, 50), limit: numberProp(1, 1000) }),
@@ -362,6 +369,19 @@ async function dispatchTool(config, name, args) {
       return productUx.stateExport(config, args);
     case "relai_state_import":
       return productUx.stateImport(config, args);
+
+    case "relai_release_readiness":
+      return release.releaseReadiness(config, args);
+    case "relai_connector_check":
+      return release.connectorCheck(config, args);
+    case "relai_config_migration_plan":
+      return release.configMigrationPlan(config, args);
+    case "relai_workspace_preflight":
+      return release.workspacePreflight(config, args);
+    case "relai_release_manifest":
+      return release.releaseManifest(config, args);
+    case "relai_release_notes":
+      return release.releaseNotes(config, args);
 
     case "relai_scheduler_start":
       return scheduler.startScheduler(config, args);
@@ -732,7 +752,12 @@ function versionInfo() {
       "cleanup preview/run workflows",
       "doctor --fix style line-ending normalization",
       "setup wizard and original Rel.AI config import",
-      "state export/import for backups"
+      "state export/import for backups",
+      "release readiness scoring",
+      "ChatGPT connector validation",
+      "workspace preflight checks",
+      "config migration planning",
+      "release manifests and release notes"
     ]
   };
 }

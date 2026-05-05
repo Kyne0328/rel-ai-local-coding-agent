@@ -10,6 +10,7 @@ const locks = require("./locks");
 const taskRunner = require("./taskRunner");
 const multiagent = require("./multiagent");
 const productUx = require("./productUx");
+const release = require("./release");
 const { workspaceFromSession } = require("./worktrees");
 const pkg = require("../package.json");
 
@@ -95,6 +96,17 @@ async function routeRequest(req, res, options) {
     return;
   }
 
+  if (req.method === "GET" && parsed.pathname === "/api/dashboard/v10") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    const config = readConfig();
+    const limit = Number(parsed.searchParams.get("limit") || 100);
+    sendJson(res, 200, {
+      ...productUx.dashboardData(config, { limit }),
+      readiness: release.releaseReadiness(config, { requireHttpToken: parsed.searchParams.get("requireHttpToken") !== "0" })
+    });
+    return;
+  }
+
   if (req.method === "GET" && parsed.pathname === "/api/logs") {
     if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
     const config = readConfig();
@@ -106,6 +118,28 @@ async function routeRequest(req, res, options) {
     if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
     const config = readConfig();
     sendJson(res, 200, productUx.healthMonitor(config, { limit: Number(parsed.searchParams.get("limit") || 100) }));
+    return;
+  }
+
+  if (req.method === "GET" && parsed.pathname === "/api/readiness") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    const config = readConfig();
+    sendJson(res, 200, release.releaseReadiness(config, { requireHttpToken: parsed.searchParams.get("requireHttpToken") !== "0" }));
+    return;
+  }
+
+  if (req.method === "GET" && parsed.pathname === "/api/release-manifest") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    const config = readConfig();
+    sendJson(res, 200, release.releaseManifest(config, { maxFiles: Number(parsed.searchParams.get("maxFiles") || 10000) }));
+    return;
+  }
+
+  if (req.method === "GET" && parsed.pathname === "/api/workspace/preflight") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    const config = readConfig();
+    const payload = await release.workspacePreflight(config, { workspace: parsed.searchParams.get("workspace") || "", requireClean: parsed.searchParams.get("requireClean") !== "0" });
+    sendJson(res, 200, payload);
     return;
   }
 
@@ -206,8 +240,12 @@ async function routeRequest(req, res, options) {
       dashboard: "GET /dashboard",
       dashboardApi: "GET /api/dashboard",
       dashboardV9Api: "GET /api/dashboard/v9",
+      dashboardV10Api: "GET /api/dashboard/v10",
       logsApi: "GET /api/logs",
       healthMonitorApi: "GET /api/health-monitor",
+      readinessApi: "GET /api/readiness",
+      releaseManifestApi: "GET /api/release-manifest",
+      workspacePreflightApi: "GET /api/workspace/preflight?workspace=...",
       events: "GET /events",
       sessionDiffApi: "GET /api/session/diff?workspace=...&sessionId=...",
       taskGraphApi: "GET /api/task/graph?sessionId=...",
@@ -371,7 +409,7 @@ function renderDashboardHtml(options) {
 </head>
 <body>
 <header>
-  <div class="row"><h1 style="margin:.1rem 1rem .1rem 0">Rel.AI MCP Dashboard</h1><span class="pill">v9 console</span><span id="status" class="muted">not connected</span></div>
+  <div class="row"><h1 style="margin:.1rem 1rem .1rem 0">Rel.AI MCP Dashboard</h1><span class="pill">v10 console</span><span id="status" class="muted">not connected</span></div>
   <div class="row"><input id="token" type="password" placeholder="Bearer token${hasToken ? "" : " not required"}" style="min-width:280px"><button onclick="refresh()">Refresh</button><button onclick="toggleLive()" id="liveBtn">Start live logs</button><button onclick="loadHealth()">Health</button><button onclick="loadDiff()">Load diff</button><input id="workspace" placeholder="workspace"><input id="sessionId" placeholder="sessionId"></div>
 </header>
 <main class="wrap">
@@ -404,7 +442,7 @@ function render(data){
   document.getElementById('logs').textContent=JSON.stringify((data.auditTail&&data.auditTail.entries)||[],null,2);
   document.getElementById('raw').textContent=JSON.stringify(data,null,2);
 }
-async function refresh(){render(await fetchJson('/api/dashboard/v9?limit=100'))}
+async function refresh(){render(await fetchJson('/api/dashboard/v10?limit=100&requireHttpToken=0'))}
 async function loadHealth(){document.getElementById('raw').textContent=JSON.stringify(await fetchJson('/api/health-monitor'),null,2)}
 async function loadDiff(){const w=document.getElementById('workspace').value;const s=document.getElementById('sessionId').value;document.getElementById('diff').textContent=JSON.stringify(await fetchJson('/api/session/diff?workspace='+encodeURIComponent(w)+'&sessionId='+encodeURIComponent(s)),null,2)}
 function toggleLive(){if(eventSource){eventSource.close();eventSource=null;document.getElementById('liveBtn').textContent='Start live logs';return}const t=document.getElementById('token').value;eventSource=new EventSource('/events'+(t?'?token='+encodeURIComponent(t):''));eventSource.addEventListener('dashboard',e=>{try{render(JSON.parse(e.data))}catch(_){}});eventSource.addEventListener('error',()=>{document.getElementById('status').textContent='live stream error'});document.getElementById('liveBtn').textContent='Stop live logs'}

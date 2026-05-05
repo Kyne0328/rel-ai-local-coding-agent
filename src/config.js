@@ -93,6 +93,13 @@ function makeDefaultConfig() {
       cleanupOlderThanHours: 168,
       enableStateExport: true
     },
+    release: {
+      minimumReadinessScore: 80,
+      requireHttpToken: true,
+      requireCleanWorktreeBeforePush: true,
+      connectorProbeTimeoutMs: 5000,
+      enableReleaseEndpoints: true
+    },
     workspaces: {}
   };
 }
@@ -164,6 +171,9 @@ function normalizeConfig(config) {
   next.semanticIndex = { ...base.semanticIndex, ...((config && config.semanticIndex) || {}) };
   next.policies = { ...base.policies, ...((config && config.policies) || {}) };
   next.productUx = { ...base.productUx, ...((config && config.productUx) || {}) };
+  next.release = { ...base.release, ...((config && config.release) || {}) };
+  next.release.minimumReadinessScore = Math.min(Math.max(Number(next.release.minimumReadinessScore || base.release.minimumReadinessScore), 0), 100);
+  next.release.connectorProbeTimeoutMs = Math.min(Math.max(Number(next.release.connectorProbeTimeoutMs || base.release.connectorProbeTimeoutMs), 500), 60000);
   next.approvalGates = { ...base.approvalGates, ...((config && config.approvalGates) || {}) };
 
   for (const [alias, workspace] of Object.entries(next.workspaces)) {
@@ -258,6 +268,7 @@ function publicConfigSummary(config) {
     semanticIndex: config.semanticIndex,
     policies: config.policies,
     productUx: config.productUx,
+    release: config.release,
     workspaces: Object.entries(config.workspaces || {}).map(([alias, entry]) => ({
       alias,
       path: entry.path,
