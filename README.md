@@ -1,52 +1,49 @@
 # Rel.AI MCP
 
-MCP-based Codex-like local coding runner for ChatGPT.
+Rel.AI MCP is a Codex-like coding runner for ChatGPT. It exposes safe repo/workspace tools over MCP so ChatGPT can inspect a project, apply patches, run allowlisted tests, inspect failures, patch again, commit, push, and create a draft PR.
 
-This is a first version of the cleaner Rel.AI architecture:
+This repo is the MCP replacement for the original Rel.AI browser-extension flow.
 
 ```text
 ChatGPT
 -> MCP tool: inspect workspace
--> MCP tool: read selected files
+-> MCP tool: read/search files
+-> MCP tool: create feature branch
 -> MCP tool: apply validated patch
 -> MCP tool: run allowlisted tests
--> MCP tool: inspect output
--> MCP tool: patch again
+-> MCP tool: inspect output and patch again
 -> MCP tool: commit, push, and create a draft PR
 ```
 
-It replaces the original browser-extension prompt-insertion flow with direct MCP tools.
+## Version
 
-## What this v1 includes
+Current version: `0.2.0`
 
-- Local stdio MCP server using newline-delimited JSON-RPC.
+## What v0.2 adds
+
+- Local stdio MCP server.
+- Remote HTTP JSON-RPC endpoint: `POST /mcp`.
+- SSE compatibility endpoint: `GET /sse` plus `POST /messages?sessionId=...`.
+- Bearer-token authentication for remote transport.
+- Health endpoint: `GET /health`.
+- HTTP smoke test.
 - No external npm dependencies.
-- Workspace aliases stored in a local config file.
-- Safe file-tree generation.
-- Safe text-file reads.
-- Literal workspace search.
-- Unified diff application through `git apply --check` and `git apply --whitespace=warn`.
-- Allowlisted test command execution by `testCommandKey`.
-- Git status and diff tools.
-- Feature branch creation.
-- Commit all changes.
-- Push feature branch.
-- Optional draft PR creation through GitHub CLI.
 
-## What this v1 intentionally does not include
+## What is intentionally not included
 
-- No arbitrary shell command tool.
-- No silent full-disk access.
+- No arbitrary shell-command tool.
+- No full-disk access.
 - No delete-file tool.
 - No deploy tool.
 - No force-push tool.
 - No auto-merge tool.
 - No secret-file reads.
+- No direct commits to protected branches.
 
 ## Requirements
 
 - Node.js 18+
-- Git available on PATH
+- Git available on `PATH`
 - Optional: GitHub CLI `gh`, only if you enable PR creation
 
 ## Install
@@ -54,9 +51,11 @@ It replaces the original browser-extension prompt-insertion flow with direct MCP
 ```bash
 npm install
 npm run check
+npm run test:smoke
+npm run test:http
 ```
 
-No dependencies are currently installed; `npm install` mainly creates your lockfile if you want one.
+There are no runtime npm dependencies yet. `npm install` is mainly useful if you want a lockfile.
 
 ## Initialize config
 
@@ -103,9 +102,15 @@ Example config:
 }
 ```
 
-## Connect as an MCP server
+## Run as local stdio MCP server
 
-Use this shape in your MCP client or ChatGPT Developer Mode connector setup:
+Use this for local MCP clients that support stdio:
+
+```bash
+node /absolute/path/to/rel-ai-mcp/bin/rel-ai-mcp.js
+```
+
+Example local MCP config:
 
 ```json
 {
@@ -121,7 +126,69 @@ Use this shape in your MCP client or ChatGPT Developer Mode connector setup:
 }
 ```
 
-If you use the default config path, the `env` block can be omitted.
+## Run as remote HTTP/SSE MCP server
+
+Use this for ChatGPT Developer Mode or any MCP client that needs a remote endpoint.
+
+Generate a strong token:
+
+```bash
+node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+```
+
+Start the server:
+
+```bash
+REL_AI_MCP_TOKEN="paste-token-here" \
+REL_AI_MCP_CONFIG="$HOME/.rel-ai-mcp/config.json" \
+npm run start:http -- --host 127.0.0.1 --port 3333
+```
+
+Endpoints:
+
+```text
+GET  /health
+POST /mcp
+GET  /sse
+POST /messages?sessionId=...
+```
+
+Remote requests must include:
+
+```text
+Authorization: Bearer <REL_AI_MCP_TOKEN>
+```
+
+For local-only testing without auth:
+
+```bash
+REL_AI_MCP_ALLOW_NO_AUTH=1 npm run start:http -- --host 127.0.0.1 --port 3333
+```
+
+Do not expose an unauthenticated server through a tunnel.
+
+## Expose to ChatGPT Developer Mode
+
+ChatGPT needs a reachable HTTPS URL. For local testing, put the HTTP server behind a tunnel:
+
+```text
+ChatGPT
+-> HTTPS tunnel
+-> http://127.0.0.1:3333
+-> rel-ai-mcp
+-> your configured workspace
+```
+
+Examples:
+
+- Cloudflare Tunnel
+- Tailscale Funnel
+- a private VPS reverse proxy
+- Railway/Fly.io/Render if your workspaces are available there
+
+Use `POST /mcp` as the primary endpoint when the connector asks for a streamable HTTP MCP endpoint. Use `GET /sse` only for clients that specifically expect SSE.
+
+See [`docs/CONNECTING_TO_CHATGPT.md`](docs/CONNECTING_TO_CHATGPT.md).
 
 ## Available tools
 
@@ -225,9 +292,7 @@ Creates a draft PR through GitHub CLI. Disabled unless `allowGitHubCli` is `true
 }
 ```
 
-## Suggested agent loop
-
-Ask ChatGPT to follow this order:
+## Recommended agent loop
 
 ```text
 1. relai_git_status
@@ -244,23 +309,22 @@ Ask ChatGPT to follow this order:
 12. relai_create_pr or use ChatGPT's GitHub connector to open the PR
 ```
 
-## Smoke test
+## Smoke tests
 
 ```bash
 npm run check
 npm run test:smoke
+npm run test:http
 ```
 
-The smoke test starts the MCP server, sends `initialize` and `tools/list`, and verifies that tools are returned.
+`test:smoke` verifies stdio MCP. `test:http` verifies HTTP auth, initialize, tools/list, and tool calling.
 
-## Notes
+## Next version ideas
 
-This is v0.1.0. It is deliberately small. The next version should add:
-
-- direct file write tool with strong approval boundaries,
-- structured patch summaries,
-- test failure extraction,
-- optional GitHub API integration without requiring `gh`,
-- OpenCode fallback integration,
-- audit log file under `.relai-mcp/`,
-- workspace-level tool permissions.
+- Audit log under `.relai-mcp/`.
+- Optional direct file write tool with strict previews.
+- GitHub API integration without requiring `gh`.
+- OpenCode fallback integration.
+- Test-failure extraction/summarization.
+- Workspace-level tool permission toggles.
+- Docker sandbox mode for untrusted repos.

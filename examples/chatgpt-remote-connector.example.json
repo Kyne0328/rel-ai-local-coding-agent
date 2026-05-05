@@ -1,0 +1,9 @@
+{
+  "name": "Rel.AI MCP",
+  "description": "Safe MCP coding runner for local workspaces, patches, tests, git branches, and draft PRs.",
+  "transport": "streamable-http",
+  "url": "https://your-public-https-domain.example.com/mcp",
+  "headers": {
+    "Authorization": "Bearer ${REL_AI_MCP_TOKEN}"
+  }
+}

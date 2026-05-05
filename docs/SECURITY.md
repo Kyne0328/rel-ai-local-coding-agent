@@ -1,36 +1,75 @@
 # Security Model
 
-Rel.AI MCP is intentionally local, narrow, and allowlist-based.
+Rel.AI MCP is designed for coding-agent workflows without handing the model unrestricted shell or disk access.
 
-## Default protections
+## Main guarantees
 
-- Workspace aliases must be configured locally.
-- Paths must be relative to the workspace root.
-- Path traversal and absolute paths are rejected.
-- Sensitive paths such as `.env`, `.ssh`, `.aws`, key files, npm/pypi credentials, service account JSON files, and Firebase admin SDK files are blocked.
-- Binary-looking files are skipped when reading or searching.
-- Symlinks are skipped while building trees.
-- Generated and dependency folders such as `.git`, `node_modules`, `dist`, `build`, `coverage`, `.next`, and `target` are skipped in tree/search operations.
-- Test execution only accepts locally configured `testCommandKey` values.
+- Workspace access is limited to configured aliases.
+- Paths must be relative and must stay inside the workspace root.
+- Secret-looking paths are blocked.
+- Binary-looking and oversized files are blocked for reads/searches.
+- Patch paths are validated before `git apply` runs.
+- Test execution uses configured `testCommandKey` values only.
 - Commits and pushes are refused on protected branches.
-- PR creation through GitHub CLI is disabled unless `allowGitHubCli` is set to `true`.
+- Remote HTTP/SSE transport requires bearer-token auth unless explicitly disabled.
 
-## Dangerous things this v1 does not expose
+## Blocked sensitive paths
 
-- No arbitrary shell command tool.
-- No delete-file tool.
-- No deployment tool.
-- No force-push tool.
-- No direct merge tool.
-- No direct secret-reading tool.
+Examples:
 
-## Recommended workflow
+```text
+.env
+.ssh/
+.aws/
+.azure/
+gcloud/credentials
+*.pem
+*.key
+*.p12
+*.pfx
+.npmrc
+.pypirc
+.netrc
+firebase-adminsdk*.json
+service-account*.json
+```
 
-1. Create or switch to a feature branch.
-2. Read only the files needed for the task.
-3. Apply a dry-run patch first.
-4. Apply the patch if the dry-run passes.
-5. Run an allowlisted test command.
-6. Inspect errors and patch again if needed.
-7. Commit and push the feature branch.
-8. Create a draft PR.
+## Remote transport rules
+
+Use:
+
+```bash
+REL_AI_MCP_TOKEN="strong-random-token" npm run start:http
+```
+
+Do not expose the server over a public URL without a token.
+
+`REL_AI_MCP_ALLOW_NO_AUTH=1` exists only for local testing.
+
+## Safe command policy
+
+There is no arbitrary command tool. Tests must be configured locally:
+
+```json
+{
+  "workspaces": {
+    "myapp": {
+      "testCommands": {
+        "unit": "npm test",
+        "lint": "npm run lint"
+      }
+    }
+  }
+}
+```
+
+The model can request `unit`; it cannot provide a new shell command unless you add it to the config.
+
+## Recommended setup
+
+- Use a disposable/sandbox workspace first.
+- Keep `allowGitHubCli` disabled until you are ready for PR creation.
+- Use draft PRs.
+- Keep protected branches set to at least `main` and `master`.
+- Review diffs before commit/push.
+- Never add deploy, force-push, delete-repo, or secret-reading tools.
