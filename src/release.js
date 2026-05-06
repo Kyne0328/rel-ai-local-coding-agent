@@ -255,10 +255,10 @@ function checkCommandAvailability(commands, findings) {
 
 function commandExists(command) {
   const isWindows = process.platform === "win32";
-  const lookup = isWindows ? "where" : "command";
-  const args = isWindows ? [command] : ["-v", command];
+  const lookup = isWindows ? "where" : "which";
+  const args = [command];
   try {
-    const child = require("node:child_process").spawnSync(lookup, args, { shell: !isWindows, encoding: "utf8" });
+    const child = require("node:child_process").spawnSync(lookup, args, { shell: false, encoding: "utf8" });
     return { command, ok: child.status === 0, path: (child.stdout || "").trim().split(/\r?\n/)[0] || "" };
   } catch (error) {
     return { command, ok: false, error: error.message };
