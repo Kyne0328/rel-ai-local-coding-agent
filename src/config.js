@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { safeReadJson } = require("./safety");
 
 function getConfigPath() {
   return process.env.REL_AI_MCP_CONFIG || path.join(os.homedir(), ".rel-ai-mcp", "config.json");
@@ -110,8 +111,8 @@ function readConfig(options = {}) {
     if (options.allowMissing) return makeDefaultConfig();
     throw new Error(`Rel.AI MCP config not found: ${configPath}. Run: npm run init-config`);
   }
-  const raw = fs.readFileSync(configPath, "utf8");
-  const parsed = JSON.parse(raw);
+  const parsed = safeReadJson(configPath);
+  if (!parsed) throw new Error(`Config file is corrupted or empty: ${configPath}. Fix or re-run: npm run init-config`);
   return normalizeConfig(parsed);
 }
 
