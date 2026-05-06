@@ -4,6 +4,7 @@ const crypto = require("node:crypto");
 const { getStateDir } = require("./audit");
 const { runGit, gitDiff } = require("./git");
 const { summarizeCommand } = require("./process");
+const { safeReadJson } = require("./safety");
 
 function snapshotDir(config) { return path.join(getStateDir(config), "snapshots"); }
 function snapshotPath(config, id) { return path.join(snapshotDir(config), `${validateId(id)}.json`); }
@@ -55,7 +56,9 @@ function listSnapshots(config, args = {}) {
 function readSnapshot(config, id) {
   const file = snapshotPath(config, id);
   if (!fs.existsSync(file)) throw new Error(`Snapshot not found: ${id}`);
-  return JSON.parse(fs.readFileSync(file, "utf8"));
+  const data = safeReadJson(file);
+  if (!data) throw new Error(`Snapshot file corrupted: ${id}`);
+  return data;
 }
 
 async function restoreSnapshot(config, workspace, args = {}) {

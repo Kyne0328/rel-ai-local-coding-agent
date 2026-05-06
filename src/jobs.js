@@ -3,7 +3,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { spawn } = require("node:child_process");
 const { getStateDir } = require("./audit");
-const { safeCommandPolicy } = require("./safety");
+const { safeCommandPolicy, safeReadJson } = require("./safety");
 
 const liveJobs = new Map();
 
@@ -28,7 +28,9 @@ function jobPath(config, jobId) {
 function readJob(config, jobId) {
   const file = jobPath(config, jobId);
   if (!fs.existsSync(file)) throw new Error(`Job not found: ${jobId}`);
-  return JSON.parse(fs.readFileSync(file, "utf8"));
+  const data = safeReadJson(file);
+  if (!data) throw new Error(`Job file corrupted: ${jobId}`);
+  return data;
 }
 
 function writeJob(config, job) {

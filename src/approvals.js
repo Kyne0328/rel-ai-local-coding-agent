@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { getStateDir } = require("./audit");
+const { safeReadJson } = require("./safety");
 
 const KNOWN_ACTIONS = new Set(["write", "patch", "command", "docker", "commit", "push", "pr", "reset", "worktree-remove"]);
 
@@ -55,7 +56,9 @@ function createApproval(config, args = {}) {
 function readApproval(config, approvalId) {
   const file = approvalPath(config, approvalId);
   if (!fs.existsSync(file)) throw new Error(`Approval not found: ${approvalId}`);
-  return JSON.parse(fs.readFileSync(file, "utf8"));
+  const data = safeReadJson(file);
+  if (!data) throw new Error(`Approval file corrupted: ${approvalId}`);
+  return data;
 }
 
 function listApprovals(config, options = {}) {

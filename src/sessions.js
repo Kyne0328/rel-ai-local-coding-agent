@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { getStateDir } = require("./audit");
+const { safeReadJson } = require("./safety");
 
 function sessionDir(config) {
   return path.join(getStateDir(config), "sessions");
@@ -43,7 +44,9 @@ function createSession(config, args) {
 function readSession(config, sessionId) {
   const file = sessionPath(config, sessionId);
   if (!fs.existsSync(file)) throw new Error(`Session not found: ${sessionId}`);
-  return JSON.parse(fs.readFileSync(file, "utf8"));
+  const data = safeReadJson(file);
+  if (!data) throw new Error(`Session file corrupted: ${sessionId}`);
+  return data;
 }
 
 function writeSession(config, session) {
