@@ -235,6 +235,15 @@ function safeCommandPolicy(command) {
   return text;
 }
 
+function safeReadJson(file, fallback = null) {
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch (err) {
+    console.warn(`[rel-ai-mcp] Failed to read JSON at ${file}: ${err.message}`);
+    return fallback;
+  }
+}
+
 module.exports = {
   SECRET_PATH_PATTERNS,
   DEFAULT_EXCLUDED_NAMES,
@@ -249,5 +258,6 @@ module.exports = {
   readTextFileSafe,
   writeTextFileSafe,
   fileSha256,
-  safeCommandPolicy
+  safeCommandPolicy,
+  safeReadJson
 };
