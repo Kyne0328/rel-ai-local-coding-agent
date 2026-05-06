@@ -1,6 +1,6 @@
 {
   "name": "rel-ai-mcp",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "description": "Release-readiness release of the MCP-based Codex-like multi-agent coding task platform for ChatGPT with dashboard UX, connector validation, workspace preflight, config migration planning, release manifests, git, CI, and PR workflows.",
   "private": true,
   "license": "MIT",

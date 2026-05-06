@@ -19,7 +19,16 @@ ChatGPT
 
 ## Version
 
-Current version: `0.10.0`
+Current version: `0.10.1`
+
+## What v0.10.1 fixes
+
+v0.10.1 is a defensive hardening patch. No new tools or config fields. No breaking changes.
+
+- Adds `safeReadJson(file, fallback)` to `src/safety.js` — wraps `JSON.parse(fs.readFileSync(...))` in try-catch, logs a warning with file path, returns fallback. Prevents process crashes from corrupted or partially-written state files.
+- Applies `safeReadJson` across all 16 unguarded call sites in 14 files: `approvals`, `config`, `indexer`, `jobs`, `locks`, `memory`, `multiagent`, `plans`, `productUx`, `scheduler`, `semantic`, `sessions`, `snapshots`. Single-item reads throw a descriptive "file corrupted" error on parse failure. Registry reads (memory, scheduler state, semantic index) return safe empty fallbacks.
+- Fixes `commandExists` in `src/release.js` to use `which` (Unix) / `where` (Windows) with `shell: false` instead of `command -v` with `shell: true`, eliminating the shell invocation surface.
+- Fixes hardcoded test token in `test/http-smoke.mjs` to read from `TEST_TOKEN` env var with safe fallback.
 
 ## What v0.10 adds
 
