@@ -3,6 +3,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { getStateDir } = require("./audit");
 const sessions = require("./sessions");
+const { safeReadJson } = require("./safety");
 
 function plansDir(config) {
   return path.join(getStateDir(config), "plans");
@@ -69,7 +70,9 @@ function createPlan(config, args = {}) {
 function readPlan(config, planId) {
   const file = planPath(config, planId);
   if (!fs.existsSync(file)) throw new Error(`Plan not found: ${planId}`);
-  return JSON.parse(fs.readFileSync(file, "utf8"));
+  const data = safeReadJson(file);
+  if (!data) throw new Error(`Plan file corrupted: ${planId}`);
+  return data;
 }
 
 function listPlans(config, options = {}) {

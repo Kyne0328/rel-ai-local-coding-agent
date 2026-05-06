@@ -9,6 +9,7 @@ const taskRunner = require("./taskRunner");
 const { createTaskWorktree, workspaceFromSession } = require("./worktrees");
 const { runGit, gitDiff, gitStatus, gitShow, prChecksWithGh } = require("./git");
 const { summarizeCommand } = require("./process");
+const { safeReadJson } = require("./safety");
 
 function multiagentDir(config) {
   return path.join(getStateDir(config), "multiagent");
@@ -42,7 +43,9 @@ function writeSubtask(config, subtask) {
 function readSubtask(config, subtaskId) {
   const file = subtaskPath(config, subtaskId);
   if (!fs.existsSync(file)) throw new Error(`Subtask not found: ${subtaskId}`);
-  return JSON.parse(fs.readFileSync(file, "utf8"));
+  const data = safeReadJson(file);
+  if (!data) throw new Error(`Subtask file corrupted: ${subtaskId}`);
+  return data;
 }
 
 function listSubtasks(config, options = {}) {
