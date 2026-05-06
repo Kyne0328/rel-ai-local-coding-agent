@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { getStateDir } = require("./audit");
+const { safeReadJson } = require("./safety");
 
 function locksDir(config) {
   return path.join(getStateDir(config), "locks");
@@ -21,8 +22,8 @@ function acquireLock(config, args = {}) {
   const file = lockPath(config, workspace, resource);
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   if (fs.existsSync(file) && args.steal !== true) {
-    const existing = JSON.parse(fs.readFileSync(file, "utf8"));
-    throw new Error(`Lock already held by ${existing.owner || existing.id}: ${workspace}/${resource}`);
+    const existing = safeReadJson(file);
+    throw new Error(`Lock already held by ${existing ? (existing.owner || existing.id) : "unknown"}: ${workspace}/${resource}`);
   }
   const lock = {
     id: `lock-${new Date().toISOString().replace(/[:.]/g, "-")}-${crypto.randomBytes(4).toString("hex")}`,
@@ -42,7 +43,8 @@ function releaseLock(config, args = {}) {
   const resource = String(args.resource || "workspace");
   const file = lockPath(config, workspace, resource);
   if (!fs.existsSync(file)) return { ok: false, message: "Lock does not exist." };
-  const lock = JSON.parse(fs.readFileSync(file, "utf8"));
+  const lock = safeReadJson(file);
+  if (!lock) throw new Error(`Lock file corrupted: ${workspace}/${resource}`);
   if (args.lockId && lock.id !== args.lockId) throw new Error(`Lock id mismatch. Existing lock is ${lock.id}.`);
   fs.unlinkSync(file);
   return { ok: true, released: lock };
