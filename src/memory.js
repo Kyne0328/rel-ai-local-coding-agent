@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { getStateDir } = require("./audit");
+const { safeReadJson } = require("./safety");
 
 function memoryDir(config) { return path.join(getStateDir(config), "memory"); }
 function workspaceMemoryPath(config, workspace) { return path.join(memoryDir(config), `${String(workspace.alias || workspace).replace(/[^A-Za-z0-9_.-]/g, "-")}.json`); }
@@ -8,7 +9,7 @@ function workspaceMemoryPath(config, workspace) { return path.join(memoryDir(con
 function readMemory(config, workspace) {
   const file = workspaceMemoryPath(config, workspace);
   if (!fs.existsSync(file)) return { workspace: workspace.alias || workspace, notes: [], updatedAt: null };
-  return JSON.parse(fs.readFileSync(file, "utf8"));
+  return safeReadJson(file, { workspace: workspace.alias || workspace, notes: [], updatedAt: null });
 }
 
 function writeMemoryFile(config, workspace, data) {

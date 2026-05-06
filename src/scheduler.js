@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { getStateDir } = require("./audit");
+const { safeReadJson } = require("./safety");
 const multiagent = require("./multiagent");
 
 function schedulerDir(config) {
@@ -61,12 +62,16 @@ function readScheduler(config, args = {}) {
   const id = args.schedulerId || "default";
   const file = schedulerPath(config, id);
   if (!fs.existsSync(file)) return { ok: false, schedulerId: id, message: "Scheduler record not found." };
-  return { ok: true, scheduler: JSON.parse(fs.readFileSync(file, "utf8")) };
+  const scheduler = safeReadJson(file);
+  if (!scheduler) return { ok: false, schedulerId: id, message: "Scheduler record corrupted." };
+  return { ok: true, scheduler };
 }
 
 function updateScheduler(config, args = {}, status) {
   const id = args.schedulerId || "default";
-  const current = fs.existsSync(schedulerPath(config, id)) ? JSON.parse(fs.readFileSync(schedulerPath(config, id), "utf8")) : { id, createdAt: new Date().toISOString() };
+  const current = fs.existsSync(schedulerPath(config, id))
+    ? (safeReadJson(schedulerPath(config, id)) ?? { id, createdAt: new Date().toISOString() })
+    : { id, createdAt: new Date().toISOString() };
   current.status = status;
   current.updatedAt = new Date().toISOString();
   if (args.reason) current.reason = String(args.reason);
