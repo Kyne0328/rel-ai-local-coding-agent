@@ -404,48 +404,278 @@ function renderDashboardHtml(options) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rel.AI MCP Dashboard</title>
 <style>
-:root{color-scheme:light dark;--bg:#0f1115;--card:#171a21;--muted:#8b95a7;--text:#edf2ff;--line:#2a3140;--ok:#4ade80;--warn:#fbbf24;--bad:#fb7185;--accent:#93c5fd}*{box-sizing:border-box}body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;margin:0;background:var(--bg);color:var(--text)}header{position:sticky;top:0;background:rgba(15,17,21,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:1rem 1.25rem;z-index:10}.wrap{max-width:1380px;margin:0 auto;padding:1rem}.row{display:flex;gap:.75rem;align-items:center;flex-wrap:wrap}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem}.card{background:var(--card);border:1px solid var(--line);border-radius:1rem;padding:1rem;box-shadow:0 10px 30px rgba(0,0,0,.18)}button,input,select{font:inherit;padding:.6rem .8rem;border-radius:.6rem;border:1px solid var(--line);background:#10131a;color:var(--text)}button{cursor:pointer;background:#1d2736}.muted{color:var(--muted)}.pill{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:.2rem .55rem;margin:.1rem}.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}pre{white-space:pre-wrap;word-break:break-word;background:#080a0f;border:1px solid var(--line);padding:.75rem;border-radius:.75rem;max-height:420px;overflow:auto}.list{display:grid;gap:.5rem}.item{border:1px solid var(--line);border-radius:.7rem;padding:.6rem;background:#11151d}a{color:var(--accent)}
+:root{
+  color-scheme:dark;
+  --bg:#020611;
+  --bg-soft:#060b18;
+  --panel:#0b1222;
+  --panel-2:#0e1729;
+  --panel-3:#101b31;
+  --line:#1e3150;
+  --line-soft:rgba(107,139,255,.18);
+  --text:#f7fbff;
+  --muted:#92a4bc;
+  --muted-2:#61718a;
+  --blue:#35a3ff;
+  --blue-2:#5f7cff;
+  --purple:#9b4dff;
+  --cyan:#49d9ff;
+  --green:#3ee883;
+  --amber:#ffb83d;
+  --red:#ff6680;
+  --shadow:0 24px 80px rgba(0,0,0,.48);
+  --radius:18px;
+  --radius-sm:12px;
+  --sidebar:246px;
+}
+*{box-sizing:border-box}
+html{min-height:100%;background:var(--bg)}
+body{
+  min-height:100%;margin:0;color:var(--text);
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  background:
+    radial-gradient(circle at 9% 7%,rgba(111,76,255,.23),transparent 24rem),
+    radial-gradient(circle at 92% 14%,rgba(42,151,255,.16),transparent 26rem),
+    radial-gradient(circle at 56% 120%,rgba(49,114,255,.14),transparent 30rem),
+    linear-gradient(180deg,#020611 0%,#040816 48%,#020611 100%);
+}
+button,input{font:inherit}
+button{
+  min-height:40px;border:1px solid rgba(77,123,255,.35);border-radius:12px;
+  padding:0 14px;color:var(--text);cursor:pointer;
+  background:linear-gradient(180deg,rgba(53,163,255,.18),rgba(95,124,255,.1));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
+}
+button:hover{border-color:rgba(73,217,255,.55);background:linear-gradient(180deg,rgba(53,163,255,.25),rgba(155,77,255,.16))}
+input{
+  min-height:40px;border:1px solid rgba(77,123,255,.24);border-radius:12px;
+  padding:0 12px;color:var(--text);background:#070d1a;outline:none;
+}
+input:focus{border-color:rgba(73,217,255,.65);box-shadow:0 0 0 3px rgba(73,217,255,.09)}
+a{color:var(--cyan)}
+.shell{display:grid;grid-template-columns:var(--sidebar) minmax(0,1fr);min-height:100vh;padding:24px;gap:24px}
+.sidebar{
+  position:sticky;top:24px;height:calc(100vh - 48px);padding:18px 14px;
+  border:1px solid rgba(86,132,255,.22);border-radius:22px;background:rgba(6,11,24,.86);
+  box-shadow:var(--shadow);backdrop-filter:blur(18px);overflow:auto;
+}
+.brand{display:flex;align-items:center;gap:12px;padding:2px 8px 18px;border-bottom:1px solid rgba(86,132,255,.14)}
+.logo{
+  width:38px;height:38px;border-radius:12px;display:grid;place-items:center;font-weight:900;font-size:22px;
+  background:linear-gradient(135deg,var(--blue),var(--purple));box-shadow:0 0 22px rgba(95,124,255,.42);
+}
+.brand-title{font-weight:800;letter-spacing:-.02em}.brand-subtitle{font-size:12px;color:var(--muted);margin-top:2px}
+.nav{display:grid;gap:6px;padding:18px 0}.nav-item{
+  display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:12px;color:#c9d6ea;font-size:14px;
+  border:1px solid transparent;
+}
+.nav-item.active{background:linear-gradient(135deg,#2367dd,#2b5ccf);color:#fff;box-shadow:0 12px 28px rgba(35,103,221,.25)}
+.nav-item:not(.active):hover{background:rgba(53,163,255,.07);border-color:rgba(77,123,255,.18)}
+.nav-icon{width:18px;text-align:center;color:#91a7ff}.nav-spacer{height:8px}.sidebar-footer{margin-top:auto;padding:14px 10px;border-top:1px solid rgba(86,132,255,.14);color:var(--muted);font-size:12px;line-height:1.5}
+.app{min-width:0}.topbar{
+  display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:24px;padding:14px 16px;
+  border:1px solid rgba(86,132,255,.2);border-radius:22px;background:rgba(6,11,24,.66);backdrop-filter:blur(18px);
+  box-shadow:0 18px 60px rgba(0,0,0,.28);
+}
+.top-title{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:-.01em}.home-dot{color:#8fb4ff}.server-state{display:flex;align-items:center;gap:8px;color:#cbd7ea;font-size:13px;white-space:nowrap}.server-state:before{content:"";width:8px;height:8px;border-radius:99px;background:var(--green);box-shadow:0 0 14px rgba(62,232,131,.85)}
+.controls{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}.controls input{width:210px}.controls .short{width:148px}.content{display:grid;gap:20px}.hero-panel{
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(360px,.72fr);gap:20px;align-items:stretch;
+  padding:22px;border:1px solid rgba(86,132,255,.22);border-radius:26px;background:
+    linear-gradient(135deg,rgba(12,22,41,.92),rgba(6,10,24,.88)),
+    radial-gradient(circle at top right,rgba(155,77,255,.24),transparent 20rem);
+  box-shadow:var(--shadow);overflow:hidden;
+}
+.eyebrow{margin:0 0 10px;color:#71c7ff;text-transform:uppercase;letter-spacing:.14em;font-size:12px;font-weight:800}.hero-copy h1{margin:0;max-width:760px;font-size:clamp(30px,4vw,56px);line-height:.98;letter-spacing:-.055em}.gradient-text{background:linear-gradient(90deg,#fff 0%,#7aa7ff 52%,#a955ff 100%);-webkit-background-clip:text;background-clip:text;color:transparent}.hero-copy p{max-width:720px;margin:18px 0 0;color:#b9c7d9;font-size:16px;line-height:1.65}.chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}.chip{display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:0 13px;border:1px solid rgba(53,163,255,.34);border-radius:999px;background:rgba(8,15,30,.64);color:#eaf2ff;font-size:13px}.chip.ok:before{content:"✓";color:var(--green)}.chip.lock:before{content:"▣";color:var(--cyan)}.chip.bolt:before{content:"✦";color:var(--amber)}
+.terminal-card{display:flex;flex-direction:column;min-height:216px;border:1px solid rgba(86,132,255,.22);border-radius:18px;background:#060b15;box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
+.terminal-top{display:flex;align-items:center;justify-content:space-between;padding:11px 13px;border-bottom:1px solid rgba(86,132,255,.16);color:#9db1c9;font-size:12px}.terminal-dots{display:flex;gap:6px}.terminal-dots span{width:8px;height:8px;border-radius:50%;background:#263850}.terminal-body{padding:14px;font:13px/1.65 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#dce7ff;overflow:auto}.terminal-body .prompt{color:var(--green)}.terminal-body .accent{color:#9b77ff}.terminal-body .ok{color:var(--green)}
+.stats-grid{display:grid;grid-template-columns:repeat(5,minmax(140px,1fr));gap:14px}.stat-card{
+  min-height:112px;padding:18px 18px 16px;border:1px solid rgba(86,132,255,.18);border-radius:18px;
+  background:linear-gradient(180deg,rgba(15,26,48,.92),rgba(9,16,31,.92));box-shadow:0 18px 42px rgba(0,0,0,.2);
+}
+.stat-label{color:#aab9cc;font-size:13px;font-weight:700}.stat-value{margin-top:10px;font-size:34px;line-height:1;font-weight:900;letter-spacing:-.04em}.stat-meta{margin-top:8px;color:var(--muted);font-size:12px}.stat-blue{color:#5ab4ff}.stat-amber{color:var(--amber)}.stat-purple{color:#b374ff}.stat-green{color:var(--green)}.stat-red{color:var(--red)}
+.dashboard-grid{display:grid;grid-template-columns:minmax(0,1.36fr) minmax(320px,.64fr);gap:20px}.panel{
+  min-width:0;border:1px solid rgba(86,132,255,.2);border-radius:20px;background:rgba(10,18,33,.88);box-shadow:0 18px 46px rgba(0,0,0,.22);overflow:hidden;
+}
+.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:17px 18px;border-bottom:1px solid rgba(86,132,255,.14)}
+.panel-title{margin:0;font-size:16px;letter-spacing:-.01em}.panel-action{color:#8ea4bd;font-size:12px}.panel-body{padding:14px}.list{display:grid;gap:10px}.item{
+  display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;padding:12px;border:1px solid rgba(86,132,255,.14);border-radius:14px;background:rgba(4,9,19,.54);
+}
+.item-dot{width:9px;height:9px;border-radius:99px;background:var(--green);box-shadow:0 0 12px rgba(62,232,131,.65)}.item-dot.warn{background:var(--amber);box-shadow:0 0 12px rgba(255,184,61,.55)}.item-dot.bad{background:var(--red);box-shadow:0 0 12px rgba(255,102,128,.55)}
+.item-main{min-width:0}.item-title{font-size:13px;color:#eef5ff;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.item-sub{margin-top:3px;color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.item-time{color:var(--muted-2);font-size:12px;white-space:nowrap}
+.agent-list{display:grid;gap:9px}.agent-row{display:grid;grid-template-columns:30px minmax(0,1fr) auto;align-items:center;gap:10px;padding:10px 11px;border-radius:13px;background:rgba(4,9,19,.45);border:1px solid rgba(86,132,255,.12)}.agent-icon{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:linear-gradient(135deg,rgba(53,163,255,.28),rgba(155,77,255,.24));font-size:14px}.agent-name{font-size:13px;font-weight:750}.agent-status{font-size:12px;color:var(--muted);margin-top:2px}.status-pill{font-size:11px;padding:4px 8px;border-radius:999px;border:1px solid rgba(86,132,255,.2);color:#b8c7dd;background:#07101e}.status-pill.ok{color:var(--green);border-color:rgba(62,232,131,.28);background:rgba(62,232,131,.08)}.status-pill.warn{color:var(--amber);border-color:rgba(255,184,61,.28);background:rgba(255,184,61,.08)}
+.three-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}.empty{padding:18px;border:1px dashed rgba(86,132,255,.25);border-radius:14px;color:var(--muted);text-align:center;font-size:13px;background:rgba(5,10,20,.38)}
+.ops-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px}.code-box{margin:0;min-height:220px;max-height:440px;overflow:auto;white-space:pre-wrap;word-break:break-word;padding:16px;border:1px solid rgba(86,132,255,.18);border-radius:16px;background:#030813;color:#dce7ff;font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}.raw-panel{display:none}.raw-panel.open{display:block}
+.mobile-tabs{display:none}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media (max-width:1180px){.shell{grid-template-columns:1fr}.sidebar{display:none}.topbar{align-items:flex-start;flex-direction:column}.controls{justify-content:flex-start}.hero-panel{grid-template-columns:1fr}.stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.dashboard-grid,.three-grid,.ops-grid{grid-template-columns:1fr}.mobile-tabs{display:flex}}
+@media (max-width:680px){.shell{padding:12px;gap:12px}.topbar,.hero-panel{border-radius:18px}.hero-panel{padding:16px}.controls{width:100%}.controls input,.controls .short,.controls button{width:100%}.stats-grid{grid-template-columns:1fr}.item{grid-template-columns:auto minmax(0,1fr)}.item-time{grid-column:2}.hero-copy h1{font-size:34px}}
 </style>
 </head>
 <body>
-<header>
-  <div class="row"><h1 style="margin:.1rem 1rem .1rem 0">Rel.AI MCP Dashboard</h1><span class="pill">v10 console</span><span id="status" class="muted">not connected</span></div>
-  <div class="row"><input id="token" type="password" placeholder="Bearer token${hasToken ? "" : " not required"}" style="min-width:280px"><button onclick="refresh()">Refresh</button><button onclick="toggleLive()" id="liveBtn">Start live logs</button><button onclick="loadHealth()">Health</button><button onclick="loadDiff()">Load diff</button><input id="workspace" placeholder="workspace"><input id="sessionId" placeholder="sessionId"></div>
-</header>
-<main class="wrap">
-  <section class="grid" id="summary"></section>
-  <section class="grid">
-    <div class="card"><h2>Sessions</h2><div class="list" id="sessions"></div></div>
-    <div class="card"><h2>Jobs</h2><div class="list" id="jobs"></div></div>
-    <div class="card"><h2>Approvals</h2><div class="list" id="approvals"></div></div>
-    <div class="card"><h2>Health findings</h2><div class="list" id="health"></div></div>
-  </section>
-  <section class="grid">
-    <div class="card"><h2>Audit / live logs</h2><pre id="logs">No logs loaded.</pre></div>
-    <div class="card"><h2>Diff viewer</h2><pre id="diff">Enter workspace/sessionId and click Load diff.</pre></div>
-  </section>
-  <section class="card"><h2>Raw dashboard data</h2><pre id="raw">Click Refresh.</pre></section>
-</main>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">R</div>
+      <div><div class="brand-title">Rel.AI MCP</div><div class="brand-subtitle">local coding team</div></div>
+    </div>
+    <nav class="nav" aria-label="Dashboard navigation">
+      <div class="nav-item active"><span class="nav-icon">⌂</span>Overview</div>
+      <div class="nav-item"><span class="nav-icon">▣</span>Sessions</div>
+      <div class="nav-item"><span class="nav-icon">☑</span>Tasks</div>
+      <div class="nav-item"><span class="nav-icon">♙</span>Agents</div>
+      <div class="nav-item"><span class="nav-icon">▤</span>Workspaces</div>
+      <div class="nav-item"><span class="nav-icon">⑂</span>PRs</div>
+      <div class="nav-item"><span class="nav-icon">▦</span>Logs</div>
+      <div class="nav-spacer"></div>
+      <div class="nav-item"><span class="nav-icon">⚙</span>Settings</div>
+    </nav>
+    <div class="sidebar-footer">100% local by default. Approval gates, snapshots, rollback, and policy checks stay visible while agents work.</div>
+  </aside>
+  <div class="app">
+    <header class="topbar">
+      <div>
+        <div class="top-title"><span class="home-dot">⌂</span>Dashboard</div>
+        <div class="server-state" id="status">Server pending</div>
+      </div>
+      <div class="controls" aria-label="Dashboard controls">
+        <label class="sr-only" for="token">Bearer token</label>
+        <input id="token" type="password" autocomplete="off" placeholder="Bearer token${hasToken ? "" : " not required"}">
+        <button onclick="refresh()">Refresh</button>
+        <button onclick="toggleLive()" id="liveBtn">Start live</button>
+        <button onclick="loadHealth()">Health</button>
+        <button onclick="toggleRaw()" id="rawBtn">Raw</button>
+        <input class="short" id="workspace" placeholder="workspace">
+        <input class="short" id="sessionId" placeholder="sessionId">
+        <button onclick="loadDiff()">Load diff</button>
+      </div>
+    </header>
+    <main class="content">
+      <section class="hero-panel">
+        <div class="hero-copy">
+          <p class="eyebrow">Overview</p>
+          <h1>Run your <span class="gradient-text">local AI coding team</span> from one console.</h1>
+          <p>Track sessions, tasks, approvals, health, logs, and agent activity without leaving the browser. The layout mirrors the hero: compact cards, clear status, and operational panels with consistent padding.</p>
+          <div class="chips">
+            <span class="chip ok">100% Local</span>
+            <span class="chip lock">Private & Secure</span>
+            <span class="chip bolt">MCP Compatible</span>
+            <span class="chip">130+ Tools</span>
+          </div>
+        </div>
+        <div class="terminal-card">
+          <div class="terminal-top"><span>rel-ai-mcp</span><div class="terminal-dots"><span></span><span></span><span></span></div></div>
+          <div class="terminal-body" id="terminal">$ relai dashboard --live<br><span class="ok">✓</span> Waiting for dashboard data...</div>
+        </div>
+      </section>
+      <section class="stats-grid" id="summary"></section>
+      <section class="dashboard-grid">
+        <div class="panel">
+          <div class="panel-head"><h2 class="panel-title">Recent Activity</h2><span class="panel-action" id="activityCount">0 events</span></div>
+          <div class="panel-body"><div class="list" id="activity"></div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2 class="panel-title">Agent Team</h2><span class="panel-action" id="agentCount">7 roles</span></div>
+          <div class="panel-body"><div class="agent-list" id="agents"></div></div>
+        </div>
+      </section>
+      <section class="three-grid">
+        <div class="panel"><div class="panel-head"><h2 class="panel-title">Sessions</h2><span class="panel-action" id="sessionCount">0</span></div><div class="panel-body"><div class="list" id="sessions"></div></div></div>
+        <div class="panel"><div class="panel-head"><h2 class="panel-title">Tasks</h2><span class="panel-action" id="jobCount">0</span></div><div class="panel-body"><div class="list" id="jobs"></div></div></div>
+        <div class="panel"><div class="panel-head"><h2 class="panel-title">Approvals</h2><span class="panel-action" id="approvalCount">0</span></div><div class="panel-body"><div class="list" id="approvals"></div></div></div>
+      </section>
+      <section class="ops-grid">
+        <div class="panel"><div class="panel-head"><h2 class="panel-title">Health Findings</h2><span class="panel-action" id="healthCount">0</span></div><div class="panel-body"><div class="list" id="health"></div></div></div>
+        <div class="panel"><div class="panel-head"><h2 class="panel-title">Diff Viewer</h2><span class="panel-action">workspace + session</span></div><div class="panel-body"><pre class="code-box" id="diff">Enter workspace/sessionId and click Load diff.</pre></div></div>
+      </section>
+      <section class="panel raw-panel" id="rawPanel"><div class="panel-head"><h2 class="panel-title">Raw Dashboard Data</h2><span class="panel-action">debug</span></div><div class="panel-body"><pre class="code-box" id="raw">Click Refresh.</pre></div></section>
+    </main>
+  </div>
+</div>
 <script>
 let eventSource=null;
+let lastData=null;
+const AGENT_ROLES=[
+  ['Planner','Planning','♙'],['Coder','Implementing','⌘'],['Reviewer','Reviewing','◆'],['Tester','Running tests','✓'],['CI Engineer','Monitoring','◈'],['Docs Writer','Writing docs','✎'],['Security Guard','Scanning','▰']
+];
 function headers(){const t=document.getElementById('token').value;return t?{Authorization:'Bearer '+t}:{}}
-async function fetchJson(url){const res=await fetch(url,{headers:headers()});const text=await res.text();try{return JSON.parse(text)}catch(e){return {ok:false,error:text}}}
-function esc(s){return String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
-function card(label,value,cls=''){return '<div class="card"><div class="muted">'+esc(label)+'</div><div class="'+cls+'" style="font-size:1.6rem;font-weight:700">'+esc(value)+'</div></div>'}
+async function fetchJson(url){const res=await fetch(url,{headers:headers()});const text=await res.text();try{return JSON.parse(text)}catch(e){return {ok:false,error:text,status:res.status}}}
+function esc(value){return String(value??'').replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function statusClass(value){const s=String(value||'').toLowerCase();if(s.includes('fail')||s.includes('error')||s.includes('denied'))return 'bad';if(s.includes('run')||s.includes('pending')||s.includes('wait')||s.includes('cancel'))return 'warn';return 'ok'}
+function shortId(value){const s=String(value||'');return s.length>24?s.slice(0,12)+'...'+s.slice(-6):s}
+function timeAgo(value){const ts=Date.parse(value||'');if(!Number.isFinite(ts))return '';const diff=Math.max(0,Date.now()-ts);const mins=Math.floor(diff/60000);if(mins<1)return 'now';if(mins<60)return mins+'m ago';const hours=Math.floor(mins/60);if(hours<24)return hours+'h ago';return Math.floor(hours/24)+'d ago'}
+function empty(message){return '<div class="empty">'+esc(message)+'</div>'}
+function stat(label,value,meta,cls){return '<div class="stat-card"><div class="stat-label">'+esc(label)+'</div><div class="stat-value '+(cls||'')+'">'+esc(value)+'</div><div class="stat-meta">'+esc(meta||'')+'</div></div>'}
+function listItem(title,sub,time,kind){return '<div class="item"><span class="item-dot '+(kind||'')+'"></span><div class="item-main"><div class="item-title">'+esc(title)+'</div><div class="item-sub">'+esc(sub||'')+'</div></div><div class="item-time">'+esc(time||'')+'</div></div>'}
 function render(data){
-  document.getElementById('status').textContent=data.ok?'connected':'error';
-  const c=data.counts||{};document.getElementById('summary').innerHTML=card('Sessions',c.sessions||0)+card('Jobs',c.jobs||0)+card('Approvals',c.approvals||0)+card('Locks',c.locks||0)+card('Findings',(data.health&&data.health.counts&&data.health.counts.findings)||0,((data.health&&data.health.ok)?'ok':'warn'));
-  document.getElementById('sessions').innerHTML=(data.sessions||[]).slice(0,20).map(x=>'<div class="item"><b>'+esc(x.id)+'</b><br><span class="muted">'+esc(x.status)+' · '+esc(x.workspace)+' · '+esc(x.updatedAt||x.createdAt)+'</span></div>').join('')||'<span class="muted">none</span>';
-  document.getElementById('jobs').innerHTML=(data.jobs||[]).slice(0,20).map(x=>'<div class="item"><b>'+esc(x.id)+'</b><br><span class="muted">'+esc(x.status)+' · '+esc(x.workspace)+' · '+esc(x.commandKey||'')+'</span></div>').join('')||'<span class="muted">none</span>';
-  document.getElementById('approvals').innerHTML=(data.approvals||[]).slice(0,20).map(x=>'<div class="item"><b>'+esc(x.id)+'</b><br><span class="muted">'+esc(x.action)+' · '+esc(x.status||'pending')+'</span></div>').join('')||'<span class="muted">none</span>';
-  document.getElementById('health').innerHTML=((data.health&&data.health.findings)||[]).slice(0,20).map(x=>'<div class="item"><b class="'+(x.severity==='error'?'bad':x.severity==='warning'?'warn':'ok')+'">'+esc(x.severity)+'</b> '+esc(x.code)+'<br><span class="muted">'+esc(x.message)+'</span></div>').join('')||'<span class="ok">No findings</span>';
-  document.getElementById('logs').textContent=JSON.stringify((data.auditTail&&data.auditTail.entries)||[],null,2);
+  lastData=data||{};
+  const ok=Boolean(data&&data.ok);
+  document.getElementById('status').textContent=ok?'Server Online':'Server Error';
+  const c=data.counts||{};
+  const sessions=data.sessions||[];
+  const jobs=data.jobs||[];
+  const approvals=data.approvals||[];
+  const locks=data.locks||[];
+  const health=data.health||{};
+  const audit=(data.auditTail&&data.auditTail.entries)||[];
+  const subtasks=(data.multiAgent&&data.multiAgent.subtasks)||[];
+  const runningJobs=jobs.filter(function(x){return ['running','cancelling'].includes(String(x.status||'').toLowerCase())}).length;
+  const activeSessions=sessions.filter(function(x){return !['completed','closed','cancelled','failed'].includes(String(x.status||'').toLowerCase())}).length;
+  const openApprovals=approvals.filter(function(x){return !['approved','denied','resolved'].includes(String(x.status||'').toLowerCase())}).length;
+  const findings=(health.counts&&health.counts.findings)||0;
+  document.getElementById('summary').innerHTML=
+    stat('Sessions',c.sessions||0,activeSessions+' active','stat-blue')+
+    stat('Tasks',c.jobs||0,runningJobs+' running','stat-amber')+
+    stat('PR / Gates',approvals.length,openApprovals+' open','stat-purple')+
+    stat('Agents',subtasks.length||AGENT_ROLES.length,(subtasks.length?'from subtasks':'ready'),'stat-green')+
+    stat('Health',findings,health.ok===false?'needs attention':'all clear',health.ok===false?'stat-red':'stat-green');
+  document.getElementById('activityCount').textContent=audit.length+' events';
+  document.getElementById('sessionCount').textContent=String(sessions.length);
+  document.getElementById('jobCount').textContent=String(jobs.length);
+  document.getElementById('approvalCount').textContent=String(approvals.length);
+  document.getElementById('healthCount').textContent=String(findings);
+  document.getElementById('activity').innerHTML=audit.slice(0,8).map(function(x,index){
+    const title=x.tool||x.type||x.event||x.action||('Activity #'+(index+1));
+    const sub=x.workspace||x.sessionId||x.message||x.path||JSON.stringify(x).slice(0,120);
+    return listItem(title,sub,timeAgo(x.at||x.createdAt||x.timestamp),statusClass(x.status||x.ok));
+  }).join('')||empty('No recent activity yet. Start a task or enable live logs.');
+  document.getElementById('sessions').innerHTML=sessions.slice(0,8).map(function(x){return listItem(shortId(x.id),String(x.status||'unknown')+' · '+String(x.workspace||'workspace'),timeAgo(x.updatedAt||x.createdAt),statusClass(x.status))}).join('')||empty('No sessions found.');
+  document.getElementById('jobs').innerHTML=jobs.slice(0,8).map(function(x){return listItem(shortId(x.id),String(x.status||'unknown')+' · '+String(x.workspace||'workspace')+' · '+String(x.commandKey||x.command||''),timeAgo(x.updatedAt||x.startedAt||x.createdAt),statusClass(x.status))}).join('')||empty('No tasks are running.');
+  document.getElementById('approvals').innerHTML=approvals.slice(0,8).map(function(x){return listItem(shortId(x.id),String(x.action||'approval')+' · '+String(x.status||'pending'),timeAgo(x.updatedAt||x.createdAt),statusClass(x.status||'pending'))}).join('')||empty('No approval gates pending.');
+  document.getElementById('health').innerHTML=((health.findings)||[]).slice(0,8).map(function(x){return listItem(String(x.code||x.severity||'finding'),String(x.message||''),'',statusClass(x.severity))}).join('')||empty('No health findings.');
+  renderAgents(subtasks,jobs,approvals,health);
+  renderTerminal(data,audit,jobs,subtasks);
   document.getElementById('raw').textContent=JSON.stringify(data,null,2);
 }
+function renderAgents(subtasks,jobs,approvals,health){
+  const rows=AGENT_ROLES.map(function(role){
+    const name=role[0], fallback=role[1], icon=role[2];
+    const item=subtasks.find(function(x){return String(x.role||'').toLowerCase().includes(name.toLowerCase().split(' ')[0])});
+    let status=item?String(item.status||fallback):fallback;
+    if(name==='Tester'&&jobs.some(function(x){return String(x.commandKey||x.command||'').toLowerCase().includes('test')}))status='Running tests';
+    if(name==='Reviewer'&&approvals.length)status='Reviewing gates';
+    if(name==='Security Guard'&&health&&health.ok===false)status='Needs attention';
+    const cls=statusClass(status);
+    return '<div class="agent-row"><div class="agent-icon">'+esc(icon)+'</div><div><div class="agent-name">'+esc(name)+'</div><div class="agent-status">'+esc(status)+'</div></div><span class="status-pill '+cls+'">'+(cls==='ok'?'online':cls==='warn'?'active':'check')+'</span></div>';
+  });
+  document.getElementById('agentCount').textContent=rows.length+' roles';
+  document.getElementById('agents').innerHTML=rows.join('');
+}
+function renderTerminal(data,audit,jobs,subtasks){
+  const lines=[];
+  lines.push('<span class="prompt">$</span> relai dashboard --live');
+  if(data&&data.ok)lines.push('<span class="ok">✓</span> Dashboard data loaded');
+  else lines.push('<span class="accent">!</span> Waiting for server data');
+  if(jobs.length)lines.push('<span class="ok">✓</span> '+jobs.length+' task record(s) found');
+  if(subtasks.length)lines.push('<span class="ok">✓</span> '+subtasks.length+' agent subtask(s) tracked');
+  if(audit.length){const latest=audit[0];lines.push('<span class="accent">›</span> '+esc(latest.tool||latest.type||latest.event||'recent activity')+' '+esc(timeAgo(latest.at||latest.createdAt||latest.timestamp)));}
+  if(data&&data.readiness&&typeof data.readiness.score!=='undefined')lines.push('<span class="ok">✓</span> Release readiness score: '+esc(data.readiness.score));
+  lines.push('<span class="accent">{ AI + YOU }</span> better together');
+  document.getElementById('terminal').innerHTML=lines.join('<br>');
+}
 async function refresh(){render(await fetchJson('/api/dashboard/v10?limit=100&requireHttpToken=0'))}
-async function loadHealth(){document.getElementById('raw').textContent=JSON.stringify(await fetchJson('/api/health-monitor'),null,2)}
+async function loadHealth(){const payload=await fetchJson('/api/health-monitor');document.getElementById('rawPanel').classList.add('open');document.getElementById('raw').textContent=JSON.stringify(payload,null,2)}
 async function loadDiff(){const w=document.getElementById('workspace').value;const s=document.getElementById('sessionId').value;document.getElementById('diff').textContent=JSON.stringify(await fetchJson('/api/session/diff?workspace='+encodeURIComponent(w)+'&sessionId='+encodeURIComponent(s)),null,2)}
-function toggleLive(){if(eventSource){eventSource.close();eventSource=null;document.getElementById('liveBtn').textContent='Start live logs';return}const t=document.getElementById('token').value;eventSource=new EventSource('/events'+(t?'?token='+encodeURIComponent(t):''));eventSource.addEventListener('dashboard',e=>{try{render(JSON.parse(e.data))}catch(_){}});eventSource.addEventListener('error',()=>{document.getElementById('status').textContent='live stream error'});document.getElementById('liveBtn').textContent='Stop live logs'}
+function toggleLive(){if(eventSource){eventSource.close();eventSource=null;document.getElementById('liveBtn').textContent='Start live';return}const t=document.getElementById('token').value;eventSource=new EventSource('/events'+(t?'?token='+encodeURIComponent(t):''));eventSource.addEventListener('dashboard',function(e){try{render(JSON.parse(e.data))}catch(_){}});eventSource.addEventListener('error',function(){document.getElementById('status').textContent='Live stream error'});document.getElementById('liveBtn').textContent='Stop live'}
+function toggleRaw(){const panel=document.getElementById('rawPanel');panel.classList.toggle('open');if(lastData)document.getElementById('raw').textContent=JSON.stringify(lastData,null,2)}
 refresh();
 </script>
 </body>
