@@ -11,6 +11,7 @@ const locks = require("./locks");
 const multiagent = require("./multiagent");
 const { listWorktrees } = require("./worktrees");
 const { runProcess, summarizeCommand } = require("./process");
+const { safeReadJson } = require("./safety");
 
 function dashboardData(config, args = {}) {
   const limit = clampNumber(args.limit || 100, 1, 500);
@@ -201,7 +202,8 @@ function setupWizard(args = {}) {
 function importOriginalRelAiConfig(args = {}) {
   const sourcePath = args.sourcePath ? path.resolve(String(args.sourcePath)) : path.join(os.homedir(), ".rel-ai", "opencode.json");
   if (!fs.existsSync(sourcePath)) throw new Error(`Original Rel.AI config not found: ${sourcePath}`);
-  const source = JSON.parse(fs.readFileSync(sourcePath, "utf8"));
+  const source = safeReadJson(sourcePath);
+  if (!source) throw new Error(`Original Rel.AI config file is corrupted or empty: ${sourcePath}`);
   const config = readConfig({ allowMissing: true });
   const imported = [];
   for (const [alias, entry] of Object.entries(source.workspaces || {})) {
@@ -235,7 +237,10 @@ function stateExport(config, args = {}) {
 function stateImport(config, args = {}) {
   if (args.confirm !== true) throw new Error("stateImport requires confirm=true.");
   let payload = args.payload;
-  if (args.inputPath) payload = JSON.parse(fs.readFileSync(path.resolve(String(args.inputPath)), "utf8"));
+  if (args.inputPath) {
+    payload = safeReadJson(path.resolve(String(args.inputPath)));
+    if (!payload) throw new Error(`State import file is corrupted or empty: ${args.inputPath}`);
+  }
   if (!payload || !Array.isArray(payload.files)) throw new Error("State import payload must contain a files array.");
   const stateDir = getStateDir(config);
   const written = [];
