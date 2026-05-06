@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { getStateDir } = require("./audit");
-const { collectTextFiles, readTextFileSafe } = require("./safety");
+const { collectTextFiles, readTextFileSafe, safeReadJson } = require("./safety");
 
 function semanticDir(config) { return path.join(getStateDir(config), "semantic-indexes"); }
 function indexPath(config, workspace) { return path.join(semanticDir(config), `${String(workspace.alias).replace(/[^A-Za-z0-9_.-]/g, "-")}.json`); }
@@ -37,7 +37,9 @@ function buildSemanticIndex(config, workspace, args = {}) {
 function readIndex(config, workspace) {
   const file = indexPath(config, workspace);
   if (!fs.existsSync(file)) throw new Error(`Semantic index not found for ${workspace.alias}. Run relai_semantic_index_build first.`);
-  return JSON.parse(fs.readFileSync(file, "utf8"));
+  const data = safeReadJson(file);
+  if (!data) throw new Error(`Semantic index file corrupted for ${workspace.alias}. Re-run relai_semantic_index_build.`);
+  return data;
 }
 
 function semanticSearch(config, workspace, args = {}) {

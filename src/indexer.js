@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { getStateDir } = require("./audit");
-const { collectTextFiles, readTextFileSafe, fileSha256 } = require("./safety");
+const { collectTextFiles, readTextFileSafe, fileSha256, safeReadJson } = require("./safety");
 
 function indexesDir(config) {
   return path.join(getStateDir(config), "indexes");
@@ -83,7 +83,9 @@ function readIndex(config, workspace, args = {}) {
   const sessionId = args.sessionId || workspace.taskSessionId || null;
   const file = indexPath(config, workspace, sessionId);
   if (!fs.existsSync(file)) throw new Error("Repository index does not exist. Run relai_index_build first.");
-  return JSON.parse(fs.readFileSync(file, "utf8"));
+  const data = safeReadJson(file);
+  if (!data) throw new Error("Repository index file corrupted. Re-run relai_index_build.");
+  return data;
 }
 
 function searchIndex(config, workspace, args = {}) {
