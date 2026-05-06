@@ -2,6 +2,14 @@
 
 Rel.AI MCP supports local stdio and remote HTTP/SSE transport. ChatGPT Developer Mode needs a reachable HTTPS endpoint, so use the HTTP server plus a tunnel or reverse proxy.
 
+For the simpler permanent setup, start with [ONE_CLICK_SETUP.md](ONE_CLICK_SETUP.md). The short version is:
+
+```bash
+npm run oneclick -- --public-url https://relai.your-domain.com
+```
+
+That command keeps a persistent local token and prints the stable MCP URL to use in ChatGPT.
+
 ## Start local HTTP server
 
 ```bash

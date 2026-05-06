@@ -6,6 +6,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "relai-v9-smoke-"));
 const repo = path.join(tmp, "repo");
 fs.mkdirSync(path.join(repo, "src"), { recursive: true });
@@ -50,7 +51,7 @@ process.env.REL_AI_MCP_CONFIG = configPath;
 const { callTool } = await import(pathToFileURL(path.join(root, "src", "tools.js")).href);
 
 const version = await callTool("relai_version", {});
-assert.equal(version.version, "0.10.0");
+assert.equal(version.version, pkg.version);
 assert.ok(version.capabilities.includes("rich dashboard data and live audit logs"));
 
 const setup = await callTool("relai_setup_wizard", { alias: "demo", workspacePath: repo });

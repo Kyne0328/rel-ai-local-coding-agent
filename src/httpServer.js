@@ -13,14 +13,18 @@ const productUx = require("./productUx");
 const release = require("./release");
 const { workspaceFromSession } = require("./worktrees");
 const pkg = require("../package.json");
+const connection = require("./connectionProfile");
 
 const DEFAULT_MAX_BODY_BYTES = 10 * 1024 * 1024;
 const sessions = new Map();
 
 function startHttpServer(options = {}) {
-  const host = options.host || process.env.REL_AI_MCP_HOST || "127.0.0.1";
-  const port = Number(options.port ?? process.env.REL_AI_MCP_PORT ?? 3333);
-  const token = options.token || process.env.REL_AI_MCP_TOKEN || "";
+  const launchEnv = connection.readLaunchEnv();
+  const savedProfile = connection.readConnectionProfile();
+  const host = options.host || process.env.REL_AI_MCP_HOST || savedProfile.host || "127.0.0.1";
+  const port = Number(options.port ?? process.env.REL_AI_MCP_PORT ?? savedProfile.port ?? 3333);
+  const token = options.token || process.env.REL_AI_MCP_TOKEN || launchEnv.REL_AI_MCP_TOKEN || "";
+  const publicUrl = connection.normalizePublicUrl(options.publicUrl || process.env.REL_AI_MCP_PUBLIC_URL || launchEnv.REL_AI_MCP_PUBLIC_URL || savedProfile.publicUrl || "");
   const allowNoAuth = Boolean(options.allowNoAuth || process.env.REL_AI_MCP_ALLOW_NO_AUTH === "1");
   const maxBodyBytes = Number(options.maxBodyBytes || process.env.REL_AI_MCP_MAX_BODY_BYTES || DEFAULT_MAX_BODY_BYTES);
 
@@ -30,7 +34,7 @@ function startHttpServer(options = {}) {
 
   const server = http.createServer(async (req, res) => {
     try {
-      await routeRequest(req, res, { token, allowNoAuth, maxBodyBytes });
+      await routeRequest(req, res, { token, allowNoAuth, maxBodyBytes, host, port, publicUrl });
     } catch (error) {
       sendJson(res, 500, {
         ok: false,
@@ -47,6 +51,12 @@ function startHttpServer(options = {}) {
     const address = server.address();
     const actualPort = address && typeof address === "object" ? address.port : port;
     console.error(`[rel-ai-mcp] HTTP/SSE server listening on http://${host}:${actualPort}`);
+    connection.writeConnectionProfile({ host, port: actualPort, publicUrl, configPath: require("./config").getConfigPath() });
+    if (publicUrl) {
+      console.error(`[rel-ai-mcp] Public connector URL: ${publicUrl}/mcp`);
+    } else {
+      console.error("[rel-ai-mcp] No permanent public URL configured. Use rel-ai-mcp-launch --public-url https://your-domain.example.com when your tunnel is ready.");
+    }
     if (!token) {
       console.error("[rel-ai-mcp] WARNING: HTTP/SSE auth is disabled. Use only on a trusted local network.");
     }
@@ -86,6 +96,18 @@ async function routeRequest(req, res, options) {
       locks: locks.listLocks(config).locks,
       multiAgent: multiagent.multiagentStatus(config, { limit })
     });
+    return;
+  }
+
+  if (req.method === "GET" && parsed.pathname === "/api/connection") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    sendJson(res, 200, connection.buildConnectionSummary({
+      host: options.host,
+      port: options.port,
+      publicUrl: options.publicUrl,
+      token: options.token,
+      showToken: parsed.searchParams.get("showToken") === "1"
+    }));
     return;
   }
 
@@ -493,7 +515,7 @@ a{color:var(--cyan)}
   background:linear-gradient(180deg,rgba(15,26,48,.92),rgba(9,16,31,.92));box-shadow:0 18px 42px rgba(0,0,0,.2);
 }
 .stat-label{color:#aab9cc;font-size:13px;font-weight:700}.stat-value{margin-top:10px;font-size:34px;line-height:1;font-weight:900;letter-spacing:-.04em}.stat-meta{margin-top:8px;color:var(--muted);font-size:12px}.stat-blue{color:#5ab4ff}.stat-amber{color:var(--amber)}.stat-purple{color:#b374ff}.stat-green{color:var(--green)}.stat-red{color:var(--red)}
-.dashboard-grid{display:grid;grid-template-columns:minmax(0,1.36fr) minmax(320px,.64fr);gap:20px}.panel{
+.setup-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,.38fr);gap:20px}.connector-steps{display:grid;gap:10px}.connector-step{padding:12px;border:1px solid rgba(86,132,255,.14);border-radius:14px;background:rgba(4,9,19,.5);color:#dce7ff;font-size:13px;line-height:1.45}.connector-step strong{color:#fff}.dashboard-grid{display:grid;grid-template-columns:minmax(0,1.36fr) minmax(320px,.64fr);gap:20px}.panel{
   min-width:0;border:1px solid rgba(86,132,255,.2);border-radius:20px;background:rgba(10,18,33,.88);box-shadow:0 18px 46px rgba(0,0,0,.22);overflow:hidden;
 }
 .panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:17px 18px;border-bottom:1px solid rgba(86,132,255,.14)}
@@ -506,7 +528,7 @@ a{color:var(--cyan)}
 .three-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}.empty{padding:18px;border:1px dashed rgba(86,132,255,.25);border-radius:14px;color:var(--muted);text-align:center;font-size:13px;background:rgba(5,10,20,.38)}
 .ops-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px}.code-box{margin:0;min-height:220px;max-height:440px;overflow:auto;white-space:pre-wrap;word-break:break-word;padding:16px;border:1px solid rgba(86,132,255,.18);border-radius:16px;background:#030813;color:#dce7ff;font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}.raw-panel{display:none}.raw-panel.open{display:block}
 .mobile-tabs{display:none}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
-@media (max-width:1180px){.shell{grid-template-columns:1fr}.sidebar{display:none}.topbar{align-items:flex-start;flex-direction:column}.controls{justify-content:flex-start}.hero-panel{grid-template-columns:1fr}.stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.dashboard-grid,.three-grid,.ops-grid{grid-template-columns:1fr}.mobile-tabs{display:flex}}
+@media (max-width:1180px){.shell{grid-template-columns:1fr}.sidebar{display:none}.topbar{align-items:flex-start;flex-direction:column}.controls{justify-content:flex-start}.hero-panel{grid-template-columns:1fr}.stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.setup-grid,.dashboard-grid,.three-grid,.ops-grid{grid-template-columns:1fr}.mobile-tabs{display:flex}}
 @media (max-width:680px){.shell{padding:12px;gap:12px}.topbar,.hero-panel{border-radius:18px}.hero-panel{padding:16px}.controls{width:100%}.controls input,.controls .short,.controls button{width:100%}.stats-grid{grid-template-columns:1fr}.item{grid-template-columns:auto minmax(0,1fr)}.item-time{grid-column:2}.hero-copy h1{font-size:34px}}
 </style>
 </head>
@@ -567,6 +589,21 @@ a{color:var(--cyan)}
         </div>
       </section>
       <section class="stats-grid" id="summary"></section>
+      <section class="setup-grid">
+        <div class="panel">
+          <div class="panel-head"><h2 class="panel-title">ChatGPT Connector</h2><span class="panel-action" id="connectorState">checking</span></div>
+          <div class="panel-body"><pre class="code-box" id="connectorBox">Loading connector profile...</pre></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2 class="panel-title">Permanent Setup</h2><button onclick="loadConnection()">Reload</button></div>
+          <div class="panel-body connector-steps">
+            <div class="connector-step"><strong>1.</strong> Run <code>npm run oneclick</code>.</div>
+            <div class="connector-step"><strong>2.</strong> Use Cloudflare Tunnel, Tailscale Funnel, or a static ngrok domain.</div>
+            <div class="connector-step"><strong>3.</strong> Start with <code>--public-url https://your-domain</code>.</div>
+            <div class="connector-step"><strong>4.</strong> In ChatGPT, use the printed <code>/mcp</code> URL and bearer token.</div>
+          </div>
+        </div>
+      </section>
       <section class="dashboard-grid">
         <div class="panel">
           <div class="panel-head"><h2 class="panel-title">Recent Activity</h2><span class="panel-action" id="activityCount">0 events</span></div>
@@ -593,6 +630,8 @@ a{color:var(--cyan)}
 <script>
 let eventSource=null;
 let lastData=null;
+const urlToken=new URLSearchParams(window.location.search).get('token');
+if(urlToken){const tokenInput=document.getElementById('token');if(tokenInput)tokenInput.value=urlToken;}
 const AGENT_ROLES=[
   ['Planner','Planning','♙'],['Coder','Implementing','⌘'],['Reviewer','Reviewing','◆'],['Tester','Running tests','✓'],['CI Engineer','Monitoring','◈'],['Docs Writer','Writing docs','✎'],['Security Guard','Scanning','▰']
 ];
@@ -675,8 +714,28 @@ async function refresh(){render(await fetchJson('/api/dashboard/v10?limit=100&re
 async function loadHealth(){const payload=await fetchJson('/api/health-monitor');document.getElementById('rawPanel').classList.add('open');document.getElementById('raw').textContent=JSON.stringify(payload,null,2)}
 async function loadDiff(){const w=document.getElementById('workspace').value;const s=document.getElementById('sessionId').value;document.getElementById('diff').textContent=JSON.stringify(await fetchJson('/api/session/diff?workspace='+encodeURIComponent(w)+'&sessionId='+encodeURIComponent(s)),null,2)}
 function toggleLive(){if(eventSource){eventSource.close();eventSource=null;document.getElementById('liveBtn').textContent='Start live';return}const t=document.getElementById('token').value;eventSource=new EventSource('/events'+(t?'?token='+encodeURIComponent(t):''));eventSource.addEventListener('dashboard',function(e){try{render(JSON.parse(e.data))}catch(_){}});eventSource.addEventListener('error',function(){document.getElementById('status').textContent='Live stream error'});document.getElementById('liveBtn').textContent='Stop live'}
+async function loadConnection(){
+  const payload=await fetchJson('/api/connection');
+  const state=document.getElementById('connectorState');
+  state.textContent=payload.permanentUrlConfigured?'permanent URL set':'local only';
+  const lines=[
+    'Dashboard: '+(payload.dashboardUrl||''),
+    'ChatGPT MCP URL: '+(payload.chatgptMcpUrl||''),
+    'Health URL: '+(payload.chatgptHealthUrl||''),
+    'Auth: '+(payload.authHeader||''),
+    'Token file: '+(payload.tokenFile||''),
+    'Profile file: '+(payload.profileFile||''),
+    '',
+    payload.permanentUrlConfigured?'Stable connector URL is configured.':'No stable public URL configured yet.',
+    '',
+    'Command:',
+    'npm run oneclick -- --public-url https://your-domain.example.com'
+  ];
+  document.getElementById('connectorBox').textContent=lines.join('\n');
+}
 function toggleRaw(){const panel=document.getElementById('rawPanel');panel.classList.toggle('open');if(lastData)document.getElementById('raw').textContent=JSON.stringify(lastData,null,2)}
 refresh();
+loadConnection();
 </script>
 </body>
 </html>`;

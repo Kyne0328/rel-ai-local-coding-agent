@@ -52,9 +52,35 @@ You review, approve, merge, or discard the worktree
 | **Approval gate** | A policy checkpoint before risky file, command, Git, or PR actions. |
 | **Dashboard** | The local web UI for monitoring sessions, readiness, agents, jobs, and PR flow. |
 
+## One-command start
+
+For the easiest local setup:
+
+```bash
+npm install
+npm run oneclick
+```
+
+This creates a local config if needed, generates a persistent bearer token, starts the HTTP server, and prints the dashboard plus ChatGPT MCP endpoint.
+
+For a permanent ChatGPT app, use a stable HTTPS tunnel or reverse proxy and launch with:
+
+```bash
+npm run oneclick -- --public-url https://relai.your-domain.com
+```
+
+Then configure ChatGPT Developer Mode once with:
+
+```text
+https://relai.your-domain.com/mcp
+Authorization: Bearer <REL_AI_MCP_TOKEN>
+```
+
+Full guide: [docs/ONE_CLICK_SETUP.md](docs/ONE_CLICK_SETUP.md)
+
 ## Dashboard
 
-Start the HTTP server:
+The one-command launcher prints a local dashboard URL. You can also start the HTTP server directly:
 
 ```bash
 npm run start:http
@@ -102,16 +128,20 @@ npm run cmd:add
 
 ## Connect to ChatGPT Developer Mode
 
-See the full setup guide:
+Start with the easier setup guide:
+
+[docs/ONE_CLICK_SETUP.md](docs/ONE_CLICK_SETUP.md)
+
+The deeper connector guide is here:
 
 [docs/CONNECTING_TO_CHATGPT.md](docs/CONNECTING_TO_CHATGPT.md)
 
 At a high level:
 
-1. Start the Rel.AI MCP HTTP server.
-2. Configure the connector endpoint in ChatGPT Developer Mode.
-3. Use the configured token.
-4. Run the connector check.
+1. Run `npm run oneclick`.
+2. Put a stable HTTPS tunnel in front of `http://127.0.0.1:3333`.
+3. Run `npm run oneclick -- --public-url https://your-stable-domain`.
+4. Configure one ChatGPT app with `https://your-stable-domain/mcp`.
 5. Ask ChatGPT to inspect or work on one of your configured workspaces.
 
 ## Safety model
@@ -133,6 +163,8 @@ For more detail, read:
 ## Useful commands
 
 ```bash
+npm run oneclick       # One-command local launch + connector summary
+npm run connector:print # Print saved connector settings/token
 npm run check          # Syntax-check project files
 npm run test:smoke     # Basic MCP smoke test
 npm run test:http      # HTTP server smoke test
@@ -153,9 +185,9 @@ test/       Smoke and release tests
 
 ## Version
 
-Current version: `0.10.1`
+Current version: `0.11.0`
 
-v0.10.1 is a defensive hardening release. It adds safe JSON reads across state files, fixes command detection to avoid shell invocation, and removes a hardcoded test token from the HTTP smoke test.
+v0.11.0 adds one-command startup, persistent local connector profiles, stable public URL support, and dashboard setup guidance so users do not need to recreate the ChatGPT app every time a temporary tunnel URL changes.
 
 ## Status
 

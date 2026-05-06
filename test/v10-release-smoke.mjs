@@ -6,6 +6,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "relai-v10-smoke-"));
 const repo = path.join(tmp, "repo");
 fs.mkdirSync(path.join(repo, "src"), { recursive: true });
@@ -44,7 +45,7 @@ process.env.REL_AI_MCP_TOKEN = "test-token-for-v10";
 const { callTool } = await import(pathToFileURL(path.join(root, "src", "tools.js")).href);
 
 const version = await callTool("relai_version", {});
-assert.equal(version.version, "0.10.0");
+assert.equal(version.version, pkg.version);
 assert.ok(version.capabilities.includes("release readiness scoring"));
 
 const readiness = await callTool("relai_release_readiness", { requireHttpToken: true });
@@ -64,17 +65,17 @@ assert.ok(connector.curl.includes("/health"));
 
 const migration = await callTool("relai_config_migration_plan", { fromVersion: "0.9.0" });
 assert.equal(migration.ok, true);
-assert.equal(migration.toVersion, "0.10.0");
+assert.equal(migration.toVersion, pkg.version);
 assert.ok(Array.isArray(migration.missingKeysInCurrentConfig));
 
 const manifest = await callTool("relai_release_manifest", { maxFiles: 5000, maxFileBytes: 1048576 });
 assert.equal(manifest.ok, true);
-assert.equal(manifest.version, "0.10.0");
+assert.equal(manifest.version, pkg.version);
 assert.ok(manifest.files.some((item) => item.path === "package.json"));
 
 const notes = await callTool("relai_release_notes", {});
 assert.equal(notes.ok, true);
-assert.equal(notes.version, "0.10.0");
-assert.ok(notes.commitMessage.includes("v10"));
+assert.equal(notes.version, pkg.version);
+assert.ok(notes.commitMessage.includes("one-command"));
 
 console.log(`v10 release smoke ok: ${version.toolCount} tools, readiness ${readiness.score}`);
