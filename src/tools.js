@@ -43,7 +43,7 @@ const doctor = require("./doctor");
 const policy = require("./policy");
 const productUx = require("./productUx");
 const release = require("./release");
-const { enforcePermission } = require("./permissions");
+const { enforcePermission, TOOL_LEVEL } = require("./permissions");
 const pkg = require("../package.json");
 
 const toolSchemas = [
@@ -1009,7 +1009,10 @@ function ok(value) {
 }
 
 function tool(name, title, description, properties, required = []) {
-  return { name, title, description, inputSchema: { type: "object", properties, required, additionalProperties: false } };
+  const level = TOOL_LEVEL[name] || "admin";
+  const readOnlyHint = level === "read-only";
+  const destructiveHint = level === "admin";
+  return { name, title, description, inputSchema: { type: "object", properties, required, additionalProperties: false }, annotations: { readOnlyHint, destructiveHint } };
 }
 function stringProp() { return { type: "string" }; }
 function boolProp() { return { type: "boolean" }; }
