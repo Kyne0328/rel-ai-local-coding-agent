@@ -47,280 +47,280 @@ const { enforcePermission, TOOL_LEVEL } = require("./permissions");
 const pkg = require("../package.json");
 
 const toolSchemas = [
-  tool("relai_version", "Version Info", "Return rel-ai-mcp version, runtime, and server capabilities.", {}),
-  tool("relai_config", "Rel.AI MCP Config Summary", "Return active config path, limits, workspace aliases, command keys, and safety switches. Does not reveal secrets.", {}),
-  tool("relai_audit_tail", "Audit Log Tail", "Return recent rel-ai-mcp audit entries.", { limit: numberProp(1, 1000) }),
-  tool("relai_dashboard_summary", "Dashboard Summary", "Return sessions, jobs, approvals, locks, and config summary for a lightweight web dashboard.", { limit: numberProp(1, 200) }),
-  tool("relai_dashboard_open", "Dashboard Open Info", "Return dashboard and API URLs for a running Rel.AI MCP HTTP server.", { baseUrl: stringProp() }),
-  tool("relai_dashboard_data", "Dashboard Data", "Return rich v9 dashboard data: sessions, jobs, approvals, locks, health, multi-agent status, and audit tail.", { limit: numberProp(1, 500) }),
-  tool("relai_live_log_tail", "Live Log Tail", "Return recent audit entries for live-log/dashboard views.", { limit: numberProp(1, 1000) }),
-  tool("relai_health_monitor", "Health Monitor", "Check state directories, configured workspaces, stale jobs, stale locks, approvals, and worktree availability.", { limit: numberProp(1, 500) }),
-  tool("relai_cleanup_preview", "Cleanup Preview", "Preview old state files that cleanup would remove. Does not delete files.", { olderThanHours: numberProp(1, 8760), maxDeletes: numberProp(1, 5000), includeAudit: boolProp() }),
-  tool("relai_cleanup_run", "Cleanup Run", "Delete old generated state files. Requires confirm=true and admin permission profile.", { olderThanHours: numberProp(1, 8760), maxDeletes: numberProp(1, 5000), includeAudit: boolProp(), confirm: boolProp() }, ["confirm"]),
-  tool("relai_doctor_fix", "Doctor Fix", "Apply safe local fixes such as state directory creation and LF-normalization files for a workspace.", { workspacePath: stringProp(), overwrite: boolProp(), renormalize: boolProp() }),
-  tool("relai_setup_wizard", "Setup Wizard", "Generate a first-run setup plan, suggested config, token, and commands for onboarding.", { alias: stringProp(), workspacePath: stringProp(), generateToken: boolProp() }),
-  tool("relai_import_original_relai_config", "Import Original Rel.AI Config", "Import workspace aliases and test commands from the original ~/.rel-ai/opencode.json config.", { sourcePath: stringProp(), dryRun: boolProp() }),
-  tool("relai_state_export", "Export Rel.AI MCP State", "Export JSON state files for backup or migration.", { outputPath: stringProp(), maxFiles: numberProp(1, 20000), maxFileBytes: numberProp(1000, 10485760) }),
-  tool("relai_state_import", "Import Rel.AI MCP State", "Import a JSON state export. Requires confirm=true and admin permission profile.", { inputPath: stringProp(), payload: objectProp(), confirm: boolProp() }, ["confirm"]),
+  tool("relai_version", "Version Info", "MCP server version, runtime info, and capabilities.", {}),
+  tool("relai_config", "Rel.AI MCP Config Summary", "Active config summary: limits, workspace aliases, command keys. No secrets.", {}),
+  tool("relai_audit_tail", "Audit Log Tail", "Recent audit log entries.", { limit: numberProp(1, 1000) }),
+  tool("relai_dashboard_summary", "Dashboard Summary", "Dashboard summary: sessions, jobs, approvals, locks.", { limit: numberProp(1, 200) }),
+  tool("relai_dashboard_open", "Dashboard Open Info", "Dashboard and API URLs for a running Rel.AI MCP HTTP server.", { baseUrl: stringProp() }),
+  tool("relai_dashboard_data", "Dashboard Data", "Rich dashboard data: sessions, jobs, approvals, locks, health, agent status.", { limit: numberProp(1, 500) }),
+  tool("relai_live_log_tail", "Live Log Tail", "Audit entries for live-log views.", { limit: numberProp(1, 1000) }),
+  tool("relai_health_monitor", "Health Monitor", "Health check: state dirs, workspaces, stale jobs, locks, and worktrees.", { limit: numberProp(1, 500) }),
+  tool("relai_cleanup_preview", "Cleanup Preview", "Preview old state files cleanup would remove. Read-only.", { olderThanHours: numberProp(1, 8760), maxDeletes: numberProp(1, 5000), includeAudit: boolProp() }),
+  tool("relai_cleanup_run", "Cleanup Run", "Delete old state files. Requires confirm=true and admin profile.", { olderThanHours: numberProp(1, 8760), maxDeletes: numberProp(1, 5000), includeAudit: boolProp(), confirm: boolProp() }, ["confirm"]),
+  tool("relai_doctor_fix", "Doctor Fix", "Apply safe local fixes: state dir creation, LF normalization.", { workspacePath: stringProp(), overwrite: boolProp(), renormalize: boolProp() }),
+  tool("relai_setup_wizard", "Setup Wizard", "First-run setup plan, suggested config, and onboarding commands.", { alias: stringProp(), workspacePath: stringProp(), generateToken: boolProp() }),
+  tool("relai_import_original_relai_config", "Import Original Rel.AI Config", "Import workspaces from original ~/.rel-ai/opencode.json.", { sourcePath: stringProp(), dryRun: boolProp() }),
+  tool("relai_state_export", "Export Rel.AI MCP State", "Export state files for backup or migration.", { outputPath: stringProp(), maxFiles: numberProp(1, 20000), maxFileBytes: numberProp(1000, 10485760) }),
+  tool("relai_state_import", "Import Rel.AI MCP State", "Import state export. Requires confirm=true and admin profile.", { inputPath: stringProp(), payload: objectProp(), confirm: boolProp() }, ["confirm"]),
 
-  tool("relai_release_readiness", "Release Readiness", "Score release readiness for config, approval gates, state directories, command availability, and workspace setup.", { requireHttpToken: boolProp() }),
-  tool("relai_connector_check", "Connector Check", "Validate ChatGPT Developer Mode connector endpoint/token settings and optionally probe /health.", { endpoint: stringProp(), baseUrl: stringProp(), token: stringProp(), probe: boolProp(), timeoutMs: numberProp(500, 60000) }),
-  tool("relai_config_migration_plan", "Config Migration Plan", "Compare the active config against the current default schema and return safe migration guidance.", { fromVersion: stringProp() }),
-  tool("relai_workspace_preflight", "Workspace Preflight", "Check a workspace before agent execution: Git repo state, protected branch, line-ending files, and configured test commands.", { workspace: stringProp(), requireClean: boolProp() }, ["workspace"]),
-  tool("relai_workspace_list", "Workspace List", "List configured Rel.AI workspace aliases and safe metadata. Use first when a user asks about a workspace and the alias may be unknown.", {}),
-  tool("relai_workspace_inspect", "Workspace Inspect", "Return a combined workspace profile and safe filtered project structure. Use this for prompts like show the jjclover workspace profile, current project structure, project overview, or inspect this workspace.", { workspace: stringProp(), sessionId: stringProp(), maxEntries: numberProp(1, 5000) }, ["workspace"]),
-  tool("relai_release_manifest", "Release Manifest", "Generate a package file manifest with sizes and SHA-256 hashes for release review.", { maxFiles: numberProp(1, 50000), maxFileBytes: numberProp(1000, 10485760) }),
-  tool("relai_release_notes", "Release Notes", "Return suggested release notes, commit message, tag message, and validation commands for the current version.", { version: stringProp() }),
+  tool("relai_release_readiness", "Release Readiness", "Release readiness score: config, gates, state dirs, commands, workspace.", { requireHttpToken: boolProp() }),
+  tool("relai_connector_check", "Connector Check", "Validate ChatGPT connector endpoint/token and optionally probe /health.", { endpoint: stringProp(), baseUrl: stringProp(), token: stringProp(), probe: boolProp(), timeoutMs: numberProp(500, 60000) }),
+  tool("relai_config_migration_plan", "Config Migration Plan", "Compare active config to default schema and return migration guidance.", { fromVersion: stringProp() }),
+  tool("relai_workspace_preflight", "Workspace Preflight", "Pre-execution check: Git state, protected branch, line endings, test commands.", { workspace: stringProp(), requireClean: boolProp() }, ["workspace"]),
+  tool("relai_workspace_list", "Workspace List", "Configured workspace aliases and safe metadata. Use when alias may be unknown.", {}),
+  tool("relai_workspace_inspect", "Workspace Inspect", "Combined workspace profile and filtered project structure.", { workspace: stringProp(), sessionId: stringProp(), maxEntries: numberProp(1, 5000) }, ["workspace"]),
+  tool("relai_release_manifest", "Release Manifest", "Package file manifest with sizes and SHA-256 hashes for release review.", { maxFiles: numberProp(1, 50000), maxFileBytes: numberProp(1000, 10485760) }),
+  tool("relai_release_notes", "Release Notes", "Suggested release notes, commit message, tag message, and validation commands.", { version: stringProp() }),
 
-  tool("relai_scheduler_start", "Start Multi-Agent Scheduler", "Create a dependency-aware scheduler record and compute which subtasks can run now.", { parentSessionId: stringProp(), schedulerId: stringProp(), maxParallel: numberProp(1, 50), limit: numberProp(1, 1000) }),
-  tool("relai_scheduler_status", "Scheduler Status", "Read scheduler status and current runnable/blocked subtask sets.", { parentSessionId: stringProp(), schedulerId: stringProp(), maxParallel: numberProp(1, 50), limit: numberProp(1, 1000) }),
-  tool("relai_scheduler_pause", "Pause Scheduler", "Mark a scheduler record as paused.", { schedulerId: stringProp(), reason: stringProp() }),
-  tool("relai_scheduler_resume", "Resume Scheduler", "Mark a scheduler record as active.", { schedulerId: stringProp(), reason: stringProp() }),
-  tool("relai_scheduler_stop", "Stop Scheduler", "Mark a scheduler record as stopped.", { schedulerId: stringProp(), reason: stringProp() }),
+  tool("relai_scheduler_start", "Start Multi-Agent Scheduler", "Dependency-aware scheduler record; computes runnable subtasks.", { parentSessionId: stringProp(), schedulerId: stringProp(), maxParallel: numberProp(1, 50), limit: numberProp(1, 1000) }),
+  tool("relai_scheduler_status", "Scheduler Status", "Scheduler status with runnable/blocked subtask sets.", { parentSessionId: stringProp(), schedulerId: stringProp(), maxParallel: numberProp(1, 50), limit: numberProp(1, 1000) }),
+  tool("relai_scheduler_pause", "Pause Scheduler", "Mark scheduler as paused.", { schedulerId: stringProp(), reason: stringProp() }),
+  tool("relai_scheduler_resume", "Resume Scheduler", "Mark scheduler as active.", { schedulerId: stringProp(), reason: stringProp() }),
+  tool("relai_scheduler_stop", "Stop Scheduler", "Mark scheduler as stopped.", { schedulerId: stringProp(), reason: stringProp() }),
 
-  tool("relai_merge_plan", "Plan Multi-Agent Merge", "Create a safe merge order for completed/reviewed subtasks and detect changed-file conflicts.", { workspace: stringProp(), parentSessionId: stringProp(), targetBranch: stringProp() }, ["workspace"]),
-  tool("relai_merge_execute", "Execute Multi-Agent Merge", "Execute the computed merge plan. Dry-run by default; non-dry-run requires merge approval.", { workspace: stringProp(), parentSessionId: stringProp(), targetBranch: stringProp(), dryRun: boolProp(), force: boolProp(), stopOnFailure: boolProp(), message: stringProp(), approvalId: stringProp() }, ["workspace"]),
-  tool("relai_merge_abort", "Abort Git Merge", "Run git merge --abort in a workspace or task worktree.", { workspace: stringProp(), sessionId: stringProp(), approvalId: stringProp() }, ["workspace"]),
-  tool("relai_merge_status", "Merge Status", "Show merge status and optional merge plan summary.", { workspace: stringProp(), sessionId: stringProp(), parentSessionId: stringProp() }, ["workspace"]),
+  tool("relai_merge_plan", "Plan Multi-Agent Merge", "Safe merge order for completed subtasks; detects changed-file conflicts.", { workspace: stringProp(), parentSessionId: stringProp(), targetBranch: stringProp() }, ["workspace"]),
+  tool("relai_merge_execute", "Execute Multi-Agent Merge", "Execute merge plan. Dry-run by default; non-dry-run requires merge approval.", { workspace: stringProp(), parentSessionId: stringProp(), targetBranch: stringProp(), dryRun: boolProp(), force: boolProp(), stopOnFailure: boolProp(), message: stringProp(), approvalId: stringProp() }, ["workspace"]),
+  tool("relai_merge_abort", "Abort Git Merge", "git merge --abort in a workspace or task worktree.", { workspace: stringProp(), sessionId: stringProp(), approvalId: stringProp() }, ["workspace"]),
+  tool("relai_merge_status", "Merge Status", "Merge status and optional merge plan summary.", { workspace: stringProp(), sessionId: stringProp(), parentSessionId: stringProp() }, ["workspace"]),
 
-  tool("relai_memory_read", "Read Repository Memory", "Read safe local repository memory notes for a workspace.", { workspace: stringProp() }, ["workspace"]),
-  tool("relai_memory_write", "Write Repository Memory", "Append a safe local repository memory note such as conventions, architecture notes, or known flaky tests.", { workspace: stringProp(), type: stringProp(), title: stringProp(), text: stringProp(), tags: arrayProp("string", 0, 30) }, ["workspace", "title", "text"]),
-  tool("relai_memory_search", "Search Repository Memory", "Search safe local repository memory notes.", { workspace: stringProp(), query: stringProp(), limit: numberProp(1, 200) }, ["workspace"]),
-  tool("relai_memory_clear", "Clear Repository Memory", "Clear local repository memory for one workspace. Requires confirm=true.", { workspace: stringProp(), confirm: boolProp() }, ["workspace", "confirm"]),
+  tool("relai_memory_read", "Read Repository Memory", "Local repository memory notes for a workspace.", { workspace: stringProp() }, ["workspace"]),
+  tool("relai_memory_write", "Write Repository Memory", "Append a repository memory note: conventions, architecture, or flaky tests.", { workspace: stringProp(), type: stringProp(), title: stringProp(), text: stringProp(), tags: arrayProp("string", 0, 30) }, ["workspace", "title", "text"]),
+  tool("relai_memory_search", "Search Repository Memory", "Search local repository memory notes.", { workspace: stringProp(), query: stringProp(), limit: numberProp(1, 200) }, ["workspace"]),
+  tool("relai_memory_clear", "Clear Repository Memory", "Clear repository memory for a workspace. Requires confirm=true.", { workspace: stringProp(), confirm: boolProp() }, ["workspace", "confirm"]),
 
-  tool("relai_review_score", "Review Risk Score", "Score the current diff for risk, changed-file breadth, secret-like tokens, and test coverage gaps.", { workspace: stringProp(), sessionId: stringProp(), staged: boolProp(), goal: stringProp(), includeDiff: boolProp() }, ["workspace"]),
-  tool("relai_review_security", "Review Security Risks", "Run security-focused heuristic review over the current diff.", { workspace: stringProp(), sessionId: stringProp(), staged: boolProp(), goal: stringProp(), includeDiff: boolProp() }, ["workspace"]),
-  tool("relai_review_test_gaps", "Review Test Gaps", "Detect likely missing test coverage from current diff and task goal.", { workspace: stringProp(), sessionId: stringProp(), staged: boolProp(), goal: stringProp(), includeDiff: boolProp() }, ["workspace"]),
-  tool("relai_review_regression_risks", "Review Regression Risks", "Detect likely regression risks from current diff.", { workspace: stringProp(), sessionId: stringProp(), staged: boolProp(), goal: stringProp(), includeDiff: boolProp() }, ["workspace"]),
+  tool("relai_review_score", "Review Risk Score", "Diff risk score: changed-file breadth, secret-like tokens, test coverage gaps.", { workspace: stringProp(), sessionId: stringProp(), staged: boolProp(), goal: stringProp(), includeDiff: boolProp() }, ["workspace"]),
+  tool("relai_review_security", "Review Security Risks", "Security-focused heuristic review of the current diff.", { workspace: stringProp(), sessionId: stringProp(), staged: boolProp(), goal: stringProp(), includeDiff: boolProp() }, ["workspace"]),
+  tool("relai_review_test_gaps", "Review Test Gaps", "Likely missing test coverage from current diff and task goal.", { workspace: stringProp(), sessionId: stringProp(), staged: boolProp(), goal: stringProp(), includeDiff: boolProp() }, ["workspace"]),
+  tool("relai_review_regression_risks", "Review Regression Risks", "Likely regression risks from current diff.", { workspace: stringProp(), sessionId: stringProp(), staged: boolProp(), goal: stringProp(), includeDiff: boolProp() }, ["workspace"]),
 
-  tool("relai_snapshot_create", "Create Workspace Snapshot", "Capture HEAD, branch, status, staged diff, and unstaged diff before risky actions.", { workspace: stringProp(), sessionId: stringProp(), title: stringProp(), summary: stringProp() }, ["workspace"]),
-  tool("relai_snapshot_list", "List Workspace Snapshots", "List stored workspace snapshots.", { workspace: stringProp(), limit: numberProp(1, 1000) }),
-  tool("relai_snapshot_read", "Read Workspace Snapshot", "Read a stored workspace snapshot with diffs.", { snapshotId: stringProp() }, ["snapshotId"]),
-  tool("relai_snapshot_restore", "Restore Workspace Snapshot", "Restore a stored snapshot. Dry-run by default; non-dry-run requires reset approval.", { workspace: stringProp(), sessionId: stringProp(), snapshotId: stringProp(), dryRun: boolProp(), allowDifferentHead: boolProp(), approvalId: stringProp() }, ["workspace", "snapshotId"]),
+  tool("relai_snapshot_create", "Create Workspace Snapshot", "Capture HEAD, branch, status, and diffs before risky actions.", { workspace: stringProp(), sessionId: stringProp(), title: stringProp(), summary: stringProp() }, ["workspace"]),
+  tool("relai_snapshot_list", "List Workspace Snapshots", "Stored workspace snapshots.", { workspace: stringProp(), limit: numberProp(1, 1000) }),
+  tool("relai_snapshot_read", "Read Workspace Snapshot", "Stored workspace snapshot with diffs.", { snapshotId: stringProp() }, ["snapshotId"]),
+  tool("relai_snapshot_restore", "Restore Workspace Snapshot", "Restore a snapshot. Dry-run by default; non-dry-run requires reset approval.", { workspace: stringProp(), sessionId: stringProp(), snapshotId: stringProp(), dryRun: boolProp(), allowDifferentHead: boolProp(), approvalId: stringProp() }, ["workspace", "snapshotId"]),
   tool("relai_snapshot_delete", "Delete Workspace Snapshot", "Delete a stored snapshot record.", { snapshotId: stringProp() }, ["snapshotId"]),
 
-  tool("relai_semantic_index_build", "Build Semantic-ish Index", "Build an optional local token-frequency index for better relevant-file retrieval without external embeddings.", { workspace: stringProp(), sessionId: stringProp(), maxFiles: numberProp(1, 100000), maxFileBytes: numberProp(1000, 5242880) }, ["workspace"]),
-  tool("relai_semantic_search", "Semantic-ish Search", "Search the optional local token-frequency index.", { workspace: stringProp(), sessionId: stringProp(), query: stringProp(), terms: stringProp(), limit: numberProp(1, 200) }, ["workspace"]),
-  tool("relai_context_recommend", "Recommend Context", "Recommend files to read for a task using the optional local semantic-ish index.", { workspace: stringProp(), sessionId: stringProp(), goal: stringProp(), task: stringProp(), terms: arrayProp("string", 0, 30), limit: numberProp(1, 200) }, ["workspace"]),
+  tool("relai_semantic_index_build", "Build Semantic-ish Index", "Local token-frequency index for file retrieval; no external embeddings.", { workspace: stringProp(), sessionId: stringProp(), maxFiles: numberProp(1, 100000), maxFileBytes: numberProp(1000, 5242880) }, ["workspace"]),
+  tool("relai_semantic_search", "Semantic-ish Search", "Search the local token-frequency index.", { workspace: stringProp(), sessionId: stringProp(), query: stringProp(), terms: stringProp(), limit: numberProp(1, 200) }, ["workspace"]),
+  tool("relai_context_recommend", "Recommend Context", "Recommend files for a task using the local semantic-ish index.", { workspace: stringProp(), sessionId: stringProp(), goal: stringProp(), task: stringProp(), terms: arrayProp("string", 0, 30), limit: numberProp(1, 200) }, ["workspace"]),
 
-  tool("relai_pr_comments_read", "Read PR Comments", "Read PR comments/reviews through GitHub CLI for requested-changes workflows.", { workspace: stringProp(), pr: stringProp(), sessionId: stringProp() }, ["workspace"]),
-  tool("relai_pr_requested_changes_plan", "Plan Requested Changes", "Turn PR review comments into a safe fix plan skeleton.", { workspace: stringProp(), pr: stringProp(), comments: objectProp(), review: objectProp(), sessionId: stringProp() }, ["workspace"]),
-  tool("relai_pr_reply_to_review", "Reply To PR Review", "Post a PR comment through GitHub CLI after applying requested changes.", { workspace: stringProp(), pr: stringProp(), body: stringProp(), message: stringProp(), sessionId: stringProp(), approvalId: stringProp() }, ["workspace"]),
+  tool("relai_pr_comments_read", "Read PR Comments", "PR comments/reviews via GitHub CLI for requested-changes workflows.", { workspace: stringProp(), pr: stringProp(), sessionId: stringProp() }, ["workspace"]),
+  tool("relai_pr_requested_changes_plan", "Plan Requested Changes", "Turn PR review comments into a fix plan skeleton.", { workspace: stringProp(), pr: stringProp(), comments: objectProp(), review: objectProp(), sessionId: stringProp() }, ["workspace"]),
+  tool("relai_pr_reply_to_review", "Reply To PR Review", "Post a PR comment via GitHub CLI after applying requested changes.", { workspace: stringProp(), pr: stringProp(), body: stringProp(), message: stringProp(), sessionId: stringProp(), approvalId: stringProp() }, ["workspace"]),
 
-  tool("relai_doctor", "Run Rel.AI MCP Doctor", "Check Node/Git/GitHub/Docker availability, config safety, and optional line-ending setup.", { workspacePath: stringProp(), checkGh: boolProp(), checkDocker: boolProp() }),
-  tool("relai_policy_summary", "Policy Summary", "Return effective safety policy, approval gates, and recommendations.", {}),
-  tool("relai_policy_evaluate", "Evaluate Policy", "Evaluate whether a proposed action is allowed or approval-gated.", { action: stringProp(), workspace: stringProp(), sessionId: stringProp(), commandKey: stringProp() }, ["action"]),
+  tool("relai_doctor", "Run Rel.AI MCP Doctor", "Node/Git/GitHub/Docker availability, config safety, optional line-ending setup.", { workspacePath: stringProp(), checkGh: boolProp(), checkDocker: boolProp() }),
+  tool("relai_policy_summary", "Policy Summary", "Effective safety policy, approval gates, and recommendations.", {}),
+  tool("relai_policy_evaluate", "Evaluate Policy", "Whether a proposed action is allowed or approval-gated.", { action: stringProp(), workspace: stringProp(), sessionId: stringProp(), commandKey: stringProp() }, ["action"]),
 
-  tool("relai_task_run", "Run Codex-like Task", "High-level task runner: create/resume a task session, create worktree, build index, create plan, apply supplied patches, run tests, and optionally prepare a PR.", {
+  tool("relai_task_run", "Run Codex-like Task", "Task runner: session, worktree, index, plan, patches, tests, optional PR.", {
     workspace: stringProp(), sessionId: stringProp(), goal: stringProp(), task: stringProp(), mode: stringProp(), title: stringProp(), branchName: stringProp(), fromRef: stringProp(), createWorktree: boolProp(), buildIndex: boolProp(), maxIndexFiles: numberProp(1, 100000), forceNewPlan: boolProp(), patches: arrayProp("string", 0, 20), testCommandKeys: arrayProp("string", 0, 30), stopOnFailure: boolProp(), commitMessage: stringProp(), push: boolProp(), remote: stringProp(), createPr: boolProp(), prTitle: stringProp(), prBody: stringProp(), prBodyExtra: stringProp(), base: stringProp(), head: stringProp(), draft: boolProp(), labels: arrayProp("string", 0, 20), reviewers: arrayProp("string", 0, 20), steps: arrayProp("object", 0, 200)
   }, ["workspace"]),
-  tool("relai_task_status", "Read Codex-like Task Status", "Read task session status, related plans, and orchestration metadata.", { sessionId: stringProp() }, ["sessionId"]),
-  tool("relai_task_stop", "Stop Codex-like Task", "Mark a task session as stopped and append a control step.", { sessionId: stringProp(), reason: stringProp() }, ["sessionId"]),
-  tool("relai_task_resume", "Resume Codex-like Task", "Mark a stopped/paused task session as active again.", { sessionId: stringProp(), note: stringProp() }, ["sessionId"]),
+  tool("relai_task_status", "Read Codex-like Task Status", "Task session status, related plans, and orchestration metadata.", { sessionId: stringProp() }, ["sessionId"]),
+  tool("relai_task_stop", "Stop Codex-like Task", "Mark task session as stopped and append a control step.", { sessionId: stringProp(), reason: stringProp() }, ["sessionId"]),
+  tool("relai_task_resume", "Resume Codex-like Task", "Mark a stopped/paused task session as active.", { sessionId: stringProp(), note: stringProp() }, ["sessionId"]),
 
-  tool("relai_task_split", "Split Task Into Agent Subtasks", "Create role-based or user-defined subtasks under a parent session for multi-agent execution.", {
+  tool("relai_task_split", "Split Task Into Agent Subtasks", "Role-based or custom subtasks under a parent session for multi-agent execution.", {
     workspace: stringProp(), sessionId: stringProp(), goal: stringProp(), task: stringProp(), strategy: stringProp(), count: numberProp(1, 12), maxSubtasks: numberProp(1, 50), subtasks: arrayProp("object", 0, 50), branchPrefix: stringProp(), createWorktrees: boolProp(), fromRef: stringProp()
   }, ["workspace"]),
-  tool("relai_subtask_create", "Create Agent Subtask", "Create a persistent subtask with its own role, session, and optional isolated worktree.", {
+  tool("relai_subtask_create", "Create Agent Subtask", "Persistent subtask with role, session, and optional isolated worktree.", {
     workspace: stringProp(), parentSessionId: stringProp(), role: stringProp(), title: stringProp(), goal: stringProp(), dependsOn: arrayProp("string", 0, 50), branchName: stringProp(), createSession: boolProp(), createWorktree: boolProp(), fromRef: stringProp()
   }, ["workspace", "title"]),
-  tool("relai_subtask_list", "List Agent Subtasks", "List multi-agent subtasks, optionally scoped by parent session or status.", { parentSessionId: stringProp(), status: stringProp(), limit: numberProp(1, 1000) }),
-  tool("relai_subtask_read", "Read Agent Subtask", "Read a persistent multi-agent subtask record.", { subtaskId: stringProp() }, ["subtaskId"]),
-  tool("relai_subtask_run", "Run Agent Subtask", "Run one subtask through the high-level task runner using the role's default mode or an explicit mode.", {
+  tool("relai_subtask_list", "List Agent Subtasks", "Multi-agent subtasks, optionally filtered by parent session or status.", { parentSessionId: stringProp(), status: stringProp(), limit: numberProp(1, 1000) }),
+  tool("relai_subtask_read", "Read Agent Subtask", "Persistent multi-agent subtask record.", { subtaskId: stringProp() }, ["subtaskId"]),
+  tool("relai_subtask_run", "Run Agent Subtask", "Run a subtask via the task runner using its role's default or explicit mode.", {
     workspace: stringProp(), subtaskId: stringProp(), mode: stringProp(), createWorktree: boolProp(), buildIndex: boolProp(), branchName: stringProp(), fromRef: stringProp(), patches: arrayProp("string", 0, 20), testCommandKeys: arrayProp("string", 0, 30), stopOnFailure: boolProp(), commitMessage: stringProp(), push: boolProp(), createPr: boolProp(), ignoreDependencies: boolProp()
   }, ["workspace", "subtaskId"]),
-  tool("relai_subtask_merge_back", "Merge Agent Subtask Back", "Preflight or merge a completed subtask branch back to a target branch. Dry-run is default.", {
+  tool("relai_subtask_merge_back", "Merge Agent Subtask Back", "Preflight or merge a completed subtask branch to target. Dry-run by default.", {
     workspace: stringProp(), subtaskId: stringProp(), sourceBranch: stringProp(), targetBranch: stringProp(), dryRun: boolProp(), message: stringProp(), approvalId: stringProp()
   }, ["workspace", "subtaskId"]),
-  tool("relai_conflict_check", "Check Multi-Agent Conflicts", "Detect changed-file overlap across subtasks before merge-back.", {
+  tool("relai_conflict_check", "Check Multi-Agent Conflicts", "Changed-file overlap across subtasks before merge-back.", {
     workspace: stringProp(), parentSessionId: stringProp(), subtaskIds: arrayProp("string", 0, 100)
   }, ["workspace"]),
-  tool("relai_agent_review_diff", "Agent Review Current Diff", "Run a reviewer-style heuristic pass over the current diff or a git revision.", {
+  tool("relai_agent_review_diff", "Agent Review Current Diff", "Reviewer-style heuristic pass over the current diff or a git revision.", {
     workspace: stringProp(), sessionId: stringProp(), staged: boolProp(), rev: stringProp(), largeDiffThreshold: numberProp(1, 100000)
   }, ["workspace"]),
-  tool("relai_pr_review_summary", "Summarize Pull Request For Review", "Use GitHub CLI to summarize PR metadata, checks, diff risk, and review checklist.", {
+  tool("relai_pr_review_summary", "Summarize Pull Request For Review", "GitHub CLI summary of PR metadata, checks, diff risk, and review checklist.", {
     workspace: stringProp(), pr: stringProp(), sessionId: stringProp(), largeDiffThreshold: numberProp(1, 100000)
   }, ["workspace"]),
-  tool("relai_agent_review_pr", "Agent Review Pull Request", "Record a reviewer-agent summary of a pull request and its checks.", {
+  tool("relai_agent_review_pr", "Agent Review Pull Request", "Reviewer-agent summary of a pull request and its checks.", {
     workspace: stringProp(), pr: stringProp(), sessionId: stringProp(), largeDiffThreshold: numberProp(1, 100000)
   }, ["workspace"]),
-  tool("relai_task_graph", "Read Multi-Agent Task Graph", "Return parent session, plans, subtasks, and dependency edges for dashboard/task graph views.", { sessionId: stringProp(), parentSessionId: stringProp() }),
-  tool("relai_multiagent_status", "Read Multi-Agent Status", "Return multi-agent subtask status counts and summaries.", { parentSessionId: stringProp(), status: stringProp(), limit: numberProp(1, 1000) }),
+  tool("relai_task_graph", "Read Multi-Agent Task Graph", "Parent session, plans, subtasks, and dependency edges for task graph views.", { sessionId: stringProp(), parentSessionId: stringProp() }),
+  tool("relai_multiagent_status", "Read Multi-Agent Status", "Multi-agent subtask status counts and summaries.", { parentSessionId: stringProp(), status: stringProp(), limit: numberProp(1, 1000) }),
 
-  tool("relai_approval_request", "Request Approval Gate", "Create a pending approval record for gated write, patch, command, Docker, commit, push, PR, reset, or worktree-removal actions.", {
+  tool("relai_approval_request", "Request Approval Gate", "Pending approval for gated write, patch, Docker, commit, push, PR, or reset.", {
     action: stringProp(), workspace: stringProp(), sessionId: stringProp(), summary: stringProp(), data: objectProp()
   }, ["action", "summary"]),
-  tool("relai_approval_read", "Read Approval Gate", "Read a single approval record.", { approvalId: stringProp() }, ["approvalId"]),
-  tool("relai_approval_list", "List Approval Gates", "List approval records, optionally by status.", { status: stringProp(), limit: numberProp(1, 500) }),
+  tool("relai_approval_read", "Read Approval Gate", "Single approval record.", { approvalId: stringProp() }, ["approvalId"]),
+  tool("relai_approval_list", "List Approval Gates", "Approval records, optionally filtered by status.", { status: stringProp(), limit: numberProp(1, 500) }),
   tool("relai_approval_resolve", "Resolve Approval Gate", "Approve, reject, or cancel an approval record.", {
     approvalId: stringProp(), status: stringProp(), note: stringProp()
   }, ["approvalId", "status"]),
-  tool("relai_approval_grant", "Grant Approval", "Approve a pending one-time approval gate.", { approvalId: stringProp(), note: stringProp() }, ["approvalId"]),
-  tool("relai_approval_deny", "Deny Approval", "Reject a pending one-time approval gate.", { approvalId: stringProp(), note: stringProp() }, ["approvalId"]),
-  tool("relai_approval_status", "Approval Status", "Read a pending/resolved approval gate status.", { approvalId: stringProp() }, ["approvalId"]),
+  tool("relai_approval_grant", "Grant Approval", "Approve a pending approval gate.", { approvalId: stringProp(), note: stringProp() }, ["approvalId"]),
+  tool("relai_approval_deny", "Deny Approval", "Reject a pending approval gate.", { approvalId: stringProp(), note: stringProp() }, ["approvalId"]),
+  tool("relai_approval_status", "Approval Status", "Pending/resolved approval gate status.", { approvalId: stringProp() }, ["approvalId"]),
 
-  tool("relai_plan_create", "Create Task Plan", "Create a persistent multi-step implementation plan attached to an optional task session.", {
+  tool("relai_plan_create", "Create Task Plan", "Persistent multi-step plan, optionally attached to a task session.", {
     sessionId: stringProp(), workspace: stringProp(), title: stringProp(), goal: stringProp(), steps: arrayProp("object", 0, 200), risks: arrayProp("string", 0, 100), validation: arrayProp("string", 0, 100)
   }, ["goal"]),
-  tool("relai_plan_list", "List Task Plans", "List recent plans, optionally scoped to a task session.", { sessionId: stringProp(), limit: numberProp(1, 500) }),
-  tool("relai_plan_read", "Read Task Plan", "Read a full persistent task plan.", { planId: stringProp() }, ["planId"]),
+  tool("relai_plan_list", "List Task Plans", "Recent plans, optionally scoped to a task session.", { sessionId: stringProp(), limit: numberProp(1, 500) }),
+  tool("relai_plan_read", "Read Task Plan", "Full persistent task plan.", { planId: stringProp() }, ["planId"]),
   tool("relai_plan_update", "Update Task Plan", "Update plan title, goal, status, risks, or validation list.", {
     planId: stringProp(), status: stringProp(), title: stringProp(), goal: stringProp(), risks: arrayProp("string", 0, 100), validation: arrayProp("string", 0, 100)
   }, ["planId"]),
-  tool("relai_plan_step_update", "Update Task Plan Step", "Update the status/result/details of one plan step.", {
+  tool("relai_plan_step_update", "Update Task Plan Step", "Update status, result, or details of one plan step.", {
     planId: stringProp(), stepId: stringProp(), index: numberProp(1, 1000), status: stringProp(), title: stringProp(), details: stringProp(), resultSummary: stringProp(), data: objectProp()
   }, ["planId"]),
-  tool("relai_plan_step_append", "Append Task Plan Step", "Append a new step to a persistent plan.", {
+  tool("relai_plan_step_append", "Append Task Plan Step", "Append a step to a persistent plan.", {
     planId: stringProp(), step: objectProp(), title: stringProp(), details: stringProp(), status: stringProp(), toolHint: stringProp()
   }, ["planId"]),
 
-  tool("relai_task_start", "Start Coding Task Session", "Create a persistent Codex-like task session for planning, edits, tests, and PR tracking.", {
+  tool("relai_task_start", "Start Coding Task Session", "Persistent task session for planning, edits, tests, and PR tracking.", {
     workspace: stringProp(), goal: stringProp(), branch: stringProp()
   }, ["workspace", "goal"]),
-  tool("relai_task_list", "List Coding Task Sessions", "List recent task sessions.", { limit: numberProp(1, 500) }),
-  tool("relai_task_read", "Read Coding Task Session", "Read a task session with all recorded steps.", { sessionId: stringProp() }, ["sessionId"]),
-  tool("relai_task_step", "Append Task Step", "Append a note, plan, test result, patch summary, or PR update to a task session.", {
+  tool("relai_task_list", "List Coding Task Sessions", "Recent task sessions.", { limit: numberProp(1, 500) }),
+  tool("relai_task_read", "Read Coding Task Session", "Task session with all recorded steps.", { sessionId: stringProp() }, ["sessionId"]),
+  tool("relai_task_step", "Append Task Step", "Append a note, plan, test result, patch summary, or PR update to a session.", {
     sessionId: stringProp(), type: stringProp(), title: stringProp(), details: stringProp(), data: objectProp()
   }, ["sessionId"]),
-  tool("relai_task_update", "Update Task Session", "Update task session status, branch, or summary.", {
+  tool("relai_task_update", "Update Task Session", "Task session status, branch, or summary.", {
     sessionId: stringProp(), status: stringProp(), summary: stringProp(), branch: stringProp()
   }, ["sessionId"]),
-  tool("relai_task_worktree_create", "Create Task Worktree", "Create an isolated git worktree for a task session and attach it to that session.", {
+  tool("relai_task_worktree_create", "Create Task Worktree", "Isolated git worktree for a task session, attached to that session.", {
     sessionId: stringProp(), workspace: stringProp(), branchName: stringProp(), fromRef: stringProp()
   }, ["sessionId"]),
-  tool("relai_task_worktree_remove", "Remove Task Worktree", "Remove a task session worktree after review/merge. Requires admin permission profile.", {
+  tool("relai_task_worktree_remove", "Remove Task Worktree", "Remove task session worktree after review/merge. Requires admin profile.", {
     sessionId: stringProp(), workspace: stringProp(), force: boolProp(), closeSession: boolProp(), approvalId: stringProp()
   }, ["sessionId"]),
-  tool("relai_worktree_list", "List Git Worktrees", "List git worktrees for a configured workspace.", {
+  tool("relai_worktree_list", "List Git Worktrees", "Git worktrees for a configured workspace.", {
     workspace: stringProp()
   }, ["workspace"]),
 
-  tool("relai_workspace_tree", "Workspace Tree", "Return a safe filtered file tree for a configured workspace alias or attached task worktree. Generated/cache folders and sensitive paths are skipped.", {
+  tool("relai_workspace_tree", "Workspace Tree", "Filtered file tree for a workspace or task worktree. Sensitive paths skipped.", {
     workspace: stringProp(), sessionId: stringProp(), maxEntries: numberProp(1, 20000)
   }, ["workspace"]),
-  tool("relai_workspace_profile", "Workspace Profile", "Detect common stack manifests and summarize likely package manager/test surface.", {
+  tool("relai_workspace_profile", "Workspace Profile", "Stack manifests and likely package manager/test surface.", {
     workspace: stringProp(), sessionId: stringProp()
   }, ["workspace"]),
-  tool("relai_read_files", "Read Workspace Files", "Read specific safe text files from a workspace or attached task worktree. Rejects traversal, secret-looking paths, large files, binary files, and escaping symlinks.", {
+  tool("relai_read_files", "Read Workspace Files", "Text files from a workspace or worktree. Rejects traversal, secrets, binary.", {
     workspace: stringProp(), sessionId: stringProp(), paths: arrayProp("string", 1, 100), includeSha256: boolProp()
   }, ["workspace", "paths"]),
-  tool("relai_write_file", "Write Workspace Text File", "Create or replace a safe text file in a workspace or task worktree. Supports expectedSha256 optimistic locking.", {
+  tool("relai_write_file", "Write Workspace Text File", "Create or replace a workspace text file. Supports SHA-256 optimistic locking.", {
     workspace: stringProp(), sessionId: stringProp(), path: stringProp(), content: stringProp(), expectedSha256: stringProp(), approvalId: stringProp()
   }, ["workspace", "path", "content"]),
-  tool("relai_search", "Search Workspace Text", "Literal text search across safe text files.", {
+  tool("relai_search", "Search Workspace Text", "Literal text search across workspace text files.", {
     workspace: stringProp(), sessionId: stringProp(), query: stringProp(), maxMatches: numberProp(1, 500)
   }, ["workspace", "query"]),
-  tool("relai_context_pack", "Build Focused Context Pack", "Build a focused coding context pack from explicit files plus search terms.", {
+  tool("relai_context_pack", "Build Focused Context Pack", "Focused coding context from explicit files plus search terms.", {
     workspace: stringProp(), sessionId: stringProp(), paths: arrayProp("string", 0, 100), searchTerms: arrayProp("string", 0, 20), maxSearchMatches: numberProp(1, 300), includeTree: boolProp()
   }, ["workspace"]),
-  tool("relai_index_build", "Build Repository Index", "Build a cached repository index with file metadata, hashes, line counts, and simple symbol extraction.", {
+  tool("relai_index_build", "Build Repository Index", "Cached repository index: file metadata, hashes, line counts, symbol extraction.", {
     workspace: stringProp(), sessionId: stringProp(), maxFiles: numberProp(1, 100000), maxFileBytes: numberProp(1000, 5242880)
   }, ["workspace"]),
-  tool("relai_index_stats", "Repository Index Stats", "Return stats for a previously built repository index.", {
+  tool("relai_index_stats", "Repository Index Stats", "Stats for a previously built repository index.", {
     workspace: stringProp(), sessionId: stringProp()
   }, ["workspace"]),
-  tool("relai_index_search", "Search Repository Index", "Search paths and extracted symbols in the cached repository index.", {
+  tool("relai_index_search", "Search Repository Index", "Paths and extracted symbols in the cached repository index.", {
     workspace: stringProp(), sessionId: stringProp(), query: stringProp(), limit: numberProp(1, 500)
   }, ["workspace", "query"]),
 
-  tool("relai_task_bootstrap", "Bootstrap Codex-like Task", "Create a task session, optional worktree, repository index, and initial implementation plan in one call.", {
+  tool("relai_task_bootstrap", "Bootstrap Codex-like Task", "Task session, optional worktree, index, and implementation plan in one call.", {
     workspace: stringProp(), goal: stringProp(), title: stringProp(), branchName: stringProp(), fromRef: stringProp(), createWorktree: boolProp(), buildIndex: boolProp(), maxIndexFiles: numberProp(1, 100000), testCommandKeys: arrayProp("string", 0, 30), steps: arrayProp("object", 0, 200)
   }, ["workspace", "goal"]),
-  tool("relai_issue_to_pr_bootstrap", "Bootstrap GitHub Issue To PR Task", "Use GitHub CLI to read an issue and create a session, worktree, index, and plan for a linked PR workflow.", {
+  tool("relai_issue_to_pr_bootstrap", "Bootstrap GitHub Issue To PR Task", "Read GitHub issue; create session, worktree, index, and plan for a PR.", {
     workspace: stringProp(), issue: stringProp(), issueNumber: stringProp(), branchName: stringProp(), fromRef: stringProp(), createWorktree: boolProp(), buildIndex: boolProp(), testCommandKeys: arrayProp("string", 0, 30)
   }, ["workspace"]),
-  tool("relai_ci_repair_snapshot", "Capture CI Repair Snapshot", "Read PR checks through GitHub CLI and create a repair-oriented session note when checks fail.", {
+  tool("relai_ci_repair_snapshot", "Capture CI Repair Snapshot", "PR checks via GitHub CLI; creates a repair session note on failure.", {
     workspace: stringProp(), sessionId: stringProp(), pr: stringProp()
   }, ["workspace"]),
-  tool("relai_ci_watch", "Watch CI Checks", "Poll GitHub PR checks and classify pass/fail/pending state.", {
+  tool("relai_ci_watch", "Watch CI Checks", "Poll GitHub PR checks; classify pass/fail/pending.", {
     workspace: stringProp(), sessionId: stringProp(), pr: stringProp(), attempts: numberProp(1, 50), intervalSeconds: numberProp(1, 300)
   }, ["workspace"]),
-  tool("relai_ci_repair_run", "Run CI Repair Loop", "Watch failing PR checks and optionally run an allowlisted repair command, commit, and push for a bounded number of cycles.", {
+  tool("relai_ci_repair_run", "Run CI Repair Loop", "Watch failing PR checks; run allowlisted repair, commit, and push for N cycles.", {
     workspace: stringProp(), sessionId: stringProp(), pr: stringProp(), maxCycles: numberProp(1, 10), watchAttempts: numberProp(1, 20), repairCommandKey: stringProp(), repairCommand: stringProp(), commitMessage: stringProp(), push: boolProp(), remote: stringProp(), branchName: stringProp()
   }, ["workspace"]),
 
-  tool("relai_session_diff", "Task Session Diff", "Return the current diff for a task session worktree or workspace.", { workspace: stringProp(), sessionId: stringProp(), staged: boolProp() }, ["workspace"]),
-  tool("relai_session_changed_files", "Task Session Changed Files", "Return changed files parsed from the current session/workspace diff.", { workspace: stringProp(), sessionId: stringProp(), staged: boolProp() }, ["workspace"]),
-  tool("relai_session_test_summary", "Task Session Test Summary", "Return recent test/CI/check steps recorded in a task session.", { sessionId: stringProp(), limit: numberProp(1, 100) }, ["sessionId"]),
-  tool("relai_session_export", "Export Task Session", "Export session, related plans, current diff, and audit entries for review/debugging.", { workspace: stringProp(), sessionId: stringProp(), auditLimit: numberProp(1, 1000) }, ["workspace", "sessionId"]),
+  tool("relai_session_diff", "Task Session Diff", "Current diff for a task session worktree or workspace.", { workspace: stringProp(), sessionId: stringProp(), staged: boolProp() }, ["workspace"]),
+  tool("relai_session_changed_files", "Task Session Changed Files", "Changed files from the current session/workspace diff.", { workspace: stringProp(), sessionId: stringProp(), staged: boolProp() }, ["workspace"]),
+  tool("relai_session_test_summary", "Task Session Test Summary", "Recent test/CI/check steps recorded in a task session.", { sessionId: stringProp(), limit: numberProp(1, 100) }, ["sessionId"]),
+  tool("relai_session_export", "Export Task Session", "Session, plans, diff, and audit entries for review/debugging.", { workspace: stringProp(), sessionId: stringProp(), auditLimit: numberProp(1, 1000) }, ["workspace", "sessionId"]),
 
-  tool("relai_repo_profile", "Repository Profile", "Detect repository stack, manifests, package managers, configured commands, and test surface.", { workspace: stringProp(), sessionId: stringProp() }, ["workspace"]),
-  tool("relai_repo_relevant_files", "Repository Relevant Files", "Rank likely relevant files from the cached index or safe file tree using search terms.", { workspace: stringProp(), sessionId: stringProp(), terms: arrayProp("string", 0, 30), limit: numberProp(1, 500), includeTests: boolProp() }, ["workspace"]),
-  tool("relai_repo_test_suggestions", "Repository Test Suggestions", "Suggest test command keys/commands from detected manifests and configured commands.", { workspace: stringProp(), sessionId: stringProp() }, ["workspace"]),
+  tool("relai_repo_profile", "Repository Profile", "Stack, manifests, package managers, configured commands, test surface.", { workspace: stringProp(), sessionId: stringProp() }, ["workspace"]),
+  tool("relai_repo_relevant_files", "Repository Relevant Files", "Rank relevant files from cached index or file tree using search terms.", { workspace: stringProp(), sessionId: stringProp(), terms: arrayProp("string", 0, 30), limit: numberProp(1, 500), includeTests: boolProp() }, ["workspace"]),
+  tool("relai_repo_test_suggestions", "Repository Test Suggestions", "Test command keys from detected manifests and configured commands.", { workspace: stringProp(), sessionId: stringProp() }, ["workspace"]),
 
-  tool("relai_apply_patch", "Apply Unified Diff", "Validate and apply a unified diff with git apply. Use dryRun=true first for check-only mode.", {
+  tool("relai_apply_patch", "Apply Unified Diff", "Validate and apply a unified diff via git apply. Use dryRun=true for check-only.", {
     workspace: stringProp(), sessionId: stringProp(), diff: stringProp(), dryRun: boolProp(), approvalId: stringProp()
   }, ["workspace", "diff"]),
-  tool("relai_apply_patch_and_run", "Apply Patch And Run Tests", "Apply a patch, then run selected allowlisted tests. This is the main Codex-like build/verify tool.", {
+  tool("relai_apply_patch_and_run", "Apply Patch And Run Tests", "Apply a patch then run allowlisted tests. Main Codex-like build/verify tool.", {
     workspace: stringProp(), diff: stringProp(), dryRun: boolProp(), testCommandKeys: arrayProp("string", 0, 20), stopOnFailure: boolProp(), sessionId: stringProp(), approvalId: stringProp()
   }, ["workspace", "diff"]),
-  tool("relai_run_test", "Run Allowlisted Test Command", "Run a locally configured test command by key. Arbitrary shell commands from the model are not accepted here.", {
+  tool("relai_run_test", "Run Allowlisted Test Command", "Locally configured test command by key. Arbitrary shell commands are rejected.", {
     workspace: stringProp(), testCommandKey: stringProp(), sessionId: stringProp()
   }, ["workspace", "testCommandKey"]),
-  tool("relai_run_test_matrix", "Run Test Matrix", "Run several allowlisted test commands in order and return all outputs.", {
+  tool("relai_run_test_matrix", "Run Test Matrix", "Multiple allowlisted test commands in order; returns all outputs.", {
     workspace: stringProp(), testCommandKeys: arrayProp("string", 1, 30), stopOnFailure: boolProp(), sessionId: stringProp()
   }, ["workspace", "testCommandKeys"]),
-  tool("relai_run_command", "Run Configured Dev Command", "Run an allowlisted dev command by key, or an arbitrary command only if explicitly enabled in config.", {
+  tool("relai_run_command", "Run Configured Dev Command", "Allowlisted dev command by key; arbitrary commands only if explicitly enabled.", {
     workspace: stringProp(), commandKey: stringProp(), command: stringProp(), sessionId: stringProp(), approvalId: stringProp()
   }, ["workspace"]),
-  tool("relai_patch_test_loop", "Patch Test Loop", "Run a Codex-like patch/test cycle over one or more diffs, stopping at first patch or test failure.", {
+  tool("relai_patch_test_loop", "Patch Test Loop", "Patch/test cycle over diffs, stopping at first patch or test failure.", {
     workspace: stringProp(), sessionId: stringProp(), patches: arrayProp("string", 1, 10), testCommandKeys: arrayProp("string", 0, 30), stopOnFailure: boolProp(), approvalId: stringProp()
   }, ["patches"]),
-  tool("relai_job_start_command", "Start Background Command Job", "Start an allowlisted test or dev command as a background job and return a job id for polling.", {
+  tool("relai_job_start_command", "Start Background Command Job", "Allowlisted test/dev command as a background job; returns job id for polling.", {
     workspace: stringProp(), sessionId: stringProp(), testCommandKey: stringProp(), commandKey: stringProp()
   }, ["workspace"]),
-  tool("relai_job_status", "Read Background Job Status", "Read job metadata and stdout/stderr tails.", {
+  tool("relai_job_status", "Read Background Job Status", "Job metadata and stdout/stderr tails.", {
     jobId: stringProp(), tailBytes: numberProp(0, 200000)
   }, ["jobId"]),
-  tool("relai_job_list", "List Background Jobs", "List recent background jobs.", {
+  tool("relai_job_list", "List Background Jobs", "Recent background jobs.", {
     limit: numberProp(1, 500)
   }),
-  tool("relai_job_cancel", "Cancel Background Job", "Send SIGTERM or SIGKILL to a live background job. Requires admin permission profile.", {
+  tool("relai_job_cancel", "Cancel Background Job", "SIGTERM or SIGKILL a live background job. Requires admin profile.", {
     jobId: stringProp(), force: boolProp()
   }, ["jobId"]),
-  tool("relai_docker_run", "Run Command In Docker Sandbox", "Run an allowlisted test/dev command inside an allowlisted Docker image with the workspace mounted at /workspace.", {
+  tool("relai_docker_run", "Run Command In Docker Sandbox", "Allowlisted command in an allowlisted Docker image; workspace at /workspace.", {
     workspace: stringProp(), sessionId: stringProp(), image: stringProp(), testCommandKey: stringProp(), commandKey: stringProp(), network: stringProp(), approvalId: stringProp()
   }, ["workspace"]),
-  tool("relai_lock_acquire", "Acquire Workspace Lock", "Acquire a cooperative lock for a workspace/resource to prevent parallel sessions from editing the same target.", {
+  tool("relai_lock_acquire", "Acquire Workspace Lock", "Cooperative workspace/resource lock; prevents parallel sessions from conflicts.", {
     workspace: stringProp(), resource: stringProp(), sessionId: stringProp(), owner: stringProp(), note: stringProp(), steal: boolProp()
   }, ["workspace"]),
   tool("relai_lock_release", "Release Workspace Lock", "Release a cooperative workspace/resource lock.", {
     workspace: stringProp(), resource: stringProp(), lockId: stringProp()
   }, ["workspace"]),
-  tool("relai_lock_list", "List Workspace Locks", "List current cooperative locks.", {}),
+  tool("relai_lock_list", "List Workspace Locks", "Current cooperative locks.", {}),
 
-  tool("relai_git_status", "Git Status", "Return git branch, cleanliness, and short status.", { workspace: stringProp(), sessionId: stringProp() }, ["workspace"]),
-  tool("relai_git_diff", "Git Diff", "Return current unstaged or staged git diff.", {
+  tool("relai_git_status", "Git Status", "Git branch, cleanliness, and short status.", { workspace: stringProp(), sessionId: stringProp() }, ["workspace"]),
+  tool("relai_git_diff", "Git Diff", "Current unstaged or staged git diff.", {
     workspace: stringProp(), sessionId: stringProp(), staged: boolProp(), path: stringProp()
   }, ["workspace"]),
-  tool("relai_git_log", "Git Log", "Return recent commits, optionally for one file.", {
+  tool("relai_git_log", "Git Log", "Recent commits, optionally filtered to one file.", {
     workspace: stringProp(), sessionId: stringProp(), limit: numberProp(1, 100), path: stringProp()
   }, ["workspace"]),
-  tool("relai_git_show", "Git Show", "Show one commit/ref with stat and patch.", {
+  tool("relai_git_show", "Git Show", "One commit/ref with stat and patch.", {
     workspace: stringProp(), sessionId: stringProp(), rev: stringProp()
   }, ["workspace", "rev"]),
-  tool("relai_create_branch", "Create Git Branch", "Create and switch to a feature branch. Refuses protected branch names.", {
+  tool("relai_create_branch", "Create Git Branch", "Create and switch to a feature branch. Protected branch names refused.", {
     workspace: stringProp(), branchName: stringProp(), fromRef: stringProp(), sessionId: stringProp()
   }, ["workspace", "branchName"]),
-  tool("relai_switch_branch", "Switch Git Branch", "Switch to a branch. Protected branch switching is blocked unless destructive tools are explicitly enabled.", {
+  tool("relai_switch_branch", "Switch Git Branch", "Switch to a branch. Protected branches blocked unless destructive tools enabled.", {
     workspace: stringProp(), branchName: stringProp()
   }, ["workspace", "branchName"]),
-  tool("relai_commit_all", "Commit Workspace Changes", "Stage all workspace changes and commit them. Refuses commits directly on protected branches.", {
+  tool("relai_commit_all", "Commit Workspace Changes", "Stage all changes and commit. Protected branches refused.", {
     workspace: stringProp(), message: stringProp(), sessionId: stringProp(), approvalId: stringProp()
   }, ["workspace", "message"]),
-  tool("relai_push_branch", "Push Feature Branch", "Push current or provided feature branch to an allowlisted remote. Refuses protected branches.", {
+  tool("relai_push_branch", "Push Feature Branch", "Push feature branch to an allowlisted remote. Protected branches refused.", {
     workspace: stringProp(), remote: stringProp(), branchName: stringProp(), sessionId: stringProp(), approvalId: stringProp()
   }, ["workspace"]),
-  tool("relai_create_pr", "Create Draft Pull Request Via GitHub CLI", "Create a pull request with gh pr create. Disabled unless allowGitHubCli is true in config.json.", {
+  tool("relai_create_pr", "Create Draft Pull Request Via GitHub CLI", "gh pr create. Disabled unless allowGitHubCli is true.", {
     workspace: stringProp(), title: stringProp(), body: stringProp(), base: stringProp(), head: stringProp(), draft: boolProp(), labels: arrayProp("string", 0, 20), reviewers: arrayProp("string", 0, 20), sessionId: stringProp(), approvalId: stringProp()
   }, ["workspace", "title"]),
-  tool("relai_pr_checks", "Pull Request Checks Via GitHub CLI", "Read PR checks through gh pr checks. Disabled unless allowGitHubCli is true.", {
+  tool("relai_pr_checks", "Pull Request Checks Via GitHub CLI", "gh pr checks. Disabled unless allowGitHubCli is true.", {
     workspace: stringProp(), pr: stringProp(), sessionId: stringProp()
   }, ["workspace"]),
-  tool("relai_pr_watch_checks", "Watch Pull Request Checks", "Poll gh pr checks several times and return the timeline. Use this to repair CI failures after pushing.", {
+  tool("relai_pr_watch_checks", "Watch Pull Request Checks", "Poll gh pr checks and return the timeline. Use to repair CI failures after push.", {
     workspace: stringProp(), pr: stringProp(), sessionId: stringProp(), attempts: numberProp(1, 20), intervalSeconds: numberProp(1, 120)
   }, ["workspace"]),
-  tool("relai_git_reset_worktree", "Reset Task Worktree", "Hard reset and optionally clean a task worktree. Requires admin permission profile and a task session worktree unless destructive tools are enabled.", {
+  tool("relai_git_reset_worktree", "Reset Task Worktree", "Hard reset and optionally clean a task worktree. Requires admin profile.", {
     workspace: stringProp(), sessionId: stringProp(), clean: boolProp(), approvalId: stringProp()
   }, ["workspace"])
 ];

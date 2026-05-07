@@ -2,6 +2,7 @@ const http = require("node:http");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
+const zlib = require("node:zlib");
 const { URL } = require("node:url");
 const { handleMessage } = require("./server");
 const { readConfig, publicConfigSummary, resolveWorkspace } = require("./config");
@@ -76,6 +77,7 @@ function startHttpServer(options = {}) {
 
 async function routeRequest(req, res, options) {
   setBaseHeaders(res);
+  const ae = req.headers["accept-encoding"] || "";
   const parsed = new URL(req.url || "/", "http://127.0.0.1");
 
   if (req.method === "OPTIONS") {
@@ -105,7 +107,7 @@ async function routeRequest(req, res, options) {
   if (req.method === "GET" && parsed.pathname === "/api/settings") {
     if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
     const config = readConfig();
-    sendJson(res, 200, configEditor.settingsPayload(config));
+    sendJson(res, 200, configEditor.settingsPayload(config), ae);
     return;
   }
 
@@ -113,7 +115,7 @@ async function routeRequest(req, res, options) {
     if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
     const current = readConfig();
     const payload = await readJsonBody(req, options.maxBodyBytes);
-    sendJson(res, 200, configEditor.updateSettings(current, payload));
+    sendJson(res, 200, configEditor.updateSettings(current, payload), ae);
     return;
   }
 
@@ -121,7 +123,7 @@ async function routeRequest(req, res, options) {
     if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
     const current = readConfig();
     const payload = await readJsonBody(req, options.maxBodyBytes);
-    sendJson(res, 200, configEditor.updateWorkspace(current, payload));
+    sendJson(res, 200, configEditor.updateWorkspace(current, payload), ae);
     return;
   }
 
@@ -139,7 +141,7 @@ async function routeRequest(req, res, options) {
       approvals: approvals.listApprovals(config, { limit }),
       locks: locks.listLocks(config).locks,
       multiAgent: multiagent.multiagentStatus(config, { limit })
-    });
+    }, ae);
     return;
   }
 
@@ -152,14 +154,14 @@ async function routeRequest(req, res, options) {
       token: options.token,
       chatgptSecret: options.chatgptSecret,
       showToken: parsed.searchParams.get("showToken") === "1"
-    }));
+    }), ae);
     return;
   }
 
   if (req.method === "GET" && parsed.pathname === "/api/dashboard/v9") {
     if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
     const config = readConfig();
-    sendJson(res, 200, productUx.dashboardData(config, { limit: Number(parsed.searchParams.get("limit") || 100) }));
+    sendJson(res, 200, productUx.dashboardData(config, { limit: Number(parsed.searchParams.get("limit") || 100) }), ae);
     return;
   }
 
@@ -170,35 +172,35 @@ async function routeRequest(req, res, options) {
     sendJson(res, 200, {
       ...productUx.dashboardData(config, { limit }),
       readiness: release.releaseReadiness(config, { requireHttpToken: parsed.searchParams.get("requireHttpToken") !== "0" })
-    });
+    }, ae);
     return;
   }
 
   if (req.method === "GET" && parsed.pathname === "/api/logs") {
     if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
     const config = readConfig();
-    sendJson(res, 200, productUx.liveLogTail(config, { limit: Number(parsed.searchParams.get("limit") || 100) }));
+    sendJson(res, 200, productUx.liveLogTail(config, { limit: Number(parsed.searchParams.get("limit") || 100) }), ae);
     return;
   }
 
   if (req.method === "GET" && parsed.pathname === "/api/health-monitor") {
     if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
     const config = readConfig();
-    sendJson(res, 200, productUx.healthMonitor(config, { limit: Number(parsed.searchParams.get("limit") || 100) }));
+    sendJson(res, 200, productUx.healthMonitor(config, { limit: Number(parsed.searchParams.get("limit") || 100) }), ae);
     return;
   }
 
   if (req.method === "GET" && parsed.pathname === "/api/readiness") {
     if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
     const config = readConfig();
-    sendJson(res, 200, release.releaseReadiness(config, { requireHttpToken: parsed.searchParams.get("requireHttpToken") !== "0" }));
+    sendJson(res, 200, release.releaseReadiness(config, { requireHttpToken: parsed.searchParams.get("requireHttpToken") !== "0" }), ae);
     return;
   }
 
   if (req.method === "GET" && parsed.pathname === "/api/release-manifest") {
     if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
     const config = readConfig();
-    sendJson(res, 200, release.releaseManifest(config, { maxFiles: Number(parsed.searchParams.get("maxFiles") || 10000) }));
+    sendJson(res, 200, release.releaseManifest(config, { maxFiles: Number(parsed.searchParams.get("maxFiles") || 10000) }), ae);
     return;
   }
 
@@ -206,7 +208,7 @@ async function routeRequest(req, res, options) {
     if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
     const config = readConfig();
     const payload = await release.workspacePreflight(config, { workspace: parsed.searchParams.get("workspace") || "", requireClean: parsed.searchParams.get("requireClean") !== "0" });
-    sendJson(res, 200, payload);
+    sendJson(res, 200, payload, ae);
     return;
   }
 
@@ -223,7 +225,7 @@ async function routeRequest(req, res, options) {
       sessionId: parsed.searchParams.get("sessionId") || undefined,
       parentSessionId: parsed.searchParams.get("parentSessionId") || undefined
     });
-    sendJson(res, 200, payload);
+    sendJson(res, 200, payload, ae);
     return;
   }
 
@@ -236,7 +238,7 @@ async function routeRequest(req, res, options) {
       sessionId: parsed.searchParams.get("sessionId") || undefined,
       auditLimit: Number(parsed.searchParams.get("auditLimit") || 200)
     });
-    sendJson(res, 200, payload);
+    sendJson(res, 200, payload, ae);
     return;
   }
 
@@ -249,7 +251,7 @@ async function routeRequest(req, res, options) {
       sessionId: parsed.searchParams.get("sessionId") || undefined,
       staged: parsed.searchParams.get("staged") === "1"
     });
-    sendJson(res, 200, payload);
+    sendJson(res, 200, payload, ae);
     return;
   }
 
@@ -260,14 +262,14 @@ async function routeRequest(req, res, options) {
       version: pkg.version,
       transports: ["streamable-http", "sse"],
       auth: options.token ? "bearer" : "disabled"
-    });
+    }, ae);
     return;
   }
 
   const mcpAccess = getMcpAccess(parsed.pathname, options);
 
   if (req.method === "GET" && (parsed.pathname === "/mcp" || mcpAccess.kind === "streamable-http")) {
-    sendJson(res, 200, mcpGetDiagnostic(parsed.pathname, options, mcpAccess, req));
+    sendJson(res, 200, mcpGetDiagnostic(parsed.pathname, options, mcpAccess, req), ae);
     return;
   }
 
@@ -276,10 +278,10 @@ async function routeRequest(req, res, options) {
     const payload = await readJsonBody(req, options.maxBodyBytes);
     const response = await handleJsonRpcPayload(payload);
     if (response === null) {
-      sendJson(res, 202, { ok: true, accepted: true });
+      sendJson(res, 202, { ok: true, accepted: true }, ae);
       return;
     }
-    sendJson(res, 200, response);
+    sendJson(res, 200, response, ae);
     return;
   }
 
@@ -294,7 +296,7 @@ async function routeRequest(req, res, options) {
     const sessionId = parsed.searchParams.get("sessionId") || "";
     const session = sessions.get(sessionId);
     if (!session) {
-      sendJson(res, 404, { ok: false, error: "Unknown or expired SSE session." });
+      sendJson(res, 404, { ok: false, error: "Unknown or expired SSE session." }, ae);
       return;
     }
     const payload = await readJsonBody(req, options.maxBodyBytes);
@@ -302,7 +304,7 @@ async function routeRequest(req, res, options) {
     if (response !== null) {
       sendSse(session.res, "message", response);
     }
-    sendJson(res, 202, { ok: true, accepted: true });
+    sendJson(res, 202, { ok: true, accepted: true }, ae);
     return;
   }
 
@@ -330,7 +332,7 @@ async function routeRequest(req, res, options) {
       streamableHttp: "POST /mcp or POST /mcp/<chatgpt-secret>",
       sse: "GET /sse or GET /sse/<chatgpt-secret> then POST /messages...?sessionId=..."
     }
-  });
+  }, ae);
 }
 
 
@@ -499,10 +501,19 @@ function setBaseHeaders(res) {
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
 }
 
-function sendJson(res, status, payload) {
+function sendJson(res, status, payload, ae = "") {
   if (res.headersSent) return;
+  const json = `${JSON.stringify(payload)}\n`;
+  if (ae.includes("gzip")) {
+    try {
+      const compressed = zlib.gzipSync(Buffer.from(json, "utf8"), { level: 6 });
+      res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Content-Encoding": "gzip", "Vary": "Accept-Encoding" });
+      res.end(compressed);
+      return;
+    } catch (_) {}
+  }
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
-  res.end(`${JSON.stringify(payload)}\n`);
+  res.end(json);
 }
 
 function sendHtml(res, status, html) {
