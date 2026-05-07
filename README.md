@@ -61,7 +61,7 @@ npm install
 npm run oneclick
 ```
 
-This creates a local config if needed, generates a persistent bearer token, starts the HTTP server, and prints the dashboard plus ChatGPT MCP endpoint.
+This creates a local config if needed, generates a persistent local/API bearer token, starts the HTTP server, and prints the dashboard plus the ChatGPT MCP URL.
 
 For a permanent ChatGPT app, use a stable HTTPS tunnel or reverse proxy and launch with:
 
@@ -69,14 +69,29 @@ For a permanent ChatGPT app, use a stable HTTPS tunnel or reverse proxy and laun
 npm run oneclick -- --public-url https://relai.your-domain.com
 ```
 
-Then configure ChatGPT Developer Mode once with:
+Then configure ChatGPT Developer Mode once with the printed `ChatGPT MCP URL`:
 
 ```text
-https://relai.your-domain.com/mcp
-Authorization: Bearer <REL_AI_MCP_TOKEN>
+https://relai.your-domain.com/mcp/<secret>
+Authentication: No Authentication
 ```
 
+The secret path is generated locally and stays stable until you rotate it. For ChatGPT, always choose `No Authentication` and use the printed `/mcp/<secret>` URL. The plain `/mcp` endpoint remains only for non-ChatGPT bearer-token clients.
+
 Full guide: [docs/ONE_CLICK_SETUP.md](docs/ONE_CLICK_SETUP.md)
+
+### First ChatGPT test
+
+After the connector is added, do not start with an edit. Start with a read-only tool check:
+
+```text
+Use Rel.AI MCP tools directly.
+Call relai_workspace_list.
+Then call relai_workspace_inspect with workspace "myapp" and maxEntries 200.
+Do not use file search. Do not modify files.
+```
+
+If ChatGPT says it found zero results in a `rel-ai-mcp` source, it searched the wrong layer. Ask it to call `relai_workspace_list` and `relai_workspace_inspect` by name. These diagnostic tools work under the normal `pr` profile and do not require admin mode.
 
 ## Dashboard
 
@@ -141,7 +156,7 @@ At a high level:
 1. Run `npm run oneclick`.
 2. Put a stable HTTPS tunnel in front of `http://127.0.0.1:3333`.
 3. Run `npm run oneclick -- --public-url https://your-stable-domain`.
-4. Configure one ChatGPT app with `https://your-stable-domain/mcp`.
+4. Configure one ChatGPT app with the printed `https://your-stable-domain/mcp/<secret>` URL and select `No Authentication`.
 5. Ask ChatGPT to inspect or work on one of your configured workspaces.
 
 ## Safety model
@@ -164,7 +179,7 @@ For more detail, read:
 
 ```bash
 npm run oneclick       # One-command local launch + connector summary
-npm run connector:print # Print saved connector settings/token
+npm run connector:print # Print saved connector settings. ChatGPT auth should be No Authentication.
 npm run check          # Syntax-check project files
 npm run test:smoke     # Basic MCP smoke test
 npm run test:http      # HTTP server smoke test

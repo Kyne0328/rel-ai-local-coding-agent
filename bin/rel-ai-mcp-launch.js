@@ -13,6 +13,8 @@ function parseArgs(argv) {
     else if (arg === "--token") options.token = argv[++i];
     else if (arg === "--public-url") options.publicUrl = argv[++i];
     else if (arg === "--reset-token") options.resetToken = true;
+    else if (arg === "--chatgpt-secret") options.chatgptSecret = argv[++i];
+    else if (arg === "--reset-chatgpt-secret") options.resetChatgptSecret = true;
     else if (arg === "--show-token") options.showToken = true;
     else if (arg === "--print-only") options.printOnly = true;
     else if (arg === "--allow-no-auth") options.allowNoAuth = true;
@@ -41,8 +43,10 @@ Options:
   --port <port>          Bind port. Default: 3333
   --public-url <url>     Stable HTTPS base URL routed to this local server.
   --token <token>        Use this bearer token for this run.
-  --reset-token          Generate and save a new token.
-  --show-token           Print the token in connector summary output.
+  --reset-token          Generate and save a new local/API bearer token.
+  --chatgpt-secret <s>   Use this secret in the ChatGPT no-auth MCP URL path.
+  --reset-chatgpt-secret Generate and save a new ChatGPT MCP URL secret.
+  --show-token           Print local/API token and ChatGPT secret in connector summary output.
   --print-only           Print saved connector settings without starting the server.
   --allow-no-auth        Disable auth for local-only testing.
 `);
@@ -78,17 +82,19 @@ function main() {
   const port = Number(options.port || process.env.REL_AI_MCP_PORT || savedProfile.port || 3333);
   const publicUrl = connection.normalizePublicUrl(options.publicUrl || process.env.REL_AI_MCP_PUBLIC_URL || savedEnv.REL_AI_MCP_PUBLIC_URL || savedProfile.publicUrl || "");
   const token = resolveToken(options);
+  const chatgptSecret = connection.resolveChatGPTSecret({ reset: options.resetChatgptSecret, value: options.chatgptSecret });
 
   if (publicUrl) connection.writeLaunchEnv({ REL_AI_MCP_PUBLIC_URL: publicUrl });
-  const profile = connection.writeConnectionProfile({ host, port, publicUrl, configPath: getConfigPath() });
-  const summary = connection.buildConnectionSummary({ host: profile.host, port: profile.port, publicUrl: profile.publicUrl, token, showToken: options.showToken });
+  connection.writeLaunchEnv({ REL_AI_MCP_CHATGPT_SECRET: chatgptSecret });
+  const profile = connection.writeConnectionProfile({ host, port, publicUrl, chatgptSecret, configPath: getConfigPath() });
+  const summary = connection.buildConnectionSummary({ host: profile.host, port: profile.port, publicUrl: profile.publicUrl, token, chatgptSecret, showToken: options.showToken });
 
   if (createdConfig) console.error(`Created default config: ${getConfigPath()}`);
   connection.printConnectionSummary(summary);
 
   if (options.printOnly) return;
 
-  startHttpServer({ host, port, token, allowNoAuth: options.allowNoAuth, publicUrl });
+  startHttpServer({ host, port, token, chatgptSecret, allowNoAuth: options.allowNoAuth, publicUrl });
 }
 
 try {

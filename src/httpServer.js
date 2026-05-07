@@ -24,6 +24,7 @@ function startHttpServer(options = {}) {
   const host = options.host || process.env.REL_AI_MCP_HOST || savedProfile.host || "127.0.0.1";
   const port = Number(options.port ?? process.env.REL_AI_MCP_PORT ?? savedProfile.port ?? 3333);
   const token = options.token || process.env.REL_AI_MCP_TOKEN || launchEnv.REL_AI_MCP_TOKEN || "";
+  const chatgptSecret = String(options.chatgptSecret || process.env.REL_AI_MCP_CHATGPT_SECRET || launchEnv.REL_AI_MCP_CHATGPT_SECRET || savedProfile.chatgptSecret || "").trim();
   const publicUrl = connection.normalizePublicUrl(options.publicUrl || process.env.REL_AI_MCP_PUBLIC_URL || launchEnv.REL_AI_MCP_PUBLIC_URL || savedProfile.publicUrl || "");
   const allowNoAuth = Boolean(options.allowNoAuth || process.env.REL_AI_MCP_ALLOW_NO_AUTH === "1");
   const maxBodyBytes = Number(options.maxBodyBytes || process.env.REL_AI_MCP_MAX_BODY_BYTES || DEFAULT_MAX_BODY_BYTES);
@@ -34,7 +35,7 @@ function startHttpServer(options = {}) {
 
   const server = http.createServer(async (req, res) => {
     try {
-      await routeRequest(req, res, { token, allowNoAuth, maxBodyBytes, host, port, publicUrl });
+      await routeRequest(req, res, { token, chatgptSecret, allowNoAuth, maxBodyBytes, host, port, publicUrl });
     } catch (error) {
       sendJson(res, 500, {
         ok: false,
@@ -51,7 +52,7 @@ function startHttpServer(options = {}) {
     const address = server.address();
     const actualPort = address && typeof address === "object" ? address.port : port;
     console.error(`[rel-ai-mcp] HTTP/SSE server listening on http://${host}:${actualPort}`);
-    connection.writeConnectionProfile({ host, port: actualPort, publicUrl, configPath: require("./config").getConfigPath() });
+    connection.writeConnectionProfile({ host, port: actualPort, publicUrl, chatgptSecret, configPath: require("./config").getConfigPath() });
     if (publicUrl) {
       console.error(`[rel-ai-mcp] Public connector URL: ${publicUrl}/mcp`);
     } else {
@@ -106,6 +107,7 @@ async function routeRequest(req, res, options) {
       port: options.port,
       publicUrl: options.publicUrl,
       token: options.token,
+      chatgptSecret: options.chatgptSecret,
       showToken: parsed.searchParams.get("showToken") === "1"
     }));
     return;
@@ -219,8 +221,10 @@ async function routeRequest(req, res, options) {
     return;
   }
 
-  if (req.method === "POST" && parsed.pathname === "/mcp") {
-    if (!isAuthorized(req, options)) return unauthorized(res);
+  const mcpAccess = getMcpAccess(parsed.pathname, options);
+
+  if (req.method === "POST" && mcpAccess.kind === "streamable-http") {
+    if (!mcpAccess.allowed && !isAuthorized(req, options)) return unauthorized(res);
     const payload = await readJsonBody(req, options.maxBodyBytes);
     const response = await handleJsonRpcPayload(payload);
     if (response === null) {
@@ -231,14 +235,14 @@ async function routeRequest(req, res, options) {
     return;
   }
 
-  if (req.method === "GET" && parsed.pathname === "/sse") {
-    if (!isAuthorized(req, options)) return unauthorized(res);
-    openSseSession(res, req);
+  if (req.method === "GET" && mcpAccess.kind === "sse") {
+    if (!mcpAccess.allowed && !isAuthorized(req, options)) return unauthorized(res);
+    openSseSession(res, req, mcpAccess.messagePath);
     return;
   }
 
-  if (req.method === "POST" && parsed.pathname === "/messages") {
-    if (!isAuthorized(req, options)) return unauthorized(res);
+  if (req.method === "POST" && mcpAccess.kind === "messages") {
+    if (!mcpAccess.allowed && !isAuthorized(req, options)) return unauthorized(res);
     const sessionId = parsed.searchParams.get("sessionId") || "";
     const session = sessions.get(sessionId);
     if (!session) {
@@ -272,10 +276,24 @@ async function routeRequest(req, res, options) {
       sessionDiffApi: "GET /api/session/diff?workspace=...&sessionId=...",
       taskGraphApi: "GET /api/task/graph?sessionId=...",
       sessionExportApi: "GET /api/session/export?workspace=...&sessionId=...",
-      streamableHttp: "POST /mcp",
-      sse: "GET /sse then POST /messages?sessionId=..."
+      streamableHttp: "POST /mcp or POST /mcp/<chatgpt-secret>",
+      sse: "GET /sse or GET /sse/<chatgpt-secret> then POST /messages...?sessionId=..."
     }
   });
+}
+
+
+function getMcpAccess(pathname, options) {
+  const secret = String(options.chatgptSecret || "").trim();
+  if (pathname === "/mcp") return { kind: "streamable-http", allowed: false };
+  if (pathname === "/sse") return { kind: "sse", allowed: false, messagePath: "/messages" };
+  if (pathname === "/messages") return { kind: "messages", allowed: false };
+  if (!secret) return { kind: "none", allowed: false };
+  const encoded = encodeURIComponent(secret);
+  if (pathname === `/mcp/${encoded}` || pathname === `/mcp/${secret}`) return { kind: "streamable-http", allowed: true };
+  if (pathname === `/sse/${encoded}` || pathname === `/sse/${secret}`) return { kind: "sse", allowed: true, messagePath: `/messages/${encoded}` };
+  if (pathname === `/messages/${encoded}` || pathname === `/messages/${secret}`) return { kind: "messages", allowed: true };
+  return { kind: "none", allowed: false };
 }
 
 function resolveApiWorkspace(config, parsed) {
@@ -299,7 +317,7 @@ async function handleJsonRpcPayload(payload) {
   return handleMessage(payload);
 }
 
-function openSseSession(res, req) {
+function openSseSession(res, req, messagePath = "/messages") {
   const sessionId = crypto.randomUUID();
   res.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
@@ -310,7 +328,7 @@ function openSseSession(res, req) {
   const session = { id: sessionId, res, createdAt: new Date().toISOString() };
   sessions.set(sessionId, session);
 
-  sendSse(res, "endpoint", `/messages?sessionId=${encodeURIComponent(sessionId)}`);
+  sendSse(res, "endpoint", `${messagePath}?sessionId=${encodeURIComponent(sessionId)}`);
   sendSse(res, "ready", { ok: true, sessionId, name: pkg.name, version: pkg.version });
 
   const keepAlive = setInterval(() => {
@@ -600,7 +618,7 @@ a{color:var(--cyan)}
             <div class="connector-step"><strong>1.</strong> Run <code>npm run oneclick</code>.</div>
             <div class="connector-step"><strong>2.</strong> Use Cloudflare Tunnel, Tailscale Funnel, or a static ngrok domain.</div>
             <div class="connector-step"><strong>3.</strong> Start with <code>--public-url https://your-domain</code>.</div>
-            <div class="connector-step"><strong>4.</strong> In ChatGPT, use the printed <code>/mcp</code> URL and bearer token.</div>
+            <div class="connector-step"><strong>4.</strong> In ChatGPT, use the printed <code>/mcp/&lt;secret&gt;</code> URL and set auth to <code>No Authentication</code>.</div>
           </div>
         </div>
       </section>

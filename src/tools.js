@@ -67,6 +67,8 @@ const toolSchemas = [
   tool("relai_connector_check", "Connector Check", "Validate ChatGPT Developer Mode connector endpoint/token settings and optionally probe /health.", { endpoint: stringProp(), baseUrl: stringProp(), token: stringProp(), probe: boolProp(), timeoutMs: numberProp(500, 60000) }),
   tool("relai_config_migration_plan", "Config Migration Plan", "Compare the active config against the current default schema and return safe migration guidance.", { fromVersion: stringProp() }),
   tool("relai_workspace_preflight", "Workspace Preflight", "Check a workspace before agent execution: Git repo state, protected branch, line-ending files, and configured test commands.", { workspace: stringProp(), requireClean: boolProp() }, ["workspace"]),
+  tool("relai_workspace_list", "Workspace List", "List configured Rel.AI workspace aliases and safe metadata. Use first when a user asks about a workspace and the alias may be unknown.", {}),
+  tool("relai_workspace_inspect", "Workspace Inspect", "Return a combined workspace profile and safe filtered project structure. Use this for prompts like show the jjclover workspace profile, current project structure, project overview, or inspect this workspace.", { workspace: stringProp(), sessionId: stringProp(), maxEntries: numberProp(1, 5000) }, ["workspace"]),
   tool("relai_release_manifest", "Release Manifest", "Generate a package file manifest with sizes and SHA-256 hashes for release review.", { maxFiles: numberProp(1, 50000), maxFileBytes: numberProp(1000, 10485760) }),
   tool("relai_release_notes", "Release Notes", "Return suggested release notes, commit message, tag message, and validation commands for the current version.", { version: stringProp() }),
 
@@ -378,6 +380,10 @@ async function dispatchTool(config, name, args) {
       return release.configMigrationPlan(config, args);
     case "relai_workspace_preflight":
       return release.workspacePreflight(config, args);
+    case "relai_workspace_list":
+      return workspaceList(config);
+    case "relai_workspace_inspect":
+      return workspaceInspect(config, args);
     case "relai_release_manifest":
       return release.releaseManifest(config, args);
     case "relai_release_notes":
@@ -776,6 +782,54 @@ function dashboardSummary(config, args = {}) {
   };
 }
 
+function workspaceList(config) {
+  const workspaces = Object.entries(config.workspaces || {}).map(([alias, item]) => ({
+    alias,
+    path: item.path,
+    repoSlug: item.repoSlug || "",
+    testCommandKeys: Object.keys(item.testCommands || {}).sort(),
+    commandKeys: Object.keys(item.commands || {}).sort(),
+    protectedBranches: Array.isArray(item.protectedBranches) ? item.protectedBranches : []
+  })).sort((a, b) => a.alias.localeCompare(b.alias));
+  return { ok: true, count: workspaces.length, workspaces };
+}
+
+function workspaceInspect(config, args = {}) {
+  const requested = String(args.workspace || "").trim();
+  try {
+    const profile = workspaceProfile(config, args);
+    const tree = workspaceTree(config, { ...args, maxEntries: Math.min(Math.max(Number(args.maxEntries || 800), 1), 5000) });
+    return {
+      ok: true,
+      workspace: profile.workspace,
+      root: profile.root,
+      profile,
+      tree: {
+        fileCount: tree.fileCount,
+        files: tree.files,
+        skipped: tree.skipped,
+        truncated: tree.truncated
+      },
+      nextSuggestedTools: [
+        "relai_read_files",
+        "relai_context_pack",
+        "relai_task_start",
+        "relai_task_run"
+      ]
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      workspace: requested,
+      error: error instanceof Error ? error.message : String(error),
+      availableWorkspaces: workspaceList(config).workspaces,
+      fix: requested
+        ? `Workspace '${requested}' is not ready. Add it with npm run workspace:add -- ${requested} /absolute/path/to/project, then restart the connector.`
+        : "No workspace alias was provided. Call relai_workspace_list first, then retry with one of the aliases."
+    };
+  }
+}
+
 function workspaceTree(config, args) {
   const workspace = resolveTargetWorkspace(config, args);
   const result = collectTextFiles(workspace.path, {
@@ -963,4 +1017,4 @@ function numberProp(min, max) { return { type: "number", minimum: min, maximum: 
 function objectProp() { return { type: "object" }; }
 function arrayProp(type, minItems, maxItems) { return { type: "array", items: { type }, minItems, maxItems }; }
 
-module.exports = { toolSchemas, callTool };
+module.exports = { toolSchemas, callTool, workspaceList, workspaceInspect, workspaceTree, workspaceProfile };

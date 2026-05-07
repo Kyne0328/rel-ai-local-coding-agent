@@ -8,7 +8,7 @@ For the simpler permanent setup, start with [ONE_CLICK_SETUP.md](ONE_CLICK_SETUP
 npm run oneclick -- --public-url https://relai.your-domain.com
 ```
 
-That command keeps a persistent local token and prints the stable MCP URL to use in ChatGPT.
+That command keeps a persistent local/API token and prints the stable MCP URL to use in ChatGPT. ChatGPT should use `No Authentication`.
 
 ## Start local HTTP server
 
@@ -46,14 +46,16 @@ http://127.0.0.1:3333
 Recommended endpoint for ChatGPT:
 
 ```text
-https://your-domain.example.com/mcp
+https://your-domain.example.com/mcp/<secret>
 ```
 
-Auth:
+Auth in ChatGPT:
 
 ```text
-Authorization: Bearer <REL_AI_MCP_TOKEN>
+No Authentication
 ```
+
+Use the exact `ChatGPT MCP URL` printed by `npm run oneclick -- --public-url ...`. The secret is embedded in the path. In ChatGPT, set authentication to `No Authentication`. The regular `/mcp` endpoint remains available only for non-ChatGPT bearer-token clients.
 
 ## First safe test in ChatGPT
 
@@ -173,8 +175,8 @@ The v0.8 smoke tests use this pattern.
 
 ## v0.9 production UX notes
 
-- Use the dashboard only over localhost, a trusted tunnel, or HTTPS with a strong bearer token.
-- `/events` streams dashboard snapshots over SSE and should not be exposed without authentication.
+- Use the dashboard only over localhost, a trusted tunnel, or HTTPS with a strong local/API bearer token.
+- `/events` streams dashboard snapshots over SSE and should not be exposed publicly without local/API authentication.
 - `relai_cleanup_run`, `relai_doctor_fix`, `relai_state_import`, and original Rel.AI config import are admin-level operations.
 - Prefer `relai_cleanup_preview` before deleting generated state files.
 - Keep state exports private; they can contain task summaries, diffs, audit entries, and local path metadata.
@@ -184,7 +186,7 @@ The v0.8 smoke tests use this pattern.
 Before exposing the connector, run these MCP tools or dashboard APIs:
 
 - `relai_release_readiness` to score config, approval gates, token setup, state directories, command availability, and workspaces.
-- `relai_connector_check` with your public `/mcp` endpoint to validate URL/auth settings and optionally probe `/health`.
+- `relai_connector_check` with your printed public `/mcp/<secret>` endpoint to validate URL settings and optionally probe `/health`.
 - `relai_workspace_preflight` for each workspace before running real coding tasks.
 
 HTTP equivalents when the server is running:
@@ -195,4 +197,22 @@ GET /api/release-manifest
 GET /api/workspace/preflight?workspace=myapp
 ```
 
-Keep bearer auth enabled when using these endpoints through a tunnel.
+For ChatGPT, use `/mcp/<secret>` with `No Authentication`. Keep bearer auth only for non-ChatGPT local/API endpoints exposed through a tunnel.
+
+## Connector-discovery sanity check
+
+If ChatGPT replies that it searched a `rel-ai-mcp` source and found zero results, it probably did not call the MCP tools. Ask it to call the tool names explicitly:
+
+```text
+Use Rel.AI MCP tools directly. Call relai_workspace_list, then call relai_workspace_inspect for workspace myapp with maxEntries 200. Do not use file search.
+```
+
+If the workspace alias is wrong or missing, `relai_workspace_inspect` returns a non-throwing diagnostic with available aliases and a setup command.
+
+The server also exposes read-only MCP resources for discovery:
+
+- `relai://server/help`
+- `relai://server/workspaces`
+- `relai://workspace/<alias>/inspect`
+- `relai://workspace/<alias>/profile`
+- `relai://workspace/<alias>/tree`

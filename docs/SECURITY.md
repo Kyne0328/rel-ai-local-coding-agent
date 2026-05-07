@@ -119,7 +119,7 @@ Recommended:
 
 ## HTTP/SSE transport
 
-Remote transport requires `REL_AI_MCP_TOKEN` unless `REL_AI_MCP_ALLOW_NO_AUTH=1` is set. Never expose an unauthenticated server through a tunnel.
+Remote transport requires `REL_AI_MCP_TOKEN` for the plain local/API endpoints unless `REL_AI_MCP_ALLOW_NO_AUTH=1` is set. ChatGPT should use the generated `/mcp/<secret>` URL with `No Authentication`; never expose a plain unauthenticated server through a tunnel.
 
 Use HTTPS in front of the server when connecting from ChatGPT Developer Mode.
 
@@ -181,8 +181,8 @@ For remote ChatGPT Developer Mode use, keep `approvalGates.push`, `approvalGates
 
 ## v0.10 release hardening
 
-Use `relai_release_readiness` before exposing Rel.AI MCP through ChatGPT Developer Mode. It checks for common unsafe states such as missing bearer token, disabled approval gates, globally enabled arbitrary commands, globally enabled destructive tools, missing state directories, and missing workspace tests.
+Use `relai_release_readiness` before exposing Rel.AI MCP through ChatGPT Developer Mode. It checks for common unsafe states such as missing local/API bearer token, disabled approval gates, globally enabled arbitrary commands, globally enabled destructive tools, missing state directories, and missing workspace tests. ChatGPT itself should still be configured as `No Authentication` on the `/mcp/<secret>` URL.
 
 Use `relai_workspace_preflight` before agent execution on a real project. It checks whether the workspace is a Git repository, whether it is on a protected branch, whether it has uncommitted changes, and whether line-ending normalization files exist.
 
-Use `relai_connector_check` to validate that the public connector endpoint is HTTPS, points at `/mcp`, and is configured with bearer-token authentication.
+Use `relai_connector_check` to validate that the public connector endpoint is HTTPS and points at the generated `/mcp/<secret>` URL. ChatGPT Developer Mode should be configured as No Authentication; the secret is in the URL path. Keep that URL private and rotate it if exposed.

@@ -2,7 +2,7 @@
 
 This guide fixes the annoying loop where a temporary ngrok URL changes, forcing you to delete and recreate the ChatGPT app.
 
-Rel.AI MCP can now keep a persistent local token and connection profile. You start it with one command, then point one permanent HTTPS URL at the local server.
+Rel.AI MCP can now keep a persistent local/API token and connection profile. You start it with one command, then point one permanent HTTPS URL at the local server.
 
 ## One-command local start
 
@@ -16,7 +16,7 @@ npm run oneclick
 This command:
 
 - creates `~/.rel-ai-mcp/config.json` if it does not exist
-- creates a strong bearer token in `~/.rel-ai-mcp/.env` if one does not exist
+- creates a strong local/API bearer token in `~/.rel-ai-mcp/.env` if one does not exist
 - stores connection details in `~/.rel-ai-mcp/connection.json`
 - starts the MCP HTTP server on `http://127.0.0.1:3333`
 - prints the local dashboard URL and ChatGPT MCP endpoint
@@ -58,13 +58,13 @@ npm run oneclick -- --public-url https://relai.your-domain.com
 The ChatGPT MCP endpoint will be:
 
 ```text
-https://relai.your-domain.com/mcp
+https://relai.your-domain.com/mcp/<secret>
 ```
 
 You should only need to recreate the ChatGPT app if one of these changes:
 
 - public URL
-- bearer token
+- local/API bearer token
 - ChatGPT app settings
 
 ## Recommended permanent tunnel options
@@ -136,23 +136,23 @@ Do not use random temporary ngrok URLs for a permanent ChatGPT app. They solve t
 After `npm run oneclick -- --public-url ...`, use the printed values:
 
 ```text
-MCP URL: https://your-stable-domain/mcp
-Authorization: Bearer <REL_AI_MCP_TOKEN>
+MCP URL: https://your-stable-domain/mcp/<secret>
+Authentication: No Authentication
 ```
 
-The token is stored locally in:
+The ChatGPT URL secret is stored locally in:
 
 ```text
-~/.rel-ai-mcp/.env
+~/.rel-ai-mcp/chatgpt-secret
 ```
 
-To rotate the token:
+To rotate the ChatGPT MCP URL secret:
 
 ```bash
-npm run oneclick -- --reset-token --show-token
+npm run oneclick -- --reset-chatgpt-secret --show-token
 ```
 
-After token rotation, update the ChatGPT app authentication value.
+After secret rotation, update the ChatGPT app URL and keep ChatGPT authentication set to `No Authentication`. The local/API bearer token is still stored in `~/.rel-ai-mcp/.env`, but it is not the ChatGPT app authentication mode.
 
 ## Safer first prompt
 
@@ -175,6 +175,45 @@ If ChatGPT cannot connect:
 1. Open the local dashboard printed by `npm run oneclick`.
 2. Check `http://127.0.0.1:3333/health` locally.
 3. Check that your tunnel points to `http://127.0.0.1:3333`.
-4. Confirm the ChatGPT MCP URL ends in `/mcp`.
-5. Confirm the bearer token in ChatGPT matches `~/.rel-ai-mcp/.env`.
-6. Avoid using the dashboard URL as the MCP URL. ChatGPT needs `/mcp`, not `/dashboard`.
+4. Confirm the ChatGPT MCP URL looks like `/mcp/<secret>`, not plain `/mcp`.
+5. Confirm the ChatGPT app authentication is exactly `No Authentication`.
+6. Avoid using the dashboard URL as the MCP URL. ChatGPT needs `/mcp/<secret>`, not `/dashboard`.
+
+## If ChatGPT says it cannot find the workspace/tools
+
+That usually means ChatGPT searched connector files instead of calling the MCP tools, or the workspace alias is not configured.
+
+Use this exact diagnostic prompt:
+
+```text
+Use the Rel.AI MCP connector tools directly.
+First call relai_workspace_list.
+Then call relai_workspace_inspect with workspace "jjclover" and maxEntries 200.
+Do not use file search. Do not modify files.
+```
+
+Expected result:
+
+- `relai_workspace_list` shows the configured aliases and works under the normal `pr` profile.
+- `relai_workspace_inspect` returns the project profile and safe file tree and works under the normal `pr` profile.
+- If `jjclover` is not configured, the response shows the available aliases and the command to add it.
+
+Add a missing workspace alias with:
+
+```bash
+npm run workspace:add -- jjclover /absolute/path/to/jjclover
+```
+
+Restart `npm run oneclick` after editing workspace config.
+
+Rel.AI MCP now also exposes MCP resources:
+
+```text
+relai://server/help
+relai://server/workspaces
+relai://workspace/<alias>/inspect
+relai://workspace/<alias>/profile
+relai://workspace/<alias>/tree
+```
+
+These resources make the connector easier for ChatGPT to discover, but tools are still the preferred path for app actions.

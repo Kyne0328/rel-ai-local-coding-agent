@@ -53,6 +53,31 @@ assert.equal(readiness.ok, true);
 assert.ok(readiness.score >= 60);
 assert.ok(Array.isArray(readiness.workspaces));
 
+const workspaces = await callTool("relai_workspace_list", {});
+assert.equal(workspaces.ok, true);
+assert.ok(workspaces.workspaces.some((item) => item.alias === "smoke"));
+
+const inspect = await callTool("relai_workspace_inspect", { workspace: "smoke", maxEntries: 50 });
+assert.equal(inspect.ok, true);
+assert.equal(inspect.workspace, "smoke");
+assert.ok(inspect.profile.manifests.includes("package.json"));
+assert.ok(inspect.tree.files.includes("package.json"));
+
+const missingInspect = await callTool("relai_workspace_inspect", { workspace: "jjclover", maxEntries: 50 });
+assert.equal(missingInspect.ok, false);
+assert.ok(missingInspect.availableWorkspaces.some((item) => item.alias === "smoke"));
+
+const prConfig = JSON.parse(fs.readFileSync(configPath, "utf8"));
+prConfig.permissionProfile = "pr";
+fs.writeFileSync(configPath, JSON.stringify(prConfig, null, 2), "utf8");
+const prWorkspaces = await callTool("relai_workspace_list", {});
+assert.equal(prWorkspaces.ok, true);
+const prInspect = await callTool("relai_workspace_inspect", { workspace: "smoke", maxEntries: 50 });
+assert.equal(prInspect.ok, true);
+assert.equal(prInspect.workspace, "smoke");
+prConfig.permissionProfile = "admin";
+fs.writeFileSync(configPath, JSON.stringify(prConfig, null, 2), "utf8");
+
 const preflight = await callTool("relai_workspace_preflight", { workspace: "smoke", requireClean: true });
 assert.equal(preflight.ok, true);
 assert.equal(preflight.workspace, "smoke");
@@ -60,7 +85,7 @@ assert.ok(preflight.testCommandKeys.includes("unit"));
 
 const connector = await callTool("relai_connector_check", { endpoint: "http://127.0.0.1:3333/mcp", token: "abc", probe: false });
 assert.equal(connector.ok, true);
-assert.equal(connector.suggestedChatGPTConnector.authentication, "Bearer token");
+assert.equal(connector.suggestedChatGPTConnector.authentication, "No Authentication");
 assert.ok(connector.curl.includes("/health"));
 
 const migration = await callTool("relai_config_migration_plan", { fromVersion: "0.9.0" });
@@ -76,6 +101,6 @@ assert.ok(manifest.files.some((item) => item.path === "package.json"));
 const notes = await callTool("relai_release_notes", {});
 assert.equal(notes.ok, true);
 assert.equal(notes.version, pkg.version);
-assert.ok(notes.commitMessage.includes("one-command"));
+assert.ok(notes.commitMessage.includes("workspace diagnostics"));
 
 console.log(`v10 release smoke ok: ${version.toolCount} tools, readiness ${readiness.score}`);

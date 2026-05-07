@@ -87,6 +87,8 @@ const TOOL_LEVEL = {
   relai_task_graph: "read-only",
   relai_multiagent_status: "read-only",
   relai_task_read: "read-only",
+  relai_workspace_list: "read-only",
+  relai_workspace_inspect: "read-only",
   relai_workspace_tree: "read-only",
   relai_workspace_profile: "read-only",
   relai_read_files: "read-only",

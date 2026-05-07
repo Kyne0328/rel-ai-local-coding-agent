@@ -51,6 +51,7 @@ function waitFor(id, timeoutMs = 3000) {
 send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } });
 const init = await waitFor(1);
 if (!init.result?.capabilities?.tools) throw new Error('initialize did not advertise tools capability');
+if (!init.result?.capabilities?.resources) throw new Error('initialize did not advertise resources capability');
 
 send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
 const list = await waitFor(2);
@@ -58,8 +59,14 @@ if (!Array.isArray(list.result?.tools) || list.result.tools.length < 5) {
   throw new Error('tools/list returned too few tools');
 }
 
-send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'relai_config', arguments: {} } });
-const config = await waitFor(3);
+send({ jsonrpc: '2.0', id: 3, method: 'resources/list', params: {} });
+const resources = await waitFor(3);
+if (!Array.isArray(resources.result?.resources) || !resources.result.resources.some((item) => item.uri === 'relai://server/workspaces')) {
+  throw new Error('resources/list did not expose workspace resource');
+}
+
+send({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'relai_config', arguments: {} } });
+const config = await waitFor(4);
 if (!config.result?.structuredContent?.ok) throw new Error('relai_config did not return ok');
 
 child.stdin.end();

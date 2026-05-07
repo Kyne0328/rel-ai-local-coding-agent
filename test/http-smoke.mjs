@@ -7,6 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 const port = 39876;
 const token = process.env.TEST_TOKEN ?? 'test-token-please-change';
+const chatgptSecret = 'chatgpt-smoke-secret';
 
 const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.js'), '--host', '127.0.0.1', '--port', String(port)], {
   cwd: root,
@@ -14,7 +15,8 @@ const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.j
   env: {
     ...process.env,
     REL_AI_MCP_CONFIG: path.join(root, 'examples', 'config.example.json'),
-    REL_AI_MCP_TOKEN: token
+    REL_AI_MCP_TOKEN: token,
+    REL_AI_MCP_CHATGPT_SECRET: chatgptSecret
   }
 });
 
@@ -48,6 +50,16 @@ if (unauthorized.status !== 401) {
   throw new Error(`expected unauthorized status 401, got ${unauthorized.status}`);
 }
 
+
+const chatgptList = await fetch(`http://127.0.0.1:${port}/mcp/${chatgptSecret}`, {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ jsonrpc: '2.0', id: 30, method: 'tools/list', params: {} })
+}).then((response) => response.json());
+if (!Array.isArray(chatgptList.result?.tools) || !chatgptList.result.tools.some((item) => item.name === 'relai_workspace_list')) {
+  throw new Error('secret ChatGPT MCP URL did not expose relai_workspace_list without bearer auth');
+}
+
 const initialized = await fetch(`http://127.0.0.1:${port}/mcp`, {
   method: 'POST',
   headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
@@ -55,6 +67,9 @@ const initialized = await fetch(`http://127.0.0.1:${port}/mcp`, {
 }).then((response) => response.json());
 if (!initialized.result?.capabilities?.tools) {
   throw new Error('HTTP initialize did not advertise tools');
+}
+if (!initialized.result?.capabilities?.resources) {
+  throw new Error('HTTP initialize did not advertise resources');
 }
 
 const list = await fetch(`http://127.0.0.1:${port}/mcp`, {
@@ -66,10 +81,19 @@ if (!Array.isArray(list.result?.tools) || list.result.tools.length < 5) {
   throw new Error('HTTP tools/list returned too few tools');
 }
 
+const resources = await fetch(`http://127.0.0.1:${port}/mcp`, {
+  method: 'POST',
+  headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+  body: JSON.stringify({ jsonrpc: '2.0', id: 4, method: 'resources/list', params: {} })
+}).then((response) => response.json());
+if (!Array.isArray(resources.result?.resources) || !resources.result.resources.some((item) => item.uri === 'relai://server/workspaces')) {
+  throw new Error('HTTP resources/list did not expose workspace resource');
+}
+
 const config = await fetch(`http://127.0.0.1:${port}/mcp`, {
   method: 'POST',
   headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-  body: JSON.stringify({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'relai_config', arguments: {} } })
+  body: JSON.stringify({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'relai_config', arguments: {} } })
 }).then((response) => response.json());
 if (!config.result?.structuredContent?.ok) {
   throw new Error('HTTP relai_config did not return ok');

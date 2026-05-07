@@ -1,5 +1,6 @@
 const readline = require("node:readline");
 const { toolSchemas, callTool } = require("./tools");
+const { listResources, readResource } = require("./resources");
 const pkg = require("../package.json");
 
 function main() {
@@ -39,13 +40,20 @@ async function handleMessage(message) {
       case "initialize":
         return result(message.id, {
           protocolVersion: (message.params && message.params.protocolVersion) || "2025-06-18",
-          capabilities: { tools: { listChanged: false } },
+          capabilities: { tools: { listChanged: false }, resources: { subscribe: false, listChanged: false } },
           serverInfo: { name: pkg.name, version: pkg.version }
         });
       case "ping":
         return result(message.id, {});
       case "tools/list":
         return result(message.id, { tools: toolSchemas });
+      case "resources/list":
+        return result(message.id, listResources());
+      case "resources/read": {
+        const uri = message.params && message.params.uri;
+        if (!uri) return jsonRpcError(message.id, -32602, "Missing resource uri.");
+        return result(message.id, readResource(uri));
+      }
       case "tools/call": {
         const params = message.params || {};
         const name = params.name;

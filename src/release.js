@@ -109,19 +109,20 @@ async function connectorCheck(_config, args = {}) {
   const endpoint = String(args.endpoint || args.baseUrl || "").trim();
   const token = String(args.token || process.env.REL_AI_MCP_TOKEN || "").trim();
   const findings = [];
-  if (!endpoint) findings.push(finding("error", "missing_endpoint", "Provide endpoint, usually https://your-domain.example.com/mcp."));
+  if (!endpoint) findings.push(finding("error", "missing_endpoint", "Provide endpoint, usually the secret ChatGPT URL printed by npm run connector:print, for example https://your-domain.example.com/mcp/<secret>."));
   let parsed = null;
   if (endpoint) {
     try {
       parsed = new URL(endpoint);
       if (!["http:", "https:"].includes(parsed.protocol)) findings.push(finding("error", "invalid_scheme", "Endpoint must use http:// or https://."));
       if (parsed.protocol === "http:" && !["localhost", "127.0.0.1", "::1"].includes(parsed.hostname)) findings.push(finding("warning", "plain_http_remote", "Use HTTPS when endpoint is not local."));
-      if (parsed.pathname !== "/mcp") findings.push(finding("info", "nonstandard_path", "Developer Mode usually points at /mcp for this server."));
+      if (parsed.pathname === "/mcp") findings.push(finding("warning", "bearer_endpoint_for_chatgpt", "ChatGPT Developer Mode does not use arbitrary bearer-token auth here. Prefer the secret URL path printed as chatgptMcpUrl and choose No Authentication."));
+      else if (!parsed.pathname.startsWith("/mcp/")) findings.push(finding("info", "nonstandard_path", "For ChatGPT use the secret /mcp/<secret> URL printed by npm run connector:print."));
     } catch (error) {
       findings.push(finding("error", "invalid_endpoint", `Invalid endpoint URL: ${error.message}`));
     }
   }
-  if (!token) findings.push(finding("warning", "missing_token", "No bearer token provided. Remote connector should use Authorization: Bearer <token>."));
+  if (!token) findings.push(finding("info", "missing_token", "No bearer token provided. That is expected when ChatGPT uses the secret /mcp/<secret> URL with No Authentication."));
 
   let probe = null;
   if (args.probe === true && parsed) {
@@ -135,13 +136,13 @@ async function connectorCheck(_config, args = {}) {
     endpoint,
     healthEndpoint: `${base}/health`,
     dashboardEndpoint: `${base}/dashboard`,
-    authHeader: token ? "Authorization: Bearer <provided token>" : "Authorization: Bearer <REL_AI_MCP_TOKEN>",
+    authHeader: token ? "Authorization: Bearer <provided token>" : "not used by ChatGPT No Authentication mode",
     suggestedChatGPTConnector: {
       name: "Rel.AI MCP",
-      url: endpoint || `${base}/mcp`,
-      authentication: "Bearer token"
+      url: endpoint || `${base}/mcp/<secret>`,
+      authentication: "No Authentication"
     },
-    curl: endpoint ? `curl -sS -H "Authorization: Bearer $REL_AI_MCP_TOKEN" ${base}/health` : "",
+    curl: endpoint ? `curl -sS ${base}/health` : "",
     probe,
     findings,
     nextActions: nextActions(findings)
@@ -193,11 +194,15 @@ function releaseNotes(_config, args = {}) {
     ok: true,
     version,
     title: `Rel.AI MCP v${version}`,
-    commitMessage: "feat: add one-command launch and stable connector profile",
-    tagMessage: `Rel.AI MCP v${version}: one-command launch, stable connector setup, and dashboard guidance`,
+    commitMessage: "fix: allow workspace diagnostics in pr profile",
+    tagMessage: `Rel.AI MCP v${version}: workspace diagnostics and no-auth ChatGPT guidance`,
     bullets: [
-      "Adds one-command local startup with persistent token generation and saved connector profiles.",
-      "Adds stable public URL support so one ChatGPT app can point at a permanent /mcp endpoint.",
+      "Allows relai_workspace_list and relai_workspace_inspect under read-only/pr profiles so the first diagnostic prompt works without admin mode.",
+      "Keeps one-command local startup with persistent token generation and saved connector profiles.",
+      "Keeps relai_workspace_list and relai_workspace_inspect for reliable first-call workspace discovery.",
+      "Adds read-only MCP resources for connector help, configured workspaces, workspace profile, and workspace tree discovery.",
+      "Adds stable public URL support so one ChatGPT app can point at a permanent secret /mcp/<secret> endpoint.",
+      "Adds a ChatGPT-compatible No Authentication URL path because Developer Mode does not import tools through arbitrary bearer-token headers.",
       "Adds dashboard connector setup guidance and a /api/connection helper endpoint.",
       "Keeps release-readiness scoring for config, approval gates, command availability, state directories, and workspace setup.",
       "Keeps connector verification helpers for ChatGPT Developer Mode endpoint/token setup.",
@@ -304,7 +309,7 @@ function readinessRating(score) {
 function nextActions(findings) {
   const actions = [];
   for (const item of findings.slice(0, 20)) {
-    if (item.code === "missing_http_token_env" || item.code === "missing_token") actions.push("Set REL_AI_MCP_TOKEN and configure bearer auth in ChatGPT Developer Mode.");
+    if (item.code === "missing_http_token_env" || item.code === "missing_token") actions.push("Use the printed /mcp/<secret> ChatGPT MCP URL and set ChatGPT authentication to No Authentication. Keep REL_AI_MCP_TOKEN only for local/API bearer clients.");
     else if (item.code === "no_workspaces") actions.push("Run npm run workspace:add -- <alias> <absolute-project-path>.");
     else if (item.code === "no_test_commands") actions.push("Add at least one allowlisted test command with npm run testcmd:add.");
     else if (item.code === "dirty_worktree") actions.push("Commit/stash local changes or create a task worktree before running agents.");
