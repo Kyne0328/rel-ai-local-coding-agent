@@ -1,5 +1,7 @@
 const http = require("node:http");
 const crypto = require("node:crypto");
+const fs = require("node:fs");
+const path = require("node:path");
 const { URL } = require("node:url");
 const { handleMessage } = require("./server");
 const { readConfig, publicConfigSummary, resolveWorkspace } = require("./config");
@@ -84,6 +86,12 @@ async function routeRequest(req, res, options) {
   if (req.method === "GET" && parsed.pathname === "/dashboard") {
     if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
     sendHtml(res, 200, renderDashboardHtml(options));
+    return;
+  }
+
+  if (req.method === "GET" && parsed.pathname === "/dashboard-client.js") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    sendJavaScript(res, 200, fs.readFileSync(path.join(__dirname, "dashboardClient.js"), "utf8"));
     return;
   }
 
@@ -470,6 +478,12 @@ function sendHtml(res, status, html) {
   res.end(html);
 }
 
+function sendJavaScript(res, status, js) {
+  if (res.headersSent) return;
+  res.writeHead(status, { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "no-store" });
+  res.end(js);
+}
+
 function safeInitialDashboardData() {
   try {
     const config = readConfig();
@@ -491,6 +505,7 @@ function jsonForHtmlScript(value) {
 
 function renderDashboardHtml(options) {
   const tokenQuery = options.token ? `?token=${encodeURIComponent(options.token)}` : "";
+  const initialDashboardJson = jsonForHtmlScript(safeInitialDashboardData());
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -909,6 +924,7 @@ async function boot(){
 }
 boot();
 </script>
+<script src="/dashboard-client.js${tokenQuery}"></script>
 </body>
 </html>`;
 }

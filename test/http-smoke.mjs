@@ -56,6 +56,12 @@ if (!dashboardQueryAuth.ok) {
   throw new Error('dashboard API did not accept token query auth used by browser dashboard');
 }
 
+const dashboardHtmlResponse = await fetch(`http://127.0.0.1:${port}/dashboard?token=${encodeURIComponent(token)}`);
+const dashboardHtml = await dashboardHtmlResponse.text();
+if (!dashboardHtmlResponse.ok || dashboardHtml.includes('initialDashboardJson is not defined') || !dashboardHtml.includes('id="initialDashboardData"')) {
+  throw new Error('dashboard HTML did not render embedded initial dashboard data');
+}
+
 const unauthorized = await fetch(`http://127.0.0.1:${port}/mcp`, {
   method: 'POST',
   headers: { 'content-type': 'application/json' },
