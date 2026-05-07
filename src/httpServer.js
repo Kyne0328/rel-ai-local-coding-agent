@@ -13,6 +13,7 @@ const taskRunner = require("./taskRunner");
 const multiagent = require("./multiagent");
 const productUx = require("./productUx");
 const release = require("./release");
+const configEditor = require("./configEditor");
 const { workspaceFromSession } = require("./worktrees");
 const pkg = require("../package.json");
 const connection = require("./connectionProfile");
@@ -92,6 +93,35 @@ async function routeRequest(req, res, options) {
   if (req.method === "GET" && parsed.pathname === "/dashboard-client.js") {
     if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
     sendJavaScript(res, 200, fs.readFileSync(path.join(__dirname, "dashboardClient.js"), "utf8"));
+    return;
+  }
+
+  if (req.method === "GET" && parsed.pathname === "/settings-dashboard-client.js") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    sendJavaScript(res, 200, fs.readFileSync(path.join(__dirname, "settingsDashboardClient.js"), "utf8"));
+    return;
+  }
+
+  if (req.method === "GET" && parsed.pathname === "/api/settings") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    const config = readConfig();
+    sendJson(res, 200, configEditor.settingsPayload(config));
+    return;
+  }
+
+  if (req.method === "POST" && parsed.pathname === "/api/settings") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    const current = readConfig();
+    const payload = await readJsonBody(req, options.maxBodyBytes);
+    sendJson(res, 200, configEditor.updateSettings(current, payload));
+    return;
+  }
+
+  if (req.method === "POST" && parsed.pathname === "/api/workspaces") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    const current = readConfig();
+    const payload = await readJsonBody(req, options.maxBodyBytes);
+    sendJson(res, 200, configEditor.updateWorkspace(current, payload));
     return;
   }
 
@@ -286,6 +316,9 @@ async function routeRequest(req, res, options) {
       dashboardV9Api: "GET /api/dashboard/v9",
       dashboardV10Api: "GET /api/dashboard/v10",
       logsApi: "GET /api/logs",
+      settingsApi: "GET /api/settings",
+      updateSettingsApi: "POST /api/settings",
+      updateWorkspacesApi: "POST /api/workspaces",
       healthMonitorApi: "GET /api/health-monitor",
       readinessApi: "GET /api/readiness",
       releaseManifestApi: "GET /api/release-manifest",
@@ -925,6 +958,7 @@ async function boot(){
 boot();
 </script>
 <script src="/dashboard-client.js${tokenQuery}"></script>
+<script src="/settings-dashboard-client.js${tokenQuery}"></script>
 </body>
 </html>`;
 }
