@@ -78,6 +78,8 @@ Authentication: No Authentication
 
 The secret path is generated locally and stays stable until you rotate it. For ChatGPT, always choose `No Authentication` and use the printed `/mcp/<secret>` URL. The plain `/mcp` endpoint remains only for non-ChatGPT bearer-token clients.
 
+Do not test the connector by opening plain `http://127.0.0.1:3333/mcp` in a browser. MCP uses JSON-RPC over `POST`; browser `GET` is only a diagnostic. Use `/dashboard` for the UI and the printed `/mcp/<secret>` URL for ChatGPT.
+
 Full guide: [docs/ONE_CLICK_SETUP.md](docs/ONE_CLICK_SETUP.md)
 
 ### First ChatGPT test
@@ -200,9 +202,9 @@ test/       Smoke and release tests
 
 ## Version
 
-Current version: `0.11.0`
+Current version: `0.11.5`
 
-v0.11.0 adds one-command startup, persistent local connector profiles, stable public URL support, and dashboard setup guidance so users do not need to recreate the ChatGPT app every time a temporary tunnel URL changes.
+v0.11.5 fixes the dashboard connection loop by carrying the dashboard token into API/EventSource calls, adds a browser-friendly `/mcp` diagnostic response, and makes `npm run oneclick` output clearly distinguish the ChatGPT `/mcp/<secret>` URL from the plain local `/mcp` bearer endpoint. v0.11.4 rebuilt the dashboard as an operational, responsive console. v0.11.0 added one-command startup, persistent local connector profiles, stable public URL support, and dashboard setup guidance.
 
 ## Status
 

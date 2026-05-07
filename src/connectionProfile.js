@@ -132,6 +132,8 @@ function buildConnectionSummary({ host = "127.0.0.1", port = 3333, publicUrl = "
     localBaseUrl: localUrl,
     publicBaseUrl,
     dashboardUrl: `${localUrl}/dashboard${token ? `?token=${encodeURIComponent(token)}` : ""}`,
+    dashboardDataUrl: `${localUrl}/api/dashboard/v10?limit=100&requireHttpToken=0${token ? `&token=${encodeURIComponent(token)}` : ""}`,
+    localBearerMcpUrl: `${localUrl}/mcp`,
     localMcpUrl: `${localUrl}/mcp`,
     bearerMcpUrl: `${baseForChatGPT}/mcp`,
     chatgptMcpUrl: `${baseForChatGPT}${chatgptMcpPath}`,
@@ -148,7 +150,7 @@ function buildConnectionSummary({ host = "127.0.0.1", port = 3333, publicUrl = "
       ? [
           "Keep the local Rel.AI MCP server running on this machine.",
           "Keep your tunnel/reverse proxy routing the public URL to http://127.0.0.1:3333.",
-          "In ChatGPT Developer Mode, create or update one app that points to the chatgptMcpUrl.",
+          "In ChatGPT Developer Mode, create or update one app using the COPY THIS FOR CHATGPT URL.",
           "Set authentication to No Authentication. Do not add a bearer token in ChatGPT.",
           "Keep the secret MCP URL private. Rotate it with --reset-chatgpt-secret if exposed."
         ]
@@ -165,19 +167,26 @@ function printConnectionSummary(summary) {
     "",
     "Rel.AI MCP is ready.",
     "",
-    `Local dashboard: ${summary.dashboardUrl}`,
-    `Local MCP URL:    ${summary.localMcpUrl}`,
-    `ChatGPT MCP URL:  ${summary.chatgptMcpUrl}`,
-    `Health URL:       ${summary.chatgptHealthUrl}`,
-    `ChatGPT Auth:     ${summary.chatgptAuthMode}`,
-    `Local/API Auth:   ${summary.authHeader}`,
+    `Local dashboard:        ${summary.dashboardUrl}`,
+    `Dashboard data check:   ${summary.dashboardDataUrl}`,
+    `COPY THIS FOR CHATGPT:  ${summary.chatgptMcpUrl}`,
+    `ChatGPT Auth:          No Authentication`,
+    `Health URL:            ${summary.chatgptHealthUrl}`,
+    `Local/API MCP only:     ${summary.localBearerMcpUrl}`,
+    `Local/API Auth:         ${summary.authHeader}`,
     `Token file:       ${summary.tokenFile}`,
     `ChatGPT secret:   ${summary.chatgptSecretFile}`,
     `Profile file:     ${summary.profileFile}`,
     "",
     summary.permanentUrlConfigured
-      ? "Permanent URL: configured. You should not need to recreate the ChatGPT app unless this URL or secret path changes."
-      : "Permanent URL: not configured. Add one with --public-url https://your-domain.example.com.",
+      ? "Permanent URL: configured. Use the COPY THIS FOR CHATGPT URL above. You should not need to recreate the ChatGPT app unless that URL or secret path changes."
+      : "Permanent URL: not configured. Add one with --public-url https://your-domain.example.com before using ChatGPT Developer Mode permanently.",
+    "",
+    "Important:",
+    "  - Do not paste the plain /mcp URL into ChatGPT.",
+    "  - Do not open /mcp in the browser as a dashboard. Use /dashboard instead.",
+    "  - If the dashboard says Connecting, open the Dashboard data check URL above.",
+    "  - ChatGPT authentication must be No Authentication because the secret is in the URL path.",
     "",
     "Next steps:",
     ...summary.nextSteps.map((step, index) => `  ${index + 1}. ${step}`),
@@ -198,6 +207,7 @@ module.exports = {
   readConnectionProfile,
   writeConnectionProfile,
   normalizePublicUrl,
+  localBaseUrl,
   buildConnectionSummary,
   printConnectionSummary
 };

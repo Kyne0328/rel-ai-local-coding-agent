@@ -41,6 +41,21 @@ if (!health.ok || !health.transports.includes('streamable-http')) {
   throw new Error('health endpoint did not advertise streamable-http');
 }
 
+const mcpBrowserDiagnostic = await fetch(`http://127.0.0.1:${port}/mcp`).then((response) => response.json());
+if (!mcpBrowserDiagnostic.ok || !mcpBrowserDiagnostic.postRequired || !mcpBrowserDiagnostic.correctChatGPTUrl.includes(`/mcp/${chatgptSecret}`)) {
+  throw new Error('GET /mcp did not return the browser diagnostic with the correct ChatGPT URL');
+}
+
+const secretBrowserDiagnostic = await fetch(`http://127.0.0.1:${port}/mcp/${chatgptSecret}`).then((response) => response.json());
+if (!secretBrowserDiagnostic.ok || secretBrowserDiagnostic.chatgptAuth !== 'No Authentication' || !secretBrowserDiagnostic.usableWithPost) {
+  throw new Error('GET /mcp/<secret> did not return a usable ChatGPT diagnostic');
+}
+
+const dashboardQueryAuth = await fetch(`http://127.0.0.1:${port}/api/dashboard/v10?token=${encodeURIComponent(token)}&requireHttpToken=0`).then((response) => response.json());
+if (!dashboardQueryAuth.ok) {
+  throw new Error('dashboard API did not accept token query auth used by browser dashboard');
+}
+
 const unauthorized = await fetch(`http://127.0.0.1:${port}/mcp`, {
   method: 'POST',
   headers: { 'content-type': 'application/json' },

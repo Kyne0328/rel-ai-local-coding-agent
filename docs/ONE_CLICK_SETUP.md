@@ -55,7 +55,7 @@ Then launch Rel.AI MCP with that same public URL:
 npm run oneclick -- --public-url https://relai.your-domain.com
 ```
 
-The ChatGPT MCP endpoint will be:
+The ChatGPT MCP endpoint will be printed as `COPY THIS FOR CHATGPT` and will look like:
 
 ```text
 https://relai.your-domain.com/mcp/<secret>
@@ -64,7 +64,7 @@ https://relai.your-domain.com/mcp/<secret>
 You should only need to recreate the ChatGPT app if one of these changes:
 
 - public URL
-- local/API bearer token
+- ChatGPT MCP URL secret
 - ChatGPT app settings
 
 ## Recommended permanent tunnel options
@@ -178,6 +178,7 @@ If ChatGPT cannot connect:
 4. Confirm the ChatGPT MCP URL looks like `/mcp/<secret>`, not plain `/mcp`.
 5. Confirm the ChatGPT app authentication is exactly `No Authentication`.
 6. Avoid using the dashboard URL as the MCP URL. ChatGPT needs `/mcp/<secret>`, not `/dashboard`.
+7. Do not judge the connector by opening plain `/mcp` in a browser. MCP uses `POST`; browser `GET` is only a diagnostic.
 
 ## If ChatGPT says it cannot find the workspace/tools
 

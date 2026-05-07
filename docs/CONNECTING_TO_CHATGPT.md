@@ -55,7 +55,7 @@ Auth in ChatGPT:
 No Authentication
 ```
 
-Use the exact `ChatGPT MCP URL` printed by `npm run oneclick -- --public-url ...`. The secret is embedded in the path. In ChatGPT, set authentication to `No Authentication`. The regular `/mcp` endpoint remains available only for non-ChatGPT bearer-token clients.
+Use the exact `COPY THIS FOR CHATGPT` / `ChatGPT MCP URL` printed by `npm run oneclick -- --public-url ...`. The secret is embedded in the path. In ChatGPT, set authentication to `No Authentication`. The regular `/mcp` endpoint remains available only for non-ChatGPT bearer-token clients. Opening `/mcp` in a browser is not a real MCP connection test because MCP clients send JSON-RPC with `POST`.
 
 ## First safe test in ChatGPT
 
