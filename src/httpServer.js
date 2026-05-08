@@ -104,6 +104,12 @@ async function routeRequest(req, res, options) {
     return;
   }
 
+  if (req.method === "GET" && parsed.pathname === "/activity-dashboard-client.js") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    sendJavaScript(res, 200, fs.readFileSync(path.join(__dirname, "activityDashboardClient.js"), "utf8"));
+    return;
+  }
+
   if (req.method === "GET" && parsed.pathname === "/api/settings") {
     if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
     const config = readConfig();
@@ -970,6 +976,7 @@ boot();
 </script>
 <script src="/dashboard-client.js${tokenQuery}"></script>
 <script src="/settings-dashboard-client.js${tokenQuery}"></script>
+<script src="/activity-dashboard-client.js${tokenQuery}"></script>
 </body>
 </html>`;
 }
