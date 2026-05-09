@@ -2,12 +2,16 @@
 let _sections = {};
 let _current = null;
 let _container = null;
+let _bound = false;
 
 export function initRouter(container, sections) {
   _container = container;
   _sections = sections || {};
 
-  window.addEventListener('hashchange', _route);
+  if (!_bound) {
+    window.addEventListener('hashchange', _route);
+    _bound = true;
+  }
   _route(); // initial mount
 }
 
@@ -31,9 +35,9 @@ function _route() {
     a.classList.toggle('active', href === '#' + id || href === '#' + id.replace(/^home$/, 'overview'));
   });
 
-  // Mount section into container
+  // Mount section into route container only; persistent shell lives outside it.
   if (!_container) return;
   _container.innerHTML = '';
-  const mount = _sections[id];
+  const mount = _sections[id] || _sections.home;
   if (mount) mount(_container);
 }

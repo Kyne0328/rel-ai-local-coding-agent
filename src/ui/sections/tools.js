@@ -19,7 +19,6 @@ function _buildTools() {
   const root = document.createElement('div');
   root.className = 'section';
 
-  // Toolbar
   const toolbar = document.createElement('div');
   toolbar.style.cssText = 'display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;';
 
@@ -33,7 +32,6 @@ function _buildTools() {
     searchTimer = setTimeout(() => { _filterState.search = searchInput.value; _renderTable(_applyFilters(_allTools)); }, 200);
   });
 
-  // Category chips
   const catWrap = document.createElement('div');
   catWrap.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;';
   const allChip = _chip('All', true, () => {
@@ -51,7 +49,6 @@ function _buildTools() {
     catWrap.appendChild(chip);
   }
 
-  // Approval-only toggle
   const apprLabel = document.createElement('label');
   apprLabel.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--text-muted);';
   const apprCheck = document.createElement('input');
@@ -64,7 +61,6 @@ function _buildTools() {
   toolbar.appendChild(catWrap);
   toolbar.appendChild(apprLabel);
 
-  // Table card
   const tableCard = document.createElement('div');
   tableCard.className = 'card';
   tableCard.innerHTML = '<div class="card-head"><h3>Tools</h3><span class="section-action" id="__tools-count">Loading…</span></div><div class="card-body"><div class="table-wrap"><table class="data-table"><caption class="sr-only">MCP tool catalog</caption><thead><tr><th scope="col">Name</th><th scope="col">Category</th><th scope="col">Profile required</th><th scope="col">Approval</th><th scope="col"></th></tr></thead><tbody id="__tools-tbody"></tbody></table></div></div>';
@@ -91,10 +87,12 @@ function _applyFilters(tools) {
   return tools.filter(t => {
     if (_filterState.search) {
       const q = _filterState.search.toLowerCase();
-      if (!t.name.toLowerCase().includes(q) && !(t.description || '').toLowerCase().includes(q)) return false;
+      const name = String(t && t.name || '').toLowerCase();
+      const description = String(t && t.description || '').toLowerCase();
+      if (!name.includes(q) && !description.includes(q)) return false;
     }
-    if (_filterState.category && t.category !== _filterState.category) return false;
-    if (_filterState.approvalOnly && !t.requiresApproval) return false;
+    if (_filterState.category && String(t && t.category || '') !== _filterState.category) return false;
+    if (_filterState.approvalOnly && !(t && t.requiresApproval)) return false;
     return true;
   });
 }
@@ -105,17 +103,17 @@ function _renderTable(tools) {
   if (!tbody) return;
   if (countEl) countEl.textContent = tools.length + ' tools';
 
-  tbody.innerHTML = tools.map(t => `<tr style="cursor:pointer;" data-name="${esc(t.name)}">
-    <td class="mono" style="font-size:12px;">${esc(t.name)}</td>
-    <td><span class="badge">${esc(t.category)}</span></td>
-    <td><span class="badge ${t.requiredProfile === 'admin' ? 'warn' : ''}">${esc(t.requiredProfile)}</span></td>
-    <td>${t.requiresApproval ? '<span class="badge warn">requires approval</span>' : '<span style="color:var(--text-dim);">—</span>'}</td>
+  tbody.innerHTML = tools.map(t => `<tr style="cursor:pointer;" data-name="${esc(t && t.name)}">
+    <td class="mono" style="font-size:12px;">${esc(t && t.name)}</td>
+    <td><span class="badge">${esc(t && t.category)}</span></td>
+    <td><span class="badge ${String(t && t.requiredProfile || '') === 'admin' ? 'warn' : ''}">${esc(t && t.requiredProfile)}</span></td>
+    <td>${t && t.requiresApproval ? '<span class="badge warn">requires approval</span>' : '<span style="color:var(--text-dim);">—</span>'}</td>
     <td><button class="secondary" style="min-height:24px;padding:0 8px;font-size:11px;">▸</button></td>
   </tr>`).join('') || `<tr><td colspan="5"><div class="empty">No tools match your filters.</div></td></tr>`;
 
   tbody.querySelectorAll('tr[data-name]').forEach(row => {
     const name = row.dataset.name;
-    const tool = tools.find(t => t.name === name);
+    const tool = tools.find(t => String(t && t.name || '') === name);
     if (tool) row.onclick = () => _openDetail(tool);
   });
 }
@@ -127,12 +125,12 @@ function _openDetail(tool) {
   const meta = document.createElement('div');
   meta.style.cssText = 'display:grid;gap:8px;';
   meta.innerHTML = [
-    ['Category', tool.category],
-    ['Profile required', tool.requiredProfile],
-    ['Requires approval', tool.requiresApproval ? 'Yes' : 'No'],
-  ].map(([k, v]) => `<div style="display:flex;gap:10px;"><span style="color:var(--text-muted);min-width:130px;">${esc(k)}</span><span>${esc(String(v))}</span></div>`).join('');
+    ['Category', tool && tool.category],
+    ['Profile required', tool && tool.requiredProfile],
+    ['Requires approval', tool && tool.requiresApproval ? 'Yes' : 'No'],
+  ].map(([k, v]) => `<div style="display:flex;gap:10px;"><span style="color:var(--text-muted);min-width:130px;">${esc(k)}</span><span>${esc(String(v == null ? '' : v))}</span></div>`).join('');
 
-  if (tool.description) {
+  if (tool && tool.description) {
     const desc = document.createElement('p');
     desc.style.cssText = 'color:var(--text-muted);margin:0;';
     desc.textContent = tool.description;
@@ -140,7 +138,7 @@ function _openDetail(tool) {
   }
   content.appendChild(meta);
 
-  if (tool.parameters && tool.parameters.length) {
+  if (tool && tool.parameters && tool.parameters.length) {
     const params = document.createElement('div');
     params.innerHTML = '<div style="font-weight:700;margin-bottom:8px;">Parameters</div>';
     for (const p of tool.parameters) {
@@ -152,7 +150,8 @@ function _openDetail(tool) {
     content.appendChild(params);
   }
 
-  const template = `Run ${tool.name} with workspace="<alias>"`;
+  const toolName = String(tool && tool.name || 'tool');
+  const template = `Run ${toolName} with workspace="<alias>"`;
   const copyWrap = document.createElement('div');
   copyWrap.style.cssText = 'display:flex;gap:8px;align-items:flex-start;margin-top:4px;';
   const pre = document.createElement('pre');
@@ -167,7 +166,7 @@ function _openDetail(tool) {
   copyWrap.appendChild(copyBtn);
   content.appendChild(copyWrap);
 
-  openDrawer({ title: tool.name, content });
+  openDrawer({ title: toolName, content });
 }
 
 function _chip(label, active, onClick) {

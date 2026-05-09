@@ -18,8 +18,14 @@ export function mountActivity(container) {
 }
 
 export function prependEntry(entry) {
+  if (!entry || typeof entry !== 'object') return;
   if (_paused) return;
+  const key = _entryKey(entry);
+  if (key && _allEntries.some(item => _entryKey(item) === key)) return;
   _allEntries.unshift(entry);
+  if (_allEntries.length > 1000) {
+    _allEntries = _allEntries.slice(0, 1000);
+  }
   _renderTable(_applyFilters(_allEntries));
 }
 
@@ -174,4 +180,5 @@ function _openDetail(entry) {
 }
 
 function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
+function _entryKey(entry) { if (!entry) return ''; return entry.id || [entry.ts || entry.at || entry.createdAt || '', entry.tool || entry.type || '', entry.workspace || '', entry.message || entry.error || entry.path || ''].join('|'); }
 function _timeAgo(v) { const ts = Date.parse(String(v || '')); if (!Number.isFinite(ts)) return ''; const m = Math.floor(Math.max(0, Date.now() - ts) / 60000); if (m < 1) return 'now'; if (m < 60) return m + 'm ago'; const h = Math.floor(m / 60); return h < 24 ? h + 'h ago' : Math.floor(h / 24) + 'd ago'; }

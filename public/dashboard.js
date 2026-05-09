@@ -21,21 +21,42 @@ function readInitialPayload() {
   }
 }
 
+function ensureRouteRoot() {
+  const main = document.getElementById('main');
+  if (!main) return null;
+
+  let routeRoot = document.getElementById('routeRoot');
+  if (routeRoot) return routeRoot;
+
+  routeRoot = document.createElement('div');
+  routeRoot.id = 'routeRoot';
+  routeRoot.className = 'route-root';
+
+  const persistent = Array.from(main.children);
+  for (const node of persistent) {
+    const keep = node.classList.contains('mobile-nav') || node.classList.contains('topbar');
+    if (!keep) node.remove();
+  }
+
+  main.appendChild(routeRoot);
+  return routeRoot;
+}
+
 async function boot() {
   const initial = readInitialPayload();
   initStore(initial || {});
 
-  const main = document.getElementById('main');
-  if (!main) return;
+  const routeRoot = ensureRouteRoot();
+  if (!routeRoot) return;
 
   const sections = _sectionMap();
   _buildNav();
-  initRouter(main, sections);
+  initRouter(routeRoot, sections);
 
   const fresh = await fetchJson('/api/dashboard/v10?limit=100&requireHttpToken=0');
   if (fresh) {
     initStore(fresh);
-    _renderCurrentSection(main, currentSection(), sections);
+    _renderCurrentSection(routeRoot, currentSection(), sections);
   }
 
   _wireTopControls();
@@ -120,14 +141,17 @@ function _wireTopControls() {
 
 function _renderCurrentSection(main, id, sections) {
   const fn = sections[id] || sections.home;
-  if (main && fn) { main.innerHTML = ''; fn(main); }
+  if (main && fn) {
+    main.innerHTML = '';
+    fn(main);
+  }
 }
 
 async function _doRefresh() {
   const data = await fetchJson('/api/dashboard/v10?limit=100&requireHttpToken=0');
   if (data) {
     initStore(data);
-    _renderCurrentSection(document.getElementById('main'), currentSection(), _sectionMap());
+    _renderCurrentSection(ensureRouteRoot(), currentSection(), _sectionMap());
   }
 }
 
@@ -139,12 +163,19 @@ function _toggleLive() {
   } else {
     initEvents(async (data) => {
       initStore(data);
-      const main = document.getElementById('main');
+      const routeRoot = ensureRouteRoot();
       const id = currentSection();
-      if (main && id === 'home') mountHome(main, getStore());
-      if (main && id === 'activity') import('/ui/sections/activity.js').then(m => m.mountActivity(main)).catch(console.error);
-      if (main && id === 'workspaces') import('/ui/sections/workspaces.js').then(m => m.mountWorkspaces(main, getStore())).catch(console.error);
-      if (main && id === 'agents') import('/ui/sections/agents.js').then(m => m.mountAgents(main, getStore())).catch(console.error);
+      if (!routeRoot) return;
+
+      if (['home', 'overview', 'workspaces', 'agents'].includes(id)) {
+        _renderCurrentSection(routeRoot, id, _sectionMap());
+      }
+
+      if (id === 'activity') {
+        import('/ui/sections/activity.js')
+          .then(m => m.prependEntry((data.auditTail && data.auditTail.entries && data.auditTail.entries[0]) || null))
+          .catch(console.error);
+      }
     });
     startSSE(getToken);
     if (btn) btn.textContent = 'Stop live';

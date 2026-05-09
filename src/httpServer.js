@@ -672,12 +672,13 @@ function renderDashboardHtml(options) {
         <input id="token" type="password" placeholder="Dashboard token" autocomplete="off" spellcheck="false">
         <button id="refreshBtn" type="button">Refresh</button>
         <button class="secondary" id="liveBtn">Start live</button>
+        <span class="section-action" id="lastUpdated">Server-rendered</span>
         <button class="secondary" id="rawToggleBtn">View API response</button>
       </div>
     </header>
 
     <section class="section" id="overview">
-      <div class="section-head"><div><h2>Overview</h2><p>Live counts from sessions, jobs, approvals, locks, health, and readiness.</p></div><span class="section-action" id="lastUpdated">Server-rendered</span></div>
+      <div class="section-head"><div><h2>Overview</h2><p>Live counts from sessions, jobs, approvals, locks, health, and readiness.</p></div></div>
       <div class="overview-grid" id="metrics"></div>
     </section>
 
@@ -747,7 +748,7 @@ function renderDashboardHtml(options) {
         <div class="card-head"><h3>Session diff</h3><span class="section-action">safe read-only endpoint</span></div>
         <div class="card-body utility-grid">
           <div class="field-row"><label for="workspace" class="sr-only">Workspace alias</label><input id="workspace" placeholder="workspace alias" value=""></div>
-          <div class="field-row"><label for="sessionId" class="sr-only">Session ID</label><input id="sessionId" placeholder="session id"><button onclick="void 0">Load diff</button></div>
+          <div class="field-row"><label for="sessionId" class="sr-only">Session ID</label><input id="sessionId" placeholder="session id"><button disabled title="Open Settings Diagnostics for this action">Load diff</button></div>
         </div>
         <div class="card-body diff-panel"><pre id="diffOut">No diff loaded.</pre></div>
       </div>
@@ -755,9 +756,9 @@ function renderDashboardHtml(options) {
         <div class="card-head"><h3>Maintenance views</h3><span class="section-action">no write actions</span></div>
         <div class="card-body">
           <div class="setup-steps">
-            <button class="secondary" onclick="void 0">Load health monitor</button>
-            <button class="secondary" onclick="void 0">Load readiness</button>
-            <button class="secondary" onclick="void 0">Load audit tail</button>
+            <button class="secondary" disabled title="Open Settings Diagnostics for this action">Load health monitor</button>
+            <button class="secondary" disabled title="Open Settings Diagnostics for this action">Load readiness</button>
+            <button class="secondary" disabled title="Open Settings Diagnostics for this action">Load audit tail</button>
           </div>
         </div>
         <div class="card-body diff-panel"><pre id="maintenanceOut">Choose a diagnostic view.</pre></div>

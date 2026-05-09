@@ -21,7 +21,7 @@ function _buildHome(data) {
   const counts = data.counts || {};
   const locks = Array.isArray(data.locks) ? data.locks : [];
 
-  const openApprovals = approvals.filter(x => !['approved', 'denied', 'resolved', 'cancelled'].includes(String(x.status || '').toLowerCase()));
+  const openApprovals = approvals.filter(x => !['approved', 'rejected', 'cancelled'].includes(String(x.status || '').toLowerCase()));
   const activeSessions = sessions.filter(x => !['completed', 'closed', 'cancelled', 'failed'].includes(String(x.status || '').toLowerCase()));
   const runningJobs = jobs.filter(x => ['running', 'cancelling', 'queued'].includes(String(x.status || '').toLowerCase()));
 
@@ -29,7 +29,6 @@ function _buildHome(data) {
   root.className = 'section';
   root.style.gap = '16px';
 
-  // Topbar subtitle (topbar is outside <main>, still in DOM)
   const subtitle = document.getElementById('subtitle');
   if (subtitle) subtitle.textContent = 'Rel.AI MCP' + (cfg.permissionProfile ? ' · ' + cfg.permissionProfile + ' profile' : '') + ' · ' + (Array.isArray(cfg.workspaces) ? cfg.workspaces.length : 0) + ' workspaces';
   const updated = document.getElementById('lastUpdated');
@@ -37,7 +36,6 @@ function _buildHome(data) {
   const statusEl = document.getElementById('serverStatus');
   if (statusEl) { statusEl.className = 'status-pill ' + (data.ok ? 'ok' : 'bad'); statusEl.textContent = data.ok ? 'Online' : 'Error'; }
 
-  // Health warning above fold
   if (health.ok === false && findings.length) {
     const healthBanner = document.createElement('div');
     healthBanner.style.cssText = 'padding:12px 14px;border:1px solid rgba(255,102,128,.35);border-radius:12px;background:rgba(255,102,128,.08);color:#ffb3c0;font-size:13px;display:flex;gap:10px;align-items:flex-start;';
@@ -45,7 +43,6 @@ function _buildHome(data) {
     root.appendChild(healthBanner);
   }
 
-  // Pending approvals card
   if (openApprovals.length) {
     const apprCard = document.createElement('div');
     apprCard.className = 'card';
@@ -79,7 +76,6 @@ function _buildHome(data) {
     root.appendChild(apprCard);
   }
 
-  // Metrics grid
   const metricsGrid = document.createElement('div');
   metricsGrid.className = 'overview-grid';
   metricsGrid.innerHTML =
@@ -91,7 +87,6 @@ function _buildHome(data) {
     _metric('Readiness', readiness.score != null ? readiness.score : '—', readiness.ok === false ? 'review needed' : 'release check', readiness.ok === false ? 'warn' : 'good');
   root.appendChild(metricsGrid);
 
-  // Live work + Recent activity (two-column)
   const lowerGrid = document.createElement('div');
   lowerGrid.className = 'layout-grid';
 
@@ -143,6 +138,6 @@ async function _decideApproval(id, status, rowEl) {
 function _metric(label, value, meta, type) { return `<div class="metric ${type || ''}"><div class="metric-label">${esc(label)}</div><div class="metric-value">${esc(value)}</div><div class="metric-meta">${esc(meta || '')}</div></div>`; }
 function _listItem(title, sub, time, state) { const c = _cls(state || 'ok'); return `<div class="list-item"><span class="dot ${c === 'ok' ? '' : c}"></span><div><div class="item-title">${esc(title)}</div><div class="item-sub">${esc(sub || '')}</div></div><div class="item-time">${esc(time || '')}</div></div>`; }
 function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
-function _cls(v) { const s = String(v || '').toLowerCase(); return s.includes('fail') || s.includes('error') || s.includes('denied') || s === 'false' ? 'bad' : s.includes('pending') || s.includes('run') || s.includes('warn') || s.includes('active') ? 'warn' : 'ok'; }
+function _cls(v) { const s = String(v || '').toLowerCase(); return s.includes('fail') || s.includes('error') || s.includes('rejected') || s === 'false' ? 'bad' : s.includes('pending') || s.includes('run') || s.includes('warn') || s.includes('active') ? 'warn' : 'ok'; }
 function short(v) { const s = String(v || ''); return s.length > 20 ? s.slice(0, 10) + '…' + s.slice(-5) : s; }
 function timeAgo(v) { const ts = Date.parse(String(v || '')); if (!Number.isFinite(ts)) return ''; const m = Math.floor(Math.max(0, Date.now() - ts) / 60000); if (m < 1) return 'now'; if (m < 60) return m + 'm ago'; const h = Math.floor(m / 60); return h < 24 ? h + 'h ago' : Math.floor(h / 24) + 'd ago'; }

@@ -31,8 +31,8 @@ function _renderApprovals(approvals) {
   const list = document.getElementById('__approvals-list');
   if (!list) return;
 
-  const pending = approvals.filter(x => !['approved', 'denied', 'resolved', 'cancelled'].includes(String(x.status || '').toLowerCase()));
-  const resolved = approvals.filter(x => ['approved', 'denied', 'resolved', 'cancelled'].includes(String(x.status || '').toLowerCase()));
+  const pending = approvals.filter(x => !['approved', 'rejected', 'cancelled'].includes(String(x.status || '').toLowerCase()));
+  const resolved = approvals.filter(x => ['approved', 'rejected', 'cancelled'].includes(String(x.status || '').toLowerCase()));
 
   if (!approvals.length) {
     list.innerHTML = '<div class="empty">No approval requests yet. Approvals appear when a tool requires explicit permission.</div>';

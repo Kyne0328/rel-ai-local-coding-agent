@@ -19,7 +19,7 @@ function _buildAgents(data) {
   const cfg = data.config || {};
   const roles = ((cfg.multiAgent && Array.isArray(cfg.multiAgent.defaultRoles)) ? cfg.multiAgent.defaultRoles : ['planner', 'implementer', 'tester', 'reviewer']).map(String);
 
-  const openApprovals = approvals.filter(x => !['approved', 'rejected', 'denied', 'resolved', 'cancelled'].includes(String(x.status || '').toLowerCase()));
+  const openApprovals = approvals.filter(x => !['approved', 'rejected', 'cancelled'].includes(String(x.status || '').toLowerCase()));
   const activeSessions = sessions.filter(x => !['completed', 'closed', 'cancelled', 'failed'].includes(String(x.status || '').toLowerCase()));
   const runningJobs = jobs.filter(x => ['running', 'cancelling', 'queued'].includes(String(x.status || '').toLowerCase()));
 
