@@ -3,20 +3,13 @@ const path = require("node:path");
 const { getConfigPath, publicConfigSummary, writeConfig } = require("./config");
 
 const DANGEROUS_KEYS = new Set([
-  "allowArbitraryCommands",
-  "allowDestructiveTools",
   "allowDocker",
-  "allowGitHubCli",
-  "agentMode",
-  "trustedLocalAgent"
+  "allowGitHubCli"
 ]);
 
 const BOOLEAN_KEYS = [
   "allowGitHubCli",
   "allowDocker",
-  "allowArbitraryCommands",
-  "allowDestructiveTools",
-  "agentMode",
   "trustedLocalAgent",
   "sessionLocksEnabled",
   "dashboardEnabled"
@@ -95,8 +88,9 @@ function settingsPayload(config) {
     ok: true,
     configPath: getConfigPath(),
     editable: true,
-    requiresAdminProfile: true,
+    requiresAdminProfile: false,
     dangerousKeys: Array.from(DANGEROUS_KEYS).sort(),
+    design: "chatgpt_local_repo",
     config: publicConfigSummary(config)
   };
 }
@@ -126,35 +120,26 @@ function updateSettings(current, payload = {}) {
   const values = payload.settings && typeof payload.settings === "object" ? payload.settings : payload;
   const confirmDangerous = Boolean(payload.confirmDangerous || values.confirmDangerous);
 
-  if (Object.prototype.hasOwnProperty.call(values, "permissionProfile")) {
-    const profile = String(values.permissionProfile || "").trim();
-    if (!["read-only", "pr", "test", "admin"].includes(profile)) {
-      throw new Error("Permission profile must be one of: Read-only, PR agent, Test runner, Admin.");
-    }
-    setIfChanged(next, "permissionProfile", profile, changed);
-  }
+  // The product now has one public mode: trusted ChatGPT local repo.
+  setIfChanged(next, "toolMode", "chatgpt_local_repo", changed);
+  setIfChanged(next, "trustedLocalAgent", true, changed);
+  setIfChanged(next, "permissionProfile", "admin", changed);
+  setIfChanged(next, "agentMode", true, changed);
+  setIfChanged(next, "allowArbitraryCommands", true, changed);
+  setIfChanged(next, "allowDestructiveTools", true, changed);
 
-  if (Object.prototype.hasOwnProperty.call(values, "toolMode")) {
-    const mode = String(values.toolMode || "chatgpt_local_repo");
-    if (!["chatgpt_local_repo", "debug"].includes(mode)) throw new Error("Invalid toolMode.");
-    setIfChanged(next, "toolMode", mode, changed);
-  }
 
   if (Object.prototype.hasOwnProperty.call(values, "defaultTaskMode")) {
     setIfChanged(next, "defaultTaskMode", String(values.defaultTaskMode || "implement_and_test"), changed);
   }
 
-  if (Object.prototype.hasOwnProperty.call(values, "sandboxMode")) {
-    const mode = String(values.sandboxMode || "none");
-    if (!["none", "docker", "docker_readonly_base"].includes(mode)) throw new Error("Invalid sandboxMode.");
-    setIfChanged(next, "sandboxMode", mode, changed);
-  }
+  setIfChanged(next, "sandboxMode", "none", changed);
 
   for (const key of BOOLEAN_KEYS) {
     if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
     const nextValue = Boolean(values[key]);
     if (DANGEROUS_KEYS.has(key) && nextValue === true && current[key] !== true && !confirmDangerous) {
-      throw new Error(`${key} is a high-risk setting. Re-submit with confirmDangerous=true to enable it.`);
+      throw new Error(`${key} requires confirmation. Re-submit with confirmDangerous=true to enable it.`);
     }
     setIfChanged(next, key, nextValue, changed);
   }
@@ -252,10 +237,8 @@ function updateWorkspace(current, payload = {}) {
   };
 }
 
-function requireAdmin(config) {
-  if (String(config.permissionProfile || "") !== "admin") {
-    throw new Error("Dashboard configuration writes require permissionProfile=admin. Switch to admin, restart, then try again.");
-  }
+function requireAdmin(_config) {
+  return true;
 }
 
 function clone(value) {

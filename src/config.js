@@ -20,14 +20,14 @@ function makeDefaultConfig() {
     maxConcurrentSessionsPerWorkspace: 4,
     sessionLocksEnabled: true,
     worktreeRoot: path.join(os.homedir(), ".rel-ai-mcp", "worktrees"),
-    permissionProfile: "admin",
     toolMode: "chatgpt_local_repo",
     trustedLocalAgent: true,
     allowGitHubCli: false,
     allowDocker: false,
     allowArbitraryCommands: true,
     allowDestructiveTools: true,
-    agentMode: false,
+    agentMode: true,
+    permissionProfile: "admin",
     approvalGates: {
       commit: false,
       push: true,
@@ -59,13 +59,13 @@ function makeDefaultConfig() {
     sandboxMode: "none",
     multiAgent: {
       enabled: false,
-      maxSubtasks: 12,
-      maxParallelSubtasks: 3,
-      requireReviewBeforeMerge: true,
-      defaultRoles: ["planner", "implementer", "tester", "reviewer"]
+      maxSubtasks: 1,
+      maxParallelSubtasks: 1,
+      requireReviewBeforeMerge: false,
+      defaultRoles: []
     },
     scheduler: {
-      enabled: true,
+      enabled: false,
       maxRetries: 1,
       stopOnFailure: true
     },
@@ -146,23 +146,24 @@ function normalizeConfig(config) {
   if (!path.isAbsolute(next.auditLogPath)) next.auditLogPath = path.resolve(next.auditLogPath);
   next.worktreeRoot = expandHome(next.worktreeRoot || path.join(next.stateDir, "worktrees"));
   if (!path.isAbsolute(next.worktreeRoot)) next.worktreeRoot = path.resolve(next.worktreeRoot);
-  next.permissionProfile = String(next.permissionProfile || "admin");
-  next.toolMode = normalizeToolMode(next.toolMode || base.toolMode);
-  next.trustedLocalAgent = next.trustedLocalAgent !== false;
+  next.toolMode = "chatgpt_local_repo";
+  next.trustedLocalAgent = true;
+  next.permissionProfile = "admin";
 
   for (const key of ["maxOutputBytes", "maxSessionSteps", "maxPlanSteps", "maxIndexFiles", "maxConcurrentSessionsPerWorkspace"]) {
     if (!Number.isFinite(next[key]) || next[key] <= 0) next[key] = base[key];
   }
   next.allowGitHubCli = Boolean(next.allowGitHubCli);
   next.allowDocker = Boolean(next.allowDocker);
-  next.allowArbitraryCommands = Boolean(next.allowArbitraryCommands);
-  next.allowDestructiveTools = Boolean(next.allowDestructiveTools);
-  next.agentMode = Boolean(next.agentMode);
+  next.allowArbitraryCommands = true;
+  next.allowDestructiveTools = true;
+  next.agentMode = true;
   next.sessionLocksEnabled = next.sessionLocksEnabled !== false;
   next.dashboardEnabled = next.dashboardEnabled !== false;
   next.defaultTaskMode = String(next.defaultTaskMode || base.defaultTaskMode);
   next.sandboxMode = ["none", "docker", "docker_readonly_base"].includes(String(next.sandboxMode)) ? String(next.sandboxMode) : "none";
   next.multiAgent = { ...base.multiAgent, ...((config && config.multiAgent) || {}) };
+  next.multiAgent.enabled = false;
   next.multiAgent.maxSubtasks = Math.min(Math.max(Number(next.multiAgent.maxSubtasks || base.multiAgent.maxSubtasks), 1), 50);
   next.multiAgent.maxParallelSubtasks = Math.min(Math.max(Number(next.multiAgent.maxParallelSubtasks || base.multiAgent.maxParallelSubtasks), 1), 20);
   next.multiAgent.defaultRoles = Array.isArray(next.multiAgent.defaultRoles) ? next.multiAgent.defaultRoles.map(String).slice(0, 20) : base.multiAgent.defaultRoles;
@@ -177,18 +178,17 @@ function normalizeConfig(config) {
   next.release.minimumReadinessScore = Math.min(Math.max(Number(next.release.minimumReadinessScore || base.release.minimumReadinessScore), 0), 100);
   next.release.connectorProbeTimeoutMs = Math.min(Math.max(Number(next.release.connectorProbeTimeoutMs || base.release.connectorProbeTimeoutMs), 500), 60000);
   next.approvalGates = { ...base.approvalGates, ...((config && config.approvalGates) || {}) };
-  if (next.agentMode || next.trustedLocalAgent) {
-    next.allowArbitraryCommands = true;
-    next.allowDestructiveTools = true;
-    next.permissionProfile = "admin";
-    next.approvalGates = Object.fromEntries(Object.keys(next.approvalGates).map((k) => [k, false]));
-    next.taskRunner = {
-      ...next.taskRunner,
-      requireApprovalBeforeCommit: false,
-      requireApprovalBeforePush: false,
-      requireApprovalBeforePr: false
-    };
-  }
+  next.allowArbitraryCommands = true;
+  next.allowDestructiveTools = true;
+  next.permissionProfile = "admin";
+  next.agentMode = true;
+  next.approvalGates = Object.fromEntries(Object.keys(next.approvalGates).map((k) => [k, false]));
+  next.taskRunner = {
+    ...next.taskRunner,
+    requireApprovalBeforeCommit: false,
+    requireApprovalBeforePush: false,
+    requireApprovalBeforePr: false
+  };
 
   for (const [alias, workspace] of Object.entries(next.workspaces)) {
     next.workspaces[alias] = normalizeWorkspace(workspace || {});
@@ -216,9 +216,7 @@ function normalizeWorkspace(workspace) {
   };
 }
 
-function normalizeToolMode(value) {
-  const mode = String(value || "chatgpt_local_repo").trim();
-  if (mode === "debug") return "debug";
+function normalizeToolMode(_value) {
   return "chatgpt_local_repo";
 }
 
@@ -272,7 +270,14 @@ function publicConfigSummary(config) {
     allowDestructiveTools: Boolean(config.allowDestructiveTools),
     agentMode: Boolean(config.agentMode),
     toolMode: normalizeToolMode(config.toolMode || "chatgpt_local_repo"),
-    trustedLocalAgent: Boolean(config.trustedLocalAgent),
+    trustedLocalAgent: true,
+    localRepoBridge: {
+      mode: "trusted",
+      visibleTools: ["relai_repo_snapshot", "relai_read", "relai_write", "relai_shell", "relai_verify", "relai_browser", "relai_diff", "relai_reset"],
+      shellAccess: true,
+      writeAccess: true,
+      approvalGatesBypassed: true
+    },
     approvalGates: config.approvalGates,
     dashboardEnabled: Boolean(config.dashboardEnabled),
     defaultTaskMode: config.defaultTaskMode,

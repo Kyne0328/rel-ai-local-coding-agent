@@ -28,8 +28,8 @@ function buildWorkspaces(data) {
     <div class="overview-grid">
       ${metricHtml('Workspaces', workspaces.length, 'configured aliases', 'blue')}
       ${metricHtml('Validation ready', validationReady + '/' + workspaces.length, 'configured or auto-detected', validationReady === workspaces.length ? 'good' : 'warn')}
-      ${metricHtml('Health findings', Array.isArray(health.findings) ? health.findings.length : 0, health.ok === false ? 'needs attention' : 'all clear', health.ok === false ? 'bad' : 'good')}
-      ${metricHtml('Mode', cfg.toolMode === 'debug' ? 'debug' : 'ChatGPT', cfg.toolMode === 'debug' ? 'all tools visible' : '8 bridge tools', cfg.toolMode === 'debug' ? 'warn' : 'good')}
+      ${metricHtml('Health findings', actionableFindings(health).length, health.ok === false ? 'needs attention' : 'all clear', health.ok === false ? 'bad' : 'good')}
+      ${metricHtml('ChatGPT tools', '8', 'local bridge', 'good')}
     </div>
   `;
 
@@ -38,7 +38,7 @@ function buildWorkspaces(data) {
   grid.innerHTML = workspaces.length ? workspaces.map(ws => workspaceCard(ws, healthByAlias.get(ws.alias))).join('') : '<div class="empty">No workspaces configured.</div>';
   root.appendChild(grid);
 
-  const findings = Array.isArray(health.findings) ? health.findings : [];
+  const findings = actionableFindings(health);
   if (findings.length) {
     const card = document.createElement('div');
     card.className = 'card';
@@ -148,4 +148,8 @@ async function saveDetectedTests(alias) {
 
 function preflightOutput(alias) {
   return Array.from(document.querySelectorAll('[data-preflight-out]')).find(el => el.getAttribute('data-preflight-out') === alias) || null;
+}
+
+function actionableFindings(health) {
+  return Array.isArray(health.findings) ? health.findings.filter(f => f.severity !== 'info') : [];
 }

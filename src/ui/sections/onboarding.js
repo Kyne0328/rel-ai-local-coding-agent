@@ -103,29 +103,8 @@ function _renderStep(step, content, nextBtn, skipBtn) {
       _step++; _showStep();
     };
   } else if (step === 2) {
-    content.innerHTML = '<h3 style="margin:0;font-size:15px;">Permission profile</h3><p style="font-size:13px;color:var(--text-muted);">Controls what ChatGPT can do in your workspaces.</p>';
-    const profiles = [
-      { id: 'read-only', label: 'Read-only', desc: "Look but don't touch — no file changes." },
-      { id: 'pr', label: 'PR agent (recommended)', desc: 'Can edit code, commit, and open PRs. Never pushes to main.' },
-      { id: 'test', label: 'Test runner', desc: 'PR level plus ability to run test commands.' },
-      { id: 'admin', label: 'Admin', desc: 'Full access including dashboard settings.' },
-    ];
-    const selected = { value: 'pr' };
-    for (const p of profiles) {
-      const card = document.createElement('label');
-      card.style.cssText = `display:flex;gap:12px;align-items:flex-start;padding:12px;border:1px solid ${p.id === 'pr' ? 'rgba(78,161,255,.4)' : 'var(--line-soft)'};border-radius:10px;cursor:pointer;font-size:13px;background:${p.id === 'pr' ? 'rgba(78,161,255,.06)' : 'transparent'};`;
-      const radio = document.createElement('input');
-      radio.type = 'radio'; radio.name = 'profile'; radio.value = p.id; radio.checked = p.id === 'pr';
-      radio.addEventListener('change', () => {
-        selected.value = p.id;
-        content.querySelectorAll('label').forEach(l => { l.style.borderColor = 'var(--line-soft)'; l.style.background = 'transparent'; });
-        card.style.borderColor = 'rgba(78,161,255,.4)'; card.style.background = 'rgba(78,161,255,.06)';
-      });
-      card.innerHTML = `<div><div style="font-weight:700;">${p.label}</div><div style="color:var(--text-muted);font-size:12px;margin-top:3px;">${p.desc}</div></div>`;
-      card.prepend(radio);
-      content.appendChild(card);
-    }
-    nextBtn.onclick = async () => { _data.profile = selected.value; _step++; _showStep(); };
+    content.innerHTML = '<h3 style="margin:0;font-size:15px;">Trusted local bridge</h3><p style="font-size:13px;color:var(--text-muted);line-height:1.5;">Rel.AI is now designed for one thing: connect ChatGPT to your local repo like an uploaded zip, with local shell, write, verify, diff, and reset access inside configured workspaces.</p><div class="empty" style="text-align:left;padding:12px;">No permission profile setup is needed. Approval gates and command allowlists are not part of the normal ChatGPT-local workflow.</div>';
+    nextBtn.onclick = async () => { _data.profile = 'admin'; _step++; _showStep(); };
   } else if (step === 3) {
     content.innerHTML = '<h3 style="margin:0;font-size:15px;">Connect ChatGPT</h3>';
     _withConnection(content, true);

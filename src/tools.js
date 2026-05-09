@@ -674,10 +674,10 @@ async function dispatchTool(config, name, args) {
       return withWorkspace(config, args, (workspace) => taskRunner.repoTestSuggestions(config, workspace, args));
 
     case "relai_apply_patch":
-      approvals.requireApproval(config, "patch", args);
+      if (!config.trustedLocalAgent) approvals.requireApproval(config, "patch", args);
       return withWorkspace(config, args, (workspace) => applyPatch(workspace, config, args.diff, { dryRun: Boolean(args.dryRun) }));
     case "relai_apply_patch_and_run":
-      approvals.requireApproval(config, "patch", args);
+      if (!config.trustedLocalAgent) approvals.requireApproval(config, "patch", args);
       return recordMaybe(config, args, "patch_and_test", async (workspace) => applyPatchAndRun(workspace, config, args));
     case "relai_run_test":
       return recordMaybe(config, args, "test", async () => runTest(config, args));
@@ -789,60 +789,13 @@ function versionInfo(config = {}) {
     transports: ["stdio", "streamable-http", "sse"],
     toolCount: getToolSchemas(config || {}).length,
     capabilities: [
-      "workspace tree/search/read/write",
-      "task sessions",
-      "audit log",
-      "patch check/apply",
-      "test matrix",
-      "configured command runner",
-      "git branch/diff/log/commit/push",
-      "GitHub CLI PR creation/checks",
-      "worktree-per-task isolation",
-      "background job queue",
-      "Docker sandbox hooks",
-      "CI check watcher",
-      "permission profiles",
-      "task worktree reset/remove",
-      "persistent implementation plans",
-      "approval gates",
-      "repository indexing",
-      "issue-to-PR bootstrap",
-      "CI repair snapshots",
-      "cooperative workspace locks",
-      "dashboard summary",
-      "high-level task runner",
-      "task execution modes",
-      "CI watch and repair loop",
-      "session diff/export tools",
-      "repository relevance and test suggestion tools",
-      "approval grant/deny aliases",
-      "multi-agent task splitting",
-      "agent subtask sessions and worktrees",
-      "subtask dependency graph",
-      "changed-file conflict detection",
-      "review-agent diff and PR summaries",
-      "subtask merge-back preflight",
-      "dependency-aware multi-agent scheduler",
-      "merge coordinator",
-      "local repository memory",
-      "review risk scoring",
-      "workspace snapshots and rollback",
-      "semantic-ish local search",
-      "PR requested-changes workflow",
-      "doctor checks",
-      "policy evaluation",
-      "rich dashboard data and live audit logs",
-      "health monitoring and stale-state detection",
-      "cleanup preview/run workflows",
-      "doctor --fix style line-ending normalization",
-      "setup wizard and original Rel.AI config import",
-      "state export/import for backups",
-      "release readiness scoring",
-      "ChatGPT connector validation",
-      "workspace preflight checks",
-      "config migration planning",
-      "release manifests and release notes",
-      "deterministic text edits without hand-written diffs (relai_edit_file)"
+      "ChatGPT local repo bridge",
+      "zip-like repository snapshot and batch file reads",
+      "deterministic structured file writes",
+      "unrestricted trusted local shell inside configured workspaces",
+      "auto-detected validation commands",
+      "browser/UI check bridge",
+      "git diff review and rollback"
     ]
   };
 }
@@ -891,6 +844,8 @@ function workspaceInspect(config, args = {}) {
       },
       nextSuggestedTools: [
         "relai_read_files",
+  "relai_write_file",
+  "relai_edit_file",
         "relai_context_pack",
         "relai_task_start",
         "relai_task_run"
@@ -1131,19 +1086,9 @@ const CHATGPT_LOCAL_REPO_TOOLS = new Set([
   "relai_reset"
 ]);
 
-const DEVELOPER_EXTRA_TOOLS = new Set([
-  "relai_version",
-  "relai_config",
-  "relai_workspace_list",
-  "relai_workspace_inspect",
-  "relai_workspace_tree",
-  "relai_workspace_profile",
-  "relai_search",
-  "relai_context_pack",
-  "relai_git_status",
-  "relai_git_log",
-  "relai_git_show"
-]);
+// Legacy tool groups are intentionally not exposed. Some older ChatGPT connector
+// runs may still call them from cached schemas, so selected calls remain callable
+// as compatibility aliases until the connector refreshes.
 
 // Compatibility tools stay callable in ChatGPT local repo mode so older connector
 // prompts/runs do not dead-end after tool list simplification. They are not
@@ -1158,6 +1103,8 @@ const CHATGPT_LOCAL_REPO_COMPAT_CALLABLE_TOOLS = new Set([
   "relai_workspace_tree",
   "relai_workspace_profile",
   "relai_read_files",
+  "relai_write_file",
+  "relai_edit_file",
   "relai_search",
   "relai_context_pack",
   "relai_repo_profile",
@@ -1167,15 +1114,15 @@ const CHATGPT_LOCAL_REPO_COMPAT_CALLABLE_TOOLS = new Set([
   "relai_git_diff",
   "relai_git_log",
   "relai_git_show",
+  "relai_apply_patch",
+  "relai_apply_patch_and_run",
   "relai_run_test",
   "relai_run_test_matrix",
   "relai_run_command",
   "relai_task_run"
 ]);
 
-function getToolSchemas(config = {}) {
-  const mode = String(config.toolMode || "chatgpt_local_repo");
-  if (mode === "debug") return allToolSchemas;
+function getToolSchemas(_config = {}) {
   return allToolSchemas.filter((tool) => CHATGPT_LOCAL_REPO_TOOLS.has(tool.name));
 }
 
@@ -1184,8 +1131,6 @@ function isToolVisible(config = {}, name) {
 }
 
 function isToolCallable(config = {}, name) {
-  const mode = String(config.toolMode || "chatgpt_local_repo");
-  if (mode === "debug") return allToolSchemas.some((tool) => tool.name === name);
   if (isToolVisible(config, name)) return true;
   return CHATGPT_LOCAL_REPO_COMPAT_CALLABLE_TOOLS.has(name);
 }

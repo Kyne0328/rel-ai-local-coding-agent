@@ -1,17 +1,15 @@
-// Settings section — simplified ChatGPT-local-repo settings
+// Settings section — ChatGPT local repo bridge settings only
 import { mountGeneral } from './general.js';
 import { mountConnector } from './connector.js';
 import { mountDiagnostics } from './diagnostics.js';
-import { mountAdvanced } from './advanced.js';
 
 const SUB_PAGES = [
   { id: 'general', label: 'General', mount: mountGeneral },
   { id: 'connector', label: 'Connector', mount: mountConnector },
   { id: 'diagnostics', label: 'Diagnostics', mount: mountDiagnostics },
-  { id: 'advanced', label: 'Advanced', mount: mountAdvanced },
 ];
 
-const LEGACY_REDIRECTS = { permissions: 'general', 'approval-gates': 'advanced' };
+const LEGACY_REDIRECTS = { permissions: 'general', 'approval-gates': 'general', advanced: 'general' };
 let _currentSubPage = 'general';
 
 export function mountSettings(container, subPageId = 'general') {

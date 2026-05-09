@@ -649,18 +649,16 @@ function renderDashboardHtml(options) {
   <aside class="sidebar">
     <div class="brand"><div class="logo">R</div><div><strong>Rel.AI MCP</strong><span>local agent control</span></div></div>
     <nav class="nav">
-      <a class="active" href="#overview">Overview</a>
+      <a class="active" href="#home">Home</a>
       <a href="#workspaces">Workspaces</a>
       <a href="#activity">Activity</a>
-      <a href="#agents">Agents</a>
-      <a href="#connector">ChatGPT setup</a>
-      <a href="#diagnostics">Diagnostics</a>
+      <a href="#settings">Settings</a>
     </nav>
     <div class="sidebar-note">This dashboard mirrors live MCP state.</div>
   </aside>
   <main id="main" class="main">
     <div class="mobile-nav">
-      <a href="#overview">Overview</a><a href="#workspaces">Workspaces</a><a href="#activity">Activity</a><a href="#agents">Agents</a><a href="#connector">Connector</a><a href="#diagnostics">Diagnostics</a>
+      <a href="#home">Home</a><a href="#workspaces">Workspaces</a><a href="#activity">Activity</a><a href="#settings">Settings</a>
     </div>
     <header class="topbar">
       <div class="title-wrap">
@@ -679,7 +677,7 @@ function renderDashboardHtml(options) {
     </header>
 
     <section class="section" id="overview">
-      <div class="section-head"><div><h2>Overview</h2><p>Live counts from sessions, jobs, approvals, locks, health, and readiness.</p></div></div>
+      <div class="section-head"><div><h2>Overview</h2><p>ChatGPT local repo bridge overview.</p></div></div>
       <div class="overview-grid" id="metrics"></div>
     </section>
 
@@ -713,21 +711,6 @@ function renderDashboardHtml(options) {
       <div class="card">
         <div class="card-head"><h3>Jobs</h3><span class="section-action" id="jobCount">0</span></div>
         <div class="card-body"><div class="list" id="jobsList"></div></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><h3>Approvals</h3><span class="section-action" id="approvalCount">0</span></div>
-        <div class="card-body"><div class="list" id="approvalsList"></div></div>
-      </div>
-    </section>
-
-    <section class="layout-grid" id="agents">
-      <div class="card">
-        <div class="card-head"><h3>Agent roles</h3><span class="section-action" id="agentCount">0 roles</span></div>
-        <div class="card-body"><div class="agent-grid" id="agentGrid"></div></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><h3>Health findings</h3><span class="section-action" id="findingCount">0 findings</span></div>
-        <div class="card-body"><div class="list" id="healthList"></div></div>
       </div>
     </section>
 

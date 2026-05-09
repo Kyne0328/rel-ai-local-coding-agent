@@ -339,8 +339,15 @@ function defaultSteps(mode, args) {
 }
 
 function normalizeMode(mode) {
-  const value = String(mode || "").trim() || "implement_and_test";
-  if (!TASK_MODES.has(value)) throw new Error(`Unsupported mode: ${value}. Allowed: ${[...TASK_MODES].join(", ")}`);
+  const raw = String(mode || "").trim() || "implement_and_test";
+  const aliases = {
+    implement: "implement_and_test",
+    test: "implement_and_test",
+    plan: "plan_only",
+    review: "review_only"
+  };
+  const value = aliases[raw] || raw;
+  if (!TASK_MODES.has(value)) throw new Error(`Unsupported mode: ${raw}. Allowed: ${[...TASK_MODES].join(", ")} plus aliases: implement, test, plan, review`);
   return value;
 }
 

@@ -16,8 +16,8 @@ function buildHome(data) {
   const sessions = Array.isArray(data.sessions) ? data.sessions : [];
   const jobs = Array.isArray(data.jobs) ? data.jobs : [];
   const workspaces = Array.isArray(cfg.workspaces) ? cfg.workspaces : [];
-  const findings = Array.isArray(health.findings) ? health.findings : [];
-  const visibleToolCount = cfg.toolMode === 'debug' ? 'all legacy/debug tools' : '8 bridge tools';
+  const findings = Array.isArray(health.findings) ? health.findings.filter(f => f.severity !== 'info') : [];
+  const visibleToolCount = '8 bridge tools';
   const staleHours = Number((cfg.productUx && cfg.productUx.staleHours) || health.staleHours || 24);
   const currentSessions = sessions.filter(s => isCurrentWork(s, staleHours));
   const runningJobs = jobs.filter(j => ['running', 'queued', 'cancelling'].includes(String(j.status || '').toLowerCase()) && !isOlderThan(j.updatedAt || j.startedAt, staleHours));
@@ -28,23 +28,15 @@ function buildHome(data) {
   root.className = 'section';
   root.style.gap = '16px';
 
-  if (cfg.toolMode === 'debug') {
-    const banner = document.createElement('div');
-    banner.className = 'card';
-    banner.style.borderColor = 'rgba(255,194,75,.35)';
-    banner.innerHTML = `<div class="card-body" style="color:var(--yellow);font-size:13px;">Debug mode is exposing every legacy/internal tool. For normal ChatGPT use, switch Settings → General → Mode to <strong>ChatGPT local repo</strong>.</div>`;
-    root.appendChild(banner);
-  }
-
   const metrics = document.createElement('div');
   metrics.className = 'overview-grid';
   metrics.innerHTML =
     metricHtml('Workspaces', workspaces.length, 'configured repositories', 'blue') +
-    metricHtml('ChatGPT tools', visibleToolCount, cfg.toolMode === 'debug' ? 'debug mode' : 'clean mode', cfg.toolMode === 'debug' ? 'warn' : 'good') +
+    metricHtml('ChatGPT tools', visibleToolCount, 'clean local bridge', 'good') +
     metricHtml('Health', findings.length, health.ok === false ? 'needs attention' : 'all clear', health.ok === false ? 'bad' : 'good') +
     metricHtml('Validation', validationSummary(workspaces), 'auto-detected where possible', 'blue') +
     metricHtml('Activity', audit.length, 'recent tool calls', 'purple') +
-    metricHtml('Readiness', readiness.score != null ? readiness.score : '—', readiness.ok === false ? 'review needed' : 'release check', readiness.ok === false ? 'warn' : 'good');
+    metricHtml('Local bridge', 'ready', 'trusted read/write/shell', 'good');
   root.appendChild(metrics);
 
   const grid = document.createElement('div');
@@ -61,7 +53,7 @@ function buildHome(data) {
 
 function updateShell(data, cfg) {
   const subtitle = document.getElementById('subtitle');
-  if (subtitle) subtitle.textContent = `Rel.AI MCP · ${cfg.toolMode === 'debug' ? 'debug mode' : 'ChatGPT local repo mode'} · ${Array.isArray(cfg.workspaces) ? cfg.workspaces.length : 0} workspaces`;
+  if (subtitle) subtitle.textContent = `Rel.AI MCP · ChatGPT local repo bridge · ${Array.isArray(cfg.workspaces) ? cfg.workspaces.length : 0} workspaces`;
   const updated = document.getElementById('lastUpdated');
   if (updated) updated.textContent = 'Updated ' + new Date().toLocaleTimeString();
   const statusEl = document.getElementById('serverStatus');

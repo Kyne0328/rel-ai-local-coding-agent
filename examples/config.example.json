@@ -3,110 +3,25 @@
   "stateDir": "/Users/you/.rel-ai-mcp",
   "auditLogPath": "",
   "worktreeRoot": "/Users/you/.rel-ai-mcp/worktrees",
-  "permissionProfile": "admin",
+  "toolMode": "chatgpt_local_repo",
+  "trustedLocalAgent": true,
+  "maxOutputBytes": 2097152,
   "maxSessionSteps": 1000,
-  "allowGitHubCli": false,
-  "allowDocker": false,
-  "allowArbitraryCommands": true,
-  "allowDestructiveTools": true,
-  "workspaces": {
-    "myapp": {
-      "path": "/absolute/path/to/myapp",
-      "protectedBranches": [
-        "main",
-        "master"
-      ],
-      "defaultBaseBranch": "main",
-      "allowedRemotes": [
-        "origin"
-      ],
-      "repoSlug": "Kyne0328/myapp",
-      "worktreeRoot": "",
-      "testCommands": {
-        "unit": "npm test",
-        "lint": "npm run lint",
-        "typecheck": "npm run typecheck"
-      },
-      "commands": {
-        "install": "npm install",
-        "build": "npm run build"
-      },
-      "allowDocker": false,
-      "defaultDockerImage": "node:22-alpine",
-      "allowedDockerImages": [
-        "node:22-alpine"
-      ],
-      "dockerNetworkNone": true,
-      "dockerUser": "node",
-      "allowArbitraryCommands": false,
-      "allowDestructiveTools": false
-    }
-  },
   "maxPlanSteps": 200,
   "maxIndexFiles": 25000,
   "maxConcurrentSessionsPerWorkspace": 4,
   "sessionLocksEnabled": true,
   "dashboardEnabled": true,
-  "approvalGates": {
-    "commit": false,
-    "push": false,
-    "pr": false,
-    "reset": false,
-    "worktree-remove": false,
-    "docker": false,
-    "command": false,
-    "patch": false,
-    "write": false,
-    "merge": false
-  },
   "defaultTaskMode": "implement_and_test",
-  "taskRunner": {
-    "maxCycles": 3,
-    "requireWorktree": true,
-    "requireApprovalBeforeCommit": false,
-    "requireApprovalBeforePush": false,
-    "requireApprovalBeforePr": false
-  },
-  "ciRepair": {
-    "enabled": false,
-    "maxCycles": 3,
-    "watchAttempts": 5,
-    "intervalSeconds": 15,
-    "requireApprovalBeforePush": true
-  },
-  "sandboxMode": "none",
-  "multiAgent": {
-    "enabled": true,
-    "maxSubtasks": 12,
-    "maxParallelSubtasks": 3,
-    "requireReviewBeforeMerge": true,
-    "defaultRoles": [
-      "planner",
-      "implementer",
-      "tester",
-      "reviewer"
-    ]
-  },
-  "scheduler": {
-    "enabled": true,
-    "maxRetries": 1,
-    "stopOnFailure": true
-  },
-  "memory": {
-    "enabled": true,
-    "maxNotesPerWorkspace": 500,
-    "maxNoteChars": 20000
-  },
-  "semanticIndex": {
-    "enabled": false,
-    "maxFiles": 8000,
-    "maxFileBytes": 200000
-  },
-  "policies": {
-    "blockedPaths": [],
-    "maxPatchFiles": 50,
-    "requireApprovalBeforePush": true,
-    "requireApprovalBeforeMergeBack": true
+  "workspaces": {
+    "myapp": {
+      "path": "/absolute/path/to/myapp",
+      "protectedBranches": ["main", "master"],
+      "defaultBaseBranch": "main",
+      "allowedRemotes": ["origin"],
+      "testCommands": {},
+      "commands": {}
+    }
   },
   "productUx": {
     "dashboardRefreshSeconds": 5,
@@ -114,14 +29,5 @@
     "staleHours": 24,
     "cleanupOlderThanHours": 168,
     "enableStateExport": true
-  },
-  "release": {
-    "minimumReadinessScore": 80,
-    "requireHttpToken": true,
-    "requireCleanWorktreeBeforePush": true,
-    "connectorProbeTimeoutMs": 5000,
-    "enableReleaseEndpoints": true
-  },
-  "toolMode": "chatgpt_local_repo",
-  "trustedLocalAgent": true
+  }
 }

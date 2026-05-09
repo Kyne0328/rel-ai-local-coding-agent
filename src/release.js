@@ -27,19 +27,10 @@ function releaseReadiness(config, args = {}) {
   if (!process.env.REL_AI_MCP_TOKEN && args.requireHttpToken !== false) {
     findings.push(finding("warning", "missing_http_token_env", "REL_AI_MCP_TOKEN is not set in the current environment. Set it before exposing /mcp."));
   }
-  if (config.allowArbitraryCommands) {
-    findings.push(finding("warning", "arbitrary_commands_enabled", "allowArbitraryCommands is enabled. Keep this disabled unless you trust every connected client."));
-  }
-  if (config.allowDestructiveTools) {
-    findings.push(finding("warning", "destructive_tools_enabled", "allowDestructiveTools is enabled globally."));
-  }
-  if (config.permissionProfile === "admin") {
-    findings.push(finding("info", "admin_profile", "permissionProfile is admin. Prefer pr or test for normal daily use."));
-  }
-  for (const gate of ["push", "pr", "reset", "merge"]) {
-    if (!config.approvalGates || config.approvalGates[gate] !== true) {
-      findings.push(finding("warning", `approval_gate_${gate}_off`, `Approval gate '${gate}' is not enabled.`));
-    }
+  if (config.trustedLocalAgent) {
+    findings.push(finding("info", "trusted_local_agent", "Trusted ChatGPT local repo mode is enabled. Shell, write, verify, diff, and reset are intentionally available inside configured workspaces."));
+  } else {
+    findings.push(finding("warning", "trusted_local_agent_disabled", "Trusted local mode is disabled. ChatGPT may be blocked from writing or running verification."));
   }
 
   const commandChecks = checkCommandAvailability(["git", "node"], findings);
@@ -318,7 +309,7 @@ function nextActions(findings) {
     else if (item.code === "no_workspaces") actions.push("Run npm run workspace:add -- <alias> <absolute-project-path>.");
     else if (item.code === "no_test_commands") actions.push("Add at least one allowlisted test command with npm run testcmd:add.");
     else if (item.code === "dirty_worktree") actions.push("Commit/stash local changes or create a task worktree before running agents.");
-    else if (item.code && item.code.includes("approval_gate")) actions.push("Enable approval gates for push, pr, reset, and merge in config.json.");
+    else if (item.code === "trusted_local_agent_disabled") actions.push("Enable trusted local mode for the ChatGPT repo bridge.");
     else if (item.code && item.code.includes("gitattributes")) actions.push("Run relai_doctor_fix with workspacePath to add .gitattributes/.editorconfig.");
   }
   return [...new Set(actions)];

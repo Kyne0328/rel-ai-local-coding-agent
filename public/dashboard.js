@@ -68,7 +68,6 @@ async function boot() {
     { label: 'Home', href: '#home', category: 'Navigation' },
     { label: 'Workspaces', href: '#workspaces', category: 'Navigation' },
     { label: 'Activity', href: '#activity', category: 'Navigation' },
-    { label: 'Tools', href: '#tools', category: 'Navigation' },
     { label: 'Settings', href: '#settings', category: 'Navigation' },
     { label: 'Settings → Connector', href: '#settings/connector', category: 'Navigation' },
     { label: 'Settings → Diagnostics', href: '#settings/diagnostics', category: 'Navigation' },
@@ -85,11 +84,6 @@ async function boot() {
   }));
   initCommandPalette([...navActions, ...actionActions, ...wsActions]);
 
-  fetchJson('/api/tools').then(tools => {
-    if (Array.isArray(tools)) {
-      registerActions(tools.map(t => ({ label: 'View tool: ' + t.name, category: 'Tools', href: '#tools' })));
-    }
-  }).catch(() => {});
 }
 
 function _sectionMap() {
@@ -97,9 +91,9 @@ function _sectionMap() {
     home:        (el) => mountHome(el, getStore()),
     workspaces:  (el) => import('/ui/sections/workspaces.js').then(m => m.mountWorkspaces(el, getStore())).catch(console.error),
     activity:    (el) => import('/ui/sections/activity.js').then(m => m.mountActivity(el)).catch(console.error),
-    approvals:   (el) => import('/ui/sections/approvals.js').then(m => m.mountApprovals(el, getStore())).catch(console.error),
-    tools:       (el) => import('/ui/sections/tools.js').then(m => m.mountTools(el)).catch(console.error),
-    agents:      (el) => import('/ui/sections/agents.js').then(m => m.mountAgents(el, getStore())).catch(console.error),
+    approvals:   () => { location.hash = '#home'; },
+    tools:       () => { location.hash = '#home'; },
+    agents:      () => { location.hash = '#home'; },
     settings:    (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el, _settingsSubPage())).catch(console.error),
     connector:   (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el, 'connector')).catch(console.error),
     diagnostics: (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el, 'diagnostics')).catch(console.error),
@@ -118,7 +112,6 @@ function _buildNav() {
     <a href="#home">Home</a>
     <a href="#workspaces">Workspaces</a>
     <a href="#activity">Activity</a>
-    <a href="#tools">Tools</a>
     <a href="#settings">Settings</a>
   `;
   const mobileNav = document.querySelector('.mobile-nav');
@@ -167,7 +160,7 @@ function _toggleLive() {
       const id = currentSection();
       if (!routeRoot) return;
 
-      if (['home', 'workspaces', 'agents', 'approvals', 'tools', 'settings', 'connector', 'diagnostics'].includes(id)) {
+      if (['home', 'workspaces', 'activity', 'settings', 'connector', 'diagnostics'].includes(id)) {
         _renderCurrentSection(routeRoot, id, _sectionMap());
       }
 

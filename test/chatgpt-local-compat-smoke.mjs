@@ -81,9 +81,14 @@ try {
   const test = await waitFor(4);
   if (test.result.isError) throw new Error(`relai_run_test should remain callable in local repo mode: ${test.result.content[0].text}`);
 
-  send(5, 'tools/call', { name: 'relai_shell', arguments: { workspace: 'repo', command: 'node --version' } });
-  const shell = await waitFor(5);
+  send(5, 'tools/call', { name: 'relai_write_file', arguments: { workspace: 'repo', path: 'tmp-relai-compat.txt', content: 'compat write ok\n' } });
+  const write = await waitFor(5);
+  if (write.result.isError) throw new Error(`relai_write_file should remain callable as a hidden compatibility alias: ${write.result.content[0].text}`);
+
+  send(6, 'tools/call', { name: 'relai_shell', arguments: { workspace: 'repo', command: 'node --version' } });
+  const shell = await waitFor(6);
   if (shell.result.isError) throw new Error(`relai_shell should be unrestricted in trusted local mode: ${shell.result.content[0].text}`);
+  fs.rmSync(path.join(root, 'tmp-relai-compat.txt'), { force: true });
 
   console.log('ChatGPT local compatibility smoke test passed.');
 } finally {
