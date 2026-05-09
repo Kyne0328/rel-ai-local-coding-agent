@@ -8,6 +8,7 @@ import { mountApprovals } from '/ui/sections/approvals.js';
 import { mountSettings } from '/ui/sections/settings/index.js';
 import { mountWorkspaces } from '/ui/sections/workspaces.js';
 import { mountAgents } from '/ui/sections/agents.js';
+import { initCommandPalette, registerActions } from '/ui/components/command-palette.js';
 
 // Restore saved theme
 const savedTheme = localStorage.getItem('relai_theme');
@@ -54,6 +55,37 @@ async function boot() {
 
   _wireTopControls();
   _checkOnboarding();
+
+  // Init command palette
+  const storeData = getStore();
+  const navActions = [
+    { label: 'Home', href: '#home', category: 'Navigation' },
+    { label: 'Workspaces', href: '#workspaces', category: 'Navigation' },
+    { label: 'Activity', href: '#activity', category: 'Navigation' },
+    { label: 'Approvals', href: '#approvals', category: 'Navigation' },
+    { label: 'Tools', href: '#tools', category: 'Navigation' },
+    { label: 'Agents', href: '#agents', category: 'Navigation' },
+    { label: 'Settings', href: '#settings', category: 'Navigation' },
+    { label: 'Settings → Connector', href: '#settings/connector', category: 'Navigation' },
+    { label: 'Settings → Diagnostics', href: '#settings/diagnostics', category: 'Navigation' },
+  ];
+  const actionActions = [
+    { label: 'Refresh dashboard', category: 'Actions', action: _doRefresh },
+    { label: 'Toggle live mode', category: 'Actions', action: _toggleLive },
+    { label: 'Copy dashboard token', category: 'Actions', action: () => { if (token) navigator.clipboard.writeText(token).catch(() => {}); } },
+  ];
+  const wsActions = Array.isArray(storeData.config && storeData.config.workspaces ? storeData.config.workspaces : []).map(ws => ({
+    label: 'Switch to workspace: ' + ws.alias, category: 'Workspaces',
+    action: () => { const el = document.getElementById('workspace'); if (el) el.value = ws.alias; }
+  }));
+  initCommandPalette([...navActions, ...actionActions, ...wsActions]);
+
+  // Lazy-register tool actions after tools fetch
+  fetchJson('/api/tools').then(tools => {
+    if (Array.isArray(tools)) {
+      registerActions(tools.map(t => ({ label: 'View tool: ' + t.name, category: 'Tools', href: '#tools' })));
+    }
+  }).catch(() => {});
 }
 
 function _buildNav() {
