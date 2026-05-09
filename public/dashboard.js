@@ -35,6 +35,7 @@ async function boot() {
     workspaces:  (el) => mountWorkspaces(el, getStore()),
     activity:    (el) => mountActivity(el),
     approvals:   (el) => mountApprovals(el),
+    tools:       (el) => { import('/ui/sections/tools.js').then(m => m.mountTools(el)); },
     agents:      (el) => mountAgents(el, getStore()),
     settings:    (el) => mountSettings(el),
     connector:   (el) => mountSettings(el),
@@ -63,6 +64,7 @@ function _buildNav() {
     <a href="#workspaces">Workspaces</a>
     <a href="#activity">Activity</a>
     <a href="#approvals">Approvals</a>
+    <a href="#tools">Tools</a>
     <a href="#agents">Agents</a>
     <a href="#settings">Settings</a>
   `;
@@ -89,7 +91,7 @@ async function _doRefresh() {
     initStore(data);
     const main = document.getElementById('main');
     const id = currentSection();
-    const fns = { home: mountHome, overview: mountHome, workspaces: mountWorkspaces, activity: mountActivity, approvals: mountApprovals, agents: mountAgents, settings: mountSettings };
+    const fns = { home: mountHome, overview: mountHome, workspaces: mountWorkspaces, activity: mountActivity, approvals: mountApprovals, tools: (el) => import('/ui/sections/tools.js').then(m => m.mountTools(el)), agents: mountAgents, settings: mountSettings };
     const fn = fns[id];
     if (main && fn) { main.innerHTML = ''; fn(main, getStore()); }
   }
