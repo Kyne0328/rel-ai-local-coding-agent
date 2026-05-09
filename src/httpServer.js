@@ -20,7 +20,7 @@ const pkg = require("../package.json");
 const connection = require("./connectionProfile");
 
 function buildToolMetadata() {
-  const { toolSchemas } = require("./tools");
+  const { toolSchemas, TOOL_METADATA } = require("./tools");
   const categoryMap = {
     relai_git: "Git", relai_docker: "Docker", relai_workspace: "Workspace",
     relai_plan: "Plans", relai_multi: "Multi-agent", relai_ci: "CI",
@@ -29,13 +29,14 @@ function buildToolMetadata() {
   };
   return toolSchemas.map(tool => {
     const prefix = Object.keys(categoryMap).find(k => tool.name.startsWith(k)) || "relai";
+    const meta = TOOL_METADATA[tool.name] || { profile: 'read-only', requiresApproval: false };
     return {
       name: tool.name,
       displayName: tool.name.replace(/^relai_/, "").replace(/_/g, " "),
       description: tool.description || "",
       category: categoryMap[prefix] || "Other",
-      requiredProfile: "read-only",
-      requiresApproval: false,
+      requiredProfile: meta.profile,
+      requiresApproval: meta.requiresApproval,
       parameters: tool.inputSchema ? Object.keys(tool.inputSchema.properties || {}) : [],
     };
   });

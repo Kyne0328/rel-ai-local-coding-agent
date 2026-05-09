@@ -49,5 +49,10 @@ assert('POST /api/approvals/:id/decision rejects bad id gracefully', appr.status
 const dry = await req('POST', '/api/settings', { dryRun: true, permissionProfile: 'pr' });
 assert('POST /api/settings dryRun returns changes array', Array.isArray(dry.body.changes));
 
+// Phase 3: tool metadata
+const toolsDetailed = await req('GET', '/api/tools');
+assert('GET /api/tools returns requiredProfile', toolsDetailed.body[0] && typeof toolsDetailed.body[0].requiredProfile === 'string');
+assert('GET /api/tools returns requiresApproval bool', toolsDetailed.body[0] && typeof toolsDetailed.body[0].requiresApproval === 'boolean');
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

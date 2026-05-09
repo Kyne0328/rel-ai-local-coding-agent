@@ -46,6 +46,44 @@ const release = require("./release");
 const { enforcePermission, TOOL_LEVEL } = require("./permissions");
 const pkg = require("../package.json");
 
+// Static tool metadata — profile and approval requirements derived from enforcePermission calls
+const TOOL_METADATA = {
+  // Git tools
+  relai_git_status:           { profile: 'read-only', requiresApproval: false },
+  relai_git_log:              { profile: 'read-only', requiresApproval: false },
+  relai_git_diff:             { profile: 'read-only', requiresApproval: false },
+  relai_git_show:             { profile: 'read-only', requiresApproval: false },
+  relai_git_blame:            { profile: 'read-only', requiresApproval: false },
+  relai_git_branch:           { profile: 'read-only', requiresApproval: false },
+  relai_git_checkout:         { profile: 'pr', requiresApproval: false },
+  relai_git_commit:           { profile: 'pr', requiresApproval: false },
+  relai_git_push:             { profile: 'pr', requiresApproval: true },
+  relai_git_pull:             { profile: 'pr', requiresApproval: false },
+  relai_git_merge:            { profile: 'pr', requiresApproval: true },
+  relai_git_rebase:           { profile: 'pr', requiresApproval: true },
+  relai_git_stash:            { profile: 'pr', requiresApproval: false },
+  relai_git_tag:              { profile: 'pr', requiresApproval: false },
+  relai_git_reset:            { profile: 'admin', requiresApproval: true },
+  // Docker tools
+  relai_docker_run:           { profile: 'admin', requiresApproval: true },
+  relai_docker_build:         { profile: 'admin', requiresApproval: true },
+  relai_docker_exec:          { profile: 'admin', requiresApproval: true },
+  relai_docker_ps:            { profile: 'read-only', requiresApproval: false },
+  relai_docker_logs:          { profile: 'read-only', requiresApproval: false },
+  // Workspace tools
+  relai_workspace_read:       { profile: 'read-only', requiresApproval: false },
+  relai_workspace_write:      { profile: 'pr', requiresApproval: false },
+  relai_workspace_delete:     { profile: 'admin', requiresApproval: true },
+  relai_workspace_list:       { profile: 'read-only', requiresApproval: false },
+  // Plans
+  relai_plan_create:          { profile: 'pr', requiresApproval: false },
+  relai_plan_apply:           { profile: 'pr', requiresApproval: false },
+  relai_plan_revert:          { profile: 'pr', requiresApproval: true },
+  // Approvals
+  relai_approval_request:     { profile: 'pr', requiresApproval: false },
+  relai_approval_list:        { profile: 'read-only', requiresApproval: false },
+};
+
 const toolSchemas = [
   tool("relai_version", "Version Info", "MCP server version, runtime info, and capabilities.", {}),
   tool("relai_config", "Rel.AI MCP Config Summary", "Active config summary: limits, workspace aliases, command keys. No secrets.", {}),
@@ -1014,4 +1052,4 @@ function numberProp(min, max) { return { type: "number", minimum: min, maximum: 
 function objectProp() { return { type: "object" }; }
 function arrayProp(type, minItems, maxItems) { return { type: "array", items: { type }, minItems, maxItems }; }
 
-module.exports = { toolSchemas, callTool, workspaceList, workspaceInspect, workspaceTree, workspaceProfile };
+module.exports = { toolSchemas, TOOL_METADATA, callTool, workspaceList, workspaceInspect, workspaceTree, workspaceProfile };
