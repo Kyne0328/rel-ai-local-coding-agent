@@ -8,6 +8,7 @@ let _allTools = [];
 let _filterState = { search: '', category: '', approvalOnly: false };
 
 export function mountTools(container) {
+  _allTools = [];
   _filterState = { search: '', category: '', approvalOnly: false };
   container.innerHTML = '';
   container.appendChild(_buildTools());
@@ -180,8 +181,8 @@ function _chip(label, active, onClick) {
 }
 
 function _styleChip(btn, active) {
-  btn.style.background = active ? 'rgba(78,161,255,.2)' : '';
-  btn.style.borderColor = active ? 'rgba(78,161,255,.5)' : '';
+  btn.style.background = active ? 'var(--blue-dim)' : '';
+  btn.style.borderColor = active ? 'var(--ring)' : '';
 }
 
 function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }

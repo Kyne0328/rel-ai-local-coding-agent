@@ -66,7 +66,7 @@ function _open() {
       const el = document.createElement('div');
       el.setAttribute('role', 'option');
       el.setAttribute('aria-selected', i === 0 ? 'true' : 'false');
-      el.style.cssText = `padding:10px 16px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:10px;background:${i === 0 ? 'rgba(78,161,255,.1)' : 'transparent'};`;
+      el.style.cssText = `padding:10px 16px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:10px;background:${i === 0 ? 'var(--blue-dim)' : 'transparent'};`;
       el.innerHTML = `<div><div style="font-weight:600;">${esc(item.label)}</div>${item.category ? `<div style="font-size:11px;color:var(--text-muted);">${esc(item.category)}</div>` : ''}</div>`;
       el.addEventListener('mouseenter', () => { _selectedIndex = i; _highlightSelected(); });
       el.onclick = () => { _execute(item); };
@@ -76,7 +76,7 @@ function _open() {
 
   function _highlightSelected() {
     Array.from(results.children).forEach((el, i) => {
-      el.style.background = i === _selectedIndex ? 'rgba(78,161,255,.1)' : 'transparent';
+      el.style.background = i === _selectedIndex ? 'var(--blue-dim)' : 'transparent';
       el.setAttribute('aria-selected', i === _selectedIndex ? 'true' : 'false');
     });
     const selected = results.children[_selectedIndex];
@@ -147,7 +147,7 @@ function _getRecent() {
 }
 
 function _saveRecent(item) {
-  if (item.action && !item.href) return; // can't serialize functions
+  if (item.action && !item.href) return; // action functions can't be serialized to localStorage; only nav items appear in recents
   const recent = _getRecent().filter(r => r.label !== item.label);
   recent.unshift({ label: item.label, href: item.href, category: 'Recent' });
   if (recent.length > MAX_RECENT) recent.length = MAX_RECENT;
