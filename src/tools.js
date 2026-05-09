@@ -302,10 +302,10 @@ const allToolSchemas = [
   tool("relai_repo_relevant_files", "Repository Relevant Files", "Rank relevant files from cached index or file tree using search terms.", { workspace: stringProp(), sessionId: stringProp(), terms: arrayProp("string", 0, 30), limit: numberProp(1, 500), includeTests: boolProp() }, ["workspace"]),
   tool("relai_repo_test_suggestions", "Repository Test Suggestions", "Test command keys from detected manifests and configured commands.", { workspace: stringProp(), sessionId: stringProp() }, ["workspace"]),
 
-  tool("relai_apply_patch", "Apply Unified Diff", "Validate and apply a unified diff via git apply. Use dryRun=true for check-only.", {
+  tool("relai_apply_patch", "Legacy Apply Unified Diff", "Legacy/debug compatibility only. Prefer relai_write for edits. If a malformed LLM-style diff is received, Rel.AI attempts a deterministic loose-context fallback or returns relai_write guidance instead of retrying broken patches.", {
     workspace: stringProp(), sessionId: stringProp(), diff: stringProp(), dryRun: boolProp(), approvalId: stringProp()
   }, ["workspace", "diff"]),
-  tool("relai_apply_patch_and_run", "Apply Patch And Run Tests", "Apply a patch then run allowlisted tests. Main Codex-like build/verify tool.", {
+  tool("relai_apply_patch_and_run", "Legacy Apply Patch And Run Tests", "Legacy/debug compatibility only. Prefer relai_write followed by relai_verify. Malformed diffs are routed through the safer patch fallback before tests run.", {
     workspace: stringProp(), diff: stringProp(), dryRun: boolProp(), testCommandKeys: arrayProp("string", 0, 20), stopOnFailure: boolProp(), sessionId: stringProp(), approvalId: stringProp()
   }, ["workspace", "diff"]),
   tool("relai_run_test", "Run Allowlisted Test Command", "Locally configured test command by key, discovered command by key, or arbitrary command string when allowArbitraryCommands is enabled.", {
@@ -383,8 +383,8 @@ async function callTool(name, args = {}) {
   const config = readConfig();
   const started = Date.now();
   try {
-    if (!isToolVisible(config, name)) {
-      throw new Error(`Tool '${name}' is hidden in toolMode='${config.toolMode || "chatgpt_local_repo"}'. Switch toolMode to debug to access legacy/internal tools.`);
+    if (!isToolCallable(config, name)) {
+      throw new Error(`Tool '${name}' is hidden in toolMode='${config.toolMode || "chatgpt_local_repo"}'. Use the ChatGPT local repo bridge tools, or switch toolMode to debug to access legacy/internal tools.`);
     }
     enforcePermission(config, name);
     const value = await dispatchTool(config, name, args || {});
@@ -684,7 +684,7 @@ async function dispatchTool(config, name, args) {
     case "relai_run_test_matrix":
       return recordMaybe(config, args, "test_matrix", async () => runTestMatrix(config, args));
     case "relai_run_command":
-      approvals.requireApproval(config, "command", args);
+      if (!config.trustedLocalAgent) approvals.requireApproval(config, "command", args);
       return recordMaybe(config, args, "command", async (workspace) => runConfiguredCommand(workspace, config, args));
     case "relai_patch_test_loop":
       approvals.requireApproval(config, "patch", args);
@@ -1053,15 +1053,24 @@ async function runTest(config, args) {
 }
 
 async function runTestMatrix(config, args) {
-  const keys = Array.isArray(args.testCommandKeys) ? args.testCommandKeys : [];
-  if (keys.length === 0) throw new Error("testCommandKeys must contain at least one key.");
+  const workspace = resolveTargetWorkspace(config, args);
+  let keys = Array.isArray(args.testCommandKeys) ? args.testCommandKeys.filter(Boolean).map(String) : [];
+  const discovered = discoverCommands(workspace.path);
+  if (keys.length === 0) {
+    keys = Object.keys({ ...(workspace.testCommands || {}), ...discovered })
+      .filter((key) => /test|analy[sz]e|lint|check|vet|build/.test(key + " " + ((workspace.testCommands && workspace.testCommands[key]) || discovered[key] || "")))
+      .slice(0, 5);
+  }
+  if (keys.length === 0) {
+    return { ok: true, workspace: workspace.alias, results: [], message: "No configured or discovered validation commands found. In trusted local mode, use relai_shell or relai_verify with explicit commands." };
+  }
   const results = [];
   for (const key of keys) {
-    const result = await runTest(config, { workspace: args.workspace, testCommandKey: key });
+    const result = await runTest(config, { workspace: workspace.alias, testCommandKey: key });
     results.push(result);
     if (!result.ok && args.stopOnFailure !== false) break;
   }
-  return { ok: results.every((item) => item.ok), workspace: args.workspace, results };
+  return { ok: results.every((item) => item.ok), workspace: workspace.alias, autoDiscovered: !(Array.isArray(args.testCommandKeys) && args.testCommandKeys.length), testCommandKeys: keys, results };
 }
 
 function resolveTargetWorkspace(config, args = {}) {
@@ -1136,17 +1145,49 @@ const DEVELOPER_EXTRA_TOOLS = new Set([
   "relai_git_show"
 ]);
 
+// Compatibility tools stay callable in ChatGPT local repo mode so older connector
+// prompts/runs do not dead-end after tool list simplification. They are not
+// advertised by tools/list, which keeps the public surface clean, but direct
+// calls continue to work and internally map to the same local repo bridge
+// primitives or trusted local execution path.
+const CHATGPT_LOCAL_REPO_COMPAT_CALLABLE_TOOLS = new Set([
+  "relai_version",
+  "relai_config",
+  "relai_workspace_list",
+  "relai_workspace_inspect",
+  "relai_workspace_tree",
+  "relai_workspace_profile",
+  "relai_read_files",
+  "relai_search",
+  "relai_context_pack",
+  "relai_repo_profile",
+  "relai_repo_relevant_files",
+  "relai_repo_test_suggestions",
+  "relai_git_status",
+  "relai_git_diff",
+  "relai_git_log",
+  "relai_git_show",
+  "relai_run_test",
+  "relai_run_test_matrix",
+  "relai_run_command",
+  "relai_task_run"
+]);
+
 function getToolSchemas(config = {}) {
   const mode = String(config.toolMode || "chatgpt_local_repo");
   if (mode === "debug") return allToolSchemas;
-  const visible = mode === "developer"
-    ? new Set([...CHATGPT_LOCAL_REPO_TOOLS, ...DEVELOPER_EXTRA_TOOLS])
-    : CHATGPT_LOCAL_REPO_TOOLS;
-  return allToolSchemas.filter((tool) => visible.has(tool.name));
+  return allToolSchemas.filter((tool) => CHATGPT_LOCAL_REPO_TOOLS.has(tool.name));
 }
 
 function isToolVisible(config = {}, name) {
   return getToolSchemas(config).some((tool) => tool.name === name);
+}
+
+function isToolCallable(config = {}, name) {
+  const mode = String(config.toolMode || "chatgpt_local_repo");
+  if (mode === "debug") return allToolSchemas.some((tool) => tool.name === name);
+  if (isToolVisible(config, name)) return true;
+  return CHATGPT_LOCAL_REPO_COMPAT_CALLABLE_TOOLS.has(name);
 }
 
 const toolSchemas = getToolSchemas({ toolMode: "chatgpt_local_repo" });

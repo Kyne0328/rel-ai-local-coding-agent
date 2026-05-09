@@ -329,6 +329,14 @@ function detectVerifyCommands(root, level) {
       if (level === "full" && scripts.build) commands.push("npm run build");
     } catch (_error) {}
   }
+  if (fs.existsSync(path.join(root, "pubspec.yaml"))) {
+    if (level === "quick") {
+      commands.push("dart analyze");
+    } else {
+      commands.push("flutter analyze");
+      commands.push("flutter test");
+    }
+  }
   if (fs.existsSync(path.join(root, "pyproject.toml")) || fs.existsSync(path.join(root, "requirements.txt"))) commands.push("python -m pytest");
   if (fs.existsSync(path.join(root, "go.mod"))) commands.push("go test ./...");
   if (fs.existsSync(path.join(root, "Cargo.toml"))) commands.push("cargo test");

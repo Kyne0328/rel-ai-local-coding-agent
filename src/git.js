@@ -4,6 +4,7 @@ const path = require("node:path");
 const { runProcess, summarizeCommand } = require("./process");
 const { validateDiffPaths, safeCommandPolicy } = require("./safety");
 const { discoverCommands } = require("./commandDiscovery");
+const { applyLoosePatch, isPatchParserError } = require("./loosePatch");
 
 function runGit(args, workspace, config) {
   return runProcess("git", args, { cwd: workspace.path, shell: false }, config);
@@ -63,18 +64,52 @@ async function gitShow(workspace, config, rev) {
 
 async function applyPatch(workspace, config, diff, options = {}) {
   if (!String(diff || "").trim()) throw new Error("diff is required.");
-  const touchedPaths = validateDiffPaths(diff, workspace.path);
+  let touchedPaths = [];
+  try {
+    touchedPaths = validateDiffPaths(diff, workspace.path);
+  } catch (error) {
+    const fallback = applyLoosePatch(workspace, diff, { dryRun: Boolean(options.dryRun) });
+    return {
+      ok: Boolean(fallback.ok),
+      dryRun: Boolean(options.dryRun),
+      touchedPaths,
+      message: fallback.ok
+        ? fallback.message
+        : `Patch path validation failed and loose fallback was not safe: ${error instanceof Error ? error.message : String(error)}`,
+      patchFailureKind: "invalid_or_missing_diff_paths",
+      recommendedTool: "relai_write",
+      fallback
+    };
+  }
+
   const diffPath = writeTempDiff(diff);
   try {
     const check = await runGit(["apply", "--check", diffPath], workspace, config);
+    const gitCheck = summarizeCommand(check);
     const result = {
       ok: false,
       dryRun: Boolean(options.dryRun),
       touchedPaths,
-      gitCheck: summarizeCommand(check)
+      gitCheck
     };
     if (check.exitCode !== 0) {
+      if (isPatchParserError(gitCheck)) {
+        const fallback = applyLoosePatch(workspace, diff, { dryRun: Boolean(options.dryRun) });
+        return {
+          ...result,
+          ok: Boolean(fallback.ok),
+          message: fallback.ok
+            ? fallback.message
+            : "Patch was malformed and the deterministic loose-context fallback could not apply it safely.",
+          patchFailureKind: "malformed_unified_diff",
+          recommendedTool: "relai_write",
+          recommendedFlow: ["relai_read", "relai_write", "relai_verify", "relai_diff"],
+          fallback
+        };
+      }
       result.message = "Patch did not apply cleanly.";
+      result.patchFailureKind = "context_or_conflict";
+      result.recommendedTool = "relai_write";
       return result;
     }
     if (options.dryRun) {

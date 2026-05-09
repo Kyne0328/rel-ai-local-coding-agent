@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { safeReadJson } = require("./safety");
+const { discoverCommands } = require("./commandDiscovery");
 
 function getConfigPath() {
   return process.env.REL_AI_MCP_CONFIG || path.join(os.homedir(), ".rel-ai-mcp", "config.json");
@@ -57,7 +58,7 @@ function makeDefaultConfig() {
     },
     sandboxMode: "none",
     multiAgent: {
-      enabled: true,
+      enabled: false,
       maxSubtasks: 12,
       maxParallelSubtasks: 3,
       requireReviewBeforeMerge: true,
@@ -217,7 +218,8 @@ function normalizeWorkspace(workspace) {
 
 function normalizeToolMode(value) {
   const mode = String(value || "chatgpt_local_repo").trim();
-  return ["chatgpt_local_repo", "simple", "developer", "debug"].includes(mode) ? mode : "chatgpt_local_repo";
+  if (mode === "debug") return "debug";
+  return "chatgpt_local_repo";
 }
 
 function resolveWorkspace(config, alias) {
@@ -298,9 +300,20 @@ function publicConfigSummary(config) {
       allowedDockerImages: entry.allowedDockerImages || [],
       allowDocker: Boolean(entry.allowDocker),
       allowArbitraryCommands: Boolean(entry.allowArbitraryCommands),
-      allowDestructiveTools: Boolean(entry.allowDestructiveTools)
+      allowDestructiveTools: Boolean(entry.allowDestructiveTools),
+      discoveredCommands: safeDiscoverCommands(entry.path),
+      discoveredTestCommandKeys: Object.keys(safeDiscoverCommands(entry.path)).filter((key) => /test|analy[sz]e|lint|check|vet|build/.test(key + " " + safeDiscoverCommands(entry.path)[key])).sort()
     })).sort((a, b) => a.alias.localeCompare(b.alias))
   };
+}
+
+function safeDiscoverCommands(workspacePath) {
+  try {
+    if (!workspacePath || !fs.existsSync(workspacePath)) return {};
+    return discoverCommands(workspacePath);
+  } catch (_error) {
+    return {};
+  }
 }
 
 module.exports = {

@@ -68,9 +68,7 @@ async function boot() {
     { label: 'Home', href: '#home', category: 'Navigation' },
     { label: 'Workspaces', href: '#workspaces', category: 'Navigation' },
     { label: 'Activity', href: '#activity', category: 'Navigation' },
-    { label: 'Approvals', href: '#approvals', category: 'Navigation' },
     { label: 'Tools', href: '#tools', category: 'Navigation' },
-    { label: 'Agents', href: '#agents', category: 'Navigation' },
     { label: 'Settings', href: '#settings', category: 'Navigation' },
     { label: 'Settings → Connector', href: '#settings/connector', category: 'Navigation' },
     { label: 'Settings → Diagnostics', href: '#settings/diagnostics', category: 'Navigation' },
@@ -120,9 +118,7 @@ function _buildNav() {
     <a href="#home">Home</a>
     <a href="#workspaces">Workspaces</a>
     <a href="#activity">Activity</a>
-    <a href="#approvals">Approvals</a>
     <a href="#tools">Tools</a>
-    <a href="#agents">Agents</a>
     <a href="#settings">Settings</a>
   `;
   const mobileNav = document.querySelector('.mobile-nav');

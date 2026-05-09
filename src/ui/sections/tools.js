@@ -24,6 +24,12 @@ function _buildTools() {
   const root = document.createElement('div');
   root.className = 'section';
 
+  const explainer = document.createElement('div');
+  explainer.id = '__tools-explainer';
+  explainer.className = 'card';
+  explainer.style.display = 'none';
+  explainer.innerHTML = '<div class="card-body" style="font-size:13px;color:var(--text-muted);line-height:1.5;"></div>';
+
   const toolbar = document.createElement('div');
   toolbar.style.cssText = 'display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;';
 
@@ -69,6 +75,7 @@ function _buildTools() {
   tableCard.className = 'card';
   tableCard.innerHTML = '<div class="card-head"><h3>Tools</h3><span class="section-action" id="__tools-count">Loading…</span></div><div class="card-body"><div class="table-wrap"><table class="data-table"><caption class="sr-only">MCP tool catalog</caption><thead><tr><th scope="col">Name</th><th scope="col">Category</th><th scope="col">Profile required</th><th scope="col">Approval</th><th scope="col"></th></tr></thead><tbody id="__tools-tbody"></tbody></table></div></div>';
 
+  root.appendChild(explainer);
   root.appendChild(toolbar);
   root.appendChild(tableCard);
   return root;
@@ -79,6 +86,7 @@ async function _loadTools(token) {
     const data = await fetchJson('/api/tools');
     if (token !== _mountToken) return;
     _allTools = Array.isArray(data) ? data : [];
+    _renderExplainer(_allTools);
     _renderTable(_applyFilters(_allTools));
   } catch (_) {
     if (token !== _mountToken) return;
@@ -101,6 +109,21 @@ function _applyFilters(tools) {
     if (_filterState.approvalOnly && !(t && t.requiresApproval)) return false;
     return true;
   });
+}
+
+
+function _renderExplainer(tools) {
+  const el = document.getElementById('__tools-explainer');
+  if (!el) return;
+  const body = el.querySelector('.card-body');
+  if (!body) return;
+  if (tools.length > 20) {
+    el.style.display = '';
+    body.innerHTML = '<strong style="color:var(--yellow);">Debug tool surface is active.</strong> This page is showing legacy/internal tools. ChatGPT should normally see only the 8 bridge tools: repo_snapshot, read, write, shell, verify, browser, diff, and reset. Switch Settings → General → Mode to ChatGPT local repo for the clean interface.';
+  } else {
+    el.style.display = '';
+    body.innerHTML = '<strong style="color:var(--text);">Clean ChatGPT interface.</strong> These are the tools intended for normal ChatGPT use. Legacy tools may exist internally for compatibility, but they are not part of the default workflow.';
+  }
 }
 
 function _renderTable(tools) {

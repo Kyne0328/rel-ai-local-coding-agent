@@ -1,23 +1,21 @@
-// Settings section — left-rail sub-navigation
+// Settings section — simplified ChatGPT-local-repo settings
 import { mountGeneral } from './general.js';
-import { mountPermissions } from './permissions.js';
-import { mountApprovalGates } from './approval-gates.js';
 import { mountConnector } from './connector.js';
 import { mountDiagnostics } from './diagnostics.js';
 import { mountAdvanced } from './advanced.js';
 
 const SUB_PAGES = [
-  { id: 'general',        label: 'General',        mount: mountGeneral },
-  { id: 'permissions',    label: 'Permissions',     mount: mountPermissions },
-  { id: 'approval-gates', label: 'Approval gates',  mount: mountApprovalGates },
-  { id: 'connector',      label: 'Connector',       mount: mountConnector },
-  { id: 'diagnostics',    label: 'Diagnostics',     mount: mountDiagnostics },
-  { id: 'advanced',       label: 'Advanced',        mount: mountAdvanced },
+  { id: 'general', label: 'General', mount: mountGeneral },
+  { id: 'connector', label: 'Connector', mount: mountConnector },
+  { id: 'diagnostics', label: 'Diagnostics', mount: mountDiagnostics },
+  { id: 'advanced', label: 'Advanced', mount: mountAdvanced },
 ];
 
+const LEGACY_REDIRECTS = { permissions: 'general', 'approval-gates': 'advanced' };
 let _currentSubPage = 'general';
 
 export function mountSettings(container, subPageId = 'general') {
+  subPageId = LEGACY_REDIRECTS[subPageId] || subPageId;
   if (SUB_PAGES.some(page => page.id === subPageId)) _currentSubPage = subPageId;
   container.innerHTML = '';
   const shell = document.createElement('div');
@@ -37,7 +35,7 @@ export function mountSettings(container, subPageId = 'general') {
     btn.style.cssText = 'text-align:left;padding:8px 12px;font-size:13px;border-radius:8px;border:1px solid transparent;justify-content:flex-start;min-height:34px;';
     btn.textContent = page.label;
     btn.dataset.subPage = page.id;
-    if (page.id === _currentSubPage) { btn.style.background = '#173b73'; btn.style.borderColor = 'rgba(78,161,255,.35)'; btn.style.color = '#fff'; }
+    if (page.id === _currentSubPage) setActiveButton(btn, true);
     btn.onclick = () => {
       const target = page.id === 'general' ? '#settings' : '#settings/' + page.id;
       if (location.hash !== target) {
@@ -45,7 +43,8 @@ export function mountSettings(container, subPageId = 'general') {
         return;
       }
       _currentSubPage = page.id;
-      _setActive(rail, btn);
+      rail.querySelectorAll('button').forEach(b => setActiveButton(b, false));
+      setActiveButton(btn, true);
       content.innerHTML = '';
       page.mount(content);
     };
@@ -60,9 +59,8 @@ export function mountSettings(container, subPageId = 'general') {
   current.mount(content);
 }
 
-function _setActive(rail, activeBtn) {
-  rail.querySelectorAll('button').forEach(b => { b.style.background = ''; b.style.borderColor = 'transparent'; b.style.color = ''; });
-  activeBtn.style.background = '#173b73';
-  activeBtn.style.borderColor = 'rgba(78,161,255,.35)';
-  activeBtn.style.color = '#fff';
+function setActiveButton(button, active) {
+  button.style.background = active ? '#173b73' : '';
+  button.style.borderColor = active ? 'rgba(78,161,255,.35)' : 'transparent';
+  button.style.color = active ? '#fff' : '';
 }

@@ -136,7 +136,7 @@ function updateSettings(current, payload = {}) {
 
   if (Object.prototype.hasOwnProperty.call(values, "toolMode")) {
     const mode = String(values.toolMode || "chatgpt_local_repo");
-    if (!["chatgpt_local_repo", "simple", "developer", "debug"].includes(mode)) throw new Error("Invalid toolMode.");
+    if (!["chatgpt_local_repo", "debug"].includes(mode)) throw new Error("Invalid toolMode.");
     setIfChanged(next, "toolMode", mode, changed);
   }
 

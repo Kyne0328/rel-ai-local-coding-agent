@@ -36,32 +36,36 @@ async function _loadAndRender(container) {
 
 function _render(container) {
   container.innerHTML = '';
-  container.appendChild(header('General', 'Core server behavior, dashboard availability, and local UI preferences.'));
+  container.appendChild(header('General', 'Plain-language controls for the ChatGPT local repo bridge.'));
 
   const grid = formGrid();
-  const server = panel('Server behavior');
-  const limits = panel('Session limits');
+  const main = panel('ChatGPT connection mode');
+  const limits = panel('Runtime limits');
   const local = panel('Local dashboard');
 
-  server.body.appendChild(field('Tool mode', selectControl(['chatgpt_local_repo', 'simple', 'developer', 'debug'], _draft.toolMode || 'chatgpt_local_repo', (v) => { _draft.toolMode = v; _checkDirty(); }), 'ChatGPT local repo mode exposes only the small zip-like bridge tools; debug exposes every legacy/internal tool.'));
-  server.body.appendChild(field('Permission profile', selectControl(['read-only', 'pr', 'test', 'admin'], _draft.permissionProfile, (v) => { _draft.permissionProfile = v; _checkDirty(); }), 'Legacy permission profile. Trusted local agent forces admin behavior.'));
-  server.body.appendChild(field('Trusted local agent', toggleControl(_draft.trustedLocalAgent !== false, (v) => { _draft.trustedLocalAgent = v; _checkDirty(); }), 'One trust decision for ChatGPT-local use: unrestricted shell/write/reset within configured workspaces, no per-command approvals.'));
-  server.body.appendChild(field('Default task mode', selectControl(['plan_only', 'implement', 'implement_and_test', 'review_only'], _draft.defaultTaskMode || 'implement_and_test', (v) => { _draft.defaultTaskMode = v; _checkDirty(); }), 'How new tasks are approached by default.'));
-  server.body.appendChild(field('Sandbox mode', selectControl(['none', 'docker', 'docker_readonly_base'], _draft.sandboxMode || 'none', (v) => { _draft.sandboxMode = v; _checkDirty(); }), 'Execution isolation mode for tool and task runs.'));
-  server.body.appendChild(field('Agent mode', toggleControl(_draft.agentMode, (v) => { _draft.agentMode = v; _checkDirty(); }), 'Convenience mode that enables full autonomous execution. Treat as high risk.'));
+  main.body.appendChild(field('Mode', selectControl([
+    { value: 'chatgpt_local_repo', label: 'ChatGPT local repo — clean 8-tool bridge' },
+    { value: 'debug', label: 'Debug — expose legacy/internal tools' }
+  ], _draft.toolMode || 'chatgpt_local_repo', (v) => { _draft.toolMode = v; _checkDirty(); }), 'Use ChatGPT local repo for normal work. Debug is only for developing Rel.AI itself.'));
+  main.body.appendChild(field('Trusted local agent', toggleControl(_draft.trustedLocalAgent !== false, (v) => { _draft.trustedLocalAgent = v; _checkDirty(); }), 'One trust decision: ChatGPT may read/write inside configured workspaces and run shell commands there.'));
+  main.body.appendChild(field('Automatic implementation mode', selectControl(['plan_only', 'implement', 'implement_and_test', 'review_only'], _draft.defaultTaskMode || 'implement_and_test', (v) => { _draft.defaultTaskMode = v; _checkDirty(); }), 'Default behavior for high-level tasks.'));
 
-  limits.body.appendChild(field('Session locks', toggleControl(_draft.sessionLocksEnabled !== false, (v) => { _draft.sessionLocksEnabled = v; _checkDirty(); }), 'Prevent concurrent sessions on the same workspace.'));
-  limits.body.appendChild(field('Max concurrent sessions per workspace', numberControl(_draft.maxConcurrentSessionsPerWorkspace, (v) => { _draft.maxConcurrentSessionsPerWorkspace = v; _checkDirty(); }, { min: 1, max: 50 }), 'Upper bound for simultaneous sessions per workspace.'));
-  limits.body.appendChild(field('Max session steps', numberControl(_draft.maxSessionSteps, (v) => { _draft.maxSessionSteps = v; _checkDirty(); }, { min: 1, max: 100000 }), 'Hard cap for individual session loops.'));
-  limits.body.appendChild(field('Max plan steps', numberControl(_draft.maxPlanSteps, (v) => { _draft.maxPlanSteps = v; _checkDirty(); }, { min: 1, max: 100000 }), 'Hard cap for planning loops.'));
+  limits.body.appendChild(field('Session locks', toggleControl(_draft.sessionLocksEnabled !== false, (v) => { _draft.sessionLocksEnabled = v; _checkDirty(); }), 'Prevents two runs from editing the same workspace at once.'));
+  limits.body.appendChild(field('Max concurrent sessions per workspace', numberControl(_draft.maxConcurrentSessionsPerWorkspace, (v) => { _draft.maxConcurrentSessionsPerWorkspace = v; _checkDirty(); }, { min: 1, max: 50 }), 'Usually 1–4 is enough.'));
+  limits.body.appendChild(field('Max output bytes', numberControl(_draft.maxOutputBytes, (v) => { _draft.maxOutputBytes = v; _checkDirty(); }, { min: 10000, max: 20000000, width: '140px' }), 'Caps command output returned to ChatGPT.'));
 
-  local.body.appendChild(field('Dashboard enabled', toggleControl(_draft.dashboardEnabled !== false, (v) => { _draft.dashboardEnabled = v; _checkDirty(); }), 'Disable to stop serving the dashboard.'));
+  local.body.appendChild(field('Dashboard enabled', toggleControl(_draft.dashboardEnabled !== false, (v) => { _draft.dashboardEnabled = v; _checkDirty(); }), 'Controls this local dashboard only.'));
   local.body.appendChild(field('Color theme', _themeToggle(), 'Stored only in this browser.'));
 
-  grid.appendChild(server.el);
+  const note = document.createElement('div');
+  note.className = 'card';
+  note.innerHTML = '<div class="card-body" style="font-size:13px;color:var(--text-muted);line-height:1.5;"><strong style="color:var(--text);">Hidden complexity:</strong> permission profiles, approval gates, sandbox modes, and multi-agent controls are debug-era concepts. In trusted ChatGPT mode, Rel.AI uses one local trust decision instead of per-command approvals.</div>';
+
+  grid.appendChild(main.el);
   grid.appendChild(limits.el);
   grid.appendChild(local.el);
   container.appendChild(grid);
+  container.appendChild(note);
 
   const save = saveRow(() => _save(container), () => _loadAndRender(container));
   save.id = '__settings-save-row';

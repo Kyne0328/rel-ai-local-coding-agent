@@ -5,6 +5,7 @@ const https = require("node:https");
 const crypto = require("node:crypto");
 const { getConfigPath, publicConfigSummary, resolveWorkspace, makeDefaultConfig } = require("./config");
 const { runProcess, summarizeCommand } = require("./process");
+const { discoverCommands } = require("./commandDiscovery");
 const { gitStatus } = require("./git");
 const pkg = require("../package.json");
 
@@ -89,7 +90,9 @@ async function workspacePreflight(config, args = {}) {
 
   const commandKeys = Object.keys(workspace.commands || {});
   const testKeys = Object.keys(workspace.testCommands || {});
-  if (testKeys.length === 0) findings.push(finding("warning", "no_test_commands", "No allowlisted test commands are configured for this workspace."));
+  const discoveredCommands = discoverCommands(workspace.path);
+  const discoveredTestKeys = Object.keys(discoveredCommands).filter((key) => /test|analy[sz]e|lint|check|vet|build/.test(key + " " + discoveredCommands[key]));
+  if (testKeys.length === 0 && discoveredTestKeys.length === 0) findings.push(finding("warning", "no_validation_commands", "No configured or discovered validation commands were found for this workspace."));
 
   return {
     ok: !findings.some((item) => item.severity === "error"),
@@ -99,6 +102,8 @@ async function workspacePreflight(config, args = {}) {
     generatedAt: new Date().toISOString(),
     commandKeys,
     testCommandKeys: testKeys,
+    discoveredCommandKeys: Object.keys(discoveredCommands).sort(),
+    discoveredTestCommandKeys: discoveredTestKeys.sort(),
     checks,
     findings,
     nextActions: nextActions(findings)

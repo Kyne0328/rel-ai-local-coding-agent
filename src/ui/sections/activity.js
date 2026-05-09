@@ -26,6 +26,7 @@ export function prependEntry(entry) {
   const key = _entryKey(entry);
   if (key && _allEntries.some(item => _entryKey(item) === key)) return;
   _allEntries.unshift(entry);
+  _allEntries = sortEntries(_allEntries);
   if (_allEntries.length > 1000) {
     _allEntries = _allEntries.slice(0, 1000);
   }
@@ -90,7 +91,7 @@ function _buildActivity() {
 async function _loadLogs(token) {
   const data = await fetchJson('/api/logs?limit=500');
   if (token !== _mountToken) return;
-  _allEntries = Array.isArray(data) ? data : (data && Array.isArray(data.entries) ? data.entries : []);
+  _allEntries = sortEntries(Array.isArray(data) ? data : (data && Array.isArray(data.entries) ? data.entries : []));
   _renderTable(_applyFilters(_allEntries));
 }
 
@@ -99,7 +100,7 @@ function _applyFilters(entries) {
   const ranges = { '15m': 15 * 60000, '1h': 60 * 60000, '24h': 24 * 60 * 60000, '7d': 7 * 24 * 60 * 60000 };
   const rangeMs = ranges[_filterState.timeRange];
 
-  return entries.filter(x => {
+  return sortEntries(entries).filter(x => {
     if (rangeMs) { const ts = Date.parse(String(x.ts || x.at || x.createdAt || '')); if (!Number.isFinite(ts) || now - ts > rangeMs) return false; }
     if (_filterState.search) {
       const q = _filterState.search.toLowerCase();
@@ -181,6 +182,10 @@ function _openDetail(entry) {
     content.appendChild(pre);
   }
   openDrawer({ title: entry.tool || 'Activity detail', content });
+}
+
+function sortEntries(entries) {
+  return [...(Array.isArray(entries) ? entries : [])].sort((a, b) => Date.parse(b.ts || b.at || b.createdAt || 0) - Date.parse(a.ts || a.at || a.createdAt || 0));
 }
 
 function _entryKey(entry) { if (!entry) return ''; return entry.id || [entry.ts || entry.at || entry.createdAt || '', entry.tool || entry.type || '', entry.workspace || '', entry.message || entry.error || entry.path || ''].join('|'); }

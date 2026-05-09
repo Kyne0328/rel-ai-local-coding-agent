@@ -28,7 +28,12 @@ async function _load(container) {
 
 function _render(container) {
   container.innerHTML = '';
-  container.appendChild(header('Advanced', 'Tune multi-agent orchestration, task runner, product UX, release, memory, and indexing settings.'));
+  container.appendChild(header('Advanced', 'Optional debug and product settings. Most users do not need this page for ChatGPT local repo work.'));
+  const note = document.createElement('div');
+  note.className = 'card';
+  note.style.marginBottom = '14px';
+  note.innerHTML = '<div class="card-body" style="font-size:13px;color:var(--text-muted);line-height:1.5;"><strong style="color:var(--text);">Agents are optional.</strong> Rel.AI previously exposed planner/implementer/tester/reviewer roles, but the normal ChatGPT workflow now uses the simpler repo bridge. Keep multi-agent disabled unless you are testing that experimental system.</div>';
+  container.appendChild(note);
 
   const grid = formGrid();
   const multi = panel('Multi-agent');
