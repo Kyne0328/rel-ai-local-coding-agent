@@ -97,7 +97,25 @@ function settingsPayload(config) {
   };
 }
 
+function _getNestedValue(config, key) {
+  const parts = key.split('.');
+  let val = config;
+  for (const p of parts) { val = val && val[p]; }
+  return val;
+}
+
 function updateSettings(current, payload = {}) {
+  if (payload.dryRun) {
+    const changes = [];
+    for (const [key, newVal] of Object.entries(payload)) {
+      if (key === 'dryRun') continue;
+      const oldVal = _getNestedValue(current, key);
+      if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+        changes.push({ key, oldValue: oldVal, newValue: newVal });
+      }
+    }
+    return { ok: true, dryRun: true, changes };
+  }
   requireAdmin(current);
   const next = clone(current);
   const changed = [];

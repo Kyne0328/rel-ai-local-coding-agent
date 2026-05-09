@@ -19,6 +19,28 @@ const { workspaceFromSession } = require("./worktrees");
 const pkg = require("../package.json");
 const connection = require("./connectionProfile");
 
+function buildToolMetadata() {
+  const { toolSchemas } = require("./tools");
+  const categoryMap = {
+    relai_git: "Git", relai_docker: "Docker", relai_workspace: "Workspace",
+    relai_plan: "Plans", relai_multi: "Multi-agent", relai_ci: "CI",
+    relai_audit: "Audit", relai_release: "Release", relai_doctor: "Doctor",
+    relai_memory: "Memory", relai_approval: "Approvals",
+  };
+  return toolSchemas.map(tool => {
+    const prefix = Object.keys(categoryMap).find(k => tool.name.startsWith(k)) || "relai";
+    return {
+      name: tool.name,
+      displayName: tool.name.replace(/^relai_/, "").replace(/_/g, " "),
+      description: tool.description || "",
+      category: categoryMap[prefix] || "Other",
+      requiredProfile: "read-only",
+      requiresApproval: false,
+      parameters: tool.inputSchema ? Object.keys(tool.inputSchema.properties || {}) : [],
+    };
+  });
+}
+
 const DEFAULT_MAX_BODY_BYTES = 10 * 1024 * 1024;
 const sessions = new Map();
 
@@ -120,6 +142,37 @@ async function routeRequest(req, res, options) {
     return;
   }
 
+  if (req.method === "GET" && parsed.pathname === "/api/tools") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    try {
+      sendJson(res, 200, buildToolMetadata(), ae);
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: err.message }, ae);
+    }
+    return;
+  }
+
+  if (req.method === "GET" && parsed.pathname === "/api/onboarding/status") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    const onboardingPath = path.join(require("node:os").homedir(), ".rel-ai-mcp", "onboarding.json");
+    let flag = null;
+    try { flag = JSON.parse(fs.readFileSync(onboardingPath, "utf8")); } catch (_) {}
+    const needsOnboarding = !flag || flag.completed !== true;
+    sendJson(res, 200, { ok: true, completed: flag ? flag.completed : false, skipped: flag ? flag.skipped : false, needsOnboarding }, ae);
+    return;
+  }
+
+  if (req.method === "POST" && parsed.pathname === "/api/onboarding/complete") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    const payload = await readJsonBody(req, options.maxBodyBytes);
+    const onboardingDir = path.join(require("node:os").homedir(), ".rel-ai-mcp");
+    fs.mkdirSync(onboardingDir, { recursive: true });
+    const onboardingPath = path.join(onboardingDir, "onboarding.json");
+    fs.writeFileSync(onboardingPath, JSON.stringify({ completed: Boolean(payload.completed), skipped: Boolean(payload.skipped), updatedAt: new Date().toISOString() }));
+    sendJson(res, 200, { ok: true }, ae);
+    return;
+  }
+
   if (req.method === "POST" && parsed.pathname === "/api/settings") {
     if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
     const current = readConfig();
@@ -133,6 +186,25 @@ async function routeRequest(req, res, options) {
     const current = readConfig();
     const payload = await readJsonBody(req, options.maxBodyBytes);
     sendJson(res, 200, configEditor.updateWorkspace(current, payload), ae);
+    return;
+  }
+
+  const approvalMatch = req.method === "POST" && parsed.pathname.match(/^\/api\/approvals\/([^/]+)\/decision$/);
+  if (approvalMatch) {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    const config = readConfig();
+    if (config.permissionProfile !== "admin") {
+      sendJson(res, 403, { ok: false, error: "Approvals require admin permission profile." }, ae);
+      return;
+    }
+    const approvalId = approvalMatch[1];
+    const payload = await readJsonBody(req, options.maxBodyBytes);
+    try {
+      const result = approvals.resolveApproval(config, { approvalId, status: payload.status, note: payload.reason });
+      sendJson(res, 200, { ok: true, approvalId, status: result.status }, ae);
+    } catch (err) {
+      sendJson(res, 400, { ok: false, error: err.message }, ae);
+    }
     return;
   }
 

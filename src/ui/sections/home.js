@@ -1,173 +1,148 @@
-// Home section — ported from httpServer.js render* functions
-// Same DOM IDs as current template; no routing in Phase 1
+// Home section — Phase 2: pending approvals above fold, live-work card, health surfacing
+import { fetchJson, postJson } from '/ui/api.js';
+import { pillHtml } from '/ui/components/pill.js';
+import { toast } from '/ui/components/toast.js';
 
-export function boot(data) {
+export function mountHome(container, data) {
   if (!data) return;
-  render(data);
+  container.innerHTML = '';
+  container.appendChild(_buildHome(data));
 }
 
-function render(data) {
-  const ok = Boolean(data && data.ok);
-  const statusEl = document.getElementById('serverStatus');
-  if (statusEl) { statusEl.className = 'status-pill ' + (ok ? 'ok' : 'bad'); statusEl.textContent = ok ? 'Online' : 'Error'; }
-  const subtitleEl = document.getElementById('subtitle');
-  if (subtitleEl) subtitleEl.textContent = ok ? 'Rel.AI MCP ' + (data.config && data.config.permissionProfile ? '· ' + data.config.permissionProfile + ' profile' : '') : 'Could not load dashboard data';
-  const updatedEl = document.getElementById('lastUpdated');
-  if (updatedEl) updatedEl.textContent = 'Updated ' + new Date().toLocaleTimeString();
-
+function _buildHome(data) {
   const cfg = data.config || {};
-  const counts = data.counts || {};
   const sessions = Array.isArray(data.sessions) ? data.sessions : [];
   const jobs = Array.isArray(data.jobs) ? data.jobs : [];
   const approvals = Array.isArray(data.approvals) ? data.approvals : [];
-  const locks = Array.isArray(data.locks) ? data.locks : [];
   const health = data.health || {};
   const findings = Array.isArray(health.findings) ? health.findings : [];
   const audit = (data.auditTail && Array.isArray(data.auditTail.entries)) ? data.auditTail.entries : [];
-  const subtasks = (data.multiAgent && Array.isArray(data.multiAgent.subtasks)) ? data.multiAgent.subtasks : [];
   const readiness = data.readiness || {};
+  const counts = data.counts || {};
+  const locks = Array.isArray(data.locks) ? data.locks : [];
 
-  const activeSessions = sessions.filter(x => !['completed', 'closed', 'cancelled', 'failed'].includes(String(x.status || '').toLowerCase())).length;
-  const runningJobs = jobs.filter(x => ['running', 'cancelling', 'queued'].includes(String(x.status || '').toLowerCase())).length;
-  const openApprovals = approvals.filter(x => !['approved', 'denied', 'resolved', 'cancelled'].includes(String(x.status || '').toLowerCase())).length;
+  const openApprovals = approvals.filter(x => !['approved', 'denied', 'resolved', 'cancelled'].includes(String(x.status || '').toLowerCase()));
+  const activeSessions = sessions.filter(x => !['completed', 'closed', 'cancelled', 'failed'].includes(String(x.status || '').toLowerCase()));
+  const runningJobs = jobs.filter(x => ['running', 'cancelling', 'queued'].includes(String(x.status || '').toLowerCase()));
 
-  const metricsEl = document.getElementById('metrics');
-  if (metricsEl) metricsEl.innerHTML =
-    metric('Sessions', counts.sessions || sessions.length, activeSessions + ' active', 'blue') +
-    metric('Jobs', counts.jobs || jobs.length, runningJobs + ' running', 'warn') +
-    metric('Approvals', counts.approvals || approvals.length, openApprovals + ' open', openApprovals ? 'warn' : 'purple') +
-    metric('Locks', counts.locks || locks.length, 'cooperative locks', 'blue') +
-    metric('Health', findings.length, health.ok === false ? 'needs attention' : 'all clear', health.ok === false ? 'bad' : 'good') +
-    metric('Readiness', readiness.score != null ? readiness.score : '—', readiness.ok === false ? 'review needed' : 'release check', readiness.ok === false ? 'warn' : 'good');
+  const root = document.createElement('div');
+  root.className = 'section';
+  root.style.gap = '16px';
 
-  renderConfig(cfg, data);
-  renderWorkspaces(cfg, health);
-  renderActivity(audit);
-  renderLists(sessions, jobs, approvals, findings);
-  renderTerminal(data, audit, jobs, subtasks, findings);
-  renderAgents(subtasks, jobs, approvals, health);
-}
+  // Topbar subtitle (topbar is outside <main>, still in DOM)
+  const subtitle = document.getElementById('subtitle');
+  if (subtitle) subtitle.textContent = 'Rel.AI MCP' + (cfg.permissionProfile ? ' · ' + cfg.permissionProfile + ' profile' : '') + ' · ' + (Array.isArray(cfg.workspaces) ? cfg.workspaces.length : 0) + ' workspaces';
+  const updated = document.getElementById('lastUpdated');
+  if (updated) updated.textContent = 'Updated ' + new Date().toLocaleTimeString();
+  const statusEl = document.getElementById('serverStatus');
+  if (statusEl) { statusEl.className = 'status-pill ' + (data.ok ? 'ok' : 'bad'); statusEl.textContent = data.ok ? 'Online' : 'Error'; }
 
-function renderConfig(cfg, data) {
-  const profile = cfg.permissionProfile || 'unknown';
-  const pill = document.getElementById('profilePill');
-  if (pill) { pill.className = 'status-pill ' + (profile === 'admin' ? 'warn' : 'ok'); pill.textContent = profile + ' profile'; }
-  const configItems = [
-    ['State dir', cfg.stateDir || 'not reported', 'ok'],
-    ['Dashboard', cfg.dashboardEnabled === false ? 'disabled' : 'enabled', cfg.dashboardEnabled === false ? 'bad' : 'ok'],
-    ['Arbitrary commands', cfg.allowArbitraryCommands ? 'enabled' : 'disabled', cfg.allowArbitraryCommands ? 'warn' : 'ok'],
-    ['Docker', cfg.allowDocker ? 'enabled' : 'disabled', cfg.allowDocker ? 'warn' : 'ok'],
-    ['GitHub CLI', cfg.allowGitHubCli ? 'enabled' : 'disabled', cfg.allowGitHubCli ? 'warn' : 'ok'],
-    ['Multi-agent', cfg.multiAgent && cfg.multiAgent.enabled ? 'enabled' : 'disabled', cfg.multiAgent && cfg.multiAgent.enabled ? 'ok' : 'warn'],
-  ];
-  const el = document.getElementById('configList');
-  if (el) el.innerHTML = configItems.map(x => listItem(x[0], x[1], '', x[2])).join('') || emptyHtml('No configuration summary available.');
-}
-
-function renderWorkspaces(cfg, health) {
-  const workspaces = Array.isArray(cfg.workspaces) ? cfg.workspaces : [];
-  const healthWorkspaces = Array.isArray(health.workspaces) ? health.workspaces : [];
-  const countEl = document.getElementById('workspaceCount');
-  if (countEl) countEl.textContent = workspaces.length + ' configured';
-  const firstWs = workspaces[0];
-  const wsInput = document.getElementById('workspace');
-  if (wsInput && firstWs && !wsInput.value) wsInput.value = firstWs.alias || '';
-  const listEl = document.getElementById('workspacesList');
-  if (!listEl) return;
-  if (!workspaces.length) {
-    listEl.innerHTML = '';
-    listEl.appendChild(createEmptyState());
-    return;
+  // Health warning above fold
+  if (health.ok === false && findings.length) {
+    const healthBanner = document.createElement('div');
+    healthBanner.style.cssText = 'padding:12px 14px;border:1px solid rgba(255,102,128,.35);border-radius:12px;background:rgba(255,102,128,.08);color:#ffb3c0;font-size:13px;display:flex;gap:10px;align-items:flex-start;';
+    healthBanner.innerHTML = `<span style="font-size:16px;">⚠</span><div><strong>Health findings (${findings.length})</strong><div style="margin-top:4px;color:#ff9aaa;">${findings.slice(0, 3).map(f => esc(f.message || f.code || 'finding')).join(' · ')}</div></div>`;
+    root.appendChild(healthBanner);
   }
-  listEl.innerHTML = workspaces.map(w => {
-    const h = healthWorkspaces.find(x => x.alias === w.alias) || {};
-    const badges = [
-      `<span class="badge ${h.ok === false ? 'warn' : 'good'}">${h.ok === false ? 'check' : 'healthy'}</span>`,
-      `<span class="badge">base ${esc(w.defaultBaseBranch || 'main')}</span>`,
-      `<span class="badge">tests ${esc((w.testCommandKeys || []).length)}</span>`,
-      h.worktreeCount != null ? `<span class="badge">worktrees ${esc(h.worktreeCount)}</span>` : '',
-    ].join('');
-    return `<div class="workspace-card"><strong>${esc(w.alias || 'workspace')}</strong><div class="path">${esc(w.path || '')}</div><div class="badge-row">${badges}</div></div>`;
-  }).join('');
-}
 
-function createEmptyState() {
-  const el = document.createElement('div');
-  el.className = 'empty';
-  el.style.cssText = 'text-align:center;padding:32px 16px;display:grid;gap:8px;';
-  el.innerHTML = '<div style="font-size:24px;">📁</div><div style="font-weight:700;">No workspaces yet</div><div style="color:var(--muted,var(--text-muted));font-size:13px;">Point Rel.AI at a folder to get started</div>';
-  return el;
-}
+  // Pending approvals card
+  if (openApprovals.length) {
+    const apprCard = document.createElement('div');
+    apprCard.className = 'card';
+    apprCard.style.border = '1px solid rgba(255,194,75,.35)';
+    apprCard.innerHTML = `<div class="card-head" style="border-bottom-color:rgba(255,194,75,.2);"><h3>Pending approvals (${openApprovals.length})</h3></div>`;
+    const body = document.createElement('div');
+    body.className = 'card-body';
+    body.style.display = 'grid';
+    body.style.gap = '8px';
+    for (const appr of openApprovals.slice(0, 5)) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px;border:1px solid rgba(255,194,75,.15);border-radius:10px;background:rgba(255,194,75,.04);';
+      row.innerHTML = `<div><div style="font-weight:700;font-size:13px;">⚠ ${esc(appr.action || 'approval')}</div><div style="color:var(--text-muted);font-size:12px;margin-top:2px;">${esc(appr.workspace || '')} · ${timeAgo(appr.createdAt)}</div></div>`;
+      const btns = document.createElement('div');
+      btns.style.cssText = 'display:flex;gap:8px;flex-shrink:0;';
+      const approveBtn = document.createElement('button');
+      approveBtn.textContent = 'Approve';
+      approveBtn.style.cssText = 'min-height:30px;padding:0 12px;font-size:12px;background:rgba(71,221,138,.12);border-color:rgba(71,221,138,.35);';
+      approveBtn.onclick = () => _decideApproval(appr.id, 'approved', row);
+      const rejectBtn = document.createElement('button');
+      rejectBtn.className = 'danger';
+      rejectBtn.textContent = 'Reject';
+      rejectBtn.style.cssText = 'min-height:30px;padding:0 12px;font-size:12px;';
+      rejectBtn.onclick = () => _decideApproval(appr.id, 'rejected', row);
+      btns.appendChild(approveBtn);
+      btns.appendChild(rejectBtn);
+      row.appendChild(btns);
+      body.appendChild(row);
+    }
+    apprCard.appendChild(body);
+    root.appendChild(apprCard);
+  }
 
-function renderActivity(audit) {
-  const countEl = document.getElementById('activityCount');
-  if (countEl) countEl.textContent = audit.length + ' events';
-  const tbody = document.getElementById('activityRows');
-  if (!tbody) return;
-  tbody.innerHTML = audit.slice(0, 12).map(x => {
-    const ok = x.ok === false ? 'failed' : 'ok';
-    const message = x.error || x.message || x.path || '';
-    return `<tr><td class="nowrap">${esc(timeAgo(x.ts || x.at || x.createdAt || x.timestamp))}</td><td class="truncate mono">${esc(x.tool || x.type || x.event || 'activity')}</td><td class="truncate">${esc(x.workspace || '—')}</td><td><span class="status-pill ${cls(ok)}">${esc(ok)}<span class="sr-only"> (${cls(ok)})</span></span></td><td class="truncate">${esc(message)}</td></tr>`;
-  }).join('') || `<tr><td colspan="5"><div class="empty">Activity will appear here when ChatGPT calls a Rel.AI tool.</div></td></tr>`;
-}
+  // Metrics grid
+  const metricsGrid = document.createElement('div');
+  metricsGrid.className = 'overview-grid';
+  metricsGrid.innerHTML =
+    _metric('Sessions', counts.sessions || sessions.length, activeSessions.length + ' active', 'blue') +
+    _metric('Jobs', counts.jobs || jobs.length, runningJobs.length + ' running', 'warn') +
+    _metric('Approvals', counts.approvals || approvals.length, openApprovals.length + ' open', openApprovals.length ? 'warn' : 'purple') +
+    _metric('Locks', counts.locks || locks.length, 'cooperative locks', 'blue') +
+    _metric('Health', findings.length, health.ok === false ? 'needs attention' : 'all clear', health.ok === false ? 'bad' : 'good') +
+    _metric('Readiness', readiness.score != null ? readiness.score : '—', readiness.ok === false ? 'review needed' : 'release check', readiness.ok === false ? 'warn' : 'good');
+  root.appendChild(metricsGrid);
 
-function renderLists(sessions, jobs, approvals, findings) {
-  const set = (id, items, mapFn, emptyMsg) => {
-    const el = document.getElementById(id);
-    if (el) el.innerHTML = items.slice(0, 8).map(mapFn).join('') || emptyHtml(emptyMsg);
-  };
-  const cnt = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = String(val); };
-  cnt('sessionCount', sessions.length);
-  cnt('jobCount', jobs.length);
-  cnt('approvalCount', approvals.length);
-  cnt('findingCount', findings.length);
-  set('sessionsList', sessions, x => listItem(short(x.id), String(x.workspace || 'workspace') + ' · ' + String(x.status || 'unknown'), timeAgo(x.updatedAt || x.createdAt), x.status), 'No task sessions yet.');
-  set('jobsList', jobs, x => listItem(short(x.id), String(x.workspace || 'workspace') + ' · ' + String(x.commandKey || x.command || 'command'), timeAgo(x.updatedAt || x.startedAt || x.createdAt), x.status), 'No background jobs.');
-  set('approvalsList', approvals, x => listItem(short(x.id), String(x.action || 'approval') + ' · ' + String(x.status || 'pending'), timeAgo(x.updatedAt || x.createdAt), x.status || 'pending'), 'No pending approvals.');
-  set('healthList', findings, x => listItem(x.code || x.severity || 'finding', x.message || '', '', x.severity || 'warn'), 'No health findings.');
-}
+  // Live work + Recent activity (two-column)
+  const lowerGrid = document.createElement('div');
+  lowerGrid.className = 'layout-grid';
 
-function renderTerminal(data, audit, jobs, subtasks, findings) {
-  const el = document.getElementById('terminal');
-  if (!el) return;
-  const lines = [];
-  lines.push('<span class="prompt">$</span> relai dashboard');
-  if (data && data.ok) lines.push('<span class="ok">✓</span> server responded');
-  else lines.push('<span class="bad">✕</span> ' + esc(data && data.error ? data.error : 'failed to load'));
-  lines.push('<span class="ok">✓</span> sessions ' + esc((data.sessions || []).length) + ', jobs ' + esc((data.jobs || []).length) + ', approvals ' + esc((data.approvals || []).length));
-  if (subtasks.length) lines.push('<span class="ok">✓</span> subtasks tracked: ' + esc(subtasks.length));
-  if (findings.length) lines.push('<span class="warn">!</span> health findings: ' + esc(findings.length));
-  else lines.push('<span class="ok">✓</span> health findings: 0');
-  if (audit[0]) lines.push('<span class="prompt">›</span> latest ' + esc(audit[0].tool || 'activity') + ' ' + esc(timeAgo(audit[0].ts || audit[0].at || audit[0].createdAt)));
-  el.innerHTML = lines.join('<br>');
-}
-
-function renderAgents(subtasks, jobs, approvals, health) {
-  const AGENTS = [
-    ['Planner', 'Plans tasks', '♙'], ['Implementer', 'Applies changes', '⌘'],
-    ['Tester', 'Runs checks', '✓'], ['Reviewer', 'Reviews diffs', '◆'],
-    ['CI Repair', 'Watches checks', '◈'], ['Docs', 'Updates notes', '✎'], ['Security', 'Flags risk', '▰'],
+  const liveCard = document.createElement('div');
+  liveCard.className = 'card';
+  liveCard.innerHTML = '<div class="card-head"><h3>Live work</h3></div>';
+  const liveBody = document.createElement('div');
+  liveBody.className = 'card-body list';
+  const liveItems = [
+    ...activeSessions.slice(0, 4).map(s => _listItem(short(s.id), (s.workspace || 'workspace') + ' · ' + (s.status || 'unknown'), timeAgo(s.updatedAt || s.createdAt), s.status)),
+    ...runningJobs.slice(0, 3).map(j => _listItem(short(j.id), (j.workspace || 'workspace') + ' · ' + (j.commandKey || j.command || 'job'), timeAgo(j.updatedAt || j.startedAt), j.status)),
   ];
-  const el = document.getElementById('agentGrid');
-  if (!el) return;
-  const cnt = document.getElementById('agentCount');
-  if (cnt) cnt.textContent = AGENTS.length + ' roles';
-  el.innerHTML = AGENTS.map(role => {
-    const [label, fallback, icon] = role;
-    const match = subtasks.find(x => String(x.role || '').toLowerCase().includes(label.toLowerCase().split(' ')[0]));
-    let state = match ? String(match.status || fallback) : fallback;
-    if (label === 'Tester' && jobs.some(x => String(x.commandKey || x.command || '').toLowerCase().includes('test'))) state = 'Running tests';
-    if (label === 'Reviewer' && approvals.length) state = 'Reviewing gates';
-    if (label === 'Security' && health && health.ok === false) state = 'Needs attention';
-    return `<div class="agent"><div class="agent-top"><span class="agent-icon">${esc(icon)}</span><span class="status-pill ${cls(state)}">${esc(state)}<span class="sr-only"> (${cls(state)})</span></span></div><div class="agent-name">${esc(label)}</div><div class="agent-state">${esc(state)}</div></div>`;
-  }).join('');
+  liveBody.innerHTML = liveItems.join('') || '<div class="empty">No active sessions or jobs.</div>';
+  liveCard.appendChild(liveBody);
+
+  const actCard = document.createElement('div');
+  actCard.className = 'card';
+  actCard.innerHTML = `<div class="card-head"><h3>Recent activity (${audit.length})</h3></div>`;
+  const actBody = document.createElement('div');
+  actBody.className = 'card-body';
+  actBody.innerHTML = audit.slice(0, 12).map(x => {
+    const ok = x.ok === false ? 'failed' : 'ok';
+    return `<div style="display:flex;gap:10px;padding:6px 0;border-bottom:1px solid var(--line-soft);font-size:12px;"><span style="color:var(--text-muted);white-space:nowrap;">${esc(timeAgo(x.ts || x.at))}</span><span class="truncate mono" style="flex:1;">${esc(x.tool || x.type || 'activity')}</span>${pillHtml(ok)}</div>`;
+  }).join('') || '<div class="empty">Activity will appear here when ChatGPT calls a Rel.AI tool.</div>';
+  actCard.appendChild(actBody);
+
+  lowerGrid.appendChild(liveCard);
+  lowerGrid.appendChild(actCard);
+  root.appendChild(lowerGrid);
+
+  return root;
 }
 
-// ── Shared helpers ────────────────────────────────────────────────────────────
+async function _decideApproval(id, status, rowEl) {
+  rowEl.style.opacity = '0.5';
+  rowEl.style.pointerEvents = 'none';
+  const result = await postJson(`/api/approvals/${encodeURIComponent(id)}/decision`, { status });
+  if (result && result.ok) {
+    toast(status === 'approved' ? 'Approved — agent can now retry.' : 'Rejected.', { variant: status === 'approved' ? 'success' : 'warn' });
+    try { await navigator.clipboard.writeText(id); } catch (_) {}
+    rowEl.remove();
+  } else {
+    rowEl.style.opacity = '';
+    rowEl.style.pointerEvents = '';
+    toast('Error: ' + (result ? result.error : 'unknown'), { variant: 'error' });
+  }
+}
+
+function _metric(label, value, meta, type) { return `<div class="metric ${type || ''}"><div class="metric-label">${esc(label)}</div><div class="metric-value">${esc(value)}</div><div class="metric-meta">${esc(meta || '')}</div></div>`; }
+function _listItem(title, sub, time, state) { const c = _cls(state || 'ok'); return `<div class="list-item"><span class="dot ${c === 'ok' ? '' : c}"></span><div><div class="item-title">${esc(title)}</div><div class="item-sub">${esc(sub || '')}</div></div><div class="item-time">${esc(time || '')}</div></div>`; }
 function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
-function cls(v) { const s = String(v || '').toLowerCase(); return s.includes('fail') || s.includes('error') || s.includes('denied') || s.includes('blocked') || s === 'false' ? 'bad' : s.includes('pending') || s.includes('run') || s.includes('warn') || s.includes('wait') || s.includes('active') ? 'warn' : 'ok'; }
-function short(v) { const s = String(v || ''); return s.length > 28 ? s.slice(0, 14) + '…' + s.slice(-7) : s; }
-function timeAgo(v) { const ts = Date.parse(String(v || '')); if (!Number.isFinite(ts)) return String(v || ''); const m = Math.floor(Math.max(0, Date.now() - ts) / 60000); if (m < 1) return 'now'; if (m < 60) return m + 'm ago'; const h = Math.floor(m / 60); if (h < 24) return h + 'h ago'; return Math.floor(h / 24) + 'd ago'; }
-function metric(label, value, meta, type) { return `<div class="metric ${type || ''}"><div class="metric-label">${esc(label)}</div><div class="metric-value">${esc(value)}</div><div class="metric-meta">${esc(meta || '')}</div></div>`; }
-function listItem(title, sub, time, state) { const c = cls(state || 'ok'); return `<div class="list-item"><span class="dot ${c === 'ok' ? '' : c}"></span><div><div class="item-title">${esc(title)}</div><div class="item-sub">${esc(sub || '')}</div></div><div class="item-time">${esc(time || '')}</div></div>`; }
-function emptyHtml(msg) { return `<div class="empty">${esc(msg)}</div>`; }
+function _cls(v) { const s = String(v || '').toLowerCase(); return s.includes('fail') || s.includes('error') || s.includes('denied') || s === 'false' ? 'bad' : s.includes('pending') || s.includes('run') || s.includes('warn') || s.includes('active') ? 'warn' : 'ok'; }
+function short(v) { const s = String(v || ''); return s.length > 20 ? s.slice(0, 10) + '…' + s.slice(-5) : s; }
+function timeAgo(v) { const ts = Date.parse(String(v || '')); if (!Number.isFinite(ts)) return ''; const m = Math.floor(Math.max(0, Date.now() - ts) / 60000); if (m < 1) return 'now'; if (m < 60) return m + 'm ago'; const h = Math.floor(m / 60); return h < 24 ? h + 'h ago' : Math.floor(h / 24) + 'd ago'; }

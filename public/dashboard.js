@@ -1,140 +1,126 @@
 import { setToken, getToken, fetchJson } from '/ui/api.js';
-import { init as initStore } from '/ui/store.js';
+import { init as initStore, get as getStore } from '/ui/store.js';
+import { initRouter, currentSection } from '/ui/router.js';
 import { initEvents, startSSE, stopSSE, isLive } from '/ui/events.js';
-import { boot as bootHome } from '/ui/sections/home.js';
-import { boot as bootActivity } from '/ui/sections/activity.js';
-import { boot as bootSettings } from '/ui/sections/settings/index.js';
+import { mountHome } from '/ui/sections/home.js';
+import { mountActivity } from '/ui/sections/activity.js';
+import { mountApprovals } from '/ui/sections/approvals.js';
+import { mountSettings } from '/ui/sections/settings/index.js';
+import { mountWorkspaces } from '/ui/sections/workspaces.js';
+import { mountAgents } from '/ui/sections/agents.js';
 
-// ── Token bootstrap ──────────────────────────────────────────────────────────
+// Restore saved theme
+const savedTheme = localStorage.getItem('relai_theme');
+if (savedTheme === 'light') document.documentElement.dataset.theme = 'light';
+
+// Token bootstrap
 const urlToken = new URLSearchParams(location.search).get('token') || '';
-const storedToken = sessionStorage.getItem('relai_dashboard_token') || '';
-const token = urlToken || storedToken;
-if (token) {
-  setToken(token);
-  const tokenInput = document.getElementById('token');
-  if (tokenInput) tokenInput.value = token;
-}
+const token = urlToken || sessionStorage.getItem('relai_dashboard_token') || '';
+if (token) setToken(token);
 
-// ── Initial payload ──────────────────────────────────────────────────────────
 function readInitialPayload() {
-  try {
-    const el = document.getElementById('initialDashboardData');
-    return el && el.textContent ? JSON.parse(el.textContent) : null;
-  } catch (_) { return null; }
+  try { const el = document.getElementById('initialDashboardData'); return el && el.textContent ? JSON.parse(el.textContent) : null; } catch (_) { return null; }
 }
 
-// ── Boot ─────────────────────────────────────────────────────────────────────
 async function boot() {
   const initial = readInitialPayload();
-  initStore(initial);
+  initStore(initial || {});
 
-  // Render initial state immediately (zero-flash)
-  if (initial) bootHome(initial);
+  const main = document.getElementById('main');
+  if (!main) return;
 
-  // Fetch fresh data
+  const sections = {
+    home:        (el) => mountHome(el, getStore()),
+    overview:    (el) => mountHome(el, getStore()),
+    workspaces:  (el) => mountWorkspaces(el, getStore()),
+    activity:    (el) => mountActivity(el),
+    approvals:   (el) => mountApprovals(el),
+    agents:      (el) => mountAgents(el, getStore()),
+    settings:    (el) => mountSettings(el),
+    connector:   (el) => mountSettings(el),
+    diagnostics: (el) => mountSettings(el),
+  };
+
+  _buildNav();
+  initRouter(main, sections);
+
   const fresh = await fetchJson('/api/dashboard/v10?limit=100&requireHttpToken=0');
   if (fresh) {
-    bootHome(fresh);
-    bootActivity(fresh);
+    initStore(fresh);
+    const id = currentSection();
+    if (sections[id]) { main.innerHTML = ''; sections[id](main); }
   }
 
-  await loadConnection();
-
-  // Boot settings section (attaches to nav + DOM injection)
-  bootSettings();
-
-  // Wire up global controls
-  wireControls();
+  _wireTopControls();
+  _checkOnboarding();
 }
 
-async function loadConnection() {
-  const payload = await fetchJson('/api/connection');
-  const status = document.getElementById('connectorStatus');
-  if (status && payload) {
-    status.className = 'status-pill ' + (payload.permanentUrlConfigured ? 'ok' : 'warn');
-    status.textContent = payload.permanentUrlConfigured ? 'permanent URL' : 'local only';
-  }
-  const box = document.getElementById('connectorBox');
-  if (box && payload) {
-    box.textContent = [
-      'Dashboard: ' + (payload.dashboardUrl || ''),
-      'ChatGPT MCP URL: ' + (payload.chatgptMcpUrl || ''),
-      'ChatGPT auth: No Authentication',
-      'Health: ' + (payload.chatgptHealthUrl || ''),
-      '',
-      payload.permanentUrlConfigured ? 'Stable public URL is configured.' : 'No stable public URL configured yet.',
-    ].join('\n');
-  }
+function _buildNav() {
+  const nav = document.querySelector('.nav');
+  if (!nav) return;
+  nav.innerHTML = `
+    <a href="#home">Home</a>
+    <a href="#workspaces">Workspaces</a>
+    <a href="#activity">Activity</a>
+    <a href="#approvals">Approvals</a>
+    <a href="#agents">Agents</a>
+    <a href="#settings">Settings</a>
+  `;
+  const mobileNav = document.querySelector('.mobile-nav');
+  if (mobileNav) mobileNav.innerHTML = nav.innerHTML;
 }
 
-function wireControls() {
-  // Refresh button
-  const refreshBtn = document.querySelector('button[onclick="refresh()"]');
-  if (refreshBtn) { refreshBtn.removeAttribute('onclick'); refreshBtn.onclick = doRefresh; }
-
-  // Live button
-  const liveBtn = document.getElementById('liveBtn');
-  if (liveBtn) { liveBtn.removeAttribute('onclick'); liveBtn.onclick = toggleLive; }
-
-  // Raw button
-  const rawBtn = document.querySelector('button[onclick="toggleRaw()"]');
-  if (rawBtn) { rawBtn.removeAttribute('onclick'); rawBtn.onclick = toggleRaw; }
-
-  // Token input
+function _wireTopControls() {
   const tokenInput = document.getElementById('token');
-  if (tokenInput) tokenInput.addEventListener('input', () => setToken(tokenInput.value.trim()));
-
-  // Diagnostic buttons (keep working)
-  const healthBtn = document.querySelector('button[onclick="loadHealth()"]');
-  if (healthBtn) { healthBtn.removeAttribute('onclick'); healthBtn.onclick = () => loadDiag('/api/health-monitor'); }
-  const readinessBtn = document.querySelector('button[onclick="loadReadiness()"]');
-  if (readinessBtn) { readinessBtn.removeAttribute('onclick'); readinessBtn.onclick = () => loadDiag('/api/readiness?requireHttpToken=0'); }
-  const logsBtn = document.querySelector('button[onclick="loadLogs()"]');
-  if (logsBtn) { logsBtn.removeAttribute('onclick'); logsBtn.onclick = () => loadDiag('/api/logs?limit=100'); }
-  const diffBtn = document.querySelector('button[onclick="loadDiff()"]');
-  if (diffBtn) { diffBtn.removeAttribute('onclick'); diffBtn.onclick = loadDiff; }
+  if (tokenInput) {
+    if (getToken()) tokenInput.value = getToken();
+    tokenInput.addEventListener('input', () => setToken(tokenInput.value.trim()));
+  }
+  const liveBtn = document.getElementById('liveBtn');
+  if (liveBtn) liveBtn.onclick = _toggleLive;
+  // Hide raw panel button (Phase 3: moved to Cmd-K)
+  const rawBtn = document.getElementById('rawToggleBtn');
+  if (rawBtn) rawBtn.style.display = 'none';
 }
 
-async function doRefresh() {
+async function _doRefresh() {
   const data = await fetchJson('/api/dashboard/v10?limit=100&requireHttpToken=0');
-  if (data) { bootHome(data); bootActivity(data); }
+  if (data) {
+    initStore(data);
+    const main = document.getElementById('main');
+    const id = currentSection();
+    const fns = { home: mountHome, overview: mountHome, workspaces: mountWorkspaces, activity: mountActivity, approvals: mountApprovals, agents: mountAgents, settings: mountSettings };
+    const fn = fns[id];
+    if (main && fn) { main.innerHTML = ''; fn(main, getStore()); }
+  }
 }
 
-function toggleLive() {
+function _toggleLive() {
   const btn = document.getElementById('liveBtn');
   if (isLive()) {
     stopSSE();
     if (btn) btn.textContent = 'Start live';
   } else {
-    initEvents((data) => { bootHome(data); bootActivity(data); });
+    initEvents(async (data) => {
+      initStore(data);
+      const main = document.getElementById('main');
+      const id = currentSection();
+      if (main && id === 'home') mountHome(main, getStore());
+      if (main && id === 'activity') mountActivity(main);
+    });
     startSSE(getToken);
     if (btn) btn.textContent = 'Stop live';
   }
 }
 
-function toggleRaw() {
-  const panel = document.getElementById('rawPanel');
-  if (!panel) return;
-  panel.classList.toggle('open');
-  if (panel.classList.contains('open')) {
-    const out = document.getElementById('rawOut');
-    const data = readInitialPayload();
-    if (out && data) out.textContent = JSON.stringify(data, null, 2);
-  }
-}
-
-async function loadDiag(url) {
-  const data = await fetchJson(url);
-  const out = document.getElementById('maintenanceOut');
-  if (out) out.textContent = JSON.stringify(data, null, 2);
-}
-
-async function loadDiff() {
-  const w = (document.getElementById('workspace') || {}).value || '';
-  const s = (document.getElementById('sessionId') || {}).value || '';
-  const data = await fetchJson(`/api/session/diff?workspace=${encodeURIComponent(w)}&sessionId=${encodeURIComponent(s)}`);
-  const out = document.getElementById('diffOut');
-  if (out) out.textContent = JSON.stringify(data, null, 2);
+async function _checkOnboarding() {
+  try {
+    const status = await fetchJson('/api/onboarding/status');
+    if (status && status.needsOnboarding) {
+      const { openOnboarding } = await import('/ui/sections/onboarding.js');
+      openOnboarding();
+    }
+  } catch (_) { /* degrade gracefully */ }
 }
 
 boot();
