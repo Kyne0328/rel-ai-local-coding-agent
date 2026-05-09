@@ -2,11 +2,16 @@
 import { fetchJson, postJson } from '/ui/api.js';
 import { openModal, closeModal } from '/ui/components/modal.js';
 import { toast } from '/ui/components/toast.js';
+import { TabList } from '/ui/components/tab.js';
+import { EmptyState } from '/ui/components/empty-state.js';
+import { esc, timeAgo } from '/ui/utils.js';
 
-export function mountApprovals(container) {
+export function mountApprovals(container, data = null) {
   container.innerHTML = '';
   container.appendChild(_buildApprovals());
-  _loadApprovals();
+  const approvals = data && Array.isArray(data.approvals) ? data.approvals : null;
+  if (approvals) _renderApprovals(approvals);
+  else _loadApprovals();
 }
 
 function _buildApprovals() {
@@ -16,7 +21,7 @@ function _buildApprovals() {
   const list = document.createElement('div');
   list.id = '__approvals-list';
   list.className = 'list';
-  list.innerHTML = '<div class="empty">Loading approvals…</div>';
+  list.appendChild(EmptyState({ icon: '…', title: 'Loading approvals', body: 'Approval requests will appear here.' }));
   root.appendChild(list);
   return root;
 }
@@ -35,27 +40,40 @@ function _renderApprovals(approvals) {
   const resolved = approvals.filter(x => ['approved', 'rejected', 'cancelled'].includes(String(x.status || '').toLowerCase()));
 
   if (!approvals.length) {
-    list.innerHTML = '<div class="empty">No approval requests yet. Approvals appear when a tool requires explicit permission.</div>';
+    list.innerHTML = '';
+    list.appendChild(EmptyState({
+      icon: '✓',
+      title: 'No approval requests yet',
+      body: 'Approvals appear when a tool requires explicit permission.'
+    }));
     return;
   }
 
   list.innerHTML = '';
+  const rows = document.createElement('div');
+  rows.className = 'list';
+  rows.style.marginTop = '10px';
 
-  if (pending.length) {
-    const heading = document.createElement('div');
-    heading.style.cssText = 'font-size:12px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:4px 0;';
-    heading.textContent = 'Pending (' + pending.length + ')';
-    list.appendChild(heading);
-    for (const appr of pending) list.appendChild(_buildApprovalRow(appr, true));
-  }
+  const renderTab = (id) => {
+    rows.innerHTML = '';
+    const items = id === 'resolved' ? resolved.slice(0, 10) : pending;
+    if (!items.length) {
+      rows.appendChild(EmptyState({
+        icon: id === 'resolved' ? '✓' : '□',
+        title: id === 'resolved' ? 'No resolved approvals' : 'No pending approvals',
+        body: id === 'resolved' ? 'Approved and rejected requests will appear here.' : 'Nothing is waiting for review.'
+      }));
+      return;
+    }
+    for (const appr of items) rows.appendChild(_buildApprovalRow(appr, id !== 'resolved'));
+  };
 
-  if (resolved.length) {
-    const heading = document.createElement('div');
-    heading.style.cssText = 'font-size:12px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:12px 0 4px;';
-    heading.textContent = 'Resolved (' + resolved.length + ')';
-    list.appendChild(heading);
-    for (const appr of resolved.slice(0, 10)) list.appendChild(_buildApprovalRow(appr, false));
-  }
+  list.appendChild(TabList([
+    { id: 'pending', label: 'Pending (' + pending.length + ')' },
+    { id: 'resolved', label: 'Resolved (' + resolved.length + ')' }
+  ], renderTab));
+  list.appendChild(rows);
+  renderTab('pending');
 }
 
 function _buildApprovalRow(appr, isPending) {
@@ -66,7 +84,7 @@ function _buildApprovalRow(appr, isPending) {
     <span class="dot ${isPending ? 'warn' : ''}"></span>
     <div>
       <div class="item-title">${esc(appr.action || 'approval')}</div>
-      <div class="item-sub">${esc(appr.workspace || '')} · ${esc(appr.status || 'pending')} · ${_timeAgo(appr.createdAt)}</div>
+      <div class="item-sub">${esc(appr.workspace || '')} · ${esc(appr.status || 'pending')} · ${timeAgo(appr.createdAt)}</div>
     </div>
   `;
 
@@ -133,5 +151,3 @@ function _openApprovalModal(appr, rowEl) {
   openModal({ title: 'Review approval: ' + (appr.action || ''), content });
 }
 
-function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
-function _timeAgo(v) { const ts = Date.parse(String(v || '')); if (!Number.isFinite(ts)) return ''; const m = Math.floor(Math.max(0, Date.now() - ts) / 60000); if (m < 1) return 'now'; if (m < 60) return m + 'm ago'; const h = Math.floor(m / 60); return h < 24 ? h + 'h ago' : Math.floor(h / 24) + 'd ago'; }

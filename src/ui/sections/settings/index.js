@@ -17,7 +17,8 @@ const SUB_PAGES = [
 
 let _currentSubPage = 'general';
 
-export function mountSettings(container) {
+export function mountSettings(container, subPageId = 'general') {
+  if (SUB_PAGES.some(page => page.id === subPageId)) _currentSubPage = subPageId;
   container.innerHTML = '';
   const shell = document.createElement('div');
   shell.style.cssText = 'display:grid;grid-template-columns:180px minmax(0,1fr);gap:16px;min-height:400px;';

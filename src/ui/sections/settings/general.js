@@ -2,6 +2,9 @@
 import { fetchJson, postJson } from '/ui/api.js';
 import { openModal, closeModal } from '/ui/components/modal.js';
 import { toast } from '/ui/components/toast.js';
+import { Select } from '/ui/components/select.js';
+import { Toggle } from '/ui/components/toggle.js';
+import { esc } from '/ui/utils.js';
 
 let _original = null;
 let _draft = null;
@@ -24,14 +27,14 @@ function _render(container, data) {
   const form = document.createElement('div');
   form.style.cssText = 'display:grid;gap:20px;max-width:560px;';
 
-  form.appendChild(_field('Permission profile', _select('permissionProfile', ['read-only', 'pr', 'test', 'admin'], data.permissionProfile, (v) => { _draft.permissionProfile = v; _checkDirty(container); }), 'Controls what tools are available to ChatGPT. Read-only sees but doesn\'t touch. PR can commit and open PRs. Test adds ability to run test commands. Admin allows everything.'));
+  form.appendChild(_field('Permission profile', _selectControl(['read-only', 'pr', 'test', 'admin'], data.permissionProfile, (v) => { _draft.permissionProfile = v; _checkDirty(container); }), 'Controls what tools are available to ChatGPT. Read-only sees but doesn\'t touch. PR can commit and open PRs. Test adds ability to run test commands. Admin allows everything.'));
 
   if (data.defaultTaskMode !== undefined) {
-    form.appendChild(_field('Default task mode', _select('defaultTaskMode', ['implement', 'implement_test', 'plan_only'], data.defaultTaskMode, (v) => { _draft.defaultTaskMode = v; _checkDirty(container); }), 'How ChatGPT approaches new tasks by default.'));
+    form.appendChild(_field('Default task mode', _selectControl(['implement', 'implement_test', 'plan_only'], data.defaultTaskMode, (v) => { _draft.defaultTaskMode = v; _checkDirty(container); }), 'How ChatGPT approaches new tasks by default.'));
   }
 
-  form.appendChild(_field('Session locks', _checkbox('sessionLocksEnabled', data.sessionLocksEnabled, (v) => { _draft.sessionLocksEnabled = v; _checkDirty(container); }), 'Prevent concurrent sessions on the same workspace.'));
-  form.appendChild(_field('Dashboard enabled', _checkbox('dashboardEnabled', data.dashboardEnabled !== false, (v) => { _draft.dashboardEnabled = v; _checkDirty(container); }), 'Disable to stop serving the dashboard entirely.'));
+  form.appendChild(_field('Session locks', _toggleControl(data.sessionLocksEnabled, (v) => { _draft.sessionLocksEnabled = v; _checkDirty(container); }), 'Prevent concurrent sessions on the same workspace.'));
+  form.appendChild(_field('Dashboard enabled', _toggleControl(data.dashboardEnabled !== false, (v) => { _draft.dashboardEnabled = v; _checkDirty(container); }), 'Disable to stop serving the dashboard entirely.'));
 
   if (data.maxConcurrentSessionsPerWorkspace !== undefined) {
     form.appendChild(_field('Max concurrent sessions per workspace', _number('maxConcurrentSessionsPerWorkspace', data.maxConcurrentSessionsPerWorkspace, (v) => { _draft.maxConcurrentSessionsPerWorkspace = parseInt(v, 10); _checkDirty(container); }), ''));
@@ -151,21 +154,22 @@ function _field(label, control, help) {
   return wrap;
 }
 
-function _select(name, options, value, onChange) {
-  const el = document.createElement('select');
-  for (const opt of options) { const o = document.createElement('option'); o.value = opt; o.textContent = opt; if (opt === value) o.selected = true; el.appendChild(o); }
-  el.addEventListener('change', () => onChange(el.value));
-  return el;
+function _selectControl(options, value, onChange) {
+  return Select({ options, value, onChange });
 }
 
-function _checkbox(name, checked, onChange) {
-  const label = document.createElement('label');
-  label.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;';
-  const input = document.createElement('input');
-  input.type = 'checkbox'; input.checked = Boolean(checked);
-  input.addEventListener('change', () => onChange(input.checked));
-  label.appendChild(input); label.appendChild(document.createTextNode(checked ? 'Enabled' : 'Disabled'));
-  return label;
+function _toggleControl(checked, onChange) {
+  let control;
+  control = Toggle({
+    checked: Boolean(checked),
+    label: Boolean(checked) ? 'Enabled' : 'Disabled',
+    onChange: (value) => {
+      onChange(value);
+      const label = control.querySelector('span');
+      if (label) label.textContent = value ? 'Enabled' : 'Disabled';
+    }
+  });
+  return control;
 }
 
 function _number(name, value, onChange) {
@@ -201,4 +205,3 @@ function _themeToggle() {
   return wrap;
 }
 
-function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }

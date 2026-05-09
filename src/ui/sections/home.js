@@ -2,6 +2,7 @@
 import { fetchJson, postJson } from '/ui/api.js';
 import { pillHtml } from '/ui/components/pill.js';
 import { toast } from '/ui/components/toast.js';
+import { esc, listItemHtml, metricHtml, short, timeAgo } from '/ui/utils.js';
 
 export function mountHome(container, data) {
   if (!data) return;
@@ -79,12 +80,12 @@ function _buildHome(data) {
   const metricsGrid = document.createElement('div');
   metricsGrid.className = 'overview-grid';
   metricsGrid.innerHTML =
-    _metric('Sessions', counts.sessions || sessions.length, activeSessions.length + ' active', 'blue') +
-    _metric('Jobs', counts.jobs || jobs.length, runningJobs.length + ' running', 'warn') +
-    _metric('Approvals', counts.approvals || approvals.length, openApprovals.length + ' open', openApprovals.length ? 'warn' : 'purple') +
-    _metric('Locks', counts.locks || locks.length, 'cooperative locks', 'blue') +
-    _metric('Health', findings.length, health.ok === false ? 'needs attention' : 'all clear', health.ok === false ? 'bad' : 'good') +
-    _metric('Readiness', readiness.score != null ? readiness.score : '—', readiness.ok === false ? 'review needed' : 'release check', readiness.ok === false ? 'warn' : 'good');
+    metricHtml('Sessions', counts.sessions || sessions.length, activeSessions.length + ' active', 'blue') +
+    metricHtml('Jobs', counts.jobs || jobs.length, runningJobs.length + ' running', 'warn') +
+    metricHtml('Approvals', counts.approvals || approvals.length, openApprovals.length + ' open', openApprovals.length ? 'warn' : 'purple') +
+    metricHtml('Locks', counts.locks || locks.length, 'cooperative locks', 'blue') +
+    metricHtml('Health', findings.length, health.ok === false ? 'needs attention' : 'all clear', health.ok === false ? 'bad' : 'good') +
+    metricHtml('Readiness', readiness.score != null ? readiness.score : '—', readiness.ok === false ? 'review needed' : 'release check', readiness.ok === false ? 'warn' : 'good');
   root.appendChild(metricsGrid);
 
   const lowerGrid = document.createElement('div');
@@ -96,8 +97,8 @@ function _buildHome(data) {
   const liveBody = document.createElement('div');
   liveBody.className = 'card-body list';
   const liveItems = [
-    ...activeSessions.slice(0, 4).map(s => _listItem(short(s.id), (s.workspace || 'workspace') + ' · ' + (s.status || 'unknown'), timeAgo(s.updatedAt || s.createdAt), s.status)),
-    ...runningJobs.slice(0, 3).map(j => _listItem(short(j.id), (j.workspace || 'workspace') + ' · ' + (j.commandKey || j.command || 'job'), timeAgo(j.updatedAt || j.startedAt), j.status)),
+    ...activeSessions.slice(0, 4).map(s => listItemHtml(short(s.id), (s.workspace || 'workspace') + ' · ' + (s.status || 'unknown'), timeAgo(s.updatedAt || s.createdAt), s.status)),
+    ...runningJobs.slice(0, 3).map(j => listItemHtml(short(j.id), (j.workspace || 'workspace') + ' · ' + (j.commandKey || j.command || 'job'), timeAgo(j.updatedAt || j.startedAt), j.status)),
   ];
   liveBody.innerHTML = liveItems.join('') || '<div class="empty">No active sessions or jobs.</div>';
   liveCard.appendChild(liveBody);
@@ -135,9 +136,3 @@ async function _decideApproval(id, status, rowEl) {
   }
 }
 
-function _metric(label, value, meta, type) { return `<div class="metric ${type || ''}"><div class="metric-label">${esc(label)}</div><div class="metric-value">${esc(value)}</div><div class="metric-meta">${esc(meta || '')}</div></div>`; }
-function _listItem(title, sub, time, state) { const c = _cls(state || 'ok'); return `<div class="list-item"><span class="dot ${c === 'ok' ? '' : c}"></span><div><div class="item-title">${esc(title)}</div><div class="item-sub">${esc(sub || '')}</div></div><div class="item-time">${esc(time || '')}</div></div>`; }
-function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
-function _cls(v) { const s = String(v || '').toLowerCase(); return s.includes('fail') || s.includes('error') || s.includes('rejected') || s === 'false' ? 'bad' : s.includes('pending') || s.includes('run') || s.includes('warn') || s.includes('active') ? 'warn' : 'ok'; }
-function short(v) { const s = String(v || ''); return s.length > 20 ? s.slice(0, 10) + '…' + s.slice(-5) : s; }
-function timeAgo(v) { const ts = Date.parse(String(v || '')); if (!Number.isFinite(ts)) return ''; const m = Math.floor(Math.max(0, Date.now() - ts) / 60000); if (m < 1) return 'now'; if (m < 60) return m + 'm ago'; const h = Math.floor(m / 60); return h < 24 ? h + 'h ago' : Math.floor(h / 24) + 'd ago'; }

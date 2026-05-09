@@ -1,7 +1,7 @@
 // Agents section — role overview plus live multi-agent subtask binding
 import { pillHtml } from '/ui/components/pill.js';
+import { esc, metricHtml, statusClass, titleize } from '/ui/utils.js';
 
-export function boot(_data) { /* no-op */ }
 
 export function mountAgents(container, data) {
   container.innerHTML = '';
@@ -31,12 +31,12 @@ function _buildAgents(data) {
       <span class="section-action">${esc(subtasks.length)} subtasks</span>
     </div>
     <div class="overview-grid">
-      ${_metric('Configured roles', roles.length, 'default multi-agent roles', 'blue')}
-      ${_metric('Subtasks', subtasks.length, _countSummary(counts), 'purple')}
-      ${_metric('Active sessions', activeSessions.length, 'not closed or completed', activeSessions.length ? 'warn' : 'good')}
-      ${_metric('Running jobs', runningJobs.length, 'queued/running/cancelling', runningJobs.length ? 'warn' : 'good')}
-      ${_metric('Open approvals', openApprovals.length, 'agent gates', openApprovals.length ? 'warn' : 'good')}
-      ${_metric('Health', Array.isArray(health.findings) ? health.findings.length : 0, health.ok === false ? 'needs attention' : 'all clear', health.ok === false ? 'bad' : 'good')}
+      ${metricHtml('Configured roles', roles.length, 'default multi-agent roles', 'blue')}
+      ${metricHtml('Subtasks', subtasks.length, _countSummary(counts), 'purple')}
+      ${metricHtml('Active sessions', activeSessions.length, 'not closed or completed', activeSessions.length ? 'warn' : 'good')}
+      ${metricHtml('Running jobs', runningJobs.length, 'queued/running/cancelling', runningJobs.length ? 'warn' : 'good')}
+      ${metricHtml('Open approvals', openApprovals.length, 'agent gates', openApprovals.length ? 'warn' : 'good')}
+      ${metricHtml('Health', Array.isArray(health.findings) ? health.findings.length : 0, health.ok === false ? 'needs attention' : 'all clear', health.ok === false ? 'bad' : 'good')}
     </div>
   `;
 
@@ -69,18 +69,12 @@ function _roleCard(role, subtasks, state) {
   if (normalized.includes('review') && state.openApprovals.length) label = 'approval gates';
   if (normalized.includes('test') && state.runningJobs.length) label = 'jobs running';
   if (normalized.includes('security') && state.health.ok === false) label = 'health findings';
-  return `<div class="agent"><div class="agent-top"><span class="agent-icon">${esc(role.charAt(0).toUpperCase())}</span>${pillHtml(label)}</div><div class="agent-name">${esc(_title(role))}</div><div class="agent-state">${esc(items.length ? items.length + ' subtask(s)' : 'No assigned subtasks')}</div></div>`;
+  return `<div class="agent"><div class="agent-top"><span class="agent-icon">${esc(role.charAt(0).toUpperCase())}</span>${pillHtml(label)}</div><div class="agent-name">${esc(titleize(role))}</div><div class="agent-state">${esc(items.length ? items.length + ' subtask(s)' : 'No assigned subtasks')}</div></div>`;
 }
 
 function _subtaskRow(item) {
   const deps = Array.isArray(item.dependsOn) && item.dependsOn.length ? ' · depends on ' + item.dependsOn.join(', ') : '';
-  return `<div class="list-item"><span class="dot ${_cls(item.status)}"></span><div><div class="item-title">${esc(item.title || item.id || 'subtask')}</div><div class="item-sub">${esc((item.role || 'agent') + ' · ' + (item.workspace || 'workspace') + deps)}</div></div><div class="item-time">${pillHtml(item.status || 'created')}</div></div>`;
+  return `<div class="list-item"><span class="dot ${statusClass(item.status)}"></span><div><div class="item-title">${esc(item.title || item.id || 'subtask')}</div><div class="item-sub">${esc((item.role || 'agent') + ' · ' + (item.workspace || 'workspace') + deps)}</div></div><div class="item-time">${pillHtml(item.status || 'created')}</div></div>`;
 }
 
-function _metric(label, value, meta, type) { return `<div class="metric ${type || ''}"><div class="metric-label">${esc(label)}</div><div class="metric-value">${esc(value)}</div><div class="metric-meta">${esc(meta || '')}</div></div>`; }
 function _countSummary(counts) { const parts = Object.entries(counts || {}).map(([k, v]) => `${k}: ${v}`); return parts.length ? parts.join(', ') : 'no subtask states'; }
-function _title(v) { return String(v || '').replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()); }
-function _cls(v) { const s = String(v || '').toLowerCase(); return s.includes('fail') || s.includes('error') || s.includes('repair') || s.includes('blocked') ? 'bad' : s.includes('pending') || s.includes('run') || s.includes('created') || s.includes('active') || s.includes('paused') ? 'warn' : 'ok'; }
-function esc(v) {
-  return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-}

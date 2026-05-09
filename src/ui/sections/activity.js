@@ -3,18 +3,21 @@ import { fetchJson } from '/ui/api.js';
 import { openDrawer } from '/ui/components/drawer.js';
 import { pillHtml } from '/ui/components/pill.js';
 import { virtualizeTable } from '/ui/components/table.js';
+import { esc, timeAgo } from '/ui/utils.js';
 
 let _allEntries = [];
 let _paused = false;
 let _filterState = { search: '', timeRange: '1h', workspace: '', tool: '', status: '' };
 let _virtualizer = null;
+let _mountToken = 0;
 
 export function mountActivity(container) {
+  const token = ++_mountToken;
   if (_virtualizer) { _virtualizer.destroy(); }
   _virtualizer = null;
   container.innerHTML = '';
   container.appendChild(_buildActivity());
-  _loadLogs();
+  _loadLogs(token);
 }
 
 export function prependEntry(entry) {
@@ -84,8 +87,9 @@ function _buildActivity() {
   return root;
 }
 
-async function _loadLogs() {
+async function _loadLogs(token) {
   const data = await fetchJson('/api/logs?limit=500');
+  if (token !== _mountToken) return;
   _allEntries = Array.isArray(data) ? data : (data && Array.isArray(data.entries) ? data.entries : []);
   _renderTable(_applyFilters(_allEntries));
 }
@@ -134,7 +138,7 @@ function _renderTable(entries) {
       const row = document.createElement('tr');
       row.style.cursor = 'pointer';
       row.innerHTML = `
-        <td class="nowrap" style="font-size:12px;">${esc(_timeAgo(x.ts || x.at || x.createdAt))}</td>
+        <td class="nowrap" style="font-size:12px;">${esc(timeAgo(x.ts || x.at || x.createdAt))}</td>
         <td class="truncate mono" style="max-width:180px;">${esc(x.tool || x.type || 'activity')}</td>
         <td class="truncate" style="max-width:120px;">${esc(x.workspace || '—')}</td>
         <td>${pillHtml(ok)}</td>
@@ -179,6 +183,4 @@ function _openDetail(entry) {
   openDrawer({ title: entry.tool || 'Activity detail', content });
 }
 
-function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
 function _entryKey(entry) { if (!entry) return ''; return entry.id || [entry.ts || entry.at || entry.createdAt || '', entry.tool || entry.type || '', entry.workspace || '', entry.message || entry.error || entry.path || ''].join('|'); }
-function _timeAgo(v) { const ts = Date.parse(String(v || '')); if (!Number.isFinite(ts)) return ''; const m = Math.floor(Math.max(0, Date.now() - ts) / 60000); if (m < 1) return 'now'; if (m < 60) return m + 'm ago'; const h = Math.floor(m / 60); return h < 24 ? h + 'h ago' : Math.floor(h / 24) + 'd ago'; }

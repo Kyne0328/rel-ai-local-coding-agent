@@ -1,18 +1,23 @@
 // Tool Browser — searchable table, category filters, detail drawer
 import { fetchJson } from '/ui/api.js';
 import { openDrawer } from '/ui/components/drawer.js';
+import { badgeHtml } from '/ui/components/badge.js';
+import { Toggle } from '/ui/components/toggle.js';
+import { esc } from '/ui/utils.js';
 
 const CATEGORIES = ['Git', 'Docker', 'Workspace', 'Plans', 'Multi-agent', 'CI', 'Audit', 'Release', 'Doctor', 'Memory', 'Approvals', 'Other'];
 
 let _allTools = [];
 let _filterState = { search: '', category: '', approvalOnly: false };
+let _mountToken = 0;
 
 export function mountTools(container) {
+  const token = ++_mountToken;
   _allTools = [];
   _filterState = { search: '', category: '', approvalOnly: false };
   container.innerHTML = '';
   container.appendChild(_buildTools());
-  _loadTools();
+  _loadTools(token);
 }
 
 function _buildTools() {
@@ -49,13 +54,12 @@ function _buildTools() {
     catWrap.appendChild(chip);
   }
 
-  const apprLabel = document.createElement('label');
-  apprLabel.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--text-muted);';
-  const apprCheck = document.createElement('input');
-  apprCheck.type = 'checkbox';
-  apprCheck.addEventListener('change', () => { _filterState.approvalOnly = apprCheck.checked; _renderTable(_applyFilters(_allTools)); });
-  apprLabel.appendChild(apprCheck);
-  apprLabel.appendChild(document.createTextNode('Requires approval only'));
+  const apprLabel = Toggle({
+    checked: false,
+    label: 'Requires approval only',
+    onChange: (checked) => { _filterState.approvalOnly = checked; _renderTable(_applyFilters(_allTools)); }
+  });
+  apprLabel.style.color = 'var(--text-muted)';
 
   toolbar.appendChild(searchInput);
   toolbar.appendChild(catWrap);
@@ -70,12 +74,14 @@ function _buildTools() {
   return root;
 }
 
-async function _loadTools() {
+async function _loadTools(token) {
   try {
     const data = await fetchJson('/api/tools');
+    if (token !== _mountToken) return;
     _allTools = Array.isArray(data) ? data : [];
     _renderTable(_applyFilters(_allTools));
   } catch (_) {
+    if (token !== _mountToken) return;
     const tbody = document.getElementById('__tools-tbody');
     const countEl = document.getElementById('__tools-count');
     if (tbody) tbody.innerHTML = '<tr><td colspan="5"><div class="empty">Failed to load tools.</div></td></tr>';
@@ -105,9 +111,9 @@ function _renderTable(tools) {
 
   tbody.innerHTML = tools.map(t => `<tr style="cursor:pointer;" data-name="${esc(t && t.name)}">
     <td class="mono" style="font-size:12px;">${esc(t && t.name)}</td>
-    <td><span class="badge">${esc(t && t.category)}</span></td>
-    <td><span class="badge ${String(t && t.requiredProfile || '') === 'admin' ? 'warn' : ''}">${esc(t && t.requiredProfile)}</span></td>
-    <td>${t && t.requiresApproval ? '<span class="badge warn">requires approval</span>' : '<span style="color:var(--text-dim);">—</span>'}</td>
+    <td>${badgeHtml(t && t.category)}</td>
+    <td>${badgeHtml(t && t.requiredProfile, String(t && t.requiredProfile || '') === 'admin' ? 'warn' : '')}</td>
+    <td>${t && t.requiresApproval ? badgeHtml('requires approval', 'warn') : '<span style="color:var(--text-dim);">—</span>'}</td>
     <td><button class="secondary" style="min-height:24px;padding:0 8px;font-size:11px;">▸</button></td>
   </tr>`).join('') || `<tr><td colspan="5"><div class="empty">No tools match your filters.</div></td></tr>`;
 
@@ -184,4 +190,3 @@ function _styleChip(btn, active) {
   btn.style.borderColor = active ? 'var(--ring)' : '';
 }
 
-function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }

@@ -1,6 +1,7 @@
 // Hash-based section router — one section visible at a time
 let _sections = {};
 let _current = null;
+let _currentRouteKey = null;
 let _container = null;
 let _bound = false;
 
@@ -20,19 +21,25 @@ export function currentSection() {
   return hash.split('/')[0] || 'home';
 }
 
+function currentRouteKey() {
+  return (location.hash || '#home').slice(1) || 'home';
+}
+
 export function navigate(sectionId) {
   location.hash = '#' + sectionId;
 }
 
 function _route() {
   const id = currentSection();
-  if (id === _current) return;
+  const routeKey = currentRouteKey();
+  if (routeKey === _currentRouteKey) return;
   _current = id;
+  _currentRouteKey = routeKey;
 
   // Update nav active state
   document.querySelectorAll('.nav a, .mobile-nav a').forEach(a => {
     const href = a.getAttribute('href') || '';
-    a.classList.toggle('active', href === '#' + id || href === '#' + id.replace(/^home$/, 'overview'));
+    a.classList.toggle('active', href === '#' + id || (['settings', 'connector', 'diagnostics'].includes(id) && href === '#settings'));
   });
 
   // Mount section into route container only; persistent shell lives outside it.

@@ -97,16 +97,20 @@ async function boot() {
 function _sectionMap() {
   return {
     home:        (el) => mountHome(el, getStore()),
-    overview:    (el) => mountHome(el, getStore()),
     workspaces:  (el) => import('/ui/sections/workspaces.js').then(m => m.mountWorkspaces(el, getStore())).catch(console.error),
     activity:    (el) => import('/ui/sections/activity.js').then(m => m.mountActivity(el)).catch(console.error),
-    approvals:   (el) => import('/ui/sections/approvals.js').then(m => m.mountApprovals(el)).catch(console.error),
+    approvals:   (el) => import('/ui/sections/approvals.js').then(m => m.mountApprovals(el, getStore())).catch(console.error),
     tools:       (el) => import('/ui/sections/tools.js').then(m => m.mountTools(el)).catch(console.error),
     agents:      (el) => import('/ui/sections/agents.js').then(m => m.mountAgents(el, getStore())).catch(console.error),
-    settings:    (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el)).catch(console.error),
-    connector:   (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el)).catch(console.error),
-    diagnostics: (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el)).catch(console.error),
+    settings:    (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el, _settingsSubPage())).catch(console.error),
+    connector:   (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el, 'connector')).catch(console.error),
+    diagnostics: (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el, 'diagnostics')).catch(console.error),
   };
+}
+
+function _settingsSubPage() {
+  const parts = (location.hash || '').replace(/^#/, '').split('/');
+  return parts[0] === 'settings' && parts[1] ? parts[1] : 'general';
 }
 
 function _buildNav() {
@@ -167,7 +171,7 @@ function _toggleLive() {
       const id = currentSection();
       if (!routeRoot) return;
 
-      if (['home', 'overview', 'workspaces', 'agents'].includes(id)) {
+      if (['home', 'workspaces', 'agents', 'approvals', 'tools', 'settings', 'connector', 'diagnostics'].includes(id)) {
         _renderCurrentSection(routeRoot, id, _sectionMap());
       }
 

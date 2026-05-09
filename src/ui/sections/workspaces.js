@@ -1,8 +1,9 @@
 // Workspaces section — configured repositories, health, and command surface
 import { fetchJson } from '/ui/api.js';
 import { pillHtml } from '/ui/components/pill.js';
+import { badgeHtml } from '/ui/components/badge.js';
+import { esc, metricHtml, statusClass } from '/ui/utils.js';
 
-export function boot(_data) { /* no-op */ }
 
 export function mountWorkspaces(container, data) {
   container.innerHTML = '';
@@ -24,10 +25,10 @@ function _buildWorkspaces(data) {
       <span class="section-action">${esc(workspaces.length)} configured</span>
     </div>
     <div class="overview-grid">
-      ${_metric('Workspaces', workspaces.length, 'configured aliases', 'blue')}
-      ${_metric('Health findings', Array.isArray(health.findings) ? health.findings.length : 0, health.ok === false ? 'needs attention' : 'all clear', health.ok === false ? 'bad' : 'good')}
-      ${_metric('Readiness', readiness.score != null ? readiness.score : '—', readiness.rating || 'release check', readiness.ok === false ? 'warn' : 'good')}
-      ${_metric('Permission profile', cfg.permissionProfile || 'unknown', 'effective config', 'purple')}
+      ${metricHtml('Workspaces', workspaces.length, 'configured aliases', 'blue')}
+      ${metricHtml('Health findings', Array.isArray(health.findings) ? health.findings.length : 0, health.ok === false ? 'needs attention' : 'all clear', health.ok === false ? 'bad' : 'good')}
+      ${metricHtml('Readiness', readiness.score != null ? readiness.score : '—', readiness.rating || 'release check', readiness.ok === false ? 'warn' : 'good')}
+      ${metricHtml('Permission profile', cfg.permissionProfile || 'unknown', 'effective config', 'purple')}
     </div>
   `;
 
@@ -62,10 +63,10 @@ function _workspaceCard(ws, health) {
       </div>
       <div class="path">${esc(ws.path || '')}</div>
       <div class="badge-row">
-        <span class="badge">tests ${esc(testKeys.length)}</span>
-        <span class="badge">commands ${esc(commandKeys.length)}</span>
-        <span class="badge">worktrees ${esc(health && health.worktreeCount != null ? health.worktreeCount : 0)}</span>
-        <span class="badge">protected ${esc(protectedBranches.join(', ') || 'none')}</span>
+        ${badgeHtml('tests ' + testKeys.length)}
+        ${badgeHtml('commands ' + commandKeys.length)}
+        ${badgeHtml('worktrees ' + (health && health.worktreeCount != null ? health.worktreeCount : 0))}
+        ${badgeHtml('protected ' + (protectedBranches.join(', ') || 'none'))}
       </div>
       ${testKeys.length ? `<div class="path">Test commands: ${esc(testKeys.join(', '))}</div>` : '<div class="path">No test commands configured.</div>'}
       ${commandKeys.length ? `<div class="path">Dev commands: ${esc(commandKeys.join(', '))}</div>` : ''}
@@ -77,7 +78,7 @@ function _workspaceCard(ws, health) {
 }
 
 function _findingRow(finding) {
-  return `<div class="list-item"><span class="dot ${_cls(finding.severity)}"></span><div><div class="item-title">${esc(finding.code || finding.severity || 'finding')}</div><div class="item-sub">${esc(finding.message || '')}</div></div><div class="item-time">${pillHtml(finding.severity || 'info')}</div></div>`;
+  return `<div class="list-item"><span class="dot ${statusClass(finding.severity)}"></span><div><div class="item-title">${esc(finding.code || finding.severity || 'finding')}</div><div class="item-sub">${esc(finding.message || '')}</div></div><div class="item-time">${pillHtml(finding.severity || 'info')}</div></div>`;
 }
 
 document.addEventListener('click', async (event) => {
@@ -97,8 +98,3 @@ function _preflightOutput(alias) {
   return Array.from(document.querySelectorAll('[data-preflight-out]')).find(el => el.getAttribute('data-preflight-out') === alias) || null;
 }
 
-function _metric(label, value, meta, type) { return `<div class="metric ${type || ''}"><div class="metric-label">${esc(label)}</div><div class="metric-value">${esc(value)}</div><div class="metric-meta">${esc(meta || '')}</div></div>`; }
-function _cls(v) { const s = String(v || '').toLowerCase(); return s.includes('error') || s.includes('fail') ? 'bad' : s.includes('warn') ? 'warn' : 'ok'; }
-function esc(v) {
-  return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-}
