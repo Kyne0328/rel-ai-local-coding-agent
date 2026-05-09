@@ -128,6 +128,8 @@ async function _doRefresh() {
       tools:       (el) => import('/ui/sections/tools.js').then(m => m.mountTools(el)).catch(console.error),
       agents:      (el) => import('/ui/sections/agents.js').then(m => m.mountAgents(el, getStore())).catch(console.error),
       settings:    (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el)).catch(console.error),
+      connector:   (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el)).catch(console.error),
+      diagnostics: (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el)).catch(console.error),
     };
     const fn = sectionFns[id];
     if (main && fn) { main.innerHTML = ''; fn(main); }
