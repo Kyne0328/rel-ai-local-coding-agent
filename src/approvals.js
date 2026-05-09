@@ -109,7 +109,7 @@ function requireApproval(config, action, args = {}) {
   if (!actionRequiresApproval(config, action)) return null;
   const approvalId = args.approvalId ? String(args.approvalId) : "";
   if (!approvalId) {
-    throw new Error(`Approval required for action '${action}'. Create approval with relai_approval_request, approve it, then retry with approvalId.`);
+    throw new Error(`This action needs approval. ChatGPT has paused; open the Approvals tab in the dashboard to allow or deny.`);
   }
   const approval = readApproval(config, approvalId);
   if (approval.action !== action) throw new Error(`Approval ${approvalId} is for '${approval.action}', not '${action}'.`);

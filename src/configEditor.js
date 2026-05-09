@@ -107,7 +107,7 @@ function updateSettings(current, payload = {}) {
   if (Object.prototype.hasOwnProperty.call(values, "permissionProfile")) {
     const profile = String(values.permissionProfile || "").trim();
     if (!["read-only", "pr", "test", "admin"].includes(profile)) {
-      throw new Error("permissionProfile must be read-only, pr, test, or admin.");
+      throw new Error("Permission profile must be one of: Read-only, PR agent, Test runner, Admin.");
     }
     setIfChanged(next, "permissionProfile", profile, changed);
   }

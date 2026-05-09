@@ -1,0 +1,40 @@
+@layer tokens {
+  :root {
+    /* spacing */
+    --space-1: 4px;  --space-2: 8px;   --space-3: 12px;
+    --space-4: 16px; --space-5: 24px;  --space-6: 32px; --space-7: 48px;
+    /* type */
+    --font-12: 12px; --font-13: 13px; --font-14: 14px;
+    --font-16: 16px; --font-20: 20px; --font-24: 24px; --font-30: 30px;
+    /* radius */
+    --radius-sm: 6px; --radius-md: 10px; --radius-lg: 16px;
+    /* elevation */
+    --shadow-1: 0 1px 3px rgba(0,0,0,.4), 0 1px 2px rgba(0,0,0,.6);
+    --shadow-2: 0 4px 12px rgba(0,0,0,.5), 0 2px 4px rgba(0,0,0,.4);
+    /* z-index */
+    --z-overlay: 50; --z-modal: 60; --z-toast: 70;
+    /* semantic colors — dark default */
+    --bg: #070b13;
+    --surface: #0b1220;
+    --surface-2: #111827;
+    --text: #e2e8f0;
+    --text-muted: #8892a4;
+    --text-dim: #4a5568;
+    --line: rgba(255,255,255,.08);
+    --line-soft: rgba(154,173,212,.12);
+    --blue: #4ea1ff;
+    --blue-dim: rgba(78,161,255,.15);
+    --green: #47dd8a;
+    --green-dim: rgba(71,221,138,.15);
+    --yellow: #ffc24b;
+    --yellow-dim: rgba(255,194,75,.15);
+    --red: #ff6680;
+    --red-dim: rgba(255,102,128,.15);
+    --ring: #4ea1ff;
+  }
+  :root[data-theme="light"] {
+    --bg: #fafbfc;      --surface: #ffffff;   --surface-2: #f3f4f6;
+    --text: #111827;    --text-muted: #6b7280; --text-dim: #9ca3af;
+    --line: rgba(0,0,0,.08); --line-soft: rgba(0,0,0,.06);
+  }
+}

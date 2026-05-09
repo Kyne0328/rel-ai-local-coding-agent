@@ -1,0 +1,75 @@
+@layer layout {
+  .app-shell {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: 22px;
+    min-height: 100vh;
+    padding: var(--page-pad, clamp(14px, 2vw, 28px));
+    max-width: 1720px;
+    margin: 0 auto;
+  }
+  .sidebar {
+    position: sticky;
+    top: var(--page-pad, 14px);
+    height: calc(100vh - (var(--page-pad, 14px) * 2));
+    padding: 16px;
+    border: 1px solid var(--line-soft);
+    border-radius: 22px;
+    background: rgba(9,15,27,.82);
+    box-shadow: 0 22px 65px rgba(0,0,0,.38);
+    overflow: auto;
+  }
+  .brand { display: flex; align-items: center; gap: 11px; padding-bottom: 14px; border-bottom: 1px solid var(--line-soft); }
+  .logo { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; font-weight: 900; background: linear-gradient(135deg, var(--blue), #9b7cff); }
+  .brand strong { display: block; letter-spacing: -.02em; }
+  .brand span { display: block; margin-top: 2px; color: var(--muted, var(--text-muted)); font-size: 12px; }
+  .nav { display: grid; gap: 7px; margin-top: 16px; }
+  .nav a { display: flex; align-items: center; gap: 9px; padding: 10px 11px; border-radius: 10px; color: #c9d6e8; text-decoration: none; border: 1px solid transparent; font-size: 13px; }
+  .nav a:hover { background: rgba(78,161,255,.08); border-color: rgba(78,161,255,.16); }
+  .nav a.active { background: #173b73; color: #fff; border-color: rgba(78,161,255,.35); }
+  .sidebar-note { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line-soft); color: var(--muted, var(--text-muted)); font-size: 12px; line-height: 1.45; }
+  .main { min-width: 0; display: grid; gap: 18px; }
+  .topbar {
+    position: sticky; top: var(--page-pad, 14px); z-index: 5;
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    padding: 13px 14px;
+    border: 1px solid var(--line-soft); border-radius: 18px;
+    background: rgba(8,13,23,.86); backdrop-filter: blur(14px);
+    box-shadow: 0 12px 34px rgba(0,0,0,.26);
+  }
+  .title-wrap { min-width: 0; }
+  .page-title { margin: 0; font-size: 20px; letter-spacing: -.025em; }
+  .page-subtitle { margin-top: 3px; color: var(--muted, var(--text-muted)); font-size: 13px; }
+  .top-controls { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+  .top-controls input { width: min(230px, 36vw); }
+  .overview-grid { display: grid; grid-template-columns: repeat(6, minmax(120px, 1fr)); gap: 12px; }
+  .layout-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(320px, .75fr); gap: 14px; }
+  .columns-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .columns-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  .connector-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .5fr); gap: 12px; }
+  .utility-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+  .workspace-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
+  .agent-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 9px; }
+  .mobile-nav { display: none; gap: 8px; overflow: auto; padding: 2px; }
+  .mobile-nav a { white-space: nowrap; text-decoration: none; color: #d8e6fb; border: 1px solid var(--line); border-radius: 999px; padding: 8px 10px; font-size: 12px; background: rgba(255,255,255,.035); }
+
+  @media (max-width: 1250px) {
+    .app-shell { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .mobile-nav { display: flex; }
+    .overview-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .layout-grid, .connector-grid { grid-template-columns: 1fr; }
+    .topbar { top: 8px; }
+  }
+  @media (max-width: 860px) {
+    .topbar { position: relative; top: auto; align-items: flex-start; flex-direction: column; }
+    .top-controls { justify-content: flex-start; width: 100%; }
+    .top-controls input { width: 100%; flex: 1 1 180px; }
+    .overview-grid, .columns-2, .columns-3, .utility-grid { grid-template-columns: 1fr; }
+    .card-head, .section-head { align-items: flex-start; flex-direction: column; }
+  }
+  @media (max-width: 520px) {
+    :root { --page-pad: 10px; }
+    .data-table { min-width: 560px; }
+  }
+}
