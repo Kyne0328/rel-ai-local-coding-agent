@@ -21,7 +21,8 @@ export function mountSettings(container, subPageId = 'general') {
   if (SUB_PAGES.some(page => page.id === subPageId)) _currentSubPage = subPageId;
   container.innerHTML = '';
   const shell = document.createElement('div');
-  shell.style.cssText = 'display:grid;grid-template-columns:180px minmax(0,1fr);gap:16px;min-height:400px;';
+  shell.className = 'settings-shell';
+  shell.style.cssText = 'display:grid;grid-template-columns:180px minmax(0,1fr);gap:16px;align-items:start;';
 
   const rail = document.createElement('nav');
   rail.style.cssText = 'display:grid;gap:4px;align-content:start;padding:4px 0;';
@@ -38,9 +39,13 @@ export function mountSettings(container, subPageId = 'general') {
     btn.dataset.subPage = page.id;
     if (page.id === _currentSubPage) { btn.style.background = '#173b73'; btn.style.borderColor = 'rgba(78,161,255,.35)'; btn.style.color = '#fff'; }
     btn.onclick = () => {
+      const target = page.id === 'general' ? '#settings' : '#settings/' + page.id;
+      if (location.hash !== target) {
+        location.hash = target;
+        return;
+      }
       _currentSubPage = page.id;
-      rail.querySelectorAll('button').forEach(b => { b.style.background = ''; b.style.borderColor = 'transparent'; b.style.color = ''; });
-      btn.style.background = '#173b73'; btn.style.borderColor = 'rgba(78,161,255,.35)'; btn.style.color = '#fff';
+      _setActive(rail, btn);
       content.innerHTML = '';
       page.mount(content);
     };
@@ -53,4 +58,11 @@ export function mountSettings(container, subPageId = 'general') {
 
   const current = SUB_PAGES.find(p => p.id === _currentSubPage) || SUB_PAGES[0];
   current.mount(content);
+}
+
+function _setActive(rail, activeBtn) {
+  rail.querySelectorAll('button').forEach(b => { b.style.background = ''; b.style.borderColor = 'transparent'; b.style.color = ''; });
+  activeBtn.style.background = '#173b73';
+  activeBtn.style.borderColor = 'rgba(78,161,255,.35)';
+  activeBtn.style.color = '#fff';
 }

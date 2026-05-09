@@ -28,7 +28,8 @@
   .nav a:hover { background: rgba(78,161,255,.08); border-color: rgba(78,161,255,.16); }
   .nav a.active { background: #173b73; color: #fff; border-color: rgba(78,161,255,.35); }
   .sidebar-note { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line-soft); color: var(--muted, var(--text-muted)); font-size: 12px; line-height: 1.45; }
-  .main { min-width: 0; display: grid; gap: 18px; }
+  .main { min-width: 0; display: grid; gap: 18px; align-content: start; align-items: start; }
+  .route-root { min-width: 0; display: block; }
   .topbar {
     position: sticky; top: var(--page-pad, 14px); z-index: 5;
     display: flex; align-items: center; justify-content: space-between; gap: 14px;
@@ -94,4 +95,9 @@
 :root[data-theme="light"] .mobile-nav a {
   color: #374151;
   background: transparent;
+}
+
+@media (max-width: 860px) {
+  .settings-shell { grid-template-columns: 1fr !important; }
+  .settings-shell nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

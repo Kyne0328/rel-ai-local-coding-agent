@@ -1,14 +1,65 @@
-import { fetchJson } from '/ui/api.js';
+import {
+  loadSettingsConfig,
+  saveSettings,
+  header,
+  formGrid,
+  panel,
+  field,
+  selectControl,
+  toggleControl,
+  saveRow
+} from './shared.js';
+
+let _draft = null;
+let _original = null;
+
 export function mountPermissions(container) {
   container.innerHTML = '<div style="padding:8px 0;color:var(--text-muted);font-size:13px;">Loading…</div>';
   _load(container);
 }
+
 async function _load(container) {
-  const data = await fetchJson('/api/settings');
-  if (!data || !data.ok) { container.innerHTML = '<div class="empty">Failed to load.</div>'; return; }
-  container.innerHTML = '<h3 style="margin:0 0 16px;font-size:15px;">Permissions</h3>';
-  const info = document.createElement('p');
-  info.style.cssText = 'color:var(--text-muted);font-size:13px;';
-  info.textContent = 'Full permissions editor — sandbox mode, Docker, GitHub CLI settings. Full implementation in Phase 3.';
-  container.appendChild(info);
+  const cfg = await loadSettingsConfig(container);
+  if (!cfg) return;
+  _original = JSON.parse(JSON.stringify(cfg));
+  _draft = JSON.parse(JSON.stringify(cfg));
+  _render(container);
+}
+
+function _render(container) {
+  container.innerHTML = '';
+  container.appendChild(header('Permissions', 'Control global capabilities. High-risk switches require explicit confirmation when saved.'));
+  const grid = formGrid();
+
+  const profile = panel('Access profile');
+  profile.body.appendChild(field('Permission profile', selectControl(['read-only', 'pr', 'test', 'admin'], _draft.permissionProfile || 'pr', (v) => { _draft.permissionProfile = v; }), 'Read-only can inspect; PR can edit and propose; Test can run configured tests; Admin can use all tools.'));
+  profile.body.appendChild(field('Sandbox mode', selectControl(['none', 'docker', 'docker_readonly_base'], _draft.sandboxMode || 'none', (v) => { _draft.sandboxMode = v; }), 'Docker modes only work when Docker is available and enabled.'));
+
+  const caps = panel('Capabilities');
+  caps.body.appendChild(field('Agent mode', toggleControl(_draft.agentMode, (v) => { _draft.agentMode = v; }), 'Turns on admin, arbitrary commands, and permissive approval settings.'));
+  caps.body.appendChild(field('GitHub CLI', toggleControl(_draft.allowGitHubCli, (v) => { _draft.allowGitHubCli = v; }), 'Allow use of the GitHub CLI from tools.'));
+  caps.body.appendChild(field('Docker', toggleControl(_draft.allowDocker, (v) => { _draft.allowDocker = v; }), 'Allow Docker-backed execution where supported.'));
+  caps.body.appendChild(field('Arbitrary commands', toggleControl(_draft.allowArbitraryCommands, (v) => { _draft.allowArbitraryCommands = v; }), 'Allow command strings beyond configured command keys.'));
+  caps.body.appendChild(field('Destructive tools', toggleControl(_draft.allowDestructiveTools, (v) => { _draft.allowDestructiveTools = v; }), 'Allow operations that can remove or reset state.'));
+
+  grid.appendChild(profile.el);
+  grid.appendChild(caps.el);
+  container.appendChild(grid);
+  container.appendChild(saveRow(() => _save(container), () => _load(container)));
+}
+
+async function _save(container) {
+  const highRisk = ['agentMode', 'allowGitHubCli', 'allowDocker', 'allowArbitraryCommands', 'allowDestructiveTools'];
+  const enabled = highRisk.filter(k => _draft[k] === true && (!_original || _original[k] !== true));
+  if (enabled.length && !window.confirm('Enable high-risk settings: ' + enabled.join(', ') + '?')) return;
+  const res = await saveSettings({
+    permissionProfile: _draft.permissionProfile,
+    sandboxMode: _draft.sandboxMode,
+    agentMode: _draft.agentMode,
+    allowGitHubCli: _draft.allowGitHubCli,
+    allowDocker: _draft.allowDocker,
+    allowArbitraryCommands: _draft.allowArbitraryCommands,
+    allowDestructiveTools: _draft.allowDestructiveTools
+  }, { confirmDangerous: true });
+  if (res && res.ok) await _load(container);
 }

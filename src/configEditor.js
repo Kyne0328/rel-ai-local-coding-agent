@@ -6,7 +6,8 @@ const DANGEROUS_KEYS = new Set([
   "allowArbitraryCommands",
   "allowDestructiveTools",
   "allowDocker",
-  "allowGitHubCli"
+  "allowGitHubCli",
+  "agentMode"
 ]);
 
 const BOOLEAN_KEYS = [
@@ -14,6 +15,7 @@ const BOOLEAN_KEYS = [
   "allowDocker",
   "allowArbitraryCommands",
   "allowDestructiveTools",
+  "agentMode",
   "sessionLocksEnabled",
   "dashboardEnabled"
 ];

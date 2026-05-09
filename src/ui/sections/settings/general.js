@@ -1,13 +1,24 @@
 // General settings sub-page — dirty tracking, diff summary, explicit save
-import { fetchJson, postJson } from '/ui/api.js';
 import { openModal, closeModal } from '/ui/components/modal.js';
-import { toast } from '/ui/components/toast.js';
-import { Select } from '/ui/components/select.js';
-import { Toggle } from '/ui/components/toggle.js';
 import { esc } from '/ui/utils.js';
+import {
+  loadSettingsConfig,
+  saveSettings,
+  header,
+  formGrid,
+  panel,
+  field,
+  selectControl,
+  toggleControl,
+  numberControl,
+  saveRow
+} from './shared.js';
 
 let _original = null;
 let _draft = null;
+let _confirmedDangerous = false;
+
+const DANGEROUS_KEYS = ['agentMode', 'allowArbitraryCommands', 'allowDestructiveTools', 'allowDocker', 'allowGitHubCli'];
 
 export function mountGeneral(container) {
   container.innerHTML = '<div style="padding:8px 0;color:var(--text-muted);font-size:13px;">Loading…</div>';
@@ -15,70 +26,60 @@ export function mountGeneral(container) {
 }
 
 async function _loadAndRender(container) {
-  const data = await fetchJson('/api/settings');
-  if (!data || !data.ok) { container.innerHTML = '<div class="empty">Failed to load settings.</div>'; return; }
-  _original = JSON.parse(JSON.stringify(data));
-  _draft = JSON.parse(JSON.stringify(data));
-  _render(container, data);
+  const cfg = await loadSettingsConfig(container);
+  if (!cfg) return;
+  _original = JSON.parse(JSON.stringify(cfg));
+  _draft = JSON.parse(JSON.stringify(cfg));
+  _confirmedDangerous = false;
+  _render(container);
 }
 
-function _render(container, data) {
+function _render(container) {
   container.innerHTML = '';
-  const form = document.createElement('div');
-  form.style.cssText = 'display:grid;gap:20px;max-width:560px;';
+  container.appendChild(header('General', 'Core server behavior, dashboard availability, and local UI preferences.'));
 
-  form.appendChild(_field('Permission profile', _selectControl(['read-only', 'pr', 'test', 'admin'], data.permissionProfile, (v) => { _draft.permissionProfile = v; _checkDirty(container); }), 'Controls what tools are available to ChatGPT. Read-only sees but doesn\'t touch. PR can commit and open PRs. Test adds ability to run test commands. Admin allows everything.'));
+  const grid = formGrid();
+  const server = panel('Server behavior');
+  const limits = panel('Session limits');
+  const local = panel('Local dashboard');
 
-  if (data.defaultTaskMode !== undefined) {
-    form.appendChild(_field('Default task mode', _selectControl(['implement', 'implement_test', 'plan_only'], data.defaultTaskMode, (v) => { _draft.defaultTaskMode = v; _checkDirty(container); }), 'How ChatGPT approaches new tasks by default.'));
-  }
+  server.body.appendChild(field('Permission profile', selectControl(['read-only', 'pr', 'test', 'admin'], _draft.permissionProfile, (v) => { _draft.permissionProfile = v; _checkDirty(); }), 'Controls which tools are available to agent clients.'));
+  server.body.appendChild(field('Default task mode', selectControl(['plan_only', 'implement', 'implement_and_test', 'review_only'], _draft.defaultTaskMode || 'implement_and_test', (v) => { _draft.defaultTaskMode = v; _checkDirty(); }), 'How new tasks are approached by default.'));
+  server.body.appendChild(field('Sandbox mode', selectControl(['none', 'docker', 'docker_readonly_base'], _draft.sandboxMode || 'none', (v) => { _draft.sandboxMode = v; _checkDirty(); }), 'Execution isolation mode for tool and task runs.'));
+  server.body.appendChild(field('Agent mode', toggleControl(_draft.agentMode, (v) => { _draft.agentMode = v; _checkDirty(); }), 'Convenience mode that enables full autonomous execution. Treat as high risk.'));
 
-  form.appendChild(_field('Session locks', _toggleControl(data.sessionLocksEnabled, (v) => { _draft.sessionLocksEnabled = v; _checkDirty(container); }), 'Prevent concurrent sessions on the same workspace.'));
-  form.appendChild(_field('Dashboard enabled', _toggleControl(data.dashboardEnabled !== false, (v) => { _draft.dashboardEnabled = v; _checkDirty(container); }), 'Disable to stop serving the dashboard entirely.'));
+  limits.body.appendChild(field('Session locks', toggleControl(_draft.sessionLocksEnabled !== false, (v) => { _draft.sessionLocksEnabled = v; _checkDirty(); }), 'Prevent concurrent sessions on the same workspace.'));
+  limits.body.appendChild(field('Max concurrent sessions per workspace', numberControl(_draft.maxConcurrentSessionsPerWorkspace, (v) => { _draft.maxConcurrentSessionsPerWorkspace = v; _checkDirty(); }, { min: 1, max: 50 }), 'Upper bound for simultaneous sessions per workspace.'));
+  limits.body.appendChild(field('Max session steps', numberControl(_draft.maxSessionSteps, (v) => { _draft.maxSessionSteps = v; _checkDirty(); }, { min: 1, max: 100000 }), 'Hard cap for individual session loops.'));
+  limits.body.appendChild(field('Max plan steps', numberControl(_draft.maxPlanSteps, (v) => { _draft.maxPlanSteps = v; _checkDirty(); }, { min: 1, max: 100000 }), 'Hard cap for planning loops.'));
 
-  if (data.maxConcurrentSessionsPerWorkspace !== undefined) {
-    form.appendChild(_field('Max concurrent sessions per workspace', _number('maxConcurrentSessionsPerWorkspace', data.maxConcurrentSessionsPerWorkspace, (v) => { _draft.maxConcurrentSessionsPerWorkspace = parseInt(v, 10); _checkDirty(container); }), ''));
-  }
+  local.body.appendChild(field('Dashboard enabled', toggleControl(_draft.dashboardEnabled !== false, (v) => { _draft.dashboardEnabled = v; _checkDirty(); }), 'Disable to stop serving the dashboard.'));
+  local.body.appendChild(field('Color theme', _themeToggle(), 'Stored only in this browser.'));
 
-  form.appendChild(_field('Color theme', _themeToggle(), 'Switch between dark and light mode. Default is dark.'));
+  grid.appendChild(server.el);
+  grid.appendChild(limits.el);
+  grid.appendChild(local.el);
+  container.appendChild(grid);
 
-  container.appendChild(form);
-
-  const saveBar = document.createElement('div');
-  saveBar.id = '__settings-save-bar';
-  saveBar.style.cssText = 'position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--line-soft);padding:12px 0;margin-top:16px;display:flex;gap:10px;align-items:center;display:none;';
-  const changesLink = document.createElement('button');
-  changesLink.className = 'secondary';
-  changesLink.style.cssText = 'font-size:12px;min-height:28px;padding:0 10px;';
-  changesLink.id = '__settings-changes-link';
-  changesLink.onclick = () => _showDiffModal();
-  const discardBtn = document.createElement('button');
-  discardBtn.className = 'secondary';
-  discardBtn.textContent = 'Discard';
-  discardBtn.style.cssText = 'min-height:32px;';
-  discardBtn.onclick = () => { _draft = JSON.parse(JSON.stringify(_original)); _render(container, _original); };
-  const saveBtn = document.createElement('button');
-  saveBtn.id = '__settings-save-btn';
-  saveBtn.textContent = 'Save changes';
-  saveBtn.style.cssText = 'min-height:32px;';
-  saveBtn.onclick = () => _save(container, saveBtn);
-  saveBar.appendChild(changesLink);
-  saveBar.appendChild(discardBtn);
-  saveBar.appendChild(saveBtn);
-  container.appendChild(saveBar);
+  const save = saveRow(() => _save(container), () => _loadAndRender(container));
+  save.id = '__settings-save-row';
+  save.style.display = 'none';
+  const changes = document.createElement('button');
+  changes.className = 'secondary';
+  changes.id = '__settings-changes-link';
+  changes.style.cssText = 'font-size:12px;min-height:28px;padding:0 10px;';
+  changes.onclick = () => _showDiffModal();
+  save.prepend(changes);
+  container.appendChild(save);
 }
 
-function _checkDirty(container) {
-  const saveBar = document.getElementById('__settings-save-bar');
-  if (!saveBar) return;
+function _checkDirty() {
+  const saveRowEl = document.getElementById('__settings-save-row');
+  if (!saveRowEl) return;
   const changes = _getChanges();
-  if (changes.length === 0) {
-    saveBar.style.display = 'none';
-  } else {
-    saveBar.style.display = 'flex';
-    const link = document.getElementById('__settings-changes-link');
-    if (link) link.textContent = changes.length + ' change' + (changes.length === 1 ? '' : 's') + ' pending';
-  }
+  saveRowEl.style.display = changes.length ? 'flex' : 'none';
+  const link = document.getElementById('__settings-changes-link');
+  if (link) link.textContent = changes.length + ' change' + (changes.length === 1 ? '' : 's') + ' pending';
 }
 
 function _getChanges() {
@@ -105,78 +106,37 @@ function _showDiffModal() {
   openModal({ title: 'Pending changes', content });
 }
 
-const DANGEROUS_KEYS = ['allowArbitraryCommands', 'allowDestructiveTools', 'allowDocker', 'allowGitHubCli'];
-
-async function _save(container, saveBtn) {
+async function _save(container) {
   const changes = _getChanges();
   const dangerous = changes.filter(c => DANGEROUS_KEYS.includes(c.key) && c.newValue === true && c.oldValue !== true);
-  if (dangerous.length) {
-    await _confirmDangerous(dangerous);
+  if (dangerous.length && !_confirmedDangerous) {
+    _confirmedDangerous = await _confirmDangerous(dangerous);
+    if (!_confirmedDangerous) return;
   }
-  saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
-  const res = await postJson('/api/settings', _draft);
-  if (res && res.ok) {
-    _original = JSON.parse(JSON.stringify(_draft));
-    saveBtn.textContent = 'Saved ✓';
-    setTimeout(() => { saveBtn.disabled = false; saveBtn.textContent = 'Save changes'; _checkDirty(container); }, 2000);
-    toast('Settings saved.', { variant: 'success' });
-  } else {
-    saveBtn.disabled = false; saveBtn.textContent = 'Save changes';
-    toast('Error: ' + (res ? res.error : 'unknown'), { variant: 'error' });
-  }
+  const res = await saveSettings(_draft, { confirmDangerous: _confirmedDangerous });
+  if (res && res.ok) await _loadAndRender(container);
 }
 
 async function _confirmDangerous(dangerous) {
   return new Promise((resolve) => {
     const content = document.createElement('div');
     content.style.cssText = 'display:grid;gap:14px;font-size:13px;';
-    content.innerHTML = `<p style="color:var(--yellow);">⚠ You are enabling high-risk settings: <strong>${dangerous.map(d => esc(d.key)).join(', ')}</strong>. These let agents run unrestricted commands.</p><p>Type <code>DISABLE SAFETY</code> to confirm:</p>`;
+    content.innerHTML = `<p style="color:var(--yellow);">⚠ You are enabling high-risk settings: <strong>${dangerous.map(d => esc(d.key)).join(', ')}</strong>.</p><p>Type <code>DISABLE SAFETY</code> to confirm:</p>`;
     const input = document.createElement('input');
     input.type = 'text'; input.placeholder = 'DISABLE SAFETY'; input.style.cssText = 'width:100%;';
     const btn = document.createElement('button');
     btn.textContent = 'Confirm'; btn.disabled = true;
+    const cancel = document.createElement('button');
+    cancel.className = 'secondary'; cancel.textContent = 'Cancel';
     input.addEventListener('input', () => { btn.disabled = input.value !== 'DISABLE SAFETY'; });
-    btn.onclick = () => { closeModal(); resolve(); };
-    content.appendChild(input); content.appendChild(btn);
+    btn.onclick = () => { closeModal(); resolve(true); };
+    cancel.onclick = () => { closeModal(); resolve(false); };
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:8px;';
+    row.appendChild(cancel); row.appendChild(btn);
+    content.appendChild(input); content.appendChild(row);
     openModal({ title: 'Confirm dangerous change', content, escDisabled: false });
   });
-}
-
-function _field(label, control, help) {
-  const wrap = document.createElement('div');
-  wrap.style.cssText = 'display:grid;gap:6px;';
-  const lbl = document.createElement('label');
-  lbl.style.cssText = 'font-size:13px;font-weight:700;';
-  lbl.textContent = label;
-  wrap.appendChild(lbl);
-  wrap.appendChild(control);
-  if (help) { const p = document.createElement('p'); p.style.cssText = 'font-size:12px;color:var(--text-muted);margin:0;'; p.textContent = help; wrap.appendChild(p); }
-  return wrap;
-}
-
-function _selectControl(options, value, onChange) {
-  return Select({ options, value, onChange });
-}
-
-function _toggleControl(checked, onChange) {
-  let control;
-  control = Toggle({
-    checked: Boolean(checked),
-    label: Boolean(checked) ? 'Enabled' : 'Disabled',
-    onChange: (value) => {
-      onChange(value);
-      const label = control.querySelector('span');
-      if (label) label.textContent = value ? 'Enabled' : 'Disabled';
-    }
-  });
-  return control;
-}
-
-function _number(name, value, onChange) {
-  const el = document.createElement('input');
-  el.type = 'number'; el.value = value; el.min = '1'; el.max = '20'; el.style.cssText = 'width:80px;';
-  el.addEventListener('input', () => onChange(el.value));
-  return el;
 }
 
 function _themeToggle() {
@@ -204,4 +164,3 @@ function _themeToggle() {
   }
   return wrap;
 }
-
