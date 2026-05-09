@@ -18,7 +18,7 @@ export function openModal({ title, content, onClose, escDisabled = false } = {})
   dialog.setAttribute('aria-modal', 'true');
   dialog.setAttribute('aria-labelledby', '__relai-modal-title');
   dialog.style.cssText = `
-    background:var(--surface,#0b1220);border:1px solid var(--line-soft);
+    background:var(--surface,#ffffff);border:1px solid var(--line-soft);
     border-radius:16px;padding:24px;max-width:520px;width:100%;
     box-shadow:0 24px 64px rgba(0,0,0,.5);
   `;

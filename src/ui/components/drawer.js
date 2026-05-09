@@ -18,7 +18,7 @@ export function openDrawer({ title, content, onClose } = {}) {
   panel.setAttribute('aria-labelledby', '__relai-drawer-title');
   panel.style.cssText = `
     position:fixed;top:0;right:0;bottom:0;width:min(480px,95vw);
-    background:var(--surface,#0b1220);border-left:1px solid var(--line-soft);
+    background:var(--surface,#ffffff);border-left:1px solid var(--line-soft);
     padding:24px;overflow:auto;box-shadow:-8px 0 32px rgba(0,0,0,.4);
     display:flex;flex-direction:column;gap:16px;
   `;

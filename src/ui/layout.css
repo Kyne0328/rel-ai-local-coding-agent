@@ -73,3 +73,25 @@
     .data-table { min-width: 560px; }
   }
 }
+
+/* Light-mode layout overrides */
+:root[data-theme="light"] .sidebar {
+  background: #ffffff;
+  border-right: 1px solid rgba(0,0,0,.08);
+}
+:root[data-theme="light"] .topbar {
+  background: rgba(255,255,255,.95);
+  border-bottom: 1px solid rgba(0,0,0,.08);
+}
+:root[data-theme="light"] .nav a {
+  color: #374151;
+}
+:root[data-theme="light"] .nav a.active,
+:root[data-theme="light"] .nav a:hover {
+  background: rgba(37,99,235,.08);
+  color: #1d4ed8;
+}
+:root[data-theme="light"] .mobile-nav a {
+  color: #374151;
+  background: transparent;
+}
