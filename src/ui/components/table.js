@@ -43,3 +43,56 @@ export function Table({ columns, rows, emptyMessage = 'No data.' } = {}) {
   wrap.appendChild(table);
   return wrap;
 }
+
+// Virtualizer: renders first 50 rows, appends 50 more on IntersectionObserver scroll-end
+export function virtualizeTable(tbody, allRows, renderRow) {
+  const CHUNK = 50;
+  let rendered = 0;
+  let sentinel = null;
+
+  const observer = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting) _renderChunk();
+  }, { rootMargin: '200px' });
+
+  function _renderChunk() {
+    const chunk = allRows.slice(rendered, rendered + CHUNK);
+    for (const row of chunk) {
+      const el = renderRow(row);
+      if (sentinel) tbody.insertBefore(el, sentinel);
+      else tbody.appendChild(el);
+    }
+    rendered += chunk.length;
+    if (rendered >= allRows.length && sentinel) {
+      observer.unobserve(sentinel);
+      sentinel.remove();
+      sentinel = null;
+    }
+  }
+
+  // Initial render
+  tbody.innerHTML = '';
+  _renderChunk();
+  if (rendered < allRows.length) {
+    sentinel = document.createElement('tr');
+    sentinel.innerHTML = '<td colspan="99" style="padding:4px;height:1px;"></td>';
+    tbody.appendChild(sentinel);
+    observer.observe(sentinel);
+  }
+
+  return {
+    reinit(rows) {
+      if (sentinel) { observer.unobserve(sentinel); sentinel = null; }
+      allRows = rows;
+      rendered = 0;
+      tbody.innerHTML = '';
+      _renderChunk();
+      if (rendered < allRows.length) {
+        sentinel = document.createElement('tr');
+        sentinel.innerHTML = '<td colspan="99" style="padding:4px;height:1px;"></td>';
+        tbody.appendChild(sentinel);
+        observer.observe(sentinel);
+      }
+    },
+    getRendered() { return rendered; },
+  };
+}
