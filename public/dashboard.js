@@ -5,17 +5,20 @@ import { initEvents, startSSE, stopSSE, isLive, setPollCallback } from '/ui/even
 import { mountHome } from '/ui/sections/home.js';
 import { initCommandPalette, registerActions } from '/ui/components/command-palette.js';
 
-// Restore saved theme
 const savedTheme = localStorage.getItem('relai_theme');
 if (savedTheme === 'light') document.documentElement.dataset.theme = 'light';
 
-// Token bootstrap
 const urlToken = new URLSearchParams(location.search).get('token') || '';
 const token = urlToken || sessionStorage.getItem('relai_dashboard_token') || '';
 if (token) setToken(token);
 
 function readInitialPayload() {
-  try { const el = document.getElementById('initialDashboardData'); return el && el.textContent ? JSON.parse(el.textContent) : null; } catch (_) { return null; }
+  try {
+    const el = document.getElementById('initialDashboardData');
+    return el && el.textContent ? JSON.parse(el.textContent) : null;
+  } catch (_) {
+    return null;
+  }
 }
 
 async function boot() {
@@ -25,34 +28,20 @@ async function boot() {
   const main = document.getElementById('main');
   if (!main) return;
 
-  const sections = {
-    home:        (el) => mountHome(el, getStore()),
-    overview:    (el) => mountHome(el, getStore()),
-    workspaces:  (el) => import('/ui/sections/workspaces.js').then(m => m.mountWorkspaces(el, getStore())).catch(console.error),
-    activity:    (el) => import('/ui/sections/activity.js').then(m => m.mountActivity(el)).catch(console.error),
-    approvals:   (el) => import('/ui/sections/approvals.js').then(m => m.mountApprovals(el)).catch(console.error),
-    tools:       (el) => import('/ui/sections/tools.js').then(m => m.mountTools(el)).catch(console.error),
-    agents:      (el) => import('/ui/sections/agents.js').then(m => m.mountAgents(el, getStore())).catch(console.error),
-    settings:    (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el)).catch(console.error),
-    connector:   (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el)).catch(console.error),
-    diagnostics: (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el)).catch(console.error),
-  };
-
+  const sections = _sectionMap();
   _buildNav();
   initRouter(main, sections);
 
   const fresh = await fetchJson('/api/dashboard/v10?limit=100&requireHttpToken=0');
   if (fresh) {
     initStore(fresh);
-    const id = currentSection();
-    if (sections[id]) { main.innerHTML = ''; sections[id](main); }
+    _renderCurrentSection(main, currentSection(), sections);
   }
 
   _wireTopControls();
   setPollCallback(_doRefresh);
   _checkOnboarding();
 
-  // Init command palette
   const storeData = getStore();
   const navActions = [
     { label: 'Home', href: '#home', category: 'Navigation' },
@@ -68,20 +57,35 @@ async function boot() {
   const actionActions = [
     { label: 'Refresh dashboard', category: 'Actions', action: _doRefresh },
     { label: 'Toggle live mode', category: 'Actions', action: _toggleLive },
-    { label: 'Copy dashboard token', category: 'Actions', action: () => { if (token) navigator.clipboard.writeText(token).catch(() => {}); } },
+    { label: 'Copy dashboard token', category: 'Actions', action: () => { if (getToken()) navigator.clipboard.writeText(getToken()).catch(() => {}); } },
   ];
   const wsActions = Array.isArray(storeData.config && storeData.config.workspaces ? storeData.config.workspaces : []).map(ws => ({
-    label: 'Switch to workspace: ' + ws.alias, category: 'Workspaces',
+    label: 'Switch to workspace: ' + ws.alias,
+    category: 'Workspaces',
     action: () => { const el = document.getElementById('workspace'); if (el) el.value = ws.alias; }
   }));
   initCommandPalette([...navActions, ...actionActions, ...wsActions]);
 
-  // Lazy-register tool actions after tools fetch
   fetchJson('/api/tools').then(tools => {
     if (Array.isArray(tools)) {
       registerActions(tools.map(t => ({ label: 'View tool: ' + t.name, category: 'Tools', href: '#tools' })));
     }
   }).catch(() => {});
+}
+
+function _sectionMap() {
+  return {
+    home:        (el) => mountHome(el, getStore()),
+    overview:    (el) => mountHome(el, getStore()),
+    workspaces:  (el) => import('/ui/sections/workspaces.js').then(m => m.mountWorkspaces(el, getStore())).catch(console.error),
+    activity:    (el) => import('/ui/sections/activity.js').then(m => m.mountActivity(el)).catch(console.error),
+    approvals:   (el) => import('/ui/sections/approvals.js').then(m => m.mountApprovals(el)).catch(console.error),
+    tools:       (el) => import('/ui/sections/tools.js').then(m => m.mountTools(el)).catch(console.error),
+    agents:      (el) => import('/ui/sections/agents.js').then(m => m.mountAgents(el, getStore())).catch(console.error),
+    settings:    (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el)).catch(console.error),
+    connector:   (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el)).catch(console.error),
+    diagnostics: (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el)).catch(console.error),
+  };
 }
 
 function _buildNav() {
@@ -108,31 +112,22 @@ function _wireTopControls() {
   }
   const liveBtn = document.getElementById('liveBtn');
   if (liveBtn) liveBtn.onclick = _toggleLive;
-  // Hide raw panel button (Phase 3: moved to Cmd-K)
+  const refreshBtn = document.getElementById('refreshBtn');
+  if (refreshBtn) refreshBtn.onclick = _doRefresh;
   const rawBtn = document.getElementById('rawToggleBtn');
   if (rawBtn) rawBtn.style.display = 'none';
+}
+
+function _renderCurrentSection(main, id, sections) {
+  const fn = sections[id] || sections.home;
+  if (main && fn) { main.innerHTML = ''; fn(main); }
 }
 
 async function _doRefresh() {
   const data = await fetchJson('/api/dashboard/v10?limit=100&requireHttpToken=0');
   if (data) {
     initStore(data);
-    const main = document.getElementById('main');
-    const id = currentSection();
-    const sectionFns = {
-      home:        (el) => mountHome(el, getStore()),
-      overview:    (el) => mountHome(el, getStore()),
-      workspaces:  (el) => import('/ui/sections/workspaces.js').then(m => m.mountWorkspaces(el, getStore())).catch(console.error),
-      activity:    (el) => import('/ui/sections/activity.js').then(m => m.mountActivity(el)).catch(console.error),
-      approvals:   (el) => import('/ui/sections/approvals.js').then(m => m.mountApprovals(el)).catch(console.error),
-      tools:       (el) => import('/ui/sections/tools.js').then(m => m.mountTools(el)).catch(console.error),
-      agents:      (el) => import('/ui/sections/agents.js').then(m => m.mountAgents(el, getStore())).catch(console.error),
-      settings:    (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el)).catch(console.error),
-      connector:   (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el)).catch(console.error),
-      diagnostics: (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el)).catch(console.error),
-    };
-    const fn = sectionFns[id];
-    if (main && fn) { main.innerHTML = ''; fn(main); }
+    _renderCurrentSection(document.getElementById('main'), currentSection(), _sectionMap());
   }
 }
 
@@ -148,6 +143,8 @@ function _toggleLive() {
       const id = currentSection();
       if (main && id === 'home') mountHome(main, getStore());
       if (main && id === 'activity') import('/ui/sections/activity.js').then(m => m.mountActivity(main)).catch(console.error);
+      if (main && id === 'workspaces') import('/ui/sections/workspaces.js').then(m => m.mountWorkspaces(main, getStore())).catch(console.error);
+      if (main && id === 'agents') import('/ui/sections/agents.js').then(m => m.mountAgents(main, getStore())).catch(console.error);
     });
     startSSE(getToken);
     if (btn) btn.textContent = 'Stop live';

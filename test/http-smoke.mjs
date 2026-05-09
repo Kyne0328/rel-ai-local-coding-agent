@@ -55,11 +55,27 @@ const dashboardQueryAuth = await fetch(`http://127.0.0.1:${port}/api/dashboard/v
 if (!dashboardQueryAuth.ok) {
   throw new Error('dashboard API did not accept token query auth used by browser dashboard');
 }
+if (dashboardQueryAuth.readiness == null) {
+  throw new Error('dashboard API did not include readiness data');
+}
 
 const dashboardHtmlResponse = await fetch(`http://127.0.0.1:${port}/dashboard?token=${encodeURIComponent(token)}`);
 const dashboardHtml = await dashboardHtmlResponse.text();
 if (!dashboardHtmlResponse.ok || dashboardHtml.includes('initialDashboardJson is not defined') || !dashboardHtml.includes('id="initialDashboardData"')) {
   throw new Error('dashboard HTML did not render embedded initial dashboard data');
+}
+if (!dashboardHtml.includes('id="refreshBtn"')) {
+  throw new Error('dashboard HTML did not expose the wired refresh button');
+}
+
+const workspaceModule = await fetch(`http://127.0.0.1:${port}/ui/sections/workspaces.js`).then((response) => response.text());
+if (!workspaceModule.includes('mountWorkspaces') || workspaceModule.includes('Full workspace editor coming in Phase 2')) {
+  throw new Error('workspace dashboard section is still incomplete or placeholder-only');
+}
+
+const agentsModule = await fetch(`http://127.0.0.1:${port}/ui/sections/agents.js`).then((response) => response.text());
+if (!agentsModule.includes('mountAgents') || agentsModule.includes('Phase 2 adds live subtask binding')) {
+  throw new Error('agents dashboard section is still incomplete or placeholder-only');
 }
 
 const unauthorized = await fetch(`http://127.0.0.1:${port}/mcp`, {

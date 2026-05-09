@@ -512,7 +512,10 @@ function openDashboardEvents(res, req, options) {
   const sendSnapshot = () => {
     try {
       const config = readConfig();
-      sendSse(res, "dashboard", productUx.dashboardData(config, { limit: 100 }));
+      sendSse(res, "dashboard", {
+        ...productUx.dashboardData(config, { limit: 100 }),
+        readiness: release.releaseReadiness(config, { requireHttpToken: false })
+      });
     } catch (error) {
       sendSse(res, "error", { ok: false, error: error instanceof Error ? error.message : String(error) });
     }
@@ -667,7 +670,7 @@ function renderDashboardHtml(options) {
         <span class="status-pill ok" id="serverStatus">Online</span>
         <label for="token" class="sr-only">Dashboard token</label>
         <input id="token" type="password" placeholder="Dashboard token" autocomplete="off" spellcheck="false">
-        <button onclick="void 0">Refresh</button>
+        <button id="refreshBtn" type="button">Refresh</button>
         <button class="secondary" id="liveBtn">Start live</button>
         <button class="secondary" id="rawToggleBtn">View API response</button>
       </div>
