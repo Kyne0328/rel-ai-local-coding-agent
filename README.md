@@ -87,6 +87,8 @@ A minimal config looks like this:
 
 Trusted local mode is a single trust decision. It enables local read/write/shell/reset behavior inside configured workspaces so ChatGPT can work like a local coding assistant. Workspace path boundaries are still enforced.
 
+Legacy approval gates, task sessions, worktrees, PR workflows, scheduler, and multi-agent tools remain as compatibility/debug code, not the normal public product flow.
+
 ## Validation commands
 
 Rel.AI detects common project commands from manifests:
@@ -105,6 +107,7 @@ npm run start:http      # start HTTP/dashboard server directly
 npm run connector:print # print saved connector settings
 npm run check           # syntax-check server/dashboard code
 npm run test:smoke      # verify the public 8-tool bridge
+npm run test:public-workflow # verify inspect/read/write/verify/diff/reset workflow
 npm run test:compat     # verify hidden legacy compatibility aliases
 ```
 

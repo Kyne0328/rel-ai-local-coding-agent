@@ -320,14 +320,19 @@ function detectVerifyCommands(root, level) {
   const commands = [];
   const packageJson = path.join(root, "package.json");
   if (fs.existsSync(packageJson)) {
-    commands.push("node --check src/tools.js");
     try {
       const pkg = JSON.parse(fs.readFileSync(packageJson, "utf8"));
       const scripts = pkg.scripts || {};
-      if (scripts.check) commands.push("npm run check");
+      if (scripts.check) {
+        commands.push("npm run check");
+      } else if (level === "quick" && fs.existsSync(path.join(root, "src", "tools.js"))) {
+        commands.push("node --check src/tools.js");
+      }
       if (level !== "quick" && scripts.test) commands.push("npm test");
       if (level === "full" && scripts.build) commands.push("npm run build");
-    } catch (_error) {}
+    } catch (_error) {
+      if (level === "quick" && fs.existsSync(path.join(root, "src", "tools.js"))) commands.push("node --check src/tools.js");
+    }
   }
   if (fs.existsSync(path.join(root, "pubspec.yaml"))) {
     if (level === "quick") {

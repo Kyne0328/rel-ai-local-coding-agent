@@ -843,12 +843,12 @@ function workspaceInspect(config, args = {}) {
         truncated: tree.truncated
       },
       nextSuggestedTools: [
-        "relai_read_files",
-  "relai_write_file",
-  "relai_edit_file",
-        "relai_context_pack",
-        "relai_task_start",
-        "relai_task_run"
+        "relai_repo_snapshot",
+        "relai_read",
+        "relai_write",
+        "relai_verify",
+        "relai_diff",
+        "relai_reset"
       ]
     };
   } catch (error) {
@@ -1086,15 +1086,11 @@ const CHATGPT_LOCAL_REPO_TOOLS = new Set([
   "relai_reset"
 ]);
 
-// Legacy tool groups are intentionally not exposed. Some older ChatGPT connector
-// runs may still call them from cached schemas, so selected calls remain callable
-// as compatibility aliases until the connector refreshes.
-
-// Compatibility tools stay callable in ChatGPT local repo mode so older connector
-// prompts/runs do not dead-end after tool list simplification. They are not
-// advertised by tools/list, which keeps the public surface clean, but direct
-// calls continue to work and internally map to the same local repo bridge
-// primitives or trusted local execution path.
+// Public ChatGPT local repo mode exposes only the 8 bridge tools above.
+// The tools below are legacy/debug compatibility aliases. They remain callable
+// for cached connector schemas and older transcripts, but must not be suggested
+// by product flows or used by default smoke tests. Prefer:
+// relai_repo_snapshot -> relai_read -> relai_write -> relai_verify -> relai_diff -> relai_reset.
 const CHATGPT_LOCAL_REPO_COMPAT_CALLABLE_TOOLS = new Set([
   "relai_version",
   "relai_config",
