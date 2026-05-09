@@ -200,9 +200,36 @@ function writeTextFileSafe(root, relativePath, content, options = {}) {
       throw new Error(`SHA mismatch for ${resolved.relativePath}. Expected ${options.expectedSha256}, got ${current || "missing"}.`);
     }
   }
+
+  const expectedWrittenSha256 = crypto.createHash("sha256").update(text, "utf8").digest("hex");
   fs.mkdirSync(path.dirname(resolved.absolutePath), { recursive: true });
-  fs.writeFileSync(resolved.absolutePath, text, "utf8");
-  return { path: resolved.relativePath, sha256: fileSha256(root, resolved.relativePath), bytes: Buffer.byteLength(text, "utf8") };
+
+  const tmpName = `.${path.basename(resolved.absolutePath)}.${process.pid}.${Date.now()}.tmp`;
+  const tmpPath = path.join(path.dirname(resolved.absolutePath), tmpName);
+  try {
+    fs.writeFileSync(tmpPath, text, "utf8");
+    const tmpSha256 = crypto.createHash("sha256").update(fs.readFileSync(tmpPath)).digest("hex");
+    if (tmpSha256 !== expectedWrittenSha256) {
+      throw new Error(`Temporary write verification failed for ${resolved.relativePath}. Expected ${expectedWrittenSha256}, got ${tmpSha256}.`);
+    }
+    fs.renameSync(tmpPath, resolved.absolutePath);
+  } catch (error) {
+    try { if (fs.existsSync(tmpPath)) fs.rmSync(tmpPath, { force: true }); } catch (_cleanupError) {}
+    throw error;
+  }
+
+  const reread = fs.readFileSync(resolved.absolutePath);
+  const actualSha256 = crypto.createHash("sha256").update(reread).digest("hex");
+  if (actualSha256 !== expectedWrittenSha256) {
+    throw new Error(`Post-write verification failed for ${resolved.relativePath}. Expected ${expectedWrittenSha256}, got ${actualSha256}.`);
+  }
+  return {
+    path: resolved.relativePath,
+    sha256: actualSha256,
+    expectedSha256: expectedWrittenSha256,
+    verified: true,
+    bytes: Buffer.byteLength(text, "utf8")
+  };
 }
 
 function safeCommandPolicy(command) {

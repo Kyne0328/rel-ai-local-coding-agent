@@ -47,6 +47,7 @@ const release = require("./release");
 const { runShellCommand } = require("./shell");
 const { discoverCommands } = require("./commandDiscovery");
 const { repoSnapshot, relaiRead, relaiWrite, relaiVerify, relaiBrowser, relaiDiff, relaiReset } = require("./localRepoBridge");
+const { appendOperation, makeOperationId, summarizeOperations } = require("./journal");
 const { enforcePermission, TOOL_LEVEL } = require("./permissions");
 const pkg = require("../package.json");
 
@@ -434,7 +435,7 @@ async function dispatchTool(config, name, args) {
     case "relai_read":
       return withWorkspace(config, args, (workspace) => relaiRead(workspace, args));
     case "relai_write":
-      return recordMaybe(config, args, "write", async (workspace) => relaiWrite(workspace, args));
+      return recordMaybe(config, args, "write", async (workspace) => relaiWrite(workspace, config, args));
     case "relai_verify":
       return recordMaybe(config, args, "verify", async (workspace) => relaiVerify(workspace, config, args));
     case "relai_browser":
@@ -628,7 +629,21 @@ async function dispatchTool(config, name, args) {
       return readFiles(config, args);
     case "relai_write_file":
       if (!config.trustedLocalAgent) approvals.requireApproval(config, "write", args);
-      return withWorkspace(config, args, (workspace) => writeTextFileSafe(workspace.path, args.path, args.content, { expectedSha256: args.expectedSha256 }));
+      return withWorkspace(config, args, (workspace) => {
+        const oldSha256 = fileSha256(workspace.path, args.path);
+        const result = writeTextFileSafe(workspace.path, args.path, args.content, { expectedSha256: args.expectedSha256 });
+        const verifiedSha256 = fileSha256(workspace.path, result.path);
+        if (verifiedSha256 !== result.sha256) throw new Error(`Fresh read verification failed for ${result.path}.`);
+        const operationId = makeOperationId();
+        appendOperation(config, workspace, {
+          id: operationId,
+          type: "legacy_write_file",
+          ok: true,
+          paths: [result.path],
+          results: [{ path: result.path, oldSha256, newSha256: result.sha256, verified: result.verified === true }]
+        });
+        return { ...result, operationId };
+      });
     case "relai_edit_file":
       if (!config.trustedLocalAgent) approvals.requireApproval(config, "write", args);
       return withWorkspace(config, args, (workspace) => editFile(workspace, args));
@@ -849,7 +864,8 @@ function workspaceInspect(config, args = {}) {
         "relai_verify",
         "relai_diff",
         "relai_reset"
-      ]
+      ],
+      operationJournal: summarizeOperations(config, { alias: profile.workspace, path: profile.root }, args.journalLimit || 10)
     };
   } catch (error) {
     return {

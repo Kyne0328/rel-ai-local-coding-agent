@@ -121,6 +121,10 @@ test/       smoke and compatibility tests
 examples/   example config and connector files
 ```
 
+## Workflow reliability
+
+For long ChatGPT coding sessions, use the deterministic bridge flow and operation journal described in [docs/WORKFLOW_RELIABILITY.md](docs/WORKFLOW_RELIABILITY.md).
+
 ## Notes
 
 Rel.AI is local developer tooling. Review diffs before committing important changes, keep workspaces scoped to repositories you trust ChatGPT to edit, and use `relai_reset` or git to roll back unwanted changes.

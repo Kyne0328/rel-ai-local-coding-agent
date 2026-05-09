@@ -10,6 +10,7 @@ const {
   looksBinary
 } = require("./safety");
 const { discoverCommands } = require("./commandDiscovery");
+const { appendOperation, makeOperationId, summarizeOperations } = require("./journal");
 
 const DEFAULT_MAX_READ_BYTES = 1024 * 1024;
 const DEFAULT_MAX_SNAPSHOT_FILES = 1000;
@@ -35,7 +36,8 @@ function repoSnapshot(workspace, config, args = {}) {
     skipped: tree.skipped.slice(0, 200),
     truncated: tree.truncated,
     hints: projectHints(Object.keys(manifests)),
-    recommendedFlow: ["relai_read", "relai_write", "relai_shell or relai_verify", "relai_diff"]
+    recommendedFlow: ["relai_read", "relai_write", "relai_verify", "relai_diff", "relai_reset"],
+    operationJournal: summarizeOperations(config, workspace, args.journalLimit || 10)
   };
 }
 
@@ -79,21 +81,38 @@ function relaiRead(workspace, args = {}) {
   return { ok: true, workspace: workspace.alias, items, skipped };
 }
 
-function relaiWrite(workspace, args = {}) {
+function relaiWrite(workspace, config, args = {}) {
   const edits = Array.isArray(args.edits) ? args.edits : [];
   if (edits.length === 0) throw new Error("edits must contain at least one edit.");
   const dryRun = Boolean(args.dryRun);
+  const operationId = makeOperationId();
   const results = [];
   for (let i = 0; i < edits.length; i += 1) {
-    results.push(applyWriteEdit(workspace, edits[i] || {}, i, { dryRun }));
+    results.push(applyWriteEdit(workspace, edits[i] || {}, i, { dryRun, operationId }));
   }
-  return {
+  const summary = {
     ok: results.every((item) => item.ok !== false),
     dryRun,
     workspace: workspace.alias,
+    operationId,
     changedFiles: results.filter((item) => item.changed).map((item) => item.path),
     results
   };
+  appendOperation(config, workspace, {
+    id: operationId,
+    type: dryRun ? "write:dryRun" : "write",
+    ok: summary.ok,
+    paths: summary.changedFiles,
+    results: results.map((item) => ({
+      path: item.path,
+      op: item.op,
+      changed: item.changed,
+      oldSha256: item.oldSha256,
+      newSha256: item.newSha256,
+      verified: item.verified === true || item.dryRun === true
+    }))
+  });
+  return summary;
 }
 
 async function relaiVerify(workspace, config, args = {}) {
@@ -193,7 +212,11 @@ function applyWriteEdit(workspace, edit, index, options) {
   if (!changed) return { ok: true, path: safe.relativePath, op, changed: false, oldSha256, newSha256: oldSha256 };
   if (options.dryRun) return { ok: true, path: safe.relativePath, op, changed: true, dryRun: true, oldSha256, newSha256: sha256Text(newContent) };
   const write = writeTextFileSafe(workspace.path, safe.relativePath, newContent, { expectedSha256: oldSha256 || undefined });
-  return { ok: true, path: safe.relativePath, op, changed: true, oldSha256, newSha256: write.sha256, bytes: write.bytes };
+  const verifiedSha256 = fileSha256(workspace.path, safe.relativePath);
+  if (verifiedSha256 !== write.sha256) {
+    throw new Error(`Fresh read verification failed for ${safe.relativePath}. Expected ${write.sha256}, got ${verifiedSha256 || "missing"}.`);
+  }
+  return { ok: true, path: safe.relativePath, op, changed: true, oldSha256, newSha256: write.sha256, verified: write.verified === true, bytes: write.bytes };
 }
 
 function transformContent(content, edit, op, index) {

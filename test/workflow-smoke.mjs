@@ -157,6 +157,15 @@ const written = contentOf(await waitFor(6));
 if (!written.changedFiles.includes('README.md')) {
   throw new Error('write failed');
 }
+if (!written.operationId || !written.results[0].verified) {
+  throw new Error('write did not return a verified operation id');
+}
+
+call(61, 'relai_repo_snapshot', { workspace: 'smoke', maxEntries: 100, includeFiles: false, journalLimit: 5 });
+const postWriteSnapshot = contentOf(await waitFor(61));
+if (!postWriteSnapshot.operationJournal || !postWriteSnapshot.operationJournal.recent.some((item) => item.id === written.operationId)) {
+  throw new Error('post-write snapshot did not expose the operation journal');
+}
 
 call(7, 'relai_verify', { workspace: 'smoke', level: 'standard' });
 const verify = contentOf(await waitFor(7));
