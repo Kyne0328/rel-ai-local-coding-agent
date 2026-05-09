@@ -1,13 +1,8 @@
 import { setToken, getToken, fetchJson } from '/ui/api.js';
 import { init as initStore, get as getStore } from '/ui/store.js';
 import { initRouter, currentSection } from '/ui/router.js';
-import { initEvents, startSSE, stopSSE, isLive } from '/ui/events.js';
+import { initEvents, startSSE, stopSSE, isLive, setPollCallback } from '/ui/events.js';
 import { mountHome } from '/ui/sections/home.js';
-import { mountActivity } from '/ui/sections/activity.js';
-import { mountApprovals } from '/ui/sections/approvals.js';
-import { mountSettings } from '/ui/sections/settings/index.js';
-import { mountWorkspaces } from '/ui/sections/workspaces.js';
-import { mountAgents } from '/ui/sections/agents.js';
 import { initCommandPalette, registerActions } from '/ui/components/command-palette.js';
 
 // Restore saved theme
@@ -33,14 +28,14 @@ async function boot() {
   const sections = {
     home:        (el) => mountHome(el, getStore()),
     overview:    (el) => mountHome(el, getStore()),
-    workspaces:  (el) => mountWorkspaces(el, getStore()),
-    activity:    (el) => mountActivity(el).catch(console.error),
-    approvals:   (el) => mountApprovals(el).catch(console.error),
-    tools:       (el) => { import('/ui/sections/tools.js').then(m => m.mountTools(el)).catch(console.error); },
-    agents:      (el) => mountAgents(el, getStore()).catch(console.error),
-    settings:    (el) => mountSettings(el).catch(console.error),
-    connector:   (el) => mountSettings(el).catch(console.error),
-    diagnostics: (el) => mountSettings(el).catch(console.error),
+    workspaces:  (el) => import('/ui/sections/workspaces.js').then(m => m.mountWorkspaces(el, getStore())).catch(console.error),
+    activity:    (el) => import('/ui/sections/activity.js').then(m => m.mountActivity(el)).catch(console.error),
+    approvals:   (el) => import('/ui/sections/approvals.js').then(m => m.mountApprovals(el)).catch(console.error),
+    tools:       (el) => import('/ui/sections/tools.js').then(m => m.mountTools(el)).catch(console.error),
+    agents:      (el) => import('/ui/sections/agents.js').then(m => m.mountAgents(el, getStore())).catch(console.error),
+    settings:    (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el)).catch(console.error),
+    connector:   (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el)).catch(console.error),
+    diagnostics: (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el)).catch(console.error),
   };
 
   _buildNav();
@@ -54,6 +49,7 @@ async function boot() {
   }
 
   _wireTopControls();
+  setPollCallback(_doRefresh);
   _checkOnboarding();
 
   // Init command palette
@@ -123,9 +119,18 @@ async function _doRefresh() {
     initStore(data);
     const main = document.getElementById('main');
     const id = currentSection();
-    const fns = { home: mountHome, overview: mountHome, workspaces: mountWorkspaces, activity: mountActivity, approvals: mountApprovals, tools: (el) => import('/ui/sections/tools.js').then(m => m.mountTools(el)).catch(console.error), agents: mountAgents, settings: mountSettings };
-    const fn = fns[id];
-    if (main && fn) { main.innerHTML = ''; fn(main, getStore()); }
+    const sectionFns = {
+      home:        (el) => mountHome(el, getStore()),
+      overview:    (el) => mountHome(el, getStore()),
+      workspaces:  (el) => import('/ui/sections/workspaces.js').then(m => m.mountWorkspaces(el, getStore())).catch(console.error),
+      activity:    (el) => import('/ui/sections/activity.js').then(m => m.mountActivity(el)).catch(console.error),
+      approvals:   (el) => import('/ui/sections/approvals.js').then(m => m.mountApprovals(el)).catch(console.error),
+      tools:       (el) => import('/ui/sections/tools.js').then(m => m.mountTools(el)).catch(console.error),
+      agents:      (el) => import('/ui/sections/agents.js').then(m => m.mountAgents(el, getStore())).catch(console.error),
+      settings:    (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el)).catch(console.error),
+    };
+    const fn = sectionFns[id];
+    if (main && fn) { main.innerHTML = ''; fn(main); }
   }
 }
 
@@ -140,7 +145,7 @@ function _toggleLive() {
       const main = document.getElementById('main');
       const id = currentSection();
       if (main && id === 'home') mountHome(main, getStore());
-      if (main && id === 'activity') mountActivity(main);
+      if (main && id === 'activity') import('/ui/sections/activity.js').then(m => m.mountActivity(main)).catch(console.error);
     });
     startSSE(getToken);
     if (btn) btn.textContent = 'Stop live';
