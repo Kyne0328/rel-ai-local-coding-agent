@@ -1,3 +1,5 @@
+![Rel.AI MCP hero](docs/assets/relai-mcp-hero.png)
+
 # Rel.AI MCP
 
 Rel.AI MCP is a local repo bridge for ChatGPT. It makes a configured local repository feel like an uploaded zip, but with local shell execution, persistent workspace access, verification commands, diffs, and reset support.
