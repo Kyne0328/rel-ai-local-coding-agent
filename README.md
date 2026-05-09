@@ -1,211 +1,121 @@
 # Rel.AI MCP
 
-![Rel.AI MCP hero](docs/assets/relai-mcp-hero.png)
+Rel.AI MCP is a local repo bridge for ChatGPT. It makes a configured local repository feel like an uploaded zip, but with local shell execution, persistent workspace access, verification commands, diffs, and reset support.
 
-**Rel.AI MCP is a local MCP server that turns ChatGPT into a Codex-style coding team.**
+The current product model is intentionally simple: ChatGPT connects to your local server and uses a small set of bridge tools to inspect, edit, verify, and review your real local projects.
 
-It gives ChatGPT controlled access to your local projects so it can plan work, create isolated Git worktrees, edit files, run tests, inspect failures, commit changes, and prepare pull requests without sending your code to a hosted coding agent.
+## What ChatGPT can do
+
+Rel.AI exposes eight public bridge tools:
+
+| Tool | Purpose |
+| --- | --- |
+| `relai_repo_snapshot` | Summarize a workspace like a zip upload: tree, manifests, scripts, git status, and detected commands. |
+| `relai_read` | Batch-read safe text files from a configured workspace. |
+| `relai_write` | Apply deterministic structured edits without fragile hand-written diffs. |
+| `relai_shell` | Run local shell commands inside a configured workspace. |
+| `relai_verify` | Run detected validation commands such as `npm run check`, `flutter analyze`, or `flutter test`. |
+| `relai_browser` | Browser/UI check bridge for dashboard and app validation workflows. |
+| `relai_diff` | Show the resulting git diff for review. |
+| `relai_reset` | Roll back workspace changes when needed. |
+
+Some older tool names are kept as hidden compatibility aliases so cached ChatGPT connector calls do not dead-end, but they are not advertised as the public interface.
 
 ## Why this exists
 
-Rel.AI MCP is built for developers who want AI-assisted coding with local control.
-
-Instead of giving a remote service access to your repository, you run Rel.AI MCP on your own machine. ChatGPT talks to it through the Model Context Protocol, and Rel.AI MCP handles the local coding workflow safely.
-
-## What it can do
-
-- **Create task sessions** for each coding request.
-- **Create isolated worktrees** so changes do not touch your main checkout.
-- **Read, search, and edit project files** through controlled tools.
-- **Apply patches and safe text writes** with policy checks.
-- **Run tests and commands** from an allowlisted command set.
-- **Inspect failures and iterate** until the task is complete.
-- **Track background jobs** for longer-running commands.
-- **Commit changes, push branches, and create draft PRs**.
-- **Check release readiness, workspace health, and connector setup**.
-- **Use a local dashboard** to monitor sessions, tasks, agents, readiness, and activity.
-
-## How the workflow looks
+Uploading a repo zip to ChatGPT is often reliable because ChatGPT can inspect and modify files directly. Rel.AI keeps that workflow but removes repeated zipping:
 
 ```text
-You ask ChatGPT to build or fix something
-        ↓
-ChatGPT creates a Rel.AI MCP task session
-        ↓
-Rel.AI MCP creates an isolated Git worktree
-        ↓
-Agents plan, edit, test, review, and fix
-        ↓
-Rel.AI MCP commits the result and prepares a draft PR
-        ↓
-You review, approve, merge, or discard the worktree
+ChatGPT inspects the local repo
+ChatGPT reads relevant files
+ChatGPT writes deterministic edits
+ChatGPT runs local checks
+ChatGPT shows the final diff
 ```
 
-## Core concepts
+Your code stays on your machine. Rel.AI runs on localhost or behind your own tunnel.
 
-| Concept | Meaning |
-| --- | --- |
-| **Workspace** | A local repository Rel.AI MCP is allowed to work in. |
-| **Session** | A coding task with its own state, plan, logs, and worktree. |
-| **Worktree** | An isolated Git checkout used for one task. |
-| **Agent** | A specialized role such as planner, coder, reviewer, tester, or docs writer. |
-| **Approval gate** | A policy checkpoint before risky file, command, Git, or PR actions. |
-| **Dashboard** | The local web UI for monitoring sessions, readiness, agents, jobs, and PR flow. |
+## Quick start
 
-## One-command start
-
-For the easiest local setup:
+Requires Node.js 18 or newer.
 
 ```bash
 npm install
 npm run oneclick
 ```
 
-This creates a local config if needed, generates a persistent local/API bearer token, starts the HTTP server, and prints the dashboard plus the ChatGPT MCP URL.
+The launcher prints:
 
-For a permanent ChatGPT app, use a stable HTTPS tunnel or reverse proxy and launch with:
+- a local dashboard URL
+- a ChatGPT MCP URL using `/mcp/<secret>`
+- the connector token/secret information needed for setup
 
-```bash
-npm run oneclick -- --public-url https://relai.your-domain.com
-```
-
-Then configure ChatGPT Developer Mode once with the printed `ChatGPT MCP URL`:
-
-```text
-https://relai.your-domain.com/mcp/<secret>
-Authentication: No Authentication
-```
-
-The secret path is generated locally and stays stable until you rotate it. For ChatGPT, always choose `No Authentication` and use the printed `/mcp/<secret>` URL. The plain `/mcp` endpoint remains only for non-ChatGPT bearer-token clients.
-
-Do not test the connector by opening plain `http://127.0.0.1:3333/mcp` in a browser. MCP uses JSON-RPC over `POST`; browser `GET` is only a diagnostic. Use `/dashboard` for the UI and the printed `/mcp/<secret>` URL for ChatGPT.
-
-Full guide: [docs/ONE_CLICK_SETUP.md](docs/ONE_CLICK_SETUP.md)
-
-### First ChatGPT test
-
-After the connector is added, do not start with an edit. Start with a read-only tool check:
-
-```text
-Use Rel.AI MCP tools directly.
-Call relai_workspace_list.
-Then call relai_workspace_inspect with workspace "myapp" and maxEntries 200.
-Do not use file search. Do not modify files.
-```
-
-If ChatGPT says it found zero results in a `rel-ai-mcp` source, it searched the wrong layer. Ask it to call `relai_workspace_list` and `relai_workspace_inspect` by name. These diagnostic tools work under the normal `pr` profile and do not require admin mode.
+For ChatGPT Developer Mode, use the printed MCP URL and choose **No Authentication**. The secret is already in the path.
 
 ## Dashboard
 
-The one-command launcher prints a local dashboard URL. You can also start the HTTP server directly:
+The dashboard is for managing the local bridge:
 
-```bash
-npm run start:http
+- **Home**: current status and recent activity
+- **Workspaces**: add, rename, inspect, preflight, and save detected validation commands
+- **Activity**: audit log of bridge calls
+- **Tools**: the eight public ChatGPT tools and descriptions
+- **Settings**: local bridge settings, connector instructions, and diagnostics
+
+Workspaces can be added directly from the dashboard. Detected commands such as `dart:analyze`, `flutter:test`, and `npm:check` can be saved as validation commands.
+
+## Configuration shape
+
+A minimal config looks like this:
+
+```json
+{
+  "toolMode": "chatgpt_local_repo",
+  "trustedLocalAgent": true,
+  "dashboardEnabled": true,
+  "maxOutputBytes": 2097152,
+  "workspaces": {
+    "myapp": {
+      "path": "C:\\Dev\\myapp",
+      "protectedBranches": ["main", "master"]
+    }
+  }
+}
 ```
 
-Then open the local dashboard shown by the server output.
+Trusted local mode is a single trust decision. It enables local read/write/shell/reset behavior inside configured workspaces so ChatGPT can work like a local coding assistant. Workspace path boundaries are still enforced.
 
-The dashboard includes:
+## Validation commands
 
-- Session, task, PR, and agent status cards
-- Recent activity feed
-- Agent team status
-- Release readiness checks
-- Workspace preflight checks
-- Health and connector diagnostics
-- Raw dashboard data for debugging
+Rel.AI detects common project commands from manifests:
 
-## Install
+- `package.json` scripts, for example `npm:check`
+- Flutter/Dart projects, for example `flutter:analyze`, `flutter:test`, `dart:analyze`
+- Go, Rust, Makefile, and Python conventions
 
-Rel.AI MCP requires Node.js 18 or newer.
-
-```bash
-npm install
-npm run check
-```
-
-Create or update your local configuration:
-
-```bash
-npm run init-config
-```
-
-Add a workspace:
-
-```bash
-npm run workspace:add
-```
-
-Add safe commands ChatGPT is allowed to run:
-
-```bash
-npm run testcmd:add
-npm run cmd:add
-```
-
-## Connect to ChatGPT Developer Mode
-
-Start with the easier setup guide:
-
-[docs/ONE_CLICK_SETUP.md](docs/ONE_CLICK_SETUP.md)
-
-The deeper connector guide is here:
-
-[docs/CONNECTING_TO_CHATGPT.md](docs/CONNECTING_TO_CHATGPT.md)
-
-At a high level:
-
-1. Run `npm run oneclick`.
-2. Put a stable HTTPS tunnel in front of `http://127.0.0.1:3333`.
-3. Run `npm run oneclick -- --public-url https://your-stable-domain`.
-4. Configure one ChatGPT app with the printed `https://your-stable-domain/mcp/<secret>` URL and select `No Authentication`.
-5. Ask ChatGPT to inspect or work on one of your configured workspaces.
-
-## Safety model
-
-Rel.AI MCP is designed to keep the user in control.
-
-- Your code stays on your machine.
-- Work happens in isolated Git worktrees.
-- Commands must be allowlisted.
-- Sensitive operations can require approval.
-- State files are parsed safely and corrupted state is handled defensively.
-- Workspace preflight checks warn before risky operations.
-- Release-readiness checks verify configuration before real use.
-
-For more detail, read:
-
-[docs/SECURITY.md](docs/SECURITY.md)
+Use the dashboard **Save detected tests** button to persist detected validation commands, or let `relai_verify` run detected commands automatically.
 
 ## Useful commands
 
 ```bash
-npm run oneclick       # One-command local launch + connector summary
-npm run connector:print # Print saved connector settings. ChatGPT auth should be No Authentication.
-npm run check          # Syntax-check project files
-npm run test:smoke     # Basic MCP smoke test
-npm run test:http      # HTTP server smoke test
-npm run test:workflow  # End-to-end workflow smoke test
-npm run test:v9        # Product UX smoke test
-npm run test:v10       # Release-readiness smoke test
+npm run oneclick        # launch local server and print connector URLs
+npm run start:http      # start HTTP/dashboard server directly
+npm run connector:print # print saved connector settings
+npm run check           # syntax-check server/dashboard code
+npm run test:smoke      # verify the public 8-tool bridge
+npm run test:compat     # verify hidden legacy compatibility aliases
 ```
 
 ## Project structure
 
 ```text
 bin/        CLI entrypoints
-src/        MCP server, dashboard, agents, Git, policy, safety, and workflow code
-docs/       Setup, security, release, and planning docs
-examples/   Example connector and config files
-test/       Smoke and release tests
+src/        MCP server, local repo bridge, dashboard, config, shell, git, and compatibility helpers
+public/     dashboard entrypoint and CSS
+test/       smoke and compatibility tests
+examples/   example config and connector files
 ```
 
-## Version
+## Notes
 
-Current version: `0.11.5`
-
-v0.11.5 fixes the dashboard connection loop by carrying the dashboard token into API/EventSource calls, adds a browser-friendly `/mcp` diagnostic response, and makes `npm run oneclick` output clearly distinguish the ChatGPT `/mcp/<secret>` URL from the plain local `/mcp` bearer endpoint. v0.11.4 rebuilt the dashboard as an operational, responsive console. v0.11.0 added one-command startup, persistent local connector profiles, stable public URL support, and dashboard setup guidance.
-
-## Status
-
-Rel.AI MCP is an active local-first coding-agent project. Treat it as developer tooling: review generated changes, keep command allowlists tight, and use draft PRs for final verification.
+Rel.AI is local developer tooling. Review diffs before committing important changes, keep workspaces scoped to repositories you trust ChatGPT to edit, and use `relai_reset` or git to roll back unwanted changes.

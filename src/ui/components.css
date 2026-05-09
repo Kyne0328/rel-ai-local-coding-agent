@@ -65,6 +65,14 @@
   .small { font-size: 12px; }
   .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 
+  .tools-table { table-layout: fixed; min-width: 900px; }
+  .tools-table .tool-name-col { width: 190px; }
+  .tools-table .tool-params-col { width: 360px; }
+  .tools-table .tool-name { white-space: nowrap; }
+  .tools-table .tool-description { line-height: 1.45; }
+  .tool-params { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px; }
+  .tool-params .badge { margin: 0; }
+
   .list { display: grid; gap: 9px; }
   .list-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 10px; border: 1px solid rgba(154,173,212,.1); border-radius: 12px; background: rgba(255,255,255,.025); }
   .dot { width: 9px; height: 9px; border-radius: 99px; background: var(--green); margin-top: 4px; }

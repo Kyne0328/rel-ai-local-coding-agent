@@ -23,7 +23,10 @@ function buildWorkspaces(data) {
   root.innerHTML = `
     <div class="section-head">
       <div><h2>Workspaces</h2><p>Repositories ChatGPT can read, edit, and verify. In trusted mode, tests can be run automatically from detected project commands.</p></div>
-      <span class="section-action">${esc(workspaces.length)} configured</span>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button type="button" data-add-workspace>Add workspace</button>
+        <span class="section-action">${esc(workspaces.length)} configured</span>
+      </div>
     </div>
     <div class="overview-grid">
       ${metricHtml('Workspaces', workspaces.length, 'configured aliases', 'blue')}
@@ -77,6 +80,7 @@ function workspaceCard(ws, health) {
       <div class="path">${validationText(testKeys, detected)}</div>
       <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
         <button class="secondary" type="button" data-preflight="${esc(ws.alias || '')}">Run preflight</button>
+        <button class="secondary" type="button" data-rename-workspace="${esc(ws.alias || '')}">Rename</button>
         ${canSaveDetected ? `<button type="button" data-save-detected="${esc(ws.alias || '')}">Save detected tests</button>` : ''}
       </div>
       <pre class="copy-box" data-preflight-out="${esc(ws.alias || '')}" style="display:none;margin-top:10px;max-height:220px;overflow:auto;"></pre>
@@ -94,6 +98,19 @@ function findingRow(finding) {
 }
 
 document.addEventListener('click', async (event) => {
+  const addWorkspace = event.target && event.target.closest ? event.target.closest('[data-add-workspace]') : null;
+  if (addWorkspace) {
+    await addWorkspaceFlow();
+    return;
+  }
+
+  const renameWorkspace = event.target && event.target.closest ? event.target.closest('[data-rename-workspace]') : null;
+  if (renameWorkspace) {
+    const alias = renameWorkspace.getAttribute('data-rename-workspace') || '';
+    await renameWorkspaceFlow(alias);
+    return;
+  }
+
   const preflight = event.target && event.target.closest ? event.target.closest('[data-preflight]') : null;
   if (preflight) {
     const alias = preflight.getAttribute('data-preflight') || '';
@@ -152,4 +169,42 @@ function preflightOutput(alias) {
 
 function actionableFindings(health) {
   return Array.isArray(health.findings) ? health.findings.filter(f => f.severity !== 'info') : [];
+}
+
+async function addWorkspaceFlow() {
+  const alias = (window.prompt('Workspace alias, for example jjclover') || '').trim();
+  if (!alias) return;
+  const workspacePath = (window.prompt('Absolute workspace path') || '').trim();
+  if (!workspacePath) return;
+  const result = await postJson('/api/workspaces', {
+    action: 'upsert',
+    alias,
+    path: workspacePath,
+    protectedBranches: ['main', 'master'],
+    defaultBaseBranch: 'main',
+    allowedRemotes: ['origin'],
+    confirmDangerous: true
+  });
+  if (result && result.ok) {
+    toast('Workspace added: ' + alias, { variant: 'success' });
+    setTimeout(() => location.reload(), 400);
+  } else {
+    toast('Could not add workspace: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });
+  }
+}
+
+async function renameWorkspaceFlow(alias) {
+  const nextAlias = (window.prompt('New workspace alias', alias) || '').trim();
+  if (!nextAlias || nextAlias === alias) return;
+  const result = await postJson('/api/workspaces', {
+    action: 'rename',
+    alias,
+    newAlias: nextAlias
+  });
+  if (result && result.ok) {
+    toast('Workspace renamed to ' + nextAlias, { variant: 'success' });
+    setTimeout(() => location.reload(), 400);
+  } else {
+    toast('Could not rename workspace: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });
+  }
 }

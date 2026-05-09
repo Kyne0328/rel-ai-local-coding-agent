@@ -191,6 +191,18 @@ function updateWorkspace(current, payload = {}) {
     return { ok: true, changed: [`workspaces.${alias}`], message: `Removed workspace '${alias}'.`, configPath: getConfigPath(), config: publicConfigSummary(normalized) };
   }
 
+  if (action === "rename") {
+    const newAlias = String(payload.newAlias || "").trim();
+    validateAlias(newAlias);
+    if (!next.workspaces[alias]) throw new Error(`Workspace '${alias}' is not configured.`);
+    if (alias === newAlias) return { ok: true, changed: [], message: "Workspace alias unchanged.", configPath: getConfigPath(), config: publicConfigSummary(current) };
+    if (next.workspaces[newAlias]) throw new Error(`Workspace '${newAlias}' already exists.`);
+    next.workspaces[newAlias] = { ...next.workspaces[alias] };
+    delete next.workspaces[alias];
+    const normalized = writeConfig(next);
+    return { ok: true, changed: [`workspaces.${alias}`, `workspaces.${newAlias}`], message: `Renamed workspace '${alias}' to '${newAlias}'.`, configPath: getConfigPath(), config: publicConfigSummary(normalized) };
+  }
+
   const source = payload.workspaceConfig && typeof payload.workspaceConfig === "object" ? payload.workspaceConfig : payload;
   const currentWorkspace = next.workspaces[alias] || {};
   const workspacePath = source.path == null || source.path === "" ? currentWorkspace.path : String(source.path).trim();
@@ -296,7 +308,9 @@ function validateAlias(alias) {
 }
 
 function validateCommandKey(key) {
-  if (!/^[A-Za-z0-9._-]{1,80}$/.test(key)) throw new Error(`Invalid command key: ${key}`);
+  if (!/^[A-Za-z0-9._:-]{1,120}$/.test(key)) {
+    throw new Error(`Invalid command key: ${key}`);
+  }
 }
 
 function setIfChanged(target, key, value, changed) {

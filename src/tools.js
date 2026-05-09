@@ -311,9 +311,9 @@ const allToolSchemas = [
   tool("relai_run_test", "Run Allowlisted Test Command", "Locally configured test command by key, discovered command by key, or arbitrary command string when allowArbitraryCommands is enabled.", {
     workspace: stringProp(), testCommandKey: stringProp(), command: stringProp(), sessionId: stringProp()
   }, ["workspace"]),
-  tool("relai_run_test_matrix", "Run Test Matrix", "Multiple allowlisted test commands in order; returns all outputs.", {
-    workspace: stringProp(), testCommandKeys: arrayProp("string", 1, 30), stopOnFailure: boolProp(), sessionId: stringProp()
-  }, ["workspace", "testCommandKeys"]),
+  tool("relai_run_test_matrix", "Run Test Matrix", "Run configured or auto-detected validation commands. If no keys are supplied, Rel.AI auto-selects likely test/analyze/check commands.", {
+    workspace: stringProp(), testCommandKeys: arrayProp("string", 0, 30), stopOnFailure: boolProp(), sessionId: stringProp()
+  }, ["workspace"]),
   tool("relai_run_command", "Run Configured Dev Command", "Allowlisted dev command by key; arbitrary commands only if explicitly enabled.", {
     workspace: stringProp(), commandKey: stringProp(), command: stringProp(), sessionId: stringProp(), approvalId: stringProp()
   }, ["workspace"]),
