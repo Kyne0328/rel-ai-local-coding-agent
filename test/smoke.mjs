@@ -58,6 +58,9 @@ const list = await waitFor(2);
 if (!Array.isArray(list.result?.tools) || list.result.tools.length < 5) {
   throw new Error('tools/list returned too few tools');
 }
+const editTool = list.result.tools.find((item) => item.name === 'relai_edit_file');
+if (!editTool) throw new Error('tools/list did not expose relai_edit_file');
+if (!editTool.inputSchema?.properties?.edits) throw new Error('relai_edit_file schema did not expose edits');
 
 send({ jsonrpc: '2.0', id: 3, method: 'resources/list', params: {} });
 const resources = await waitFor(3);

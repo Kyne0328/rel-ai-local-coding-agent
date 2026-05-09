@@ -119,6 +119,7 @@ const TOOL_LEVEL = {
   relai_lock_list: "read-only",
   relai_worktree_list: "read-only",
   relai_write_file: "patch",
+  relai_edit_file: "patch",
   relai_apply_patch: "patch",
   relai_create_branch: "patch",
   relai_switch_branch: "patch",

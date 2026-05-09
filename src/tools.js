@@ -42,6 +42,7 @@ const prWorkflow = require("./prWorkflow");
 const doctor = require("./doctor");
 const policy = require("./policy");
 const productUx = require("./productUx");
+const { editFile } = require("./editFile");
 const release = require("./release");
 const { enforcePermission, TOOL_LEVEL } = require("./permissions");
 const pkg = require("../package.json");
@@ -55,6 +56,7 @@ const APPROVAL_GATES = new Set([
   "relai_subtask_merge_back",
   "relai_task_worktree_remove",
   "relai_write_file",
+  "relai_edit_file",
   "relai_apply_patch",
   "relai_apply_patch_and_run",
   "relai_run_command",
@@ -227,6 +229,9 @@ const toolSchemas = [
   tool("relai_write_file", "Write Workspace Text File", "Create or replace a workspace text file. Supports SHA-256 optimistic locking.", {
     workspace: stringProp(), sessionId: stringProp(), path: stringProp(), content: stringProp(), expectedSha256: stringProp(), approvalId: stringProp()
   }, ["workspace", "path", "content"]),
+  tool("relai_edit_file", "Edit Workspace Text File", "Deterministic text edits without hand-written unified diffs. Supports exact replace/delete/insert operations, SHA-256 optimistic locking, dry-run preview, ambiguity checks, and generated review diff.", {
+    workspace: stringProp(), sessionId: stringProp(), path: stringProp(), edits: arrayProp("object", 1, 100), expectedSha256: stringProp(), dryRun: boolProp(), maxChangedBytes: numberProp(1, 10485760), maxPreviewBytes: numberProp(1, 1048576), approvalId: stringProp()
+  }, ["workspace", "path", "edits"]),
   tool("relai_search", "Search Workspace Text", "Literal text search across workspace text files.", {
     workspace: stringProp(), sessionId: stringProp(), query: stringProp(), maxMatches: numberProp(1, 500)
   }, ["workspace", "query"]),
@@ -577,6 +582,9 @@ async function dispatchTool(config, name, args) {
     case "relai_write_file":
       approvals.requireApproval(config, "write", args);
       return withWorkspace(config, args, (workspace) => writeTextFileSafe(workspace.path, args.path, args.content, { expectedSha256: args.expectedSha256 }));
+    case "relai_edit_file":
+      approvals.requireApproval(config, "write", args);
+      return withWorkspace(config, args, (workspace) => editFile(workspace, args));
     case "relai_search":
       return searchWorkspace(config, args);
     case "relai_context_pack":
@@ -783,7 +791,8 @@ function versionInfo() {
       "ChatGPT connector validation",
       "workspace preflight checks",
       "config migration planning",
-      "release manifests and release notes"
+      "release manifests and release notes",
+      "deterministic text edits without hand-written diffs (relai_edit_file)"
     ]
   };
 }
