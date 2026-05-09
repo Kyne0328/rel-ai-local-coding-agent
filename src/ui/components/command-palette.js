@@ -3,16 +3,20 @@ const RECENT_KEY = 'relai_palette_recent';
 const MAX_RECENT = 10;
 let _registry = [];
 let _backdrop = null;
+let _keyHandler = null;
+let _previousFocus = null;
 
 export function initCommandPalette(registry) {
   _registry = registry || [];
-  document.addEventListener('keydown', (e) => {
+  if (_keyHandler) document.removeEventListener('keydown', _keyHandler);
+  _keyHandler = (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
       e.preventDefault();
       _backdrop ? _close() : _open();
     }
     if (e.key === 'Escape' && _backdrop) _close();
-  });
+  };
+  document.addEventListener('keydown', _keyHandler);
 }
 
 export function registerActions(actions) {
@@ -20,6 +24,7 @@ export function registerActions(actions) {
 }
 
 function _open() {
+  _previousFocus = document.activeElement;
   _close();
   _backdrop = document.createElement('div');
   _backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:var(--z-modal,60);display:flex;align-items:flex-start;justify-content:center;padding:80px 24px 24px;';
@@ -89,7 +94,10 @@ function _open() {
     if (!count) return;
     if (e.key === 'ArrowDown') { e.preventDefault(); _selectedIndex = (_selectedIndex + 1) % count; _highlightSelected(); }
     if (e.key === 'ArrowUp') { e.preventDefault(); _selectedIndex = (_selectedIndex - 1 + count) % count; _highlightSelected(); }
-    if (e.key === 'Enter') { const item = _getCurrentItems(input.value)[_selectedIndex]; if (item) _execute(item); }
+    if (e.key === 'Enter') {
+      const selected = results.children[_selectedIndex];
+      if (selected) selected.click();
+    }
   });
 
   _renderResults('');
@@ -103,6 +111,10 @@ function _open() {
 
 function _close() {
   if (_backdrop) { _backdrop.remove(); _backdrop = null; }
+  if (_previousFocus && typeof _previousFocus.focus === 'function') {
+    _previousFocus.focus();
+    _previousFocus = null;
+  }
 }
 
 function _execute(item) {
@@ -135,6 +147,7 @@ function _getRecent() {
 }
 
 function _saveRecent(item) {
+  if (item.action && !item.href) return; // can't serialize functions
   const recent = _getRecent().filter(r => r.label !== item.label);
   recent.unshift({ label: item.label, href: item.href, category: 'Recent' });
   if (recent.length > MAX_RECENT) recent.length = MAX_RECENT;
