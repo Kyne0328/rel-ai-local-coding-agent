@@ -2,12 +2,15 @@
 import { fetchJson } from '/ui/api.js';
 import { openDrawer } from '/ui/components/drawer.js';
 import { pillHtml } from '/ui/components/pill.js';
+import { virtualizeTable } from '/ui/components/table.js';
 
 let _allEntries = [];
 let _paused = false;
 let _filterState = { search: '', timeRange: '1h', workspace: '', tool: '', status: '' };
+let _virtualizer = null;
 
 export function mountActivity(container) {
+  _virtualizer = null;
   container.innerHTML = '';
   container.appendChild(_buildActivity());
   _loadLogs();
@@ -108,22 +111,32 @@ function _renderTable(entries) {
   if (!tbody) return;
   if (countEl) countEl.textContent = entries.length + ' events';
 
-  tbody.innerHTML = entries.slice(0, 50).map(x => {
-    const ok = x.ok === false ? 'error' : 'ok';
-    const msg = x.error || x.message || x.path || '';
-    return `<tr style="cursor:pointer;" data-id="${esc(x.id || x.ts || '')}">
-      <td class="nowrap" style="font-size:12px;">${esc(_timeAgo(x.ts || x.at || x.createdAt))}</td>
-      <td class="truncate mono" style="max-width:180px;">${esc(x.tool || x.type || 'activity')}</td>
-      <td class="truncate" style="max-width:120px;">${esc(x.workspace || '—')}</td>
-      <td>${pillHtml(ok)}</td>
-      <td class="truncate" style="max-width:240px;">${esc(msg)}</td>
-      <td><button class="secondary" style="min-height:24px;padding:0 8px;font-size:11px;">▸</button></td>
-    </tr>`;
-  }).join('') || `<tr><td colspan="6"><div class="empty">Activity will appear here when ChatGPT calls a Rel.AI tool.</div></td></tr>`;
+  if (!entries.length) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty">Activity will appear here when ChatGPT calls a Rel.AI tool.</div></td></tr>`;
+    _virtualizer = null;
+    return;
+  }
 
-  tbody.querySelectorAll('tr[data-id]').forEach((row, i) => {
-    row.onclick = () => _openDetail(entries[i]);
-  });
+  if (_virtualizer) {
+    _virtualizer.reinit(entries);
+  } else {
+    _virtualizer = virtualizeTable(tbody, entries, (x) => {
+      const ok = x.ok === false ? 'error' : 'ok';
+      const msg = x.error || x.message || x.path || '';
+      const row = document.createElement('tr');
+      row.style.cursor = 'pointer';
+      row.innerHTML = `
+        <td class="nowrap" style="font-size:12px;">${esc(_timeAgo(x.ts || x.at || x.createdAt))}</td>
+        <td class="truncate mono" style="max-width:180px;">${esc(x.tool || x.type || 'activity')}</td>
+        <td class="truncate" style="max-width:120px;">${esc(x.workspace || '—')}</td>
+        <td>${pillHtml(ok)}</td>
+        <td class="truncate" style="max-width:240px;">${esc(msg)}</td>
+        <td><button class="secondary" style="min-height:24px;padding:0 8px;font-size:11px;">▸</button></td>
+      `;
+      row.onclick = () => _openDetail(x);
+      return row;
+    });
+  }
 }
 
 function _openDetail(entry) {
