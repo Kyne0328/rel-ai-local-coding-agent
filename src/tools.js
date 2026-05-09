@@ -556,7 +556,7 @@ async function dispatchTool(config, name, args) {
       return readFiles(config, args);
     case "relai_write_file":
       approvals.requireApproval(config, "write", args);
-      return withWorkspace(config, args, (workspace) => writeTextFileSafe(workspace.path, args.path, args.content, { maxBytes: config.maxWriteFileBytes, expectedSha256: args.expectedSha256 }));
+      return withWorkspace(config, args, (workspace) => writeTextFileSafe(workspace.path, args.path, args.content, { expectedSha256: args.expectedSha256 }));
     case "relai_search":
       return searchWorkspace(config, args);
     case "relai_context_pack":
@@ -832,10 +832,7 @@ function workspaceInspect(config, args = {}) {
 
 function workspaceTree(config, args) {
   const workspace = resolveTargetWorkspace(config, args);
-  const result = collectTextFiles(workspace.path, {
-    maxEntries: args.maxEntries || config.maxTreeEntries,
-    maxFileBytes: config.maxSearchFileBytes
-  });
+  const result = collectTextFiles(workspace.path, { maxEntries: args.maxEntries });
   return {
     workspace: workspace.alias,
     root: workspace.path,
@@ -890,7 +887,7 @@ function readFiles(config, args) {
       files.push({
         path: safePath,
         ...(args.includeSha256 ? { sha256: fileSha256(workspace.path, safePath) } : {}),
-        content: readTextFileSafe(workspace.path, safePath, config.maxReadFileBytes)
+        content: readTextFileSafe(workspace.path, safePath)
       });
     } catch (error) {
       skipped.push({ path: String(requestedPath), reason: error instanceof Error ? error.message : String(error) });
@@ -904,15 +901,12 @@ function searchWorkspace(config, args) {
   const query = String(args.query || "");
   if (!query.trim()) throw new Error("query is required.");
   const maxMatches = Math.min(Math.max(Number(args.maxMatches || 50), 1), 500);
-  const tree = collectTextFiles(workspace.path, {
-    maxEntries: config.maxTreeEntries,
-    maxFileBytes: config.maxSearchFileBytes
-  });
+  const tree = collectTextFiles(workspace.path);
   const matches = [];
   for (const relativePath of tree.files) {
     if (matches.length >= maxMatches) break;
     let content;
-    try { content = readTextFileSafe(workspace.path, relativePath, config.maxSearchFileBytes); } catch (_error) { continue; }
+    try { content = readTextFileSafe(workspace.path, relativePath); } catch (_error) { continue; }
     const lines = content.split(/\r?\n/);
     for (let i = 0; i < lines.length && matches.length < maxMatches; i += 1) {
       if (lines[i].includes(query)) matches.push({ path: relativePath, line: i + 1, text: lines[i].slice(0, 500) });
@@ -929,7 +923,7 @@ function contextPack(config, args) {
     if (!String(term).trim()) continue;
     searches.push(searchWorkspace(config, { workspace: workspace.alias, query: String(term), maxMatches: args.maxSearchMatches || 50 }));
   }
-  const tree = args.includeTree === false ? null : workspaceTree(config, { workspace: workspace.alias, maxEntries: Math.min(config.maxTreeEntries, 2000) });
+  const tree = args.includeTree === false ? null : workspaceTree(config, { workspace: workspace.alias });
   return { workspace: workspace.alias, tree, explicitFiles: explicit, searches };
 }
 

@@ -3,6 +3,8 @@ const { toolSchemas, callTool } = require("./tools");
 const { listResources, readResource } = require("./resources");
 const pkg = require("../package.json");
 
+const MAX_TOOL_RESULT_CHARS = Number(process.env.REL_AI_MCP_MAX_TOOL_RESULT_CHARS || 120000);
+
 function main() {
   const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
   rl.on("line", async (line) => {
@@ -85,10 +87,31 @@ async function handleNotification(message) {
 
 function toolResult(payload, isError) {
   const text = JSON.stringify(payload, null, 2);
+  if (text.length > MAX_TOOL_RESULT_CHARS) {
+    const preview = text.slice(0, MAX_TOOL_RESULT_CHARS) + "\n\n[rel-ai-mcp truncated tool result: " + text.length + " chars total]";
+    return {
+      content: [{ type: "text", text: preview }],
+      structuredContent: compactToolResult(payload, text.length),
+      isError: Boolean(isError)
+    };
+  }
   return {
     content: [{ type: "text", text }],
     structuredContent: payload,
     isError: Boolean(isError)
+  };
+}
+
+function compactToolResult(payload, originalChars) {
+  if (!payload || typeof payload !== "object") return { ok: false, truncated: true, originalChars };
+  return {
+    ok: payload.ok !== false,
+    truncated: true,
+    originalChars,
+    message: "Tool result was truncated to keep ChatGPT responsive. Use narrower reads, lower limits, or job/status tools for large outputs.",
+    workspace: payload.workspace || null,
+    sessionId: payload.sessionId || null,
+    keys: Object.keys(payload).slice(0, 50)
   };
 }
 

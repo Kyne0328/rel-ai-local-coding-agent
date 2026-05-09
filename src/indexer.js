@@ -42,12 +42,11 @@ function extractSymbols(relativePath, content) {
 
 function buildIndex(config, workspace, args = {}) {
   const maxFiles = Math.min(Math.max(Number(args.maxFiles || config.maxIndexFiles || 20000), 1), 100000);
-  const maxFileBytes = Math.min(Math.max(Number(args.maxFileBytes || config.maxIndexFileBytes || config.maxSearchFileBytes || 300000), 1000), 5 * 1024 * 1024);
-  const tree = collectTextFiles(workspace.path, { maxEntries: maxFiles, maxFileBytes });
+  const tree = collectTextFiles(workspace.path, { maxEntries: maxFiles });
   const files = [];
   for (const relativePath of tree.files) {
     try {
-      const content = readTextFileSafe(workspace.path, relativePath, maxFileBytes);
+      const content = readTextFileSafe(workspace.path, relativePath);
       const lines = content.split(/\r?\n/);
       files.push({
         path: relativePath,

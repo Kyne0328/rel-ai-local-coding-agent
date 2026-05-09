@@ -19,12 +19,11 @@ function topTerms(tokens, max = 80) {
 
 function buildSemanticIndex(config, workspace, args = {}) {
   const maxFiles = Math.min(Math.max(Number(args.maxFiles || config.semanticIndex?.maxFiles || 8000), 1), 100000);
-  const maxFileBytes = Math.min(Math.max(Number(args.maxFileBytes || config.semanticIndex?.maxFileBytes || 200000), 1000), 5 * 1024 * 1024);
-  const tree = collectTextFiles(workspace.path, { maxEntries: maxFiles, maxFileBytes });
+  const tree = collectTextFiles(workspace.path, { maxEntries: maxFiles });
   const documents = [];
   for (const relativePath of tree.files) {
     let content;
-    try { content = readTextFileSafe(workspace.path, relativePath, maxFileBytes); } catch (_error) { continue; }
+    try { content = readTextFileSafe(workspace.path, relativePath); } catch (_error) { continue; }
     const tokens = tokenize(`${relativePath}\n${content}`);
     documents.push({ path: relativePath, sha256: crypto.createHash("sha256").update(content).digest("hex"), bytes: Buffer.byteLength(content, "utf8"), terms: topTerms(tokens, 100) });
   }

@@ -115,8 +115,7 @@ function decodeGitOctalEscapes(value) {
 }
 
 function collectTextFiles(root, options = {}) {
-  const maxEntries = options.maxEntries || 5000;
-  const maxFileBytes = options.maxFileBytes || 300000;
+  const maxEntries = options.maxEntries || Infinity;
   const files = [];
   const skipped = [];
   const realRoot = fs.realpathSync(root);
@@ -153,11 +152,6 @@ function collectTextFiles(root, options = {}) {
       }
       if (!entry.isFile()) continue;
       try {
-        const stat = fs.statSync(abs);
-        if (stat.size > maxFileBytes) {
-          skipped.push({ path: rel, reason: `larger than ${maxFileBytes} bytes` });
-          continue;
-        }
         const real = fs.realpathSync(abs);
         if (!isPathInside(real, realRoot)) {
           skipped.push({ path: rel, reason: "escapes workspace" });
@@ -179,11 +173,10 @@ function collectTextFiles(root, options = {}) {
   return { files, skipped, truncated: files.length >= maxEntries };
 }
 
-function readTextFileSafe(root, relativePath, maxBytes) {
+function readTextFileSafe(root, relativePath) {
   const resolved = resolveSafePath(root, relativePath);
   const stat = fs.statSync(resolved.absolutePath);
   if (!stat.isFile()) throw new Error(`Not a file: ${resolved.relativePath}`);
-  if (stat.size > maxBytes) throw new Error(`File larger than ${maxBytes} bytes: ${resolved.relativePath}`);
   const data = fs.readFileSync(resolved.absolutePath);
   if (looksBinary(data)) throw new Error(`Binary-looking file skipped: ${resolved.relativePath}`);
   return data.toString("utf8");
@@ -200,10 +193,6 @@ function fileSha256(root, relativePath) {
 function writeTextFileSafe(root, relativePath, content, options = {}) {
   const resolved = resolveSafePath(root, relativePath);
   const text = String(content ?? "");
-  const maxBytes = options.maxBytes || 600000;
-  if (Buffer.byteLength(text, "utf8") > maxBytes) {
-    throw new Error(`Refusing to write ${resolved.relativePath}; content exceeds ${maxBytes} bytes.`);
-  }
   if (looksBinary(Buffer.from(text, "utf8"))) throw new Error("Refusing to write binary-looking content.");
   if (options.expectedSha256) {
     const current = fileSha256(root, resolved.relativePath);

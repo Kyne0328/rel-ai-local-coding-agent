@@ -19,16 +19,10 @@ const BOOLEAN_KEYS = [
 ];
 
 const NUMBER_KEYS = [
-  "maxReadFileBytes",
-  "maxWriteFileBytes",
-  "maxSearchFileBytes",
   "maxOutputBytes",
-  "commandTimeoutMs",
-  "maxTreeEntries",
   "maxSessionSteps",
   "maxPlanSteps",
   "maxIndexFiles",
-  "maxIndexFileBytes",
   "maxConcurrentSessionsPerWorkspace"
 ];
 

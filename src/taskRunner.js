@@ -269,7 +269,7 @@ function repoRelevantFiles(config, workspace, args = {}) {
   try {
     files = indexer.readIndex(config, workspace, args).files || [];
   } catch (_error) {
-    files = collectTextFiles(workspace.path, { maxEntries: config.maxTreeEntries, maxFileBytes: config.maxSearchFileBytes }).files.map((file) => ({ path: file, symbols: [] }));
+    files = collectTextFiles(workspace.path).files.map((file) => ({ path: file, symbols: [] }));
   }
   const scored = [];
   for (const file of files) {

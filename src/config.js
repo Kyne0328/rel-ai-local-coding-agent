@@ -12,16 +12,10 @@ function makeDefaultConfig() {
     version: 1,
     stateDir: path.join(os.homedir(), ".rel-ai-mcp"),
     auditLogPath: "",
-    maxReadFileBytes: 300000,
-    maxWriteFileBytes: 600000,
-    maxSearchFileBytes: 300000,
     maxOutputBytes: 2 * 1024 * 1024,
-    commandTimeoutMs: 20 * 60 * 1000,
-    maxTreeEntries: 12000,
     maxSessionSteps: 1000,
     maxPlanSteps: 200,
     maxIndexFiles: 25000,
-    maxIndexFileBytes: 300000,
     maxConcurrentSessionsPerWorkspace: 4,
     sessionLocksEnabled: true,
     worktreeRoot: path.join(os.homedir(), ".rel-ai-mcp", "worktrees"),
@@ -150,7 +144,7 @@ function normalizeConfig(config) {
   if (!path.isAbsolute(next.worktreeRoot)) next.worktreeRoot = path.resolve(next.worktreeRoot);
   next.permissionProfile = String(next.permissionProfile || "pr");
 
-  for (const key of ["maxReadFileBytes", "maxWriteFileBytes", "maxSearchFileBytes", "maxOutputBytes", "commandTimeoutMs", "maxTreeEntries", "maxSessionSteps", "maxPlanSteps", "maxIndexFiles", "maxIndexFileBytes", "maxConcurrentSessionsPerWorkspace"]) {
+  for (const key of ["maxOutputBytes", "maxSessionSteps", "maxPlanSteps", "maxIndexFiles", "maxConcurrentSessionsPerWorkspace"]) {
     if (!Number.isFinite(next[key]) || next[key] <= 0) next[key] = base[key];
   }
   next.allowGitHubCli = Boolean(next.allowGitHubCli);
@@ -239,16 +233,10 @@ function publicConfigSummary(config) {
     configPath: getConfigPath(),
     stateDir: config.stateDir,
     auditLogPath: config.auditLogPath,
-    maxReadFileBytes: config.maxReadFileBytes,
-    maxWriteFileBytes: config.maxWriteFileBytes,
-    maxSearchFileBytes: config.maxSearchFileBytes,
     maxOutputBytes: config.maxOutputBytes,
-    commandTimeoutMs: config.commandTimeoutMs,
-    maxTreeEntries: config.maxTreeEntries,
     maxSessionSteps: config.maxSessionSteps,
     maxPlanSteps: config.maxPlanSteps,
     maxIndexFiles: config.maxIndexFiles,
-    maxIndexFileBytes: config.maxIndexFileBytes,
     maxConcurrentSessionsPerWorkspace: config.maxConcurrentSessionsPerWorkspace,
     sessionLocksEnabled: Boolean(config.sessionLocksEnabled),
     worktreeRoot: config.worktreeRoot,

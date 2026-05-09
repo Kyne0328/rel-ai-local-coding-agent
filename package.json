@@ -1,6 +1,6 @@
 {
   "name": "rel-ai-mcp",
-  "version": "0.11.10",
+  "version": "0.11.11",
   "description": "Local-first MCP coding-agent server for ChatGPT with one-command launch, stable connector profile support, dashboard UX, workspace safety checks, multi-agent workflows, git, CI, and PR tooling.",
   "private": true,
   "license": "MIT",

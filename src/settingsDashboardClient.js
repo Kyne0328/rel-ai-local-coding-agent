@@ -181,11 +181,7 @@
           ${checkbox("set_sessionLocksEnabled", "Enable session locks", cfg.sessionLocksEnabled)}
           ${checkbox("set_dashboardEnabled", "Enable dashboard", cfg.dashboardEnabled)}
         </div>
-        <div class="settings-panel"><h4>Limits</h4>
-          ${field("set_maxReadFileBytes", "Max read bytes", cfg.maxReadFileBytes, "number")}
-          ${field("set_maxWriteFileBytes", "Max write bytes", cfg.maxWriteFileBytes, "number")}
-          ${field("set_maxTreeEntries", "Max tree entries", cfg.maxTreeEntries, "number")}
-          ${field("set_commandTimeoutMs", "Command timeout ms", cfg.commandTimeoutMs, "number")}
+        <div class="settings-panel"><h4>Session limits</h4>
           ${field("set_maxConcurrentSessionsPerWorkspace", "Max concurrent sessions/workspace", cfg.maxConcurrentSessionsPerWorkspace, "number")}
         </div>
       </div><div class="settings-actions"><button type="button" onclick="saveGeneralSettings()">Save general settings</button><button class="secondary" type="button" onclick="loadSettingsPanel('general')">Reload</button></div>`;
@@ -294,10 +290,6 @@
         sandboxMode: readValue("set_sandboxMode"),
         sessionLocksEnabled: Boolean($("set_sessionLocksEnabled") && $("set_sessionLocksEnabled").checked),
         dashboardEnabled: Boolean($("set_dashboardEnabled") && $("set_dashboardEnabled").checked),
-        maxReadFileBytes: readValue("set_maxReadFileBytes"),
-        maxWriteFileBytes: readValue("set_maxWriteFileBytes"),
-        maxTreeEntries: readValue("set_maxTreeEntries"),
-        commandTimeoutMs: readValue("set_commandTimeoutMs"),
         maxConcurrentSessionsPerWorkspace: readValue("set_maxConcurrentSessionsPerWorkspace")
       });
     } catch (error) { showMessage(String(error.message || error)); setStatus("error", "bad"); }
