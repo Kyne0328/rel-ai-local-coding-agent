@@ -8,6 +8,7 @@ let _allTools = [];
 let _filterState = { search: '', category: '', approvalOnly: false };
 
 export function mountTools(container) {
+  _filterState = { search: '', category: '', approvalOnly: false };
   container.innerHTML = '';
   container.appendChild(_buildTools());
   _loadTools();
@@ -73,9 +74,16 @@ function _buildTools() {
 }
 
 async function _loadTools() {
-  const data = await fetchJson('/api/tools');
-  _allTools = Array.isArray(data) ? data : [];
-  _renderTable(_applyFilters(_allTools));
+  try {
+    const data = await fetchJson('/api/tools');
+    _allTools = Array.isArray(data) ? data : [];
+    _renderTable(_applyFilters(_allTools));
+  } catch (_) {
+    const tbody = document.getElementById('__tools-tbody');
+    const countEl = document.getElementById('__tools-count');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="5"><div class="empty">Failed to load tools.</div></td></tr>';
+    if (countEl) countEl.textContent = '—';
+  }
 }
 
 function _applyFilters(tools) {

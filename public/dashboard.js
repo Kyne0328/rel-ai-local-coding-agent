@@ -33,13 +33,13 @@ async function boot() {
     home:        (el) => mountHome(el, getStore()),
     overview:    (el) => mountHome(el, getStore()),
     workspaces:  (el) => mountWorkspaces(el, getStore()),
-    activity:    (el) => mountActivity(el),
-    approvals:   (el) => mountApprovals(el),
-    tools:       (el) => { import('/ui/sections/tools.js').then(m => m.mountTools(el)); },
-    agents:      (el) => mountAgents(el, getStore()),
-    settings:    (el) => mountSettings(el),
-    connector:   (el) => mountSettings(el),
-    diagnostics: (el) => mountSettings(el),
+    activity:    (el) => mountActivity(el).catch(console.error),
+    approvals:   (el) => mountApprovals(el).catch(console.error),
+    tools:       (el) => { import('/ui/sections/tools.js').then(m => m.mountTools(el)).catch(console.error); },
+    agents:      (el) => mountAgents(el, getStore()).catch(console.error),
+    settings:    (el) => mountSettings(el).catch(console.error),
+    connector:   (el) => mountSettings(el).catch(console.error),
+    diagnostics: (el) => mountSettings(el).catch(console.error),
   };
 
   _buildNav();
@@ -91,7 +91,7 @@ async function _doRefresh() {
     initStore(data);
     const main = document.getElementById('main');
     const id = currentSection();
-    const fns = { home: mountHome, overview: mountHome, workspaces: mountWorkspaces, activity: mountActivity, approvals: mountApprovals, tools: (el) => import('/ui/sections/tools.js').then(m => m.mountTools(el)), agents: mountAgents, settings: mountSettings };
+    const fns = { home: mountHome, overview: mountHome, workspaces: mountWorkspaces, activity: mountActivity, approvals: mountApprovals, tools: (el) => import('/ui/sections/tools.js').then(m => m.mountTools(el)).catch(console.error), agents: mountAgents, settings: mountSettings };
     const fn = fns[id];
     if (main && fn) { main.innerHTML = ''; fn(main, getStore()); }
   }
