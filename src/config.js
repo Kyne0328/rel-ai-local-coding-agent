@@ -24,6 +24,7 @@ function makeDefaultConfig() {
     allowDocker: false,
     allowArbitraryCommands: false,
     allowDestructiveTools: false,
+    agentMode: false,
     approvalGates: {
       commit: false,
       push: true,
@@ -151,6 +152,7 @@ function normalizeConfig(config) {
   next.allowDocker = Boolean(next.allowDocker);
   next.allowArbitraryCommands = Boolean(next.allowArbitraryCommands);
   next.allowDestructiveTools = Boolean(next.allowDestructiveTools);
+  next.agentMode = Boolean(next.agentMode);
   next.sessionLocksEnabled = next.sessionLocksEnabled !== false;
   next.dashboardEnabled = next.dashboardEnabled !== false;
   next.defaultTaskMode = String(next.defaultTaskMode || base.defaultTaskMode);
@@ -170,6 +172,17 @@ function normalizeConfig(config) {
   next.release.minimumReadinessScore = Math.min(Math.max(Number(next.release.minimumReadinessScore || base.release.minimumReadinessScore), 0), 100);
   next.release.connectorProbeTimeoutMs = Math.min(Math.max(Number(next.release.connectorProbeTimeoutMs || base.release.connectorProbeTimeoutMs), 500), 60000);
   next.approvalGates = { ...base.approvalGates, ...((config && config.approvalGates) || {}) };
+  if (next.agentMode) {
+    next.allowArbitraryCommands = true;
+    next.permissionProfile = "admin";
+    next.approvalGates = Object.fromEntries(Object.keys(next.approvalGates).map((k) => [k, false]));
+    next.taskRunner = {
+      ...next.taskRunner,
+      requireApprovalBeforeCommit: false,
+      requireApprovalBeforePush: false,
+      requireApprovalBeforePr: false
+    };
+  }
 
   for (const [alias, workspace] of Object.entries(next.workspaces)) {
     next.workspaces[alias] = normalizeWorkspace(workspace || {});
@@ -245,6 +258,7 @@ function publicConfigSummary(config) {
     allowDocker: Boolean(config.allowDocker),
     allowArbitraryCommands: Boolean(config.allowArbitraryCommands),
     allowDestructiveTools: Boolean(config.allowDestructiveTools),
+    agentMode: Boolean(config.agentMode),
     approvalGates: config.approvalGates,
     dashboardEnabled: Boolean(config.dashboardEnabled),
     defaultTaskMode: config.defaultTaskMode,

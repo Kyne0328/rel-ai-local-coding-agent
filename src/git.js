@@ -3,6 +3,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { runProcess, summarizeCommand } = require("./process");
 const { validateDiffPaths, safeCommandPolicy } = require("./safety");
+const { discoverCommands } = require("./commandDiscovery");
 
 function runGit(args, workspace, config) {
   return runProcess("git", args, { cwd: workspace.path, shell: false }, config);
@@ -99,7 +100,9 @@ async function applyPatchAndRun(workspace, config, args) {
   }
   const keys = Array.isArray(args.testCommandKeys) ? args.testCommandKeys : [];
   for (const key of keys) {
-    const command = workspace.testCommands && workspace.testCommands[key];
+    const configuredCommand = workspace.testCommands && workspace.testCommands[key];
+    const discoveredCommand = configuredCommand ? null : discoverCommands(workspace.path)[key];
+    const command = configuredCommand || discoveredCommand;
     if (!command) throw new Error(`Test command key '${key}' is not configured for workspace '${workspace.alias}'.`);
     const result = await runProcess(command, [], { cwd: workspace.path, shell: true, commandString: command }, config);
     tests.push({ key, command, ...summarizeCommand(result) });
@@ -214,7 +217,17 @@ async function runConfiguredCommand(workspace, config, args = {}) {
   if (args.commandKey) {
     key = String(args.commandKey);
     command = workspace.commands && workspace.commands[key];
-    if (!command) throw new Error(`Command key '${key}' is not configured for workspace '${workspace.alias}'.`);
+    if (!command) {
+      const discovered = discoverCommands(workspace.path);
+      command = discovered[key];
+      if (!command) {
+        const availableKeys = [
+          ...Object.keys(workspace.commands || {}),
+          ...Object.keys(discovered)
+        ].join(", ") || "none";
+        throw new Error(`Command key '${key}' is not configured for workspace '${workspace.alias}'. Available keys: ${availableKeys}.`);
+      }
+    }
   } else if (args.command && workspace.allowArbitraryCommands) {
     command = String(args.command);
     key = "arbitrary";

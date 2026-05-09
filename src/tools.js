@@ -44,6 +44,8 @@ const policy = require("./policy");
 const productUx = require("./productUx");
 const { editFile } = require("./editFile");
 const release = require("./release");
+const { runShellCommand } = require("./shell");
+const { discoverCommands } = require("./commandDiscovery");
 const { enforcePermission, TOOL_LEVEL } = require("./permissions");
 const pkg = require("../package.json");
 
@@ -58,6 +60,7 @@ const APPROVAL_GATES = new Set([
   "relai_write_file",
   "relai_edit_file",
   "relai_apply_patch",
+  "relai_shell",
   "relai_apply_patch_and_run",
   "relai_run_command",
   "relai_patch_test_loop",
@@ -232,6 +235,9 @@ const toolSchemas = [
   tool("relai_edit_file", "Edit Workspace Text File", "Deterministic text edits without hand-written unified diffs. Supports exact replace/delete/insert operations, SHA-256 optimistic locking, dry-run preview, ambiguity checks, and generated review diff.", {
     workspace: stringProp(), sessionId: stringProp(), path: stringProp(), edits: arrayProp("object", 1, 100), expectedSha256: stringProp(), dryRun: boolProp(), maxChangedBytes: numberProp(1, 10485760), maxPreviewBytes: numberProp(1, 1048576), approvalId: stringProp()
   }, ["workspace", "path", "edits"]),
+  tool("relai_shell", "Run Shell Command", "Arbitrary shell command in a workspace directory. Requires allowArbitraryCommands or agentMode. Returns stdout, stderr, and exit code.", {
+    workspace: stringProp(), command: stringProp(), cwd: stringProp(), env: objectProp(), timeoutMs: numberProp(1000, 600000), sessionId: stringProp(), approvalId: stringProp()
+  }, ["workspace", "command"]),
   tool("relai_search", "Search Workspace Text", "Literal text search across workspace text files.", {
     workspace: stringProp(), sessionId: stringProp(), query: stringProp(), maxMatches: numberProp(1, 500)
   }, ["workspace", "query"]),
@@ -279,9 +285,9 @@ const toolSchemas = [
   tool("relai_apply_patch_and_run", "Apply Patch And Run Tests", "Apply a patch then run allowlisted tests. Main Codex-like build/verify tool.", {
     workspace: stringProp(), diff: stringProp(), dryRun: boolProp(), testCommandKeys: arrayProp("string", 0, 20), stopOnFailure: boolProp(), sessionId: stringProp(), approvalId: stringProp()
   }, ["workspace", "diff"]),
-  tool("relai_run_test", "Run Allowlisted Test Command", "Locally configured test command by key. Arbitrary shell commands are rejected.", {
-    workspace: stringProp(), testCommandKey: stringProp(), sessionId: stringProp()
-  }, ["workspace", "testCommandKey"]),
+  tool("relai_run_test", "Run Allowlisted Test Command", "Locally configured test command by key, discovered command by key, or arbitrary command string when allowArbitraryCommands is enabled.", {
+    workspace: stringProp(), testCommandKey: stringProp(), command: stringProp(), sessionId: stringProp()
+  }, ["workspace"]),
   tool("relai_run_test_matrix", "Run Test Matrix", "Multiple allowlisted test commands in order; returns all outputs.", {
     workspace: stringProp(), testCommandKeys: arrayProp("string", 1, 30), stopOnFailure: boolProp(), sessionId: stringProp()
   }, ["workspace", "testCommandKeys"]),
@@ -585,6 +591,9 @@ async function dispatchTool(config, name, args) {
     case "relai_edit_file":
       approvals.requireApproval(config, "write", args);
       return withWorkspace(config, args, (workspace) => editFile(workspace, args));
+    case "relai_shell":
+      approvals.requireApproval(config, "command", args);
+      return recordMaybe(config, args, "shell", async (workspace) => runShellCommand(workspace, config, args));
     case "relai_search":
       return searchWorkspace(config, args);
     case "relai_context_pack":
@@ -711,7 +720,7 @@ async function recordMaybe(config, args, type, fn) {
 }
 
 function titleFromType(type) {
-  return ({ patch_and_test: "Applied patch and ran tests", test: "Ran test", test_matrix: "Ran test matrix", command: "Ran command", branch: "Created branch", commit: "Committed changes", push: "Pushed branch", pr: "Created PR", checks: "Read PR checks", docker: "Ran Docker command", patch_test_loop: "Ran patch/test loop", reset: "Reset worktree" })[type] || type;
+  return ({ patch_and_test: "Applied patch and ran tests", test: "Ran test", test_matrix: "Ran test matrix", command: "Ran command", shell: "Ran shell command", branch: "Created branch", commit: "Committed changes", push: "Pushed branch", pr: "Created PR", checks: "Read PR checks", docker: "Ran Docker command", patch_test_loop: "Ran patch/test loop", reset: "Reset worktree" })[type] || type;
 }
 
 function compactData(result) {
@@ -894,13 +903,16 @@ function workspaceProfile(config, args) {
   if (present.includes("pyproject.toml") || present.includes("requirements.txt")) hints.push("Python project");
   if (present.includes("Cargo.toml")) hints.push("Rust project");
   if (present.includes("go.mod")) hints.push("Go project");
+  const discovered = discoverCommands(workspace.path);
   return {
     workspace: workspace.alias,
     root: workspace.path,
     manifests: present,
     hints,
     configuredTestCommands: Object.keys(workspace.testCommands || {}).sort(),
-    configuredCommands: Object.keys(workspace.commands || {}).sort()
+    configuredCommands: Object.keys(workspace.commands || {}).sort(),
+    discoveredCommands: discovered,
+    discoveredCommandCount: Object.keys(discovered).length
   };
 }
 
@@ -959,11 +971,44 @@ function contextPack(config, args) {
 async function runTest(config, args) {
   const workspace = resolveTargetWorkspace(config, args);
   const key = String(args.testCommandKey || "").trim();
-  if (!key) throw new Error("testCommandKey is required.");
-  const command = workspace.testCommands && workspace.testCommands[key];
-  if (!command) throw new Error(`Test command key '${key}' is not configured for workspace '${workspace.alias}'.`);
+  const literalCommand = String(args.command || "").trim();
+
+  let command;
+  let resolvedKey;
+
+  if (key) {
+    command = workspace.testCommands && workspace.testCommands[key];
+    if (!command) {
+      const discovered = discoverCommands(workspace.path);
+      command = discovered[key];
+      if (command) {
+        resolvedKey = key;
+      } else if (literalCommand && workspace.allowArbitraryCommands) {
+        command = literalCommand;
+        resolvedKey = key || "arbitrary";
+      } else {
+        const availableKeys = [
+          ...Object.keys(workspace.testCommands || {}),
+          ...Object.keys(discoverCommands(workspace.path))
+        ].join(", ") || "none";
+        throw new Error(
+          `Test command key '${key}' is not configured for workspace '${workspace.alias}'. ` +
+          `Available keys: ${availableKeys}. ` +
+          `Set allowArbitraryCommands: true and pass command to run without pre-registration.`
+        );
+      }
+    } else {
+      resolvedKey = key;
+    }
+  } else if (literalCommand && workspace.allowArbitraryCommands) {
+    command = literalCommand;
+    resolvedKey = "arbitrary";
+  } else {
+    throw new Error("testCommandKey or (command + allowArbitraryCommands) is required.");
+  }
+
   const result = await runProcess(command, [], { cwd: workspace.path, shell: true, commandString: command }, config);
-  return { workspace: workspace.alias, testCommandKey: key, command, ...summarizeCommand(result) };
+  return { workspace: workspace.alias, testCommandKey: resolvedKey, command, ...summarizeCommand(result) };
 }
 
 async function runTestMatrix(config, args) {

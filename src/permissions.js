@@ -121,6 +121,7 @@ const TOOL_LEVEL = {
   relai_write_file: "patch",
   relai_edit_file: "patch",
   relai_apply_patch: "patch",
+  relai_shell: "test",
   relai_create_branch: "patch",
   relai_switch_branch: "patch",
   relai_run_test: "test",

@@ -6,9 +6,35 @@ function runProcess(command, args, options = {}, config = {}) {
     let stderr = "";
     let settled = false;
     const maxOutputBytes = config.maxOutputBytes || 1024 * 1024;
+    const timeoutMs = Number.isFinite(Number(options.timeout)) && Number(options.timeout) > 0
+      ? Number(options.timeout)
+      : 0;
     const child = options.shell
       ? spawn(options.commandString || command, { cwd: options.cwd, shell: true, env: makeEnv(options.env) })
       : spawn(command, args || [], { cwd: options.cwd, shell: false, env: makeEnv(options.env) });
+
+    let timer = null;
+    function finish(payload) {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      resolve(payload);
+    }
+
+    if (timeoutMs > 0) {
+      timer = setTimeout(() => {
+        stderr = appendLimited(stderr, `\n[rel-ai-mcp timed out after ${timeoutMs}ms]\n`, maxOutputBytes);
+        try { child.kill("SIGTERM"); } catch (_error) {}
+        finish({
+          exitCode: -1,
+          signal: "SIGTERM",
+          stdout: stdout.trim(),
+          stderr: stderr.trim(),
+          error: `Timed out after ${timeoutMs}ms`
+        });
+      }, timeoutMs);
+      if (typeof timer.unref === "function") timer.unref();
+    }
 
     child.stdout.on("data", (chunk) => {
       stdout = appendLimited(stdout, chunk.toString("utf8"), maxOutputBytes);
@@ -18,13 +44,11 @@ function runProcess(command, args, options = {}, config = {}) {
     });
     child.on("error", (error) => {
       if (settled) return;
-      settled = true;
-      resolve({ exitCode: -1, signal: undefined, stdout: stdout.trim(), stderr: stderr.trim(), error: error.message });
+      finish({ exitCode: -1, signal: undefined, stdout: stdout.trim(), stderr: stderr.trim(), error: error.message });
     });
     child.on("close", (code, signal) => {
       if (settled) return;
-      settled = true;
-      resolve({
+      finish({
         exitCode: typeof code === "number" ? code : -1,
         signal: signal || undefined,
         stdout: stdout.trim(),
