@@ -18,7 +18,7 @@ let _original = null;
 let _draft = null;
 let _confirmedDangerous = false;
 
-const DANGEROUS_KEYS = ['agentMode', 'allowArbitraryCommands', 'allowDestructiveTools', 'allowDocker', 'allowGitHubCli'];
+const DANGEROUS_KEYS = ['agentMode', 'trustedLocalAgent', 'allowArbitraryCommands', 'allowDestructiveTools', 'allowDocker', 'allowGitHubCli'];
 
 export function mountGeneral(container) {
   container.innerHTML = '<div style="padding:8px 0;color:var(--text-muted);font-size:13px;">Loading…</div>';
@@ -43,7 +43,9 @@ function _render(container) {
   const limits = panel('Session limits');
   const local = panel('Local dashboard');
 
-  server.body.appendChild(field('Permission profile', selectControl(['read-only', 'pr', 'test', 'admin'], _draft.permissionProfile, (v) => { _draft.permissionProfile = v; _checkDirty(); }), 'Controls which tools are available to agent clients.'));
+  server.body.appendChild(field('Tool mode', selectControl(['chatgpt_local_repo', 'simple', 'developer', 'debug'], _draft.toolMode || 'chatgpt_local_repo', (v) => { _draft.toolMode = v; _checkDirty(); }), 'ChatGPT local repo mode exposes only the small zip-like bridge tools; debug exposes every legacy/internal tool.'));
+  server.body.appendChild(field('Permission profile', selectControl(['read-only', 'pr', 'test', 'admin'], _draft.permissionProfile, (v) => { _draft.permissionProfile = v; _checkDirty(); }), 'Legacy permission profile. Trusted local agent forces admin behavior.'));
+  server.body.appendChild(field('Trusted local agent', toggleControl(_draft.trustedLocalAgent !== false, (v) => { _draft.trustedLocalAgent = v; _checkDirty(); }), 'One trust decision for ChatGPT-local use: unrestricted shell/write/reset within configured workspaces, no per-command approvals.'));
   server.body.appendChild(field('Default task mode', selectControl(['plan_only', 'implement', 'implement_and_test', 'review_only'], _draft.defaultTaskMode || 'implement_and_test', (v) => { _draft.defaultTaskMode = v; _checkDirty(); }), 'How new tasks are approached by default.'));
   server.body.appendChild(field('Sandbox mode', selectControl(['none', 'docker', 'docker_readonly_base'], _draft.sandboxMode || 'none', (v) => { _draft.sandboxMode = v; _checkDirty(); }), 'Execution isolation mode for tool and task runs.'));
   server.body.appendChild(field('Agent mode', toggleControl(_draft.agentMode, (v) => { _draft.agentMode = v; _checkDirty(); }), 'Convenience mode that enables full autonomous execution. Treat as high risk.'));

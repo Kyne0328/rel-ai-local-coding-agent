@@ -46,6 +46,7 @@ const { editFile } = require("./editFile");
 const release = require("./release");
 const { runShellCommand } = require("./shell");
 const { discoverCommands } = require("./commandDiscovery");
+const { repoSnapshot, relaiRead, relaiWrite, relaiVerify, relaiBrowser, relaiDiff, relaiReset } = require("./localRepoBridge");
 const { enforcePermission, TOOL_LEVEL } = require("./permissions");
 const pkg = require("../package.json");
 
@@ -71,7 +72,7 @@ const APPROVAL_GATES = new Set([
   "relai_git_reset_worktree",
 ]);
 
-const toolSchemas = [
+const allToolSchemas = [
   tool("relai_version", "Version Info", "MCP server version, runtime info, and capabilities.", {}),
   tool("relai_config", "Rel.AI MCP Config Summary", "Active config summary: limits, workspace aliases, command keys. No secrets.", {}),
   tool("relai_audit_tail", "Audit Log Tail", "Recent audit log entries.", { limit: numberProp(1, 1000) }),
@@ -92,6 +93,28 @@ const toolSchemas = [
   tool("relai_connector_check", "Connector Check", "Validate ChatGPT connector endpoint/token and optionally probe /health.", { endpoint: stringProp(), baseUrl: stringProp(), token: stringProp(), probe: boolProp(), timeoutMs: numberProp(500, 60000) }),
   tool("relai_config_migration_plan", "Config Migration Plan", "Compare active config to default schema and return migration guidance.", { fromVersion: stringProp() }),
   tool("relai_workspace_preflight", "Workspace Preflight", "Pre-execution check: Git state, protected branch, line endings, test commands.", { workspace: stringProp(), requireClean: boolProp() }, ["workspace"]),
+
+  tool("relai_repo_snapshot", "Repository Snapshot", "ChatGPT-style local repository snapshot: file tree, manifests, discovered commands, and project hints.", {
+    workspace: stringProp(), sessionId: stringProp(), maxEntries: numberProp(1, 20000), includeFiles: boolProp()
+  }, ["workspace"]),
+  tool("relai_read", "Read Local Repo Paths", "Batch-read files or directory summaries from the workspace. Mirrors reading files from an uploaded zip.", {
+    workspace: stringProp(), sessionId: stringProp(), paths: arrayProp("string", 1, 100), maxBytes: numberProp(1000, 10485760), maxEntries: numberProp(1, 20000)
+  }, ["workspace", "paths"]),
+  tool("relai_write", "Write Local Repo Files", "Deterministic structured writes. Prefer this over unified diffs. Supports writeFile, replaceExact, replaceFirst, replaceAll, insertBefore, insertAfter, replaceBetween, deleteBetween, and replaceFunction.", {
+    workspace: stringProp(), sessionId: stringProp(), edits: arrayProp("object", 1, 200), dryRun: boolProp()
+  }, ["workspace", "edits"]),
+  tool("relai_verify", "Verify Local Repo", "Auto-detect and run local verification commands such as syntax checks, npm run check, npm test, builds, and language tests.", {
+    workspace: stringProp(), sessionId: stringProp(), level: stringProp(), commands: arrayProp("string", 0, 50), timeoutMs: numberProp(1000, 1800000), stopOnFailure: boolProp()
+  }, ["workspace"]),
+  tool("relai_browser", "Browser/UI Check", "UI validation bridge. Fetch a URL/route or run a local browser command such as Playwright; returns output and errors.", {
+    workspace: stringProp(), sessionId: stringProp(), url: stringProp(), route: stringProp(), command: stringProp(), timeoutMs: numberProp(1000, 1800000)
+  }, ["workspace"]),
+  tool("relai_diff", "Review Local Repo Diff", "Return git status and current diff. Diffs are output-only review artifacts, not the primary editing path.", {
+    workspace: stringProp(), sessionId: stringProp(), staged: boolProp(), path: stringProp(), maxBytes: numberProp(1000, 5242880)
+  }, ["workspace"]),
+  tool("relai_reset", "Reset Local Repo Changes", "Rollback local changes by paths, or run git reset --hard with mode='hard'.", {
+    workspace: stringProp(), sessionId: stringProp(), paths: arrayProp("string", 0, 100), mode: stringProp(), clean: boolProp()
+  }, ["workspace"]),
   tool("relai_workspace_list", "Workspace List", "Configured workspace aliases and safe metadata. Use when alias may be unknown.", {}),
   tool("relai_workspace_inspect", "Workspace Inspect", "Combined workspace profile and filtered project structure.", { workspace: stringProp(), sessionId: stringProp(), maxEntries: numberProp(1, 5000) }, ["workspace"]),
   tool("relai_release_manifest", "Release Manifest", "Package file manifest with sizes and SHA-256 hashes for release review.", { maxFiles: numberProp(1, 50000), maxFileBytes: numberProp(1000, 10485760) }),
@@ -360,6 +383,9 @@ async function callTool(name, args = {}) {
   const config = readConfig();
   const started = Date.now();
   try {
+    if (!isToolVisible(config, name)) {
+      throw new Error(`Tool '${name}' is hidden in toolMode='${config.toolMode || "chatgpt_local_repo"}'. Switch toolMode to debug to access legacy/internal tools.`);
+    }
     enforcePermission(config, name);
     const value = await dispatchTool(config, name, args || {});
     logAudit(config, { tool: name, ok: true, workspace: args && args.workspace, sessionId: args && args.sessionId, ms: Date.now() - started });
@@ -373,7 +399,7 @@ async function callTool(name, args = {}) {
 async function dispatchTool(config, name, args) {
   switch (name) {
     case "relai_version":
-      return versionInfo();
+      return versionInfo(config);
     case "relai_config":
       return publicConfigSummary(config);
     case "relai_audit_tail":
@@ -402,6 +428,21 @@ async function dispatchTool(config, name, args) {
       return productUx.stateExport(config, args);
     case "relai_state_import":
       return productUx.stateImport(config, args);
+
+    case "relai_repo_snapshot":
+      return withWorkspace(config, args, (workspace) => repoSnapshot(workspace, config, args));
+    case "relai_read":
+      return withWorkspace(config, args, (workspace) => relaiRead(workspace, args));
+    case "relai_write":
+      return recordMaybe(config, args, "write", async (workspace) => relaiWrite(workspace, args));
+    case "relai_verify":
+      return recordMaybe(config, args, "verify", async (workspace) => relaiVerify(workspace, config, args));
+    case "relai_browser":
+      return recordMaybe(config, args, "browser", async (workspace) => relaiBrowser(workspace, config, args));
+    case "relai_diff":
+      return withWorkspace(config, args, (workspace) => relaiDiff(workspace, config, args));
+    case "relai_reset":
+      return recordMaybe(config, args, "reset", async (workspace) => relaiReset(workspace, config, args));
 
     case "relai_release_readiness":
       return release.releaseReadiness(config, args);
@@ -586,13 +627,13 @@ async function dispatchTool(config, name, args) {
     case "relai_read_files":
       return readFiles(config, args);
     case "relai_write_file":
-      approvals.requireApproval(config, "write", args);
+      if (!config.trustedLocalAgent) approvals.requireApproval(config, "write", args);
       return withWorkspace(config, args, (workspace) => writeTextFileSafe(workspace.path, args.path, args.content, { expectedSha256: args.expectedSha256 }));
     case "relai_edit_file":
-      approvals.requireApproval(config, "write", args);
+      if (!config.trustedLocalAgent) approvals.requireApproval(config, "write", args);
       return withWorkspace(config, args, (workspace) => editFile(workspace, args));
     case "relai_shell":
-      approvals.requireApproval(config, "command", args);
+      if (!config.trustedLocalAgent) approvals.requireApproval(config, "command", args);
       return recordMaybe(config, args, "shell", async (workspace) => runShellCommand(workspace, config, args));
     case "relai_search":
       return searchWorkspace(config, args);
@@ -720,7 +761,7 @@ async function recordMaybe(config, args, type, fn) {
 }
 
 function titleFromType(type) {
-  return ({ patch_and_test: "Applied patch and ran tests", test: "Ran test", test_matrix: "Ran test matrix", command: "Ran command", shell: "Ran shell command", branch: "Created branch", commit: "Committed changes", push: "Pushed branch", pr: "Created PR", checks: "Read PR checks", docker: "Ran Docker command", patch_test_loop: "Ran patch/test loop", reset: "Reset worktree" })[type] || type;
+  return ({ patch_and_test: "Applied patch and ran tests", test: "Ran test", test_matrix: "Ran test matrix", command: "Ran command", shell: "Ran shell command", write: "Wrote local repo files", verify: "Verified local repo", browser: "Ran browser/UI check", branch: "Created branch", commit: "Committed changes", push: "Pushed branch", pr: "Created PR", checks: "Read PR checks", docker: "Ran Docker command", patch_test_loop: "Ran patch/test loop", reset: "Reset worktree" })[type] || type;
 }
 
 function compactData(result) {
@@ -739,14 +780,14 @@ async function withWorkspace(config, requestOrAlias, fn) {
   return fn(workspace);
 }
 
-function versionInfo() {
+function versionInfo(config = {}) {
   return {
     name: pkg.name,
     version: pkg.version,
     node: process.version,
     pid: process.pid,
     transports: ["stdio", "streamable-http", "sse"],
-    toolCount: toolSchemas.length,
+    toolCount: getToolSchemas(config || {}).length,
     capabilities: [
       "workspace tree/search/read/write",
       "task sessions",
@@ -810,7 +851,7 @@ function dashboardSummary(config, args = {}) {
   const limit = args.limit || 50;
   return {
     ok: true,
-    version: versionInfo(),
+    version: versionInfo(config),
     config: publicConfigSummary(config),
     sessions: sessions.listSessions(config, { limit }),
     jobs: listJobs(config, { limit }),
@@ -1070,6 +1111,46 @@ async function resetWorktree(workspace, config, args = {}) {
   return { ok: reset.exitCode === 0 && (!clean || clean.exitCode === 0), reset: summarizeCommand(reset), ...(clean ? { clean: summarizeCommand(clean) } : {}) };
 }
 
+const CHATGPT_LOCAL_REPO_TOOLS = new Set([
+  "relai_repo_snapshot",
+  "relai_read",
+  "relai_write",
+  "relai_shell",
+  "relai_verify",
+  "relai_browser",
+  "relai_diff",
+  "relai_reset"
+]);
+
+const DEVELOPER_EXTRA_TOOLS = new Set([
+  "relai_version",
+  "relai_config",
+  "relai_workspace_list",
+  "relai_workspace_inspect",
+  "relai_workspace_tree",
+  "relai_workspace_profile",
+  "relai_search",
+  "relai_context_pack",
+  "relai_git_status",
+  "relai_git_log",
+  "relai_git_show"
+]);
+
+function getToolSchemas(config = {}) {
+  const mode = String(config.toolMode || "chatgpt_local_repo");
+  if (mode === "debug") return allToolSchemas;
+  const visible = mode === "developer"
+    ? new Set([...CHATGPT_LOCAL_REPO_TOOLS, ...DEVELOPER_EXTRA_TOOLS])
+    : CHATGPT_LOCAL_REPO_TOOLS;
+  return allToolSchemas.filter((tool) => visible.has(tool.name));
+}
+
+function isToolVisible(config = {}, name) {
+  return getToolSchemas(config).some((tool) => tool.name === name);
+}
+
+const toolSchemas = getToolSchemas({ toolMode: "chatgpt_local_repo" });
+
 function ok(value) {
   return value && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, "ok")
     ? value
@@ -1088,4 +1169,4 @@ function numberProp(min, max) { return { type: "number", minimum: min, maximum: 
 function objectProp() { return { type: "object" }; }
 function arrayProp(type, minItems, maxItems) { return { type: "array", items: { type }, minItems, maxItems }; }
 
-module.exports = { toolSchemas, APPROVAL_GATES, callTool, workspaceList, workspaceInspect, workspaceTree, workspaceProfile };
+module.exports = { toolSchemas, allToolSchemas, getToolSchemas, APPROVAL_GATES, callTool, workspaceList, workspaceInspect, workspaceTree, workspaceProfile };

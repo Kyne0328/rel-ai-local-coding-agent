@@ -19,11 +19,13 @@ function makeDefaultConfig() {
     maxConcurrentSessionsPerWorkspace: 4,
     sessionLocksEnabled: true,
     worktreeRoot: path.join(os.homedir(), ".rel-ai-mcp", "worktrees"),
-    permissionProfile: "pr",
+    permissionProfile: "admin",
+    toolMode: "chatgpt_local_repo",
+    trustedLocalAgent: true,
     allowGitHubCli: false,
     allowDocker: false,
-    allowArbitraryCommands: false,
-    allowDestructiveTools: false,
+    allowArbitraryCommands: true,
+    allowDestructiveTools: true,
     agentMode: false,
     approvalGates: {
       commit: false,
@@ -143,7 +145,9 @@ function normalizeConfig(config) {
   if (!path.isAbsolute(next.auditLogPath)) next.auditLogPath = path.resolve(next.auditLogPath);
   next.worktreeRoot = expandHome(next.worktreeRoot || path.join(next.stateDir, "worktrees"));
   if (!path.isAbsolute(next.worktreeRoot)) next.worktreeRoot = path.resolve(next.worktreeRoot);
-  next.permissionProfile = String(next.permissionProfile || "pr");
+  next.permissionProfile = String(next.permissionProfile || "admin");
+  next.toolMode = normalizeToolMode(next.toolMode || base.toolMode);
+  next.trustedLocalAgent = next.trustedLocalAgent !== false;
 
   for (const key of ["maxOutputBytes", "maxSessionSteps", "maxPlanSteps", "maxIndexFiles", "maxConcurrentSessionsPerWorkspace"]) {
     if (!Number.isFinite(next[key]) || next[key] <= 0) next[key] = base[key];
@@ -172,8 +176,9 @@ function normalizeConfig(config) {
   next.release.minimumReadinessScore = Math.min(Math.max(Number(next.release.minimumReadinessScore || base.release.minimumReadinessScore), 0), 100);
   next.release.connectorProbeTimeoutMs = Math.min(Math.max(Number(next.release.connectorProbeTimeoutMs || base.release.connectorProbeTimeoutMs), 500), 60000);
   next.approvalGates = { ...base.approvalGates, ...((config && config.approvalGates) || {}) };
-  if (next.agentMode) {
+  if (next.agentMode || next.trustedLocalAgent) {
     next.allowArbitraryCommands = true;
+    next.allowDestructiveTools = true;
     next.permissionProfile = "admin";
     next.approvalGates = Object.fromEntries(Object.keys(next.approvalGates).map((k) => [k, false]));
     next.taskRunner = {
@@ -208,6 +213,11 @@ function normalizeWorkspace(workspace) {
     allowArbitraryCommands: Boolean(workspace.allowArbitraryCommands),
     allowDestructiveTools: Boolean(workspace.allowDestructiveTools)
   };
+}
+
+function normalizeToolMode(value) {
+  const mode = String(value || "chatgpt_local_repo").trim();
+  return ["chatgpt_local_repo", "simple", "developer", "debug"].includes(mode) ? mode : "chatgpt_local_repo";
 }
 
 function resolveWorkspace(config, alias) {
@@ -259,6 +269,8 @@ function publicConfigSummary(config) {
     allowArbitraryCommands: Boolean(config.allowArbitraryCommands),
     allowDestructiveTools: Boolean(config.allowDestructiveTools),
     agentMode: Boolean(config.agentMode),
+    toolMode: normalizeToolMode(config.toolMode || "chatgpt_local_repo"),
+    trustedLocalAgent: Boolean(config.trustedLocalAgent),
     approvalGates: config.approvalGates,
     dashboardEnabled: Boolean(config.dashboardEnabled),
     defaultTaskMode: config.defaultTaskMode,

@@ -55,14 +55,15 @@ if (!init.result?.capabilities?.resources) throw new Error('initialize did not a
 
 send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
 const list = await waitFor(2);
-if (!Array.isArray(list.result?.tools) || list.result.tools.length < 5) {
-  throw new Error('tools/list returned too few tools');
+if (!Array.isArray(list.result?.tools) || list.result.tools.length !== 8) {
+  throw new Error(`tools/list should expose the 8 ChatGPT local repo bridge tools, got ${list.result?.tools?.length}`);
 }
-const editTool = list.result.tools.find((item) => item.name === 'relai_edit_file');
-if (!editTool) throw new Error('tools/list did not expose relai_edit_file');
-if (!editTool.inputSchema?.properties?.edits) throw new Error('relai_edit_file schema did not expose edits');
+const names = list.result.tools.map((item) => item.name).sort();
+const expected = ['relai_browser', 'relai_diff', 'relai_read', 'relai_repo_snapshot', 'relai_reset', 'relai_shell', 'relai_verify', 'relai_write'].sort();
+if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error(`Unexpected tool list: ${names.join(', ')}`);
+const writeTool = list.result.tools.find((item) => item.name === 'relai_write');
+if (!writeTool.inputSchema?.properties?.edits) throw new Error('relai_write schema did not expose edits');
 const shellTool = list.result.tools.find((item) => item.name === 'relai_shell');
-if (!shellTool) throw new Error('tools/list did not expose relai_shell');
 if (!shellTool.inputSchema?.properties?.command) throw new Error('relai_shell schema did not expose command');
 
 send({ jsonrpc: '2.0', id: 3, method: 'resources/list', params: {} });
@@ -70,10 +71,6 @@ const resources = await waitFor(3);
 if (!Array.isArray(resources.result?.resources) || !resources.result.resources.some((item) => item.uri === 'relai://server/workspaces')) {
   throw new Error('resources/list did not expose workspace resource');
 }
-
-send({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'relai_config', arguments: {} } });
-const config = await waitFor(4);
-if (!config.result?.structuredContent?.ok) throw new Error('relai_config did not return ok');
 
 child.stdin.end();
 child.kill('SIGTERM');

@@ -20,7 +20,7 @@ const pkg = require("../package.json");
 const connection = require("./connectionProfile");
 
 function buildToolMetadata() {
-  const { toolSchemas, APPROVAL_GATES } = require("./tools");
+  const { getToolSchemas, APPROVAL_GATES } = require("./tools");
   const { TOOL_LEVEL } = require("./permissions");
   const categoryMap = {
     relai_git: "Git", relai_docker: "Docker", relai_workspace: "Workspace",
@@ -28,7 +28,8 @@ function buildToolMetadata() {
     relai_audit: "Audit", relai_release: "Release", relai_doctor: "Doctor",
     relai_memory: "Memory", relai_approval: "Approvals",
   };
-  return toolSchemas.map(tool => {
+  const config = readConfig({ allowMissing: true });
+  return getToolSchemas(config).map(tool => {
     const prefix = Object.keys(categoryMap).find(k => tool.name.startsWith(k)) || "relai";
     return {
       name: tool.name,

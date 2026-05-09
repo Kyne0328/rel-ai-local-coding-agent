@@ -2,10 +2,9 @@ const { runProcess, summarizeCommand } = require("./process");
 const { resolveSafePath } = require("./safety");
 
 async function runShellCommand(workspace, config, args = {}) {
-  if (!workspace.allowArbitraryCommands) {
+  if (!config.trustedLocalAgent && !workspace.allowArbitraryCommands) {
     throw new Error(
-      `relai_shell requires allowArbitraryCommands: true for workspace '${workspace.alias}'. ` +
-      "Set it in config.json or enable agentMode: true."
+      `relai_shell requires trustedLocalAgent: true or allowArbitraryCommands: true for workspace '${workspace.alias}'.`
     );
   }
 

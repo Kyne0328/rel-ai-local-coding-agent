@@ -1,5 +1,6 @@
 const readline = require("node:readline");
-const { toolSchemas, callTool } = require("./tools");
+const { getToolSchemas, callTool } = require("./tools");
+const { readConfig } = require("./config");
 const { listResources, readResource } = require("./resources");
 const pkg = require("../package.json");
 
@@ -48,7 +49,7 @@ async function handleMessage(message) {
       case "ping":
         return result(message.id, {});
       case "tools/list":
-        return result(message.id, { tools: toolSchemas });
+        return result(message.id, { tools: getToolSchemas(readConfig({ allowMissing: true })) });
       case "resources/list":
         return result(message.id, listResources());
       case "resources/read": {

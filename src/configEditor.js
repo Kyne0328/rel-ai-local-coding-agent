@@ -7,7 +7,8 @@ const DANGEROUS_KEYS = new Set([
   "allowDestructiveTools",
   "allowDocker",
   "allowGitHubCli",
-  "agentMode"
+  "agentMode",
+  "trustedLocalAgent"
 ]);
 
 const BOOLEAN_KEYS = [
@@ -16,6 +17,7 @@ const BOOLEAN_KEYS = [
   "allowArbitraryCommands",
   "allowDestructiveTools",
   "agentMode",
+  "trustedLocalAgent",
   "sessionLocksEnabled",
   "dashboardEnabled"
 ];
@@ -130,6 +132,12 @@ function updateSettings(current, payload = {}) {
       throw new Error("Permission profile must be one of: Read-only, PR agent, Test runner, Admin.");
     }
     setIfChanged(next, "permissionProfile", profile, changed);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(values, "toolMode")) {
+    const mode = String(values.toolMode || "chatgpt_local_repo");
+    if (!["chatgpt_local_repo", "simple", "developer", "debug"].includes(mode)) throw new Error("Invalid toolMode.");
+    setIfChanged(next, "toolMode", mode, changed);
   }
 
   if (Object.prototype.hasOwnProperty.call(values, "defaultTaskMode")) {

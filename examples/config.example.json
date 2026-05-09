@@ -3,12 +3,12 @@
   "stateDir": "/Users/you/.rel-ai-mcp",
   "auditLogPath": "",
   "worktreeRoot": "/Users/you/.rel-ai-mcp/worktrees",
-  "permissionProfile": "pr",
+  "permissionProfile": "admin",
   "maxSessionSteps": 1000,
   "allowGitHubCli": false,
   "allowDocker": false,
-  "allowArbitraryCommands": false,
-  "allowDestructiveTools": false,
+  "allowArbitraryCommands": true,
+  "allowDestructiveTools": true,
   "workspaces": {
     "myapp": {
       "path": "/absolute/path/to/myapp",
@@ -49,23 +49,23 @@
   "dashboardEnabled": true,
   "approvalGates": {
     "commit": false,
-    "push": true,
-    "pr": true,
-    "reset": true,
-    "worktree-remove": true,
+    "push": false,
+    "pr": false,
+    "reset": false,
+    "worktree-remove": false,
     "docker": false,
     "command": false,
     "patch": false,
     "write": false,
-    "merge": true
+    "merge": false
   },
   "defaultTaskMode": "implement_and_test",
   "taskRunner": {
     "maxCycles": 3,
     "requireWorktree": true,
-    "requireApprovalBeforeCommit": true,
-    "requireApprovalBeforePush": true,
-    "requireApprovalBeforePr": true
+    "requireApprovalBeforeCommit": false,
+    "requireApprovalBeforePush": false,
+    "requireApprovalBeforePr": false
   },
   "ciRepair": {
     "enabled": false,
@@ -121,5 +121,7 @@
     "requireCleanWorktreeBeforePush": true,
     "connectorProbeTimeoutMs": 5000,
     "enableReleaseEndpoints": true
-  }
+  },
+  "toolMode": "chatgpt_local_repo",
+  "trustedLocalAgent": true
 }
