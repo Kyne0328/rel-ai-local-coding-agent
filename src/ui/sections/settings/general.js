@@ -37,6 +37,8 @@ function _render(container, data) {
     form.appendChild(_field('Max concurrent sessions per workspace', _number('maxConcurrentSessionsPerWorkspace', data.maxConcurrentSessionsPerWorkspace, (v) => { _draft.maxConcurrentSessionsPerWorkspace = parseInt(v, 10); _checkDirty(container); }), ''));
   }
 
+  form.appendChild(_field('Color theme', _themeToggle(), 'Switch between dark and light mode. Default is dark.'));
+
   container.appendChild(form);
 
   const saveBar = document.createElement('div');
@@ -171,6 +173,32 @@ function _number(name, value, onChange) {
   el.type = 'number'; el.value = value; el.min = '1'; el.max = '20'; el.style.cssText = 'width:80px;';
   el.addEventListener('input', () => onChange(el.value));
   return el;
+}
+
+function _themeToggle() {
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;gap:8px;';
+  const current = document.documentElement.dataset.theme || 'dark';
+  for (const theme of ['dark', 'light']) {
+    const btn = document.createElement('button');
+    btn.className = 'secondary';
+    btn.style.cssText = 'min-height:32px;padding:0 14px;font-size:13px;';
+    btn.textContent = theme.charAt(0).toUpperCase() + theme.slice(1);
+    if (current === theme) btn.style.background = 'rgba(78,161,255,.2)';
+    btn.onclick = () => {
+      if (theme === 'dark') {
+        delete document.documentElement.dataset.theme;
+        localStorage.setItem('relai_theme', 'dark');
+      } else {
+        document.documentElement.dataset.theme = 'light';
+        localStorage.setItem('relai_theme', 'light');
+      }
+      wrap.querySelectorAll('button').forEach(b => { b.style.background = ''; });
+      btn.style.background = 'rgba(78,161,255,.2)';
+    };
+    wrap.appendChild(btn);
+  }
+  return wrap;
 }
 
 function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
