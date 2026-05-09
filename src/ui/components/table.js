@@ -94,5 +94,9 @@ export function virtualizeTable(tbody, allRows, renderRow) {
       }
     },
     getRendered() { return rendered; },
+    destroy() {
+      if (sentinel) { observer.unobserve(sentinel); sentinel.remove(); sentinel = null; }
+      observer.disconnect();
+    },
   };
 }

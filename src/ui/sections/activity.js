@@ -10,6 +10,7 @@ let _filterState = { search: '', timeRange: '1h', workspace: '', tool: '', statu
 let _virtualizer = null;
 
 export function mountActivity(container) {
+  if (_virtualizer) { _virtualizer.destroy(); }
   _virtualizer = null;
   container.innerHTML = '';
   container.appendChild(_buildActivity());
@@ -113,6 +114,7 @@ function _renderTable(entries) {
 
   if (!entries.length) {
     tbody.innerHTML = `<tr><td colspan="6"><div class="empty">Activity will appear here when ChatGPT calls a Rel.AI tool.</div></td></tr>`;
+    if (_virtualizer) { _virtualizer.destroy(); }
     _virtualizer = null;
     return;
   }
