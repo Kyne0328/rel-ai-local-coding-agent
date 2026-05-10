@@ -21,6 +21,46 @@ This command:
 - starts the MCP HTTP server on `http://127.0.0.1:3333`
 - prints the local dashboard URL and ChatGPT MCP endpoint
 
+## One-command public start
+
+For a quick ChatGPT-accessible endpoint, let one-click start the local server and try a public tunnel automatically:
+
+```bash
+npm run oneclick -- --public
+```
+
+You can also choose the provider directly after `--public`:
+
+```bash
+npm run oneclick -- --public ngrok
+npm run oneclick -- --public cloudflare
+npm run oneclick -- --public localtunnel
+```
+
+This starts the Rel.AI MCP server first, then tries these tunnel providers in order if no `--public-url` is already configured:
+
+1. Cloudflare Quick Tunnel via `cloudflared tunnel --url http://127.0.0.1:3333`
+2. ngrok via `ngrok http 3333 --log=stdout`
+3. localtunnel via `npx --yes localtunnel --port 3333`
+
+When a tunnel prints an `https://` URL, Rel.AI MCP saves it in `~/.rel-ai-mcp/.env` and prints a fresh `COPY THIS FOR CHATGPT` URL using `/mcp/<secret>`.
+
+Provider-specific examples:
+
+```bash
+npm run oneclick -- --tunnel cloudflare
+npm run oneclick -- --tunnel ngrok
+npm run oneclick -- --tunnel localtunnel
+```
+
+Custom tunnel command support is available for other providers. The command must keep running and print its public HTTPS URL to stdout or stderr:
+
+```bash
+npm run oneclick -- --tunnel custom --tunnel-command "your-tunnel http://127.0.0.1:3333"
+```
+
+Temporary tunnel URLs can change. They are good for quick setup/testing. For a permanent ChatGPT connector, use `--public-url` with a stable domain.
+
 To print the saved connector settings again:
 
 ```bash
@@ -42,6 +82,8 @@ scripts\relai-start.cmd
 ## Permanent URL rule
 
 ChatGPT Developer Mode needs a reachable HTTPS endpoint. A random temporary tunnel URL is not permanent. If the URL changes, ChatGPT sees it as a different connector target.
+
+`--public` is the fastest path to a working public endpoint when Cloudflare/ngrok/localtunnel is installed. `--public-url` is the stable path for a connector you do not want to recreate.
 
 Use one stable public URL and keep routing it to:
 
@@ -69,9 +111,15 @@ You should only need to recreate the ChatGPT app if one of these changes:
 
 ## Recommended permanent tunnel options
 
-### Option A: Cloudflare Tunnel with a domain
+### Option A: Cloudflare Tunnel
 
-Best for a stable public connector URL.
+For a quick temporary Cloudflare URL, install `cloudflared` and run:
+
+```bash
+npm run oneclick -- --tunnel cloudflare
+```
+
+For a stable public connector URL, use a Cloudflare Tunnel with your own domain.
 
 ```bash
 cloudflared tunnel login
@@ -120,16 +168,32 @@ tailscale funnel 3333
 npm run oneclick -- --public-url https://your-machine.your-tailnet.ts.net
 ```
 
-### Option C: ngrok static or reserved domain
+### Option C: ngrok
 
-Use this if your ngrok account supports a static domain.
+For a quick ngrok URL, install and sign in to ngrok, then run:
+
+```bash
+npm run oneclick -- --tunnel ngrok
+```
+
+Use a static/reserved ngrok domain if your account supports it.
 
 ```bash
 ngrok http --domain=your-static-domain.ngrok.app 3333
 npm run oneclick -- --public-url https://your-static-domain.ngrok.app
 ```
 
-Do not use random temporary ngrok URLs for a permanent ChatGPT app. They solve testing, not long-term setup.
+Do not use random temporary ngrok/localtunnel/quick-tunnel URLs for a permanent ChatGPT app. They solve testing, not long-term setup.
+
+### Option D: localtunnel
+
+Use this as a low-friction fallback when Cloudflare/ngrok are not installed:
+
+```bash
+npm run oneclick -- --tunnel localtunnel
+```
+
+This uses `npx --yes localtunnel --port 3333`, so it requires npm/npx and internet access.
 
 ## ChatGPT app setup
 
@@ -217,3 +281,6 @@ relai://workspace/<alias>/tree
 ```
 
 These resources make the connector easier for ChatGPT to discover, but tools are still the preferred path for app actions.
+
+
+Maintained by [@Kyne0328](https://github.com/Kyne0328).

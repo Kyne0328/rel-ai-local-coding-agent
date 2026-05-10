@@ -282,8 +282,9 @@ function fileSha256(root, relativePath) {
 
 function writeTextFileSafe(root, relativePath, content, options = {}) {
   const resolved = resolveSafePath(root, relativePath);
-  const text = String(content ?? "");
+  const text = normalizeFullFileContent(String(content ?? ""));
   if (looksBinary(Buffer.from(text, "utf8"))) throw new Error("Refusing to write binary-looking content.");
+  guardAgainstCollapsedFullFileWrite(resolved.absolutePath, resolved.relativePath, text);
   if (options.expectedSha256) {
     const current = fileSha256(root, resolved.relativePath);
     if (current !== options.expectedSha256) {
@@ -368,3 +369,25 @@ module.exports = {
   safeCommandPolicy,
   safeReadJson
 };
+
+function normalizeFullFileContent(text) {
+  // Some app clients may pass escaped newlines literally. Convert only when
+  // there are no real newlines and the payload clearly contains escaped lines.
+  if (!/[\r\n]/.test(text) && text.includes('\\n')) {
+    return text.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n');
+  }
+  return text;
+}
+
+function guardAgainstCollapsedFullFileWrite(absolutePath, relativePath, newText) {
+  if (!fs.existsSync(absolutePath)) return;
+  let oldText = '';
+  try { oldText = fs.readFileSync(absolutePath, 'utf8'); } catch (_error) { return; }
+  const oldLines = oldText.split(/\r?\n/).length;
+  const newLines = newText.split(/\r?\n/).length;
+  const ext = path.extname(relativePath).toLowerCase();
+  const sourceLike = new Set(['.js','.jsx','.ts','.tsx','.mjs','.cjs','.dart','.py','.go','.rs','.java','.kt','.swift','.cs','.cpp','.c','.h','.hpp','.rb','.php','.css','.scss','.html','.xml','.yaml','.yml','.json','.md']);
+  if (sourceLike.has(ext) && oldLines >= 8 && newLines <= 2 && newText.length > 500) {
+    throw new Error('Refusing likely collapsed full-file write for ' + relativePath + ': existing file has ' + oldLines + ' lines but new content has ' + newLines + '. Use relai_read and pass the complete multiline file content to relai_write.');
+  }
+}

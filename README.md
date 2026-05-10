@@ -1,5 +1,7 @@
 # Rel.AI MCP
 
+Maintained by [@Kyne0328](https://github.com/Kyne0328).
+
 Rel.AI MCP is a local ChatGPT repository bridge. It intentionally exposes one reliable workflow for configured local workspaces:
 
 ```text
@@ -19,6 +21,45 @@ relai_repo_snapshot -> relai_read -> relai_write -> relai_verify -> relai_diff -
 | `relai_reset` | Roll back requested local changes. |
 
 Removed workflows are not part of the MCP anymore: unified patch application, generated patch scripts, ad-hoc shell tools, task runners, isolated worktree orchestration, multi-agent schedulers, approval-gated legacy flows, Docker runners, and PR/CI repair loops.
+
+
+## One-click server and public tunnel
+
+Local only:
+
+```bash
+npm run oneclick
+```
+
+Start the server and try to create a public HTTPS tunnel automatically:
+
+```bash
+npm run oneclick -- --public
+```
+
+Provider shortcut after `--public` is also supported:
+
+```bash
+npm run oneclick -- --public ngrok
+npm run oneclick -- --public cloudflare
+npm run oneclick -- --public localtunnel
+```
+
+Provider-specific tunnel startup:
+
+```bash
+npm run oneclick -- --tunnel cloudflare
+npm run oneclick -- --tunnel ngrok
+npm run oneclick -- --tunnel localtunnel
+```
+
+For other providers, use a custom command that prints its public `https://` URL:
+
+```bash
+npm run oneclick -- --tunnel custom --tunnel-command "your-tunnel http://127.0.0.1:3333"
+```
+
+Use `--public-url https://your-stable-domain` for a permanent ChatGPT connector. `--public`/quick tunnels are convenient but may rotate URLs.
 
 ## Dashboard
 
@@ -44,6 +85,15 @@ Each workspace can define fast-task behavior:
 Use `.relaiignore` in a repo to add repo-specific AI-context exclusions.
 
 
-## Optional ChatGPT request helper
+## Optional ChatGPT app-request auto-approve userscript
 
-The dashboard can generate a guarded userscript for ChatGPT Web and Android browsers with userscript support. It can highlight or auto-approve visible Rel.AI app/tool request dialogs only when explicitly enabled. See `docs/CHATGPT_REQUEST_HELPER.md`.
+Rel.AI MCP includes an optional userscript for ChatGPT web that can auto-click Rel.AI MCP app-request approvals. It is off by default and requires a double opt-in: the dashboard setting plus the userscript's local browser toggle. This can authorize local repo reads, full-file writes, verification commands, browser checks, diffs, or resets without a manual click, so use it only on your own trusted machine and disable it after the task. See `docs/AUTO_APPROVE_USERSCRIPT.md`.
+
+
+## Verify command behavior
+
+`relai_verify` is intentionally unrestricted inside configured workspaces. When `command`, `commands`, or `commandsText` is provided, Rel.AI runs exactly those shell commands. When no command is provided, it auto-detects sensible validation commands.
+
+## Full-file write formatting guard
+
+`relai_write` accepts only complete file content. If a multiline source file is accidentally collapsed into one long line, the write is rejected instead of damaging formatting.

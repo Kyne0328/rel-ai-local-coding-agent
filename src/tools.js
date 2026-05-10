@@ -26,8 +26,14 @@ const toolSchemas = [
   tool("relai_write", "Write Local Repo File", "Full-file write only. Read the target with relai_read, send the complete corrected file content here, then verify and inspect the diff. Edit arrays, find/replace operations, patches, and generated scripts are not supported.", {
     workspace: stringProp(), path: stringProp(), content: stringProp(), dryRun: boolProp()
   }, ["workspace", "path", "content"]),
-  tool("relai_verify", "Verify Local Repo", "Auto-detect and run local verification commands such as syntax checks, tests, and builds.", {
-    workspace: stringProp(), level: stringProp(), commands: arrayProp("string", 0, 50), timeoutMs: numberProp(1000, 1800000), stopOnFailure: boolProp()
+  tool("relai_verify", "Verify Local Repo", "Run verification without command whitelists. If commands are provided, Rel.AI runs exactly those shell commands. If omitted, Rel.AI auto-detects sensible validation commands for the workspace.", {
+    workspace: stringProp(),
+    level: stringProp(),
+    command: stringProp(),
+    commands: arrayProp("string", 0),
+    commandsText: stringProp(),
+    timeoutMs: numberProp(1000, 86400000),
+    stopOnFailure: boolProp()
   }, ["workspace"]),
   tool("relai_browser", "Browser/UI Check", "UI validation bridge. Fetch a URL/route or run a local browser command such as Playwright; returns output and errors.", {
     workspace: stringProp(), url: stringProp(), route: stringProp(), command: stringProp(), timeoutMs: numberProp(1000, 1800000)
@@ -203,6 +209,11 @@ function tool(name, title, description, properties, required = []) {
 function stringProp() { return { type: "string" }; }
 function boolProp() { return { type: "boolean" }; }
 function numberProp(min, max) { return { type: "number", minimum: min, maximum: max }; }
-function arrayProp(type, minItems, maxItems) { return { type: "array", items: { type }, minItems, maxItems }; }
+function arrayProp(type, minItems, maxItems) {
+  const schema = { type: "array", items: { type } };
+  if (Number.isFinite(Number(minItems))) schema.minItems = minItems;
+  if (Number.isFinite(Number(maxItems))) schema.maxItems = maxItems;
+  return schema;
+}
 
 module.exports = { toolSchemas, allToolSchemas: toolSchemas, getToolSchemas, APPROVAL_GATES, BRIDGE_TOOL_NAMES, callTool, workspaceList, workspaceInspect, workspaceTree, workspaceProfile };

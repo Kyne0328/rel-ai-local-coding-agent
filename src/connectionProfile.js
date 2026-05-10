@@ -121,7 +121,7 @@ function localBaseUrl(host, port) {
   return `http://${safeHost}:${port}`;
 }
 
-function buildConnectionSummary({ host = "127.0.0.1", port = 3333, publicUrl = "", token = "", showToken = false, chatgptSecret = "" } = {}) {
+function buildConnectionSummary({ host = "127.0.0.1", port = 3333, publicUrl = "", token = "", showToken = false, chatgptSecret = "", tunnelProvider = "" } = {}) {
   const localUrl = localBaseUrl(host, port);
   const publicBaseUrl = publicUrl ? normalizePublicUrl(publicUrl) : "";
   const baseForChatGPT = publicBaseUrl || localUrl;
@@ -146,6 +146,8 @@ function buildConnectionSummary({ host = "127.0.0.1", port = 3333, publicUrl = "
     chatgptSecretFile: getChatGPTSecretPath(),
     profileFile: getConnectionProfilePath(),
     permanentUrlConfigured: Boolean(publicBaseUrl),
+    tunnelProvider: tunnelProvider || "none",
+    tunnelMode: publicBaseUrl ? (tunnelProvider && tunnelProvider !== "none" ? `public tunnel via ${tunnelProvider}` : "configured public URL") : "local only",
     nextSteps: publicBaseUrl
       ? [
           "Keep the local Rel.AI MCP server running on this machine.",
@@ -172,6 +174,7 @@ function printConnectionSummary(summary) {
     `COPY THIS FOR CHATGPT:  ${summary.chatgptMcpUrl}`,
     `ChatGPT Auth:          No Authentication`,
     `Health URL:            ${summary.chatgptHealthUrl}`,
+    `Public mode:           ${summary.tunnelMode || "local only"}`,
     `Local/API MCP only:     ${summary.localBearerMcpUrl}`,
     `Local/API Auth:         ${summary.authHeader}`,
     `Token file:       ${summary.tokenFile}`,
@@ -180,7 +183,7 @@ function printConnectionSummary(summary) {
     "",
     summary.permanentUrlConfigured
       ? "Permanent URL: configured. Use the COPY THIS FOR CHATGPT URL above. You should not need to recreate the ChatGPT app unless that URL or secret path changes."
-      : "Permanent URL: not configured. Add one with --public-url https://your-domain.example.com before using ChatGPT Developer Mode permanently.",
+      : "Permanent URL: not configured. Add one with --public to create a temporary tunnel, or --public-url https://your-domain.example.com for a stable connector URL.",
     "",
     "Important:",
     "  - Do not paste the plain /mcp URL into ChatGPT.",

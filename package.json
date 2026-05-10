@@ -1,6 +1,6 @@
 {
   "name": "rel-ai-mcp",
-  "version": "0.11.14",
+  "version": "0.11.26",
   "description": "Local ChatGPT repo bridge: one reliable workflow for snapshot, read, write, verify, diff, and reset configured local workspaces.",
   "private": true,
   "license": "MIT",
@@ -22,7 +22,7 @@
     "workspace:add": "node bin/relai-mcp-config.js workspace add",
     "testcmd:add": "node bin/relai-mcp-config.js test-command add",
     "cmd:add": "node bin/relai-mcp-config.js command add",
-    "test": "npm run check && npm run test:smoke && npm run test:request-helper",
+    "test": "npm run check && npm run test:smoke",
     "test:smoke": "node test/smoke.mjs",
     "test:http": "node test/http-smoke.mjs",
     "install:unix": "sh scripts/install-unix.sh",
@@ -31,7 +31,9 @@
     "launch": "node bin/rel-ai-mcp-launch.js",
     "connector:print": "node bin/rel-ai-mcp-launch.js --print-only --show-token",
     "test:fast-task": "node test/workspace-fast-task-smoke.mjs",
-    "test:request-helper": "node test/request-helper-smoke.mjs"
+    "test:auto-approve": "node test/auto-approve-smoke.mjs",
+    "test:tunnel": "node test/tunnel-manager-smoke.mjs",
+    "test:oneclick": "node test/oneclick-args-smoke.mjs"
   },
   "keywords": [
     "mcp",
@@ -40,5 +42,14 @@
     "codex",
     "git",
     "pull-request"
-  ]
+  ],
+  "author": {
+    "name": "Kyne0328",
+    "url": "https://github.com/Kyne0328"
+  },
+  "homepage": "https://github.com/Kyne0328/rel-ai-mcp",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kyne0328/rel-ai-mcp.git"
+  }
 }

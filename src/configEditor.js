@@ -1,6 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const { getConfigPath, publicConfigSummary, writeConfig, normalizeChatgptRequestHelper } = require("./config");
+const { getConfigPath, publicConfigSummary, writeConfig, normalizeAutoApproveConfig } = require("./config");
 
 const BOOLEAN_KEYS = ["trustedLocalAgent", "dashboardEnabled"];
 const NUMBER_KEYS = ["maxOutputBytes", "maxIndexFiles"];
@@ -47,12 +47,9 @@ function updateSettings(current, payload = {}) {
     setIfChanged(next, key, finiteNumber(values[key], key), changed);
   }
 
-  if (values.chatgptRequestHelper && typeof values.chatgptRequestHelper === "object") {
-    const nextHelper = normalizeChatgptRequestHelper(values.chatgptRequestHelper);
-    if (JSON.stringify(next.chatgptRequestHelper) !== JSON.stringify(nextHelper)) {
-      next.chatgptRequestHelper = nextHelper;
-      changed.push("chatgptRequestHelper");
-    }
+  if (values.autoApproveAppRequests && typeof values.autoApproveAppRequests === "object") {
+    next.autoApproveAppRequests = normalizeAutoApproveConfig({ ...(next.autoApproveAppRequests || {}), ...values.autoApproveAppRequests });
+    changed.push("autoApproveAppRequests");
   }
 
   for (const section of ["productUx", "release"]) {

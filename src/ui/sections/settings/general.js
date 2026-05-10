@@ -35,27 +35,39 @@ function _render(container) {
 
   const grid = formGrid();
   const bridge = panel('ChatGPT local repo bridge');
-  const helper = panel('ChatGPT request helper');
   const limits = panel('Runtime limits');
   const local = panel('Local dashboard');
+  const autoApprove = panel('ChatGPT web app-request auto-approve');
 
   bridge.body.appendChild(summaryBox());
   bridge.body.appendChild(field('Trusted local access', toggleControl(true, () => {}, { enabled: 'Always enabled', disabled: 'Always enabled' }), 'Configured workspaces are exposed through the local bridge tools. Workspace-level fast task settings control how much context is scanned before structured writes.'));
-  helper.body.appendChild(requestHelperBox());
-  helper.body.appendChild(field('Enable helper', toggleControl((_draft.chatgptRequestHelper || {}).enabled === true, (v) => { ensureRequestHelper().enabled = v; _checkDirty(); }), 'Shows a small overlay on ChatGPT pages and detects Rel.AI app/tool request dialogs.'));
-  helper.body.appendChild(field('Auto-approve Rel.AI requests', toggleControl((_draft.chatgptRequestHelper || {}).autoApprove === true, (v) => { ensureRequestHelper().autoApprove = v; _checkDirty(); }, { enabled: 'Auto-approve on', disabled: 'Auto-approve off' }), 'When enabled, the userscript clicks only visible approval buttons inside dialogs that match the configured Rel.AI/tool allowlist.'));
-  helper.body.appendChild(field('Max clicks per minute', numberControl((_draft.chatgptRequestHelper || {}).maxClicksPerMinute || 12, (v) => { ensureRequestHelper().maxClicksPerMinute = v; _checkDirty(); }, { min: 1, max: 120, width: '100px' }), 'Safety rate limit for web and Android userscript usage.'));
-  helper.body.appendChild(field('Cooldown milliseconds', numberControl((_draft.chatgptRequestHelper || {}).cooldownMs || 1500, (v) => { ensureRequestHelper().cooldownMs = v; _checkDirty(); }, { min: 250, max: 60000, width: '120px' }), 'Minimum delay between clicks.'));
-  helper.body.appendChild(field('Userscript', requestHelperInstallControls(), 'Install in a userscript manager on desktop or Android browser. Reinstall after changing helper settings.'));
+  bridge.body.appendChild(field('Automatic task behavior', _selectTaskMode(), 'Default behavior for high-level task calls.'));
+
+  autoApprove.body.appendChild(autoApproveWarningBox());
+  autoApprove.body.appendChild(field('Enable dashboard-side auto-approve', toggleControl((_draft.autoApproveAppRequests || {}).enabled === true, (v) => {
+    if (v && !confirmAutoApproveWarning()) return;
+    if (!_draft.autoApproveAppRequests) _draft.autoApproveAppRequests = {};
+    _draft.autoApproveAppRequests.enabled = v;
+    if (v) _draft.autoApproveAppRequests.warningAccepted = true;
+    _checkDirty();
+  }), 'Both this dashboard setting and the userscript local toggle must be enabled before any click automation runs.'));
+  autoApprove.body.appendChild(field('Poll interval (ms)', numberControl((_draft.autoApproveAppRequests || {}).pollMs || 1200, (v) => {
+    if (!_draft.autoApproveAppRequests) _draft.autoApproveAppRequests = {};
+    _draft.autoApproveAppRequests.pollMs = v;
+    _checkDirty();
+  }, { min: 500, max: 10000, width: '140px' }), 'How often the userscript checks ChatGPT for a Rel.AI MCP app request.'));
+  autoApprove.body.appendChild(field('Install userscript', userscriptInstallControl(), 'Install in Tampermonkey/Violentmonkey, then use the userscript menu on ChatGPT to enable or disable it locally.'));
 
 
+  limits.body.appendChild(field('Session locks', toggleControl(_draft.sessionLocksEnabled !== false, (v) => { _draft.sessionLocksEnabled = v; _checkDirty(); }), 'Prevents overlapping edits to the same workspace.'));
+  limits.body.appendChild(field('Max concurrent sessions per workspace', numberControl(_draft.maxConcurrentSessionsPerWorkspace, (v) => { _draft.maxConcurrentSessionsPerWorkspace = v; _checkDirty(); }, { min: 1, max: 20 }), 'Usually 1–4 is enough.'));
   limits.body.appendChild(field('Max output bytes', numberControl(_draft.maxOutputBytes, (v) => { _draft.maxOutputBytes = v; _checkDirty(); }, { min: 10000, max: 20000000, width: '140px' }), 'Maximum command output returned to ChatGPT. 2 MB is a safe default for test failures without flooding the chat.'));
 
   local.body.appendChild(field('Dashboard enabled', toggleControl(_draft.dashboardEnabled !== false, (v) => { _draft.dashboardEnabled = v; _checkDirty(); }), 'Controls this local dashboard only.'));
   local.body.appendChild(field('Color theme', _themeToggle(), 'Stored only in this browser.'));
 
   grid.appendChild(bridge.el);
-  grid.appendChild(helper.el);
+  grid.appendChild(autoApprove.el);
   grid.appendChild(limits.el);
   grid.appendChild(local.el);
   container.appendChild(grid);
@@ -84,60 +96,51 @@ function summaryBox() {
   return div;
 }
 
-
-function ensureRequestHelper() {
-  if (!_draft.chatgptRequestHelper || typeof _draft.chatgptRequestHelper !== 'object') _draft.chatgptRequestHelper = {};
-  return _draft.chatgptRequestHelper;
-}
-
-function requestHelperBox() {
+function autoApproveWarningBox() {
   const div = document.createElement('div');
   div.className = 'empty';
-  div.style.cssText = 'text-align:left;padding:12px;line-height:1.55;';
+  div.style.cssText = 'text-align:left;padding:12px;line-height:1.55;border-color:rgba(255,184,77,.35);background:rgba(255,184,77,.08);';
   div.innerHTML = `
-    <strong style="color:var(--text);">Optional app request helper</strong><br>
-    This creates a userscript for ChatGPT Web and Android browsers with userscript support. It is disabled by default and only targets visible Rel.AI request dialogs. It does not read passwords, cookies, messages, or arbitrary page data.
+    <strong style="color:var(--text);">Warning: app-request auto-approve is dangerous.</strong><br>
+    This optional userscript can click ChatGPT approval buttons for Rel.AI MCP app requests. That can authorize local repo reads, full-file writes, verification commands, browser checks, diffs, or resets without a manual click. Keep it off unless you are actively supervising a task on your own trusted machine.
   `;
   return div;
 }
 
-function requestHelperInstallControls() {
+function confirmAutoApproveWarning() {
+  return window.confirm('Enable Rel.AI MCP auto-approve?\n\nThis can click ChatGPT app-request approvals for local repo actions without a manual click. Use only on your own trusted machine and turn it off after the task.');
+}
+
+function userscriptInstallControl() {
   const wrap = document.createElement('div');
   wrap.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;';
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'secondary';
-  btn.textContent = 'Download userscript';
-  btn.onclick = downloadRequestHelperUserscript;
+  const token = getToken();
+  const install = document.createElement('a');
+  install.className = 'buttonlike';
+  install.textContent = 'Open userscript';
+  install.href = '/userscripts/chatgpt-auto-approve.user.js' + (token ? '?token=' + encodeURIComponent(token) : '');
+  install.target = '_blank';
+  install.rel = 'noopener';
+
+  const installWithToken = document.createElement('a');
+  installWithToken.className = 'buttonlike secondary';
+  installWithToken.textContent = 'Open with token embedded';
+  installWithToken.href = '/userscripts/chatgpt-auto-approve.user.js' + (token ? '?token=' + encodeURIComponent(token) + '&embedToken=1' : '?embedToken=1');
+  installWithToken.target = '_blank';
+  installWithToken.rel = 'noopener';
+  installWithToken.onclick = (event) => {
+    if (!window.confirm('Embedding the dashboard token in a userscript is convenient but sensitive. Only do this on your own trusted browser profile. Continue?')) event.preventDefault();
+  };
+
   const docs = document.createElement('a');
-  docs.href = '/docs/CHATGPT_REQUEST_HELPER.md';
-  docs.textContent = 'Usage notes';
-  docs.className = 'section-action';
+  docs.className = 'buttonlike secondary';
+  docs.textContent = 'Read setup docs';
+  docs.href = '/public/docs/AUTO_APPROVE_USERSCRIPT.md';
   docs.target = '_blank';
-  wrap.append(btn, docs);
+  docs.rel = 'noopener';
+  wrap.append(install, installWithToken, docs);
   return wrap;
 }
-
-async function downloadRequestHelperUserscript() {
-  const token = getToken();
-  const headers = token ? { Authorization: 'Bearer ' + token } : {};
-  const url = '/userscripts/chatgpt-request-helper.user.js' + (token ? '?token=' + encodeURIComponent(token) : '');
-  const res = await fetch(url, { headers });
-  const text = await res.text();
-  if (!res.ok) {
-    alert('Could not download userscript: ' + text);
-    return;
-  }
-  const blobUrl = URL.createObjectURL(new Blob([text], { type: 'application/javascript' }));
-  const a = document.createElement('a');
-  a.href = blobUrl;
-  a.download = 'rel-ai-chatgpt-request-helper.user.js';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-}
-
 
 function _selectTaskMode() {
   const el = document.createElement('select');
@@ -163,7 +166,7 @@ function _checkDirty() {
 
 function _getChanges() {
   if (!_original || !_draft) return [];
-  const keys = ['maxOutputBytes', 'dashboardEnabled', 'chatgptRequestHelper'];
+  const keys = ['sessionLocksEnabled', 'maxConcurrentSessionsPerWorkspace', 'maxOutputBytes', 'dashboardEnabled', 'defaultTaskMode', 'autoApproveAppRequests'];
   const changes = [];
   for (const key of keys) {
     if (JSON.stringify(_draft[key]) !== JSON.stringify(_original[key])) {
@@ -175,9 +178,12 @@ function _getChanges() {
 
 async function _save(container) {
   const payload = {
+    sessionLocksEnabled: _draft.sessionLocksEnabled,
+    maxConcurrentSessionsPerWorkspace: _draft.maxConcurrentSessionsPerWorkspace,
     maxOutputBytes: _draft.maxOutputBytes,
     dashboardEnabled: _draft.dashboardEnabled,
-    chatgptRequestHelper: _draft.chatgptRequestHelper
+    defaultTaskMode: _draft.defaultTaskMode,
+    autoApproveAppRequests: _draft.autoApproveAppRequests
   };
   const res = await saveSettings(payload);
   if (res && res.ok) await _loadAndRender(container);

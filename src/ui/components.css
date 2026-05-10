@@ -8,6 +8,8 @@
   }
   button:hover { border-color: rgba(80,215,255,.66); background: linear-gradient(180deg, rgba(78,161,255,.25), rgba(155,124,255,.12)); }
   button.secondary { background: rgba(255,255,255,.04); border-color: var(--line); color: #d8e4f7; }
+  a.buttonlike { min-height: 38px; border: 1px solid rgba(125,164,255,.32); border-radius: 10px; padding: 0 12px; color: var(--text); background: linear-gradient(180deg, rgba(78,161,255,.18), rgba(78,161,255,.07)); cursor: pointer; display: inline-flex; align-items: center; text-decoration: none; }
+  a.buttonlike.secondary { background: rgba(255,255,255,.04); border-color: var(--line); color: #d8e4f7; }
   button.danger { border-color: rgba(255,102,128,.45); background: rgba(255,102,128,.08); }
   input, select {
     min-height: 38px; border: 1px solid var(--line); border-radius: 10px;

@@ -11,7 +11,7 @@ const release = require("./release");
 const configEditor = require("./configEditor");
 const pkg = require("../package.json");
 const connection = require("./connectionProfile");
-const requestHelper = require("./chatgptRequestHelper");
+const autoApprove = require("./autoApproveUserscript");
 
 function buildToolMetadata() {
   const { getToolSchemas, APPROVAL_GATES } = require("./tools");
@@ -119,17 +119,11 @@ async function routeRequest(req, res, options) {
   }
 
 
-  if (req.method === "GET" && parsed.pathname.startsWith("/docs/")) {
-    const safePath = parsed.pathname.replace(/\\/g, "/");
-    if (safePath.includes("..")) { res.writeHead(400); res.end("Bad path"); return; }
-    const filePath = path.join(__dirname, "..", "docs", safePath.slice(6));
-    try {
-      const content = fs.readFileSync(filePath);
-      res.writeHead(200, { "Content-Type": "text/markdown; charset=utf-8", "Cache-Control": "no-cache" });
-      res.end(content);
-    } catch (_) {
-      res.writeHead(404); res.end("Not found");
-    }
+  if (req.method === "GET" && parsed.pathname === "/userscripts/chatgpt-auto-approve.user.js") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    const baseUrl = `${req.socket.encrypted ? "https" : "http"}://${req.headers.host || `${options.host}:${options.port}`}`;
+    const scriptToken = parsed.searchParams.get("embedToken") === "1" ? (parsed.searchParams.get("token") || "") : "";
+    sendJavaScript(res, 200, autoApprove.renderUserscript({ baseUrl, token: scriptToken }));
     return;
   }
 
@@ -155,22 +149,6 @@ async function routeRequest(req, res, options) {
     return;
   }
 
-
-  if (req.method === "GET" && parsed.pathname === "/api/request-helper/config") {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
-    const config = readConfig();
-    sendJson(res, 200, requestHelper.publicRequestHelperConfig(config), ae);
-    return;
-  }
-
-  if (req.method === "GET" && parsed.pathname === "/userscripts/chatgpt-request-helper.user.js") {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
-    const config = readConfig();
-    const baseUrl = options.publicUrl || `http://${options.host || "127.0.0.1"}:${options.port || 3333}`;
-    sendJavaScript(res, 200, requestHelper.renderUserscript(config, { baseUrl }));
-    return;
-  }
-
   if (req.method === "GET" && parsed.pathname === "/api/settings") {
     if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
     const config = readConfig();
@@ -185,6 +163,14 @@ async function routeRequest(req, res, options) {
     } catch (err) {
       sendJson(res, 500, { ok: false, error: err.message }, ae);
     }
+    return;
+  }
+
+
+  if (req.method === "GET" && parsed.pathname === "/api/auto-approve/settings") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    const config = readConfig();
+    sendJson(res, 200, autoApprove.autoApproveSettings(config), ae);
     return;
   }
 
@@ -245,12 +231,14 @@ async function routeRequest(req, res, options) {
 
   if (req.method === "GET" && parsed.pathname === "/api/connection") {
     if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    const latestProfile = connection.readConnectionProfile();
     sendJson(res, 200, connection.buildConnectionSummary({
-      host: options.host,
-      port: options.port,
-      publicUrl: options.publicUrl,
+      host: latestProfile.host || options.host,
+      port: latestProfile.port || options.port,
+      publicUrl: latestProfile.publicUrl || options.publicUrl,
       token: options.token,
-      chatgptSecret: options.chatgptSecret,
+      chatgptSecret: latestProfile.chatgptSecret || options.chatgptSecret,
+      tunnelProvider: latestProfile.tunnelProvider || "none",
       showToken: parsed.searchParams.get("showToken") === "1"
     }), ae);
     return;
@@ -380,8 +368,6 @@ async function routeRequest(req, res, options) {
       dashboardV10Api: "GET /api/dashboard/v10",
       logsApi: "GET /api/logs",
       settingsApi: "GET /api/settings",
-      requestHelperConfigApi: "GET /api/request-helper/config",
-      requestHelperUserscript: "GET /userscripts/chatgpt-request-helper.user.js",
       updateSettingsApi: "POST /api/settings",
       updateWorkspacesApi: "POST /api/workspaces",
       healthMonitorApi: "GET /api/health-monitor",
@@ -413,8 +399,9 @@ function getMcpAccess(pathname, options) {
 }
 
 function mcpGetDiagnostic(pathname, options, mcpAccess, req) {
-  const base = options.publicUrl || connection.localBaseUrl?.(options.host, options.port) || `http://${options.host || "127.0.0.1"}:${options.port || 3333}`;
-  const secret = String(options.chatgptSecret || "").trim();
+  const latestProfile = connection.readConnectionProfile();
+  const base = latestProfile.publicUrl || options.publicUrl || connection.localBaseUrl?.(options.host, options.port) || `http://${options.host || "127.0.0.1"}:${options.port || 3333}`;
+  const secret = String(latestProfile.chatgptSecret || options.chatgptSecret || "").trim();
   const chatgptPath = secret ? `/mcp/${encodeURIComponent(secret)}` : "/mcp/<missing-secret>";
   const bearerAuthorized = isAuthorized(req, options);
   const usableWithPost = Boolean(mcpAccess.allowed || bearerAuthorized || options.allowNoAuth);
@@ -610,6 +597,7 @@ function contentTypeForStaticAsset(filePath) {
   const lower = String(filePath || "").toLowerCase();
   if (lower.endsWith(".css")) return "text/css";
   if (lower.endsWith(".js")) return "application/javascript";
+  if (lower.endsWith(".md")) return "text/markdown";
   if (lower.endsWith(".png")) return "image/png";
   if (lower.endsWith(".ico")) return "image/x-icon";
   if (lower.endsWith(".svg")) return "image/svg+xml";
@@ -710,7 +698,7 @@ function renderDashboardHtml(options) {
       <div class="card-head"><h3>ChatGPT connector setup</h3><span class="status-pill" id="connectorStatus">checking</span></div>
       <div class="card-body connector-grid">
         <div class="setup-steps">
-          <div class="step"><span class="step-num">1</span><div>Run <code>npm run oneclick -- --public-url https://your-domain.example.com</code>.</div></div>
+          <div class="step"><span class="step-num">1</span><div>Run <code>npm run oneclick -- --public</code> for a quick tunnel, or <code>npm run oneclick -- --public-url https://your-domain.example.com</code> for a stable URL.</div></div>
           <div class="step"><span class="step-num">2</span><div>Use the printed <code>/mcp/&lt;secret&gt;</code> URL as your MCP server in ChatGPT.</div></div>
           <div class="step"><span class="step-num">3</span><div>In ChatGPT, go to <strong>Settings → Connectors → Add MCP server</strong> and paste the URL.</div></div>
           <div class="step"><span class="step-num">4</span><div>Set authentication to <strong>No Authentication</strong>. Keep the bearer token only for local dashboard access.</div></div>

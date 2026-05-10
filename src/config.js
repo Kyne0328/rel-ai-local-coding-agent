@@ -6,24 +6,18 @@ const { discoverCommands } = require("./commandDiscovery");
 
 const BRIDGE_TOOLS = ["relai_repo_snapshot", "relai_read", "relai_write", "relai_verify", "relai_browser", "relai_diff", "relai_reset"];
 
-function getConfigPath() {
-  return process.env.REL_AI_MCP_CONFIG || path.join(os.homedir(), ".rel-ai-mcp", "config.json");
+function makeDefaultAutoApproveConfig() {
+  return {
+    enabled: false,
+    requireUserscriptToggle: true,
+    pollMs: 1200,
+    warningAccepted: false
+  };
 }
 
 
-function makeDefaultChatgptRequestHelperConfig() {
-  return {
-    enabled: false,
-    autoApprove: false,
-    showOverlay: true,
-    cooldownMs: 1500,
-    maxClicksPerMinute: 12,
-    allowedToolNames: BRIDGE_TOOLS,
-    allowedAppText: ["rel-ai-mcp", "Rel.AI MCP", "Relai"],
-    approveButtonText: ["Continue", "Allow", "Approve", "Run", "Confirm", "Connect"],
-    requireRelaiText: true,
-    requireToolName: false
-  };
+function getConfigPath() {
+  return process.env.REL_AI_MCP_CONFIG || path.join(os.homedir(), ".rel-ai-mcp", "config.json");
 }
 
 function makeDefaultFastTaskConfig() {
@@ -51,7 +45,6 @@ function makeDefaultConfig() {
     toolMode: "chatgpt_local_repo",
     trustedLocalAgent: true,
     dashboardEnabled: true,
-    chatgptRequestHelper: makeDefaultChatgptRequestHelperConfig(),
     productUx: {
       dashboardRefreshSeconds: 5,
       liveLogPollSeconds: 3,
@@ -65,6 +58,7 @@ function makeDefaultConfig() {
       connectorProbeTimeoutMs: 5000,
       enableReleaseEndpoints: true
     },
+    autoApproveAppRequests: makeDefaultAutoApproveConfig(),
     workspaces: {}
   };
 }
@@ -117,9 +111,9 @@ function normalizeConfig(config) {
   next.dashboardEnabled = next.dashboardEnabled !== false;
   next.maxOutputBytes = positiveNumber(next.maxOutputBytes, base.maxOutputBytes);
   next.maxIndexFiles = positiveNumber(next.maxIndexFiles, base.maxIndexFiles);
-  next.chatgptRequestHelper = normalizeChatgptRequestHelper(input.chatgptRequestHelper || input.requestHelper || base.chatgptRequestHelper);
   next.productUx = { ...base.productUx, ...(input.productUx || {}) };
   next.release = { ...base.release, ...(input.release || {}) };
+  next.autoApproveAppRequests = normalizeAutoApproveConfig(input.autoApproveAppRequests || input.autoApprove || base.autoApproveAppRequests);
   next.release.minimumReadinessScore = clampNumber(next.release.minimumReadinessScore, 0, 100, base.release.minimumReadinessScore);
   next.release.connectorProbeTimeoutMs = clampNumber(next.release.connectorProbeTimeoutMs, 500, 60000, base.release.connectorProbeTimeoutMs);
 
@@ -142,25 +136,6 @@ function normalizeWorkspace(workspace) {
   };
 }
 
-function normalizeChatgptRequestHelper(value) {
-  const base = makeDefaultChatgptRequestHelperConfig();
-  const raw = value && typeof value === "object" ? value : {};
-  return {
-    ...base,
-    ...raw,
-    enabled: raw.enabled == null ? base.enabled : Boolean(raw.enabled),
-    autoApprove: raw.autoApprove == null ? base.autoApprove : Boolean(raw.autoApprove),
-    showOverlay: raw.showOverlay == null ? base.showOverlay : Boolean(raw.showOverlay),
-    cooldownMs: clampNumber(raw.cooldownMs, 250, 60000, base.cooldownMs),
-    maxClicksPerMinute: clampNumber(raw.maxClicksPerMinute, 1, 120, base.maxClicksPerMinute),
-    allowedToolNames: normalizeStringList(raw.allowedToolNames || base.allowedToolNames),
-    allowedAppText: normalizeStringList(raw.allowedAppText || base.allowedAppText),
-    approveButtonText: normalizeStringList(raw.approveButtonText || base.approveButtonText),
-    requireRelaiText: raw.requireRelaiText == null ? base.requireRelaiText : Boolean(raw.requireRelaiText),
-    requireToolName: raw.requireToolName == null ? base.requireToolName : Boolean(raw.requireToolName)
-  };
-}
-
 function normalizeFastTask(value) {
   const base = makeDefaultFastTaskConfig();
   const raw = value && typeof value === "object" ? value : {};
@@ -173,6 +148,19 @@ function normalizeFastTask(value) {
     maxIndexFiles: clampNumber(raw.maxIndexFiles, 1, 100000, base.maxIndexFiles),
     includeRoots: normalizeStringList(raw.includeRoots || raw.includePaths || base.includeRoots),
     excludePaths: normalizeStringList(raw.excludePaths || base.excludePaths)
+  };
+}
+
+function normalizeAutoApproveConfig(value) {
+  const base = makeDefaultAutoApproveConfig();
+  const raw = value && typeof value === "object" ? value : {};
+  return {
+    ...base,
+    ...raw,
+    enabled: raw.enabled == null ? base.enabled : Boolean(raw.enabled),
+    requireUserscriptToggle: raw.requireUserscriptToggle == null ? base.requireUserscriptToggle : Boolean(raw.requireUserscriptToggle),
+    pollMs: clampNumber(raw.pollMs, 500, 10000, base.pollMs),
+    warningAccepted: raw.warningAccepted == null ? base.warningAccepted : Boolean(raw.warningAccepted)
   };
 }
 
@@ -217,7 +205,6 @@ function publicConfigSummary(config) {
     maxIndexFiles: config.maxIndexFiles,
     toolMode: normalizeToolMode(config.toolMode || "chatgpt_local_repo"),
     trustedLocalAgent: true,
-    chatgptRequestHelper: normalizeChatgptRequestHelper(config.chatgptRequestHelper),
     localRepoBridge: {
       mode: "trusted",
       visibleTools: BRIDGE_TOOLS,
@@ -229,6 +216,7 @@ function publicConfigSummary(config) {
     dashboardEnabled: Boolean(config.dashboardEnabled),
     productUx: config.productUx,
     release: config.release,
+    autoApproveAppRequests: normalizeAutoApproveConfig(config.autoApproveAppRequests),
     workspaces: Object.entries(config.workspaces || {}).map(([alias, entry]) => {
       const discovered = safeDiscoverCommands(entry.path);
       return {
@@ -268,10 +256,13 @@ function clampNumber(value, min, max, fallback) {
   return Math.min(Math.max(Math.floor(n), min), max);
 }
 
-module.exports = { makeDefaultChatgptRequestHelperConfig, normalizeChatgptRequestHelper,
+module.exports = {
   getConfigPath,
   makeDefaultConfig,
   makeDefaultFastTaskConfig,
+  normalizeFastTask,
+  makeDefaultAutoApproveConfig,
+  normalizeAutoApproveConfig,
   readConfig,
   writeConfig,
   normalizeConfig,

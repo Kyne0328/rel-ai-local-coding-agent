@@ -149,9 +149,7 @@ function relaiWrite(workspace, config, args = {}) {
 
 async function relaiVerify(workspace, config, args = {}) {
   const level = String(args.level || "standard").toLowerCase();
-  const commands = Array.isArray(args.commands) && args.commands.length
-    ? args.commands.map(String)
-    : detectVerifyCommands(workspace.path, level);
+  const commands = normalizeVerifyCommands(args, workspace.path, level);
   if (commands.length === 0) return { ok: true, workspace: workspace.alias, level, commands: [], results: [], message: "No verification commands detected." };
   const stopOnFailure = args.stopOnFailure !== false;
   const results = [];
@@ -160,7 +158,7 @@ async function relaiVerify(workspace, config, args = {}) {
       cwd: workspace.path,
       shell: true,
       commandString: command,
-      timeout: clampNumber(args.timeoutMs, 1000, 30 * 60 * 1000, 120000)
+      timeout: clampNumber(args.timeoutMs, 1000, 24 * 60 * 60 * 1000, 120000)
     }, config);
     const summary = { command, ...summarizeCommand(result) };
     results.push(summary);
@@ -177,7 +175,7 @@ async function relaiBrowser(workspace, config, args = {}) {
       cwd: workspace.path,
       shell: true,
       commandString: command,
-      timeout: clampNumber(args.timeoutMs, 1000, 30 * 60 * 1000, 120000)
+      timeout: clampNumber(args.timeoutMs, 1000, 24 * 60 * 60 * 1000, 120000)
     }, config);
     return { ok: result.exitCode === 0, workspace: workspace.alias, mode: "command", command, ...summarizeCommand(result) };
   }
@@ -264,6 +262,25 @@ function projectHints(manifests) {
   if (manifests.includes("go.mod")) hints.push("Go project");
   if (manifests.includes("pubspec.yaml")) hints.push("Flutter/Dart project");
   return hints;
+}
+
+function normalizeVerifyCommands(args, root, level) {
+  const explicit = [];
+  if (typeof args.command === "string" && args.command.trim()) explicit.push(args.command.trim());
+  if (Array.isArray(args.commands)) {
+    for (const item of args.commands) {
+      const command = String(item || "").trim();
+      if (command) explicit.push(command);
+    }
+  }
+  if (typeof args.commandsText === "string" && args.commandsText.trim()) {
+    for (const line of args.commandsText.split(/\r?\n/)) {
+      const command = line.trim();
+      if (command && !command.startsWith("#")) explicit.push(command);
+    }
+  }
+  if (explicit.length) return [...new Set(explicit)];
+  return detectVerifyCommands(root, level);
 }
 
 function detectVerifyCommands(root, level) {
