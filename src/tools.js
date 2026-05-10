@@ -23,9 +23,9 @@ const toolSchemas = [
   tool("relai_read", "Read Local Repo Paths", "Batch-read files or directory summaries from the workspace. Mirrors reading files from an uploaded zip.", {
     workspace: stringProp(), paths: arrayProp("string", 1, 100), maxBytes: numberProp(1000, 10485760), maxEntries: numberProp(1, 20000)
   }, ["workspace", "paths"]),
-  tool("relai_write", "Write Local Repo Files", "Deterministic structured writes. The only normal edit path. Supports writeFile, replaceExact, replaceFirst, replaceAll, insertBefore, insertAfter, replaceBetween, deleteBetween, and replaceFunction.", {
-    workspace: stringProp(), edits: arrayProp("object", 1, 200), dryRun: boolProp()
-  }, ["workspace", "edits"]),
+  tool("relai_write", "Write Local Repo File", "Full-file write only. Read the target with relai_read, send the complete corrected file content here, then verify and inspect the diff. Edit arrays, find/replace operations, patches, and generated scripts are not supported.", {
+    workspace: stringProp(), path: stringProp(), content: stringProp(), dryRun: boolProp()
+  }, ["workspace", "path", "content"]),
   tool("relai_verify", "Verify Local Repo", "Auto-detect and run local verification commands such as syntax checks, tests, and builds.", {
     workspace: stringProp(), level: stringProp(), commands: arrayProp("string", 0, 50), timeoutMs: numberProp(1000, 1800000), stopOnFailure: boolProp()
   }, ["workspace"]),

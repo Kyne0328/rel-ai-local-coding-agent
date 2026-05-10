@@ -4,7 +4,6 @@ const { runProcess, summarizeCommand } = require("./process");
 const {
   collectTextFiles,
   collectOptionsFromWorkspace,
-  readTextFileSafe,
   writeTextFileSafe,
   resolveSafePath,
   fileSha256,
@@ -83,36 +82,68 @@ function relaiRead(workspace, args = {}) {
 }
 
 function relaiWrite(workspace, config, args = {}) {
-  const edits = Array.isArray(args.edits) ? args.edits : [];
-  if (edits.length === 0) throw new Error("edits must contain at least one edit.");
+  if (Array.isArray(args.edits) || args.find || args.replace || args.type || args.op || args.expectedSha256) {
+    throw new Error("relai_write only supports full-file writes: { workspace, path, content }. Use relai_read to load the file, modify the complete content, then call relai_write. Edit arrays, find/replace operations, patch scripts, and expectedSha256 are not supported in the bridge workflow.");
+  }
+  const relativePath = String(args.path || "").trim();
+  if (!relativePath) throw new Error("relai_write requires path and content. Expected: { workspace, path, content }.");
+  if (typeof args.content !== "string") throw new Error("relai_write requires content as a string containing the entire target file. Expected: { workspace, path, content }.");
+
   const dryRun = Boolean(args.dryRun);
   const operationId = makeOperationId();
-  const results = [];
-  for (let i = 0; i < edits.length; i += 1) {
-    results.push(applyWriteEdit(workspace, edits[i] || {}, i, { dryRun, operationId }));
+  const safe = resolveSafePath(workspace.path, relativePath);
+  const exists = fs.existsSync(safe.absolutePath);
+  const oldContent = exists ? fs.readFileSync(safe.absolutePath, "utf8") : "";
+  const oldSha256 = exists ? fileSha256(workspace.path, safe.relativePath) : null;
+  const newContent = args.content;
+  const changed = newContent !== oldContent;
+  const newSha256 = sha256Text(newContent);
+
+  const result = {
+    ok: true,
+    path: safe.relativePath,
+    operation: "fullFileWrite",
+    changed,
+    oldSha256,
+    newSha256: changed ? newSha256 : oldSha256,
+    ...(dryRun ? { dryRun: true } : {})
+  };
+
+  if (changed && !dryRun) {
+    const write = writeTextFileSafe(workspace.path, safe.relativePath, newContent);
+    const verifiedSha256 = fileSha256(workspace.path, safe.relativePath);
+    if (verifiedSha256 !== write.sha256) {
+      throw new Error(`Fresh read verification failed for ${safe.relativePath}. Expected ${write.sha256}, got ${verifiedSha256 || "missing"}.`);
+    }
+    result.newSha256 = write.sha256;
+    result.verified = write.verified === true;
+    result.bytes = write.bytes;
   }
+
   const summary = {
-    ok: results.every((item) => item.ok !== false),
+    ok: true,
     dryRun,
     workspace: workspace.alias,
     operationId,
-    changedFiles: results.filter((item) => item.changed).map((item) => item.path),
-    results
+    changedFiles: changed ? [safe.relativePath] : [],
+    result
   };
+
   appendOperation(config, workspace, {
     id: operationId,
     type: dryRun ? "write:dryRun" : "write",
-    ok: summary.ok,
+    ok: true,
     paths: summary.changedFiles,
-    results: results.map((item) => ({
-      path: item.path,
-      op: item.op,
-      changed: item.changed,
-      oldSha256: item.oldSha256,
-      newSha256: item.newSha256,
-      verified: item.verified === true || item.dryRun === true
-    }))
+    results: [{
+      path: safe.relativePath,
+      operation: "fullFileWrite",
+      changed,
+      oldSha256,
+      newSha256: result.newSha256,
+      verified: dryRun || result.verified === true || !changed
+    }]
   });
+
   return summary;
 }
 
@@ -197,111 +228,6 @@ async function relaiReset(workspace, config, args = {}) {
   return { ok: reset.exitCode === 0 && (!clean || clean.exitCode === 0), workspace: workspace.alias, mode: "hard", reset: summarizeCommand(reset), ...(clean ? { clean: summarizeCommand(clean) } : {}) };
 }
 
-function applyWriteEdit(workspace, edit, index, options) {
-  const op = normalizeOp(edit.op || edit.type);
-  const relativePath = String(edit.file || edit.path || "").trim();
-  if (!relativePath) throw new Error(`edits[${index}].file is required.`);
-  const safe = resolveSafePath(workspace.path, relativePath);
-  const exists = fs.existsSync(safe.absolutePath);
-  const oldContent = exists ? readTextFileSafe(workspace.path, safe.relativePath) : "";
-  const oldSha256 = exists ? fileSha256(workspace.path, safe.relativePath) : null;
-  if (edit.expectedSha256 && edit.expectedSha256 !== oldSha256) {
-    throw new Error(`SHA mismatch for ${safe.relativePath}. Expected ${edit.expectedSha256}, got ${oldSha256 || "missing"}.`);
-  }
-  const newContent = transformContent(oldContent, edit, op, index);
-  const changed = newContent !== oldContent;
-  if (!changed) return { ok: true, path: safe.relativePath, op, changed: false, oldSha256, newSha256: oldSha256 };
-  if (options.dryRun) return { ok: true, path: safe.relativePath, op, changed: true, dryRun: true, oldSha256, newSha256: sha256Text(newContent) };
-  const write = writeTextFileSafe(workspace.path, safe.relativePath, newContent, { expectedSha256: oldSha256 || undefined });
-  const verifiedSha256 = fileSha256(workspace.path, safe.relativePath);
-  if (verifiedSha256 !== write.sha256) {
-    throw new Error(`Fresh read verification failed for ${safe.relativePath}. Expected ${write.sha256}, got ${verifiedSha256 || "missing"}.`);
-  }
-  return { ok: true, path: safe.relativePath, op, changed: true, oldSha256, newSha256: write.sha256, verified: write.verified === true, bytes: write.bytes };
-}
-
-function transformContent(content, edit, op, index) {
-  switch (op) {
-    case "writeFile":
-      return String(edit.content ?? edit.text ?? "");
-    case "replaceExact":
-      return replaceExact(content, required(edit.old ?? edit.text, index, "old"), String(edit.new ?? ""), edit, false);
-    case "replaceFirst":
-      return replaceExact(content, required(edit.old ?? edit.text, index, "old"), String(edit.new ?? ""), { ...edit, occurrence: 1 }, false);
-    case "replaceAll":
-      return replaceExact(content, required(edit.old ?? edit.text, index, "old"), String(edit.new ?? ""), edit, true);
-    case "insertBefore":
-      return insertRelative(content, required(edit.anchor, index, "anchor"), required(edit.text ?? edit.new, index, "text"), edit, "before");
-    case "insertAfter":
-      return insertRelative(content, required(edit.anchor, index, "anchor"), required(edit.text ?? edit.new, index, "text"), edit, "after");
-    case "replaceBetween":
-      return replaceBetween(content, required(edit.start, index, "start"), required(edit.end, index, "end"), String(edit.new ?? edit.text ?? ""), edit, false);
-    case "deleteBetween":
-      return replaceBetween(content, required(edit.start, index, "start"), required(edit.end, index, "end"), "", edit, true);
-    case "replaceFunction":
-      return replaceFunction(content, required(edit.functionName || edit.name, index, "functionName"), required(edit.text ?? edit.new, index, "text"));
-    default:
-      throw new Error(`Unsupported relai_write operation at edits[${index}]: ${op}`);
-  }
-}
-
-function replaceExact(content, oldText, newText, edit, replaceAll) {
-  const matches = findAll(content, oldText);
-  if (matches.length === 0) throw new Error("replace operation found no matches.");
-  if (replaceAll || edit.count === "all") return content.split(oldText).join(newText);
-  const occurrence = edit.occurrence == null ? null : Number(edit.occurrence);
-  if (occurrence != null) {
-    if (!Number.isInteger(occurrence) || occurrence < 1 || occurrence > matches.length) throw new Error(`Invalid occurrence ${edit.occurrence}; found ${matches.length} match(es).`);
-    const pos = matches[occurrence - 1];
-    return content.slice(0, pos) + newText + content.slice(pos + oldText.length);
-  }
-  if (matches.length !== 1) throw new Error(`replace operation is ambiguous: found ${matches.length} matches. Use occurrence or replaceAll.`);
-  const pos = matches[0];
-  return content.slice(0, pos) + newText + content.slice(pos + oldText.length);
-}
-
-function insertRelative(content, anchor, text, edit, where) {
-  const matches = findAll(content, anchor);
-  if (matches.length === 0) throw new Error(`insert_${where} found no anchor matches.`);
-  const occurrence = edit.occurrence == null ? 1 : Number(edit.occurrence);
-  if (!Number.isInteger(occurrence) || occurrence < 1 || occurrence > matches.length) throw new Error(`Invalid occurrence ${edit.occurrence || 1}; found ${matches.length} anchor match(es).`);
-  const base = matches[occurrence - 1];
-  const pos = where === "before" ? base : base + anchor.length;
-  return content.slice(0, pos) + text + content.slice(pos);
-}
-
-function replaceBetween(content, start, end, text, edit, deleteMarkers) {
-  const startMatches = findAll(content, start);
-  if (startMatches.length === 0) throw new Error("replaceBetween found no start marker.");
-  const occurrence = edit.occurrence == null ? 1 : Number(edit.occurrence);
-  if (!Number.isInteger(occurrence) || occurrence < 1 || occurrence > startMatches.length) throw new Error(`Invalid occurrence ${edit.occurrence || 1}; found ${startMatches.length} start marker match(es).`);
-  const startPos = startMatches[occurrence - 1];
-  const endPos = content.indexOf(end, startPos + start.length);
-  if (endPos === -1) throw new Error("replaceBetween found no end marker after selected start marker.");
-  const from = deleteMarkers ? startPos : startPos + start.length;
-  const to = deleteMarkers ? endPos + end.length : endPos;
-  return content.slice(0, from) + text + content.slice(to);
-}
-
-function replaceFunction(content, functionName, text) {
-  const escaped = escapeRegExp(functionName);
-  const patterns = [
-    new RegExp(`async\\s+function\\s+${escaped}\\s*\\([^)]*\\)\\s*\\{`),
-    new RegExp(`function\\s+${escaped}\\s*\\([^)]*\\)\\s*\\{`),
-    new RegExp(`const\\s+${escaped}\\s*=\\s*(?:async\\s*)?\\([^)]*\\)\\s*=>\\s*\\{`)
-  ];
-  for (const pattern of patterns) {
-    const match = pattern.exec(content);
-    if (!match) continue;
-    const start = match.index;
-    const open = content.indexOf("{", start);
-    const end = findMatchingBrace(content, open);
-    if (end === -1) throw new Error(`Could not find end of function ${functionName}.`);
-    return content.slice(0, start) + text + content.slice(end + 1);
-  }
-  throw new Error(`Function not found: ${functionName}`);
-}
-
 function readDirectory(workspace, relativePath, args) {
   const maxEntries = clampNumber(args.maxEntries, 1, 20000, 1000);
   const prefix = relativePath === "." ? "" : relativePath;
@@ -370,66 +296,6 @@ function detectVerifyCommands(root, level) {
   if (fs.existsSync(path.join(root, "go.mod"))) commands.push("go test ./...");
   if (fs.existsSync(path.join(root, "Cargo.toml"))) commands.push("cargo test");
   return [...new Set(commands)];
-}
-
-function normalizeOp(op) {
-  const raw = String(op || "").trim();
-  const map = {
-    write_file: "writeFile",
-    replace_exact: "replaceExact",
-    replace_first: "replaceFirst",
-    replace_all: "replaceAll",
-    insert_before: "insertBefore",
-    insert_after: "insertAfter",
-    replace_between: "replaceBetween",
-    delete_between: "deleteBetween",
-    replace_function: "replaceFunction"
-  };
-  return map[raw] || raw;
-}
-
-function required(value, index, key) {
-  if (typeof value !== "string" || value.length === 0) throw new Error(`edits[${index}].${key} must be a non-empty string.`);
-  return value;
-}
-
-function findAll(content, needle) {
-  if (!needle) throw new Error("Search text cannot be empty.");
-  const positions = [];
-  let offset = 0;
-  while (offset <= content.length) {
-    const found = content.indexOf(needle, offset);
-    if (found === -1) break;
-    positions.push(found);
-    offset = found + Math.max(needle.length, 1);
-  }
-  return positions;
-}
-
-function findMatchingBrace(content, openIndex) {
-  let depth = 0;
-  let quote = null;
-  let escaped = false;
-  for (let i = openIndex; i < content.length; i += 1) {
-    const ch = content[i];
-    if (quote) {
-      if (escaped) { escaped = false; continue; }
-      if (ch === "\\") { escaped = true; continue; }
-      if (ch === quote) quote = null;
-      continue;
-    }
-    if (ch === '"' || ch === "'" || ch === "`") { quote = ch; continue; }
-    if (ch === "{") depth += 1;
-    if (ch === "}") {
-      depth -= 1;
-      if (depth === 0) return i;
-    }
-  }
-  return -1;
-}
-
-function escapeRegExp(text) {
-  return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function sha256Text(text) {

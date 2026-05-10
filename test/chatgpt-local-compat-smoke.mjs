@@ -72,9 +72,14 @@ try {
   const names = list.result.tools.map((tool) => tool.name);
   if (names.length !== 7) throw new Error(`Expected 7 visible bridge tools, got ${names.length}`);
 
-  send(3, 'tools/call', { name: 'relai_write', arguments: { workspace: 'repo', edits: [{ op: 'writeFile', path: 'tmp-relai-bridge.txt', content: 'bridge write ok\n' }] } });
+  send(3, 'tools/call', { name: 'relai_write', arguments: { workspace: 'repo', path: 'tmp-relai-bridge.txt', content: 'bridge write ok\n' } });
   const write = await waitFor(3);
   if (write.result.isError) throw new Error(`relai_write should be callable in local repo mode: ${write.result.content[0].text}`);
+
+  send(31, 'tools/call', { name: 'relai_write', arguments: { workspace: 'repo', edits: [{ path: 'tmp-relai-bridge.txt', find: 'x', replace: 'y' }] } });
+  const editWrite = await waitFor(31);
+  if (!editWrite.result.isError) throw new Error('relai_write must reject edit-array payloads');
+  if (!/full-file writes/.test(editWrite.result.content[0].text)) throw new Error('relai_write edit rejection should explain full-file writes');
 
   send(4, 'tools/call', { name: 'relai_shell', arguments: { workspace: 'repo', command: 'node --version' } });
   const shell = await waitFor(4);

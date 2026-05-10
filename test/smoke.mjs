@@ -62,7 +62,7 @@ const names = list.result.tools.map((item) => item.name).sort();
 const expected = ['relai_browser', 'relai_diff', 'relai_read', 'relai_repo_snapshot', 'relai_reset', 'relai_verify', 'relai_write'].sort();
 if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error(`Unexpected tool list: ${names.join(', ')}`);
 const writeTool = list.result.tools.find((item) => item.name === 'relai_write');
-if (!writeTool.inputSchema?.properties?.edits) throw new Error('relai_write schema did not expose edits');
+if (!writeTool.inputSchema?.properties?.content || writeTool.inputSchema?.properties?.edits) throw new Error('relai_write schema should expose content and not expose edits');
 
 send({ jsonrpc: '2.0', id: 3, method: 'resources/list', params: {} });
 const resources = await waitFor(3);

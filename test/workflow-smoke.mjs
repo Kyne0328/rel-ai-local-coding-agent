@@ -138,25 +138,20 @@ if (!read.items[0].content.includes('# Smoke')) {
   throw new Error('read failed');
 }
 
-const edit = {
-  op: 'insertAfter',
-  file: 'README.md',
-  anchor: '# Smoke\n',
-  text: '\nUpdated by public workflow smoke.\n'
-};
+const newReadme = '# Smoke\n\nUpdated by public workflow smoke.\n';
 
-call(5, 'relai_write', { workspace: 'smoke', edits: [edit], dryRun: true });
+call(5, 'relai_write', { workspace: 'smoke', path: 'README.md', content: newReadme, dryRun: true });
 const dryWrite = contentOf(await waitFor(5));
 if (!dryWrite.dryRun || !dryWrite.changedFiles.includes('README.md')) {
   throw new Error('dry-run write failed');
 }
 
-call(6, 'relai_write', { workspace: 'smoke', edits: [edit] });
+call(6, 'relai_write', { workspace: 'smoke', path: 'README.md', content: newReadme });
 const written = contentOf(await waitFor(6));
 if (!written.changedFiles.includes('README.md')) {
   throw new Error('write failed');
 }
-if (!written.operationId || !written.results[0].verified) {
+if (!written.operationId || !written.result.verified) {
   throw new Error('write did not return a verified operation id');
 }
 

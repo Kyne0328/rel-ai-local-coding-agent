@@ -12,7 +12,7 @@ relai_repo_snapshot -> relai_read -> relai_write -> relai_verify -> relai_diff -
 | --- | --- |
 | `relai_repo_snapshot` | Return a filtered project snapshot, manifests, discovered commands, and context hints. |
 | `relai_read` | Read focused files or directory summaries. |
-| `relai_write` | Apply deterministic structured edits. This is the only normal edit path. |
+| `relai_write` | Replace one complete file with corrected full-file content. This is the only normal edit path. |
 | `relai_verify` | Run detected or requested verification commands. |
 | `relai_browser` | Run a browser/UI check or fetch a route. |
 | `relai_diff` | Review git status and diff. |

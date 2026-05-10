@@ -160,7 +160,7 @@ function configMigrationPlan(config, args = {}) {
     recommendedActions: [
       "Back up config.json before upgrading.",
       "Run relai_release_readiness after migration.",
-      "Use the single local repo bridge workflow for edits and verification."
+      "Use the single local repo bridge workflow for full-file writes and verification."
     ]
   };
 }
