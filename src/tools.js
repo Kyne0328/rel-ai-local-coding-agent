@@ -1,11 +1,10 @@
 const fs = require("node:fs");
-const { readConfig, resolveWorkspace, publicConfigSummary } = require("./config");
+const { readConfig, resolveWorkspace } = require("./config");
 const { collectTextFiles, collectOptionsFromWorkspace, resolveSafePath } = require("./safety");
-const { readAudit, logAudit } = require("./audit");
+const { logAudit } = require("./audit");
 const { discoverCommands } = require("./commandDiscovery");
 const { summarizeOperations } = require("./journal");
 const { repoSnapshot, relaiRead, relaiWrite, relaiVerify, relaiBrowser, relaiDiff, relaiReset } = require("./localRepoBridge");
-const pkg = require("../package.json");
 
 const BRIDGE_TOOL_NAMES = [
   "relai_repo_snapshot",
@@ -17,12 +16,7 @@ const BRIDGE_TOOL_NAMES = [
   "relai_reset"
 ];
 
-const allToolSchemas = [
-  tool("relai_version", "Version Info", "MCP server version, runtime info, and local bridge capabilities.", {}),
-  tool("relai_config", "Rel.AI MCP Config Summary", "Active config summary: workspace aliases and local bridge settings. No secrets.", {}),
-  tool("relai_audit_tail", "Audit Log Tail", "Recent audit log entries.", { limit: numberProp(1, 1000) }),
-  tool("relai_workspace_list", "Workspace List", "Configured workspace aliases and safe metadata.", {}),
-  tool("relai_workspace_inspect", "Workspace Inspect", "Combined workspace profile and filtered project structure.", { workspace: stringProp(), maxEntries: numberProp(1, 5000) }, ["workspace"]),
+const toolSchemas = [
   tool("relai_repo_snapshot", "Repository Snapshot", "Local repository snapshot: filtered file tree, manifests, discovered commands, and project hints.", {
     workspace: stringProp(), maxEntries: numberProp(1, 20000), includeFiles: boolProp()
   }, ["workspace"]),
@@ -46,12 +40,11 @@ const allToolSchemas = [
   }, ["workspace"])
 ];
 
-const TOOL_NAMES = new Set(allToolSchemas.map((item) => item.name));
+const TOOL_NAMES = new Set(toolSchemas.map((item) => item.name));
 const APPROVAL_GATES = new Set();
-const toolSchemas = getToolSchemas();
 
 function getToolSchemas() {
-  return allToolSchemas.filter((tool) => BRIDGE_TOOL_NAMES.includes(tool.name));
+  return toolSchemas;
 }
 
 function isToolCallable(name) {
@@ -63,7 +56,7 @@ async function callTool(name, args = {}) {
   const started = Date.now();
   try {
     if (!isToolCallable(name)) {
-      throw new Error(`Unknown tool '${name}'. This MCP exposes one bridge workflow only: ${BRIDGE_TOOL_NAMES.join(", ")}.`);
+      throw new Error(`Unknown tool '${name}'. This MCP exposes one bridge workflow only: ${BRIDGE_TOOL_NAMES.join(", ")}. Restart/reconnect ChatGPT if it still shows removed tools.`);
     }
     const value = await dispatchTool(config, name, args || {});
     logAudit(config, { tool: name, ok: true, workspace: args && args.workspace, ms: Date.now() - started });
@@ -76,16 +69,6 @@ async function callTool(name, args = {}) {
 
 async function dispatchTool(config, name, args) {
   switch (name) {
-    case "relai_version":
-      return versionInfo(config);
-    case "relai_config":
-      return publicConfigSummary(config);
-    case "relai_audit_tail":
-      return readAudit(config, { limit: args.limit });
-    case "relai_workspace_list":
-      return workspaceList(config);
-    case "relai_workspace_inspect":
-      return workspaceInspect(config, args);
     case "relai_repo_snapshot":
       return withWorkspace(config, args, (workspace) => repoSnapshot(workspace, config, args));
     case "relai_read":
@@ -109,36 +92,6 @@ async function withWorkspace(config, request, fn) {
   const alias = request && request.workspace;
   const workspace = resolveWorkspace(config, alias);
   return fn(workspace);
-}
-
-function versionInfo() {
-  return {
-    name: pkg.name,
-    version: pkg.version,
-    node: process.version,
-    pid: process.pid,
-    transports: ["stdio", "streamable-http", "sse"],
-    toolCount: allToolSchemas.length,
-    bridgeToolCount: BRIDGE_TOOL_NAMES.length,
-    capabilities: [
-      "single local repo bridge workflow",
-      "snapshot -> read -> write -> verify -> diff -> reset",
-      "deterministic structured file writes",
-      "filtered repository snapshots",
-      "auto-detected verification commands",
-      "git diff review and rollback"
-    ],
-    removedWorkflows: [
-      "unified patch tools",
-      "generated patch scripts",
-      "ad-hoc shell tool",
-      "task runner/worktree orchestration",
-      "multi-agent scheduler",
-      "approval-gated legacy flows",
-      "Docker workflow runner",
-      "PR/CI repair workflows"
-    ]
-  };
 }
 
 function workspaceList(config) {
@@ -252,4 +205,4 @@ function boolProp() { return { type: "boolean" }; }
 function numberProp(min, max) { return { type: "number", minimum: min, maximum: max }; }
 function arrayProp(type, minItems, maxItems) { return { type: "array", items: { type }, minItems, maxItems }; }
 
-module.exports = { toolSchemas, allToolSchemas, getToolSchemas, APPROVAL_GATES, callTool, workspaceList, workspaceInspect, workspaceTree, workspaceProfile };
+module.exports = { toolSchemas, allToolSchemas: toolSchemas, getToolSchemas, APPROVAL_GATES, BRIDGE_TOOL_NAMES, callTool, workspaceList, workspaceInspect, workspaceTree, workspaceProfile };

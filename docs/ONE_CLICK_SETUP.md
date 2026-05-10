@@ -159,7 +159,7 @@ After secret rotation, update the ChatGPT app URL and keep ChatGPT authenticatio
 Use this after connecting the app in ChatGPT:
 
 ```text
-Use Rel.AI MCP. Show relai_version and relai_config. Do not read project files yet.
+Use Rel.AI MCP. Call relai_repo_snapshot for the configured workspace. Do not modify files yet.
 ```
 
 Then test a workspace read:
@@ -188,16 +188,15 @@ Use this exact diagnostic prompt:
 
 ```text
 Use the Rel.AI MCP connector tools directly.
-First call relai_workspace_list.
-Then call relai_workspace_inspect with workspace "jjclover" and maxEntries 200.
+Call relai_repo_snapshot with workspace "jjclover" and maxEntries 200.
 Do not use file search. Do not modify files.
+If ChatGPT still shows removed tools such as relai_workspace_list, relai_read_files, relai_run_command, or relai_apply_patch, restart/reconnect the MCP server and refresh the connector.
 ```
 
 Expected result:
 
-- `relai_workspace_list` shows the configured aliases and works under the normal `pr` profile.
-- `relai_workspace_inspect` returns the project profile and safe file tree and works under the normal `pr` profile.
-- If `jjclover` is not configured, the response shows the available aliases and the command to add it.
+- `relai_repo_snapshot` returns the project profile, filtered tree, discovered commands, and workspace context.
+- If `jjclover` is not configured, the response shows a workspace resolution error; add the alias locally and restart the MCP server.
 
 Add a missing workspace alias with:
 

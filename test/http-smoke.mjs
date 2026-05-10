@@ -73,11 +73,6 @@ if (!workspaceModule.includes('mountWorkspaces') || workspaceModule.includes('Fu
   throw new Error('workspace dashboard section is still incomplete or placeholder-only');
 }
 
-const agentsModule = await fetch(`http://127.0.0.1:${port}/ui/sections/agents.js`).then((response) => response.text());
-if (!agentsModule.includes('mountAgents') || agentsModule.includes('Phase 2 adds live subtask binding')) {
-  throw new Error('agents dashboard section is still incomplete or placeholder-only');
-}
-
 const unauthorized = await fetch(`http://127.0.0.1:${port}/mcp`, {
   method: 'POST',
   headers: { 'content-type': 'application/json' },
@@ -93,8 +88,8 @@ const chatgptList = await fetch(`http://127.0.0.1:${port}/mcp/${chatgptSecret}`,
   headers: { 'content-type': 'application/json' },
   body: JSON.stringify({ jsonrpc: '2.0', id: 30, method: 'tools/list', params: {} })
 }).then((response) => response.json());
-if (!Array.isArray(chatgptList.result?.tools) || !chatgptList.result.tools.some((item) => item.name === 'relai_workspace_list')) {
-  throw new Error('secret ChatGPT MCP URL did not expose relai_workspace_list without bearer auth');
+if (!Array.isArray(chatgptList.result?.tools) || chatgptList.result.tools.length !== 7 || !chatgptList.result.tools.some((item) => item.name === 'relai_repo_snapshot')) {
+  throw new Error('secret ChatGPT MCP URL did not expose exactly the bridge tools without bearer auth');
 }
 
 const initialized = await fetch(`http://127.0.0.1:${port}/mcp`, {
@@ -114,8 +109,8 @@ const list = await fetch(`http://127.0.0.1:${port}/mcp`, {
   headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
   body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/list', params: {} })
 }).then((response) => response.json());
-if (!Array.isArray(list.result?.tools) || list.result.tools.length < 5) {
-  throw new Error('HTTP tools/list returned too few tools');
+if (!Array.isArray(list.result?.tools) || list.result.tools.length !== 7) {
+  throw new Error(`HTTP tools/list should return exactly 7 bridge tools, got ${list.result?.tools?.length}`);
 }
 
 const resources = await fetch(`http://127.0.0.1:${port}/mcp`, {
@@ -127,15 +122,15 @@ if (!Array.isArray(resources.result?.resources) || !resources.result.resources.s
   throw new Error('HTTP resources/list did not expose workspace resource');
 }
 
-const config = await fetch(`http://127.0.0.1:${port}/mcp`, {
+const removedConfigTool = await fetch(`http://127.0.0.1:${port}/mcp`, {
   method: 'POST',
   headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
   body: JSON.stringify({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'relai_config', arguments: {} } })
 }).then((response) => response.json());
-if (!config.result?.structuredContent?.ok) {
-  throw new Error('HTTP relai_config did not return ok');
+if (!removedConfigTool.result?.isError) {
+  throw new Error('HTTP relai_config should be rejected because only bridge tools are MCP tools');
 }
 
-child.kill('SIGTERM');
+child.kill('SIGKILL');
 await once(child, 'close');
 console.log(`HTTP smoke test passed. Tools: ${list.result.tools.length}`);

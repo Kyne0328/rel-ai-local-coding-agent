@@ -86,6 +86,17 @@ try {
   if (!patch.result.isError) throw new Error('removed relai_apply_patch should be rejected');
   if (!/Unknown tool/.test(patch.result.content[0].text)) throw new Error('removed patch tool should return Unknown tool');
 
+
+  send(6, 'tools/call', { name: 'relai_read_files', arguments: { workspace: 'repo', paths: ['package.json'] } });
+  const readFiles = await waitFor(6);
+  if (!readFiles.result.isError) throw new Error('removed relai_read_files should be rejected');
+  if (!/Unknown tool/.test(readFiles.result.content[0].text)) throw new Error('removed read_files tool should return Unknown tool');
+
+  send(7, 'tools/call', { name: 'relai_version', arguments: {} });
+  const version = await waitFor(7);
+  if (!version.result.isError) throw new Error('removed relai_version MCP tool should be rejected; use /health instead');
+  if (!/Unknown tool/.test(version.result.content[0].text)) throw new Error('removed version tool should return Unknown tool');
+
   fs.rmSync(path.join(root, 'tmp-relai-bridge.txt'), { force: true });
 
   console.log('ChatGPT local single-workflow smoke test passed; removed tools are rejected.');

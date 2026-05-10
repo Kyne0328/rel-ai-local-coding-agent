@@ -43,7 +43,7 @@ async function handleMessage(message) {
       case "initialize":
         return result(message.id, {
           protocolVersion: (message.params && message.params.protocolVersion) || "2025-06-18",
-          capabilities: { tools: { listChanged: false }, resources: { subscribe: false, listChanged: false } },
+          capabilities: { tools: { listChanged: true }, resources: { subscribe: false, listChanged: true } },
           serverInfo: { name: pkg.name, version: pkg.version }
         });
       case "ping":
