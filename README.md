@@ -372,13 +372,9 @@ If a multiline source file is accidentally collapsed into one long line, the wri
 
 ---
 
-## CI compatibility
+## Compatibility test aliases
 
-<p align="center">
-  <img src="docs/images/github-ci-test-compat-section.png" alt="GitHub Actions compatibility script failure" width="900">
-</p>
-
-The package keeps CI aliases that older workflows may call:
+The package keeps the CI aliases that existing GitHub Actions workflows may call:
 
 ```bash
 npm run test:compat
@@ -386,7 +382,7 @@ npm run test:loose-patch
 npm run test:public-workflow
 ```
 
-`test:loose-patch` is now a compatibility guard that confirms the removed patch workflow stays removed. `test:public-workflow` runs the current bridge workflow smoke test.
+`test:loose-patch` is now a compatibility guard that confirms the removed patch workflow stays removed. `test:public-workflow` runs the current bridge workflow smoke test. No CI screenshot belongs in the README; the README should show the product, not a failed run.
 
 ---
 
