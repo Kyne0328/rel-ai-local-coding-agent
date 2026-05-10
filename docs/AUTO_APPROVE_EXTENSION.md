@@ -56,3 +56,7 @@ It requires Rel.AI MCP card text and a Deny/Cancel-style button nearby, so ordin
 ## Warning
 
 This can authorize local repository reads, full-file writes, verification commands, browser checks, diffs, or resets without a manual click. Use only on your own trusted machine and disable it when done.
+
+## Approval button coverage
+
+The extension recognizes approval cards for every normal Rel.AI bridge tool: repository snapshot, read, write/edit file, verify, browser/UI check, diff review, and reset/rollback actions such as `Reset Workspace`. It first identifies the small Rel.AI MCP approval card, then clicks only the primary non-negative action button inside that card.

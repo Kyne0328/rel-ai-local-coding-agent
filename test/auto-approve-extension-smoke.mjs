@@ -35,7 +35,11 @@ assert.ok(manifest.permissions.includes('scripting'));
 const content = readFileSync(path.join(extDir, 'content.js'), 'utf8');
 assert.match(content, /edit file/);
 assert.match(content, /read local repo paths/);
-assert.match(content, /countButtons\(node\) > 8/);
+assert.match(content, /reset workspace/);
+assert.match(content, /reset local repo changes/);
+assert.match(content, /snapshot workspace/);
+assert.match(content, /isPrimaryButton/);
+assert.match(content, /visibleButtons.length > 8/);
 assert.doesNotMatch(content, /'edit',/);
 assert.doesNotThrow(() => new Function(content));
 
