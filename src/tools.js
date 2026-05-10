@@ -23,9 +23,9 @@ const toolSchemas = [
   tool("relai_read", "Read Local Repo Paths", "Batch-read files or directory summaries from the workspace. Mirrors reading files from an uploaded zip.", {
     workspace: stringProp(), paths: arrayProp("string", 1, 100), maxBytes: numberProp(1000, 10485760), maxEntries: numberProp(1, 20000)
   }, ["workspace", "paths"]),
-  tool("relai_write", "Write Local Repo File", "Full-file write only. Read the target with relai_read, send the complete corrected file content here, then verify and inspect the diff. Edit arrays, find/replace operations, patches, and generated scripts are not supported.", {
-    workspace: stringProp(), path: stringProp(), content: stringProp(), dryRun: boolProp()
-  }, ["workspace", "path", "content"]),
+  tool("relai_write", "Write Local Repo File", "Full-file write only. Direct mode: pass { workspace, path, content }. For large files that ChatGPT may block, use the same tool in staged mode: start with { workspace, stage: 'start', path, content }, append chunks with { workspace, stage: 'append', writeId, content }, then commit with { workspace, stage: 'commit', writeId }. Edit arrays, find/replace operations, patches, and generated scripts are not supported.", {
+    workspace: stringProp(), path: stringProp(), content: stringProp(), dryRun: boolProp(), stage: stringProp(), writeId: stringProp()
+  }, ["workspace"]),
   tool("relai_verify", "Verify Local Repo", "Run verification without command whitelists. If commands are provided, Rel.AI runs exactly those shell commands. If omitted, Rel.AI auto-detects sensible validation commands for the workspace.", {
     workspace: stringProp(),
     level: stringProp(),

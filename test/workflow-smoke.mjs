@@ -155,6 +155,19 @@ if (!written.operationId || !written.result.verified) {
   throw new Error('write did not return a verified operation id');
 }
 
+const stagedContent = '# Smoke\n\nUpdated through staged full-file write.\n';
+call(62, 'relai_write', { workspace: 'smoke', stage: 'start', path: 'README.md', content: stagedContent.slice(0, 12) });
+const stagedStart = contentOf(await waitFor(62));
+if (!stagedStart.writeId) throw new Error('staged write did not return writeId');
+call(63, 'relai_write', { workspace: 'smoke', stage: 'append', writeId: stagedStart.writeId, content: stagedContent.slice(12) });
+const stagedAppend = contentOf(await waitFor(63));
+if (stagedAppend.chunks !== 2) throw new Error('staged append did not record second chunk');
+call(64, 'relai_write', { workspace: 'smoke', stage: 'commit', writeId: stagedStart.writeId });
+const stagedCommit = contentOf(await waitFor(64));
+if (!stagedCommit.staged || !stagedCommit.changedFiles.includes('README.md')) {
+  throw new Error('staged commit failed');
+}
+
 call(61, 'relai_repo_snapshot', { workspace: 'smoke', maxEntries: 100, includeFiles: false, journalLimit: 5 });
 const postWriteSnapshot = contentOf(await waitFor(61));
 if (!postWriteSnapshot.operationJournal || !postWriteSnapshot.operationJournal.recent.some((item) => item.id === written.operationId)) {
@@ -173,8 +186,8 @@ if (!verify.commands.includes('npm run check')) {
 
 call(8, 'relai_diff', { workspace: 'smoke' });
 const diff = contentOf(await waitFor(8));
-if (!diff.diff.includes('Updated by public workflow smoke')) {
-  throw new Error('diff missing edit');
+if (!diff.diff.includes('Updated through staged full-file write')) {
+  throw new Error('diff missing staged edit');
 }
 
 call(9, 'relai_reset', { workspace: 'smoke', paths: ['README.md'] });

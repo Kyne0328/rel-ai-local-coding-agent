@@ -13,7 +13,7 @@ The MCP has one normal workflow:
 
 Removed workflows are not hidden fallbacks; they are removed from the MCP package. The server should not retry malformed unified diffs, generate patch scripts, run compressed shell commands, or switch to ad-hoc Python one-liners for repo edits.
 
-`relai_write` supports only full-file writes with `{ workspace, path, content }`. It does not support edit arrays, find/replace payloads, unified patches, generated scripts, or Python one-liners.
+`relai_write` supports only full-file writes. Use direct `{ workspace, path, content }` for normal files, or staged chunks through the same tool for large files: `{ workspace, stage: "start", path, content }`, `{ workspace, stage: "append", writeId, content }`, `{ workspace, stage: "commit", writeId }`. It does not support edit arrays, find/replace payloads, unified patches, generated scripts, or Python one-liners.
 
 
 ## Verify command behavior
@@ -22,4 +22,4 @@ Removed workflows are not hidden fallbacks; they are removed from the MCP packag
 
 ## Full-file write formatting guard
 
-`relai_write` accepts only complete file content. If a multiline source file is accidentally collapsed into one long line, the write is rejected instead of damaging formatting.
+`relai_write` accepts complete file content only. For large files, use staged full-file write chunks with the same `relai_write` tool (`stage: start`, `append`, then `commit`) so ChatGPT does not have to approve one oversized request. If a multiline source file is accidentally collapsed into one long line, the write is rejected instead of damaging formatting.

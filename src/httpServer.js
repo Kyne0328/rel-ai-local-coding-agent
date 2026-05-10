@@ -11,7 +11,7 @@ const release = require("./release");
 const configEditor = require("./configEditor");
 const pkg = require("../package.json");
 const connection = require("./connectionProfile");
-const autoApprove = require("./autoApproveUserscript");
+const autoApprove = require("./autoApproveExtension");
 
 function buildToolMetadata() {
   const { getToolSchemas, APPROVAL_GATES } = require("./tools");
@@ -118,14 +118,6 @@ async function routeRequest(req, res, options) {
     return;
   }
 
-
-  if (req.method === "GET" && parsed.pathname === "/userscripts/chatgpt-auto-approve.user.js") {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
-    const baseUrl = `${req.socket.encrypted ? "https" : "http"}://${req.headers.host || `${options.host}:${options.port}`}`;
-    const scriptToken = parsed.searchParams.get("embedToken") === "1" ? (parsed.searchParams.get("token") || "") : "";
-    sendJavaScript(res, 200, autoApprove.renderUserscript({ baseUrl, token: scriptToken }));
-    return;
-  }
 
   // Serve src/ui/* and public/* without token (static assets only; API data remains token-gated)
   if (req.method === "GET" && (parsed.pathname.startsWith("/ui/") || parsed.pathname.startsWith("/public/"))) {

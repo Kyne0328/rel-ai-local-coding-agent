@@ -9,9 +9,9 @@ const BRIDGE_TOOLS = ["relai_repo_snapshot", "relai_read", "relai_write", "relai
 function makeDefaultAutoApproveConfig() {
   return {
     enabled: false,
-    requireUserscriptToggle: true,
     pollMs: 1200,
-    warningAccepted: false
+    warningAccepted: false,
+    mode: "chrome_extension"
   };
 }
 
@@ -158,9 +158,9 @@ function normalizeAutoApproveConfig(value) {
     ...base,
     ...raw,
     enabled: raw.enabled == null ? base.enabled : Boolean(raw.enabled),
-    requireUserscriptToggle: raw.requireUserscriptToggle == null ? base.requireUserscriptToggle : Boolean(raw.requireUserscriptToggle),
     pollMs: clampNumber(raw.pollMs, 500, 10000, base.pollMs),
-    warningAccepted: raw.warningAccepted == null ? base.warningAccepted : Boolean(raw.warningAccepted)
+    warningAccepted: raw.warningAccepted == null ? base.warningAccepted : Boolean(raw.warningAccepted),
+    mode: "chrome_extension"
   };
 }
 

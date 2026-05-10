@@ -83,26 +83,104 @@ function relaiRead(workspace, args = {}) {
 
 function relaiWrite(workspace, config, args = {}) {
   if (Array.isArray(args.edits) || args.find || args.replace || args.type || args.op || args.expectedSha256) {
-    throw new Error("relai_write only supports full-file writes: { workspace, path, content }. Use relai_read to load the file, modify the complete content, then call relai_write. Edit arrays, find/replace operations, patch scripts, and expectedSha256 are not supported in the bridge workflow.");
+    throw new Error("relai_write only supports full-file writes. Use direct mode { workspace, path, content } or staged mode { workspace, stage: 'start'|'append'|'commit'|'abort', ... }. Edit arrays, find/replace operations, patch scripts, and expectedSha256 are not supported in the bridge workflow.");
   }
-  const relativePath = String(args.path || "").trim();
-  if (!relativePath) throw new Error("relai_write requires path and content. Expected: { workspace, path, content }.");
-  if (typeof args.content !== "string") throw new Error("relai_write requires content as a string containing the entire target file. Expected: { workspace, path, content }.");
 
-  const dryRun = Boolean(args.dryRun);
-  const operationId = makeOperationId();
+  const stage = String(args.stage || "direct").trim().toLowerCase();
+  if (stage === "direct" || stage === "") {
+    const relativePath = String(args.path || "").trim();
+    if (!relativePath) throw new Error("relai_write requires path and content. Expected: { workspace, path, content }.");
+    if (typeof args.content !== "string") throw new Error("relai_write requires content as a string containing the entire target file. Expected: { workspace, path, content }.");
+    return performFullFileWrite(workspace, config, relativePath, args.content, { dryRun: Boolean(args.dryRun) });
+  }
+
+  if (stage === "start") {
+    const relativePath = String(args.path || "").trim();
+    if (!relativePath) throw new Error("relai_write stage='start' requires path and content.");
+    if (typeof args.content !== "string") throw new Error("relai_write stage='start' requires a content chunk string.");
+    const safe = resolveSafePath(workspace.path, relativePath);
+    const writeId = makeOperationId();
+    writeStagedPayload(config, workspace, writeId, {
+      id: writeId,
+      workspace: workspace.alias,
+      root: workspace.path,
+      path: safe.relativePath,
+      chunks: [args.content],
+      bytes: Buffer.byteLength(args.content, "utf8"),
+      createdAt: new Date().toISOString()
+    });
+    return {
+      ok: true,
+      workspace: workspace.alias,
+      path: safe.relativePath,
+      operation: "stagedFullFileWrite:start",
+      writeId,
+      chunks: 1,
+      bytes: Buffer.byteLength(args.content, "utf8"),
+      next: "Call relai_write with { workspace, stage: 'append', writeId, content } for more chunks, then { workspace, stage: 'commit', writeId } to write the complete file."
+    };
+  }
+
+  if (stage === "append") {
+    const writeId = validateWriteId(args.writeId);
+    if (typeof args.content !== "string") throw new Error("relai_write stage='append' requires writeId and a content chunk string.");
+    const payload = readStagedPayload(config, workspace, writeId);
+    payload.chunks.push(args.content);
+    payload.bytes += Buffer.byteLength(args.content, "utf8");
+    payload.updatedAt = new Date().toISOString();
+    writeStagedPayload(config, workspace, writeId, payload);
+    return {
+      ok: true,
+      workspace: workspace.alias,
+      path: payload.path,
+      operation: "stagedFullFileWrite:append",
+      writeId,
+      chunks: payload.chunks.length,
+      bytes: payload.bytes,
+      next: "Append more chunks or call relai_write with { workspace, stage: 'commit', writeId }."
+    };
+  }
+
+  if (stage === "commit") {
+    const writeId = validateWriteId(args.writeId);
+    const payload = readStagedPayload(config, workspace, writeId);
+    const content = payload.chunks.join("");
+    const result = performFullFileWrite(workspace, config, payload.path, content, { dryRun: Boolean(args.dryRun), staged: true, writeId });
+    if (!args.dryRun) deleteStagedPayload(config, workspace, writeId);
+    return {
+      ...result,
+      operation: "stagedFullFileWrite:commit",
+      writeId,
+      staged: true,
+      chunks: payload.chunks.length,
+      bytes: Buffer.byteLength(content, "utf8")
+    };
+  }
+
+  if (stage === "abort") {
+    const writeId = validateWriteId(args.writeId);
+    const existed = deleteStagedPayload(config, workspace, writeId);
+    return { ok: true, workspace: workspace.alias, operation: "stagedFullFileWrite:abort", writeId, deleted: existed };
+  }
+
+  throw new Error("relai_write stage must be one of: direct, start, append, commit, abort.");
+}
+
+function performFullFileWrite(workspace, config, relativePath, content, options = {}) {
+  const dryRun = Boolean(options.dryRun);
+  const operationId = options.writeId || makeOperationId();
   const safe = resolveSafePath(workspace.path, relativePath);
   const exists = fs.existsSync(safe.absolutePath);
   const oldContent = exists ? fs.readFileSync(safe.absolutePath, "utf8") : "";
   const oldSha256 = exists ? fileSha256(workspace.path, safe.relativePath) : null;
-  const newContent = args.content;
+  const newContent = content;
   const changed = newContent !== oldContent;
   const newSha256 = sha256Text(newContent);
 
   const result = {
     ok: true,
     path: safe.relativePath,
-    operation: "fullFileWrite",
+    operation: options.staged ? "stagedFullFileWrite" : "fullFileWrite",
     changed,
     oldSha256,
     newSha256: changed ? newSha256 : oldSha256,
@@ -136,7 +214,7 @@ function relaiWrite(workspace, config, args = {}) {
     paths: summary.changedFiles,
     results: [{
       path: safe.relativePath,
-      operation: "fullFileWrite",
+      operation: result.operation,
       changed,
       oldSha256,
       newSha256: result.newSha256,
@@ -145,6 +223,42 @@ function relaiWrite(workspace, config, args = {}) {
   });
 
   return summary;
+}
+
+function stagedDir(config, workspace) {
+  const safeAlias = String(workspace.alias || "workspace").replace(/[^A-Za-z0-9_.-]/g, "_");
+  return path.join(config.stateDir || path.join(process.cwd(), ".rel-ai-mcp-state"), "write-staging", safeAlias);
+}
+
+function stagedPath(config, workspace, writeId) {
+  return path.join(stagedDir(config, workspace), `${validateWriteId(writeId)}.json`);
+}
+
+function validateWriteId(writeId) {
+  const text = String(writeId || "").trim();
+  if (!/^op_[a-z0-9]+_[a-f0-9]{12}$/.test(text)) throw new Error("Invalid or missing relai_write writeId.");
+  return text;
+}
+
+function writeStagedPayload(config, workspace, writeId, payload) {
+  const file = stagedPath(config, workspace, writeId);
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(file, `${JSON.stringify(payload)}\n`, { mode: 0o600 });
+}
+
+function readStagedPayload(config, workspace, writeId) {
+  const file = stagedPath(config, workspace, writeId);
+  if (!fs.existsSync(file)) throw new Error(`No staged relai_write payload found for writeId ${writeId}. Start again with stage='start'.`);
+  const payload = JSON.parse(fs.readFileSync(file, "utf8"));
+  if (payload.workspace !== workspace.alias || payload.root !== workspace.path) throw new Error("Staged relai_write payload belongs to a different workspace.");
+  return payload;
+}
+
+function deleteStagedPayload(config, workspace, writeId) {
+  const file = stagedPath(config, workspace, writeId);
+  const existed = fs.existsSync(file);
+  if (existed) fs.rmSync(file, { force: true });
+  return existed;
 }
 
 async function relaiVerify(workspace, config, args = {}) {

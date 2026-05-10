@@ -85,9 +85,9 @@ Each workspace can define fast-task behavior:
 Use `.relaiignore` in a repo to add repo-specific AI-context exclusions.
 
 
-## Optional ChatGPT app-request auto-approve userscript
+## Optional ChatGPT app-request auto-approve Chrome extension
 
-Rel.AI MCP includes an optional userscript for ChatGPT web that can auto-click Rel.AI MCP app-request approvals. It is off by default and requires a double opt-in: the dashboard setting plus the userscript's local browser toggle. This can authorize local repo reads, full-file writes, verification commands, browser checks, diffs, or resets without a manual click, so use it only on your own trusted machine and disable it after the task. See `docs/AUTO_APPROVE_USERSCRIPT.md`.
+Rel.AI MCP includes an optional Chrome extension for ChatGPT web that can auto-click Rel.AI MCP app-request approvals. It is off by default and requires a double opt-in: the dashboard setting plus the extension popup toggle. This can authorize local repo reads, full-file writes, verification commands, browser checks, diffs, or resets without a manual click, so use it only on your own trusted machine and disable it after the task. The older userscript workflow has been removed. See `docs/AUTO_APPROVE_EXTENSION.md`.
 
 
 ## Verify command behavior
@@ -96,4 +96,4 @@ Rel.AI MCP includes an optional userscript for ChatGPT web that can auto-click R
 
 ## Full-file write formatting guard
 
-`relai_write` accepts only complete file content. If a multiline source file is accidentally collapsed into one long line, the write is rejected instead of damaging formatting.
+`relai_write` accepts complete file content only. For large files, use staged full-file write chunks with the same `relai_write` tool (`stage: start`, `append`, then `commit`) so ChatGPT does not have to approve one oversized request. If a multiline source file is accidentally collapsed into one long line, the write is rejected instead of damaging formatting.

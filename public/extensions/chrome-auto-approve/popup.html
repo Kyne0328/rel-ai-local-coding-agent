@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Rel.AI MCP Auto-Approve</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <img src="relai-logo-192.png" alt="Rel.AI MCP">
+    <div>
+      <strong>Rel.AI MCP</strong>
+      <span>Auto-approve extension</span>
+    </div>
+  </header>
+  <section class="warning">
+    <strong>Warning</strong>
+    <p>This can approve ChatGPT app requests for local repo reads, full-file writes, verify, diff, browser, or reset actions. Enable only while supervising a trusted task.</p>
+  </section>
+  <label class="row">
+    <span>Enable in this browser</span>
+    <input id="enabled" type="checkbox">
+  </label>
+  <label>
+    Dashboard URL
+    <input id="baseUrl" type="text" placeholder="http://127.0.0.1:3333">
+  </label>
+  <label>
+    Dashboard token
+    <input id="token" type="password" placeholder="optional token">
+  </label>
+  <label>
+    Poll interval (ms)
+    <input id="pollMs" type="number" min="500" step="100">
+  </label>
+  <div id="status" class="status">Loading...</div>
+  <div class="actions">
+    <button id="save">Save</button>
+    <button id="scanNow" type="button">Scan now</button>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

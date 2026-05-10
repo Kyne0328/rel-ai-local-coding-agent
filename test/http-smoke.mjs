@@ -69,19 +69,24 @@ if (!dashboardHtml.includes('id="refreshBtn"')) {
 }
 
 const autoApproveSettings = await fetch(`http://127.0.0.1:${port}/api/auto-approve/settings?token=${encodeURIComponent(token)}`).then((response) => response.json());
-if (!autoApproveSettings.ok || autoApproveSettings.enabled !== false || !autoApproveSettings.warning.includes('Auto-approving')) {
-  throw new Error('auto-approve settings endpoint did not expose the disabled default warning state');
+if (!autoApproveSettings.ok || autoApproveSettings.enabled !== false || autoApproveSettings.mode !== 'chrome_extension' || !autoApproveSettings.warning.includes('Chrome extension')) {
+  throw new Error('auto-approve settings endpoint did not expose the disabled extension-only warning state');
 }
 
-const userscriptResponse = await fetch(`http://127.0.0.1:${port}/userscripts/chatgpt-auto-approve.user.js?token=${encodeURIComponent(token)}&embedToken=1`);
-const userscript = await userscriptResponse.text();
-if (!userscriptResponse.ok || !userscript.includes('@name         Rel.AI MCP ChatGPT App Request Auto-Approve') || !userscript.includes('/api/auto-approve/settings') || !userscript.includes(token)) {
-  throw new Error('auto-approve userscript endpoint did not render an installable token-aware userscript');
+const removedUserscript = await fetch(`http://127.0.0.1:${port}/userscripts/chatgpt-auto-approve.user.js?token=${encodeURIComponent(token)}`);
+if (removedUserscript.status !== 404) {
+  throw new Error('removed userscript endpoint should not be served');
 }
 
-const userscriptDocs = await fetch(`http://127.0.0.1:${port}/public/docs/AUTO_APPROVE_USERSCRIPT.md`).then((response) => response.text());
-if (!userscriptDocs.includes('Required double opt-in')) {
-  throw new Error('auto-approve userscript docs were not served');
+const extensionManifestResponse = await fetch(`http://127.0.0.1:${port}/public/extensions/chrome-auto-approve/manifest.json`);
+const extensionManifest = await extensionManifestResponse.text();
+if (!extensionManifestResponse.ok || !extensionManifest.includes('Rel.AI MCP Auto-Approve') || !extensionManifest.includes('Kyne0328')) {
+  throw new Error('auto-approve extension manifest was not served');
+}
+
+const extensionDocs = await fetch(`http://127.0.0.1:${port}/public/docs/AUTO_APPROVE_EXTENSION.md`).then((response) => response.text());
+if (!extensionDocs.includes('Required double opt-in')) {
+  throw new Error('auto-approve extension docs were not served');
 }
 
 const workspaceModule = await fetch(`http://127.0.0.1:${port}/ui/sections/workspaces.js`).then((response) => response.text());

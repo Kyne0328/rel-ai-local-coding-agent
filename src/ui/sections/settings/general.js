@@ -37,7 +37,7 @@ function _render(container) {
   const bridge = panel('ChatGPT local repo bridge');
   const limits = panel('Runtime limits');
   const local = panel('Local dashboard');
-  const autoApprove = panel('ChatGPT web app-request auto-approve');
+  const autoApprove = panel('ChatGPT web app-request auto-approve extension');
 
   bridge.body.appendChild(summaryBox());
   bridge.body.appendChild(field('Trusted local access', toggleControl(true, () => {}, { enabled: 'Always enabled', disabled: 'Always enabled' }), 'Configured workspaces are exposed through the local bridge tools. Workspace-level fast task settings control how much context is scanned before structured writes.'));
@@ -50,13 +50,13 @@ function _render(container) {
     _draft.autoApproveAppRequests.enabled = v;
     if (v) _draft.autoApproveAppRequests.warningAccepted = true;
     _checkDirty();
-  }), 'Both this dashboard setting and the userscript local toggle must be enabled before any click automation runs.'));
+  }), 'Both this dashboard setting and the Chrome extension popup toggle must be enabled before any approval automation runs.'));
   autoApprove.body.appendChild(field('Poll interval (ms)', numberControl((_draft.autoApproveAppRequests || {}).pollMs || 1200, (v) => {
     if (!_draft.autoApproveAppRequests) _draft.autoApproveAppRequests = {};
     _draft.autoApproveAppRequests.pollMs = v;
     _checkDirty();
-  }, { min: 500, max: 10000, width: '140px' }), 'How often the userscript checks ChatGPT for a Rel.AI MCP app request.'));
-  autoApprove.body.appendChild(field('Install userscript', userscriptInstallControl(), 'Install in Tampermonkey/Violentmonkey, then use the userscript menu on ChatGPT to enable or disable it locally.'));
+  }, { min: 500, max: 10000, width: '140px' }), 'How often the Chrome extension may scan ChatGPT for a Rel.AI MCP app request.'));
+  autoApprove.body.appendChild(field('Install Chrome extension', extensionInstallControl(), 'Load the unpacked Chrome extension, then use the extension popup to configure the dashboard URL/token and enable or disable it locally.'));
 
 
   limits.body.appendChild(field('Session locks', toggleControl(_draft.sessionLocksEnabled !== false, (v) => { _draft.sessionLocksEnabled = v; _checkDirty(); }), 'Prevents overlapping edits to the same workspace.'));
@@ -102,7 +102,7 @@ function autoApproveWarningBox() {
   div.style.cssText = 'text-align:left;padding:12px;line-height:1.55;border-color:rgba(255,184,77,.35);background:rgba(255,184,77,.08);';
   div.innerHTML = `
     <strong style="color:var(--text);">Warning: app-request auto-approve is dangerous.</strong><br>
-    This optional userscript can click ChatGPT approval buttons for Rel.AI MCP app requests. That can authorize local repo reads, full-file writes, verification commands, browser checks, diffs, or resets without a manual click. Keep it off unless you are actively supervising a task on your own trusted machine.
+    This optional Chrome extension can click ChatGPT approval buttons for Rel.AI MCP app requests. That can authorize local repo reads, full-file writes, verification commands, browser checks, diffs, or resets without a manual click. Keep it off unless you are actively supervising a task on your own trusted machine. The previous userscript workflow has been removed.
   `;
   return div;
 }
@@ -111,34 +111,29 @@ function confirmAutoApproveWarning() {
   return window.confirm('Enable Rel.AI MCP auto-approve?\n\nThis can click ChatGPT app-request approvals for local repo actions without a manual click. Use only on your own trusted machine and turn it off after the task.');
 }
 
-function userscriptInstallControl() {
+function extensionInstallControl() {
   const wrap = document.createElement('div');
   wrap.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;';
-  const token = getToken();
-  const install = document.createElement('a');
-  install.className = 'buttonlike';
-  install.textContent = 'Open userscript';
-  install.href = '/userscripts/chatgpt-auto-approve.user.js' + (token ? '?token=' + encodeURIComponent(token) : '');
-  install.target = '_blank';
-  install.rel = 'noopener';
-
-  const installWithToken = document.createElement('a');
-  installWithToken.className = 'buttonlike secondary';
-  installWithToken.textContent = 'Open with token embedded';
-  installWithToken.href = '/userscripts/chatgpt-auto-approve.user.js' + (token ? '?token=' + encodeURIComponent(token) + '&embedToken=1' : '?embedToken=1');
-  installWithToken.target = '_blank';
-  installWithToken.rel = 'noopener';
-  installWithToken.onclick = (event) => {
-    if (!window.confirm('Embedding the dashboard token in a userscript is convenient but sensitive. Only do this on your own trusted browser profile. Continue?')) event.preventDefault();
-  };
 
   const docs = document.createElement('a');
-  docs.className = 'buttonlike secondary';
-  docs.textContent = 'Read setup docs';
-  docs.href = '/public/docs/AUTO_APPROVE_USERSCRIPT.md';
+  docs.className = 'buttonlike';
+  docs.textContent = 'Open extension setup docs';
+  docs.href = '/public/docs/AUTO_APPROVE_EXTENSION.md';
   docs.target = '_blank';
   docs.rel = 'noopener';
-  wrap.append(install, installWithToken, docs);
+
+  const manifest = document.createElement('a');
+  manifest.className = 'buttonlike secondary';
+  manifest.textContent = 'View manifest';
+  manifest.href = '/public/extensions/chrome-auto-approve/manifest.json';
+  manifest.target = '_blank';
+  manifest.rel = 'noopener';
+
+  const folderHint = document.createElement('div');
+  folderHint.style.cssText = 'width:100%;font-size:12px;color:var(--text-muted);line-height:1.45;';
+  folderHint.innerHTML = 'Load unpacked extension from <code>public/extensions/chrome-auto-approve</code> in this package. Configure the dashboard URL and token in the extension popup.';
+
+  wrap.append(docs, manifest, folderHint);
   return wrap;
 }
 
