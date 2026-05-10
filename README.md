@@ -42,3 +42,8 @@ Each workspace can define fast-task behavior:
 ```
 
 Use `.relaiignore` in a repo to add repo-specific AI-context exclusions.
+
+
+## Optional ChatGPT request helper
+
+The dashboard can generate a guarded userscript for ChatGPT Web and Android browsers with userscript support. It can highlight or auto-approve visible Rel.AI app/tool request dialogs only when explicitly enabled. See `docs/CHATGPT_REQUEST_HELPER.md`.

@@ -11,6 +11,7 @@ const release = require("./release");
 const configEditor = require("./configEditor");
 const pkg = require("../package.json");
 const connection = require("./connectionProfile");
+const requestHelper = require("./chatgptRequestHelper");
 
 function buildToolMetadata() {
   const { getToolSchemas, APPROVAL_GATES } = require("./tools");
@@ -117,6 +118,21 @@ async function routeRequest(req, res, options) {
     return;
   }
 
+
+  if (req.method === "GET" && parsed.pathname.startsWith("/docs/")) {
+    const safePath = parsed.pathname.replace(/\\/g, "/");
+    if (safePath.includes("..")) { res.writeHead(400); res.end("Bad path"); return; }
+    const filePath = path.join(__dirname, "..", "docs", safePath.slice(6));
+    try {
+      const content = fs.readFileSync(filePath);
+      res.writeHead(200, { "Content-Type": "text/markdown; charset=utf-8", "Cache-Control": "no-cache" });
+      res.end(content);
+    } catch (_) {
+      res.writeHead(404); res.end("Not found");
+    }
+    return;
+  }
+
   // Serve src/ui/* and public/* without token (static assets only; API data remains token-gated)
   if (req.method === "GET" && (parsed.pathname.startsWith("/ui/") || parsed.pathname.startsWith("/public/"))) {
     const safePath = parsed.pathname.replace(/\\/g, "/");
@@ -136,6 +152,22 @@ async function routeRequest(req, res, options) {
     } catch (_) {
       res.writeHead(404); res.end("Not found");
     }
+    return;
+  }
+
+
+  if (req.method === "GET" && parsed.pathname === "/api/request-helper/config") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    const config = readConfig();
+    sendJson(res, 200, requestHelper.publicRequestHelperConfig(config), ae);
+    return;
+  }
+
+  if (req.method === "GET" && parsed.pathname === "/userscripts/chatgpt-request-helper.user.js") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    const config = readConfig();
+    const baseUrl = options.publicUrl || `http://${options.host || "127.0.0.1"}:${options.port || 3333}`;
+    sendJavaScript(res, 200, requestHelper.renderUserscript(config, { baseUrl }));
     return;
   }
 
@@ -348,6 +380,8 @@ async function routeRequest(req, res, options) {
       dashboardV10Api: "GET /api/dashboard/v10",
       logsApi: "GET /api/logs",
       settingsApi: "GET /api/settings",
+      requestHelperConfigApi: "GET /api/request-helper/config",
+      requestHelperUserscript: "GET /userscripts/chatgpt-request-helper.user.js",
       updateSettingsApi: "POST /api/settings",
       updateWorkspacesApi: "POST /api/workspaces",
       healthMonitorApi: "GET /api/health-monitor",

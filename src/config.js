@@ -10,6 +10,22 @@ function getConfigPath() {
   return process.env.REL_AI_MCP_CONFIG || path.join(os.homedir(), ".rel-ai-mcp", "config.json");
 }
 
+
+function makeDefaultChatgptRequestHelperConfig() {
+  return {
+    enabled: false,
+    autoApprove: false,
+    showOverlay: true,
+    cooldownMs: 1500,
+    maxClicksPerMinute: 12,
+    allowedToolNames: BRIDGE_TOOLS,
+    allowedAppText: ["rel-ai-mcp", "Rel.AI MCP", "Relai"],
+    approveButtonText: ["Continue", "Allow", "Approve", "Run", "Confirm", "Connect"],
+    requireRelaiText: true,
+    requireToolName: false
+  };
+}
+
 function makeDefaultFastTaskConfig() {
   return {
     enabled: true,
@@ -35,6 +51,7 @@ function makeDefaultConfig() {
     toolMode: "chatgpt_local_repo",
     trustedLocalAgent: true,
     dashboardEnabled: true,
+    chatgptRequestHelper: makeDefaultChatgptRequestHelperConfig(),
     productUx: {
       dashboardRefreshSeconds: 5,
       liveLogPollSeconds: 3,
@@ -100,6 +117,7 @@ function normalizeConfig(config) {
   next.dashboardEnabled = next.dashboardEnabled !== false;
   next.maxOutputBytes = positiveNumber(next.maxOutputBytes, base.maxOutputBytes);
   next.maxIndexFiles = positiveNumber(next.maxIndexFiles, base.maxIndexFiles);
+  next.chatgptRequestHelper = normalizeChatgptRequestHelper(input.chatgptRequestHelper || input.requestHelper || base.chatgptRequestHelper);
   next.productUx = { ...base.productUx, ...(input.productUx || {}) };
   next.release = { ...base.release, ...(input.release || {}) };
   next.release.minimumReadinessScore = clampNumber(next.release.minimumReadinessScore, 0, 100, base.release.minimumReadinessScore);
@@ -121,6 +139,25 @@ function normalizeWorkspace(workspace) {
     allowedRemotes: Array.isArray(workspace.allowedRemotes) ? workspace.allowedRemotes : ["origin"],
     repoSlug: workspace.repoSlug || "",
     fastTask: normalizeFastTask(workspace.fastTask)
+  };
+}
+
+function normalizeChatgptRequestHelper(value) {
+  const base = makeDefaultChatgptRequestHelperConfig();
+  const raw = value && typeof value === "object" ? value : {};
+  return {
+    ...base,
+    ...raw,
+    enabled: raw.enabled == null ? base.enabled : Boolean(raw.enabled),
+    autoApprove: raw.autoApprove == null ? base.autoApprove : Boolean(raw.autoApprove),
+    showOverlay: raw.showOverlay == null ? base.showOverlay : Boolean(raw.showOverlay),
+    cooldownMs: clampNumber(raw.cooldownMs, 250, 60000, base.cooldownMs),
+    maxClicksPerMinute: clampNumber(raw.maxClicksPerMinute, 1, 120, base.maxClicksPerMinute),
+    allowedToolNames: normalizeStringList(raw.allowedToolNames || base.allowedToolNames),
+    allowedAppText: normalizeStringList(raw.allowedAppText || base.allowedAppText),
+    approveButtonText: normalizeStringList(raw.approveButtonText || base.approveButtonText),
+    requireRelaiText: raw.requireRelaiText == null ? base.requireRelaiText : Boolean(raw.requireRelaiText),
+    requireToolName: raw.requireToolName == null ? base.requireToolName : Boolean(raw.requireToolName)
   };
 }
 
@@ -180,6 +217,7 @@ function publicConfigSummary(config) {
     maxIndexFiles: config.maxIndexFiles,
     toolMode: normalizeToolMode(config.toolMode || "chatgpt_local_repo"),
     trustedLocalAgent: true,
+    chatgptRequestHelper: normalizeChatgptRequestHelper(config.chatgptRequestHelper),
     localRepoBridge: {
       mode: "trusted",
       visibleTools: BRIDGE_TOOLS,
@@ -230,7 +268,7 @@ function clampNumber(value, min, max, fallback) {
   return Math.min(Math.max(Math.floor(n), min), max);
 }
 
-module.exports = {
+module.exports = { makeDefaultChatgptRequestHelperConfig, normalizeChatgptRequestHelper,
   getConfigPath,
   makeDefaultConfig,
   makeDefaultFastTaskConfig,

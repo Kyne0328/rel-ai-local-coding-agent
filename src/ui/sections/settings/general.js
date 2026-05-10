@@ -1,5 +1,6 @@
 // General settings — one trusted ChatGPT local repo bridge, no legacy permission model
 import { esc } from '/ui/utils.js';
+import { getToken } from '/ui/api.js';
 import {
   loadSettingsConfig,
   saveSettings,
@@ -34,21 +35,27 @@ function _render(container) {
 
   const grid = formGrid();
   const bridge = panel('ChatGPT local repo bridge');
+  const helper = panel('ChatGPT request helper');
   const limits = panel('Runtime limits');
   const local = panel('Local dashboard');
 
   bridge.body.appendChild(summaryBox());
   bridge.body.appendChild(field('Trusted local access', toggleControl(true, () => {}, { enabled: 'Always enabled', disabled: 'Always enabled' }), 'Configured workspaces are exposed through the local bridge tools. Workspace-level fast task settings control how much context is scanned before structured writes.'));
-  bridge.body.appendChild(field('Automatic task behavior', _selectTaskMode(), 'Default behavior for high-level task calls.'));
+  helper.body.appendChild(requestHelperBox());
+  helper.body.appendChild(field('Enable helper', toggleControl((_draft.chatgptRequestHelper || {}).enabled === true, (v) => { ensureRequestHelper().enabled = v; _checkDirty(); }), 'Shows a small overlay on ChatGPT pages and detects Rel.AI app/tool request dialogs.'));
+  helper.body.appendChild(field('Auto-approve Rel.AI requests', toggleControl((_draft.chatgptRequestHelper || {}).autoApprove === true, (v) => { ensureRequestHelper().autoApprove = v; _checkDirty(); }, { enabled: 'Auto-approve on', disabled: 'Auto-approve off' }), 'When enabled, the userscript clicks only visible approval buttons inside dialogs that match the configured Rel.AI/tool allowlist.'));
+  helper.body.appendChild(field('Max clicks per minute', numberControl((_draft.chatgptRequestHelper || {}).maxClicksPerMinute || 12, (v) => { ensureRequestHelper().maxClicksPerMinute = v; _checkDirty(); }, { min: 1, max: 120, width: '100px' }), 'Safety rate limit for web and Android userscript usage.'));
+  helper.body.appendChild(field('Cooldown milliseconds', numberControl((_draft.chatgptRequestHelper || {}).cooldownMs || 1500, (v) => { ensureRequestHelper().cooldownMs = v; _checkDirty(); }, { min: 250, max: 60000, width: '120px' }), 'Minimum delay between clicks.'));
+  helper.body.appendChild(field('Userscript', requestHelperInstallControls(), 'Install in a userscript manager on desktop or Android browser. Reinstall after changing helper settings.'));
 
-  limits.body.appendChild(field('Session locks', toggleControl(_draft.sessionLocksEnabled !== false, (v) => { _draft.sessionLocksEnabled = v; _checkDirty(); }), 'Prevents overlapping edits to the same workspace.'));
-  limits.body.appendChild(field('Max concurrent sessions per workspace', numberControl(_draft.maxConcurrentSessionsPerWorkspace, (v) => { _draft.maxConcurrentSessionsPerWorkspace = v; _checkDirty(); }, { min: 1, max: 20 }), 'Usually 1–4 is enough.'));
+
   limits.body.appendChild(field('Max output bytes', numberControl(_draft.maxOutputBytes, (v) => { _draft.maxOutputBytes = v; _checkDirty(); }, { min: 10000, max: 20000000, width: '140px' }), 'Maximum command output returned to ChatGPT. 2 MB is a safe default for test failures without flooding the chat.'));
 
   local.body.appendChild(field('Dashboard enabled', toggleControl(_draft.dashboardEnabled !== false, (v) => { _draft.dashboardEnabled = v; _checkDirty(); }), 'Controls this local dashboard only.'));
   local.body.appendChild(field('Color theme', _themeToggle(), 'Stored only in this browser.'));
 
   grid.appendChild(bridge.el);
+  grid.appendChild(helper.el);
   grid.appendChild(limits.el);
   grid.appendChild(local.el);
   container.appendChild(grid);
@@ -77,6 +84,61 @@ function summaryBox() {
   return div;
 }
 
+
+function ensureRequestHelper() {
+  if (!_draft.chatgptRequestHelper || typeof _draft.chatgptRequestHelper !== 'object') _draft.chatgptRequestHelper = {};
+  return _draft.chatgptRequestHelper;
+}
+
+function requestHelperBox() {
+  const div = document.createElement('div');
+  div.className = 'empty';
+  div.style.cssText = 'text-align:left;padding:12px;line-height:1.55;';
+  div.innerHTML = `
+    <strong style="color:var(--text);">Optional app request helper</strong><br>
+    This creates a userscript for ChatGPT Web and Android browsers with userscript support. It is disabled by default and only targets visible Rel.AI request dialogs. It does not read passwords, cookies, messages, or arbitrary page data.
+  `;
+  return div;
+}
+
+function requestHelperInstallControls() {
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'secondary';
+  btn.textContent = 'Download userscript';
+  btn.onclick = downloadRequestHelperUserscript;
+  const docs = document.createElement('a');
+  docs.href = '/docs/CHATGPT_REQUEST_HELPER.md';
+  docs.textContent = 'Usage notes';
+  docs.className = 'section-action';
+  docs.target = '_blank';
+  wrap.append(btn, docs);
+  return wrap;
+}
+
+async function downloadRequestHelperUserscript() {
+  const token = getToken();
+  const headers = token ? { Authorization: 'Bearer ' + token } : {};
+  const url = '/userscripts/chatgpt-request-helper.user.js' + (token ? '?token=' + encodeURIComponent(token) : '');
+  const res = await fetch(url, { headers });
+  const text = await res.text();
+  if (!res.ok) {
+    alert('Could not download userscript: ' + text);
+    return;
+  }
+  const blobUrl = URL.createObjectURL(new Blob([text], { type: 'application/javascript' }));
+  const a = document.createElement('a');
+  a.href = blobUrl;
+  a.download = 'rel-ai-chatgpt-request-helper.user.js';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+}
+
+
 function _selectTaskMode() {
   const el = document.createElement('select');
   for (const value of ['plan_only', 'implement', 'implement_and_test', 'review_only']) {
@@ -101,7 +163,7 @@ function _checkDirty() {
 
 function _getChanges() {
   if (!_original || !_draft) return [];
-  const keys = ['sessionLocksEnabled', 'maxConcurrentSessionsPerWorkspace', 'maxOutputBytes', 'dashboardEnabled', 'defaultTaskMode'];
+  const keys = ['maxOutputBytes', 'dashboardEnabled', 'chatgptRequestHelper'];
   const changes = [];
   for (const key of keys) {
     if (JSON.stringify(_draft[key]) !== JSON.stringify(_original[key])) {
@@ -113,11 +175,9 @@ function _getChanges() {
 
 async function _save(container) {
   const payload = {
-    sessionLocksEnabled: _draft.sessionLocksEnabled,
-    maxConcurrentSessionsPerWorkspace: _draft.maxConcurrentSessionsPerWorkspace,
     maxOutputBytes: _draft.maxOutputBytes,
     dashboardEnabled: _draft.dashboardEnabled,
-    defaultTaskMode: _draft.defaultTaskMode
+    chatgptRequestHelper: _draft.chatgptRequestHelper
   };
   const res = await saveSettings(payload);
   if (res && res.ok) await _loadAndRender(container);
