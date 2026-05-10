@@ -1,6 +1,6 @@
 {
   "name": "rel-ai-mcp",
-  "version": "0.11.30",
+  "version": "0.11.33",
   "description": "Local ChatGPT repo bridge: one reliable workflow for snapshot, read, write, verify, diff, and reset configured local workspaces.",
   "private": true,
   "license": "MIT",
@@ -33,7 +33,10 @@
     "test:fast-task": "node test/workspace-fast-task-smoke.mjs",
     "test:auto-approve": "node test/auto-approve-extension-smoke.mjs",
     "test:tunnel": "node test/tunnel-manager-smoke.mjs",
-    "test:oneclick": "node test/oneclick-args-smoke.mjs"
+    "test:oneclick": "node test/oneclick-args-smoke.mjs",
+    "test:compat": "node test/chatgpt-local-compat-smoke.mjs",
+    "test:loose-patch": "node test/chatgpt-local-compat-smoke.mjs",
+    "test:public-workflow": "node test/workflow-smoke.mjs"
   },
   "keywords": [
     "mcp",
