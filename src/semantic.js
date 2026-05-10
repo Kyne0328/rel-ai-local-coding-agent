@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { getStateDir } = require("./audit");
-const { collectTextFiles, readTextFileSafe, safeReadJson } = require("./safety");
+const { collectTextFiles, collectOptionsFromWorkspace, readTextFileSafe, safeReadJson } = require("./safety");
 
 function semanticDir(config) { return path.join(getStateDir(config), "semantic-indexes"); }
 function indexPath(config, workspace) { return path.join(semanticDir(config), `${String(workspace.alias).replace(/[^A-Za-z0-9_.-]/g, "-")}.json`); }
@@ -18,8 +18,9 @@ function topTerms(tokens, max = 80) {
 }
 
 function buildSemanticIndex(config, workspace, args = {}) {
-  const maxFiles = Math.min(Math.max(Number(args.maxFiles || config.semanticIndex?.maxFiles || 8000), 1), 100000);
-  const tree = collectTextFiles(workspace.path, { maxEntries: maxFiles });
+  const fastMax = workspace.fastTask && workspace.fastTask.enabled !== false ? workspace.fastTask.maxIndexFiles : null;
+  const maxFiles = Math.min(Math.max(Number(args.maxFiles || fastMax || config.semanticIndex?.maxFiles || 8000), 1), 100000);
+  const tree = collectTextFiles(workspace.path, collectOptionsFromWorkspace(workspace, { maxEntries: maxFiles }));
   const documents = [];
   for (const relativePath of tree.files) {
     let content;

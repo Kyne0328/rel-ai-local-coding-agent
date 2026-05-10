@@ -30,7 +30,7 @@ async function _loadAndRender(container) {
 
 function _render(container) {
   container.innerHTML = '';
-  container.appendChild(header('General', 'Rel.AI now uses one design: a trusted local repo bridge for ChatGPT, similar to uploading a zip but connected to your real local files.'));
+  container.appendChild(header('General', 'Rel.AI uses a trusted local repo bridge for ChatGPT: the repo stays on your machine, while ChatGPT gets explicit local tools to snapshot, read, write, verify, diff, and reset configured workspaces.'));
 
   const grid = formGrid();
   const bridge = panel('ChatGPT local repo bridge');
@@ -38,7 +38,7 @@ function _render(container) {
   const local = panel('Local dashboard');
 
   bridge.body.appendChild(summaryBox());
-  bridge.body.appendChild(field('Trusted local access', toggleControl(true, () => {}, { enabled: 'Always enabled', disabled: 'Always enabled' }), 'ChatGPT may read/write configured workspaces and run shell commands there. This replaces permission profiles, approval gates, and command allowlists.'));
+  bridge.body.appendChild(field('Trusted local access', toggleControl(true, () => {}, { enabled: 'Always enabled', disabled: 'Always enabled' }), 'Configured workspaces are exposed through the local bridge tools. Workspace-level fast task settings control how much context is scanned before edits.'));
   bridge.body.appendChild(field('Automatic task behavior', _selectTaskMode(), 'Default behavior for high-level task calls.'));
 
   limits.body.appendChild(field('Session locks', toggleControl(_draft.sessionLocksEnabled !== false, (v) => { _draft.sessionLocksEnabled = v; _checkDirty(); }), 'Prevents overlapping edits to the same workspace.'));
@@ -70,9 +70,9 @@ function summaryBox() {
   div.className = 'empty';
   div.style.cssText = 'text-align:left;padding:12px;line-height:1.55;';
   div.innerHTML = `
-    <strong style="color:var(--text);">Always-on local bridge</strong><br>
-    Visible ChatGPT tools: <code>relai_repo_snapshot</code>, <code>relai_read</code>, <code>relai_write</code>, <code>relai_shell</code>, <code>relai_verify</code>, <code>relai_browser</code>, <code>relai_diff</code>, <code>relai_reset</code>.<br>
-    Legacy approval gates, permission profiles, sandbox modes, and multi-agent roles are no longer part of the normal product flow.
+    <strong style="color:var(--text);">ChatGPT local repo bridge</strong><br>
+    This is the always-on local connector between ChatGPT and your configured repositories. It avoids uploading a zip for every task by giving ChatGPT controlled local tools: <code>relai_repo_snapshot</code>, <code>relai_read</code>, <code>relai_write</code>, <code>relai_shell</code>, <code>relai_verify</code>, <code>relai_browser</code>, <code>relai_diff</code>, and <code>relai_reset</code>.<br>
+    Fast task settings live on each workspace and reduce broad scans/indexing for small tasks across any language stack.
   `;
   return div;
 }

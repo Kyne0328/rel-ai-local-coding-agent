@@ -3,6 +3,7 @@ const path = require("node:path");
 const { runProcess, summarizeCommand } = require("./process");
 const {
   collectTextFiles,
+  collectOptionsFromWorkspace,
   readTextFileSafe,
   writeTextFileSafe,
   resolveSafePath,
@@ -19,7 +20,7 @@ const DEFAULT_MAX_DIFF_BYTES = 300000;
 function repoSnapshot(workspace, config, args = {}) {
   const maxEntries = clampNumber(args.maxEntries, 1, 20000, DEFAULT_MAX_SNAPSHOT_FILES);
   const includeFiles = args.includeFiles !== false;
-  const tree = collectTextFiles(workspace.path, { maxEntries });
+  const tree = collectTextFiles(workspace.path, collectOptionsFromWorkspace(workspace, { maxEntries }));
   const manifests = readManifests(workspace.path);
   const discoveredCommands = discoverCommands(workspace.path);
   return {
@@ -52,7 +53,7 @@ function relaiRead(workspace, args = {}) {
       const safe = resolveSafePath(workspace.path, requested);
       const stat = fs.statSync(safe.absolutePath);
       if (stat.isDirectory()) {
-        items.push(readDirectory(workspace.path, safe.relativePath, args));
+        items.push(readDirectory(workspace, safe.relativePath, args));
         continue;
       }
       if (!stat.isFile()) {
@@ -301,10 +302,10 @@ function replaceFunction(content, functionName, text) {
   throw new Error(`Function not found: ${functionName}`);
 }
 
-function readDirectory(root, relativePath, args) {
+function readDirectory(workspace, relativePath, args) {
   const maxEntries = clampNumber(args.maxEntries, 1, 20000, 1000);
   const prefix = relativePath === "." ? "" : relativePath;
-  const result = collectTextFiles(path.join(root, prefix), { maxEntries });
+  const result = collectTextFiles(path.join(workspace.path, prefix), collectOptionsFromWorkspace(workspace, { maxEntries, includeRoots: [] }));
   return {
     type: "directory",
     path: relativePath,

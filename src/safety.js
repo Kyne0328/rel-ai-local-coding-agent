@@ -21,8 +21,23 @@ const DEFAULT_EXCLUDED_NAMES = new Set([
   ".git", "node_modules", "dist", "build", "coverage", ".next", ".nuxt", ".svelte-kit",
   ".turbo", ".cache", ".parcel-cache", ".vite", ".pytest_cache", "__pycache__",
   ".venv", "venv", "target", "bin", "obj", "DerivedData", ".gradle", ".idea", ".vscode",
-  "vendor", ".pnpm-store", ".yarn/cache", "storybook-static", ".nyc_output", "htmlcov"
+  "vendor", ".pnpm-store", ".yarn/cache", "storybook-static", ".nyc_output", "htmlcov",
+  ".dart_tool", ".flutter-plugins", ".flutter-plugins-dependencies", ".pub-cache", ".pub",
+  ".mypy_cache", ".ruff_cache", ".tox", ".nox", ".hypothesis", ".eggs", "site-packages",
+  ".pytest_cache", ".coverage", ".parcel-cache", ".angular", ".expo", ".serverless",
+  ".terraform", ".bloop", ".metals", ".scala-build", ".stack-work", ".cabal",
+  "Pods", "Carthage", "DerivedData", "xcuserdata", ".vs", "cmake-build-debug", "cmake-build-release"
 ]);
+
+const DEFAULT_EXCLUDED_PATHS = [
+  "android/.gradle",
+  "ios/Flutter/ephemeral",
+  "macos/Flutter/ephemeral",
+  "windows/flutter/ephemeral",
+  "linux/flutter/ephemeral",
+  ".claude/skills",
+  ".superpowers"
+];
 
 function validateRelativePath(relativePath, label = "Path") {
   const value = String(relativePath || "").replace(/\\/g, "/").trim();
@@ -119,6 +134,7 @@ function collectTextFiles(root, options = {}) {
   const files = [];
   const skipped = [];
   const realRoot = fs.realpathSync(root);
+  const policy = buildCollectionPolicy(realRoot, options);
 
   function walk(dir, prefix) {
     if (files.length >= maxEntries) return;
@@ -137,8 +153,9 @@ function collectTextFiles(root, options = {}) {
         skipped.push({ path: rel, reason: "blocked sensitive path" });
         continue;
       }
-      if (DEFAULT_EXCLUDED_NAMES.has(entry.name) || DEFAULT_EXCLUDED_NAMES.has(rel)) {
-        skipped.push({ path: rel, reason: "excluded generated/cache folder" });
+      const excluded = shouldExcludeRelativePath(rel, entry.name, policy);
+      if (excluded) {
+        skipped.push({ path: rel, reason: excluded });
         continue;
       }
       const abs = path.join(dir, entry.name);
@@ -171,6 +188,79 @@ function collectTextFiles(root, options = {}) {
 
   walk(realRoot, "");
   return { files, skipped, truncated: files.length >= maxEntries };
+}
+
+function buildCollectionPolicy(root, options = {}) {
+  const includeRoots = normalizePathList(options.includeRoots || options.includePaths || []);
+  const excludePaths = [
+    ...DEFAULT_EXCLUDED_PATHS,
+    ...normalizePathList(options.excludePaths || []),
+    ...readRelaiIgnore(root)
+  ];
+  return {
+    includeRoots,
+    excludePaths: normalizePathList(excludePaths),
+    excludeNames: new Set([...DEFAULT_EXCLUDED_NAMES, ...normalizePathList(options.excludeNames || [])])
+  };
+}
+
+function collectOptionsFromWorkspace(workspace, overrides = {}) {
+  const fastTask = workspace && workspace.fastTask && typeof workspace.fastTask === "object" ? workspace.fastTask : {};
+  if (fastTask.enabled === false) return { ...overrides };
+  return {
+    includeRoots: fastTask.includeRoots || fastTask.includePaths || [],
+    excludePaths: fastTask.excludePaths || [],
+    ...overrides
+  };
+}
+
+function readRelaiIgnore(root) {
+  try {
+    const file = path.join(root, ".relaiignore");
+    if (!fs.existsSync(file)) return [];
+    return fs.readFileSync(file, "utf8")
+      .split(/\r?\n/)
+      .map((line) => line.replace(/#.*/, "").trim())
+      .filter(Boolean);
+  } catch (_error) {
+    return [];
+  }
+}
+
+function normalizePathList(value) {
+  const list = Array.isArray(value) ? value : String(value || "").split(/[\n,]/);
+  return list.map((item) => String(item || "").replace(/\\/g, "/").trim().replace(/^\.\//, "").replace(/\/$/, "")).filter(Boolean);
+}
+
+function shouldExcludeRelativePath(rel, name, policy) {
+  const normalized = String(rel || "").replace(/\\/g, "/");
+  if (policy.includeRoots.length && !policy.includeRoots.some((root) => normalized === root || normalized.startsWith(root + "/") || root.startsWith(normalized + "/"))) {
+    return "outside fast-task include roots";
+  }
+  if (policy.excludeNames.has(name) || policy.excludeNames.has(normalized)) return "excluded generated/cache folder";
+  for (const pattern of policy.excludePaths) {
+    if (matchesIgnorePattern(normalized, pattern)) return "excluded by context policy";
+  }
+  return "";
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function matchesIgnorePattern(rel, pattern) {
+  const raw = String(pattern || "").replace(/\\/g, "/").trim();
+  if (!raw) return false;
+  const anchored = raw.startsWith("/");
+  const clean = raw.replace(/^\//, "").replace(/\/$/, "");
+  if (!clean) return false;
+  if (!clean.includes("*")) {
+    if (anchored) return rel === clean || rel.startsWith(clean + "/");
+    return rel === clean || rel.startsWith(clean + "/") || rel.includes("/" + clean + "/") || rel.endsWith("/" + clean);
+  }
+  const escaped = clean.split("*").map(escapeRegExp).join(".*");
+  const regex = new RegExp(anchored ? `^${escaped}(?:/|$)` : `(^|/)${escaped}(?:/|$)`);
+  return regex.test(rel);
 }
 
 function readTextFileSafe(root, relativePath) {
@@ -271,6 +361,7 @@ module.exports = {
   extractPathsFromDiff,
   validateDiffPaths,
   collectTextFiles,
+  collectOptionsFromWorkspace,
   readTextFileSafe,
   writeTextFileSafe,
   fileSha256,

@@ -8,6 +8,21 @@ function getConfigPath() {
   return process.env.REL_AI_MCP_CONFIG || path.join(os.homedir(), ".rel-ai-mcp", "config.json");
 }
 
+function makeDefaultFastTaskConfig() {
+  return {
+    enabled: true,
+    skipIndexForSmallTasks: true,
+    preferChangedFiles: true,
+    maxIndexFiles: 750,
+    includeRoots: [],
+    excludePaths: [
+      ".git", "node_modules", "build", "dist", "coverage", ".next", ".nuxt", ".svelte-kit",
+      ".dart_tool", ".gradle", "target", "bin", "obj", "vendor", ".venv", "venv",
+      ".claude/skills", ".superpowers"
+    ]
+  };
+}
+
 function makeDefaultConfig() {
   return {
     version: 1,
@@ -197,6 +212,7 @@ function normalizeConfig(config) {
 }
 
 function normalizeWorkspace(workspace) {
+  const fastTask = normalizeFastTask(workspace.fastTask);
   return {
     path: workspace.path,
     testCommands: workspace.testCommands || {},
@@ -212,8 +228,31 @@ function normalizeWorkspace(workspace) {
     dockerNetworkNone: workspace.dockerNetworkNone !== false,
     allowDocker: Boolean(workspace.allowDocker),
     allowArbitraryCommands: Boolean(workspace.allowArbitraryCommands),
-    allowDestructiveTools: Boolean(workspace.allowDestructiveTools)
+    allowDestructiveTools: Boolean(workspace.allowDestructiveTools),
+    fastTask
   };
+}
+
+function normalizeFastTask(value) {
+  const base = makeDefaultFastTaskConfig();
+  const raw = value && typeof value === "object" ? value : {};
+  const maxIndexFiles = Number(raw.maxIndexFiles);
+  return {
+    ...base,
+    ...raw,
+    enabled: raw.enabled == null ? base.enabled : Boolean(raw.enabled),
+    skipIndexForSmallTasks: raw.skipIndexForSmallTasks == null ? base.skipIndexForSmallTasks : Boolean(raw.skipIndexForSmallTasks),
+    preferChangedFiles: raw.preferChangedFiles == null ? base.preferChangedFiles : Boolean(raw.preferChangedFiles),
+    maxIndexFiles: Number.isFinite(maxIndexFiles) && maxIndexFiles > 0 ? Math.min(Math.floor(maxIndexFiles), 100000) : base.maxIndexFiles,
+    includeRoots: normalizeStringList(raw.includeRoots || raw.includePaths || base.includeRoots),
+    excludePaths: normalizeStringList(raw.excludePaths || base.excludePaths)
+  };
+}
+
+function normalizeStringList(value) {
+  if (value == null || value === "") return [];
+  if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
+  return String(value).split(/[\n,]/).map((item) => item.trim()).filter(Boolean);
 }
 
 function normalizeToolMode(_value) {
@@ -247,7 +286,8 @@ function resolveWorkspace(config, alias) {
     dockerNetworkNone: entry.dockerNetworkNone !== false,
     allowDocker: Boolean(entry.allowDocker || config.allowDocker),
     allowArbitraryCommands: Boolean(entry.allowArbitraryCommands || config.allowArbitraryCommands),
-    allowDestructiveTools: Boolean(entry.allowDestructiveTools || config.allowDestructiveTools)
+    allowDestructiveTools: Boolean(entry.allowDestructiveTools || config.allowDestructiveTools),
+    fastTask: normalizeFastTask(entry.fastTask)
   };
 }
 
@@ -306,6 +346,7 @@ function publicConfigSummary(config) {
       allowDocker: Boolean(entry.allowDocker),
       allowArbitraryCommands: Boolean(entry.allowArbitraryCommands),
       allowDestructiveTools: Boolean(entry.allowDestructiveTools),
+      fastTask: normalizeFastTask(entry.fastTask),
       discoveredCommands: safeDiscoverCommands(entry.path),
       discoveredTestCommandKeys: Object.keys(safeDiscoverCommands(entry.path)).filter((key) => /test|analy[sz]e|lint|check|vet|build/.test(key + " " + safeDiscoverCommands(entry.path)[key])).sort()
     })).sort((a, b) => a.alias.localeCompare(b.alias))
@@ -324,6 +365,7 @@ function safeDiscoverCommands(workspacePath) {
 module.exports = {
   getConfigPath,
   makeDefaultConfig,
+  makeDefaultFastTaskConfig,
   readConfig,
   writeConfig,
   normalizeConfig,

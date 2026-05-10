@@ -1,7 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { readConfig, resolveWorkspace, publicConfigSummary } = require("./config");
-const { collectTextFiles, readTextFileSafe, writeTextFileSafe, resolveSafePath, fileSha256 } = require("./safety");
+const { collectTextFiles, collectOptionsFromWorkspace, readTextFileSafe, writeTextFileSafe, resolveSafePath, fileSha256 } = require("./safety");
 const { runProcess, summarizeCommand } = require("./process");
 const { logAudit, readAudit } = require("./audit");
 const sessions = require("./sessions");
@@ -882,7 +882,7 @@ function workspaceInspect(config, args = {}) {
 
 function workspaceTree(config, args) {
   const workspace = resolveTargetWorkspace(config, args);
-  const result = collectTextFiles(workspace.path, { maxEntries: args.maxEntries });
+  const result = collectTextFiles(workspace.path, collectOptionsFromWorkspace(workspace, { maxEntries: args.maxEntries }));
   return {
     workspace: workspace.alias,
     root: workspace.path,
@@ -954,7 +954,7 @@ function searchWorkspace(config, args) {
   const query = String(args.query || "");
   if (!query.trim()) throw new Error("query is required.");
   const maxMatches = Math.min(Math.max(Number(args.maxMatches || 50), 1), 500);
-  const tree = collectTextFiles(workspace.path);
+  const tree = collectTextFiles(workspace.path, collectOptionsFromWorkspace(workspace));
   const matches = [];
   for (const relativePath of tree.files) {
     if (matches.length >= maxMatches) break;

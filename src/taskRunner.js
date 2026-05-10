@@ -4,7 +4,7 @@ const sessions = require("./sessions");
 const plans = require("./plans");
 const indexer = require("./indexer");
 const { readAudit } = require("./audit");
-const { collectTextFiles, readTextFileSafe, resolveSafePath } = require("./safety");
+const { collectTextFiles, collectOptionsFromWorkspace, readTextFileSafe, resolveSafePath } = require("./safety");
 const { runProcess, summarizeCommand } = require("./process");
 const {
   gitStatus,
@@ -58,9 +58,13 @@ async function taskRun(config, baseWorkspace, args = {}) {
     if (worktree.ok) workspace = workspaceFromSession(config, baseWorkspace, session.id);
   }
 
-  if (args.buildIndex !== false) {
-    const index = indexer.buildIndex(config, workspace, { sessionId: session.id, maxFiles: args.maxIndexFiles });
+  const fastTask = workspace.fastTask && workspace.fastTask.enabled !== false ? workspace.fastTask : null;
+  const shouldBuildIndex = args.buildIndex !== false && !(args.buildIndex == null && fastTask && fastTask.skipIndexForSmallTasks !== false);
+  if (shouldBuildIndex) {
+    const index = indexer.buildIndex(config, workspace, { sessionId: session.id, maxFiles: args.maxIndexFiles || (fastTask && fastTask.maxIndexFiles) });
     timeline.push({ step: "index", ok: true, fileCount: index.fileCount, skippedCount: index.skippedCount });
+  } else if (fastTask) {
+    timeline.push({ step: "index", ok: true, skipped: true, reason: "fastTask.skipIndexForSmallTasks" });
   }
 
   const plan = ensurePlan(config, session, baseWorkspace, args, mode, goal || session.goal);
@@ -269,7 +273,7 @@ function repoRelevantFiles(config, workspace, args = {}) {
   try {
     files = indexer.readIndex(config, workspace, args).files || [];
   } catch (_error) {
-    files = collectTextFiles(workspace.path).files.map((file) => ({ path: file, symbols: [] }));
+    files = collectTextFiles(workspace.path, collectOptionsFromWorkspace(workspace)).files.map((file) => ({ path: file, symbols: [] }));
   }
   const scored = [];
   for (const file of files) {

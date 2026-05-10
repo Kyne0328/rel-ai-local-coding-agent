@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { getStateDir } = require("./audit");
-const { collectTextFiles, readTextFileSafe, fileSha256, safeReadJson } = require("./safety");
+const { collectTextFiles, collectOptionsFromWorkspace, readTextFileSafe, fileSha256, safeReadJson } = require("./safety");
 
 function indexesDir(config) {
   return path.join(getStateDir(config), "indexes");
@@ -41,8 +41,9 @@ function extractSymbols(relativePath, content) {
 }
 
 function buildIndex(config, workspace, args = {}) {
-  const maxFiles = Math.min(Math.max(Number(args.maxFiles || config.maxIndexFiles || 20000), 1), 100000);
-  const tree = collectTextFiles(workspace.path, { maxEntries: maxFiles });
+  const fastMax = workspace.fastTask && workspace.fastTask.enabled !== false ? workspace.fastTask.maxIndexFiles : null;
+  const maxFiles = Math.min(Math.max(Number(args.maxFiles || fastMax || config.maxIndexFiles || 20000), 1), 100000);
+  const tree = collectTextFiles(workspace.path, collectOptionsFromWorkspace(workspace, { maxEntries: maxFiles }));
   const files = [];
   for (const relativePath of tree.files) {
     try {

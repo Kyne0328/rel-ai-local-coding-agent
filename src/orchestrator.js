@@ -22,7 +22,9 @@ async function bootstrapTask(config, workspace, args = {}) {
     });
   }
   const taskWorkspace = worktree && worktree.ok ? { ...workspace, path: worktree.worktreePath, alias: `${workspace.alias}:${session.id}`, taskSessionId: session.id } : workspace;
-  const index = args.buildIndex === false ? null : buildIndex(config, taskWorkspace, { sessionId: session.id, maxFiles: args.maxIndexFiles });
+  const fastTask = taskWorkspace.fastTask && taskWorkspace.fastTask.enabled !== false ? taskWorkspace.fastTask : null;
+  const shouldBuildIndex = args.buildIndex !== false && !(args.buildIndex == null && fastTask && fastTask.skipIndexForSmallTasks !== false);
+  const index = shouldBuildIndex ? buildIndex(config, taskWorkspace, { sessionId: session.id, maxFiles: args.maxIndexFiles || (fastTask && fastTask.maxIndexFiles) }) : null;
   const plan = plans.createPlan(config, {
     sessionId: session.id,
     workspace: workspace.baseAlias || workspace.alias,

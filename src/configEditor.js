@@ -23,6 +23,19 @@ const NUMBER_KEYS = [
   "maxConcurrentSessionsPerWorkspace"
 ];
 
+const DEFAULT_FAST_TASK = {
+  enabled: true,
+  skipIndexForSmallTasks: true,
+  preferChangedFiles: true,
+  maxIndexFiles: 750,
+  includeRoots: [],
+  excludePaths: [
+    ".git", "node_modules", "build", "dist", "coverage", ".next", ".nuxt", ".svelte-kit",
+    ".dart_tool", ".gradle", "target", "bin", "obj", "vendor", ".venv", "venv",
+    ".claude/skills", ".superpowers"
+  ]
+};
+
 const NESTED_SCHEMA = {
   approvalGates: "booleanMap",
   taskRunner: {
@@ -225,6 +238,7 @@ function updateWorkspace(current, payload = {}) {
     allowDocker: source.allowDocker == null ? Boolean(currentWorkspace.allowDocker) : Boolean(source.allowDocker),
     allowArbitraryCommands: source.allowArbitraryCommands == null ? Boolean(currentWorkspace.allowArbitraryCommands) : Boolean(source.allowArbitraryCommands),
     allowDestructiveTools: source.allowDestructiveTools == null ? Boolean(currentWorkspace.allowDestructiveTools) : Boolean(source.allowDestructiveTools),
+    fastTask: parseFastTask(source.fastTask, currentWorkspace.fastTask),
     testCommands: parseCommandMap(source.testCommands, currentWorkspace.testCommands || {}),
     commands: parseCommandMap(source.commands, currentWorkspace.commands || {})
   };
@@ -274,6 +288,21 @@ function parseList(value, fallback = []) {
   if (value == null || value === "") return Array.isArray(fallback) ? fallback.map(String) : [];
   if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
   return String(value).split(/[\n,]/).map((item) => item.trim()).filter(Boolean);
+}
+
+function parseFastTask(value, fallback = {}) {
+  const source = value && typeof value === "object" ? value : {};
+  const current = fallback && typeof fallback === "object" ? { ...DEFAULT_FAST_TASK, ...fallback } : { ...DEFAULT_FAST_TASK };
+  const maxIndexFiles = source.maxIndexFiles == null ? current.maxIndexFiles : finiteNumber(source.maxIndexFiles, "fastTask.maxIndexFiles");
+  return {
+    ...current,
+    enabled: source.enabled == null ? current.enabled !== false : Boolean(source.enabled),
+    skipIndexForSmallTasks: source.skipIndexForSmallTasks == null ? current.skipIndexForSmallTasks !== false : Boolean(source.skipIndexForSmallTasks),
+    preferChangedFiles: source.preferChangedFiles == null ? current.preferChangedFiles !== false : Boolean(source.preferChangedFiles),
+    maxIndexFiles: maxIndexFiles || 750,
+    includeRoots: parseList(source.includeRoots, current.includeRoots || []),
+    excludePaths: parseList(source.excludePaths, current.excludePaths || [])
+  };
 }
 
 function parseCommandMap(value, fallback = {}) {

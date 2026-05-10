@@ -74,17 +74,31 @@ function workspaceCard(ws, health) {
         ${badgeHtml('configured tests ' + testKeys.length)}
         ${badgeHtml('detected tests ' + detected.length, detected.length ? 'good' : 'warn')}
         ${badgeHtml('commands ' + commandKeys.length)}
+        ${badgeHtml('fast task ' + (ws.fastTask && ws.fastTask.enabled !== false ? 'on' : 'off'), ws.fastTask && ws.fastTask.enabled !== false ? 'good' : 'warn')}
         ${badgeHtml('worktrees ' + (health && health.worktreeCount != null ? health.worktreeCount : 0))}
         ${badgeHtml('protected ' + (protectedBranches.join(', ') || 'none'))}
       </div>
       <div class="path">${validationText(testKeys, detected)}</div>
+      <div class="path">${fastTaskText(ws.fastTask)}</div>
       <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
         <button class="secondary" type="button" data-preflight="${esc(ws.alias || '')}">Run preflight</button>
+        <button class="secondary" type="button" data-toggle-fast-task="${esc(ws.alias || '')}">${ws.fastTask && ws.fastTask.enabled !== false ? 'Disable fast task' : 'Enable fast task'}</button>
+        <button class="secondary" type="button" data-edit-fast-task="${esc(ws.alias || '')}">Fast task settings</button>
         <button class="secondary" type="button" data-rename-workspace="${esc(ws.alias || '')}">Rename</button>
+        <button class="secondary danger" type="button" data-delete-workspace="${esc(ws.alias || '')}">Delete</button>
         ${canSaveDetected ? `<button type="button" data-save-detected="${esc(ws.alias || '')}">Save detected tests</button>` : ''}
       </div>
       <pre class="copy-box" data-preflight-out="${esc(ws.alias || '')}" style="display:none;margin-top:10px;max-height:220px;overflow:auto;"></pre>
     </div>`;
+}
+
+function fastTaskText(fastTask = {}) {
+  const enabled = fastTask.enabled !== false;
+  const max = fastTask.maxIndexFiles || 750;
+  const includeRoots = Array.isArray(fastTask.includeRoots) && fastTask.includeRoots.length ? ' Include roots: ' + esc(fastTask.includeRoots.join(', ')) + '.' : '';
+  return enabled
+    ? `Fast task mode: on. Skips broad indexing for small tasks, caps focused indexes at ${esc(max)} files, and respects .relaiignore/context excludes.${includeRoots}`
+    : 'Fast task mode: off. Context scans may inspect more of the workspace.';
 }
 
 function validationText(configured, detected) {
@@ -108,6 +122,27 @@ document.addEventListener('click', async (event) => {
   if (renameWorkspace) {
     const alias = renameWorkspace.getAttribute('data-rename-workspace') || '';
     await renameWorkspaceFlow(alias);
+    return;
+  }
+
+  const toggleFast = event.target && event.target.closest ? event.target.closest('[data-toggle-fast-task]') : null;
+  if (toggleFast) {
+    const alias = toggleFast.getAttribute('data-toggle-fast-task') || '';
+    await toggleFastTaskFlow(alias);
+    return;
+  }
+
+  const editFast = event.target && event.target.closest ? event.target.closest('[data-edit-fast-task]') : null;
+  if (editFast) {
+    const alias = editFast.getAttribute('data-edit-fast-task') || '';
+    await editFastTaskFlow(alias);
+    return;
+  }
+
+  const deleteWorkspace = event.target && event.target.closest ? event.target.closest('[data-delete-workspace]') : null;
+  if (deleteWorkspace) {
+    const alias = deleteWorkspace.getAttribute('data-delete-workspace') || '';
+    await deleteWorkspaceFlow(alias);
     return;
   }
 
@@ -207,4 +242,84 @@ async function renameWorkspaceFlow(alias) {
   } else {
     toast('Could not rename workspace: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });
   }
+}
+
+
+async function toggleFastTaskFlow(alias) {
+  const ws = await loadWorkspace(alias);
+  if (!ws) return;
+  const fastTask = { ...(ws.fastTask || {}), enabled: !(ws.fastTask && ws.fastTask.enabled !== false) };
+  const result = await saveWorkspaceFastTask(ws, fastTask);
+  if (result && result.ok) {
+    toast('Fast task mode ' + (fastTask.enabled ? 'enabled' : 'disabled') + ' for ' + alias, { variant: 'success' });
+    setTimeout(() => location.reload(), 400);
+  } else {
+    toast('Could not update fast task mode: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });
+  }
+}
+
+async function editFastTaskFlow(alias) {
+  const ws = await loadWorkspace(alias);
+  if (!ws) return;
+  const current = ws.fastTask || {};
+  const maxIndexFiles = window.prompt('Max files for focused index in fast task mode', String(current.maxIndexFiles || 750));
+  if (maxIndexFiles == null) return;
+  const includeRoots = window.prompt('Optional include roots, comma-separated. Leave blank to scan all non-excluded source files.', Array.isArray(current.includeRoots) ? current.includeRoots.join(', ') : '');
+  if (includeRoots == null) return;
+  const excludePaths = window.prompt('Extra exclude paths, comma-separated. .relaiignore is also respected.', Array.isArray(current.excludePaths) ? current.excludePaths.join(', ') : '');
+  if (excludePaths == null) return;
+  const fastTask = {
+    ...current,
+    enabled: current.enabled !== false,
+    skipIndexForSmallTasks: true,
+    preferChangedFiles: true,
+    maxIndexFiles: Number(maxIndexFiles) || current.maxIndexFiles || 750,
+    includeRoots: splitList(includeRoots),
+    excludePaths: splitList(excludePaths)
+  };
+  const result = await saveWorkspaceFastTask(ws, fastTask);
+  if (result && result.ok) {
+    toast('Fast task settings saved for ' + alias, { variant: 'success' });
+    setTimeout(() => location.reload(), 400);
+  } else {
+    toast('Could not save fast task settings: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });
+  }
+}
+
+async function deleteWorkspaceFlow(alias) {
+  const ok = window.confirm(`Delete workspace '${alias}' from Rel.AI? This removes only the dashboard/config entry. It does not delete repo files.`);
+  if (!ok) return;
+  const result = await postJson('/api/workspaces', { action: 'delete', alias, confirmDelete: true });
+  if (result && result.ok) {
+    toast('Workspace deleted: ' + alias, { variant: 'success' });
+    setTimeout(() => location.reload(), 400);
+  } else {
+    toast('Could not delete workspace: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });
+  }
+}
+
+async function loadWorkspace(alias) {
+  const dashboard = await fetchJson('/api/dashboard/v10?limit=100&requireHttpToken=0');
+  const ws = dashboard && dashboard.config && Array.isArray(dashboard.config.workspaces)
+    ? dashboard.config.workspaces.find(item => item.alias === alias)
+    : null;
+  if (!ws) toast('Workspace not found: ' + alias, { variant: 'error' });
+  return ws;
+}
+
+function saveWorkspaceFastTask(ws, fastTask) {
+  return postJson('/api/workspaces', {
+    action: 'upsert',
+    alias: ws.alias,
+    path: ws.path,
+    protectedBranches: ws.protectedBranches,
+    defaultBaseBranch: ws.defaultBaseBranch,
+    allowedRemotes: ws.allowedRemotes,
+    fastTask,
+    confirmDangerous: true
+  });
+}
+
+function splitList(value) {
+  return String(value || '').split(/[,\n]/).map(item => item.trim()).filter(Boolean);
 }
