@@ -43,7 +43,7 @@ async function loadTools(container, mountId) {
       </table>
     </div>
     <div class="path" style="padding:12px 14px;border-top:1px solid var(--line);">
-      If ChatGPT still calls an old cached tool, Rel.AI keeps a small hidden compatibility layer so the task does not dead-end.
+      Normal ChatGPT mode intentionally exposes only this single bridge workflow. Legacy shell, patch, and task-runner tools are debug-mode only.
     </div>`;
 }
 

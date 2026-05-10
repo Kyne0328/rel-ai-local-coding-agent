@@ -75,7 +75,6 @@ function workspaceCard(ws, health) {
         ${badgeHtml('detected tests ' + detected.length, detected.length ? 'good' : 'warn')}
         ${badgeHtml('commands ' + commandKeys.length)}
         ${badgeHtml('fast task ' + (ws.fastTask && ws.fastTask.enabled !== false ? 'on' : 'off'), ws.fastTask && ws.fastTask.enabled !== false ? 'good' : 'warn')}
-        ${badgeHtml('worktrees ' + (health && health.worktreeCount != null ? health.worktreeCount : 0))}
         ${badgeHtml('protected ' + (protectedBranches.join(', ') || 'none'))}
       </div>
       <div class="path">${validationText(testKeys, detected)}</div>

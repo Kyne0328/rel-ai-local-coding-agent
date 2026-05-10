@@ -2,26 +2,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { getConfigPath, publicConfigSummary, writeConfig } = require("./config");
 
-const DANGEROUS_KEYS = new Set([
-  "allowDocker",
-  "allowGitHubCli"
-]);
-
-const BOOLEAN_KEYS = [
-  "allowGitHubCli",
-  "allowDocker",
-  "trustedLocalAgent",
-  "sessionLocksEnabled",
-  "dashboardEnabled"
-];
-
-const NUMBER_KEYS = [
-  "maxOutputBytes",
-  "maxSessionSteps",
-  "maxPlanSteps",
-  "maxIndexFiles",
-  "maxConcurrentSessionsPerWorkspace"
-];
+const BOOLEAN_KEYS = ["trustedLocalAgent", "dashboardEnabled"];
+const NUMBER_KEYS = ["maxOutputBytes", "maxIndexFiles"];
 
 const DEFAULT_FAST_TASK = {
   enabled: true,
@@ -36,125 +18,28 @@ const DEFAULT_FAST_TASK = {
   ]
 };
 
-const NESTED_SCHEMA = {
-  approvalGates: "booleanMap",
-  taskRunner: {
-    maxCycles: "number",
-    requireWorktree: "boolean",
-    requireApprovalBeforeCommit: "boolean",
-    requireApprovalBeforePush: "boolean",
-    requireApprovalBeforePr: "boolean"
-  },
-  ciRepair: {
-    enabled: "boolean",
-    maxCycles: "number",
-    watchAttempts: "number",
-    intervalSeconds: "number",
-    requireApprovalBeforePush: "boolean"
-  },
-  multiAgent: {
-    enabled: "boolean",
-    maxSubtasks: "number",
-    maxParallelSubtasks: "number",
-    requireReviewBeforeMerge: "boolean",
-    defaultRoles: "stringList"
-  },
-  scheduler: {
-    enabled: "boolean",
-    maxRetries: "number",
-    stopOnFailure: "boolean"
-  },
-  memory: {
-    enabled: "boolean",
-    maxNotesPerWorkspace: "number",
-    maxNoteChars: "number"
-  },
-  semanticIndex: {
-    enabled: "boolean",
-    maxFiles: "number",
-    maxFileBytes: "number"
-  },
-  policies: {
-    maxPatchFiles: "number",
-    requireApprovalBeforePush: "boolean",
-    requireApprovalBeforeMergeBack: "boolean",
-    blockedPaths: "stringList"
-  },
-  productUx: {
-    dashboardRefreshSeconds: "number",
-    liveLogPollSeconds: "number",
-    staleHours: "number",
-    cleanupOlderThanHours: "number",
-    enableStateExport: "boolean"
-  },
-  release: {
-    minimumReadinessScore: "number",
-    requireHttpToken: "boolean",
-    requireCleanWorktreeBeforePush: "boolean",
-    connectorProbeTimeoutMs: "number",
-    enableReleaseEndpoints: "boolean"
-  }
-};
-
 function settingsPayload(config) {
   return {
     ok: true,
     configPath: getConfigPath(),
     editable: true,
-    requiresAdminProfile: false,
-    dangerousKeys: Array.from(DANGEROUS_KEYS).sort(),
-    design: "chatgpt_local_repo",
+    design: "single_local_repo_bridge",
+    removedLegacyWorkflows: ["patch", "shell", "task-runner", "worktree", "multi-agent", "approval-gates", "docker", "pr-ci-repair"],
     config: publicConfigSummary(config)
   };
 }
 
-function _getNestedValue(config, key) {
-  const parts = key.split('.');
-  let val = config;
-  for (const p of parts) { val = val && val[p]; }
-  return val;
-}
-
 function updateSettings(current, payload = {}) {
-  if (payload.dryRun) {
-    const changes = [];
-    for (const [key, newVal] of Object.entries(payload)) {
-      if (key === 'dryRun') continue;
-      const oldVal = _getNestedValue(current, key);
-      if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
-        changes.push({ key, oldValue: oldVal, newValue: newVal });
-      }
-    }
-    return { ok: true, dryRun: true, changes };
-  }
-  requireAdmin(current);
   const next = clone(current);
   const changed = [];
   const values = payload.settings && typeof payload.settings === "object" ? payload.settings : payload;
-  const confirmDangerous = Boolean(payload.confirmDangerous || values.confirmDangerous);
 
-  // The product now has one public mode: trusted ChatGPT local repo.
   setIfChanged(next, "toolMode", "chatgpt_local_repo", changed);
   setIfChanged(next, "trustedLocalAgent", true, changed);
-  setIfChanged(next, "permissionProfile", "admin", changed);
-  setIfChanged(next, "agentMode", true, changed);
-  setIfChanged(next, "allowArbitraryCommands", true, changed);
-  setIfChanged(next, "allowDestructiveTools", true, changed);
-
-
-  if (Object.prototype.hasOwnProperty.call(values, "defaultTaskMode")) {
-    setIfChanged(next, "defaultTaskMode", String(values.defaultTaskMode || "implement_and_test"), changed);
-  }
-
-  setIfChanged(next, "sandboxMode", "none", changed);
 
   for (const key of BOOLEAN_KEYS) {
     if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
-    const nextValue = Boolean(values[key]);
-    if (DANGEROUS_KEYS.has(key) && nextValue === true && current[key] !== true && !confirmDangerous) {
-      throw new Error(`${key} requires confirmation. Re-submit with confirmDangerous=true to enable it.`);
-    }
-    setIfChanged(next, key, nextValue, changed);
+    setIfChanged(next, key, Boolean(values[key]), changed);
   }
 
   for (const key of NUMBER_KEYS) {
@@ -162,19 +47,12 @@ function updateSettings(current, payload = {}) {
     setIfChanged(next, key, finiteNumber(values[key], key), changed);
   }
 
-  for (const [section, schema] of Object.entries(NESTED_SCHEMA)) {
+  for (const section of ["productUx", "release"]) {
     if (!values[section] || typeof values[section] !== "object") continue;
     if (!next[section] || typeof next[section] !== "object") next[section] = {};
-    if (schema === "booleanMap") {
-      for (const [key, value] of Object.entries(values[section])) {
-        if (!/^[A-Za-z0-9._-]{1,80}$/.test(key)) throw new Error(`Invalid ${section} key: ${key}`);
-        setNestedIfChanged(next, section, key, Boolean(value), changed);
-      }
-      continue;
-    }
-    for (const [key, kind] of Object.entries(schema)) {
-      if (!Object.prototype.hasOwnProperty.call(values[section], key)) continue;
-      setNestedIfChanged(next, section, key, coerce(values[section][key], kind, `${section}.${key}`), changed);
+    for (const [key, value] of Object.entries(values[section])) {
+      const coerced = typeof value === "boolean" ? Boolean(value) : (typeof value === "number" || /^\d+$/.test(String(value)) ? finiteNumber(value, `${section}.${key}`) : value);
+      setNestedIfChanged(next, section, key, coerced, changed);
     }
   }
 
@@ -189,7 +67,6 @@ function updateSettings(current, payload = {}) {
 }
 
 function updateWorkspace(current, payload = {}) {
-  requireAdmin(current);
   const action = String(payload.action || "upsert").toLowerCase();
   const alias = String(payload.alias || payload.workspace || "").trim();
   validateAlias(alias);
@@ -223,36 +100,18 @@ function updateWorkspace(current, payload = {}) {
   if (!path.isAbsolute(workspacePath)) throw new Error("Workspace path must be absolute.");
   if (!fs.existsSync(workspacePath)) throw new Error(`Workspace path does not exist: ${workspacePath}`);
 
-  const entry = {
+  next.workspaces[alias] = {
     ...currentWorkspace,
     path: workspacePath,
     protectedBranches: parseList(source.protectedBranches, currentWorkspace.protectedBranches || ["main", "master"]),
     defaultBaseBranch: String(source.defaultBaseBranch || currentWorkspace.defaultBaseBranch || "main"),
     allowedRemotes: parseList(source.allowedRemotes, currentWorkspace.allowedRemotes || ["origin"]),
     repoSlug: String(source.repoSlug || currentWorkspace.repoSlug || ""),
-    worktreeRoot: String(source.worktreeRoot || currentWorkspace.worktreeRoot || ""),
-    defaultDockerImage: String(source.defaultDockerImage || currentWorkspace.defaultDockerImage || ""),
-    allowedDockerImages: parseList(source.allowedDockerImages, currentWorkspace.allowedDockerImages || []),
-    dockerUser: String(source.dockerUser || currentWorkspace.dockerUser || ""),
-    dockerNetworkNone: source.dockerNetworkNone == null ? currentWorkspace.dockerNetworkNone !== false : Boolean(source.dockerNetworkNone),
-    allowDocker: source.allowDocker == null ? Boolean(currentWorkspace.allowDocker) : Boolean(source.allowDocker),
-    allowArbitraryCommands: source.allowArbitraryCommands == null ? Boolean(currentWorkspace.allowArbitraryCommands) : Boolean(source.allowArbitraryCommands),
-    allowDestructiveTools: source.allowDestructiveTools == null ? Boolean(currentWorkspace.allowDestructiveTools) : Boolean(source.allowDestructiveTools),
     fastTask: parseFastTask(source.fastTask, currentWorkspace.fastTask),
     testCommands: parseCommandMap(source.testCommands, currentWorkspace.testCommands || {}),
     commands: parseCommandMap(source.commands, currentWorkspace.commands || {})
   };
 
-  const enablesDangerous = (
-    entry.allowDocker && !currentWorkspace.allowDocker
-    || entry.allowArbitraryCommands && !currentWorkspace.allowArbitraryCommands
-    || entry.allowDestructiveTools && !currentWorkspace.allowDestructiveTools
-  );
-  if (enablesDangerous && !payload.confirmDangerous) {
-    throw new Error("This workspace update enables high-risk capabilities. Re-submit with confirmDangerous=true.");
-  }
-
-  next.workspaces[alias] = entry;
   const normalized = writeConfig(next);
   return {
     ok: true,
@@ -263,10 +122,6 @@ function updateWorkspace(current, payload = {}) {
   };
 }
 
-function requireAdmin(_config) {
-  return true;
-}
-
 function clone(value) {
   return JSON.parse(JSON.stringify(value || {}));
 }
@@ -275,13 +130,6 @@ function finiteNumber(value, label) {
   const number = Number(value);
   if (!Number.isFinite(number) || number < 0) throw new Error(`${label} must be a non-negative number.`);
   return number;
-}
-
-function coerce(value, kind, label) {
-  if (kind === "boolean") return Boolean(value);
-  if (kind === "number") return finiteNumber(value, label);
-  if (kind === "stringList") return parseList(value, []);
-  return value;
 }
 
 function parseList(value, fallback = []) {
@@ -337,9 +185,7 @@ function validateAlias(alias) {
 }
 
 function validateCommandKey(key) {
-  if (!/^[A-Za-z0-9._:-]{1,120}$/.test(key)) {
-    throw new Error(`Invalid command key: ${key}`);
-  }
+  if (!/^[A-Za-z0-9._:-]{1,120}$/.test(key)) throw new Error(`Invalid command key: ${key}`);
 }
 
 function setIfChanged(target, key, value, changed) {
@@ -357,8 +203,4 @@ function setNestedIfChanged(target, section, key, value, changed) {
   }
 }
 
-module.exports = {
-  settingsPayload,
-  updateSettings,
-  updateWorkspace
-};
+module.exports = { settingsPayload, updateSettings, updateWorkspace };

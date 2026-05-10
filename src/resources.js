@@ -63,7 +63,7 @@ function contents(uri, mimeType, value) {
 
 function helpMarkdown(config) {
   const workspaces = workspaceList(config).workspaces.map((item) => `- ${item.alias}: ${item.path}`).join("\n") || "- No workspaces are configured yet.";
-  return `# Rel.AI MCP connector\n\nThis server exposes local coding-agent tools and resources to ChatGPT. Prefer tools over file search when the user asks to inspect or modify a workspace.\n\n## First calls to make\n\n1. Call \`relai_workspace_list\` to see configured aliases.\n2. Call \`relai_workspace_inspect\` with the requested alias, for example \`jjclover\`, to return the workspace profile and safe project tree in one response.\n3. For edits, create a task session and use the normal Rel.AI task workflow.\n\n## Configured workspaces\n\n${workspaces}\n\n## Server\n\n- name: ${pkg.name}\n- version: ${pkg.version}\n`;
+  return `# Rel.AI MCP connector\n\nThis server exposes one local repo bridge workflow to ChatGPT. Prefer these tools over file search when the user asks to inspect or modify a configured workspace.\n\n## First calls to make\n\n1. Call \`relai_workspace_list\` to see configured aliases.\n2. Call \`relai_workspace_inspect\` with the requested alias, for example \`jjclover\`, to return the workspace profile and safe project tree in one response.\n3. For edits, create a task session and use the normal Rel.AI task workflow.\n\n## Configured workspaces\n\n${workspaces}\n\n## Server\n\n- name: ${pkg.name}\n- version: ${pkg.version}\n`;
 }
 
 module.exports = { listResources, readResource };

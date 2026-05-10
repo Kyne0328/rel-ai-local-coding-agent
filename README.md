@@ -1,130 +1,44 @@
-![Rel.AI MCP hero](docs/assets/relai-mcp-hero.png)
-
 # Rel.AI MCP
 
-Rel.AI MCP is a local repo bridge for ChatGPT. It makes a configured local repository feel like an uploaded zip, but with local shell execution, persistent workspace access, verification commands, diffs, and reset support.
+Rel.AI MCP is a local ChatGPT repository bridge. It intentionally exposes one reliable workflow for configured local workspaces:
 
-The current product model is intentionally simple: ChatGPT connects to your local server and uses a small set of bridge tools to inspect, edit, verify, and review your real local projects.
+```text
+relai_repo_snapshot -> relai_read -> relai_write -> relai_verify -> relai_diff -> relai_reset
+```
 
-## What ChatGPT can do
-
-Rel.AI exposes eight public bridge tools:
+## MCP tools
 
 | Tool | Purpose |
 | --- | --- |
-| `relai_repo_snapshot` | Summarize a workspace like a zip upload: tree, manifests, scripts, git status, and detected commands. |
-| `relai_read` | Batch-read safe text files from a configured workspace. |
-| `relai_write` | Apply deterministic structured edits without fragile hand-written diffs. |
-| `relai_shell` | Run local shell commands inside a configured workspace. |
-| `relai_verify` | Run detected validation commands such as `npm run check`, `flutter analyze`, or `flutter test`. |
-| `relai_browser` | Browser/UI check bridge for dashboard and app validation workflows. |
-| `relai_diff` | Show the resulting git diff for review. |
-| `relai_reset` | Roll back workspace changes when needed. |
+| `relai_repo_snapshot` | Return a filtered project snapshot, manifests, discovered commands, and context hints. |
+| `relai_read` | Read focused files or directory summaries. |
+| `relai_write` | Apply deterministic structured edits. This is the only normal edit path. |
+| `relai_verify` | Run detected or requested verification commands. |
+| `relai_browser` | Run a browser/UI check or fetch a route. |
+| `relai_diff` | Review git status and diff. |
+| `relai_reset` | Roll back requested local changes. |
 
-Some older tool names are kept as hidden compatibility aliases so cached ChatGPT connector calls do not dead-end, but they are not advertised as the public interface.
-
-## Why this exists
-
-Uploading a repo zip to ChatGPT is often reliable because ChatGPT can inspect and modify files directly. Rel.AI keeps that workflow but removes repeated zipping:
-
-```text
-ChatGPT inspects the local repo
-ChatGPT reads relevant files
-ChatGPT writes deterministic edits
-ChatGPT runs local checks
-ChatGPT shows the final diff
-```
-
-Your code stays on your machine. Rel.AI runs on localhost or behind your own tunnel.
-
-## Quick start
-
-Requires Node.js 18 or newer.
-
-```bash
-npm install
-npm run oneclick
-```
-
-The launcher prints:
-
-- a local dashboard URL
-- a ChatGPT MCP URL using `/mcp/<secret>`
-- the connector token/secret information needed for setup
-
-For ChatGPT Developer Mode, use the printed MCP URL and choose **No Authentication**. The secret is already in the path.
+Removed workflows are not part of the MCP anymore: unified patch application, generated patch scripts, ad-hoc shell tools, task runners, isolated worktree orchestration, multi-agent schedulers, approval-gated legacy flows, Docker runners, and PR/CI repair loops.
 
 ## Dashboard
 
-The dashboard is for managing the local bridge:
+The dashboard manages local bridge configuration, workspace settings, fast-task mode, workspace deletion, and connection details. It does not expose alternate edit workflows.
 
-- **Home**: current status and recent activity
-- **Workspaces**: add, rename, inspect, preflight, and save detected validation commands
-- **Activity**: audit log of bridge calls
-- **Tools**: the eight public ChatGPT tools and descriptions
-- **Settings**: local bridge settings, connector instructions, and diagnostics
+## Fast task mode
 
-Workspaces can be added directly from the dashboard. Detected commands such as `dart:analyze`, `flutter:test`, and `npm:check` can be saved as validation commands.
-
-## Configuration shape
-
-A minimal config looks like this:
+Each workspace can define fast-task behavior:
 
 ```json
 {
-  "toolMode": "chatgpt_local_repo",
-  "trustedLocalAgent": true,
-  "dashboardEnabled": true,
-  "maxOutputBytes": 2097152,
-  "workspaces": {
-    "myapp": {
-      "path": "C:\\Dev\\myapp",
-      "protectedBranches": ["main", "master"]
-    }
+  "fastTask": {
+    "enabled": true,
+    "preferChangedFiles": true,
+    "skipIndexForSmallTasks": true,
+    "maxIndexFiles": 750,
+    "includeRoots": [],
+    "excludePaths": [".git", "node_modules", "build", "dist", "coverage"]
   }
 }
 ```
 
-Trusted local mode is a single trust decision. It enables local read/write/shell/reset behavior inside configured workspaces so ChatGPT can work like a local coding assistant. Workspace path boundaries are still enforced.
-
-Legacy approval gates, task sessions, worktrees, PR workflows, scheduler, and multi-agent tools remain as compatibility/debug code, not the normal public product flow.
-
-## Validation commands
-
-Rel.AI detects common project commands from manifests:
-
-- `package.json` scripts, for example `npm:check`
-- Flutter/Dart projects, for example `flutter:analyze`, `flutter:test`, `dart:analyze`
-- Go, Rust, Makefile, and Python conventions
-
-Use the dashboard **Save detected tests** button to persist detected validation commands, or let `relai_verify` run detected commands automatically.
-
-## Useful commands
-
-```bash
-npm run oneclick        # launch local server and print connector URLs
-npm run start:http      # start HTTP/dashboard server directly
-npm run connector:print # print saved connector settings
-npm run check           # syntax-check server/dashboard code
-npm run test:smoke      # verify the public 8-tool bridge
-npm run test:public-workflow # verify inspect/read/write/verify/diff/reset workflow
-npm run test:compat     # verify hidden legacy compatibility aliases
-```
-
-## Project structure
-
-```text
-bin/        CLI entrypoints
-src/        MCP server, local repo bridge, dashboard, config, shell, git, and compatibility helpers
-public/     dashboard entrypoint and CSS
-test/       smoke and compatibility tests
-examples/   example config and connector files
-```
-
-## Workflow reliability
-
-For long ChatGPT coding sessions, use the deterministic bridge flow and operation journal described in [docs/WORKFLOW_RELIABILITY.md](docs/WORKFLOW_RELIABILITY.md).
-
-## Notes
-
-Rel.AI is local developer tooling. Review diffs before committing important changes, keep workspaces scoped to repositories you trust ChatGPT to edit, and use `relai_reset` or git to roll back unwanted changes.
+Use `.relaiignore` in a repo to add repo-specific AI-context exclusions.

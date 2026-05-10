@@ -1,24 +1,26 @@
 {
-  "version": 1,
+  "version": 2,
   "stateDir": "/Users/you/.rel-ai-mcp",
   "auditLogPath": "",
-  "worktreeRoot": "/Users/you/.rel-ai-mcp/worktrees",
   "toolMode": "chatgpt_local_repo",
   "trustedLocalAgent": true,
   "maxOutputBytes": 2097152,
-  "maxSessionSteps": 1000,
-  "maxPlanSteps": 200,
-  "maxIndexFiles": 25000,
-  "maxConcurrentSessionsPerWorkspace": 4,
-  "sessionLocksEnabled": true,
+  "maxIndexFiles": 3000,
   "dashboardEnabled": true,
-  "defaultTaskMode": "implement_and_test",
   "workspaces": {
     "myapp": {
       "path": "/absolute/path/to/myapp",
       "protectedBranches": ["main", "master"],
       "defaultBaseBranch": "main",
       "allowedRemotes": ["origin"],
+      "fastTask": {
+        "enabled": true,
+        "preferChangedFiles": true,
+        "skipIndexForSmallTasks": true,
+        "maxIndexFiles": 750,
+        "includeRoots": [],
+        "excludePaths": [".git", "node_modules", "build", "dist", "coverage"]
+      },
       "testCommands": {},
       "commands": {}
     }

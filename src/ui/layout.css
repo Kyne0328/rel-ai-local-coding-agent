@@ -20,7 +20,8 @@
     overflow: auto;
   }
   .brand { display: flex; align-items: center; gap: 11px; padding-bottom: 14px; border-bottom: 1px solid var(--line-soft); }
-  .logo { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; font-weight: 900; background: linear-gradient(135deg, var(--blue), #9b7cff); }
+  .logo { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; overflow: hidden; background: rgba(255,255,255,.035); box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
+  .logo img { width: 100%; height: 100%; object-fit: contain; display: block; }
   .brand strong { display: block; letter-spacing: -.02em; }
   .brand span { display: block; margin-top: 2px; color: var(--muted, var(--text-muted)); font-size: 12px; }
   .nav { display: grid; gap: 7px; margin-top: 16px; }

@@ -70,27 +70,25 @@ try {
   send(2, 'tools/list');
   const list = await waitFor(2);
   const names = list.result.tools.map((tool) => tool.name);
-  if (names.length !== 8) throw new Error(`Expected 8 visible bridge tools, got ${names.length}`);
-  if (names.includes('relai_read_files')) throw new Error('compatibility tool leaked into tools/list');
+  if (names.length !== 7) throw new Error(`Expected 7 visible bridge tools, got ${names.length}`);
 
-  send(3, 'tools/call', { name: 'relai_read_files', arguments: { workspace: 'repo', paths: ['package.json'] } });
-  const read = await waitFor(3);
-  if (read.result.isError) throw new Error(`relai_read_files should remain callable in local repo mode: ${read.result.content[0].text}`);
+  send(3, 'tools/call', { name: 'relai_write', arguments: { workspace: 'repo', edits: [{ op: 'writeFile', path: 'tmp-relai-bridge.txt', content: 'bridge write ok\n' }] } });
+  const write = await waitFor(3);
+  if (write.result.isError) throw new Error(`relai_write should be callable in local repo mode: ${write.result.content[0].text}`);
 
-  send(4, 'tools/call', { name: 'relai_run_test', arguments: { workspace: 'repo', command: 'node --version' } });
-  const test = await waitFor(4);
-  if (test.result.isError) throw new Error(`relai_run_test should remain callable in local repo mode: ${test.result.content[0].text}`);
+  send(4, 'tools/call', { name: 'relai_shell', arguments: { workspace: 'repo', command: 'node --version' } });
+  const shell = await waitFor(4);
+  if (!shell.result.isError) throw new Error('removed relai_shell should be rejected');
+  if (!/Unknown tool/.test(shell.result.content[0].text)) throw new Error('removed tool should return Unknown tool');
 
-  send(5, 'tools/call', { name: 'relai_write_file', arguments: { workspace: 'repo', path: 'tmp-relai-compat.txt', content: 'compat write ok\n' } });
-  const write = await waitFor(5);
-  if (write.result.isError) throw new Error(`relai_write_file should remain callable as a hidden compatibility alias: ${write.result.content[0].text}`);
+  send(5, 'tools/call', { name: 'relai_apply_patch', arguments: { workspace: 'repo', diff: 'bad patch' } });
+  const patch = await waitFor(5);
+  if (!patch.result.isError) throw new Error('removed relai_apply_patch should be rejected');
+  if (!/Unknown tool/.test(patch.result.content[0].text)) throw new Error('removed patch tool should return Unknown tool');
 
-  send(6, 'tools/call', { name: 'relai_shell', arguments: { workspace: 'repo', command: 'node --version' } });
-  const shell = await waitFor(6);
-  if (shell.result.isError) throw new Error(`relai_shell should be unrestricted in trusted local mode: ${shell.result.content[0].text}`);
-  fs.rmSync(path.join(root, 'tmp-relai-compat.txt'), { force: true });
+  fs.rmSync(path.join(root, 'tmp-relai-bridge.txt'), { force: true });
 
-  console.log('ChatGPT local compatibility smoke test passed.');
+  console.log('ChatGPT local single-workflow smoke test passed; removed tools are rejected.');
 } finally {
   child.stdin.end();
   child.kill('SIGTERM');

@@ -6,7 +6,6 @@ const crypto = require("node:crypto");
 const { getConfigPath, publicConfigSummary, resolveWorkspace, makeDefaultConfig } = require("./config");
 const { runProcess, summarizeCommand } = require("./process");
 const { discoverCommands } = require("./commandDiscovery");
-const { gitStatus } = require("./git");
 const pkg = require("../package.json");
 
 function releaseReadiness(config, args = {}) {
@@ -19,7 +18,6 @@ function releaseReadiness(config, args = {}) {
   checkFile(findings, ".gitattributes", path.join(projectRoot(), ".gitattributes"), "warning");
   checkFile(findings, ".editorconfig", path.join(projectRoot(), ".editorconfig"), "warning");
   checkDir(findings, "stateDir", config.stateDir, "error");
-  checkDir(findings, "worktreeRoot", config.worktreeRoot, "warning");
 
   if (workspaces.length === 0) {
     findings.push(finding("warning", "no_workspaces", "No workspaces are configured yet."));
@@ -35,7 +33,6 @@ function releaseReadiness(config, args = {}) {
 
   const commandChecks = checkCommandAvailability(["git", "node"], findings);
   if (config.allowGitHubCli) checkCommandAvailability(["gh"], findings);
-  if (config.allowDocker || config.sandboxMode === "docker" || config.sandboxMode === "docker_readonly_base") checkCommandAvailability(["docker"], findings);
 
   const score = scoreFindings(findings);
   return {
@@ -70,13 +67,14 @@ async function workspacePreflight(config, args = {}) {
   const branchName = (branch.stdout || "").trim();
   checks.push({ name: "current_branch", ok: branch.exitCode === 0, branch: branchName, result: summarizeCommand(branch) });
   if ((workspace.protectedBranches || []).includes(branchName)) {
-    findings.push(finding("warning", "on_protected_branch", `Workspace is currently on protected branch '${branchName}'. Use a task worktree or feature branch.`));
+    findings.push(finding("warning", "on_protected_branch", `Workspace is currently on protected branch '${branchName}'. Switch to a feature branch before edits.`));
   }
 
-  const status = await gitStatus(workspace, config);
-  checks.push({ name: "git_status", ok: status.ok, dirty: Boolean(status.stdout && status.stdout.trim()), status });
-  if (status.stdout && status.stdout.trim() && args.requireClean !== false) {
-    findings.push(finding("warning", "dirty_worktree", "Workspace has uncommitted changes. Prefer starting a task worktree before agent edits."));
+  const statusResult = await runProcess("git", ["status", "--short"], { cwd: root, shell: false }, config);
+  const status = summarizeCommand(statusResult);
+  checks.push({ name: "git_status", ok: statusResult.exitCode === 0, dirty: Boolean(statusResult.stdout && statusResult.stdout.trim()), status });
+  if (statusResult.stdout && statusResult.stdout.trim() && args.requireClean !== false) {
+    findings.push(finding("warning", "dirty_worktree", "Workspace has uncommitted changes. Review relai_diff before editing."));
   }
 
   const commandKeys = Object.keys(workspace.commands || {});
@@ -162,7 +160,7 @@ function configMigrationPlan(config, args = {}) {
     recommendedActions: [
       "Back up config.json before upgrading.",
       "Run relai_release_readiness after migration.",
-      "Keep approval gates enabled for push, pr, reset, and merge."
+      "Use the single local repo bridge workflow for edits and verification."
     ]
   };
 }
@@ -200,7 +198,7 @@ function releaseNotes(_config, args = {}) {
       "Adds stable public URL support so one ChatGPT app can point at a permanent secret /mcp/<secret> endpoint.",
       "Adds a ChatGPT-compatible No Authentication URL path because Developer Mode does not import tools through arbitrary bearer-token headers.",
       "Adds dashboard connector setup guidance and a /api/connection helper endpoint.",
-      "Keeps release-readiness scoring for config, approval gates, command availability, state directories, and workspace setup.",
+      "Keeps release-readiness scoring for config, command availability, state directories, and workspace setup.",
       "Keeps connector verification helpers for ChatGPT Developer Mode endpoint/token setup.",
       "Adds workspace preflight checks for Git repo state, protected branches, line-ending files, and allowlisted tests.",
       "Adds config migration planning against the current default schema.",
@@ -308,7 +306,7 @@ function nextActions(findings) {
     if (item.code === "missing_http_token_env" || item.code === "missing_token") actions.push("Use the printed /mcp/<secret> ChatGPT MCP URL and set ChatGPT authentication to No Authentication. Keep REL_AI_MCP_TOKEN only for local/API bearer clients.");
     else if (item.code === "no_workspaces") actions.push("Run npm run workspace:add -- <alias> <absolute-project-path>.");
     else if (item.code === "no_test_commands") actions.push("Add at least one allowlisted test command with npm run testcmd:add.");
-    else if (item.code === "dirty_worktree") actions.push("Commit/stash local changes or create a task worktree before running agents.");
+    else if (item.code === "dirty_worktree") actions.push("Commit/stash local changes or review relai_diff before further edits.");
     else if (item.code === "trusted_local_agent_disabled") actions.push("Enable trusted local mode for the ChatGPT repo bridge.");
     else if (item.code && item.code.includes("gitattributes")) actions.push("Run relai_doctor_fix with workspacePath to add .gitattributes/.editorconfig.");
   }

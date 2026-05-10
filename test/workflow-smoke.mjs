@@ -118,7 +118,6 @@ const expected = [
   'relai_read',
   'relai_repo_snapshot',
   'relai_reset',
-  'relai_shell',
   'relai_verify',
   'relai_write'
 ].sort();

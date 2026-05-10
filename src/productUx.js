@@ -4,21 +4,11 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { publicConfigSummary, resolveWorkspace, writeConfig, readConfig, getConfigPath, makeDefaultConfig } = require("./config");
 const { readAudit, getStateDir } = require("./audit");
-const sessions = require("./sessions");
-const { listJobs } = require("./jobs");
-const approvals = require("./approvals");
-const locks = require("./locks");
-const multiagent = require("./multiagent");
-const { listWorktrees } = require("./worktrees");
 const { runProcess, summarizeCommand } = require("./process");
 const { safeReadJson } = require("./safety");
 
 function dashboardData(config, args = {}) {
   const limit = clampNumber(args.limit || 100, 1, 500);
-  const sessionItems = sessions.listSessions(config, { limit });
-  const jobItems = listJobs(config, { limit });
-  const approvalItems = approvals.listApprovals(config, { limit });
-  const lockItems = locks.listLocks(config).locks || [];
   const auditTail = readAudit(config, { limit: Math.min(limit, 200) });
   const health = healthMonitor(config, { limit: 25 });
   return {
@@ -26,17 +16,13 @@ function dashboardData(config, args = {}) {
     generatedAt: new Date().toISOString(),
     config: publicConfigSummary(config),
     counts: {
-      sessions: sessionItems.length,
-      jobs: jobItems.length,
-      approvals: approvalItems.length,
-      locks: lockItems.length,
-      auditEntries: auditTail.entries ? auditTail.entries.length : 0
+      auditEntries: auditTail.entries ? auditTail.entries.length : 0,
+      workspaces: Object.keys(config.workspaces || {}).length
     },
-    sessions: sessionItems,
-    jobs: jobItems,
-    approvals: approvalItems,
-    locks: lockItems,
-    multiAgent: multiagent.multiagentStatus(config, { limit }),
+    workflow: {
+      normal: ["relai_repo_snapshot", "relai_read", "relai_write", "relai_verify", "relai_diff", "relai_reset"],
+      removedLegacyWorkflows: ["patch", "shell", "task-runner", "worktree", "multi-agent", "approvals", "docker", "pr-ci-repair"]
+    },
     health,
     auditTail
   };
@@ -58,28 +44,13 @@ function healthMonitor(config, args = {}) {
   const findings = [];
   const stateDir = getStateDir(config);
   checkDir(findings, "stateDir", stateDir, true);
-  checkDir(findings, "worktreeRoot", config.worktreeRoot, true);
   checkFile(findings, "config", getConfigPath(), false);
 
-  const sessionItems = sessions.listSessions(config, { limit: args.limit || 200 });
-  const jobItems = listJobs(config, { limit: args.limit || 200 });
-  const approvalItems = approvals.listApprovals(config, { limit: args.limit || 200 });
-  const lockItems = locks.listLocks(config).locks || [];
   const staleHours = Number(config.productUx && config.productUx.staleHours || 24);
-  const staleSessions = sessionItems.filter((item) => isOlderThan(item.updatedAt || item.createdAt, staleHours));
-  const staleJobs = jobItems.filter((item) => ["running", "cancelling"].includes(item.status) && isOlderThan(item.updatedAt || item.startedAt, staleHours));
-  const staleLocks = lockItems.filter((item) => isOlderThan(item.updatedAt || item.createdAt, staleHours));
-
-  if (staleSessions.length) findings.push({ severity: "info", code: "stale_sessions", message: `${staleSessions.length} session(s) older than ${staleHours}h.`, items: staleSessions.slice(0, 20) });
-  if (staleJobs.length) findings.push({ severity: "warning", code: "stale_jobs", message: `${staleJobs.length} running/cancelling job(s) look stale.`, items: staleJobs.slice(0, 20) });
-  if (staleLocks.length) findings.push({ severity: "warning", code: "stale_locks", message: `${staleLocks.length} lock(s) look stale.`, items: staleLocks.slice(0, 20) });
-  if (approvalItems.length > 25) findings.push({ severity: "info", code: "many_approvals", message: `${approvalItems.length} approval records exist; cleanup may be useful.` });
-
   const workspaces = Object.keys(config.workspaces || {}).map((alias) => {
     try {
       const workspace = resolveWorkspace(config, alias);
-      const wt = listWorktrees(workspace);
-      return { alias, ok: true, path: workspace.path, worktreeCount: Array.isArray(wt.worktrees) ? wt.worktrees.length : 0 };
+      return { alias, ok: true, path: workspace.path, fastTask: workspace.fastTask || {} };
     } catch (error) {
       findings.push({ severity: "error", code: "workspace_unavailable", workspace: alias, message: error instanceof Error ? error.message : String(error) });
       return { alias, ok: false, error: error instanceof Error ? error.message : String(error) };
@@ -93,10 +64,7 @@ function healthMonitor(config, args = {}) {
     stateDir,
     workspaces,
     counts: {
-      sessions: sessionItems.length,
-      jobs: jobItems.length,
-      approvals: approvalItems.length,
-      locks: lockItems.length,
+      workspaces: workspaces.length,
       findings: findings.length
     },
     findings
@@ -117,9 +85,6 @@ function cleanupPlan(config, args = {}, apply) {
   const olderThanHours = clampNumber(args.olderThanHours || (config.productUx && config.productUx.cleanupOlderThanHours) || 168, 1, 24 * 365);
   const includeAudit = args.includeAudit === true;
   const targets = [];
-  collectOldJson(targets, path.join(stateDir, "jobs"), olderThanHours, [".json", ".log"]);
-  collectOldJson(targets, path.join(stateDir, "snapshots"), olderThanHours, [".json"]);
-  collectOldJson(targets, path.join(stateDir, "approvals"), olderThanHours, [".json"]);
   if (includeAudit) collectOldJson(targets, path.dirname(config.auditLogPath), olderThanHours, [path.basename(config.auditLogPath)]);
   const limited = targets.slice(0, clampNumber(args.maxDeletes || 500, 1, 5000));
   const deleted = [];
@@ -165,9 +130,7 @@ async function doctorFix(config, args = {}) {
     }
   }
   fs.mkdirSync(getStateDir(config), { recursive: true, mode: 0o700 });
-  fs.mkdirSync(config.worktreeRoot, { recursive: true, mode: 0o700 });
   fixes.push({ path: getStateDir(config), action: "ensured stateDir" });
-  fixes.push({ path: config.worktreeRoot, action: "ensured worktreeRoot" });
   return { ok: true, fixes, message: fixes.length ? "Doctor fixes completed." : "Nothing to fix." };
 }
 

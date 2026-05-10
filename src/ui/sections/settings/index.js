@@ -9,7 +9,7 @@ const SUB_PAGES = [
   { id: 'diagnostics', label: 'Diagnostics', mount: mountDiagnostics },
 ];
 
-const LEGACY_REDIRECTS = { permissions: 'general', 'approval-gates': 'general', advanced: 'general' };
+const LEGACY_REDIRECTS = { advanced: 'general' };
 let _currentSubPage = 'general';
 
 export function mountSettings(container, subPageId = 'general') {

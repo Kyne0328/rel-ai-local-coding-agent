@@ -6,27 +6,17 @@ const zlib = require("node:zlib");
 const { URL } = require("node:url");
 const { handleMessage } = require("./server");
 const { readConfig, publicConfigSummary, resolveWorkspace } = require("./config");
-const sessionsStore = require("./sessions");
-const { listJobs } = require("./jobs");
-const approvals = require("./approvals");
-const locks = require("./locks");
-const taskRunner = require("./taskRunner");
-const multiagent = require("./multiagent");
 const productUx = require("./productUx");
 const release = require("./release");
 const configEditor = require("./configEditor");
-const { workspaceFromSession } = require("./worktrees");
 const pkg = require("../package.json");
 const connection = require("./connectionProfile");
 
 function buildToolMetadata() {
   const { getToolSchemas, APPROVAL_GATES } = require("./tools");
-  const { TOOL_LEVEL } = require("./permissions");
   const categoryMap = {
-    relai_git: "Git", relai_docker: "Docker", relai_workspace: "Workspace",
-    relai_plan: "Plans", relai_multi: "Multi-agent", relai_ci: "CI",
-    relai_audit: "Audit", relai_release: "Release", relai_doctor: "Doctor",
-    relai_memory: "Memory", relai_approval: "Approvals",
+    relai_repo: "Bridge", relai_read: "Bridge", relai_write: "Bridge", relai_verify: "Bridge",
+    relai_browser: "Bridge", relai_diff: "Bridge", relai_reset: "Bridge",
   };
   const config = readConfig({ allowMissing: true });
   return getToolSchemas(config).map(tool => {
@@ -36,8 +26,8 @@ function buildToolMetadata() {
       displayName: tool.name.replace(/^relai_/, "").replace(/_/g, " "),
       description: tool.description || "",
       category: categoryMap[prefix] || "Other",
-      requiredProfile: TOOL_LEVEL[tool.name] || "admin",
-      requiresApproval: APPROVAL_GATES.has(tool.name),
+      requiredProfile: "bridge",
+      requiresApproval: false,
       parameters: tool.inputSchema ? Object.keys(tool.inputSchema.properties || {}) : [],
     };
   });
@@ -116,6 +106,17 @@ async function routeRequest(req, res, options) {
     return;
   }
 
+  if (req.method === "GET" && parsed.pathname === "/favicon.ico") {
+    try {
+      const content = fs.readFileSync(path.join(__dirname, "..", "public", "assets", "favicon.ico"));
+      res.writeHead(200, { "Content-Type": "image/x-icon", "Cache-Control": "no-cache" });
+      res.end(content);
+    } catch (_) {
+      res.writeHead(404); res.end("Not found");
+    }
+    return;
+  }
+
   // Serve src/ui/* and public/* without token (static assets only; API data remains token-gated)
   if (req.method === "GET" && (parsed.pathname.startsWith("/ui/") || parsed.pathname.startsWith("/public/"))) {
     const safePath = parsed.pathname.replace(/\\/g, "/");
@@ -127,9 +128,10 @@ async function routeRequest(req, res, options) {
       filePath = path.join(__dirname, "..", "public", safePath.slice(8));
     }
     try {
-      const content = fs.readFileSync(filePath, "utf8");
-      const ct = safePath.endsWith(".css") ? "text/css" : "text/javascript";
-      res.writeHead(200, { "Content-Type": ct + "; charset=utf-8", "Cache-Control": "no-cache" });
+      const content = fs.readFileSync(filePath);
+      const ct = contentTypeForStaticAsset(safePath);
+      const charset = ct.startsWith("text/") || ct === "application/javascript" ? "; charset=utf-8" : "";
+      res.writeHead(200, { "Content-Type": ct + charset, "Cache-Control": "no-cache" });
       res.end(content);
     } catch (_) {
       res.writeHead(404); res.end("Not found");
@@ -191,25 +193,6 @@ async function routeRequest(req, res, options) {
     return;
   }
 
-  const approvalMatch = req.method === "POST" && parsed.pathname.match(/^\/api\/approvals\/([^/]+)\/decision$/);
-  if (approvalMatch) {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
-    const config = readConfig();
-    if (config.permissionProfile !== "admin") {
-      sendJson(res, 403, { ok: false, error: "Approvals require admin permission profile." }, ae);
-      return;
-    }
-    const approvalId = approvalMatch[1];
-    const payload = await readJsonBody(req, options.maxBodyBytes);
-    try {
-      const result = approvals.resolveApproval(config, { approvalId, status: payload.status, note: payload.reason });
-      sendJson(res, 200, { ok: true, approvalId, status: result.status }, ae);
-    } catch (err) {
-      sendJson(res, 400, { ok: false, error: err.message }, ae);
-    }
-    return;
-  }
-
   if (req.method === "GET" && parsed.pathname === "/api/dashboard") {
     if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
     const config = readConfig();
@@ -219,11 +202,11 @@ async function routeRequest(req, res, options) {
       name: pkg.name,
       version: pkg.version,
       config: publicConfigSummary(config),
-      sessions: sessionsStore.listSessions(config, { limit }),
-      jobs: listJobs(config, { limit }),
-      approvals: approvals.listApprovals(config, { limit }),
-      locks: locks.listLocks(config).locks,
-      multiAgent: multiagent.multiagentStatus(config, { limit })
+      workflow: {
+        normal: ["relai_repo_snapshot", "relai_read", "relai_write", "relai_verify", "relai_diff", "relai_reset"],
+        removedLegacyWorkflows: ["patch", "shell", "task-runner", "worktree", "multi-agent", "approvals", "docker", "pr-ci-repair"]
+      },
+      audit: require("./audit").readAudit(config, { limit })
     }, ae);
     return;
   }
@@ -298,43 +281,6 @@ async function routeRequest(req, res, options) {
   if (req.method === "GET" && parsed.pathname === "/events") {
     if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
     openDashboardEvents(res, req, options);
-    return;
-  }
-
-  if (req.method === "GET" && parsed.pathname === "/api/task/graph") {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
-    const config = readConfig();
-    const payload = multiagent.taskGraph(config, {
-      sessionId: parsed.searchParams.get("sessionId") || undefined,
-      parentSessionId: parsed.searchParams.get("parentSessionId") || undefined
-    });
-    sendJson(res, 200, payload, ae);
-    return;
-  }
-
-  if (req.method === "GET" && parsed.pathname === "/api/session/export") {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
-    const config = readConfig();
-    const workspace = resolveApiWorkspace(config, parsed);
-    const payload = await taskRunner.sessionExport(config, workspace, {
-      workspace: parsed.searchParams.get("workspace") || undefined,
-      sessionId: parsed.searchParams.get("sessionId") || undefined,
-      auditLimit: Number(parsed.searchParams.get("auditLimit") || 200)
-    });
-    sendJson(res, 200, payload, ae);
-    return;
-  }
-
-  if (req.method === "GET" && parsed.pathname === "/api/session/diff") {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
-    const config = readConfig();
-    const workspace = resolveApiWorkspace(config, parsed);
-    const payload = await taskRunner.sessionDiff(config, workspace, {
-      workspace: parsed.searchParams.get("workspace") || undefined,
-      sessionId: parsed.searchParams.get("sessionId") || undefined,
-      staged: parsed.searchParams.get("staged") === "1"
-    });
-    sendJson(res, 200, payload, ae);
     return;
   }
 
@@ -459,11 +405,7 @@ function mcpGetDiagnostic(pathname, options, mcpAccess, req) {
 
 function resolveApiWorkspace(config, parsed) {
   const workspaceAlias = parsed.searchParams.get("workspace") || "";
-  const sessionId = parsed.searchParams.get("sessionId") || "";
-  let baseAlias = workspaceAlias;
-  if (!baseAlias && sessionId) baseAlias = sessionsStore.readSession(config, sessionId).workspace;
-  const base = resolveWorkspace(config, baseAlias);
-  return sessionId ? workspaceFromSession(config, base, sessionId) : base;
+  return resolveWorkspace(config, workspaceAlias);
 }
 
 async function handleJsonRpcPayload(payload) {
@@ -629,6 +571,19 @@ function safeInitialDashboardData() {
   }
 }
 
+
+function contentTypeForStaticAsset(filePath) {
+  const lower = String(filePath || "").toLowerCase();
+  if (lower.endsWith(".css")) return "text/css";
+  if (lower.endsWith(".js")) return "application/javascript";
+  if (lower.endsWith(".png")) return "image/png";
+  if (lower.endsWith(".ico")) return "image/x-icon";
+  if (lower.endsWith(".svg")) return "image/svg+xml";
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+  if (lower.endsWith(".webp")) return "image/webp";
+  return "application/octet-stream";
+}
+
 function jsonForHtmlScript(value) {
   return JSON.stringify(value).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026");
 }
@@ -641,13 +596,16 @@ function renderDashboardHtml(options) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rel.AI MCP Dashboard</title>
+<link rel="icon" href="/public/assets/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="/public/assets/favicon.png">
+<link rel="apple-touch-icon" href="/public/assets/relai-logo-192.png">
 <link rel="stylesheet" href="/public/dashboard.css">
 </head>
 <body>
 <a href="#main" class="skip-link">Skip to content</a>
 <div class="app-shell">
   <aside class="sidebar">
-    <div class="brand"><div class="logo">R</div><div><strong>Rel.AI MCP</strong><span>local agent control</span></div></div>
+    <div class="brand"><div class="logo"><img src="/public/assets/relai-logo.png" alt="Rel.AI logo"></div><div><strong>Rel.AI MCP</strong><span>local agent control</span></div></div>
     <nav class="nav">
       <a class="active" href="#home">Home</a>
       <a href="#workspaces">Workspaces</a>
