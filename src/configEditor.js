@@ -1,8 +1,8 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const { getConfigPath, publicConfigSummary, writeConfig, normalizeAutoApproveConfig } = require("./config");
+const { getConfigPath, publicConfigSummary, writeConfig, normalizeAutoApproveConfig, normalizeWorkflowConfig } = require("./config");
 
-const BOOLEAN_KEYS = ["trustedLocalAgent", "dashboardEnabled"];
+const BOOLEAN_KEYS = ["dashboardEnabled"];
 const NUMBER_KEYS = ["maxOutputBytes", "maxIndexFiles"];
 
 const DEFAULT_FAST_TASK = {
@@ -24,7 +24,7 @@ function settingsPayload(config) {
     configPath: getConfigPath(),
     editable: true,
     design: "single_local_repo_bridge",
-    removedLegacyWorkflows: ["patch", "shell", "task-runner", "worktree", "multi-agent", "approval-gates", "docker", "pr-ci-repair"],
+    removedLegacyWorkflows: ["generated helper scripts", "standalone shell fallback loops", "task-runner", "multi-agent", "approval-gates", "docker", "pr-ci-repair"],
     config: publicConfigSummary(config)
   };
 }
@@ -33,9 +33,6 @@ function updateSettings(current, payload = {}) {
   const next = clone(current);
   const changed = [];
   const values = payload.settings && typeof payload.settings === "object" ? payload.settings : payload;
-
-  setIfChanged(next, "toolMode", "chatgpt_local_repo", changed);
-  setIfChanged(next, "trustedLocalAgent", true, changed);
 
   for (const key of BOOLEAN_KEYS) {
     if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
@@ -50,6 +47,11 @@ function updateSettings(current, payload = {}) {
   if (values.autoApproveAppRequests && typeof values.autoApproveAppRequests === "object") {
     next.autoApproveAppRequests = normalizeAutoApproveConfig({ ...(next.autoApproveAppRequests || {}), ...values.autoApproveAppRequests });
     changed.push("autoApproveAppRequests");
+  }
+
+  if (values.workflow && typeof values.workflow === "object") {
+    next.workflow = normalizeWorkflowConfig({ ...(next.workflow || {}), ...values.workflow, aggressive: { ...((next.workflow || {}).aggressive || {}), ...((values.workflow || {}).aggressive || {}) } });
+    changed.push("workflow");
   }
 
   for (const section of ["productUx", "release"]) {

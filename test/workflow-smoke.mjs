@@ -13,9 +13,14 @@ const stateDir = path.join(temp, 'state');
 
 fs.mkdirSync(workspace, { recursive: true });
 fs.mkdirSync(path.join(workspace, 'src'), { recursive: true });
+fs.mkdirSync(path.join(workspace, 'lib'), { recursive: true });
 fs.writeFileSync(path.join(workspace, 'README.md'), '# Smoke\n');
 fs.writeFileSync(path.join(workspace, '.gitattributes'), '* text=auto eol=lf\n', 'utf8');
 fs.writeFileSync(path.join(workspace, 'src', 'index.js'), 'console.log("smoke")\n');
+const riskyDart = ['class SmsHandlerUtils {'];
+for (let i = 0; i < 220; i += 1) riskyDart.push(`  String render${i}(String phone) => 'sms-${i}-${'$'}{phone}';`);
+riskyDart.push('}');
+fs.writeFileSync(path.join(workspace, 'lib', 'sms_handler_utils.dart'), `${riskyDart.join('\n')}\n`);
 fs.writeFileSync(
   path.join(workspace, 'package.json'),
   JSON.stringify({
@@ -36,6 +41,7 @@ const configPath = path.join(temp, 'config.json');
 fs.writeFileSync(configPath, JSON.stringify({
   version: 1,
   stateDir,
+  workflow: { mode: 'aggressive', aggressive: { requireCleanGit: true, backup: true, deleteMissingDefault: false } },
   workspaces: {
     smoke: {
       path: workspace,
@@ -113,11 +119,16 @@ const listedResponse = await waitFor(2);
 const listed = listedResponse.result || {};
 const names = (listed.tools || []).map((tool) => tool.name).sort();
 const expected = [
+  'relai_apply_archive',
+  'relai_apply_patch',
   'relai_browser',
+  'relai_delete',
   'relai_diff',
   'relai_read',
+  'relai_replace',
   'relai_repo_snapshot',
   'relai_reset',
+  'relai_snapshot_archive',
   'relai_verify',
   'relai_write'
 ].sort();
@@ -136,6 +147,73 @@ call(4, 'relai_read', { workspace: 'smoke', paths: ['README.md'] });
 const read = contentOf(await waitFor(4));
 if (!read.items[0].content.includes('# Smoke')) {
   throw new Error('read failed');
+}
+
+call(41, 'relai_read', { workspace: 'smoke', paths: ['lib/sms_handler_utils.dart'] });
+const riskyRead = contentOf(await waitFor(41));
+if (riskyRead.items[0].writeGuidance.recommendedMode !== 'exact-replace') {
+  throw new Error('large interpolation-heavy source should recommend exact replacements');
+}
+if (!riskyRead.items[0].writeGuidance.reasons.some((item) => item.includes('template/interpolation'))) {
+  throw new Error('write guidance should explain interpolation-heavy risk');
+}
+
+call(42, 'relai_write', { workspace: 'smoke', path: 'lib/sms_handler_utils.dart', content: riskyRead.items[0].content });
+const refusedDirectWrite = await waitFor(42);
+if (!refusedDirectWrite.result?.isError || !refusedDirectWrite.result.content?.[0]?.text?.includes('Direct relai_write refused')) {
+  throw new Error('risky direct write should be refused with exact-replace guidance');
+}
+if (!refusedDirectWrite.result.content[0].text.includes('relai_replace')) {
+  throw new Error('risky write refusal should direct ChatGPT to relai_replace');
+}
+
+const riskySha = riskyRead.items[0].sha256;
+const oldDartLine = "  String render7(String phone) => 'sms-7-${phone}';";
+const newDartLine = "  String render7(String phone) => 'sms-7-fixed-' + phone;";
+call(43, 'relai_replace', { workspace: 'smoke', path: 'lib/sms_handler_utils.dart', expectedSha256: riskySha, oldText: oldDartLine, newText: newDartLine });
+const replacedRisky = contentOf(await waitFor(43));
+if (!replacedRisky.changedFiles.includes('lib/sms_handler_utils.dart') || !replacedRisky.verified) {
+  throw new Error('relai_replace should safely edit the risky interpolation-heavy Dart file');
+}
+
+call(44, 'relai_read', { workspace: 'smoke', paths: ['lib/sms_handler_utils.dart'] });
+const postReplaceRead = contentOf(await waitFor(44));
+if (!postReplaceRead.items[0].content.includes(newDartLine)) {
+  throw new Error('relai_replace result was not visible through relai_read');
+}
+
+call(45, 'relai_replace', { workspace: 'smoke', path: 'lib/sms_handler_utils.dart', expectedSha256: riskySha, oldText: newDartLine, newText: oldDartLine });
+const staleReplace = await waitFor(45);
+if (!staleReplace.result?.isError || !staleReplace.result.content?.[0]?.text?.includes('stale edit')) {
+  throw new Error('relai_replace should refuse stale expectedSha256 edits');
+}
+
+fs.writeFileSync(path.join(workspace, 'docs-to-delete.md'), 'obsolete\n');
+execFileSync('git', ['add', 'docs-to-delete.md'], { cwd: workspace });
+execFileSync('git', ['commit', '-m', 'add obsolete doc'], { cwd: workspace, stdio: 'ignore' });
+call(46, 'relai_delete', { workspace: 'smoke', path: 'docs-to-delete.md' });
+const deletedDoc = contentOf(await waitFor(46));
+if (!deletedDoc.changedFiles.includes('docs-to-delete.md') || fs.existsSync(path.join(workspace, 'docs-to-delete.md'))) {
+  throw new Error('relai_delete should remove obsolete files without shell helpers');
+}
+
+execFileSync('git', ['add', '.'], { cwd: workspace });
+execFileSync('git', ['commit', '-m', 'checkpoint before aggressive patch'], { cwd: workspace, stdio: 'ignore' });
+const aggressivePatch = `diff --git a/src/index.js b/src/index.js
+index 4e0946d..38910e4 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -1 +1 @@
+-console.log("smoke")
++console.log("smoke aggressive")
+`;
+call(47, 'relai_apply_patch', { workspace: 'smoke', patch: aggressivePatch, commands: ['node --check src/index.js'], returnDiff: true });
+const appliedPatch = contentOf(await waitFor(47));
+if (!appliedPatch.ok || !appliedPatch.changedFiles.includes('src/index.js')) {
+  throw new Error('relai_apply_patch should apply a checked patch in aggressive mode');
+}
+if (!fs.readFileSync(path.join(workspace, 'src', 'index.js'), 'utf8').includes('smoke aggressive')) {
+  throw new Error('relai_apply_patch did not modify the file');
 }
 
 const newReadme = '# Smoke\n\nUpdated by public workflow smoke.\n';
@@ -190,7 +268,7 @@ if (!diff.diff.includes('Updated through staged full-file write')) {
   throw new Error('diff missing staged edit');
 }
 
-call(9, 'relai_reset', { workspace: 'smoke', paths: ['README.md'] });
+call(9, 'relai_reset', { workspace: 'smoke', paths: ['README.md', 'lib/sms_handler_utils.dart', 'src/index.js'] });
 const reset = contentOf(await waitFor(9));
 if (!reset.ok) {
   throw new Error('reset failed');

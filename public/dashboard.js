@@ -3,7 +3,7 @@ import { init as initStore, get as getStore } from '/ui/store.js';
 import { initRouter, currentSection } from '/ui/router.js';
 import { initEvents, startSSE, stopSSE, isLive, setPollCallback } from '/ui/events.js';
 import { mountHome } from '/ui/sections/home.js';
-import { initCommandPalette, registerActions } from '/ui/components/command-palette.js';
+import { initCommandPalette } from '/ui/components/command-palette.js';
 
 const savedTheme = localStorage.getItem('relai_theme');
 if (savedTheme === 'light') document.documentElement.dataset.theme = 'light';

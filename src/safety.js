@@ -84,51 +84,6 @@ function looksBinary(buffer) {
   return false;
 }
 
-function extractPathsFromDiff(diff) {
-  const paths = [];
-  for (const line of String(diff || "").split(/\r?\n/)) {
-    if (line.startsWith("diff --git ")) {
-      const match = line.match(/^diff --git\s+a\/(.+?)\s+b\/(.+)$/);
-      if (match) {
-        paths.push(stripQuotedPath(match[1]));
-        paths.push(stripQuotedPath(match[2]));
-      }
-      continue;
-    }
-    if (line.startsWith("--- ") || line.startsWith("+++ ")) {
-      const raw = line.slice(4).trim().split(/\s+/)[0];
-      if (raw === "/dev/null") continue;
-      if (raw.startsWith("a/") || raw.startsWith("b/")) paths.push(stripQuotedPath(raw.slice(2)));
-    }
-  }
-  return [...new Set(paths.filter(Boolean))];
-}
-
-function validateDiffPaths(diff, root) {
-  const paths = extractPathsFromDiff(diff);
-  if (paths.length === 0) throw new Error("Diff does not contain recognizable file paths.");
-  for (const relativePath of paths) {
-    if (relativePath === "/dev/null") continue;
-    resolveSafePath(root, relativePath);
-  }
-  return paths;
-}
-
-function stripQuotedPath(input) {
-  let value = String(input || "").trim();
-  if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-    value = value.slice(1, -1);
-  }
-  return decodeGitOctalEscapes(value);
-}
-
-function decodeGitOctalEscapes(value) {
-  return value.replace(/(\\[0-7]{3})+/g, (run) => {
-    const bytes = run.match(/\\([0-7]{3})/g).map((m) => parseInt(m.slice(1), 8));
-    return Buffer.from(bytes).toString("utf8");
-  });
-}
-
 function collectTextFiles(root, options = {}) {
   const maxEntries = options.maxEntries || Infinity;
   const files = [];
@@ -263,15 +218,6 @@ function matchesIgnorePattern(rel, pattern) {
   return regex.test(rel);
 }
 
-function readTextFileSafe(root, relativePath) {
-  const resolved = resolveSafePath(root, relativePath);
-  const stat = fs.statSync(resolved.absolutePath);
-  if (!stat.isFile()) throw new Error(`Not a file: ${resolved.relativePath}`);
-  const data = fs.readFileSync(resolved.absolutePath);
-  if (looksBinary(data)) throw new Error(`Binary-looking file skipped: ${resolved.relativePath}`);
-  return data.toString("utf8");
-}
-
 function fileSha256(root, relativePath) {
   const resolved = resolveSafePath(root, relativePath);
   if (!fs.existsSync(resolved.absolutePath)) return null;
@@ -323,25 +269,6 @@ function writeTextFileSafe(root, relativePath, content, options = {}) {
   };
 }
 
-function safeCommandPolicy(command) {
-  const text = String(command || "");
-  const banned = [
-    /\brm\s+-rf\b/,
-    /\bsudo\b/,
-    /\bmkfs\b/,
-    /\bdd\s+if=/,
-    /:\(\)\s*\{\s*:\|:/,
-    />\s*\/dev\/sd[a-z]/,
-    /\bchmod\s+-R\s+777\b/,
-    /\bchown\s+-R\b/,
-    /\bshutdown\b|\breboot\b/,
-    /\bdeploy\b.*\bprod/i
-  ];
-  const hit = banned.find((pattern) => pattern.test(text));
-  if (hit) throw new Error(`Command rejected by safety policy: ${hit}`);
-  return text;
-}
-
 function safeReadJson(file, fallback = null) {
   try {
     return JSON.parse(fs.readFileSync(file, "utf8"));
@@ -359,14 +286,10 @@ module.exports = {
   isPathInside,
   isSecretPath,
   looksBinary,
-  extractPathsFromDiff,
-  validateDiffPaths,
   collectTextFiles,
   collectOptionsFromWorkspace,
-  readTextFileSafe,
   writeTextFileSafe,
   fileSha256,
-  safeCommandPolicy,
   safeReadJson
 };
 

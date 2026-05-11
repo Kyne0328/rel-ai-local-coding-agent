@@ -59,6 +59,11 @@ if (dashboardQueryAuth.readiness == null) {
   throw new Error('dashboard API did not include readiness data');
 }
 
+const pathPreflight = await fetch(`http://127.0.0.1:${port}/api/workspace/preflight?token=${encodeURIComponent(token)}&path=${encodeURIComponent(root)}`).then((response) => response.json());
+if (!pathPreflight.ok || !pathPreflight.exists || !pathPreflight.isDirectory) {
+  throw new Error('workspace path preflight did not validate an existing directory');
+}
+
 const dashboardHtmlResponse = await fetch(`http://127.0.0.1:${port}/dashboard?token=${encodeURIComponent(token)}`);
 const dashboardHtml = await dashboardHtmlResponse.text();
 if (!dashboardHtmlResponse.ok || dashboardHtml.includes('initialDashboardJson is not defined') || !dashboardHtml.includes('id="initialDashboardData"')) {
@@ -109,7 +114,7 @@ const chatgptList = await fetch(`http://127.0.0.1:${port}/mcp/${chatgptSecret}`,
   headers: { 'content-type': 'application/json' },
   body: JSON.stringify({ jsonrpc: '2.0', id: 30, method: 'tools/list', params: {} })
 }).then((response) => response.json());
-if (!Array.isArray(chatgptList.result?.tools) || chatgptList.result.tools.length !== 7 || !chatgptList.result.tools.some((item) => item.name === 'relai_repo_snapshot')) {
+if (!Array.isArray(chatgptList.result?.tools) || chatgptList.result.tools.length !== 12 || !chatgptList.result.tools.some((item) => item.name === 'relai_repo_snapshot')) {
   throw new Error('secret ChatGPT MCP URL did not expose exactly the bridge tools without bearer auth');
 }
 
@@ -130,8 +135,8 @@ const list = await fetch(`http://127.0.0.1:${port}/mcp`, {
   headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
   body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/list', params: {} })
 }).then((response) => response.json());
-if (!Array.isArray(list.result?.tools) || list.result.tools.length !== 7) {
-  throw new Error(`HTTP tools/list should return exactly 7 bridge tools, got ${list.result?.tools?.length}`);
+if (!Array.isArray(list.result?.tools) || list.result.tools.length !== 12) {
+  throw new Error(`HTTP tools/list should return exactly 12 bridge tools, got ${list.result?.tools?.length}`);
 }
 
 const resources = await fetch(`http://127.0.0.1:${port}/mcp`, {

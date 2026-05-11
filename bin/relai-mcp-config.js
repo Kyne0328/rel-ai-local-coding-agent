@@ -15,28 +15,9 @@ function printUsage() {
   relai-mcp-config import-relai [source-path]
   relai-mcp-config state export <output-path>
   relai-mcp-config state import <input-path> --confirm
-  relai-mcp-config set allowGitHubCli <true|false>
-  relai-mcp-config set allowDocker <true|false>
-  relai-mcp-config set allowArbitraryCommands <true|false>
-  relai-mcp-config set allowDestructiveTools <true|false>
-  relai-mcp-config set permissionProfile <read-only|patch|test|pr|admin>
-  relai-mcp-config set worktreeRoot <absolute-path>
   relai-mcp-config set dashboardEnabled <true|false>
-  relai-mcp-config set sessionLocksEnabled <true|false>
+  relai-mcp-config set maxOutputBytes <number>
   relai-mcp-config set maxIndexFiles <number>
-  relai-mcp-config set maxIndexFileBytes <number>
-  relai-mcp-config set multiAgent.enabled <true|false>
-  relai-mcp-config set multiAgent.maxSubtasks <number>
-  relai-mcp-config set multiAgent.maxParallelSubtasks <number>
-  relai-mcp-config set multiAgent.requireReviewBeforeMerge <true|false>
-  relai-mcp-config set scheduler.enabled <true|false>
-  relai-mcp-config set scheduler.maxRetries <number>
-  relai-mcp-config set memory.enabled <true|false>
-  relai-mcp-config set memory.maxNotesPerWorkspace <number>
-  relai-mcp-config set semanticIndex.enabled <true|false>
-  relai-mcp-config set semanticIndex.maxFiles <number>
-  relai-mcp-config set semanticIndex.maxFileBytes <number>
-  relai-mcp-config approval-gate set <action> <true|false>
 
 Config path: ${getConfigPath()}`);
 }
@@ -113,45 +94,17 @@ function main() {
     const key = requireArg(subcommand, "setting key");
     const value = requireArg(action, "setting value");
     const config = readConfig({ allowMissing: true });
-    if (["allowGitHubCli", "allowDocker", "allowArbitraryCommands", "allowDestructiveTools", "dashboardEnabled", "sessionLocksEnabled"].includes(key)) {
+    if (["dashboardEnabled"].includes(key)) {
       config[key] = parseBool(value, key);
-    } else if (["multiAgent.enabled", "multiAgent.requireReviewBeforeMerge", "scheduler.enabled", "memory.enabled", "semanticIndex.enabled"].includes(key)) {
-      const [section, field] = key.split(".");
-      config[section] = config[section] || {};
-      config[section][field] = parseBool(value, key);
-    } else if (key === "permissionProfile") {
-      if (!["read-only", "patch", "test", "pr", "admin"].includes(value)) throw new Error("permissionProfile must be one of: read-only, patch, test, pr, admin.");
-      config[key] = value;
-    } else if (key === "worktreeRoot") {
-      if (!path.isAbsolute(value)) throw new Error("worktreeRoot must be an absolute path.");
-      config[key] = value;
-    } else if (["maxIndexFiles", "maxIndexFileBytes", "maxPlanSteps", "maxConcurrentSessionsPerWorkspace"].includes(key)) {
+    } else if (["maxOutputBytes", "maxIndexFiles"].includes(key)) {
       const number = Number(value);
       if (!Number.isFinite(number) || number <= 0) throw new Error(`${key} must be a positive number.`);
       config[key] = number;
-    } else if (["multiAgent.maxSubtasks", "multiAgent.maxParallelSubtasks", "scheduler.maxRetries", "memory.maxNotesPerWorkspace", "memory.maxNoteChars", "semanticIndex.maxFiles", "semanticIndex.maxFileBytes"].includes(key)) {
-      const number = Number(value);
-      if (!Number.isFinite(number) || number <= 0) throw new Error(`${key} must be a positive number.`);
-      const [section, field] = key.split(".");
-      config[section] = config[section] || {};
-      config[section][field] = number;
     } else {
-      throw new Error(`Unsupported setting '${key}'.`);
+      throw new Error(`Unsupported setting '${key}'. Supported settings: dashboardEnabled, maxOutputBytes, maxIndexFiles.`);
     }
     writeConfig(config);
-    const printed = key.includes(".") ? config[key.split(".")[0]][key.split(".")[1]] : config[key];
-    console.log(`Set ${key}=${printed}`);
-    return;
-  }
-
-  if (command === "approval-gate" && subcommand === "set") {
-    const gate = requireArg(action, "approval gate action");
-    const value = requireArg(rest[0], "approval gate value");
-    const config = readConfig({ allowMissing: true });
-    config.approvalGates = config.approvalGates || {};
-    config.approvalGates[gate] = parseBool(value, gate);
-    writeConfig(config);
-    console.log(`Set approval gate ${gate}=${config.approvalGates[gate]}`);
+    console.log(`Set ${key}=${config[key]}`);
     return;
   }
 

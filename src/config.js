@@ -4,7 +4,7 @@ const path = require("node:path");
 const { safeReadJson } = require("./safety");
 const { discoverCommands } = require("./commandDiscovery");
 
-const BRIDGE_TOOLS = ["relai_repo_snapshot", "relai_read", "relai_write", "relai_verify", "relai_browser", "relai_diff", "relai_reset"];
+const BRIDGE_TOOLS = ["relai_repo_snapshot", "relai_read", "relai_write", "relai_replace", "relai_delete", "relai_apply_patch", "relai_apply_archive", "relai_snapshot_archive", "relai_verify", "relai_browser", "relai_diff", "relai_reset"];
 
 function makeDefaultAutoApproveConfig() {
   return {
@@ -35,6 +35,19 @@ function makeDefaultFastTaskConfig() {
   };
 }
 
+function makeDefaultWorkflowConfig() {
+  return {
+    mode: "conservative",
+    aggressive: {
+      requireCleanGit: true,
+      backup: true,
+      deleteMissingDefault: false,
+      maxPatchBytes: 2 * 1024 * 1024,
+      maxArchiveBytes: 250 * 1024 * 1024
+    }
+  };
+}
+
 function makeDefaultConfig() {
   return {
     version: 2,
@@ -59,6 +72,7 @@ function makeDefaultConfig() {
       enableReleaseEndpoints: true
     },
     autoApproveAppRequests: makeDefaultAutoApproveConfig(),
+    workflow: makeDefaultWorkflowConfig(),
     workspaces: {}
   };
 }
@@ -114,6 +128,7 @@ function normalizeConfig(config) {
   next.productUx = { ...base.productUx, ...(input.productUx || {}) };
   next.release = { ...base.release, ...(input.release || {}) };
   next.autoApproveAppRequests = normalizeAutoApproveConfig(input.autoApproveAppRequests || input.autoApprove || base.autoApproveAppRequests);
+  next.workflow = normalizeWorkflowConfig(input.workflow || base.workflow);
   next.release.minimumReadinessScore = clampNumber(next.release.minimumReadinessScore, 0, 100, base.release.minimumReadinessScore);
   next.release.connectorProbeTimeoutMs = clampNumber(next.release.connectorProbeTimeoutMs, 500, 60000, base.release.connectorProbeTimeoutMs);
 
@@ -151,6 +166,24 @@ function normalizeFastTask(value) {
   };
 }
 
+function normalizeWorkflowConfig(value) {
+  const base = makeDefaultWorkflowConfig();
+  const raw = value && typeof value === "object" ? value : {};
+  const aggressive = raw.aggressive && typeof raw.aggressive === "object" ? raw.aggressive : {};
+  return {
+    mode: raw.mode === "aggressive" ? "aggressive" : "conservative",
+    aggressive: {
+      ...base.aggressive,
+      ...aggressive,
+      requireCleanGit: aggressive.requireCleanGit == null ? base.aggressive.requireCleanGit : Boolean(aggressive.requireCleanGit),
+      backup: aggressive.backup == null ? base.aggressive.backup : Boolean(aggressive.backup),
+      deleteMissingDefault: aggressive.deleteMissingDefault == null ? base.aggressive.deleteMissingDefault : Boolean(aggressive.deleteMissingDefault),
+      maxPatchBytes: clampNumber(aggressive.maxPatchBytes, 1024, 50 * 1024 * 1024, base.aggressive.maxPatchBytes),
+      maxArchiveBytes: clampNumber(aggressive.maxArchiveBytes, 1024 * 1024, 2 * 1024 * 1024 * 1024, base.aggressive.maxArchiveBytes)
+    }
+  };
+}
+
 function normalizeAutoApproveConfig(value) {
   const base = makeDefaultAutoApproveConfig();
   const raw = value && typeof value === "object" ? value : {};
@@ -170,9 +203,6 @@ function normalizeStringList(value) {
   return String(value).split(/[\n,]/).map((item) => item.trim()).filter(Boolean);
 }
 
-function normalizeToolMode(_value) {
-  return "chatgpt_local_repo";
-}
 
 function resolveWorkspace(config, alias) {
   const key = String(alias || "").trim();
@@ -203,8 +233,9 @@ function publicConfigSummary(config) {
     auditLogPath: config.auditLogPath,
     maxOutputBytes: config.maxOutputBytes,
     maxIndexFiles: config.maxIndexFiles,
-    toolMode: normalizeToolMode(config.toolMode || "chatgpt_local_repo"),
+    toolMode: "chatgpt_local_repo",
     trustedLocalAgent: true,
+    workflow: normalizeWorkflowConfig(config.workflow),
     localRepoBridge: {
       mode: "trusted",
       visibleTools: BRIDGE_TOOLS,
@@ -212,7 +243,7 @@ function publicConfigSummary(config) {
       verificationAccess: true,
       resetAccess: true
     },
-    removedLegacyWorkflows: ["patch", "generated scripts", "standalone shell", "task-runner", "worktree", "multi-agent", "approvals", "docker", "pr-ci-repair"],
+    removedLegacyWorkflows: ["generated helper scripts", "standalone shell fallback loops", "task-runner", "multi-agent", "approval-gates", "docker", "pr-ci-repair"],
     dashboardEnabled: Boolean(config.dashboardEnabled),
     productUx: config.productUx,
     release: config.release,
@@ -261,6 +292,8 @@ module.exports = {
   makeDefaultConfig,
   makeDefaultFastTaskConfig,
   normalizeFastTask,
+  makeDefaultWorkflowConfig,
+  normalizeWorkflowConfig,
   makeDefaultAutoApproveConfig,
   normalizeAutoApproveConfig,
   readConfig,

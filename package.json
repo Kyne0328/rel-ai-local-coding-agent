@@ -35,7 +35,6 @@
     "test:tunnel": "node test/tunnel-manager-smoke.mjs",
     "test:oneclick": "node test/oneclick-args-smoke.mjs",
     "test:compat": "node test/chatgpt-local-compat-smoke.mjs",
-    "test:loose-patch": "node test/chatgpt-local-compat-smoke.mjs",
     "test:public-workflow": "node test/workflow-smoke.mjs"
   },
   "keywords": [

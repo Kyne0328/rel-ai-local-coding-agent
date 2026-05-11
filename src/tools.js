@@ -4,12 +4,17 @@ const { collectTextFiles, collectOptionsFromWorkspace, resolveSafePath } = requi
 const { logAudit } = require("./audit");
 const { discoverCommands } = require("./commandDiscovery");
 const { summarizeOperations } = require("./journal");
-const { repoSnapshot, relaiRead, relaiWrite, relaiVerify, relaiBrowser, relaiDiff, relaiReset } = require("./localRepoBridge");
+const { repoSnapshot, relaiRead, relaiWrite, relaiReplace, relaiDelete, relaiApplyPatch, relaiApplyArchive, relaiSnapshotArchive, relaiVerify, relaiBrowser, relaiDiff, relaiReset } = require("./localRepoBridge");
 
 const BRIDGE_TOOL_NAMES = [
   "relai_repo_snapshot",
   "relai_read",
   "relai_write",
+  "relai_replace",
+  "relai_delete",
+  "relai_apply_patch",
+  "relai_apply_archive",
+  "relai_snapshot_archive",
   "relai_verify",
   "relai_browser",
   "relai_diff",
@@ -23,8 +28,30 @@ const toolSchemas = [
   tool("relai_read", "Read Local Repo Paths", "Batch-read files or directory summaries from the workspace. Mirrors reading files from an uploaded zip.", {
     workspace: stringProp(), paths: arrayProp("string", 1, 100), maxBytes: numberProp(1000, 10485760), maxEntries: numberProp(1, 20000)
   }, ["workspace", "paths"]),
-  tool("relai_write", "Write Local Repo File", "Full-file write only. Direct mode: pass { workspace, path, content }. For large files that ChatGPT may block, use the same tool in staged mode: start with { workspace, stage: 'start', path, content }, append chunks with { workspace, stage: 'append', writeId, content }, then commit with { workspace, stage: 'commit', writeId }. Edit arrays, find/replace operations, patches, and generated scripts are not supported.", {
+  tool("relai_write", "Write Local Repo File", "Full-file replacement only. Use direct { workspace, path, content } for normal-sized complete-file writes. Long, large, or interpolation-heavy source files are refused in direct mode; use relai_replace for small exact edits inside those files, or staged relai_write only when whole-file replacement is unavoidable. Patch scripts, shell heredocs, generated edit helpers, and edit-array payloads are not supported.", {
     workspace: stringProp(), path: stringProp(), content: stringProp(), dryRun: boolProp(), stage: stringProp(), writeId: stringProp()
+  }, ["workspace"]),
+  tool("relai_replace", "Replace Exact Text", "Small deterministic edits inside an existing file. Provide { workspace, path, expectedSha256?, oldText, newText } or replacements: [{ oldText, newText, occurrence? }]. Each oldText must match exactly; ambiguous duplicate matches require occurrence. Use this instead of full-file writes for large/interpolation-heavy source files, lint cleanup, duplicate import removal, and localized behavior changes.", {
+    workspace: stringProp(),
+    path: stringProp(),
+    oldText: stringProp(),
+    newText: stringProp(),
+    expectedSha256: stringProp(),
+    occurrence: numberProp(1, 1000000),
+    replacements: arrayObjectProp({ oldText: stringProp(), newText: stringProp(), occurrence: numberProp(1, 1000000) }, ["oldText", "newText"], 1, 50),
+    dryRun: boolProp()
+  }, ["workspace", "path"]),
+  tool("relai_delete", "Delete Local Repo Files", "Delete one or more files from a configured workspace without shell commands or patch scripts. Use for removing obsolete docs or generated files after reading/reviewing them. Directories are refused. Supports dryRun, failIfMissing, and expectedSha256 for one-file stale deletion checks.", {
+    workspace: stringProp(), path: stringProp(), paths: arrayProp("string", 1, 100), expectedSha256: stringProp(), dryRun: boolProp(), failIfMissing: boolProp()
+  }, ["workspace"]),
+  tool("relai_apply_patch", "Apply Patch Aggressively", "Aggressive workflow tool. Apply a unified diff directly to the live workspace using git apply --check then git apply. Requires workflow.mode='aggressive' unless confirmAggressive=true is passed. Honors requireCleanGit, backup, verify commands, and returns diff/status. Use for Codex-style fast patch application when exact replacements are too small-scale.", {
+    workspace: stringProp(), patch: stringProp(), diff: stringProp(), confirmAggressive: boolProp(), requireCleanGit: boolProp(), backup: boolProp(), command: stringProp(), commands: arrayProp("string", 0), commandsText: stringProp(), timeoutMs: numberProp(1000, 86400000), stopOnFailure: boolProp(), returnDiff: boolProp(), maxDiffBytes: numberProp(1000, 5242880)
+  }, ["workspace"]),
+  tool("relai_apply_archive", "Overlay Archive Aggressively", "Aggressive workflow tool. Extract a local zip archive on the MCP host and overlay it onto the live workspace, preserving .git and skipping dangerous/generated paths. Requires workflow.mode='aggressive' unless confirmAggressive=true is passed. Use for fast zip-over-repo style edits with clean-git checks, optional backup, verification, and diff output.", {
+    workspace: stringProp(), archivePath: stringProp(), path: stringProp(), confirmAggressive: boolProp(), stripRoot: boolProp(), deleteMissing: boolProp(), requireCleanGit: boolProp(), backup: boolProp(), command: stringProp(), commands: arrayProp("string", 0), commandsText: stringProp(), timeoutMs: numberProp(1000, 86400000), stopOnFailure: boolProp(), returnDiff: boolProp(), maxDiffBytes: numberProp(1000, 5242880)
+  }, ["workspace"]),
+  tool("relai_snapshot_archive", "Export Workspace Zip", "Create a zip snapshot of the current workspace on the MCP host, excluding .git, dependency caches, build outputs, and Rel.AI state. Use before or after aggressive work to get a zip artifact without uploading the repo again.", {
+    workspace: stringProp(), maxFiles: numberProp(1, 200000), timeoutMs: numberProp(1000, 86400000)
   }, ["workspace"]),
   tool("relai_verify", "Verify Local Repo", "Run verification without command whitelists. If commands are provided, Rel.AI runs exactly those shell commands. If omitted, Rel.AI auto-detects sensible validation commands for the workspace.", {
     workspace: stringProp(),
@@ -47,8 +74,6 @@ const toolSchemas = [
 ];
 
 const TOOL_NAMES = new Set(toolSchemas.map((item) => item.name));
-const APPROVAL_GATES = new Set();
-
 function getToolSchemas() {
   return toolSchemas;
 }
@@ -81,6 +106,16 @@ async function dispatchTool(config, name, args) {
       return withWorkspace(config, args, (workspace) => relaiRead(workspace, args));
     case "relai_write":
       return withWorkspace(config, args, (workspace) => relaiWrite(workspace, config, args));
+    case "relai_replace":
+      return withWorkspace(config, args, (workspace) => relaiReplace(workspace, config, args));
+    case "relai_delete":
+      return withWorkspace(config, args, (workspace) => relaiDelete(workspace, config, args));
+    case "relai_apply_patch":
+      return withWorkspace(config, args, (workspace) => relaiApplyPatch(workspace, config, args));
+    case "relai_apply_archive":
+      return withWorkspace(config, args, (workspace) => relaiApplyArchive(workspace, config, args));
+    case "relai_snapshot_archive":
+      return withWorkspace(config, args, (workspace) => relaiSnapshotArchive(workspace, config, args));
     case "relai_verify":
       return withWorkspace(config, args, (workspace) => relaiVerify(workspace, config, args));
     case "relai_browser":
@@ -203,7 +238,7 @@ function tool(name, title, description, properties, required = []) {
     title,
     description,
     inputSchema: { type: "object", properties, required, additionalProperties: false },
-    annotations: { readOnlyHint: !["relai_write", "relai_verify", "relai_browser", "relai_reset"].includes(name), destructiveHint: name === "relai_reset" }
+    annotations: { readOnlyHint: !["relai_write", "relai_replace", "relai_delete", "relai_apply_patch", "relai_apply_archive", "relai_snapshot_archive", "relai_verify", "relai_browser", "relai_reset"].includes(name), destructiveHint: ["relai_delete", "relai_apply_patch", "relai_apply_archive", "relai_reset"].includes(name) }
   };
 }
 function stringProp() { return { type: "string" }; }
@@ -216,4 +251,11 @@ function arrayProp(type, minItems, maxItems) {
   return schema;
 }
 
-module.exports = { toolSchemas, allToolSchemas: toolSchemas, getToolSchemas, APPROVAL_GATES, BRIDGE_TOOL_NAMES, callTool, workspaceList, workspaceInspect, workspaceTree, workspaceProfile };
+function arrayObjectProp(properties, required = [], minItems, maxItems) {
+  const schema = { type: "array", items: { type: "object", properties, required, additionalProperties: false } };
+  if (Number.isFinite(Number(minItems))) schema.minItems = minItems;
+  if (Number.isFinite(Number(maxItems))) schema.maxItems = maxItems;
+  return schema;
+}
+
+module.exports = { toolSchemas, allToolSchemas: toolSchemas, getToolSchemas, BRIDGE_TOOL_NAMES, callTool, workspaceList, workspaceInspect, workspaceTree, workspaceProfile };

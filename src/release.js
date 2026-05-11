@@ -1,9 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const http = require("node:http");
-const https = require("node:https");
-const crypto = require("node:crypto");
-const { getConfigPath, publicConfigSummary, resolveWorkspace, makeDefaultConfig } = require("./config");
+const { publicConfigSummary, resolveWorkspace } = require("./config");
 const { runProcess, summarizeCommand } = require("./process");
 const { discoverCommands } = require("./commandDiscovery");
 const pkg = require("../package.json");
@@ -23,17 +20,15 @@ function releaseReadiness(config, args = {}) {
     findings.push(finding("warning", "no_workspaces", "No workspaces are configured yet."));
   }
   if (!process.env.REL_AI_MCP_TOKEN && args.requireHttpToken !== false) {
-    findings.push(finding("warning", "missing_http_token_env", "REL_AI_MCP_TOKEN is not set in the current environment. Set it before exposing /mcp."));
+    findings.push(finding("warning", "missing_http_token_env", "REL_AI_MCP_TOKEN is not set in the current environment. Set it before exposing bearer-auth endpoints."));
   }
   if (config.trustedLocalAgent) {
-    findings.push(finding("info", "trusted_local_agent", "Trusted ChatGPT local repo mode is enabled. Shell, write, verify, diff, and reset are intentionally available inside configured workspaces."));
+    findings.push(finding("info", "trusted_local_agent", "Trusted ChatGPT local repo mode is enabled. Read, write, verify, diff, and reset are intentionally available inside configured workspaces."));
   } else {
     findings.push(finding("warning", "trusted_local_agent_disabled", "Trusted local mode is disabled. ChatGPT may be blocked from writing or running verification."));
   }
 
   const commandChecks = checkCommandAvailability(["git", "node"], findings);
-  if (config.allowGitHubCli) checkCommandAvailability(["gh"], findings);
-
   const score = scoreFindings(findings);
   return {
     ok: !findings.some((item) => item.severity === "error"),
@@ -99,121 +94,6 @@ async function workspacePreflight(config, args = {}) {
   };
 }
 
-async function connectorCheck(_config, args = {}) {
-  const endpoint = String(args.endpoint || args.baseUrl || "").trim();
-  const token = String(args.token || process.env.REL_AI_MCP_TOKEN || "").trim();
-  const findings = [];
-  if (!endpoint) findings.push(finding("error", "missing_endpoint", "Provide endpoint, usually the secret ChatGPT URL printed by npm run connector:print, for example https://your-domain.example.com/mcp/<secret>."));
-  let parsed = null;
-  if (endpoint) {
-    try {
-      parsed = new URL(endpoint);
-      if (!["http:", "https:"].includes(parsed.protocol)) findings.push(finding("error", "invalid_scheme", "Endpoint must use http:// or https://."));
-      if (parsed.protocol === "http:" && !["localhost", "127.0.0.1", "::1"].includes(parsed.hostname)) findings.push(finding("warning", "plain_http_remote", "Use HTTPS when endpoint is not local."));
-      if (parsed.pathname === "/mcp") findings.push(finding("warning", "bearer_endpoint_for_chatgpt", "ChatGPT Developer Mode does not use arbitrary bearer-token auth here. Prefer the secret URL path printed as chatgptMcpUrl and choose No Authentication."));
-      else if (!parsed.pathname.startsWith("/mcp/")) findings.push(finding("info", "nonstandard_path", "For ChatGPT use the secret /mcp/<secret> URL printed by npm run connector:print."));
-    } catch (error) {
-      findings.push(finding("error", "invalid_endpoint", `Invalid endpoint URL: ${error.message}`));
-    }
-  }
-  if (!token) findings.push(finding("info", "missing_token", "No bearer token provided. That is expected when ChatGPT uses the secret /mcp/<secret> URL with No Authentication."));
-
-  let probe = null;
-  if (args.probe === true && parsed) {
-    probe = await probeHealth(parsed, token, Number(args.timeoutMs || 5000));
-    if (!probe.ok) findings.push(finding("warning", "probe_failed", `Endpoint probe failed: ${probe.error || probe.statusCode || "unknown"}`));
-  }
-
-  const base = parsed ? `${parsed.protocol}//${parsed.host}` : "https://your-domain.example.com";
-  return {
-    ok: !findings.some((item) => item.severity === "error"),
-    endpoint,
-    healthEndpoint: `${base}/health`,
-    dashboardEndpoint: `${base}/dashboard`,
-    authHeader: token ? "Authorization: Bearer <provided token>" : "not used by ChatGPT No Authentication mode",
-    suggestedChatGPTConnector: {
-      name: "Rel.AI MCP",
-      url: endpoint || `${base}/mcp/<secret>`,
-      authentication: "No Authentication"
-    },
-    curl: endpoint ? `curl -sS ${base}/health` : "",
-    probe,
-    findings,
-    nextActions: nextActions(findings)
-  };
-}
-
-function configMigrationPlan(config, args = {}) {
-  const defaults = makeDefaultConfig();
-  const current = publicConfigSummary(config);
-  const added = [];
-  const missing = [];
-  diffKeys("", defaults, config, added, missing);
-  return {
-    ok: true,
-    fromVersion: args.fromVersion || "unknown",
-    toVersion: pkg.version,
-    configPath: getConfigPath(),
-    addedDefaultKeys: added,
-    missingKeysInCurrentConfig: missing,
-    current,
-    recommendedActions: [
-      "Back up config.json before upgrading.",
-      "Run relai_release_readiness after migration.",
-      "Use the single local repo bridge workflow for full-file writes and verification."
-    ]
-  };
-}
-
-function releaseManifest(_config, args = {}) {
-  const root = projectRoot();
-  const files = [];
-  walkProject(root, root, files, Number(args.maxFiles || 10000), Number(args.maxFileBytes || 1024 * 1024));
-  const totalBytes = files.reduce((sum, item) => sum + item.size, 0);
-  return {
-    ok: true,
-    name: pkg.name,
-    version: pkg.version,
-    generatedAt: new Date().toISOString(),
-    root,
-    fileCount: files.length,
-    totalBytes,
-    files
-  };
-}
-
-function releaseNotes(_config, args = {}) {
-  const version = args.version || pkg.version;
-  return {
-    ok: true,
-    version,
-    title: `Rel.AI MCP v${version}`,
-    commitMessage: "fix: expose only bridge tools",
-    tagMessage: `Rel.AI MCP v${version}: single bridge workflow and no-auth ChatGPT guidance`,
-    bullets: [
-      "Exposes only the bridge tools through MCP: relai_repo_snapshot, relai_read, relai_write, relai_verify, relai_browser, relai_diff, and relai_reset.",
-      "Keeps one-command local startup with persistent token generation and saved connector profiles.",
-      "Uses relai_repo_snapshot for reliable first-call workspace discovery.",
-      "Adds read-only MCP resources for connector help, configured workspaces, workspace profile, and workspace tree discovery.",
-      "Adds stable public URL support so one ChatGPT app can point at a permanent secret /mcp/<secret> endpoint.",
-      "Adds a ChatGPT-compatible No Authentication URL path because Developer Mode does not import tools through arbitrary bearer-token headers.",
-      "Adds dashboard connector setup guidance and a /api/connection helper endpoint.",
-      "Keeps release-readiness scoring for config, command availability, state directories, and workspace setup.",
-      "Keeps connector verification helpers for ChatGPT Developer Mode endpoint/token setup.",
-      "Adds workspace preflight checks for Git repo state, protected branches, line-ending files, and allowlisted tests.",
-      "Adds config migration planning against the current default schema.",
-      "Adds release manifest generation for packaged ZIP review and reproducibility.",
-      "Adds dashboard APIs for readiness and release manifest data."
-    ],
-    commands: [
-      "npm run check",
-      "npm run test:smoke",
-      "npm run test:http",
-      "npm run test:v10"
-    ]
-  };
-}
-
 function projectRoot() {
   return path.resolve(__dirname, "..");
 }
@@ -258,9 +138,8 @@ function checkCommandAvailability(commands, findings) {
 function commandExists(command) {
   const isWindows = process.platform === "win32";
   const lookup = isWindows ? "where" : "which";
-  const args = [command];
   try {
-    const child = require("node:child_process").spawnSync(lookup, args, { shell: false, encoding: "utf8" });
+    const child = require("node:child_process").spawnSync(lookup, [command], { shell: false, encoding: "utf8" });
     return { command, ok: child.status === 0, path: (child.stdout || "").trim().split(/\r?\n/)[0] || "" };
   } catch (error) {
     return { command, ok: false, error: error.message };
@@ -303,12 +182,12 @@ function readinessRating(score) {
 function nextActions(findings) {
   const actions = [];
   for (const item of findings.slice(0, 20)) {
-    if (item.code === "missing_http_token_env" || item.code === "missing_token") actions.push("Use the printed /mcp/<secret> ChatGPT MCP URL and set ChatGPT authentication to No Authentication. Keep REL_AI_MCP_TOKEN only for local/API bearer clients.");
+    if (item.code === "missing_http_token_env") actions.push("Use the secret /mcp/<secret> ChatGPT MCP URL with No Authentication. Keep REL_AI_MCP_TOKEN only for local/API bearer clients.");
     else if (item.code === "no_workspaces") actions.push("Run npm run workspace:add -- <alias> <absolute-project-path>.");
-    else if (item.code === "no_test_commands") actions.push("Add at least one allowlisted test command with npm run testcmd:add.");
+    else if (item.code === "no_validation_commands") actions.push("Add a validation command with npm run testcmd:add -- <alias> <key> <command...>.");
     else if (item.code === "dirty_worktree") actions.push("Commit/stash local changes or review relai_diff before further edits.");
-    else if (item.code === "trusted_local_agent_disabled") actions.push("Enable trusted local mode for the ChatGPT repo bridge.");
-    else if (item.code && item.code.includes("gitattributes")) actions.push("Run relai_doctor_fix with workspacePath to add .gitattributes/.editorconfig.");
+    else if (item.code === "trusted_local_agent_disabled") actions.push("Use the default trusted local bridge mode for ChatGPT repo work.");
+    else if (item.code && item.code.includes("gitattributes")) actions.push("Run relai-mcp-config doctor --fix <workspace-path> to add .gitattributes/.editorconfig.");
   }
   return [...new Set(actions)];
 }
@@ -317,62 +196,7 @@ function finding(severity, code, message, extra = {}) {
   return { severity, code, message, ...extra };
 }
 
-function diffKeys(prefix, defaults, current, added, missing) {
-  if (!defaults || typeof defaults !== "object" || Array.isArray(defaults)) return;
-  for (const key of Object.keys(defaults)) {
-    const full = prefix ? `${prefix}.${key}` : key;
-    if (!current || !Object.prototype.hasOwnProperty.call(current, key)) missing.push(full);
-    if (defaults[key] && typeof defaults[key] === "object" && !Array.isArray(defaults[key])) diffKeys(full, defaults[key], current && current[key], added, missing);
-  }
-  if (current && typeof current === "object" && !Array.isArray(current)) {
-    for (const key of Object.keys(current)) {
-      const full = prefix ? `${prefix}.${key}` : key;
-      if (!Object.prototype.hasOwnProperty.call(defaults, key)) added.push(full);
-    }
-  }
-}
-
-function walkProject(root, current, files, maxFiles, maxFileBytes) {
-  if (files.length >= maxFiles) return;
-  const skip = new Set(["node_modules", ".git", "coverage", "dist", "build", ".relai", ".rel-ai-mcp"]);
-  for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-    if (files.length >= maxFiles || skip.has(entry.name)) continue;
-    const full = path.join(current, entry.name);
-    if (entry.isDirectory()) walkProject(root, full, files, maxFiles, maxFileBytes);
-    else {
-      const stat = fs.statSync(full);
-      if (stat.size > maxFileBytes) continue;
-      const content = fs.readFileSync(full);
-      files.push({
-        path: path.relative(root, full).replace(/\\/g, "/"),
-        size: stat.size,
-        sha256: crypto.createHash("sha256").update(content).digest("hex")
-      });
-    }
-  }
-}
-
-function probeHealth(endpoint, token, timeoutMs) {
-  return new Promise((resolve) => {
-    const healthUrl = new URL("/health", `${endpoint.protocol}//${endpoint.host}`);
-    const lib = healthUrl.protocol === "https:" ? https : http;
-    const req = lib.request(healthUrl, { method: "GET", timeout: timeoutMs, headers: token ? { Authorization: `Bearer ${token}` } : {} }, (res) => {
-      let body = "";
-      res.setEncoding("utf8");
-      res.on("data", (chunk) => { body += chunk; });
-      res.on("end", () => resolve({ ok: res.statusCode >= 200 && res.statusCode < 300, statusCode: res.statusCode, body: body.slice(0, 2000) }));
-    });
-    req.on("timeout", () => { req.destroy(new Error("probe timeout")); });
-    req.on("error", (error) => resolve({ ok: false, error: error.message }));
-    req.end();
-  });
-}
-
 module.exports = {
   releaseReadiness,
-  workspacePreflight,
-  connectorCheck,
-  configMigrationPlan,
-  releaseManifest,
-  releaseNotes
+  workspacePreflight
 };

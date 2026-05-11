@@ -1,6 +1,4 @@
 // General settings — one trusted ChatGPT local repo bridge, no legacy permission model
-import { esc } from '/ui/utils.js';
-import { getToken } from '/ui/api.js';
 import {
   loadSettingsConfig,
   saveSettings,
@@ -10,6 +8,7 @@ import {
   field,
   toggleControl,
   numberControl,
+  selectControl,
   saveRow
 } from './shared.js';
 
@@ -35,13 +34,55 @@ function _render(container) {
 
   const grid = formGrid();
   const bridge = panel('ChatGPT local repo bridge');
+  const workflow = panel('Workflow mode');
   const limits = panel('Runtime limits');
   const local = panel('Local dashboard');
   const autoApprove = panel('ChatGPT web app-request auto-approve extension');
 
   bridge.body.appendChild(summaryBox());
   bridge.body.appendChild(field('Trusted local access', toggleControl(true, () => {}, { enabled: 'Always enabled', disabled: 'Always enabled' }), 'Configured workspaces are exposed through the local bridge tools. Workspace-level fast task settings control how much context is scanned before structured writes.'));
-  bridge.body.appendChild(field('Automatic task behavior', _selectTaskMode(), 'Default behavior for high-level task calls.'));
+
+  workflow.body.appendChild(workflowWarningBox());
+  workflow.body.appendChild(field('Mode', selectControl([
+    { value: 'conservative', label: 'Conservative - exact edits and guarded writes' },
+    { value: 'aggressive', label: 'Aggressive - Codex-style patch/archive apply' }
+  ], (_draft.workflow || {}).mode || 'conservative', (value) => {
+    if (value === 'aggressive' && !confirmAggressiveWorkflow()) return;
+    if (!_draft.workflow) _draft.workflow = {};
+    _draft.workflow.mode = value;
+    _checkDirty();
+  }), 'Conservative keeps the exact-replacement workflow. Aggressive exposes relai_apply_patch, relai_apply_archive, and relai_snapshot_archive for fast live repo mutation.'));
+  const aggressive = (_draft.workflow && _draft.workflow.aggressive) || {};
+  workflow.body.appendChild(field('Require clean git before aggressive apply', toggleControl(aggressive.requireCleanGit !== false, (v) => {
+    if (!_draft.workflow) _draft.workflow = {};
+    if (!_draft.workflow.aggressive) _draft.workflow.aggressive = {};
+    _draft.workflow.aggressive.requireCleanGit = v;
+    _checkDirty();
+  }, { enabled: 'Require clean git', disabled: 'Allow dirty git' }), 'Recommended on. Turn off only if you want apply tools to operate on a dirty working tree.'));
+  workflow.body.appendChild(field('Backup before aggressive apply', toggleControl(aggressive.backup !== false, (v) => {
+    if (!_draft.workflow) _draft.workflow = {};
+    if (!_draft.workflow.aggressive) _draft.workflow.aggressive = {};
+    _draft.workflow.aggressive.backup = v;
+    _checkDirty();
+  }, { enabled: 'Backup enabled', disabled: 'No automatic backup' }), 'When dirty edits are allowed, Rel.AI attempts a git stash backup before applying a patch or archive.'));
+  workflow.body.appendChild(field('Delete missing files during archive overlay', toggleControl(aggressive.deleteMissingDefault === true, (v) => {
+    if (!_draft.workflow) _draft.workflow = {};
+    if (!_draft.workflow.aggressive) _draft.workflow.aggressive = {};
+    _draft.workflow.aggressive.deleteMissingDefault = v;
+    _checkDirty();
+  }, { enabled: 'Delete missing', disabled: 'Overlay only' }), 'Off means zip/archive apply overwrites and adds files but does not delete live files missing from the archive unless a tool call explicitly asks for deleteMissing.'));
+  workflow.body.appendChild(field('Max patch bytes', numberControl(aggressive.maxPatchBytes || 2097152, (v) => {
+    if (!_draft.workflow) _draft.workflow = {};
+    if (!_draft.workflow.aggressive) _draft.workflow.aggressive = {};
+    _draft.workflow.aggressive.maxPatchBytes = v;
+    _checkDirty();
+  }, { min: 1024, max: 52428800, width: '150px' }), 'Upper bound for relai_apply_patch payloads.'));
+  workflow.body.appendChild(field('Max archive bytes', numberControl(aggressive.maxArchiveBytes || 262144000, (v) => {
+    if (!_draft.workflow) _draft.workflow = {};
+    if (!_draft.workflow.aggressive) _draft.workflow.aggressive = {};
+    _draft.workflow.aggressive.maxArchiveBytes = v;
+    _checkDirty();
+  }, { min: 1048576, max: 2147483648, width: '150px' }), 'Upper bound for local zip overlays.'));
 
   autoApprove.body.appendChild(autoApproveWarningBox());
   autoApprove.body.appendChild(field('Enable dashboard-side auto-approve', toggleControl((_draft.autoApproveAppRequests || {}).enabled === true, (v) => {
@@ -59,14 +100,13 @@ function _render(container) {
   autoApprove.body.appendChild(field('Install Chrome extension', extensionInstallControl(), 'Load the unpacked Chrome extension, then use the extension popup to configure the dashboard URL/token and enable or disable it locally.'));
 
 
-  limits.body.appendChild(field('Session locks', toggleControl(_draft.sessionLocksEnabled !== false, (v) => { _draft.sessionLocksEnabled = v; _checkDirty(); }), 'Prevents overlapping edits to the same workspace.'));
-  limits.body.appendChild(field('Max concurrent sessions per workspace', numberControl(_draft.maxConcurrentSessionsPerWorkspace, (v) => { _draft.maxConcurrentSessionsPerWorkspace = v; _checkDirty(); }, { min: 1, max: 20 }), 'Usually 1–4 is enough.'));
   limits.body.appendChild(field('Max output bytes', numberControl(_draft.maxOutputBytes, (v) => { _draft.maxOutputBytes = v; _checkDirty(); }, { min: 10000, max: 20000000, width: '140px' }), 'Maximum command output returned to ChatGPT. 2 MB is a safe default for test failures without flooding the chat.'));
 
   local.body.appendChild(field('Dashboard enabled', toggleControl(_draft.dashboardEnabled !== false, (v) => { _draft.dashboardEnabled = v; _checkDirty(); }), 'Controls this local dashboard only.'));
   local.body.appendChild(field('Color theme', _themeToggle(), 'Stored only in this browser.'));
 
   grid.appendChild(bridge.el);
+  grid.appendChild(workflow.el);
   grid.appendChild(autoApprove.el);
   grid.appendChild(limits.el);
   grid.appendChild(local.el);
@@ -90,12 +130,27 @@ function summaryBox() {
   div.style.cssText = 'text-align:left;padding:12px;line-height:1.55;';
   div.innerHTML = `
     <strong style="color:var(--text);">ChatGPT local repo bridge</strong><br>
-    This is the always-on local connector between ChatGPT and your configured repositories. It avoids uploading a zip for every task through one reliable workflow: <code>relai_repo_snapshot</code>, <code>relai_read</code>, <code>relai_write</code> full-file writes, <code>relai_verify</code>, <code>relai_browser</code>, <code>relai_diff</code>, and <code>relai_reset</code>.<br>
+    This is the always-on local connector between ChatGPT and your configured repositories. It avoids uploading a zip for every task through one reliable workflow: <code>relai_repo_snapshot</code>, <code>relai_read</code>, <code>relai_replace</code> exact edits, <code>relai_write</code> full-file writes, <code>relai_delete</code> deletions, <code>relai_verify</code>, <code>relai_browser</code>, <code>relai_diff</code>, and <code>relai_reset</code>.<br>
     Fast task settings live on each workspace and reduce broad scans/indexing for small tasks across any language stack.
   `;
   return div;
 }
 
+
+function workflowWarningBox() {
+  const div = document.createElement('div');
+  div.className = 'empty';
+  div.style.cssText = 'text-align:left;padding:12px;line-height:1.55;border-color:rgba(99,102,241,.35);background:rgba(99,102,241,.08);';
+  div.innerHTML = `
+    <strong style="color:var(--text);">Choose how hard Rel.AI is allowed to drive.</strong><br>
+    Conservative mode keeps exact replacements, file writes, deletes, verification, diff, and reset. Aggressive mode adds Codex-style live patch/archive application for fast repo-wide changes. It still preserves <code>.git</code>, keeps path guards, and can require a clean git state before applying.
+  `;
+  return div;
+}
+
+function confirmAggressiveWorkflow() {
+  return window.confirm('Enable aggressive workflow mode?\n\nThis exposes live patch/archive apply tools for fast Codex-style repo edits. Commit or stash your work first. Rel.AI will still protect .git and workspace boundaries.');
+}
 function autoApproveWarningBox() {
   const div = document.createElement('div');
   div.className = 'empty';
@@ -137,19 +192,6 @@ function extensionInstallControl() {
   return wrap;
 }
 
-function _selectTaskMode() {
-  const el = document.createElement('select');
-  for (const value of ['plan_only', 'implement', 'implement_and_test', 'review_only']) {
-    const opt = document.createElement('option');
-    opt.value = value;
-    opt.textContent = value.replace(/_/g, ' ');
-    if ((_draft.defaultTaskMode || 'implement_and_test') === value) opt.selected = true;
-    el.appendChild(opt);
-  }
-  el.onchange = () => { _draft.defaultTaskMode = el.value; _checkDirty(); };
-  return el;
-}
-
 function _checkDirty() {
   const saveRowEl = document.getElementById('__settings-save-row');
   if (!saveRowEl) return;
@@ -161,7 +203,7 @@ function _checkDirty() {
 
 function _getChanges() {
   if (!_original || !_draft) return [];
-  const keys = ['sessionLocksEnabled', 'maxConcurrentSessionsPerWorkspace', 'maxOutputBytes', 'dashboardEnabled', 'defaultTaskMode', 'autoApproveAppRequests'];
+  const keys = ['maxOutputBytes', 'dashboardEnabled', 'autoApproveAppRequests', 'workflow'];
   const changes = [];
   for (const key of keys) {
     if (JSON.stringify(_draft[key]) !== JSON.stringify(_original[key])) {
@@ -173,12 +215,10 @@ function _getChanges() {
 
 async function _save(container) {
   const payload = {
-    sessionLocksEnabled: _draft.sessionLocksEnabled,
-    maxConcurrentSessionsPerWorkspace: _draft.maxConcurrentSessionsPerWorkspace,
     maxOutputBytes: _draft.maxOutputBytes,
     dashboardEnabled: _draft.dashboardEnabled,
-    defaultTaskMode: _draft.defaultTaskMode,
-    autoApproveAppRequests: _draft.autoApproveAppRequests
+    autoApproveAppRequests: _draft.autoApproveAppRequests,
+    workflow: _draft.workflow
   };
   const res = await saveSettings(payload);
   if (res && res.ok) await _loadAndRender(container);

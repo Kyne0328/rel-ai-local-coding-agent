@@ -16,9 +16,7 @@ fs.writeFileSync(configPath, JSON.stringify({
   trustedLocalAgent: true,
   workspaces: {
     repo: {
-      path: root,
-      allowArbitraryCommands: true,
-      allowDestructiveTools: true
+      path: root
     }
   }
 }, null, 2));
@@ -70,7 +68,10 @@ try {
   send(2, 'tools/list');
   const list = await waitFor(2);
   const names = list.result.tools.map((tool) => tool.name);
-  if (names.length !== 7) throw new Error(`Expected 7 visible bridge tools, got ${names.length}`);
+  if (names.length !== 12) throw new Error(`Expected 12 visible bridge tools, got ${names.length}`);
+  for (const required of ['relai_apply_patch', 'relai_apply_archive', 'relai_snapshot_archive']) {
+    if (!names.includes(required)) throw new Error(`missing aggressive tool ${required}`);
+  }
 
   send(3, 'tools/call', { name: 'relai_write', arguments: { workspace: 'repo', path: 'tmp-relai-bridge.txt', content: 'bridge write ok\n' } });
   const write = await waitFor(3);
@@ -79,7 +80,20 @@ try {
   send(31, 'tools/call', { name: 'relai_write', arguments: { workspace: 'repo', edits: [{ path: 'tmp-relai-bridge.txt', find: 'x', replace: 'y' }] } });
   const editWrite = await waitFor(31);
   if (!editWrite.result.isError) throw new Error('relai_write must reject edit-array payloads');
-  if (!/full-file writes/.test(editWrite.result.content[0].text)) throw new Error('relai_write edit rejection should explain full-file writes');
+  if (!/relai_replace/.test(editWrite.result.content[0].text)) throw new Error('relai_write edit rejection should redirect to relai_replace');
+
+
+
+  fs.writeFileSync(path.join(root, 'tmp-relai-replace.txt'), 'alpha\nbeta\n');
+  send(32, 'tools/call', { name: 'relai_replace', arguments: { workspace: 'repo', path: 'tmp-relai-replace.txt', oldText: 'beta\n', newText: 'gamma\n' } });
+  const replace = await waitFor(32);
+  if (replace.result.isError) throw new Error(`relai_replace should be callable: ${replace.result.content[0].text}`);
+  if (fs.readFileSync(path.join(root, 'tmp-relai-replace.txt'), 'utf8') !== 'alpha\ngamma\n') throw new Error('relai_replace did not apply exact replacement');
+
+  send(33, 'tools/call', { name: 'relai_delete', arguments: { workspace: 'repo', path: 'tmp-relai-replace.txt' } });
+  const del = await waitFor(33);
+  if (del.result.isError) throw new Error(`relai_delete should be callable: ${del.result.content[0].text}`);
+  if (fs.existsSync(path.join(root, 'tmp-relai-replace.txt'))) throw new Error('relai_delete did not remove file');
 
   send(4, 'tools/call', { name: 'relai_shell', arguments: { workspace: 'repo', command: 'node --version' } });
   const shell = await waitFor(4);
@@ -88,8 +102,8 @@ try {
 
   send(5, 'tools/call', { name: 'relai_apply_patch', arguments: { workspace: 'repo', diff: 'bad patch' } });
   const patch = await waitFor(5);
-  if (!patch.result.isError) throw new Error('removed relai_apply_patch should be rejected');
-  if (!/Unknown tool/.test(patch.result.content[0].text)) throw new Error('removed patch tool should return Unknown tool');
+  if (!patch.result.isError) throw new Error('relai_apply_patch should be rejected while conservative mode is active');
+  if (!/requires aggressive workflow mode/.test(patch.result.content[0].text)) throw new Error('conservative patch rejection should mention aggressive workflow mode');
 
 
   send(6, 'tools/call', { name: 'relai_read_files', arguments: { workspace: 'repo', paths: ['package.json'] } });
@@ -103,6 +117,7 @@ try {
   if (!/Unknown tool/.test(version.result.content[0].text)) throw new Error('removed version tool should return Unknown tool');
 
   fs.rmSync(path.join(root, 'tmp-relai-bridge.txt'), { force: true });
+  fs.rmSync(path.join(root, 'tmp-relai-replace.txt'), { force: true });
 
   console.log('ChatGPT local single-workflow smoke test passed; removed tools are rejected.');
 } finally {

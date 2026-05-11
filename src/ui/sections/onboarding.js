@@ -1,6 +1,5 @@
 // Onboarding wizard — 5-step modal carousel
 import { fetchJson, postJson } from '/ui/api.js';
-import { closeModal } from '/ui/components/modal.js';
 import { toast } from '/ui/components/toast.js';
 
 let _step = 0;

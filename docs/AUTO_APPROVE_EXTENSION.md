@@ -59,4 +59,4 @@ This can authorize local repository reads, full-file writes, verification comman
 
 ## Approval button coverage
 
-The extension recognizes approval cards for every normal Rel.AI bridge tool: repository snapshot, read, write/edit file, verify, browser/UI check, diff review, and reset/rollback actions such as `Reset Workspace`. It first identifies the small Rel.AI MCP approval card, then clicks only the primary non-negative action button inside that card.
+The extension recognizes approval cards for every normal Rel.AI bridge tool: repository snapshot, read, exact text replacement, write/edit file, delete file, verify, browser/UI check, diff review, and reset/rollback actions such as `Reset Workspace`. It first identifies the small Rel.AI MCP approval card, then clicks only the primary non-negative action button inside that card.

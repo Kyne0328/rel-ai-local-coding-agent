@@ -5,7 +5,7 @@ const path = require("node:path");
 const zlib = require("node:zlib");
 const { URL } = require("node:url");
 const { handleMessage } = require("./server");
-const { readConfig, publicConfigSummary, resolveWorkspace } = require("./config");
+const { readConfig } = require("./config");
 const productUx = require("./productUx");
 const release = require("./release");
 const configEditor = require("./configEditor");
@@ -14,10 +14,10 @@ const connection = require("./connectionProfile");
 const autoApprove = require("./autoApproveExtension");
 
 function buildToolMetadata() {
-  const { getToolSchemas, APPROVAL_GATES } = require("./tools");
+  const { getToolSchemas } = require("./tools");
   const categoryMap = {
-    relai_repo: "Bridge", relai_read: "Bridge", relai_write: "Bridge", relai_verify: "Bridge",
-    relai_browser: "Bridge", relai_diff: "Bridge", relai_reset: "Bridge",
+    relai_repo: "Bridge", relai_read: "Bridge", relai_write: "Bridge", relai_replace: "Bridge",
+    relai_delete: "Bridge", relai_verify: "Bridge", relai_browser: "Bridge", relai_diff: "Bridge", relai_reset: "Bridge",
   };
   const config = readConfig({ allowMissing: true });
   return getToolSchemas(config).map(tool => {
@@ -203,24 +203,6 @@ async function routeRequest(req, res, options) {
     return;
   }
 
-  if (req.method === "GET" && parsed.pathname === "/api/dashboard") {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
-    const config = readConfig();
-    const limit = Math.min(Math.max(Number(parsed.searchParams.get("limit") || 50), 1), 200);
-    sendJson(res, 200, {
-      ok: true,
-      name: pkg.name,
-      version: pkg.version,
-      config: publicConfigSummary(config),
-      workflow: {
-        normal: ["relai_repo_snapshot", "relai_read", "relai_write", "relai_verify", "relai_diff", "relai_reset"],
-        removedLegacyWorkflows: ["patch", "shell", "task-runner", "worktree", "multi-agent", "approvals", "docker", "pr-ci-repair"]
-      },
-      audit: require("./audit").readAudit(config, { limit })
-    }, ae);
-    return;
-  }
-
   if (req.method === "GET" && parsed.pathname === "/api/connection") {
     if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
     const latestProfile = connection.readConnectionProfile();
@@ -233,13 +215,6 @@ async function routeRequest(req, res, options) {
       tunnelProvider: latestProfile.tunnelProvider || "none",
       showToken: parsed.searchParams.get("showToken") === "1"
     }), ae);
-    return;
-  }
-
-  if (req.method === "GET" && parsed.pathname === "/api/dashboard/v9") {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
-    const config = readConfig();
-    sendJson(res, 200, productUx.dashboardData(config, { limit: Number(parsed.searchParams.get("limit") || 100) }), ae);
     return;
   }
 
@@ -275,15 +250,13 @@ async function routeRequest(req, res, options) {
     return;
   }
 
-  if (req.method === "GET" && parsed.pathname === "/api/release-manifest") {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
-    const config = readConfig();
-    sendJson(res, 200, release.releaseManifest(config, { maxFiles: Number(parsed.searchParams.get("maxFiles") || 10000) }), ae);
-    return;
-  }
-
   if (req.method === "GET" && parsed.pathname === "/api/workspace/preflight") {
     if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    const rawPath = parsed.searchParams.get("path") || "";
+    if (rawPath) {
+      sendJson(res, 200, workspacePathPreflight(rawPath), ae);
+      return;
+    }
     const config = readConfig();
     const payload = await release.workspacePreflight(config, { workspace: parsed.searchParams.get("workspace") || "", requireClean: parsed.searchParams.get("requireClean") !== "0" });
     sendJson(res, 200, payload, ae);
@@ -355,8 +328,6 @@ async function routeRequest(req, res, options) {
     endpoints: {
       health: "GET /health",
       dashboard: "GET /dashboard",
-      dashboardApi: "GET /api/dashboard",
-      dashboardV9Api: "GET /api/dashboard/v9",
       dashboardV10Api: "GET /api/dashboard/v10",
       logsApi: "GET /api/logs",
       settingsApi: "GET /api/settings",
@@ -364,12 +335,8 @@ async function routeRequest(req, res, options) {
       updateWorkspacesApi: "POST /api/workspaces",
       healthMonitorApi: "GET /api/health-monitor",
       readinessApi: "GET /api/readiness",
-      releaseManifestApi: "GET /api/release-manifest",
       workspacePreflightApi: "GET /api/workspace/preflight?workspace=...",
       events: "GET /events",
-      sessionDiffApi: "GET /api/session/diff?workspace=...&sessionId=...",
-      taskGraphApi: "GET /api/task/graph?sessionId=...",
-      sessionExportApi: "GET /api/session/export?workspace=...&sessionId=...",
       streamableHttp: "POST /mcp or POST /mcp/<chatgpt-secret>",
       sse: "GET /sse or GET /sse/<chatgpt-secret> then POST /messages...?sessionId=..."
     }
@@ -388,6 +355,30 @@ function getMcpAccess(pathname, options) {
   if (pathname === `/sse/${encoded}` || pathname === `/sse/${secret}`) return { kind: "sse", allowed: true, messagePath: `/messages/${encoded}` };
   if (pathname === `/messages/${encoded}` || pathname === `/messages/${secret}`) return { kind: "messages", allowed: true };
   return { kind: "none", allowed: false };
+}
+
+function workspacePathPreflight(rawPath) {
+  const target = path.resolve(String(rawPath || ""));
+  const findings = [];
+  let stat = null;
+  try {
+    stat = fs.statSync(target);
+  } catch (_error) {
+    findings.push({ severity: "error", code: "path_not_found", message: `Path does not exist: ${target}` });
+  }
+  const exists = Boolean(stat);
+  const isDirectory = Boolean(stat && stat.isDirectory());
+  const gitDir = path.join(target, ".git");
+  const isGit = isDirectory && fs.existsSync(gitDir);
+  if (exists && !isDirectory) findings.push({ severity: "error", code: "path_not_directory", message: `Path is not a directory: ${target}` });
+  return {
+    ok: findings.every((item) => item.severity !== "error"),
+    path: target,
+    exists,
+    isDirectory,
+    isGit,
+    findings
+  };
 }
 
 function mcpGetDiagnostic(pathname, options, mcpAccess, req) {
@@ -414,11 +405,6 @@ function mcpGetDiagnostic(pathname, options, mcpAccess, req) {
       localBearerMcp: "/mcp"
     }
   };
-}
-
-function resolveApiWorkspace(config, parsed) {
-  const workspaceAlias = parsed.searchParams.get("workspace") || "";
-  return resolveWorkspace(config, workspaceAlias);
 }
 
 async function handleJsonRpcPayload(payload) {
@@ -561,12 +547,6 @@ function sendHtml(res, status, html) {
   if (res.headersSent) return;
   res.writeHead(status, { "Content-Type": "text/html; charset=utf-8" });
   res.end(html);
-}
-
-function sendJavaScript(res, status, js) {
-  if (res.headersSent) return;
-  res.writeHead(status, { "Content-Type": "application/javascript; charset=utf-8", "Cache-Control": "no-store" });
-  res.end(js);
 }
 
 function safeInitialDashboardData() {

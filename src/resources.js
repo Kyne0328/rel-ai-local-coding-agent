@@ -1,5 +1,4 @@
 const { readConfig, publicConfigSummary } = require("./config");
-const { collectTextFiles } = require("./safety");
 const { workspaceProfile, workspaceTree, workspaceInspect, workspaceList } = require("./tools");
 const pkg = require("../package.json");
 
@@ -63,7 +62,30 @@ function contents(uri, mimeType, value) {
 
 function helpMarkdown(config) {
   const workspaces = workspaceList(config).workspaces.map((item) => `- ${item.alias}: ${item.path}`).join("\n") || "- No workspaces are configured yet.";
-  return `# Rel.AI MCP connector\n\nThis server exposes one local repo bridge workflow to ChatGPT. Prefer these tools over file search when the user asks to inspect or modify a configured workspace.\n\n## First calls to make\n\n1. Call \`relai_repo_snapshot\` with the requested alias, for example \`jjclover\`, to return the workspace profile and safe project tree in one response.\n2. For edits, use only the bridge workflow: \`relai_read\` exact files, \`relai_write\` full-file content, \`relai_verify\` validation, then \`relai_diff\` review.\n3. If ChatGPT still shows removed tools, restart/reconnect the MCP server instead of falling back.\n\n## Configured workspaces\n\n${workspaces}\n\n## Server\n\n- name: ${pkg.name}\n- version: ${pkg.version}\n`;
+  return `# Rel.AI MCP connector
+
+This server exposes a local repo bridge to ChatGPT with a selectable workflow mode. Conservative mode keeps exact replacements and guarded writes. Aggressive mode adds Codex-style patch/archive application for users who want fast live repo mutation.
+
+## First calls to make
+
+1. Call \`relai_repo_snapshot\` with the requested alias, for example \`jjclover\`, to return the workspace profile and safe project tree in one response.
+2. For edits, use only the bridge workflow: \`relai_read\` exact files, then choose the smallest safe write tool:
+   - \`relai_replace\` for small exact edits inside existing files, especially large/interpolation-heavy Dart or source files.
+   - \`relai_write\` only for complete file replacement. Direct mode is for normal-sized files; staged mode is only for unavoidable whole-file replacement.
+   - \`relai_delete\` for deleting obsolete files.
+3. After edits, run \`relai_verify\`, then \`relai_diff\` for review.
+4. If a connector blocks a full-file or staged payload, do not create patch helpers, shell heredocs, Python scripts, or Dart runners. Re-read the target and use \`relai_replace\` with exact current text.
+5. If ChatGPT still shows removed tools, restart/reconnect the MCP server instead of falling back.
+
+## Configured workspaces
+
+${workspaces}
+
+## Server
+
+- name: ${pkg.name}
+- version: ${pkg.version}
+`;
 }
 
 module.exports = { listResources, readResource };

@@ -20,13 +20,13 @@ The goal is simple: I want the reasoning power of ChatGPT on the web, but I stil
 ChatGPT asks -> Rel.AI MCP reads/writes/verifies locally -> I inspect the diff -> I keep or reset it
 ```
 
-The normal workflow is intentionally small:
+The default conservative workflow is intentionally small:
 
 ```text
-relai_repo_snapshot -> relai_read -> relai_write -> relai_verify -> relai_diff -> relai_reset
+relai_repo_snapshot -> relai_read -> relai_replace/relai_write/relai_delete -> relai_verify -> relai_diff -> relai_reset
 ```
 
-No generated Python edit scripts. No patch-script maze. No shell-edit fallback loops. No old multi-agent/task-runner workflows pretending to be reliable. One bridge workflow, because the broken ones were wasting time.
+No generated Python edit scripts. No patch-script maze. No shell-edit fallback loops. No old multi-agent/task-runner workflows pretending to be reliable. For users who want Codex-style speed, Settings > General now has an Aggressive workflow mode that exposes first-class patch/archive apply tools instead of brittle helper scripts.
 
 Rel.AI MCP still lightly nods to the original Rel.AI idea, but this README stands on its own: this is now a local MCP bridge for ChatGPT.
 
@@ -40,7 +40,8 @@ It can:
 
 - snapshot a filtered repo tree
 - read selected files or small directory summaries
-- write full files, including staged writes for large files
+- write full files, apply exact localized replacements, delete obsolete files, and stage whole-file writes only when unavoidable
+- optionally enable aggressive patch/archive application for fast live workspace edits
 - run verification commands such as tests/analyzers
 - inspect git diffs
 - reset local changes
@@ -53,7 +54,7 @@ It is built around the practical flow I kept needing:
 I describe the coding task
 ChatGPT reasons about it
 Rel.AI MCP gives it only the repo access it asks for
-ChatGPT edits through full-file writes
+ChatGPT edits through exact replacements or full-file writes
 Rel.AI MCP runs tests
 I inspect the diff
 ```
@@ -297,7 +298,9 @@ See [`docs/AUTO_APPROVE_EXTENSION.md`](docs/AUTO_APPROVE_EXTENSION.md).
 | --- | --- |
 | `relai_repo_snapshot` | Return a filtered project snapshot, manifests, discovered commands, and context hints. |
 | `relai_read` | Read focused files or directory summaries. |
-| `relai_write` | Replace one complete file with corrected full-file content. Large writes can be staged through the same tool. |
+| `relai_write` | Replace one complete file with corrected full-file content. Direct mode is for normal-sized files; staged mode is for unavoidable whole-file replacement. |
+| `relai_replace` | Apply small exact text replacements inside an existing file. This is the preferred tool for large/interpolation-heavy source files, duplicate import cleanup, lint-only string edits, and localized behavior changes. |
+| `relai_delete` | Delete obsolete files without shell commands or patch scripts. |
 | `relai_verify` | Run detected or requested verification commands. |
 | `relai_browser` | Run a browser/UI check or fetch a route. |
 | `relai_diff` | Review git status and diff. |
@@ -348,9 +351,9 @@ If no command is provided, it auto-detects sensible validation commands for the 
 
 ## Full-file write behavior
 
-`relai_write` accepts complete file content only.
+`relai_write` accepts complete file content only. Use `relai_replace` for localized edits inside existing files and `relai_delete` for deletion.
 
-Small write:
+Small full-file write:
 
 ```json
 {
@@ -360,7 +363,7 @@ Small write:
 }
 ```
 
-Large write through the same tool:
+Large or connector-risky write through the same tool:
 
 ```json
 { "workspace": "myapp", "stage": "start", "path": "src/big.ts", "content": "first chunk" }
@@ -368,21 +371,38 @@ Large write through the same tool:
 { "workspace": "myapp", "stage": "commit", "writeId": "..." }
 ```
 
-If a multiline source file is accidentally collapsed into one long line, the write is rejected instead of damaging formatting.
+Preferred localized edit inside a risky source file:
+
+```json
+{
+  "workspace": "myapp",
+  "path": "lib/sms_handler_utils.dart",
+  "expectedSha256": "sha-from-relai-read",
+  "oldText": "exact current text block",
+  "newText": "exact replacement text block"
+}
+```
+
+Obsolete file deletion:
+
+```json
+{ "workspace": "myapp", "paths": ["docs/old-plan.md"] }
+```
+
+For long, large, or interpolation-heavy source files, direct full-file mode is refused. Use `relai_replace` for small exact edits. Use staged `relai_write` only when the whole file genuinely needs replacement. If a connector blocks a full-file or staged payload, re-read the file and retry with smaller `relai_replace` operations rather than patch scripts, shell-edit fallbacks, Python runners, or Dart runners. If a multiline source file is accidentally collapsed into one long line, the write is rejected instead of damaging formatting.
 
 ---
 
 ## Compatibility test aliases
 
-The package keeps the CI aliases that existing GitHub Actions workflows may call:
+The package keeps only active workflow test aliases:
 
 ```bash
 npm run test:compat
-npm run test:loose-patch
 npm run test:public-workflow
 ```
 
-`test:loose-patch` is now a compatibility guard that confirms the removed patch workflow stays removed. `test:public-workflow` runs the current bridge workflow smoke test. No CI screenshot belongs in the README; the README should show the product, not a failed run.
+`test:compat` confirms removed legacy tools stay rejected. `test:public-workflow` runs the current bridge workflow smoke test. No CI screenshot belongs in the README; the README should show the product, not a failed run.
 
 ---
 

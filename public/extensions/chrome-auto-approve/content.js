@@ -22,6 +22,14 @@
     'edit file', 'edit files', 'update file', 'update files', 'overwrite file', 'overwrite files',
     'save file', 'save files', 'stage write', 'append write', 'commit write',
 
+    // relai_replace
+    'replace exact text', 'exact replace', 'replace text', 'apply exact replacement',
+    'replace in file', 'localized edit', 'targeted edit', 'remove duplicate import',
+
+    // relai_delete
+    'delete file', 'delete files', 'delete local repo file', 'delete local repo files',
+    'remove file', 'remove files', 'remove obsolete file', 'remove obsolete files',
+
     // relai_verify
     'verify', 'verify local repo', 'verify workspace', 'run verification', 'run verify',
     'run checks', 'run tests', 'run command', 'run commands', 'execute verification',
