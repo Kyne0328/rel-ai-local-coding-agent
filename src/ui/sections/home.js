@@ -36,7 +36,7 @@ function buildHome(data) {
     metricHtml('Health', findings.length, health.ok === false ? 'needs attention' : 'all clear', health.ok === false ? 'bad' : 'good') +
     metricHtml('Validation', validationSummary(workspaces), 'auto-detected where possible', 'blue') +
     metricHtml('Activity', audit.length, 'recent tool calls', 'purple') +
-    metricHtml('Local bridge', 'ready', 'trusted read/write/shell', 'good');
+    metricHtml('Local bridge', 'ready', 'trusted read/write/local', 'good');
   root.appendChild(metrics);
 
   const grid = document.createElement('div');

@@ -64,7 +64,7 @@ function helpMarkdown(config) {
   const workspaces = workspaceList(config).workspaces.map((item) => `- ${item.alias}: ${item.path}`).join("\n") || "- No workspaces are configured yet.";
   return `# Rel.AI MCP connector
 
-This server exposes a local repo bridge to ChatGPT with a selectable workflow mode. Conservative mode keeps exact replacements and guarded writes. Aggressive mode adds Codex-style patch/archive application for users who want fast live repo mutation.
+This server exposes a local repo bridge to ChatGPT with a selectable workflow mode. Conservative mode keeps exact replacements and guarded writes. Fast mode adds Codex-style update/bundle application for users who want fast live repo mutation.
 
 ## First calls to make
 
@@ -72,9 +72,9 @@ This server exposes a local repo bridge to ChatGPT with a selectable workflow mo
 2. For edits, use only the bridge workflow: \`relai_read\` exact files, then choose the smallest safe write tool:
    - \`relai_replace\` for small exact edits inside existing files, especially large/interpolation-heavy Dart or source files.
    - \`relai_write\` only for complete file replacement. Direct mode is for normal-sized files; staged mode is only for unavoidable whole-file replacement.
-   - \`relai_delete\` for deleting obsolete files.
-3. After edits, run \`relai_verify\`, then \`relai_diff\` for review.
-4. If a connector blocks a full-file or staged payload, do not create patch helpers, shell heredocs, Python scripts, or Dart runners. Re-read the target and use \`relai_replace\` with exact current text.
+   - \`relai_clear_files\` for clearing obsolete files.
+3. After edits, run \`relai_run_checks\`, then \`relai_diff\` for review.
+4. If a connector blocks a full-file or staged payload, do not create update helpers, local heredocs, Python scripts, or Dart runners. Re-read the target and use \`relai_replace\` with exact current text.
 5. If ChatGPT still shows removed tools, restart/reconnect the MCP server instead of falling back.
 
 ## Configured workspaces

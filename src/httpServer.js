@@ -17,7 +17,7 @@ function buildToolMetadata() {
   const { getToolSchemas } = require("./tools");
   const categoryMap = {
     relai_repo: "Bridge", relai_read: "Bridge", relai_write: "Bridge", relai_replace: "Bridge",
-    relai_delete: "Bridge", relai_verify: "Bridge", relai_browser: "Bridge", relai_diff: "Bridge", relai_reset: "Bridge",
+    relai_clear: "Bridge", relai_run: "Bridge", relai_browser: "Bridge", relai_diff: "Bridge", relai_restore: "Bridge", relai_status: "Bridge", relai_feature: "Bridge", relai_apply: "Bridge", relai_package: "Bridge",
   };
   const config = readConfig({ allowMissing: true });
   return getToolSchemas(config).map(tool => {

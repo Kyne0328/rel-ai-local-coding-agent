@@ -20,8 +20,8 @@ function dashboardData(config, args = {}) {
       workspaces: Object.keys(config.workspaces || {}).length
     },
     workflow: {
-      normal: ["relai_repo_snapshot", "relai_read", "relai_write", "relai_replace", "relai_delete", "relai_verify", "relai_diff", "relai_reset"],
-      removedLegacyWorkflows: ["patch", "shell", "task-runner", "worktree", "multi-agent", "approvals", "docker", "pr-ci-repair"]
+      normal: ["relai_repo_snapshot", "relai_read", "relai_write", "relai_replace", "relai_clear_files", "relai_run_checks", "relai_diff", "relai_restore_changes"],
+      removedLegacyWorkflows: ["update", "local", "task-runner", "worktree", "multi-agent", "approvals", "docker", "pr-ci-repair"]
     },
     health,
     auditTail
@@ -86,13 +86,13 @@ function cleanupPlan(config, args = {}, apply) {
   const includeAudit = args.includeAudit === true;
   const targets = [];
   if (includeAudit) collectOldJson(targets, path.dirname(config.auditLogPath), olderThanHours, [path.basename(config.auditLogPath)]);
-  const limited = targets.slice(0, clampNumber(args.maxDeletes || 500, 1, 5000));
-  const deleted = [];
+  const limited = targets.slice(0, clampNumber(args.maxClears || 500, 1, 5000));
+  const cleard = [];
   if (apply) {
     for (const file of limited) {
       try {
         fs.rmSync(file.path, { force: true });
-        deleted.push(file);
+        cleard.push(file);
       } catch (error) {
         file.error = error instanceof Error ? error.message : String(error);
       }
@@ -104,8 +104,8 @@ function cleanupPlan(config, args = {}, apply) {
     olderThanHours,
     totalCandidates: targets.length,
     candidates: limited,
-    deleted,
-    message: apply ? `Deleted ${deleted.length} file(s).` : "Preview only. Re-run with confirm=true to delete candidates."
+    cleard,
+    message: apply ? `Cleard ${cleard.length} file(s).` : "Preview only. Re-run with confirm=true to clear candidates."
   };
 }
 
@@ -125,7 +125,7 @@ async function doctorFix(config, args = {}) {
       fixes.push({ path: editor, action: "wrote .editorconfig" });
     }
     if (args.renormalize === true) {
-      const result = await runProcess("git", ["add", "--renormalize", "."], { cwd: workspacePath, shell: false }, config);
+      const result = await runProcess("git", ["add", "--renormalize", "."], { cwd: workspacePath, local: false }, config);
       fixes.push({ action: "git add --renormalize .", result: summarizeCommand(result) });
     }
   }

@@ -45,38 +45,38 @@ function _render(container) {
   workflow.body.appendChild(workflowWarningBox());
   workflow.body.appendChild(field('Mode', selectControl([
     { value: 'conservative', label: 'Conservative - exact edits and guarded writes' },
-    { value: 'aggressive', label: 'Aggressive - Codex-style patch/archive apply' }
+    { value: 'aggressive', label: 'Fast - Codex-style update/bundle apply' }
   ], (_draft.workflow || {}).mode || 'conservative', (value) => {
-    if (value === 'aggressive' && !confirmAggressiveWorkflow()) return;
+    if (value === 'aggressive' && !confirmFastFlow()) return;
     if (!_draft.workflow) _draft.workflow = {};
     _draft.workflow.mode = value;
     _checkDirty();
-  }), 'Conservative keeps the exact-replacement workflow. Aggressive exposes relai_apply_patch, relai_apply_archive, and relai_snapshot_archive for fast live repo mutation.'));
+  }), 'Conservative keeps exact replacements. Fast mode exposes relai_apply_update, relai_apply_bundle, and relai_package_snapshot for fast live repo mutation.'));
   const aggressive = (_draft.workflow && _draft.workflow.aggressive) || {};
-  workflow.body.appendChild(field('Require clean git before aggressive apply', toggleControl(aggressive.requireCleanGit !== false, (v) => {
+  workflow.body.appendChild(field('Require clean git before fast apply', toggleControl(aggressive.requireCleanGit !== false, (v) => {
     if (!_draft.workflow) _draft.workflow = {};
     if (!_draft.workflow.aggressive) _draft.workflow.aggressive = {};
     _draft.workflow.aggressive.requireCleanGit = v;
     _checkDirty();
   }, { enabled: 'Require clean git', disabled: 'Allow dirty git' }), 'Recommended on. Turn off only if you want apply tools to operate on a dirty working tree.'));
-  workflow.body.appendChild(field('Backup before aggressive apply', toggleControl(aggressive.backup !== false, (v) => {
+  workflow.body.appendChild(field('Backup before fast apply', toggleControl(aggressive.backup !== false, (v) => {
     if (!_draft.workflow) _draft.workflow = {};
     if (!_draft.workflow.aggressive) _draft.workflow.aggressive = {};
     _draft.workflow.aggressive.backup = v;
     _checkDirty();
-  }, { enabled: 'Backup enabled', disabled: 'No automatic backup' }), 'When dirty edits are allowed, Rel.AI attempts a git stash backup before applying a patch or archive.'));
-  workflow.body.appendChild(field('Delete missing files during archive overlay', toggleControl(aggressive.deleteMissingDefault === true, (v) => {
+  }, { enabled: 'Backup enabled', disabled: 'No automatic backup' }), 'When dirty edits are allowed, Rel.AI attempts a git stash backup before applying a update or archive.'));
+  workflow.body.appendChild(field('Clear missing files during archive overlay', toggleControl(aggressive.deleteMissingDefault === true, (v) => {
     if (!_draft.workflow) _draft.workflow = {};
     if (!_draft.workflow.aggressive) _draft.workflow.aggressive = {};
     _draft.workflow.aggressive.deleteMissingDefault = v;
     _checkDirty();
-  }, { enabled: 'Delete missing', disabled: 'Overlay only' }), 'Off means zip/archive apply overwrites and adds files but does not delete live files missing from the archive unless a tool call explicitly asks for deleteMissing.'));
-  workflow.body.appendChild(field('Max patch bytes', numberControl(aggressive.maxPatchBytes || 2097152, (v) => {
+  }, { enabled: 'Clear missing', disabled: 'Overlay only' }), 'Off means zip/archive apply overwrites and adds files but does not clear live files missing from the archive unless a tool call explicitly asks for clearMissing.'));
+  workflow.body.appendChild(field('Max update bytes', numberControl(aggressive.maxPatchBytes || 2097152, (v) => {
     if (!_draft.workflow) _draft.workflow = {};
     if (!_draft.workflow.aggressive) _draft.workflow.aggressive = {};
     _draft.workflow.aggressive.maxPatchBytes = v;
     _checkDirty();
-  }, { min: 1024, max: 52428800, width: '150px' }), 'Upper bound for relai_apply_patch payloads.'));
+  }, { min: 1024, max: 52428800, width: '150px' }), 'Upper bound for relai_apply_update payloads.'));
   workflow.body.appendChild(field('Max archive bytes', numberControl(aggressive.maxArchiveBytes || 262144000, (v) => {
     if (!_draft.workflow) _draft.workflow = {};
     if (!_draft.workflow.aggressive) _draft.workflow.aggressive = {};
@@ -130,7 +130,7 @@ function summaryBox() {
   div.style.cssText = 'text-align:left;padding:12px;line-height:1.55;';
   div.innerHTML = `
     <strong style="color:var(--text);">ChatGPT local repo bridge</strong><br>
-    This is the always-on local connector between ChatGPT and your configured repositories. It avoids uploading a zip for every task through one reliable workflow: <code>relai_repo_snapshot</code>, <code>relai_read</code>, <code>relai_replace</code> exact edits, <code>relai_write</code> full-file writes, <code>relai_delete</code> deletions, <code>relai_verify</code>, <code>relai_browser</code>, <code>relai_diff</code>, and <code>relai_reset</code>.<br>
+    This is the always-on local connector between ChatGPT and your configured repositories. It avoids uploading a zip for every task through one reliable workflow: <code>relai_repo_snapshot</code>, <code>relai_read</code>, <code>relai_replace</code> exact edits, <code>relai_write</code> full-file writes, <code>relai_clear_files</code> file clearing, <code>relai_run_checks</code>, <code>relai_browser</code>, <code>relai_diff</code>, and <code>relai_restore_changes</code>.<br>
     Fast task settings live on each workspace and reduce broad scans/indexing for small tasks across any language stack.
   `;
   return div;
@@ -143,13 +143,13 @@ function workflowWarningBox() {
   div.style.cssText = 'text-align:left;padding:12px;line-height:1.55;border-color:rgba(99,102,241,.35);background:rgba(99,102,241,.08);';
   div.innerHTML = `
     <strong style="color:var(--text);">Choose how hard Rel.AI is allowed to drive.</strong><br>
-    Conservative mode keeps exact replacements, file writes, deletes, verification, diff, and reset. Aggressive mode adds Codex-style live patch/archive application for fast repo-wide changes. It still preserves <code>.git</code>, keeps path guards, and can require a clean git state before applying.
+    Conservative mode keeps exact replacements, file writes, clears, verification, diff, and reset. Fast mode adds Codex-style live update/bundle application for fast repo-wide changes. It still preserves <code>.git</code>, keeps path guards, and can require a clean git state before applying.
   `;
   return div;
 }
 
-function confirmAggressiveWorkflow() {
-  return window.confirm('Enable aggressive workflow mode?\n\nThis exposes live patch/archive apply tools for fast Codex-style repo edits. Commit or stash your work first. Rel.AI will still protect .git and workspace boundaries.');
+function confirmFastFlow() {
+  return window.confirm('Enable fast flow mode?\n\nThis exposes live update/bundle apply tools for fast Codex-style repo edits. Commit or stash your work first. Rel.AI will still protect .git and workspace boundaries.');
 }
 function autoApproveWarningBox() {
   const div = document.createElement('div');
@@ -229,7 +229,7 @@ function _themeToggle() {
   wrap.style.cssText = 'display:flex;gap:8px;';
   const dark = document.createElement('button'); dark.textContent = 'Dark'; dark.type = 'button';
   const light = document.createElement('button'); light.textContent = 'Light'; light.type = 'button'; light.className = 'secondary';
-  dark.onclick = () => { localStorage.setItem('relai_theme', 'dark'); delete document.documentElement.dataset.theme; };
+  dark.onclick = () => { localStorage.setItem('relai_theme', 'dark'); clear document.documentElement.dataset.theme; };
   light.onclick = () => { localStorage.setItem('relai_theme', 'light'); document.documentElement.dataset.theme = 'light'; };
   wrap.append(dark, light);
   return wrap;

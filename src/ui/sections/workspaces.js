@@ -84,7 +84,7 @@ function workspaceCard(ws, health) {
         <button class="secondary" type="button" data-toggle-fast-task="${esc(ws.alias || '')}">${ws.fastTask && ws.fastTask.enabled !== false ? 'Disable fast task' : 'Enable fast task'}</button>
         <button class="secondary" type="button" data-edit-fast-task="${esc(ws.alias || '')}">Fast task settings</button>
         <button class="secondary" type="button" data-rename-workspace="${esc(ws.alias || '')}">Rename</button>
-        <button class="secondary danger" type="button" data-delete-workspace="${esc(ws.alias || '')}">Delete</button>
+        <button class="secondary danger" type="button" data-clear-workspace="${esc(ws.alias || '')}">Clear</button>
         ${canSaveDetected ? `<button type="button" data-save-detected="${esc(ws.alias || '')}">Save detected tests</button>` : ''}
       </div>
       <pre class="copy-box" data-preflight-out="${esc(ws.alias || '')}" style="display:none;margin-top:10px;max-height:220px;overflow:auto;"></pre>
@@ -102,8 +102,8 @@ function fastTaskText(fastTask = {}) {
 
 function validationText(configured, detected) {
   if (configured.length) return 'Configured tests: ' + esc(configured.join(', '));
-  if (detected.length) return 'Auto-detected validation: ' + esc(detected.join(', ')) + '. ChatGPT can run these via relai_verify even before saving them.';
-  return 'No validation commands found yet. ChatGPT can still run explicit shell commands in trusted mode.';
+  if (detected.length) return 'Auto-detected validation: ' + esc(detected.join(', ')) + '. ChatGPT can run these via relai_run_checks even before saving them.';
+  return 'No validation commands found yet. ChatGPT can still run explicit local checks in trusted mode.';
 }
 
 function findingRow(finding) {
@@ -138,10 +138,10 @@ document.addEventListener('click', async (event) => {
     return;
   }
 
-  const deleteWorkspace = event.target && event.target.closest ? event.target.closest('[data-delete-workspace]') : null;
-  if (deleteWorkspace) {
-    const alias = deleteWorkspace.getAttribute('data-delete-workspace') || '';
-    await deleteWorkspaceFlow(alias);
+  const clearWorkspace = event.target && event.target.closest ? event.target.closest('[data-clear-workspace]') : null;
+  if (clearWorkspace) {
+    const alias = clearWorkspace.getAttribute('data-clear-workspace') || '';
+    await clearWorkspaceFlow(alias);
     return;
   }
 
@@ -285,15 +285,15 @@ async function editFastTaskFlow(alias) {
   }
 }
 
-async function deleteWorkspaceFlow(alias) {
-  const ok = window.confirm(`Delete workspace '${alias}' from Rel.AI? This removes only the dashboard/config entry. It does not delete repo files.`);
+async function clearWorkspaceFlow(alias) {
+  const ok = window.confirm(`Clear workspace '${alias}' from Rel.AI? This removes only the dashboard/config entry. It does not clear repo files.`);
   if (!ok) return;
-  const result = await postJson('/api/workspaces', { action: 'delete', alias, confirmDelete: true });
+  const result = await postJson('/api/workspaces', { action: 'clear', alias, confirmClear: true });
   if (result && result.ok) {
-    toast('Workspace deleted: ' + alias, { variant: 'success' });
+    toast('Workspace cleard: ' + alias, { variant: 'success' });
     setTimeout(() => location.reload(), 400);
   } else {
-    toast('Could not delete workspace: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });
+    toast('Could not clear workspace: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });
   }
 }
 

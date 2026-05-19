@@ -102,7 +102,7 @@ function _renderStep(step, content, nextBtn, skipBtn) {
       _step++; _showStep();
     };
   } else if (step === 2) {
-    content.innerHTML = '<h3 style="margin:0;font-size:15px;">Trusted local bridge</h3><p style="font-size:13px;color:var(--text-muted);line-height:1.5;">Rel.AI is now designed for one thing: connect ChatGPT to your local repo like an uploaded zip, with local shell, write, verify, diff, and reset access inside configured workspaces.</p><div class="empty" style="text-align:left;padding:12px;">No permission profile setup is needed. Approval gates and command allowlists are not part of the normal ChatGPT-local workflow.</div>';
+    content.innerHTML = '<h3 style="margin:0;font-size:15px;">Trusted local bridge</h3><p style="font-size:13px;color:var(--text-muted);line-height:1.5;">Rel.AI is now designed for one thing: connect ChatGPT to your local repo like an uploaded zip, with local local, write, verify, diff, and reset access inside configured workspaces.</p><div class="empty" style="text-align:left;padding:12px;">No permission profile setup is needed. Approval gates and command allowlists are not part of the normal ChatGPT-local workflow.</div>';
     nextBtn.onclick = async () => { _data.profile = 'admin'; _step++; _showStep(); };
   } else if (step === 3) {
     content.innerHTML = '<h3 style="margin:0;font-size:15px;">Connect ChatGPT</h3>';

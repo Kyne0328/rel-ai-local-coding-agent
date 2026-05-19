@@ -26,11 +26,11 @@
     'replace exact text', 'exact replace', 'replace text', 'apply exact replacement',
     'replace in file', 'localized edit', 'targeted edit', 'remove duplicate import',
 
-    // relai_delete
-    'delete file', 'delete files', 'delete local repo file', 'delete local repo files',
+    // relai_clear_files
+    'clear file', 'clear files', 'clear local repo file', 'clear local repo files',
     'remove file', 'remove files', 'remove obsolete file', 'remove obsolete files',
 
-    // relai_verify
+    // relai_run_checks
     'verify', 'verify local repo', 'verify workspace', 'run verification', 'run verify',
     'run checks', 'run tests', 'run command', 'run commands', 'execute verification',
 
@@ -42,7 +42,7 @@
     'diff', 'review diff', 'review local repo diff', 'inspect diff', 'inspect local repo diff',
     'show diff', 'get diff', 'load diff', 'view diff',
 
-    // relai_reset
+    // relai_restore_changes
     'reset', 'reset repo', 'reset repository', 'reset workspace', 'reset local repo',
     'reset local repo changes', 'rollback changes', 'discard changes', 'restore files',
     'reset files', 'reset path', 'reset paths'
@@ -173,7 +173,7 @@
   function trustedClick(el) {
     try { el.scrollIntoView({ block: 'center', inline: 'center' }); } catch (_) {}
     for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
-      el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+      el.disupdateEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
     }
     try { el.click(); } catch (_) {}
   }

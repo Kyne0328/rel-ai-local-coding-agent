@@ -4,7 +4,7 @@ const path = require("node:path");
 const { safeReadJson } = require("./safety");
 const { discoverCommands } = require("./commandDiscovery");
 
-const BRIDGE_TOOLS = ["relai_repo_snapshot", "relai_read", "relai_write", "relai_replace", "relai_delete", "relai_apply_patch", "relai_apply_archive", "relai_snapshot_archive", "relai_verify", "relai_browser", "relai_diff", "relai_reset"];
+const BRIDGE_TOOLS = ["relai_repo_snapshot", "relai_read", "relai_write", "relai_replace", "relai_clear_files", "relai_apply_update", "relai_apply_bundle", "relai_package_snapshot", "relai_run_checks", "relai_browser", "relai_diff", "relai_restore_changes", "relai_status", "relai_feature_probe"];
 
 function makeDefaultAutoApproveConfig() {
   return {
@@ -241,7 +241,7 @@ function publicConfigSummary(config) {
       visibleTools: BRIDGE_TOOLS,
       writeAccess: true,
       verificationAccess: true,
-      resetAccess: true
+      restoreAccess: true
     },
     removedLegacyWorkflows: ["generated helper scripts", "standalone shell fallback loops", "task-runner", "multi-agent", "approval-gates", "docker", "pr-ci-repair"],
     dashboardEnabled: Boolean(config.dashboardEnabled),

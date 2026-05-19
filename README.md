@@ -23,10 +23,10 @@ ChatGPT asks -> Rel.AI MCP reads/writes/verifies locally -> I inspect the diff -
 The default conservative workflow is intentionally small:
 
 ```text
-relai_repo_snapshot -> relai_read -> relai_replace/relai_write/relai_delete -> relai_verify -> relai_diff -> relai_reset
+relai_repo_snapshot -> relai_read -> relai_replace/relai_write/relai_clear_files -> relai_run_checks -> relai_diff -> relai_restore_changes
 ```
 
-No generated Python edit scripts. No patch-script maze. No shell-edit fallback loops. No old multi-agent/task-runner workflows pretending to be reliable. For users who want Codex-style speed, Settings > General now has an Aggressive workflow mode that exposes first-class patch/archive apply tools instead of brittle helper scripts.
+No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. No old multi-agent/task-runner workflows pretending to be reliable. For users who want Codex-style speed, Settings > General now has an Fast flow mode that exposes first-class update/bundle apply tools instead of brittle helper scripts.
 
 Rel.AI MCP still lightly nods to the original Rel.AI idea, but this README stands on its own: this is now a local MCP bridge for ChatGPT.
 
@@ -40,8 +40,8 @@ It can:
 
 - snapshot a filtered repo tree
 - read selected files or small directory summaries
-- write full files, apply exact localized replacements, delete obsolete files, and stage whole-file writes only when unavoidable
-- optionally enable aggressive patch/archive application for fast live workspace edits
+- write full files, apply exact localized replacements, clear obsolete files, and stage whole-file writes only when unavoidable
+- optionally enable fast update/bundle application for fast live workspace edits
 - run verification commands such as tests/analyzers
 - inspect git diffs
 - reset local changes
@@ -77,7 +77,7 @@ The home screen shows the current bridge health, configured workspaces, validati
   <img src="docs/images/dashboard-workspaces-section.png" alt="Rel.AI MCP workspace cards" width="900">
 </p>
 
-Workspace cards show detected commands, fast-task mode, protected branches, preflight actions, settings, rename, and delete controls.
+Workspace cards show detected commands, fast-task mode, protected branches, preflight actions, settings, rename, and clear controls.
 
 ### Activity
 
@@ -93,7 +93,7 @@ The activity page is there because I got tired of guessing what the MCP server w
   <img src="docs/images/dashboard-tools-section.png" alt="Rel.AI MCP bridge tools" width="900">
 </p>
 
-Normal mode exposes only the local bridge tools. Legacy shell/patch/task-runner workflows are not part of the public MCP surface.
+Normal mode exposes only the local bridge tools. Legacy local/update/task-runner workflows are not part of the public MCP surface.
 
 ### Chrome extension auto-approve
 
@@ -178,7 +178,7 @@ I still wanted a Codex-like loop:
 understand the repo -> make the change -> run validation -> show the diff
 ```
 
-But I wanted to drive it with ChatGPT web, especially the stronger reasoning models there. Copying files manually, uploading ZIPs, and pasting patches back into the project was too slow. The older Rel.AI project was my first answer to that problem. Rel.AI MCP is the next version: simpler, more direct, and built around MCP tools instead of a patch-heavy browser/native-host flow.
+But I wanted to drive it with ChatGPT web, especially the stronger reasoning models there. Copying files manually, uploading ZIPs, and pasting updatees back into the project was too slow. The older Rel.AI project was my first answer to that problem. Rel.AI MCP is the next version: simpler, more direct, and built around MCP tools instead of a update-heavy browser/native-host flow.
 
 The important design choice: ChatGPT does the thinking, but the local bridge keeps the repo access explicit.
 
@@ -300,13 +300,13 @@ See [`docs/AUTO_APPROVE_EXTENSION.md`](docs/AUTO_APPROVE_EXTENSION.md).
 | `relai_read` | Read focused files or directory summaries. |
 | `relai_write` | Replace one complete file with corrected full-file content. Direct mode is for normal-sized files; staged mode is for unavoidable whole-file replacement. |
 | `relai_replace` | Apply small exact text replacements inside an existing file. This is the preferred tool for large/interpolation-heavy source files, duplicate import cleanup, lint-only string edits, and localized behavior changes. |
-| `relai_delete` | Delete obsolete files without shell commands or patch scripts. |
-| `relai_verify` | Run detected or requested verification commands. |
+| `relai_clear_files` | Clear obsolete files without local checks or update helpers. |
+| `relai_run_checks` | Run detected or requested verification commands. |
 | `relai_browser` | Run a browser/UI check or fetch a route. |
 | `relai_diff` | Review git status and diff. |
-| `relai_reset` | Roll back requested local changes. |
+| `relai_restore_changes` | Roll back requested local changes. |
 
-Removed workflows are not part of the MCP anymore: patch application loops, generated patch scripts, shell-edit tools, task runners, isolated worktree orchestration, multi-agent schedulers, Docker runners, and PR/CI repair loops.
+Removed workflows are not part of the MCP anymore: update application loops, generated update helpers, local-edit tools, task runners, isolated worktree orchestration, multi-agent schedulers, Docker runners, and PR/CI repair loops.
 
 ---
 
@@ -335,7 +335,7 @@ The point is to avoid the slow version of AI coding where the tool scans the wor
 
 ## Verify command behavior
 
-`relai_verify` can run explicit commands inside configured workspaces:
+`relai_run_checks` can run explicit commands inside configured workspaces:
 
 ```json
 { "workspace": "jjclover", "commands": ["flutter analyze", "flutter test"] }
@@ -351,7 +351,7 @@ If no command is provided, it auto-detects sensible validation commands for the 
 
 ## Full-file write behavior
 
-`relai_write` accepts complete file content only. Use `relai_replace` for localized edits inside existing files and `relai_delete` for deletion.
+`relai_write` accepts complete file content only. Use `relai_replace` for localized edits inside existing files and `relai_clear_files` for file clearing.
 
 Small full-file write:
 
@@ -383,13 +383,13 @@ Preferred localized edit inside a risky source file:
 }
 ```
 
-Obsolete file deletion:
+Obsolete file file clearing:
 
 ```json
 { "workspace": "myapp", "paths": ["docs/old-plan.md"] }
 ```
 
-For long, large, or interpolation-heavy source files, direct full-file mode is refused. Use `relai_replace` for small exact edits. Use staged `relai_write` only when the whole file genuinely needs replacement. If a connector blocks a full-file or staged payload, re-read the file and retry with smaller `relai_replace` operations rather than patch scripts, shell-edit fallbacks, Python runners, or Dart runners. If a multiline source file is accidentally collapsed into one long line, the write is rejected instead of damaging formatting.
+For long, large, or interpolation-heavy source files, direct full-file mode is refused. Use `relai_replace` for small exact edits. Use staged `relai_write` only when the whole file genuinely needs replacement. If a connector blocks a full-file or staged payload, re-read the file and retry with smaller `relai_replace` operations rather than update helpers, local-edit fallbacks, Python runners, or Dart runners. If a multiline source file is accidentally collapsed into one long line, the write is rejected instead of damaging formatting.
 
 ---
 
@@ -411,7 +411,7 @@ npm run test:public-workflow
 Rel.AI MCP is intentionally opinionated now.
 
 - One normal workflow is better than five fallback workflows that fail differently.
-- Full-file writes are easier to reason about than hidden mini-patches.
+- Full-file writes are easier to reason about than hidden mini-updatees.
 - Verification should be visible and repeatable.
 - Auto-approve belongs in a browser extension, not a fragile userscript.
 - Public tunnel setup should be easy, but local-only should stay the default.

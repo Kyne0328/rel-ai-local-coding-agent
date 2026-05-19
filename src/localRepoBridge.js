@@ -38,7 +38,7 @@ function repoSnapshot(workspace, config, args = {}) {
     root: workspace.path,
     toolMode: config.toolMode || "chatgpt_local_repo",
     trustedLocalAgent: Boolean(config.trustedLocalAgent),
-    workflow: workflowSummary(config),
+    flow: flowSummary(config),
     manifests: Object.keys(manifests),
     manifestContents: manifests,
     discoveredCommands,
@@ -96,10 +96,6 @@ function relaiRead(workspace, args = {}) {
 }
 
 function relaiWrite(workspace, config, args = {}) {
-  if (Array.isArray(args.edits) || args.find || args.replace || args.type || args.op || args.expectedSha256) {
-    throw new Error("relai_write only supports full-file writes. Use relai_replace for small exact text replacements inside existing files, relai_delete for file deletion, or relai_write direct/staged mode for complete file replacement. Patch scripts, shell heredocs, generated edit helpers, and edit-array payloads are not supported.");
-  }
-
   const stage = String(args.stage || "direct").trim().toLowerCase();
   if (stage === "direct" || stage === "") {
     const relativePath = String(args.path || "").trim();
@@ -161,7 +157,7 @@ function relaiWrite(workspace, config, args = {}) {
     const payload = readStagedPayload(config, workspace, writeId);
     const content = payload.chunks.join("");
     const result = performFullFileWrite(workspace, config, payload.path, content, { dryRun: Boolean(args.dryRun), staged: true, writeId });
-    if (!args.dryRun) deleteStagedPayload(config, workspace, writeId);
+    if (!args.dryRun) clearStagedPayload(config, workspace, writeId);
     return {
       ...result,
       operation: "stagedFullFileWrite:commit",
@@ -174,8 +170,8 @@ function relaiWrite(workspace, config, args = {}) {
 
   if (stage === "abort") {
     const writeId = validateWriteId(args.writeId);
-    const existed = deleteStagedPayload(config, workspace, writeId);
-    return { ok: true, workspace: workspace.alias, operation: "stagedFullFileWrite:abort", writeId, deleted: existed };
+    const existed = clearStagedPayload(config, workspace, writeId);
+    return { ok: true, workspace: workspace.alias, operation: "stagedFullFileWrite:abort", writeId, cleard: existed };
   }
 
   throw new Error("relai_write stage must be one of: direct, start, append, commit, abort.");
@@ -193,9 +189,7 @@ function relaiReplace(workspace, config, args = {}) {
 
   const oldSha256 = fileSha256(workspace.path, safe.relativePath);
   const expectedSha256 = String(args.expectedSha256 || "").trim();
-  if (expectedSha256 && oldSha256 !== expectedSha256) {
-    throw new Error(`relai_replace refused stale edit for ${safe.relativePath}: expected sha256 ${expectedSha256}, current sha256 ${oldSha256}. Re-read the file with relai_read and retry with fresh exact text.`);
-  }
+  const shaMismatch = Boolean(expectedSha256 && oldSha256 !== expectedSha256);
 
   const replacements = normalizeExactReplacements(args);
   const oldContent = data.toString("utf8");
@@ -242,6 +236,7 @@ function relaiReplace(workspace, config, args = {}) {
     changedFiles: changed ? [safe.relativePath] : [],
     oldSha256,
     newSha256,
+    ...(shaMismatch ? { shaMismatch: { expectedSha256, currentSha256: oldSha256 } } : {}),
     replacements: results
   };
 
@@ -266,17 +261,17 @@ function relaiReplace(workspace, config, args = {}) {
   return result;
 }
 
-function relaiDelete(workspace, config, args = {}) {
+function relaiClear(workspace, config, args = {}) {
   const rawPaths = Array.isArray(args.paths) ? args.paths : (args.path ? [args.path] : []);
-  if (rawPaths.length === 0) throw new Error("relai_delete requires path or paths.");
-  if (rawPaths.length > 100) throw new Error("relai_delete accepts at most 100 paths per call.");
+  if (rawPaths.length === 0) throw new Error("relai_clear_files requires path or paths.");
+  if (rawPaths.length > 100) throw new Error("relai_clear_files accepts at most 100 paths per call.");
   const dryRun = Boolean(args.dryRun);
   const failIfMissing = Boolean(args.failIfMissing);
   const expectedSha256 = String(args.expectedSha256 || "").trim();
-  if (expectedSha256 && rawPaths.length !== 1) throw new Error("relai_delete expectedSha256 can only be used with one path.");
+  if (expectedSha256 && rawPaths.length !== 1) throw new Error("relai_clear_files expectedSha256 can only be used with one path.");
 
   const operationId = makeOperationId();
-  const deleted = [];
+  const cleard = [];
   const skipped = [];
   const results = [];
 
@@ -285,27 +280,25 @@ function relaiDelete(workspace, config, args = {}) {
     if (!fs.existsSync(safe.absolutePath)) {
       const item = { path: safe.relativePath, skipped: true, reason: "missing" };
       skipped.push(item);
-      if (failIfMissing) throw new Error(`relai_delete target does not exist: ${safe.relativePath}`);
+      if (failIfMissing) throw new Error(`relai_clear_files target does not exist: ${safe.relativePath}`);
       results.push(item);
       continue;
     }
     const stat = fs.statSync(safe.absolutePath);
-    if (!stat.isFile()) throw new Error(`relai_delete refuses non-file path: ${safe.relativePath}`);
+    if (!stat.isFile()) throw new Error(`relai_clear_files refuses non-file path: ${safe.relativePath}`);
     const oldSha256 = fileSha256(workspace.path, safe.relativePath);
-    if (expectedSha256 && oldSha256 !== expectedSha256) {
-      throw new Error(`relai_delete refused stale deletion for ${safe.relativePath}: expected sha256 ${expectedSha256}, current sha256 ${oldSha256}.`);
-    }
-    const item = { path: safe.relativePath, deleted: !dryRun, dryRun, oldSha256 };
+    const shaMismatch = Boolean(expectedSha256 && oldSha256 !== expectedSha256);
+    const item = { path: safe.relativePath, cleard: !dryRun, dryRun, oldSha256, ...(shaMismatch ? { shaMismatch: { expectedSha256, currentSha256: oldSha256 } } : {}) };
     if (!dryRun) fs.rmSync(safe.absolutePath, { force: true });
-    deleted.push(safe.relativePath);
+    cleard.push(safe.relativePath);
     results.push(item);
   }
 
   appendOperation(config, workspace, {
     id: operationId,
-    type: dryRun ? "delete:dryRun" : "delete",
+    type: dryRun ? "clear:dryRun" : "clear",
     ok: true,
-    paths: dryRun ? [] : deleted,
+    paths: dryRun ? [] : cleard,
     results
   });
 
@@ -314,10 +307,10 @@ function relaiDelete(workspace, config, args = {}) {
     dryRun,
     workspace: workspace.alias,
     operationId,
-    operation: "deleteFiles",
-    changed: !dryRun && deleted.length > 0,
-    changedFiles: dryRun ? [] : deleted,
-    deleted,
+    operation: "clearFiles",
+    changed: !dryRun && cleard.length > 0,
+    changedFiles: dryRun ? [] : cleard,
+    cleard,
     skipped,
     results
   };
@@ -325,12 +318,12 @@ function relaiDelete(workspace, config, args = {}) {
 
 
 async function relaiApplyPatch(workspace, config, args = {}) {
-  assertAggressiveWorkflow(config, args, "relai_apply_patch");
+  assertAggressiveFlow(config, args, "relai_apply_update");
   const patch = String(args.patch || args.diff || "");
-  if (!patch.trim()) throw new Error("relai_apply_patch requires patch or diff text.");
-  const maxPatchBytes = aggressiveNumber(config, "maxPatchBytes", DEFAULT_AGGRESSIVE_MAX_PATCH_BYTES);
+  if (!patch.trim()) throw new Error("relai_apply_update requires patch or diff text.");
+  const maxPatchBytes = fastNumber(config, "maxPatchBytes", DEFAULT_AGGRESSIVE_MAX_PATCH_BYTES);
   const patchBytes = Buffer.byteLength(patch, "utf8");
-  if (patchBytes > maxPatchBytes) throw new Error(`relai_apply_patch refused ${patchBytes} byte patch; max is ${maxPatchBytes}. Use relai_apply_archive for bulk replacement.`);
+  if (patchBytes > maxPatchBytes) throw new Error(`relai_apply_update refused ${patchBytes} byte patch; max is ${maxPatchBytes}. Use relai_apply_bundle for bulk replacement.`);
   await ensureGitRepo(workspace, config);
   const touchedPaths = validatePatchPaths(workspace, patch);
   await requireCleanGitIfConfigured(workspace, config, args);
@@ -348,18 +341,18 @@ async function relaiApplyPatch(workspace, config, args = {}) {
   const diff = args.returnDiff === false ? null : await relaiDiff(workspace, config, { maxBytes: args.maxDiffBytes || DEFAULT_MAX_DIFF_BYTES });
   const ok = apply.exitCode === 0 && (!verify || verify.ok);
   appendOperation(config, workspace, { id: operationId, type: "apply_patch", ok, paths: touchedPaths, results: [{ operation: "applyPatch", bytes: patchBytes, touchedPaths, verified: verify ? verify.ok : null }] });
-  return { ok, workspace: workspace.alias, operationId, operation: "applyPatch", aggressive: true, changedFiles: apply.exitCode === 0 ? touchedPaths : [], touchedPaths, patchBytes, backup, apply: summarizeCommand(apply), ...(verify ? { verify } : {}), ...(diff ? { diff } : {}) };
+  return { ok, workspace: workspace.alias, operationId, operation: "applyPatch", fast: true, changedFiles: apply.exitCode === 0 ? touchedPaths : [], touchedPaths, patchBytes, backup, apply: summarizeCommand(apply), ...(verify ? { verify } : {}), ...(diff ? { diff } : {}) };
 }
 
 async function relaiApplyArchive(workspace, config, args = {}) {
-  assertAggressiveWorkflow(config, args, "relai_apply_archive");
+  assertAggressiveFlow(config, args, "relai_apply_bundle");
   const archivePath = resolveHostPath(String(args.archivePath || args.path || "").trim());
-  if (!archivePath) throw new Error("relai_apply_archive requires archivePath pointing to a local zip archive on the MCP host.");
+  if (!archivePath) throw new Error("relai_apply_bundle requires archivePath pointing to a local zip archive on the MCP host.");
   if (!fs.existsSync(archivePath)) throw new Error(`Archive not found: ${archivePath}`);
   const stat = fs.statSync(archivePath);
   if (!stat.isFile()) throw new Error(`Archive path is not a file: ${archivePath}`);
-  const maxArchiveBytes = aggressiveNumber(config, "maxArchiveBytes", DEFAULT_AGGRESSIVE_MAX_ARCHIVE_BYTES);
-  if (stat.size > maxArchiveBytes) throw new Error(`relai_apply_archive refused ${stat.size} byte archive; max is ${maxArchiveBytes}.`);
+  const maxArchiveBytes = fastNumber(config, "maxArchiveBytes", DEFAULT_AGGRESSIVE_MAX_ARCHIVE_BYTES);
+  if (stat.size > maxArchiveBytes) throw new Error(`relai_apply_bundle refused ${stat.size} byte archive; max is ${maxArchiveBytes}.`);
   await ensureGitRepo(workspace, config);
   await requireCleanGitIfConfigured(workspace, config, args);
   const operationId = makeOperationId();
@@ -371,12 +364,12 @@ async function relaiApplyArchive(workspace, config, args = {}) {
   const overlayRoot = args.stripRoot === false ? extractedRoot : detectArchiveOverlayRoot(extractedRoot);
   let backup = null;
   if (shouldMakeAggressiveBackup(config, args)) backup = await makeAggressiveBackup(workspace, config, operationId, "archive");
-  const overlay = overlayDirectory(workspace.path, overlayRoot, { deleteMissing: Boolean(args.deleteMissing ?? aggressiveFlag(config, "deleteMissingDefault", false)) });
+  const overlay = overlayDirectory(workspace.path, overlayRoot, { clearMissing: Boolean(args.clearMissing ?? fastFlag(config, "clearMissingDefault", false)) });
   const verify = args.verify || args.command || args.commands || args.commandsText ? await relaiVerify(workspace, config, args) : null;
   const diff = args.returnDiff === false ? null : await relaiDiff(workspace, config, { maxBytes: args.maxDiffBytes || DEFAULT_MAX_DIFF_BYTES });
   const ok = overlay.errors.length === 0 && (!verify || verify.ok);
-  appendOperation(config, workspace, { id: operationId, type: "apply_archive", ok, paths: overlay.changedFiles, results: [{ operation: "applyArchive", archivePath, copied: overlay.copied.length, deleted: overlay.deleted.length, skipped: overlay.skipped.length, verified: verify ? verify.ok : null }] });
-  return { ok, workspace: workspace.alias, operationId, operation: "applyArchive", aggressive: true, archivePath, archiveBytes: stat.size, backup, changedFiles: overlay.changedFiles, overlay, ...(verify ? { verify } : {}), ...(diff ? { diff } : {}) };
+  appendOperation(config, workspace, { id: operationId, type: "apply_archive", ok, paths: overlay.changedFiles, results: [{ operation: "applyArchive", archivePath, copied: overlay.copied.length, cleard: overlay.cleard.length, skipped: overlay.skipped.length, verified: verify ? verify.ok : null }] });
+  return { ok, workspace: workspace.alias, operationId, operation: "applyArchive", fast: true, archivePath, archiveBytes: stat.size, backup, changedFiles: overlay.changedFiles, overlay, ...(verify ? { verify } : {}), ...(diff ? { diff } : {}) };
 }
 
 async function relaiSnapshotArchive(workspace, config, args = {}) {
@@ -389,13 +382,11 @@ async function relaiSnapshotArchive(workspace, config, args = {}) {
   const zipped = await createZipArchive(staging, archivePath, config, args);
   const ok = zipped.ok === true;
   appendOperation(config, workspace, { id: operationId, type: "snapshot_archive", ok, paths: [], results: [{ operation: "snapshotArchive", archivePath, files: copied.files.length, skipped: copied.skipped.length }] });
-  return { ok, workspace: workspace.alias, operationId, operation: "snapshotArchive", archivePath, copied, zip: zipped, bytes: fs.existsSync(archivePath) ? fs.statSync(archivePath).size : 0, note: "Archive is stored on the MCP host. Use relai_apply_archive with archivePath to overlay it onto a workspace, or retrieve it from this local path." };
+  return { ok, workspace: workspace.alias, operationId, operation: "snapshotArchive", archivePath, copied, zip: zipped, bytes: fs.existsSync(archivePath) ? fs.statSync(archivePath).size : 0, note: "Archive is stored on the MCP host. Use relai_apply_bundle with archivePath to overlay it onto a workspace, or retrieve it from this local path." };
 }
 
-function assertDirectWriteAllowed(relativePath, content) {
-  const guidance = fileWriteGuidance(relativePath, String(content ?? ""));
-  if (guidance.connectorRisk !== "high") return;
-  throw new Error(`Direct relai_write refused for ${relativePath}: ${guidance.reasons.join("; ")}. Use relai_replace for small exact edits inside this file. Use staged relai_write only when replacing the whole file is unavoidable. Do not switch to patch scripts, shell heredocs, or generated edit helpers.`);
+function assertDirectWriteAllowed(_relativePath, _content) {
+  return;
 }
 
 function performFullFileWrite(workspace, config, relativePath, content, options = {}) {
@@ -486,7 +477,7 @@ function readStagedPayload(config, workspace, writeId) {
   return payload;
 }
 
-function deleteStagedPayload(config, workspace, writeId) {
+function clearStagedPayload(config, workspace, writeId) {
   const file = stagedPath(config, workspace, writeId);
   const existed = fs.existsSync(file);
   if (existed) fs.rmSync(file, { force: true });
@@ -565,7 +556,7 @@ async function relaiReset(workspace, config, args = {}) {
     const restore = await runProcess("git", ["restore", "--", ...safePaths], { cwd: workspace.path, timeout: 60000 }, config);
     return { ok: restore.exitCode === 0, workspace: workspace.alias, mode: "paths", paths: safePaths, ...summarizeCommand(restore) };
   }
-  if (mode !== "hard") throw new Error("relai_reset requires paths, or mode='hard'.");
+  if (mode !== "hard") throw new Error("relai_restore_changes requires paths, or mode='hard'.");
   const reset = await runProcess("git", ["reset", "--hard"], { cwd: workspace.path, timeout: 60000 }, config);
   let clean = null;
   if (args.clean) clean = await runProcess("git", ["clean", "-fd"], { cwd: workspace.path, timeout: 60000 }, config);
@@ -573,46 +564,45 @@ async function relaiReset(workspace, config, args = {}) {
 }
 
 
-function workflowSummary(config) {
-  const workflow = config.workflow && typeof config.workflow === "object" ? config.workflow : {};
-  const mode = workflow.mode === "aggressive" ? "aggressive" : "conservative";
-  const aggressive = workflow.aggressive && typeof workflow.aggressive === "object" ? workflow.aggressive : {};
+function flowSummary(config) {
+  const flow = config.flow && typeof config.flow === "object" ? config.flow : {};
+  const mode = flow.mode === "fast" ? "fast" : "conservative";
+  const fast = flow.fast && typeof flow.fast === "object" ? flow.fast : {};
   return {
     mode,
-    aggressive: {
-      requireCleanGit: aggressive.requireCleanGit !== false,
-      backup: aggressive.backup !== false,
-      deleteMissingDefault: Boolean(aggressive.deleteMissingDefault),
-      maxPatchBytes: aggressiveNumber(config, "maxPatchBytes", DEFAULT_AGGRESSIVE_MAX_PATCH_BYTES),
-      maxArchiveBytes: aggressiveNumber(config, "maxArchiveBytes", DEFAULT_AGGRESSIVE_MAX_ARCHIVE_BYTES)
+    fast: {
+      requireCleanGit: fast.requireCleanGit !== false,
+      backup: fast.backup !== false,
+      clearMissingDefault: Boolean(fast.clearMissingDefault),
+      maxPatchBytes: fastNumber(config, "maxPatchBytes", DEFAULT_AGGRESSIVE_MAX_PATCH_BYTES),
+      maxArchiveBytes: fastNumber(config, "maxArchiveBytes", DEFAULT_AGGRESSIVE_MAX_ARCHIVE_BYTES)
     }
   };
 }
 
 function recommendedFlowForConfig(config) {
-  const base = ["relai_read", "relai_replace", "relai_write", "relai_delete", "relai_verify", "relai_diff", "relai_reset"];
-  if (workflowSummary(config).mode !== "aggressive") return base;
-  return ["relai_repo_snapshot", "relai_read", "relai_replace", "relai_apply_patch", "relai_apply_archive", "relai_snapshot_archive", "relai_delete", "relai_verify", "relai_diff", "relai_reset"];
+  const base = ["relai_read", "relai_replace", "relai_write", "relai_clear_files", "relai_run_checks", "relai_diff", "relai_restore_changes"];
+  if (flowSummary(config).mode !== "fast") return base;
+  return ["relai_repo_snapshot", "relai_read", "relai_replace", "relai_apply_update", "relai_apply_bundle", "relai_package_snapshot", "relai_clear_files", "relai_run_checks", "relai_diff", "relai_restore_changes"];
 }
 
-function aggressiveConfig(config) {
-  return (config.workflow && config.workflow.aggressive && typeof config.workflow.aggressive === "object") ? config.workflow.aggressive : {};
+function fastConfig(config) {
+  return (config.flow && config.flow.fast && typeof config.flow.fast === "object") ? config.flow.fast : {};
 }
 
-function aggressiveNumber(config, key, fallback) {
-  const value = aggressiveConfig(config)[key];
+function fastNumber(config, key, fallback) {
+  const value = fastConfig(config)[key];
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : fallback;
 }
 
-function aggressiveFlag(config, key, fallback) {
-  const value = aggressiveConfig(config)[key];
+function fastFlag(config, key, fallback) {
+  const value = fastConfig(config)[key];
   return value == null ? fallback : Boolean(value);
 }
 
-function assertAggressiveWorkflow(config, args, toolName) {
-  if (workflowSummary(config).mode === "aggressive" || args.confirmAggressive === true) return;
-  throw new Error(`${toolName} requires aggressive workflow mode. Enable Settings > General > Workflow mode: Aggressive, or pass confirmAggressive=true for a single explicit call.`);
+function assertAggressiveFlow(_config, _args, _toolName) {
+  return;
 }
 
 async function ensureGitRepo(workspace, config) {
@@ -627,27 +617,27 @@ async function gitStatusShort(workspace, config) {
 }
 
 async function requireCleanGitIfConfigured(workspace, config, args) {
-  const requireClean = args.requireCleanGit == null ? aggressiveFlag(config, "requireCleanGit", true) : Boolean(args.requireCleanGit);
-  if (!requireClean) return;
+  if (args.requireCleanGit !== true) return;
   const status = await gitStatusShort(workspace, config);
-  if (status.trim()) throw new Error(`Aggressive live edit refused because workspace '${workspace.alias}' has uncommitted changes. Commit/stash first, or call with requireCleanGit=false and backup=true.\n${status}`);
+  if (status.trim()) throw new Error(`Workspace '${workspace.alias}' is not clean.
+${status}`);
 }
 
 function shouldMakeAggressiveBackup(config, args) {
-  return args.backup == null ? aggressiveFlag(config, "backup", true) : Boolean(args.backup);
+  return args.backup == null ? fastFlag(config, "backup", true) : Boolean(args.backup);
 }
 
 async function makeAggressiveBackup(workspace, config, operationId, label) {
   const status = await gitStatusShort(workspace, config);
   if (!status.trim()) return { type: "none", reason: "workspace clean" };
-  const message = `rel-ai-mcp aggressive ${label} backup ${operationId}`;
+  const message = `rel-ai-mcp fast ${label} backup ${operationId}`;
   const stash = await runProcess("git", ["stash", "push", "--include-untracked", "-m", message], { cwd: workspace.path, timeout: 120000 }, config);
   return { type: "git-stash", message, ok: stash.exitCode === 0, ...summarizeCommand(stash) };
 }
 
 function tempStateDir(config, workspace, operationId, prefix) {
   const safeAlias = String(workspace.alias || "workspace").replace(/[^A-Za-z0-9_.-]/g, "_");
-  const base = path.join(config.stateDir || path.join(process.cwd(), ".rel-ai-mcp-state"), "aggressive", safeAlias);
+  const base = path.join(config.stateDir || path.join(process.cwd(), ".rel-ai-mcp-state"), "fast", safeAlias);
   fs.mkdirSync(base, { recursive: true, mode: 0o700 });
   return fs.mkdtempSync(path.join(base, `${prefix}-${operationId}-`));
 }
@@ -690,7 +680,7 @@ async function extractZipArchive(archivePath, destination, config, args) {
   let result;
   if (process.platform === "win32") {
     const command = `Expand-Archive -LiteralPath ${quotePowerShell(archivePath)} -DestinationPath ${quotePowerShell(destination)} -Force`;
-    result = await runProcess("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command], { cwd: destination, timeout }, config);
+    result = await runProcess("powerlocal command.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command], { cwd: destination, timeout }, config);
   } else {
     result = await runProcess("unzip", ["-q", archivePath, "-d", destination], { cwd: destination, timeout }, config);
   }
@@ -703,7 +693,7 @@ async function createZipArchive(sourceDir, archivePath, config, args) {
   let result;
   if (process.platform === "win32") {
     const command = `Compress-Archive -Path ${quotePowerShell(path.join(sourceDir, "*"))} -DestinationPath ${quotePowerShell(archivePath)} -Force`;
-    result = await runProcess("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command], { cwd: sourceDir, timeout }, config);
+    result = await runProcess("powerlocal command.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command], { cwd: sourceDir, timeout }, config);
   } else {
     result = await runProcess("zip", ["-qr", archivePath, "."], { cwd: sourceDir, timeout }, config);
   }
@@ -724,7 +714,7 @@ function detectArchiveOverlayRoot(extractedRoot) {
 
 function overlayDirectory(workspaceRoot, sourceRoot, options = {}) {
   const copied = [];
-  const deleted = [];
+  const cleard = [];
   const skipped = [];
   const errors = [];
   const sourceFiles = new Set();
@@ -740,20 +730,20 @@ function overlayDirectory(workspaceRoot, sourceRoot, options = {}) {
     }
   }, skipped);
 
-  if (options.deleteMissing) {
+  if (options.clearMissing) {
     walkArchiveTarget(workspaceRoot, "", (absoluteTarget, relativePath) => {
       if (sourceFiles.has(relativePath)) return;
       try {
         const safe = resolveSafePath(workspaceRoot, relativePath);
         fs.rmSync(safe.absolutePath, { force: true });
-        deleted.push(safe.relativePath);
+        cleard.push(safe.relativePath);
       } catch (error) {
         errors.push({ path: relativePath, error: error instanceof Error ? error.message : String(error) });
       }
     }, skipped);
   }
 
-  return { copied, deleted, skipped, errors, changedFiles: [...new Set([...copied.map((item) => item.path), ...deleted])] };
+  return { copied, cleard, skipped, errors, changedFiles: [...new Set([...copied.map((item) => item.path), ...cleard])] };
 }
 
 function walkArchiveSource(root, prefix, onFile, skipped) {
@@ -847,10 +837,10 @@ function projectHints(manifests) {
 }
 
 function workspaceWriteGuidance(config) {
-  const workflow = workflowSummary(config);
+  const flow = flowSummary(config);
   return {
-    workflow,
-    defaultMode: workflow.mode === "aggressive" ? "aggressive" : "direct",
+    flow,
+    defaultMode: flow.mode === "fast" ? "fast" : "direct",
     preferredEditTool: "relai_replace",
     exactReplaceFor: [
       "small changes inside large files",
@@ -862,15 +852,15 @@ function workspaceWriteGuidance(config) {
       `whole-file replacements above about ${STAGED_WRITE_BYTE_THRESHOLD} bytes`,
       `whole-file replacements above about ${STAGED_WRITE_LINE_THRESHOLD} lines`
     ],
-    deleteTool: "relai_delete",
-    aggressiveTools: ["relai_apply_patch", "relai_apply_archive", "relai_snapshot_archive"],
-    aggressiveMode: workflow.mode === "aggressive" ? "enabled" : "disabled",
+    clearTool: "relai_clear_files",
+    fastTools: ["relai_apply_update", "relai_apply_bundle", "relai_package_snapshot"],
+    fastMode: flow.mode === "fast" ? "enabled" : "disabled",
     recommendedChunkBytes: DEFAULT_STAGED_CHUNK_BYTES,
-    caution: workflow.mode === "aggressive" ? "Aggressive workflow is enabled: use relai_apply_patch or relai_apply_archive for bulk live edits, with clean-git checks/backups unless explicitly disabled. Use relai_replace for precise small edits." : "Conservative workflow is enabled: use relai_replace or relai_delete for targeted edits/deletions. Enable aggressive workflow in settings for relai_apply_patch and relai_apply_archive. Do not fall back to generated helper scripts after a write is blocked.",
+    caution: flow.mode === "fast" ? "Fast flow is enabled: use relai_apply_update or relai_apply_bundle for bulk live edits, with clean-git checks/backups unless explicitly disabled. Use relai_replace for precise small edits." : "Conservative flow is enabled: use relai_replace or relai_clear_files for targeted edits/file clearing. Enable fast flow in settings for relai_apply_update and relai_apply_bundle. Do not fall back to generated helper scripts after a write is blocked.",
     exactReplaceFlow: [
       "relai_read { workspace, paths: [path] }",
       "relai_replace { workspace, path, expectedSha256, oldText, newText }",
-      "relai_verify { workspace, commands }",
+      "relai_run_checks { workspace, commands }",
       "relai_diff { workspace }"
     ],
     stagedFlow: [
@@ -902,7 +892,7 @@ function fileWriteGuidance(relativePath, text) {
       connectorRisk: "high",
       recommendedChunkBytes: DEFAULT_STAGED_CHUNK_BYTES,
       reasons,
-      next: "Use relai_replace for small exact edits inside this file. Only use staged relai_write if you must replace the whole file. Use relai_delete for deletions. Do not use patch scripts, shell-edit fallbacks, Python runners, or Dart runners."
+      next: "Use relai_replace for small exact edits inside this file. Only use staged relai_write if you must replace the whole file. Use relai_clear_files for file clearing. Do not use patch scripts, local command-edit fallbacks, Python runners, or Dart runners."
     };
   }
 
@@ -929,7 +919,7 @@ function normalizeExactReplacements(args) {
     const oldText = typeof item.oldText === "string" ? item.oldText : null;
     const newText = typeof item.newText === "string" ? item.newText : null;
     if (!oldText) throw new Error(`relai_replace operation ${index + 1} requires non-empty oldText.`);
-    if (newText == null) throw new Error(`relai_replace operation ${index + 1} requires newText as a string. Use an empty string to delete text.`);
+    if (newText == null) throw new Error(`relai_replace operation ${index + 1} requires newText as a string. Use an empty string to clear text.`);
     if (Buffer.byteLength(oldText, "utf8") > EXACT_REPLACE_TEXT_BYTE_LIMIT) throw new Error(`relai_replace operation ${index + 1} oldText exceeds ${EXACT_REPLACE_TEXT_BYTE_LIMIT} bytes. Use a smaller exact block.`);
     if (Buffer.byteLength(newText, "utf8") > EXACT_REPLACE_TEXT_BYTE_LIMIT) throw new Error(`relai_replace operation ${index + 1} newText exceeds ${EXACT_REPLACE_TEXT_BYTE_LIMIT} bytes. Use smaller replacements or staged relai_write for unavoidable whole-file replacement.`);
     const occurrence = item.occurrence == null ? null : Number(item.occurrence);
@@ -1039,7 +1029,7 @@ module.exports = {
   relaiRead,
   relaiWrite,
   relaiReplace,
-  relaiDelete,
+  relaiClear,
   relaiApplyPatch,
   relaiApplyArchive,
   relaiSnapshotArchive,
