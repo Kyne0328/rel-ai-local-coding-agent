@@ -5,16 +5,24 @@ const DEFAULTS = {
   pollMs: 1200
 };
 
+// Per-tab injection cooldown — prevents double-injection during ChatGPT navigation.
+// In-memory only; resets when the service worker restarts, which is acceptable.
+const lastInjectedAt = new Map();
+const INJECT_COOLDOWN_MS = 10000;
+
 chrome.runtime.onInstalled.addListener(() => {
   chrome.alarms.create('relai-scan', { periodInMinutes: 0.1 });
+  chrome.alarms.create('relai-heartbeat', { periodInMinutes: 0.5 });
 });
 
 chrome.runtime.onStartup.addListener(() => {
   chrome.alarms.create('relai-scan', { periodInMinutes: 0.1 });
+  chrome.alarms.create('relai-heartbeat', { periodInMinutes: 0.5 });
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === 'relai-scan') scanChatGptTabs().catch(() => {});
+  if (alarm.name === 'relai-heartbeat') heartbeatChatGptTabs().catch(() => {});
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -46,10 +54,15 @@ async function dashboardAllows(cfg) {
   const url = new URL(base + '/api/auto-approve/settings');
   if (cfg.token) url.searchParams.set('token', cfg.token);
   const headers = cfg.token ? { Authorization: 'Bearer ' + cfg.token } : {};
-  const response = await fetch(url.toString(), { headers, cache: 'no-store' });
-  if (!response.ok) return false;
-  const json = await response.json();
-  return json && json.enabled === true;
+  try {
+    const response = await fetch(url.toString(), { headers, cache: 'no-store' });
+    const ok = response.ok && (await response.json())?.enabled === true;
+    chrome.storage.local.set({ connectionOk: ok }).catch(() => {});
+    return ok;
+  } catch (_) {
+    chrome.storage.local.set({ connectionOk: false }).catch(() => {});
+    return false;
+  }
 }
 
 async function scanChatGptTabs() {
@@ -57,11 +70,16 @@ async function scanChatGptTabs() {
   if (!cfg.enabled) return 0;
   if (!(await dashboardAllows(cfg))) return 0;
   const tabs = await chrome.tabs.query({ url: ['https://chatgpt.com/*', 'https://chat.openai.com/*'] });
+  chrome.storage.local.set({ lastScanAt: Date.now(), activeTabs: tabs.length }).catch(() => {});
   await Promise.all(tabs.map(async (tab) => {
     if (!tab.id) return;
     try {
       await chrome.tabs.sendMessage(tab.id, { type: 'relai-auto-approve-scan' });
     } catch (_) {
+      const now = Date.now();
+      const last = lastInjectedAt.get(tab.id) || 0;
+      if (now - last < INJECT_COOLDOWN_MS) return;
+      lastInjectedAt.set(tab.id, now);
       await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content.js'] }).catch(() => {});
       await chrome.tabs.sendMessage(tab.id, { type: 'relai-auto-approve-scan' }).catch(() => {});
     }
@@ -69,10 +87,24 @@ async function scanChatGptTabs() {
   return tabs.length;
 }
 
+async function heartbeatChatGptTabs() {
+  const cfg = await getConfig();
+  if (!cfg.enabled) return;
+  const tabs = await chrome.tabs.query({ url: ['https://chatgpt.com/*', 'https://chat.openai.com/*'] });
+  for (const tab of tabs) {
+    if (!tab.id) continue;
+    chrome.tabs.sendMessage(tab.id, { type: 'relai-heartbeat' }).catch(() => {});
+  }
+}
+
 let quietTimer = null;
 let approvedSinceQuiet = 0;
 async function maybeNotify(count) {
   approvedSinceQuiet += count;
+
+  const current = await chrome.storage.local.get({ approvalCount: 0 });
+  chrome.storage.local.set({ approvalCount: current.approvalCount + count }).catch(() => {});
+
   if (quietTimer) clearTimeout(quietTimer);
   quietTimer = setTimeout(() => {
     const total = approvedSinceQuiet;

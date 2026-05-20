@@ -34,6 +34,24 @@
     <input id="pollMs" type="number" min="500" step="100">
   </label>
   <div id="status" class="status">Loading...</div>
+  <div class="stats">
+    <div class="stat-row">
+      <span>Last scan</span>
+      <span id="lastScan">—</span>
+    </div>
+    <div class="stat-row">
+      <span>Approvals</span>
+      <span id="approvalCount">—</span>
+    </div>
+    <div class="stat-row">
+      <span>Active tabs</span>
+      <span id="activeTabs">—</span>
+    </div>
+    <div class="stat-row">
+      <span>Connection</span>
+      <span id="connStatus">—</span>
+    </div>
+  </div>
   <div class="actions">
     <button id="save">Save</button>
     <button id="scanNow" type="button">Scan now</button>

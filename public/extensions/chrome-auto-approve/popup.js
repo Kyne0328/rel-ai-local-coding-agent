@@ -33,6 +33,7 @@ async function save() {
     next.enabled = false;
     $('enabled').checked = false;
   }
+  if (!next.enabled) next.approvalCount = 0;
   await chrome.storage.local.set(next);
   await chrome.runtime.sendMessage({ type: 'relai-config-updated' }).catch(() => {});
   setStatus(next.enabled ? 'Saved and enabled.' : 'Saved and disabled.');
@@ -44,6 +45,33 @@ async function scanNow() {
   setStatus(res && res.ok ? `Scan sent to ${res.tabs || 0} tab(s).` : `Scan failed: ${res && res.error ? res.error : 'unknown error'}`);
 }
 
+function relativeTime(ts) {
+  if (!ts) return 'never';
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 5) return 'just now';
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  return `${Math.floor(s / 3600)}h ago`;
+}
+
+async function refreshStats() {
+  const data = await chrome.storage.local.get({ lastScanAt: 0, approvalCount: 0, activeTabs: 0, connectionOk: null });
+  $('lastScan').textContent = relativeTime(data.lastScanAt);
+  $('approvalCount').textContent = data.approvalCount;
+  $('activeTabs').textContent = data.activeTabs;
+  const conn = $('connStatus');
+  if (data.connectionOk === true) {
+    conn.innerHTML = '<span class="dot ok"></span>OK';
+  } else if (data.connectionOk === false) {
+    conn.innerHTML = '<span class="dot err"></span>Unreachable';
+  } else {
+    conn.innerHTML = '<span class="dot"></span>Unknown';
+  }
+}
+
 $('save').addEventListener('click', save);
 $('scanNow').addEventListener('click', scanNow);
 load().catch((err) => setStatus(String(err)));
+refreshStats().catch(() => {});
+const statsInterval = setInterval(() => refreshStats().catch(() => {}), 2000);
+window.addEventListener('unload', () => clearInterval(statsInterval));

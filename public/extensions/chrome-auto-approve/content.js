@@ -58,6 +58,15 @@
           safeSendResponse(sendResponse, { ok: true, count });
           return true;
         }
+        if (message && message.type === 'relai-heartbeat') {
+          try {
+            document.dispatchEvent(new MouseEvent('mousemove', {
+              bubbles: true, cancelable: true, clientX: 1, clientY: 1
+            }));
+          } catch (_) {}
+          safeSendResponse(sendResponse, { ok: true });
+          return true;
+        }
         return false;
       });
     }
@@ -90,6 +99,12 @@
   let scheduledTimer = 0;
   scheduleScan('startup');
 
+  // Polling fallback for foreground — catches cards that appear without DOM mutations.
+  // Background tabs rely on alarm-driven scans from background.js (timers are throttled there).
+  setInterval(() => {
+    if (!document.hidden) safeScanAndApprove('poll');
+  }, 2000);
+
   function scheduleScan(reason) {
     try {
       if (scheduledTimer) clearTimeout(scheduledTimer);
@@ -106,7 +121,8 @@
     const runner = () => {
       try { fn(); } catch (error) { reportContentError('idle scan', error); }
     };
-    if (typeof window.requestIdleCallback === 'function') {
+    // requestIdleCallback is deferred indefinitely in background tabs — skip it when hidden
+    if (!document.hidden && typeof window.requestIdleCallback === 'function') {
       window.requestIdleCallback(runner, { timeout: 1200 });
       return;
     }
@@ -256,9 +272,12 @@
 
   function isVisible(el) {
     if (!(el instanceof HTMLElement)) return false;
-    const rect = el.getBoundingClientRect();
     const style = window.getComputedStyle(el);
-    return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none' && Number(style.opacity || 1) !== 0;
+    if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity || 1) === 0) return false;
+    // getBoundingClientRect returns zero dimensions in background tabs — skip it when hidden
+    if (document.hidden) return true;
+    const rect = el.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
   }
 
   function trustedClick(el) {

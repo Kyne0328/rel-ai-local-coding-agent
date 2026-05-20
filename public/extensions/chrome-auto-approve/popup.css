@@ -13,3 +13,9 @@ input[type="text"], input[type="password"], input[type="number"] { box-sizing: b
 .actions { display: flex; gap: 8px; }
 button { flex: 1; border: 0; border-radius: 9px; padding: 9px; font-weight: 700; background: #f4f4f5; color: #111214; cursor: pointer; }
 button[type="button"] { background: #27272a; color: #f4f4f5; }
+.stats { border: 1px solid #27272a; border-radius: 12px; padding: 8px 10px; margin-bottom: 12px; }
+.stat-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; padding: 3px 0; color: #a1a1aa; }
+.stat-row span:last-child { color: #f4f4f5; font-variant-numeric: tabular-nums; }
+.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; background: #52525b; }
+.dot.ok { background: #22c55e; }
+.dot.err { background: #ef4444; }
