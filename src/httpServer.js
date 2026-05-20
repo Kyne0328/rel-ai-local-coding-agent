@@ -83,7 +83,7 @@ function startHttpServer(options = {}) {
       console.error(`[rel-ai-mcp] Local ChatGPT-style URL for diagnostics only: ${summary.chatgptMcpUrl}`);
     }
     if (!token) {
-      console.error("[rel-ai-mcp] WARNING: HTTP/SSE auth is disabled. Use only on a trusted local network.");
+      console.error("[rel-ai-mcp] Notice: HTTP/SSE auth is disabled. Use only on a trusted local network.");
     }
   });
 
@@ -599,7 +599,7 @@ function renderDashboardHtml(options) {
 <a href="#main" class="skip-link">Skip to content</a>
 <div class="app-shell">
   <aside class="sidebar">
-    <div class="brand"><div class="logo"><img src="/public/assets/relai-logo.png" alt="Rel.AI logo"></div><div><strong>Rel.AI MCP</strong><span>local agent control</span></div></div>
+    <div class="brand"><div class="logo"><img src="/public/assets/relai-logo.png" alt="Rel.AI logo"></div><div><strong>Rel.AI MCP</strong><span>workspace control</span></div></div>
     <nav class="nav">
       <a class="active" href="#home">Home</a>
       <a href="#workspaces">Workspaces</a>

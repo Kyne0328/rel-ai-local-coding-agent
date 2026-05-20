@@ -26,7 +26,7 @@ The default conservative workflow is intentionally small:
 relai_repo_snapshot -> relai_read -> relai_replace/relai_write/relai_clear_files -> relai_run_checks -> relai_diff -> relai_restore_changes
 ```
 
-No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. No old multi-agent/task-runner workflows pretending to be reliable. For users who want Codex-style speed, Settings > General now has an Fast flow mode that exposes first-class update/bundle apply tools instead of brittle helper scripts.
+No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. No old multi-agent/task-runner workflows pretending to be reliable. Settings > General can expose prepared update/bundle tools for larger workspace changes without brittle helper scripts.
 
 Rel.AI MCP still lightly nods to the original Rel.AI idea, but this README stands on its own: this is now a local MCP bridge for ChatGPT.
 
@@ -41,7 +41,7 @@ It can:
 - snapshot a filtered repo tree
 - read selected files or small directory summaries
 - write full files, apply exact localized replacements, clear obsolete files, and stage whole-file writes only when unavoidable
-- optionally enable fast update/bundle application for fast live workspace edits
+- optionally apply prepared text updates or file bundles for larger workspace edits
 - run verification commands such as tests/analyzers
 - inspect git diffs
 - reset local changes
@@ -77,7 +77,7 @@ The home screen shows the current bridge health, configured workspaces, validati
   <img src="docs/images/dashboard-workspaces-section.png" alt="Rel.AI MCP workspace cards" width="900">
 </p>
 
-Workspace cards show detected commands, fast-task mode, protected branches, preflight actions, settings, rename, and clear controls.
+Workspace cards show detected checks, workspace scope settings, protected branches, preflight actions, rename, and clear controls.
 
 ### Activity
 
@@ -101,7 +101,7 @@ Normal mode exposes only the local bridge tools. Legacy local/update/task-runner
   <img src="docs/images/dashboard-settings-auto-approve-section.png" alt="Rel.AI MCP auto-approve settings" width="700">
 </p>
 
-Auto-approve is handled by a Chrome extension, not a userscript. It is optional and can be turned on when you want ChatGPT to keep moving through trusted Rel.AI MCP app requests while you supervise the run.
+Request approval assistance is handled by a Chrome extension, not a userscript. It is optional and can be turned on when you want ChatGPT to continue through Rel.AI MCP app requests while you supervise the run.
 
 ### Connector setup
 
@@ -268,7 +268,7 @@ The dashboard connector page prints the final ChatGPT MCP URL.
 
 ## Chrome extension auto-approve
 
-Rel.AI MCP includes an optional Chrome extension for ChatGPT web app-request approvals.
+Rel.AI MCP includes an optional Chrome extension for ChatGPT web app-request approval assistance.
 
 Install it as an unpacked extension:
 
@@ -284,7 +284,7 @@ Then enable it in two places:
 1. Dashboard setting: **ChatGPT web app-request auto-approve**
 2. Chrome extension popup toggle
 
-This is meant to reduce repetitive approval clicks for trusted local work. It is not trying to be scary, but it is powerful: when enabled, it can approve Rel.AI MCP requests for repo reads, writes, verifies, diffs, browser checks, and resets. Use it when you are actively working, then turn it off when you are done.
+This is meant to reduce repetitive approval clicks during supervised local work. When enabled, it can approve Rel.AI MCP requests for repo reads, writes, verifies, diffs, browser checks, and resets. Use it only while you are actively working, then turn it off when you are done.
 
 The previous userscript workflow was removed because background-tab behavior and selector reliability were not good enough.
 
@@ -310,9 +310,9 @@ Removed workflows are not part of the MCP anymore: update application loops, gen
 
 ---
 
-## Fast task mode
+## Workspace context mode
 
-Each workspace can define fast-task behavior:
+Each workspace can define how repository context is collected:
 
 ```json
 {
@@ -329,7 +329,7 @@ Each workspace can define fast-task behavior:
 
 Use `.relaiignore` in a repo to add repo-specific AI-context exclusions.
 
-The point is to avoid the slow version of AI coding where the tool scans the world before touching the obvious files.
+The point is to avoid scanning unrelated files before touching the obvious files.
 
 ---
 
@@ -363,7 +363,7 @@ Small full-file write:
 }
 ```
 
-Large or connector-risky write through the same tool:
+Large complete-file write through the same tool:
 
 ```json
 { "workspace": "myapp", "stage": "start", "path": "src/big.ts", "content": "first chunk" }
@@ -371,7 +371,7 @@ Large or connector-risky write through the same tool:
 { "workspace": "myapp", "stage": "commit", "writeId": "..." }
 ```
 
-Preferred localized edit inside a risky source file:
+Preferred localized edit inside a large or interpolation-heavy source file:
 
 ```json
 {
@@ -389,7 +389,7 @@ Obsolete file file clearing:
 { "workspace": "myapp", "paths": ["docs/old-plan.md"] }
 ```
 
-For long, large, or interpolation-heavy source files, direct full-file mode is refused. Use `relai_replace` for small exact edits. Use staged `relai_write` only when the whole file genuinely needs replacement. If a connector blocks a full-file or staged payload, re-read the file and retry with smaller `relai_replace` operations rather than update helpers, local-edit fallbacks, Python runners, or Dart runners. If a multiline source file is accidentally collapsed into one long line, the write is rejected instead of damaging formatting.
+For long, large, or interpolation-heavy source files, direct full-file mode is refused. Use `relai_replace` for small exact edits. Use staged `relai_write` only when the whole file genuinely needs replacement. If a full-file or staged payload is too large, re-read the file and retry with smaller `relai_replace` operations rather than update helpers, local-edit fallbacks, Python runners, or Dart runners. If a multiline source file is accidentally collapsed into one long line, the write is rejected instead of damaging formatting.
 
 ---
 
@@ -413,7 +413,7 @@ Rel.AI MCP is intentionally opinionated now.
 - One normal workflow is better than five fallback workflows that fail differently.
 - Full-file writes are easier to reason about than hidden mini-updatees.
 - Verification should be visible and repeatable.
-- Auto-approve belongs in a browser extension, not a fragile userscript.
+- Request approval assistance belongs in a browser extension, not a fragile userscript.
 - Public tunnel setup should be easy, but local-only should stay the default.
 - The dashboard should explain what is happening instead of hiding everything in logs.
 

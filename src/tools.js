@@ -46,16 +46,16 @@ const toolSchemas = [
   tool("relai_clear_files", "Clear Local Repo Files", "Clear one or more files from a configured workspace. Folders are refused. Supports dryRun and failIfMissing.", {
     workspace: stringProp(), path: stringProp(), paths: arrayProp("string", 1, 100), expectedSha256: stringProp(), dryRun: boolProp(), failIfMissing: boolProp()
   }, ["workspace"]),
-  tool("relai_apply_update", "Apply Update Fast", "Fast path for update text. Applies the update directly to the live workspace and can run optional checks afterward.", {
+  tool("relai_apply_update", "Apply Prepared Update", "Apply a prepared text update to the workspace and optionally run checks afterward.", {
     workspace: stringProp(), updateText: stringProp(), backup: boolProp(), check: stringProp(), checks: arrayProp("string", 0), checksText: stringProp(), timeoutMs: numberProp(1000, 86400000), stopOnFailure: boolProp(), returnDiff: boolProp(), maxResultBytes: numberProp(1000, 5242880)
   }, ["workspace"]),
-  tool("relai_apply_bundle", "Apply Bundle Fast", "Fast path for a local zip bundle on the MCP host. Overlays files onto the live workspace and can run optional checks afterward.", {
+  tool("relai_apply_bundle", "Apply Prepared Bundle", "Apply a prepared file bundle to the workspace and optionally run checks afterward.", {
     workspace: stringProp(), bundlePath: stringProp(), path: stringProp(), stripRoot: boolProp(), clearMissing: boolProp(), backup: boolProp(), check: stringProp(), checks: arrayProp("string", 0), checksText: stringProp(), timeoutMs: numberProp(1000, 86400000), stopOnFailure: boolProp(), returnDiff: boolProp(), maxResultBytes: numberProp(1000, 5242880)
   }, ["workspace"]),
   tool("relai_package_snapshot", "Package Workspace Zip", "Create a zip package of the current workspace on the MCP host, excluding repo internals, dependency caches, build outputs, and Rel.AI state.", {
     workspace: stringProp(), maxFiles: numberProp(1, 200000), timeoutMs: numberProp(1000, 86400000)
   }, ["workspace"]),
-  tool("relai_run_checks", "Run Local Checks", "Run detected or requested local checks inside a configured workspace.", {
+  tool("relai_run_checks", "Run Workspace Checks", "Run configured or requested validation checks inside the workspace.", {
     workspace: stringProp(),
     level: stringProp(),
     check: stringProp(),
@@ -70,7 +70,7 @@ const toolSchemas = [
   tool("relai_diff", "Review Local Repo Diff", "Return git status and current diff as a review artifact.", {
     workspace: stringProp(), staged: boolProp(), path: stringProp(), maxBytes: numberProp(1000, 5242880)
   }, ["workspace"]),
-  tool("relai_restore_changes", "Restore Local Repo Changes", "Restore local changes by paths, or restore the full workspace with mode='hard'.", {
+  tool("relai_restore_changes", "Restore Workspace Changes", "Restore selected workspace changes, or restore the workspace to the last git state.", {
     workspace: stringProp(), paths: arrayProp("string", 0, 100), mode: stringProp(), clean: boolProp()
   }, ["workspace"]),
   tool("relai_status", "Rel.AI Status", "Compact live status for configured workspaces, scripts, and CI references. Prefer this over reading source files when checking whether an update is active.", {

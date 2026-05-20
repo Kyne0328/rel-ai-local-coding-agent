@@ -1,12 +1,12 @@
-# ChatGPT app-request auto-approve Chrome extension
+# ChatGPT app-request approval helper Chrome extension
 
-Rel.AI MCP now uses a Chrome extension only for optional ChatGPT app-request auto-approval. The userscript workflow was removed because background tabs and userscript managers were unreliable.
+Rel.AI MCP now uses a Chrome extension only for optional ChatGPT app-request approval assistance. The userscript workflow was removed because background tabs and userscript managers were unreliable.
 
 Author: [@Kyne0328](https://github.com/Kyne0328)
 
 ## Required double opt-in
 
-Auto-approve runs only when both toggles are enabled:
+Approval assistance runs only when both toggles are enabled:
 
 1. Dashboard setting: **Settings -> General -> ChatGPT web app-request auto-approve extension**.
 2. Chrome extension popup: **Enable in this browser**.
@@ -41,7 +41,7 @@ Chrome throttles background tabs. Userscripts can pause or run late when ChatGPT
 
 ## What it can approve
 
-The extension detects small Rel.AI MCP app-request cards on ChatGPT and clicks only a valid action button inside that card. It recognizes actions such as:
+The extension detects small Rel.AI MCP app-request cards on ChatGPT and clicks only a valid action button inside that card. It recognizes requests such as:
 
 - Read Local Repo Paths
 - Read File / Read Files
@@ -53,10 +53,10 @@ The extension detects small Rel.AI MCP app-request cards on ChatGPT and clicks o
 
 It requires Rel.AI MCP card text and a Deny/Cancel-style button nearby, so ordinary ChatGPT buttons such as message edit controls are not approval targets.
 
-## Warning
+## Usage note
 
-This can authorize local repository reads, full-file writes, verification commands, browser checks, diffs, or resets without a manual click. Use only on your own trusted machine and disable it when done.
+This can approve local repository reads, full-file writes, validation checks, browser checks, diffs, or resets without a manual click. Use only on your own trusted machine and disable it when done.
 
-## Approval button coverage
+## Request button coverage
 
-The extension recognizes approval cards for every normal Rel.AI bridge tool: repository snapshot, read, exact text replacement, write/edit file, delete file, verify, browser/UI check, diff review, and reset/rollback actions such as `Reset Workspace`. It first identifies the small Rel.AI MCP approval card, then clicks only the primary non-negative action button inside that card.
+The extension recognizes request cards for every normal Rel.AI bridge tool: repository snapshot, read, exact text replacement, write/edit file, clear file, validation check, browser/UI check, diff review, and restore actions such as `Restore Workspace`. It first identifies the small Rel.AI MCP request card, then clicks only the primary non-negative action button inside that card.
