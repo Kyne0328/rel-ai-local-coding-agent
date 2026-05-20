@@ -93,7 +93,7 @@ The activity page is there because I got tired of guessing what the MCP server w
   <img src="docs/images/dashboard-tools-section.png" alt="Rel.AI MCP bridge tools" width="900">
 </p>
 
-Normal mode exposes only the local bridge tools. Legacy local/update/task-runner workflows are not part of the public MCP surface.
+The dashboard shows the workspace tools ChatGPT can use for the normal inspect, change, validate, review, and restore workflow. Legacy local/update/task-runner workflows are not part of the public MCP surface.
 
 ### Chrome extension auto-approve
 
@@ -304,7 +304,7 @@ See [`docs/AUTO_APPROVE_EXTENSION.md`](docs/AUTO_APPROVE_EXTENSION.md).
 | `relai_run_checks` | Run detected or requested verification commands. |
 | `relai_browser` | Run a browser/UI check or fetch a route. |
 | `relai_diff` | Review git status and diff. |
-| `relai_restore_changes` | Roll back requested local changes. |
+| `relai_restore_changes` | Restore selected workspace changes. |
 
 Removed workflows are not part of the MCP anymore: update application loops, generated update helpers, local-edit tools, task runners, isolated worktree orchestration, multi-agent schedulers, Docker runners, and PR/CI repair loops.
 

@@ -15,23 +15,16 @@ const autoApprove = require("./autoApproveExtension");
 
 function buildToolMetadata() {
   const { getToolSchemas } = require("./tools");
-  const categoryMap = {
-    relai_repo: "Bridge", relai_read: "Bridge", relai_write: "Bridge", relai_replace: "Bridge",
-    relai_clear: "Bridge", relai_run: "Bridge", relai_browser: "Bridge", relai_diff: "Bridge", relai_restore: "Bridge", relai_status: "Bridge", relai_feature: "Bridge", relai_apply: "Bridge", relai_package: "Bridge",
-  };
   const config = readConfig({ allowMissing: true });
-  return getToolSchemas(config).map(tool => {
-    const prefix = Object.keys(categoryMap).find(k => tool.name.startsWith(k)) || "relai";
-    return {
-      name: tool.name,
-      displayName: tool.name.replace(/^relai_/, "").replace(/_/g, " "),
-      description: tool.description || "",
-      category: categoryMap[prefix] || "Other",
-      requiredProfile: "bridge",
-      requiresApproval: false,
-      parameters: tool.inputSchema ? Object.keys(tool.inputSchema.properties || {}) : [],
-    };
-  });
+  return getToolSchemas(config).map(tool => ({
+    name: tool.name,
+    displayName: tool.name.replace(/^relai_/, "").replace(/_/g, " "),
+    description: tool.description || "",
+    category: "Workspace tools",
+    requiredProfile: "workspace",
+    requiresApproval: false,
+    parameters: tool.inputSchema ? Object.keys(tool.inputSchema.properties || {}) : [],
+  }));
 }
 
 const DEFAULT_MAX_BODY_BYTES = 10 * 1024 * 1024;

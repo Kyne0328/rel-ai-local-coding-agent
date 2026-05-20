@@ -13,7 +13,7 @@ export function mountTools(container) {
       <div class="section-head">
         <div>
           <h2>Tools</h2>
-          <p>The public ChatGPT bridge tools. Legacy compatibility tools are hidden from this list.</p>
+          <p>The public ChatGPT workspace tools are listed together so the model can choose based on task shape and file size.</p>
         </div>
         <span class="section-action">loading</span>
       </div>
@@ -43,7 +43,7 @@ async function loadTools(container, mountId) {
       </table>
     </div>
     <div class="path" style="padding:12px 14px;border-top:1px solid var(--line);">
-      Normal ChatGPT mode intentionally exposes only this single bridge workflow. Legacy local, update, and task-runner tools are debug-mode only.
+      ChatGPT sees one workspace-tool surface. Tool choice is based on the task: inspect, change, validate, review, or restore.
     </div>`;
 }
 

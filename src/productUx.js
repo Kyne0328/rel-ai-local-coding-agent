@@ -20,7 +20,22 @@ function dashboardData(config, args = {}) {
       workspaces: Object.keys(config.workspaces || {}).length
     },
     workflow: {
-      normal: ["relai_repo_snapshot", "relai_read", "relai_write", "relai_replace", "relai_clear_files", "relai_run_checks", "relai_diff", "relai_restore_changes"],
+      tools: [
+        "relai_repo_snapshot",
+        "relai_read",
+        "relai_write",
+        "relai_replace",
+        "relai_clear_files",
+        "relai_apply_update",
+        "relai_apply_bundle",
+        "relai_package_snapshot",
+        "relai_run_checks",
+        "relai_browser",
+        "relai_diff",
+        "relai_restore_changes",
+        "relai_status",
+        "relai_feature_probe"
+      ],
       removedLegacyWorkflows: ["update", "local", "task-runner", "worktree", "multi-agent", "approvals", "docker", "pr-ci-repair"]
     },
     health,

@@ -114,8 +114,8 @@ const chatgptList = await fetch(`http://127.0.0.1:${port}/mcp/${chatgptSecret}`,
   headers: { 'content-type': 'application/json' },
   body: JSON.stringify({ jsonrpc: '2.0', id: 30, method: 'tools/list', params: {} })
 }).then((response) => response.json());
-if (!Array.isArray(chatgptList.result?.tools) || chatgptList.result.tools.length !== 12 || !chatgptList.result.tools.some((item) => item.name === 'relai_repo_snapshot')) {
-  throw new Error('secret ChatGPT MCP URL did not expose exactly the bridge tools without bearer auth');
+if (!Array.isArray(chatgptList.result?.tools) || chatgptList.result.tools.length !== 14 || !chatgptList.result.tools.some((item) => item.name === 'relai_repo_snapshot')) {
+  throw new Error('secret ChatGPT MCP URL did not expose exactly the workspace tools without bearer auth');
 }
 
 const initialized = await fetch(`http://127.0.0.1:${port}/mcp`, {
@@ -135,8 +135,8 @@ const list = await fetch(`http://127.0.0.1:${port}/mcp`, {
   headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
   body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/list', params: {} })
 }).then((response) => response.json());
-if (!Array.isArray(list.result?.tools) || list.result.tools.length !== 12) {
-  throw new Error(`HTTP tools/list should return exactly 12 bridge tools, got ${list.result?.tools?.length}`);
+if (!Array.isArray(list.result?.tools) || list.result.tools.length !== 14) {
+  throw new Error(`HTTP tools/list should return exactly 14 workspace tools, got ${list.result?.tools?.length}`);
 }
 
 const resources = await fetch(`http://127.0.0.1:${port}/mcp`, {
@@ -159,4 +159,4 @@ if (!removedConfigTool.result?.isError) {
 
 child.kill('SIGKILL');
 await once(child, 'close');
-console.log(`HTTP smoke test passed. Tools: ${list.result.tools.length}`);
+console.log(`HTTP smoke test passed. Workspace tools: ${list.result.tools.length}`);

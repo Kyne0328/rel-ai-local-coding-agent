@@ -1,4 +1,4 @@
-// General settings — one trusted ChatGPT local repo bridge, no legacy permission model
+// General settings — one ChatGPT workspace bridge, no legacy permission model
 import {
   loadSettingsConfig,
   saveSettings,
@@ -30,41 +30,41 @@ async function _loadAndRender(container) {
 
 function _render(container) {
   container.innerHTML = '';
-  container.appendChild(header('General', 'Rel.AI uses a trusted local repo bridge for ChatGPT: the repo stays on your machine, while ChatGPT gets explicit local tools to snapshot, read, write, verify, diff, and reset configured workspaces.'));
+  container.appendChild(header('General', 'Rel.AI uses one workspace bridge for ChatGPT: the repo stays on your machine, while ChatGPT gets explicit tools to inspect, change, validate, review, and restore configured workspaces.'));
 
   const grid = formGrid();
   const bridge = panel('ChatGPT local repo bridge');
-  const workflow = panel('Workflow mode');
+  const workflow = panel('Workspace update style');
   const limits = panel('Runtime limits');
   const local = panel('Local dashboard');
   const autoApprove = panel('ChatGPT web app-request auto-approve extension');
 
   bridge.body.appendChild(summaryBox());
-  bridge.body.appendChild(field('Trusted local access', toggleControl(true, () => {}, { enabled: 'Always enabled', disabled: 'Always enabled' }), 'Configured workspaces are exposed through the local bridge tools. Workspace-level fast task settings control how much context is scanned before structured writes.'));
+  bridge.body.appendChild(field('Workspace access', toggleControl(true, () => {}, { enabled: 'Always enabled', disabled: 'Always enabled' }), 'Configured workspaces are exposed through one peer-level tool surface. Workspace-level context settings control how much context is scanned before structured writes.'));
 
   workflow.body.appendChild(workflowWarningBox());
   workflow.body.appendChild(field('Mode', selectControl([
-    { value: 'conservative', label: 'Conservative - exact edits and guarded writes' },
-    { value: 'aggressive', label: 'Fast - Codex-style update/bundle apply' }
+    { value: 'conservative', label: 'Focused edits and guarded writes' },
+    { value: 'aggressive', label: 'Prepared update and bundle apply' }
   ], (_draft.workflow || {}).mode || 'conservative', (value) => {
     if (value === 'aggressive' && !confirmFastFlow()) return;
     if (!_draft.workflow) _draft.workflow = {};
     _draft.workflow.mode = value;
     _checkDirty();
-  }), 'Conservative keeps exact replacements. Fast mode exposes relai_apply_update, relai_apply_bundle, and relai_package_snapshot for fast live repo mutation.'));
+  }), 'Both options keep the same workspace-tool surface. Prepared update mode includes relai_apply_update, relai_apply_bundle, and relai_package_snapshot for larger changes.'));
   const aggressive = (_draft.workflow && _draft.workflow.aggressive) || {};
-  workflow.body.appendChild(field('Require clean git before fast apply', toggleControl(aggressive.requireCleanGit !== false, (v) => {
+  workflow.body.appendChild(field('Require clean git before prepared apply', toggleControl(aggressive.requireCleanGit !== false, (v) => {
     if (!_draft.workflow) _draft.workflow = {};
     if (!_draft.workflow.aggressive) _draft.workflow.aggressive = {};
     _draft.workflow.aggressive.requireCleanGit = v;
     _checkDirty();
   }, { enabled: 'Require clean git', disabled: 'Allow dirty git' }), 'Recommended on. Turn off only if you want apply tools to operate on a dirty working tree.'));
-  workflow.body.appendChild(field('Backup before fast apply', toggleControl(aggressive.backup !== false, (v) => {
+  workflow.body.appendChild(field('Backup before prepared apply', toggleControl(aggressive.backup !== false, (v) => {
     if (!_draft.workflow) _draft.workflow = {};
     if (!_draft.workflow.aggressive) _draft.workflow.aggressive = {};
     _draft.workflow.aggressive.backup = v;
     _checkDirty();
-  }, { enabled: 'Backup enabled', disabled: 'No automatic backup' }), 'When dirty edits are allowed, Rel.AI attempts a git stash backup before applying a update or archive.'));
+  }, { enabled: 'Backup enabled', disabled: 'No automatic backup' }), 'When dirty edits are allowed, Rel.AI attempts a git stash backup before applying an update or archive.'));
   workflow.body.appendChild(field('Clear missing files during archive overlay', toggleControl(aggressive.deleteMissingDefault === true, (v) => {
     if (!_draft.workflow) _draft.workflow = {};
     if (!_draft.workflow.aggressive) _draft.workflow.aggressive = {};
@@ -130,8 +130,8 @@ function summaryBox() {
   div.style.cssText = 'text-align:left;padding:12px;line-height:1.55;';
   div.innerHTML = `
     <strong style="color:var(--text);">ChatGPT local repo bridge</strong><br>
-    This is the always-on local connector between ChatGPT and your configured repositories. It avoids uploading a zip for every task through one reliable workflow: <code>relai_repo_snapshot</code>, <code>relai_read</code>, <code>relai_replace</code> exact edits, <code>relai_write</code> full-file writes, <code>relai_clear_files</code> file clearing, <code>relai_run_checks</code>, <code>relai_browser</code>, <code>relai_diff</code>, and <code>relai_restore_changes</code>.<br>
-    Fast task settings live on each workspace and reduce broad scans/indexing for small tasks across any language stack.
+    This is the always-on workspace connector between ChatGPT and your configured repositories. It avoids uploading a zip for every task through one reliable workflow: <code>relai_repo_snapshot</code>, <code>relai_read</code>, <code>relai_replace</code> exact edits, <code>relai_write</code> full-file writes, <code>relai_apply_update</code>, <code>relai_apply_bundle</code>, <code>relai_clear_files</code> file clearing, <code>relai_run_checks</code>, <code>relai_browser</code>, <code>relai_diff</code>, and <code>relai_restore_changes</code>.<br>
+    Context settings live on each workspace and reduce broad scans/indexing for small tasks across any language stack.
   `;
   return div;
 }
@@ -142,28 +142,28 @@ function workflowWarningBox() {
   div.className = 'empty';
   div.style.cssText = 'text-align:left;padding:12px;line-height:1.55;border-color:rgba(99,102,241,.35);background:rgba(99,102,241,.08);';
   div.innerHTML = `
-    <strong style="color:var(--text);">Choose how hard Rel.AI is allowed to drive.</strong><br>
-    Conservative mode keeps exact replacements, file writes, clears, verification, diff, and reset. Fast mode adds Codex-style live update/bundle application for fast repo-wide changes. It still preserves <code>.git</code>, keeps path guards, and can require a clean git state before applying.
+    <strong style="color:var(--text);">Choose how Rel.AI applies workspace updates.</strong><br>
+    Focused edits favor exact replacements, file writes, clears, validation, diff, and restore. Prepared update mode also allows update/bundle application for repo-wide changes. It still preserves <code>.git</code>, keeps path guards, and can require a clean git state before applying.
   `;
   return div;
 }
 
 function confirmFastFlow() {
-  return window.confirm('Enable fast flow mode?\n\nThis exposes live update/bundle apply tools for fast Codex-style repo edits. Commit or stash your work first. Rel.AI will still protect .git and workspace boundaries.');
+  return window.confirm('Enable prepared update mode?\n\nThis enables update/bundle apply tools for repo-wide edits. Commit or stash your work first. Rel.AI will still protect .git and workspace boundaries.');
 }
 function autoApproveWarningBox() {
   const div = document.createElement('div');
   div.className = 'empty';
   div.style.cssText = 'text-align:left;padding:12px;line-height:1.55;border-color:rgba(255,184,77,.35);background:rgba(255,184,77,.08);';
   div.innerHTML = `
-    <strong style="color:var(--text);">Warning: app-request auto-approve is dangerous.</strong><br>
-    This optional Chrome extension can click ChatGPT approval buttons for Rel.AI MCP app requests. That can authorize local repo reads, full-file writes, verification commands, browser checks, diffs, or resets without a manual click. Keep it off unless you are actively supervising a task on your own trusted machine. The previous userscript workflow has been removed.
+    <strong style="color:var(--text);">Use approval assistance only while supervising work.</strong><br>
+    This optional Chrome extension can click ChatGPT approval buttons for Rel.AI MCP app requests. That can approve local repo reads, full-file writes, validation checks, browser checks, diffs, or restores without a manual click. Keep it off unless you are actively supervising a task on your own machine. The previous userscript workflow has been removed.
   `;
   return div;
 }
 
 function confirmAutoApproveWarning() {
-  return window.confirm('Enable Rel.AI MCP auto-approve?\n\nThis can click ChatGPT app-request approvals for local repo actions without a manual click. Use only on your own trusted machine and turn it off after the task.');
+  return window.confirm('Enable Rel.AI MCP approval assistance?\n\nThis can click ChatGPT app-request approvals for local repo actions without a manual click. Use only while supervising work on your own machine and turn it off after the task.');
 }
 
 function extensionInstallControl() {

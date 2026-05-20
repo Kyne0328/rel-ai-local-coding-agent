@@ -17,7 +17,7 @@ function buildHome(data) {
   const jobs = Array.isArray(data.jobs) ? data.jobs : [];
   const workspaces = Array.isArray(cfg.workspaces) ? cfg.workspaces : [];
   const findings = Array.isArray(health.findings) ? health.findings.filter(f => f.severity !== 'info') : [];
-  const visibleToolCount = '9 bridge tools';
+  const visibleToolCount = '14 workspace tools';
   const staleHours = Number((cfg.productUx && cfg.productUx.staleHours) || health.staleHours || 24);
   const currentSessions = sessions.filter(s => isCurrentWork(s, staleHours));
   const runningJobs = jobs.filter(j => ['running', 'queued', 'cancelling'].includes(String(j.status || '').toLowerCase()) && !isOlderThan(j.updatedAt || j.startedAt, staleHours));
@@ -32,11 +32,11 @@ function buildHome(data) {
   metrics.className = 'overview-grid';
   metrics.innerHTML =
     metricHtml('Workspaces', workspaces.length, 'configured repositories', 'blue') +
-    metricHtml('ChatGPT tools', visibleToolCount, 'clean local bridge', 'good') +
+    metricHtml('ChatGPT tools', visibleToolCount, 'single workspace surface', 'good') +
     metricHtml('Health', findings.length, health.ok === false ? 'needs attention' : 'all clear', health.ok === false ? 'bad' : 'good') +
     metricHtml('Validation', validationSummary(workspaces), 'auto-detected where possible', 'blue') +
     metricHtml('Activity', audit.length, 'recent tool calls', 'purple') +
-    metricHtml('Local bridge', 'ready', 'trusted read/write/local', 'good');
+    metricHtml('Workspace bridge', 'ready', 'read, change, validate, review', 'good');
   root.appendChild(metrics);
 
   const grid = document.createElement('div');
@@ -53,7 +53,7 @@ function buildHome(data) {
 
 function updateShell(data, cfg) {
   const subtitle = document.getElementById('subtitle');
-  if (subtitle) subtitle.textContent = `Rel.AI MCP · ChatGPT local repo bridge · ${Array.isArray(cfg.workspaces) ? cfg.workspaces.length : 0} workspaces`;
+  if (subtitle) subtitle.textContent = `Rel.AI MCP · ChatGPT workspace bridge · ${Array.isArray(cfg.workspaces) ? cfg.workspaces.length : 0} workspaces`;
   const updated = document.getElementById('lastUpdated');
   if (updated) updated.textContent = 'Updated ' + new Date().toLocaleTimeString();
   const statusEl = document.getElementById('serverStatus');

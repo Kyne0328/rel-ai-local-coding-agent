@@ -22,7 +22,7 @@ function buildWorkspaces(data) {
   root.className = 'section';
   root.innerHTML = `
     <div class="section-head">
-      <div><h2>Workspaces</h2><p>Repositories ChatGPT can read, edit, and verify. In trusted mode, tests can be run automatically from detected project commands.</p></div>
+      <div><h2>Workspaces</h2><p>Repositories ChatGPT can inspect, change, validate, review, and restore through the same workspace-tool surface.</p></div>
       <div style="display:flex;gap:8px;align-items:center;">
         <button type="button" data-add-workspace>Add workspace</button>
         <span class="section-action">${esc(workspaces.length)} configured</span>
@@ -32,7 +32,7 @@ function buildWorkspaces(data) {
       ${metricHtml('Workspaces', workspaces.length, 'configured aliases', 'blue')}
       ${metricHtml('Validation ready', validationReady + '/' + workspaces.length, 'configured or auto-detected', validationReady === workspaces.length ? 'good' : 'warn')}
       ${metricHtml('Health findings', actionableFindings(health).length, health.ok === false ? 'needs attention' : 'all clear', health.ok === false ? 'bad' : 'good')}
-      ${metricHtml('ChatGPT tools', '8', 'local bridge', 'good')}
+      ${metricHtml('ChatGPT tools', '14', 'workspace tools', 'good')}
     </div>
   `;
 
@@ -74,15 +74,15 @@ function workspaceCard(ws, health) {
         ${badgeHtml('configured tests ' + testKeys.length)}
         ${badgeHtml('detected tests ' + detected.length, detected.length ? 'good' : 'warn')}
         ${badgeHtml('commands ' + commandKeys.length)}
-        ${badgeHtml('fast task ' + (ws.fastTask && ws.fastTask.enabled !== false ? 'on' : 'off'), ws.fastTask && ws.fastTask.enabled !== false ? 'good' : 'warn')}
+        ${badgeHtml('context mode ' + (ws.fastTask && ws.fastTask.enabled !== false ? 'focused' : 'broad'), ws.fastTask && ws.fastTask.enabled !== false ? 'good' : 'warn')}
         ${badgeHtml('protected ' + (protectedBranches.join(', ') || 'none'))}
       </div>
       <div class="path">${validationText(testKeys, detected)}</div>
       <div class="path">${fastTaskText(ws.fastTask)}</div>
       <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
         <button class="secondary" type="button" data-preflight="${esc(ws.alias || '')}">Run preflight</button>
-        <button class="secondary" type="button" data-toggle-fast-task="${esc(ws.alias || '')}">${ws.fastTask && ws.fastTask.enabled !== false ? 'Disable fast task' : 'Enable fast task'}</button>
-        <button class="secondary" type="button" data-edit-fast-task="${esc(ws.alias || '')}">Fast task settings</button>
+        <button class="secondary" type="button" data-toggle-fast-task="${esc(ws.alias || '')}">${ws.fastTask && ws.fastTask.enabled !== false ? 'Use broad context' : 'Use focused context'}</button>
+        <button class="secondary" type="button" data-edit-fast-task="${esc(ws.alias || '')}">Context settings</button>
         <button class="secondary" type="button" data-rename-workspace="${esc(ws.alias || '')}">Rename</button>
         <button class="secondary danger" type="button" data-clear-workspace="${esc(ws.alias || '')}">Clear</button>
         ${canSaveDetected ? `<button type="button" data-save-detected="${esc(ws.alias || '')}">Save detected tests</button>` : ''}
@@ -96,14 +96,14 @@ function fastTaskText(fastTask = {}) {
   const max = fastTask.maxIndexFiles || 750;
   const includeRoots = Array.isArray(fastTask.includeRoots) && fastTask.includeRoots.length ? ' Include roots: ' + esc(fastTask.includeRoots.join(', ')) + '.' : '';
   return enabled
-    ? `Fast task mode: on. Skips broad indexing for small tasks, caps focused indexes at ${esc(max)} files, and respects .relaiignore/context excludes.${includeRoots}`
-    : 'Fast task mode: off. Context scans may inspect more of the workspace.';
+    ? `Focused context: on. Skips broad indexing for small tasks, caps focused indexes at ${esc(max)} files, and respects .relaiignore/context excludes.${includeRoots}`
+    : 'Focused context: off. Context scans may inspect more of the workspace.';
 }
 
 function validationText(configured, detected) {
   if (configured.length) return 'Configured tests: ' + esc(configured.join(', '));
   if (detected.length) return 'Auto-detected validation: ' + esc(detected.join(', ')) + '. ChatGPT can run these via relai_run_checks even before saving them.';
-  return 'No validation commands found yet. ChatGPT can still run explicit local checks in trusted mode.';
+  return 'No validation checks found yet. ChatGPT can still run explicit workspace checks.';
 }
 
 function findingRow(finding) {
@@ -250,10 +250,10 @@ async function toggleFastTaskFlow(alias) {
   const fastTask = { ...(ws.fastTask || {}), enabled: !(ws.fastTask && ws.fastTask.enabled !== false) };
   const result = await saveWorkspaceFastTask(ws, fastTask);
   if (result && result.ok) {
-    toast('Fast task mode ' + (fastTask.enabled ? 'enabled' : 'disabled') + ' for ' + alias, { variant: 'success' });
+    toast('Focused context ' + (fastTask.enabled ? 'enabled' : 'disabled') + ' for ' + alias, { variant: 'success' });
     setTimeout(() => location.reload(), 400);
   } else {
-    toast('Could not update fast task mode: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });
+    toast('Could not update context mode: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });
   }
 }
 
@@ -261,7 +261,7 @@ async function editFastTaskFlow(alias) {
   const ws = await loadWorkspace(alias);
   if (!ws) return;
   const current = ws.fastTask || {};
-  const maxIndexFiles = window.prompt('Max files for focused index in fast task mode', String(current.maxIndexFiles || 750));
+  const maxIndexFiles = window.prompt('Max files for focused context', String(current.maxIndexFiles || 750));
   if (maxIndexFiles == null) return;
   const includeRoots = window.prompt('Optional include roots, comma-separated. Leave blank to scan all non-excluded source files.', Array.isArray(current.includeRoots) ? current.includeRoots.join(', ') : '');
   if (includeRoots == null) return;
@@ -278,10 +278,10 @@ async function editFastTaskFlow(alias) {
   };
   const result = await saveWorkspaceFastTask(ws, fastTask);
   if (result && result.ok) {
-    toast('Fast task settings saved for ' + alias, { variant: 'success' });
+    toast('Context settings saved for ' + alias, { variant: 'success' });
     setTimeout(() => location.reload(), 400);
   } else {
-    toast('Could not save fast task settings: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });
+    toast('Could not save context settings: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });
   }
 }
 
