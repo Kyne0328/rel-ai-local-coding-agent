@@ -277,8 +277,11 @@ if (!verify.ok) {
   throw new Error('verify failed');
 }
 
+if (!verify.checks.includes('npm run check')) {
+  throw new Error(`verify did not use npm run check: ${verify.checks.join(', ')}`);
+}
 if (!verify.commands.includes('npm run check')) {
-  throw new Error(`verify did not use npm run check: ${verify.commands.join(', ')}`);
+  throw new Error('compatibility commands alias should still include npm run check');
 }
 
 call(8, 'relai_diff', { workspace: 'smoke' });

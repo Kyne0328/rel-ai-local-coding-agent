@@ -59,18 +59,53 @@
     return false;
   });
 
-  const observer = new MutationObserver(() => scheduleScan());
-  observer.observe(document.documentElement, { childList: true, subtree: true });
-  setInterval(scanAndApprove, 1500);
+  const SCAN_DEBOUNCE_MS = 900;
+  const observer = new MutationObserver((mutations) => {
+    if (mutations.some(isRelevantMutation)) scheduleScan('mutation');
+  });
+  observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label', 'disabled', 'data-testid', 'class'] });
 
-  let scheduled = false;
-  function scheduleScan() {
-    if (scheduled) return;
-    scheduled = true;
-    setTimeout(() => {
-      scheduled = false;
-      scanAndApprove();
-    }, 150);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) scheduleScan('visible');
+  });
+  window.addEventListener('focus', () => scheduleScan('focus'));
+  window.addEventListener('pageshow', () => scheduleScan('pageshow'));
+  scheduleScan('startup');
+
+  let scheduledTimer = 0;
+  function scheduleScan(_reason) {
+    if (scheduledTimer) clearTimeout(scheduledTimer);
+    scheduledTimer = setTimeout(() => {
+      scheduledTimer = 0;
+      runWhenIdle(scanAndApprove);
+    }, SCAN_DEBOUNCE_MS);
+  }
+
+  function runWhenIdle(fn) {
+    if (typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(fn, { timeout: 1200 });
+      return;
+    }
+    setTimeout(fn, 0);
+  }
+
+  function isRelevantMutation(mutation) {
+    if (mutation.type === 'attributes') {
+      const target = mutation.target;
+      return target instanceof HTMLElement && (target.matches('button, [role="button"]') || target.closest('button, [role="button"]'));
+    }
+    for (const node of mutation.addedNodes || []) {
+      if (isPotentialApprovalNode(node)) return true;
+    }
+    return false;
+  }
+
+  function isPotentialApprovalNode(node) {
+    if (!(node instanceof HTMLElement)) return false;
+    if (node.matches('button, [role="button"]')) return true;
+    const text = compact(node.innerText || node.textContent || '');
+    if (text.includes('rel-ai-mcp') || text.includes('using tools comes with risks')) return true;
+    return Boolean(node.querySelector && node.querySelector('button, [role="button"]'));
   }
 
   function scanAndApprove() {
@@ -173,7 +208,7 @@
   function trustedClick(el) {
     try { el.scrollIntoView({ block: 'center', inline: 'center' }); } catch (_) {}
     for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
-      el.disupdateEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
+      el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
     }
     try { el.click(); } catch (_) {}
   }

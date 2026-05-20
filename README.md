@@ -42,7 +42,7 @@ It can:
 - read selected files or small directory summaries
 - write full files, apply exact localized replacements, clear obsolete files, and stage whole-file writes only when unavoidable
 - optionally apply prepared text updates or file bundles for larger workspace edits
-- run verification commands such as tests/analyzers
+- run validation checks such as tests/analyzers
 - inspect git diffs
 - reset local changes
 - expose a local or public MCP URL for ChatGPT connectors
@@ -296,12 +296,12 @@ See [`docs/AUTO_APPROVE_EXTENSION.md`](docs/AUTO_APPROVE_EXTENSION.md).
 
 | Tool | Purpose |
 | --- | --- |
-| `relai_repo_snapshot` | Return a filtered project snapshot, manifests, discovered commands, and context hints. |
+| `relai_repo_snapshot` | Return a filtered project snapshot, manifests, discovered checks, and context hints. |
 | `relai_read` | Read focused files or directory summaries. |
 | `relai_write` | Replace one complete file with corrected full-file content. Direct mode is for normal-sized files; staged mode is for unavoidable whole-file replacement. |
 | `relai_replace` | Apply small exact text replacements inside an existing file. This is the preferred tool for large/interpolation-heavy source files, duplicate import cleanup, lint-only string edits, and localized behavior changes. |
-| `relai_clear_files` | Clear obsolete files without local checks or update helpers. |
-| `relai_run_checks` | Run detected or requested verification commands. |
+| `relai_clear_files` | Clear obsolete files without update helpers. |
+| `relai_run_checks` | Run detected or requested validation checks. |
 | `relai_browser` | Run a browser/UI check or fetch a route. |
 | `relai_diff` | Review git status and diff. |
 | `relai_restore_changes` | Restore selected workspace changes. |
@@ -333,19 +333,19 @@ The point is to avoid scanning unrelated files before touching the obvious files
 
 ---
 
-## Verify command behavior
+## Validation check behavior
 
-`relai_run_checks` can run explicit commands inside configured workspaces:
+`relai_run_checks` can run explicit validation checks inside configured workspaces:
 
 ```json
-{ "workspace": "jjclover", "commands": ["flutter analyze", "flutter test"] }
+{ "workspace": "jjclover", "checks": ["flutter analyze", "flutter test"] }
 ```
 
 ```json
-{ "workspace": "rel-ai-mcp", "commandsText": "npm run check\nnpm run test:compat" }
+{ "workspace": "rel-ai-mcp", "checksText": "npm run check\nnpm run test:compat" }
 ```
 
-If no command is provided, it auto-detects sensible validation commands for the workspace.
+If no check is provided, it auto-detects sensible validation checks for the workspace.
 
 ---
 

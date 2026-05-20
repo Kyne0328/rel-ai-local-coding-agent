@@ -337,7 +337,7 @@ async function relaiApplyPatch(workspace, config, args = {}) {
   let backup = null;
   if (shouldMakeAggressiveBackup(config, args)) backup = await makeAggressiveBackup(workspace, config, operationId, "patch");
   const apply = await runProcess("git", ["apply", patchFile], { cwd: workspace.path, timeout: clampNumber(args.timeoutMs, 1000, 86400000, 120000) }, config);
-  const verify = args.verify || args.command || args.commands || args.commandsText ? await relaiVerify(workspace, config, args) : null;
+  const verify = hasRequestedChecks(args) ? await relaiVerify(workspace, config, args) : null;
   const diff = args.returnDiff === false ? null : await relaiDiff(workspace, config, { maxBytes: args.maxDiffBytes || DEFAULT_MAX_DIFF_BYTES });
   const ok = apply.exitCode === 0 && (!verify || verify.ok);
   appendOperation(config, workspace, { id: operationId, type: "apply_patch", ok, paths: touchedPaths, results: [{ operation: "applyPatch", bytes: patchBytes, touchedPaths, verified: verify ? verify.ok : null }] });
@@ -365,7 +365,7 @@ async function relaiApplyArchive(workspace, config, args = {}) {
   let backup = null;
   if (shouldMakeAggressiveBackup(config, args)) backup = await makeAggressiveBackup(workspace, config, operationId, "archive");
   const overlay = overlayDirectory(workspace.path, overlayRoot, { clearMissing: Boolean(args.clearMissing ?? fastFlag(config, "clearMissingDefault", false)) });
-  const verify = args.verify || args.command || args.commands || args.commandsText ? await relaiVerify(workspace, config, args) : null;
+  const verify = hasRequestedChecks(args) ? await relaiVerify(workspace, config, args) : null;
   const diff = args.returnDiff === false ? null : await relaiDiff(workspace, config, { maxBytes: args.maxDiffBytes || DEFAULT_MAX_DIFF_BYTES });
   const ok = overlay.errors.length === 0 && (!verify || verify.ok);
   appendOperation(config, workspace, { id: operationId, type: "apply_archive", ok, paths: overlay.changedFiles, results: [{ operation: "applyArchive", archivePath, copied: overlay.copied.length, cleard: overlay.cleard.length, skipped: overlay.skipped.length, verified: verify ? verify.ok : null }] });
@@ -486,11 +486,11 @@ function clearStagedPayload(config, workspace, writeId) {
 
 async function relaiVerify(workspace, config, args = {}) {
   const level = String(args.level || "standard").toLowerCase();
-  const commands = normalizeVerifyCommands(args, workspace.path, level);
-  if (commands.length === 0) return { ok: true, workspace: workspace.alias, level, commands: [], results: [], message: "No verification commands detected." };
+  const checks = normalizeVerifyChecks(args, workspace.path, level);
+  if (checks.length === 0) return { ok: true, workspace: workspace.alias, level, checks: [], commands: [], results: [], message: "No validation checks detected." };
   const stopOnFailure = args.stopOnFailure !== false;
   const results = [];
-  for (const command of commands) {
+  for (const command of checks) {
     const result = await runProcess(command, [], {
       cwd: workspace.path,
       shell: true,
@@ -501,7 +501,7 @@ async function relaiVerify(workspace, config, args = {}) {
     results.push(summary);
     if (!summary.ok && stopOnFailure) break;
   }
-  return { ok: results.every((item) => item.ok), workspace: workspace.alias, level, commands, results };
+  return { ok: results.every((item) => item.ok), workspace: workspace.alias, level, checks, commands: checks, results };
 }
 
 async function relaiBrowser(workspace, config, args = {}) {
@@ -1029,8 +1029,13 @@ function countLines(text) {
   return String(text).split(/\r?\n/).length;
 }
 
-function normalizeVerifyCommands(args, root, level) {
+function hasRequestedChecks(args = {}) {
+  return Boolean(args.verify || args.check || args.checks || args.checksText || args.command || args.commands || args.commandsText);
+}
+
+function normalizeVerifyChecks(args, root, level) {
   const explicit = [];
+  if (typeof args.check === "string" && args.check.trim()) explicit.push(args.check.trim());
   if (typeof args.command === "string" && args.command.trim()) explicit.push(args.command.trim());
   if (Array.isArray(args.commands)) {
     for (const item of args.commands) {
@@ -1045,10 +1050,10 @@ function normalizeVerifyCommands(args, root, level) {
     }
   }
   if (explicit.length) return [...new Set(explicit)];
-  return detectVerifyCommands(root, level);
+  return detectVerifyChecks(root, level);
 }
 
-function detectVerifyCommands(root, level) {
+function detectVerifyChecks(root, level) {
   const commands = [];
   const packageJson = path.join(root, "package.json");
   if (fs.existsSync(packageJson)) {
