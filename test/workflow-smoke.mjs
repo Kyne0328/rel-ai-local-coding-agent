@@ -144,11 +144,25 @@ const snapshot = contentOf(await waitFor(3));
 if (!snapshot.files.includes('README.md')) {
   throw new Error('snapshot missing README.md');
 }
+if (snapshot.writeGuidance.defaultMode !== 'size-based') {
+  throw new Error('snapshot should expose size-based write guidance');
+}
+for (const mode of ['exact-replace', 'direct-write', 'staged-write', 'apply-update', 'apply-bundle', 'clear-file']) {
+  if (!snapshot.writeGuidance.modes || !snapshot.writeGuidance.modes[mode]) {
+    throw new Error(`snapshot write guidance missing mode ${mode}`);
+  }
+}
 
 call(4, 'relai_read', { workspace: 'smoke', paths: ['README.md'] });
 const read = contentOf(await waitFor(4));
 if (!read.items[0].content.includes('# Smoke')) {
   throw new Error('read failed');
+}
+if (read.items[0].writeGuidance.recommendedMode !== 'direct-write') {
+  throw new Error('small README should recommend direct-write for complete replacement');
+}
+if (read.items[0].writeGuidance.localizedEdit.recommendedMode !== 'exact-replace') {
+  throw new Error('small README should still recommend exact-replace for localized edits');
 }
 
 call(41, 'relai_read', { workspace: 'smoke', paths: ['lib/sms_handler_utils.dart'] });
@@ -157,7 +171,13 @@ if (riskyRead.items[0].writeGuidance.recommendedMode !== 'exact-replace') {
   throw new Error('large interpolation-heavy source should recommend exact replacements');
 }
 if (!riskyRead.items[0].writeGuidance.reasons.some((item) => item.includes('template/interpolation'))) {
-  throw new Error('write guidance should explain interpolation-heavy risk');
+  throw new Error('write guidance should explain interpolation-heavy shape');
+}
+if (riskyRead.items[0].writeGuidance.fallbackMode !== 'staged-write') {
+  throw new Error('large interpolation-heavy source should use staged-write for whole-file fallback');
+}
+if (riskyRead.items[0].writeGuidance.multiFileChange.recommendedMode !== 'apply-update') {
+  throw new Error('large source guidance should include apply-update as the patch-shaped alternative');
 }
 
 call(42, 'relai_write', { workspace: 'smoke', path: 'lib/sms_handler_utils.dart', content: riskyRead.items[0].content });

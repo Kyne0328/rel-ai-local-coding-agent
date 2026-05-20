@@ -840,34 +840,71 @@ function workspaceWriteGuidance(config) {
   const flow = flowSummary(config);
   return {
     flow,
-    defaultMode: flow.mode === "fast" ? "fast" : "direct",
-    preferredEditTool: "relai_replace",
-    exactReplaceFor: [
-      "small changes inside large files",
-      "large or interpolation-heavy source files such as Dart/Flutter SMS handlers",
-      "cleanup edits such as duplicate imports, lint-only string rewrites, and localized behavior changes",
-      "any file after one connector or approval rejection"
-    ],
-    stagedModeFor: [
-      `whole-file replacements above about ${STAGED_WRITE_BYTE_THRESHOLD} bytes`,
-      `whole-file replacements above about ${STAGED_WRITE_LINE_THRESHOLD} lines`
-    ],
-    clearTool: "relai_clear_files",
-    fastTools: ["relai_apply_update", "relai_apply_bundle", "relai_package_snapshot"],
-    fastMode: flow.mode === "fast" ? "enabled" : "disabled",
+    defaultMode: "size-based",
     recommendedChunkBytes: DEFAULT_STAGED_CHUNK_BYTES,
-    caution: flow.mode === "fast" ? "Fast flow is enabled: use relai_apply_update or relai_apply_bundle for bulk live edits, with clean-git checks/backups unless explicitly disabled. Use relai_replace for precise small edits." : "Conservative flow is enabled: use relai_replace or relai_clear_files for targeted edits/file clearing. Enable fast flow in settings for relai_apply_update and relai_apply_bundle. Do not fall back to generated helper scripts after a write is blocked.",
-    exactReplaceFlow: [
-      "relai_read { workspace, paths: [path] }",
-      "relai_replace { workspace, path, expectedSha256, oldText, newText }",
-      "relai_run_checks { workspace, commands }",
-      "relai_diff { workspace }"
+    modes: {
+      "exact-replace": {
+        tool: "relai_replace",
+        when: [
+          "localized edits inside existing files",
+          "large source files",
+          "template-heavy or interpolation-heavy files",
+          "duplicate import cleanup, lint-only text edits, and focused behavior changes"
+        ]
+      },
+      "direct-write": {
+        tool: "relai_write",
+        when: [
+          "complete replacement of a small or normal-sized file",
+          `whole-file content under about ${STAGED_WRITE_BYTE_THRESHOLD} bytes and ${STAGED_WRITE_LINE_THRESHOLD} lines`
+        ]
+      },
+      "staged-write": {
+        tool: "relai_write",
+        when: [
+          "complete replacement of a large file",
+          `whole-file content above about ${STAGED_WRITE_BYTE_THRESHOLD} bytes or ${STAGED_WRITE_LINE_THRESHOLD} lines`
+        ],
+        chunkBytes: DEFAULT_STAGED_CHUNK_BYTES
+      },
+      "apply-update": {
+        tool: "relai_apply_update",
+        when: [
+          "a multi-file change is already represented as a unified patch",
+          "several related files need coordinated text edits"
+        ]
+      },
+      "apply-bundle": {
+        tool: "relai_apply_bundle",
+        when: [
+          "a prepared file bundle already exists on the MCP host",
+          "many files need to be overlaid together"
+        ]
+      },
+      "clear-file": {
+        tool: "relai_clear_files",
+        when: ["one or more obsolete files should be removed"]
+      }
+    },
+    selectionOrder: [
+      "Use exact-replace for small edits inside existing files.",
+      "Use direct-write for complete replacement of small or normal-sized files.",
+      "Use staged-write for complete replacement of large files.",
+      "Use apply-update when the change is naturally patch-shaped across files.",
+      "Use apply-bundle when a prepared archive should overlay many files.",
+      "Use clear-file for obsolete files."
     ],
-    stagedFlow: [
-      "relai_write { workspace, stage: 'start', path, content }",
-      "relai_write { workspace, stage: 'append', writeId, content }",
-      "relai_write { workspace, stage: 'commit', writeId }"
-    ]
+    examples: {
+      exactReplace: "relai_replace { workspace, path, expectedSha256, oldText, newText }",
+      directWrite: "relai_write { workspace, path, content }",
+      stagedWriteStart: "relai_write { workspace, stage: 'start', path, content }",
+      stagedWriteAppend: "relai_write { workspace, stage: 'append', writeId, content }",
+      stagedWriteCommit: "relai_write { workspace, stage: 'commit', writeId }",
+      applyUpdate: "relai_apply_update { workspace, updateText, checks }",
+      applyBundle: "relai_apply_bundle { workspace, bundlePath, checks }",
+      clearFile: "relai_clear_files { workspace, path }"
+    },
+    next: "Choose the edit tool by task shape and file size, then run relai_run_checks and relai_diff."
   };
 }
 
@@ -888,19 +925,48 @@ function fileWriteGuidance(relativePath, text) {
   if (reasons.length) {
     return {
       recommendedMode: "exact-replace",
-      fallbackMode: "staged-full-file-write",
-      connectorRisk: "high",
+      tool: "relai_replace",
+      fallbackMode: "staged-write",
+      fallbackTool: "relai_write",
+      alternatives: ["staged-write", "apply-update"],
       recommendedChunkBytes: DEFAULT_STAGED_CHUNK_BYTES,
+      fileShape: { bytes, lineCount, extension: ext || "", interpolationMarkers },
       reasons,
-      next: "Use relai_replace for small exact edits inside this file. Only use staged relai_write if you must replace the whole file. Use relai_clear_files for file clearing. Do not use patch scripts, local command-edit fallbacks, Python runners, or Dart runners."
+      useWhen: "Use for localized edits inside this existing file.",
+      wholeFileReplacement: {
+        recommendedMode: "staged-write",
+        tool: "relai_write",
+        reason: "Use staged writes only when the complete file genuinely needs replacement."
+      },
+      multiFileChange: {
+        recommendedMode: "apply-update",
+        tool: "relai_apply_update",
+        reason: "Use a prepared update when the change is patch-shaped across multiple files."
+      },
+      next: "Prefer relai_replace with exact current text. Use staged relai_write for unavoidable whole-file replacement. Use relai_clear_files only for obsolete files."
     };
   }
 
   return {
-    recommendedMode: "direct",
-    connectorRisk: "normal",
+    recommendedMode: "direct-write",
+    tool: "relai_write",
+    fallbackMode: "exact-replace",
+    fallbackTool: "relai_replace",
+    alternatives: ["exact-replace", "apply-update"],
+    fileShape: { bytes, lineCount, extension: ext || "", interpolationMarkers },
     reasons: ["normal-sized file"],
-    next: "Use relai_replace for localized edits or a normal direct relai_write full-file content payload for whole-file replacement."
+    useWhen: "Use for complete replacement of this small or normal-sized file.",
+    localizedEdit: {
+      recommendedMode: "exact-replace",
+      tool: "relai_replace",
+      reason: "Use exact replacement when only a small block changes."
+    },
+    multiFileChange: {
+      recommendedMode: "apply-update",
+      tool: "relai_apply_update",
+      reason: "Use a prepared update when the change is patch-shaped across multiple files."
+    },
+    next: "Use direct relai_write for full-file replacement, or relai_replace for localized edits."
   };
 }
 
