@@ -33,7 +33,7 @@ Either side disables automation.
    ```
 
 8. Paste the dashboard token if your dashboard requires one.
-9. Enable the extension toggle only while supervising a trusted task.
+9. Enable the extension toggle only while supervising a local workspace task.
 
 ## Why extension-only
 
@@ -43,20 +43,25 @@ Chrome throttles background tabs. Userscripts can pause or run late when ChatGPT
 
 The extension detects small Rel.AI MCP app-request cards on ChatGPT and clicks only a valid action button inside that card. It recognizes requests such as:
 
+- Repository Snapshot
 - Read Local Repo Paths
-- Read File / Read Files
-- Edit File / Write File
-- Verify
-- Browser
-- Diff
-- Reset
+- Replace Exact Text
+- Write Local Repo File
+- Clear Local Repo Files
+- Apply Prepared Update
+- Apply Prepared Bundle
+- Package Workspace Zip
+- Run Workspace Checks
+- Browser/UI Check
+- Review Local Repo Diff
+- Restore Workspace Changes
 
 It requires Rel.AI MCP card text and a Deny/Cancel-style button nearby, so ordinary ChatGPT buttons such as message edit controls are not approval targets.
 
 ## Usage note
 
-This can approve local repository reads, full-file writes, validation checks, browser checks, diffs, or resets without a manual click. Use only on your own trusted machine and disable it when done.
+This can approve local repository reads, file changes, validation checks, browser checks, diffs, or restores without a manual click. Use only on your own machine while supervising the task, then disable it when done.
 
 ## Request button coverage
 
-The extension recognizes request cards for every normal Rel.AI bridge tool: repository snapshot, read, exact text replacement, write/edit file, clear file, validation check, browser/UI check, diff review, and restore actions such as `Restore Workspace`. It first identifies the small Rel.AI MCP request card, then clicks only the primary non-negative action button inside that card.
+The extension recognizes request cards for the Rel.AI workspace tools: repository snapshot, read, exact text replacement, file write, file clear, prepared update, prepared bundle, workspace package, validation check, browser/UI check, diff review, and restore actions such as `Restore Workspace`. It first identifies the small Rel.AI MCP request card, then clicks only the primary non-negative action button inside that card.

@@ -70,9 +70,10 @@
   });
   window.addEventListener('focus', () => scheduleScan('focus'));
   window.addEventListener('pageshow', () => scheduleScan('pageshow'));
-  scheduleScan('startup');
 
   let scheduledTimer = 0;
+  scheduleScan('startup');
+
   function scheduleScan(_reason) {
     if (scheduledTimer) clearTimeout(scheduledTimer);
     scheduledTimer = setTimeout(() => {

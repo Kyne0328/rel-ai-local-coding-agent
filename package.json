@@ -22,7 +22,7 @@
     "workspace:add": "node bin/relai-mcp-config.js workspace add",
     "testcmd:add": "node bin/relai-mcp-config.js test-command add",
     "cmd:add": "node bin/relai-mcp-config.js command add",
-    "test": "npm run check && npm run test:repo-health && npm run test:smoke",
+    "test": "npm run check && npm run test:repo-health && npm run test:smoke && npm run test:connector-wording",
     "test:repo-health": "node test/repo-health.mjs",
     "test:smoke": "node test/smoke.mjs",
     "test:http": "node test/http-smoke.mjs",
@@ -36,7 +36,8 @@
     "test:tunnel": "node test/tunnel-manager-smoke.mjs",
     "test:oneclick": "node test/oneclick-args-smoke.mjs",
     "test:compat": "node test/chatgpt-local-compat-smoke.mjs",
-    "test:public-workflow": "node test/workflow-smoke.mjs"
+    "test:public-workflow": "node test/workflow-smoke.mjs",
+    "test:connector-wording": "node test/connector-wording-smoke.mjs"
   },
   "keywords": [
     "mcp",

@@ -294,17 +294,24 @@ See [`docs/AUTO_APPROVE_EXTENSION.md`](docs/AUTO_APPROVE_EXTENSION.md).
 
 ## MCP tools
 
+Rel.AI exposes one peer-level workspace-tool surface. ChatGPT chooses the tool from the task shape and file size, not from separate tool tiers.
+
 | Tool | Purpose |
 | --- | --- |
-| `relai_repo_snapshot` | Return a filtered project snapshot, manifests, discovered checks, and context hints. |
-| `relai_read` | Read focused files or directory summaries. |
-| `relai_write` | Replace one complete file with corrected full-file content. Direct mode is for normal-sized files; staged mode is for unavoidable whole-file replacement. |
+| `relai_repo_snapshot` | Return a filtered project snapshot, manifests, discovered checks, context hints, and size-based write guidance. |
+| `relai_read` | Read focused files or directory summaries and return file-level write guidance. |
+| `relai_write` | Replace one complete file with corrected full-file content. Direct mode is for normal-sized files; staged mode is for larger complete-file replacement. |
 | `relai_replace` | Apply small exact text replacements inside an existing file. This is the preferred tool for large/interpolation-heavy source files, duplicate import cleanup, lint-only string edits, and localized behavior changes. |
 | `relai_clear_files` | Clear obsolete files without update helpers. |
+| `relai_apply_update` | Apply a prepared text update when a change is naturally patch-shaped across files. |
+| `relai_apply_bundle` | Apply a prepared file bundle when many files need to be overlaid together. |
+| `relai_package_snapshot` | Create a workspace zip package on the MCP host. |
 | `relai_run_checks` | Run detected or requested validation checks. |
 | `relai_browser` | Run a browser/UI check or fetch a route. |
 | `relai_diff` | Review git status and diff. |
 | `relai_restore_changes` | Restore selected workspace changes. |
+| `relai_status` | Return compact live status for configured workspaces and scripts. |
+| `relai_feature_probe` | Return compact booleans for important runtime behavior. |
 
 Removed workflows are not part of the MCP anymore: update application loops, generated update helpers, local-edit tools, task runners, isolated worktree orchestration, multi-agent schedulers, Docker runners, and PR/CI repair loops.
 
@@ -349,6 +356,57 @@ If no check is provided, it auto-detects sensible validation checks for the work
 
 ---
 
+## Tool selection guide
+
+ChatGPT should choose tools by task shape and file size. All tools are part of the same workspace workflow.
+
+| Situation | Use |
+| --- | --- |
+| Need a project overview | `relai_repo_snapshot` |
+| Need focused file content | `relai_read` |
+| Small localized edit inside an existing file | `relai_replace` |
+| Complete replacement of a small or normal-sized file | `relai_write` direct mode |
+| Complete replacement of a large file | `relai_write` staged mode |
+| Multi-file patch-shaped change | `relai_apply_update` |
+| Prepared file bundle update | `relai_apply_bundle` |
+| Remove obsolete files | `relai_clear_files` |
+| Run validation | `relai_run_checks` |
+| Review changes | `relai_diff` |
+| Restore changes | `relai_restore_changes` |
+
+The `writeGuidance` field returned by `relai_read` and `relai_repo_snapshot` gives the recommended mode for the current file or workspace. Prefer that guidance over guessing from the tool list.
+
+---
+
+## Tool selection guide
+
+Use this guide together with the `writeGuidance` returned by `relai_repo_snapshot` and `relai_read`.
+
+| Situation | Use |
+| --- | --- |
+| Need a repository overview | `relai_repo_snapshot` |
+| Need focused file content | `relai_read` |
+| Small localized edit inside an existing file | `relai_replace` |
+| Complete replacement of a small or normal-sized file | direct `relai_write` |
+| Complete replacement of a larger file | staged `relai_write` |
+| Multi-file patch-shaped change | `relai_apply_update` |
+| Prepared file bundle update | `relai_apply_bundle` |
+| Remove obsolete files | `relai_clear_files` |
+| Run validation | `relai_run_checks` |
+| Browser or UI route check | `relai_browser` |
+| Review changes | `relai_diff` |
+| Restore selected changes | `relai_restore_changes` |
+
+Typical loop:
+
+```text
+inspect -> read -> change -> validate -> review -> restore only if needed
+```
+
+For large or interpolation-heavy files, prefer `relai_replace` for focused edits. Use staged `relai_write` only when the entire file genuinely needs replacement. For multi-file patch-shaped changes, use `relai_apply_update`. For prepared archives on the MCP host, use `relai_apply_bundle`.
+
+---
+
 ## Full-file write behavior
 
 `relai_write` accepts complete file content only. Use `relai_replace` for localized edits inside existing files and `relai_clear_files` for file clearing.
@@ -389,7 +447,7 @@ Obsolete file file clearing:
 { "workspace": "myapp", "paths": ["docs/old-plan.md"] }
 ```
 
-For long, large, or interpolation-heavy source files, direct full-file mode is refused. Use `relai_replace` for small exact edits. Use staged `relai_write` only when the whole file genuinely needs replacement. If a full-file or staged payload is too large, re-read the file and retry with smaller `relai_replace` operations rather than update helpers, local-edit fallbacks, Python runners, or Dart runners. If a multiline source file is accidentally collapsed into one long line, the write is rejected instead of damaging formatting.
+For long, large, or interpolation-heavy source files, prefer `relai_replace` for small exact edits. Use staged `relai_write` only when the whole file genuinely needs replacement. If a full-file or staged payload is too large, re-read the file and retry with smaller `relai_replace` operations. If a multiline source file is accidentally collapsed into one long line, the write is rejected instead of damaging formatting.
 
 ---
 
@@ -400,9 +458,10 @@ The package keeps only active workflow test aliases:
 ```bash
 npm run test:compat
 npm run test:public-workflow
+npm run test:connector-wording
 ```
 
-`test:compat` confirms removed legacy tools stay rejected. `test:public-workflow` runs the current bridge workflow smoke test. No CI screenshot belongs in the README; the README should show the product, not a failed run.
+`test:compat` confirms removed legacy tools stay rejected. `test:public-workflow` runs the current bridge workflow smoke test. `test:connector-wording` checks connector-facing wording so tool copy stays neutral and workflow-oriented. No CI screenshot belongs in the README; the README should show the product, not a failed run.
 
 ---
 
