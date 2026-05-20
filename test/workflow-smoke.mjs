@@ -235,6 +235,21 @@ if (!fs.readFileSync(path.join(workspace, 'src', 'index.js'), 'utf8').includes('
   throw new Error('relai_apply_update did not modify the file');
 }
 
+call(48, 'relai_package_snapshot', { workspace: 'smoke', maxFiles: 1000 });
+const packaged = contentOf(await waitFor(48, 20000));
+if (!packaged.archivePath) {
+  throw new Error('relai_package_snapshot should return archivePath');
+}
+fs.writeFileSync(path.join(workspace, 'src', 'index.js'), 'console.log("bundle placeholder")\n');
+call(49, 'relai_apply_bundle', { workspace: 'smoke', bundlePath: packaged.archivePath, backup: false, returnDiff: false });
+const appliedBundle = contentOf(await waitFor(49, 20000));
+if (!appliedBundle.ok || !appliedBundle.changedFiles.includes('src/index.js')) {
+  throw new Error('relai_apply_bundle should accept bundlePath and overlay files');
+}
+if (!fs.readFileSync(path.join(workspace, 'src', 'index.js'), 'utf8').includes('smoke aggressive')) {
+  throw new Error('relai_apply_bundle did not restore packaged file through bundlePath');
+}
+
 const newReadme = '# Smoke\n\nUpdated by public workflow smoke.\n';
 
 call(5, 'relai_write', { workspace: 'smoke', path: 'README.md', content: newReadme, dryRun: true });

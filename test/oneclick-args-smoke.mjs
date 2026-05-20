@@ -37,4 +37,25 @@ for (const args of [
   assert.match(result.stderr, /Rel\.AI MCP is ready\./);
 }
 
+fs.writeFileSync(
+  path.join(stateDir, 'connection.json'),
+  JSON.stringify({
+    host: '127.0.0.1',
+    port: 39876,
+    publicUrl: 'https://saved.example.test',
+    chatgptSecret: 'saved-secret'
+  }, null, 2)
+);
+
+const staleProfileResult = run([]);
+assert.equal(staleProfileResult.status, 0, `stale profile run failed\nstdout=${staleProfileResult.stdout}\nstderr=${staleProfileResult.stderr}`);
+assert.match(staleProfileResult.stderr, /Local dashboard:\s+http:\/\/127\.0\.0\.1:3333\/dashboard/);
+assert.doesNotMatch(staleProfileResult.stderr, /127\.0\.0\.1:39876/);
+assert.match(staleProfileResult.stderr, /routing the public URL to http:\/\/127\.0\.0\.1:3333/);
+
+const explicitPortResult = run(['--port', '4444']);
+assert.equal(explicitPortResult.status, 0, `explicit port run failed\nstdout=${explicitPortResult.stdout}\nstderr=${explicitPortResult.stderr}`);
+assert.match(explicitPortResult.stderr, /Local dashboard:\s+http:\/\/127\.0\.0\.1:4444\/dashboard/);
+assert.match(explicitPortResult.stderr, /routing the public URL to http:\/\/127\.0\.0\.1:4444/);
+
 console.log('One-click argument smoke passed.');

@@ -50,20 +50,36 @@
   const NEGATIVE = ['cancel', 'deny', 'decline', 'reject', 'not now', 'stop', 'close', 'dismiss'];
   let lastClickAt = 0;
 
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (message && message.type === 'relai-auto-approve-scan') {
-      const count = scanAndApprove();
-      sendResponse({ ok: true, count });
-      return true;
+  try {
+    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
+      chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+        if (message && message.type === 'relai-auto-approve-scan') {
+          const count = safeScanAndApprove('message');
+          safeSendResponse(sendResponse, { ok: true, count });
+          return true;
+        }
+        return false;
+      });
     }
-    return false;
-  });
+  } catch (error) {
+    reportContentError('message listener', error);
+  }
 
   const SCAN_DEBOUNCE_MS = 900;
   const observer = new MutationObserver((mutations) => {
-    if (mutations.some(isRelevantMutation)) scheduleScan('mutation');
+    try {
+      if (mutations.some(isRelevantMutation)) scheduleScan('mutation');
+    } catch (error) {
+      reportContentError('mutation observer', error);
+    }
   });
-  observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label', 'disabled', 'data-testid', 'class'] });
+  try {
+    if (document.documentElement) {
+      observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label', 'disabled', 'data-testid', 'class'] });
+    }
+  } catch (error) {
+    reportContentError('observer setup', error);
+  }
 
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) scheduleScan('visible');
@@ -74,20 +90,59 @@
   let scheduledTimer = 0;
   scheduleScan('startup');
 
-  function scheduleScan(_reason) {
-    if (scheduledTimer) clearTimeout(scheduledTimer);
-    scheduledTimer = setTimeout(() => {
-      scheduledTimer = 0;
-      runWhenIdle(scanAndApprove);
-    }, SCAN_DEBOUNCE_MS);
+  function scheduleScan(reason) {
+    try {
+      if (scheduledTimer) clearTimeout(scheduledTimer);
+      scheduledTimer = setTimeout(() => {
+        scheduledTimer = 0;
+        runWhenIdle(() => safeScanAndApprove(reason || 'timer'));
+      }, SCAN_DEBOUNCE_MS);
+    } catch (error) {
+      reportContentError('schedule scan', error);
+    }
   }
 
   function runWhenIdle(fn) {
+    const runner = () => {
+      try { fn(); } catch (error) { reportContentError('idle scan', error); }
+    };
     if (typeof window.requestIdleCallback === 'function') {
-      window.requestIdleCallback(fn, { timeout: 1200 });
+      window.requestIdleCallback(runner, { timeout: 1200 });
       return;
     }
-    setTimeout(fn, 0);
+    setTimeout(runner, 0);
+  }
+
+
+
+  function safeScanAndApprove(reason) {
+    try {
+      return scanAndApprove();
+    } catch (error) {
+      reportContentError(`scan ${reason || ''}`.trim(), error);
+      return 0;
+    }
+  }
+
+  function safeSendResponse(sendResponse, payload) {
+    try { sendResponse(payload); } catch (error) { reportContentError('message response', error); }
+  }
+
+  function safeSendRuntimeMessage(payload) {
+    try {
+      if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.id || !chrome.runtime.sendMessage) return;
+      const result = chrome.runtime.sendMessage(payload);
+      if (result && typeof result.catch === 'function') result.catch(() => {});
+    } catch (_error) {
+      // Extension context can be invalidated while ChatGPT is already open.
+    }
+  }
+
+  function reportContentError(scope, error) {
+    try {
+      const message = error && error.message ? error.message : String(error || 'unknown error');
+      console.debug(`[rel-ai-mcp] content script ${scope || 'scan'} skipped: ${message}`);
+    } catch (_error) {}
   }
 
   function isRelevantMutation(mutation) {
@@ -122,7 +177,7 @@
       clicked += 1;
       break;
     }
-    if (clicked) chrome.runtime.sendMessage({ type: 'relai-approved', count: clicked }).catch(() => {});
+    if (clicked) safeSendRuntimeMessage({ type: 'relai-approved', count: clicked });
     return clicked;
   }
 

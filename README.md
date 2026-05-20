@@ -17,7 +17,7 @@ Rel.AI MCP is the successor to my original Rel.AI project. The first version pro
 The goal is simple: I want the reasoning power of ChatGPT on the web, but I still want my repo to stay local, controlled, visible, and reversible.
 
 ```text
-ChatGPT asks -> Rel.AI MCP reads/writes/verifies locally -> I inspect the diff -> I keep or reset it
+ChatGPT asks -> Rel.AI MCP inspects, changes, validates, and reviews locally -> I inspect the diff -> I keep or restore it
 ```
 
 The default conservative workflow is intentionally small:
@@ -44,9 +44,9 @@ It can:
 - optionally apply prepared text updates or file bundles for larger workspace edits
 - run validation checks such as tests/analyzers
 - inspect git diffs
-- reset local changes
+- restore local changes
 - expose a local or public MCP URL for ChatGPT connectors
-- optionally auto-approve ChatGPT app requests through a Chrome extension
+- optionally use Chrome extension approval assistance for ChatGPT app requests
 
 It is built around the practical flow I kept needing:
 

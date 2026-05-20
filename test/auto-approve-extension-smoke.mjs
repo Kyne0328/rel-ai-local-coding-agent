@@ -40,6 +40,10 @@ assert.match(content, /reset local repo changes/);
 assert.match(content, /snapshot workspace/);
 assert.match(content, /isPrimaryButton/);
 assert.match(content, /visibleButtons.length > 8/);
+assert.match(content, /safeScanAndApprove/);
+assert.match(content, /safeSendRuntimeMessage/);
+assert.match(content, /reportContentError/);
+assert.equal(content.includes('chrome.runtime.sendMessage(payload).catch'), false);
 assert.doesNotMatch(content, /'edit',/);
 assert.doesNotThrow(() => new Function(content));
 

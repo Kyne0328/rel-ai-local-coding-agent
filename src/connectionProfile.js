@@ -151,7 +151,7 @@ function buildConnectionSummary({ host = "127.0.0.1", port = 3333, publicUrl = "
     nextSteps: publicBaseUrl
       ? [
           "Keep the local Rel.AI MCP server running on this machine.",
-          "Keep your tunnel/reverse proxy routing the public URL to http://127.0.0.1:3333.",
+          `Keep your tunnel/reverse proxy routing the public URL to ${localUrl}.`,
           "In ChatGPT Developer Mode, create or update one app using the COPY THIS FOR CHATGPT URL.",
           "Set authentication to No Authentication. Do not add a bearer token in ChatGPT.",
           "Keep the secret MCP URL private. Rotate it with --reset-chatgpt-secret if exposed."

@@ -171,7 +171,7 @@ function relaiWrite(workspace, config, args = {}) {
   if (stage === "abort") {
     const writeId = validateWriteId(args.writeId);
     const existed = clearStagedPayload(config, workspace, writeId);
-    return { ok: true, workspace: workspace.alias, operation: "stagedFullFileWrite:abort", writeId, cleard: existed };
+    return { ok: true, workspace: workspace.alias, operation: "stagedFullFileWrite:abort", writeId, cleared: existed, cleard: existed };
   }
 
   throw new Error("relai_write stage must be one of: direct, start, append, commit, abort.");
@@ -271,7 +271,7 @@ function relaiClear(workspace, config, args = {}) {
   if (expectedSha256 && rawPaths.length !== 1) throw new Error("relai_clear_files expectedSha256 can only be used with one path.");
 
   const operationId = makeOperationId();
-  const cleard = [];
+  const cleared = [];
   const skipped = [];
   const results = [];
 
@@ -288,9 +288,9 @@ function relaiClear(workspace, config, args = {}) {
     if (!stat.isFile()) throw new Error(`relai_clear_files refuses non-file path: ${safe.relativePath}`);
     const oldSha256 = fileSha256(workspace.path, safe.relativePath);
     const shaMismatch = Boolean(expectedSha256 && oldSha256 !== expectedSha256);
-    const item = { path: safe.relativePath, cleard: !dryRun, dryRun, oldSha256, ...(shaMismatch ? { shaMismatch: { expectedSha256, currentSha256: oldSha256 } } : {}) };
+    const item = { path: safe.relativePath, cleared: !dryRun, cleard: !dryRun, dryRun, oldSha256, ...(shaMismatch ? { shaMismatch: { expectedSha256, currentSha256: oldSha256 } } : {}) };
     if (!dryRun) fs.rmSync(safe.absolutePath, { force: true });
-    cleard.push(safe.relativePath);
+    cleared.push(safe.relativePath);
     results.push(item);
   }
 
@@ -298,7 +298,7 @@ function relaiClear(workspace, config, args = {}) {
     id: operationId,
     type: dryRun ? "clear:dryRun" : "clear",
     ok: true,
-    paths: dryRun ? [] : cleard,
+    paths: dryRun ? [] : cleared,
     results
   });
 
@@ -308,9 +308,10 @@ function relaiClear(workspace, config, args = {}) {
     workspace: workspace.alias,
     operationId,
     operation: "clearFiles",
-    changed: !dryRun && cleard.length > 0,
-    changedFiles: dryRun ? [] : cleard,
-    cleard,
+    changed: !dryRun && cleared.length > 0,
+    changedFiles: dryRun ? [] : cleared,
+    cleared,
+    cleard: cleared,
     skipped,
     results
   };
@@ -341,13 +342,13 @@ async function relaiApplyPatch(workspace, config, args = {}) {
   const diff = args.returnDiff === false ? null : await relaiDiff(workspace, config, { maxBytes: args.maxDiffBytes || DEFAULT_MAX_DIFF_BYTES });
   const ok = apply.exitCode === 0 && (!verify || verify.ok);
   appendOperation(config, workspace, { id: operationId, type: "apply_patch", ok, paths: touchedPaths, results: [{ operation: "applyPatch", bytes: patchBytes, touchedPaths, verified: verify ? verify.ok : null }] });
-  return { ok, workspace: workspace.alias, operationId, operation: "applyPatch", fast: true, changedFiles: apply.exitCode === 0 ? touchedPaths : [], touchedPaths, patchBytes, backup, apply: summarizeCommand(apply), ...(verify ? { verify } : {}), ...(diff ? { diff } : {}) };
+  return { ok, workspace: workspace.alias, operationId, operation: "applyPatch", changedFiles: apply.exitCode === 0 ? touchedPaths : [], touchedPaths, patchBytes, backup, apply: summarizeCommand(apply), ...(verify ? { verify } : {}), ...(diff ? { diff } : {}) };
 }
 
 async function relaiApplyArchive(workspace, config, args = {}) {
   assertAggressiveFlow(config, args, "relai_apply_bundle");
-  const archivePath = resolveHostPath(String(args.archivePath || args.path || "").trim());
-  if (!archivePath) throw new Error("relai_apply_bundle requires archivePath pointing to a local zip archive on the MCP host.");
+  const archivePath = resolveHostPath(String(args.archivePath || args.bundlePath || args.path || "").trim());
+  if (!archivePath) throw new Error("relai_apply_bundle requires bundlePath pointing to a local zip archive on the MCP host.");
   if (!fs.existsSync(archivePath)) throw new Error(`Archive not found: ${archivePath}`);
   const stat = fs.statSync(archivePath);
   if (!stat.isFile()) throw new Error(`Archive path is not a file: ${archivePath}`);
@@ -368,8 +369,8 @@ async function relaiApplyArchive(workspace, config, args = {}) {
   const verify = hasRequestedChecks(args) ? await relaiVerify(workspace, config, args) : null;
   const diff = args.returnDiff === false ? null : await relaiDiff(workspace, config, { maxBytes: args.maxDiffBytes || DEFAULT_MAX_DIFF_BYTES });
   const ok = overlay.errors.length === 0 && (!verify || verify.ok);
-  appendOperation(config, workspace, { id: operationId, type: "apply_archive", ok, paths: overlay.changedFiles, results: [{ operation: "applyArchive", archivePath, copied: overlay.copied.length, cleard: overlay.cleard.length, skipped: overlay.skipped.length, verified: verify ? verify.ok : null }] });
-  return { ok, workspace: workspace.alias, operationId, operation: "applyArchive", fast: true, archivePath, archiveBytes: stat.size, backup, changedFiles: overlay.changedFiles, overlay, ...(verify ? { verify } : {}), ...(diff ? { diff } : {}) };
+  appendOperation(config, workspace, { id: operationId, type: "apply_archive", ok, paths: overlay.changedFiles, results: [{ operation: "applyArchive", archivePath, copied: overlay.copied.length, cleared: overlay.cleared.length, cleard: overlay.cleared.length, skipped: overlay.skipped.length, verified: verify ? verify.ok : null }] });
+  return { ok, workspace: workspace.alias, operationId, operation: "applyArchive", archivePath, bundlePath: archivePath, archiveBytes: stat.size, backup, changedFiles: overlay.changedFiles, overlay, ...(verify ? { verify } : {}), ...(diff ? { diff } : {}) };
 }
 
 async function relaiSnapshotArchive(workspace, config, args = {}) {
@@ -382,7 +383,7 @@ async function relaiSnapshotArchive(workspace, config, args = {}) {
   const zipped = await createZipArchive(staging, archivePath, config, args);
   const ok = zipped.ok === true;
   appendOperation(config, workspace, { id: operationId, type: "snapshot_archive", ok, paths: [], results: [{ operation: "snapshotArchive", archivePath, files: copied.files.length, skipped: copied.skipped.length }] });
-  return { ok, workspace: workspace.alias, operationId, operation: "snapshotArchive", archivePath, copied, zip: zipped, bytes: fs.existsSync(archivePath) ? fs.statSync(archivePath).size : 0, note: "Archive is stored on the MCP host. Use relai_apply_bundle with archivePath to overlay it onto a workspace, or retrieve it from this local path." };
+  return { ok, workspace: workspace.alias, operationId, operation: "snapshotArchive", archivePath, copied, zip: zipped, bytes: fs.existsSync(archivePath) ? fs.statSync(archivePath).size : 0, note: "Archive is stored on the MCP host. Use relai_apply_bundle with bundlePath to overlay it onto a workspace, or retrieve it from this local path." };
 }
 
 function assertDirectWriteAllowed(_relativePath, _content) {
@@ -714,7 +715,7 @@ function detectArchiveOverlayRoot(extractedRoot) {
 
 function overlayDirectory(workspaceRoot, sourceRoot, options = {}) {
   const copied = [];
-  const cleard = [];
+  const cleared = [];
   const skipped = [];
   const errors = [];
   const sourceFiles = new Set();
@@ -736,14 +737,14 @@ function overlayDirectory(workspaceRoot, sourceRoot, options = {}) {
       try {
         const safe = resolveSafePath(workspaceRoot, relativePath);
         fs.rmSync(safe.absolutePath, { force: true });
-        cleard.push(safe.relativePath);
+        cleared.push(safe.relativePath);
       } catch (error) {
         errors.push({ path: relativePath, error: error instanceof Error ? error.message : String(error) });
       }
     }, skipped);
   }
 
-  return { copied, cleard, skipped, errors, changedFiles: [...new Set([...copied.map((item) => item.path), ...cleard])] };
+  return { copied, cleared, cleard: cleared, skipped, errors, changedFiles: [...new Set([...copied.map((item) => item.path), ...cleared])] };
 }
 
 function walkArchiveSource(root, prefix, onFile, skipped) {

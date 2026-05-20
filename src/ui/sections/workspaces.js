@@ -290,7 +290,7 @@ async function clearWorkspaceFlow(alias) {
   if (!ok) return;
   const result = await postJson('/api/workspaces', { action: 'clear', alias, confirmClear: true });
   if (result && result.ok) {
-    toast('Workspace cleard: ' + alias, { variant: 'success' });
+    toast('Workspace cleared: ' + alias, { variant: 'success' });
     setTimeout(() => location.reload(), 400);
   } else {
     toast('Could not clear workspace: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });

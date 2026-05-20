@@ -102,12 +102,12 @@ function cleanupPlan(config, args = {}, apply) {
   const targets = [];
   if (includeAudit) collectOldJson(targets, path.dirname(config.auditLogPath), olderThanHours, [path.basename(config.auditLogPath)]);
   const limited = targets.slice(0, clampNumber(args.maxClears || 500, 1, 5000));
-  const cleard = [];
+  const cleared = [];
   if (apply) {
     for (const file of limited) {
       try {
         fs.rmSync(file.path, { force: true });
-        cleard.push(file);
+        cleared.push(file);
       } catch (error) {
         file.error = error instanceof Error ? error.message : String(error);
       }
@@ -119,8 +119,9 @@ function cleanupPlan(config, args = {}, apply) {
     olderThanHours,
     totalCandidates: targets.length,
     candidates: limited,
-    cleard,
-    message: apply ? `Cleard ${cleard.length} file(s).` : "Preview only. Re-run with confirm=true to clear candidates."
+    cleared,
+    cleard: cleared,
+    message: apply ? `Cleared ${cleared.length} file(s).` : "Preview only. Re-run with confirm=true to clear candidates."
   };
 }
 

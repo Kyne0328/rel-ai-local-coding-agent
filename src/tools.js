@@ -24,7 +24,7 @@ const BRIDGE_TOOL_NAMES = [
 ];
 
 const toolSchemas = [
-  tool("relai_repo_snapshot", "Repository Snapshot", "Compact repository overview: file tree, manifests, detected scripts, and project hints.", {
+  tool("relai_repo_snapshot", "Repository Snapshot", "Compact repository overview: file tree, manifests, detected checks, and project hints.", {
     workspace: stringProp(), maxEntries: numberProp(1, 20000), includeFiles: boolProp()
   }, ["workspace"]),
   tool("relai_read", "Read Local Repo Paths", "Batch-read files or directory summaries from the workspace.", {
@@ -122,7 +122,7 @@ async function dispatchTool(config, name, args) {
     case "relai_apply_update":
       return withWorkspace(config, args, (workspace) => relaiApplyPatch(workspace, config, mapCheckArgs({ ...args, patch: args.updateText || args.patch || args.diff })));
     case "relai_apply_bundle":
-      return withWorkspace(config, args, (workspace) => relaiApplyArchive(workspace, config, mapCheckArgs({ ...args, bundlePath: args.bundlePath || args.path, deleteMissing: args.clearMissing })));
+      return withWorkspace(config, args, (workspace) => relaiApplyArchive(workspace, config, mapCheckArgs({ ...args, archivePath: args.archivePath || args.bundlePath || args.path, bundlePath: args.bundlePath || args.archivePath || args.path, deleteMissing: args.clearMissing })));
     case "relai_package_snapshot":
       return withWorkspace(config, args, (workspace) => relaiSnapshotArchive(workspace, config, args));
     case "relai_run_checks":

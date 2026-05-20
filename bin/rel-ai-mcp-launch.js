@@ -126,7 +126,7 @@ async function main() {
   const savedProfile = connection.readConnectionProfile();
   const savedEnv = connection.readLaunchEnv();
   const host = options.host || process.env.REL_AI_MCP_HOST || savedProfile.host || "127.0.0.1";
-  const port = Number(options.port || process.env.REL_AI_MCP_PORT || savedProfile.port || 3333);
+  const port = Number(options.port || process.env.REL_AI_MCP_PORT || 3333);
   let publicUrl = connection.normalizePublicUrl(options.publicUrl || process.env.REL_AI_MCP_PUBLIC_URL || savedEnv.REL_AI_MCP_PUBLIC_URL || savedProfile.publicUrl || "");
   const token = resolveToken(options);
   const chatgptSecret = connection.resolveChatGPTSecret({ reset: options.resetChatgptSecret, value: options.chatgptSecret });

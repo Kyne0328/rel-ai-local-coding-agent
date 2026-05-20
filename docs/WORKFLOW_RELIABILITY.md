@@ -1,39 +1,42 @@
 # Workflow reliability
 
-The MCP has a conservative workflow by default and an opt-in fast flow for Codex-style editing.
+Rel.AI MCP uses one workspace workflow. ChatGPT chooses the change tool by task shape and file size instead of separate tool tiers.
 
 ```text
-1. Snapshot: relai_repo_snapshot
+1. Inspect:  relai_repo_snapshot
 2. Read:     relai_read
-3. Edit:     relai_replace for localized edits, relai_write for whole-file replacement, relai_clear_files for file file clearing
-4. Verify:   relai_run_checks
+3. Change:   relai_replace / relai_write / relai_apply_update / relai_apply_bundle / relai_clear_files
+4. Validate: relai_run_checks
 5. Review:   relai_diff
-6. Rollback: relai_restore_changes
+6. Restore:  relai_restore_changes
 ```
 
-Removed fallback loops are not hidden backdoors. The server should not generate helper scripts, run compressed local checks, or switch to ad-hoc Python/Dart one-liners for repo edits. In fast mode it should use first-class bulk tools instead: `relai_apply_update` for unified diffs and `relai_apply_bundle` for zip overlay.
+Removed fallback loops are not hidden backdoors. The server should not generate helper scripts, switch to ad-hoc one-liners for repo edits, or route around the public workspace tools.
 
-Use the smallest tool that fits the job. `relai_replace` applies exact text replacements inside an existing file and is the preferred conservative path for large or interpolation-heavy source files. `relai_write` performs complete file replacement only; direct mode is for normal files, and staged chunks are reserved for unavoidable whole-file replacement. `relai_clear_files` removes obsolete files without local checks. In fast mode, use `relai_apply_update` or `relai_apply_bundle` instead of generated runners when a change is broad or zip-like.
+## Tool selection
 
+Use the smallest tool that fits the job:
 
-## Fast flow mode
+| Situation | Use |
+| --- | --- |
+| Small localized edit inside an existing file | `relai_replace` |
+| Complete replacement of a small or normal-sized file | direct `relai_write` |
+| Complete replacement of a larger file | staged `relai_write` |
+| Multi-file patch-shaped change | `relai_apply_update` |
+| Prepared file bundle update | `relai_apply_bundle` |
+| Obsolete file removal | `relai_clear_files` |
+| Validation | `relai_run_checks` |
+| Review | `relai_diff` |
+| Restore selected changes | `relai_restore_changes` |
 
-Fast mode is opt-in from Settings > General > Workflow mode. It exposes:
+`relai_repo_snapshot` and `relai_read` return `writeGuidance` so ChatGPT can choose among `exact-replace`, `direct-write`, `staged-write`, `apply-update`, `apply-bundle`, and `clear-file`.
 
-```text
-relai_apply_update      git apply --check + git apply for unified diffs
-relai_apply_bundle    extract local zip and overlay files onto the workspace
-relai_package_snapshot export the current workspace to a zip on the MCP host
-```
+## Validation check behavior
 
-Fast mode is designed for users who commit/stash before asking for changes and want Codex-style speed. It still refuses path traversal, preserves `.git`, skips generated/cache folders, can require a clean git tree, can create a git-stash backup when dirty edits are allowed, runs verification, and returns a diff.
+`relai_run_checks` accepts `check`, `checks`, or `checksText`. These are the preferred public names. Compatibility aliases are still accepted internally for older callers. When no check is provided, it auto-detects sensible validation checks for the workspace.
 
-## Verify command behavior
-
-`relai_run_checks` is intentionally unrestricted inside configured workspaces. When `command`, `commands`, or `commandsText` is provided, Rel.AI runs exactly those local checks. When no command is provided, it auto-detects sensible validation commands.
-
-## Exact replacement and full-file write guards
+## Exact replacement and complete-file write guards
 
 `relai_replace` requires exact current text and optionally an `expectedSha256` from `relai_read`. Ambiguous duplicate matches are refused unless an explicit `occurrence` is provided. This keeps payloads small and deterministic for files like Dart SMS handlers that can trigger connector filtering.
 
-`relai_write` accepts complete file content only. For unavoidable large whole-file replacements, use staged chunks (`stage: start`, `append`, then `commit`) so ChatGPT does not have to approve one oversized request and the server can refuse the risky direct path. If a multiline source file is accidentally collapsed into one long line, the write is rejected instead of damaging formatting.
+`relai_write` accepts complete file content only. For larger whole-file replacements, use staged chunks (`stage: start`, `append`, then `commit`) so ChatGPT does not have to send one oversized request. If a multiline source file is accidentally collapsed into one long line, the write is rejected instead of damaging formatting.
