@@ -131,6 +131,9 @@ async function main() {
   const token = resolveToken(options);
   const chatgptSecret = connection.resolveChatGPTSecret({ reset: options.resetChatgptSecret, value: options.chatgptSecret });
   const tunnelProvider = tunnelManager.normalizeTunnel(options.tunnel || process.env.REL_AI_MCP_TUNNEL || savedEnv.REL_AI_MCP_TUNNEL || "none");
+  // When user explicitly requests a tunnel (--public/--tunnel/etc) without a stable --public-url,
+  // discard the saved URL from the previous session so a fresh tunnel starts instead of reusing a stale one.
+  if (options.tunnel && !options.publicUrl) publicUrl = "";
   const tunnelTimeoutMs = Number(options.tunnelTimeoutMs || process.env.REL_AI_MCP_TUNNEL_TIMEOUT_MS || savedEnv.REL_AI_MCP_TUNNEL_TIMEOUT_MS || 30000);
   const tunnelCommand = options.tunnelCommand || process.env.REL_AI_MCP_TUNNEL_COMMAND || savedEnv.REL_AI_MCP_TUNNEL_COMMAND || "";
 

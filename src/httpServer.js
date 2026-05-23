@@ -60,6 +60,15 @@ function startHttpServer(options = {}) {
     socket.end("HTTP/1.1 400 Bad Request\r\n\r\n");
   });
 
+  server.on("error", (error) => {
+    if (error.code === "EADDRINUSE") {
+      console.error(`[rel-ai-mcp] Port ${port} is already in use. Stop the other process or use --port to pick a different port.`);
+    } else {
+      console.error(`[rel-ai-mcp] Server error: ${error.message}`);
+    }
+    process.exit(1);
+  });
+
   server.listen(port, host, () => {
     const address = server.address();
     const actualPort = address && typeof address === "object" ? address.port : port;
