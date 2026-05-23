@@ -604,16 +604,17 @@ function renderDashboardHtml(options) {
   <aside class="sidebar">
     <div class="brand"><div class="logo"><img src="/public/assets/relai-logo.png" alt="Rel.AI logo"></div><div><strong>Rel.AI MCP</strong><span>workspace control</span></div></div>
     <nav class="nav">
-      <a class="active" href="#home">Home</a>
+      <a href="#home">Home</a>
       <a href="#workspaces">Workspaces</a>
       <a href="#activity">Activity</a>
+      <a href="#tools">Tools</a>
       <a href="#settings">Settings</a>
     </nav>
     <div class="sidebar-note">This dashboard mirrors live MCP state.</div>
   </aside>
   <main id="main" class="main">
     <div class="mobile-nav">
-      <a href="#home">Home</a><a href="#workspaces">Workspaces</a><a href="#activity">Activity</a><a href="#settings">Settings</a>
+      <a href="#home">Home</a><a href="#workspaces">Workspaces</a><a href="#activity">Activity</a><a href="#tools">Tools</a><a href="#settings">Settings</a>
     </div>
     <header class="topbar">
       <div class="title-wrap">
@@ -627,89 +628,8 @@ function renderDashboardHtml(options) {
         <button id="refreshBtn" type="button">Refresh</button>
         <button class="secondary" id="liveBtn">Start live</button>
         <span class="section-action" id="lastUpdated">Server-rendered</span>
-        <button class="secondary" id="rawToggleBtn">View API response</button>
       </div>
     </header>
-
-    <section class="section" id="overview">
-      <div class="section-head"><div><h2>Overview</h2><p>ChatGPT local repo bridge overview.</p></div></div>
-      <div class="overview-grid" id="metrics"></div>
-    </section>
-
-    <section class="layout-grid" id="workspaces">
-      <div class="card">
-        <div class="card-head"><h3>Workspaces</h3><span class="section-action" id="workspaceCount">0 configured</span></div>
-        <div class="card-body"><div class="workspace-grid" id="workspacesList"></div></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><h3>Server configuration</h3><span class="status-pill" id="profilePill">profile</span></div>
-        <div class="card-body"><div class="list" id="configList"></div></div>
-      </div>
-    </section>
-
-    <section class="layout-grid" id="activity">
-      <div class="card">
-        <div class="card-head"><h3>Recent activity</h3><span class="section-action" id="activityCount">0 events</span></div>
-        <div class="card-body"><div class="table-wrap"><table class="data-table"><caption class="sr-only">Recent audit activity</caption><thead><tr><th scope="col">Time</th><th scope="col">Tool</th><th scope="col">Workspace</th><th scope="col">Status</th><th scope="col">Message</th></tr></thead><tbody id="activityRows"></tbody></table></div></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><h3>Live console</h3><span class="section-action">polling-safe view</span></div>
-        <div class="card-body"><div class="terminal" id="terminal"><span class="prompt">$</span> relai dashboard<br><span class="warn">…</span> waiting for data</div></div>
-      </div>
-    </section>
-
-    <section class="columns-3">
-      <div class="card">
-        <div class="card-head"><h3>Sessions</h3><span class="section-action" id="sessionCount">0</span></div>
-        <div class="card-body"><div class="list" id="sessionsList"></div></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><h3>Jobs</h3><span class="section-action" id="jobCount">0</span></div>
-        <div class="card-body"><div class="list" id="jobsList"></div></div>
-      </div>
-    </section>
-
-    <section class="card" id="connector">
-      <div class="card-head"><h3>ChatGPT connector setup</h3><span class="status-pill" id="connectorStatus">checking</span></div>
-      <div class="card-body connector-grid">
-        <div class="setup-steps">
-          <div class="step"><span class="step-num">1</span><div>Run <code>npm run oneclick -- --public</code> for a quick tunnel, or <code>npm run oneclick -- --public-url https://your-domain.example.com</code> for a stable URL.</div></div>
-          <div class="step"><span class="step-num">2</span><div>Use the printed <code>/mcp/&lt;secret&gt;</code> URL as your MCP server in ChatGPT.</div></div>
-          <div class="step"><span class="step-num">3</span><div>In ChatGPT, go to <strong>Settings → Connectors → Add MCP server</strong> and paste the URL.</div></div>
-          <div class="step"><span class="step-num">4</span><div>Set authentication to <strong>No Authentication</strong>. Keep the bearer token only for local dashboard access.</div></div>
-        </div>
-        <pre class="copy-box" id="connectorBox">Loading connector profile…</pre>
-      </div>
-    </section>
-
-    <section class="columns-2" id="diagnostics">
-      <div class="card">
-        <div class="card-head"><h3>Session diff</h3><span class="section-action">safe read-only endpoint</span></div>
-        <div class="card-body utility-grid">
-          <div class="field-row"><label for="workspace" class="sr-only">Workspace alias</label><input id="workspace" placeholder="workspace alias" value=""></div>
-          <div class="field-row"><label for="sessionId" class="sr-only">Session ID</label><input id="sessionId" placeholder="session id"><button disabled title="Open Settings Diagnostics for this action">Load diff</button></div>
-        </div>
-        <div class="card-body diff-panel"><pre id="diffOut">No diff loaded.</pre></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><h3>Maintenance views</h3><span class="section-action">no write actions</span></div>
-        <div class="card-body">
-          <div class="setup-steps">
-            <button class="secondary" disabled title="Open Settings Diagnostics for this action">Load health monitor</button>
-            <button class="secondary" disabled title="Open Settings Diagnostics for this action">Load readiness</button>
-            <button class="secondary" disabled title="Open Settings Diagnostics for this action">Load audit tail</button>
-          </div>
-        </div>
-        <div class="card-body diff-panel"><pre id="maintenanceOut">Choose a diagnostic view.</pre></div>
-      </div>
-    </section>
-
-    <section class="raw-panel" id="rawPanel">
-      <div class="card">
-        <div class="card-head"><h3>Raw dashboard payload</h3><button class="secondary" id="rawCloseBtn">Close</button></div>
-        <div class="card-body"><pre id="rawOut">No data yet.</pre></div>
-      </div>
-    </section>
   </main>
 </div>
 <script type="application/json" id="initialDashboardData">${initialDashboardJson}</script>

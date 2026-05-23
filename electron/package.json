@@ -24,17 +24,24 @@
       {
         "from": "../src",
         "to": "src",
-        "filter": ["**/*.js"]
+        "filter": [
+          "**/*.js",
+          "**/*.css"
+        ]
       },
       {
         "from": "../bin",
         "to": "bin",
-        "filter": ["**/*.js"]
+        "filter": [
+          "**/*.js"
+        ]
       },
       {
         "from": "../public",
         "to": "public",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "../package.json",
@@ -42,7 +49,10 @@
       }
     ],
     "win": {
-      "target": ["nsis", "portable"],
+      "target": [
+        "nsis",
+        "portable"
+      ],
       "icon": "build/icon.ico"
     },
     "nsis": {

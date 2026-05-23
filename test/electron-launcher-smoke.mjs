@@ -41,6 +41,22 @@ assert.equal(
   'https://my-domain.ngrok-free.dev/mcp/has%20space'
 );
 
+const electronPkg = JSON.parse(fs.readFileSync(path.join(root, 'electron', 'package.json'), 'utf8'));
+const srcResource = electronPkg.build.extraResources.find((item) => item.from === '../src');
+assert.ok(srcResource, 'electron build must bundle src resources');
+assert.ok(srcResource.filter.includes('**/*.js'), 'electron build must bundle src JavaScript');
+assert.ok(srcResource.filter.includes('**/*.css'), 'electron build must bundle src UI CSS imported by public/dashboard.css');
+
+const dashboardJs = fs.readFileSync(path.join(root, 'public', 'dashboard.js'), 'utf8');
+assert.ok(
+  dashboardJs.includes('const workspaceList = storeData.config && Array.isArray(storeData.config.workspaces) ? storeData.config.workspaces : [];'),
+  'dashboard boot must normalize workspace actions before calling map'
+);
+assert.ok(
+  !dashboardJs.includes('Array.isArray(storeData.config && storeData.config.workspaces ? storeData.config.workspaces : []).map'),
+  'dashboard boot must not call .map on the boolean returned by Array.isArray'
+);
+
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-gui-test-'));
 process.env.REL_AI_MCP_STATE_DIR = stateDir;
 

@@ -78,7 +78,8 @@ async function boot() {
     { label: 'Toggle live mode', category: 'Actions', action: _toggleLive },
     { label: 'Copy dashboard token', category: 'Actions', action: () => { if (getToken()) navigator.clipboard.writeText(getToken()).catch(() => {}); } },
   ];
-  const wsActions = Array.isArray(storeData.config && storeData.config.workspaces ? storeData.config.workspaces : []).map(ws => ({
+  const workspaceList = storeData.config && Array.isArray(storeData.config.workspaces) ? storeData.config.workspaces : [];
+  const wsActions = workspaceList.map(ws => ({
     label: 'Switch to workspace: ' + ws.alias,
     category: 'Workspaces',
     action: () => { const el = document.getElementById('workspace'); if (el) el.value = ws.alias; }
@@ -130,8 +131,6 @@ function _wireTopControls() {
   if (liveBtn) liveBtn.onclick = _toggleLive;
   const refreshBtn = document.getElementById('refreshBtn');
   if (refreshBtn) refreshBtn.onclick = _doRefresh;
-  const rawBtn = document.getElementById('rawToggleBtn');
-  if (rawBtn) rawBtn.style.display = 'none';
 }
 
 function _renderCurrentSection(main, id, sections) {
