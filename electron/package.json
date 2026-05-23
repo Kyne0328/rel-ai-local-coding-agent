@@ -1,0 +1,53 @@
+{
+  "name": "rel-ai-mcp-launcher",
+  "version": "0.11.35",
+  "private": true,
+  "main": "main.js",
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.relai.mcp",
+    "productName": "Rel.AI MCP",
+    "directories": {
+      "output": "../dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "launcher-utils.js",
+      "renderer/**",
+      "build/**"
+    ],
+    "extraResources": [
+      {
+        "from": "../src",
+        "to": "src",
+        "filter": ["**/*.js"]
+      },
+      {
+        "from": "../bin",
+        "to": "bin",
+        "filter": ["**/*.js"]
+      },
+      {
+        "from": "../public",
+        "to": "public",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../package.json",
+        "to": "package.json"
+      }
+    ],
+    "win": {
+      "target": ["nsis", "portable"],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false
+    }
+  }
+}

@@ -66,6 +66,7 @@ function startHttpServer(options = {}) {
     } else {
       console.error(`[rel-ai-mcp] Server error: ${error.message}`);
     }
+    if (options.exitOnError === false) return;
     process.exit(1);
   });
 

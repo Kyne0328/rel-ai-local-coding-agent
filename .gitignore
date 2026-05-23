@@ -1,3 +1,6 @@
 #claude
 /.claude
 /docs/superpowers
+.superpowers
+/electron/node_modules
+/dist

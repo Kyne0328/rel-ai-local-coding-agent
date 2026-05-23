@@ -37,7 +37,11 @@
     "test:oneclick": "node test/oneclick-args-smoke.mjs",
     "test:compat": "node test/chatgpt-local-compat-smoke.mjs",
     "test:public-workflow": "node test/workflow-smoke.mjs",
-    "test:connector-wording": "node test/connector-wording-smoke.mjs"
+    "test:connector-wording": "node test/connector-wording-smoke.mjs",
+    "electron:dev": "cd electron && npx electron .",
+    "electron:build": "cd electron && npx electron-builder --win --dir",
+    "electron:dist": "cd electron && npx electron-builder --win",
+    "test:electron": "node test/electron-launcher-smoke.mjs"
   },
   "keywords": [
     "mcp",

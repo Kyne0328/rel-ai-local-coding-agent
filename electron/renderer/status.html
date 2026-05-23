@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rel.AI MCP</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0d1117;
+    color: #e0e0e0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .header { background: #161622; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #333; flex-shrink: 0; }
+  .header-left { display: flex; align-items: center; gap: 8px; }
+  .header-title { font-weight: 600; font-size: 13px; }
+  .header-right { display: flex; align-items: center; gap: 8px; }
+  .version { font-size: 10px; color: #555; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #555; }
+  .status-dot.running { background: #22c55e; }
+  .body { padding: 12px 14px; flex: 1; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .card { background: #111; border-radius: 6px; padding: 8px 10px; }
+  .card-label { font-size: 9px; color: #888; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .card-status { font-size: 11px; font-weight: 600; }
+  .card-sub { font-size: 9px; color: #555; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .running-text { color: #22c55e; }
+  .connecting-text { color: #fbbf24; }
+  .failed-text { color: #f87171; }
+  .stopped-text { color: #777; }
+  .copy-box { background: #0d1f0d; border: 1px solid #166534; border-radius: 6px; padding: 10px 12px; }
+  .copy-label { font-size: 9px; color: #888; margin-bottom: 4px; letter-spacing: 0.06em; text-transform: uppercase; }
+  .copy-url { font-size: 10px; color: #60a5fa; word-break: break-all; margin-bottom: 8px; font-family: monospace; min-height: 28px; }
+  .copy-url.empty { color: #555; font-style: italic; }
+  .error-line { color: #f87171; font-size: 10px; min-height: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  button { cursor: pointer; font-family: inherit; }
+  .btn-copy { width: 100%; background: #3b82f6; border: none; border-radius: 4px; color: #fff; padding: 6px; font-size: 11px; }
+  .btn-copy:hover { background: #2563eb; }
+  .btn-copy:disabled { background: #1e2e4a; color: #555; cursor: not-allowed; }
+  .actions { display: flex; gap: 6px; margin-top: auto; }
+  .btn-action { flex: 1; background: #1e1e2e; border: 1px solid #333; border-radius: 4px; color: #aaa; padding: 6px; font-size: 10px; }
+  .btn-action:hover { background: #2a2a3e; }
+  .btn-stop { background: #7f1d1d; border: none; color: #fca5a5; }
+  .btn-stop:hover { background: #991b1b; }
+  .btn-start { background: #14532d; border: none; color: #86efac; font-weight: 600; }
+  .btn-start:hover { background: #166534; }
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="header-left">
+    <span>Rel.AI</span>
+    <span class="header-title">MCP Launcher</span>
+  </div>
+  <div class="header-right">
+    <span class="version" id="appVersion">v0.11.35</span>
+    <div class="status-dot" id="headerDot"></div>
+  </div>
+</div>
+
+<div class="body">
+  <div class="cards">
+    <div class="card">
+      <div class="card-label">MCP Server</div>
+      <div class="card-status stopped-text" id="serverStatus">Stopped</div>
+      <div class="card-sub" id="serverSub">127.0.0.1</div>
+    </div>
+    <div class="card">
+      <div class="card-label">ngrok tunnel</div>
+      <div class="card-status stopped-text" id="tunnelStatus">Offline</div>
+      <div class="card-sub" id="tunnelSub">static domain</div>
+    </div>
+  </div>
+
+  <div class="copy-box">
+    <div class="copy-label">Copy this for ChatGPT</div>
+    <div class="copy-url empty" id="mcpUrl">Waiting for tunnel...</div>
+    <button class="btn-copy" id="copyBtn" disabled>Copy MCP URL</button>
+  </div>
+
+  <div class="error-line" id="errorLine"></div>
+
+  <div class="actions">
+    <button class="btn-action" id="dashboardBtn">Dashboard</button>
+    <button class="btn-action" id="settingsBtn">Settings</button>
+    <button class="btn-action btn-stop" id="stopBtn">Stop</button>
+    <button class="btn-action btn-start" id="startBtn" style="display:none">Start</button>
+  </div>
+</div>
+
+<script src="status.js"></script>
+</body>
+</html>

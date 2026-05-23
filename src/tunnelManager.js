@@ -115,7 +115,7 @@ function extractPublicUrl(text, pattern) {
   return genericMatch ? genericMatch[0].replace(/[).,;]+$/, "") : "";
 }
 
-async function startTunnel({ provider = "none", port = 3333, localUrl = "", command = "", timeoutMs = 30000, onLog = () => {} } = {}) {
+async function startTunnel({ provider = "none", port = 3333, localUrl = "", command = "", timeoutMs = 30000, onLog = () => {}, onProcess = () => {} } = {}) {
   const normalized = normalizeTunnel(provider);
   if (normalized === "none") return { ok: false, provider: "none", publicUrl: "", process: null, skipped: true };
 
@@ -123,7 +123,7 @@ async function startTunnel({ provider = "none", port = 3333, localUrl = "", comm
   const errors = [];
   for (const candidate of providers) {
     try {
-      const result = await startOneTunnel(candidate, { port, localUrl, command, timeoutMs, onLog });
+      const result = await startOneTunnel(candidate, { port, localUrl, command, timeoutMs, onLog, onProcess });
       if (result.ok) return result;
       errors.push(`${candidate}: ${result.error || "no public URL detected"}`);
     } catch (error) {
@@ -133,20 +133,21 @@ async function startTunnel({ provider = "none", port = 3333, localUrl = "", comm
   return { ok: false, provider: normalized, publicUrl: "", process: null, error: errors.join("; ") };
 }
 
-async function startOneTunnel(provider, { port, localUrl, command, timeoutMs, onLog }) {
+async function startOneTunnel(provider, { port, localUrl, command, timeoutMs, onLog, onProcess }) {
   const plans = providerPlans(provider, { port, localUrl, command });
   const errors = [];
   for (const plan of plans) {
-    const result = await startProcessTunnel(plan, { timeoutMs, onLog });
+    const result = await startProcessTunnel(plan, { timeoutMs, onLog, onProcess });
     if (result.ok) return result;
     errors.push(`${plan.command}: ${result.error || "no public URL detected"}`);
   }
   return { ok: false, provider, publicUrl: "", process: null, error: errors.join("; ") };
 }
 
-function startProcessTunnel(plan, { timeoutMs, onLog }) {
+function startProcessTunnel(plan, { timeoutMs, onLog, onProcess }) {
   return new Promise((resolve) => {
     const child = spawn(plan.command, plan.args, { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    if (typeof onProcess === "function") onProcess(child, plan.provider);
     let settled = false;
     let buffer = "";
     let lastProbe = 0;

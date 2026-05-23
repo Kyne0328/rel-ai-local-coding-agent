@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rel.AI MCP - Setup</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0d1117;
+    color: #e0e0e0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .wizard { width: 420px; padding: 0 24px 24px; }
+  .progress { display: flex; gap: 6px; margin-bottom: 24px; }
+  .progress-step { flex: 1; height: 4px; background: #333; border-radius: 2px; transition: background 0.2s; }
+  .progress-step.done { background: #3b82f6; }
+  .step { display: none; }
+  .step.active { display: block; }
+  h1 { font-size: 20px; margin-bottom: 6px; }
+  h2 { font-size: 16px; margin-bottom: 6px; }
+  .subtitle { font-size: 12px; color: #888; margin-bottom: 20px; line-height: 1.5; }
+  label { font-size: 11px; color: #888; display: block; margin-bottom: 4px; }
+  input[type=text], input[type=number] {
+    width: 100%; padding: 8px 10px; background: #111; border: 1px solid #444;
+    border-radius: 4px; color: #e0e0e0; font-size: 13px; margin-bottom: 6px;
+  }
+  input:focus { outline: none; border-color: #3b82f6; }
+  .hint { font-size: 10px; color: #666; margin-bottom: 16px; line-height: 1.5; min-height: 16px; }
+  .hint code { color: #aaa; background: #1a1a1a; padding: 1px 4px; border-radius: 2px; }
+  .token-box { background: #111; border: 1px solid #333; border-radius: 4px;
+    padding: 8px 10px; font-size: 12px; color: #60a5fa; font-family: monospace;
+    word-break: break-all; margin-bottom: 8px; min-height: 34px; }
+  .btn-row { display: flex; gap: 8px; margin-bottom: 8px; }
+  .nav { display: flex; justify-content: space-between; margin-top: 20px; }
+  button { padding: 7px 18px; border: none; border-radius: 4px; font-size: 12px;
+    cursor: pointer; font-family: inherit; }
+  .btn-primary { background: #3b82f6; color: #fff; }
+  .btn-primary:hover { background: #2563eb; }
+  .btn-secondary { background: #1e1e2e; border: 1px solid #333; color: #aaa; }
+  .btn-secondary:hover { background: #2a2a3e; }
+  .btn-success { background: #22c55e; color: #000; font-weight: 600; font-size: 14px; padding: 10px 28px; }
+  .btn-success:hover { background: #16a34a; }
+  .error { font-size: 11px; color: #f87171; margin-top: 4px; min-height: 16px; }
+  .success { font-size: 11px; color: #22c55e; margin-top: 4px; min-height: 16px; }
+  .summary-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #1e1e2e; font-size: 12px; }
+  .summary-row:last-child { border-bottom: none; }
+  .summary-key { color: #888; }
+  .summary-val { color: #e0e0e0; font-family: monospace; font-size: 11px; max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .summary-box { background: #111; border-radius: 6px; padding: 4px 12px; margin-bottom: 20px; }
+  .welcome-icon { font-size: 40px; text-align: center; margin: 16px 0 12px; }
+  .welcome-center { text-align: center; }
+</style>
+</head>
+<body>
+<div class="wizard">
+  <div class="progress">
+    <div class="progress-step" id="p1"></div>
+    <div class="progress-step" id="p2"></div>
+    <div class="progress-step" id="p3"></div>
+    <div class="progress-step" id="p4"></div>
+    <div class="progress-step" id="p5"></div>
+  </div>
+
+  <div class="step active" id="step1">
+    <div class="welcome-icon">link</div>
+    <div class="welcome-center">
+      <h1>Rel.AI MCP Launcher</h1>
+      <p class="subtitle">Connect ChatGPT to your local repos through a stable ngrok domain. This wizard saves the existing Rel.AI MCP config files.</p>
+      <button class="btn-primary" id="startWizardBtn">Get Started &rarr;</button>
+    </div>
+  </div>
+
+  <div class="step" id="step2">
+    <h2>Local server port</h2>
+    <p class="subtitle">Port the MCP server listens on. Default 3333 works for most setups.</p>
+    <label for="portInput">Port number</label>
+    <input type="number" id="portInput" value="3333" min="1024" max="65535">
+    <div class="hint" id="portHint"></div>
+    <div class="nav">
+      <button class="btn-secondary" data-go="1">&larr; Back</button>
+      <button class="btn-primary" id="validatePortBtn">Next &rarr;</button>
+    </div>
+  </div>
+
+  <div class="step" id="step3">
+    <h2>Dashboard auth token</h2>
+    <p class="subtitle">This protects the local dashboard. ChatGPT uses the secret embedded in the MCP URL instead.</p>
+    <label>Your token</label>
+    <div class="token-box" id="tokenBox"></div>
+    <div class="btn-row">
+      <button class="btn-secondary" id="copyTokenBtn">Copy</button>
+      <button class="btn-secondary" id="regenTokenBtn">Regenerate</button>
+    </div>
+    <div class="nav">
+      <button class="btn-secondary" data-go="2">&larr; Back</button>
+      <button class="btn-primary" data-go="4">Next &rarr;</button>
+    </div>
+  </div>
+
+  <div class="step" id="step4">
+    <h2>ngrok static domain</h2>
+    <p class="subtitle">Enter the permanent domain from your ngrok dashboard, without https://.</p>
+    <label for="domainInput">Domain</label>
+    <input type="text" id="domainInput" placeholder="your-name.ngrok-free.dev" autocomplete="off" spellcheck="false">
+    <div class="hint">Launcher will run: <code id="ngrokCmdPreview">ngrok http --url=&lt;domain&gt; 3333 --log=stdout</code></div>
+    <div class="error" id="domainError"></div>
+    <div class="nav">
+      <button class="btn-secondary" data-go="3">&larr; Back</button>
+      <button class="btn-primary" id="validateDomainBtn">Next &rarr;</button>
+    </div>
+  </div>
+
+  <div class="step" id="step5">
+    <h2 style="text-align:center;margin-bottom:16px;">Ready</h2>
+    <div class="summary-box" id="summaryBox"></div>
+    <div style="text-align:center;">
+      <button class="btn-success" id="launchBtn">Launch Server</button>
+      <p class="hint" style="margin-top:10px;">Config saved. Next launch skips this wizard.</p>
+      <div class="error" id="launchError"></div>
+    </div>
+  </div>
+</div>
+<script src="wizard.js"></script>
+</body>
+</html>
