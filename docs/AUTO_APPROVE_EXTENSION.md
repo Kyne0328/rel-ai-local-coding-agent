@@ -4,14 +4,11 @@ Rel.AI MCP now uses a Chrome extension only for optional ChatGPT app-request app
 
 Author: [@Kyne0328](https://github.com/Kyne0328)
 
-## Required double opt-in
+## Enable/disable control
 
-Approval assistance runs only when both toggles are enabled:
+The Chrome extension popup is the only enable/disable control. The dashboard does not need to be enabled.
 
-1. Dashboard setting: **Settings -> General -> ChatGPT web app-request auto-approve extension**.
-2. Chrome extension popup: **Enable in this browser**.
-
-Either side disables automation.
+To enable approval assistance, open the Chrome extension popup and toggle **Enable in this browser**. To stop, toggle it off. No dashboard setting is required.
 
 ## Install
 

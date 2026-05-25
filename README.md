@@ -20,7 +20,7 @@ The goal is simple: I want the reasoning power of ChatGPT on the web, but I stil
 ChatGPT asks -> Rel.AI MCP inspects, changes, validates, and reviews locally -> I inspect the diff -> I keep or restore it
 ```
 
-The default conservative workflow is intentionally small:
+The default standard workflow is intentionally small:
 
 ```text
 relai_repo_snapshot -> relai_read -> relai_replace/relai_write/relai_clear_files -> relai_run_checks -> relai_diff -> relai_restore_changes
@@ -279,12 +279,9 @@ chrome://extensions
 -> select public/extensions/chrome-auto-approve
 ```
 
-Then enable it in two places:
+Enable it using the Chrome extension popup toggle. The dashboard does not need to be enabled.
 
-1. Dashboard setting: **ChatGPT web app-request auto-approve**
-2. Chrome extension popup toggle
-
-This is meant to reduce repetitive approval clicks during supervised local work. When enabled, it can approve Rel.AI MCP requests for repo reads, writes, verifies, diffs, browser checks, and resets. Use it only while you are actively working, then turn it off when you are done.
+This is meant to reduce repetitive approval clicks during supervised local work. When enabled, it can approve Rel.AI MCP requests for repo reads, writes, run checks, diffs, browser checks, and restores. Use it only while you are actively working, then turn it off when you are done.
 
 The previous userscript workflow was removed because background-tab behavior and selector reliability were not good enough.
 
@@ -403,7 +400,7 @@ Typical loop:
 inspect -> read -> change -> validate -> review -> restore only if needed
 ```
 
-For large or interpolation-heavy files, prefer `relai_replace` for focused edits. Use staged `relai_write` only when the entire file genuinely needs replacement. For multi-file patch-shaped changes, use `relai_apply_update`. For prepared archives on the MCP host, use `relai_apply_bundle`.
+For large or interpolation-heavy files, prefer `relai_replace` for focused edits. Use staged `relai_write` only when the entire file genuinely needs replacement. For multi-file patch-shaped changes, use `relai_apply_update`. For prepared bundles on the MCP host, use `relai_apply_bundle`.
 
 ---
 

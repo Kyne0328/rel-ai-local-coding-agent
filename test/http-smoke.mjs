@@ -90,7 +90,7 @@ if (!extensionManifestResponse.ok || !extensionManifest.includes('Rel.AI MCP Aut
 }
 
 const extensionDocs = await fetch(`http://127.0.0.1:${port}/public/docs/AUTO_APPROVE_EXTENSION.md`).then((response) => response.text());
-if (!extensionDocs.includes('Required double opt-in')) {
+if (!extensionDocs.includes('Enable/disable control')) {
   throw new Error('auto-approve extension docs were not served');
 }
 
