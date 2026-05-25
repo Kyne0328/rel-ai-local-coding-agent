@@ -41,7 +41,8 @@
     "electron:dev": "cd electron && npx electron .",
     "electron:build": "cd electron && npx electron-builder --win --dir",
     "electron:dist": "cd electron && npx electron-builder --win",
-    "test:electron": "node test/electron-launcher-smoke.mjs"
+    "test:electron": "node test/electron-launcher-smoke.mjs",
+    "test:http-auth": "node test/http-auth-smoke.mjs"
   },
   "keywords": [
     "mcp",

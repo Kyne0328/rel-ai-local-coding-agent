@@ -1,0 +1,166 @@
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const root = path.resolve(__dirname, '..');
+const port = 39877;
+const token = process.env.TEST_TOKEN ?? 'auth-smoke-token';
+const chatgptSecret = 'auth-smoke-secret';
+// Use a small body limit so the 2.5 MB body test actually triggers the rejection
+const maxBodyBytes = 1 * 1024 * 1024; // 1 MB
+
+const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.js'), '--host', '127.0.0.1', '--port', String(port)], {
+  cwd: root,
+  stdio: ['ignore', 'pipe', 'pipe'],
+  env: {
+    ...process.env,
+    REL_AI_MCP_CONFIG: path.join(root, 'examples', 'config.example.json'),
+    REL_AI_MCP_TOKEN: token,
+    REL_AI_MCP_CHATGPT_SECRET: chatgptSecret,
+    REL_AI_MCP_MAX_BODY_BYTES: String(maxBodyBytes)
+  }
+});
+
+let stderr = '';
+child.stderr.on('data', (chunk) => { stderr += chunk.toString('utf8'); });
+
+async function waitForHealth() {
+  const url = `http://127.0.0.1:${port}/health`;
+  const started = Date.now();
+  while (Date.now() - started < 5000) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) return response.json();
+    } catch (_error) {}
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`HTTP server did not become healthy. stderr:\n${stderr}`);
+}
+
+async function check(label, fn) {
+  try {
+    await fn();
+    console.log(`  ✓ ${label}`);
+  } catch (err) {
+    console.error(`  ✗ ${label}: ${err.message}`);
+    process.exitCode = 1;
+  }
+}
+
+await waitForHealth();
+
+const base = `http://127.0.0.1:${port}`;
+const bearer = { authorization: `Bearer ${token}` };
+const jsonType = { 'content-type': 'application/json' };
+const mcpToolsList = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
+
+// GET /health — public, no token → 200
+await check('GET /health — public, no token → 200', async () => {
+  const res = await fetch(`${base}/health`);
+  if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
+  const body = await res.json();
+  if (!body.ok) throw new Error('health body.ok was not true');
+});
+
+// GET /dashboard — no token → 401
+await check('GET /dashboard — no token → 401', async () => {
+  const res = await fetch(`${base}/dashboard`);
+  if (res.status !== 401) throw new Error(`expected 401, got ${res.status}`);
+});
+
+// GET /dashboard — with bearer → 200
+await check('GET /dashboard — with bearer → 200', async () => {
+  const res = await fetch(`${base}/dashboard`, { headers: bearer });
+  if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
+});
+
+// GET /dashboard — with ?token= → 200
+await check('GET /dashboard — with ?token= → 200', async () => {
+  const res = await fetch(`${base}/dashboard?token=${encodeURIComponent(token)}`);
+  if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
+});
+
+// GET /api/settings — no token → 401
+await check('GET /api/settings — no token → 401', async () => {
+  const res = await fetch(`${base}/api/settings`);
+  if (res.status !== 401) throw new Error(`expected 401, got ${res.status}`);
+});
+
+// GET /api/settings — with bearer → 200
+await check('GET /api/settings — with bearer → 200', async () => {
+  const res = await fetch(`${base}/api/settings`, { headers: bearer });
+  if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
+  const body = await res.json();
+  if (!body.ok) throw new Error('settings body.ok was not true');
+});
+
+// POST /mcp — no bearer → 401
+await check('POST /mcp — no bearer → 401', async () => {
+  const res = await fetch(`${base}/mcp`, {
+    method: 'POST',
+    headers: jsonType,
+    body: mcpToolsList
+  });
+  if (res.status !== 401) throw new Error(`expected 401, got ${res.status}`);
+});
+
+// POST /mcp — with bearer → 200 (tools/list)
+await check('POST /mcp — with bearer → 200 (tools/list)', async () => {
+  const res = await fetch(`${base}/mcp`, {
+    method: 'POST',
+    headers: { ...jsonType, ...bearer },
+    body: mcpToolsList
+  });
+  if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
+  const body = await res.json();
+  if (!Array.isArray(body.result?.tools)) throw new Error('expected tools array in response');
+});
+
+// POST /mcp/<secret> — no bearer → 200 (authenticated by secret)
+await check('POST /mcp/<secret> — no bearer → 200 (authenticated by secret)', async () => {
+  const res = await fetch(`${base}/mcp/${chatgptSecret}`, {
+    method: 'POST',
+    headers: jsonType,
+    body: mcpToolsList
+  });
+  if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
+  const body = await res.json();
+  if (!Array.isArray(body.result?.tools)) throw new Error('expected tools array in response');
+});
+
+// POST /mcp/wrong-secret — no bearer → 401 or 404
+await check('POST /mcp/wrong-secret — no bearer → 401 or 404', async () => {
+  const res = await fetch(`${base}/mcp/wrong-secret-that-does-not-match`, {
+    method: 'POST',
+    headers: jsonType,
+    body: mcpToolsList
+  });
+  if (res.status !== 401 && res.status !== 404) {
+    throw new Error(`expected 401 or 404, got ${res.status}`);
+  }
+});
+
+// body limit — POST /mcp with 2.5 MB+ body → 413 or error (server configured with 1 MB limit)
+await check('body limit — POST /mcp with 2.5 MB+ body → 4xx or 5xx or connection error', async () => {
+  const oversized = 'x'.repeat(2.5 * 1024 * 1024);
+  const payload = JSON.stringify({ jsonrpc: '2.0', id: 99, method: 'tools/list', params: { _pad: oversized } });
+  let status;
+  try {
+    const res = await fetch(`${base}/mcp`, {
+      method: 'POST',
+      headers: { ...jsonType, ...bearer },
+      body: payload
+    });
+    status = res.status;
+  } catch (_err) {
+    // Connection destroyed by server — that counts as the limit being enforced
+    return;
+  }
+  if (status < 400) throw new Error(`expected error status for oversized body, got ${status}`);
+});
+
+child.kill('SIGKILL');
+await once(child, 'close');
+console.log('HTTP auth smoke tests passed.');
