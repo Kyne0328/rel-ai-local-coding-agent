@@ -691,33 +691,45 @@ function resolveHostPath(value) {
   return path.resolve(text);
 }
 
+function quotePowerShell(value) {
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
+
+function buildZipCommand(platform, sourceDir, archivePath) {
+  if (platform === "win32") {
+    return {
+      exe: "powershell.exe",
+      args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+        `Compress-Archive -Path ${quotePowerShell(path.join(sourceDir, "*"))} -DestinationPath ${quotePowerShell(archivePath)} -Force`]
+    };
+  }
+  return { exe: "zip", args: ["-qr", archivePath, "."], cwd: sourceDir };
+}
+
+function buildUnzipCommand(platform, archivePath, destination) {
+  if (platform === "win32") {
+    return {
+      exe: "powershell.exe",
+      args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+        `Expand-Archive -LiteralPath ${quotePowerShell(archivePath)} -DestinationPath ${quotePowerShell(destination)} -Force`]
+    };
+  }
+  return { exe: "unzip", args: ["-q", archivePath, "-d", destination] };
+}
+
 async function extractZipArchive(archivePath, destination, config, args) {
   const timeout = clampNumber(args.timeoutMs, 1000, 86400000, 120000);
-  let result;
-  if (process.platform === "win32") {
-    const command = `Expand-Archive -LiteralPath ${quotePowerShell(archivePath)} -DestinationPath ${quotePowerShell(destination)} -Force`;
-    result = await runProcess("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command], { cwd: destination, timeout }, config);
-  } else {
-    result = await runProcess("unzip", ["-q", archivePath, "-d", destination], { cwd: destination, timeout }, config);
-  }
+  const cmd = buildUnzipCommand(process.platform, archivePath, destination);
+  const result = await runProcess(cmd.exe, cmd.args, { cwd: cmd.cwd || destination, timeout }, config);
   return { ok: result.exitCode === 0, ...summarizeCommand(result) };
 }
 
 async function createZipArchive(sourceDir, archivePath, config, args) {
   const timeout = clampNumber(args.timeoutMs, 1000, 86400000, 120000);
   fs.mkdirSync(path.dirname(archivePath), { recursive: true, mode: 0o700 });
-  let result;
-  if (process.platform === "win32") {
-    const command = `Compress-Archive -Path ${quotePowerShell(path.join(sourceDir, "*"))} -DestinationPath ${quotePowerShell(archivePath)} -Force`;
-    result = await runProcess("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command], { cwd: sourceDir, timeout }, config);
-  } else {
-    result = await runProcess("zip", ["-qr", archivePath, "."], { cwd: sourceDir, timeout }, config);
-  }
+  const cmd = buildZipCommand(process.platform, sourceDir, archivePath);
+  const result = await runProcess(cmd.exe, cmd.args, { cwd: cmd.cwd || sourceDir, timeout }, config);
   return { ok: result.exitCode === 0, ...summarizeCommand(result) };
-}
-
-function quotePowerShell(value) {
-  return `'${String(value).replace(/'/g, "''")}'`;
 }
 
 function detectArchiveOverlayRoot(extractedRoot) {
@@ -1125,5 +1137,7 @@ module.exports = {
   relaiVerify,
   relaiBrowser,
   relaiDiff,
-  relaiReset
+  relaiReset,
+  buildZipCommand,
+  buildUnzipCommand
 };
