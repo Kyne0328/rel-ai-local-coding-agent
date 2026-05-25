@@ -20,6 +20,7 @@ function dashboardData(config, args = {}) {
       workspaces: Object.keys(config.workspaces || {}).length
     },
     workflow: {
+      mode: (config.workflow && config.workflow.mode) || "standard",
       tools: [
         "relai_repo_snapshot",
         "relai_read",
@@ -37,6 +38,10 @@ function dashboardData(config, args = {}) {
         "relai_feature_probe"
       ],
       removedLegacyWorkflows: ["update", "local", "task-runner", "worktree", "multi-agent", "approvals", "docker", "pr-ci-repair"]
+    },
+    extensionApprovalHelper: {
+      mode: "chrome_extension",
+      note: "Extension popup is the only enable/disable control. Dashboard does not gate approval."
     },
     health,
     auditTail

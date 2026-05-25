@@ -45,7 +45,8 @@
     "test:electron": "node test/electron-launcher-smoke.mjs",
     "test:http-auth": "node test/http-auth-smoke.mjs",
     "test:safety-paths": "node test/safety-paths.mjs",
-    "test:archive-safety": "node test/archive-safety.mjs"
+    "test:archive-safety": "node test/archive-safety.mjs",
+    "test:dashboard-wording": "node test/dashboard-wording-smoke.mjs"
   },
   "keywords": [
     "mcp",
