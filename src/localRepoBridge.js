@@ -38,7 +38,7 @@ function repoSnapshot(workspace, config, args = {}) {
     root: workspace.path,
     toolMode: config.toolMode || "chatgpt_local_repo",
     trustedLocalAgent: Boolean(config.trustedLocalAgent),
-    flow: flowSummary(config),
+    flow: workflowSummary(config),
     manifests: Object.keys(manifests),
     manifestContents: manifests,
     discoveredCommands,
@@ -322,7 +322,7 @@ async function relaiApplyPatch(workspace, config, args = {}) {
   assertAggressiveFlow(config, args, "relai_apply_update");
   const patch = String(args.patch || args.diff || "");
   if (!patch.trim()) throw new Error("relai_apply_update requires patch or diff text.");
-  const maxPatchBytes = fastNumber(config, "maxPatchBytes", DEFAULT_AGGRESSIVE_MAX_PATCH_BYTES);
+  const maxPatchBytes = preparedNumber(config, "maxUpdateBytes", DEFAULT_AGGRESSIVE_MAX_PATCH_BYTES);
   const patchBytes = Buffer.byteLength(patch, "utf8");
   if (patchBytes > maxPatchBytes) throw new Error(`relai_apply_update refused ${patchBytes} byte patch; max is ${maxPatchBytes}. Use relai_apply_bundle for bulk replacement.`);
   await ensureGitRepo(workspace, config);
@@ -336,7 +336,7 @@ async function relaiApplyPatch(workspace, config, args = {}) {
     return { ok: false, workspace: workspace.alias, operationId, operation: "applyPatch:check", touchedPaths, check: summarizeCommand(check) };
   }
   let backup = null;
-  if (shouldMakeAggressiveBackup(config, args)) backup = await makeAggressiveBackup(workspace, config, operationId, "patch");
+  if (shouldMakePreparedBackup(config, args)) backup = await makePreparedBackup(workspace, config, operationId, "patch");
   const apply = await runProcess("git", ["apply", patchFile], { cwd: workspace.path, timeout: clampNumber(args.timeoutMs, 1000, 86400000, 120000) }, config);
   const verify = hasRequestedChecks(args) ? await relaiVerify(workspace, config, args) : null;
   const diff = args.returnDiff === false ? null : await relaiDiff(workspace, config, { maxBytes: args.maxDiffBytes || DEFAULT_MAX_DIFF_BYTES });
@@ -352,7 +352,7 @@ async function relaiApplyArchive(workspace, config, args = {}) {
   if (!fs.existsSync(archivePath)) throw new Error(`Archive not found: ${archivePath}`);
   const stat = fs.statSync(archivePath);
   if (!stat.isFile()) throw new Error(`Archive path is not a file: ${archivePath}`);
-  const maxArchiveBytes = fastNumber(config, "maxArchiveBytes", DEFAULT_AGGRESSIVE_MAX_ARCHIVE_BYTES);
+  const maxArchiveBytes = preparedNumber(config, "maxBundleBytes", DEFAULT_AGGRESSIVE_MAX_ARCHIVE_BYTES);
   if (stat.size > maxArchiveBytes) throw new Error(`relai_apply_bundle refused ${stat.size} byte archive; max is ${maxArchiveBytes}.`);
   await ensureGitRepo(workspace, config);
   await requireCleanGitIfConfigured(workspace, config, args);
@@ -364,8 +364,8 @@ async function relaiApplyArchive(workspace, config, args = {}) {
   if (!extract.ok) return { ok: false, workspace: workspace.alias, operationId, operation: "applyArchive:extract", archivePath, extract };
   const overlayRoot = args.stripRoot === false ? extractedRoot : detectArchiveOverlayRoot(extractedRoot);
   let backup = null;
-  if (shouldMakeAggressiveBackup(config, args)) backup = await makeAggressiveBackup(workspace, config, operationId, "archive");
-  const overlay = overlayDirectory(workspace.path, overlayRoot, { clearMissing: Boolean(args.clearMissing ?? fastFlag(config, "clearMissingDefault", false)) });
+  if (shouldMakePreparedBackup(config, args)) backup = await makePreparedBackup(workspace, config, operationId, "archive");
+  const overlay = overlayDirectory(workspace.path, overlayRoot, { clearMissing: Boolean(args.clearMissing ?? preparedFlag(config, "clearMissingDefault", false)) });
   const verify = hasRequestedChecks(args) ? await relaiVerify(workspace, config, args) : null;
   const diff = args.returnDiff === false ? null : await relaiDiff(workspace, config, { maxBytes: args.maxDiffBytes || DEFAULT_MAX_DIFF_BYTES });
   const ok = overlay.errors.length === 0 && (!verify || verify.ok);
@@ -565,41 +565,42 @@ async function relaiReset(workspace, config, args = {}) {
 }
 
 
-function flowSummary(config) {
-  const flow = config.flow && typeof config.flow === "object" ? config.flow : {};
-  const mode = flow.mode === "fast" ? "fast" : "conservative";
-  const fast = flow.fast && typeof flow.fast === "object" ? flow.fast : {};
+function getPreparedConfig(config) {
+  const wf = config.workflow && typeof config.workflow === "object" ? config.workflow : {};
+  return wf.prepared && typeof wf.prepared === "object" ? wf.prepared : {};
+}
+
+function preparedNumber(config, key, fallback) {
+  const value = getPreparedConfig(config)[key];
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function preparedFlag(config, key, fallback) {
+  const value = getPreparedConfig(config)[key];
+  return value == null ? fallback : Boolean(value);
+}
+
+function workflowSummary(config) {
+  const { isPreparedWorkflow, getWorkflowConfig } = require("./config");
+  const wf = getWorkflowConfig(config);
   return {
-    mode,
-    fast: {
-      requireCleanGit: fast.requireCleanGit !== false,
-      backup: fast.backup !== false,
-      clearMissingDefault: Boolean(fast.clearMissingDefault),
-      maxPatchBytes: fastNumber(config, "maxPatchBytes", DEFAULT_AGGRESSIVE_MAX_PATCH_BYTES),
-      maxArchiveBytes: fastNumber(config, "maxArchiveBytes", DEFAULT_AGGRESSIVE_MAX_ARCHIVE_BYTES)
+    mode: wf.mode,
+    prepared: {
+      requireCleanGit: preparedFlag(config, "requireCleanGit", true),
+      backup: preparedFlag(config, "backup", true),
+      clearMissingDefault: preparedFlag(config, "clearMissingDefault", false),
+      maxUpdateBytes: preparedNumber(config, "maxUpdateBytes", DEFAULT_AGGRESSIVE_MAX_PATCH_BYTES),
+      maxBundleBytes: preparedNumber(config, "maxBundleBytes", DEFAULT_AGGRESSIVE_MAX_ARCHIVE_BYTES)
     }
   };
 }
 
 function recommendedFlowForConfig(config) {
+  const { isPreparedWorkflow } = require("./config");
   const base = ["relai_read", "relai_replace", "relai_write", "relai_clear_files", "relai_run_checks", "relai_diff", "relai_restore_changes"];
-  if (flowSummary(config).mode !== "fast") return base;
+  if (!isPreparedWorkflow(config)) return base;
   return ["relai_repo_snapshot", "relai_read", "relai_replace", "relai_apply_update", "relai_apply_bundle", "relai_package_snapshot", "relai_clear_files", "relai_run_checks", "relai_diff", "relai_restore_changes"];
-}
-
-function fastConfig(config) {
-  return (config.flow && config.flow.fast && typeof config.flow.fast === "object") ? config.flow.fast : {};
-}
-
-function fastNumber(config, key, fallback) {
-  const value = fastConfig(config)[key];
-  const number = Number(value);
-  return Number.isFinite(number) && number > 0 ? number : fallback;
-}
-
-function fastFlag(config, key, fallback) {
-  const value = fastConfig(config)[key];
-  return value == null ? fallback : Boolean(value);
 }
 
 function assertAggressiveFlow(_config, _args, _toolName) {
@@ -624,14 +625,14 @@ async function requireCleanGitIfConfigured(workspace, config, args) {
 ${status}`);
 }
 
-function shouldMakeAggressiveBackup(config, args) {
-  return args.backup == null ? fastFlag(config, "backup", true) : Boolean(args.backup);
+function shouldMakePreparedBackup(config, args) {
+  return args.backup == null ? preparedFlag(config, "backup", true) : Boolean(args.backup);
 }
 
-async function makeAggressiveBackup(workspace, config, operationId, label) {
+async function makePreparedBackup(workspace, config, operationId, label) {
   const status = await gitStatusShort(workspace, config);
   if (!status.trim()) return { type: "none", reason: "workspace clean" };
-  const message = `rel-ai-mcp fast ${label} backup ${operationId}`;
+  const message = `rel-ai-mcp prepared ${label} backup ${operationId}`;
   const stash = await runProcess("git", ["stash", "push", "--include-untracked", "-m", message], { cwd: workspace.path, timeout: 120000 }, config);
   return { type: "git-stash", message, ok: stash.exitCode === 0, ...summarizeCommand(stash) };
 }
@@ -838,7 +839,7 @@ function projectHints(manifests) {
 }
 
 function workspaceWriteGuidance(config) {
-  const flow = flowSummary(config);
+  const flow = workflowSummary(config);
   return {
     flow,
     defaultMode: "size-based",

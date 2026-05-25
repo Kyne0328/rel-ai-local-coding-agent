@@ -37,13 +37,13 @@ function makeDefaultFastTaskConfig() {
 
 function makeDefaultWorkflowConfig() {
   return {
-    mode: "conservative",
-    aggressive: {
-      requireCleanGit: true,
+    mode: "standard",
+    prepared: {
       backup: true,
-      deleteMissingDefault: false,
-      maxPatchBytes: 2 * 1024 * 1024,
-      maxArchiveBytes: 250 * 1024 * 1024
+      requireCleanGit: true,
+      clearMissingDefault: false,
+      maxUpdateBytes: 2 * 1024 * 1024,
+      maxBundleBytes: 250 * 1024 * 1024
     }
   };
 }
@@ -128,7 +128,7 @@ function normalizeConfig(config) {
   next.productUx = { ...base.productUx, ...(input.productUx || {}) };
   next.release = { ...base.release, ...(input.release || {}) };
   next.autoApproveAppRequests = normalizeAutoApproveConfig(input.autoApproveAppRequests || input.autoApprove || base.autoApproveAppRequests);
-  next.workflow = normalizeWorkflowConfig(input.workflow || base.workflow);
+  next.workflow = normalizeWorkflowConfig(input.workflow, input.flow);
   next.release.minimumReadinessScore = clampNumber(next.release.minimumReadinessScore, 0, 100, base.release.minimumReadinessScore);
   next.release.connectorProbeTimeoutMs = clampNumber(next.release.connectorProbeTimeoutMs, 500, 60000, base.release.connectorProbeTimeoutMs);
 
@@ -166,22 +166,74 @@ function normalizeFastTask(value) {
   };
 }
 
-function normalizeWorkflowConfig(value) {
+function normalizeWorkflowConfig(value, flowLegacy) {
   const base = makeDefaultWorkflowConfig();
   const raw = value && typeof value === "object" ? value : {};
-  const aggressive = raw.aggressive && typeof raw.aggressive === "object" ? raw.aggressive : {};
+  const flow = flowLegacy && typeof flowLegacy === "object" ? flowLegacy : {};
+
+  // Determine mode: support old "aggressive"/"conservative" and legacy flow.mode "fast"
+  let mode;
+  if (raw.mode === "prepared" || raw.mode === "aggressive") {
+    mode = "prepared";
+  } else if (raw.mode === "standard" || raw.mode === "conservative") {
+    mode = "standard";
+  } else if (!raw.mode && flow.mode === "fast") {
+    mode = "prepared";
+  } else {
+    mode = "standard";
+  }
+
+  // Gather prepared settings from old "aggressive" sub-object (with field renames)
+  const oldAggressive = raw.aggressive && typeof raw.aggressive === "object" ? raw.aggressive : {};
+  const oldFlow = flow.fast && typeof flow.fast === "object" ? flow.fast : {};
+  // New canonical prepared sub-object (if present)
+  const rawPrepared = raw.prepared && typeof raw.prepared === "object" ? raw.prepared : {};
+
+  // Merge order: base < oldFlow < oldAggressive < rawPrepared
+  const merged = { ...base.prepared, ...oldFlow, ...oldAggressive, ...rawPrepared };
+
+  // Apply field renames from old shape to new shape
+  const clearMissingDefault =
+    rawPrepared.clearMissingDefault != null ? Boolean(rawPrepared.clearMissingDefault)
+    : oldAggressive.clearMissingDefault != null ? Boolean(oldAggressive.clearMissingDefault)
+    : oldAggressive.deleteMissingDefault != null ? Boolean(oldAggressive.deleteMissingDefault)
+    : oldFlow.clearMissingDefault != null ? Boolean(oldFlow.clearMissingDefault)
+    : base.prepared.clearMissingDefault;
+
+  const maxUpdateBytes =
+    rawPrepared.maxUpdateBytes != null ? clampNumber(rawPrepared.maxUpdateBytes, 1024, 50 * 1024 * 1024, base.prepared.maxUpdateBytes)
+    : oldAggressive.maxUpdateBytes != null ? clampNumber(oldAggressive.maxUpdateBytes, 1024, 50 * 1024 * 1024, base.prepared.maxUpdateBytes)
+    : oldAggressive.maxPatchBytes != null ? clampNumber(oldAggressive.maxPatchBytes, 1024, 50 * 1024 * 1024, base.prepared.maxUpdateBytes)
+    : oldFlow.maxUpdateBytes != null ? clampNumber(oldFlow.maxUpdateBytes, 1024, 50 * 1024 * 1024, base.prepared.maxUpdateBytes)
+    : oldFlow.maxPatchBytes != null ? clampNumber(oldFlow.maxPatchBytes, 1024, 50 * 1024 * 1024, base.prepared.maxUpdateBytes)
+    : base.prepared.maxUpdateBytes;
+
+  const maxBundleBytes =
+    rawPrepared.maxBundleBytes != null ? clampNumber(rawPrepared.maxBundleBytes, 1024 * 1024, 2 * 1024 * 1024 * 1024, base.prepared.maxBundleBytes)
+    : oldAggressive.maxBundleBytes != null ? clampNumber(oldAggressive.maxBundleBytes, 1024 * 1024, 2 * 1024 * 1024 * 1024, base.prepared.maxBundleBytes)
+    : oldAggressive.maxArchiveBytes != null ? clampNumber(oldAggressive.maxArchiveBytes, 1024 * 1024, 2 * 1024 * 1024 * 1024, base.prepared.maxBundleBytes)
+    : oldFlow.maxBundleBytes != null ? clampNumber(oldFlow.maxBundleBytes, 1024 * 1024, 2 * 1024 * 1024 * 1024, base.prepared.maxBundleBytes)
+    : oldFlow.maxArchiveBytes != null ? clampNumber(oldFlow.maxArchiveBytes, 1024 * 1024, 2 * 1024 * 1024 * 1024, base.prepared.maxBundleBytes)
+    : base.prepared.maxBundleBytes;
+
   return {
-    mode: raw.mode === "aggressive" ? "aggressive" : "conservative",
-    aggressive: {
-      ...base.aggressive,
-      ...aggressive,
-      requireCleanGit: aggressive.requireCleanGit == null ? base.aggressive.requireCleanGit : Boolean(aggressive.requireCleanGit),
-      backup: aggressive.backup == null ? base.aggressive.backup : Boolean(aggressive.backup),
-      deleteMissingDefault: aggressive.deleteMissingDefault == null ? base.aggressive.deleteMissingDefault : Boolean(aggressive.deleteMissingDefault),
-      maxPatchBytes: clampNumber(aggressive.maxPatchBytes, 1024, 50 * 1024 * 1024, base.aggressive.maxPatchBytes),
-      maxArchiveBytes: clampNumber(aggressive.maxArchiveBytes, 1024 * 1024, 2 * 1024 * 1024 * 1024, base.aggressive.maxArchiveBytes)
+    mode,
+    prepared: {
+      backup: merged.backup == null ? base.prepared.backup : Boolean(merged.backup),
+      requireCleanGit: merged.requireCleanGit == null ? base.prepared.requireCleanGit : Boolean(merged.requireCleanGit),
+      clearMissingDefault,
+      maxUpdateBytes,
+      maxBundleBytes
     }
   };
+}
+
+function getWorkflowConfig(config) {
+  return config.workflow || makeDefaultWorkflowConfig();
+}
+
+function isPreparedWorkflow(config) {
+  return getWorkflowConfig(config).mode === "prepared";
 }
 
 function normalizeAutoApproveConfig(value) {
@@ -294,6 +346,8 @@ module.exports = {
   normalizeFastTask,
   makeDefaultWorkflowConfig,
   normalizeWorkflowConfig,
+  getWorkflowConfig,
+  isPreparedWorkflow,
   makeDefaultAutoApproveConfig,
   normalizeAutoApproveConfig,
   readConfig,

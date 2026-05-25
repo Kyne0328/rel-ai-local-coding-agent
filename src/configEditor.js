@@ -50,7 +50,7 @@ function updateSettings(current, payload = {}) {
   }
 
   if (values.workflow && typeof values.workflow === "object") {
-    next.workflow = normalizeWorkflowConfig({ ...(next.workflow || {}), ...values.workflow, aggressive: { ...((next.workflow || {}).aggressive || {}), ...((values.workflow || {}).aggressive || {}) } });
+    next.workflow = normalizeWorkflowConfig({ ...(next.workflow || {}), ...values.workflow, prepared: { ...((next.workflow || {}).prepared || {}), ...((values.workflow || {}).prepared || {}) } });
     changed.push("workflow");
   }
 
