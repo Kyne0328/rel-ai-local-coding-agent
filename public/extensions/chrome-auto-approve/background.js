@@ -38,6 +38,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
   if (message.type === 'relai-approved') {
     maybeNotify(message.count || 1).catch(() => {});
+    chrome.storage.local.set({ lastApprovalAt: Date.now() }).catch(() => {});
     sendResponse({ ok: true });
     return true;
   }
@@ -50,19 +51,20 @@ async function getConfig() {
 
 async function dashboardAllows(cfg) {
   if (!cfg.enabled) return false;
+  // Still check dashboard for status display only — don't gate on it
   const base = String(cfg.baseUrl || DEFAULTS.baseUrl).replace(/\/$/, '');
-  const url = new URL(base + '/api/auto-approve/settings');
-  if (cfg.token) url.searchParams.set('token', cfg.token);
-  const headers = cfg.token ? { Authorization: 'Bearer ' + cfg.token } : {};
   try {
-    const response = await fetch(url.toString(), { headers, cache: 'no-store' });
-    const ok = response.ok && (await response.json())?.enabled === true;
-    chrome.storage.local.set({ connectionOk: ok }).catch(() => {});
-    return ok;
+    const headers = cfg.token ? { Authorization: 'Bearer ' + cfg.token } : {};
+    const url = cfg.token
+      ? `${base}/api/auto-approve/settings?token=${encodeURIComponent(cfg.token)}`
+      : `${base}/api/auto-approve/settings`;
+    const response = await fetch(url, { headers, cache: 'no-store' });
+    const reachable = response.ok;
+    chrome.storage.local.set({ connectionOk: reachable }).catch(() => {});
   } catch (_) {
     chrome.storage.local.set({ connectionOk: false }).catch(() => {});
-    return false;
   }
+  return true; // extension enabled state is the gate, not dashboard
 }
 
 async function scanChatGptTabs() {

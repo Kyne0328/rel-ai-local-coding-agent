@@ -14,7 +14,9 @@ async function load() {
   $('baseUrl').value = cfg.baseUrl || DEFAULTS.baseUrl;
   $('token').value = cfg.token || '';
   $('pollMs').value = Number(cfg.pollMs || DEFAULTS.pollMs);
-  setStatus(cfg.enabled ? 'Enabled. Dashboard setting must also be enabled.' : 'Disabled.');
+  setStatus(cfg.enabled ? 'Enabled. Monitoring ChatGPT tabs.' : 'Disabled. Click enable to start.');
+  const disableBtn = $('disableBtn');
+  if (disableBtn) disableBtn.style.display = cfg.enabled ? '' : 'none';
 }
 
 function setStatus(text) {
@@ -36,6 +38,8 @@ async function save() {
   if (!next.enabled) next.approvalCount = 0;
   await chrome.storage.local.set(next);
   await chrome.runtime.sendMessage({ type: 'relai-config-updated' }).catch(() => {});
+  const disableBtn = $('disableBtn');
+  if (disableBtn) disableBtn.style.display = next.enabled ? '' : 'none';
   setStatus(next.enabled ? 'Saved and enabled.' : 'Saved and disabled.');
 }
 
@@ -55,10 +59,12 @@ function relativeTime(ts) {
 }
 
 async function refreshStats() {
-  const data = await chrome.storage.local.get({ lastScanAt: 0, approvalCount: 0, activeTabs: 0, connectionOk: null });
+  const data = await chrome.storage.local.get({ lastScanAt: 0, approvalCount: 0, activeTabs: 0, connectionOk: null, lastApprovalAt: 0 });
   $('lastScan').textContent = relativeTime(data.lastScanAt);
   $('approvalCount').textContent = data.approvalCount;
   $('activeTabs').textContent = data.activeTabs;
+  const lastApproval = $('lastApproval');
+  if (lastApproval) lastApproval.textContent = relativeTime(data.lastApprovalAt);
   const conn = $('connStatus');
   if (data.connectionOk === true) {
     conn.innerHTML = '<span class="dot ok"></span>OK';
@@ -71,6 +77,13 @@ async function refreshStats() {
 
 $('save').addEventListener('click', save);
 $('scanNow').addEventListener('click', scanNow);
+const disableBtnEl = $('disableBtn');
+if (disableBtnEl) {
+  disableBtnEl.addEventListener('click', async () => {
+    $('enabled').checked = false;
+    await save();
+  });
+}
 load().catch((err) => setStatus(String(err)));
 refreshStats().catch(() => {});
 const statsInterval = setInterval(() => refreshStats().catch(() => {}), 2000);

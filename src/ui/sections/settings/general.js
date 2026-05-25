@@ -85,13 +85,12 @@ function _render(container) {
   }, { min: 1048576, max: 2147483648, width: '150px' }), 'Upper bound for local zip overlays.'));
 
   autoApprove.body.appendChild(autoApproveWarningBox());
-  autoApprove.body.appendChild(field('Enable dashboard-side auto-approve', toggleControl((_draft.autoApproveAppRequests || {}).enabled === true, (v) => {
-    if (v && !confirmAutoApproveWarning()) return;
-    if (!_draft.autoApproveAppRequests) _draft.autoApproveAppRequests = {};
-    _draft.autoApproveAppRequests.enabled = v;
-    if (v) _draft.autoApproveAppRequests.warningAccepted = true;
-    _checkDirty();
-  }), 'Both this dashboard setting and the Chrome extension popup toggle must be enabled before any approval automation runs.'));
+  autoApprove.body.appendChild(field('Extension approval helper', (() => {
+    const span = document.createElement('span');
+    span.style.cssText = 'font-size:13px;color:var(--text-muted);line-height:1.45;';
+    span.textContent = 'Install the Chrome extension and use the extension popup to enable or disable auto-approval. The extension popup is the only enable/disable control.';
+    return span;
+  })(), 'Load unpacked from public/extensions/chrome-auto-approve. The dashboard shows extension status below.'));
   autoApprove.body.appendChild(field('Poll interval (ms)', numberControl((_draft.autoApproveAppRequests || {}).pollMs || 1200, (v) => {
     if (!_draft.autoApproveAppRequests) _draft.autoApproveAppRequests = {};
     _draft.autoApproveAppRequests.pollMs = v;
@@ -160,10 +159,6 @@ function autoApproveWarningBox() {
     This optional Chrome extension can click ChatGPT approval buttons for Rel.AI MCP app requests. That can approve local repo reads, full-file writes, validation checks, browser checks, diffs, or restores without a manual click. Keep it off unless you are actively supervising a task on your own machine. The previous userscript workflow has been removed.
   `;
   return div;
-}
-
-function confirmAutoApproveWarning() {
-  return window.confirm('Enable Rel.AI MCP approval assistance?\n\nThis can click ChatGPT app-request approvals for local repo actions without a manual click. Use only while supervising work on your own machine and turn it off after the task.');
 }
 
 function extensionInstallControl() {

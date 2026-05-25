@@ -11,7 +11,7 @@ function autoApproveSettings(config) {
     version: pkg.version,
     mode: "chrome_extension",
     extensionOnly: true,
-    warning: "Auto-approving ChatGPT app requests can authorize local repo reads/writes/verification without a manual click. Enable only on your own trusted machine and disable it after the task. The userscript workflow has been removed; use the Chrome extension only."
+    warning: "Auto-approving ChatGPT app requests can authorize local repo reads/writes/verification without a manual click. Enable only on your own trusted machine and disable it after the task. Control approval from the Chrome extension popup — the dashboard does not need to be enabled."
   };
 }
 
