@@ -319,12 +319,9 @@ function relaiClear(workspace, config, args = {}) {
 
 
 async function relaiApplyPatch(workspace, config, args = {}) {
-  assertAggressiveFlow(config, args, "relai_apply_update");
   const patch = String(args.patch || args.diff || "");
-  if (!patch.trim()) throw new Error("relai_apply_update requires patch or diff text.");
-  const maxPatchBytes = preparedNumber(config, "maxUpdateBytes", DEFAULT_AGGRESSIVE_MAX_PATCH_BYTES);
+  assertPreparedUpdateSafe(workspace, config, args, patch);
   const patchBytes = Buffer.byteLength(patch, "utf8");
-  if (patchBytes > maxPatchBytes) throw new Error(`relai_apply_update refused ${patchBytes} byte patch; max is ${maxPatchBytes}. Use relai_apply_bundle for bulk replacement.`);
   await ensureGitRepo(workspace, config);
   const touchedPaths = validatePatchPaths(workspace, patch);
   await requireCleanGitIfConfigured(workspace, config, args);
@@ -346,14 +343,11 @@ async function relaiApplyPatch(workspace, config, args = {}) {
 }
 
 async function relaiApplyArchive(workspace, config, args = {}) {
-  assertAggressiveFlow(config, args, "relai_apply_bundle");
   const archivePath = resolveHostPath(String(args.archivePath || args.bundlePath || args.path || "").trim());
   if (!archivePath) throw new Error("relai_apply_bundle requires bundlePath pointing to a local zip archive on the MCP host.");
   if (!fs.existsSync(archivePath)) throw new Error(`Archive not found: ${archivePath}`);
   const stat = fs.statSync(archivePath);
-  if (!stat.isFile()) throw new Error(`Archive path is not a file: ${archivePath}`);
-  const maxArchiveBytes = preparedNumber(config, "maxBundleBytes", DEFAULT_AGGRESSIVE_MAX_ARCHIVE_BYTES);
-  if (stat.size > maxArchiveBytes) throw new Error(`relai_apply_bundle refused ${stat.size} byte archive; max is ${maxArchiveBytes}.`);
+  assertPreparedBundleSafe(workspace, config, args, archivePath, stat);
   await ensureGitRepo(workspace, config);
   await requireCleanGitIfConfigured(workspace, config, args);
   const operationId = makeOperationId();
@@ -603,8 +597,28 @@ function recommendedFlowForConfig(config) {
   return ["relai_repo_snapshot", "relai_read", "relai_replace", "relai_apply_update", "relai_apply_bundle", "relai_package_snapshot", "relai_clear_files", "relai_run_checks", "relai_diff", "relai_restore_changes"];
 }
 
-function assertAggressiveFlow(_config, _args, _toolName) {
-  return;
+function assertPreparedUpdateSafe(workspace, config, args, patch) {
+  // payload exists
+  if (!patch || !patch.trim()) throw new Error("relai_apply_update requires patch or diff text.");
+  // payload size
+  const maxBytes = preparedNumber(config, "maxUpdateBytes", DEFAULT_AGGRESSIVE_MAX_PATCH_BYTES);
+  const bytes = Buffer.byteLength(patch, "utf8");
+  if (bytes > maxBytes) throw new Error(`relai_apply_update refused ${bytes} byte patch; max is ${maxBytes}.`);
+  // valid workspace (already resolved before this call, but verify)
+  if (!workspace || !workspace.path) throw new Error("relai_apply_update requires a valid workspace.");
+}
+
+function assertPreparedBundleSafe(workspace, config, args, archivePath, stat) {
+  // payload exists
+  if (!archivePath) throw new Error("relai_apply_bundle requires bundlePath pointing to a local zip archive on the MCP host.");
+  if (!stat || !stat.isFile()) throw new Error(`Archive path is not a file: ${archivePath}`);
+  // payload size
+  const maxBytes = preparedNumber(config, "maxBundleBytes", DEFAULT_AGGRESSIVE_MAX_ARCHIVE_BYTES);
+  if (stat.size > maxBytes) throw new Error(`relai_apply_bundle refused ${stat.size} byte archive; max is ${maxBytes}.`);
+  // valid workspace
+  if (!workspace || !workspace.path) throw new Error("relai_apply_bundle requires a valid workspace.");
+  // no workspace escape (archive path must not be inside the workspace itself for safety)
+  // archive is on MCP host, not workspace — no further check needed here
 }
 
 async function ensureGitRepo(workspace, config) {
@@ -682,7 +696,7 @@ async function extractZipArchive(archivePath, destination, config, args) {
   let result;
   if (process.platform === "win32") {
     const command = `Expand-Archive -LiteralPath ${quotePowerShell(archivePath)} -DestinationPath ${quotePowerShell(destination)} -Force`;
-    result = await runProcess("powerlocal command.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command], { cwd: destination, timeout }, config);
+    result = await runProcess("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command], { cwd: destination, timeout }, config);
   } else {
     result = await runProcess("unzip", ["-q", archivePath, "-d", destination], { cwd: destination, timeout }, config);
   }
@@ -695,7 +709,7 @@ async function createZipArchive(sourceDir, archivePath, config, args) {
   let result;
   if (process.platform === "win32") {
     const command = `Compress-Archive -Path ${quotePowerShell(path.join(sourceDir, "*"))} -DestinationPath ${quotePowerShell(archivePath)} -Force`;
-    result = await runProcess("powerlocal command.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command], { cwd: sourceDir, timeout }, config);
+    result = await runProcess("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command], { cwd: sourceDir, timeout }, config);
   } else {
     result = await runProcess("zip", ["-qr", archivePath, "."], { cwd: sourceDir, timeout }, config);
   }
@@ -783,6 +797,8 @@ function shouldSkipArchivePath(relativePath, entry) {
   for (const pattern of AGGRESSIVE_ARCHIVE_EXCLUDED_PATHS) {
     if (normalized === pattern.replace(/\/$/, "") || normalized.startsWith(pattern)) return true;
   }
+  // Skip any .env* files (e.g. .env, .env.local, .env.production, .env-staging)
+  if (/^\.env($|[./-])/i.test(entry.name)) return true;
   return false;
 }
 

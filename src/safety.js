@@ -26,7 +26,8 @@ const DEFAULT_EXCLUDED_NAMES = new Set([
   ".mypy_cache", ".ruff_cache", ".tox", ".nox", ".hypothesis", ".eggs", "site-packages",
   ".pytest_cache", ".coverage", ".parcel-cache", ".angular", ".expo", ".serverless",
   ".terraform", ".bloop", ".metals", ".scala-build", ".stack-work", ".cabal",
-  "Pods", "Carthage", "DerivedData", "xcuserdata", ".vs", "cmake-build-debug", "cmake-build-release"
+  "Pods", "Carthage", "DerivedData", "xcuserdata", ".vs", "cmake-build-debug", "cmake-build-release",
+  ".rel-ai-mcp", ".relai"
 ]);
 
 const DEFAULT_EXCLUDED_PATHS = [
@@ -36,7 +37,9 @@ const DEFAULT_EXCLUDED_PATHS = [
   "windows/flutter/ephemeral",
   "linux/flutter/ephemeral",
   ".claude/skills",
-  ".superpowers"
+  ".superpowers",
+  ".rel-ai-mcp",
+  ".relai"
 ];
 
 function validateRelativePath(relativePath, label = "Path") {
