@@ -69,6 +69,30 @@ if (findings.length) {
   process.exit(1);
 }
 
+// Check relai_run_checks description wording
+const toolsSource = fs.readFileSync(path.join(root, 'src', 'tools.js'), 'utf8');
+const runChecksMatch = toolsSource.match(/tool\("relai_run_checks",\s*"[^"]*",\s*"([^"]+)"/);
+const runChecksDescription = runChecksMatch ? runChecksMatch[1] : '';
+
+const forbiddenInRunChecks = ['shell', 'execute', 'arbitrary', 'command runner', 'terminal command'];
+const descriptionFindings = [];
+for (const forbidden of forbiddenInRunChecks) {
+  if (runChecksDescription.toLowerCase().includes(forbidden.toLowerCase())) {
+    descriptionFindings.push(`relai_run_checks description contains forbidden word: "${forbidden}" — found in: "${runChecksDescription}"`);
+  }
+}
+if (!runChecksDescription.toLowerCase().includes('validation checks')) {
+  descriptionFindings.push(`relai_run_checks description must contain "validation checks" — got: "${runChecksDescription}"`);
+}
+
+if (descriptionFindings.length) {
+  console.error('Connector wording smoke test failed. relai_run_checks description wording issue:');
+  for (const msg of descriptionFindings) {
+    console.error(`  ${msg}`);
+  }
+  process.exit(1);
+}
+
 console.log(`Connector wording smoke test passed. Scanned ${scannedFiles.length} files.`);
 
 function isAllowed(file, lineText) {

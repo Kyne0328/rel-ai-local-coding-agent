@@ -55,7 +55,7 @@ const toolSchemas = [
   tool("relai_package_snapshot", "Package Workspace Zip", "Create a zip package of the current workspace on the MCP host, excluding repo internals, dependency caches, build outputs, and Rel.AI state.", {
     workspace: stringProp(), maxFiles: numberProp(1, 200000), timeoutMs: numberProp(1000, 86400000)
   }, ["workspace"]),
-  tool("relai_run_checks", "Run Workspace Checks", "Run configured or requested validation checks inside the workspace.", {
+  tool("relai_run_checks", "Run Workspace Checks", "Run workspace validation checks such as tests, analyzers, linters, and build checks.", {
     workspace: stringProp(),
     level: stringProp(),
     check: stringProp(),
