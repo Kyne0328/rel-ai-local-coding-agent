@@ -44,43 +44,43 @@ function _render(container) {
 
   workflow.body.appendChild(workflowWarningBox());
   workflow.body.appendChild(field('Mode', selectControl([
-    { value: 'conservative', label: 'Focused edits and guarded writes' },
-    { value: 'aggressive', label: 'Prepared update and bundle apply' }
-  ], (_draft.workflow || {}).mode || 'conservative', (value) => {
-    if (value === 'aggressive' && !confirmFastFlow()) return;
+    { value: 'standard', label: 'Focused edits and guarded writes' },
+    { value: 'prepared', label: 'Prepared update and bundle apply' }
+  ], (_draft.workflow || {}).mode || 'standard', (value) => {
+    if (value === 'prepared' && !confirmFastFlow()) return;
     if (!_draft.workflow) _draft.workflow = {};
     _draft.workflow.mode = value;
     _checkDirty();
   }), 'Both options keep the same workspace-tool surface. Prepared update mode includes relai_apply_update, relai_apply_bundle, and relai_package_snapshot for larger changes.'));
-  const aggressive = (_draft.workflow && _draft.workflow.aggressive) || {};
-  workflow.body.appendChild(field('Require clean git before prepared apply', toggleControl(aggressive.requireCleanGit !== false, (v) => {
+  const prepared = (_draft.workflow && _draft.workflow.prepared) || {};
+  workflow.body.appendChild(field('Require clean git before prepared apply', toggleControl(prepared.requireCleanGit !== false, (v) => {
     if (!_draft.workflow) _draft.workflow = {};
-    if (!_draft.workflow.aggressive) _draft.workflow.aggressive = {};
-    _draft.workflow.aggressive.requireCleanGit = v;
+    if (!_draft.workflow.prepared) _draft.workflow.prepared = {};
+    _draft.workflow.prepared.requireCleanGit = v;
     _checkDirty();
   }, { enabled: 'Require clean git', disabled: 'Allow dirty git' }), 'Recommended on. Turn off only if you want apply tools to operate on a dirty working tree.'));
-  workflow.body.appendChild(field('Backup before prepared apply', toggleControl(aggressive.backup !== false, (v) => {
+  workflow.body.appendChild(field('Backup before prepared apply', toggleControl(prepared.backup !== false, (v) => {
     if (!_draft.workflow) _draft.workflow = {};
-    if (!_draft.workflow.aggressive) _draft.workflow.aggressive = {};
-    _draft.workflow.aggressive.backup = v;
+    if (!_draft.workflow.prepared) _draft.workflow.prepared = {};
+    _draft.workflow.prepared.backup = v;
     _checkDirty();
   }, { enabled: 'Backup enabled', disabled: 'No automatic backup' }), 'When dirty edits are allowed, Rel.AI attempts a git stash backup before applying an update or archive.'));
-  workflow.body.appendChild(field('Clear missing files during archive overlay', toggleControl(aggressive.deleteMissingDefault === true, (v) => {
+  workflow.body.appendChild(field('Clear missing files during archive overlay', toggleControl(prepared.clearMissingDefault === true, (v) => {
     if (!_draft.workflow) _draft.workflow = {};
-    if (!_draft.workflow.aggressive) _draft.workflow.aggressive = {};
-    _draft.workflow.aggressive.deleteMissingDefault = v;
+    if (!_draft.workflow.prepared) _draft.workflow.prepared = {};
+    _draft.workflow.prepared.clearMissingDefault = v;
     _checkDirty();
   }, { enabled: 'Clear missing', disabled: 'Overlay only' }), 'Off means zip/archive apply overwrites and adds files but does not clear live files missing from the archive unless a tool call explicitly asks for clearMissing.'));
-  workflow.body.appendChild(field('Max update bytes', numberControl(aggressive.maxPatchBytes || 2097152, (v) => {
+  workflow.body.appendChild(field('Max update bytes', numberControl(prepared.maxUpdateBytes || 2097152, (v) => {
     if (!_draft.workflow) _draft.workflow = {};
-    if (!_draft.workflow.aggressive) _draft.workflow.aggressive = {};
-    _draft.workflow.aggressive.maxPatchBytes = v;
+    if (!_draft.workflow.prepared) _draft.workflow.prepared = {};
+    _draft.workflow.prepared.maxUpdateBytes = v;
     _checkDirty();
   }, { min: 1024, max: 52428800, width: '150px' }), 'Upper bound for relai_apply_update payloads.'));
-  workflow.body.appendChild(field('Max archive bytes', numberControl(aggressive.maxArchiveBytes || 262144000, (v) => {
+  workflow.body.appendChild(field('Max archive bytes', numberControl(prepared.maxBundleBytes || 262144000, (v) => {
     if (!_draft.workflow) _draft.workflow = {};
-    if (!_draft.workflow.aggressive) _draft.workflow.aggressive = {};
-    _draft.workflow.aggressive.maxArchiveBytes = v;
+    if (!_draft.workflow.prepared) _draft.workflow.prepared = {};
+    _draft.workflow.prepared.maxBundleBytes = v;
     _checkDirty();
   }, { min: 1048576, max: 2147483648, width: '150px' }), 'Upper bound for local zip overlays.'));
 
