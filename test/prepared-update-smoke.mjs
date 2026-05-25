@@ -203,6 +203,33 @@ await testThrows(
   "relai_apply_bundle refused"
 );
 
+// --- Test 8: snapshot excludes .env and .env.local files ---
+await test("relaiSnapshotArchive excludes .env and .env.local files", async () => {
+  // Create .env and .env.local files
+  fs.writeFileSync(path.join(workspacePath, ".env"), "API_KEY=secret123\n");
+  fs.writeFileSync(path.join(workspacePath, ".env.local"), "LOCAL_VAR=local_value\n");
+
+  // Create the snapshot
+  const snapshot = await relaiSnapshotArchive(workspace, config, { maxFiles: 100 });
+  if (!snapshot.ok) throw new Error(`relaiSnapshotArchive returned ok=false: ${JSON.stringify(snapshot)}`);
+  if (!snapshot.copied) throw new Error("relaiSnapshotArchive did not return copied list");
+
+  // Check that .env files are in the skipped list (not in copied)
+  const copiedPaths = snapshot.copied.files.map((f) => f.path);
+  const skippedPaths = snapshot.copied.skipped.map((s) => s.path);
+
+  if (copiedPaths.includes(".env")) throw new Error(".env should be excluded from snapshot");
+  if (copiedPaths.includes(".env.local")) throw new Error(".env.local should be excluded from snapshot");
+
+  // Verify .env files are in the skipped list
+  const envSkipped = skippedPaths.filter((p) => p === ".env" || p === ".env.local");
+  if (envSkipped.length !== 2) throw new Error(`.env files should be skipped; found ${envSkipped.length} in skipped list`);
+
+  // Clean up the .env files
+  fs.rmSync(path.join(workspacePath, ".env"), { force: true });
+  fs.rmSync(path.join(workspacePath, ".env.local"), { force: true });
+});
+
 // Cleanup
 try { fs.rmSync(temp, { recursive: true, force: true }); } catch (_e) {}
 

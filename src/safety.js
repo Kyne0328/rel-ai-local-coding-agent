@@ -24,9 +24,9 @@ const DEFAULT_EXCLUDED_NAMES = new Set([
   "vendor", ".pnpm-store", ".yarn/cache", "storybook-static", ".nyc_output", "htmlcov",
   ".dart_tool", ".flutter-plugins", ".flutter-plugins-dependencies", ".pub-cache", ".pub",
   ".mypy_cache", ".ruff_cache", ".tox", ".nox", ".hypothesis", ".eggs", "site-packages",
-  ".pytest_cache", ".coverage", ".parcel-cache", ".angular", ".expo", ".serverless",
+  ".coverage", ".angular", ".expo", ".serverless",
   ".terraform", ".bloop", ".metals", ".scala-build", ".stack-work", ".cabal",
-  "Pods", "Carthage", "DerivedData", "xcuserdata", ".vs", "cmake-build-debug", "cmake-build-release",
+  "Pods", "Carthage", "xcuserdata", ".vs", "cmake-build-debug", "cmake-build-release",
   ".rel-ai-mcp", ".relai"
 ]);
 
