@@ -22,7 +22,7 @@
     "workspace:add": "node bin/relai-mcp-config.js workspace add",
     "testcmd:add": "node bin/relai-mcp-config.js test-command add",
     "cmd:add": "node bin/relai-mcp-config.js command add",
-    "test": "npm run check && npm run test:repo-health && npm run test:smoke && npm run test:connector-wording && npm run test:windows-archive",
+    "test": "npm run check && npm run test:repo-health && npm run test:smoke && npm run test:connector-wording && npm run test:windows-archive && npm run test:safety-paths && npm run test:archive-safety",
     "test:repo-health": "node test/repo-health.mjs",
     "test:smoke": "node test/smoke.mjs",
     "test:windows-archive": "node test/windows-archive-command-smoke.mjs",
@@ -43,7 +43,9 @@
     "electron:build": "cd electron && npx electron-builder --win --dir",
     "electron:dist": "cd electron && npx electron-builder --win",
     "test:electron": "node test/electron-launcher-smoke.mjs",
-    "test:http-auth": "node test/http-auth-smoke.mjs"
+    "test:http-auth": "node test/http-auth-smoke.mjs",
+    "test:safety-paths": "node test/safety-paths.mjs",
+    "test:archive-safety": "node test/archive-safety.mjs"
   },
   "keywords": [
     "mcp",

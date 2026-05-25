@@ -1139,5 +1139,8 @@ module.exports = {
   relaiDiff,
   relaiReset,
   buildZipCommand,
-  buildUnzipCommand
+  buildUnzipCommand,
+  copyWorkspaceForArchive,
+  overlayDirectory,
+  shouldSkipArchivePath
 };
