@@ -6,6 +6,15 @@ const { discoverCommands } = require("./commandDiscovery");
 const { summarizeOperations } = require("./journal");
 const { repoSnapshot, relaiRead, relaiWrite, relaiReplace, relaiClear, relaiApplyPatch, relaiApplyArchive, relaiSnapshotArchive, relaiVerify, relaiBrowser, relaiDiff, relaiReset } = require("./localRepoBridge");
 
+const STALE_TOOL_HINTS = {
+  relai_verify:           "relai_verify was renamed to relai_run_checks. Please use relai_run_checks instead.",
+  relai_reset:            "relai_reset was renamed to relai_restore_changes. Please use relai_restore_changes instead.",
+  relai_delete:           "relai_delete was renamed to relai_clear_files. Please use relai_clear_files instead.",
+  relai_apply_patch:      "relai_apply_patch was renamed to relai_apply_update. Please use relai_apply_update instead.",
+  relai_apply_archive:    "relai_apply_archive was renamed to relai_apply_bundle. Please use relai_apply_bundle instead.",
+  relai_snapshot_archive: "relai_snapshot_archive was renamed to relai_package_snapshot. Please use relai_package_snapshot instead.",
+};
+
 const BRIDGE_TOOL_NAMES = [
   "relai_repo_snapshot",
   "relai_read",
@@ -95,6 +104,9 @@ async function callTool(name, args = {}) {
   const started = Date.now();
   const canonicalName = name;
   try {
+    if (STALE_TOOL_HINTS[name]) {
+      throw new Error(STALE_TOOL_HINTS[name]);
+    }
     if (!isToolCallable(name)) {
       throw new Error(`Unknown tool '${name}'. Available tools: ${BRIDGE_TOOL_NAMES.join(", ")}. Restart/reconnect ChatGPT if the tool list looks stale.`);
     }

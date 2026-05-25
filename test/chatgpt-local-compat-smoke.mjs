@@ -114,10 +114,46 @@ try {
   if (!version.result.isError) throw new Error('removed relai_version MCP tool should be rejected; use /health instead');
   if (!/Unknown tool/.test(version.result.content[0].text)) throw new Error('removed version tool should return Unknown tool');
 
+  // Test stale tool: relai_verify → relai_run_checks
+  send(10, 'tools/call', { name: 'relai_verify', arguments: {} });
+  const staleVerify = await waitFor(10);
+  if (!staleVerify.result.isError) throw new Error('relai_verify should be a stale-tool error');
+  if (!/relai_run_checks/.test(staleVerify.result.content[0].text)) throw new Error('relai_verify error should mention relai_run_checks');
+
+  // Test stale tool: relai_reset → relai_restore_changes
+  send(11, 'tools/call', { name: 'relai_reset', arguments: {} });
+  const staleReset = await waitFor(11);
+  if (!staleReset.result.isError) throw new Error('relai_reset should be a stale-tool error');
+  if (!/relai_restore_changes/.test(staleReset.result.content[0].text)) throw new Error('relai_reset error should mention relai_restore_changes');
+
+  // Test stale tool: relai_delete → relai_clear_files
+  send(12, 'tools/call', { name: 'relai_delete', arguments: {} });
+  const staleDelete = await waitFor(12);
+  if (!staleDelete.result.isError) throw new Error('relai_delete should be a stale-tool error');
+  if (!/relai_clear_files/.test(staleDelete.result.content[0].text)) throw new Error('relai_delete error should mention relai_clear_files');
+
+  // Test stale tool: relai_apply_patch → relai_apply_update
+  send(13, 'tools/call', { name: 'relai_apply_patch', arguments: {} });
+  const stalePatch = await waitFor(13);
+  if (!stalePatch.result.isError) throw new Error('relai_apply_patch should be a stale-tool error');
+  if (!/relai_apply_update/.test(stalePatch.result.content[0].text)) throw new Error('relai_apply_patch error should mention relai_apply_update');
+
+  // Test stale tool: relai_apply_archive → relai_apply_bundle
+  send(14, 'tools/call', { name: 'relai_apply_archive', arguments: {} });
+  const staleArchive = await waitFor(14);
+  if (!staleArchive.result.isError) throw new Error('relai_apply_archive should be a stale-tool error');
+  if (!/relai_apply_bundle/.test(staleArchive.result.content[0].text)) throw new Error('relai_apply_archive error should mention relai_apply_bundle');
+
+  // Test stale tool: relai_snapshot_archive → relai_package_snapshot
+  send(15, 'tools/call', { name: 'relai_snapshot_archive', arguments: {} });
+  const staleSnapshot = await waitFor(15);
+  if (!staleSnapshot.result.isError) throw new Error('relai_snapshot_archive should be a stale-tool error');
+  if (!/relai_package_snapshot/.test(staleSnapshot.result.content[0].text)) throw new Error('relai_snapshot_archive error should mention relai_package_snapshot');
+
   fs.rmSync(path.join(root, 'tmp-relai-bridge.txt'), { force: true });
   fs.rmSync(path.join(root, 'tmp-relai-replace.txt'), { force: true });
 
-  console.log('ChatGPT local single-workflow smoke test passed; removed tools are rejected.');
+  console.log('ChatGPT local single-workflow smoke test passed; removed tools are rejected and stale tools return helpful errors.');
 } finally {
   child.stdin.end();
   child.kill('SIGTERM');
