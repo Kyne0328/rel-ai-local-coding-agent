@@ -18,8 +18,4 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run check
-      - run: npm run test:repo-health
-      - run: npm run test:smoke
-      - run: npm run test:compat
-      - run: npm run test:public-workflow
+      - run: npm run test:all
