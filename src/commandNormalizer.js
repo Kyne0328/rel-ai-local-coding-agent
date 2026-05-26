@@ -9,22 +9,24 @@ const KNOWN_RUNNABLE_PREFIXES = [
 ];
 
 function normalizeCommandAlias(commandKey, commandValue, discoveredCommands) {
-  const value = String(commandValue || '').trim();
-  const key = String(commandKey || '').trim();
-  const disc = discoveredCommands && typeof discoveredCommands === 'object' ? discoveredCommands : {};
+  const value = String(commandValue ?? '').trim();
+  const key = String(commandKey ?? '').trim();
+  const disc = discoveredCommands && typeof discoveredCommands === 'object' && !Array.isArray(discoveredCommands)
+    ? discoveredCommands
+    : {};
 
   if (!value) {
     return { command: key, normalized: false, warning: 'empty command value' };
   }
 
+  // Key maps to a discovered command (checked BEFORE value-match)
+  if (Object.prototype.hasOwnProperty.call(disc, key)) {
+    return { command: disc[key], normalized: true, originalValue: value };
+  }
+
   // Already a canonical discovered value
   if (Object.values(disc).includes(value)) {
     return { command: value, normalized: false };
-  }
-
-  // Key maps to a discovered command
-  if (Object.prototype.hasOwnProperty.call(disc, key)) {
-    return { command: disc[key], normalized: true, originalValue: value };
   }
 
   // Looks like a directly runnable command
