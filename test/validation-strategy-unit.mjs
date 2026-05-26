@@ -80,4 +80,57 @@ function makeTempRepo(filename, content = 'hello') {
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 
+// 8. UI file (contains /ui/) → broad
+{
+  const dir = makeTempRepo('src/ui/dashboard.js', 'export default {}');
+  const r = selectValidationLevel(dir, {}, null);
+  assert.equal(r.level, 'broad', 'ui-file: level must be broad');
+  assert.ok(r.reason.includes('UI') || r.reason.includes('HTTP') || r.reason.includes('operator'), 'ui-file: reason must mention UI/HTTP/operator');
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// 9. 6+ files across multiple top-level directories → broad
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-vs-broad-'));
+  execSync('git init', { cwd: dir, stdio: 'pipe' });
+  execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe' });
+  execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe' });
+  fs.writeFileSync(path.join(dir, 'initial.txt'), 'init');
+  execSync('git add .', { cwd: dir, stdio: 'pipe' });
+  execSync('git commit -m "init"', { cwd: dir, stdio: 'pipe' });
+  // Create 6 files in different top-level dirs
+  const filesToCreate = [
+    'src/a.js', 'lib/b.js', 'utils/c.js',
+    'helpers/d.js', 'core/e.js', 'scripts/f.js'
+  ];
+  for (const f of filesToCreate) {
+    const fp = path.join(dir, f);
+    fs.mkdirSync(path.dirname(fp), { recursive: true });
+    fs.writeFileSync(fp, 'x');
+  }
+  const r = selectValidationLevel(dir, {}, null);
+  assert.equal(r.level, 'broad', 'multi-dir: level must be broad');
+  assert.ok(r.reason.includes('multiple') || r.reason.includes('directories'), 'multi-dir: reason must mention multiple directories');
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// 10. 2-5 files in one directory → focused (fallback)
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-vs-onedir-'));
+  execSync('git init', { cwd: dir, stdio: 'pipe' });
+  execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe' });
+  execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe' });
+  fs.writeFileSync(path.join(dir, 'initial.txt'), 'init');
+  execSync('git add .', { cwd: dir, stdio: 'pipe' });
+  execSync('git commit -m "init"', { cwd: dir, stdio: 'pipe' });
+  // Create 3 source files in the same directory
+  for (const name of ['alpha.js', 'beta.js', 'gamma.js']) {
+    fs.mkdirSync(path.join(dir, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'src', name), 'x');
+  }
+  const r = selectValidationLevel(dir, {}, null);
+  assert.equal(r.level, 'focused', 'one-dir: level must be focused');
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
 console.log('validationStrategy unit tests passed.');
