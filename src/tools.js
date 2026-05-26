@@ -177,11 +177,24 @@ function relaiStatus(config, args = {}) {
   if (args.workspace) {
     try {
       const workspace = resolveWorkspace(config, args.workspace);
+      const discovered = discoverCommands(workspace.path);
+      const commandKeys = Object.keys(workspace.commands || {}).sort();
+      const testCommandKeys = Object.keys(workspace.testCommands || {}).sort();
+      const staleCommandKeys = commandKeys.filter((k) => {
+        const cmd = (workspace.commands || {})[k];
+        return cmd && !Object.values(discovered).includes(cmd) && !discovered[cmd];
+      });
+      const staleTestCommandKeys = testCommandKeys.filter((k) => {
+        const cmd = (workspace.testCommands || {})[k];
+        return cmd && !Object.values(discovered).includes(cmd) && !discovered[cmd];
+      });
       selectedWorkspace = {
         alias: workspace.alias,
         root: workspace.path,
-        commandKeys: Object.keys(workspace.commands || {}).sort(),
-        testCommandKeys: Object.keys(workspace.testCommands || {}).sort()
+        commandKeys,
+        testCommandKeys,
+        ...(staleCommandKeys.length > 0 ? { staleCommandKeys } : {}),
+        ...(staleTestCommandKeys.length > 0 ? { staleTestCommandKeys } : {})
       };
     } catch (error) {
       selectedWorkspace = { alias: String(args.workspace), error: error instanceof Error ? error.message : String(error) };

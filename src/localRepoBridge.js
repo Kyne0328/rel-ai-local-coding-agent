@@ -679,7 +679,7 @@ function validatePatchPaths(workspace, patch) {
       paths.push(safe.relativePath);
     }
   }
-  if (paths.length === 0) throw new Error("Patch did not contain any valid workspace file paths.");
+  if (paths.length === 0) throw new Error("Patch did not contain any valid workspace file paths. Expected unified diff format with headers like '--- a/path/to/file' and '+++ b/path/to/file'. Example: use 'git diff' output or generate a patch with 'git format-patch'.");
   return paths;
 }
 
@@ -1063,19 +1063,29 @@ function hasRequestedChecks(args = {}) {
   return Boolean(args.verify || args.check || args.checks || args.checksText || args.command || args.commands || args.commandsText);
 }
 
+function resolveCommandAlias(raw, discoveredCommands) {
+  const trimmed = String(raw || "").trim();
+  if (!trimmed) return trimmed;
+  if (discoveredCommands && Object.prototype.hasOwnProperty.call(discoveredCommands, trimmed)) {
+    return discoveredCommands[trimmed];
+  }
+  return trimmed;
+}
+
 function normalizeVerifyChecks(args, root, level) {
+  const discovered = discoverCommands(root);
   const explicit = [];
-  if (typeof args.check === "string" && args.check.trim()) explicit.push(args.check.trim());
-  if (typeof args.command === "string" && args.command.trim()) explicit.push(args.command.trim());
+  if (typeof args.check === "string" && args.check.trim()) explicit.push(resolveCommandAlias(args.check, discovered));
+  if (typeof args.command === "string" && args.command.trim()) explicit.push(resolveCommandAlias(args.command, discovered));
   if (Array.isArray(args.commands)) {
     for (const item of args.commands) {
-      const command = String(item || "").trim();
+      const command = resolveCommandAlias(String(item || ""), discovered);
       if (command) explicit.push(command);
     }
   }
   if (typeof args.commandsText === "string" && args.commandsText.trim()) {
     for (const line of args.commandsText.split(/\r?\n/)) {
-      const command = line.trim();
+      const command = resolveCommandAlias(line.trim(), discovered);
       if (command && !command.startsWith("#")) explicit.push(command);
     }
   }

@@ -355,28 +355,6 @@ If no check is provided, it auto-detects sensible validation checks for the work
 
 ## Tool selection guide
 
-ChatGPT should choose tools by task shape and file size. All tools are part of the same workspace workflow.
-
-| Situation | Use |
-| --- | --- |
-| Need a project overview | `relai_repo_snapshot` |
-| Need focused file content | `relai_read` |
-| Small localized edit inside an existing file | `relai_replace` |
-| Complete replacement of a small or normal-sized file | `relai_write` direct mode |
-| Complete replacement of a large file | `relai_write` staged mode |
-| Multi-file patch-shaped change | `relai_apply_update` |
-| Prepared file bundle update | `relai_apply_bundle` |
-| Remove obsolete files | `relai_clear_files` |
-| Run validation | `relai_run_checks` |
-| Review changes | `relai_diff` |
-| Restore changes | `relai_restore_changes` |
-
-The `writeGuidance` field returned by `relai_read` and `relai_repo_snapshot` gives the recommended mode for the current file or workspace. Prefer that guidance over guessing from the tool list.
-
----
-
-## Tool selection guide
-
 Use this guide together with the `writeGuidance` returned by `relai_repo_snapshot` and `relai_read`.
 
 | Situation | Use |

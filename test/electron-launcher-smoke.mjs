@@ -25,11 +25,11 @@ assert.throws(() => normalizeNgrokDomain('-bad.example.com'), /letters, numbers,
 
 assert.equal(
   buildTunnelCommand('my-domain.ngrok-free.dev', 3333),
-  'ngrok http --url=my-domain.ngrok-free.dev 3333 --log=stdout'
+  'ngrok http --url=my-domain.ngrok-free.dev http://127.0.0.1:3333 --log=stdout'
 );
 assert.equal(
   buildTunnelCommand('MY-DOMAIN.ngrok-free.dev', 4444),
-  'ngrok http --url=my-domain.ngrok-free.dev 4444 --log=stdout'
+  'ngrok http --url=my-domain.ngrok-free.dev http://127.0.0.1:4444 --log=stdout'
 );
 
 assert.equal(
