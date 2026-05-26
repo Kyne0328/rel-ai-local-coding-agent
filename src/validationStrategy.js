@@ -43,8 +43,8 @@ function classifyFiles(files) {
 
   const filesWithDir = files.filter((f) => f.includes('/'));
   const topDirs = new Set(filesWithDir.map((f) => f.split('/')[0]));
-  if (files.length >= 6 && topDirs.size > 1) {
-    return { level: 'broad', reason: `${files.length} files across multiple directories` };
+  if (filesWithDir.length >= 6 && topDirs.size > 1) {
+    return { level: 'broad', reason: `${filesWithDir.length} files across multiple directories` };
   }
 
   if (files.length === 1) {
