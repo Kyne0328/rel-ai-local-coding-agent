@@ -11,10 +11,9 @@
     font-size: 13px;
     background: #0d1117;
     color: #e0e0e0;
-    height: 100vh;
+    min-height: 0;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
   }
   .header { background: #161622; padding: 11px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #2a2a3e; flex-shrink: 0; }
   .header-left { display: flex; align-items: center; gap: 8px; }
@@ -23,7 +22,7 @@
   .version { font-size: 11px; color: #555; }
   .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #555; flex-shrink: 0; }
   .status-dot.running { background: #22c55e; }
-  .body { padding: 14px 16px; flex: 1; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+  .body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 10px; }
   .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .card { background: #111; border-radius: 6px; padding: 10px 12px; }
   .card-label { font-size: 11px; color: #777; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; }
@@ -42,7 +41,7 @@
   .btn-copy { width: 100%; background: #3b82f6; border: none; border-radius: 5px; color: #fff; padding: 8px; font-size: 13px; font-weight: 500; }
   .btn-copy:hover { background: #2563eb; }
   .btn-copy:disabled { background: #1e2e4a; color: #555; cursor: not-allowed; }
-  .actions { display: flex; gap: 6px; margin-top: auto; }
+  .actions { display: flex; gap: 6px; margin-top: 4px; }
   .btn-action { flex: 1; background: #1e1e2e; border: 1px solid #333; border-radius: 5px; color: #aaa; padding: 8px; font-size: 12px; }
   .btn-action:hover { background: #2a2a3e; }
   .btn-stop { background: #7f1d1d; border: none; color: #fca5a5; }

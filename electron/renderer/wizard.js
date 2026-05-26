@@ -7,6 +7,16 @@ const state = {
 
 let currentStep = 1;
 
+function requestWindowFit() {
+  window.requestAnimationFrame(() => {
+    const wizard = document.querySelector('.wizard');
+    if (!wizard || !window.electronAPI || typeof window.electronAPI.fitWindowToContent !== 'function') return;
+    const width = Math.ceil(wizard.getBoundingClientRect().width);
+    const height = Math.ceil(document.documentElement.scrollHeight);
+    window.electronAPI.fitWindowToContent({ width, height });
+  });
+}
+
 function normalizeDomain(value) {
   return String(value || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '').toLowerCase();
 }
@@ -27,6 +37,7 @@ function goTo(stepNumber) {
   if (stepNumber === 3 && !state.token) regenerateToken();
   if (stepNumber === 4) updateNgrokPreview();
   if (stepNumber === 5) renderSummary();
+  requestWindowFit();
 }
 
 function updateProgress() {
@@ -41,11 +52,13 @@ function validatePort() {
   if (!Number.isInteger(value) || value < 1024 || value > 65535) {
     hint.textContent = 'Enter a valid port between 1024 and 65535.';
     hint.style.color = '#f87171';
+    requestWindowFit();
     return;
   }
   state.port = value;
   hint.textContent = 'Port saved.';
   hint.style.color = '#22c55e';
+  requestWindowFit();
   window.setTimeout(() => goTo(3), 200);
 }
 
@@ -70,6 +83,7 @@ function validateDomain() {
   const error = document.getElementById('domainError');
   if (!isValidDomain(domain)) {
     error.textContent = 'Enter a valid domain, for example your-name.ngrok-free.dev.';
+    requestWindowFit();
     return;
   }
   state.ngrokDomain = domain;
@@ -102,6 +116,7 @@ function renderSummary() {
 async function launch() {
   const launchError = document.getElementById('launchError');
   launchError.textContent = '';
+  requestWindowFit();
   try {
     await window.electronAPI.wizardDone({
       port: state.port,
@@ -110,6 +125,7 @@ async function launch() {
     });
   } catch (error) {
     launchError.textContent = error && error.message ? error.message : String(error);
+    requestWindowFit();
   }
 }
 
@@ -142,3 +158,4 @@ bindEvents();
 loadEditParams();
 updateProgress();
 if (state.token) document.getElementById('tokenBox').textContent = state.token;
+requestWindowFit();

@@ -1,5 +1,16 @@
 let currentMcpUrl = '';
 
+function requestWindowFit() {
+  window.requestAnimationFrame(() => {
+    if (!window.electronAPI || typeof window.electronAPI.fitWindowToContent !== 'function') return;
+    const body = document.querySelector('.body');
+    const widthSource = body || document.documentElement;
+    const width = Math.ceil(widthSource.getBoundingClientRect().width);
+    const height = Math.ceil(document.documentElement.scrollHeight);
+    window.electronAPI.fitWindowToContent({ width, height });
+  });
+}
+
 function updateUI(status) {
   const serverRunning = Boolean(status && status.serverRunning);
   const tunnelStatus = status && status.tunnelStatus ? status.tunnelStatus : 'stopped';
@@ -53,6 +64,7 @@ function updateUI(status) {
   document.getElementById('errorLine').textContent = error;
   document.getElementById('stopBtn').style.display = serverRunning ? '' : 'none';
   document.getElementById('startBtn').style.display = serverRunning ? 'none' : '';
+  requestWindowFit();
 }
 
 function bindEvents() {
@@ -78,7 +90,9 @@ window.electronAPI.getExtensionPath().then((p) => {
       if (p) window.electronAPI.copyText(p);
     });
   }
+  requestWindowFit();
 }).catch(() => {
   const el = document.getElementById('extPath');
   if (el) el.textContent = 'Not available';
+  requestWindowFit();
 });

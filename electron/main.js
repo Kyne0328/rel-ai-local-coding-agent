@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage, screen } = require('electron');
 const fs = require('node:fs');
 const net = require('node:net');
 const path = require('node:path');
@@ -36,6 +36,25 @@ let currentStatus = {
   tunnelStatus: 'stopped',
   mcpUrl: '',
   error: ''
+};
+
+const WINDOW_SIZE_LIMITS = {
+  wizard: {
+    minWidth: 480,
+    maxWidth: 720,
+    minHeight: 420,
+    maxHeight: 900,
+    paddingWidth: 24,
+    paddingHeight: 24
+  },
+  status: {
+    minWidth: 440,
+    maxWidth: 760,
+    minHeight: 500,
+    maxHeight: 940,
+    paddingWidth: 20,
+    paddingHeight: 20
+  }
 };
 
 const gotLock = app.requestSingleInstanceLock();
@@ -81,9 +100,12 @@ function createWizardWindow(options = {}) {
   }
 
   wizardWindow = new BrowserWindow({
-    width: 480,
-    height: 580,
+    width: WINDOW_SIZE_LIMITS.wizard.minWidth,
+    height: 620,
+    minWidth: WINDOW_SIZE_LIMITS.wizard.minWidth,
+    minHeight: WINDOW_SIZE_LIMITS.wizard.minHeight,
     resizable: false,
+    useContentSize: true,
     parent: options.parent || undefined,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -96,6 +118,9 @@ function createWizardWindow(options = {}) {
 
   const loadOptions = options.query ? { query: options.query } : undefined;
   wizardWindow.loadFile(path.join(__dirname, 'renderer', 'wizard.html'), loadOptions);
+  wizardWindow.webContents.on('did-finish-load', () => {
+    fitWindowToContent(wizardWindow, { type: 'wizard' });
+  });
   wizardWindow.on('closed', () => {
     wizardWindow = null;
   });
@@ -111,10 +136,11 @@ function createStatusWindow() {
   }
 
   statusWindow = new BrowserWindow({
-    width: 440,
-    height: 520,
-    minWidth: 380,
-    minHeight: 480,
+    width: WINDOW_SIZE_LIMITS.status.minWidth,
+    height: 620,
+    minWidth: WINDOW_SIZE_LIMITS.status.minWidth,
+    minHeight: WINDOW_SIZE_LIMITS.status.minHeight,
+    useContentSize: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -437,6 +463,34 @@ function openSettingsWindow() {
   });
 }
 
+function fitWindowToContent(win, options = {}) {
+  if (!win || win.isDestroyed()) return;
+
+  const type = options.type === 'wizard' ? 'wizard' : 'status';
+  const limits = WINDOW_SIZE_LIMITS[type];
+  const display = screen.getDisplayMatching(win.getBounds());
+  const maxDisplayWidth = Math.max(limits.minWidth, (display?.workAreaSize?.width || limits.maxWidth) - 80);
+  const maxDisplayHeight = Math.max(limits.minHeight, (display?.workAreaSize?.height || limits.maxHeight) - 80);
+
+  const requestedWidth = Number.isFinite(options.width) ? options.width : win.getContentBounds().width;
+  const requestedHeight = Number.isFinite(options.height) ? options.height : win.getContentBounds().height;
+
+  const width = Math.max(
+    limits.minWidth,
+    Math.min(Math.ceil(requestedWidth + limits.paddingWidth), limits.maxWidth, maxDisplayWidth)
+  );
+  const height = Math.max(
+    limits.minHeight,
+    Math.min(Math.ceil(requestedHeight + limits.paddingHeight), limits.maxHeight, maxDisplayHeight)
+  );
+
+  const currentBounds = win.getContentBounds();
+  if (currentBounds.width === width && currentBounds.height === height) return;
+
+  win.setContentSize(width, height, true);
+  win.center();
+}
+
 function formatError(error) {
   return error instanceof Error ? error.message : String(error || 'Unknown error');
 }
@@ -482,6 +536,21 @@ ipcMain.handle('url:open-dashboard', () => {
 
 ipcMain.handle('extension:get-path', () => {
   return resolveResourcePath(path.join('public', 'extensions', 'chrome-auto-approve'));
+});
+
+ipcMain.on('window:fit-content', (event, payload = {}) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) return;
+
+  const isWizard = win === wizardWindow;
+  const isStatus = win === statusWindow;
+  if (!isWizard && !isStatus) return;
+
+  fitWindowToContent(win, {
+    type: isWizard ? 'wizard' : 'status',
+    width: Number(payload.width),
+    height: Number(payload.height)
+  });
 });
 
 module.exports = { isPortAvailable, normalizeWizardConfig, saveLauncherConfig };

@@ -15,5 +15,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.removeAllListeners('server:status');
   },
   getExtensionPath: () => ipcRenderer.invoke('extension:get-path'),
-  copyText: (text) => ipcRenderer.invoke('url:copy', text)
+  copyText: (text) => ipcRenderer.invoke('url:copy', text),
+  fitWindowToContent: (size) => ipcRenderer.send('window:fit-content', size)
 });
