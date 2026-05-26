@@ -1152,5 +1152,7 @@ module.exports = {
   buildUnzipCommand,
   copyWorkspaceForArchive,
   overlayDirectory,
-  shouldSkipArchivePath
+  shouldSkipArchivePath,
+  STAGED_WRITE_BYTE_THRESHOLD,
+  STAGED_WRITE_LINE_THRESHOLD
 };
