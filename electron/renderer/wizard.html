@@ -21,38 +21,39 @@
   .progress-step.done { background: #3b82f6; }
   .step { display: none; }
   .step.active { display: block; }
-  h1 { font-size: 20px; margin-bottom: 6px; }
-  h2 { font-size: 16px; margin-bottom: 6px; }
-  .subtitle { font-size: 12px; color: #888; margin-bottom: 20px; line-height: 1.5; }
-  label { font-size: 11px; color: #888; display: block; margin-bottom: 4px; }
+  h1 { font-size: 22px; margin-bottom: 8px; }
+  h2 { font-size: 17px; margin-bottom: 8px; }
+  .subtitle { font-size: 13px; color: #888; margin-bottom: 20px; line-height: 1.6; }
+  label { font-size: 12px; color: #888; display: block; margin-bottom: 5px; font-weight: 500; }
   input[type=text], input[type=number] {
-    width: 100%; padding: 8px 10px; background: #111; border: 1px solid #444;
-    border-radius: 4px; color: #e0e0e0; font-size: 13px; margin-bottom: 6px;
+    width: 100%; padding: 9px 11px; background: #111; border: 1px solid #444;
+    border-radius: 5px; color: #e0e0e0; font-size: 14px; margin-bottom: 6px;
+    font-family: inherit;
   }
   input:focus { outline: none; border-color: #3b82f6; }
-  .hint { font-size: 10px; color: #666; margin-bottom: 16px; line-height: 1.5; min-height: 16px; }
-  .hint code { color: #aaa; background: #1a1a1a; padding: 1px 4px; border-radius: 2px; }
-  .token-box { background: #111; border: 1px solid #333; border-radius: 4px;
-    padding: 8px 10px; font-size: 12px; color: #60a5fa; font-family: monospace;
-    word-break: break-all; margin-bottom: 8px; min-height: 34px; }
+  .hint { font-size: 12px; color: #666; margin-bottom: 16px; line-height: 1.6; min-height: 18px; }
+  .hint code { color: #aaa; background: #1a1a1a; padding: 2px 5px; border-radius: 3px; font-size: 11px; }
+  .token-box { background: #111; border: 1px solid #333; border-radius: 5px;
+    padding: 10px 12px; font-size: 13px; color: #60a5fa; font-family: "SF Mono", Consolas, monospace;
+    word-break: break-all; margin-bottom: 10px; min-height: 38px; line-height: 1.5; }
   .btn-row { display: flex; gap: 8px; margin-bottom: 8px; }
   .nav { display: flex; justify-content: space-between; margin-top: 20px; }
-  button { padding: 7px 18px; border: none; border-radius: 4px; font-size: 12px;
+  button { padding: 8px 20px; border: none; border-radius: 5px; font-size: 13px;
     cursor: pointer; font-family: inherit; }
-  .btn-primary { background: #3b82f6; color: #fff; }
+  .btn-primary { background: #3b82f6; color: #fff; font-weight: 500; }
   .btn-primary:hover { background: #2563eb; }
   .btn-secondary { background: #1e1e2e; border: 1px solid #333; color: #aaa; }
   .btn-secondary:hover { background: #2a2a3e; }
-  .btn-success { background: #22c55e; color: #000; font-weight: 600; font-size: 14px; padding: 10px 28px; }
+  .btn-success { background: #22c55e; color: #000; font-weight: 700; font-size: 15px; padding: 11px 32px; }
   .btn-success:hover { background: #16a34a; }
-  .error { font-size: 11px; color: #f87171; margin-top: 4px; min-height: 16px; }
-  .success { font-size: 11px; color: #22c55e; margin-top: 4px; min-height: 16px; }
-  .summary-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #1e1e2e; font-size: 12px; }
+  .error { font-size: 12px; color: #f87171; margin-top: 4px; min-height: 18px; }
+  .success { font-size: 12px; color: #22c55e; margin-top: 4px; min-height: 18px; }
+  .summary-row { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid #1e1e2e; font-size: 13px; }
   .summary-row:last-child { border-bottom: none; }
   .summary-key { color: #888; }
-  .summary-val { color: #e0e0e0; font-family: monospace; font-size: 11px; max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .summary-val { color: #e0e0e0; font-family: "SF Mono", Consolas, monospace; font-size: 12px; max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .summary-box { background: #111; border-radius: 6px; padding: 4px 12px; margin-bottom: 20px; }
-  .welcome-icon { font-size: 40px; text-align: center; margin: 16px 0 12px; }
+  .welcome-icon { font-size: 44px; text-align: center; margin: 16px 0 14px; }
   .welcome-center { text-align: center; }
 </style>
 </head>
@@ -67,17 +68,17 @@
   </div>
 
   <div class="step active" id="step1">
-    <div class="welcome-icon">link</div>
+    <div class="welcome-icon">&#128279;</div>
     <div class="welcome-center">
       <h1>Rel.AI MCP Launcher</h1>
-      <p class="subtitle">Connect ChatGPT to your local repos through a stable ngrok domain. This wizard saves the existing Rel.AI MCP config files.</p>
+      <p class="subtitle">Connect ChatGPT to your local files through a secure ngrok tunnel. Setup takes about 2 minutes — you'll need an ngrok account with a static domain.</p>
       <button class="btn-primary" id="startWizardBtn">Get Started &rarr;</button>
     </div>
   </div>
 
   <div class="step" id="step2">
     <h2>Local server port</h2>
-    <p class="subtitle">Port the MCP server listens on. Default 3333 works for most setups.</p>
+    <p class="subtitle">The port the MCP server listens on. Leave as 3333 unless another app is already using it.</p>
     <label for="portInput">Port number</label>
     <input type="number" id="portInput" value="3333" min="1024" max="65535">
     <div class="hint" id="portHint"></div>
@@ -88,12 +89,12 @@
   </div>
 
   <div class="step" id="step3">
-    <h2>Dashboard auth token</h2>
-    <p class="subtitle">This protects the local dashboard. ChatGPT uses the secret embedded in the MCP URL instead.</p>
+    <h2>Dashboard token</h2>
+    <p class="subtitle">This token protects your local dashboard. Copy it now and save it somewhere safe — you'll need it to log in to the dashboard later.</p>
     <label>Your token</label>
     <div class="token-box" id="tokenBox"></div>
     <div class="btn-row">
-      <button class="btn-secondary" id="copyTokenBtn">Copy</button>
+      <button class="btn-secondary" id="copyTokenBtn">Copy token</button>
       <button class="btn-secondary" id="regenTokenBtn">Regenerate</button>
     </div>
     <div class="nav">
@@ -104,10 +105,10 @@
 
   <div class="step" id="step4">
     <h2>ngrok static domain</h2>
-    <p class="subtitle">Enter the permanent domain from your ngrok dashboard, without https://.</p>
+    <p class="subtitle">Find your static domain at <strong>ngrok.com &rarr; Dashboard &rarr; Domains</strong>. Paste it below without the https:// prefix.</p>
     <label for="domainInput">Domain</label>
     <input type="text" id="domainInput" placeholder="your-name.ngrok-free.dev" autocomplete="off" spellcheck="false">
-    <div class="hint">Launcher will run: <code id="ngrokCmdPreview">ngrok http --url=&lt;domain&gt; 3333 --log=stdout</code></div>
+    <div class="hint">Command that will run: <code id="ngrokCmdPreview">ngrok http --url=&lt;domain&gt; 3333 --log=stdout</code></div>
     <div class="error" id="domainError"></div>
     <div class="nav">
       <button class="btn-secondary" data-go="3">&larr; Back</button>
@@ -116,12 +117,12 @@
   </div>
 
   <div class="step" id="step5">
-    <h2 style="text-align:center;margin-bottom:16px;">Ready</h2>
+    <h2 style="text-align:center;margin-bottom:16px;">All set!</h2>
     <div class="summary-box" id="summaryBox"></div>
     <div style="text-align:center;">
       <button class="btn-success" id="launchBtn">Launch Server</button>
-      <p class="hint" style="margin-top:10px;">In ChatGPT, add this URL as a connector with <strong>No Authentication</strong>. Treat the URL as a secret — rotate it if exposed.</p>
-      <p class="hint">Config saved. Next launch skips this wizard.</p>
+      <p class="hint" style="margin-top:12px;">After launch, copy the MCP URL and add it in ChatGPT as a connector with <strong>No Authentication</strong>. Treat the URL like a password.</p>
+      <p class="hint">Settings are saved — this wizard won't appear again on next launch.</p>
       <div class="error" id="launchError"></div>
     </div>
   </div>

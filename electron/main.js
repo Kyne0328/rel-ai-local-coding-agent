@@ -82,7 +82,7 @@ function createWizardWindow(options = {}) {
 
   wizardWindow = new BrowserWindow({
     width: 480,
-    height: 540,
+    height: 580,
     resizable: false,
     parent: options.parent || undefined,
     webPreferences: {
@@ -111,10 +111,10 @@ function createStatusWindow() {
   }
 
   statusWindow = new BrowserWindow({
-    width: 420,
-    height: 480,
+    width: 440,
+    height: 520,
     minWidth: 380,
-    minHeight: 450,
+    minHeight: 480,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

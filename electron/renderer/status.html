@@ -7,7 +7,8 @@
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 13px;
     background: #0d1117;
     color: #e0e0e0;
     height: 100vh;
@@ -15,44 +16,44 @@
     flex-direction: column;
     overflow: hidden;
   }
-  .header { background: #161622; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #333; flex-shrink: 0; }
+  .header { background: #161622; padding: 11px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #2a2a3e; flex-shrink: 0; }
   .header-left { display: flex; align-items: center; gap: 8px; }
-  .header-title { font-weight: 600; font-size: 13px; }
+  .header-title { font-weight: 600; font-size: 14px; }
   .header-right { display: flex; align-items: center; gap: 8px; }
-  .version { font-size: 10px; color: #555; }
-  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #555; }
+  .version { font-size: 11px; color: #555; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #555; flex-shrink: 0; }
   .status-dot.running { background: #22c55e; }
-  .body { padding: 12px 14px; flex: 1; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+  .body { padding: 14px 16px; flex: 1; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
   .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .card { background: #111; border-radius: 6px; padding: 8px 10px; }
-  .card-label { font-size: 9px; color: #888; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.04em; }
-  .card-status { font-size: 11px; font-weight: 600; }
-  .card-sub { font-size: 9px; color: #555; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card { background: #111; border-radius: 6px; padding: 10px 12px; }
+  .card-label { font-size: 11px; color: #777; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; }
+  .card-status { font-size: 14px; font-weight: 600; }
+  .card-sub { font-size: 11px; color: #555; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .running-text { color: #22c55e; }
   .connecting-text { color: #fbbf24; }
   .failed-text { color: #f87171; }
-  .stopped-text { color: #777; }
-  .copy-box { background: #0d1f0d; border: 1px solid #166534; border-radius: 6px; padding: 10px 12px; }
-  .copy-label { font-size: 9px; color: #888; margin-bottom: 4px; letter-spacing: 0.06em; text-transform: uppercase; }
-  .copy-url { font-size: 10px; color: #60a5fa; word-break: break-all; margin-bottom: 8px; font-family: monospace; min-height: 28px; }
+  .stopped-text { color: #666; }
+  .copy-box { background: #0d1f0d; border: 1px solid #166534; border-radius: 6px; padding: 12px 14px; }
+  .copy-label { font-size: 11px; color: #777; margin-bottom: 6px; letter-spacing: 0.05em; text-transform: uppercase; font-weight: 500; }
+  .copy-url { font-size: 12px; color: #60a5fa; word-break: break-all; margin-bottom: 10px; font-family: "SF Mono", Consolas, monospace; min-height: 32px; line-height: 1.5; }
   .copy-url.empty { color: #555; font-style: italic; }
-  .error-line { color: #f87171; font-size: 10px; min-height: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .error-line { color: #f87171; font-size: 12px; min-height: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   button { cursor: pointer; font-family: inherit; }
-  .btn-copy { width: 100%; background: #3b82f6; border: none; border-radius: 4px; color: #fff; padding: 6px; font-size: 11px; }
+  .btn-copy { width: 100%; background: #3b82f6; border: none; border-radius: 5px; color: #fff; padding: 8px; font-size: 13px; font-weight: 500; }
   .btn-copy:hover { background: #2563eb; }
   .btn-copy:disabled { background: #1e2e4a; color: #555; cursor: not-allowed; }
   .actions { display: flex; gap: 6px; margin-top: auto; }
-  .btn-action { flex: 1; background: #1e1e2e; border: 1px solid #333; border-radius: 4px; color: #aaa; padding: 6px; font-size: 10px; }
+  .btn-action { flex: 1; background: #1e1e2e; border: 1px solid #333; border-radius: 5px; color: #aaa; padding: 8px; font-size: 12px; }
   .btn-action:hover { background: #2a2a3e; }
   .btn-stop { background: #7f1d1d; border: none; color: #fca5a5; }
   .btn-stop:hover { background: #991b1b; }
   .btn-start { background: #14532d; border: none; color: #86efac; font-weight: 600; }
   .btn-start:hover { background: #166534; }
-  .ext-box { background: #111; border-radius: 6px; padding: 8px 10px; }
-  .ext-label { font-size: 9px; color: #888; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.04em; }
-  .ext-path { font-size: 9px; color: #94a3b8; font-family: monospace; word-break: break-all; margin-bottom: 6px; min-height: 14px; }
-  .ext-hint { font-size: 9px; color: #555; margin-bottom: 6px; line-height: 1.4; }
-  .btn-ext { width: 100%; background: #1e293b; border: 1px solid #334155; border-radius: 4px; color: #94a3b8; padding: 5px; font-size: 10px; }
+  .ext-box { background: #111; border-radius: 6px; padding: 10px 12px; }
+  .ext-label { font-size: 11px; color: #777; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; }
+  .ext-path { font-size: 11px; color: #94a3b8; font-family: "SF Mono", Consolas, monospace; word-break: break-all; margin-bottom: 7px; min-height: 16px; line-height: 1.4; }
+  .ext-hint { font-size: 11px; color: #555; margin-bottom: 8px; line-height: 1.5; }
+  .btn-ext { width: 100%; background: #1e293b; border: 1px solid #334155; border-radius: 5px; color: #94a3b8; padding: 7px; font-size: 12px; }
   .btn-ext:hover { background: #273448; }
 </style>
 </head>
@@ -93,7 +94,7 @@
   <div class="ext-box">
     <div class="ext-label">Chrome Extension</div>
     <div class="ext-path" id="extPath">Loading...</div>
-    <div class="ext-hint">chrome://extensions → Enable Developer mode → Load unpacked → select path above</div>
+    <div class="ext-hint">1. Open <strong>chrome://extensions</strong> in Chrome<br>2. Toggle <strong>Developer mode</strong> (top-right)<br>3. Click <strong>Load unpacked</strong> &rarr; select the path above</div>
     <button class="btn-ext" id="extCopyBtn">Copy Extension Path</button>
   </div>
 
