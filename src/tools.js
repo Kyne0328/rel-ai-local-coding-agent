@@ -32,16 +32,21 @@ const BRIDGE_TOOL_NAMES = [
   "relai_feature_probe"
 ];
 
+const READ_ONLY_LOCAL  = { readOnlyHint: false,  destructiveHint: false, idempotentHint: false,  openWorldHint: false };
+const WRITE_LOCAL      = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
+const DESTRUCTIVE_LOCAL = { readOnlyHint: false, destructiveHint: false,  idempotentHint: false, openWorldHint: false };
+const WRITE_OPEN       = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false  };
+
 const toolSchemas = [
   tool("relai_repo_snapshot", "Repository Snapshot", "Compact repository overview: file tree, manifests, detected checks, and project hints.", {
     workspace: stringProp(), maxEntries: numberProp(1, 20000), includeFiles: boolProp()
-  }, ["workspace"]),
+  }, ["workspace"], READ_ONLY_LOCAL),
   tool("relai_read", "Read Local Repo Paths", "Batch-read files or directory summaries from the workspace.", {
     workspace: stringProp(), paths: arrayProp("string", 1, 100), maxBytes: numberProp(1000, 10485760), maxEntries: numberProp(1, 20000)
-  }, ["workspace", "paths"]),
+  }, ["workspace", "paths"], READ_ONLY_LOCAL),
   tool("relai_write", "Write Local Repo File", "Full-file replacement. Use direct { workspace, path, content } for complete-file updates. Use staged mode for very large files.", {
     workspace: stringProp(), path: stringProp(), content: stringProp(), dryRun: boolProp(), stage: stringProp(), writeId: stringProp()
-  }, ["workspace"]),
+  }, ["workspace"], WRITE_LOCAL),
   tool("relai_replace", "Replace Exact Text", "Small deterministic edits inside an existing file. Provide { workspace, path, oldText, newText } or replacements: [{ oldText, newText, occurrence? }]. Duplicate matches require occurrence.", {
     workspace: stringProp(),
     path: stringProp(),
@@ -51,19 +56,19 @@ const toolSchemas = [
     occurrence: numberProp(1, 1000000),
     replacements: arrayObjectProp({ oldText: stringProp(), newText: stringProp(), occurrence: numberProp(1, 1000000) }, ["oldText", "newText"], 1, 50),
     dryRun: boolProp()
-  }, ["workspace", "path"]),
+  }, ["workspace", "path"], WRITE_LOCAL),
   tool("relai_clear_files", "Clear Local Repo Files", "Clear one or more files from a configured workspace. Folders are refused. Supports dryRun and failIfMissing.", {
     workspace: stringProp(), path: stringProp(), paths: arrayProp("string", 1, 100), expectedSha256: stringProp(), dryRun: boolProp(), failIfMissing: boolProp()
-  }, ["workspace"]),
+  }, ["workspace"], DESTRUCTIVE_LOCAL),
   tool("relai_apply_update", "Apply Prepared Update", "Apply a prepared text update to the workspace and optionally run checks afterward.", {
     workspace: stringProp(), updateText: stringProp(), backup: boolProp(), check: stringProp(), checks: arrayProp("string", 0), checksText: stringProp(), timeoutMs: numberProp(1000, 86400000), stopOnFailure: boolProp(), returnDiff: boolProp(), maxResultBytes: numberProp(1000, 5242880)
-  }, ["workspace"]),
+  }, ["workspace"], WRITE_LOCAL),
   tool("relai_apply_bundle", "Apply Prepared Bundle", "Apply a prepared file bundle to the workspace and optionally run checks afterward.", {
     workspace: stringProp(), bundlePath: stringProp(), path: stringProp(), stripRoot: boolProp(), clearMissing: boolProp(), backup: boolProp(), check: stringProp(), checks: arrayProp("string", 0), checksText: stringProp(), timeoutMs: numberProp(1000, 86400000), stopOnFailure: boolProp(), returnDiff: boolProp(), maxResultBytes: numberProp(1000, 5242880)
-  }, ["workspace"]),
+  }, ["workspace"], WRITE_LOCAL),
   tool("relai_package_snapshot", "Package Workspace Zip", "Create a zip package of the current workspace on the MCP host, excluding repo internals, dependency caches, build outputs, and Rel.AI state.", {
     workspace: stringProp(), maxFiles: numberProp(1, 200000), timeoutMs: numberProp(1000, 86400000)
-  }, ["workspace"]),
+  }, ["workspace"], WRITE_LOCAL),
   tool("relai_run_checks", "Run Workspace Checks", "Run workspace validation checks such as tests, analyzers, linters, and build checks.", {
     workspace: stringProp(),
     level: stringProp(),
@@ -72,22 +77,22 @@ const toolSchemas = [
     checksText: stringProp(),
     timeoutMs: numberProp(1000, 86400000),
     stopOnFailure: boolProp()
-  }, ["workspace"]),
+  }, ["workspace"], WRITE_LOCAL),
   tool("relai_browser", "Browser/UI Check", "UI validation bridge. Fetch a URL/route or run a local browser check such as Playwright; returns output and errors.", {
     workspace: stringProp(), url: stringProp(), route: stringProp(), check: stringProp(), timeoutMs: numberProp(1000, 1800000)
-  }, ["workspace"]),
+  }, ["workspace"], WRITE_OPEN),
   tool("relai_diff", "Review Local Repo Diff", "Return git status and current diff as a review artifact.", {
     workspace: stringProp(), staged: boolProp(), path: stringProp(), maxBytes: numberProp(1000, 5242880)
-  }, ["workspace"]),
+  }, ["workspace"], READ_ONLY_LOCAL),
   tool("relai_restore_changes", "Restore Workspace Changes", "Restore selected workspace changes, or restore the workspace to the last git state.", {
     workspace: stringProp(), paths: arrayProp("string", 0, 100), mode: stringProp(), clean: boolProp()
-  }, ["workspace"]),
+  }, ["workspace"], DESTRUCTIVE_LOCAL),
   tool("relai_status", "Rel.AI Status", "Compact live status for configured workspaces, scripts, and CI references. Prefer this over reading source files when checking whether an update is active.", {
     workspace: stringProp()
-  }),
+  }, [], READ_ONLY_LOCAL),
   tool("relai_feature_probe", "Rel.AI Feature Probe", "Compact booleans for important runtime behavior. Prefer this over source reads when checking installed behavior.", {
     workspace: stringProp()
-  })
+  }, [], READ_ONLY_LOCAL)
 ];
 
 const TOOL_NAMES = new Set(toolSchemas.map((item) => item.name));
@@ -354,13 +359,13 @@ function ok(value) {
     : { ok: true, ...value };
 }
 
-function tool(name, title, description, properties, required = []) {
+function tool(name, title, description, properties, required = [], annotations = {}) {
   return {
     name,
     title,
     description,
     inputSchema: { type: "object", properties, required, additionalProperties: false },
-    annotations: { readOnlyHint: false }
+    annotations
   };
 }
 function stringProp() { return { type: "string" }; }
