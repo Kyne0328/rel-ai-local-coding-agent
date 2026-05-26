@@ -49,21 +49,69 @@ async function getConfig() {
   return { ...DEFAULTS, ...(await chrome.storage.local.get(DEFAULTS)) };
 }
 
+const DISCOVER_PORTS = [3333, 3334, 3335, 3336, 3337, 3338, 3339, 3340, 3341, 3342];
+
+async function probeFetch(url, token) {
+  try {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 900);
+    const headers = token ? { Authorization: 'Bearer ' + token } : {};
+    const res = await fetch(url, { headers, cache: 'no-store', signal: ctrl.signal });
+    clearTimeout(tid);
+    return res.ok;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function discoverServer(token) {
+  const results = await Promise.all(DISCOVER_PORTS.map(async (port) => {
+    const url = `http://127.0.0.1:${port}/api/auto-approve/settings`;
+    const ok = await probeFetch(url, token);
+    if (!ok) return null;
+    try {
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 900);
+      const res = await fetch(`http://127.0.0.1:${port}/api/local-connect`, { cache: 'no-store', signal: ctrl.signal });
+      clearTimeout(tid);
+      const data = res.ok ? await res.json() : null;
+      return { base: `http://127.0.0.1:${port}`, token: (data && data.token) || null };
+    } catch (_) {
+      return { base: `http://127.0.0.1:${port}`, token: null };
+    }
+  }));
+  return results.find((r) => r !== null) || null;
+}
+
 async function dashboardAllows(cfg) {
   if (!cfg.enabled) return false;
-  // Still check dashboard for status display only — don't gate on it
   const base = String(cfg.baseUrl || DEFAULTS.baseUrl).replace(/\/$/, '');
-  try {
-    const headers = cfg.token ? { Authorization: 'Bearer ' + cfg.token } : {};
-    const url = cfg.token
-      ? `${base}/api/auto-approve/settings?token=${encodeURIComponent(cfg.token)}`
-      : `${base}/api/auto-approve/settings`;
-    const response = await fetch(url, { headers, cache: 'no-store' });
-    const reachable = response.ok;
-    chrome.storage.local.set({ connectionOk: reachable }).catch(() => {});
-  } catch (_) {
-    chrome.storage.local.set({ connectionOk: false }).catch(() => {});
+  const settingsPath = cfg.token ? `/api/auto-approve/settings?token=${encodeURIComponent(cfg.token)}` : '/api/auto-approve/settings';
+  let reachable = await probeFetch(base + settingsPath, cfg.token);
+  if (reachable) {
+    // Opportunistically sync token from server (in case it changed)
+    try {
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 900);
+      const res = await fetch(`${base}/api/local-connect`, { cache: 'no-store', signal: ctrl.signal });
+      clearTimeout(tid);
+      const data = res.ok ? await res.json() : null;
+      if (data && data.token && data.token !== cfg.token) {
+        await chrome.storage.local.set({ token: data.token });
+      }
+    } catch (_) {}
   }
+  if (!reachable) {
+    const discovered = await discoverServer(cfg.token);
+    if (discovered) {
+      reachable = true;
+      const updates = {};
+      if (discovered.base !== base) updates.baseUrl = discovered.base;
+      if (discovered.token && discovered.token !== cfg.token) updates.token = discovered.token;
+      if (Object.keys(updates).length) await chrome.storage.local.set(updates);
+    }
+  }
+  chrome.storage.local.set({ connectionOk: reachable }).catch(() => {});
   return true; // extension enabled state is the gate, not dashboard
 }
 

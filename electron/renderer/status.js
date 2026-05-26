@@ -68,3 +68,17 @@ function bindEvents() {
 window.electronAPI.onServerStatus(updateUI);
 bindEvents();
 updateUI({ serverRunning: false, tunnelStatus: 'stopped', mcpUrl: '', error: '' });
+
+window.electronAPI.getExtensionPath().then((p) => {
+  const el = document.getElementById('extPath');
+  if (el) el.textContent = p || 'Not found';
+  const btn = document.getElementById('extCopyBtn');
+  if (btn) {
+    btn.addEventListener('click', () => {
+      if (p) window.electronAPI.copyText(p);
+    });
+  }
+}).catch(() => {
+  const el = document.getElementById('extPath');
+  if (el) el.textContent = 'Not available';
+});

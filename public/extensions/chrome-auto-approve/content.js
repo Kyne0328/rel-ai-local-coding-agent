@@ -45,7 +45,10 @@
     // relai_restore_changes
     'reset', 'reset repo', 'reset repository', 'reset workspace', 'reset local repo',
     'reset local repo changes', 'rollback changes', 'discard changes', 'restore files',
-    'reset files', 'reset path', 'reset paths'
+    'reset files', 'reset path', 'reset paths',
+
+    // ChatGPT generic approval button labels
+    'approve', 'allow', 'allow once', 'confirm', 'yes', 'ok', 'proceed', 'continue'
   ];
   const NEGATIVE = ['cancel', 'deny', 'decline', 'reject', 'not now', 'stop', 'close', 'dismiss'];
   let lastClickAt = 0;
@@ -210,7 +213,6 @@
 
     const text = compact(node.innerText || node.textContent || '');
     if (!text.includes('rel-ai-mcp')) return false;
-    if (!text.includes('using tools comes with risks') && !text.includes('workspace') && !text.includes('will overwrite') && !text.includes('local repo')) return false;
     if (!visibleButtons.some(isNegativeButton)) return false;
     if (!visibleButtons.some(isActionButton)) return false;
 
@@ -254,6 +256,8 @@
     const label = labelFor(button);
     if (!label || isNegativeButton(button)) return false;
     if (cls.includes('btn-primary') || cls.includes('primary')) return true;
+    if (button.getAttribute('data-color') === 'primary') return true;
+    if (button.getAttribute('data-variant') === 'solid' && button.getAttribute('data-color') !== 'secondary') return true;
     if (button.getAttribute('data-testid') && String(button.getAttribute('data-testid')).toLowerCase().includes('confirm')) return true;
     return false;
   }

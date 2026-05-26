@@ -11,7 +11,6 @@ export function mountHome(container, data) {
 function buildHome(data) {
   const cfg = data.config || {};
   const health = data.health || {};
-  const readiness = data.readiness || {};
   const audit = sortedAudit(data.auditTail && data.auditTail.entries);
   const sessions = Array.isArray(data.sessions) ? data.sessions : [];
   const jobs = Array.isArray(data.jobs) ? data.jobs : [];
@@ -40,6 +39,8 @@ function buildHome(data) {
     metricHtml('Workspace bridge', 'ready', 'read, change, validate, review', 'good');
   root.appendChild(metrics);
 
+  root.appendChild(nextStepsCard(workspaces, findings, audit));
+
   const grid = document.createElement('div');
   grid.className = 'layout-grid';
   grid.appendChild(workspaceSetupCard(workspaces));
@@ -58,7 +59,87 @@ function updateShell(data, cfg) {
   const updated = document.getElementById('lastUpdated');
   if (updated) updated.textContent = 'Updated ' + new Date().toLocaleTimeString();
   const statusEl = document.getElementById('serverStatus');
-  if (statusEl) { statusEl.className = 'status-pill ' + (data.ok ? 'ok' : 'bad'); statusEl.textContent = data.ok ? 'Online' : 'Error'; }
+  if (statusEl) {
+    statusEl.className = 'status-pill ' + (data.ok ? 'ok' : 'bad');
+    statusEl.textContent = data.ok ? 'Online' : 'Error';
+  }
+}
+
+function nextStepsCard(workspaces, findings, audit) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = '<div class="card-head"><h3>Next steps</h3><span class="section-action">best next move</span></div>';
+  const body = document.createElement('div');
+  body.className = 'card-body list';
+  const steps = buildNextSteps(workspaces, findings, audit);
+  body.innerHTML = steps.map(step => `
+    <div class="list-item">
+      <span class="dot ${esc(step.state || '')}"></span>
+      <div>
+        <div class="item-title">${esc(step.title)}</div>
+        <div class="item-sub">${esc(step.description)}</div>
+      </div>
+      ${step.href ? `<a class="buttonlike secondary" href="${esc(step.href)}" style="min-height:30px;padding:0 10px;font-size:12px;white-space:nowrap;">${esc(step.cta || 'Open')}</a>` : `<span class="section-action">${esc(step.cta || 'Ready')}</span>`}
+    </div>
+  `).join('');
+  card.appendChild(body);
+  return card;
+}
+
+function buildNextSteps(workspaces, findings, audit) {
+  const actions = [];
+  if (!workspaces.length) {
+    actions.push({
+      title: 'Add your first workspace',
+      description: 'Nothing is available to ChatGPT until at least one local repository is configured.',
+      href: '#workspaces',
+      cta: 'Open workspaces',
+      state: 'warn'
+    });
+  }
+
+  const missingValidation = workspaces.filter(ws => !((ws.testCommandKeys || []).length || (ws.discoveredTestCommandKeys || []).length));
+  if (missingValidation.length) {
+    actions.push({
+      title: 'Save a validation command',
+      description: `${missingValidation.length} workspace${missingValidation.length === 1 ? '' : 's'} still lack a saved test or check command.`,
+      href: '#workspaces',
+      cta: 'Review validation',
+      state: 'warn'
+    });
+  }
+
+  if (findings.length) {
+    actions.push({
+      title: 'Review diagnostics',
+      description: 'Rel.AI has health findings that may cause setup or runtime friction.',
+      href: '#settings/diagnostics',
+      cta: 'Open diagnostics',
+      state: 'bad'
+    });
+  }
+
+  if (!audit.length) {
+    actions.push({
+      title: 'Run a first task in ChatGPT',
+      description: 'After setup, ask ChatGPT to inspect a file or run a workspace check so you can confirm the bridge end to end.',
+      href: '#tools',
+      cta: 'View tools',
+      state: 'warn'
+    });
+  }
+
+  if (!actions.length) {
+    actions.push({
+      title: 'The bridge is ready',
+      description: 'Your workspace, validation, and recent activity all look healthy. The next step is just using it.',
+      href: '#activity',
+      cta: 'See activity',
+      state: ''
+    });
+  }
+
+  return actions.slice(0, 3);
 }
 
 function workspaceSetupCard(workspaces) {
@@ -73,7 +154,7 @@ function workspaceSetupCard(workspaces) {
     const status = detected.length || configured.length ? 'ready' : 'check';
     const label = configured.length ? `${configured.length} configured` : detected.length ? `${detected.length} auto-detected` : 'no validation found';
     return `<div class="list-item"><span class="dot ${status === 'ready' ? 'good' : 'warn'}"></span><div><div class="item-title">${esc(ws.alias || 'workspace')}</div><div class="item-sub">${esc(label)}${detected.length ? ' · ' + esc(detected.slice(0, 3).join(', ')) : ''}</div></div><div class="item-time">${pillHtml(status)}</div></div>`;
-  }).join('') : '<div class="empty">No workspaces configured yet.</div>';
+  }).join('') : '<div class="empty">No workspaces configured yet. Open <a href="#workspaces">Workspaces</a> to add your first repository.</div>';
   card.appendChild(body);
   return card;
 }

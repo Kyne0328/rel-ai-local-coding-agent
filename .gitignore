@@ -4,3 +4,4 @@
 .superpowers
 /electron/node_modules
 /dist
+.agents

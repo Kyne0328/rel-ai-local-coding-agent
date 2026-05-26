@@ -467,4 +467,8 @@ ipcMain.handle('url:open-dashboard', () => {
   return { ok: true };
 });
 
+ipcMain.handle('extension:get-path', () => {
+  return resolveResourcePath(path.join('public', 'extensions', 'chrome-auto-approve'));
+});
+
 module.exports = { isPortAvailable, normalizeWizardConfig, saveLauncherConfig };

@@ -13,5 +13,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   removeServerStatusListener: () => {
     ipcRenderer.removeAllListeners('server:status');
-  }
+  },
+  getExtensionPath: () => ipcRenderer.invoke('extension:get-path'),
+  copyText: (text) => ipcRenderer.invoke('url:copy', text)
 });

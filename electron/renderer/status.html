@@ -48,6 +48,12 @@
   .btn-stop:hover { background: #991b1b; }
   .btn-start { background: #14532d; border: none; color: #86efac; font-weight: 600; }
   .btn-start:hover { background: #166534; }
+  .ext-box { background: #111; border-radius: 6px; padding: 8px 10px; }
+  .ext-label { font-size: 9px; color: #888; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .ext-path { font-size: 9px; color: #94a3b8; font-family: monospace; word-break: break-all; margin-bottom: 6px; min-height: 14px; }
+  .ext-hint { font-size: 9px; color: #555; margin-bottom: 6px; line-height: 1.4; }
+  .btn-ext { width: 100%; background: #1e293b; border: 1px solid #334155; border-radius: 4px; color: #94a3b8; padding: 5px; font-size: 10px; }
+  .btn-ext:hover { background: #273448; }
 </style>
 </head>
 <body>
@@ -83,6 +89,13 @@
   </div>
 
   <div class="error-line" id="errorLine"></div>
+
+  <div class="ext-box">
+    <div class="ext-label">Chrome Extension</div>
+    <div class="ext-path" id="extPath">Loading...</div>
+    <div class="ext-hint">chrome://extensions → Enable Developer mode → Load unpacked → select path above</div>
+    <button class="btn-ext" id="extCopyBtn">Copy Extension Path</button>
+  </div>
 
   <div class="actions">
     <button class="btn-action" id="dashboardBtn">Dashboard</button>

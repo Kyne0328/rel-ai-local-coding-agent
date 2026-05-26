@@ -168,6 +168,13 @@ async function routeRequest(req, res, options) {
     return;
   }
 
+  // Public localhost-only endpoint — Chrome extension reads this to auto-sync token + port.
+  // No auth required: only reachable from 127.0.0.1, token is a local-machine secret.
+  if (req.method === "GET" && parsed.pathname === "/api/local-connect") {
+    sendJson(res, 200, { ok: true, token: options.token || "", baseUrl: `http://${options.host || "127.0.0.1"}:${options.port || 3333}` }, ae);
+    return;
+  }
+
   if (req.method === "GET" && parsed.pathname === "/api/onboarding/status") {
     if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
     const onboardingPath = path.join(require("node:os").homedir(), ".rel-ai-mcp", "onboarding.json");
