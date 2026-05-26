@@ -399,6 +399,62 @@ function workspaceProfile(config, args = {}) {
   };
 }
 
+function buildSessionSummary(entries, alias, policy) {
+  const sessionActive = Boolean(policy && policy.sessionActive);
+  const sessionCreatedAt = sessionActive ? (policy.sessionCreatedAt || null) : null;
+
+  let window = (entries || []).filter(e => e.workspace === alias);
+  if (sessionActive && sessionCreatedAt) {
+    window = window.filter(e => e.ts >= sessionCreatedAt);
+  }
+
+  const filesChanged = [];
+  const seenFiles = new Set();
+  const checksRun = [];
+  let diffReviewed = false;
+  const seenPlannerPaths = new Set();
+  const plannerDecisions = [];
+
+  for (const entry of window) {
+    if (["relai_write", "relai_replace", "relai_clear_files", "relai_edit"].includes(entry.tool)) {
+      if (entry.filePath && !seenFiles.has(entry.filePath)) {
+        seenFiles.add(entry.filePath);
+        filesChanged.push(entry.filePath);
+      }
+      if (Array.isArray(entry.filePaths)) {
+        for (const p of entry.filePaths) {
+          if (p && !seenFiles.has(p)) {
+            seenFiles.add(p);
+            filesChanged.push(p);
+          }
+        }
+      }
+    }
+    if (entry.tool === "relai_run_checks" && entry.validationLevel) {
+      checksRun.push({ validationLevel: entry.validationLevel, passed: entry.ok === true });
+    }
+    if (entry.tool === "relai_diff") {
+      diffReviewed = true;
+    }
+    if (entry.tool === "relai_edit" && entry.plannerPath && !seenPlannerPaths.has(entry.plannerPath)) {
+      seenPlannerPaths.add(entry.plannerPath);
+      plannerDecisions.push({ plannerPath: entry.plannerPath, plannerReason: entry.plannerReason || null });
+    }
+  }
+
+  return {
+    windowSource: sessionActive ? "session_file" : "recent_entries",
+    sessionActive,
+    sessionCreatedAt,
+    taskHint: (policy && policy.taskHint) || null,
+    entryCount: window.length,
+    filesChanged,
+    checksRun,
+    diffReviewed,
+    plannerDecisions,
+  };
+}
+
 function ok(value) {
   return value && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, "ok")
     ? value
@@ -431,4 +487,4 @@ function arrayObjectProp(properties, required = [], minItems, maxItems) {
   return schema;
 }
 
-module.exports = { toolSchemas, allToolSchemas: toolSchemas, getToolSchemas, BRIDGE_TOOL_NAMES, callTool, workspaceList, workspaceInspect, workspaceTree, workspaceProfile };
+module.exports = { toolSchemas, allToolSchemas: toolSchemas, getToolSchemas, BRIDGE_TOOL_NAMES, callTool, workspaceList, workspaceInspect, workspaceTree, workspaceProfile, buildSessionSummary };
