@@ -12,6 +12,7 @@ const {
 const { discoverCommands } = require("./commandDiscovery");
 const { appendOperation, makeOperationId, summarizeOperations } = require("./journal");
 const { normalizeCommandAlias } = require("./commandNormalizer");
+const { selectValidationLevel } = require("./validationStrategy");
 
 const DEFAULT_MAX_READ_BYTES = 1024 * 1024;
 const DEFAULT_MAX_SNAPSHOT_FILES = 1000;
@@ -483,7 +484,8 @@ function clearStagedPayload(config, workspace, writeId) {
 async function relaiVerify(workspace, config, args = {}) {
   const level = String(args.level || "standard").toLowerCase();
   const { checks, aliasNormalizations } = normalizeVerifyChecks(args, workspace.path, level);
-  if (checks.length === 0) return { ok: true, workspace: workspace.alias, level, checks: [], commands: [], results: [], aliasNormalizations: 0, message: "No validation checks detected." };
+  const { level: validationLevel, reason: validationLevelReason, changedFiles } = selectValidationLevel(workspace.path, workspace, args.validationLevel);
+  if (checks.length === 0) return { ok: true, workspace: workspace.alias, level, checks: [], commands: [], results: [], aliasNormalizations: 0, validationLevel, validationLevelReason, changedFiles, message: "No validation checks detected." };
   const stopOnFailure = args.stopOnFailure !== false;
   const results = [];
   for (const command of checks) {
@@ -497,7 +499,7 @@ async function relaiVerify(workspace, config, args = {}) {
     results.push(summary);
     if (!summary.ok && stopOnFailure) break;
   }
-  return { ok: results.every((item) => item.ok), workspace: workspace.alias, level, checks, commands: checks, results, aliasNormalizations };
+  return { ok: results.every((item) => item.ok), workspace: workspace.alias, level, checks, commands: checks, results, aliasNormalizations, validationLevel, validationLevelReason, changedFiles };
 }
 
 async function relaiBrowser(workspace, config, args = {}) {
