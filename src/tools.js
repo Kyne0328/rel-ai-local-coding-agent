@@ -6,6 +6,7 @@ const { discoverCommands } = require("./commandDiscovery");
 const { summarizeOperations } = require("./journal");
 const { repoSnapshot, relaiRead, relaiWrite, relaiReplace, relaiClear, relaiApplyPatch, relaiApplyArchive, relaiSnapshotArchive, relaiVerify, relaiBrowser, relaiDiff, relaiReset } = require("./localRepoBridge");
 const { planEdit } = require("./executionPlanner");
+const { resolvePolicy, writeSessionPolicy, clearSessionPolicy } = require("./policyResolver");
 
 const STALE_TOOL_HINTS = {
   relai_verify:           "relai_verify was renamed to relai_run_checks. Please use relai_run_checks instead.",
@@ -31,7 +32,8 @@ const BRIDGE_TOOL_NAMES = [
   "relai_restore_changes",
   "relai_status",
   "relai_feature_probe",
-  "relai_edit"
+  "relai_edit",
+  "relai_set_policy"
 ];
 
 const READ_ONLY_LOCAL  = { readOnlyHint: false,  destructiveHint: false, idempotentHint: false,  openWorldHint: false };
@@ -103,7 +105,12 @@ const toolSchemas = [
     content: stringProp(),
     updateText: stringProp(),
     dryRun: boolProp()
-  }, ["workspace"], WRITE_LOCAL)
+  }, ["workspace"], WRITE_LOCAL),
+  tool("relai_set_policy", "Set Workspace Session Policy", "Set or clear the trusted session policy for a workspace. Call with taskHint to record what the current task is. Call with clear: true to end the session. The effective policy is always trusted — this tool records session context, not access grants.", {
+    workspace: stringProp(),
+    taskHint: stringProp(),
+    clear: boolProp()
+  }, ["workspace"], READ_ONLY_LOCAL)
 ];
 
 const TOOL_NAMES = new Set(toolSchemas.map((item) => item.name));
@@ -135,6 +142,10 @@ async function callTool(name, args = {}) {
       if (value.validationLevel) extraAudit.validationLevel = value.validationLevel;
       if (value.validationLevelReason) extraAudit.validationLevelReason = value.validationLevelReason;
       if (value.aliasNormalizations != null) extraAudit.aliasNormalizations = value.aliasNormalizations;
+      if (value.policy) extraAudit.policySessionActive = value.policy.sessionActive;
+    } else if (canonicalName === "relai_set_policy" && value) {
+      if (value.operation) extraAudit.policyOperation = value.operation;
+      if (value.policy) extraAudit.policySessionActive = value.policy.sessionActive;
     }
     logAudit(config, { tool: canonicalName, ok: true, workspace: args && args.workspace, ms: Date.now() - started, ...extraAudit });
     return ok(value);
@@ -176,6 +187,17 @@ async function dispatchTool(config, name, args) {
       return relaiFeatureProbe(config, args);
     case "relai_edit":
       return withWorkspace(config, args, (workspace) => planEdit(workspace, config, args));
+    case "relai_set_policy":
+      return withWorkspace(config, args, (workspace) => {
+        if (args.clear) {
+          const { cleared } = clearSessionPolicy(config, workspace.alias);
+          const policy = resolvePolicy(workspace, config);
+          return { ok: true, workspace: workspace.alias, operation: "clear", cleared, policy };
+        }
+        writeSessionPolicy(config, workspace.alias, { taskHint: args.taskHint });
+        const policy = resolvePolicy(workspace, config);
+        return { ok: true, workspace: workspace.alias, operation: "set", policy };
+      });
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
@@ -221,7 +243,8 @@ function relaiStatus(config, args = {}) {
         commandKeys,
         testCommandKeys,
         ...(staleCommandKeys.length > 0 ? { staleCommandKeys } : {}),
-        ...(staleTestCommandKeys.length > 0 ? { staleTestCommandKeys } : {})
+        ...(staleTestCommandKeys.length > 0 ? { staleTestCommandKeys } : {}),
+        policy: resolvePolicy(workspace, config)
       };
     } catch (error) {
       selectedWorkspace = { alias: String(args.workspace), error: error instanceof Error ? error.message : String(error) };
@@ -249,6 +272,7 @@ function relaiFeatureProbe(config, args = {}) {
     cleanCheckOptIn: true,
     ciHealthCheck: Boolean(scripts["test:repo-health"] && ci.ok),
     softerToolNames: true,
+    sessionPolicySupport: true,
     tools: BRIDGE_TOOL_NAMES,
     workspaceRequested: args.workspace || ""
   };
