@@ -12,7 +12,7 @@ function readSessionPolicy(config, alias) {
   try {
     if (!fs.existsSync(filePath)) return null;
     const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    if (!parsed || typeof parsed !== 'object') return null;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
     return parsed;
   } catch (_err) {
     return null;

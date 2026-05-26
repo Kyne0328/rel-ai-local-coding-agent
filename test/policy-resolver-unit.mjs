@@ -35,6 +35,7 @@ function makeTempStateDir() {
   assert.equal(session.workspace, 'myapp', 'workspace must match');
   assert.equal(session.taskHint, 'fix auth bug', 'taskHint must match');
   assert.ok(typeof session.createdAt === 'string', 'createdAt must be a string');
+  assert.ok(/^\d{4}-\d{2}-\d{2}T/.test(session.createdAt), 'createdAt must be ISO date string');
   fs.rmSync(stateDir, { recursive: true, force: true });
 }
 
@@ -50,6 +51,7 @@ function makeTempStateDir() {
   assert.equal(policy.taskHint, 'implement feature X', 'taskHint must be populated');
   assert.equal(policy.source, 'session_file', 'source must be session_file');
   assert.ok(typeof policy.sessionCreatedAt === 'string', 'sessionCreatedAt must be a string');
+  assert.ok(/^\d{4}-\d{2}-\d{2}T/.test(policy.sessionCreatedAt), 'sessionCreatedAt must be ISO date string');
   fs.rmSync(stateDir, { recursive: true, force: true });
 }
 
