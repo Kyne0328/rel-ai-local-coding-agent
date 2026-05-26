@@ -163,7 +163,6 @@ async function routeRequest(req, res, options) {
 
 
   if (req.method === "GET" && parsed.pathname === "/api/auto-approve/settings") {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
     const config = readConfig();
     sendJson(res, 200, autoApprove.autoApproveSettings(config), ae);
     return;
