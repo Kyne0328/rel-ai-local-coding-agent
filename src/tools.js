@@ -5,6 +5,7 @@ const { logAudit } = require("./audit");
 const { discoverCommands } = require("./commandDiscovery");
 const { summarizeOperations } = require("./journal");
 const { repoSnapshot, relaiRead, relaiWrite, relaiReplace, relaiClear, relaiApplyPatch, relaiApplyArchive, relaiSnapshotArchive, relaiVerify, relaiBrowser, relaiDiff, relaiReset } = require("./localRepoBridge");
+const { planEdit } = require("./executionPlanner");
 
 const STALE_TOOL_HINTS = {
   relai_verify:           "relai_verify was renamed to relai_run_checks. Please use relai_run_checks instead.",
@@ -29,7 +30,8 @@ const BRIDGE_TOOL_NAMES = [
   "relai_diff",
   "relai_restore_changes",
   "relai_status",
-  "relai_feature_probe"
+  "relai_feature_probe",
+  "relai_edit"
 ];
 
 const READ_ONLY_LOCAL  = { readOnlyHint: false,  destructiveHint: false, idempotentHint: false,  openWorldHint: false };
@@ -92,7 +94,16 @@ const toolSchemas = [
   }, [], READ_ONLY_LOCAL),
   tool("relai_feature_probe", "Rel.AI Feature Probe", "Compact booleans for important runtime behavior. Prefer this over source reads when checking installed behavior.", {
     workspace: stringProp()
-  }, [], READ_ONLY_LOCAL)
+  }, [], READ_ONLY_LOCAL),
+  tool("relai_edit", "Unified Workspace Edit", "Unified workspace edit. The planner auto-selects the safest path based on what you provide: exact replacement for localized changes, full-file write for complete rewrites, or prepared update for diff-shaped changes. Prefer this over relai_replace / relai_write / relai_apply_update in ordinary coding work.", {
+    workspace: stringProp(),
+    path: stringProp(),
+    oldText: stringProp(),
+    newText: stringProp(),
+    content: stringProp(),
+    updateText: stringProp(),
+    dryRun: boolProp()
+  }, ["workspace"], WRITE_LOCAL)
 ];
 
 const TOOL_NAMES = new Set(toolSchemas.map((item) => item.name));
@@ -116,7 +127,16 @@ async function callTool(name, args = {}) {
       throw new Error(`Unknown tool '${name}'. Available tools: ${BRIDGE_TOOL_NAMES.join(", ")}. Restart/reconnect ChatGPT if the tool list looks stale.`);
     }
     const value = await dispatchTool(config, canonicalName, args || {});
-    logAudit(config, { tool: canonicalName, ok: true, workspace: args && args.workspace, ms: Date.now() - started });
+    const extraAudit = {};
+    if (canonicalName === "relai_edit" && value) {
+      if (value.plannerPath) extraAudit.plannerPath = value.plannerPath;
+      if (value.plannerReason) extraAudit.plannerReason = value.plannerReason;
+    } else if (canonicalName === "relai_run_checks" && value) {
+      if (value.validationLevel) extraAudit.validationLevel = value.validationLevel;
+      if (value.validationLevelReason) extraAudit.validationLevelReason = value.validationLevelReason;
+      if (value.aliasNormalizations != null) extraAudit.aliasNormalizations = value.aliasNormalizations;
+    }
+    logAudit(config, { tool: canonicalName, ok: true, workspace: args && args.workspace, ms: Date.now() - started, ...extraAudit });
     return ok(value);
   } catch (error) {
     logAudit(config, { tool: canonicalName, ok: false, workspace: args && args.workspace, ms: Date.now() - started, error: error instanceof Error ? error.message : String(error) });
@@ -154,6 +174,8 @@ async function dispatchTool(config, name, args) {
       return relaiStatus(config, args);
     case "relai_feature_probe":
       return relaiFeatureProbe(config, args);
+    case "relai_edit":
+      return withWorkspace(config, args, (workspace) => planEdit(workspace, config, args));
     default:
       throw new Error(`Unknown tool: ${name}`);
   }

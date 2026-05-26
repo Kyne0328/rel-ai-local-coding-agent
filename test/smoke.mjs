@@ -55,11 +55,11 @@ if (!init.result?.capabilities?.resources) throw new Error('initialize did not a
 
 send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
 const list = await waitFor(2);
-if (!Array.isArray(list.result?.tools) || list.result.tools.length !== 14) {
-  throw new Error(`tools/list should expose the 14 ChatGPT local repo bridge tools, got ${list.result?.tools?.length}`);
+if (!Array.isArray(list.result?.tools) || list.result.tools.length !== 15) {
+  throw new Error(`tools/list should expose the 15 ChatGPT local repo bridge tools, got ${list.result?.tools?.length}`);
 }
 const names = list.result.tools.map((item) => item.name).sort();
-const expected = ['relai_apply_bundle', 'relai_apply_update', 'relai_browser', 'relai_clear_files', 'relai_diff', 'relai_feature_probe', 'relai_package_snapshot', 'relai_read', 'relai_replace', 'relai_repo_snapshot', 'relai_restore_changes', 'relai_run_checks', 'relai_status', 'relai_write'].sort();
+const expected = ['relai_apply_bundle', 'relai_apply_update', 'relai_browser', 'relai_clear_files', 'relai_diff', 'relai_edit', 'relai_feature_probe', 'relai_package_snapshot', 'relai_read', 'relai_replace', 'relai_repo_snapshot', 'relai_restore_changes', 'relai_run_checks', 'relai_status', 'relai_write'].sort();
 if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error(`Unexpected tool list: ${names.join(', ')}`);
 const writeTool = list.result.tools.find((item) => item.name === 'relai_write');
 if (!writeTool.inputSchema?.properties?.content || writeTool.inputSchema?.properties?.edits) throw new Error('relai_write schema should expose content and not expose edits');
