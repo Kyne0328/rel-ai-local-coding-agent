@@ -11,6 +11,7 @@ const {
 } = require("./safety");
 const { discoverCommands } = require("./commandDiscovery");
 const { appendOperation, makeOperationId, summarizeOperations } = require("./journal");
+const { normalizeCommandAlias } = require("./commandNormalizer");
 
 const DEFAULT_MAX_READ_BYTES = 1024 * 1024;
 const DEFAULT_MAX_SNAPSHOT_FILES = 1000;
@@ -481,8 +482,8 @@ function clearStagedPayload(config, workspace, writeId) {
 
 async function relaiVerify(workspace, config, args = {}) {
   const level = String(args.level || "standard").toLowerCase();
-  const checks = normalizeVerifyChecks(args, workspace.path, level);
-  if (checks.length === 0) return { ok: true, workspace: workspace.alias, level, checks: [], commands: [], results: [], message: "No validation checks detected." };
+  const { checks, aliasNormalizations } = normalizeVerifyChecks(args, workspace.path, level);
+  if (checks.length === 0) return { ok: true, workspace: workspace.alias, level, checks: [], commands: [], results: [], aliasNormalizations: 0, message: "No validation checks detected." };
   const stopOnFailure = args.stopOnFailure !== false;
   const results = [];
   for (const command of checks) {
@@ -496,7 +497,7 @@ async function relaiVerify(workspace, config, args = {}) {
     results.push(summary);
     if (!summary.ok && stopOnFailure) break;
   }
-  return { ok: results.every((item) => item.ok), workspace: workspace.alias, level, checks, commands: checks, results };
+  return { ok: results.every((item) => item.ok), workspace: workspace.alias, level, checks, commands: checks, results, aliasNormalizations };
 }
 
 async function relaiBrowser(workspace, config, args = {}) {
@@ -1075,22 +1076,34 @@ function resolveCommandAlias(raw, discoveredCommands) {
 function normalizeVerifyChecks(args, root, level) {
   const discovered = discoverCommands(root);
   const explicit = [];
-  if (typeof args.check === "string" && args.check.trim()) explicit.push(resolveCommandAlias(args.check, discovered));
-  if (typeof args.command === "string" && args.command.trim()) explicit.push(resolveCommandAlias(args.command, discovered));
+  let aliasNormalizations = 0;
+
+  function resolveAndTrack(raw) {
+    const trimmed = String(raw || "").trim();
+    if (!trimmed) return trimmed;
+    const { command, normalized } = normalizeCommandAlias(trimmed, trimmed, discovered);
+    if (normalized) aliasNormalizations++;
+    return command;
+  }
+
+  if (typeof args.check === "string" && args.check.trim()) explicit.push(resolveAndTrack(args.check));
+  if (typeof args.command === "string" && args.command.trim()) explicit.push(resolveAndTrack(args.command));
   if (Array.isArray(args.commands)) {
     for (const item of args.commands) {
-      const command = resolveCommandAlias(String(item || ""), discovered);
+      const command = resolveAndTrack(String(item || ""));
       if (command) explicit.push(command);
     }
   }
   if (typeof args.commandsText === "string" && args.commandsText.trim()) {
     for (const line of args.commandsText.split(/\r?\n/)) {
-      const command = resolveCommandAlias(line.trim(), discovered);
-      if (command && !command.startsWith("#")) explicit.push(command);
+      const trimmedLine = line.trim();
+      if (trimmedLine && !trimmedLine.startsWith("#")) {
+        explicit.push(resolveAndTrack(trimmedLine));
+      }
     }
   }
-  if (explicit.length) return [...new Set(explicit)];
-  return detectVerifyChecks(root, level);
+  if (explicit.length) return { checks: [...new Set(explicit)], aliasNormalizations };
+  return { checks: detectVerifyChecks(root, level), aliasNormalizations };
 }
 
 function detectVerifyChecks(root, level) {
