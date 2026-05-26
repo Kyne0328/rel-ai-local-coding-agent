@@ -112,9 +112,9 @@ function createStatusWindow() {
 
   statusWindow = new BrowserWindow({
     width: 420,
-    height: 330,
+    height: 480,
     minWidth: 380,
-    minHeight: 300,
+    minHeight: 450,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -249,9 +249,11 @@ function saveLauncherConfig(config = {}) {
     REL_AI_MCP_TUNNEL_COMMAND: tunnelCommand
   });
 
+  // Do NOT write port here — port in connectionProfile must only come from the running server.
+  // Writing wizard-configured port here would make readGuiConfig return the desired port
+  // before the server has restarted, causing dashboard and ngrok to target the wrong port.
   connection.writeConnectionProfile({
     host: '127.0.0.1',
-    port: normalized.port,
     publicUrl,
     ngrokDomain: normalized.ngrokDomain,
     tunnelProvider: 'custom',
@@ -301,6 +303,7 @@ async function startServer() {
       return currentStatus;
     }
 
+    let actualPort;
     try {
       httpServer = startHttpServer({
         host: '127.0.0.1',
@@ -309,6 +312,10 @@ async function startServer() {
         chatgptSecret: guiConfig.chatgptSecret,
         publicUrl: `https://${guiConfig.ngrokDomain}`,
         exitOnError: false
+      });
+      actualPort = await new Promise((resolve, reject) => {
+        httpServer.once('listening', () => resolve(httpServer.address().port));
+        httpServer.once('error', reject);
       });
     } catch (error) {
       httpServer = null;
@@ -319,12 +326,12 @@ async function startServer() {
 
     setStatus({ serverRunning: true, tunnelStatus: 'connecting', mcpUrl: '', error: '' });
 
-    const command = buildTunnelCommand(guiConfig.ngrokDomain, guiConfig.port);
+    const command = buildTunnelCommand(guiConfig.ngrokDomain, actualPort);
     const result = await tunnelManager.startTunnel({
       provider: 'custom',
       command,
-      port: guiConfig.port,
-      localUrl: `http://127.0.0.1:${guiConfig.port}`,
+      port: actualPort,
+      localUrl: `http://127.0.0.1:${actualPort}`,
       timeoutMs: 30000,
       onLog: (chunk) => {
         if (statusWindow && !statusWindow.isDestroyed()) {
@@ -337,7 +344,7 @@ async function startServer() {
     });
 
     if (runToken !== lifecycleToken) {
-      if (result.process && !result.process.killed) result.process.kill();
+      if (result.process) tunnelManager.killProcess(result.process);
       startPromise = null;
       return currentStatus;
     }
@@ -348,7 +355,7 @@ async function startServer() {
       const mcpUrl = buildMcpUrl(publicBaseUrl, guiConfig.chatgptSecret);
       connection.writeConnectionProfile({
         host: '127.0.0.1',
-        port: guiConfig.port,
+        port: actualPort,
         publicUrl: publicBaseUrl,
         ngrokDomain: guiConfig.ngrokDomain,
         tunnelProvider: 'custom',
@@ -373,8 +380,8 @@ async function startServer() {
 }
 
 function stopServer(options = {}) {
-  if (tunnelProcess && !tunnelProcess.killed) {
-    tunnelProcess.kill();
+  if (tunnelProcess) {
+    tunnelManager.killProcess(tunnelProcess);
   }
   tunnelProcess = null;
 
@@ -395,10 +402,14 @@ function stopServer(options = {}) {
 
 function openDashboardUrl() {
   try {
-    const config = readGuiConfig();
-    const token = config.token || connection.readLaunchEnv().REL_AI_MCP_TOKEN || '';
+    // Use the actual bound port from the in-memory server object — this is always authoritative.
+    // Fallback to guiConfig only when the server isn't running (e.g. user clicks Dashboard early).
+    const port = (httpServer && httpServer.listening && httpServer.address() && httpServer.address().port)
+      || readGuiConfig().port
+      || 3333;
+    const token = connection.readLaunchEnv().REL_AI_MCP_TOKEN || readGuiConfig().token || '';
     shell.openExternal(
-      `http://127.0.0.1:${config.port}/dashboard${token ? `?token=${encodeURIComponent(token)}` : ''}`
+      `http://127.0.0.1:${port}/dashboard${token ? `?token=${encodeURIComponent(token)}` : ''}`
     );
   } catch (error) {
     setStatus({ error: formatError(error) });

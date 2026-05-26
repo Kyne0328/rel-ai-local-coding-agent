@@ -62,7 +62,7 @@ function copyToken() {
 
 function updateNgrokPreview() {
   const domain = normalizeDomain(document.getElementById('domainInput').value);
-  document.getElementById('ngrokCmdPreview').textContent = `ngrok http --url=${domain || '<domain>'} ${state.port} --log=stdout`;
+  document.getElementById('ngrokCmdPreview').textContent = `ngrok http --url=${domain || '<domain>'} http://127.0.0.1:${state.port} --log=stdout`;
 }
 
 function validateDomain() {

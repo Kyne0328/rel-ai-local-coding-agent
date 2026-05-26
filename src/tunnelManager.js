@@ -77,14 +77,60 @@ function providerPlan(provider, options = {}) {
   return providerPlans(provider, options)[0];
 }
 
+function parseCommandWords(command) {
+  const words = [];
+  let word = "";
+  let quote = null;
+  for (const ch of String(command || "")) {
+    if (quote) {
+      if (ch === quote) quote = null;
+      else word += ch;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+    } else if (ch === " " || ch === "\t") {
+      if (word) { words.push(word); word = ""; }
+    } else {
+      word += ch;
+    }
+  }
+  if (word) words.push(word);
+  return words.length ? words : [command];
+}
+
 function shellPlan(command) {
+  if (process.platform === "win32") {
+    // Spawn directly on Windows — skipping cmd.exe means tunnelProcess IS ngrok.exe,
+    // so taskkillTree can reliably terminate it without orphaned child processes.
+    const words = parseCommandWords(command);
+    return {
+      provider: "custom",
+      command: words[0],
+      args: words.slice(1),
+      urlPattern: HTTPS_URL_RE,
+      help: "The custom command must print its public https:// URL to stdout/stderr."
+    };
+  }
   return {
     provider: "custom",
-    command: process.platform === "win32" ? "cmd.exe" : "sh",
-    args: process.platform === "win32" ? ["/d", "/s", "/c", command] : ["-lc", command],
+    command: "sh",
+    args: ["-lc", command],
     urlPattern: HTTPS_URL_RE,
     help: "The custom command must print its public https:// URL to stdout/stderr."
   };
+}
+
+function killProcess(child) {
+  if (!child || child.killed) return;
+  if (process.platform === "win32" && child.pid) {
+    try {
+      const { spawnSync } = require("node:child_process");
+      spawnSync("taskkill", ["/f", "/t", "/pid", String(child.pid)], { stdio: "ignore", windowsHide: true });
+    } catch (_) {
+      try { child.kill(); } catch (__) {}
+    }
+  } else {
+    try { child.kill("SIGTERM"); } catch (_) {}
+  }
 }
 
 function readNgrokApiUrl(port = 4040) {
@@ -156,7 +202,7 @@ function startProcessTunnel(plan, { timeoutMs, onLog, onProcess }) {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      if (!result.ok && child.exitCode === null && !child.killed) child.kill();
+      if (!result.ok && child.exitCode === null && !child.killed) killProcess(child);
       resolve(result);
     };
 
@@ -193,5 +239,6 @@ module.exports = {
   extractPublicUrl,
   startTunnel,
   providerPlan,
-  providerPlans
+  providerPlans,
+  killProcess
 };

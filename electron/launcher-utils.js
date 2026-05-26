@@ -44,7 +44,7 @@ function normalizeNgrokDomain(value) {
 function buildTunnelCommand(domain, port) {
   const safeDomain = normalizeNgrokDomain(domain);
   const safePort = normalizePort(port);
-  return `ngrok http --url=${safeDomain} ${safePort} --log=stdout`;
+  return `ngrok http --url=${safeDomain} http://127.0.0.1:${safePort} --log=stdout`;
 }
 
 function buildMcpUrl(publicBaseUrl, chatgptSecret) {
@@ -73,7 +73,7 @@ function readGuiConfig() {
   let ngrokDomain = env.REL_AI_MCP_NGROK_DOMAIN || profile.ngrokDomain || '';
   if (!ngrokDomain && profile.publicUrl) ngrokDomain = String(profile.publicUrl).replace(/^https?:\/\//i, '').replace(/\/+$/, '');
   return {
-    port: normalizePort(profile.port || env.REL_AI_MCP_PORT || 3333),
+    port: normalizePort(env.REL_AI_MCP_PORT || profile.port || 3333),
     ngrokDomain: ngrokDomain ? normalizeNgrokDomain(ngrokDomain) : '',
     token: env.REL_AI_MCP_TOKEN || '',
     chatgptSecret: env.REL_AI_MCP_CHATGPT_SECRET || profile.chatgptSecret || '',
