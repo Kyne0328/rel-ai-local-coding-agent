@@ -3,6 +3,8 @@ const os = require("node:os");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { publicConfigSummary, resolveWorkspace, writeConfig, readConfig, getConfigPath, makeDefaultConfig } = require("./config");
+const { discoverCommands } = require("./commandDiscovery");
+const { resolvePolicy } = require("./policyResolver");
 const { readAudit, getStateDir } = require("./audit");
 const { runProcess, summarizeCommand } = require("./process");
 const { safeReadJson } = require("./safety");
@@ -308,10 +310,27 @@ function clampNumber(value, min, max) {
   return Math.min(Math.max(number, min), max);
 }
 
+function aliasConsistencyCheck(config) {
+  const results = [];
+  for (const [alias, ws] of Object.entries(config.workspaces || {})) {
+    const configuredKeys = Object.keys(ws.testCommands || {});
+    let discovered = {};
+    try { discovered = discoverCommands(ws.path || ''); } catch (_) {}
+    const discoveredKeys = Object.keys(discovered);
+    const staleKeys = configuredKeys.filter(k => {
+      const cmd = (ws.testCommands || {})[k];
+      return cmd && !Object.values(discovered).includes(cmd) && !discovered[k];
+    });
+    results.push({ alias, configuredKeys, discoveredKeys, staleKeys, ok: staleKeys.length === 0 });
+  }
+  return { ok: results.every(r => r.ok), generatedAt: new Date().toISOString(), workspaces: results };
+}
+
 module.exports = {
   dashboardData,
   liveLogTail,
   healthMonitor,
+  aliasConsistencyCheck,
   cleanupPreview,
   cleanupRun,
   doctorFix,

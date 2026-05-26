@@ -252,6 +252,13 @@ async function routeRequest(req, res, options) {
     return;
   }
 
+  if (req.method === "GET" && parsed.pathname === "/api/alias-diagnostics") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    const config = readConfig();
+    sendJson(res, 200, productUx.aliasConsistencyCheck(config), ae);
+    return;
+  }
+
   if (req.method === "GET" && parsed.pathname === "/api/readiness") {
     if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
     const config = readConfig();
