@@ -56,6 +56,8 @@ function makeTempRepo(filename = 'hello.js', content = 'module.exports = {};') {
   try {
     const result = await planEdit(workspace, config, { path: 'big.js', content: 'x'.repeat(8001) });
     assert.equal(result.plannerPath, 'write:staged', 'staged write: plannerPath must be write:staged');
+    const written = fs.readFileSync(path.join(dir, 'big.js'), 'utf8');
+    assert.equal(written.length, 8001, 'staged: file must be written to disk');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -106,6 +108,20 @@ function makeTempRepo(filename = 'hello.js', content = 'module.exports = {};') {
         return true;
       }
     );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// 7. oldText without newText → validation error
+{
+  const dir = makeTempRepo('foo.js', 'const x = 1;\n');
+  const workspace = { alias: 'test', path: dir };
+  try {
+    await planEdit(workspace, {}, { path: 'foo.js', oldText: 'const x = 1;' });
+    assert.fail('should have thrown for missing newText');
+  } catch (err) {
+    assert.ok(err.message.includes('newText'), 'missing-newtext: error must mention newText');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

@@ -41,6 +41,11 @@ async function planEdit(workspace, config, args) {
     throw new Error('relai_edit: must provide one of: (1) oldText+newText for exact replacement, (2) content for full-file write, (3) updateText for patch-shaped update');
   }
 
+  // Validate newText when oldText is present
+  if (hasOldText && typeof args.newText !== 'string') {
+    throw new Error('relai_edit: oldText+newText are required for exact replacement; newText is missing or not a string');
+  }
+
   // Replace path: oldText provided, no content
   if (hasOldText && !hasContent) {
     const result = relaiReplace(workspace, config, {
