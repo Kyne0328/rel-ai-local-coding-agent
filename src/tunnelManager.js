@@ -133,6 +133,15 @@ function killProcess(child) {
   }
 }
 
+function killOrphanedNgrok() {
+  const { spawnSync } = require("node:child_process");
+  if (process.platform === "win32") {
+    spawnSync("taskkill", ["/f", "/im", "ngrok.exe"], { stdio: "ignore", windowsHide: true });
+  } else {
+    spawnSync("pkill", ["-f", "ngrok"], { stdio: "ignore" });
+  }
+}
+
 function readNgrokApiUrl(port = 4040) {
   return new Promise((resolve) => {
     const req = http.get({ host: "127.0.0.1", port, path: "/api/tunnels", timeout: 800 }, (res) => {
@@ -240,5 +249,6 @@ module.exports = {
   startTunnel,
   providerPlan,
   providerPlans,
-  killProcess
+  killProcess,
+  killOrphanedNgrok
 };

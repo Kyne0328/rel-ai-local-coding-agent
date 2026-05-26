@@ -326,6 +326,8 @@ async function startServer() {
 
     setStatus({ serverRunning: true, tunnelStatus: 'connecting', mcpUrl: '', error: '' });
 
+    tunnelManager.killOrphanedNgrok();
+
     const command = buildTunnelCommand(guiConfig.ngrokDomain, actualPort);
     const result = await tunnelManager.startTunnel({
       provider: 'custom',
