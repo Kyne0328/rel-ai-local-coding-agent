@@ -1,7 +1,7 @@
 const fs = require("node:fs");
 const { readConfig, resolveWorkspace } = require("./config");
 const { collectTextFiles, collectOptionsFromWorkspace, resolveSafePath } = require("./safety");
-const { logAudit } = require("./audit");
+const { logAudit, readAudit } = require("./audit");
 const { discoverCommands } = require("./commandDiscovery");
 const { summarizeOperations } = require("./journal");
 const { repoSnapshot, relaiRead, relaiWrite, relaiReplace, relaiClear, relaiApplyPatch, relaiApplyArchive, relaiSnapshotArchive, relaiVerify, relaiBrowser, relaiDiff, relaiReset } = require("./localRepoBridge");
@@ -33,7 +33,8 @@ const BRIDGE_TOOL_NAMES = [
   "relai_status",
   "relai_feature_probe",
   "relai_edit",
-  "relai_set_policy"
+  "relai_set_policy",
+  "relai_session_summary"
 ];
 
 const READ_ONLY_LOCAL  = { readOnlyHint: false,  destructiveHint: false, idempotentHint: false,  openWorldHint: false };
@@ -110,6 +111,10 @@ const toolSchemas = [
     workspace: stringProp(),
     taskHint: stringProp(),
     clear: boolProp()
+  }, ["workspace"], READ_ONLY_LOCAL),
+  tool("relai_session_summary", "Workspace Session Summary", "Get a summary of what happened in the current workspace session — files changed, checks run, diff reviewed, and execution planner decisions. If a trusted session is active, returns events since session start. Otherwise returns recent audit activity up to the given limit.", {
+    workspace: stringProp(),
+    limit: numberProp(1, 200)
   }, ["workspace"], READ_ONLY_LOCAL)
 ];
 
@@ -138,6 +143,7 @@ async function callTool(name, args = {}) {
     if (canonicalName === "relai_edit" && value) {
       if (value.plannerPath) extraAudit.plannerPath = value.plannerPath;
       if (value.plannerReason) extraAudit.plannerReason = value.plannerReason;
+      if (args && args.path) extraAudit.filePath = args.path;
     } else if (canonicalName === "relai_run_checks" && value) {
       if (value.validationLevel) extraAudit.validationLevel = value.validationLevel;
       if (value.validationLevelReason) extraAudit.validationLevelReason = value.validationLevelReason;
@@ -146,6 +152,13 @@ async function callTool(name, args = {}) {
     } else if (canonicalName === "relai_set_policy" && value) {
       if (value.operation) extraAudit.policyOperation = value.operation;
       if (value.policy) extraAudit.policySessionActive = value.policy.sessionActive;
+    } else if (canonicalName === "relai_write" && args && args.path) {
+      extraAudit.filePath = args.path;
+    } else if (canonicalName === "relai_replace" && args && args.path) {
+      extraAudit.filePath = args.path;
+    } else if (canonicalName === "relai_clear_files" && args) {
+      if (args.path) extraAudit.filePath = args.path;
+      if (Array.isArray(args.paths) && args.paths.length) extraAudit.filePaths = args.paths;
     }
     logAudit(config, { tool: canonicalName, ok: true, workspace: args && args.workspace, ms: Date.now() - started, ...extraAudit });
     return ok(value);
@@ -197,6 +210,13 @@ async function dispatchTool(config, name, args) {
         writeSessionPolicy(config, workspace.alias, { taskHint: args.taskHint });
         const policy = resolvePolicy(workspace, config);
         return { ok: true, workspace: workspace.alias, operation: "set", policy };
+      });
+    case "relai_session_summary":
+      return withWorkspace(config, args, (workspace) => {
+        const policy = resolvePolicy(workspace, config);
+        const { entries } = readAudit(config, { limit: Math.min(Number(args.limit || 50), 200) });
+        const summary = buildSessionSummary(entries || [], workspace.alias, policy);
+        return { ok: true, workspace: workspace.alias, ...summary, policy };
       });
     default:
       throw new Error(`Unknown tool: ${name}`);
