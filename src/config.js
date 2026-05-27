@@ -150,7 +150,8 @@ function normalizeWorkspace(workspace) {
     defaultBaseBranch: workspace.defaultBaseBranch || "main",
     allowedRemotes: Array.isArray(workspace.allowedRemotes) ? workspace.allowedRemotes : ["origin"],
     repoSlug: workspace.repoSlug || "",
-    fastTask: normalizeFastTask(workspace.fastTask)
+    fastTask: normalizeFastTask(workspace.fastTask),
+    validationRules: workspace.validationRules && typeof workspace.validationRules === "object" ? workspace.validationRules : {}
   };
 }
 
@@ -277,7 +278,8 @@ function resolveWorkspace(config, alias) {
     defaultBaseBranch: entry.defaultBaseBranch || "main",
     allowedRemotes: entry.allowedRemotes || ["origin"],
     repoSlug: entry.repoSlug || "",
-    fastTask: normalizeFastTask(entry.fastTask)
+    fastTask: normalizeFastTask(entry.fastTask),
+    validationRules: entry.validationRules && typeof entry.validationRules === "object" ? entry.validationRules : {}
   };
 }
 
