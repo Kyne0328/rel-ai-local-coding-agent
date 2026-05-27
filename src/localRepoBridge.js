@@ -14,6 +14,8 @@ const { appendOperation, makeOperationId, summarizeOperations } = require("./jou
 const { normalizeCommandAlias } = require("./commandNormalizer");
 const { selectValidationLevel } = require("./validationStrategy");
 const { resolvePolicy } = require("./policyResolver");
+const { resolveBudget } = require("./budgetResolver");
+const sessionCache = require("./sessionCache");
 
 const DEFAULT_MAX_READ_BYTES = 1024 * 1024;
 const DEFAULT_MAX_SNAPSHOT_FILES = 1000;
@@ -30,7 +32,9 @@ const AGGRESSIVE_ARCHIVE_EXCLUDED_PATHS = [".git/", "node_modules/", "build/", "
 const SOURCE_LIKE_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs', '.dart', '.py', '.go', '.rs', '.java', '.kt', '.swift', '.cs', '.cpp', '.c', '.h', '.hpp', '.rb', '.php', '.css', '.scss', '.html', '.xml', '.yaml', '.yml', '.json', '.md']);
 
 function repoSnapshot(workspace, config, args = {}) {
-  const maxEntries = clampNumber(args.maxEntries, 1, 20000, DEFAULT_MAX_SNAPSHOT_FILES);
+  const policy = resolvePolicy(workspace, config || {});
+  const effectiveDefault = resolveBudget(DEFAULT_MAX_SNAPSHOT_FILES, policy, config || {});
+  const maxEntries = clampNumber(args.maxEntries, 1, 20000, effectiveDefault);
   const includeFiles = args.includeFiles !== false;
   const tree = collectTextFiles(workspace.path, collectOptionsFromWorkspace(workspace, { maxEntries }));
   const manifests = readManifests(workspace.path);
@@ -46,6 +50,8 @@ function repoSnapshot(workspace, config, args = {}) {
     manifestContents: manifests,
     discoveredCommands,
     fileCount: tree.files.length,
+    effectiveMaxEntries: maxEntries,
+    budgetMultiplied: effectiveDefault !== DEFAULT_MAX_SNAPSHOT_FILES,
     ...(includeFiles ? { files: tree.files } : {}),
     skipped: tree.skipped.slice(0, 200),
     truncated: tree.truncated,
@@ -56,10 +62,13 @@ function repoSnapshot(workspace, config, args = {}) {
   };
 }
 
-function relaiRead(workspace, args = {}) {
+function relaiRead(workspace, config, args = {}) {
   const paths = Array.isArray(args.paths) ? args.paths : [];
   if (paths.length === 0) throw new Error("paths must contain at least one path.");
-  const maxBytes = clampNumber(args.maxBytes, 1000, 10 * 1024 * 1024, DEFAULT_MAX_READ_BYTES);
+  const policy = resolvePolicy(workspace, config || {});
+  const sessionActive = policy && policy.sessionActive === true;
+  const defaultMaxBytes = resolveBudget(DEFAULT_MAX_READ_BYTES, policy, config || {});
+  const maxBytes = clampNumber(args.maxBytes, 1000, 10 * 1024 * 1024, defaultMaxBytes);
   const items = [];
   const skipped = [];
   for (const requested of paths) {
@@ -74,23 +83,40 @@ function relaiRead(workspace, args = {}) {
         skipped.push({ path: String(requested), reason: "not a file or directory" });
         continue;
       }
-      const data = fs.readFileSync(safe.absolutePath);
-      if (looksBinary(data)) {
-        skipped.push({ path: safe.relativePath, reason: "binary-looking file" });
-        continue;
+
+      let text = null;
+      let cacheHit = false;
+      if (sessionActive) {
+        const cached = sessionCache.getCachedRead(workspace.alias, safe.absolutePath, stat.mtimeMs);
+        if (cached !== null) { text = cached; cacheHit = true; }
       }
-      const text = data.toString("utf8");
-      const truncated = Buffer.byteLength(text, "utf8") > maxBytes;
-      items.push({
+      let data = null;
+      if (text === null) {
+        data = fs.readFileSync(safe.absolutePath);
+        if (looksBinary(data)) {
+          skipped.push({ path: safe.relativePath, reason: "binary-looking file" });
+          continue;
+        }
+        text = data.toString("utf8");
+        if (sessionActive) {
+          sessionCache.setCachedRead(workspace.alias, safe.absolutePath, stat.mtimeMs, text);
+        }
+      }
+
+      const byteLen = Buffer.byteLength(text, "utf8");
+      const truncated = byteLen > maxBytes;
+      const item = {
         type: "file",
         path: safe.relativePath,
         sha256: fileSha256(workspace.path, safe.relativePath),
-        bytes: data.length,
+        bytes: data ? data.length : byteLen,
         lineCount: countLines(text),
         truncated,
         writeGuidance: fileWriteGuidance(safe.relativePath, text),
         content: truncated ? text.slice(0, maxBytes) : text
-      });
+      };
+      if (sessionActive) item.cacheHit = cacheHit;
+      items.push(item);
     } catch (error) {
       skipped.push({ path: String(requested), reason: error instanceof Error ? error.message : String(error) });
     }

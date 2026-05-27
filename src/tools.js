@@ -173,7 +173,7 @@ async function dispatchTool(config, name, args) {
     case "relai_repo_snapshot":
       return withWorkspace(config, args, (workspace) => repoSnapshot(workspace, config, args));
     case "relai_read":
-      return withWorkspace(config, args, (workspace) => relaiRead(workspace, args));
+      return withWorkspace(config, args, (workspace) => relaiRead(workspace, config, args));
     case "relai_write":
       return withWorkspace(config, args, (workspace) => relaiWrite(workspace, config, args));
     case "relai_replace":
