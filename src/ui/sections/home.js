@@ -39,6 +39,8 @@ function buildHome(data) {
     metricHtml('Workspace bridge', 'ready', 'read, change, validate, review', 'good');
   root.appendChild(metrics);
 
+  root.appendChild(releaseNotesCard());
+
   root.appendChild(nextStepsCard(workspaces, findings, audit));
 
   const grid = document.createElement('div');
@@ -63,6 +65,28 @@ function updateShell(data, cfg) {
     statusEl.className = 'status-pill ' + (data.ok ? 'ok' : 'bad');
     statusEl.textContent = data.ok ? 'Online' : 'Error';
   }
+}
+
+function releaseNotesCard() {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = '<div class="card-head"><h3>What\'s new</h3></div>';
+  const body = document.createElement('div');
+  body.className = 'card-body';
+  body.style.cssText = 'display:grid;gap:8px;';
+  body.innerHTML = '<div style="font-size:13px;color:var(--text-muted);">Loading release notes…</div>';
+  card.appendChild(body);
+
+  import('/ui/api.js').then(({ fetchJson }) => fetchJson('/api/release-notes').then(notes => {
+    if (!notes) { body.innerHTML = '<div style="font-size:13px;color:var(--text-muted);">No release notes available.</div>'; return; }
+    const safeVersion = esc(notes.version || '');
+    const safeHeadline = esc(notes.headline || '');
+    const bullets = Array.isArray(notes.bullets) ? notes.bullets : [];
+    const bulletsHtml = bullets.map(b => `<li style="margin:0 0 4px;">${esc(b)}</li>`).join('');
+    body.innerHTML = `<div style="font-size:13px;color:var(--text);"><strong>v${safeVersion}</strong> — ${safeHeadline}</div><ul style="margin:4px 0 0 18px;padding:0;font-size:12px;color:var(--text-muted);">${bulletsHtml}</ul>`;
+  })).catch(() => { body.innerHTML = '<div style="font-size:13px;color:var(--text-muted);">Failed to load release notes.</div>'; });
+
+  return card;
 }
 
 function nextStepsCard(workspaces, findings, audit) {

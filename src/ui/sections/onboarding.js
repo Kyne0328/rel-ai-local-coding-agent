@@ -90,7 +90,7 @@ function _showStep() {
 
 function _renderStep(step, content, nextBtn, skipBtn, backBtn) {
   if (step === 0) {
-    content.innerHTML = '<p style="font-size:14px;line-height:1.55;">This setup gets one local workspace and your ChatGPT connector ready so you can start using Rel.AI MCP immediately.</p>';
+    content.innerHTML = '<p style="font-size:14px;line-height:1.55;">Rel.AI MCP operates as your trusted local coding operator. Inside a configured workspace, the agent can read, edit, validate, and review diffs without per-action approval. Boundaries remain firm: blocked paths, destructive resets, and remote pushes are still gated.</p><p style="font-size:14px;line-height:1.55;">This setup gets one local workspace and your ChatGPT connector ready so you can start using Rel.AI MCP immediately.</p>';
     _withConnection(content);
     nextBtn.textContent = 'Start setup';
   } else if (step === 1) {

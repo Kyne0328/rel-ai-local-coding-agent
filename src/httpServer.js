@@ -259,6 +259,13 @@ async function routeRequest(req, res, options) {
     return;
   }
 
+  if (req.method === "GET" && parsed.pathname === "/api/release-notes") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    const { getReleaseNotes } = require("./releaseNotes");
+    sendJson(res, 200, getReleaseNotes(), ae);
+    return;
+  }
+
   if (req.method === "GET" && parsed.pathname === "/api/readiness") {
     if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
     const config = readConfig();
