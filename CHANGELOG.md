@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.13.0] — 2026-05-27
+
+### Trusted Workspace Agent Mode
+- New trusted local-agent policy model (`policyResolver`) with session metadata file (workspace + createdAt + taskHint)
+- `relai_set_policy` tool to activate/clear session policy; `relai_session_summary` to review files touched, checks run, planner decisions
+- Execution planner (`relai_edit`) auto-selects between localized replace, full-file write, staged write, and prepared multi-file update
+- Canonical command alias normalization for validation checks (`commandNormalizer`)
+- Risk-based validation strategy: `minimal` / `focused` / `broad` / `extended` selected from change surface
+- Session cache (LRU + mtime invalidation) and trusted budget multiplier for context loading
+- Caution-zone classifier (mass clear, bundle apply, multi-file update, workspace config writes) surfaced in workspace badge, home metric, diagnostics card
+- Hard boundaries reinforced: secret-bearing paths, traversal, absolute paths, history-rewriting ops blocked
+- Audit payload enriched with plannerPath, plannerReason, validationLevel/Reason, aliasNormalizations, policySessionActive, cautionLevel/Reason
+- Dashboard: workspace card shows session policy badge + taskHint; diagnostics page adds alias consistency + caution summary cards
+- `GET /api/alias-diagnostics` and `GET /api/caution-summary` endpoints
+
 ## [0.11.35] — 2026-05-25
 
 ### Changes
