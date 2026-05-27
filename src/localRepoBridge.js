@@ -19,7 +19,8 @@ const sessionCache = require("./sessionCache");
 
 const DEFAULT_MAX_READ_BYTES = 1024 * 1024;
 const DEFAULT_MAX_SNAPSHOT_FILES = 1000;
-const DEFAULT_MAX_DIFF_BYTES = 300000;
+const DEFAULT_MAX_DIFF_BYTES = 1024 * 1024;
+const DEFAULT_MAX_GIT_OUTPUT_BYTES = 1024 * 1024;
 const DEFAULT_STAGED_CHUNK_BYTES = 12000;
 const STAGED_WRITE_BYTE_THRESHOLD = 8000;
 const STAGED_WRITE_LINE_THRESHOLD = 180;
@@ -348,9 +349,12 @@ function relaiClear(workspace, config, args = {}) {
 
 
 async function relaiApplyPatch(workspace, config, args = {}) {
-  const rawPatch = String(args.patch || args.diff || "");
-  const { patch, converted, sourceFormat } = normalizeOpenAIPatchFormat(rawPatch);
-  assertPreparedUpdateSafe(workspace, config, args, patch);
+  const rawPatch = String(args.patch || args.diff || args.updateText || "");
+  assertPreparedUpdateSafe(workspace, config, args, rawPatch);
+  if (/^\s*\*\*\* Begin Patch\b/m.test(rawPatch)) {
+    return applyStructuredOpenAIPatch(workspace, config, args, rawPatch);
+  }
+  const patch = normalizeUnifiedDiffText(rawPatch);
   const patchBytes = Buffer.byteLength(patch, "utf8");
   await ensureGitRepo(workspace, config);
   const touchedPaths = validatePatchPaths(workspace, patch);
@@ -358,9 +362,17 @@ async function relaiApplyPatch(workspace, config, args = {}) {
   const operationId = makeOperationId();
   const patchFile = tempStatePath(config, workspace, operationId, ".patch");
   fs.writeFileSync(patchFile, patch, "utf8");
-  const check = await runProcess("git", ["apply", "--check", patchFile], { cwd: workspace.path, timeout: clampNumber(args.timeoutMs, 1000, 86400000, 120000) }, config);
+  const check = await runProcess("git", ["apply", "--check", "--verbose", "--recount", patchFile], { cwd: workspace.path, timeout: clampNumber(args.timeoutMs, 1000, 86400000, 120000) }, config);
   if (check.exitCode !== 0) {
-    return { ok: false, workspace: workspace.alias, operationId, operation: "applyPatch:check", touchedPaths, check: summarizeCommand(check) };
+    return {
+      ok: false,
+      workspace: workspace.alias,
+      operationId,
+      operation: "applyPatch:check",
+      touchedPaths,
+      check: summarizeCommand(check),
+      diagnostics: diagnosePatchFailure(check.stderr || check.stdout || "", patch, touchedPaths)
+    };
   }
   let backup = null;
   if (shouldMakePreparedBackup(config, args)) backup = await makePreparedBackup(workspace, config, operationId, "patch");
@@ -369,7 +381,7 @@ async function relaiApplyPatch(workspace, config, args = {}) {
   const diff = args.returnDiff === false ? null : await relaiDiff(workspace, config, { maxBytes: args.maxDiffBytes || DEFAULT_MAX_DIFF_BYTES });
   const ok = apply.exitCode === 0 && (!verify || verify.ok);
   appendOperation(config, workspace, { id: operationId, type: "apply_patch", ok, paths: touchedPaths, results: [{ operation: "applyPatch", bytes: patchBytes, touchedPaths, verified: verify ? verify.ok : null }] });
-  return { ok, workspace: workspace.alias, operationId, operation: "applyPatch", changedFiles: apply.exitCode === 0 ? touchedPaths : [], touchedPaths, patchBytes, backup, apply: summarizeCommand(apply), ...(converted ? { sourceFormat, converted: true } : {}), ...(verify ? { verify } : {}), ...(diff ? { diff } : {}) };
+  return { ok, workspace: workspace.alias, operationId, operation: "applyPatch", changedFiles: apply.exitCode === 0 ? touchedPaths : [], touchedPaths, patchBytes, backup, apply: summarizeCommand(apply), sourceFormat: "unified-diff", ...(verify ? { verify } : {}), ...(diff ? { diff } : {}) };
 }
 
 function normalizeOpenAIPatchFormat(input) {
@@ -420,6 +432,195 @@ function normalizeOpenAIPatchFormat(input) {
     i += 1;
   }
   return { patch: `${out.join("\n")}\n`, converted: true, sourceFormat: "openai-patch" };
+}
+
+async function applyStructuredOpenAIPatch(workspace, config, args, rawPatch) {
+  const document = parseOpenAIPatchDocument(rawPatch);
+  const touchedPaths = document.operations.map((item) => item.path);
+  await requireCleanGitIfConfigured(workspace, config, args);
+  const operationId = makeOperationId();
+  let backup = null;
+  if (shouldMakePreparedBackup(config, args)) backup = await makePreparedBackup(workspace, config, operationId, "patch");
+  const changedFiles = [];
+  for (const operation of document.operations) {
+    const safe = resolveSafePath(workspace.path, operation.path);
+    const exists = fs.existsSync(safe.absolutePath);
+    const oldText = exists ? fs.readFileSync(safe.absolutePath, "utf8").replace(/\r\n/g, "\n") : "";
+    if (operation.type === "update") {
+      const nextText = applyOpenAIPatchUpdate(oldText, operation, safe.relativePath);
+      if (nextText !== oldText) {
+        if (!Boolean(args.dryRun)) writeTextFileSafe(workspace.path, safe.relativePath, nextText);
+        changedFiles.push(safe.relativePath);
+      }
+      continue;
+    }
+    if (operation.type === "add") {
+      const nextText = joinPatchLines(operation.lines.map((line) => line.slice(1)), true);
+      if (!Boolean(args.dryRun)) writeTextFileSafe(workspace.path, safe.relativePath, nextText);
+      changedFiles.push(safe.relativePath);
+      continue;
+    }
+    if (operation.type === "delete") {
+      if (!Boolean(args.dryRun)) fs.rmSync(safe.absolutePath, { force: true });
+      changedFiles.push(safe.relativePath);
+    }
+  }
+  const verify = hasRequestedChecks(args) ? await relaiVerify(workspace, config, args) : null;
+  const diff = args.returnDiff === false ? null : await relaiDiff(workspace, config, { maxBytes: args.maxDiffBytes || DEFAULT_MAX_DIFF_BYTES });
+  const ok = !verify || verify.ok;
+  appendOperation(config, workspace, { id: operationId, type: "apply_patch", ok, paths: changedFiles, results: [{ operation: "applyPatch", bytes: Buffer.byteLength(rawPatch, "utf8"), touchedPaths: changedFiles, verified: verify ? verify.ok : null }] });
+  return {
+    ok,
+    workspace: workspace.alias,
+    operationId,
+    operation: "applyPatch",
+    sourceFormat: "openai-patch",
+    converted: false,
+    patchBytes: Buffer.byteLength(rawPatch, "utf8"),
+    changedFiles,
+    touchedPaths,
+    backup,
+    ...(verify ? { verify } : {}),
+    ...(diff ? { diff } : {})
+  };
+}
+
+function parseOpenAIPatchDocument(input) {
+  const lines = String(input || "").replace(/\r\n/g, "\n").split("\n");
+  const operations = [];
+  let index = lines.findIndex((line) => /^\s*\*\*\* Begin Patch\b/.test(line));
+  if (index === -1) throw new Error("OpenAI patch is missing '*** Begin Patch'.");
+  index += 1;
+  while (index < lines.length) {
+    const line = lines[index];
+    if (/^\s*\*\*\* End Patch\b/.test(line)) break;
+    const updateMatch = /^\s*\*\*\* Update File:\s*(.+)$/.exec(line);
+    const addMatch = /^\s*\*\*\* Add File:\s*(.+)$/.exec(line);
+    const deleteMatch = /^\s*\*\*\* Delete File:\s*(.+)$/.exec(line);
+    if (!updateMatch && !addMatch && !deleteMatch) {
+      index += 1;
+      continue;
+    }
+    const type = updateMatch ? "update" : addMatch ? "add" : "delete";
+    const pathText = (updateMatch || addMatch || deleteMatch)[1].trim();
+    const body = [];
+    index += 1;
+    while (index < lines.length && !/^\s*\*\*\* (Update File|Add File|Delete File|End Patch)\b/.test(lines[index])) {
+      body.push(lines[index]);
+      index += 1;
+    }
+    operations.push({ type, path: pathText, lines: body });
+  }
+  if (operations.length === 0) {
+    throw new Error("OpenAI patch did not contain any file operations.");
+  }
+  return { operations };
+}
+
+function applyOpenAIPatchUpdate(oldText, operation, relativePath) {
+  const oldEndsWithNewline = /\n$/.test(oldText);
+  const oldLines = splitPatchText(oldText);
+  const hunks = [];
+  let current = [];
+  for (const line of operation.lines) {
+    if (line === "*** End of File") continue;
+    if (line.startsWith("@@")) {
+      if (current.length > 0) {
+        hunks.push(current);
+        current = [];
+      }
+      continue;
+    }
+    if (/^[ +\-]/.test(line)) {
+      current.push(line);
+      continue;
+    }
+    if (line.trim() === "") {
+      current.push(" ");
+      continue;
+    }
+    throw new Error(`OpenAI patch update for ${relativePath} contains an unsupported line: ${line}`);
+  }
+  if (current.length > 0) hunks.push(current);
+  if (hunks.length === 0) throw new Error(`OpenAI patch update for ${relativePath} did not contain any hunks.`);
+
+  let cursor = 0;
+  const output = [];
+  for (const hunk of hunks) {
+    const matchLines = hunk.filter((line) => !line.startsWith("+")).map((line) => line.slice(1));
+    const start = findHunkStart(oldLines, matchLines, cursor);
+    if (start === -1) {
+      throw new Error(`OpenAI patch context mismatch for ${relativePath}. Re-read the file and regenerate the patch with current text.`);
+    }
+    output.push(...oldLines.slice(cursor, start));
+    let lineIndex = start;
+    for (const line of hunk) {
+      const prefix = line[0];
+      const content = line.slice(1);
+      if (prefix === " ") {
+        if (oldLines[lineIndex] !== content) {
+          throw new Error(`OpenAI patch context mismatch for ${relativePath} at '${content}'.`);
+        }
+        output.push(content);
+        lineIndex += 1;
+      } else if (prefix === "-") {
+        if (oldLines[lineIndex] !== content) {
+          throw new Error(`OpenAI patch delete mismatch for ${relativePath} at '${content}'.`);
+        }
+        lineIndex += 1;
+      } else if (prefix === "+") {
+        output.push(content);
+      }
+    }
+    cursor = lineIndex;
+  }
+  output.push(...oldLines.slice(cursor));
+  return joinPatchLines(output, oldEndsWithNewline);
+}
+
+function splitPatchText(text) {
+  const normalized = String(text || "").replace(/\r\n/g, "\n");
+  if (!normalized) return [];
+  const lines = normalized.split("\n");
+  if (normalized.endsWith("\n")) lines.pop();
+  return lines;
+}
+
+function joinPatchLines(lines, endsWithNewline) {
+  const body = lines.join("\n");
+  return endsWithNewline ? `${body}\n` : body;
+}
+
+function findHunkStart(lines, matchLines, fromIndex) {
+  if (matchLines.length === 0) return fromIndex;
+  for (let index = fromIndex; index <= lines.length - matchLines.length; index += 1) {
+    let matched = true;
+    for (let offset = 0; offset < matchLines.length; offset += 1) {
+      if (lines[index + offset] !== matchLines[offset]) {
+        matched = false;
+        break;
+      }
+    }
+    if (matched) return index;
+  }
+  return -1;
+}
+
+function normalizeUnifiedDiffText(input) {
+  return String(input || "").replace(/\r\n/g, "\n");
+}
+
+function diagnosePatchFailure(stderrText, patch, touchedPaths) {
+  const text = String(stderrText || "");
+  const diagnostics = [];
+  if (/corrupt patch/i.test(text)) diagnostics.push("Patch hunks are malformed or incomplete.");
+  if (/patch does not apply/i.test(text)) diagnostics.push("Patch context does not match the current file contents.");
+  if (/No such file or directory/i.test(text)) diagnostics.push("One or more patch paths do not exist in the workspace.");
+  if (/unrecognized input/i.test(text)) diagnostics.push("Patch format was not recognized by git apply.");
+  if (/\r/.test(patch)) diagnostics.push("Patch contained CRLF line endings; convert to LF before applying.");
+  if (!/^--- a\//m.test(patch) || !/^\+\+\+ b\//m.test(patch)) diagnostics.push("Unified diff headers must include --- a/path and +++ b/path lines.");
+  if (diagnostics.length === 0) diagnostics.push("Re-read the target files and regenerate the patch with current context.");
+  return { touchedPaths, diagnostics, raw: text.trim() };
 }
 
 async function relaiApplyArchive(workspace, config, args = {}) {
@@ -612,7 +813,7 @@ async function relaiBrowser(workspace, config, args = {}) {
 
 async function relaiDiff(workspace, config, args = {}) {
   const staged = Boolean(args.staged);
-  const stat = await runProcess("git", ["status", "--short"], { cwd: workspace.path, timeout: 30000 }, config);
+  const stat = await runProcess("git", ["status", "--short", "--branch"], { cwd: workspace.path, timeout: 30000 }, config);
   const diffArgs = ["diff", ...(staged ? ["--staged"] : [])];
   const filterPath = args.path ? resolveSafePath(workspace.path, args.path).relativePath : null;
   if (filterPath) diffArgs.push("--", filterPath);
@@ -626,8 +827,13 @@ async function relaiDiff(workspace, config, args = {}) {
     staged,
     ...(filterPath ? { path: filterPath } : {}),
     status: stat.stdout || "",
+    branch: ownership.branch,
+    aheadBehind: ownership.aheadBehind,
+    statusEntries: ownership.entries,
     sessionChangedFiles: ownership.sessionChanged,
     baselineChangedFiles: ownership.baselineChanged,
+    untrackedSessionFiles: ownership.untrackedSession,
+    untrackedBaselineFiles: ownership.untrackedBaseline,
     ...(ownership.baselineSource ? { baselineSource: ownership.baselineSource } : {}),
     diff: Buffer.byteLength(diffText, "utf8") > maxBytes ? diffText.slice(0, maxBytes) + `\n[rel-ai-mcp diff truncated at ${maxBytes} bytes]` : diffText,
     exitCode: diff.exitCode,
@@ -649,17 +855,52 @@ function classifyStatusOwnership(workspace, config, statusOutput) {
   const baselineSet = new Set(baselineDirty);
   const sessionChanged = [];
   const baselineChanged = [];
+  const untrackedSession = [];
+  const untrackedBaseline = [];
+  const entries = [];
+  let branch = null;
+  let aheadBehind = null;
   const lines = String(statusOutput || "").split(/\r?\n/).filter(Boolean);
   for (const line of lines) {
+    if (line.startsWith("## ")) {
+      const branchInfo = parseStatusBranchLine(line);
+      branch = branchInfo.branch;
+      aheadBehind = branchInfo.aheadBehind;
+      continue;
+    }
     if (line.length < 3) continue;
-    const rest = line.slice(3).trim();
-    const arrow = rest.indexOf(" -> ");
-    const file = arrow >= 0 ? rest.slice(arrow + 4).trim() : rest;
+    const x = line[0];
+    const y = line[1];
+    const rawPath = line.slice(3).trim();
+    const arrow = rawPath.indexOf(" -> ");
+    const file = arrow >= 0 ? rawPath.slice(arrow + 4).trim() : rawPath;
     if (!file) continue;
-    if (baselineSet.has(file)) baselineChanged.push(file);
-    else sessionChanged.push(file);
+    const untracked = x === "?" && y === "?";
+    const owner = baselineSet.has(file) ? "baseline" : "session";
+    entries.push({ path: file, indexStatus: x, worktreeStatus: y, owner, untracked, raw: line });
+    if (owner === "baseline") {
+      baselineChanged.push(file);
+      if (untracked) untrackedBaseline.push(file);
+    } else {
+      sessionChanged.push(file);
+      if (untracked) untrackedSession.push(file);
+    }
   }
-  return { sessionChanged, baselineChanged, baselineSource };
+  return { branch, aheadBehind, entries, sessionChanged, baselineChanged, untrackedSession, untrackedBaseline, baselineSource };
+}
+
+function parseStatusBranchLine(line) {
+  const text = String(line || "").replace(/^##\s+/, "").trim();
+  const aheadMatch = /ahead (\d+)/.exec(text);
+  const behindMatch = /behind (\d+)/.exec(text);
+  const branchPart = text.split("...")[0].trim();
+  return {
+    branch: branchPart || null,
+    aheadBehind: aheadMatch || behindMatch ? {
+      ahead: aheadMatch ? Number(aheadMatch[1]) : 0,
+      behind: behindMatch ? Number(behindMatch[1]) : 0
+    } : null
+  };
 }
 
 async function relaiReset(workspace, config, args = {}) {
@@ -675,6 +916,242 @@ async function relaiReset(workspace, config, args = {}) {
   let clean = null;
   if (args.clean) clean = await runProcess("git", ["clean", "-fd"], { cwd: workspace.path, timeout: 60000 }, config);
   return { ok: reset.exitCode === 0 && (!clean || clean.exitCode === 0), workspace: workspace.alias, mode: "hard", reset: summarizeCommand(reset), ...(clean ? { clean: summarizeCommand(clean) } : {}) };
+}
+
+async function relaiGitStatus(workspace, config, args = {}) {
+  const maxBytes = clampNumber(args.maxBytes, 1000, 5 * 1024 * 1024, DEFAULT_MAX_GIT_OUTPUT_BYTES);
+  const status = await runProcess("git", ["status", "--short", "--branch"], { cwd: workspace.path, timeout: 30000 }, config);
+  const ownership = classifyStatusOwnership(workspace, config, status.stdout || "");
+  return {
+    ok: status.exitCode === 0,
+    workspace: workspace.alias,
+    branch: ownership.branch,
+    aheadBehind: ownership.aheadBehind,
+    status: truncateUtf8(status.stdout || "", maxBytes, "git status"),
+    statusEntries: ownership.entries,
+    sessionChangedFiles: ownership.sessionChanged,
+    baselineChangedFiles: ownership.baselineChanged,
+    untrackedSessionFiles: ownership.untrackedSession,
+    untrackedBaselineFiles: ownership.untrackedBaseline,
+    ...(ownership.baselineSource ? { baselineSource: ownership.baselineSource } : {}),
+    ...(status.stderr ? { stderr: truncateUtf8(status.stderr, maxBytes, "git status stderr") } : {})
+  };
+}
+
+async function relaiGitFetch(workspace, config, args = {}) {
+  await ensureGitRepo(workspace, config);
+  const remote = String(args.remote || "").trim();
+  const remotes = remote ? [remote] : await listGitRemotes(workspace, config);
+  const prune = args.prune !== false;
+  const results = [];
+  for (const item of remotes) {
+    const fetchArgs = ["fetch", item, ...(prune ? ["--prune"] : [])];
+    const result = await runProcess("git", fetchArgs, { cwd: workspace.path, timeout: clampNumber(args.timeoutMs, 1000, 86400000, 120000) }, config);
+    results.push({ remote: item, ...summarizeCommand(result) });
+    if (result.exitCode !== 0 && args.stopOnFailure !== false) break;
+  }
+  return { ok: results.every((item) => item.ok), workspace: workspace.alias, remotes, prune, results };
+}
+
+async function relaiGitCommit(workspace, config, args = {}) {
+  await ensureGitRepo(workspace, config);
+  const message = String(args.message || "").trim();
+  if (!message) throw new Error("relai_git_commit requires a non-empty commit message.");
+  const dryRun = Boolean(args.dryRun);
+  const addAll = args.addAll !== false;
+  const paths = Array.isArray(args.paths) ? args.paths.map((item) => resolveSafePath(workspace.path, item).relativePath) : [];
+  const statusBefore = await relaiGitStatus(workspace, config, { maxBytes: args.maxBytes });
+  if (dryRun) {
+    return {
+      ok: true,
+      workspace: workspace.alias,
+      dryRun: true,
+      message,
+      addAll,
+      paths,
+      status: statusBefore
+    };
+  }
+  if (paths.length > 0) {
+    const add = await runProcess("git", ["add", "--", ...paths], { cwd: workspace.path, timeout: 60000 }, config);
+    if (add.exitCode !== 0) return { ok: false, workspace: workspace.alias, message, addAll, paths, add: summarizeCommand(add) };
+  } else if (addAll) {
+    const add = await runProcess("git", ["add", "-A"], { cwd: workspace.path, timeout: 60000 }, config);
+    if (add.exitCode !== 0) return { ok: false, workspace: workspace.alias, message, addAll, add: summarizeCommand(add) };
+  }
+  const commit = await runProcess("git", ["commit", "-m", message], { cwd: workspace.path, timeout: clampNumber(args.timeoutMs, 1000, 86400000, 120000) }, config);
+  const statusAfter = await relaiGitStatus(workspace, config, { maxBytes: args.maxBytes });
+  return { ok: commit.exitCode === 0, workspace: workspace.alias, message, addAll, paths, commit: summarizeCommand(commit), statusBefore, statusAfter };
+}
+
+async function relaiGitPush(workspace, config, args = {}) {
+  await ensureGitRepo(workspace, config);
+  const remote = String(args.remote || "origin").trim();
+  const branch = String(args.branch || await currentGitBranch(workspace, config)).trim();
+  if (!branch) throw new Error("relai_git_push could not determine the branch to push.");
+  const dryRun = Boolean(args.dryRun);
+  const setUpstream = Boolean(args.setUpstream);
+  const pushArgs = ["push", ...(dryRun ? ["--dry-run"] : []), ...(setUpstream ? ["--set-upstream"] : []), remote, branch];
+  const push = await runProcess("git", pushArgs, { cwd: workspace.path, timeout: clampNumber(args.timeoutMs, 1000, 86400000, 120000) }, config);
+  return { ok: push.exitCode === 0, workspace: workspace.alias, remote, branch, dryRun, setUpstream, push: summarizeCommand(push) };
+}
+
+async function relaiGitMergeBranch(workspace, config, args = {}) {
+  await ensureGitRepo(workspace, config);
+  const source = String(args.source || args.branch || "").trim();
+  const originalBranch = await currentGitBranch(workspace, config);
+  const target = String(args.target || originalBranch).trim();
+  if (!source) throw new Error("relai_git_merge_branch requires source.");
+  if (!target) throw new Error("relai_git_merge_branch could not determine target branch.");
+  const protectedBranches = Array.isArray(workspace.protectedBranches) ? workspace.protectedBranches : ["main", "master"];
+  if (protectedBranches.includes(target) && args.allowProtected !== true) {
+    throw new Error(`Target branch '${target}' is protected. Pass allowProtected: true after reviewing the plan.`);
+  }
+  const dryRun = args.dryRun !== false;
+  const checkout = target === originalBranch
+    ? { exitCode: 0, stdout: "", stderr: "" }
+    : await runProcess("git", ["checkout", target], { cwd: workspace.path, timeout: 60000 }, config);
+  if (checkout.exitCode !== 0) return { ok: false, workspace: workspace.alias, source, target, dryRun, checkout: summarizeCommand(checkout) };
+  const mergeArgs = ["merge", ...(dryRun ? ["--no-commit", "--no-ff"] : []), ...(args.ffOnly ? ["--ff-only"] : []), source];
+  const merge = await runProcess("git", mergeArgs, { cwd: workspace.path, timeout: clampNumber(args.timeoutMs, 1000, 86400000, 120000) }, config);
+  let aborted = null;
+  let restoreBranch = null;
+  if (dryRun) {
+    aborted = await runProcess("git", ["merge", "--abort"], { cwd: workspace.path, timeout: 60000 }, config);
+    if (target !== originalBranch) {
+      restoreBranch = await runProcess("git", ["checkout", originalBranch], { cwd: workspace.path, timeout: 60000 }, config);
+    }
+  }
+  const status = await relaiGitStatus(workspace, config, { maxBytes: args.maxBytes });
+  return { ok: merge.exitCode === 0 && (!aborted || aborted.exitCode === 0) && (!restoreBranch || restoreBranch.exitCode === 0), workspace: workspace.alias, source, target, originalBranch, dryRun, merge: summarizeCommand(merge), ...(aborted ? { abort: summarizeCommand(aborted) } : {}), ...(restoreBranch ? { restoreBranch: summarizeCommand(restoreBranch) } : {}), status };
+}
+
+async function relaiGitMergeRemoteBranchesPlan(workspace, config, args = {}) {
+  await ensureGitRepo(workspace, config);
+  const remote = String(args.remote || "origin").trim();
+  const targetBranch = String(args.targetBranch || "production").trim();
+  const protectedBranches = new Set(Array.isArray(workspace.protectedBranches) ? workspace.protectedBranches : ["main", "master"]);
+  protectedBranches.add(targetBranch);
+  const refs = await runProcess("git", ["for-each-ref", "--format=%(refname:short)|%(committerdate:iso8601)", `refs/remotes/${remote}`], { cwd: workspace.path, timeout: 30000 }, config);
+  if (refs.exitCode !== 0) return { ok: false, workspace: workspace.alias, remote, targetBranch, refs: summarizeCommand(refs) };
+  const branches = [];
+  const excluded = [];
+  for (const line of String(refs.stdout || "").split(/\r?\n/).filter(Boolean)) {
+    const [name, committerdate] = line.split("|");
+    if (!name || name === `${remote}/HEAD`) {
+      if (name) excluded.push({ name, reason: "symbolic remote head" });
+      continue;
+    }
+    const short = name.replace(`${remote}/`, "");
+    if (protectedBranches.has(short)) {
+      excluded.push({ name, reason: "protected or target branch" });
+      continue;
+    }
+    const merged = await runProcess("git", ["merge-base", "--is-ancestor", name, `${remote}/${targetBranch}`], { cwd: workspace.path, timeout: 30000 }, config);
+    const staleDays = committerdate ? Math.max(0, Math.floor((Date.now() - new Date(committerdate).getTime()) / (24 * 60 * 60 * 1000))) : null;
+    const risk = [];
+    if (staleDays != null && staleDays > 45) risk.push("stale branch");
+    if (short.includes("release") || short.includes("prod")) risk.push("name overlaps release flow");
+    branches.push({
+      name,
+      short,
+      lastCommitAt: committerdate || null,
+      staleDays,
+      alreadyMerged: merged.exitCode === 0,
+      recommendedOrderGroup: short.includes("ui") ? "ui" : short.includes("admin") ? "admin" : "general",
+      risk
+    });
+  }
+  const mergeCandidates = branches.filter((item) => !item.alreadyMerged).sort(compareMergeCandidates);
+  return {
+    ok: true,
+    workspace: workspace.alias,
+    remote,
+    targetBranch,
+    protectedBranches: [...protectedBranches],
+    excluded,
+    branches,
+    recommendedMergeOrder: mergeCandidates.map((item) => item.name),
+    riskSummary: mergeCandidates.filter((item) => item.risk.length > 0).map((item) => ({ name: item.name, risk: item.risk }))
+  };
+}
+
+async function relaiGitAbortMerge(workspace, config) {
+  await ensureGitRepo(workspace, config);
+  const abort = await runProcess("git", ["merge", "--abort"], { cwd: workspace.path, timeout: 60000 }, config);
+  return { ok: abort.exitCode === 0, workspace: workspace.alias, abort: summarizeCommand(abort) };
+}
+
+async function relaiGitCreatePr(workspace, config, args = {}) {
+  await ensureGitRepo(workspace, config);
+  const head = String(args.head || await currentGitBranch(workspace, config)).trim();
+  const base = String(args.base || workspace.defaultBaseBranch || "main").trim();
+  const title = String(args.title || "").trim();
+  const body = String(args.body || "").trim();
+  const diff = await runProcess("git", ["diff", `${base}...${head}`], { cwd: workspace.path, timeout: 60000 }, { ...config, maxOutputBytes: 2 * 1024 * 1024 });
+  return {
+    ok: diff.exitCode === 0,
+    workspace: workspace.alias,
+    base,
+    head,
+    title: title || `Merge ${head} into ${base}`,
+    body: body || buildPrBodyFromDiff(diff.stdout || ""),
+    diff: summarizeCommand(diff)
+  };
+}
+
+async function relaiRemoveFile(workspace, config, args = {}) {
+  const relativePath = String(args.path || "").trim();
+  if (!relativePath) throw new Error("relai_remove_file requires path.");
+  const reason = String(args.reason || "").trim();
+  const result = relaiClear(workspace, config, { path: relativePath, expectedSha256: args.expectedSha256, dryRun: args.dryRun, failIfMissing: args.failIfMissing });
+  if (!args.dryRun && args.stage === true && result.changedFiles.length > 0) {
+    const stage = await runProcess("git", ["add", "--", ...result.changedFiles], { cwd: workspace.path, timeout: 60000 }, config);
+    return { ...result, reason, stage: summarizeCommand(stage), ok: result.ok && stage.exitCode === 0 };
+  }
+  return { ...result, reason };
+}
+
+function relaiRefactorAudit(workspace, _config, args = {}) {
+  const oldTerms = normalizeAuditTerms(args.oldTerms || args.oldTerm || args.find);
+  const newTerms = normalizeAuditTerms(args.newTerms || args.newTerm || args.expect);
+  if (oldTerms.length === 0 && newTerms.length === 0) {
+    throw new Error("relai_refactor_audit requires oldTerms, newTerms, or both.");
+  }
+  const maxEntries = clampNumber(args.maxEntries, 1, 20000, 5000);
+  const tree = collectTextFiles(workspace.path, collectOptionsFromWorkspace(workspace, { maxEntries }));
+  const includeGenerated = args.includeGenerated === true;
+  const findings = [];
+  for (const relativePath of tree.files) {
+    if (!includeGenerated && isLikelyGeneratedFile(relativePath)) continue;
+    const abs = path.join(workspace.path, relativePath);
+    let text = "";
+    try { text = fs.readFileSync(abs, "utf8"); } catch (_error) { continue; }
+    const lines = text.split(/\r?\n/);
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index];
+      for (const term of oldTerms) {
+        if (line.toLowerCase().includes(term.toLowerCase())) {
+          findings.push({ kind: "oldTerm", term, path: relativePath, line: index + 1, category: fileCategory(relativePath), text: line.trim().slice(0, 300) });
+        }
+      }
+      for (const term of newTerms) {
+        if (line.toLowerCase().includes(term.toLowerCase())) {
+          findings.push({ kind: "newTerm", term, path: relativePath, line: index + 1, category: fileCategory(relativePath), text: line.trim().slice(0, 300) });
+        }
+      }
+    }
+  }
+  return {
+    ok: true,
+    workspace: workspace.alias,
+    oldTerms,
+    newTerms,
+    findings,
+    summary: summarizeAuditFindings(findings),
+    scannedFiles: tree.files.length,
+    skipped: tree.skipped
+  };
 }
 
 
@@ -752,7 +1229,8 @@ async function gitStatusShort(workspace, config) {
 }
 
 async function requireCleanGitIfConfigured(workspace, config, args) {
-  if (args.requireCleanGit !== true) return;
+  const required = args.requireCleanGit == null ? preparedFlag(config, "requireCleanGit", true) : Boolean(args.requireCleanGit);
+  if (!required) return;
   const status = await gitStatusShort(workspace, config);
   if (status.trim()) throw new Error(`Workspace '${workspace.alias}' is not clean.
 ${status}`);
@@ -1256,6 +1734,80 @@ function detectVerifyChecks(root, level) {
   return [...new Set(commands)];
 }
 
+async function listGitRemotes(workspace, config) {
+  const remotes = await runProcess("git", ["remote"], { cwd: workspace.path, timeout: 30000 }, config);
+  if (remotes.exitCode !== 0) throw new Error(`git remote failed for ${workspace.alias}: ${remotes.stderr || remotes.stdout || remotes.exitCode}`);
+  return String(remotes.stdout || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+}
+
+async function currentGitBranch(workspace, config) {
+  const branch = await runProcess("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: workspace.path, timeout: 30000 }, config);
+  if (branch.exitCode !== 0) return "";
+  return String(branch.stdout || "").trim();
+}
+
+function compareMergeCandidates(left, right) {
+  const staleLeft = left.staleDays == null ? -1 : left.staleDays;
+  const staleRight = right.staleDays == null ? -1 : right.staleDays;
+  if (left.risk.length !== right.risk.length) return left.risk.length - right.risk.length;
+  if (left.recommendedOrderGroup !== right.recommendedOrderGroup) return left.recommendedOrderGroup.localeCompare(right.recommendedOrderGroup);
+  return staleLeft - staleRight;
+}
+
+function buildPrBodyFromDiff(diffText) {
+  const changedFiles = [];
+  for (const line of String(diffText || "").split(/\r?\n/)) {
+    if (line.startsWith("+++ b/")) changedFiles.push(line.slice(6));
+  }
+  const unique = [...new Set(changedFiles)];
+  return [
+    "## Summary",
+    "",
+    `- Changes prepared from \`${unique.length}\` file(s)`,
+    "",
+    "## Files",
+    "",
+    ...unique.slice(0, 50).map((item) => `- \`${item}\``)
+  ].join("\n");
+}
+
+function normalizeAuditTerms(value) {
+  if (Array.isArray(value)) return value.map((item) => String(item || "").trim()).filter(Boolean);
+  const text = String(value || "").trim();
+  if (!text) return [];
+  return text.split(/[\n,]/).map((item) => item.trim()).filter(Boolean);
+}
+
+function isLikelyGeneratedFile(relativePath) {
+  const normalized = String(relativePath || "").replace(/\\/g, "/");
+  return /(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock|pubspec\.lock|.*generated.*|.*g\.dart|.*freezed\.dart|.*\.g\.cs)$/.test(normalized);
+}
+
+function fileCategory(relativePath) {
+  const normalized = String(relativePath || "").replace(/\\/g, "/");
+  if (/(^|\/)(test|tests|__tests__)\//.test(normalized) || /\.test\./.test(normalized) || /\.spec\./.test(normalized)) return "tests";
+  if (/(^|\/)(docs|doc)\//.test(normalized) || /\.md$/.test(normalized)) return "docs";
+  if (/(^|\/)(public|assets|ui|views|templates)\//.test(normalized)) return "ui";
+  if (/(schema|migration|migrations|sql)/i.test(normalized)) return "data";
+  return "source";
+}
+
+function summarizeAuditFindings(findings) {
+  const summary = { oldTermHits: 0, newTermHits: 0, byCategory: {} };
+  for (const finding of findings) {
+    if (finding.kind === "oldTerm") summary.oldTermHits += 1;
+    if (finding.kind === "newTerm") summary.newTermHits += 1;
+    summary.byCategory[finding.category] = (summary.byCategory[finding.category] || 0) + 1;
+  }
+  return summary;
+}
+
+function truncateUtf8(text, maxBytes, label) {
+  const value = String(text || "");
+  if (Buffer.byteLength(value, "utf8") <= maxBytes) return value;
+  return value.slice(0, maxBytes) + `\n[rel-ai-mcp ${label} truncated at ${maxBytes} bytes]`;
+}
+
 function sha256Text(text) {
   return require("node:crypto").createHash("sha256").update(String(text), "utf8").digest("hex");
 }
@@ -1279,6 +1831,16 @@ module.exports = {
   relaiBrowser,
   relaiDiff,
   relaiReset,
+  relaiGitStatus,
+  relaiGitFetch,
+  relaiGitCommit,
+  relaiGitPush,
+  relaiGitMergeBranch,
+  relaiGitMergeRemoteBranchesPlan,
+  relaiGitAbortMerge,
+  relaiGitCreatePr,
+  relaiRemoveFile,
+  relaiRefactorAudit,
   normalizeOpenAIPatchFormat,
   classifyStatusOwnership,
   buildZipCommand,

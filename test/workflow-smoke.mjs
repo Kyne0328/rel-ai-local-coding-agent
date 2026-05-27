@@ -125,7 +125,17 @@ const expected = [
   'relai_clear_files',
   'relai_diff',
   'relai_feature_probe',
+  'relai_git_abort_merge',
+  'relai_git_commit',
+  'relai_git_create_pr',
+  'relai_git_fetch',
+  'relai_git_merge_branch',
+  'relai_git_merge_remote_branches_plan',
+  'relai_git_push',
+  'relai_git_status',
   'relai_read',
+  'relai_refactor_audit',
+  'relai_remove_file',
   'relai_replace',
   'relai_repo_snapshot',
   'relai_restore_changes',
@@ -241,7 +251,7 @@ if (!packaged.archivePath) {
   throw new Error('relai_package_snapshot should return archivePath');
 }
 fs.writeFileSync(path.join(workspace, 'src', 'index.js'), 'console.log("bundle placeholder")\n');
-call(49, 'relai_apply_bundle', { workspace: 'smoke', bundlePath: packaged.archivePath, backup: false, returnDiff: false });
+call(49, 'relai_apply_bundle', { workspace: 'smoke', bundlePath: packaged.archivePath, backup: false, requireCleanGit: false, returnDiff: false });
 const appliedBundle = contentOf(await waitFor(49, 20000));
 if (!appliedBundle.ok || !appliedBundle.changedFiles.includes('src/index.js')) {
   throw new Error('relai_apply_bundle should accept bundlePath and overlay files');
@@ -303,6 +313,31 @@ call(8, 'relai_diff', { workspace: 'smoke' });
 const diff = contentOf(await waitFor(8));
 if (!diff.diff.includes('Updated through staged full-file write')) {
   throw new Error('diff missing staged edit');
+}
+if (!Array.isArray(diff.sessionChangedFiles) || !diff.sessionChangedFiles.includes('README.md')) {
+  throw new Error('diff should expose sessionChangedFiles ownership');
+}
+
+fs.writeFileSync(path.join(workspace, 'stale-zone-label.txt'), 'delivery_zone still present\n');
+call(81, 'relai_refactor_audit', { workspace: 'smoke', oldTerms: ['delivery_zone'], newTerms: ['schedule'] });
+const audit = contentOf(await waitFor(81));
+if (!audit.summary || audit.summary.oldTermHits < 1) {
+  throw new Error('relai_refactor_audit should find stale old terms');
+}
+
+call(82, 'relai_git_status', { workspace: 'smoke' });
+const gitStatus = contentOf(await waitFor(82));
+if (!Array.isArray(gitStatus.statusEntries) || !gitStatus.statusEntries.some((item) => item.path === 'README.md')) {
+  throw new Error('relai_git_status should return structured status entries');
+}
+if (!Array.isArray(gitStatus.untrackedSessionFiles) || !gitStatus.untrackedSessionFiles.includes('stale-zone-label.txt')) {
+  throw new Error('relai_git_status should split untracked session files explicitly');
+}
+
+call(83, 'relai_remove_file', { workspace: 'smoke', path: 'stale-zone-label.txt', reason: 'cleanup workflow smoke residue' });
+const removedAuditResidue = contentOf(await waitFor(83));
+if (!removedAuditResidue.changedFiles.includes('stale-zone-label.txt')) {
+  throw new Error('relai_remove_file should clean up audit residue files');
 }
 
 call(9, 'relai_restore_changes', { workspace: 'smoke', paths: ['README.md', 'lib/sms_handler_utils.dart', 'src/index.js'] });

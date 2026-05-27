@@ -68,8 +68,8 @@ try {
   send(2, 'tools/list');
   const list = await waitFor(2);
   const names = list.result.tools.map((tool) => tool.name);
-  if (names.length !== 14) throw new Error(`Expected 14 visible bridge tools, got ${names.length}`);
-  for (const required of ['relai_apply_update', 'relai_apply_bundle', 'relai_package_snapshot', 'relai_status', 'relai_feature_probe']) {
+  if (names.length !== 24) throw new Error(`Expected 24 visible bridge tools, got ${names.length}`);
+  for (const required of ['relai_apply_update', 'relai_apply_bundle', 'relai_package_snapshot', 'relai_status', 'relai_feature_probe', 'relai_git_status', 'relai_git_commit', 'relai_refactor_audit']) {
     if (!names.includes(required)) throw new Error(`missing fast tool ${required}`);
   }
 

@@ -6,7 +6,7 @@ const sessionCache = require("./sessionCache");
 const { classifyCaution } = require("./cautionZone");
 const { discoverCommands } = require("./commandDiscovery");
 const { summarizeOperations } = require("./journal");
-const { repoSnapshot, relaiRead, relaiWrite, relaiReplace, relaiClear, relaiApplyPatch, relaiApplyArchive, relaiSnapshotArchive, relaiVerify, relaiBrowser, relaiDiff, relaiReset } = require("./localRepoBridge");
+const { repoSnapshot, relaiRead, relaiWrite, relaiReplace, relaiClear, relaiApplyPatch, relaiApplyArchive, relaiSnapshotArchive, relaiVerify, relaiBrowser, relaiDiff, relaiReset, relaiGitStatus, relaiGitFetch, relaiGitCommit, relaiGitPush, relaiGitMergeBranch, relaiGitMergeRemoteBranchesPlan, relaiGitAbortMerge, relaiGitCreatePr, relaiRemoveFile, relaiRefactorAudit } = require("./localRepoBridge");
 const { planEdit } = require("./executionPlanner");
 const { resolvePolicy, writeSessionPolicy, clearSessionPolicy } = require("./policyResolver");
 
@@ -34,6 +34,16 @@ const BRIDGE_TOOL_NAMES = [
   "relai_restore_changes",
   "relai_status",
   "relai_feature_probe",
+  "relai_git_status",
+  "relai_git_fetch",
+  "relai_git_commit",
+  "relai_git_push",
+  "relai_git_merge_branch",
+  "relai_git_merge_remote_branches_plan",
+  "relai_git_abort_merge",
+  "relai_git_create_pr",
+  "relai_remove_file",
+  "relai_refactor_audit",
   "relai_edit",
   "relai_set_policy",
   "relai_session_summary"
@@ -107,6 +117,36 @@ const toolSchemas = [
   tool("relai_feature_probe", "Rel.AI Feature Probe", "Compact booleans for important runtime behavior. Prefer this over source reads when checking installed behavior. Includes sessionPolicySupport flag.", {
     workspace: stringProp()
   }, [], READ_ONLY_LOCAL),
+  tool("relai_git_status", "Git Status", "Read-only git status with branch, ahead/behind, ownership split, and untracked-file breakdown.", {
+    workspace: stringProp(), maxBytes: numberProp(1000, 5242880)
+  }, ["workspace"], READ_ONLY_LOCAL),
+  tool("relai_git_fetch", "Git Fetch", "Fetch one or more remotes and optionally prune stale remote refs before merge planning.", {
+    workspace: stringProp(), remote: stringProp(), prune: boolProp(), stopOnFailure: boolProp(), timeoutMs: numberProp(1000, 86400000)
+  }, ["workspace"], WRITE_LOCAL),
+  tool("relai_git_commit", "Git Commit", "Create a git commit with an explicit message, with optional dry-run planning and path scoping.", {
+    workspace: stringProp(), message: stringProp(), dryRun: boolProp(), addAll: boolProp(), paths: arrayProp("string", 0, 200), maxBytes: numberProp(1000, 5242880), timeoutMs: numberProp(1000, 86400000)
+  }, ["workspace", "message"], WRITE_LOCAL),
+  tool("relai_git_push", "Git Push", "Push a branch to a remote with optional dry-run and set-upstream behavior.", {
+    workspace: stringProp(), remote: stringProp(), branch: stringProp(), dryRun: boolProp(), setUpstream: boolProp(), timeoutMs: numberProp(1000, 86400000)
+  }, ["workspace"], WRITE_LOCAL),
+  tool("relai_git_merge_branch", "Git Merge Branch", "Merge a source branch into a target branch with protected-branch checks and dry-run abort support.", {
+    workspace: stringProp(), source: stringProp(), branch: stringProp(), target: stringProp(), dryRun: boolProp(), ffOnly: boolProp(), allowProtected: boolProp(), maxBytes: numberProp(1000, 5242880), timeoutMs: numberProp(1000, 86400000)
+  }, ["workspace", "source"], WRITE_LOCAL),
+  tool("relai_git_merge_remote_branches_plan", "Git Merge Plan", "List remote branches, exclude protected branches, and recommend a merge order before touching production branches.", {
+    workspace: stringProp(), remote: stringProp(), targetBranch: stringProp()
+  }, ["workspace"], READ_ONLY_LOCAL),
+  tool("relai_git_abort_merge", "Abort Git Merge", "Abort an in-progress merge safely.", {
+    workspace: stringProp()
+  }, ["workspace"], DESTRUCTIVE_LOCAL),
+  tool("relai_git_create_pr", "Create PR Draft", "Draft a pull-request title/body from a base/head diff without touching the remote host.", {
+    workspace: stringProp(), base: stringProp(), head: stringProp(), title: stringProp(), body: stringProp()
+  }, ["workspace"], READ_ONLY_LOCAL),
+  tool("relai_remove_file", "Remove File", "Delete a single obsolete file with an explicit reason and optional git staging.", {
+    workspace: stringProp(), path: stringProp(), reason: stringProp(), expectedSha256: stringProp(), dryRun: boolProp(), failIfMissing: boolProp(), stage: boolProp()
+  }, ["workspace", "path"], DESTRUCTIVE_LOCAL),
+  tool("relai_refactor_audit", "Refactor Audit", "Scan source, tests, UI text, docs, and data-shaped files for stale old terms and expected new terms after a refactor.", {
+    workspace: stringProp(), oldTerms: arrayProp("string", 0, 100), newTerms: arrayProp("string", 0, 100), oldTerm: stringProp(), newTerm: stringProp(), find: stringProp(), expect: stringProp(), includeGenerated: boolProp(), maxEntries: numberProp(1, 20000)
+  }, ["workspace"], READ_ONLY_LOCAL),
   tool("relai_edit", "Unified Workspace Edit", "Unified workspace edit. The planner auto-selects the safest path based on what you provide: exact replacement for localized changes, full-file write for complete rewrites, or prepared update for diff-shaped changes. Prefer this over relai_replace / relai_write / relai_apply_update in ordinary coding work.", {
     workspace: stringProp(),
     path: stringProp(),
@@ -250,6 +290,9 @@ function enhanceToolError(toolName, error) {
     if (/corrupt patch|patch .* invalid|did not contain any valid|patch failed/i.test(raw)) {
       return append("Accepted patch formats:\n  1) Git unified diff:\n       --- a/path/to/file\n       +++ b/path/to/file\n       @@ -1,3 +1,3 @@\n       - old line\n       + new line\n  2) OpenAI patch format:\n       *** Begin Patch\n       *** Update File: path/to/file\n       @@\n       - old\n       + new\n       *** End Patch\nFor whole-file rewrites prefer relai_write { stage: \"direct\", content }.");
     }
+    if (/context mismatch|delete mismatch|unsupported line/i.test(raw)) {
+      return append("The OpenAI patch could not be matched against the current file contents. Re-read the file, regenerate the patch from current text, and make sure each changed block includes enough unchanged context lines.");
+    }
     if (/Delete File.*not supported/i.test(raw)) {
       return error instanceof Error ? error : new Error(raw);
     }
@@ -290,6 +333,26 @@ async function dispatchTool(config, name, args) {
       return relaiStatus(config, args);
     case "relai_feature_probe":
       return relaiFeatureProbe(config, args);
+    case "relai_git_status":
+      return withWorkspace(config, args, (workspace) => relaiGitStatus(workspace, config, args));
+    case "relai_git_fetch":
+      return withWorkspace(config, args, (workspace) => relaiGitFetch(workspace, config, args));
+    case "relai_git_commit":
+      return withWorkspace(config, args, (workspace) => relaiGitCommit(workspace, config, args));
+    case "relai_git_push":
+      return withWorkspace(config, args, (workspace) => relaiGitPush(workspace, config, args));
+    case "relai_git_merge_branch":
+      return withWorkspace(config, args, (workspace) => relaiGitMergeBranch(workspace, config, args));
+    case "relai_git_merge_remote_branches_plan":
+      return withWorkspace(config, args, (workspace) => relaiGitMergeRemoteBranchesPlan(workspace, config, args));
+    case "relai_git_abort_merge":
+      return withWorkspace(config, args, (workspace) => relaiGitAbortMerge(workspace, config));
+    case "relai_git_create_pr":
+      return withWorkspace(config, args, (workspace) => relaiGitCreatePr(workspace, config, args));
+    case "relai_remove_file":
+      return withWorkspace(config, args, (workspace) => relaiRemoveFile(workspace, config, args));
+    case "relai_refactor_audit":
+      return withWorkspace(config, args, (workspace) => relaiRefactorAudit(workspace, config, args));
     case "relai_edit":
       return withWorkspace(config, args, (workspace) => planEdit(workspace, config, args));
     case "relai_set_policy":
@@ -366,6 +429,13 @@ function relaiStatus(config, args = {}) {
     ok: true,
     version: packageJson.version || "",
     tools: BRIDGE_TOOL_NAMES,
+    toolGroups: {
+      workspace: PUBLIC_HTTP_TOOL_NAMES,
+      git: BRIDGE_TOOL_NAMES.filter((name) => name.startsWith("relai_git_")),
+      audit: ["relai_refactor_audit", "relai_session_summary", "relai_diff", "relai_git_status"],
+      cleanup: ["relai_clear_files", "relai_remove_file", "relai_restore_changes"],
+      internal: BRIDGE_TOOL_NAMES.filter((name) => !PUBLIC_HTTP_TOOL_NAMES.includes(name))
+    },
     scripts: Object.keys(scripts).sort(),
     ci,
     workspace: selectedWorkspace,

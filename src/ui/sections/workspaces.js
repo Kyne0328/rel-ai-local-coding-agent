@@ -32,7 +32,7 @@ function buildWorkspaces(data) {
       ${metricHtml('Workspaces', workspaces.length, 'configured aliases', 'blue')}
       ${metricHtml('Validation ready', validationReady + '/' + workspaces.length, 'configured or auto-detected', validationReady === workspaces.length ? 'good' : 'warn')}
       ${metricHtml('Health findings', actionableFindings(health).length, health.ok === false ? 'needs attention' : 'all clear', health.ok === false ? 'bad' : 'good')}
-      ${metricHtml('ChatGPT tools', '14', 'workspace tools', 'good')}
+      ${metricHtml('ChatGPT tools', '24', 'workspace tools', 'good')}
     </div>
   `;
 

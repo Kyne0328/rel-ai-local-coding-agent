@@ -230,6 +230,37 @@ await test("relaiSnapshotArchive excludes .env and .env.local files", async () =
   fs.rmSync(path.join(workspacePath, ".env.local"), { force: true });
 });
 
+// --- Test 9: OpenAI patch format applies directly without unified diff headers ---
+await test("relaiApplyPatch accepts OpenAI patch format directly", async () => {
+  const patch = `*** Begin Patch
+*** Update File: hello.txt
+@@
+-Hello, world!
++Hello from OpenAI patch!
+*** End Patch
+`;
+  const result = await relaiApplyPatch(workspace, config, { patch, returnDiff: false });
+  if (!result.ok) throw new Error(`OpenAI patch returned ok=false: ${JSON.stringify(result)}`);
+  if (result.sourceFormat !== "openai-patch") throw new Error(`Expected sourceFormat=openai-patch, got ${result.sourceFormat}`);
+  const content = fs.readFileSync(path.join(workspacePath, "hello.txt"), "utf8");
+  if (!content.includes("Hello from OpenAI patch")) throw new Error("OpenAI patch did not update hello.txt");
+  execFileSync("git", ["checkout", "--", "hello.txt"], { cwd: workspacePath });
+});
+
+// --- Test 10: OpenAI delete file patch is supported ---
+await test("relaiApplyPatch supports OpenAI delete file blocks", async () => {
+  fs.writeFileSync(path.join(workspacePath, "obsolete.txt"), "remove me\n");
+  execFileSync("git", ["add", "obsolete.txt"], { cwd: workspacePath });
+  execFileSync("git", ["commit", "-m", "add obsolete.txt"], { cwd: workspacePath, stdio: "ignore" });
+  const patch = `*** Begin Patch
+*** Delete File: obsolete.txt
+*** End Patch
+`;
+  const result = await relaiApplyPatch(workspace, config, { patch, returnDiff: false });
+  if (!result.ok) throw new Error(`OpenAI delete patch returned ok=false: ${JSON.stringify(result)}`);
+  if (fs.existsSync(path.join(workspacePath, "obsolete.txt"))) throw new Error("Delete file patch did not remove obsolete.txt");
+});
+
 // Cleanup
 try { fs.rmSync(temp, { recursive: true, force: true }); } catch (_e) {}
 

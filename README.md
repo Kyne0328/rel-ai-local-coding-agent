@@ -20,13 +20,13 @@ The goal is simple: I want the reasoning power of ChatGPT on the web, but I stil
 ChatGPT asks -> Rel.AI MCP inspects, changes, validates, and reviews locally -> I inspect the diff -> I keep or restore it
 ```
 
-The default standard workflow is intentionally small:
+The default public ChatGPT workflow is intentionally small and predictable:
 
 ```text
 relai_repo_snapshot -> relai_read -> relai_replace/relai_write/relai_clear_files -> relai_run_checks -> relai_diff -> relai_restore_changes
 ```
 
-No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. No old multi-agent/task-runner workflows pretending to be reliable. Settings > General can expose prepared update/bundle tools for larger workspace changes without brittle helper scripts.
+No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. No old multi-agent/task-runner workflows pretending to be reliable. The public MCP surface stays limited to the workspace tools ChatGPT actually needs, while newer local bridge sessions can opt into a few extra helper tools for trusted continuity.
 
 Rel.AI MCP still lightly nods to the original Rel.AI idea, but this README stands on its own: this is now a local MCP bridge for ChatGPT.
 
@@ -44,7 +44,10 @@ It can:
 - optionally apply prepared text updates or file bundles for larger workspace edits
 - run validation checks such as tests/analyzers
 - inspect git diffs
+- run explicit git status, fetch, commit, push, merge-planning, merge-abort, and PR-draft flows
+- scan for semantic refactor residue across source, tests, docs, UI, and data-shaped files
 - restore local changes
+- expose packaging, readiness, and feature-probe helpers on the public workspace-tool surface
 - expose a local or public MCP URL for ChatGPT connectors
 - optionally use Chrome extension approval assistance for ChatGPT app requests
 
@@ -93,7 +96,7 @@ The activity page is there because I got tired of guessing what the MCP server w
   <img src="docs/images/dashboard-tools-section.png" alt="Rel.AI MCP bridge tools" width="900">
 </p>
 
-The dashboard shows the workspace tools ChatGPT can use for the normal inspect, change, validate, review, and restore workflow. Legacy local/update/task-runner workflows are not part of the public MCP surface.
+The dashboard shows the 24 public workspace tools ChatGPT can use for inspect, change, validate, review, git orchestration, refactor auditing, packaging, and restore workflows. Internal helper tools are not part of the public MCP surface.
 
 ### Chrome extension auto-approve
 
@@ -291,7 +294,11 @@ See [`docs/AUTO_APPROVE_EXTENSION.md`](docs/AUTO_APPROVE_EXTENSION.md).
 
 ## MCP tools
 
-Rel.AI exposes one peer-level workspace-tool surface. ChatGPT chooses the tool from the task shape and file size, not from separate tool tiers.
+Rel.AI exposes one peer-level public workspace-tool surface. ChatGPT chooses the tool from the task shape and file size, not from separate tool tiers. The public surface has 24 tools, including first-class git and refactor-audit flows; newer local stdio sessions can expose 3 additional trusted-session helpers for continuity:
+
+- `relai_edit`
+- `relai_set_policy`
+- `relai_session_summary`
 
 | Tool | Purpose |
 | --- | --- |

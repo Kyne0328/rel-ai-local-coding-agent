@@ -3,6 +3,11 @@
 ## [0.13.1] — 2026-05-27
 
 ### Workflow friction fixes (from black-box audit)
+- Public HTTP and compatibility surfaces now consistently expose the 24-tool public workspace surface, while newer local stdio sessions expose the 27-tool trusted surface when the config generation supports it
+- Chrome auto-approve extension matches ChatGPT on both `chatgpt.com` and `chat.openai.com` again
+- Added first-class git workflow tools for status, fetch, commit, push, merge planning, merge abort, and PR drafting
+- Added semantic residue scanning via `relai_refactor_audit` and explicit single-file cleanup via `relai_remove_file`
+- README and connector docs now describe the current public-vs-internal tool split accurately
 - `relai_apply_update` now accepts OpenAI patch format (`*** Begin Patch / *** Update File / *** End Patch`) in addition to git unified diff; converted patches report `sourceFormat: "openai-patch"` and `converted: true`
 - `relai_replace` / `relai_edit` errors gain actionable fallback guidance: 0-match → re-read hint, duplicate matches → occurrence hint, URL/IPv6 client-transport errors → workaround list, byte-limit overflow → staged-write hint
 - `relai_apply_update` patch-format errors now show both accepted format examples (unified diff + OpenAI patch)
