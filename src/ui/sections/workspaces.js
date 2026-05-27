@@ -63,6 +63,9 @@ function workspaceCard(ws, health) {
   const protectedBranches = Array.isArray(ws.protectedBranches) ? ws.protectedBranches : [];
   const status = health && health.ok === false ? 'check' : 'healthy';
   const canSaveDetected = detected.length && !testKeys.length;
+  const sessionPolicy = ws.sessionPolicy || {};
+  const sessionActive = sessionPolicy.sessionActive === true;
+  const taskHint = sessionPolicy.taskHint || '';
   return `
     <div class="workspace-card">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
@@ -76,9 +79,11 @@ function workspaceCard(ws, health) {
         ${badgeHtml('commands ' + commandKeys.length)}
         ${badgeHtml('context mode ' + (ws.fastTask && ws.fastTask.enabled !== false ? 'focused' : 'broad'), ws.fastTask && ws.fastTask.enabled !== false ? 'good' : 'warn')}
         ${badgeHtml('protected ' + (protectedBranches.join(', ') || 'none'))}
+        ${sessionActive ? badgeHtml('session active', 'good') : badgeHtml('no session', '')}
       </div>
       <div class="path">${validationText(testKeys, detected)}</div>
       <div class="path">${fastTaskText(ws.fastTask)}</div>
+      ${sessionActive && taskHint ? `<div class="path">Task: ${esc(taskHint)}</div>` : ''}
       <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
         <button class="secondary" type="button" data-preflight="${esc(ws.alias || '')}">Run preflight</button>
         <button class="secondary" type="button" data-toggle-fast-task="${esc(ws.alias || '')}">${ws.fastTask && ws.fastTask.enabled !== false ? 'Use broad context' : 'Use focused context'}</button>

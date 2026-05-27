@@ -13,10 +13,16 @@ function dashboardData(config, args = {}) {
   const limit = clampNumber(args.limit || 100, 1, 500);
   const auditTail = readAudit(config, { limit: Math.min(limit, 200) });
   const health = healthMonitor(config, { limit: 25 });
+  const configSummary = publicConfigSummary(config);
+  if (Array.isArray(configSummary.workspaces)) {
+    for (const ws of configSummary.workspaces) {
+      ws.sessionPolicy = resolvePolicy({ alias: ws.alias }, config);
+    }
+  }
   return {
     ok: true,
     generatedAt: new Date().toISOString(),
-    config: publicConfigSummary(config),
+    config: configSummary,
     counts: {
       auditEntries: auditTail.entries ? auditTail.entries.length : 0,
       workspaces: Object.keys(config.workspaces || {}).length
