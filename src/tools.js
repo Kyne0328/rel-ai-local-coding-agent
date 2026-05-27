@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const { readConfig, resolveWorkspace } = require("./config");
 const { collectTextFiles, collectOptionsFromWorkspace, resolveSafePath } = require("./safety");
 const { logAudit, readAudit } = require("./audit");
+const sessionCache = require("./sessionCache");
 const { discoverCommands } = require("./commandDiscovery");
 const { summarizeOperations } = require("./journal");
 const { repoSnapshot, relaiRead, relaiWrite, relaiReplace, relaiClear, relaiApplyPatch, relaiApplyArchive, relaiSnapshotArchive, relaiVerify, relaiBrowser, relaiDiff, relaiReset } = require("./localRepoBridge");
@@ -159,7 +160,43 @@ async function callTool(name, args = {}) {
     } else if (canonicalName === "relai_clear_files" && args) {
       if (args.path) extraAudit.filePath = args.path;
       if (Array.isArray(args.paths) && args.paths.length) extraAudit.filePaths = args.paths;
+    } else if (canonicalName === "relai_read" && value && Array.isArray(value.items)) {
+      extraAudit.cacheHit = value.items.some(i => i && i.cacheHit === true);
+    } else if (canonicalName === "relai_repo_snapshot" && value) {
+      if (value.effectiveMaxEntries != null) extraAudit.effectiveMaxIndexFiles = value.effectiveMaxEntries;
+      if (value.budgetMultiplied != null) extraAudit.budgetMultiplied = value.budgetMultiplied;
+    } else if (canonicalName === "relai_status" && value && value.policy && value.policy.sessionActive === true) {
+      value.trustedModeNote = "Trusted workspace mode active — agent operates with continuity inside this workspace.";
     }
+    try {
+      const alias = args && args.workspace;
+      if (alias) {
+        const workspace = resolveWorkspace(config, alias);
+        const wsRoot = workspace && workspace.path;
+        if (wsRoot) {
+          if (canonicalName === "relai_set_policy" && args && args.clear === true) {
+            sessionCache.invalidateAlias(alias);
+          } else if (canonicalName === "relai_write" || canonicalName === "relai_replace" || canonicalName === "relai_edit") {
+            if (args && args.path) {
+              const safe = resolveSafePath(wsRoot, args.path);
+              sessionCache.invalidatePath(alias, safe.absolutePath);
+            }
+          } else if (canonicalName === "relai_clear_files") {
+            const paths = [];
+            if (args && args.path) paths.push(args.path);
+            if (args && Array.isArray(args.paths)) for (const p of args.paths) paths.push(p);
+            for (const p of paths) {
+              try {
+                const safe = resolveSafePath(wsRoot, p);
+                sessionCache.invalidatePath(alias, safe.absolutePath);
+              } catch (_) {}
+            }
+          } else if (canonicalName === "relai_apply_update" || canonicalName === "relai_apply_bundle") {
+            sessionCache.invalidateAlias(alias);
+          }
+        }
+      }
+    } catch (_) {}
     logAudit(config, { tool: canonicalName, ok: true, workspace: args && args.workspace, ms: Date.now() - started, ...extraAudit });
     return ok(value);
   } catch (error) {
