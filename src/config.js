@@ -57,6 +57,7 @@ function makeDefaultConfig() {
     maxIndexFiles: 3000,
     toolMode: "chatgpt_local_repo",
     trustedLocalAgent: true,
+    trustedBudgetMultiplier: 2,
     dashboardEnabled: true,
     productUx: {
       dashboardRefreshSeconds: 5,
@@ -122,6 +123,8 @@ function normalizeConfig(config) {
   if (!path.isAbsolute(next.auditLogPath)) next.auditLogPath = path.resolve(next.auditLogPath);
   next.toolMode = "chatgpt_local_repo";
   next.trustedLocalAgent = true;
+  const rawMult = Number(input.trustedBudgetMultiplier);
+  next.trustedBudgetMultiplier = Number.isFinite(rawMult) && rawMult >= 1 && rawMult <= 10 ? rawMult : 2;
   next.dashboardEnabled = next.dashboardEnabled !== false;
   next.maxOutputBytes = positiveNumber(next.maxOutputBytes, base.maxOutputBytes);
   next.maxIndexFiles = positiveNumber(next.maxIndexFiles, base.maxIndexFiles);
