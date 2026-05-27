@@ -14,9 +14,9 @@ const connection = require("./connectionProfile");
 const autoApprove = require("./autoApproveExtension");
 
 function buildToolMetadata() {
-  const { getToolSchemas } = require("./tools");
+  const { getPublicToolSchemas } = require("./tools");
   const config = readConfig({ allowMissing: true });
-  return getToolSchemas(config).map(tool => ({
+  return getPublicToolSchemas(config).map(tool => ({
     name: tool.name,
     displayName: tool.name.replace(/^relai_/, "").replace(/_/g, " "),
     description: tool.description || "",
@@ -321,7 +321,7 @@ async function routeRequest(req, res, options) {
   if (req.method === "POST" && mcpAccess.kind === "streamable-http") {
     if (!mcpAccess.allowed && !isAuthorized(req, options)) return unauthorized(res);
     const payload = await readJsonBody(req, options.maxBodyBytes);
-    const response = await handleJsonRpcPayload(payload);
+    const response = await handleJsonRpcPayload(payload, { publicHttpOnly: true });
     if (response === null) {
       sendJson(res, 202, { ok: true, accepted: true }, ae);
       return;
@@ -345,7 +345,7 @@ async function routeRequest(req, res, options) {
       return;
     }
     const payload = await readJsonBody(req, options.maxBodyBytes);
-    const response = await handleJsonRpcPayload(payload);
+    const response = await handleJsonRpcPayload(payload, { publicHttpOnly: true });
     if (response !== null) {
       sendSse(session.res, "message", response);
     }
@@ -438,16 +438,16 @@ function mcpGetDiagnostic(pathname, options, mcpAccess, req) {
   };
 }
 
-async function handleJsonRpcPayload(payload) {
+async function handleJsonRpcPayload(payload, options = {}) {
   if (Array.isArray(payload)) {
     const responses = [];
     for (const item of payload) {
-      const response = await handleMessage(item);
+      const response = await handleMessage(item, options);
       if (response) responses.push(response);
     }
     return responses.length > 0 ? responses : null;
   }
-  return handleMessage(payload);
+  return handleMessage(payload, options);
 }
 
 function openSseSession(res, req, messagePath = "/messages") {

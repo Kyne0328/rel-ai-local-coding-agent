@@ -119,7 +119,7 @@ async function scanChatGptTabs() {
   const cfg = await getConfig();
   if (!cfg.enabled) return 0;
   if (!(await dashboardAllows(cfg))) return 0;
-  const tabs = await chrome.tabs.query({ url: ['https://chatgpt.com/c/*'] });
+  const tabs = await chrome.tabs.query({ url: ['https://chatgpt.com/*', 'https://chat.openai.com/*'] });
   chrome.storage.local.set({ lastScanAt: Date.now(), activeTabs: tabs.length }).catch(() => {});
   await Promise.all(tabs.map(async (tab) => {
     if (!tab.id) return;
@@ -140,7 +140,7 @@ async function scanChatGptTabs() {
 async function heartbeatChatGptTabs() {
   const cfg = await getConfig();
   if (!cfg.enabled) return;
-  const tabs = await chrome.tabs.query({ url: ['https://chatgpt.com/c/*'] });
+  const tabs = await chrome.tabs.query({ url: ['https://chatgpt.com/*', 'https://chat.openai.com/*'] });
   for (const tab of tabs) {
     if (!tab.id) continue;
     chrome.tabs.sendMessage(tab.id, { type: 'relai-heartbeat' }).catch(() => {});

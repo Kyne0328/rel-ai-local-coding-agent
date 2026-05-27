@@ -51,6 +51,7 @@ function makeDefaultWorkflowConfig() {
 function makeDefaultConfig() {
   return {
     version: 2,
+    sourceVersion: 2,
     stateDir: path.join(os.homedir(), ".rel-ai-mcp"),
     auditLogPath: "",
     maxOutputBytes: 2 * 1024 * 1024,
@@ -117,6 +118,7 @@ function normalizeConfig(config) {
     workspaces: { ...(input.workspaces || {}) }
   };
 
+  next.sourceVersion = Number.isFinite(Number(input.version)) ? Number(input.version) : base.sourceVersion;
   next.version = 2;
   next.stateDir = expandHome(next.stateDir || base.stateDir);
   if (!path.isAbsolute(next.stateDir)) next.stateDir = path.resolve(next.stateDir);

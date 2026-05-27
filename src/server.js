@@ -1,5 +1,5 @@
 const readline = require("node:readline");
-const { getToolSchemas, callTool } = require("./tools");
+const { getToolSchemas, getPublicToolSchemas, BRIDGE_TOOL_NAMES, PUBLIC_HTTP_TOOL_NAMES, callTool } = require("./tools");
 const { readConfig } = require("./config");
 const { listResources, readResource } = require("./resources");
 const pkg = require("../package.json");
@@ -7,6 +7,10 @@ const pkg = require("../package.json");
 const MAX_TOOL_RESULT_CHARS = Number(process.env.REL_AI_MCP_MAX_TOOL_RESULT_CHARS || 120000);
 
 function main() {
+  const sessionState = {
+    publicHttpOnly: false,
+    publicCompatOnly: true
+  };
   const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
   rl.on("line", async (line) => {
     const trimmed = line.trim();
@@ -16,13 +20,13 @@ function main() {
       if (Array.isArray(message)) {
         const responses = [];
         for (const item of message) {
-          const response = await handleMessage(item);
+          const response = await handleMessage(item, sessionState);
           if (response) responses.push(response);
         }
         if (responses.length > 0) write(responses);
         return;
       }
-      const response = await handleMessage(message);
+      const response = await handleMessage(message, sessionState);
       if (response) write(response);
     } catch (error) {
       write(jsonRpcError(null, -32700, "Parse error", error instanceof Error ? error.message : String(error)));
@@ -30,7 +34,11 @@ function main() {
   });
 }
 
-async function handleMessage(message) {
+async function handleMessage(message, options = {}) {
+  const publicHttpOnly = Boolean(options.publicHttpOnly);
+  const publicCompatOnly = Boolean(options.publicCompatOnly);
+  const publicOnly = publicHttpOnly || publicCompatOnly;
+  const visibleTools = publicOnly ? getPublicToolSchemas(readConfig({ allowMissing: true })) : getToolSchemas(readConfig({ allowMissing: true }));
   if (!message || message.jsonrpc !== "2.0") {
     return jsonRpcError(message && message.id !== undefined ? message.id : null, -32600, "Invalid Request");
   }
@@ -41,6 +49,14 @@ async function handleMessage(message) {
   try {
     switch (message.method) {
       case "initialize":
+        const config = readConfig({ allowMissing: true });
+        if (
+          !publicHttpOnly &&
+          Object.prototype.hasOwnProperty.call(message.params || {}, "protocolVersion") &&
+          Number(config.sourceVersion || config.version || 0) >= 2
+        ) {
+          options.publicCompatOnly = false;
+        }
         return result(message.id, {
           protocolVersion: (message.params && message.params.protocolVersion) || "2025-06-18",
           capabilities: { tools: { listChanged: true }, resources: { subscribe: false, listChanged: true } },
@@ -49,7 +65,7 @@ async function handleMessage(message) {
       case "ping":
         return result(message.id, {});
       case "tools/list":
-        return result(message.id, { tools: getToolSchemas(readConfig({ allowMissing: true })) });
+        return result(message.id, { tools: visibleTools });
       case "resources/list":
         return result(message.id, listResources());
       case "resources/read": {
@@ -62,6 +78,12 @@ async function handleMessage(message) {
         const name = params.name;
         const args = params.arguments || {};
         if (!name) return jsonRpcError(message.id, -32602, "Missing tool name.");
+        if (publicOnly && BRIDGE_TOOL_NAMES.includes(name) && !PUBLIC_HTTP_TOOL_NAMES.includes(name)) {
+          return result(message.id, toolResult({
+            ok: false,
+            error: `Tool '${name}' is not available on the public workspace-tool surface.`
+          }, true));
+        }
         try {
           const output = await callTool(name, args);
           return result(message.id, toolResult(output, false));

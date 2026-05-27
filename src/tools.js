@@ -39,6 +39,12 @@ const BRIDGE_TOOL_NAMES = [
   "relai_session_summary"
 ];
 
+const PUBLIC_HTTP_TOOL_NAMES = BRIDGE_TOOL_NAMES.filter((name) => ![
+  "relai_edit",
+  "relai_set_policy",
+  "relai_session_summary"
+].includes(name));
+
 const READ_ONLY_LOCAL  = { readOnlyHint: false,  destructiveHint: false, idempotentHint: false,  openWorldHint: false };
 const WRITE_LOCAL      = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
 const DESTRUCTIVE_LOCAL = { readOnlyHint: false, destructiveHint: false,  idempotentHint: false, openWorldHint: false };
@@ -124,6 +130,10 @@ const toolSchemas = [
 const TOOL_NAMES = new Set(toolSchemas.map((item) => item.name));
 function getToolSchemas() {
   return toolSchemas;
+}
+
+function getPublicToolSchemas() {
+  return toolSchemas.filter((item) => PUBLIC_HTTP_TOOL_NAMES.includes(item.name));
 }
 
 function isToolCallable(name) {
@@ -594,4 +604,4 @@ function arrayObjectProp(properties, required = [], minItems, maxItems) {
   return schema;
 }
 
-module.exports = { toolSchemas, allToolSchemas: toolSchemas, getToolSchemas, BRIDGE_TOOL_NAMES, callTool, workspaceList, workspaceInspect, workspaceTree, workspaceProfile, buildSessionSummary, enhanceToolError };
+module.exports = { toolSchemas, allToolSchemas: toolSchemas, getToolSchemas, getPublicToolSchemas, BRIDGE_TOOL_NAMES, PUBLIC_HTTP_TOOL_NAMES, callTool, workspaceList, workspaceInspect, workspaceTree, workspaceProfile, buildSessionSummary, enhanceToolError };
