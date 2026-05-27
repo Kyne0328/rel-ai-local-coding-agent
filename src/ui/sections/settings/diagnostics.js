@@ -21,16 +21,18 @@ export function mountDiagnostics(container) {
 
 async function loadAll(cards, raw) {
   cards.innerHTML = '<div class="empty">Loading diagnostics…</div>';
-  const [health, readiness, logs] = await Promise.all([
+  const [health, readiness, logs, aliasCheck] = await Promise.all([
     fetchJson('/api/health-monitor'),
     fetchJson('/api/readiness?requireHttpToken=0'),
-    fetchJson('/api/logs?limit=50')
+    fetchJson('/api/logs?limit=50'),
+    fetchJson('/api/alias-diagnostics')
   ]);
   cards.innerHTML = '';
   cards.appendChild(summaryCard('Health', health && health.ok !== false ? 'All clear' : 'Needs attention', health && health.findings, raw, health));
   cards.appendChild(summaryCard('Readiness', readiness && readiness.score != null ? readiness.score + '/100' : 'Unknown', readiness && readiness.findings, raw, readiness));
   const entries = logs && Array.isArray(logs.entries) ? logs.entries : [];
   cards.appendChild(activityCard(entries, raw, logs));
+  cards.appendChild(aliasConsistencyCard(aliasCheck, raw));
 }
 
 function summaryCard(title, value, findings, raw, payload) {
@@ -60,6 +62,32 @@ function activityCard(entries, raw, payload) {
   body.innerHTML = `<div style="font-size:22px;font-weight:800;color:var(--blue);">${entries.length}</div><div style="font-size:12px;color:var(--text-muted);">Last ${entries.length} audit entries loaded.</div>`;
   card.appendChild(body);
   card.querySelector('button').onclick = () => showRaw(raw, payload);
+  return card;
+}
+
+function aliasConsistencyCard(data, raw) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  const workspaces = data && Array.isArray(data.workspaces) ? data.workspaces : [];
+  const staleCount = workspaces.reduce((n, ws) => n + (ws.staleKeys ? ws.staleKeys.length : 0), 0);
+  const value = data == null ? 'Unknown' : (staleCount === 0 ? 'All consistent' : staleCount + ' stale');
+  const valueColor = data == null ? 'var(--text-muted)' : (staleCount === 0 ? 'var(--green)' : 'var(--red)');
+  card.innerHTML = `<div class="card-head"><h3>Command aliases</h3><button class="secondary" style="min-height:24px;padding:0 8px;font-size:11px;">Raw</button></div>`;
+  const body = document.createElement('div');
+  body.className = 'card-body';
+  body.style.display = 'grid';
+  body.style.gap = '8px';
+  const rows = workspaces.length
+    ? workspaces.map(ws => {
+        if (!ws.staleKeys || ws.staleKeys.length === 0) {
+          return `<div style="font-size:12px;color:var(--text-muted);">&#10003; ${esc(ws.alias)}: ${ws.configuredKeys ? ws.configuredKeys.length : 0} configured key(s) valid</div>`;
+        }
+        return `<div style="font-size:12px;color:var(--text-muted);"><strong style="color:var(--red);">${esc(ws.alias)}</strong>: stale — ${esc(ws.staleKeys.join(', '))}</div>`;
+      }).join('')
+    : '<div style="font-size:12px;color:var(--text-muted);">No workspaces configured.</div>';
+  body.innerHTML = `<div style="font-size:22px;font-weight:800;color:${valueColor};">${esc(value)}</div>${rows}`;
+  card.appendChild(body);
+  card.querySelector('button').onclick = () => showRaw(raw, data);
   return card;
 }
 
