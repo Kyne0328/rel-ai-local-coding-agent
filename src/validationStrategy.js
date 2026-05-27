@@ -34,8 +34,22 @@ function getChangedFiles(workspacePath) {
   }
 }
 
-function classifyFiles(files) {
+function classifyFiles(files, workspaceConfig) {
   if (!files || files.length === 0) return { level: 'focused', reason: 'no changed files detected' };
+
+  const rules = (workspaceConfig && workspaceConfig.validationRules) || {};
+  const broadMultiDirThreshold = Number.isFinite(rules.broadMultiDirThreshold) && rules.broadMultiDirThreshold >= 1
+    ? rules.broadMultiDirThreshold : 6;
+  const broadMultiDirTopDirs = Number.isFinite(rules.broadMultiDirTopDirs) && rules.broadMultiDirTopDirs >= 1
+    ? rules.broadMultiDirTopDirs : 2;
+
+  const customRules = Array.isArray(rules.customRules) ? rules.customRules : [];
+  for (const cr of customRules) {
+    if (!cr || !VALID_LEVELS.has(cr.level) || typeof cr.pattern !== 'string' || !cr.pattern) continue;
+    if (files.some((f) => f.includes(cr.pattern))) {
+      return { level: cr.level, reason: typeof cr.reason === 'string' && cr.reason ? cr.reason : `matched custom rule ${cr.pattern}` };
+    }
+  }
 
   for (const rule of LEVEL_RULES) {
     if (files.some(rule.test)) return { level: rule.level, reason: rule.reason };
@@ -43,7 +57,7 @@ function classifyFiles(files) {
 
   const filesWithDir = files.filter((f) => f.includes('/'));
   const topDirs = new Set(filesWithDir.map((f) => f.split('/')[0]));
-  if (filesWithDir.length >= 6 && topDirs.size > 1) {
+  if (filesWithDir.length >= broadMultiDirThreshold && topDirs.size >= broadMultiDirTopDirs) {
     return { level: 'broad', reason: `${filesWithDir.length} files across multiple directories` };
   }
 
@@ -56,7 +70,7 @@ function classifyFiles(files) {
   return { level: 'focused', reason: `${files.length} files in one directory` };
 }
 
-function selectValidationLevel(workspacePath, _workspaceConfig, overrideLevel) {
+function selectValidationLevel(workspacePath, workspaceConfig, overrideLevel) {
   if (overrideLevel && VALID_LEVELS.has(overrideLevel)) {
     return { level: overrideLevel, reason: 'caller-specified', changedFiles: [] };
   }
@@ -66,8 +80,8 @@ function selectValidationLevel(workspacePath, _workspaceConfig, overrideLevel) {
     return { level: 'focused', reason: 'git diff unavailable', changedFiles: [] };
   }
 
-  const { level, reason } = classifyFiles(changedFiles);
+  const { level, reason } = classifyFiles(changedFiles, workspaceConfig);
   return { level, reason, changedFiles };
 }
 
-module.exports = { selectValidationLevel };
+module.exports = { selectValidationLevel, classifyFiles };
