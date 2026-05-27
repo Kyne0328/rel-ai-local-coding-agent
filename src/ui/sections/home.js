@@ -28,6 +28,8 @@ function buildHome(data) {
   root.className = 'section';
   root.style.gap = '16px';
 
+  const totalCautions = workspaces.reduce((n, w) => n + ((w.caution && Number.isFinite(w.caution.count)) ? w.caution.count : 0), 0);
+
   const metrics = document.createElement('div');
   metrics.className = 'overview-grid';
   metrics.innerHTML =
@@ -36,6 +38,7 @@ function buildHome(data) {
     metricHtml('Health', findings.length, health.ok === false ? 'needs attention' : 'all clear', health.ok === false ? 'bad' : 'good') +
     metricHtml('Validation', validationSummary(workspaces), 'auto-detected where possible', 'blue') +
     metricHtml('Activity', audit.length, 'recent tool calls', 'purple') +
+    metricHtml('Cautions 24h', totalCautions, 'caution-zone events', totalCautions > 0 ? 'warn' : 'good') +
     metricHtml('Workspace bridge', 'ready', 'read, change, validate, review', 'good');
   root.appendChild(metrics);
 

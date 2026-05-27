@@ -266,6 +266,14 @@ async function routeRequest(req, res, options) {
     return;
   }
 
+  if (req.method === "GET" && parsed.pathname === "/api/caution-summary") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    const config = readConfig();
+    const windowHours = Number(parsed.searchParams.get("windowHours") || 24);
+    sendJson(res, 200, productUx.cautionSummary(config, { windowHours }), ae);
+    return;
+  }
+
   if (req.method === "GET" && parsed.pathname === "/api/readiness") {
     if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
     const config = readConfig();

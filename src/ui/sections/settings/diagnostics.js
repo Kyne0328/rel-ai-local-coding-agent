@@ -21,11 +21,12 @@ export function mountDiagnostics(container) {
 
 async function loadAll(cards, raw) {
   cards.innerHTML = '<div class="empty">Loading diagnostics…</div>';
-  const [health, readiness, logs, aliasCheck] = await Promise.all([
+  const [health, readiness, logs, aliasCheck, cautionData] = await Promise.all([
     fetchJson('/api/health-monitor'),
     fetchJson('/api/readiness?requireHttpToken=0'),
     fetchJson('/api/logs?limit=50'),
-    fetchJson('/api/alias-diagnostics')
+    fetchJson('/api/alias-diagnostics'),
+    fetchJson('/api/caution-summary')
   ]);
   cards.innerHTML = '';
   cards.appendChild(summaryCard('Health', health && health.ok !== false ? 'All clear' : 'Needs attention', health && health.findings, raw, health));
@@ -33,6 +34,7 @@ async function loadAll(cards, raw) {
   const entries = logs && Array.isArray(logs.entries) ? logs.entries : [];
   cards.appendChild(activityCard(entries, raw, logs));
   cards.appendChild(aliasConsistencyCard(aliasCheck, raw));
+  cards.appendChild(cautionEscalationsCard(cautionData, raw));
 }
 
 function summaryCard(title, value, findings, raw, payload) {
@@ -85,6 +87,32 @@ function aliasConsistencyCard(data, raw) {
         return `<div style="font-size:12px;color:var(--text-muted);"><strong style="color:var(--red);">${esc(ws.alias)}</strong>: stale — ${esc(ws.staleKeys.join(', '))}</div>`;
       }).join('')
     : '<div style="font-size:12px;color:var(--text-muted);">No workspaces configured.</div>';
+  body.innerHTML = `<div style="font-size:22px;font-weight:800;color:${valueColor};">${esc(value)}</div>${rows}`;
+  card.appendChild(body);
+  card.querySelector('button').onclick = () => showRaw(raw, data);
+  return card;
+}
+
+function cautionEscalationsCard(data, raw) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  const workspaces = data && Array.isArray(data.workspaces) ? data.workspaces : [];
+  const total = workspaces.reduce((n, w) => n + (Number.isFinite(w.count) ? w.count : 0), 0);
+  const value = data == null ? 'Unknown' : (total === 0 ? 'No escalations' : total + ' events');
+  const valueColor = data == null ? 'var(--text-muted)' : (total === 0 ? 'var(--green)' : 'var(--red)');
+  const windowHours = data && Number.isFinite(data.windowHours) ? data.windowHours : 24;
+  card.innerHTML = `<div class="card-head"><h3>Caution-zone events (${esc(windowHours)}h)</h3><button class="secondary" style="min-height:24px;padding:0 8px;font-size:11px;">Raw</button></div>`;
+  const body = document.createElement('div');
+  body.className = 'card-body';
+  body.style.display = 'grid';
+  body.style.gap = '8px';
+  const rows = workspaces.length
+    ? workspaces.map((w) => {
+        const recent = Array.isArray(w.recent) ? w.recent : [];
+        const recentHtml = recent.map((r) => `<div style="font-size:11px;color:var(--text-muted);">&middot; <strong style="color:var(--text);">${esc(r.tool || '')}</strong> &mdash; ${esc(r.reason || '')}</div>`).join('');
+        return `<div style="font-size:12px;color:var(--text-muted);"><strong style="color:var(--red);">${esc(w.alias)}</strong>: ${esc(w.count)} event(s)</div>${recentHtml}`;
+      }).join('')
+    : '<div style="font-size:12px;color:var(--text-muted);">No caution-zone events in window.</div>';
   body.innerHTML = `<div style="font-size:22px;font-weight:800;color:${valueColor};">${esc(value)}</div>${rows}`;
   card.appendChild(body);
   card.querySelector('button').onclick = () => showRaw(raw, data);

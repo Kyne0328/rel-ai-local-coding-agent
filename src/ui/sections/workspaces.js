@@ -66,6 +66,7 @@ function workspaceCard(ws, health) {
   const sessionPolicy = ws.sessionPolicy || {};
   const sessionActive = sessionPolicy.sessionActive === true;
   const taskHint = sessionPolicy.taskHint || '';
+  const cautionCount = (ws.caution && Number.isFinite(ws.caution.count)) ? ws.caution.count : 0;
   return `
     <div class="workspace-card">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
@@ -80,6 +81,7 @@ function workspaceCard(ws, health) {
         ${badgeHtml('context mode ' + (ws.fastTask && ws.fastTask.enabled !== false ? 'focused' : 'broad'), ws.fastTask && ws.fastTask.enabled !== false ? 'good' : 'warn')}
         ${badgeHtml('protected ' + (protectedBranches.join(', ') || 'none'))}
         ${sessionActive ? badgeHtml('session active', 'good') : badgeHtml('no session', '')}
+        ${cautionCount > 0 ? badgeHtml('caution ' + cautionCount, 'warn') : ''}
       </div>
       <div class="path">${validationText(testKeys, detected)}</div>
       <div class="path">${fastTaskText(ws.fastTask)}</div>

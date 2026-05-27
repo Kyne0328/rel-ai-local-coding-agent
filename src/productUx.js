@@ -14,9 +14,13 @@ function dashboardData(config, args = {}) {
   const auditTail = readAudit(config, { limit: Math.min(limit, 200) });
   const health = healthMonitor(config, { limit: 25 });
   const configSummary = publicConfigSummary(config);
+  const cs = cautionSummary(config, { windowHours: 24, limit: 500 });
+  const cautionByAlias = new Map(cs.workspaces.map((w) => [w.alias, w]));
   if (Array.isArray(configSummary.workspaces)) {
     for (const ws of configSummary.workspaces) {
       ws.sessionPolicy = resolvePolicy({ alias: ws.alias }, config);
+      const c = cautionByAlias.get(ws.alias);
+      ws.caution = { count: c ? c.count : 0, recent: c ? c.recent : [] };
     }
   }
   return {
@@ -316,6 +320,31 @@ function clampNumber(value, min, max) {
   return Math.min(Math.max(number, min), max);
 }
 
+function cautionSummary(config, options = {}) {
+  const windowHours = clampNumber(options.windowHours || 24, 1, 720);
+  const limit = clampNumber(options.limit || 200, 1, 2000);
+  const cutoffMs = Date.now() - windowHours * 3600000;
+  const { entries } = readAudit(config, { limit });
+  const byAlias = {};
+  for (const e of entries || []) {
+    if (!e || e.cautionLevel !== "caution") continue;
+    const ts = Date.parse(e.ts || "");
+    if (!Number.isFinite(ts) || ts < cutoffMs) continue;
+    const alias = e.workspace || "__unknown__";
+    if (!byAlias[alias]) byAlias[alias] = { alias, count: 0, recent: [] };
+    byAlias[alias].count += 1;
+    if (byAlias[alias].recent.length < 5) {
+      byAlias[alias].recent.push({ tool: e.tool, ts: e.ts || null, reason: e.cautionReason || null });
+    }
+  }
+  return {
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    windowHours,
+    workspaces: Object.values(byAlias)
+  };
+}
+
 function aliasConsistencyCheck(config) {
   const results = [];
   for (const [alias, ws] of Object.entries(config.workspaces || {})) {
@@ -337,6 +366,7 @@ module.exports = {
   liveLogTail,
   healthMonitor,
   aliasConsistencyCheck,
+  cautionSummary,
   cleanupPreview,
   cleanupRun,
   doctorFix,
