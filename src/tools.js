@@ -3,6 +3,7 @@ const { readConfig, resolveWorkspace } = require("./config");
 const { collectTextFiles, collectOptionsFromWorkspace, resolveSafePath } = require("./safety");
 const { logAudit, readAudit } = require("./audit");
 const sessionCache = require("./sessionCache");
+const { classifyCaution } = require("./cautionZone");
 const { discoverCommands } = require("./commandDiscovery");
 const { summarizeOperations } = require("./journal");
 const { repoSnapshot, relaiRead, relaiWrite, relaiReplace, relaiClear, relaiApplyPatch, relaiApplyArchive, relaiSnapshotArchive, relaiVerify, relaiBrowser, relaiDiff, relaiReset } = require("./localRepoBridge");
@@ -168,6 +169,13 @@ async function callTool(name, args = {}) {
     } else if (canonicalName === "relai_status" && value && value.policy && value.policy.sessionActive === true) {
       value.trustedModeNote = "Trusted workspace mode active — agent operates with continuity inside this workspace.";
     }
+    try {
+      const caution = classifyCaution(canonicalName, args || {}, value, config);
+      if (caution && caution.level === "caution") {
+        extraAudit.cautionLevel = caution.level;
+        extraAudit.cautionReason = caution.reason;
+      }
+    } catch (_) {}
     try {
       const alias = args && args.workspace;
       if (alias) {
@@ -471,6 +479,7 @@ function buildSessionSummary(entries, alias, policy) {
   let diffReviewed = false;
   const seenPlannerPaths = new Set();
   const plannerDecisions = [];
+  const escalations = [];
 
   for (const entry of window) {
     if (["relai_write", "relai_replace", "relai_clear_files", "relai_edit"].includes(entry.tool)) {
@@ -497,6 +506,9 @@ function buildSessionSummary(entries, alias, policy) {
       seenPlannerPaths.add(entry.plannerPath);
       plannerDecisions.push({ plannerPath: entry.plannerPath, plannerReason: entry.plannerReason || null });
     }
+    if (entry.cautionLevel === "caution") {
+      escalations.push({ tool: entry.tool, ts: entry.ts || null, reason: entry.cautionReason || null });
+    }
   }
 
   return {
@@ -509,6 +521,7 @@ function buildSessionSummary(entries, alias, policy) {
     checksRun,
     diffReviewed,
     plannerDecisions,
+    escalations,
   };
 }
 

@@ -58,6 +58,7 @@ function makeDefaultConfig() {
     toolMode: "chatgpt_local_repo",
     trustedLocalAgent: true,
     trustedBudgetMultiplier: 2,
+    cautionZone: { massClearThreshold: 3, bundleFileThreshold: 5, bundleBytesThreshold: 102400 },
     dashboardEnabled: true,
     productUx: {
       dashboardRefreshSeconds: 5,
@@ -125,6 +126,13 @@ function normalizeConfig(config) {
   next.trustedLocalAgent = true;
   const rawMult = Number(input.trustedBudgetMultiplier);
   next.trustedBudgetMultiplier = Number.isFinite(rawMult) && rawMult >= 1 && rawMult <= 10 ? rawMult : 2;
+  const rawCaution = input.cautionZone && typeof input.cautionZone === "object" && !Array.isArray(input.cautionZone) ? input.cautionZone : {};
+  const cautionBase = base.cautionZone;
+  next.cautionZone = {
+    massClearThreshold: Number.isFinite(Number(rawCaution.massClearThreshold)) && Number(rawCaution.massClearThreshold) >= 1 ? Number(rawCaution.massClearThreshold) : cautionBase.massClearThreshold,
+    bundleFileThreshold: Number.isFinite(Number(rawCaution.bundleFileThreshold)) && Number(rawCaution.bundleFileThreshold) >= 1 ? Number(rawCaution.bundleFileThreshold) : cautionBase.bundleFileThreshold,
+    bundleBytesThreshold: Number.isFinite(Number(rawCaution.bundleBytesThreshold)) && Number(rawCaution.bundleBytesThreshold) >= 1 ? Number(rawCaution.bundleBytesThreshold) : cautionBase.bundleBytesThreshold
+  };
   next.dashboardEnabled = next.dashboardEnabled !== false;
   next.maxOutputBytes = positiveNumber(next.maxOutputBytes, base.maxOutputBytes);
   next.maxIndexFiles = positiveNumber(next.maxIndexFiles, base.maxIndexFiles);
