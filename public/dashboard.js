@@ -50,7 +50,6 @@ async function boot() {
   if (!routeRoot) return;
 
   const sections = _sectionMap();
-  _buildNav();
   initRouter(routeRoot, sections);
 
   const fresh = await fetchJson('/api/dashboard/v10?limit=100&requireHttpToken=0');
@@ -105,20 +104,6 @@ function _sectionMap() {
 function _settingsSubPage() {
   const parts = (location.hash || '').replace(/^#/, '').split('/');
   return parts[0] === 'settings' && parts[1] ? parts[1] : 'general';
-}
-
-function _buildNav() {
-  const nav = document.querySelector('.nav');
-  if (!nav) return;
-  nav.innerHTML = `
-    <a href="#home">Home</a>
-    <a href="#workspaces">Workspaces</a>
-    <a href="#activity">Activity</a>
-    <a href="#tools">Tools</a>
-    <a href="#settings">Settings</a>
-  `;
-  const mobileNav = document.querySelector('.mobile-nav');
-  if (mobileNav) mobileNav.innerHTML = nav.innerHTML;
 }
 
 function _wireTopControls() {

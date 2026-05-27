@@ -646,16 +646,16 @@ function renderDashboardHtml(options) {
     </div>
     <header class="topbar">
       <div class="title-wrap">
-        <h1 class="page-title">Dashboard</h1>
-        <div class="page-subtitle" id="subtitle">Loading server state…</div>
+        <h1 class="page-title" id="pageTitle">Rel.AI MCP</h1>
+        <div class="page-subtitle" id="subtitle">Loading workspace state…</div>
       </div>
       <div class="top-controls">
-        <span class="status-pill ok" id="serverStatus">Online</span>
+        <span class="status-pill" id="serverStatus">Connecting…</span>
         <label for="token" class="sr-only">Dashboard token</label>
         <input id="token" type="password" placeholder="Dashboard token" autocomplete="off" spellcheck="false">
         <button id="refreshBtn" type="button">Refresh</button>
         <button class="secondary" id="liveBtn">Start live</button>
-        <span class="section-action" id="lastUpdated">Server-rendered</span>
+        <span class="section-action" id="lastUpdated"></span>
       </div>
     </header>
   </main>

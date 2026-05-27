@@ -26,7 +26,6 @@ function buildHome(data) {
 
   const root = document.createElement('div');
   root.className = 'section';
-  root.style.gap = '16px';
 
   const totalCautions = workspaces.reduce((n, w) => n + ((w.caution && Number.isFinite(w.caution.count)) ? w.caution.count : 0), 0);
 
@@ -34,12 +33,9 @@ function buildHome(data) {
   metrics.className = 'overview-grid';
   metrics.innerHTML =
     metricHtml('Workspaces', workspaces.length, 'configured repositories', 'blue') +
-    metricHtml('ChatGPT tools', visibleToolCount, 'tools available this workspace', 'good') +
     metricHtml('Health', findings.length, health.ok === false ? 'needs attention' : 'all clear', health.ok === false ? 'bad' : 'good') +
-    metricHtml('Validation', validationSummary(workspaces), 'auto-detected where possible', 'blue') +
-    metricHtml('Activity', audit.length, 'recent tool calls', 'purple') +
-    metricHtml('Cautions 24h', totalCautions, 'caution-zone events', totalCautions > 0 ? 'warn' : 'good') +
-    metricHtml('Workspace bridge', 'ready', 'read, change, validate, review', 'good');
+    metricHtml('Validation', validationSummary(workspaces), 'workspaces with a saved or detected test command', 'blue') +
+    metricHtml('Cautions 24h', totalCautions, 'caution-zone events in the last day', totalCautions > 0 ? 'warn' : 'good');
   root.appendChild(metrics);
 
   root.appendChild(releaseNotesCard());
@@ -75,19 +71,18 @@ function releaseNotesCard() {
   card.className = 'card';
   card.innerHTML = '<div class="card-head"><h3>What\'s new</h3></div>';
   const body = document.createElement('div');
-  body.className = 'card-body';
-  body.style.cssText = 'display:grid;gap:8px;';
-  body.innerHTML = '<div style="font-size:13px;color:var(--text-muted);">Loading release notes…</div>';
+  body.className = 'card-body stack-tight';
+  body.innerHTML = '<div class="release-note-meta">Loading release notes…</div>';
   card.appendChild(body);
 
   import('/ui/api.js').then(({ fetchJson }) => fetchJson('/api/release-notes').then(notes => {
-    if (!notes) { body.innerHTML = '<div style="font-size:13px;color:var(--text-muted);">No release notes available.</div>'; return; }
+    if (!notes) { body.innerHTML = '<div class="release-note-meta">No release notes available.</div>'; return; }
     const safeVersion = esc(notes.version || '');
     const safeHeadline = esc(notes.headline || '');
     const bullets = Array.isArray(notes.bullets) ? notes.bullets : [];
-    const bulletsHtml = bullets.map(b => `<li style="margin:0 0 4px;">${esc(b)}</li>`).join('');
-    body.innerHTML = `<div style="font-size:13px;color:var(--text);"><strong>v${safeVersion}</strong> — ${safeHeadline}</div><ul style="margin:4px 0 0 18px;padding:0;font-size:12px;color:var(--text-muted);">${bulletsHtml}</ul>`;
-  })).catch(() => { body.innerHTML = '<div style="font-size:13px;color:var(--text-muted);">Failed to load release notes.</div>'; });
+    const bulletsHtml = bullets.map(b => `<li>${esc(b)}</li>`).join('');
+    body.innerHTML = `<div class="release-note"><strong>v${safeVersion}</strong> — ${safeHeadline}</div><ul class="release-bullets">${bulletsHtml}</ul>`;
+  })).catch(() => { body.innerHTML = '<div class="release-note-meta">Failed to load release notes.</div>'; });
 
   return card;
 }
@@ -106,7 +101,7 @@ function nextStepsCard(workspaces, findings, audit) {
         <div class="item-title">${esc(step.title)}</div>
         <div class="item-sub">${esc(step.description)}</div>
       </div>
-      ${step.href ? `<a class="buttonlike secondary" href="${esc(step.href)}" style="min-height:30px;padding:0 10px;font-size:12px;white-space:nowrap;">${esc(step.cta || 'Open')}</a>` : `<span class="section-action">${esc(step.cta || 'Ready')}</span>`}
+      ${step.href ? `<a class="buttonlike secondary next-step-action" href="${esc(step.href)}">${esc(step.cta || 'Open')}</a>` : `<span class="section-action">${esc(step.cta || 'Ready')}</span>`}
     </div>
   `).join('');
   card.appendChild(body);
@@ -194,7 +189,7 @@ function recentActivityCard(audit) {
   body.className = 'card-body';
   body.innerHTML = audit.slice(0, 12).map(x => {
     const ok = x.ok === false ? 'failed' : 'ok';
-    return `<div style="display:flex;gap:10px;padding:6px 0;border-bottom:1px solid var(--line-soft);font-size:12px;"><span style="color:var(--text-muted);white-space:nowrap;">${esc(timeAgo(x.ts || x.at || x.createdAt))}</span><span class="truncate mono" style="flex:1;">${esc(x.tool || x.type || 'activity')}</span>${pillHtml(ok)}</div>`;
+    return `<div class="activity-row"><span class="activity-time">${esc(timeAgo(x.ts || x.at || x.createdAt))}</span><span class="activity-name truncate mono">${esc(x.tool || x.type || 'activity')}</span>${pillHtml(ok)}</div>`;
   }).join('') || '<div class="empty">Activity will appear here when ChatGPT calls Rel.AI.</div>';
   card.appendChild(body);
   return card;
