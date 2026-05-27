@@ -74,7 +74,7 @@ const toolSchemas = [
   tool("relai_package_snapshot", "Package Workspace Zip", "Create a zip package of the current workspace on the MCP host, excluding repo internals, dependency caches, build outputs, and Rel.AI state.", {
     workspace: stringProp(), maxFiles: numberProp(1, 200000), timeoutMs: numberProp(1000, 86400000)
   }, ["workspace"], WRITE_LOCAL),
-  tool("relai_run_checks", "Run Workspace Checks", "Run workspace validation checks such as tests, analyzers, linters, and build checks.", {
+  tool("relai_run_checks", "Run Workspace Checks", "Run workspace validation checks such as tests, analyzers, linters, and build checks. Validation level is selected automatically based on change surface — focused for narrow edits, broader for high-blast-radius changes.", {
     workspace: stringProp(),
     level: stringProp(),
     check: stringProp(),
@@ -92,10 +92,10 @@ const toolSchemas = [
   tool("relai_restore_changes", "Restore Workspace Changes", "Restore selected workspace changes, or restore the workspace to the last git state.", {
     workspace: stringProp(), paths: arrayProp("string", 0, 100), mode: stringProp(), clean: boolProp()
   }, ["workspace"], DESTRUCTIVE_LOCAL),
-  tool("relai_status", "Rel.AI Status", "Compact live status for configured workspaces, scripts, and CI references. Prefer this over reading source files when checking whether an update is active.", {
+  tool("relai_status", "Rel.AI Status", "Compact live status for configured workspaces, scripts, and CI references. Prefer this over reading source files when checking whether an update is active. Includes active session policy and trusted-agent state.", {
     workspace: stringProp()
   }, [], READ_ONLY_LOCAL),
-  tool("relai_feature_probe", "Rel.AI Feature Probe", "Compact booleans for important runtime behavior. Prefer this over source reads when checking installed behavior.", {
+  tool("relai_feature_probe", "Rel.AI Feature Probe", "Compact booleans for important runtime behavior. Prefer this over source reads when checking installed behavior. Includes sessionPolicySupport flag.", {
     workspace: stringProp()
   }, [], READ_ONLY_LOCAL),
   tool("relai_edit", "Unified Workspace Edit", "Unified workspace edit. The planner auto-selects the safest path based on what you provide: exact replacement for localized changes, full-file write for complete rewrites, or prepared update for diff-shaped changes. Prefer this over relai_replace / relai_write / relai_apply_update in ordinary coding work.", {
