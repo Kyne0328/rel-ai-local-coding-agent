@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.13.1] — 2026-05-27
+
+### Workflow friction fixes (from black-box audit)
+- `relai_apply_update` now accepts OpenAI patch format (`*** Begin Patch / *** Update File / *** End Patch`) in addition to git unified diff; converted patches report `sourceFormat: "openai-patch"` and `converted: true`
+- `relai_replace` / `relai_edit` errors gain actionable fallback guidance: 0-match → re-read hint, duplicate matches → occurrence hint, URL/IPv6 client-transport errors → workaround list, byte-limit overflow → staged-write hint
+- `relai_apply_update` patch-format errors now show both accepted format examples (unified diff + OpenAI patch)
+- `relai_clear_files` safety-block errors clarify the accepted call shapes (`path` and `paths` both work)
+- `relai_set_policy` captures `git status --short` baseline on session start; `policyResolver.baselineDirty` persists pre-existing dirty files
+- `relai_diff` splits worktree status into `sessionChangedFiles` vs. `baselineChangedFiles` so ownership of pre-existing dirty files is unambiguous
+- `relai_run_checks` accepts `fullOutput: true` to lift the per-command output truncation for long error logs
+- `relai_diff` `path` arg now echoed back in the result for clarity
+
+### Tests
+- `test/openai-patch-format-unit.mjs` — Update/Add/Delete File conversion, multi-file blocks, pass-through behavior
+- `test/baseline-tracking-unit.mjs` — git status baseline capture, session persistence, status ownership split, rename handling
+- `test/error-enhancer-unit.mjs` — fallback hints for replace/edit/apply_update/clear_files error patterns
+
 ## [0.13.0] — 2026-05-27
 
 ### Trusted Workspace Agent Mode

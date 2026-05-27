@@ -67,7 +67,7 @@ const toolSchemas = [
   tool("relai_clear_files", "Clear Local Repo Files", "Clear one or more files from a configured workspace. Folders are refused. Supports dryRun and failIfMissing.", {
     workspace: stringProp(), path: stringProp(), paths: arrayProp("string", 1, 100), expectedSha256: stringProp(), dryRun: boolProp(), failIfMissing: boolProp()
   }, ["workspace"], DESTRUCTIVE_LOCAL),
-  tool("relai_apply_update", "Apply Prepared Update", "Apply a prepared text update to the workspace and optionally run checks afterward.", {
+  tool("relai_apply_update", "Apply Prepared Update", "Apply a prepared text update to the workspace and optionally run checks afterward. Accepts either git unified diff (--- a/path / +++ b/path / @@ hunks) or OpenAI patch format (*** Begin Patch / *** Update File: path / *** End Patch).", {
     workspace: stringProp(), updateText: stringProp(), backup: boolProp(), check: stringProp(), checks: arrayProp("string", 0), checksText: stringProp(), timeoutMs: numberProp(1000, 86400000), stopOnFailure: boolProp(), returnDiff: boolProp(), maxResultBytes: numberProp(1000, 5242880)
   }, ["workspace"], WRITE_LOCAL),
   tool("relai_apply_bundle", "Apply Prepared Bundle", "Apply a prepared file bundle to the workspace and optionally run checks afterward.", {
@@ -76,19 +76,20 @@ const toolSchemas = [
   tool("relai_package_snapshot", "Package Workspace Zip", "Create a zip package of the current workspace on the MCP host, excluding repo internals, dependency caches, build outputs, and Rel.AI state.", {
     workspace: stringProp(), maxFiles: numberProp(1, 200000), timeoutMs: numberProp(1000, 86400000)
   }, ["workspace"], WRITE_LOCAL),
-  tool("relai_run_checks", "Run Workspace Checks", "Run workspace validation checks such as tests, analyzers, linters, and build checks. Validation level is selected automatically based on change surface — focused for narrow edits, broader for high-blast-radius changes.", {
+  tool("relai_run_checks", "Run Workspace Checks", "Run workspace validation checks such as tests, analyzers, linters, and build checks. Validation level is selected automatically based on change surface — focused for narrow edits, broader for high-blast-radius changes. Pass fullOutput: true to lift the per-command output truncation when you need to inspect a long error log.", {
     workspace: stringProp(),
     level: stringProp(),
     check: stringProp(),
     checks: arrayProp("string", 0),
     checksText: stringProp(),
     timeoutMs: numberProp(1000, 86400000),
-    stopOnFailure: boolProp()
+    stopOnFailure: boolProp(),
+    fullOutput: boolProp()
   }, ["workspace"], WRITE_LOCAL),
   tool("relai_browser", "Browser/UI Check", "UI validation bridge. Fetch a URL/route or run a local browser check such as Playwright; returns output and errors.", {
     workspace: stringProp(), url: stringProp(), route: stringProp(), check: stringProp(), timeoutMs: numberProp(1000, 1800000)
   }, ["workspace"], WRITE_OPEN),
-  tool("relai_diff", "Review Local Repo Diff", "Return git status and current diff as a review artifact.", {
+  tool("relai_diff", "Review Local Repo Diff", "Return git status and current diff as a review artifact. Pass path to filter to a single file. When a trusted session is active, sessionChangedFiles and baselineChangedFiles split the status entries by ownership (this session vs. pre-existing dirty worktree).", {
     workspace: stringProp(), staged: boolProp(), path: stringProp(), maxBytes: numberProp(1000, 5242880)
   }, ["workspace"], READ_ONLY_LOCAL),
   tool("relai_restore_changes", "Restore Workspace Changes", "Restore selected workspace changes, or restore the workspace to the last git state.", {
@@ -208,9 +209,45 @@ async function callTool(name, args = {}) {
     logAudit(config, { tool: canonicalName, ok: true, workspace: args && args.workspace, ms: Date.now() - started, ...extraAudit });
     return ok(value);
   } catch (error) {
-    logAudit(config, { tool: canonicalName, ok: false, workspace: args && args.workspace, ms: Date.now() - started, error: error instanceof Error ? error.message : String(error) });
-    throw error;
+    const enhanced = enhanceToolError(canonicalName, error);
+    logAudit(config, { tool: canonicalName, ok: false, workspace: args && args.workspace, ms: Date.now() - started, error: enhanced.message });
+    throw enhanced;
   }
+}
+
+function enhanceToolError(toolName, error) {
+  const raw = error instanceof Error ? error.message : String(error);
+  const append = (extra) => {
+    const next = new Error(`${raw}\n\n${extra}`);
+    if (error instanceof Error && error.stack) next.stack = error.stack;
+    return next;
+  };
+  if (toolName === "relai_replace" || toolName === "relai_edit") {
+    if (/Invalid IPv6 URL|Invalid URL|ERR_INVALID_URL/i.test(raw)) {
+      return append("Edit payload was rejected by a URL parser, likely on the client transport. Workarounds:\n  - relai_write { stage: \"direct\", path, content }  // whole-file replace\n  - relai_apply_update { updateText: <unified diff> }    // patch-shaped change\n  - Split into multiple smaller relai_replace calls with shorter oldText/newText blocks");
+    }
+    if (/found 0 matches/.test(raw)) {
+      return append("Fallback: call relai_read on the file to get current contents, then retry with exact current text. For complete rewrites use relai_write { stage: \"direct\", content }.");
+    }
+    if (/found \d+ matches/.test(raw)) {
+      return append("Fallback: pass occurrence: N to target one match, or extend oldText with surrounding lines until it is unique.");
+    }
+    if (/exceeds .* bytes/i.test(raw)) {
+      return append("Fallback: use relai_write { stage: \"direct\", content } for a whole-file replacement, or split the change into smaller exact replacements.");
+    }
+  }
+  if (toolName === "relai_apply_update") {
+    if (/corrupt patch|patch .* invalid|did not contain any valid|patch failed/i.test(raw)) {
+      return append("Accepted patch formats:\n  1) Git unified diff:\n       --- a/path/to/file\n       +++ b/path/to/file\n       @@ -1,3 +1,3 @@\n       - old line\n       + new line\n  2) OpenAI patch format:\n       *** Begin Patch\n       *** Update File: path/to/file\n       @@\n       - old\n       + new\n       *** End Patch\nFor whole-file rewrites prefer relai_write { stage: \"direct\", content }.");
+    }
+    if (/Delete File.*not supported/i.test(raw)) {
+      return error instanceof Error ? error : new Error(raw);
+    }
+  }
+  if (toolName === "relai_clear_files" && /blocked sensitive path|refuses non-file/i.test(raw)) {
+    return append("Hard-boundary safety block. Accepted call shapes:\n  - { path: \"relative/file\" }\n  - { paths: [\"relative/file\", ...] }\nBoth are equivalent; only the file path itself is checked. Sensitive paths (.env, .ssh, credentials, .git) are always refused.");
+  }
+  return error instanceof Error ? error : new Error(raw);
 }
 
 async function dispatchTool(config, name, args) {
@@ -252,7 +289,7 @@ async function dispatchTool(config, name, args) {
           const policy = resolvePolicy(workspace, config);
           return { ok: true, workspace: workspace.alias, operation: "clear", cleared, policy };
         }
-        writeSessionPolicy(config, workspace.alias, { taskHint: args.taskHint });
+        writeSessionPolicy(config, workspace.alias, { taskHint: args.taskHint, workspaceRoot: workspace.path });
         const policy = resolvePolicy(workspace, config);
         return { ok: true, workspace: workspace.alias, operation: "set", policy };
       });
@@ -557,4 +594,4 @@ function arrayObjectProp(properties, required = [], minItems, maxItems) {
   return schema;
 }
 
-module.exports = { toolSchemas, allToolSchemas: toolSchemas, getToolSchemas, BRIDGE_TOOL_NAMES, callTool, workspaceList, workspaceInspect, workspaceTree, workspaceProfile, buildSessionSummary };
+module.exports = { toolSchemas, allToolSchemas: toolSchemas, getToolSchemas, BRIDGE_TOOL_NAMES, callTool, workspaceList, workspaceInspect, workspaceTree, workspaceProfile, buildSessionSummary, enhanceToolError };

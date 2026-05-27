@@ -348,7 +348,8 @@ function relaiClear(workspace, config, args = {}) {
 
 
 async function relaiApplyPatch(workspace, config, args = {}) {
-  const patch = String(args.patch || args.diff || "");
+  const rawPatch = String(args.patch || args.diff || "");
+  const { patch, converted, sourceFormat } = normalizeOpenAIPatchFormat(rawPatch);
   assertPreparedUpdateSafe(workspace, config, args, patch);
   const patchBytes = Buffer.byteLength(patch, "utf8");
   await ensureGitRepo(workspace, config);
@@ -368,7 +369,57 @@ async function relaiApplyPatch(workspace, config, args = {}) {
   const diff = args.returnDiff === false ? null : await relaiDiff(workspace, config, { maxBytes: args.maxDiffBytes || DEFAULT_MAX_DIFF_BYTES });
   const ok = apply.exitCode === 0 && (!verify || verify.ok);
   appendOperation(config, workspace, { id: operationId, type: "apply_patch", ok, paths: touchedPaths, results: [{ operation: "applyPatch", bytes: patchBytes, touchedPaths, verified: verify ? verify.ok : null }] });
-  return { ok, workspace: workspace.alias, operationId, operation: "applyPatch", changedFiles: apply.exitCode === 0 ? touchedPaths : [], touchedPaths, patchBytes, backup, apply: summarizeCommand(apply), ...(verify ? { verify } : {}), ...(diff ? { diff } : {}) };
+  return { ok, workspace: workspace.alias, operationId, operation: "applyPatch", changedFiles: apply.exitCode === 0 ? touchedPaths : [], touchedPaths, patchBytes, backup, apply: summarizeCommand(apply), ...(converted ? { sourceFormat, converted: true } : {}), ...(verify ? { verify } : {}), ...(diff ? { diff } : {}) };
+}
+
+function normalizeOpenAIPatchFormat(input) {
+  const text = String(input || "");
+  if (!/^\s*\*\*\* Begin Patch\b/m.test(text)) {
+    return { patch: text, converted: false, sourceFormat: "unified-diff" };
+  }
+  const lines = text.split(/\r?\n/);
+  const out = [];
+  let i = 0;
+  while (i < lines.length && !/^\s*\*\*\* Begin Patch\b/.test(lines[i])) i += 1;
+  i += 1;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (/^\s*\*\*\* End Patch\b/.test(line)) break;
+    const updateMatch = /^\s*\*\*\* Update File:\s*(.+)$/.exec(line);
+    const addMatch = /^\s*\*\*\* Add File:\s*(.+)$/.exec(line);
+    const delMatch = /^\s*\*\*\* Delete File:\s*(.+)$/.exec(line);
+    if (updateMatch) {
+      const filePath = updateMatch[1].trim();
+      out.push(`--- a/${filePath}`);
+      out.push(`+++ b/${filePath}`);
+      i += 1;
+      while (i < lines.length && !/^\s*\*\*\* /.test(lines[i])) {
+        out.push(lines[i]);
+        i += 1;
+      }
+      continue;
+    }
+    if (addMatch) {
+      const filePath = addMatch[1].trim();
+      const body = [];
+      i += 1;
+      while (i < lines.length && !/^\s*\*\*\* /.test(lines[i])) {
+        body.push(lines[i]);
+        i += 1;
+      }
+      const contentLines = body.map((l) => (l.startsWith("+") ? l.slice(1) : l));
+      out.push(`--- /dev/null`);
+      out.push(`+++ b/${filePath}`);
+      out.push(`@@ -0,0 +1,${contentLines.length} @@`);
+      for (const cl of contentLines) out.push(`+${cl}`);
+      continue;
+    }
+    if (delMatch) {
+      throw new Error(`OpenAI patch 'Delete File' is not supported in relai_apply_update. Use relai_clear_files { paths: ["${delMatch[1].trim()}"] } instead.`);
+    }
+    i += 1;
+  }
+  return { patch: `${out.join("\n")}\n`, converted: true, sourceFormat: "openai-patch" };
 }
 
 async function relaiApplyArchive(workspace, config, args = {}) {
@@ -515,6 +566,10 @@ async function relaiVerify(workspace, config, args = {}) {
   const policy = resolvePolicy(workspace, config);
   if (checks.length === 0) return { ok: true, workspace: workspace.alias, level, checks: [], commands: [], results: [], aliasNormalizations: 0, validationLevel, validationLevelReason, changedFiles, policy, message: "No validation checks detected." };
   const stopOnFailure = args.stopOnFailure !== false;
+  const fullOutput = Boolean(args.fullOutput);
+  const runConfig = fullOutput
+    ? { ...config, maxOutputBytes: Math.max(Number(config.maxOutputBytes) || 0, 16 * 1024 * 1024) }
+    : config;
   const results = [];
   for (const command of checks) {
     const result = await runProcess(command, [], {
@@ -522,12 +577,12 @@ async function relaiVerify(workspace, config, args = {}) {
       shell: true,
       commandString: command,
       timeout: clampNumber(args.timeoutMs, 1000, 24 * 60 * 60 * 1000, 120000)
-    }, config);
+    }, runConfig);
     const summary = { command, ...summarizeCommand(result) };
     results.push(summary);
     if (!summary.ok && stopOnFailure) break;
   }
-  return { ok: results.every((item) => item.ok), workspace: workspace.alias, level, checks, commands: checks, results, aliasNormalizations, validationLevel, validationLevelReason, changedFiles, policy };
+  return { ok: results.every((item) => item.ok), workspace: workspace.alias, level, checks, commands: checks, results, aliasNormalizations, validationLevel, validationLevelReason, changedFiles, policy, ...(fullOutput ? { fullOutput: true } : {}) };
 }
 
 async function relaiBrowser(workspace, config, args = {}) {
@@ -559,19 +614,52 @@ async function relaiDiff(workspace, config, args = {}) {
   const staged = Boolean(args.staged);
   const stat = await runProcess("git", ["status", "--short"], { cwd: workspace.path, timeout: 30000 }, config);
   const diffArgs = ["diff", ...(staged ? ["--staged"] : [])];
-  if (args.path) diffArgs.push("--", resolveSafePath(workspace.path, args.path).relativePath);
+  const filterPath = args.path ? resolveSafePath(workspace.path, args.path).relativePath : null;
+  if (filterPath) diffArgs.push("--", filterPath);
   const diff = await runProcess("git", diffArgs, { cwd: workspace.path, timeout: 60000 }, config);
   const maxBytes = clampNumber(args.maxBytes, 1000, 5 * 1024 * 1024, DEFAULT_MAX_DIFF_BYTES);
   const diffText = diff.stdout || "";
+  const ownership = classifyStatusOwnership(workspace, config, stat.stdout || "");
   return {
     ok: stat.exitCode === 0 && diff.exitCode === 0,
     workspace: workspace.alias,
     staged,
+    ...(filterPath ? { path: filterPath } : {}),
     status: stat.stdout || "",
+    sessionChangedFiles: ownership.sessionChanged,
+    baselineChangedFiles: ownership.baselineChanged,
+    ...(ownership.baselineSource ? { baselineSource: ownership.baselineSource } : {}),
     diff: Buffer.byteLength(diffText, "utf8") > maxBytes ? diffText.slice(0, maxBytes) + `\n[rel-ai-mcp diff truncated at ${maxBytes} bytes]` : diffText,
     exitCode: diff.exitCode,
     ...(diff.stderr ? { stderr: diff.stderr } : {})
   };
+}
+
+function classifyStatusOwnership(workspace, config, statusOutput) {
+  let baselineDirty = [];
+  let baselineSource = null;
+  try {
+    const { readSessionPolicy } = require("./policyResolver");
+    const session = readSessionPolicy(config, workspace.alias);
+    if (session && Array.isArray(session.baselineDirty)) {
+      baselineDirty = session.baselineDirty;
+      baselineSource = "session";
+    }
+  } catch (_err) {}
+  const baselineSet = new Set(baselineDirty);
+  const sessionChanged = [];
+  const baselineChanged = [];
+  const lines = String(statusOutput || "").split(/\r?\n/).filter(Boolean);
+  for (const line of lines) {
+    if (line.length < 3) continue;
+    const rest = line.slice(3).trim();
+    const arrow = rest.indexOf(" -> ");
+    const file = arrow >= 0 ? rest.slice(arrow + 4).trim() : rest;
+    if (!file) continue;
+    if (baselineSet.has(file)) baselineChanged.push(file);
+    else sessionChanged.push(file);
+  }
+  return { sessionChanged, baselineChanged, baselineSource };
 }
 
 async function relaiReset(workspace, config, args = {}) {
@@ -1191,6 +1279,8 @@ module.exports = {
   relaiBrowser,
   relaiDiff,
   relaiReset,
+  normalizeOpenAIPatchFormat,
+  classifyStatusOwnership,
   buildZipCommand,
   buildUnzipCommand,
   copyWorkspaceForArchive,
