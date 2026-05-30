@@ -1,6 +1,6 @@
 {
   "name": "rel-ai-mcp",
-  "version": "0.14.0",
+  "version": "0.14.1",
   "description": "Local ChatGPT repo bridge: one reliable workflow for snapshot, read, write, verify, diff, and reset configured local workspaces.",
   "private": true,
   "license": "MIT",
@@ -51,7 +51,8 @@
     "test:prepared-update": "node test/prepared-update-smoke.mjs",
     "test:checks": "node test/command-checks-smoke.mjs",
     "test:git-workflow": "node test/git-workflow-smoke.mjs",
-    "test:all": "npm run check && npm run test:repo-health && npm run test:smoke && npm run test:http && npm run test:compat && npm run test:connector-wording && npm run test:public-workflow && npm run test:auto-approve && npm run test:tunnel && npm run test:oneclick && npm run test:fast-task && npm run test:electron && npm run test:workflow-config && npm run test:prepared-update && npm run test:safety-paths && npm run test:archive-safety && npm run test:http-auth && npm run test:checks && npm run test:git-workflow && npm run test:dashboard-wording && npm run test:windows-archive"
+    "test:staged-write": "node test/staged-write-fallback-unit.mjs",
+    "test:all": "npm run check && npm run test:repo-health && npm run test:smoke && npm run test:http && npm run test:compat && npm run test:connector-wording && npm run test:public-workflow && npm run test:auto-approve && npm run test:tunnel && npm run test:oneclick && npm run test:fast-task && npm run test:electron && npm run test:workflow-config && npm run test:prepared-update && npm run test:safety-paths && npm run test:archive-safety && npm run test:http-auth && npm run test:checks && npm run test:git-workflow && npm run test:staged-write && npm run test:dashboard-wording && npm run test:windows-archive"
   },
   "keywords": [
     "mcp",

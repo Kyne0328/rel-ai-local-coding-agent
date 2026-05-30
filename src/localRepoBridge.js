@@ -163,8 +163,8 @@ function relaiWrite(workspace, config, args = {}) {
   }
 
   if (stage === "append") {
-    const writeId = validateWriteId(args.writeId);
     if (typeof args.content !== "string") throw new Error("relai_write stage='append' requires writeId and a content chunk string.");
+    const writeId = resolveStagedWriteId(config, workspace, args.writeId);
     const payload = readStagedPayload(config, workspace, writeId);
     payload.chunks.push(args.content);
     payload.bytes += Buffer.byteLength(args.content, "utf8");
@@ -183,7 +183,7 @@ function relaiWrite(workspace, config, args = {}) {
   }
 
   if (stage === "commit") {
-    const writeId = validateWriteId(args.writeId);
+    const writeId = resolveStagedWriteId(config, workspace, args.writeId);
     const payload = readStagedPayload(config, workspace, writeId);
     const content = payload.chunks.join("");
     const result = performFullFileWrite(workspace, config, payload.path, content, { dryRun: Boolean(args.dryRun), staged: true, writeId });
@@ -737,6 +737,40 @@ function validateWriteId(writeId) {
   const text = String(writeId || "").trim();
   if (!/^op_[a-z0-9]+_[a-f0-9]{12}$/.test(text)) throw new Error("Invalid or missing relai_write writeId.");
   return text;
+}
+
+// Resolve the writeId for a staged append/commit. ChatGPT must otherwise echo a
+// long opaque writeId across three separate tool calls; a single dropped or
+// mistyped id breaks commit with "No staged payload found". When the supplied id
+// is missing or does not match an existing staged file, fall back to the most
+// recent staged write for this workspace (the normal case is one in-flight
+// staged write), so the model does not need to round-trip the id perfectly.
+function resolveStagedWriteId(config, workspace, rawWriteId) {
+  const text = String(rawWriteId || "").trim();
+  if (text && /^op_[a-z0-9]+_[a-f0-9]{12}$/.test(text) && fs.existsSync(stagedPath(config, workspace, text))) {
+    return text;
+  }
+  const latest = findLatestStagedWriteId(config, workspace);
+  if (latest) return latest;
+  throw new Error(`No staged relai_write payload found${text ? ` for writeId ${text}` : ""}. Start a staged write with stage='start' first, or use a direct write { stage: 'direct', path, content } (direct write has no size cap).`);
+}
+
+function findLatestStagedWriteId(config, workspace) {
+  const dir = stagedDir(config, workspace);
+  let entries;
+  try { entries = fs.readdirSync(dir); } catch (_) { return null; }
+  const candidates = entries
+    .filter((name) => name.endsWith(".json"))
+    .map((name) => {
+      const id = name.slice(0, -5);
+      let mtime = 0;
+      try { mtime = fs.statSync(path.join(dir, name)).mtimeMs; } catch (_) {}
+      return { id, mtime };
+    })
+    .filter((item) => /^op_[a-z0-9]+_[a-f0-9]{12}$/.test(item.id));
+  if (!candidates.length) return null;
+  candidates.sort((a, b) => b.mtime - a.mtime);
+  return candidates[0].id;
 }
 
 function writeStagedPayload(config, workspace, writeId, payload) {

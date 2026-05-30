@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.14.1] — 2026-05-30
+
+### Staged-write reliability fix (from full ChatGPT usability audit)
+- Fixed `relai_write` staged commit failing with `No staged relai_write payload found for writeId...` when ChatGPT dropped or mistyped the opaque `writeId` between the separate `start`/`append`/`commit` tool calls. Append and commit now fall back to the most recent staged write for the workspace when `writeId` is missing or unknown, so the model no longer has to round-trip the id perfectly
+- Clarified `relai_write` description: direct write has no size cap and is preferred; staged mode is only for transports that cap a single message
+- Improved the not-found error to point back to direct write
+- Fixed a stale, Windows-only assertion in the tunnel-manager smoke test (custom command plans split argv on win32) and wired the new staged-write fallback test into `test:all`
+
 ## [0.14.0] — 2026-05-30
 
 ### Connector moderation friction fixes (from full ChatGPT usability audit)

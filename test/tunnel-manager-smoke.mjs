@@ -21,5 +21,9 @@ const cfPlan = tunnel.providerPlan('cloudflare', { port: 3333, localUrl: 'http:/
 assert.equal(cfPlan.command, 'cloudflared');
 assert.deepEqual(cfPlan.args, ['tunnel', '--url', 'http://127.0.0.1:3333']);
 const customPlan = tunnel.providerPlan('custom', { command: 'my-tunnel http://127.0.0.1:3333' });
-assert.ok(customPlan.args.includes('my-tunnel http://127.0.0.1:3333'));
+// On win32 the command is split (command='my-tunnel', args=['http://...']); on
+// POSIX it is wrapped as `sh -lc <command>`. Assert on the reconstructed plan so
+// the check is correct on every platform.
+const customFlat = [customPlan.command, ...customPlan.args].join(' ');
+assert.ok(customFlat.includes('my-tunnel') && customFlat.includes('http://127.0.0.1:3333'));
 console.log('Tunnel manager smoke passed.');
