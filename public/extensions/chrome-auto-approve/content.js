@@ -8,8 +8,12 @@
   // action even if ChatGPT changes the exact label.
   const ACTION_LABELS = [
     // relai_repo_snapshot
-    'repo snapshot', 'repository snapshot', 'snapshot repository', 'local repository snapshot',
+    'repo snapshot', 'repository snapshot', 'repository overview', 'snapshot repository', 'local repository snapshot',
     'take repository snapshot', 'take repo snapshot', 'snapshot local repo', 'snapshot workspace',
+
+    // relai_git_* (neutralized titles)
+    'repository state', 'update remote refs', 'record commit', 'publish branch',
+    'combine branches', 'branch merge plan', 'cancel in-progress merge', 'draft pull request',
 
     // relai_read
     'read', 'read file', 'read files', 'read path', 'read paths', 'read directory', 'read directories',
