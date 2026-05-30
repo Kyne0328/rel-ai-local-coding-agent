@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.14.2] — 2026-05-30
+
+### Staged-write fallback safety + merge dry-run fix (from follow-up ChatGPT audit)
+- **Critical:** the 0.14.1 staged-write fallback picked the most-recent staged payload by mtime, which could commit the wrong/stale file — including resurrecting an abandoned staged write to an unrelated tracked file during what should have been a cleanup call. The fallback now never guesses: it resolves an exact `writeId`, else the unique staged write for a supplied `path`, else the single in-flight staged write; when several are pending it refuses and lists the candidates (`writeId → path`) so the caller picks one
+- Staged payloads are now age-bounded: fallback ignores payloads older than 6h, and payloads older than 24h are pruned on access, so stale orphans cannot be resurrected
+- `relai_write` append/commit accept `path` to disambiguate which staged write to resolve
+- Fixed `relai_git_merge_branch` dry-run returning `ok: false` on an already-up-to-date merge: it now only runs `git merge --abort` when a merge actually started (MERGE_HEAD present)
+- Added regression tests for multi-pending refusal, path disambiguation, and already-up-to-date merge dry-run
+
 ## [0.14.1] — 2026-05-30
 
 ### Staged-write reliability fix (from full ChatGPT usability audit)

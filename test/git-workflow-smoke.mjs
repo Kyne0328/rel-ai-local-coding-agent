@@ -10,6 +10,7 @@ const {
   relaiGitStatus,
   relaiGitCommit,
   relaiGitPush,
+  relaiGitMergeBranch,
   relaiGitMergeRemoteBranchesPlan
 } = require('../src/localRepoBridge.js');
 
@@ -75,6 +76,15 @@ assert.equal(mergePlan.ok, true);
 assert.ok(mergePlan.excluded.some((item) => item.name === 'origin/main'));
 assert.ok(mergePlan.excluded.some((item) => item.name === 'origin/production'));
 assert.ok(mergePlan.recommendedMergeOrder.includes('origin/feature/ui-cleanup'));
+
+// merge dry-run of an already-up-to-date source must report ok:true. Previously
+// the dry-run ran `git merge --abort` unconditionally, which fails when no merge
+// started ("Already up to date"), wrongly flipping ok:false.
+const mergeNoop = await relaiGitMergeBranch(workspace, config, { source: 'main', target: 'main', dryRun: true, allowProtected: true });
+assert.equal(mergeNoop.ok, true);
+assert.equal(mergeNoop.dryRun, true);
+assert.ok(/up to date/i.test(JSON.stringify(mergeNoop.merge)));
+assert.equal(mergeNoop.abort, undefined);
 
 fs.rmSync(root, { recursive: true, force: true });
 console.log('Git workflow smoke test passed.');

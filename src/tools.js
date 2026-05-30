@@ -71,7 +71,7 @@ const toolSchemas = [
   tool("relai_read", "Read Local Repo Paths", "Read-only. Batch-read files or directory summaries from the workspace.", {
     workspace: stringProp(), paths: arrayProp("string", 1, 100), maxBytes: numberProp(1000, 10485760), maxEntries: numberProp(1, 20000)
   }, ["workspace", "paths"], READ_ONLY_LOCAL),
-  tool("relai_write", "Write Local Repo File", "Full-file replacement. Prefer direct { workspace, path, content } for complete-file updates — direct write has no size cap. Staged mode (stage:'start'/'append'/'commit') exists only for transports that cap a single message; if used, append and commit fall back to the most recent staged write when writeId is omitted.", {
+  tool("relai_write", "Write Local Repo File", "Full-file replacement. Prefer direct { workspace, path, content } for complete-file updates — direct write has no size cap. Staged mode (stage:'start'/'append'/'commit') exists only for transports that cap a single message; if used and writeId is omitted, append/commit resolve the single in-flight staged write (or pass path to disambiguate when several are pending).", {
     workspace: stringProp(), path: stringProp(), content: stringProp(), dryRun: boolProp(), stage: stringProp(), writeId: stringProp()
   }, ["workspace"], WRITE_LOCAL),
   tool("relai_replace", "Replace Exact Text", "Small deterministic edits inside an existing file. Provide { workspace, path, oldText, newText } or replacements: [{ oldText, newText, occurrence? }]. Duplicate matches require occurrence.", {

@@ -164,7 +164,7 @@ function relaiWrite(workspace, config, args = {}) {
 
   if (stage === "append") {
     if (typeof args.content !== "string") throw new Error("relai_write stage='append' requires writeId and a content chunk string.");
-    const writeId = resolveStagedWriteId(config, workspace, args.writeId);
+    const writeId = resolveStagedWriteId(config, workspace, args.writeId, args.path);
     const payload = readStagedPayload(config, workspace, writeId);
     payload.chunks.push(args.content);
     payload.bytes += Buffer.byteLength(args.content, "utf8");
@@ -183,7 +183,7 @@ function relaiWrite(workspace, config, args = {}) {
   }
 
   if (stage === "commit") {
-    const writeId = resolveStagedWriteId(config, workspace, args.writeId);
+    const writeId = resolveStagedWriteId(config, workspace, args.writeId, args.path);
     const payload = readStagedPayload(config, workspace, writeId);
     const content = payload.chunks.join("");
     const result = performFullFileWrite(workspace, config, payload.path, content, { dryRun: Boolean(args.dryRun), staged: true, writeId });
@@ -739,38 +739,84 @@ function validateWriteId(writeId) {
   return text;
 }
 
+// Fallback only applies to staged writes touched within this window. Prevents an
+// abandoned staged payload from a much earlier session being resurrected and
+// committed (which could overwrite an unrelated tracked file).
+const STAGED_FALLBACK_TTL_MS = 6 * 60 * 60 * 1000;
+// Staged payloads older than this are pruned on any staged-write access.
+const STAGED_PRUNE_TTL_MS = 24 * 60 * 60 * 1000;
+
 // Resolve the writeId for a staged append/commit. ChatGPT must otherwise echo a
 // long opaque writeId across three separate tool calls; a single dropped or
-// mistyped id breaks commit with "No staged payload found". When the supplied id
-// is missing or does not match an existing staged file, fall back to the most
-// recent staged write for this workspace (the normal case is one in-flight
-// staged write), so the model does not need to round-trip the id perfectly.
-function resolveStagedWriteId(config, workspace, rawWriteId) {
+// mistyped id breaks the operation with "No staged payload found".
+//
+// Resolution order — each step is safe and NEVER guesses among ambiguous
+// candidates (guessing the most-recent payload previously committed the wrong,
+// stale file and could clobber an unrelated tracked file):
+//   1. Exact writeId match against an existing staged file (no TTL).
+//   2. If a path is supplied, the unique fresh staged write for that path.
+//   3. Exactly one fresh staged write total (the normal single in-flight case).
+//   4. Otherwise refuse and list the candidates so the caller passes id/path.
+function resolveStagedWriteId(config, workspace, rawWriteId, targetPath) {
   const text = String(rawWriteId || "").trim();
   if (text && /^op_[a-z0-9]+_[a-f0-9]{12}$/.test(text) && fs.existsSync(stagedPath(config, workspace, text))) {
     return text;
   }
-  const latest = findLatestStagedWriteId(config, workspace);
-  if (latest) return latest;
-  throw new Error(`No staged relai_write payload found${text ? ` for writeId ${text}` : ""}. Start a staged write with stage='start' first, or use a direct write { stage: 'direct', path, content } (direct write has no size cap).`);
+  const fresh = listStagedPayloads(config, workspace)
+    .filter((item) => item.ageMs == null || item.ageMs <= STAGED_FALLBACK_TTL_MS);
+
+  const wantPath = stagedRelativePath(workspace, targetPath);
+  if (wantPath) {
+    const byPath = fresh.filter((item) => item.path === wantPath);
+    if (byPath.length === 1) return byPath[0].id;
+    if (byPath.length > 1) throw stagedAmbiguityError(byPath, text);
+  }
+
+  if (fresh.length === 1) return fresh[0].id;
+  throw stagedAmbiguityError(fresh, text);
 }
 
-function findLatestStagedWriteId(config, workspace) {
+function stagedRelativePath(workspace, targetPath) {
+  const raw = String(targetPath || "").trim();
+  if (!raw) return null;
+  try {
+    return resolveSafePath(workspace.path, raw).relativePath;
+  } catch (_) {
+    return null;
+  }
+}
+
+function stagedAmbiguityError(candidates, suppliedId) {
+  if (!candidates.length) {
+    return new Error(`No staged relai_write payload found${suppliedId ? ` for writeId ${suppliedId}` : ""}. Start a staged write with stage='start' first, or use a direct write { stage: 'direct', path, content } (direct write has no size cap).`);
+  }
+  const list = candidates.map((item) => `${item.id} → ${item.path || "(unknown path)"}`).join("; ");
+  return new Error(`Multiple staged relai_write payloads are pending; refusing to guess which to use. Pass the exact writeId, or the target path, for the one you mean. Pending: ${list}.`);
+}
+
+function listStagedPayloads(config, workspace) {
   const dir = stagedDir(config, workspace);
-  let entries;
-  try { entries = fs.readdirSync(dir); } catch (_) { return null; }
-  const candidates = entries
-    .filter((name) => name.endsWith(".json"))
-    .map((name) => {
-      const id = name.slice(0, -5);
-      let mtime = 0;
-      try { mtime = fs.statSync(path.join(dir, name)).mtimeMs; } catch (_) {}
-      return { id, mtime };
-    })
-    .filter((item) => /^op_[a-z0-9]+_[a-f0-9]{12}$/.test(item.id));
-  if (!candidates.length) return null;
-  candidates.sort((a, b) => b.mtime - a.mtime);
-  return candidates[0].id;
+  let names;
+  try { names = fs.readdirSync(dir); } catch (_) { return []; }
+  const now = Date.now();
+  const out = [];
+  for (const name of names) {
+    if (!name.endsWith(".json")) continue;
+    const id = name.slice(0, -5);
+    if (!/^op_[a-z0-9]+_[a-f0-9]{12}$/.test(id)) continue;
+    const file = path.join(dir, name);
+    let mtime = 0;
+    try { mtime = fs.statSync(file).mtimeMs; } catch (_) {}
+    if (mtime && (now - mtime) > STAGED_PRUNE_TTL_MS) {
+      try { fs.rmSync(file, { force: true }); } catch (_) {}
+      continue;
+    }
+    let payload = null;
+    try { payload = JSON.parse(fs.readFileSync(file, "utf8")); } catch (_) { continue; }
+    out.push({ id, path: payload.path || null, mtime, ageMs: mtime ? now - mtime : null });
+  }
+  out.sort((a, b) => b.mtime - a.mtime);
+  return out;
 }
 
 function writeStagedPayload(config, workspace, writeId, payload) {
@@ -1051,7 +1097,13 @@ async function relaiGitMergeBranch(workspace, config, args = {}) {
   let aborted = null;
   let restoreBranch = null;
   if (dryRun) {
-    aborted = await runProcess("git", ["merge", "--abort"], { cwd: workspace.path, timeout: 60000 }, config);
+    // Only abort when a merge actually started. "Already up to date" leaves no
+    // MERGE_HEAD, and `git merge --abort` would then fail ("no merge to abort"),
+    // wrongly flipping ok:false on a clean no-op merge.
+    const mergeInProgress = await runProcess("git", ["rev-parse", "--verify", "--quiet", "MERGE_HEAD"], { cwd: workspace.path, timeout: 30000 }, config);
+    if (mergeInProgress.exitCode === 0) {
+      aborted = await runProcess("git", ["merge", "--abort"], { cwd: workspace.path, timeout: 60000 }, config);
+    }
     if (target !== originalBranch) {
       restoreBranch = await runProcess("git", ["checkout", originalBranch], { cwd: workspace.path, timeout: 60000 }, config);
     }
