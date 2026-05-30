@@ -96,7 +96,7 @@ const toolSchemas = [
   tool("relai_package_snapshot", "Package Workspace Zip", "Create a zip package of the current workspace on the MCP host, excluding repo internals, dependency caches, build outputs, and Rel.AI state.", {
     workspace: stringProp(), maxFiles: numberProp(1, 200000), timeoutMs: numberProp(1000, 86400000)
   }, ["workspace"], WRITE_LOCAL),
-  tool("relai_run_checks", "Run Workspace Checks", "Run workspace validation checks such as tests, analyzers, linters, and build checks. Validation level is selected automatically based on change surface — focused for narrow edits, broader for high-blast-radius changes. Pass fullOutput: true to lift the per-command output truncation when you need to inspect a long error log.", {
+  tool("relai_run_checks", "Run Workspace Checks", "Run workspace validation checks such as tests, analyzers, linters, and build checks. Validation level is selected automatically based on change surface — focused for narrow edits, broader for high-blast-radius changes. Output is bounded to the tail of each command (where failures and summaries appear) so it survives result-size limits; pass fullOutput: true to keep a larger tail for a long error log.", {
     workspace: stringProp(),
     level: stringProp(),
     check: stringProp(),

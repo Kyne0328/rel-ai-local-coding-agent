@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.14.3] — 2026-05-30
+
+### run_checks output is now inspectable (from follow-up ChatGPT audit)
+- `relai_run_checks` output was abbreviated even with `fullOutput: true`. Cause: each command's full log was returned, then the whole result hit the server result-size cap (`MAX_TOOL_RESULT_CHARS`) and was head-truncated — cutting the failing tail. `fullOutput` (which raised the per-command buffer to 16 MB) made it worse
+- `run_checks` now returns a bounded **tail** of each command's stdout/stderr (where failures and summaries live): ~4 KB per stream by default, ~40 KB with `fullOutput: true`, with a marker noting how much was dropped. The result stays under the server cap so the useful end survives
+- Added a regression test asserting the tail keeps the end of output and that `fullOutput` keeps a larger tail
+
+Note: `relai_clear_files` responses appearing "abbreviated" in ChatGPT are the ChatGPT UI folding small JSON payloads, not server-side truncation — the full data is present in the tool result.
+
 ## [0.14.2] — 2026-05-30
 
 ### Staged-write fallback safety + merge dry-run fix (from follow-up ChatGPT audit)

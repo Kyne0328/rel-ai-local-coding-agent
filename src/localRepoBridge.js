@@ -28,6 +28,13 @@ const EXACT_REPLACE_TEXT_BYTE_LIMIT = 50000;
 const EXACT_REPLACE_MAX_OPERATIONS = 50;
 const DEFAULT_AGGRESSIVE_MAX_PATCH_BYTES = 2 * 1024 * 1024;
 const DEFAULT_AGGRESSIVE_MAX_ARCHIVE_BYTES = 250 * 1024 * 1024;
+// Per-command output kept in a relai_run_checks result. The whole result is
+// later capped by the server (MAX_TOOL_RESULT_CHARS); returning multi-MB logs
+// makes the server head-truncate the result and cut the failing tail. We keep a
+// bounded TAIL per command instead (errors/summaries live at the end), so the
+// useful part survives. fullOutput keeps a larger tail but still stays bounded.
+const CHECK_OUTPUT_TAIL_DEFAULT = 4000;
+const CHECK_OUTPUT_TAIL_FULL = 40000;
 const AGGRESSIVE_ARCHIVE_EXCLUDED_NAMES = new Set([".git", "node_modules", "build", "dist", "coverage", ".dart_tool", ".gradle", ".relai", ".rel-ai-mcp", ".venv", "venv", "target", "bin", "obj", "Pods"]);
 const AGGRESSIVE_ARCHIVE_EXCLUDED_PATHS = [".git/", "node_modules/", "build/", "dist/", "coverage/", ".dart_tool/", ".gradle/", ".relai/", ".rel-ai-mcp/"];
 const SOURCE_LIKE_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs', '.dart', '.py', '.go', '.rs', '.java', '.kt', '.swift', '.cs', '.cpp', '.c', '.h', '.hpp', '.rb', '.php', '.css', '.scss', '.html', '.xml', '.yaml', '.yml', '.json', '.md']);
@@ -851,6 +858,7 @@ async function relaiVerify(workspace, config, args = {}) {
   const runConfig = fullOutput
     ? { ...config, maxOutputBytes: Math.max(Number(config.maxOutputBytes) || 0, 16 * 1024 * 1024) }
     : config;
+  const tailChars = fullOutput ? CHECK_OUTPUT_TAIL_FULL : CHECK_OUTPUT_TAIL_DEFAULT;
   const results = [];
   for (const command of checks) {
     const result = await runProcess(command, [], {
@@ -859,11 +867,26 @@ async function relaiVerify(workspace, config, args = {}) {
       commandString: command,
       timeout: clampNumber(args.timeoutMs, 1000, 24 * 60 * 60 * 1000, 120000)
     }, runConfig);
-    const summary = { command, ...summarizeCommand(result) };
+    const summary = boundCheckOutput({ command, ...summarizeCommand(result) }, tailChars);
     results.push(summary);
     if (!summary.ok && stopOnFailure) break;
   }
   return { ok: results.every((item) => item.ok), workspace: workspace.alias, level, checks, commands: checks, results, aliasNormalizations, validationLevel, validationLevelReason, changedFiles, policy, ...(fullOutput ? { fullOutput: true } : {}) };
+}
+
+// Keep the last maxChars of a command stream so the failing tail survives the
+// server-level result cap. Prepends a marker noting how much was dropped.
+function tailString(text, maxChars) {
+  const value = String(text);
+  if (value.length <= maxChars) return value;
+  return `[rel-ai-mcp kept last ${maxChars} of ${value.length} chars]\n` + value.slice(value.length - maxChars);
+}
+
+function boundCheckOutput(summary, maxChars) {
+  const bounded = { ...summary };
+  if (typeof bounded.stdout === "string") bounded.stdout = tailString(bounded.stdout, maxChars);
+  if (typeof bounded.stderr === "string") bounded.stderr = tailString(bounded.stderr, maxChars);
+  return bounded;
 }
 
 async function relaiBrowser(workspace, config, args = {}) {

@@ -104,4 +104,20 @@ const config = {};
   assert.ok(result.results[0].stdout.includes('aliased'), 'stdout should include aliased');
 }
 
+// 9. run_checks bounds each command to a TAIL so the failing end survives the
+//    server-level result cap; fullOutput keeps a larger tail.
+{
+  const cmd = 'node -e "process.stdout.write(\'a\'.repeat(50000)+\'END_MARKER_Z\')"';
+  const result = await relaiVerify(workspace, config, mapCheckArgs({ check: cmd, timeoutMs: 30000 }));
+  const stdout = result.results[0].stdout || '';
+  assert.ok(stdout.length <= 4000 + 120, `default tail should bound stdout near 4000, got ${stdout.length}`);
+  assert.ok(stdout.includes('END_MARKER_Z'), 'tail must keep the END of output where failures/summaries live');
+  assert.ok(/kept last 4000 of \d+ chars/.test(stdout), 'tail marker should note how much was dropped');
+
+  const full = await relaiVerify(workspace, config, mapCheckArgs({ check: cmd, fullOutput: true, timeoutMs: 30000 }));
+  const fullStdout = full.results[0].stdout || '';
+  assert.ok(fullStdout.length > 4000, 'fullOutput should keep a larger tail');
+  assert.ok(fullStdout.includes('END_MARKER_Z'), 'fullOutput tail must keep the END of output');
+}
+
 console.log('Check-command smoke tests passed.');
