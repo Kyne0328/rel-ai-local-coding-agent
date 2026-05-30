@@ -170,7 +170,7 @@ test("makeDefaultWorkflowConfig returns canonical defaults", () => {
   const def = makeDefaultWorkflowConfig();
   assert.equal(def.mode, "standard");
   assert.equal(def.prepared.backup, true);
-  assert.equal(def.prepared.requireCleanGit, true);
+  assert.equal(def.prepared.requireCleanGit, false);
   assert.equal(def.prepared.clearMissingDefault, false);
   assert.equal(def.prepared.maxUpdateBytes, 2 * 1024 * 1024);
   assert.equal(def.prepared.maxBundleBytes, 250 * 1024 * 1024);

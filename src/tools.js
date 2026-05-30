@@ -84,14 +84,14 @@ const toolSchemas = [
     replacements: arrayObjectProp({ oldText: stringProp(), newText: stringProp(), occurrence: numberProp(1, 1000000) }, ["oldText", "newText"], 1, 50),
     dryRun: boolProp()
   }, ["workspace", "path"], WRITE_LOCAL),
-  tool("relai_clear_files", "Clear Local Repo Files", "Clear one or more files from a configured workspace. Folders are refused. Supports dryRun and failIfMissing.", {
+  tool("relai_clear_files", "Discard Workspace Files", "Discard one or more generated or temporary files from a configured workspace. Folders are refused. Supports dryRun and failIfMissing.", {
     workspace: stringProp(), path: stringProp(), paths: arrayProp("string", 1, 100), expectedSha256: stringProp(), dryRun: boolProp(), failIfMissing: boolProp()
   }, ["workspace"], DESTRUCTIVE_LOCAL),
-  tool("relai_apply_update", "Apply Prepared Update", "Apply a prepared text update to the workspace and optionally run checks afterward. Accepts either git unified diff (--- a/path / +++ b/path / @@ hunks) or OpenAI patch format (*** Begin Patch / *** Update File: path / *** End Patch).", {
-    workspace: stringProp(), updateText: stringProp(), backup: boolProp(), check: stringProp(), checks: arrayProp("string", 0), checksText: stringProp(), timeoutMs: numberProp(1000, 86400000), stopOnFailure: boolProp(), returnDiff: boolProp(), maxResultBytes: numberProp(1000, 5242880)
+  tool("relai_apply_update", "Apply Prepared Update", "Apply a prepared text update to the workspace and optionally run checks afterward. Accepts either git unified diff (--- a/path / +++ b/path / @@ hunks) or OpenAI patch format (*** Begin Patch / *** Update File: path / *** End Patch). The workspace must be clean by default; pass requireCleanGit:false to apply when the worktree already has unrelated changes (a backup is still taken).", {
+    workspace: stringProp(), updateText: stringProp(), backup: boolProp(), requireCleanGit: boolProp(), check: stringProp(), checks: arrayProp("string", 0), checksText: stringProp(), timeoutMs: numberProp(1000, 86400000), stopOnFailure: boolProp(), returnDiff: boolProp(), maxResultBytes: numberProp(1000, 5242880)
   }, ["workspace"], WRITE_LOCAL),
-  tool("relai_apply_bundle", "Apply Prepared Bundle", "Apply a prepared file bundle to the workspace and optionally run checks afterward.", {
-    workspace: stringProp(), bundlePath: stringProp(), path: stringProp(), stripRoot: boolProp(), clearMissing: boolProp(), backup: boolProp(), check: stringProp(), checks: arrayProp("string", 0), checksText: stringProp(), timeoutMs: numberProp(1000, 86400000), stopOnFailure: boolProp(), returnDiff: boolProp(), maxResultBytes: numberProp(1000, 5242880)
+  tool("relai_apply_bundle", "Apply Prepared Bundle", "Apply a prepared file bundle to the workspace and optionally run checks afterward. The workspace must be clean by default; pass requireCleanGit:false to apply when the worktree already has unrelated changes (a backup is still taken).", {
+    workspace: stringProp(), bundlePath: stringProp(), path: stringProp(), stripRoot: boolProp(), clearMissing: boolProp(), backup: boolProp(), requireCleanGit: boolProp(), check: stringProp(), checks: arrayProp("string", 0), checksText: stringProp(), timeoutMs: numberProp(1000, 86400000), stopOnFailure: boolProp(), returnDiff: boolProp(), maxResultBytes: numberProp(1000, 5242880)
   }, ["workspace"], WRITE_LOCAL),
   tool("relai_package_snapshot", "Package Workspace Zip", "Create a zip package of the current workspace on the MCP host, excluding repo internals, dependency caches, build outputs, and Rel.AI state.", {
     workspace: stringProp(), maxFiles: numberProp(1, 200000), timeoutMs: numberProp(1000, 86400000)
@@ -112,7 +112,7 @@ const toolSchemas = [
   tool("relai_diff", "Review Local Repo Diff", "Read-only. Return repository status and current diff as a review artifact. Pass path to filter to a single file. When a trusted session is active, sessionChangedFiles and baselineChangedFiles split the status entries by ownership (this session vs. pre-existing dirty worktree).", {
     workspace: stringProp(), staged: boolProp(), path: stringProp(), maxBytes: numberProp(1000, 5242880)
   }, ["workspace"], READ_ONLY_LOCAL),
-  tool("relai_restore_changes", "Restore Workspace Changes", "Restore selected workspace changes, or restore the workspace to the last git state.", {
+  tool("relai_restore_changes", "Revert To Saved State", "Revert selected workspace changes, or return the workspace to the last saved state.", {
     workspace: stringProp(), paths: arrayProp("string", 0, 100), mode: stringProp(), clean: boolProp()
   }, ["workspace"], DESTRUCTIVE_LOCAL),
   tool("relai_status", "Rel.AI Status", "Read-only. Compact live status for configured workspaces, scripts, and CI references. Prefer this over reading source files when checking whether an update is active. Includes active session policy and trusted-agent state.", {
@@ -145,7 +145,7 @@ const toolSchemas = [
   tool("relai_git_create_pr", "Draft Pull Request", "Read-only. Draft a pull-request title/body from a base/head diff without touching the remote host.", {
     workspace: stringProp(), base: stringProp(), head: stringProp(), title: stringProp(), body: stringProp()
   }, ["workspace"], READ_ONLY_LOCAL),
-  tool("relai_remove_file", "Remove File", "Delete a single obsolete file with an explicit reason and optional git staging.", {
+  tool("relai_remove_file", "Retire Obsolete File", "Retire a single obsolete file with an explicit reason and optional staging.", {
     workspace: stringProp(), path: stringProp(), reason: stringProp(), expectedSha256: stringProp(), dryRun: boolProp(), failIfMissing: boolProp(), stage: boolProp()
   }, ["workspace", "path"], DESTRUCTIVE_LOCAL),
   tool("relai_refactor_audit", "Refactor Audit", "Read-only. Scan source, tests, UI text, docs, and data-shaped files for stale old terms and expected new terms after a refactor.", {

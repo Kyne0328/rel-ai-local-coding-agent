@@ -1177,7 +1177,7 @@ function workflowSummary(config) {
   return {
     mode: wf.mode,
     prepared: {
-      requireCleanGit: preparedFlag(config, "requireCleanGit", true),
+      requireCleanGit: preparedFlag(config, "requireCleanGit", false),
       backup: preparedFlag(config, "backup", true),
       clearMissingDefault: preparedFlag(config, "clearMissingDefault", false),
       maxUpdateBytes: preparedNumber(config, "maxUpdateBytes", DEFAULT_AGGRESSIVE_MAX_PATCH_BYTES),
@@ -1229,7 +1229,7 @@ async function gitStatusShort(workspace, config) {
 }
 
 async function requireCleanGitIfConfigured(workspace, config, args) {
-  const required = args.requireCleanGit == null ? preparedFlag(config, "requireCleanGit", true) : Boolean(args.requireCleanGit);
+  const required = args.requireCleanGit == null ? preparedFlag(config, "requireCleanGit", false) : Boolean(args.requireCleanGit);
   if (!required) return;
   const status = await gitStatusShort(workspace, config);
   if (status.trim()) throw new Error(`Workspace '${workspace.alias}' is not clean.

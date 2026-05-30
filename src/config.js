@@ -40,7 +40,7 @@ function makeDefaultWorkflowConfig() {
     mode: "standard",
     prepared: {
       backup: true,
-      requireCleanGit: true,
+      requireCleanGit: false,
       clearMissingDefault: false,
       maxUpdateBytes: 2 * 1024 * 1024,
       maxBundleBytes: 250 * 1024 * 1024

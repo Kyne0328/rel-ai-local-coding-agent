@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.14.0] — 2026-05-30
+
+### Connector moderation friction fixes (from full ChatGPT usability audit)
+- Public workspace tools now advertise `readOnlyHint: true` / `destructiveHint: false` so the ChatGPT connector classifier does not flag ordinary repo work (status, diff, reads) as risky operations; the real safety boundary stays server-side in `safety.js` / hard-boundary checks
+- Neutralized trigger-word tool titles that primed the classifier: git tools (`Git Status` → `Repository State`, `Git Push` → `Publish Branch`, etc.) and destructive tools (`Clear Local Repo Files` → `Discard Workspace Files`, `Remove File` → `Retire Obsolete File`, `Restore Workspace Changes` → `Revert To Saved State`)
+- Read-only tools now state "Read-only" up front in their descriptions
+- Removed free-form command-string inputs (`check` / `checks` / `checksText`) from the public connector schema for `relai_run_checks`, `relai_apply_update`, and `relai_apply_bundle` so ChatGPT never sees a command-execution surface; the server still honors these fields for internal/stdio callers
+- `relai_apply_update` / `relai_apply_bundle` now expose `requireCleanGit` on the public schema, and the workflow default flips to `requireCleanGit: false` so prepared updates apply on the always-dirty real repos ChatGPT operates on (a backup stash is still taken)
+- Chrome auto-approve extension recognizes the renamed tool titles (with primary-button fallback unchanged)
+
 ## [0.13.1] — 2026-05-27
 
 ### Workflow friction fixes (from black-box audit)

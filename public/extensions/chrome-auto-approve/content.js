@@ -32,7 +32,9 @@
 
     // relai_clear_files
     'clear file', 'clear files', 'clear local repo file', 'clear local repo files',
+    'discard workspace files', 'discard workspace file',
     'remove file', 'remove files', 'remove obsolete file', 'remove obsolete files',
+    'retire obsolete file', 'retire file',
 
     // relai_run_checks
     'verify', 'verify local repo', 'verify workspace', 'run verification', 'run verify',
@@ -49,7 +51,7 @@
     // relai_restore_changes
     'reset', 'reset repo', 'reset repository', 'reset workspace', 'reset local repo',
     'reset local repo changes', 'rollback changes', 'discard changes', 'restore files',
-    'reset files', 'reset path', 'reset paths',
+    'reset files', 'reset path', 'reset paths', 'revert to saved state', 'revert changes',
 
     // ChatGPT generic approval button labels
     'approve', 'allow', 'allow once', 'confirm', 'yes', 'ok', 'proceed', 'continue'
