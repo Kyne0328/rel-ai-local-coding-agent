@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.7] — 2026-06-04
+
+### `relai_apply_update` no-op reports `changedFiles:[]` (from a follow-up ChatGPT audit)
+- A unified-diff patch that applied cleanly but changed nothing (e.g. a `-same/+same` hunk) still listed the file in `changedFiles`. Cause: `changedFiles` was set to every path the patch *touched* whenever `git apply` succeeded, with no content comparison. It now hashes each touched path before and after apply and reports only paths whose contents actually changed — so a semantic no-op returns `changedFiles:[]` while `touchedPaths` still lists what the patch referenced. (The structured OpenAI-patch path already compared old/new text; this aligns the unified-diff path with it.)
+
+Bump root/electron/extension/status-UI/lockfiles to 0.14.7.
+
 ## [0.14.6] — 2026-06-04
 
 ### `relai_status` reports the real connector version (from a follow-up ChatGPT audit)
