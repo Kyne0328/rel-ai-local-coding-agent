@@ -460,7 +460,7 @@ function relaiStatus(config, args = {}) {
     toolGroups: {
       workspace: PUBLIC_HTTP_TOOL_NAMES,
       git: BRIDGE_TOOL_NAMES.filter((name) => name.startsWith("relai_git_")),
-      audit: ["relai_refactor_audit", "relai_session_summary", "relai_diff", "relai_git_status"],
+      audit: ["relai_refactor_audit", "relai_diff", "relai_git_status"],
       cleanup: ["relai_clear_files", "relai_remove_file", "relai_restore_changes"],
       internal: BRIDGE_TOOL_NAMES.filter((name) => !PUBLIC_HTTP_TOOL_NAMES.includes(name))
     },

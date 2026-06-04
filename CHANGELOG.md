@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.14.10] — 2026-06-04
+
+### Cleanup-by-path for untracked files + tool-group metadata fix (from a follow-up ChatGPT audit)
+- `relai_restore_changes` could not clean an **untracked** disposable file by path: paths-mode ran only `git restore`, which knows tracked paths only, so an untracked file failed with a pathspec error (a recurring audit cleanup pain). Paths-mode now honors `clean: true` — it additionally runs `git clean -fd` scoped to the given paths and treats the restore pathspec-miss as non-fatal when clean handled it. So `clean: true` + `paths` reverts tracked edits **and** removes untracked files; without `clean` the tracked-only behavior is unchanged
+- `relai_status` / `relai_feature_probe` tool grouping: the internal-only `relai_session_summary` was hard-listed in `toolGroups.audit`, so it appeared under both `audit` and `internal`. It is removed from the public `audit` group; internal tools now appear only under `toolGroups.internal`
+- Regression tests added: git-workflow smoke covers `clean: true` removing an untracked file (and tracked restore still working); the ChatGPT compat smoke asserts `relai_session_summary` is absent from `toolGroups.audit` and present under `toolGroups.internal`
+
+Bump root/electron/extension/status-UI/lockfiles to 0.14.10.
+
 ## [0.14.9] — 2026-06-04
 
 ### Multi-tab auto-approve coordination + a snapshot-shape regression fix

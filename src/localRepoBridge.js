@@ -1092,7 +1092,18 @@ async function relaiReset(workspace, config, args = {}) {
   if (paths.length > 0) {
     const safePaths = paths.map((p) => resolveSafePath(workspace.path, p).relativePath);
     const restore = await runProcess("git", ["restore", "--", ...safePaths], { cwd: workspace.path, timeout: 60000 }, config);
-    return { ok: restore.exitCode === 0, workspace: workspace.alias, mode: "paths", paths: safePaths, ...summarizeCommand(restore) };
+    // git restore only knows TRACKED paths, so an untracked disposable file makes it
+    // exit non-zero with a pathspec error. With clean:true, also remove untracked
+    // matches via git clean and treat that restore pathspec-miss as non-fatal — so
+    // clean:true + paths can revert tracked edits AND delete untracked files.
+    let clean = null;
+    if (args.clean) clean = await runProcess("git", ["clean", "-fd", "--", ...safePaths], { cwd: workspace.path, timeout: 60000 }, config);
+    const restorePathspecMiss = restore.exitCode !== 0 && /did not match any file|pathspec/i.test(restore.stderr || "");
+    const restoreOk = restore.exitCode === 0 || (Boolean(args.clean) && restorePathspecMiss);
+    const cleanOk = !clean || clean.exitCode === 0;
+    // ok is computed last so the spread summarizeCommand(restore).ok (which reflects
+    // only the restore step) cannot override the combined restore+clean result.
+    return { workspace: workspace.alias, mode: "paths", paths: safePaths, ...summarizeCommand(restore), ...(clean ? { clean: summarizeCommand(clean) } : {}), ok: restoreOk && cleanOk };
   }
   if (mode !== "hard") throw new Error("relai_restore_changes requires paths, or mode='hard'.");
   const reset = await runProcess("git", ["reset", "--hard"], { cwd: workspace.path, timeout: 60000 }, config);

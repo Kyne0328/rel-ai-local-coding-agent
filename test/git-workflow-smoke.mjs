@@ -11,7 +11,8 @@ const {
   relaiGitCommit,
   relaiGitPush,
   relaiGitMergeBranch,
-  relaiGitMergeRemoteBranchesPlan
+  relaiGitMergeRemoteBranchesPlan,
+  relaiReset
 } = require('../src/localRepoBridge.js');
 
 function makeRepo() {
@@ -85,6 +86,30 @@ assert.equal(mergeNoop.ok, true);
 assert.equal(mergeNoop.dryRun, true);
 assert.ok(/up to date/i.test(JSON.stringify(mergeNoop.merge)));
 assert.equal(mergeNoop.abort, undefined);
+
+// relai_restore_changes paths-mode: clean:true must remove an UNTRACKED disposable
+// file (git restore alone cannot — it only knows tracked paths). Regression guard for
+// the recurring audit finding that cleanup-by-path failed on untracked files.
+fs.mkdirSync(path.join(workspace.path, 'tmp'), { recursive: true });
+const untrackedRel = 'tmp/restore-untracked.txt';
+fs.writeFileSync(path.join(workspace.path, untrackedRel), 'disposable\n');
+const restoreUntracked = await relaiReset(workspace, config, { paths: [untrackedRel], clean: true });
+assert.equal(restoreUntracked.ok, true, 'clean:true should remove untracked file by path');
+assert.equal(fs.existsSync(path.join(workspace.path, untrackedRel)), false, 'untracked file should be gone');
+
+// Without clean:true, an untracked path is still a no-match failure (git restore is
+// tracked-only) — unchanged behavior.
+fs.writeFileSync(path.join(workspace.path, untrackedRel), 'disposable again\n');
+const restoreNoClean = await relaiReset(workspace, config, { paths: [untrackedRel] });
+assert.equal(restoreNoClean.ok, false, 'untracked restore without clean still fails');
+fs.rmSync(path.join(workspace.path, untrackedRel), { force: true });
+
+// Tracked-modified file: restore reverts it (regression: paths-mode still works).
+fs.writeFileSync(path.join(workspace.path, 'README.md'), '# Git smoke\nlocal edit\n');
+const restoreTracked = await relaiReset(workspace, config, { paths: ['README.md'] });
+assert.equal(restoreTracked.ok, true, 'tracked file restore should succeed');
+const revertedReadme = fs.readFileSync(path.join(workspace.path, 'README.md'), 'utf8').replace(/\r\n/g, '\n');
+assert.equal(revertedReadme, '# Git smoke\n', 'README reverted');
 
 fs.rmSync(root, { recursive: true, force: true });
 console.log('Git workflow smoke test passed.');

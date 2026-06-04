@@ -150,6 +150,19 @@ try {
   if (!staleSnapshot.result.isError) throw new Error('relai_snapshot_archive should be a stale-tool error');
   if (!/relai_package_snapshot/.test(staleSnapshot.result.content[0].text)) throw new Error('relai_snapshot_archive error should mention relai_package_snapshot');
 
+  // relai_status toolGroups: internal-only tools must NOT leak into a public group
+  // (relai_session_summary previously appeared under both audit and internal).
+  send(16, 'tools/call', { name: 'relai_status', arguments: { workspace: 'repo' } });
+  const statusRes = await waitFor(16);
+  const statusPayload = JSON.parse(statusRes.result.content[0].text);
+  if (!statusPayload.toolGroups) throw new Error('relai_status should return toolGroups');
+  if (statusPayload.toolGroups.audit.includes('relai_session_summary')) {
+    throw new Error('relai_session_summary is internal and must not appear in toolGroups.audit');
+  }
+  if (!statusPayload.toolGroups.internal.includes('relai_session_summary')) {
+    throw new Error('relai_session_summary should appear under toolGroups.internal');
+  }
+
   fs.rmSync(path.join(root, 'tmp-relai-bridge.txt'), { force: true });
   fs.rmSync(path.join(root, 'tmp-relai-replace.txt'), { force: true });
 
