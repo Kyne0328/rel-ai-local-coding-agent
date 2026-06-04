@@ -197,4 +197,33 @@ test("workflow.prepared canonical fields pass through", () => {
   assert.equal(result.prepared.maxBundleBytes, 100 * 1024 * 1024);
 });
 
+test("configEditor clear removes a workspace whose path no longer exists", () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "relai-cfg-"));
+  const tmpConfig = path.join(tmpDir, "config.json");
+  const prev = process.env.REL_AI_MCP_CONFIG;
+  process.env.REL_AI_MCP_CONFIG = tmpConfig;
+  try {
+    fs.writeFileSync(tmpConfig, JSON.stringify({ trustedLocalAgent: true, workspaces: { broken: { path: path.join(tmpDir, "does-not-exist") } } }));
+    const { updateWorkspace } = require(path.join(__dirname, "..", "src", "configEditor.js"));
+    const current = JSON.parse(fs.readFileSync(tmpConfig, "utf8"));
+    const result = updateWorkspace(current, { action: "clear", alias: "broken", confirmClear: true });
+    assert.equal(result.ok, true);
+    const after = JSON.parse(fs.readFileSync(tmpConfig, "utf8"));
+    assert.equal(after.workspaces.broken, undefined);
+  } finally {
+    if (prev == null) delete process.env.REL_AI_MCP_CONFIG; else process.env.REL_AI_MCP_CONFIG = prev;
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("release notes are read from CHANGELOG, not a hardcoded version", () => {
+  const { getReleaseNotes } = require(path.join(__dirname, "..", "src", "releaseNotes.js"));
+  const notes = getReleaseNotes();
+  assert.ok(notes.version && notes.version.length > 0, "release notes should carry a version");
+  assert.notEqual(notes.version, "0.13.0", "release notes must not be the old hardcoded 0.13.0");
+  assert.ok(Array.isArray(notes.bullets), "release notes should have bullets array");
+});
+
 console.log(`\nWorkflow config normalization tests passed. (${passed} tests)`);

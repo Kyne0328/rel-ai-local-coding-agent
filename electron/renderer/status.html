@@ -54,10 +54,7 @@
   .header-left { display: flex; align-items: center; gap: 8px; }
   .brand-badge {
     width: 22px; height: 22px; border-radius: 6px;
-    background: var(--grad-accent);
-    display: grid; place-items: center;
-    font-size: 11px; font-weight: 800; color: #fff; letter-spacing: -.02em;
-    box-shadow: var(--glow-accent);
+    object-fit: contain; display: block;
   }
   .header-title { font-weight: 700; font-size: 14px; letter-spacing: -.01em; }
   .header-right { display: flex; align-items: center; gap: 8px; }
@@ -129,11 +126,11 @@
 <body>
 <div class="header">
   <div class="header-left">
-    <span class="brand-badge">R</span>
+    <img class="brand-badge" src="relai-logo.png" alt="Rel.AI MCP">
     <span class="header-title">Rel.AI MCP</span>
   </div>
   <div class="header-right">
-    <span class="version" id="appVersion">v0.15.1</span>
+    <span class="version" id="appVersion">v0.15.2</span>
     <div class="status-dot" id="headerDot"></div>
   </div>
 </div>

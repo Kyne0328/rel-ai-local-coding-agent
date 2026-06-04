@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.15.2] — 2026-06-04
+
+### Clear a broken workspace, dynamic "What's new", unified logo
+- **A workspace with a missing path can now be cleared.** `relai_clear`/Clear failed with `Workspace path does not exist` because the config editor had no `clear` action and fell through to `upsert`, which validates the path. `clear` is now handled as a removal alongside `delete`/`remove` and never touches the path — so an entry whose folder is gone is removable again.
+- **"What's new" is read from CHANGELOG.md** instead of a constant that was frozen at v0.13.0. `getReleaseNotes()` parses the latest `## [version]` block (headline + top-level bullets, markdown stripped) and falls back gracefully if the file can't be read.
+- **Electron launcher uses the dashboard logo.** The launcher status window and setup wizard now show the real `relai-logo.png` (same asset the dashboard sidebar uses) instead of an "R" placeholder badge / link glyph, and the Windows build icon is generated from the 512px logo (`build/icon.png`).
+
+Bump root/electron/extension/status-UI/lockfiles to 0.15.2.
+
 ## [0.15.1] — 2026-06-04
 
 ### Workspace management QOL: fix a broken workspace path without deleting it

@@ -84,10 +84,9 @@
   .summary-box { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--radius-md); padding: 4px 14px; margin-bottom: 20px; }
   .welcome-icon {
     width: 56px; height: 56px; margin: 16px auto 16px; border-radius: 16px;
-    background: var(--grad-accent); display: grid; place-items: center;
-    box-shadow: var(--glow-accent);
+    display: grid; place-items: center;
   }
-  .welcome-icon svg { width: 28px; height: 28px; stroke: #fff; }
+  .welcome-icon img { width: 56px; height: 56px; object-fit: contain; display: block; }
   .welcome-center { text-align: center; }
 </style>
 </head>
@@ -103,11 +102,7 @@
 
   <div class="step active" id="step1">
     <div class="welcome-icon">
-      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M9 17H7A5 5 0 0 1 7 7h2"></path>
-        <path d="M15 7h2a5 5 0 0 1 0 10h-2"></path>
-        <line x1="8" y1="12" x2="16" y2="12"></line>
-      </svg>
+      <img src="relai-logo.png" alt="Rel.AI MCP">
     </div>
     <div class="welcome-center">
       <h1>Rel.AI MCP Launcher</h1>

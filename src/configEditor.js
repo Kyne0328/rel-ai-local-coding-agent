@@ -80,8 +80,11 @@ function updateWorkspace(current, payload = {}) {
   const next = clone(current);
   if (!next.workspaces || typeof next.workspaces !== "object") next.workspaces = {};
 
-  if (action === "delete" || action === "remove") {
-    if (!payload.confirmDelete) throw new Error("Workspace removal requires confirmDelete=true.");
+  // clear == delete == remove: drop the config entry. This must NOT validate the
+  // workspace path — the whole point of clearing is often to remove an entry whose
+  // path no longer exists (otherwise a broken workspace would be unremovable).
+  if (action === "delete" || action === "remove" || action === "clear") {
+    if (!payload.confirmDelete && !payload.confirmClear) throw new Error("Workspace removal requires confirmDelete=true (or confirmClear=true).");
     if (!next.workspaces[alias]) throw new Error(`Workspace '${alias}' is not configured.`);
     delete next.workspaces[alias];
     const normalized = writeConfig(next);

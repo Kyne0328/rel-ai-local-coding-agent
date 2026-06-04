@@ -1,6 +1,6 @@
 {
   "name": "rel-ai-mcp-launcher",
-  "version": "0.15.1",
+  "version": "0.15.2",
   "private": true,
   "main": "main.js",
   "devDependencies": {
@@ -53,7 +53,7 @@
         "nsis",
         "portable"
       ],
-      "icon": "build/icon.ico"
+      "icon": "build/icon.png"
     },
     "nsis": {
       "oneClick": true,
