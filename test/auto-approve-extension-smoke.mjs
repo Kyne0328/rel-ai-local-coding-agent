@@ -47,9 +47,36 @@ assert.equal(content.includes('chrome.runtime.sendMessage(payload).catch'), fals
 assert.doesNotMatch(content, /'edit',/);
 assert.doesNotThrow(() => new Function(content));
 
+// --- Regression: single activation per approval (no duplicate tool submissions) ---
+// trustedClick must dispatch ONLY the press half of the pointer/mouse sequence. A
+// pointerup/mouseup here would fire a button that activates on pointer-up AND again
+// on the native el.click(), submitting the same approval twice. Lock the dispatch
+// list to press-only and require exactly one el.click() activation.
+const dispatchMatch = content.match(/for \(const type of (\[[^\]]*\])\)\s*\{\s*el\.dispatchEvent/);
+assert.ok(dispatchMatch, 'trustedClick should have a pointer/mouse dispatch loop');
+assert.equal(
+  dispatchMatch[1],
+  "['pointerdown', 'mousedown']",
+  'trustedClick must dispatch only press events (pointerdown/mousedown); pointerup/mouseup double-activate the button'
+);
+assert.equal(
+  (content.match(/try \{ el\.click\(\); \}/g) || []).length,
+  1,
+  'trustedClick must call el.click() exactly once (the single activation)'
+);
+
+// --- Regression: cross-tab arbitration (no duplicate approvals across ChatGPT tabs) ---
+// The content script must claim a request signature from the background worker before
+// clicking, and guard against overlapping async scans.
+assert.match(content, /function claimApproval/, 'content.js should claim approvals before clicking');
+assert.match(content, /'relai-claim-approval'/, 'content.js should send the cross-tab claim message');
+assert.match(content, /scanInFlight/, 'content.js should guard against overlapping async scans');
+
 const background = readFileSync(path.join(extDir, 'background.js'), 'utf8');
 assert.match(background, /chrome\.alarms/);
 assert.match(background, /api\/auto-approve\/settings/);
+assert.match(background, /'relai-claim-approval'/, 'background.js should arbitrate cross-tab approval claims');
+assert.match(background, /granted/, 'background.js claim handler should grant/deny');
 assert.doesNotThrow(() => new Function('chrome', background));
 
 const docs = readFileSync(path.join(root, 'docs', 'AUTO_APPROVE_EXTENSION.md'), 'utf8');

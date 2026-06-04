@@ -673,14 +673,19 @@ async function relaiSnapshotArchive(workspace, config, args = {}) {
   const zipped = await createZipArchive(staging, archivePath, config, args);
   const ok = zipped.ok === true;
   appendOperation(config, workspace, { id: operationId, type: "snapshot_archive", ok, paths: [], results: [{ operation: "snapshotArchive", archivePath, files: copied.files.length, skipped: copied.skipped.length }] });
-  const LIST_SAMPLE = 10;
-  const boundList = (list) => ({
-    count: list.length,
-    ...(list.length > LIST_SAMPLE * 2
-      ? { sample: { first: list.slice(0, LIST_SAMPLE), last: list.slice(-LIST_SAMPLE), truncated: true } }
-      : { sample: { first: list, truncated: false } })
-  });
-  const copiedSummary = { fileCount: copied.files.length, files: boundList(copied.files), skipped: boundList(copied.skipped) };
+  // Keep files/skipped as ARRAYS (consumers and tests iterate them, e.g. .map(f => f.path))
+  // but cap their length so a huge repo cannot flood the response; siblings carry the
+  // true totals and a truncated flag.
+  const LIST_CAP = 50;
+  const capList = (list) => (list.length > LIST_CAP ? list.slice(0, LIST_CAP) : list);
+  const copiedSummary = {
+    fileCount: copied.files.length,
+    files: capList(copied.files),
+    filesTruncated: copied.files.length > LIST_CAP,
+    skippedCount: copied.skipped.length,
+    skipped: capList(copied.skipped),
+    skippedTruncated: copied.skipped.length > LIST_CAP
+  };
   return { ok, workspace: workspace.alias, operationId, operation: "snapshotArchive", archivePath, copied: copiedSummary, zip: zipped, bytes: fs.existsSync(archivePath) ? fs.statSync(archivePath).size : 0, note: "Archive is stored on the MCP host. Use relai_apply_bundle with bundlePath to overlay it onto a workspace, or retrieve it from this local path." };
 }
 

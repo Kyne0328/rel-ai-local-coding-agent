@@ -22,6 +22,14 @@ const CONN_TTL_MS = 60000;
 let connCache = { at: 0, ok: false };
 function invalidateConnCache() { connCache = { at: 0, ok: false }; }
 
+// Cross-tab approval arbiter. With ChatGPT open in several tabs, the same request
+// can surface in more than one tab; each tab's content script dedups within itself,
+// but only this single shared service worker can stop two DIFFERENT tabs approving
+// the same request. A tab must win a claim here (first claim per signature inside the
+// window) before it clicks. The window is refreshed while the request persists.
+const claimedApprovals = new Map(); // signature -> last-claim timestamp
+const CLAIM_TTL_MS = 8000;
+
 function ensureAlarms() {
   chrome.alarms.create('relai-scan', { periodInMinutes: SCAN_PERIOD_MIN });
   chrome.alarms.create('relai-heartbeat', { periodInMinutes: HEARTBEAT_PERIOD_MIN });
@@ -49,6 +57,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'relai-scan-now') {
     invalidateConnCache();
     scanChatGptTabs().then((tabs) => sendResponse({ ok: true, tabs })).catch((err) => sendResponse({ ok: false, error: String(err && err.message || err) }));
+    return true;
+  }
+  if (message.type === 'relai-claim-approval') {
+    const sig = String(message.signature || '');
+    const now = Date.now();
+    for (const [s, ts] of claimedApprovals) {
+      if (now - ts > CLAIM_TTL_MS) claimedApprovals.delete(s);
+    }
+    if (!sig) { sendResponse({ granted: true }); return true; }
+    const alreadyClaimed = claimedApprovals.has(sig);
+    claimedApprovals.set(sig, now); // refresh window whether or not we grant
+    sendResponse({ granted: !alreadyClaimed });
     return true;
   }
   if (message.type === 'relai-approved') {

@@ -80,6 +80,10 @@
   // (different text) is unaffected.
   const recentApprovals = new Map(); // signature -> last-seen timestamp
   const APPROVE_DEDUP_MS = 5000;
+  // Guards against overlapping async scans (poll + message + mutation can fire close
+  // together; the claim round-trip is async, so without this two scans could both
+  // pass the local dedup before either records its signature).
+  let scanInFlight = false;
 
   function approvalSignature(card) {
     // Whole-card text (tool name + args) identifies the request; cap length so a
@@ -87,12 +91,27 @@
     return compact(card.textContent || '').slice(0, 400);
   }
 
+  // Cross-tab arbitration: ask the background service worker (the one shared arbiter)
+  // to claim this request signature before clicking, so two ChatGPT tabs cannot both
+  // approve the same request. Fail-open — if the worker is unreachable, approve anyway
+  // so a single tab keeps working; the cross-tab guard only matters when tabs race.
+  async function claimApproval(signature) {
+    if (!signature) return true;
+    try {
+      if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.id || !chrome.runtime.sendMessage) return true;
+      const res = await chrome.runtime.sendMessage({ type: 'relai-claim-approval', signature });
+      return !res || res.granted !== false;
+    } catch (_) {
+      return true;
+    }
+  }
+
   try {
     if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
       chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         if (message && message.type === 'relai-auto-approve-scan') {
-          const count = safeScanAndApprove('message');
-          safeSendResponse(sendResponse, { ok: true, count });
+          // scan is async (cross-tab claim round-trip); reply once it resolves.
+          safeScanAndApprove('message').then((count) => safeSendResponse(sendResponse, { ok: true, count }));
           return true;
         }
         if (message && message.type === 'relai-heartbeat') {
@@ -248,9 +267,9 @@
 
 
 
-  function safeScanAndApprove(reason) {
+  async function safeScanAndApprove(reason) {
     try {
-      return scanAndApprove();
+      return await scanAndApprove();
     } catch (error) {
       reportContentError(`scan ${reason || ''}`.trim(), error);
       return 0;
@@ -307,7 +326,8 @@
     return text.includes('rel-ai-mcp') || text.includes('using tools comes with risks');
   }
 
-  function scanAndApprove() {
+  async function scanAndApprove() {
+    if (scanInFlight) return 0;
     const now = Date.now();
     if (now - lastClickAt < 450) return 0;
     const cards = findApprovalCards();
@@ -324,26 +344,38 @@
     for (const [sig, ts] of recentApprovals) {
       if (now - ts > APPROVE_DEDUP_MS) recentApprovals.delete(sig);
     }
-    let clicked = 0;
-    for (const card of cards) {
-      const button = findApprovalButton(card);
-      if (!button || clickedButtons.has(button)) continue;
-      const signature = approvalSignature(card);
-      if (signature && recentApprovals.has(signature)) {
-        // Same request still on screen (likely a re-render) — refresh its window so
-        // we keep skipping it until it is gone, and do not approve it again.
-        recentApprovals.set(signature, now);
-        continue;
+    scanInFlight = true;
+    try {
+      let clicked = 0;
+      for (const card of cards) {
+        const button = findApprovalButton(card);
+        if (!button || clickedButtons.has(button)) continue;
+        const signature = approvalSignature(card);
+        if (signature && recentApprovals.has(signature)) {
+          // Same request still on screen (likely a re-render) — refresh its window so
+          // we keep skipping it until it is gone, and do not approve it again.
+          recentApprovals.set(signature, now);
+          continue;
+        }
+        // Cross-tab claim before any local mutation: lose the claim => another tab
+        // owns this request, so skip it here (record locally so we stop retrying it).
+        const granted = await claimApproval(signature);
+        if (!granted) {
+          if (signature) recentApprovals.set(signature, now);
+          continue;
+        }
+        if (signature) recentApprovals.set(signature, now);
+        clickedButtons.add(button);
+        lastClickAt = Date.now();
+        trustedClick(button);
+        clicked += 1;
+        break;
       }
-      if (signature) recentApprovals.set(signature, now);
-      clickedButtons.add(button);
-      lastClickAt = Date.now();
-      trustedClick(button);
-      clicked += 1;
-      break;
+      if (clicked) safeSendRuntimeMessage({ type: 'relai-approved', count: clicked });
+      return clicked;
+    } finally {
+      scanInFlight = false;
     }
-    if (clicked) safeSendRuntimeMessage({ type: 'relai-approved', count: clicked });
-    return clicked;
   }
 
   function findApprovalCards() {

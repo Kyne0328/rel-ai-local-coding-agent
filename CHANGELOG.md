@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.14.9] — 2026-06-04
+
+### Multi-tab auto-approve coordination + a snapshot-shape regression fix
+- **Cross-tab duplicate approvals:** with ChatGPT open in more than one tab, each tab's content script deduped only within itself, so two tabs could both approve the same request. Approvals now pass through the background service worker — the one shared arbiter — which grants a request signature to the first tab that claims it (8s window) and denies the rest. Combined with the in-tab WeakSet/signature dedup and the single-activation `trustedClick`, a request is now approved exactly once across all tabs. The content scan is async (claim round-trip) and guarded by `scanInFlight` against overlapping poll/mutation/message scans. Fail-open: if the worker is unreachable, a single tab still approves
+- **Regression guard so this never silently returns:** the auto-approve smoke test now asserts `trustedClick` dispatches only the press half (`pointerdown`/`mousedown`) with exactly one `el.click()`, and that the cross-tab claim wiring is present in both content and background scripts
+- **`relai_package_snapshot` shape regression:** the 0.14.7 bounding turned `copied.files` / `copied.skipped` into summary objects, which broke consumers (and the prepared-update test) that iterate them as arrays of `{ path }`. They are arrays again — capped to 50 entries with sibling `fileCount` / `skippedCount` and `*Truncated` flags carrying the true totals
+
+Bump root/electron/extension/status-UI/lockfiles to 0.14.9.
+
 ## [0.14.8] — 2026-06-04
 
 ### Chrome auto-approve: stop the last duplicate-submission path in trustedClick
