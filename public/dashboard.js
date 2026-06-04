@@ -1,6 +1,6 @@
 import { setToken, getToken, fetchJson, DASHBOARD_DATA_URL } from '/ui/api.js';
 import { init as initStore, get as getStore } from '/ui/store.js';
-import { initRouter, currentSection } from '/ui/router.js';
+import { initRouter, currentSection, rerender } from '/ui/router.js';
 import { initEvents, startSSE, stopSSE, isLive, setPollCallback } from '/ui/events.js';
 import { mountHome } from '/ui/sections/home.js';
 import { initCommandPalette } from '/ui/components/command-palette.js';
@@ -64,14 +64,8 @@ async function boot() {
   const routeRoot = ensureRouteRoot();
   if (!routeRoot) return;
 
-  const sections = _sectionMap();
-  initRouter(routeRoot, sections);
-
-  const fresh = await fetchJson(DASHBOARD_DATA_URL);
-  if (fresh) {
-    initStore(fresh);
-    _renderCurrentSection(routeRoot, currentSection(), sections);
-  }
+  initRouter(routeRoot, getSections());
+  await _doRefresh();
 
   _wireTopControls();
   setPollCallback(_doRefresh);
@@ -97,7 +91,12 @@ async function boot() {
 
 }
 
-function _sectionMap() {
+let _sectionsCache = null;
+function getSections() {
+  return _sectionsCache || (_sectionsCache = _buildSectionMap());
+}
+
+function _buildSectionMap() {
   return {
     home:        (el) => mountHome(el, getStore()),
     workspaces:  (el) => import('/ui/sections/workspaces.js').then(m => m.mountWorkspaces(el, getStore())).catch(console.error),
@@ -126,19 +125,13 @@ function _wireTopControls() {
   if (refreshBtn) refreshBtn.onclick = _doRefresh;
 }
 
-function _renderCurrentSection(main, id, sections) {
-  const fn = sections[id] || sections.home;
-  if (main && fn) {
-    main.innerHTML = '';
-    fn(main);
-  }
-}
-
+// Single fetch-and-render path shared by boot, manual refresh, and the command
+// palette. Re-mounts the current section against fresh store state via the router.
 async function _doRefresh() {
   const data = await fetchJson(DASHBOARD_DATA_URL);
   if (data) {
     initStore(data);
-    _renderCurrentSection(ensureRouteRoot(), currentSection(), _sectionMap());
+    rerender();
   }
 }
 
@@ -150,13 +143,9 @@ function _toggleLive() {
   } else {
     initEvents(async (data) => {
       initStore(data);
-      const routeRoot = ensureRouteRoot();
       const id = currentSection();
-      if (!routeRoot) return;
-
-      const sections = _sectionMap();
-      if (Object.prototype.hasOwnProperty.call(sections, id)) {
-        _renderCurrentSection(routeRoot, id, sections);
+      if (Object.prototype.hasOwnProperty.call(getSections(), id)) {
+        rerender();
       }
 
       if (id === 'activity') {

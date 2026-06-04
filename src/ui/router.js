@@ -29,20 +29,32 @@ export function navigate(sectionId) {
   location.hash = '#' + sectionId;
 }
 
+// Force a re-mount of the current section, bypassing the routeKey guard in
+// _route. Used on data refresh / live updates, where the hash is unchanged but
+// the section must re-render against fresh store state.
+export function rerender() {
+  _mount(currentSection());
+}
+
 function _route() {
   const id = currentSection();
   const routeKey = currentRouteKey();
   if (routeKey === _currentRouteKey) return;
   _current = id;
   _currentRouteKey = routeKey;
+  _updateNavActive(id);
+  _mount(id);
+}
 
-  // Update nav active state
+function _updateNavActive(id) {
   document.querySelectorAll('.nav a, .mobile-nav a').forEach(a => {
     const href = a.getAttribute('href') || '';
     a.classList.toggle('active', href === '#' + id || (['settings', 'connector', 'diagnostics'].includes(id) && href === '#settings'));
   });
+}
 
-  // Mount section into route container only; persistent shell lives outside it.
+// Mount section into route container only; persistent shell lives outside it.
+function _mount(id) {
   if (!_container) return;
   _container.innerHTML = '';
   const mount = _sections[id] || _sections.home;
