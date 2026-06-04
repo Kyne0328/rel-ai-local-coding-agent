@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Rel.AI MCP Auto-Approve",
-  "version": "0.14.4",
+  "version": "0.14.5",
   "description": "Optional Chrome extension that can auto-approve Rel.AI MCP app requests on ChatGPT after explicit opt-in.",
   "author": "Kyne0328",
   "icons": {
@@ -25,6 +25,12 @@
       "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+      "js": ["keepalive.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
     }
   ]
 }

@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.14.5] — 2026-06-04
+
+### Fix three 0.14.4 regressions + a backup bug (from a follow-up ChatGPT audit on rel-ai-mcp)
+- `relai_browser` `check`: spawning `npm.cmd` directly failed on Windows with `spawn EINVAL` (Node refuses to spawn `.cmd` without a shell since 18.20/20.12). The named script now runs as `npm run <name>` through a shell; the check name is still validated against `package.json` scripts (no metacharacters), so nothing arbitrary reaches the shell
+- `relai_browser` HTTP/route mode no longer reports `ok:true` for an unreachable host. `ok` now requires an actual successful probe — `ok: exitCode===0 && probe present && probe.ok !== false` — and the response carries `reachable: true|false` explicitly
+- `relai_package_snapshot`: the 0.14.4 bounded-summary only capped the `skipped` list; the `files` list was still dumped in full and truncated the response. Both lists are now bounded to `count` + first/last sample
+- `relai_apply_update` / `relai_apply_bundle` prepared backup: `git stash push --include-untracked` *moved* changes away, deleting an untracked patch/overlay target before apply (a no-op patch on a newly-created file failed with "No such file or directory"). Backup now uses `git stash create` + `git stash store`, which records a recoverable stash entry **without disturbing the working tree**
+
+Bump root/electron/extension/status-UI/lockfiles to 0.14.5.
+
 ## [0.14.4] — 2026-06-04
 
 ### Fewer "blocked by OpenAI's safety checks" refusals on benign tools

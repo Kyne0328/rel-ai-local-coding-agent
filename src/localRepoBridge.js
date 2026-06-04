@@ -665,14 +665,14 @@ async function relaiSnapshotArchive(workspace, config, args = {}) {
   const zipped = await createZipArchive(staging, archivePath, config, args);
   const ok = zipped.ok === true;
   appendOperation(config, workspace, { id: operationId, type: "snapshot_archive", ok, paths: [], results: [{ operation: "snapshotArchive", archivePath, files: copied.files.length, skipped: copied.skipped.length }] });
-  const SKIPPED_SAMPLE = 10;
-  const skippedSummary = {
-    count: copied.skipped.length,
-    ...(copied.skipped.length > SKIPPED_SAMPLE * 2
-      ? { sample: { first: copied.skipped.slice(0, SKIPPED_SAMPLE), last: copied.skipped.slice(-SKIPPED_SAMPLE), truncated: true } }
-      : { sample: { first: copied.skipped, truncated: false } })
-  };
-  const copiedSummary = { fileCount: copied.files.length, files: copied.files, skipped: skippedSummary };
+  const LIST_SAMPLE = 10;
+  const boundList = (list) => ({
+    count: list.length,
+    ...(list.length > LIST_SAMPLE * 2
+      ? { sample: { first: list.slice(0, LIST_SAMPLE), last: list.slice(-LIST_SAMPLE), truncated: true } }
+      : { sample: { first: list, truncated: false } })
+  });
+  const copiedSummary = { fileCount: copied.files.length, files: boundList(copied.files), skipped: boundList(copied.skipped) };
   return { ok, workspace: workspace.alias, operationId, operation: "snapshotArchive", archivePath, copied: copiedSummary, zip: zipped, bytes: fs.existsSync(archivePath) ? fs.statSync(archivePath).size : 0, note: "Archive is stored on the MCP host. Use relai_apply_bundle with bundlePath to overlay it onto a workspace, or retrieve it from this local path." };
 }
 
@@ -940,9 +940,14 @@ async function relaiBrowser(workspace, config, args = {}) {
         availableChecks: available
       };
     }
-    const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
-    const result = await runProcess(npmCommand, ["run", command], {
+    // command passed SAFE_BROWSER_CHECK_NAME above (no spaces/metacharacters), so it
+    // is safe to run through a shell. shell:true is required on Windows, where Node
+    // refuses to spawn npm.cmd directly (EINVAL) since 18.20/20.12.
+    const npmCommand = `npm run ${command}`;
+    const result = await runProcess(npmCommand, [], {
       cwd: workspace.path,
+      shell: true,
+      commandString: npmCommand,
       timeout: clampNumber(args.timeoutMs, 1000, 24 * 60 * 60 * 1000, 120000)
     }, config);
     return { ok: result.exitCode === 0, workspace: workspace.alias, mode: "check", check: command, ...summarizeCommand(result) };
@@ -963,13 +968,16 @@ async function relaiBrowser(workspace, config, args = {}) {
     mode: "http",
     url,
     ...(probe ? {
+      reachable: true,
       httpStatus: typeof probe.status === "number" ? probe.status : null,
       finalUrl: probe.url || url,
       responseBytes: typeof probe.bytes === "number" ? probe.bytes : null,
       title: probe.title || ""
     } : { reachable: false }),
     ...summarizeCommand(result),
-    ok: result.exitCode === 0
+    // Require an actual successful probe — never report ok:true for an
+    // unreachable host (no probe) or a non-2xx response (probe.ok === false).
+    ok: result.exitCode === 0 && !!probe && probe.ok !== false
   };
 }
 
@@ -1422,8 +1430,17 @@ async function makePreparedBackup(workspace, config, operationId, label) {
   const status = await gitStatusShort(workspace, config);
   if (!status.trim()) return { type: "none", reason: "workspace clean" };
   const message = `rel-ai-mcp prepared ${label} backup ${operationId}`;
-  const stash = await runProcess("git", ["stash", "push", "--include-untracked", "-m", message], { cwd: workspace.path, timeout: 120000 }, config);
-  return { type: "git-stash", message, ok: stash.exitCode === 0, ...summarizeCommand(stash) };
+  // Snapshot tracked changes WITHOUT disturbing the working tree: `stash create`
+  // builds a stash commit but leaves the tree intact, then `stash store` records it
+  // in the stash list for manual recovery. The previous `stash push --include-untracked`
+  // moved changes away — which deleted an untracked patch/overlay target before apply,
+  // so a no-op patch on a newly-created file failed with "No such file or directory".
+  const created = await runProcess("git", ["stash", "create", message], { cwd: workspace.path, timeout: 120000 }, config);
+  if (created.exitCode !== 0) return { type: "git-stash", message, ok: false, ...summarizeCommand(created) };
+  const sha = String(created.stdout || "").trim();
+  if (!sha) return { type: "none", reason: "no tracked changes to back up" };
+  const stored = await runProcess("git", ["stash", "store", "-m", message, sha], { cwd: workspace.path, timeout: 120000 }, config);
+  return { type: "git-stash", message, sha, ok: stored.exitCode === 0, ...summarizeCommand(stored) };
 }
 
 function tempStateDir(config, workspace, operationId, prefix) {
