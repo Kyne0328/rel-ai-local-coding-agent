@@ -102,7 +102,6 @@ function _render(container) {
   limits.body.appendChild(field('Max output bytes', numberControl(_draft.maxOutputBytes, (v) => { _draft.maxOutputBytes = v; _checkDirty(); }, { min: 10000, max: 20000000, width: '140px' }), 'Maximum validation output returned to ChatGPT. 2 MB is a safe default for test failures without flooding the chat.'));
 
   local.body.appendChild(field('Dashboard enabled', toggleControl(_draft.dashboardEnabled !== false, (v) => { _draft.dashboardEnabled = v; _checkDirty(); }), 'Controls this local dashboard only.'));
-  local.body.appendChild(field('Color theme', _themeToggle(), 'Stored only in this browser.'));
 
   grid.appendChild(bridge.el);
   grid.appendChild(workflow.el);
@@ -219,13 +218,3 @@ async function _save(container) {
   if (res && res.ok) await _loadAndRender(container);
 }
 
-function _themeToggle() {
-  const wrap = document.createElement('div');
-  wrap.style.cssText = 'display:flex;gap:8px;';
-  const dark = document.createElement('button'); dark.textContent = 'Dark'; dark.type = 'button';
-  const light = document.createElement('button'); light.textContent = 'Light'; light.type = 'button'; light.className = 'secondary';
-  dark.onclick = () => { localStorage.setItem('relai_theme', 'dark'); delete document.documentElement.dataset.theme; };
-  light.onclick = () => { localStorage.setItem('relai_theme', 'light'); document.documentElement.dataset.theme = 'light'; };
-  wrap.append(dark, light);
-  return wrap;
-}

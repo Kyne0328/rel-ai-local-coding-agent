@@ -1,5 +1,6 @@
 @layer tokens {
   :root {
+    color-scheme: dark;
     /* spacing */
     --space-1: 4px;  --space-2: 8px;   --space-3: 12px;
     --space-4: 16px; --space-5: 24px;  --space-6: 32px; --space-7: 48px;
@@ -16,61 +17,52 @@
     --track-snug:  -0.01em;
     --track-wide:   0.06em;
     /* radius */
-    --radius-sm: 6px; --radius-md: 10px; --radius-lg: 16px;
-    /* elevation — one rung; flat default */
+    --radius-sm: 6px; --radius-md: 10px; --radius-lg: 16px; --radius-xl: 20px;
+    /* motion */
+    --dur-fast: 120ms;
+    --dur:      200ms;
+    --dur-slow: 320ms;
+    --ease:     cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    /* elevation — layered depth for the dark surface ramp */
     --elev-flat: none;
-    --elev-1:    0 1px 2px rgba(0,0,0,.5);
+    --elev-1: 0 1px 2px rgba(0,0,0,.45);
+    --elev-2: 0 2px 4px rgba(0,0,0,.4), 0 8px 24px -8px rgba(0,0,0,.55);
+    --elev-3: 0 4px 8px rgba(0,0,0,.45), 0 20px 48px -12px rgba(2,6,16,.7);
     /* z-index */
     --z-overlay: 50; --z-modal: 60; --z-toast: 70;
-    /* semantic colors — dark default */
-    --bg: #070b13;
-    --surface:    #0b1220;
-    --surface-2:  #111827;
-    --surface-3:  #1a2540;
-    --text:       #e2e8f0;
-    --text-muted: #8892a4;
-    --text-dim:   #4a5568;
-    --line:       rgba(255,255,255,.08);
-    --line-soft:  rgba(154,173,212,.12);
+    /* semantic colors — dark only */
+    --bg: #060912;
+    --surface:    #0c1424;
+    --surface-2:  #131d31;
+    --surface-3:  #1d2a47;
+    --text:       #e8eef9;
+    --text-muted: #93a0b6;
+    --text-dim:   #5a677e;
+    --line:       rgba(148,176,224,.10);
+    --line-soft:  rgba(148,176,224,.14);
     --code:       #cfe0ff;
     /* single accent + status palette */
-    --blue:       #4ea1ff;
-    --blue-dim:   rgba(78,161,255,.15);
-    --green:      #47dd8a;
-    --green-dim:  rgba(71,221,138,.15);
+    --blue:       #5aa6ff;
+    --blue-dim:   rgba(90,166,255,.14);
+    --green:      #4fe09a;
+    --green-dim:  rgba(79,224,154,.14);
     --yellow:     #ffc24b;
-    --yellow-dim: rgba(255,194,75,.15);
-    --red:        #ff6680;
-    --red-dim:    rgba(255,102,128,.15);
+    --yellow-dim: rgba(255,194,75,.14);
+    --red:        #ff6f88;
+    --red-dim:    rgba(255,111,136,.14);
     --accent:     var(--blue);
     --accent-dim: var(--blue-dim);
-    --accent-strong: #173b73;
+    --accent-strong: #1d4a8c;
     --ring: var(--accent);
-  }
-  :root[data-theme="light"] {
-    color-scheme: light;
-    --bg:          #fafbfc;
-    --surface:     #ffffff;
-    --surface-2:   #f3f4f6;
-    --surface-3:   #e5edff;
-    --text:        #111827;
-    --text-muted:  #6b7280;
-    --text-dim:    #9ca3af;
-    --line:        rgba(0,0,0,.08);
-    --line-soft:   rgba(0,0,0,.06);
-    --code:        #1f2937;
-    --blue:        #2563eb;
-    --blue-dim:    rgba(37,99,235,.1);
-    --green:       #16a34a;
-    --green-dim:   rgba(22,163,74,.1);
-    --yellow:      #d97706;
-    --yellow-dim:  rgba(217,119,6,.1);
-    --red:         #dc2626;
-    --red-dim:     rgba(220,38,38,.1);
-    --accent:        var(--blue);
-    --accent-dim:    var(--blue-dim);
-    --accent-strong: #dbeafe;
-    --ring: var(--accent);
-    --elev-1: 0 1px 2px rgba(0,0,0,.08);
+    /* gradients & glow — the "evolve" depth layer */
+    --grad-surface: linear-gradient(180deg, rgba(255,255,255,.025), rgba(255,255,255,0) 70%);
+    --grad-accent:  linear-gradient(135deg, #5aa6ff, #3d7fe6);
+    --grad-app:     radial-gradient(1200px 600px at 80% -10%, rgba(90,166,255,.07), transparent 60%),
+                    radial-gradient(900px 500px at -10% 110%, rgba(79,224,154,.05), transparent 55%);
+    --glow-accent:  0 0 0 1px rgba(90,166,255,.35), 0 0 24px -4px rgba(90,166,255,.45);
+    --glow-green:   0 0 12px -2px rgba(79,224,154,.6);
+    --glow-yellow:  0 0 12px -2px rgba(255,194,75,.6);
+    --glow-red:     0 0 12px -2px rgba(255,111,136,.6);
   }
 }

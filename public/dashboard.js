@@ -20,9 +20,6 @@ const SETTINGS_SUBROUTES = [
   { id: 'diagnostics', label: 'Settings → Diagnostics' },
 ];
 
-const savedTheme = localStorage.getItem('relai_theme');
-if (savedTheme === 'light') document.documentElement.dataset.theme = 'light';
-
 const urlToken = new URLSearchParams(location.search).get('token') || '';
 const token = urlToken || sessionStorage.getItem('relai_dashboard_token') || '';
 if (token) setToken(token);

@@ -6,14 +6,33 @@
     font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
       "Segoe UI", Roboto, Arial, sans-serif;
     background: var(--bg);
+    background-image: var(--grad-app);
+    background-attachment: fixed;
     color: var(--text);
     font-size: var(--font-14);
     line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
   a { color: var(--accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
   button { cursor: pointer; border: none; background: none; font: inherit; }
   img, svg { display: block; }
+
+  ::selection { background: var(--accent-dim); color: var(--text); }
+
+  /* custom scrollbars — quiet until hovered */
+  * { scrollbar-width: thin; scrollbar-color: var(--surface-3) transparent; }
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb {
+    background: var(--surface-3);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    border-radius: 999px;
+  }
+  *::-webkit-scrollbar-thumb:hover { background: var(--text-dim); background-clip: padding-box; }
 }
 
 @layer base {
@@ -37,6 +56,17 @@
     text-decoration: none;
   }
   .skip-link:focus { top: var(--space-2); }
+
+  /* shared motion primitive — sections fade up on mount */
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes pulse-ring {
+    0%   { box-shadow: 0 0 0 0 var(--pulse-color, rgba(79,224,154,.5)); }
+    70%  { box-shadow: 0 0 0 6px rgba(0,0,0,0); }
+    100% { box-shadow: 0 0 0 0 rgba(0,0,0,0); }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

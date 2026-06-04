@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.0] — 2026-06-04
+
+### Dashboard + Electron UI revamp (dark-only, unified design system)
+- **Web dashboard** evolved on its existing Hallmark token system: deeper bluer surface ramp, a three-rung elevation scale, and new motion/gradient/glow tokens. Sidebar and topbar now carry depth (topbar blurs on scroll), the active nav item shows an accent-gradient fill with a glowing left bar, and route content fades up on mount. Metric cards lift on hover with a status-colored accent bar; live status-pill dots pulse and glow; a single `.primary` accent-gradient button (the live toggle) carries the main CTA while other buttons stay quiet.
+- **Light theme removed.** The dashboard is now dark-only — the light token block, the `data-theme` apply path in `dashboard.js`, and the Settings color-theme toggle are all gone.
+- **Electron launcher** (`status.html`) and **setup wizard** (`wizard.html`) rebuilt on the dashboard's exact palette and tokens: gradient brand badge, glowing status dot, gradient primary buttons, an SVG link icon (no emoji), and matching radius/spacing. Every element id/class the renderer JS drives is preserved, so `status.js`/`wizard.js` are unchanged.
+
 ## [0.14.10] — 2026-06-04
 
 ### Cleanup-by-path for untracked files + tool-group metadata fix (from a follow-up ChatGPT audit)

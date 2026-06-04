@@ -5,55 +5,89 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rel.AI MCP - Setup</title>
 <style>
+  :root {
+    --bg: #060912;
+    --surface: #0c1424;
+    --surface-2: #131d31;
+    --surface-3: #1d2a47;
+    --text: #e8eef9;
+    --text-muted: #93a0b6;
+    --text-dim: #5a677e;
+    --line: rgba(148,176,224,.10);
+    --line-soft: rgba(148,176,224,.14);
+    --blue: #5aa6ff;
+    --green: #4fe09a;
+    --red: #ff6f88;
+    --grad-accent: linear-gradient(135deg, #5aa6ff, #3d7fe6);
+    --grad-surface: linear-gradient(180deg, rgba(255,255,255,.025), rgba(255,255,255,0) 70%);
+    --glow-accent: 0 0 0 1px rgba(90,166,255,.35), 0 0 24px -4px rgba(90,166,255,.45);
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background: #0d1117;
-    color: #e0e0e0;
-    padding: 20px 0;
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    background-image:
+      radial-gradient(900px 460px at 80% -10%, rgba(90,166,255,.09), transparent 60%),
+      radial-gradient(700px 400px at -5% 115%, rgba(79,224,154,.05), transparent 55%);
+    color: var(--text);
+    padding: 22px 0;
     display: flex;
     align-items: center;
     justify-content: center;
+    -webkit-font-smoothing: antialiased;
   }
   .wizard { width: 420px; padding: 0 24px 24px; }
-  .progress { display: flex; gap: 6px; margin-bottom: 24px; }
-  .progress-step { flex: 1; height: 4px; background: #333; border-radius: 2px; transition: background 0.2s; }
-  .progress-step.done { background: #3b82f6; }
-  .step { display: none; }
+  .progress { display: flex; gap: 6px; margin-bottom: 26px; }
+  .progress-step { flex: 1; height: 4px; background: var(--surface-3); border-radius: 999px; transition: background .25s var(--ease), box-shadow .25s var(--ease); }
+  .progress-step.done { background: var(--grad-accent); box-shadow: var(--glow-accent); }
+  .step { display: none; animation: rise .32s var(--ease) both; }
   .step.active { display: block; }
-  h1 { font-size: 22px; margin-bottom: 8px; }
-  h2 { font-size: 17px; margin-bottom: 8px; }
-  .subtitle { font-size: 13px; color: #888; margin-bottom: 20px; line-height: 1.6; }
-  label { font-size: 12px; color: #888; display: block; margin-bottom: 5px; font-weight: 500; }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  h1 { font-size: 22px; margin-bottom: 8px; letter-spacing: -.02em; }
+  h2 { font-size: 17px; margin-bottom: 8px; letter-spacing: -.01em; }
+  .subtitle { font-size: 13px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.6; }
+  label { font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 6px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
   input[type=text], input[type=number] {
-    width: 100%; padding: 9px 11px; background: #111; border: 1px solid #444;
-    border-radius: 5px; color: #e0e0e0; font-size: 14px; margin-bottom: 6px;
-    font-family: inherit;
+    width: 100%; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line-soft);
+    border-radius: var(--radius-sm); color: var(--text); font-size: 14px; margin-bottom: 6px;
+    font-family: inherit; transition: border-color .15s var(--ease), box-shadow .15s var(--ease);
   }
-  input:focus { outline: none; border-color: #3b82f6; }
-  .hint { font-size: 12px; color: #666; margin-bottom: 16px; line-height: 1.6; min-height: 18px; }
-  .hint code { color: #aaa; background: #1a1a1a; padding: 2px 5px; border-radius: 3px; font-size: 11px; }
-  .token-box { background: #111; border: 1px solid #333; border-radius: 5px;
-    padding: 10px 12px; font-size: 13px; color: #60a5fa; font-family: "SF Mono", Consolas, monospace;
-    word-break: break-all; margin-bottom: 10px; min-height: 38px; line-height: 1.5; }
+  input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(90,166,255,.18); }
+  .hint { font-size: 12px; color: var(--text-dim); margin-bottom: 16px; line-height: 1.6; min-height: 18px; }
+  .hint code { color: var(--text-muted); background: var(--surface-2); padding: 2px 6px; border-radius: 4px; font-size: 11px; font-family: ui-monospace, Consolas, monospace; }
+  .token-box {
+    background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--radius-sm);
+    padding: 10px 12px; font-size: 13px; color: var(--blue); font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    word-break: break-all; margin-bottom: 10px; min-height: 38px; line-height: 1.5;
+  }
   .btn-row { display: flex; gap: 8px; margin-bottom: 8px; }
-  .nav { display: flex; justify-content: space-between; margin-top: 20px; }
-  button { padding: 8px 20px; border: none; border-radius: 5px; font-size: 13px;
-    cursor: pointer; font-family: inherit; }
-  .btn-primary { background: #3b82f6; color: #fff; font-weight: 500; }
-  .btn-primary:hover { background: #2563eb; }
-  .btn-secondary { background: #1e1e2e; border: 1px solid #333; color: #aaa; }
-  .btn-secondary:hover { background: #2a2a3e; }
-  .btn-success { background: #22c55e; color: #000; font-weight: 700; font-size: 15px; padding: 11px 32px; }
-  .btn-success:hover { background: #16a34a; }
-  .error { font-size: 12px; color: #f87171; margin-top: 4px; min-height: 18px; }
-  .success { font-size: 12px; color: #22c55e; margin-top: 4px; min-height: 18px; }
-  .summary-row { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid #1e1e2e; font-size: 13px; }
+  .nav { display: flex; justify-content: space-between; margin-top: 22px; }
+  button { padding: 9px 20px; border: none; border-radius: var(--radius-sm); font-size: 13px;
+    cursor: pointer; font-family: inherit; font-weight: 600;
+    transition: filter .15s var(--ease), background .15s var(--ease), border-color .15s var(--ease), box-shadow .15s var(--ease); }
+  button:active { transform: translateY(1px); }
+  .btn-primary { background: var(--grad-accent); color: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.45); }
+  .btn-primary:hover { filter: brightness(1.08); box-shadow: var(--glow-accent); }
+  .btn-secondary { background: var(--surface-2); border: 1px solid var(--line-soft); color: var(--text-muted); }
+  .btn-secondary:hover { background: var(--surface-3); color: var(--text); border-color: var(--line); }
+  .btn-success { background: var(--grad-accent); color: #fff; font-weight: 700; font-size: 15px; padding: 12px 32px; box-shadow: 0 2px 4px rgba(0,0,0,.4); }
+  .btn-success:hover { filter: brightness(1.1); box-shadow: var(--glow-accent); }
+  .error { font-size: 12px; color: var(--red); margin-top: 4px; min-height: 18px; }
+  .success { font-size: 12px; color: var(--green); margin-top: 4px; min-height: 18px; }
+  .summary-row { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--line-soft); font-size: 13px; }
   .summary-row:last-child { border-bottom: none; }
-  .summary-key { color: #888; }
-  .summary-val { color: #e0e0e0; font-family: "SF Mono", Consolas, monospace; font-size: 12px; max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .summary-box { background: #111; border-radius: 6px; padding: 4px 12px; margin-bottom: 20px; }
-  .welcome-icon { font-size: 44px; text-align: center; margin: 16px 0 14px; }
+  .summary-key { color: var(--text-muted); }
+  .summary-val { color: var(--text); font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 12px; max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .summary-box { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--radius-md); padding: 4px 14px; margin-bottom: 20px; }
+  .welcome-icon {
+    width: 56px; height: 56px; margin: 16px auto 16px; border-radius: 16px;
+    background: var(--grad-accent); display: grid; place-items: center;
+    box-shadow: var(--glow-accent);
+  }
+  .welcome-icon svg { width: 28px; height: 28px; stroke: #fff; }
   .welcome-center { text-align: center; }
 </style>
 </head>
@@ -68,7 +102,13 @@
   </div>
 
   <div class="step active" id="step1">
-    <div class="welcome-icon">&#128279;</div>
+    <div class="welcome-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M9 17H7A5 5 0 0 1 7 7h2"></path>
+        <path d="M15 7h2a5 5 0 0 1 0 10h-2"></path>
+        <line x1="8" y1="12" x2="16" y2="12"></line>
+      </svg>
+    </div>
     <div class="welcome-center">
       <h1>Rel.AI MCP Launcher</h1>
       <p class="subtitle">Connect ChatGPT to your local files through a secure ngrok tunnel. Setup takes about 2 minutes — you'll need an ngrok account with a static domain.</p>

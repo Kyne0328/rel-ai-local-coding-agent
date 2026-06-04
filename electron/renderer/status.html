@@ -5,65 +5,135 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rel.AI MCP</title>
 <style>
+  :root {
+    --bg: #060912;
+    --surface: #0c1424;
+    --surface-2: #131d31;
+    --surface-3: #1d2a47;
+    --text: #e8eef9;
+    --text-muted: #93a0b6;
+    --text-dim: #5a677e;
+    --line: rgba(148,176,224,.10);
+    --line-soft: rgba(148,176,224,.14);
+    --blue: #5aa6ff;
+    --blue-dim: rgba(90,166,255,.14);
+    --green: #4fe09a;
+    --yellow: #ffc24b;
+    --red: #ff6f88;
+    --grad-accent: linear-gradient(135deg, #5aa6ff, #3d7fe6);
+    --grad-surface: linear-gradient(180deg, rgba(255,255,255,.025), rgba(255,255,255,0) 70%);
+    --glow-accent: 0 0 0 1px rgba(90,166,255,.35), 0 0 24px -4px rgba(90,166,255,.45);
+    --glow-green: 0 0 12px -2px rgba(79,224,154,.6);
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     font-size: 13px;
-    background: #0d1117;
-    color: #e0e0e0;
+    background: var(--bg);
+    background-image:
+      radial-gradient(900px 420px at 85% -15%, rgba(90,166,255,.08), transparent 60%),
+      radial-gradient(700px 380px at -10% 120%, rgba(79,224,154,.05), transparent 55%);
+    color: var(--text);
     min-height: 0;
     display: flex;
     flex-direction: column;
+    -webkit-font-smoothing: antialiased;
   }
-  .header { background: #161622; padding: 11px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #2a2a3e; flex-shrink: 0; }
+  .header {
+    background: var(--surface);
+    background-image: var(--grad-surface);
+    padding: 12px 16px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--line-soft);
+    flex-shrink: 0;
+  }
   .header-left { display: flex; align-items: center; gap: 8px; }
-  .header-title { font-weight: 600; font-size: 14px; }
+  .brand-badge {
+    width: 22px; height: 22px; border-radius: 6px;
+    background: var(--grad-accent);
+    display: grid; place-items: center;
+    font-size: 11px; font-weight: 800; color: #fff; letter-spacing: -.02em;
+    box-shadow: var(--glow-accent);
+  }
+  .header-title { font-weight: 700; font-size: 14px; letter-spacing: -.01em; }
   .header-right { display: flex; align-items: center; gap: 8px; }
-  .version { font-size: 11px; color: #555; }
-  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #555; flex-shrink: 0; }
-  .status-dot.running { background: #22c55e; }
+  .version { font-size: 11px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+  .status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text-dim); flex-shrink: 0; transition: background .2s var(--ease), box-shadow .2s var(--ease); }
+  .status-dot.running { background: var(--green); box-shadow: var(--glow-green); }
   .body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 10px; }
   .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .card { background: #111; border-radius: 6px; padding: 10px 12px; }
-  .card-label { font-size: 11px; color: #777; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; }
-  .card-status { font-size: 14px; font-weight: 600; }
-  .card-sub { font-size: 11px; color: #555; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .running-text { color: #22c55e; }
-  .connecting-text { color: #fbbf24; }
-  .failed-text { color: #f87171; }
-  .stopped-text { color: #666; }
-  .copy-box { background: #0d1f0d; border: 1px solid #166534; border-radius: 6px; padding: 12px 14px; }
-  .copy-label { font-size: 11px; color: #777; margin-bottom: 6px; letter-spacing: 0.05em; text-transform: uppercase; font-weight: 500; }
-  .copy-url { font-size: 12px; color: #60a5fa; word-break: break-all; margin-bottom: 10px; font-family: "SF Mono", Consolas, monospace; min-height: 32px; line-height: 1.5; }
-  .copy-url.empty { color: #555; font-style: italic; }
-  .error-line { color: #f87171; font-size: 12px; min-height: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  button { cursor: pointer; font-family: inherit; }
-  .btn-copy { width: 100%; background: #3b82f6; border: none; border-radius: 5px; color: #fff; padding: 8px; font-size: 13px; font-weight: 500; }
-  .btn-copy:hover { background: #2563eb; }
-  .btn-copy:disabled { background: #1e2e4a; color: #555; cursor: not-allowed; }
+  .card {
+    background: var(--surface);
+    background-image: var(--grad-surface);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-md);
+    padding: 11px 13px;
+  }
+  .card-label { font-size: 10px; color: var(--text-muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
+  .card-status { font-size: 14px; font-weight: 700; letter-spacing: -.01em; }
+  .card-sub { font-size: 11px; color: var(--text-dim); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .running-text { color: var(--green); }
+  .connecting-text { color: var(--yellow); }
+  .failed-text { color: var(--red); }
+  .stopped-text { color: var(--text-dim); }
+  .copy-box {
+    background: var(--surface);
+    border: 1px solid rgba(79,224,154,.28);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+  }
+  .copy-label { font-size: 10px; color: var(--text-muted); margin-bottom: 7px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 700; }
+  .copy-url { font-size: 12px; color: var(--blue); word-break: break-all; margin-bottom: 10px; font-family: ui-monospace, "SF Mono", Consolas, monospace; min-height: 32px; line-height: 1.5; }
+  .copy-url.empty { color: var(--text-dim); font-style: italic; }
+  .error-line { color: var(--red); font-size: 12px; min-height: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  button { cursor: pointer; font-family: inherit; transition: filter .15s var(--ease), background .15s var(--ease), border-color .15s var(--ease), box-shadow .15s var(--ease); }
+  button:active { transform: translateY(1px); }
+  .btn-copy {
+    width: 100%; background: var(--grad-accent); border: none;
+    border-radius: var(--radius-sm); color: #fff; padding: 9px;
+    font-size: 13px; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.45);
+  }
+  .btn-copy:hover { filter: brightness(1.08); box-shadow: var(--glow-accent); }
+  .btn-copy:disabled { background: var(--surface-2); color: var(--text-dim); cursor: not-allowed; box-shadow: none; }
   .actions { display: flex; gap: 6px; margin-top: 4px; }
-  .btn-action { flex: 1; background: #1e1e2e; border: 1px solid #333; border-radius: 5px; color: #aaa; padding: 8px; font-size: 12px; }
-  .btn-action:hover { background: #2a2a3e; }
-  .btn-stop { background: #7f1d1d; border: none; color: #fca5a5; }
-  .btn-stop:hover { background: #991b1b; }
-  .btn-start { background: #14532d; border: none; color: #86efac; font-weight: 600; }
-  .btn-start:hover { background: #166534; }
-  .ext-box { background: #111; border-radius: 6px; padding: 10px 12px; }
-  .ext-label { font-size: 11px; color: #777; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; }
-  .ext-path { font-size: 11px; color: #94a3b8; font-family: "SF Mono", Consolas, monospace; word-break: break-all; margin-bottom: 7px; min-height: 16px; line-height: 1.4; }
-  .ext-hint { font-size: 11px; color: #555; margin-bottom: 8px; line-height: 1.5; }
-  .btn-ext { width: 100%; background: #1e293b; border: 1px solid #334155; border-radius: 5px; color: #94a3b8; padding: 7px; font-size: 12px; }
-  .btn-ext:hover { background: #273448; }
+  .btn-action {
+    flex: 1; background: var(--surface-2); border: 1px solid var(--line-soft);
+    border-radius: var(--radius-sm); color: var(--text-muted); padding: 9px; font-size: 12px; font-weight: 600;
+  }
+  .btn-action:hover { background: var(--surface-3); color: var(--text); border-color: var(--line); }
+  .btn-stop { background: rgba(255,111,136,.12); border-color: rgba(255,111,136,.32); color: var(--red); }
+  .btn-stop:hover { background: rgba(255,111,136,.2); border-color: var(--red); color: var(--red); }
+  .btn-start { background: rgba(79,224,154,.14); border-color: rgba(79,224,154,.35); color: var(--green); font-weight: 700; }
+  .btn-start:hover { background: rgba(79,224,154,.22); border-color: var(--green); color: var(--green); }
+  .ext-box {
+    background: var(--surface);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-md);
+    padding: 11px 13px;
+  }
+  .ext-label { font-size: 10px; color: var(--text-muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
+  .ext-path { font-size: 11px; color: var(--text-muted); font-family: ui-monospace, "SF Mono", Consolas, monospace; word-break: break-all; margin-bottom: 7px; min-height: 16px; line-height: 1.4; }
+  .ext-hint { font-size: 11px; color: var(--text-dim); margin-bottom: 8px; line-height: 1.55; }
+  .ext-hint strong { color: var(--text-muted); }
+  .btn-ext {
+    width: 100%; background: var(--surface-2); border: 1px solid var(--line-soft);
+    border-radius: var(--radius-sm); color: var(--text-muted); padding: 8px; font-size: 12px; font-weight: 600;
+  }
+  .btn-ext:hover { background: var(--surface-3); color: var(--text); border-color: var(--line); }
 </style>
 </head>
 <body>
 <div class="header">
   <div class="header-left">
-    <span>Rel.AI</span>
-    <span class="header-title">MCP Launcher</span>
+    <span class="brand-badge">R</span>
+    <span class="header-title">Rel.AI MCP</span>
   </div>
   <div class="header-right">
-    <span class="version" id="appVersion">v0.14.10</span>
+    <span class="version" id="appVersion">v0.15.0</span>
     <div class="status-dot" id="headerDot"></div>
   </div>
 </div>
