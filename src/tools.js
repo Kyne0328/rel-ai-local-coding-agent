@@ -511,11 +511,20 @@ function collectWorkflowFiles(dir, out) {
 }
 
 function safeReadPackageJson() {
-  try {
-    return JSON.parse(fs.readFileSync(require("node:path").join(process.cwd(), "package.json"), "utf8"));
-  } catch (_error) {
-    return {};
+  const path = require("node:path");
+  // Read this server's OWN package.json (stable relative to the module) first.
+  // process.cwd() is unreliable — when launched from the packaged launcher it is
+  // the launcher's directory, which yields version:"" and the wrong scripts.
+  const candidates = [
+    path.join(__dirname, "..", "package.json"),
+    path.join(process.cwd(), "package.json")
+  ];
+  for (const file of candidates) {
+    try {
+      return JSON.parse(fs.readFileSync(file, "utf8"));
+    } catch (_error) {}
   }
+  return {};
 }
 
 function workspaceList(config) {

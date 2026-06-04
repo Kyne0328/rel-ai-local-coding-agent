@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.6] — 2026-06-04
+
+### `relai_status` reports the real connector version (from a follow-up ChatGPT audit)
+- `relai_status` (and `relai_feature_probe`) returned `version: ""` and could report the wrong `scripts`/CI surface when the connector ran from the packaged launcher. Cause: `safeReadPackageJson()` read `process.cwd()/package.json`, but the launcher's working directory is not the server's own directory. It now reads the server's own `package.json` resolved from the module path (`__dirname/../package.json`), falling back to cwd. This also restores accurate stale-launcher detection during audits
+
+Bump root/electron/extension/status-UI/lockfiles to 0.14.6.
+
 ## [0.14.5] — 2026-06-04
 
 ### Fix three 0.14.4 regressions + a backup bug (from a follow-up ChatGPT audit on rel-ai-mcp)
