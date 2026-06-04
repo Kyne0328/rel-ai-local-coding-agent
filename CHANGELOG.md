@@ -8,6 +8,10 @@
 - `relai_package_snapshot`: the 0.14.4 bounded-summary only capped the `skipped` list; the `files` list was still dumped in full and truncated the response. Both lists are now bounded to `count` + first/last sample
 - `relai_apply_update` / `relai_apply_bundle` prepared backup: `git stash push --include-untracked` *moved* changes away, deleting an untracked patch/overlay target before apply (a no-op patch on a newly-created file failed with "No such file or directory"). Backup now uses `git stash create` + `git stash store`, which records a recoverable stash entry **without disturbing the working tree**
 
+### Chrome auto-approve: duplicate-approval fix + background keep-alive
+- Fixed duplicated/over-long ChatGPT responses while auto-approve was on. Two compounding causes: `trustedClick` fired a synthetic `click` event **and** `el.click()` (two activations per attempt), and the same approval card — which ChatGPT leaves mounted for a second or more while it works — was re-clicked on every 2s poll. Now there is a single native click, and a `WeakSet` skips any button already clicked; a genuinely new request renders a new node, so it is still approved promptly
+- Added background-tab keep-alive so long tasks don't stall when the ChatGPT tab is backgrounded: a near-inaudible 19 kHz tone marks the tab "audible" (exempting it from background throttling and tab discard/freeze), and a MAIN-world content script reports the tab as visible so ChatGPT does not pause on `visibilitychange`. Both are gated by the enable toggle. Native rAF throttling cannot be lifted from the page; the guaranteed backstop remains Chrome's "Always keep this site active" setting
+
 Bump root/electron/extension/status-UI/lockfiles to 0.14.5.
 
 ## [0.14.4] — 2026-06-04

@@ -67,6 +67,14 @@
   let missStreak = 0;
   const MAX_MISS = 3;
 
+  // Buttons already clicked, tracked by element identity. ChatGPT leaves an
+  // approval card in the DOM for a second or more after Allow is clicked while it
+  // works, so re-scans would otherwise click the same button repeatedly and submit
+  // duplicate approvals (bloating the response). A new request renders a new button
+  // node — not in this set — so it is still approved promptly. Entries are GC'd when
+  // ChatGPT removes the node.
+  const clickedButtons = new WeakSet();
+
   try {
     if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
       chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -138,6 +146,69 @@
   setInterval(() => {
     if (!document.hidden && cardLikely) safeScanAndApprove('poll');
   }, 2000);
+
+  // --- Background keep-alive (only while the extension is enabled) ---
+  // #2 audio: a near-inaudible 19 kHz tone marks the tab "audible" so Chrome exempts
+  //   it from background timer/rAF throttling and from tab discard/freeze.
+  // #3 spoof: tell the MAIN-world keepalive.js to report the tab as visible so
+  //   ChatGPT does not pause its own work on visibilitychange.
+  let _audioCtx = null;
+  let _gestureResumeBound = false;
+
+  function _resumeAudio() {
+    if (_audioCtx && _audioCtx.state === 'suspended') _audioCtx.resume().catch(() => {});
+  }
+
+  function startKeepAliveAudio() {
+    if (_audioCtx) { _resumeAudio(); return; }
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      _audioCtx = new Ctx();
+      const osc = _audioCtx.createOscillator();
+      const gain = _audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 19000;   // above most adults' hearing range
+      gain.gain.value = 0.001;       // ~-60 dB: registers as audible yet effectively silent
+      osc.connect(gain).connect(_audioCtx.destination);
+      osc.start();
+      _resumeAudio();
+      // Autoplay policy can start the context suspended; resume on the next user
+      // gesture in the page (the user is interacting with ChatGPT anyway).
+      if (!_gestureResumeBound) {
+        _gestureResumeBound = true;
+        window.addEventListener('pointerdown', _resumeAudio, { passive: true });
+        window.addEventListener('keydown', _resumeAudio, { passive: true });
+      }
+    } catch (_) { _audioCtx = null; }
+  }
+
+  function stopKeepAliveAudio() {
+    try { if (_audioCtx) _audioCtx.close(); } catch (_) {}
+    _audioCtx = null;
+  }
+
+  function setSpoof(on) {
+    try { window.postMessage({ source: 'relai-keepalive-control', active: !!on }, '*'); } catch (_) {}
+  }
+
+  function refreshKeepAlive() {
+    try {
+      chrome.storage.local.get({ enabled: false }, (cfg) => {
+        if (cfg && cfg.enabled) { startKeepAliveAudio(); setSpoof(true); }
+        else { stopKeepAliveAudio(); setSpoof(false); }
+      });
+    } catch (_) {}
+  }
+
+  try {
+    if (chrome.storage && chrome.storage.onChanged) {
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === 'local' && changes.enabled) refreshKeepAlive();
+      });
+    }
+  } catch (_) {}
+  refreshKeepAlive();
 
   function scheduleScan(reason) {
     try {
@@ -240,7 +311,8 @@
     let clicked = 0;
     for (const card of cards) {
       const button = findApprovalButton(card);
-      if (!button) continue;
+      if (!button || clickedButtons.has(button)) continue;
+      clickedButtons.add(button);
       lastClickAt = Date.now();
       trustedClick(button);
       clicked += 1;
@@ -336,7 +408,10 @@
 
   function trustedClick(el) {
     try { el.scrollIntoView({ block: 'center', inline: 'center' }); } catch (_) {}
-    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+    // Pointer/mouse sequence primes frameworks that key off it, then a SINGLE native
+    // click is the only activation. Previously this dispatched a synthetic 'click'
+    // AND called el.click(), firing the handler twice → duplicate approvals.
+    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup']) {
       el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
     }
     try { el.click(); } catch (_) {}
