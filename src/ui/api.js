@@ -1,5 +1,10 @@
 // Consolidated fetch layer — replaces 4 divergent fetchJson helpers across client files
 const TOKEN_KEY = 'relai_dashboard_token';
+
+// Single source of truth for the aggregate dashboard payload URL. Used by the
+// bootstrap, manual/live refresh, workspace mutations, and settings cache
+// invalidation — keep them in sync via this constant, not copied literals.
+export const DASHBOARD_DATA_URL = '/api/dashboard/v10?limit=100&requireHttpToken=0';
 let _token = '';
 const _cache = new Map();
 

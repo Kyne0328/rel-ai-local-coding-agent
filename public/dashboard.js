@@ -1,9 +1,24 @@
-import { setToken, getToken, fetchJson } from '/ui/api.js';
+import { setToken, getToken, fetchJson, DASHBOARD_DATA_URL } from '/ui/api.js';
 import { init as initStore, get as getStore } from '/ui/store.js';
 import { initRouter, currentSection } from '/ui/router.js';
 import { initEvents, startSSE, stopSSE, isLive, setPollCallback } from '/ui/events.js';
 import { mountHome } from '/ui/sections/home.js';
 import { initCommandPalette } from '/ui/components/command-palette.js';
+
+// Single source of truth for navigable sections. The command palette and the
+// live-rerender allowlist derive from this; the sidebar/mobile nav markup lives
+// in the server-rendered shell (httpServer.renderDashboardHtml).
+const ROUTES = [
+  { id: 'home', label: 'Home' },
+  { id: 'workspaces', label: 'Workspaces' },
+  { id: 'activity', label: 'Activity' },
+  { id: 'tools', label: 'Tools' },
+  { id: 'settings', label: 'Settings' },
+];
+const SETTINGS_SUBROUTES = [
+  { id: 'connector', label: 'Settings → Connector' },
+  { id: 'diagnostics', label: 'Settings → Diagnostics' },
+];
 
 const savedTheme = localStorage.getItem('relai_theme');
 if (savedTheme === 'light') document.documentElement.dataset.theme = 'light';
@@ -52,7 +67,7 @@ async function boot() {
   const sections = _sectionMap();
   initRouter(routeRoot, sections);
 
-  const fresh = await fetchJson('/api/dashboard/v10?limit=100&requireHttpToken=0');
+  const fresh = await fetchJson(DASHBOARD_DATA_URL);
   if (fresh) {
     initStore(fresh);
     _renderCurrentSection(routeRoot, currentSection(), sections);
@@ -64,13 +79,8 @@ async function boot() {
 
   const storeData = getStore();
   const navActions = [
-    { label: 'Home', href: '#home', category: 'Navigation' },
-    { label: 'Workspaces', href: '#workspaces', category: 'Navigation' },
-    { label: 'Activity', href: '#activity', category: 'Navigation' },
-    { label: 'Tools', href: '#tools', category: 'Navigation' },
-    { label: 'Settings', href: '#settings', category: 'Navigation' },
-    { label: 'Settings → Connector', href: '#settings/connector', category: 'Navigation' },
-    { label: 'Settings → Diagnostics', href: '#settings/diagnostics', category: 'Navigation' },
+    ...ROUTES.map(r => ({ label: r.label, href: '#' + r.id, category: 'Navigation' })),
+    ...SETTINGS_SUBROUTES.map(r => ({ label: r.label, href: '#settings/' + r.id, category: 'Navigation' })),
   ];
   const actionActions = [
     { label: 'Refresh dashboard', category: 'Actions', action: _doRefresh },
@@ -93,8 +103,6 @@ function _sectionMap() {
     workspaces:  (el) => import('/ui/sections/workspaces.js').then(m => m.mountWorkspaces(el, getStore())).catch(console.error),
     activity:    (el) => import('/ui/sections/activity.js').then(m => m.mountActivity(el)).catch(console.error),
     tools:       (el) => import('/ui/sections/tools.js').then(m => m.mountTools(el)).catch(console.error),
-    approvals:   () => { location.hash = '#home'; },
-    agents:      () => { location.hash = '#home'; },
     settings:    (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el, _settingsSubPage())).catch(console.error),
     connector:   (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el, 'connector')).catch(console.error),
     diagnostics: (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el, 'diagnostics')).catch(console.error),
@@ -127,7 +135,7 @@ function _renderCurrentSection(main, id, sections) {
 }
 
 async function _doRefresh() {
-  const data = await fetchJson('/api/dashboard/v10?limit=100&requireHttpToken=0');
+  const data = await fetchJson(DASHBOARD_DATA_URL);
   if (data) {
     initStore(data);
     _renderCurrentSection(ensureRouteRoot(), currentSection(), _sectionMap());
@@ -146,8 +154,9 @@ function _toggleLive() {
       const id = currentSection();
       if (!routeRoot) return;
 
-      if (['home', 'workspaces', 'activity', 'tools', 'settings', 'connector', 'diagnostics'].includes(id)) {
-        _renderCurrentSection(routeRoot, id, _sectionMap());
+      const sections = _sectionMap();
+      if (Object.prototype.hasOwnProperty.call(sections, id)) {
+        _renderCurrentSection(routeRoot, id, sections);
       }
 
       if (id === 'activity') {

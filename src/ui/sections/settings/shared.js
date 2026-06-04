@@ -1,4 +1,4 @@
-import { fetchJson, postJson, invalidateCache } from '/ui/api.js';
+import { fetchJson, postJson, invalidateCache, DASHBOARD_DATA_URL } from '/ui/api.js';
 import { toast } from '/ui/components/toast.js';
 import { Toggle } from '/ui/components/toggle.js';
 import { Select } from '/ui/components/select.js';
@@ -17,7 +17,7 @@ export async function saveSettings(settings, { confirmDangerous = false } = {}) 
   const body = confirmDangerous ? { settings, confirmDangerous: true } : { settings };
   const res = await postJson('/api/settings', body);
   invalidateCache('/api/settings');
-  invalidateCache('/api/dashboard/v10?limit=100&requireHttpToken=0');
+  invalidateCache(DASHBOARD_DATA_URL);
   if (res && res.ok) toast(res.message || 'Settings saved.', { variant: 'success' });
   else toast('Error: ' + ((res && res.error) || 'settings update failed'), { variant: 'error' });
   return res;

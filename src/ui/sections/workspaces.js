@@ -1,5 +1,5 @@
 // Workspaces section — configured repositories and validation setup
-import { fetchJson, postJson } from '/ui/api.js';
+import { fetchJson, postJson, DASHBOARD_DATA_URL } from '/ui/api.js';
 import { pillHtml } from '/ui/components/pill.js';
 import { badgeHtml } from '/ui/components/badge.js';
 import { toast } from '/ui/components/toast.js';
@@ -183,7 +183,7 @@ document.addEventListener('click', async (event) => {
 });
 
 async function saveDetectedTests(alias) {
-  const dashboard = await fetchJson('/api/dashboard/v10?limit=100&requireHttpToken=0');
+  const dashboard = await fetchJson(DASHBOARD_DATA_URL);
   const ws = dashboard && dashboard.config && Array.isArray(dashboard.config.workspaces)
     ? dashboard.config.workspaces.find(item => item.alias === alias)
     : null;
@@ -305,7 +305,7 @@ async function clearWorkspaceFlow(alias) {
 }
 
 async function loadWorkspace(alias) {
-  const dashboard = await fetchJson('/api/dashboard/v10?limit=100&requireHttpToken=0');
+  const dashboard = await fetchJson(DASHBOARD_DATA_URL);
   const ws = dashboard && dashboard.config && Array.isArray(dashboard.config.workspaces)
     ? dashboard.config.workspaces.find(item => item.alias === alias)
     : null;
