@@ -383,12 +383,20 @@ async function relaiApplyPatch(workspace, config, args = {}) {
   }
   let backup = null;
   if (shouldMakePreparedBackup(config, args)) backup = await makePreparedBackup(workspace, config, operationId, "patch");
+  // Capture content hashes before apply so changedFiles reflects ACTUAL changes,
+  // not every path the patch touches — a semantic no-op patch applies cleanly but
+  // must report changedFiles:[].
+  const hashOf = (rel) => (fs.existsSync(path.join(workspace.path, rel)) ? fileSha256(workspace.path, rel) : null);
+  const beforeHashes = new Map(touchedPaths.map((rel) => [rel, hashOf(rel)]));
   const apply = await runProcess("git", ["apply", patchFile], { cwd: workspace.path, timeout: clampNumber(args.timeoutMs, 1000, 86400000, 120000) }, config);
+  const changedFiles = apply.exitCode === 0
+    ? touchedPaths.filter((rel) => hashOf(rel) !== beforeHashes.get(rel))
+    : [];
   const verify = hasRequestedChecks(args) ? await relaiVerify(workspace, config, args) : null;
   const diff = args.returnDiff === false ? null : await relaiDiff(workspace, config, { maxBytes: args.maxDiffBytes || DEFAULT_MAX_DIFF_BYTES });
   const ok = apply.exitCode === 0 && (!verify || verify.ok);
-  appendOperation(config, workspace, { id: operationId, type: "apply_patch", ok, paths: touchedPaths, results: [{ operation: "applyPatch", bytes: patchBytes, touchedPaths, verified: verify ? verify.ok : null }] });
-  return { ok, workspace: workspace.alias, operationId, operation: "applyPatch", changedFiles: apply.exitCode === 0 ? touchedPaths : [], touchedPaths, patchBytes, backup, apply: summarizeCommand(apply), sourceFormat: "unified-diff", ...(verify ? { verify } : {}), ...(diff ? { diff } : {}) };
+  appendOperation(config, workspace, { id: operationId, type: "apply_patch", ok, paths: changedFiles, results: [{ operation: "applyPatch", bytes: patchBytes, touchedPaths, changedFiles, verified: verify ? verify.ok : null }] });
+  return { ok, workspace: workspace.alias, operationId, operation: "applyPatch", changedFiles, touchedPaths, patchBytes, backup, apply: summarizeCommand(apply), sourceFormat: "unified-diff", ...(verify ? { verify } : {}), ...(diff ? { diff } : {}) };
 }
 
 function normalizeOpenAIPatchFormat(input) {

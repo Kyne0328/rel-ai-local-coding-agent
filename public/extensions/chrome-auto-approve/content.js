@@ -67,13 +67,25 @@
   let missStreak = 0;
   const MAX_MISS = 3;
 
-  // Buttons already clicked, tracked by element identity. ChatGPT leaves an
-  // approval card in the DOM for a second or more after Allow is clicked while it
-  // works, so re-scans would otherwise click the same button repeatedly and submit
-  // duplicate approvals (bloating the response). A new request renders a new button
-  // node — not in this set — so it is still approved promptly. Entries are GC'd when
-  // ChatGPT removes the node.
+  // Buttons already clicked, tracked by element identity (cheap exact-node guard).
   const clickedButtons = new WeakSet();
+
+  // Primary dedupe: by request SIGNATURE (normalized approval-card text) within a
+  // time window. ChatGPT re-renders the approval card while it works, producing a
+  // fresh button node each time — node identity alone (WeakSet) does not survive
+  // that, so the 2s poll re-clicked the new node and submitted the SAME approval
+  // twice (the duplicate-tool-call bug seen in the Activity log). The signature is
+  // stable across re-renders, so we approve a given request exactly once; the
+  // window is refreshed while the card persists and a genuinely different request
+  // (different text) is unaffected.
+  const recentApprovals = new Map(); // signature -> last-seen timestamp
+  const APPROVE_DEDUP_MS = 5000;
+
+  function approvalSignature(card) {
+    // Whole-card text (tool name + args) identifies the request; cap length so a
+    // long payload doesn't bloat the key. Stable across React re-renders.
+    return compact(card.textContent || '').slice(0, 400);
+  }
 
   try {
     if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
@@ -308,10 +320,22 @@
     // one the observer missed) — keep the gate armed until it is gone.
     missStreak = 0;
     cardLikely = true;
+    // Drop signatures whose window has lapsed (request is long gone).
+    for (const [sig, ts] of recentApprovals) {
+      if (now - ts > APPROVE_DEDUP_MS) recentApprovals.delete(sig);
+    }
     let clicked = 0;
     for (const card of cards) {
       const button = findApprovalButton(card);
       if (!button || clickedButtons.has(button)) continue;
+      const signature = approvalSignature(card);
+      if (signature && recentApprovals.has(signature)) {
+        // Same request still on screen (likely a re-render) — refresh its window so
+        // we keep skipping it until it is gone, and do not approve it again.
+        recentApprovals.set(signature, now);
+        continue;
+      }
+      if (signature) recentApprovals.set(signature, now);
       clickedButtons.add(button);
       lastClickAt = Date.now();
       trustedClick(button);
