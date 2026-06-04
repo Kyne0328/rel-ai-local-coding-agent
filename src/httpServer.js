@@ -671,9 +671,6 @@ function renderDashboardHtml(options) {
       </div>
       <div class="top-controls">
         <span class="status-pill" id="serverStatus">Connecting…</span>
-        <label for="token" class="sr-only">Dashboard token</label>
-        <input id="token" type="password" placeholder="Dashboard token" autocomplete="off" spellcheck="false">
-        <button class="secondary" id="refreshBtn" type="button">Refresh</button>
         <button class="primary" id="liveBtn">Start live</button>
         <span class="section-action" id="lastUpdated"></span>
       </div>

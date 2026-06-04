@@ -69,8 +69,13 @@ const dashboardHtml = await dashboardHtmlResponse.text();
 if (!dashboardHtmlResponse.ok || dashboardHtml.includes('initialDashboardJson is not defined') || !dashboardHtml.includes('id="initialDashboardData"')) {
   throw new Error('dashboard HTML did not render embedded initial dashboard data');
 }
-if (!dashboardHtml.includes('id="refreshBtn"')) {
-  throw new Error('dashboard HTML did not expose the wired refresh button');
+if (!dashboardHtml.includes('id="liveBtn"')) {
+  throw new Error('dashboard HTML did not expose the wired live toggle');
+}
+// The token field and Refresh button were removed from the topbar (token loads from
+// the URL/sessionStorage; refresh + token copy live in the command palette).
+if (dashboardHtml.includes('id="token"') || dashboardHtml.includes('id="refreshBtn"')) {
+  throw new Error('dashboard topbar should no longer expose the token field or Refresh button');
 }
 
 const autoApproveSettings = await fetch(`http://127.0.0.1:${port}/api/auto-approve/settings?token=${encodeURIComponent(token)}`).then((response) => response.json());

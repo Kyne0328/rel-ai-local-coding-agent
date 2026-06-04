@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.3] — 2026-06-05
+
+### Slimmer dashboard topbar
+- Removed the **Dashboard token** field and the **Refresh** button from the topbar. The token already loads from the URL / sessionStorage at boot, so the input was redundant noise (especially in the desktop launcher); manual refresh and "Copy dashboard token" remain in the command palette. The topbar now carries just the status pill, the live-mode toggle, and the last-updated time.
+
+Bump root/electron/extension/status-UI/lockfiles to 0.15.3.
+
 ## [0.15.2] — 2026-06-04
 
 ### Clear a broken workspace, dynamic "What's new", unified logo
