@@ -432,10 +432,13 @@
 
   function trustedClick(el) {
     try { el.scrollIntoView({ block: 'center', inline: 'center' }); } catch (_) {}
-    // Pointer/mouse sequence primes frameworks that key off it, then a SINGLE native
-    // click is the only activation. Previously this dispatched a synthetic 'click'
-    // AND called el.click(), firing the handler twice → duplicate approvals.
-    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup']) {
+    // Only the PRESS half of the pointer/mouse sequence is dispatched — it primes
+    // frameworks that key off pointerdown (focus/:active) WITHOUT activating the
+    // button. The single native el.click() is then the one and only activation.
+    // We must NOT dispatch pointerup/mouseup here: a button that activates on
+    // pointer-up (common in React) would fire on the synthetic up AND again on
+    // el.click(), submitting the same approval twice (the duplicate-tool-call bug).
+    for (const type of ['pointerdown', 'mousedown']) {
       el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
     }
     try { el.click(); } catch (_) {}

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.14.8] — 2026-06-04
+
+### Chrome auto-approve: stop the last duplicate-submission path in trustedClick
+- Even after the WeakSet + signature dedup (0.14.5 / earlier 0.14.7 work) stopped re-clicks across the 2s poll and React re-renders, the Activity log still showed paired tool calls (e.g. `relai_git_commit` twice). Remaining cause was inside a single `trustedClick`: it dispatched a full pointer/mouse sequence **including `pointerup`/`mouseup`** and then called `el.click()`. ChatGPT's approve button has an `onClick` (a bare `el.click()` has always activated it), but it also reacts to pointer-up — so one approval fired twice
+- `trustedClick` now dispatches only the **press** half (`pointerdown`/`mousedown`) to prime framework focus/`:active` state, then the single `el.click()` is the one and only activation. The up-events that could independently trigger the handler are gone, so each approval submits exactly once. The cross-render dedups remain as a second line of defense
+
+Bump root/electron/extension/status-UI/lockfiles to 0.14.8.
+
 ## [0.14.7] — 2026-06-04
 
 ### `relai_apply_update` no-op reports `changedFiles:[]` (from a follow-up ChatGPT audit)
