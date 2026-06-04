@@ -51,7 +51,7 @@ function startHttpServer(options = {}) {
 
   const server = http.createServer(async (req, res) => {
     try {
-      await routeRequest(req, res, { token, chatgptSecret, allowNoAuth, maxBodyBytes, host, port, publicUrl });
+      await routeRequest(req, res, { token, chatgptSecret, allowNoAuth, maxBodyBytes, host, port, publicUrl, pickFolder });
     } catch (error) {
       sendJson(res, 500, {
         ok: false,
@@ -295,6 +295,22 @@ async function routeRequest(req, res, options) {
     const config = readConfig();
     const payload = await release.workspacePreflight(config, { workspace: parsed.searchParams.get("workspace") || "", requireClean: parsed.searchParams.get("requireClean") !== "0" });
     sendJson(res, 200, payload, ae);
+    return;
+  }
+
+  if (req.method === "POST" && parsed.pathname === "/api/pick-folder") {
+    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    if (typeof options.pickFolder !== "function") {
+      sendJson(res, 200, { ok: false, unsupported: true, error: "Native folder picker is only available in the Rel.AI desktop launcher." }, ae);
+      return;
+    }
+    try {
+      const picked = await options.pickFolder();
+      if (!picked) { sendJson(res, 200, { ok: false, canceled: true }, ae); return; }
+      sendJson(res, 200, { ok: true, ...workspacePathPreflight(picked) }, ae);
+    } catch (error) {
+      sendJson(res, 200, { ok: false, error: error instanceof Error ? error.message : String(error) }, ae);
+    }
     return;
   }
 

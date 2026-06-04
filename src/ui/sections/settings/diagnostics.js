@@ -47,7 +47,12 @@ function summaryCard(title, value, findings, raw, payload) {
   body.style.display = 'grid';
   body.style.gap = '8px';
   body.innerHTML = `<div style="font-size:22px;font-weight:800;color:${list.some(f => f.severity === 'error') ? 'var(--red)' : 'var(--green)'};">${esc(value)}</div>` +
-    (list.length ? list.slice(0, 6).map(f => `<div style="font-size:12px;color:var(--text-muted);"><strong style="color:var(--text);">${esc(f.code || f.severity || 'finding')}</strong><br>${esc(f.message || '')}</div>`).join('') : '<div style="font-size:12px;color:var(--text-muted);">No findings.</div>');
+    (list.length ? list.slice(0, 6).map(f => {
+      const fix = (f.code === 'workspace_unavailable' && f.workspace)
+        ? `<br><a href="#workspaces" style="color:var(--blue);text-decoration:none;font-weight:600;">Fix in Workspaces →</a>`
+        : '';
+      return `<div style="font-size:12px;color:var(--text-muted);"><strong style="color:var(--text);">${esc(f.code || f.severity || 'finding')}</strong><br>${esc(f.message || '')}${fix}</div>`;
+    }).join('') : '<div style="font-size:12px;color:var(--text-muted);">No findings.</div>');
   card.appendChild(body);
   card.querySelector('button').onclick = () => showRaw(raw, payload);
   return card;

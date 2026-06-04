@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.15.1] — 2026-06-04
+
+### Workspace management QOL: fix a broken workspace path without deleting it
+- **The dead-end is gone.** A workspace whose path no longer exists used to surface a `workspace_unavailable` health finding with no way to act on it — the only option was Clear (delete the whole entry). The workspace card now shows the error inline with a **Fix path** button, every card has an **Edit** action, and the Health-findings rows carry inline **Edit path** / **Remove** buttons wired to the offending alias. Diagnostics findings for the same case link straight to the actionable Workspaces view.
+- **Add/Edit workspace is now a proper modal form** (replacing the chained `window.prompt`s): alias, path, protected branches, default base branch, and allowed remotes in one dialog. The path field **validates live** against `GET /api/workspace/preflight?path=` and shows whether it is a git repo, a non-git folder, or missing. Saving is **warn-but-allow** — a not-yet-existing path (about to be cloned) is flagged but never blocks the save.
+- **Native folder picker.** A **Browse…** button calls the new `POST /api/pick-folder`, which the Electron launcher backs with `dialog.showOpenDialog` (injected as `pickFolder` into `startHttpServer`; the HTTP server runs in the launcher's process). Outside the desktop launcher the endpoint reports `unsupported` and the dashboard falls back to manual entry.
+- **Friendlier preflight output:** the per-workspace preflight result renders a readable pass/fail summary instead of a raw JSON dump.
+
+Bump root/electron/extension/status-UI/lockfiles to 0.15.1.
+
 ## [0.15.0] — 2026-06-04
 
 ### Dashboard + Electron UI revamp (dark-only, unified design system)

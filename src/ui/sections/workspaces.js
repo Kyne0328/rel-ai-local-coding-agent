@@ -4,6 +4,7 @@ import { pillHtml } from '/ui/components/pill.js';
 import { badgeHtml } from '/ui/components/badge.js';
 import { toast } from '/ui/components/toast.js';
 import { esc, metricHtml, statusClass } from '/ui/utils.js';
+import { openWorkspaceForm } from '/ui/sections/workspace-form.js';
 
 export function mountWorkspaces(container, data) {
   container.innerHTML = '';
@@ -74,6 +75,7 @@ function workspaceCard(ws, health) {
         ${pillHtml(status)}
       </div>
       <div class="path">${esc(ws.path || '')}</div>
+      ${health && health.ok === false ? `<div style="margin-top:8px;padding:8px 10px;border:1px solid var(--red);border-radius:8px;background:rgba(255,111,136,.10);font-size:12px;color:var(--text);display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;"><span>⚠ ${esc(health.error || 'Workspace unavailable')}</span><button class="secondary" type="button" data-fix-path="${esc(ws.alias || '')}">Fix path</button></div>` : ''}
       <div class="badge-row">
         ${badgeHtml('configured tests ' + testKeys.length)}
         ${badgeHtml('detected tests ' + detected.length, detected.length ? 'good' : 'warn')}
@@ -90,6 +92,7 @@ function workspaceCard(ws, health) {
         <button class="secondary" type="button" data-preflight="${esc(ws.alias || '')}">Run preflight</button>
         <button class="secondary" type="button" data-toggle-fast-task="${esc(ws.alias || '')}">${ws.fastTask && ws.fastTask.enabled !== false ? 'Use broad context' : 'Use focused context'}</button>
         <button class="secondary" type="button" data-edit-fast-task="${esc(ws.alias || '')}">Context settings</button>
+        <button class="secondary" type="button" data-edit-workspace="${esc(ws.alias || '')}">Edit</button>
         <button class="secondary" type="button" data-rename-workspace="${esc(ws.alias || '')}">Rename</button>
         <button class="secondary danger" type="button" data-clear-workspace="${esc(ws.alias || '')}">Clear</button>
         ${canSaveDetected ? `<button type="button" data-save-detected="${esc(ws.alias || '')}">Save detected tests</button>` : ''}
@@ -114,13 +117,37 @@ function validationText(configured, detected) {
 }
 
 function findingRow(finding) {
-  return `<a class="list-item" href="#settings/diagnostics" style="text-decoration:none;color:inherit;"><span class="dot ${statusClass(finding.severity)}"></span><div><div class="item-title">${esc(finding.code || finding.severity || 'finding')}</div><div class="item-sub">${esc(finding.message || '')}</div></div><div class="item-time">${pillHtml(finding.severity || 'info')}</div></a>`;
+  const alias = finding.workspace || '';
+  const actionable = finding.code === 'workspace_unavailable' && alias;
+  const inner = `<span class="dot ${statusClass(finding.severity)}"></span><div style="flex:1;"><div class="item-title">${esc(finding.code || finding.severity || 'finding')}</div><div class="item-sub">${esc(finding.message || '')}</div></div>`;
+  if (actionable) {
+    return `<div class="list-item" style="display:flex;align-items:center;gap:10px;">${inner}<div style="display:flex;gap:6px;flex-shrink:0;"><button class="secondary" type="button" data-finding-edit="${esc(alias)}">Edit path</button><button class="secondary danger" type="button" data-finding-remove="${esc(alias)}">Remove</button></div></div>`;
+  }
+  return `<a class="list-item" href="#settings/diagnostics" style="text-decoration:none;color:inherit;">${inner}<div class="item-time">${pillHtml(finding.severity || 'info')}</div></a>`;
 }
 
 document.addEventListener('click', async (event) => {
   const addWorkspace = event.target && event.target.closest ? event.target.closest('[data-add-workspace]') : null;
   if (addWorkspace) {
-    await addWorkspaceFlow();
+    openWorkspaceForm({ mode: 'add' });
+    return;
+  }
+
+  const editTrigger = event.target && event.target.closest
+    ? event.target.closest('[data-edit-workspace],[data-fix-path],[data-finding-edit]')
+    : null;
+  if (editTrigger) {
+    const alias = editTrigger.getAttribute('data-edit-workspace')
+      || editTrigger.getAttribute('data-fix-path')
+      || editTrigger.getAttribute('data-finding-edit') || '';
+    const ws = await loadWorkspace(alias);
+    if (ws) openWorkspaceForm({ mode: 'edit', workspace: ws });
+    return;
+  }
+
+  const findingRemove = event.target && event.target.closest ? event.target.closest('[data-finding-remove]') : null;
+  if (findingRemove) {
+    await clearWorkspaceFlow(findingRemove.getAttribute('data-finding-remove') || '');
     return;
   }
 
@@ -159,7 +186,7 @@ document.addEventListener('click', async (event) => {
     preflight.disabled = true;
     preflight.textContent = 'Running…';
     const result = await fetchJson('/api/workspace/preflight?workspace=' + encodeURIComponent(alias) + '&requireClean=0');
-    if (out) { out.style.display = 'block'; out.textContent = JSON.stringify(result, null, 2); }
+    if (out) { out.style.display = 'block'; renderPreflight(out, result); }
     preflight.disabled = false;
     preflight.textContent = 'Run preflight';
     return;
@@ -204,34 +231,23 @@ async function saveDetectedTests(alias) {
   });
 }
 
+function renderPreflight(out, result) {
+  if (!result || typeof result !== 'object') { out.textContent = String(result); return; }
+  const findings = Array.isArray(result.findings) ? result.findings : [];
+  const parts = [result.ok === true ? '✓ Preflight passed' : '✗ Preflight found issues'];
+  if (result.branch) parts.push('branch: ' + result.branch);
+  if (result.error) parts.push(result.error);
+  for (const f of findings) parts.push((f.severity === 'error' ? '✗ ' : '⚠ ') + (f.message || f.code || ''));
+  if (result.ok === true && !findings.length) parts.push('Workspace is reachable and ready for checks.');
+  out.textContent = parts.join('\n');
+}
+
 function preflightOutput(alias) {
   return Array.from(document.querySelectorAll('[data-preflight-out]')).find(el => el.getAttribute('data-preflight-out') === alias) || null;
 }
 
 function actionableFindings(health) {
   return Array.isArray(health.findings) ? health.findings.filter(f => f.severity !== 'info') : [];
-}
-
-async function addWorkspaceFlow() {
-  const alias = (window.prompt('Workspace alias, for example jjclover') || '').trim();
-  if (!alias) return;
-  const workspacePath = (window.prompt('Absolute workspace path') || '').trim();
-  if (!workspacePath) return;
-  const result = await postJson('/api/workspaces', {
-    action: 'upsert',
-    alias,
-    path: workspacePath,
-    protectedBranches: ['main', 'master'],
-    defaultBaseBranch: 'main',
-    allowedRemotes: ['origin'],
-    confirmDangerous: true
-  });
-  if (result && result.ok) {
-    toast('Workspace added: ' + alias, { variant: 'success' });
-    setTimeout(() => location.reload(), 400);
-  } else {
-    toast('Could not add workspace: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });
-  }
 }
 
 async function renameWorkspaceFlow(alias) {

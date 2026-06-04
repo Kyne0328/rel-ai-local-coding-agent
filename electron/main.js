@@ -337,7 +337,17 @@ async function startServer() {
         token: guiConfig.token,
         chatgptSecret: guiConfig.chatgptSecret,
         publicUrl: `https://${guiConfig.ngrokDomain}`,
-        exitOnError: false
+        exitOnError: false,
+        // Native folder picker for the dashboard "Browse" buttons. Runs in the main
+        // process; the dashboard reaches it via POST /api/pick-folder.
+        pickFolder: async () => {
+          const { dialog } = require('electron');
+          const result = await dialog.showOpenDialog({
+            title: 'Select workspace folder',
+            properties: ['openDirectory']
+          });
+          return result && !result.canceled && result.filePaths && result.filePaths[0] ? result.filePaths[0] : null;
+        }
       });
       actualPort = await new Promise((resolve, reject) => {
         httpServer.once('listening', () => resolve(httpServer.address().port));
