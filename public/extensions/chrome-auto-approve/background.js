@@ -10,15 +10,28 @@ const DEFAULTS = {
 const lastInjectedAt = new Map();
 const INJECT_COOLDOWN_MS = 10000;
 
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.alarms.create('relai-scan', { periodInMinutes: 0.1 });
-  chrome.alarms.create('relai-heartbeat', { periodInMinutes: 0.5 });
-});
+// Background scan cadence. The foreground content script reacts instantly via its
+// mutation observer + gated poll, so this alarm only needs to cover throttled
+// background tabs. (Chrome clamps packed-extension alarms to a 30s floor anyway.)
+const SCAN_PERIOD_MIN = 0.5;
+const HEARTBEAT_PERIOD_MIN = 0.5;
 
-chrome.runtime.onStartup.addListener(() => {
-  chrome.alarms.create('relai-scan', { periodInMinutes: 0.1 });
-  chrome.alarms.create('relai-heartbeat', { periodInMinutes: 0.5 });
-});
+// Dashboard reachability is slow-changing; probing it on every scan was wasteful.
+// Cache the result and only re-probe when stale or on an explicit user action.
+const CONN_TTL_MS = 60000;
+let connCache = { at: 0, ok: false };
+function invalidateConnCache() { connCache = { at: 0, ok: false }; }
+
+function ensureAlarms() {
+  chrome.alarms.create('relai-scan', { periodInMinutes: SCAN_PERIOD_MIN });
+  chrome.alarms.create('relai-heartbeat', { periodInMinutes: HEARTBEAT_PERIOD_MIN });
+}
+
+chrome.runtime.onInstalled.addListener(ensureAlarms);
+chrome.runtime.onStartup.addListener(ensureAlarms);
+
+// Drop per-tab cooldown state when a tab closes so the map cannot grow unbounded.
+chrome.tabs.onRemoved.addListener((tabId) => { lastInjectedAt.delete(tabId); });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === 'relai-scan') scanChatGptTabs().catch(() => {});
@@ -28,11 +41,13 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || typeof message !== 'object') return false;
   if (message.type === 'relai-config-updated') {
-    chrome.alarms.create('relai-scan', { periodInMinutes: 0.1 });
+    invalidateConnCache();
+    chrome.alarms.create('relai-scan', { periodInMinutes: SCAN_PERIOD_MIN });
     sendResponse({ ok: true });
     return true;
   }
   if (message.type === 'relai-scan-now') {
+    invalidateConnCache();
     scanChatGptTabs().then((tabs) => sendResponse({ ok: true, tabs })).catch((err) => sendResponse({ ok: false, error: String(err && err.message || err) }));
     return true;
   }
@@ -85,6 +100,10 @@ async function discoverServer(token) {
 
 async function dashboardAllows(cfg) {
   if (!cfg.enabled) return false;
+  // Reuse a recent reachability result instead of probing localhost every scan.
+  // Enabled state is the real gate, so this only governs the status display and
+  // opportunistic token sync.
+  if (Date.now() - connCache.at < CONN_TTL_MS) return true;
   const base = String(cfg.baseUrl || DEFAULTS.baseUrl).replace(/\/$/, '');
   const settingsPath = cfg.token ? `/api/auto-approve/settings?token=${encodeURIComponent(cfg.token)}` : '/api/auto-approve/settings';
   let reachable = await probeFetch(base + settingsPath, cfg.token);
@@ -111,6 +130,7 @@ async function dashboardAllows(cfg) {
       if (Object.keys(updates).length) await chrome.storage.local.set(updates);
     }
   }
+  connCache = { at: Date.now(), ok: reachable };
   chrome.storage.local.set({ connectionOk: reachable }).catch(() => {});
   return true; // extension enabled state is the gate, not dashboard
 }

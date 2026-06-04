@@ -36,12 +36,12 @@
     'remove file', 'remove files', 'remove obsolete file', 'remove obsolete files',
     'retire obsolete file', 'retire file',
 
-    // relai_run_checks
-    'verify', 'verify local repo', 'verify workspace', 'run verification', 'run verify',
+    // relai_run_checks (title: "Workspace Checks")
+    'workspace checks', 'verify', 'verify local repo', 'verify workspace', 'run verification', 'run verify',
     'run checks', 'run tests', 'run command', 'run commands', 'execute verification',
 
-    // relai_browser
-    'browser', 'browser check', 'run browser check', 'open browser', 'check browser',
+    // relai_browser (title: "UI Route Check")
+    'ui route check', 'route check', 'browser', 'browser check', 'run browser check', 'open browser', 'check browser',
     'ui check', 'run ui check', 'validate ui',
 
     // relai_diff
@@ -58,6 +58,14 @@
   ];
   const NEGATIVE = ['cancel', 'deny', 'decline', 'reject', 'not now', 'stop', 'close', 'dismiss'];
   let lastClickAt = 0;
+
+  // Idle gate: the expensive full-DOM card scan only runs while an approval card
+  // is actually likely to be present. The observer flips cardLikely on when it
+  // sees the Rel.AI card hallmark text; consecutive empty scans flip it back off.
+  // This keeps the 2s poll free in the common case (no card on screen).
+  let cardLikely = false;
+  let missStreak = 0;
+  const MAX_MISS = 3;
 
   try {
     if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
@@ -86,14 +94,30 @@
   const SCAN_DEBOUNCE_MS = 900;
   const observer = new MutationObserver((mutations) => {
     try {
-      if (mutations.some(isRelevantMutation)) scheduleScan('mutation');
+      let relevant = false;
+      for (const mutation of mutations) {
+        if (mutation.type === 'childList') {
+          for (const node of mutation.addedNodes || []) {
+            if (nodeLooksLikeCard(node)) { cardLikely = true; relevant = true; }
+            else if (isPotentialApprovalNode(node)) relevant = true;
+          }
+        } else if (isRelevantMutation(mutation)) {
+          relevant = true;
+        }
+      }
+      // Only schedule the costly scan when a card is actually plausible. A bare
+      // button/attribute mutation with no known card present is ignored.
+      if (relevant && cardLikely) scheduleScan('mutation');
     } catch (error) {
       reportContentError('mutation observer', error);
     }
   });
   try {
     if (document.documentElement) {
-      observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label', 'disabled', 'data-testid', 'class'] });
+      // 'class' churns on every hover/animation/streamed token, so it is left out;
+      // approval cards arrive as childList insertions, and their buttons enable via
+      // 'disabled'/'aria-label'.
+      observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-label', 'disabled'] });
     }
   } catch (error) {
     reportContentError('observer setup', error);
@@ -108,10 +132,11 @@
   let scheduledTimer = 0;
   scheduleScan('startup');
 
-  // Polling fallback for foreground — catches cards that appear without DOM mutations.
-  // Background tabs rely on alarm-driven scans from background.js (timers are throttled there).
+  // Polling fallback for foreground — catches cards whose buttons enable without a
+  // tracked mutation. Gated by cardLikely so it stays free when no card is present.
+  // Background tabs rely on alarm-driven scans from background.js (timers throttle there).
   setInterval(() => {
-    if (!document.hidden) safeScanAndApprove('poll');
+    if (!document.hidden && cardLikely) safeScanAndApprove('poll');
   }, 2000);
 
   function scheduleScan(reason) {
@@ -184,15 +209,34 @@
   function isPotentialApprovalNode(node) {
     if (!(node instanceof HTMLElement)) return false;
     if (node.matches('button, [role="button"]')) return true;
-    const text = compact(node.innerText || node.textContent || '');
+    // textContent (not innerText) avoids forcing a layout reflow on every node
+    // inserted during token streaming.
+    const text = compact(node.textContent || '');
     if (text.includes('rel-ai-mcp') || text.includes('using tools comes with risks')) return true;
     return Boolean(node.querySelector && node.querySelector('button, [role="button"]'));
+  }
+
+  // Cheap, reflow-free check used to arm the scan gate: does this inserted node (or
+  // its subtree) carry the Rel.AI approval-card hallmark text?
+  function nodeLooksLikeCard(node) {
+    if (!(node instanceof HTMLElement)) return false;
+    const text = compact(node.textContent || '');
+    return text.includes('rel-ai-mcp') || text.includes('using tools comes with risks');
   }
 
   function scanAndApprove() {
     const now = Date.now();
     if (now - lastClickAt < 450) return 0;
     const cards = findApprovalCards();
+    if (cards.length === 0) {
+      // No card found; after a few empty scans, disarm the gate so the poll idles.
+      if (++missStreak >= MAX_MISS) cardLikely = false;
+      return 0;
+    }
+    // A card is present (this scan may be the background-alarm safety net catching
+    // one the observer missed) — keep the gate armed until it is gone.
+    missStreak = 0;
+    cardLikely = true;
     let clicked = 0;
     for (const card of cards) {
       const button = findApprovalButton(card);

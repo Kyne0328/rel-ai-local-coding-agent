@@ -665,7 +665,15 @@ async function relaiSnapshotArchive(workspace, config, args = {}) {
   const zipped = await createZipArchive(staging, archivePath, config, args);
   const ok = zipped.ok === true;
   appendOperation(config, workspace, { id: operationId, type: "snapshot_archive", ok, paths: [], results: [{ operation: "snapshotArchive", archivePath, files: copied.files.length, skipped: copied.skipped.length }] });
-  return { ok, workspace: workspace.alias, operationId, operation: "snapshotArchive", archivePath, copied, zip: zipped, bytes: fs.existsSync(archivePath) ? fs.statSync(archivePath).size : 0, note: "Archive is stored on the MCP host. Use relai_apply_bundle with bundlePath to overlay it onto a workspace, or retrieve it from this local path." };
+  const SKIPPED_SAMPLE = 10;
+  const skippedSummary = {
+    count: copied.skipped.length,
+    ...(copied.skipped.length > SKIPPED_SAMPLE * 2
+      ? { sample: { first: copied.skipped.slice(0, SKIPPED_SAMPLE), last: copied.skipped.slice(-SKIPPED_SAMPLE), truncated: true } }
+      : { sample: { first: copied.skipped, truncated: false } })
+  };
+  const copiedSummary = { fileCount: copied.files.length, files: copied.files, skipped: skippedSummary };
+  return { ok, workspace: workspace.alias, operationId, operation: "snapshotArchive", archivePath, copied: copiedSummary, zip: zipped, bytes: fs.existsSync(archivePath) ? fs.statSync(archivePath).size : 0, note: "Archive is stored on the MCP host. Use relai_apply_bundle with bundlePath to overlay it onto a workspace, or retrieve it from this local path." };
 }
 
 function assertDirectWriteAllowed(_relativePath, _content) {
@@ -889,19 +897,57 @@ function boundCheckOutput(summary, maxChars) {
   return bounded;
 }
 
+const SAFE_BROWSER_CHECK_NAME = /^[A-Za-z0-9:._-]+$/;
+
+function readPackageScripts(root) {
+  const packageJson = path.join(root, "package.json");
+  if (!fs.existsSync(packageJson)) return {};
+  try {
+    const pkg = JSON.parse(fs.readFileSync(packageJson, "utf8"));
+    return pkg && pkg.scripts && typeof pkg.scripts === "object" ? pkg.scripts : {};
+  } catch (_error) {
+    return {};
+  }
+}
+
+function parseBrowserProbe(stdout) {
+  const text = String(stdout || "").trim();
+  if (!text) return null;
+  const lastLine = text.split(/\r?\n/).filter(Boolean).pop();
+  if (!lastLine) return null;
+  try {
+    const probe = JSON.parse(lastLine);
+    if (probe && typeof probe === "object") return probe;
+  } catch (_error) {}
+  return null;
+}
+
 async function relaiBrowser(workspace, config, args = {}) {
   const url = String(args.url || args.route || "").trim();
   const command = String(args.command || "").trim();
   if (command) {
-    const result = await runProcess(command, [], {
+    // Bounded: only named package.json scripts may run, invoked as `npm run <name>`.
+    // No arbitrary shell — keeps this a validation bridge, not a command runner.
+    const scripts = readPackageScripts(workspace.path);
+    const available = Object.keys(scripts).sort();
+    if (!SAFE_BROWSER_CHECK_NAME.test(command) || !Object.prototype.hasOwnProperty.call(scripts, command)) {
+      return {
+        ok: false,
+        workspace: workspace.alias,
+        mode: "check",
+        check: command,
+        error: `Unknown check '${command}'. relai_browser runs named package.json scripts only. Available: ${available.join(", ") || "(none)"}.`,
+        availableChecks: available
+      };
+    }
+    const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+    const result = await runProcess(npmCommand, ["run", command], {
       cwd: workspace.path,
-      shell: true,
-      commandString: command,
       timeout: clampNumber(args.timeoutMs, 1000, 24 * 60 * 60 * 1000, 120000)
     }, config);
-    return { ok: result.exitCode === 0, workspace: workspace.alias, mode: "command", command, ...summarizeCommand(result) };
+    return { ok: result.exitCode === 0, workspace: workspace.alias, mode: "check", check: command, ...summarizeCommand(result) };
   }
-  if (!url) throw new Error("url, route, or command is required.");
+  if (!url) throw new Error("url, route, or check is required.");
   const script = `
     const target = ${JSON.stringify(url)};
     fetch(target).then(async (res) => {
@@ -911,7 +957,20 @@ async function relaiBrowser(workspace, config, args = {}) {
     }).catch((err) => { console.error(err && err.message || String(err)); process.exit(1); });
   `;
   const result = await runProcess(process.execPath, ["-e", script], { cwd: workspace.path, timeout: clampNumber(args.timeoutMs, 1000, 600000, 30000) }, config);
-  return { ok: result.exitCode === 0, workspace: workspace.alias, mode: "http", url, ...summarizeCommand(result) };
+  const probe = parseBrowserProbe(result.stdout);
+  return {
+    workspace: workspace.alias,
+    mode: "http",
+    url,
+    ...(probe ? {
+      httpStatus: typeof probe.status === "number" ? probe.status : null,
+      finalUrl: probe.url || url,
+      responseBytes: typeof probe.bytes === "number" ? probe.bytes : null,
+      title: probe.title || ""
+    } : { reachable: false }),
+    ...summarizeCommand(result),
+    ok: result.exitCode === 0
+  };
 }
 
 async function relaiDiff(workspace, config, args = {}) {
@@ -1152,6 +1211,10 @@ async function relaiGitMergeRemoteBranchesPlan(workspace, config, args = {}) {
       continue;
     }
     const short = name.replace(`${remote}/`, "");
+    if (!short || short === remote || name === remote) {
+      excluded.push({ name, reason: "remote name, not a branch" });
+      continue;
+    }
     if (protectedBranches.has(short)) {
       excluded.push({ name, reason: "protected or target branch" });
       continue;
@@ -1213,7 +1276,13 @@ async function relaiRemoveFile(workspace, config, args = {}) {
   const relativePath = String(args.path || "").trim();
   if (!relativePath) throw new Error("relai_remove_file requires path.");
   const reason = String(args.reason || "").trim();
-  const result = relaiClear(workspace, config, { path: relativePath, expectedSha256: args.expectedSha256, dryRun: args.dryRun, failIfMissing: args.failIfMissing });
+  let result;
+  try {
+    result = relaiClear(workspace, config, { path: relativePath, expectedSha256: args.expectedSha256, dryRun: args.dryRun, failIfMissing: args.failIfMissing });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(message.replace(/relai_clear_files/g, "relai_remove_file"));
+  }
   if (!args.dryRun && args.stage === true && result.changedFiles.length > 0) {
     const stage = await runProcess("git", ["add", "--", ...result.changedFiles], { cwd: workspace.path, timeout: 60000 }, config);
     return { ...result, reason, stage: summarizeCommand(stage), ok: result.ok && stage.exitCode === 0 };

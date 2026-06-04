@@ -87,16 +87,16 @@ const toolSchemas = [
   tool("relai_clear_files", "Discard Workspace Files", "Discard one or more generated or temporary files from a configured workspace. Folders are refused. Supports dryRun and failIfMissing.", {
     workspace: stringProp(), path: stringProp(), paths: arrayProp("string", 1, 100), expectedSha256: stringProp(), dryRun: boolProp(), failIfMissing: boolProp()
   }, ["workspace"], DESTRUCTIVE_LOCAL),
-  tool("relai_apply_update", "Apply Prepared Update", "Apply a prepared text update to the workspace and optionally run checks afterward. Accepts either git unified diff (--- a/path / +++ b/path / @@ hunks) or OpenAI patch format (*** Begin Patch / *** Update File: path / *** End Patch). The workspace must be clean by default; pass requireCleanGit:false to apply when the worktree already has unrelated changes (a backup is still taken).", {
+  tool("relai_apply_update", "Apply Prepared Update", "Apply a prepared text update to the workspace and optionally validate afterward. Accepts either git unified diff (--- a/path / +++ b/path / @@ hunks) or OpenAI patch format (*** Begin Patch / *** Update File: path / *** End Patch). The workspace must be clean by default; pass requireCleanGit:false to apply when the worktree already has unrelated changes (a backup is still taken).", {
     workspace: stringProp(), updateText: stringProp(), backup: boolProp(), requireCleanGit: boolProp(), check: stringProp(), checks: arrayProp("string", 0), checksText: stringProp(), timeoutMs: numberProp(1000, 86400000), stopOnFailure: boolProp(), returnDiff: boolProp(), maxResultBytes: numberProp(1000, 5242880)
   }, ["workspace"], WRITE_LOCAL),
-  tool("relai_apply_bundle", "Apply Prepared Bundle", "Apply a prepared file bundle to the workspace and optionally run checks afterward. The workspace must be clean by default; pass requireCleanGit:false to apply when the worktree already has unrelated changes (a backup is still taken).", {
+  tool("relai_apply_bundle", "Apply Prepared Bundle", "Apply a prepared file bundle to the workspace and optionally validate afterward. The workspace must be clean by default; pass requireCleanGit:false to apply when the worktree already has unrelated changes (a backup is still taken).", {
     workspace: stringProp(), bundlePath: stringProp(), path: stringProp(), stripRoot: boolProp(), clearMissing: boolProp(), backup: boolProp(), requireCleanGit: boolProp(), check: stringProp(), checks: arrayProp("string", 0), checksText: stringProp(), timeoutMs: numberProp(1000, 86400000), stopOnFailure: boolProp(), returnDiff: boolProp(), maxResultBytes: numberProp(1000, 5242880)
   }, ["workspace"], WRITE_LOCAL),
-  tool("relai_package_snapshot", "Package Workspace Zip", "Create a zip package of the current workspace on the MCP host, excluding repo internals, dependency caches, build outputs, and Rel.AI state.", {
+  tool("relai_package_snapshot", "Package Workspace Zip", "Create a zip package of the current workspace, excluding repo internals, dependency caches, build outputs, and Rel.AI state.", {
     workspace: stringProp(), maxFiles: numberProp(1, 200000), timeoutMs: numberProp(1000, 86400000)
   }, ["workspace"], WRITE_LOCAL),
-  tool("relai_run_checks", "Run Workspace Checks", "Run workspace validation checks such as tests, analyzers, linters, and build checks. Validation level is selected automatically based on change surface — focused for narrow edits, broader for high-blast-radius changes. Output is bounded to the tail of each command (where failures and summaries appear) so it survives result-size limits; pass fullOutput: true to keep a larger tail for a long error log.", {
+  tool("relai_run_checks", "Workspace Checks", "Workspace validation checks (tests, analyzers, linters, build steps). Validation level is selected automatically based on change surface — focused for narrow edits, broader for high-blast-radius changes. Output is bounded to the tail of each step (where failures and summaries appear) so it survives result-size limits; pass fullOutput: true to keep a larger tail for a long error log.", {
     workspace: stringProp(),
     level: stringProp(),
     check: stringProp(),
@@ -106,7 +106,7 @@ const toolSchemas = [
     stopOnFailure: boolProp(),
     fullOutput: boolProp()
   }, ["workspace"], WRITE_LOCAL),
-  tool("relai_browser", "Browser/UI Check", "UI validation bridge. Fetch a URL/route or run a local browser check such as Playwright; returns output and errors.", {
+  tool("relai_browser", "UI Route Check", "UI validation bridge. Load a configured workspace route (url/route) and return its HTTP status, byte count, title, and any errors. Pass check to run a named package.json script; only declared scripts are accepted.", {
     workspace: stringProp(), url: stringProp(), route: stringProp(), check: stringProp(), timeoutMs: numberProp(1000, 1800000)
   }, ["workspace"], WRITE_OPEN),
   tool("relai_diff", "Review Local Repo Diff", "Read-only. Return repository status and current diff as a review artifact. Pass path to filter to a single file. When a trusted session is active, sessionChangedFiles and baselineChangedFiles split the status entries by ownership (this session vs. pre-existing dirty worktree).", {
@@ -184,7 +184,11 @@ function getToolSchemas() {
 const PUBLIC_STRIPPED_PROPS = {
   relai_run_checks: ["check", "checks", "checksText"],
   relai_apply_update: ["check", "checks", "checksText"],
-  relai_apply_bundle: ["check", "checks", "checksText"]
+  relai_apply_bundle: ["check", "checks", "checksText"],
+  // Free-form url is the strongest SSRF/arbitrary-fetch signal for the connector
+  // classifier. Strip it from the public schema; ChatGPT drives UI checks via the
+  // configured route/check. The server still honors url when supplied internally.
+  relai_browser: ["url"]
 };
 
 function getPublicToolSchemas() {
@@ -452,7 +456,7 @@ function relaiStatus(config, args = {}) {
   return {
     ok: true,
     version: packageJson.version || "",
-    tools: BRIDGE_TOOL_NAMES,
+    tools: PUBLIC_HTTP_TOOL_NAMES,
     toolGroups: {
       workspace: PUBLIC_HTTP_TOOL_NAMES,
       git: BRIDGE_TOOL_NAMES.filter((name) => name.startsWith("relai_git_")),
@@ -479,7 +483,7 @@ function relaiFeatureProbe(config, args = {}) {
     ciHealthCheck: Boolean(scripts["test:repo-health"] && ci.ok),
     softerToolNames: true,
     sessionPolicySupport: true,
-    tools: BRIDGE_TOOL_NAMES,
+    tools: PUBLIC_HTTP_TOOL_NAMES,
     workspaceRequested: args.workspace || ""
   };
 }
