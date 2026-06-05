@@ -70,7 +70,13 @@ function regenerateToken() {
 }
 
 function copyToken() {
-  if (state.token) window.electronAPI.copyUrl(state.token);
+  if (!state.token) return;
+  window.electronAPI.copyUrl(state.token);
+  const btn = document.getElementById('copyTokenBtn');
+  if (!btn) return;
+  const original = btn.textContent;
+  btn.textContent = 'Copied';
+  window.setTimeout(() => { btn.textContent = original; }, 1600);
 }
 
 function updateNgrokPreview() {

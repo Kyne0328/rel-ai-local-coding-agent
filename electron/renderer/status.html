@@ -86,6 +86,15 @@
   .copy-label { font-size: 10px; color: var(--text-muted); margin-bottom: 7px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 700; }
   .copy-url { font-size: 12px; color: var(--blue); word-break: break-all; margin-bottom: 10px; font-family: ui-monospace, "SF Mono", Consolas, monospace; min-height: 32px; line-height: 1.5; }
   .copy-url.empty { color: var(--text-dim); font-style: italic; }
+  .connector-steps { list-style: none; counter-reset: step; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .connector-steps li { position: relative; padding-left: 22px; font-size: 11px; color: var(--text-dim); line-height: 1.45; counter-increment: step; }
+  .connector-steps li::before {
+    content: counter(step); position: absolute; left: 0; top: 0;
+    width: 15px; height: 15px; border-radius: 50%;
+    background: var(--surface-3); color: var(--text-muted);
+    font-size: 9px; font-weight: 700; display: grid; place-items: center;
+  }
+  .connector-steps strong { color: var(--text-muted); }
   .error-line { color: var(--red); font-size: 12px; min-height: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   button { cursor: pointer; font-family: inherit; transition: filter .15s var(--ease), background .15s var(--ease), border-color .15s var(--ease), box-shadow .15s var(--ease); }
   button:active { transform: translateY(1px); }
@@ -161,9 +170,15 @@
   </div>
 
   <div class="copy-box">
-    <div class="copy-label">Copy this for ChatGPT</div>
+    <div class="copy-label">ChatGPT MCP URL</div>
     <div class="copy-url empty" id="mcpUrl">Waiting for tunnel...</div>
     <button class="btn-copy" id="copyBtn" disabled>Copy MCP URL</button>
+    <ol class="connector-steps">
+      <li>Copy this URL after the tunnel connects.</li>
+      <li>In ChatGPT, open <strong>Settings &gt; Apps &gt; Create</strong>.</li>
+      <li>Paste the URL as the MCP endpoint and choose <strong>OAuth</strong>.</li>
+      <li>Approve with your dashboard token, then select the app in chat.</li>
+    </ol>
   </div>
 
   <div class="error-line" id="errorLine"></div>

@@ -8,7 +8,7 @@ export function mountConnector(container) {
 
 async function _load(container) {
   const payload = await fetchJson('/api/connection');
-  container.innerHTML = '<div class="section"><div class="section-head"><div><h2>ChatGPT Connector</h2><p>Copy the right MCP URL, confirm the auth mode, and finish the connection without guesswork.</p></div></div></div>';
+  container.innerHTML = '<div class="section"><div class="section-head"><div><h2>ChatGPT Connector</h2><p>Copy one URL, create the ChatGPT app, approve with OAuth, then select the app in chat.</p></div></div></div>';
   if (!payload) {
     container.innerHTML += '<div class="empty">Failed to load connector details.</div>';
     return;
@@ -32,11 +32,11 @@ function summaryCard(payload) {
     <div class="card-body" style="display:grid;gap:14px;">
       <div class="empty" style="text-align:left;padding:12px;line-height:1.55;${payload.permanentUrlConfigured ? 'border-color:rgba(71,221,138,.22);background:rgba(71,221,138,.07);' : 'border-color:rgba(255,194,75,.22);background:rgba(255,194,75,.07);'}">
         ${payload.permanentUrlConfigured
-          ? 'This is the stable URL to paste into ChatGPT. You should only need to update the ChatGPT connector if this URL changes.'
-          : 'This URL works for local diagnostics, but it is not a durable ChatGPT setup. For a stable connector, configure a permanent HTTPS public URL and relaunch Rel.AI MCP with that URL.'}
+          ? 'Use this /mcp endpoint when creating or updating the ChatGPT app. Keep the URL stable; only update ChatGPT if this URL changes.'
+          : 'Local diagnostics are available, but ChatGPT needs a stable HTTPS URL for OAuth. Add a public URL or tunnel, relaunch Rel.AI MCP, then copy the new /mcp URL.'}
       </div>
       <div style="display:grid;gap:8px;">
-        <div style="font-size:12px;color:var(--text-muted);">COPY THIS FOR CHATGPT</div>
+        <div style="font-size:12px;color:var(--text-muted);">CHATGPT MCP ENDPOINT</div>
         <code class="copy-box" style="min-height:auto;max-height:none;">${escapeHtml(payload.chatgptMcpUrl || '—')}</code>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button type="button" data-copy="mcp">Copy ChatGPT MCP URL</button>
@@ -44,7 +44,7 @@ function summaryCard(payload) {
         </div>
       </div>
       <div style="display:grid;gap:8px;font-size:13px;">
-        <div style="display:flex;gap:10px;flex-wrap:wrap;"><span style="color:var(--text-muted);min-width:140px;">Auth mode</span><span>${escapeHtml(payload.chatgptAuthMode || 'OAuth')}</span></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;"><span style="color:var(--text-muted);min-width:140px;">ChatGPT auth</span><span>${escapeHtml(payload.chatgptAuthMode || 'OAuth')}</span></div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;"><span style="color:var(--text-muted);min-width:140px;">Health URL</span><code style="font-size:12px;word-break:break-all;">${escapeHtml(payload.chatgptHealthUrl || '—')}</code></div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;"><span style="color:var(--text-muted);min-width:140px;">Dashboard URL</span><code style="font-size:12px;word-break:break-all;">${escapeHtml(payload.dashboardUrl || '—')}</code></div>
       </div>
@@ -59,17 +59,19 @@ function summaryCard(payload) {
 function stepsCard(payload) {
   const card = document.createElement('div');
   card.className = 'card';
-  // Steps 1-3 are the fixed core connect flow. payload.nextSteps carries deployment
-  // guidance (local vs. tunnel) and continues the numbering. The old fallback array
-  // duplicated steps 1-3 verbatim as 4-6 when nextSteps was empty; drop it.
   const extraSteps = Array.isArray(payload.nextSteps) ? payload.nextSteps : [];
+  const notes = extraSteps.length
+    ? `<div class="empty" style="text-align:left;padding:12px;line-height:1.5;"><strong style="color:var(--text);">Connection notes</strong><ul style="margin:8px 0 0 18px;padding:0;display:grid;gap:6px;">${extraSteps.map(step => `<li>${escapeHtml(step)}</li>`).join('')}</ul></div>`
+    : '';
   card.innerHTML = `
-    <div class="card-head"><h3>Next steps</h3><span class="section-action">finish the connection</span></div>
+    <div class="card-head"><h3>Use in ChatGPT</h3><span class="section-action">finish setup, then test</span></div>
     <div class="card-body setup-steps">
-      <div class="step"><span class="step-num">1</span><div>Go to <strong>ChatGPT → Settings → Connectors → Add MCP server</strong>.</div></div>
-      <div class="step"><span class="step-num">2</span><div>Paste the <strong>ChatGPT MCP URL</strong> exactly as shown above.</div></div>
-      <div class="step"><span class="step-num">3</span><div>Set authentication to <strong>OAuth</strong>. ChatGPT opens a sign-in page — enter your Rel.AI <strong>dashboard token</strong> to approve the connection.</div></div>
-      ${extraSteps.map((step, index) => `<div class="step"><span class="step-num">${index + 4}</span><div>${escapeHtml(step)}</div></div>`).join('')}
+      <div class="step"><span class="step-num">1</span><div>If app creation is not visible, enable <strong>Developer Mode</strong> for custom MCP apps or ask your workspace admin.</div></div>
+      <div class="step"><span class="step-num">2</span><div>In ChatGPT, go to <strong>Settings &gt; Apps &gt; Create</strong>. Admins can also use <strong>Workspace Settings &gt; Apps &gt; Create</strong>.</div></div>
+      <div class="step"><span class="step-num">3</span><div>Name it <strong>Rel.AI MCP</strong>, paste the endpoint above, choose <strong>OAuth</strong>, and create the app.</div></div>
+      <div class="step"><span class="step-num">4</span><div>When ChatGPT opens the sign-in page, enter your Rel.AI <strong>dashboard token</strong> to approve.</div></div>
+      <div class="step"><span class="step-num">5</span><div>Open a chat, select the <strong>Rel.AI MCP</strong> app, then start with: <code>Call relai_git_status and relai_repo_snapshot for workspace "your-workspace". Do not modify files yet.</code></div></div>
+      ${notes}
     </div>
   `;
   return card;

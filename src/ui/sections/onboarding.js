@@ -90,7 +90,7 @@ function _showStep() {
 
 function _renderStep(step, content, nextBtn, skipBtn, backBtn) {
   if (step === 0) {
-    content.innerHTML = '<p style="font-size:14px;line-height:1.55;">Rel.AI MCP operates as your trusted local coding operator. Inside a configured workspace, the agent can read, edit, validate, and review diffs without per-action approval. Boundaries remain firm: blocked paths, destructive resets, and remote pushes are still gated.</p><p style="font-size:14px;line-height:1.55;">This setup gets one local workspace and your ChatGPT connector ready so you can start using Rel.AI MCP immediately.</p>';
+    content.innerHTML = '<p style="font-size:14px;line-height:1.55;">Rel.AI MCP gives ChatGPT explicit tools for configured local workspaces: inspect the repo, read exact files, make focused edits, run checks, and review the diff.</p><p style="font-size:14px;line-height:1.55;">This setup gets one workspace and the ChatGPT app connection ready so your first request can be a safe read-only check.</p>';
     _withConnection(content);
     nextBtn.textContent = 'Start setup';
   } else if (step === 1) {
@@ -219,14 +219,14 @@ function _renderStep(step, content, nextBtn, skipBtn, backBtn) {
     nextBtn.onclick = submitWorkspace;
   } else if (step === 2) {
     nextBtn.textContent = 'Continue';
-    content.innerHTML = '<h3 style="margin:0;font-size:15px;">Trusted local bridge</h3><p style="font-size:13px;color:var(--text-muted);line-height:1.5;">Rel.AI MCP uses one workspace tool surface for ChatGPT. The repo stays on your machine while ChatGPT gets explicit tools to inspect, edit, validate, diff, and restore only configured workspaces.</p><div class="empty" style="text-align:left;padding:12px;line-height:1.5;">No extra permission profile is required for the normal ChatGPT-local workflow. The main thing is simply adding the right workspace and connector URL.</div>';
+    content.innerHTML = '<h3 style="margin:0;font-size:15px;">How to ask for work</h3><p style="font-size:13px;color:var(--text-muted);line-height:1.5;">Tell ChatGPT which workspace alias to use, then ask for the smallest useful first step. For new repos, start with status and snapshot before requesting edits.</p><div class="empty" style="text-align:left;padding:12px;line-height:1.5;"><strong style="color:var(--text);">Good first prompt</strong><br><code>Use Rel.AI MCP on workspace "myapp". Call relai_git_status and relai_repo_snapshot. Do not modify files yet.</code></div>';
     nextBtn.onclick = async () => {
       _step++;
       _showStep();
     };
   } else if (step === 3) {
     nextBtn.textContent = 'Continue';
-    content.innerHTML = '<h3 style="margin:0;font-size:15px;">Connect ChatGPT</h3><p style="font-size:13px;color:var(--text-muted);line-height:1.5;">Use the exact MCP URL below in ChatGPT. The setup already includes the right auth mode guidance.</p>';
+    content.innerHTML = '<h3 style="margin:0;font-size:15px;">Connect ChatGPT</h3><p style="font-size:13px;color:var(--text-muted);line-height:1.5;">Create a ChatGPT app, paste the MCP endpoint below, choose OAuth, and approve with your dashboard token. After that, select the Rel.AI MCP app in any chat.</p>';
     _withConnection(content, true);
   } else if (step === 4) {
     nextBtn.textContent = 'Done';
@@ -235,7 +235,7 @@ function _renderStep(step, content, nextBtn, skipBtn, backBtn) {
     const workspaceLine = _data.workspaceCreated
       ? `Workspace <strong>${escapeHtml(_data.createdWorkspaceAlias)}</strong> is saved and ready.`
       : 'You can add a workspace later from the Workspaces page.';
-    content.innerHTML = `<div style="text-align:center;padding:16px 0;display:grid;gap:12px;"><div style="font-size:32px;">✓</div><div style="font-size:16px;font-weight:700;">Setup complete</div><div style="color:var(--text-muted);font-size:13px;line-height:1.5;">${workspaceLine}<br>Ask ChatGPT to inspect a file or run a check to confirm the bridge end to end.</div></div>`;
+    content.innerHTML = `<div style="text-align:center;padding:16px 0;display:grid;gap:12px;"><div style="font-size:32px;">✓</div><div style="font-size:16px;font-weight:700;">Setup complete</div><div style="color:var(--text-muted);font-size:13px;line-height:1.5;">${workspaceLine}<br>Select the Rel.AI MCP app in ChatGPT and ask for a read-only status check first.</div></div>`;
     nextBtn.onclick = async () => {
       await postJson('/api/onboarding/complete', { completed: true });
       const bd = document.getElementById('__relai-modal-backdrop');
@@ -266,6 +266,14 @@ async function _withConnection(content, showCopy = false) {
     urlBox.appendChild(code);
     urlBox.appendChild(copyBtn);
     content.appendChild(urlBox);
+    const appSteps = document.createElement('div');
+    appSteps.className = 'setup-steps';
+    appSteps.innerHTML = [
+      'ChatGPT Settings > Apps > Create (or Workspace Settings > Apps > Create for admins).',
+      'Paste this MCP endpoint and choose OAuth.',
+      'Approve with your Rel.AI dashboard token, then select the app in chat.'
+    ].map((step, index) => `<div class="step"><span class="step-num">${index + 1}</span><div>${escapeHtml(step)}</div></div>`).join('');
+    content.appendChild(appSteps);
   }
 
   const status = document.createElement('div');

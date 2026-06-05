@@ -56,7 +56,7 @@ function updateUI(status) {
     urlEl.className = 'copy-url';
     copyBtn.disabled = false;
   } else {
-    urlEl.textContent = serverRunning ? 'Waiting for tunnel...' : 'Start the server to get a URL.';
+    urlEl.textContent = serverRunning ? 'Waiting for ngrok to publish the MCP URL...' : 'Start the server to get a ChatGPT MCP URL.';
     urlEl.className = 'copy-url empty';
     copyBtn.disabled = true;
   }
@@ -69,7 +69,12 @@ function updateUI(status) {
 
 function bindEvents() {
   document.getElementById('copyBtn').addEventListener('click', () => {
-    if (currentMcpUrl) window.electronAPI.copyUrl(currentMcpUrl);
+    if (!currentMcpUrl) return;
+    window.electronAPI.copyUrl(currentMcpUrl);
+    const btn = document.getElementById('copyBtn');
+    const original = btn.textContent;
+    btn.textContent = 'Copied MCP URL';
+    window.setTimeout(() => { btn.textContent = original; }, 1600);
   });
   document.getElementById('dashboardBtn').addEventListener('click', () => window.electronAPI.openDashboard());
   document.getElementById('settingsBtn').addEventListener('click', () => window.electronAPI.openSettings());

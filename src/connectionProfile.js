@@ -122,16 +122,18 @@ function buildConnectionSummary({ host = "127.0.0.1", port = 3333, publicUrl = "
     tunnelMode: publicBaseUrl ? (tunnelProvider && tunnelProvider !== "none" ? `public tunnel via ${tunnelProvider}` : "configured public URL") : "local only",
     nextSteps: publicBaseUrl
       ? [
-          "Keep the local Rel.AI MCP server running on this machine.",
-          `Keep your tunnel/reverse proxy routing the public URL to ${localUrl}.`,
-          "In ChatGPT Developer Mode, add one app using the COPY THIS FOR CHATGPT URL.",
-          "Set authentication to OAuth. ChatGPT will open a sign-in page — enter your Rel.AI dashboard token to approve.",
-          "Keep your dashboard token private; it is the credential that approves ChatGPT's OAuth sign-in."
+          "Keep Rel.AI MCP running on this machine while ChatGPT uses the app.",
+          `Keep your tunnel or reverse proxy routing ${baseForChatGPT} to ${localUrl}.`,
+          "In ChatGPT, create a custom app from Settings > Apps > Create. Admins can also use Workspace Settings > Apps > Create.",
+          "Paste the COPY THIS FOR CHATGPT URL as the MCP endpoint and choose OAuth.",
+          "When ChatGPT opens the sign-in page, enter your Rel.AI dashboard token to approve the app.",
+          "In a chat, select the Rel.AI MCP app, then ask it to inspect a workspace before making changes."
         ]
       : [
-          "For local testing, use the dashboardUrl on this machine.",
-          "For ChatGPT Developer Mode, configure a stable HTTPS tunnel (OAuth requires HTTPS) and run this launcher again with --public-url https://your-domain.example.com.",
-          "Do not rely on random temporary ngrok URLs if you want one permanent ChatGPT app."
+          "Open the dashboard on this machine to add workspaces and copy local diagnostics links.",
+          "For ChatGPT, set up a stable HTTPS tunnel first; OAuth requires HTTPS.",
+          "Relaunch with --public-url https://your-domain.example.com, then copy the generated /mcp URL into a ChatGPT app.",
+          "Temporary tunnel URLs work for testing, but a stable URL prevents recreating the ChatGPT app."
         ]
   };
 }
@@ -157,8 +159,9 @@ function printConnectionSummary(summary) {
       : "Permanent URL: not configured. Add one with --public to create a temporary tunnel, or --public-url https://your-domain.example.com for a stable connector URL.",
     "",
     "Important:",
-    "  - Paste the /mcp URL into ChatGPT and choose Authentication: OAuth.",
-    "  - ChatGPT will open a sign-in page; enter your Rel.AI dashboard token to approve.",
+    "  - Create or update a ChatGPT app with the /mcp URL as its MCP endpoint.",
+    "  - Choose Authentication: OAuth, then enter your Rel.AI dashboard token when ChatGPT opens the sign-in page.",
+    "  - Select the Rel.AI MCP app in a chat before asking it to inspect a workspace.",
     "  - Do not open /mcp in the browser as a dashboard. Use /dashboard instead.",
     "  - If the dashboard says Connecting, open the Dashboard data check URL above.",
     "  - OAuth requires the server to be reachable over HTTPS (use a stable public URL).",

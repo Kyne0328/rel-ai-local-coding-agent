@@ -106,7 +106,7 @@
     </div>
     <div class="welcome-center">
       <h1>Rel.AI MCP Launcher</h1>
-      <p class="subtitle">Connect ChatGPT to your local files through a secure ngrok tunnel. Setup takes about 2 minutes — you'll need an ngrok account with a static domain.</p>
+      <p class="subtitle">Connect ChatGPT to your local workspaces through a secure ngrok static domain. You will copy one MCP URL, choose OAuth in ChatGPT, and approve with your dashboard token.</p>
       <button class="btn-primary" id="startWizardBtn">Get Started &rarr;</button>
     </div>
   </div>
@@ -125,7 +125,7 @@
 
   <div class="step" id="step3">
     <h2>Dashboard token</h2>
-    <p class="subtitle">This token protects your local dashboard. Copy it now and save it somewhere safe — you'll need it to log in to the dashboard later.</p>
+    <p class="subtitle">This token protects your local dashboard and approves ChatGPT OAuth sign-ins. Copy it now and save it somewhere safe.</p>
     <label>Your token</label>
     <div class="token-box" id="tokenBox"></div>
     <div class="btn-row">
@@ -156,8 +156,8 @@
     <div class="summary-box" id="summaryBox"></div>
     <div style="text-align:center;">
       <button class="btn-success" id="launchBtn">Launch Server</button>
-      <p class="hint" style="margin-top:12px;">After launch, copy the MCP URL and add it in ChatGPT as a connector with <strong>Authentication: OAuth</strong>. ChatGPT opens a sign-in page — enter your Rel.AI dashboard token to approve.</p>
-      <p class="hint">Settings are saved — this wizard won't appear again on next launch.</p>
+      <p class="hint" style="margin-top:12px;">After launch, copy the MCP URL. In ChatGPT, create an app from <strong>Settings &gt; Apps &gt; Create</strong>, paste that endpoint, choose <strong>OAuth</strong>, and approve with your Rel.AI dashboard token.</p>
+      <p class="hint">Then select the Rel.AI MCP app in a chat and start with a read-only workspace status check. Settings are saved, so this wizard will not appear again on next launch.</p>
       <div class="error" id="launchError"></div>
     </div>
   </div>
