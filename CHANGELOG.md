@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.16.1] — 2026-06-05
+
+### Rel.AI MCP usage instruction quality-of-life pass
+- **Dashboard connector instructions now follow the whole ChatGPT app flow.** The Connector page walks users through copying the `/mcp` endpoint, creating the ChatGPT app, choosing OAuth, approving with the dashboard token, selecting the app in chat, and starting with a read-only workspace check.
+- **Dashboard onboarding now teaches safer first prompts.** The setup modal explains workspace aliases, recommends `relai_git_status` plus `relai_repo_snapshot` before edits, and shows the same ChatGPT app/OAuth setup flow in context.
+- **Electron launcher guidance is clearer at the moment users need it.** The setup wizard and status window now explain the token's OAuth role, show persistent ChatGPT app setup steps, and give copy buttons immediate copied-state feedback.
+
+Bump root/electron/extension/status UI/lockfiles to 0.16.1.
+
 ## [0.16.0] — 2026-06-05
 
 ### Real OAuth authentication for the ChatGPT connector
