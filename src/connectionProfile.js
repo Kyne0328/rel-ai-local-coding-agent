@@ -126,7 +126,6 @@ function buildConnectionSummary({ host = "127.0.0.1", port = 3333, publicUrl = "
   const publicBaseUrl = publicUrl ? normalizePublicUrl(publicUrl) : "";
   const baseForChatGPT = publicBaseUrl || localUrl;
   const secret = String(chatgptSecret || "").trim();
-  const legacySecretPath = secret ? `/mcp/${encodeURIComponent(secret)}` : "/mcp";
   return {
     ok: true,
     localBaseUrl: localUrl,
@@ -141,8 +140,6 @@ function buildConnectionSummary({ host = "127.0.0.1", port = 3333, publicUrl = "
     chatgptHealthUrl: `${baseForChatGPT}/health`,
     chatgptAuthMode: "OAuth — ChatGPT signs in with your Rel.AI dashboard token.",
     oauthMetadataUrl: `${baseForChatGPT}/.well-known/oauth-protected-resource`,
-    // Legacy secret-in-URL endpoint, kept working for backward compatibility.
-    legacySecretMcpUrl: `${baseForChatGPT}${legacySecretPath}`,
     authHeader: token ? "Authorization: Bearer <REL_AI_MCP_TOKEN>" : "not configured",
     token: showToken ? token : token ? "set" : "missing",
     chatgptSecret: showToken ? secret : secret ? "set" : "missing",

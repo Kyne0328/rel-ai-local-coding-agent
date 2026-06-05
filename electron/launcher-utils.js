@@ -47,10 +47,11 @@ function buildTunnelCommand(domain, port) {
   return `ngrok http --url=${safeDomain} http://127.0.0.1:${safePort} --log=stdout`;
 }
 
-function buildMcpUrl(publicBaseUrl, chatgptSecret) {
+// ChatGPT connects to the plain /mcp endpoint with Authentication: OAuth. The
+// legacy secret-in-URL path has been removed, so this no longer embeds a secret.
+function buildMcpUrl(publicBaseUrl) {
   const base = String(publicBaseUrl || '').trim().replace(/\/+$/, '');
-  const secret = String(chatgptSecret || '').trim();
-  return `${base}/mcp/${encodeURIComponent(secret)}`;
+  return `${base}/mcp`;
 }
 
 function hasExistingConfig() {

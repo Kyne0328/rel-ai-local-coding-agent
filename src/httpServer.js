@@ -394,7 +394,7 @@ async function routeRequest(req, res, options) {
     return;
   }
 
-  const mcpAccess = getMcpAccess(parsed.pathname, options);
+  const mcpAccess = getMcpAccess(parsed.pathname);
 
   if (req.method === "GET" && (parsed.pathname === "/mcp" || mcpAccess.kind === "streamable-http")) {
     sendJson(res, 200, mcpGetDiagnostic(parsed.pathname, options, mcpAccess, req), ae);
@@ -451,24 +451,22 @@ async function routeRequest(req, res, options) {
       readinessApi: "GET /api/readiness",
       workspacePreflightApi: "GET /api/workspace/preflight?workspace=...",
       events: "GET /events",
-      streamableHttp: "POST /mcp or POST /mcp/<chatgpt-secret>",
-      sse: "GET /sse or GET /sse/<chatgpt-secret> then POST /messages...?sessionId=..."
+      streamableHttp: "POST /mcp (Authentication: OAuth, or Bearer token)",
+      sse: "GET /sse (Authentication: OAuth, or Bearer token) then POST /messages...?sessionId=...",
+      oauthDiscovery: "GET /.well-known/oauth-protected-resource"
     }
   }, ae);
 }
 
 
-function getMcpAccess(pathname, options) {
-  const secret = String(options.chatgptSecret || "").trim();
-  if (pathname === "/mcp") return { kind: "streamable-http", allowed: false };
-  if (pathname === "/sse") return { kind: "sse", allowed: false, messagePath: "/messages" };
-  if (pathname === "/messages") return { kind: "messages", allowed: false };
-  if (!secret) return { kind: "none", allowed: false };
-  const encoded = encodeURIComponent(secret);
-  if (pathname === `/mcp/${encoded}` || pathname === `/mcp/${secret}`) return { kind: "streamable-http", allowed: true };
-  if (pathname === `/sse/${encoded}` || pathname === `/sse/${secret}`) return { kind: "sse", allowed: true, messagePath: `/messages/${encoded}` };
-  if (pathname === `/messages/${encoded}` || pathname === `/messages/${secret}`) return { kind: "messages", allowed: true };
-  return { kind: "none", allowed: false };
+// The MCP transport endpoints. The legacy secret-in-URL no-auth path
+// (/mcp/<secret>) has been removed — access is granted only by OAuth or the local
+// bearer token, enforced in isMcpAuthorized.
+function getMcpAccess(pathname) {
+  if (pathname === "/mcp") return { kind: "streamable-http" };
+  if (pathname === "/sse") return { kind: "sse", messagePath: "/messages" };
+  if (pathname === "/messages") return { kind: "messages" };
+  return { kind: "none" };
 }
 
 // External origin ChatGPT reaches us on — used as the OAuth issuer and for building
@@ -495,11 +493,11 @@ function isOAuthAuthorized(req) {
   return Boolean(token && oauth.validateAccessToken(token));
 }
 
-// MCP access is granted by ANY of: the legacy secret URL path, the static
-// REL_AI_MCP_TOKEN bearer (local/API clients), or an OAuth-issued access token
-// (the ChatGPT OAuth connector).
-function isMcpAuthorized(req, options, mcpAccess) {
-  return Boolean(mcpAccess && mcpAccess.allowed) || isAuthorized(req, options) || isOAuthAuthorized(req);
+// MCP access is granted by either the static REL_AI_MCP_TOKEN bearer (local/API
+// clients) or an OAuth-issued access token (the ChatGPT OAuth connector). There is
+// no unauthenticated path.
+function isMcpAuthorized(req, options) {
+  return isAuthorized(req, options) || isOAuthAuthorized(req);
 }
 
 function unauthorizedMcp(res, baseUrl) {
@@ -522,10 +520,6 @@ function hasDashboardQueryToken(parsed, options) {
 
 function isDashboardAuthorized(req, parsed, options) {
   return isAuthorized(req, options) || hasDashboardQueryToken(parsed, options);
-}
-
-function canShowSharedSecrets(req, options, mcpAccess = {}) {
-  return isAuthorized(req, options) || Boolean(mcpAccess.allowed);
 }
 
 // Honor an explicit requireHttpToken query param (the dashboard sends "0" because it
@@ -563,21 +557,14 @@ function workspacePathPreflight(rawPath) {
 }
 
 function mcpGetDiagnostic(pathname, options, mcpAccess, req) {
-  const latestProfile = connection.readConnectionProfile();
-  const base = latestProfile.publicUrl || options.publicUrl || connection.localBaseUrl?.(options.host, options.port) || `http://${options.host || "127.0.0.1"}:${options.port || 3333}`;
-  const secret = String(latestProfile.chatgptSecret || options.chatgptSecret || "").trim();
-  const showSecrets = canShowSharedSecrets(req, options, mcpAccess);
-  const chatgptPath = secret
-    ? (showSecrets ? `/mcp/${encodeURIComponent(secret)}` : "/mcp/<secret>")
-    : "/mcp/<missing-secret>";
-  const cleanBase = String(base || "").replace(/\/+$/, "");
-  const usableWithPost = Boolean(mcpAccess.allowed || isAuthorized(req, options) || isOAuthAuthorized(req) || options.allowNoAuth);
+  const cleanBase = resolveBaseUrl(options);
+  const usableWithPost = Boolean(isAuthorized(req, options) || isOAuthAuthorized(req) || options.allowNoAuth);
   return {
     ok: true,
     endpoint: pathname,
     reachable: true,
     note: "This is a GET browser diagnostic. MCP clients must send JSON-RPC with POST.",
-    // The ChatGPT connector now uses real OAuth: add this plain /mcp URL with
+    // The ChatGPT connector uses real OAuth: add this plain /mcp URL with
     // Authentication: OAuth. ChatGPT discovers the auth endpoints automatically.
     correctChatGPTUrl: `${cleanBase}/mcp`,
     chatgptAuth: "OAuth",
@@ -586,10 +573,6 @@ function mcpGetDiagnostic(pathname, options, mcpAccess, req) {
     plainMcpUrl: "/mcp is the OAuth-protected MCP endpoint. ChatGPT uses Authentication: OAuth; local/API clients may use a Bearer token instead.",
     postRequired: true,
     usableWithPost,
-    // Legacy secret-path URL kept working for backward compatibility; redacted unless
-    // the caller is already authorized.
-    legacySecretMcpUrl: `${cleanBase}${chatgptPath}`,
-    secretRedacted: Boolean(secret && !showSecrets),
     examples: {
       health: "/health",
       dashboard: "/dashboard",

@@ -413,7 +413,7 @@ async function startServer() {
     if (result.ok) {
       tunnelProcess = result.process;
       const publicBaseUrl = `https://${guiConfig.ngrokDomain}`;
-      const mcpUrl = buildMcpUrl(publicBaseUrl, guiConfig.chatgptSecret);
+      const mcpUrl = buildMcpUrl(publicBaseUrl);
       connection.writeConnectionProfile({
         host: '127.0.0.1',
         port: actualPort,

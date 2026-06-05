@@ -96,27 +96,17 @@ await check('GET /api/settings — with bearer → 200', async () => {
   if (!body.ok) throw new Error('settings body.ok was not true');
 });
 
-// GET /mcp diagnostic — no token → redacted
-await check('GET /mcp diagnostic — no token → redacted', async () => {
+// GET /mcp diagnostic — OAuth, and never leaks a secret/token
+await check('GET /mcp diagnostic — OAuth, no secret leak', async () => {
   const res = await fetch(`${base}/mcp`);
   if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
   const body = await res.json();
   const text = JSON.stringify(body);
-  if (!body.ok || body.secretRedacted !== true || !body.legacySecretMcpUrl.includes('/mcp/<secret>')) {
-    throw new Error('diagnostic did not redact the ChatGPT secret');
+  if (!body.ok || body.chatgptAuth !== 'OAuth' || !body.correctChatGPTUrl.endsWith('/mcp') || !body.oauthProtectedResource.includes('/.well-known/oauth-protected-resource')) {
+    throw new Error('diagnostic did not advertise the OAuth flow');
   }
   if (text.includes(chatgptSecret) || text.includes(token)) {
     throw new Error('diagnostic leaked a secret value');
-  }
-});
-
-// GET /mcp diagnostic — with bearer → full ChatGPT URL
-await check('GET /mcp diagnostic — with bearer → full ChatGPT URL', async () => {
-  const res = await fetch(`${base}/mcp`, { headers: bearer });
-  if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-  const body = await res.json();
-  if (body.secretRedacted || !body.legacySecretMcpUrl.includes(`/mcp/${encodeURIComponent(chatgptSecret)}`)) {
-    throw new Error('authorized diagnostic did not include the ChatGPT URL');
   }
 });
 
@@ -162,16 +152,16 @@ await check('POST /mcp — with bearer → 200 (tools/list)', async () => {
   if (!Array.isArray(body.result?.tools)) throw new Error('expected tools array in response');
 });
 
-// POST /mcp/<secret> — no bearer → 200 (authenticated by secret)
-await check('POST /mcp/<secret> — no bearer → 200 (authenticated by secret)', async () => {
+// POST /mcp/<secret> — legacy no-auth path removed → 401 or 404
+await check('POST /mcp/<secret> — removed → 401 or 404', async () => {
   const res = await fetch(`${base}/mcp/${chatgptSecret}`, {
     method: 'POST',
     headers: jsonType,
     body: mcpToolsList
   });
-  if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-  const body = await res.json();
-  if (!Array.isArray(body.result?.tools)) throw new Error('expected tools array in response');
+  if (res.status !== 401 && res.status !== 404) {
+    throw new Error(`legacy secret path should no longer authenticate; got ${res.status}`);
+  }
 });
 
 // POST /mcp/wrong-secret — no bearer → 401 or 404

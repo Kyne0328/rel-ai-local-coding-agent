@@ -43,13 +43,18 @@ if (!health.ok || !health.transports.includes('streamable-http')) {
 
 const mcpBrowserDiagnostic = await fetch(`http://127.0.0.1:${port}/mcp`).then((response) => response.json());
 const publicDiagnosticText = JSON.stringify(mcpBrowserDiagnostic);
-if (!mcpBrowserDiagnostic.ok || !mcpBrowserDiagnostic.postRequired || mcpBrowserDiagnostic.chatgptAuth !== 'OAuth' || !mcpBrowserDiagnostic.correctChatGPTUrl.endsWith('/mcp') || !mcpBrowserDiagnostic.legacySecretMcpUrl.includes('/mcp/<secret>') || mcpBrowserDiagnostic.secretRedacted !== true || publicDiagnosticText.includes(chatgptSecret) || publicDiagnosticText.includes(token)) {
-  throw new Error('GET /mcp did not return an OAuth diagnostic with a redacted legacy secret');
+if (!mcpBrowserDiagnostic.ok || !mcpBrowserDiagnostic.postRequired || mcpBrowserDiagnostic.chatgptAuth !== 'OAuth' || !mcpBrowserDiagnostic.correctChatGPTUrl.endsWith('/mcp') || !mcpBrowserDiagnostic.oauthProtectedResource.includes('/.well-known/oauth-protected-resource') || publicDiagnosticText.includes(chatgptSecret) || publicDiagnosticText.includes(token)) {
+  throw new Error('GET /mcp did not return an OAuth diagnostic without leaking secrets');
 }
 
-const secretBrowserDiagnostic = await fetch(`http://127.0.0.1:${port}/mcp/${chatgptSecret}`).then((response) => response.json());
-if (!secretBrowserDiagnostic.ok || secretBrowserDiagnostic.chatgptAuth !== 'OAuth' || !secretBrowserDiagnostic.usableWithPost || secretBrowserDiagnostic.secretRedacted || !secretBrowserDiagnostic.legacySecretMcpUrl.includes(`/mcp/${encodeURIComponent(chatgptSecret)}`)) {
-  throw new Error('GET /mcp/<secret> did not return a usable ChatGPT diagnostic');
+// The legacy secret-path is removed: /mcp/<secret> is no longer a special route.
+const removedSecretRoute = await fetch(`http://127.0.0.1:${port}/mcp/${chatgptSecret}`, {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ jsonrpc: '2.0', id: 99, method: 'tools/list', params: {} })
+});
+if (removedSecretRoute.status !== 401 && removedSecretRoute.status !== 404) {
+  throw new Error(`legacy /mcp/<secret> path should no longer authenticate; got ${removedSecretRoute.status}`);
 }
 
 const publicLocalConnect = await fetch(`http://127.0.0.1:${port}/api/local-connect`).then((response) => response.json());
@@ -124,13 +129,15 @@ if (unauthorized.status !== 401) {
 }
 
 
-const chatgptList = await fetch(`http://127.0.0.1:${port}/mcp/${chatgptSecret}`, {
+// Unauthenticated POST /mcp returns the OAuth challenge so ChatGPT starts the flow.
+const oauthChallenge = await fetch(`http://127.0.0.1:${port}/mcp`, {
   method: 'POST',
   headers: { 'content-type': 'application/json' },
   body: JSON.stringify({ jsonrpc: '2.0', id: 30, method: 'tools/list', params: {} })
-}).then((response) => response.json());
-if (!Array.isArray(chatgptList.result?.tools) || chatgptList.result.tools.length !== 24 || !chatgptList.result.tools.some((item) => item.name === 'relai_repo_snapshot')) {
-  throw new Error('secret ChatGPT MCP URL did not expose exactly the workspace tools without bearer auth');
+});
+const challengeHeader = oauthChallenge.headers.get('www-authenticate') || '';
+if (oauthChallenge.status !== 401 || !/Bearer/i.test(challengeHeader) || !challengeHeader.includes('resource_metadata=')) {
+  throw new Error(`POST /mcp without auth did not return a Bearer resource_metadata challenge: ${oauthChallenge.status} ${challengeHeader}`);
 }
 
 const initialized = await fetch(`http://127.0.0.1:${port}/mcp`, {

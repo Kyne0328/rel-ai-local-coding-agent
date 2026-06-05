@@ -18,9 +18,9 @@ ChatGPT connects with **Authentication: OAuth**. The server acts as its own OAut
 
 Requires `Authorization: Bearer <REL_AI_MCP_TOKEN>` on every request. Intended for local API clients, Claude Code, and automation that can pass a bearer header. The same endpoint also accepts OAuth-issued access tokens.
 
-### `/mcp/<secret>` — legacy secret-path (deprecated)
+### `/mcp/<secret>` — legacy secret-path (removed)
 
-The secret URL segment still works for backward compatibility: any client that knows the full URL can POST without an `Authorization` header. It is no longer the advertised ChatGPT path — prefer OAuth. Treat the URL like a password, rotate `REL_AI_MCP_CHATGPT_SECRET` if exposed, and publish it only over HTTPS. Public `GET /mcp` browser diagnostics redact this secret unless the caller is already authorized.
+The unauthenticated secret-in-URL path has been **removed**. `/mcp/<secret>`, `/sse/<secret>`, and `/messages/<secret>` are no longer special routes and return `401`/`404`. Access to `/mcp` is granted only by OAuth (ChatGPT) or a `Bearer` token (local/API clients) — there is no unauthenticated entry path. `REL_AI_MCP_CHATGPT_SECRET` is no longer used for access.
 
 ### Dashboard and API endpoints
 

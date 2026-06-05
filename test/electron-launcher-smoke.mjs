@@ -32,13 +32,14 @@ assert.equal(
   'ngrok http --url=my-domain.ngrok-free.dev http://127.0.0.1:4444 --log=stdout'
 );
 
+// Secret-in-URL is removed; ChatGPT uses Authentication: OAuth on the plain /mcp URL.
 assert.equal(
-  buildMcpUrl('https://my-domain.ngrok-free.dev', 'abc123'),
-  'https://my-domain.ngrok-free.dev/mcp/abc123'
+  buildMcpUrl('https://my-domain.ngrok-free.dev'),
+  'https://my-domain.ngrok-free.dev/mcp'
 );
 assert.equal(
-  buildMcpUrl('https://my-domain.ngrok-free.dev/', 'has space'),
-  'https://my-domain.ngrok-free.dev/mcp/has%20space'
+  buildMcpUrl('https://my-domain.ngrok-free.dev/'),
+  'https://my-domain.ngrok-free.dev/mcp'
 );
 
 const electronPkg = JSON.parse(fs.readFileSync(path.join(root, 'electron', 'package.json'), 'utf8'));
