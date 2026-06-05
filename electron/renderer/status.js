@@ -81,18 +81,42 @@ window.electronAPI.onServerStatus(updateUI);
 bindEvents();
 updateUI({ serverRunning: false, tunnelStatus: 'stopped', mcpUrl: '', error: '' });
 
+function bindExtensionActions(extPath) {
+  const copyBtn = document.getElementById('extCopyBtn');
+  if (copyBtn) copyBtn.addEventListener('click', () => { if (extPath) window.electronAPI.copyText(extPath); });
+
+  const revealBtn = document.getElementById('extRevealBtn');
+  if (revealBtn && window.electronAPI.revealExtensionFolder) {
+    revealBtn.addEventListener('click', () => { window.electronAPI.revealExtensionFolder().catch(() => {}); });
+  }
+
+  const chromeBtn = document.getElementById('extOpenChromeBtn');
+  if (chromeBtn && window.electronAPI.openExtensionsPage) {
+    chromeBtn.addEventListener('click', async () => {
+      const original = chromeBtn.textContent;
+      try {
+        const res = await window.electronAPI.openExtensionsPage();
+        if (!res || !res.ok) {
+          // Chrome not found / launch refused — tell the user to do it by hand.
+          chromeBtn.textContent = 'Open chrome://extensions';
+          window.setTimeout(() => { chromeBtn.textContent = original; }, 2600);
+        }
+      } catch (_) {
+        chromeBtn.textContent = 'Open chrome://extensions';
+        window.setTimeout(() => { chromeBtn.textContent = original; }, 2600);
+      }
+    });
+  }
+}
+
 window.electronAPI.getExtensionPath().then((p) => {
   const el = document.getElementById('extPath');
   if (el) el.textContent = p || 'Not found';
-  const btn = document.getElementById('extCopyBtn');
-  if (btn) {
-    btn.addEventListener('click', () => {
-      if (p) window.electronAPI.copyText(p);
-    });
-  }
+  bindExtensionActions(p);
   requestWindowFit();
 }).catch(() => {
   const el = document.getElementById('extPath');
   if (el) el.textContent = 'Not available';
+  bindExtensionActions('');
   requestWindowFit();
 });

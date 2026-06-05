@@ -110,6 +110,11 @@
     if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
       chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         if (message && message.type === 'relai-auto-approve-scan') {
+          // Background tabs reach us via this alarm-driven message even when timers
+          // are throttled. Opportunistically nudge the keep-alive audio back to
+          // running (a prior user gesture may have unlocked autoplay by now), so the
+          // tab regains "audible" exemption and the fast poll can resume.
+          try { _resumeAudio(); } catch (_) {}
           // scan is async (cross-tab claim round-trip); reply once it resolves.
           safeScanAndApprove('message').then((count) => safeSendResponse(sendResponse, { ok: true, count }));
           return true;
@@ -171,11 +176,17 @@
   let scheduledTimer = 0;
   scheduleScan('startup');
 
-  // Polling fallback for foreground — catches cards whose buttons enable without a
-  // tracked mutation. Gated by cardLikely so it stays free when no card is present.
-  // Background tabs rely on alarm-driven scans from background.js (timers throttle there).
+  // Polling fallback — catches cards whose buttons enable without a tracked mutation.
+  // Gated by cardLikely so it stays free when no card is present.
+  //
+  // The poll also runs in a HIDDEN tab while keep-alive is active: the silent-audio
+  // keep-alive marks the tab "audible", which exempts it from Chrome's background
+  // timer throttling, so this interval still fires ~every 2s. Without this, a
+  // backgrounded working tab fell back to the 30s background alarm only — approvals
+  // lagged up to 30s and felt stalled. When keep-alive is off (or audio is suspended)
+  // a hidden tab's timers are throttled anyway, so the alarm remains the safety net.
   setInterval(() => {
-    if (!document.hidden && cardLikely) safeScanAndApprove('poll');
+    if ((!document.hidden || keepAliveActive) && cardLikely) safeScanAndApprove('poll');
   }, 2000);
 
   // --- Background keep-alive (only while the extension is enabled) ---
@@ -185,6 +196,9 @@
   //   ChatGPT does not pause its own work on visibilitychange.
   let _audioCtx = null;
   let _gestureResumeBound = false;
+  // True while the extension is enabled (keep-alive armed). Lets the 2s poll run in a
+  // hidden-but-audible tab — see the setInterval above.
+  let keepAliveActive = false;
 
   function _resumeAudio() {
     if (_audioCtx && _audioCtx.state === 'suspended') _audioCtx.resume().catch(() => {});
@@ -226,7 +240,8 @@
   function refreshKeepAlive() {
     try {
       chrome.storage.local.get({ enabled: false }, (cfg) => {
-        if (cfg && cfg.enabled) { startKeepAliveAudio(); setSpoof(true); }
+        keepAliveActive = !!(cfg && cfg.enabled);
+        if (keepAliveActive) { startKeepAliveAudio(); setSpoof(true); }
         else { stopKeepAliveAudio(); setSpoof(false); }
       });
     } catch (_) {}

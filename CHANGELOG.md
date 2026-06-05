@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.15.4] — 2026-06-05
+
+### Background-tab auto-approve reliability + easier extension import
+- **Backgrounded ChatGPT tabs now approve fast, not on a 30s lag.** The 2s content-script poll was gated `!document.hidden`, so a hidden working tab (any time you switch to another tab/window — including a second ChatGPT tab) fell back to the 30s background alarm only, and approvals felt stalled. The poll now also runs while keep-alive is active: the silent-audio keep-alive marks the tab "audible", which exempts it from Chrome's background timer throttling, so the poll keeps firing at ~2s even when hidden. The 30s alarm remains the safety net for when keep-alive is off or autoplay is still suspended. (The cross-tab arbiter was already correct — two tabs never double-approve; the problem was latency, not the tab count.)
+- **Faster wake recovery.** The background service worker now scans immediately when a ChatGPT tab becomes active, finishes (re)loading, or on browser startup — so switching back to a tab, or one Chrome discarded/froze and just restored, approves without waiting for the next alarm tick.
+- **Autoplay nudge.** The alarm-driven scan also tries to resume the keep-alive audio (a user gesture may have unlocked it since), and the popup now tells you to click once inside ChatGPT after enabling so the keep-alive can arm.
+- **Extension import from the launcher.** The desktop status window's Chrome Extension box gains **Open folder** (reveals the unpacked extension in your file manager) and **Open Chrome** (jumps to `chrome://extensions`) buttons alongside Copy path, with numbered load-unpacked steps. Note: Chrome forbids an external app from installing an unpacked extension directly, so this streamlines the manual load rather than fully automating it; if Chrome can't be launched the button shows the `chrome://extensions` address to open by hand.
+
 ## [0.15.3] — 2026-06-05
 
 ### Slimmer dashboard topbar

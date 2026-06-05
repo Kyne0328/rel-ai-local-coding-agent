@@ -548,6 +548,38 @@ ipcMain.handle('extension:get-path', () => {
   return resolveResourcePath(path.join('public', 'extensions', 'chrome-auto-approve'));
 });
 
+// Open the unpacked-extension folder in the OS file manager. This is the reliable
+// import helper — Chrome forbids an external app from installing an unpacked/CRX
+// extension into the user's real browser, so the best we can do is reveal the folder
+// for a one-shot "Load unpacked".
+ipcMain.handle('extension:reveal-folder', async () => {
+  const dir = resolveResourcePath(path.join('public', 'extensions', 'chrome-auto-approve'));
+  const err = await shell.openPath(dir); // '' on success
+  return { ok: !err, path: dir, error: err || '' };
+});
+
+// Best-effort jump to chrome://extensions. The chrome:// scheme has no OS protocol
+// handler (so shell.openExternal can't reach it) — launch a Chromium browser directly
+// with the URL. Falls back to ok:false; the UI still offers reveal-folder + copy-path.
+ipcMain.handle('extension:open-extensions-page', async () => {
+  const url = 'chrome://extensions/';
+  const { spawn } = require('node:child_process');
+  const attempts = process.platform === 'win32'
+    ? [['cmd', ['/c', 'start', '', 'chrome', url]]]
+    : process.platform === 'darwin'
+      ? [['open', ['-a', 'Google Chrome', url]]]
+      : [['google-chrome', [url]], ['chromium', [url]], ['chromium-browser', [url]]];
+  for (const [cmd, args] of attempts) {
+    try {
+      const child = spawn(cmd, args, { detached: true, stdio: 'ignore' });
+      child.on('error', () => {});
+      child.unref();
+      return { ok: true };
+    } catch (_) { /* try next */ }
+  }
+  return { ok: false };
+});
+
 ipcMain.on('window:fit-content', (event, payload = {}) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) return;

@@ -36,7 +36,35 @@ function ensureAlarms() {
 }
 
 chrome.runtime.onInstalled.addListener(ensureAlarms);
-chrome.runtime.onStartup.addListener(ensureAlarms);
+chrome.runtime.onStartup.addListener(() => { ensureAlarms(); scanSoon(); });
+
+// Wake-driven scans. The 30s alarm is the throttled-background safety net; these
+// fire an immediate scan the moment a ChatGPT tab becomes active or finishes
+// (re)loading — so switching back to a backgrounded working tab, or a tab Chrome
+// discarded/froze and just restored, approves without waiting for the next alarm.
+let scanSoonTimer = null;
+function scanSoon() {
+  if (scanSoonTimer) return; // coalesce bursts (onActivated + onUpdated fire together)
+  scanSoonTimer = setTimeout(() => {
+    scanSoonTimer = null;
+    scanChatGptTabs().catch(() => {});
+  }, 150);
+}
+
+function isChatGptUrl(url) {
+  return typeof url === 'string' && (url.startsWith('https://chatgpt.com/') || url.startsWith('https://chat.openai.com/'));
+}
+
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+  chrome.tabs.get(tabId, (tab) => {
+    if (chrome.runtime.lastError) return;
+    if (tab && isChatGptUrl(tab.url)) scanSoon();
+  });
+});
+
+chrome.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete' && tab && isChatGptUrl(tab.url)) scanSoon();
+});
 
 // Drop per-tab cooldown state when a tab closes so the map cannot grow unbounded.
 chrome.tabs.onRemoved.addListener((tabId) => { lastInjectedAt.delete(tabId); });
