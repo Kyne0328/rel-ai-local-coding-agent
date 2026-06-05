@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.16.2] — 2026-06-05
+
+### MCP audit fixes and release hardening
+- **Public tool metadata now matches real connector behavior.** Read-only, write, destructive, and open-world hints are no longer collapsed into one misleading safe-looking annotation, and the dashboard now derives its 24 public tool list from the actual schemas.
+- **Workspace mutation paths now have safer dry-run and no-op behavior.** Prepared patch and bundle applies can preview without changing files, clear-file dry runs report `wouldClear` separately from `cleared`, scoped dry-run commits no longer imply add-all, and empty PR drafts are refused with a clear warning.
+- **Repository and tunnel safety safeguards are tighter.** Unsafe workspace roots are rejected, collapsed source-looking full-file writes are blocked, untracked ngrok processes are left alone, and the auto-approve settings endpoint now requires authorization.
+- **Dashboard, Electron, and setup guidance are easier to follow.** Public tunnel wording replaces ngrok-specific labels where appropriate, ChatGPT setup instructions point to the current Apps flow, and stale removed-tool guidance no longer lists active tools.
+- **Regression coverage now locks down the audit fixes.** The smoke suite covers tool counts, auth gating, dry-run patching, empty PR drafts, tunnel wording, one-click routing, release-level `test:all` detection, and git workflow safety.
+
+Bump root/electron/extension/status UI/lockfiles to 0.16.2.
+
 ## [0.16.1] — 2026-06-05
 
 ### Rel.AI MCP usage instruction quality-of-life pass
