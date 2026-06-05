@@ -43,12 +43,12 @@ if (!health.ok || !health.transports.includes('streamable-http')) {
 
 const mcpBrowserDiagnostic = await fetch(`http://127.0.0.1:${port}/mcp`).then((response) => response.json());
 const publicDiagnosticText = JSON.stringify(mcpBrowserDiagnostic);
-if (!mcpBrowserDiagnostic.ok || !mcpBrowserDiagnostic.postRequired || !mcpBrowserDiagnostic.correctChatGPTUrl.includes('/mcp/<secret>') || mcpBrowserDiagnostic.secretRedacted !== true || publicDiagnosticText.includes(chatgptSecret) || publicDiagnosticText.includes(token)) {
-  throw new Error('GET /mcp did not return a redacted browser diagnostic');
+if (!mcpBrowserDiagnostic.ok || !mcpBrowserDiagnostic.postRequired || mcpBrowserDiagnostic.chatgptAuth !== 'OAuth' || !mcpBrowserDiagnostic.correctChatGPTUrl.endsWith('/mcp') || !mcpBrowserDiagnostic.legacySecretMcpUrl.includes('/mcp/<secret>') || mcpBrowserDiagnostic.secretRedacted !== true || publicDiagnosticText.includes(chatgptSecret) || publicDiagnosticText.includes(token)) {
+  throw new Error('GET /mcp did not return an OAuth diagnostic with a redacted legacy secret');
 }
 
 const secretBrowserDiagnostic = await fetch(`http://127.0.0.1:${port}/mcp/${chatgptSecret}`).then((response) => response.json());
-if (!secretBrowserDiagnostic.ok || secretBrowserDiagnostic.chatgptAuth !== 'No Authentication' || !secretBrowserDiagnostic.usableWithPost || secretBrowserDiagnostic.secretRedacted || !secretBrowserDiagnostic.correctChatGPTUrl.includes(`/mcp/${encodeURIComponent(chatgptSecret)}`)) {
+if (!secretBrowserDiagnostic.ok || secretBrowserDiagnostic.chatgptAuth !== 'OAuth' || !secretBrowserDiagnostic.usableWithPost || secretBrowserDiagnostic.secretRedacted || !secretBrowserDiagnostic.legacySecretMcpUrl.includes(`/mcp/${encodeURIComponent(chatgptSecret)}`)) {
   throw new Error('GET /mcp/<secret> did not return a usable ChatGPT diagnostic');
 }
 

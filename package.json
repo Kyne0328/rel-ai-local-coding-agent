@@ -1,6 +1,6 @@
 {
   "name": "rel-ai-mcp",
-  "version": "0.15.8",
+  "version": "0.16.0",
   "description": "Local ChatGPT repo bridge: one reliable workflow for snapshot, read, write, verify, diff, and reset configured local workspaces.",
   "private": true,
   "license": "MIT",
@@ -22,7 +22,7 @@
     "workspace:add": "node bin/relai-mcp-config.js workspace add",
     "testcmd:add": "node bin/relai-mcp-config.js test-command add",
     "cmd:add": "node bin/relai-mcp-config.js command add",
-    "test": "npm run check && npm run test:release && npm run test:repo-health && npm run test:smoke && npm run test:connector-wording && npm run test:regressions && npm run test:windows-archive && npm run test:safety-paths && npm run test:archive-safety",
+    "test": "npm run check && npm run test:release && npm run test:repo-health && npm run test:smoke && npm run test:connector-wording && npm run test:regressions && npm run test:windows-archive && npm run test:safety-paths && npm run test:archive-safety && npm run test:http-auth && npm run test:oauth",
     "test:repo-health": "node test/repo-health.mjs",
     "test:smoke": "node test/smoke.mjs",
     "test:windows-archive": "node test/windows-archive-command-smoke.mjs",
@@ -50,6 +50,7 @@
     "electron:dist": "cd electron && npx electron-builder --win",
     "test:electron": "node test/electron-launcher-smoke.mjs",
     "test:http-auth": "node test/http-auth-smoke.mjs",
+    "test:oauth": "node test/oauth-smoke.mjs",
     "test:safety-paths": "node test/safety-paths.mjs",
     "test:archive-safety": "node test/archive-safety.mjs",
     "test:dashboard-wording": "node test/dashboard-wording-smoke.mjs",
@@ -58,7 +59,7 @@
     "test:checks": "node test/command-checks-smoke.mjs",
     "test:git-workflow": "node test/git-workflow-smoke.mjs",
     "test:staged-write": "node test/staged-write-fallback-unit.mjs",
-    "test:all": "npm run check && npm run test:release && npm run test:repo-health && npm run test:smoke && npm run test:http && npm run test:compat && npm run test:connector-wording && npm run test:regressions && npm run test:public-workflow && npm run test:auto-approve && npm run test:tunnel && npm run test:oneclick && npm run test:fast-task && npm run test:electron && npm run test:workflow-config && npm run test:prepared-update && npm run test:safety-paths && npm run test:archive-safety && npm run test:http-auth && npm run test:checks && npm run test:git-workflow && npm run test:staged-write && npm run test:dashboard-wording && npm run test:windows-archive"
+    "test:all": "npm run check && npm run test:release && npm run test:repo-health && npm run test:smoke && npm run test:http && npm run test:compat && npm run test:connector-wording && npm run test:regressions && npm run test:public-workflow && npm run test:auto-approve && npm run test:tunnel && npm run test:oneclick && npm run test:fast-task && npm run test:electron && npm run test:workflow-config && npm run test:prepared-update && npm run test:safety-paths && npm run test:archive-safety && npm run test:http-auth && npm run test:oauth && npm run test:checks && npm run test:git-workflow && npm run test:staged-write && npm run test:dashboard-wording && npm run test:windows-archive"
   },
   "keywords": [
     "mcp",

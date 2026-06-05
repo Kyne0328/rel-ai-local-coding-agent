@@ -102,7 +102,7 @@ await check('GET /mcp diagnostic — no token → redacted', async () => {
   if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
   const body = await res.json();
   const text = JSON.stringify(body);
-  if (!body.ok || body.secretRedacted !== true || !body.correctChatGPTUrl.includes('/mcp/<secret>')) {
+  if (!body.ok || body.secretRedacted !== true || !body.legacySecretMcpUrl.includes('/mcp/<secret>')) {
     throw new Error('diagnostic did not redact the ChatGPT secret');
   }
   if (text.includes(chatgptSecret) || text.includes(token)) {
@@ -115,7 +115,7 @@ await check('GET /mcp diagnostic — with bearer → full ChatGPT URL', async ()
   const res = await fetch(`${base}/mcp`, { headers: bearer });
   if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
   const body = await res.json();
-  if (body.secretRedacted || !body.correctChatGPTUrl.includes(`/mcp/${encodeURIComponent(chatgptSecret)}`)) {
+  if (body.secretRedacted || !body.legacySecretMcpUrl.includes(`/mcp/${encodeURIComponent(chatgptSecret)}`)) {
     throw new Error('authorized diagnostic did not include the ChatGPT URL');
   }
 });

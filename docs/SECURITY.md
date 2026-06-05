@@ -4,18 +4,23 @@
 
 Rel.AI MCP exposes three auth modes for its HTTP server.
 
-### `/mcp/<secret>` — secret-path authentication (ChatGPT "No Authentication" flow)
+### `POST /mcp` with OAuth 2.1 — the ChatGPT connector flow (real authentication)
 
-The secret segment of the URL acts as a shared credential. Any client that knows the full URL can POST JSON-RPC without sending an `Authorization` header. This is the correct mode for ChatGPT's "No Authentication" connector.
+ChatGPT connects with **Authentication: OAuth**. The server acts as its own OAuth 2.1 authorization server and resource server:
 
-- Treat the URL like a password. Do not share it in screenshots, logs, or public issues.
-- Rotate `REL_AI_MCP_CHATGPT_SECRET` if it is exposed.
-- Only publish this URL over a stable HTTPS tunnel; never over plain HTTP on a public interface.
-- Public `GET /mcp` browser diagnostics redact this secret. The full URL is shown only to callers that already have the bearer token or are using the secret path.
+- `POST /mcp` without a valid token returns `401` with `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource"`.
+- ChatGPT discovers endpoints via `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server`, registers a client at `/register` (RFC 7591), and runs the authorization-code flow with **PKCE (S256, required)** via `/authorize` and `/token`.
+- The `/authorize` sign-in page requires the **`REL_AI_MCP_TOKEN`** (your dashboard token) before it mints a single-use authorization code. That token is the human approval step — keep it private.
+- Authorization codes are single-use and short-lived (5 min). Access tokens expire (1 h) and are renewed with rotating refresh tokens. Issued tokens persist to a `0600` `oauth-store.json` in the state dir so ChatGPT need not re-authorize on every restart.
+- OAuth requires the server to be reachable over **HTTPS** (use a stable public URL/tunnel). Never expose the authorization endpoints over plain HTTP on a public interface.
 
 ### `POST /mcp` (plain) — Bearer token authentication
 
-Requires `Authorization: Bearer <REL_AI_MCP_TOKEN>` on every request. Intended for local API clients, Claude Code, and automation that can pass a bearer header.
+Requires `Authorization: Bearer <REL_AI_MCP_TOKEN>` on every request. Intended for local API clients, Claude Code, and automation that can pass a bearer header. The same endpoint also accepts OAuth-issued access tokens.
+
+### `/mcp/<secret>` — legacy secret-path (deprecated)
+
+The secret URL segment still works for backward compatibility: any client that knows the full URL can POST without an `Authorization` header. It is no longer the advertised ChatGPT path — prefer OAuth. Treat the URL like a password, rotate `REL_AI_MCP_CHATGPT_SECRET` if exposed, and publish it only over HTTPS. Public `GET /mcp` browser diagnostics redact this secret unless the caller is already authorized.
 
 ### Dashboard and API endpoints
 

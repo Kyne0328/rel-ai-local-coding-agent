@@ -68,7 +68,7 @@ function stepsCard(payload) {
     <div class="card-body setup-steps">
       <div class="step"><span class="step-num">1</span><div>Go to <strong>ChatGPT → Settings → Connectors → Add MCP server</strong>.</div></div>
       <div class="step"><span class="step-num">2</span><div>Paste the <strong>ChatGPT MCP URL</strong> exactly as shown above.</div></div>
-      <div class="step"><span class="step-num">3</span><div>Set authentication to <strong>No Authentication</strong>. Do not paste a bearer token into ChatGPT.</div></div>
+      <div class="step"><span class="step-num">3</span><div>Set authentication to <strong>OAuth</strong>. ChatGPT opens a sign-in page — enter your Rel.AI <strong>dashboard token</strong> to approve the connection.</div></div>
       ${extraSteps.map((step, index) => `<div class="step"><span class="step-num">${index + 4}</span><div>${escapeHtml(step)}</div></div>`).join('')}
     </div>
   `;

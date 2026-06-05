@@ -13,6 +13,7 @@ const pkg = require("../package.json");
 const connection = require("./connectionProfile");
 const autoApprove = require("./autoApproveExtension");
 const { getVersion } = require("./version");
+const oauth = require("./oauthProvider");
 
 function buildToolMetadata() {
   const { getPublicToolSchemas } = require("./tools");
@@ -84,8 +85,7 @@ function startHttpServer(options = {}) {
     console.error(`[rel-ai-mcp] Dashboard: ${summary.dashboardUrl}`);
     if (publicUrl) {
       console.error(`[rel-ai-mcp] ChatGPT MCP URL: ${summary.chatgptMcpUrl}`);
-      console.error("[rel-ai-mcp] ChatGPT Auth: No Authentication");
-      console.error("[rel-ai-mcp] Do not use the plain /mcp URL in ChatGPT.");
+      console.error("[rel-ai-mcp] ChatGPT Auth: OAuth (sign in with your dashboard token)");
     } else {
       console.error("[rel-ai-mcp] No permanent public URL configured. Use rel-ai-mcp-launch --public-url https://your-domain.example.com when your tunnel is ready.");
       console.error(`[rel-ai-mcp] Local ChatGPT-style URL for diagnostics only: ${summary.chatgptMcpUrl}`);
@@ -339,6 +339,61 @@ async function routeRequest(req, res, options) {
     return;
   }
 
+  // ---- OAuth 2.1 authorization server (ChatGPT MCP "OAuth" connector) -------
+  // These bootstrap auth and must be reachable without a bearer token.
+  if (req.method === "GET" && parsed.pathname === "/.well-known/oauth-protected-resource") {
+    sendJson(res, 200, oauth.protectedResourceMetadata(resolveBaseUrl(options)), ae);
+    return;
+  }
+  if (req.method === "GET" && (parsed.pathname === "/.well-known/oauth-authorization-server" || parsed.pathname === "/.well-known/openid-configuration")) {
+    sendJson(res, 200, oauth.authorizationServerMetadata(resolveBaseUrl(options)), ae);
+    return;
+  }
+  if (req.method === "POST" && parsed.pathname === "/register") {
+    const body = await readFormOrJsonBody(req, options.maxBodyBytes);
+    const result = oauth.registerClient(body);
+    sendJson(res, result.error ? 400 : 201, result, ae);
+    return;
+  }
+  if (req.method === "GET" && parsed.pathname === "/authorize") {
+    const query = Object.fromEntries(parsed.searchParams.entries());
+    const check = oauth.validateAuthorizationRequest(query);
+    if (!check.ok) {
+      if (check.redirectError && check.redirectUri) {
+        res.writeHead(302, { Location: oauth.buildRedirectUrl(check.redirectUri, { error: check.error, error_description: check.error_description, state: check.state }) });
+        res.end();
+        return;
+      }
+      sendHtml(res, 400, oauthErrorPage(check.error_description || check.error));
+      return;
+    }
+    sendHtml(res, 200, oauth.renderLoginPage(check.request, resolveBaseUrl(options)));
+    return;
+  }
+  if (req.method === "POST" && parsed.pathname === "/authorize") {
+    const body = await readFormOrJsonBody(req, options.maxBodyBytes);
+    const check = oauth.validateAuthorizationRequest(body);
+    if (!check.ok) {
+      sendHtml(res, 400, oauthErrorPage(check.error_description || check.error));
+      return;
+    }
+    if (!oauth.verifyLogin(body.dashboard_token, options.token)) {
+      sendHtml(res, 401, oauth.renderLoginPage(check.request, resolveBaseUrl(options), { error: "Incorrect dashboard token. Try again." }));
+      return;
+    }
+    const code = oauth.issueAuthorizationCode(check.request);
+    res.writeHead(302, { Location: oauth.buildRedirectUrl(check.request.redirectUri, { code, state: check.request.state }) });
+    res.end();
+    return;
+  }
+  if (req.method === "POST" && parsed.pathname === "/token") {
+    const body = await readFormOrJsonBody(req, options.maxBodyBytes);
+    const result = oauth.exchangeToken(body);
+    res.setHeader("Cache-Control", "no-store");
+    sendJson(res, result.status, result.body, ae);
+    return;
+  }
+
   const mcpAccess = getMcpAccess(parsed.pathname, options);
 
   if (req.method === "GET" && (parsed.pathname === "/mcp" || mcpAccess.kind === "streamable-http")) {
@@ -347,7 +402,7 @@ async function routeRequest(req, res, options) {
   }
 
   if (req.method === "POST" && mcpAccess.kind === "streamable-http") {
-    if (!mcpAccess.allowed && !isAuthorized(req, options)) return unauthorized(res);
+    if (!isMcpAuthorized(req, options, mcpAccess)) return unauthorizedMcp(res, resolveBaseUrl(options));
     const payload = await readJsonBody(req, options.maxBodyBytes);
     const response = await handleJsonRpcPayload(payload, { publicHttpOnly: true });
     if (response === null) {
@@ -359,13 +414,13 @@ async function routeRequest(req, res, options) {
   }
 
   if (req.method === "GET" && mcpAccess.kind === "sse") {
-    if (!mcpAccess.allowed && !isAuthorized(req, options)) return unauthorized(res);
+    if (!isMcpAuthorized(req, options, mcpAccess)) return unauthorizedMcp(res, resolveBaseUrl(options));
     openSseSession(res, req, mcpAccess.messagePath);
     return;
   }
 
   if (req.method === "POST" && mcpAccess.kind === "messages") {
-    if (!mcpAccess.allowed && !isAuthorized(req, options)) return unauthorized(res);
+    if (!isMcpAuthorized(req, options, mcpAccess)) return unauthorizedMcp(res, resolveBaseUrl(options));
     const sessionId = parsed.searchParams.get("sessionId") || "";
     const session = sessions.get(sessionId);
     if (!session) {
@@ -414,6 +469,51 @@ function getMcpAccess(pathname, options) {
   if (pathname === `/sse/${encoded}` || pathname === `/sse/${secret}`) return { kind: "sse", allowed: true, messagePath: `/messages/${encoded}` };
   if (pathname === `/messages/${encoded}` || pathname === `/messages/${secret}`) return { kind: "messages", allowed: true };
   return { kind: "none", allowed: false };
+}
+
+// External origin ChatGPT reaches us on — used as the OAuth issuer and for building
+// absolute authorize/token/registration URLs in discovery metadata. Prefer the
+// configured public HTTPS URL; fall back to the local bind address.
+function resolveBaseUrl(options) {
+  const latestProfile = connection.readConnectionProfile();
+  const base = latestProfile.publicUrl
+    || options.publicUrl
+    || (connection.localBaseUrl ? connection.localBaseUrl(options.host, options.port) : "")
+    || `http://${options.host || "127.0.0.1"}:${options.port || 3333}`;
+  return String(base || "").replace(/\/+$/, "");
+}
+
+function bearerToken(req) {
+  const header = (req && req.headers && req.headers.authorization) || "";
+  const match = /^Bearer\s+(.+)$/i.exec(header);
+  return match ? match[1].trim() : "";
+}
+
+// An OAuth access token issued by our /token endpoint is a valid bearer for /mcp.
+function isOAuthAuthorized(req) {
+  const token = bearerToken(req);
+  return Boolean(token && oauth.validateAccessToken(token));
+}
+
+// MCP access is granted by ANY of: the legacy secret URL path, the static
+// REL_AI_MCP_TOKEN bearer (local/API clients), or an OAuth-issued access token
+// (the ChatGPT OAuth connector).
+function isMcpAuthorized(req, options, mcpAccess) {
+  return Boolean(mcpAccess && mcpAccess.allowed) || isAuthorized(req, options) || isOAuthAuthorized(req);
+}
+
+function unauthorizedMcp(res, baseUrl) {
+  if (res.headersSent) return;
+  res.setHeader("WWW-Authenticate", oauth.wwwAuthenticateHeader(baseUrl, "invalid_token"));
+  sendJson(res, 401, {
+    ok: false,
+    error: "Authorization required. Add this server in ChatGPT with Authentication: OAuth, or send a bearer token."
+  });
+}
+
+function oauthErrorPage(message) {
+  const safe = String(message == null ? "" : message).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Cannot authorize</title></head><body style="font-family:system-ui,sans-serif;background:#0b0f1a;color:#e6eaf2;padding:48px;"><h2>Cannot authorize this connection</h2><p style="color:#9aa6bd;">${safe}</p></body></html>`;
 }
 
 function hasDashboardQueryToken(parsed, options) {
@@ -470,22 +570,31 @@ function mcpGetDiagnostic(pathname, options, mcpAccess, req) {
   const chatgptPath = secret
     ? (showSecrets ? `/mcp/${encodeURIComponent(secret)}` : "/mcp/<secret>")
     : "/mcp/<missing-secret>";
-  const usableWithPost = Boolean(mcpAccess.allowed || isAuthorized(req, options) || options.allowNoAuth);
+  const cleanBase = String(base || "").replace(/\/+$/, "");
+  const usableWithPost = Boolean(mcpAccess.allowed || isAuthorized(req, options) || isOAuthAuthorized(req) || options.allowNoAuth);
   return {
     ok: true,
     endpoint: pathname,
     reachable: true,
     note: "This is a GET browser diagnostic. MCP clients must send JSON-RPC with POST.",
-    correctChatGPTUrl: `${String(base || "").replace(/\/+$/, "")}${chatgptPath}`,
-    chatgptAuth: "No Authentication",
-    plainMcpUrl: "/mcp is for non-ChatGPT clients using Bearer auth. It is not the ChatGPT app URL.",
+    // The ChatGPT connector now uses real OAuth: add this plain /mcp URL with
+    // Authentication: OAuth. ChatGPT discovers the auth endpoints automatically.
+    correctChatGPTUrl: `${cleanBase}/mcp`,
+    chatgptAuth: "OAuth",
+    oauthProtectedResource: `${cleanBase}/.well-known/oauth-protected-resource`,
+    oauthAuthorizationServer: `${cleanBase}/.well-known/oauth-authorization-server`,
+    plainMcpUrl: "/mcp is the OAuth-protected MCP endpoint. ChatGPT uses Authentication: OAuth; local/API clients may use a Bearer token instead.",
     postRequired: true,
     usableWithPost,
+    // Legacy secret-path URL kept working for backward compatibility; redacted unless
+    // the caller is already authorized.
+    legacySecretMcpUrl: `${cleanBase}${chatgptPath}`,
     secretRedacted: Boolean(secret && !showSecrets),
     examples: {
       health: "/health",
       dashboard: "/dashboard",
-      chatgptMcp: chatgptPath,
+      chatgptMcp: "/mcp",
+      oauthDiscovery: "/.well-known/oauth-protected-resource",
       localBearerMcp: "/mcp"
     }
   };
@@ -582,7 +691,7 @@ function unauthorized(res) {
   });
 }
 
-function readJsonBody(req, maxBytes) {
+function readRawBody(req, maxBytes) {
   return new Promise((resolve, reject) => {
     let body = "";
     let bytes = 0;
@@ -596,14 +705,38 @@ function readJsonBody(req, maxBytes) {
       body += chunk.toString("utf8");
     });
     req.on("error", reject);
-    req.on("end", () => {
-      try {
-        resolve(body.trim() ? JSON.parse(body) : {});
-      } catch (error) {
-        reject(new Error(`Invalid JSON body: ${error instanceof Error ? error.message : String(error)}`));
-      }
-    });
+    req.on("end", () => resolve(body));
   });
+}
+
+function readJsonBody(req, maxBytes) {
+  return readRawBody(req, maxBytes).then((body) => {
+    try {
+      return body.trim() ? JSON.parse(body) : {};
+    } catch (error) {
+      throw new Error(`Invalid JSON body: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  });
+}
+
+// OAuth /token uses application/x-www-form-urlencoded; /register and some clients use
+// JSON. Parse by content-type, with a best-effort fallback for unlabeled JSON bodies.
+async function readFormOrJsonBody(req, maxBytes) {
+  const raw = await readRawBody(req, maxBytes);
+  const contentType = String((req.headers && req.headers["content-type"]) || "").toLowerCase();
+  if (contentType.includes("application/json")) {
+    try { return raw.trim() ? JSON.parse(raw) : {}; }
+    catch (error) { throw new Error(`Invalid JSON body: ${error instanceof Error ? error.message : String(error)}`); }
+  }
+  if (contentType.includes("application/x-www-form-urlencoded") || raw.includes("=")) {
+    const obj = {};
+    for (const [key, value] of new URLSearchParams(raw)) obj[key] = value;
+    if (Object.keys(obj).length) return obj;
+  }
+  if (raw.trim().startsWith("{")) {
+    try { return JSON.parse(raw); } catch (_) { /* fall through */ }
+  }
+  return {};
 }
 
 // Origin-scoped CORS. Endpoints like /api/local-connect return the bearer token with

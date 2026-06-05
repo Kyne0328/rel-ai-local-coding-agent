@@ -126,7 +126,7 @@ function buildConnectionSummary({ host = "127.0.0.1", port = 3333, publicUrl = "
   const publicBaseUrl = publicUrl ? normalizePublicUrl(publicUrl) : "";
   const baseForChatGPT = publicBaseUrl || localUrl;
   const secret = String(chatgptSecret || "").trim();
-  const chatgptMcpPath = secret ? `/mcp/${encodeURIComponent(secret)}` : "/mcp";
+  const legacySecretPath = secret ? `/mcp/${encodeURIComponent(secret)}` : "/mcp";
   return {
     ok: true,
     localBaseUrl: localUrl,
@@ -136,9 +136,13 @@ function buildConnectionSummary({ host = "127.0.0.1", port = 3333, publicUrl = "
     localBearerMcpUrl: `${localUrl}/mcp`,
     localMcpUrl: `${localUrl}/mcp`,
     bearerMcpUrl: `${baseForChatGPT}/mcp`,
-    chatgptMcpUrl: `${baseForChatGPT}${chatgptMcpPath}`,
+    // ChatGPT now uses real OAuth on the plain /mcp endpoint (not the secret path).
+    chatgptMcpUrl: `${baseForChatGPT}/mcp`,
     chatgptHealthUrl: `${baseForChatGPT}/health`,
-    chatgptAuthMode: secret ? "No Authentication in ChatGPT; the secret is embedded in the MCP URL path." : (token ? "Bearer token for non-ChatGPT clients." : "No Authentication"),
+    chatgptAuthMode: "OAuth — ChatGPT signs in with your Rel.AI dashboard token.",
+    oauthMetadataUrl: `${baseForChatGPT}/.well-known/oauth-protected-resource`,
+    // Legacy secret-in-URL endpoint, kept working for backward compatibility.
+    legacySecretMcpUrl: `${baseForChatGPT}${legacySecretPath}`,
     authHeader: token ? "Authorization: Bearer <REL_AI_MCP_TOKEN>" : "not configured",
     token: showToken ? token : token ? "set" : "missing",
     chatgptSecret: showToken ? secret : secret ? "set" : "missing",
@@ -152,13 +156,13 @@ function buildConnectionSummary({ host = "127.0.0.1", port = 3333, publicUrl = "
       ? [
           "Keep the local Rel.AI MCP server running on this machine.",
           `Keep your tunnel/reverse proxy routing the public URL to ${localUrl}.`,
-          "In ChatGPT Developer Mode, create or update one app using the COPY THIS FOR CHATGPT URL.",
-          "Set authentication to No Authentication. Do not add a bearer token in ChatGPT.",
-          "Keep the secret MCP URL private. Rotate it with --reset-chatgpt-secret if exposed."
+          "In ChatGPT Developer Mode, add one app using the COPY THIS FOR CHATGPT URL.",
+          "Set authentication to OAuth. ChatGPT will open a sign-in page — enter your Rel.AI dashboard token to approve.",
+          "Keep your dashboard token private; it is the credential that approves ChatGPT's OAuth sign-in."
         ]
       : [
           "For local testing, use the dashboardUrl on this machine.",
-          "For ChatGPT Developer Mode, configure a stable HTTPS tunnel and run this launcher again with --public-url https://your-domain.example.com.",
+          "For ChatGPT Developer Mode, configure a stable HTTPS tunnel (OAuth requires HTTPS) and run this launcher again with --public-url https://your-domain.example.com.",
           "Do not rely on random temporary ngrok URLs if you want one permanent ChatGPT app."
         ]
   };
@@ -172,7 +176,7 @@ function printConnectionSummary(summary) {
     `Local dashboard:        ${summary.dashboardUrl}`,
     `Dashboard data check:   ${summary.dashboardDataUrl}`,
     `COPY THIS FOR CHATGPT:  ${summary.chatgptMcpUrl}`,
-    `ChatGPT Auth:          No Authentication`,
+    `ChatGPT Auth:          OAuth (sign in with your dashboard token)`,
     `Health URL:            ${summary.chatgptHealthUrl}`,
     `Public mode:           ${summary.tunnelMode || "local only"}`,
     `Local/API MCP only:     ${summary.localBearerMcpUrl}`,
@@ -186,10 +190,11 @@ function printConnectionSummary(summary) {
       : "Permanent URL: not configured. Add one with --public to create a temporary tunnel, or --public-url https://your-domain.example.com for a stable connector URL.",
     "",
     "Important:",
-    "  - Do not paste the plain /mcp URL into ChatGPT.",
+    "  - Paste the /mcp URL into ChatGPT and choose Authentication: OAuth.",
+    "  - ChatGPT will open a sign-in page; enter your Rel.AI dashboard token to approve.",
     "  - Do not open /mcp in the browser as a dashboard. Use /dashboard instead.",
     "  - If the dashboard says Connecting, open the Dashboard data check URL above.",
-    "  - ChatGPT authentication must be No Authentication because the secret is in the URL path.",
+    "  - OAuth requires the server to be reachable over HTTPS (use a stable public URL).",
     "",
     "Next steps:",
     ...summary.nextSteps.map((step, index) => `  ${index + 1}. ${step}`),

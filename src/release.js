@@ -188,7 +188,7 @@ function readinessRating(score) {
 function nextActions(findings) {
   const actions = [];
   for (const item of findings.slice(0, 20)) {
-    if (item.code === "missing_http_token_env") actions.push("Use the secret /mcp/<secret> ChatGPT MCP URL with No Authentication. Keep REL_AI_MCP_TOKEN only for local/API bearer clients.");
+    if (item.code === "missing_http_token_env") actions.push("Set REL_AI_MCP_TOKEN: it is the dashboard credential AND the secret ChatGPT uses to approve the OAuth sign-in. Add the /mcp URL in ChatGPT with Authentication: OAuth.");
     else if (item.code === "no_workspaces") actions.push("Run npm run workspace:add -- <alias> <absolute-project-path>.");
     else if (item.code === "no_validation_commands") actions.push("Add a validation command with npm run testcmd:add -- <alias> <key> <command...>.");
     else if (item.code === "dirty_worktree") actions.push("Commit/stash local changes or review relai_diff before further edits.");
