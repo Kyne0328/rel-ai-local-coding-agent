@@ -70,9 +70,7 @@ function makeDefaultConfig() {
     },
     release: {
       minimumReadinessScore: 80,
-      requireHttpToken: true,
-      connectorProbeTimeoutMs: 5000,
-      enableReleaseEndpoints: true
+      requireHttpToken: true
     },
     autoApproveAppRequests: makeDefaultAutoApproveConfig(),
     workflow: makeDefaultWorkflowConfig(),
@@ -143,7 +141,7 @@ function normalizeConfig(config) {
   next.autoApproveAppRequests = normalizeAutoApproveConfig(input.autoApproveAppRequests || input.autoApprove || base.autoApproveAppRequests);
   next.workflow = normalizeWorkflowConfig(input.workflow, input.flow);
   next.release.minimumReadinessScore = clampNumber(next.release.minimumReadinessScore, 0, 100, base.release.minimumReadinessScore);
-  next.release.connectorProbeTimeoutMs = clampNumber(next.release.connectorProbeTimeoutMs, 500, 60000, base.release.connectorProbeTimeoutMs);
+  next.release.requireHttpToken = next.release.requireHttpToken !== false;
 
   for (const [alias, workspace] of Object.entries(next.workspaces)) {
     next.workspaces[alias] = normalizeWorkspace(workspace || {});

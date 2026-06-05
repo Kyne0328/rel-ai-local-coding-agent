@@ -208,7 +208,7 @@ function relaiWrite(workspace, config, args = {}) {
   if (stage === "abort") {
     const writeId = validateWriteId(args.writeId);
     const existed = clearStagedPayload(config, workspace, writeId);
-    return { ok: true, workspace: workspace.alias, operation: "stagedFullFileWrite:abort", writeId, cleared: existed, cleard: existed };
+    return { ok: true, workspace: workspace.alias, operation: "stagedFullFileWrite:abort", writeId, cleared: existed };
   }
 
   throw new Error("relai_write stage must be one of: direct, start, append, commit, abort.");
@@ -325,7 +325,7 @@ function relaiClear(workspace, config, args = {}) {
     if (!stat.isFile()) throw new Error(`relai_clear_files refuses non-file path: ${safe.relativePath}`);
     const oldSha256 = fileSha256(workspace.path, safe.relativePath);
     const shaMismatch = Boolean(expectedSha256 && oldSha256 !== expectedSha256);
-    const item = { path: safe.relativePath, cleared: !dryRun, cleard: !dryRun, dryRun, oldSha256, ...(shaMismatch ? { shaMismatch: { expectedSha256, currentSha256: oldSha256 } } : {}) };
+    const item = { path: safe.relativePath, cleared: !dryRun, dryRun, oldSha256, ...(shaMismatch ? { shaMismatch: { expectedSha256, currentSha256: oldSha256 } } : {}) };
     if (!dryRun) fs.rmSync(safe.absolutePath, { force: true });
     cleared.push(safe.relativePath);
     results.push(item);
@@ -348,7 +348,6 @@ function relaiClear(workspace, config, args = {}) {
     changed: !dryRun && cleared.length > 0,
     changedFiles: dryRun ? [] : cleared,
     cleared,
-    cleard: cleared,
     skipped,
     results
   };
@@ -659,7 +658,7 @@ async function relaiApplyArchive(workspace, config, args = {}) {
   const verify = hasRequestedChecks(args) ? await relaiVerify(workspace, config, args) : null;
   const diff = args.returnDiff === false ? null : await relaiDiff(workspace, config, { maxBytes: args.maxDiffBytes || DEFAULT_MAX_DIFF_BYTES });
   const ok = overlay.errors.length === 0 && (!verify || verify.ok);
-  appendOperation(config, workspace, { id: operationId, type: "apply_archive", ok, paths: overlay.changedFiles, results: [{ operation: "applyArchive", archivePath, copied: overlay.copied.length, cleared: overlay.cleared.length, cleard: overlay.cleared.length, skipped: overlay.skipped.length, verified: verify ? verify.ok : null }] });
+  appendOperation(config, workspace, { id: operationId, type: "apply_archive", ok, paths: overlay.changedFiles, results: [{ operation: "applyArchive", archivePath, copied: overlay.copied.length, cleared: overlay.cleared.length, skipped: overlay.skipped.length, verified: verify ? verify.ok : null }] });
   return { ok, workspace: workspace.alias, operationId, operation: "applyArchive", archivePath, bundlePath: archivePath, archiveBytes: stat.size, backup, changedFiles: overlay.changedFiles, overlay, ...(verify ? { verify } : {}), ...(diff ? { diff } : {}) };
 }
 
@@ -1587,7 +1586,7 @@ function overlayDirectory(workspaceRoot, sourceRoot, options = {}) {
     }, skipped);
   }
 
-  return { copied, cleared, cleard: cleared, skipped, errors, changedFiles: [...new Set([...copied.map((item) => item.path), ...cleared])] };
+  return { copied, cleared, skipped, errors, changedFiles: [...new Set([...copied.map((item) => item.path), ...cleared])] };
 }
 
 function walkArchiveSource(root, prefix, onFile, skipped) {

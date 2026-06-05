@@ -7,24 +7,36 @@ let _onEvent = null;
 let _reconnectTimer = null;
 let _pollTimer = null;
 let _pollCallback = null;
-const POLL_INTERVAL = 15000;
+let _visibilityWired = false;
+// Fallback poll cadence (ms) used only when SSE is down. Configurable from
+// productUx.dashboardRefreshSeconds via setPollInterval(); 15s default.
+let _pollInterval = 15000;
 
 export function setPollCallback(fn) {
   _pollCallback = fn;
 }
 
+export function setPollInterval(ms) {
+  const n = Number(ms);
+  if (Number.isFinite(n) && n > 0) _pollInterval = Math.min(Math.max(n, 2000), 120000);
+}
+
 export function initEvents(onEvent) {
   _onEvent = onEvent || null;
+  if (_visibilityWired) return;
+  _visibilityWired = true;
 
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') {
-      _pause();
-      _stopPoll();
-    } else {
-      _resume();
-      if (!_es && _pollCallback) _startPoll(_pollCallback);
-    }
-  });
+  document.addEventListener('visibilitychange', _handleVisibilityChange);
+}
+
+function _handleVisibilityChange() {
+  if (document.visibilityState === 'hidden') {
+    _pause();
+    _stopPoll();
+  } else {
+    _resume();
+    if (!_es && _pollCallback) _startPoll(_pollCallback);
+  }
 }
 
 export function startSSE(tokenFn) {
@@ -66,7 +78,7 @@ function _connect(tokenFn) {
 function _startPoll(fn) {
   _stopPoll();
   if (_es) return; // SSE is live — no polling needed
-  _pollTimer = setInterval(fn, POLL_INTERVAL);
+  _pollTimer = setInterval(fn, _pollInterval);
 }
 
 function _stopPoll() {

@@ -4,6 +4,7 @@ const { publicConfigSummary, resolveWorkspace } = require("./config");
 const { runProcess, summarizeCommand } = require("./process");
 const { discoverCommands } = require("./commandDiscovery");
 const pkg = require("../package.json");
+const { getVersion } = require("./version");
 
 function releaseReadiness(config, args = {}) {
   const findings = [];
@@ -30,12 +31,17 @@ function releaseReadiness(config, args = {}) {
 
   const commandChecks = checkCommandAvailability(["git", "node"], findings);
   const score = scoreFindings(findings);
+  const minimumReadinessScore = config.release && Number.isFinite(Number(config.release.minimumReadinessScore))
+    ? Number(config.release.minimumReadinessScore)
+    : 80;
   return {
     ok: !findings.some((item) => item.severity === "error"),
     score,
+    minimumReadinessScore,
+    meetsMinimum: score >= minimumReadinessScore,
     rating: readinessRating(score),
     generatedAt: new Date().toISOString(),
-    package: { name: pkg.name, version: pkg.version, node: process.version },
+    package: { name: pkg.name, version: getVersion(), node: process.version },
     config: summary,
     commandChecks,
     workspaces: workspaces.map((alias) => workspaceBrief(config, alias)),

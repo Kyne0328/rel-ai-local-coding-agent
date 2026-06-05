@@ -16,8 +16,6 @@ function buildHome(data) {
   const jobs = Array.isArray(data.jobs) ? data.jobs : [];
   const workspaces = Array.isArray(cfg.workspaces) ? cfg.workspaces : [];
   const findings = Array.isArray(health.findings) ? health.findings.filter(f => f.severity !== 'info') : [];
-  const tools = Array.isArray(data.workflow && data.workflow.tools) ? data.workflow.tools : [];
-  const visibleToolCount = tools.length || 14;
   const staleHours = Number((cfg.productUx && cfg.productUx.staleHours) || health.staleHours || 24);
   const currentSessions = sessions.filter(s => isCurrentWork(s, staleHours));
   const runningJobs = jobs.filter(j => ['running', 'queued', 'cancelling'].includes(String(j.status || '').toLowerCase()) && !isOlderThan(j.updatedAt || j.startedAt, staleHours));

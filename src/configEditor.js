@@ -1,4 +1,3 @@
-const fs = require("node:fs");
 const path = require("node:path");
 const { getConfigPath, publicConfigSummary, writeConfig, normalizeAutoApproveConfig, normalizeWorkflowConfig } = require("./config");
 
@@ -108,7 +107,10 @@ function updateWorkspace(current, payload = {}) {
   const workspacePath = source.path == null || source.path === "" ? currentWorkspace.path : String(source.path).trim();
   if (!workspacePath) throw new Error("Workspace path is required.");
   if (!path.isAbsolute(workspacePath)) throw new Error("Workspace path must be absolute.");
-  if (!fs.existsSync(workspacePath)) throw new Error(`Workspace path does not exist: ${workspacePath}`);
+  // A not-yet-existing path is allowed on save (e.g. a repo about to be cloned). The
+  // form's live preflight already warns the user, and the header comment promises
+  // "warn-but-allow" — rejecting here contradicted that and made the warning a dead end.
+  // Tool calls still hard-fail at use time via resolveWorkspace's existence check.
 
   next.workspaces[alias] = {
     ...currentWorkspace,

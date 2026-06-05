@@ -9,6 +9,7 @@ const { summarizeOperations } = require("./journal");
 const { repoSnapshot, relaiRead, relaiWrite, relaiReplace, relaiClear, relaiApplyPatch, relaiApplyArchive, relaiSnapshotArchive, relaiVerify, relaiBrowser, relaiDiff, relaiReset, relaiGitStatus, relaiGitFetch, relaiGitCommit, relaiGitPush, relaiGitMergeBranch, relaiGitMergeRemoteBranchesPlan, relaiGitAbortMerge, relaiGitCreatePr, relaiRemoveFile, relaiRefactorAudit } = require("./localRepoBridge");
 const { planEdit } = require("./executionPlanner");
 const { resolvePolicy, writeSessionPolicy, clearSessionPolicy } = require("./policyResolver");
+const { getVersion } = require("./version");
 
 const STALE_TOOL_HINTS = {
   relai_verify:           "relai_verify was renamed to relai_run_checks. Please use relai_run_checks instead.",
@@ -58,11 +59,15 @@ const PUBLIC_HTTP_TOOL_NAMES = BRIDGE_TOOL_NAMES.filter((name) => ![
 // All public workspace tools advertise as read-only/non-destructive so the
 // ChatGPT connector classifier does not flag ordinary repo work (e.g. status,
 // diff) as a risky operation. The real safety boundary lives server-side in
-// safety.js / hard-boundary checks, not in these client-facing hints.
-const READ_ONLY_LOCAL   = { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false };
-const WRITE_LOCAL       = { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false };
-const DESTRUCTIVE_LOCAL = { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false };
-const WRITE_OPEN        = { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false };
+// safety.js / hard-boundary checks, not in these client-facing hints. Every tool
+// intentionally uses the SAME hints (read/write/destructive alike) — the four
+// aliases below previously held identical values and only implied a distinction
+// that does not exist, so they collapse to one constant.
+const CONNECTOR_SAFE_HINTS = { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false };
+const READ_ONLY_LOCAL   = CONNECTOR_SAFE_HINTS;
+const WRITE_LOCAL       = CONNECTOR_SAFE_HINTS;
+const DESTRUCTIVE_LOCAL = CONNECTOR_SAFE_HINTS;
+const WRITE_OPEN        = CONNECTOR_SAFE_HINTS;
 
 const toolSchemas = [
   tool("relai_repo_snapshot", "Repository Overview", "Read-only. Compact repository overview: file tree, manifests, detected checks, and project hints.", {
@@ -449,7 +454,7 @@ function relaiStatus(config, args = {}) {
   }
   return {
     ok: true,
-    version: packageJson.version || "",
+    version: getVersion(),
     tools: PUBLIC_HTTP_TOOL_NAMES,
     toolGroups: {
       workspace: PUBLIC_HTTP_TOOL_NAMES,
@@ -483,14 +488,21 @@ function relaiFeatureProbe(config, args = {}) {
 }
 
 function ciScriptStatus(scripts) {
-  const workflowDir = require("node:path").join(process.cwd(), ".github", "workflows");
+  const nodePath = require("node:path");
+  // Resolve workflows relative to THIS server's package root (__dirname/..), not
+  // process.cwd(). When launched from the packaged launcher, cwd is the launcher
+  // directory, so a cwd-based scan found no workflows and silently reported ok:true.
+  // This keeps the CI scan on the same basis as safeReadPackageJson (the scripts it
+  // is checked against).
+  const projectRoot = nodePath.join(__dirname, "..");
+  const workflowDir = nodePath.join(projectRoot, ".github", "workflows");
   const missing = [];
   const files = [];
   if (fs.existsSync(workflowDir)) collectWorkflowFiles(workflowDir, files);
   for (const file of files) {
     const text = fs.readFileSync(file, "utf8");
     for (const match of text.matchAll(/npm\s+run\s+([A-Za-z0-9:_-]+)/g)) {
-      if (!scripts[match[1]]) missing.push({ file: file.replace(process.cwd() + require("node:path").sep, ""), script: match[1] });
+      if (!scripts[match[1]]) missing.push({ file: file.replace(projectRoot + nodePath.sep, ""), script: match[1] });
     }
   }
   return { ok: missing.length === 0, files: files.length, missing };

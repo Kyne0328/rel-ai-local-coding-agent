@@ -23,10 +23,15 @@ function dashboardData(config, args = {}) {
       ws.caution = { count: c ? c.count : 0, recent: c ? c.recent : [] };
     }
   }
+  // Single authoritative public-tool count so the UI never hardcodes a literal that
+  // drifts from PUBLIC_HTTP_TOOL_NAMES. Lazy require avoids any load-order cycle.
+  let toolCount = 0;
+  try { toolCount = require("./tools").getPublicToolSchemas(config).length; } catch (_) {}
   return {
     ok: true,
     generatedAt: new Date().toISOString(),
     config: configSummary,
+    toolCount,
     counts: {
       auditEntries: auditTail.entries ? auditTail.entries.length : 0,
       workspaces: Object.keys(config.workspaces || {}).length
@@ -137,7 +142,6 @@ function cleanupPlan(config, args = {}, apply) {
     totalCandidates: targets.length,
     candidates: limited,
     cleared,
-    cleard: cleared,
     message: apply ? `Cleared ${cleared.length} file(s).` : "Preview only. Re-run with confirm=true to clear candidates."
   };
 }
@@ -216,6 +220,9 @@ function importOriginalRelAiConfig(args = {}) {
 }
 
 function stateExport(config, args = {}) {
+  if (config.productUx && config.productUx.enableStateExport === false) {
+    throw new Error("State export is disabled (productUx.enableStateExport=false).");
+  }
   const stateDir = getStateDir(config);
   const maxFiles = clampNumber(args.maxFiles || 2000, 1, 20000);
   const files = [];
@@ -348,11 +355,15 @@ function cautionSummary(config, options = {}) {
 function aliasConsistencyCheck(config) {
   const results = [];
   for (const [alias, ws] of Object.entries(config.workspaces || {})) {
-    const configuredKeys = Object.keys(ws.testCommands || {});
+    // Cover BOTH command maps, matching relai_status. Checking only testCommands made
+    // the dashboard report "All consistent" while relai_status flagged a stale entry in
+    // the plain commands map — two surfaces disagreeing about the same workspace.
+    const allConfigured = { ...(ws.commands || {}), ...(ws.testCommands || {}) };
+    const configuredKeys = Object.keys(allConfigured);
     let discovered = {};
     try { discovered = discoverCommands(ws.path || ''); } catch (_) {}
     const discoveredKeys = Object.keys(discovered);
-    const staleKeys = staleCommandKeys(ws.testCommands || {}, discovered);
+    const staleKeys = staleCommandKeys(allConfigured, discovered);
     results.push({ alias, configuredKeys, discoveredKeys, staleKeys, ok: staleKeys.length === 0 });
   }
   return { ok: results.every(r => r.ok), generatedAt: new Date().toISOString(), workspaces: results };

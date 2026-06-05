@@ -59,18 +59,17 @@ function summaryCard(payload) {
 function stepsCard(payload) {
   const card = document.createElement('div');
   card.className = 'card';
-  const steps = Array.isArray(payload.nextSteps) && payload.nextSteps.length ? payload.nextSteps : [
-    'Open ChatGPT settings and add an MCP server.',
-    'Paste the ChatGPT MCP URL from above.',
-    'Set authentication to No Authentication.'
-  ];
+  // Steps 1-3 are the fixed core connect flow. payload.nextSteps carries deployment
+  // guidance (local vs. tunnel) and continues the numbering. The old fallback array
+  // duplicated steps 1-3 verbatim as 4-6 when nextSteps was empty; drop it.
+  const extraSteps = Array.isArray(payload.nextSteps) ? payload.nextSteps : [];
   card.innerHTML = `
     <div class="card-head"><h3>Next steps</h3><span class="section-action">finish the connection</span></div>
     <div class="card-body setup-steps">
       <div class="step"><span class="step-num">1</span><div>Go to <strong>ChatGPT → Settings → Connectors → Add MCP server</strong>.</div></div>
       <div class="step"><span class="step-num">2</span><div>Paste the <strong>ChatGPT MCP URL</strong> exactly as shown above.</div></div>
       <div class="step"><span class="step-num">3</span><div>Set authentication to <strong>No Authentication</strong>. Do not paste a bearer token into ChatGPT.</div></div>
-      ${steps.slice(0, 3).map((step, index) => `<div class="step"><span class="step-num">${index + 4}</span><div>${escapeHtml(step)}</div></div>`).join('')}
+      ${extraSteps.map((step, index) => `<div class="step"><span class="step-num">${index + 4}</span><div>${escapeHtml(step)}</div></div>`).join('')}
     </div>
   `;
   return card;

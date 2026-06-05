@@ -16,6 +16,7 @@ function buildWorkspaces(data) {
   const health = data.health || {};
   const readiness = data.readiness || {};
   const workspaces = Array.isArray(cfg.workspaces) ? cfg.workspaces : [];
+  const toolCount = Number.isFinite(Number(data.toolCount)) && Number(data.toolCount) > 0 ? Number(data.toolCount) : 24;
   const healthByAlias = new Map((Array.isArray(health.workspaces) ? health.workspaces : []).map(item => [item.alias, item]));
   const validationReady = workspaces.filter(ws => (ws.testCommandKeys || []).length || (ws.discoveredTestCommandKeys || []).length).length;
 
@@ -33,7 +34,7 @@ function buildWorkspaces(data) {
       ${metricHtml('Workspaces', workspaces.length, 'configured aliases', 'blue')}
       ${metricHtml('Validation ready', validationReady + '/' + workspaces.length, 'configured or auto-detected', validationReady === workspaces.length ? 'good' : 'warn')}
       ${metricHtml('Health findings', actionableFindings(health).length, health.ok === false ? 'needs attention' : 'all clear', health.ok === false ? 'bad' : 'good')}
-      ${metricHtml('ChatGPT tools', '24', 'workspace tools', 'good')}
+      ${metricHtml('ChatGPT tools', toolCount, 'workspace tools', 'good')}
     </div>
   `;
 

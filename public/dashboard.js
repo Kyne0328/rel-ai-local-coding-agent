@@ -1,7 +1,7 @@
 import { setToken, getToken, fetchJson, DASHBOARD_DATA_URL } from '/ui/api.js';
 import { init as initStore, get as getStore } from '/ui/store.js';
 import { initRouter, currentSection, rerender } from '/ui/router.js';
-import { initEvents, startSSE, stopSSE, isLive, setPollCallback } from '/ui/events.js';
+import { initEvents, startSSE, stopSSE, isLive, setPollCallback, setPollInterval } from '/ui/events.js';
 import { mountHome } from '/ui/sections/home.js';
 import { initCommandPalette } from '/ui/components/command-palette.js';
 
@@ -66,6 +66,13 @@ async function boot() {
 
   _wireTopControls();
   setPollCallback(_doRefresh);
+  // Register the SSE/visibility manager ONCE at boot (it adds a visibilitychange
+  // listener). _toggleLive previously re-called initEvents on every toggle, stacking
+  // duplicate listeners. The live-update callback is the same one used by SSE.
+  initEvents(_liveOnEvent);
+  const storeData0 = getStore();
+  const refreshSeconds = storeData0.config && storeData0.config.productUx && storeData0.config.productUx.dashboardRefreshSeconds;
+  if (refreshSeconds) setPollInterval(Number(refreshSeconds) * 1000);
   _checkOnboarding();
 
   const storeData = getStore();
@@ -129,25 +136,26 @@ async function _doRefresh() {
   }
 }
 
+// Shared live-update handler — fed to initEvents once at boot and reused by SSE.
+async function _liveOnEvent(data) {
+  initStore(data);
+  const id = currentSection();
+  if (Object.prototype.hasOwnProperty.call(getSections(), id)) {
+    rerender();
+  }
+  if (id === 'activity') {
+    import('/ui/sections/activity.js')
+      .then(m => m.prependEntry((data.auditTail && data.auditTail.entries && data.auditTail.entries[0]) || null))
+      .catch(console.error);
+  }
+}
+
 function _toggleLive() {
   const btn = document.getElementById('liveBtn');
   if (isLive()) {
     stopSSE();
     if (btn) btn.textContent = 'Start live';
   } else {
-    initEvents(async (data) => {
-      initStore(data);
-      const id = currentSection();
-      if (Object.prototype.hasOwnProperty.call(getSections(), id)) {
-        rerender();
-      }
-
-      if (id === 'activity') {
-        import('/ui/sections/activity.js')
-          .then(m => m.prependEntry((data.auditTail && data.auditTail.entries && data.auditTail.entries[0]) || null))
-          .catch(console.error);
-      }
-    });
     startSSE(getToken);
     if (btn) btn.textContent = 'Stop live';
   }

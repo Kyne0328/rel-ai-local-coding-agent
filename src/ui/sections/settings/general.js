@@ -195,7 +195,10 @@ function _checkDirty() {
 
 function _getChanges() {
   if (!_original || !_draft) return [];
-  const keys = ['maxOutputBytes', 'dashboardEnabled', 'autoApproveAppRequests', 'workflow'];
+  // autoApproveAppRequests is intentionally NOT listed: the dashboard has no control
+  // for it and the server copy is inert (the Chrome extension reads its own
+  // chrome.storage.local). Writing it back risked a second store that disagrees.
+  const keys = ['maxOutputBytes', 'dashboardEnabled', 'workflow'];
   const changes = [];
   for (const key of keys) {
     if (JSON.stringify(_draft[key]) !== JSON.stringify(_original[key])) {
@@ -209,7 +212,6 @@ async function _save(container) {
   const payload = {
     maxOutputBytes: _draft.maxOutputBytes,
     dashboardEnabled: _draft.dashboardEnabled,
-    autoApproveAppRequests: _draft.autoApproveAppRequests,
     workflow: _draft.workflow
   };
   const res = await saveSettings(payload);

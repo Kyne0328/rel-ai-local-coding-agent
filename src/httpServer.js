@@ -12,6 +12,7 @@ const configEditor = require("./configEditor");
 const pkg = require("../package.json");
 const connection = require("./connectionProfile");
 const autoApprove = require("./autoApproveExtension");
+const { getVersion } = require("./version");
 
 function buildToolMetadata() {
   const { getPublicToolSchemas } = require("./tools");
@@ -98,7 +99,7 @@ function startHttpServer(options = {}) {
 }
 
 async function routeRequest(req, res, options) {
-  setBaseHeaders(res);
+  setBaseHeaders(req, res);
   const ae = req.headers["accept-encoding"] || "";
   const parsed = new URL(req.url || "/", "http://127.0.0.1");
 
@@ -237,7 +238,7 @@ async function routeRequest(req, res, options) {
     const limit = Number(parsed.searchParams.get("limit") || 100);
     sendJson(res, 200, {
       ...productUx.dashboardData(config, { limit }),
-      readiness: release.releaseReadiness(config, { requireHttpToken: parsed.searchParams.get("requireHttpToken") !== "0" })
+      readiness: release.releaseReadiness(config, { requireHttpToken: resolveRequireHttpToken(parsed, config) })
     }, ae);
     return;
   }
@@ -281,7 +282,7 @@ async function routeRequest(req, res, options) {
   if (req.method === "GET" && parsed.pathname === "/api/readiness") {
     if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
     const config = readConfig();
-    sendJson(res, 200, release.releaseReadiness(config, { requireHttpToken: parsed.searchParams.get("requireHttpToken") !== "0" }), ae);
+    sendJson(res, 200, release.releaseReadiness(config, { requireHttpToken: resolveRequireHttpToken(parsed, config) }), ae);
     return;
   }
 
@@ -324,7 +325,7 @@ async function routeRequest(req, res, options) {
     sendJson(res, 200, {
       ok: true,
       name: pkg.name,
-      version: pkg.version,
+      version: getVersion(),
       transports: ["streamable-http", "sse"],
       auth: options.token ? "bearer" : "disabled"
     }, ae);
@@ -408,6 +409,16 @@ function getMcpAccess(pathname, options) {
   return { kind: "none", allowed: false };
 }
 
+// Honor an explicit requireHttpToken query param (the dashboard sends "0" because it
+// uses the secret /mcp URL, not bearer auth); when the param is absent, fall back to
+// the configured release.requireHttpToken default instead of silently assuming true.
+function resolveRequireHttpToken(parsed, config) {
+  const raw = parsed.searchParams.get("requireHttpToken");
+  if (raw != null) return raw !== "0";
+  const configured = config && config.release ? config.release.requireHttpToken : undefined;
+  return configured !== false;
+}
+
 function workspacePathPreflight(rawPath) {
   const target = path.resolve(String(rawPath || ""));
   const findings = [];
@@ -482,7 +493,7 @@ function openSseSession(res, req, messagePath = "/messages") {
   sessions.set(sessionId, session);
 
   sendSse(res, "endpoint", `${messagePath}?sessionId=${encodeURIComponent(sessionId)}`);
-  sendSse(res, "ready", { ok: true, sessionId, name: pkg.name, version: pkg.version });
+  sendSse(res, "ready", { ok: true, sessionId, name: pkg.name, version: getVersion() });
 
   const keepAlive = setInterval(() => {
     if (!sessions.has(sessionId)) return clearInterval(keepAlive);
@@ -573,8 +584,31 @@ function readJsonBody(req, maxBytes) {
   });
 }
 
-function setBaseHeaders(res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+// Origin-scoped CORS. Endpoints like /api/local-connect return the bearer token with
+// no auth (they are meant to be reachable only from this machine). With a blanket
+// "Access-Control-Allow-Origin: *", any website open in the user's browser could
+// fetch http://127.0.0.1:<port>/api/local-connect cross-origin and read the token out
+// of the response. We only echo an allow-origin for callers that legitimately need a
+// cross-origin read: the Chrome extension (chrome-extension:// / moz-extension://) and
+// localhost tooling. A request with no Origin header (server-to-server MCP, curl, the
+// same-origin dashboard) is unaffected — CORS only governs browser cross-origin reads.
+function isAllowedCorsOrigin(origin) {
+  if (!origin) return false;
+  if (/^(chrome-extension|moz-extension):\/\//i.test(origin)) return true;
+  try {
+    const { hostname } = new URL(origin);
+    return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "[::1]";
+  } catch (_error) {
+    return false;
+  }
+}
+
+function setBaseHeaders(req, res) {
+  const origin = req && req.headers ? req.headers.origin : "";
+  if (isAllowedCorsOrigin(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+  }
   res.setHeader("Access-Control-Allow-Headers", "content-type, authorization");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
 }
