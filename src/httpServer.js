@@ -149,14 +149,14 @@ async function routeRequest(req, res, options) {
   }
 
   if (req.method === "GET" && parsed.pathname === "/api/settings") {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
     const config = readConfig();
     sendJson(res, 200, configEditor.settingsPayload(config), ae);
     return;
   }
 
   if (req.method === "GET" && parsed.pathname === "/api/tools") {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
     try {
       sendJson(res, 200, buildToolMetadata(), ae);
     } catch (err) {
@@ -167,7 +167,7 @@ async function routeRequest(req, res, options) {
 
 
   if (req.method === "GET" && parsed.pathname === "/api/auto-approve/settings") {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
     const config = readConfig();
     sendJson(res, 200, autoApprove.autoApproveSettings(config), ae);
     return;
@@ -188,7 +188,7 @@ async function routeRequest(req, res, options) {
   }
 
   if (req.method === "GET" && parsed.pathname === "/api/onboarding/status") {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
     const onboardingPath = path.join(require("node:os").homedir(), ".rel-ai-mcp", "onboarding.json");
     let flag = null;
     try { flag = JSON.parse(fs.readFileSync(onboardingPath, "utf8")); } catch (_) {}
@@ -198,7 +198,7 @@ async function routeRequest(req, res, options) {
   }
 
   if (req.method === "POST" && parsed.pathname === "/api/onboarding/complete") {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
     const payload = await readJsonBody(req, options.maxBodyBytes);
     const onboardingDir = path.join(require("node:os").homedir(), ".rel-ai-mcp");
     fs.mkdirSync(onboardingDir, { recursive: true });
@@ -209,7 +209,7 @@ async function routeRequest(req, res, options) {
   }
 
   if (req.method === "POST" && parsed.pathname === "/api/settings") {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
     const current = readConfig();
     const payload = await readJsonBody(req, options.maxBodyBytes);
     sendJson(res, 200, configEditor.updateSettings(current, payload), ae);
@@ -217,7 +217,7 @@ async function routeRequest(req, res, options) {
   }
 
   if (req.method === "POST" && parsed.pathname === "/api/workspaces") {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
     const current = readConfig();
     const payload = await readJsonBody(req, options.maxBodyBytes);
     sendJson(res, 200, configEditor.updateWorkspace(current, payload), ae);
@@ -225,7 +225,7 @@ async function routeRequest(req, res, options) {
   }
 
   if (req.method === "GET" && parsed.pathname === "/api/connection") {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
     const latestProfile = connection.readConnectionProfile();
     sendJson(res, 200, connection.buildConnectionSummary({
       host: latestProfile.host || options.host,
@@ -239,7 +239,7 @@ async function routeRequest(req, res, options) {
   }
 
   if (req.method === "GET" && parsed.pathname === "/api/dashboard/v10") {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
     const config = readConfig();
     const limit = Number(parsed.searchParams.get("limit") || 100);
     sendJson(res, 200, {
@@ -250,35 +250,35 @@ async function routeRequest(req, res, options) {
   }
 
   if (req.method === "GET" && parsed.pathname === "/api/logs") {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
     const config = readConfig();
     sendJson(res, 200, productUx.liveLogTail(config, { limit: Number(parsed.searchParams.get("limit") || 100) }), ae);
     return;
   }
 
   if (req.method === "GET" && parsed.pathname === "/api/health-monitor") {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
     const config = readConfig();
     sendJson(res, 200, productUx.healthMonitor(config, { limit: Number(parsed.searchParams.get("limit") || 100) }), ae);
     return;
   }
 
   if (req.method === "GET" && parsed.pathname === "/api/alias-diagnostics") {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
     const config = readConfig();
     sendJson(res, 200, productUx.aliasConsistencyCheck(config), ae);
     return;
   }
 
   if (req.method === "GET" && parsed.pathname === "/api/release-notes") {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
     const { getReleaseNotes } = require("./releaseNotes");
     sendJson(res, 200, getReleaseNotes(), ae);
     return;
   }
 
   if (req.method === "GET" && parsed.pathname === "/api/caution-summary") {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
     const config = readConfig();
     const windowHours = Number(parsed.searchParams.get("windowHours") || 24);
     sendJson(res, 200, productUx.cautionSummary(config, { windowHours }), ae);
@@ -286,14 +286,14 @@ async function routeRequest(req, res, options) {
   }
 
   if (req.method === "GET" && parsed.pathname === "/api/readiness") {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
     const config = readConfig();
     sendJson(res, 200, release.releaseReadiness(config, { requireHttpToken: resolveRequireHttpToken(parsed, config) }), ae);
     return;
   }
 
   if (req.method === "GET" && parsed.pathname === "/api/workspace/preflight") {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
     const rawPath = parsed.searchParams.get("path") || "";
     if (rawPath) {
       sendJson(res, 200, workspacePathPreflight(rawPath), ae);
@@ -306,7 +306,7 @@ async function routeRequest(req, res, options) {
   }
 
   if (req.method === "POST" && parsed.pathname === "/api/pick-folder") {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
     if (typeof options.pickFolder !== "function") {
       sendJson(res, 200, { ok: false, unsupported: true, error: "Native folder picker is only available in the Rel.AI desktop launcher." }, ae);
       return;
@@ -322,7 +322,7 @@ async function routeRequest(req, res, options) {
   }
 
   if (req.method === "GET" && parsed.pathname === "/events") {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
     openDashboardEvents(res, req, options);
     return;
   }
