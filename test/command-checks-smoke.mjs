@@ -24,6 +24,22 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-checks-smoke-'));
 const workspace = { path: tmp, alias: 'test', commands: { lint: 'echo lint ok' }, testCommands: {} };
 const config = {};
 
+fs.writeFileSync(path.join(tmp, 'package.json'), JSON.stringify({
+  scripts: {
+    check: 'node -e "console.log(\'check should not run for release\')"',
+    test: 'node -e "console.log(\'test should not run for release\')"',
+    'test:all': 'node -e "console.log(\'release all\')"'
+  }
+}, null, 2));
+
+// 0. Release level prefers test:all over piecemeal check/test scripts.
+{
+  const result = await relaiVerify(workspace, config, { level: 'release' });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.checks, ['npm run test:all']);
+  assert.ok(result.results[0].stdout.includes('release all'));
+}
+
 // 1. Configured check by key — call relaiVerify with explicit check key mapped from commands
 {
   const args = mapCheckArgs({ check: workspace.commands.lint });

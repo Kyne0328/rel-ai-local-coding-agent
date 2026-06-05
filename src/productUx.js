@@ -23,10 +23,11 @@ function dashboardData(config, args = {}) {
       ws.caution = { count: c ? c.count : 0, recent: c ? c.recent : [] };
     }
   }
-  // Single authoritative public-tool count so the UI never hardcodes a literal that
-  // drifts from PUBLIC_HTTP_TOOL_NAMES. Lazy require avoids any load-order cycle.
-  let toolCount = 0;
-  try { toolCount = require("./tools").getPublicToolSchemas(config).length; } catch (_) {}
+  // Single authoritative public-tool list so the UI never hardcodes literals that
+  // drift from PUBLIC_HTTP_TOOL_NAMES. Lazy require avoids any load-order cycle.
+  let publicTools = Array.isArray(configSummary.localRepoBridge?.visibleTools) ? configSummary.localRepoBridge.visibleTools : [];
+  try { publicTools = require("./tools").getPublicToolSchemas(config).map((tool) => tool.name); } catch (_) {}
+  const toolCount = publicTools.length;
   return {
     ok: true,
     generatedAt: new Date().toISOString(),
@@ -38,22 +39,7 @@ function dashboardData(config, args = {}) {
     },
     workflow: {
       mode: (config.workflow && config.workflow.mode) || "standard",
-      tools: [
-        "relai_repo_snapshot",
-        "relai_read",
-        "relai_write",
-        "relai_replace",
-        "relai_clear_files",
-        "relai_apply_update",
-        "relai_apply_bundle",
-        "relai_package_snapshot",
-        "relai_run_checks",
-        "relai_browser",
-        "relai_diff",
-        "relai_restore_changes",
-        "relai_status",
-        "relai_feature_probe"
-      ],
+      tools: publicTools,
       removedLegacyWorkflows: ["update", "local", "task-runner", "worktree", "multi-agent", "approvals", "docker", "pr-ci-repair"]
     },
     extensionApprovalHelper: {

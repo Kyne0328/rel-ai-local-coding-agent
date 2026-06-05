@@ -103,7 +103,7 @@ function renderSummary() {
   const rows = [
     ['Port', String(state.port)],
     ['Dashboard token', 'saved to ~/.rel-ai-mcp/.env'],
-    ['ngrok domain', state.ngrokDomain]
+    ['Tunnel domain', state.ngrokDomain]
   ];
   for (const [key, value] of rows) {
     const row = document.createElement('div');

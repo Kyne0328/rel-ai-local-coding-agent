@@ -12,6 +12,10 @@ const {
   relaiGitPush,
   relaiGitMergeBranch,
   relaiGitMergeRemoteBranchesPlan,
+  relaiGitCreatePr,
+  relaiApplyPatch,
+  relaiClear,
+  relaiWrite,
   relaiReset
 } = require('../src/localRepoBridge.js');
 
@@ -65,6 +69,21 @@ const dryCommit = await relaiGitCommit(workspace, config, { message: 'dry run', 
 assert.equal(dryCommit.ok, true);
 assert.equal(dryCommit.dryRun, true);
 
+const dryScopedCommit = await relaiGitCommit(workspace, config, { message: 'dry scoped', paths: ['notes.txt'], dryRun: true });
+assert.equal(dryScopedCommit.ok, true);
+assert.equal(dryScopedCommit.addAll, false);
+assert.deepEqual(dryScopedCommit.paths, ['notes.txt']);
+
+const dryPatch = await relaiApplyPatch(workspace, config, {
+  updateText: '--- a/README.md\n+++ b/README.md\n@@ -1 +1,2 @@\n # Git smoke\n+dry patch\n',
+  dryRun: true,
+  requireCleanGit: false
+});
+assert.equal(dryPatch.ok, true);
+assert.equal(dryPatch.dryRun, true);
+assert.deepEqual(dryPatch.changedFiles, []);
+assert.equal(fs.readFileSync(path.join(workspace.path, 'README.md'), 'utf8').replace(/\r\n/g, '\n'), '# Git smoke\n');
+
 const commit = await relaiGitCommit(workspace, config, { message: 'add notes', paths: ['notes.txt'] });
 assert.equal(commit.ok, true);
 assert.ok(/add notes/.test(JSON.stringify(commit.commit)));
@@ -77,6 +96,11 @@ assert.equal(mergePlan.ok, true);
 assert.ok(mergePlan.excluded.some((item) => item.name === 'origin/main'));
 assert.ok(mergePlan.excluded.some((item) => item.name === 'origin/production'));
 assert.ok(mergePlan.recommendedMergeOrder.includes('origin/feature/ui-cleanup'));
+
+const emptyPr = await relaiGitCreatePr(workspace, config, { base: 'main', head: 'main' });
+assert.equal(emptyPr.ok, false);
+assert.equal(emptyPr.emptyDiff, true);
+assert.match(emptyPr.warning, /No diff/);
 
 // merge dry-run of an already-up-to-date source must report ok:true. Previously
 // the dry-run ran `git merge --abort` unconditionally, which fails when no merge
@@ -103,6 +127,14 @@ fs.writeFileSync(path.join(workspace.path, untrackedRel), 'disposable again\n');
 const restoreNoClean = await relaiReset(workspace, config, { paths: [untrackedRel] });
 assert.equal(restoreNoClean.ok, false, 'untracked restore without clean still fails');
 fs.rmSync(path.join(workspace.path, untrackedRel), { force: true });
+
+const clearDryRun = relaiClear(workspace, config, { path: 'README.md', dryRun: true });
+assert.equal(clearDryRun.ok, true);
+assert.deepEqual(clearDryRun.cleared, []);
+assert.deepEqual(clearDryRun.wouldClear, ['README.md']);
+assert.equal(fs.existsSync(path.join(workspace.path, 'README.md')), true);
+
+assert.throws(() => relaiWrite(workspace, config, { path: 'collapsed.js', content: 'const value = 1;'.repeat(400) }), /collapsed source-looking content/);
 
 // Tracked-modified file: restore reverts it (regression: paths-mode still works).
 fs.writeFileSync(path.join(workspace.path, 'README.md'), '# Git smoke\nlocal edit\n');

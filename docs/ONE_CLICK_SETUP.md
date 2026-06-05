@@ -248,7 +248,7 @@ Use this exact diagnostic prompt:
 Use the Rel.AI MCP connector tools directly.
 Call relai_repo_snapshot with workspace "jjclover" and maxEntries 200.
 Do not use file search. Do not modify files.
-If ChatGPT still shows removed tools such as relai_workspace_list, relai_read_files, relai_run_command, or relai_apply_update, restart/reconnect the MCP server and refresh the connector.
+If ChatGPT still shows removed tools such as relai_workspace_list, relai_read_files, or relai_run_command, restart/reconnect the MCP server and refresh the connector.
 ```
 
 Expected result:

@@ -262,7 +262,7 @@ The dashboard connector page prints the final ChatGPT MCP URL.
 
 1. Start the server with `npm run oneclick` or a public tunnel command.
 2. Open the dashboard.
-3. Go to **Settings -> Connector**.
+3. Go to **Settings > Apps > Create**.
 4. Copy the MCP URL.
 5. In ChatGPT, add it as an MCP connector.
 6. Set authentication to **OAuth**. ChatGPT opens a sign-in page — enter your Rel.AI dashboard token (`REL_AI_MCP_TOKEN`) to approve.

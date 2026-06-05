@@ -4,7 +4,32 @@ const path = require("node:path");
 const { safeReadJson } = require("./safety");
 const { discoverCommands } = require("./commandDiscovery");
 
-const BRIDGE_TOOLS = ["relai_repo_snapshot", "relai_read", "relai_write", "relai_replace", "relai_clear_files", "relai_apply_update", "relai_apply_bundle", "relai_package_snapshot", "relai_run_checks", "relai_browser", "relai_diff", "relai_restore_changes", "relai_status", "relai_feature_probe"];
+const BRIDGE_TOOLS = [
+  "relai_repo_snapshot",
+  "relai_read",
+  "relai_write",
+  "relai_replace",
+  "relai_clear_files",
+  "relai_apply_update",
+  "relai_apply_bundle",
+  "relai_package_snapshot",
+  "relai_run_checks",
+  "relai_browser",
+  "relai_diff",
+  "relai_restore_changes",
+  "relai_status",
+  "relai_feature_probe",
+  "relai_git_status",
+  "relai_git_fetch",
+  "relai_git_commit",
+  "relai_git_push",
+  "relai_git_merge_branch",
+  "relai_git_merge_remote_branches_plan",
+  "relai_git_abort_merge",
+  "relai_git_create_pr",
+  "relai_remove_file",
+  "relai_refactor_audit"
+];
 
 function makeDefaultAutoApproveConfig() {
   return {
@@ -29,7 +54,7 @@ function makeDefaultFastTaskConfig() {
     includeRoots: [],
     excludePaths: [
       ".git", "node_modules", "build", "dist", "coverage", ".next", ".nuxt", ".svelte-kit",
-      ".dart_tool", ".gradle", "target", "bin", "obj", "vendor", ".venv", "venv",
+      ".dart_tool", ".gradle", "target", "obj", "vendor", ".venv", "venv",
       ".claude/skills", ".superpowers"
     ]
   };
@@ -267,6 +292,26 @@ function normalizeStringList(value) {
   return String(value).split(/[\n,]/).map((item) => item.trim()).filter(Boolean);
 }
 
+function assertSafeWorkspaceRoot(rawPath, label = "Workspace path") {
+  const text = String(rawPath || "").trim();
+  if (!text) throw new Error(`${label} is required.`);
+  if (!path.isAbsolute(text)) throw new Error(`${label} must be absolute.`);
+  const resolved = path.resolve(text);
+  const strip = (value) => String(value || "").replace(/[\\/]+$/, "") || String(value || "");
+  const parsed = path.parse(resolved);
+  const root = strip(parsed.root);
+  const normalized = strip(resolved).toLowerCase();
+  const unsafe = new Set([root.toLowerCase()]);
+
+  for (const item of ["Windows", "Program Files", "Program Files (x86)", "Users", "etc", "usr", "bin", "sbin", "var", "tmp", "home", "System", "Library", "Applications"]) {
+    unsafe.add(strip(path.join(parsed.root, item)).toLowerCase());
+  }
+
+  if (unsafe.has(normalized)) {
+    throw new Error(`Unsafe workspace path refused: ${resolved}. Choose a project directory, not a system root.`);
+  }
+  return resolved;
+}
 
 function resolveWorkspace(config, alias) {
   const key = String(alias || "").trim();
@@ -274,9 +319,10 @@ function resolveWorkspace(config, alias) {
   if (!/^[A-Za-z0-9._-]{1,80}$/.test(key)) throw new Error(`Invalid workspace alias: ${key}`);
   const entry = config.workspaces && config.workspaces[key];
   if (!entry) throw new Error(`Workspace '${key}' is not configured.`);
-  if (!path.isAbsolute(entry.path)) throw new Error(`Workspace '${key}' path must be absolute.`);
+  assertSafeWorkspaceRoot(entry.path, `Workspace '${key}' path`);
   if (!fs.existsSync(entry.path)) throw new Error(`Workspace '${key}' path does not exist: ${entry.path}`);
   const realRoot = fs.realpathSync(entry.path);
+  assertSafeWorkspaceRoot(realRoot, `Workspace '${key}' resolved path`);
   return {
     alias: key,
     path: realRoot,
@@ -367,6 +413,7 @@ module.exports = {
   writeConfig,
   normalizeConfig,
   expandHome,
+  assertSafeWorkspaceRoot,
   resolveWorkspace,
   publicConfigSummary
 };

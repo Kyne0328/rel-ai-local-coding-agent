@@ -14,7 +14,7 @@ const require = createRequire(import.meta.url);
 const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-regressions-'));
 process.env.REL_AI_MCP_CONFIG = path.join(tmpRoot, 'config.json');
 
-const { makeDefaultConfig, normalizeConfig } = require('../src/config.js');
+const { makeDefaultConfig, normalizeConfig, publicConfigSummary } = require('../src/config.js');
 const { updateWorkspace } = require('../src/configEditor.js');
 const productUx = require('../src/productUx.js');
 const { getVersion } = require('../src/version.js');
@@ -46,6 +46,11 @@ assert.equal(getVersion(), latestChangelogVersion());
   });
   assert.equal(result.ok, true);
   assert.equal(result.config.workspaces.find((item) => item.alias === 'future-repo')?.path, missingPath);
+
+  assert.throws(() => updateWorkspace(makeDefaultConfig(), {
+    alias: 'root',
+    path: path.parse(process.cwd()).root
+  }), /Unsafe workspace path refused/);
 }
 
 // Dashboard settings must not keep writing the inert server-side autoApproveAppRequests
@@ -70,8 +75,25 @@ assert.equal(getVersion(), latestChangelogVersion());
   const dashboard = productUx.dashboardData(cfg, { limit: 5 });
   assert.equal(dashboard.toolCount, 24);
   assert.equal(Number.isFinite(dashboard.toolCount), true);
+  assert.equal(dashboard.workflow.tools.length, 24);
+  assert.ok(dashboard.workflow.tools.includes('relai_git_commit'));
+  assert.equal(dashboard.config.localRepoBridge.visibleTools.length, 24);
+  assert.ok(publicConfigSummary(cfg).localRepoBridge.visibleTools.includes('relai_refactor_audit'));
   assert.doesNotMatch(read('src/ui/sections/home.js'), /visibleToolCount/);
   assert.match(read('src/ui/sections/workspaces.js'), /data\.toolCount/);
+}
+
+// Audit-fix smoke guards for docs, UI copy, connector hints, and tunnel process safety.
+{
+  assert.doesNotMatch(read('README.md'), /Settings -> Connector/);
+  assert.match(read('README.md'), /Settings > Apps > Create/);
+  assert.doesNotMatch(read('docs/ONE_CLICK_SETUP.md'), /removed tools[^\n]*relai_apply_update/);
+  const toolsSource = read('src/tools.js');
+  assert.match(toolsSource, /const WRITE_LOCAL\s*=\s*\{ readOnlyHint: false/);
+  assert.match(toolsSource, /const DESTRUCTIVE_LOCAL\s*=\s*\{ readOnlyHint: false, destructiveHint: true/);
+  assert.match(read('electron/renderer/status.html'), /Public tunnel/);
+  assert.match(read('electron/renderer/status.js'), /waiting for tunnel/);
+  assert.doesNotMatch(read('electron/main.js'), /killOrphanedNgrok\(\)/);
 }
 
 // initEvents must be idempotent: dashboard.js calls it once at boot now, and the
@@ -175,6 +197,13 @@ try {
   assert.equal(authorizedBody.token, token);
   assert.equal(authorizedBody.tokenAvailable, true);
   assert.equal(authorizedBody.requiresAuthorization, false);
+
+  const autoUnauth = await fetch(`http://127.0.0.1:${port}/api/auto-approve/settings`);
+  assert.equal(autoUnauth.status, 401);
+  const autoAuth = await fetch(`http://127.0.0.1:${port}/api/auto-approve/settings`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  assert.equal(autoAuth.ok, true);
 } finally {
   child.kill('SIGKILL');
   await once(child, 'close');

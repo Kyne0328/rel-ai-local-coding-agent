@@ -30,15 +30,15 @@ function updateUI(status) {
   if (!serverRunning) {
     tunnelEl.textContent = 'Offline';
     tunnelEl.className = 'card-status stopped-text';
-    tunnelSub.textContent = 'static domain';
+    tunnelSub.textContent = 'public domain';
   } else if (tunnelStatus === 'connecting') {
     tunnelEl.textContent = 'Connecting';
     tunnelEl.className = 'card-status connecting-text';
-    tunnelSub.textContent = 'waiting for ngrok';
+    tunnelSub.textContent = 'waiting for tunnel';
   } else if (tunnelStatus === 'running') {
     tunnelEl.textContent = 'Connected';
     tunnelEl.className = 'card-status running-text';
-    tunnelSub.textContent = 'static domain';
+    tunnelSub.textContent = 'public domain';
   } else if (tunnelStatus === 'failed') {
     tunnelEl.textContent = 'Failed';
     tunnelEl.className = 'card-status failed-text';
@@ -46,7 +46,7 @@ function updateUI(status) {
   } else {
     tunnelEl.textContent = 'Offline';
     tunnelEl.className = 'card-status stopped-text';
-    tunnelSub.textContent = 'static domain';
+    tunnelSub.textContent = 'public domain';
   }
 
   const urlEl = document.getElementById('mcpUrl');
@@ -56,7 +56,7 @@ function updateUI(status) {
     urlEl.className = 'copy-url';
     copyBtn.disabled = false;
   } else {
-    urlEl.textContent = serverRunning ? 'Waiting for ngrok to publish the MCP URL...' : 'Start the server to get a ChatGPT MCP URL.';
+    urlEl.textContent = serverRunning ? 'Waiting for the tunnel to publish the MCP URL...' : 'Start the server to get a ChatGPT MCP URL.';
     urlEl.className = 'copy-url empty';
     copyBtn.disabled = true;
   }

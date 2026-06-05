@@ -35,7 +35,7 @@ const DEFAULT_AGGRESSIVE_MAX_ARCHIVE_BYTES = 250 * 1024 * 1024;
 // useful part survives. fullOutput keeps a larger tail but still stays bounded.
 const CHECK_OUTPUT_TAIL_DEFAULT = 4000;
 const CHECK_OUTPUT_TAIL_FULL = 40000;
-const AGGRESSIVE_ARCHIVE_EXCLUDED_NAMES = new Set([".git", "node_modules", "build", "dist", "coverage", ".dart_tool", ".gradle", ".relai", ".rel-ai-mcp", ".venv", "venv", "target", "bin", "obj", "Pods"]);
+const AGGRESSIVE_ARCHIVE_EXCLUDED_NAMES = new Set([".git", "node_modules", "build", "dist", "coverage", ".dart_tool", ".gradle", ".relai", ".rel-ai-mcp", ".venv", "venv", "target", "obj", "Pods"]);
 const AGGRESSIVE_ARCHIVE_EXCLUDED_PATHS = [".git/", "node_modules/", "build/", "dist/", "coverage/", ".dart_tool/", ".gradle/", ".relai/", ".rel-ai-mcp/"];
 const SOURCE_LIKE_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs', '.dart', '.py', '.go', '.rs', '.java', '.kt', '.swift', '.cs', '.cpp', '.c', '.h', '.hpp', '.rb', '.php', '.css', '.scss', '.html', '.xml', '.yaml', '.yml', '.json', '.md']);
 
@@ -309,6 +309,7 @@ function relaiClear(workspace, config, args = {}) {
 
   const operationId = makeOperationId();
   const cleared = [];
+  const wouldClear = [];
   const skipped = [];
   const results = [];
 
@@ -326,8 +327,11 @@ function relaiClear(workspace, config, args = {}) {
     const oldSha256 = fileSha256(workspace.path, safe.relativePath);
     const shaMismatch = Boolean(expectedSha256 && oldSha256 !== expectedSha256);
     const item = { path: safe.relativePath, cleared: !dryRun, dryRun, oldSha256, ...(shaMismatch ? { shaMismatch: { expectedSha256, currentSha256: oldSha256 } } : {}) };
-    if (!dryRun) fs.rmSync(safe.absolutePath, { force: true });
-    cleared.push(safe.relativePath);
+    wouldClear.push(safe.relativePath);
+    if (!dryRun) {
+      fs.rmSync(safe.absolutePath, { force: true });
+      cleared.push(safe.relativePath);
+    }
     results.push(item);
   }
 
@@ -335,7 +339,7 @@ function relaiClear(workspace, config, args = {}) {
     id: operationId,
     type: dryRun ? "clear:dryRun" : "clear",
     ok: true,
-    paths: dryRun ? [] : cleared,
+    paths: cleared,
     results
   });
 
@@ -346,8 +350,9 @@ function relaiClear(workspace, config, args = {}) {
     operationId,
     operation: "clearFiles",
     changed: !dryRun && cleared.length > 0,
-    changedFiles: dryRun ? [] : cleared,
+    changedFiles: cleared,
     cleared,
+    wouldClear: dryRun ? wouldClear : [],
     skipped,
     results
   };
@@ -378,6 +383,21 @@ async function relaiApplyPatch(workspace, config, args = {}) {
       touchedPaths,
       check: summarizeCommand(check),
       diagnostics: diagnosePatchFailure(check.stderr || check.stdout || "", patch, touchedPaths)
+    };
+  }
+  if (args.dryRun) {
+    appendOperation(config, workspace, { id: operationId, type: "apply_patch:dryRun", ok: true, paths: [], results: [{ operation: "applyPatch:dryRun", bytes: patchBytes, touchedPaths, changedFiles: [] }] });
+    return {
+      ok: true,
+      dryRun: true,
+      workspace: workspace.alias,
+      operationId,
+      operation: "applyPatch:dryRun",
+      changedFiles: [],
+      touchedPaths,
+      patchBytes,
+      check: summarizeCommand(check),
+      sourceFormat: "unified-diff"
     };
   }
   let backup = null;
@@ -652,9 +672,15 @@ async function relaiApplyArchive(workspace, config, args = {}) {
   const extract = await extractZipArchive(archivePath, extractedRoot, config, args);
   if (!extract.ok) return { ok: false, workspace: workspace.alias, operationId, operation: "applyArchive:extract", archivePath, extract };
   const overlayRoot = args.stripRoot === false ? extractedRoot : detectArchiveOverlayRoot(extractedRoot);
+  const clearMissing = Boolean(args.clearMissing ?? preparedFlag(config, "clearMissingDefault", false));
+  if (args.dryRun) {
+    const overlayPreview = previewArchiveOverlay(workspace.path, overlayRoot, { clearMissing });
+    appendOperation(config, workspace, { id: operationId, type: "apply_archive:dryRun", ok: overlayPreview.errors.length === 0, paths: [], results: [{ operation: "applyArchive:dryRun", archivePath, copied: overlayPreview.wouldCopy.length, cleared: overlayPreview.wouldClear.length, skipped: overlayPreview.skipped.length }] });
+    return { ok: overlayPreview.errors.length === 0, dryRun: true, workspace: workspace.alias, operationId, operation: "applyArchive:dryRun", archivePath, bundlePath: archivePath, archiveBytes: stat.size, changedFiles: [], overlayPreview, extract };
+  }
   let backup = null;
   if (shouldMakePreparedBackup(config, args)) backup = await makePreparedBackup(workspace, config, operationId, "archive");
-  const overlay = overlayDirectory(workspace.path, overlayRoot, { clearMissing: Boolean(args.clearMissing ?? preparedFlag(config, "clearMissingDefault", false)) });
+  const overlay = overlayDirectory(workspace.path, overlayRoot, { clearMissing });
   const verify = hasRequestedChecks(args) ? await relaiVerify(workspace, config, args) : null;
   const diff = args.returnDiff === false ? null : await relaiDiff(workspace, config, { maxBytes: args.maxDiffBytes || DEFAULT_MAX_DIFF_BYTES });
   const ok = overlay.errors.length === 0 && (!verify || verify.ok);
@@ -688,8 +714,20 @@ async function relaiSnapshotArchive(workspace, config, args = {}) {
   return { ok, workspace: workspace.alias, operationId, operation: "snapshotArchive", archivePath, copied: copiedSummary, zip: zipped, bytes: fs.existsSync(archivePath) ? fs.statSync(archivePath).size : 0, note: "Archive is stored on the MCP host. Use relai_apply_bundle with bundlePath to overlay it onto a workspace, or retrieve it from this local path." };
 }
 
-function assertDirectWriteAllowed(_relativePath, _content) {
-  return;
+function assertDirectWriteAllowed(relativePath, content) {
+  const normalized = String(relativePath || "").replace(/\\/g, "/");
+  if (/(^|\/)(dist|build|coverage|node_modules)\//.test(normalized) || /\.min\.[^.]+$/i.test(normalized)) return;
+  const ext = path.extname(normalized).toLowerCase();
+  const collapseGuardExtensions = new Set(['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs', '.dart', '.py', '.go', '.rs', '.java', '.kt', '.swift', '.cs', '.cpp', '.c', '.h', '.hpp', '.rb', '.php', '.css', '.scss', '.html', '.xml', '.yaml', '.yml']);
+  if (!collapseGuardExtensions.has(ext)) return;
+  const text = String(content || "");
+  const bytes = Buffer.byteLength(text, "utf8");
+  if (bytes < 4000) return;
+  const newlines = countMatches(text, /\n/g);
+  const averageLineBytes = bytes / Math.max(1, newlines + 1);
+  if (newlines <= 2 && averageLineBytes > 2000) {
+    throw new Error(`relai_write refuses collapsed source-looking content for ${relativePath}. Use relai_replace, relai_apply_update, or staged relai_write with the original line breaks intact.`);
+  }
 }
 
 function performFullFileWrite(workspace, config, relativePath, content, options = {}) {
@@ -934,8 +972,23 @@ function parseBrowserProbe(stdout) {
   return null;
 }
 
+function resolveBrowserTarget(rawUrl) {
+  const text = String(rawUrl || "").trim();
+  if (!text || /^https?:\/\//i.test(text)) return text;
+  if (!text.startsWith("/")) return text;
+  let host = "127.0.0.1";
+  let port = Number(process.env.REL_AI_MCP_PORT || 3333);
+  try {
+    const connection = require("./connectionProfile");
+    const profile = connection.readConnectionProfile();
+    host = profile.host || host;
+    port = Number(profile.port || port || 3333);
+  } catch (_error) {}
+  return new URL(text, `http://${host}:${port || 3333}`).toString();
+}
+
 async function relaiBrowser(workspace, config, args = {}) {
-  const url = String(args.url || args.route || "").trim();
+  const requestedUrl = String(args.url || args.route || "").trim();
   const command = String(args.command || "").trim();
   if (command) {
     // Bounded: only named package.json scripts may run, invoked as `npm run <name>`.
@@ -964,7 +1017,8 @@ async function relaiBrowser(workspace, config, args = {}) {
     }, config);
     return { ok: result.exitCode === 0, workspace: workspace.alias, mode: "check", check: command, ...summarizeCommand(result) };
   }
-  if (!url) throw new Error("url, route, or check is required.");
+  if (!requestedUrl) throw new Error("url, route, or check is required.");
+  const url = resolveBrowserTarget(requestedUrl);
   const script = `
     const target = ${JSON.stringify(url)};
     fetch(target).then(async (res) => {
@@ -979,6 +1033,7 @@ async function relaiBrowser(workspace, config, args = {}) {
     workspace: workspace.alias,
     mode: "http",
     url,
+    ...(requestedUrl !== url ? { requestedUrl } : {}),
     ...(probe ? {
       reachable: true,
       httpStatus: typeof probe.status === "number" ? probe.status : null,
@@ -1151,8 +1206,8 @@ async function relaiGitCommit(workspace, config, args = {}) {
   const message = String(args.message || "").trim();
   if (!message) throw new Error("relai_git_commit requires a non-empty commit message.");
   const dryRun = Boolean(args.dryRun);
-  const addAll = args.addAll !== false;
   const paths = Array.isArray(args.paths) ? args.paths.map((item) => resolveSafePath(workspace.path, item).relativePath) : [];
+  const addAll = paths.length === 0 && args.addAll !== false;
   const statusBefore = await relaiGitStatus(workspace, config, { maxBytes: args.maxBytes });
   if (dryRun) {
     return {
@@ -1292,13 +1347,20 @@ async function relaiGitCreatePr(workspace, config, args = {}) {
   const title = String(args.title || "").trim();
   const body = String(args.body || "").trim();
   const diff = await runProcess("git", ["diff", `${base}...${head}`], { cwd: workspace.path, timeout: 60000 }, { ...config, maxOutputBytes: 2 * 1024 * 1024 });
+  const diffText = diff.stdout || "";
+  const changedFiles = [...new Set(String(diffText).split(/\r?\n/).filter((line) => line.startsWith("+++ b/")).map((line) => line.slice(6)))];
+  const emptyDiff = diff.exitCode === 0 && changedFiles.length === 0 && !diffText.trim();
   return {
-    ok: diff.exitCode === 0,
+    ok: diff.exitCode === 0 && !emptyDiff,
     workspace: workspace.alias,
     base,
     head,
     title: title || `Merge ${head} into ${base}`,
-    body: body || buildPrBodyFromDiff(diff.stdout || ""),
+    body: body || buildPrBodyFromDiff(diffText),
+    changedFiles,
+    changedFileCount: changedFiles.length,
+    emptyDiff,
+    ...(emptyDiff ? { warning: `No diff between ${base} and ${head}; refusing to draft an empty pull request.` } : {}),
     diff: summarizeCommand(diff)
   };
 }
@@ -1553,6 +1615,35 @@ function detectArchiveOverlayRoot(extractedRoot) {
   const files = entries.filter((entry) => entry.isFile());
   if (dirs.length === 1 && files.length === 0) return path.join(extractedRoot, dirs[0].name);
   return extractedRoot;
+}
+
+function previewArchiveOverlay(workspaceRoot, sourceRoot, options = {}) {
+  const wouldCopy = [];
+  const wouldClear = [];
+  const skipped = [];
+  const errors = [];
+  const sourceFiles = new Set();
+  walkArchiveSource(sourceRoot, "", (absoluteSource, relativePath, stat) => {
+    sourceFiles.add(relativePath);
+    try {
+      const safe = resolveSafePath(workspaceRoot, relativePath);
+      wouldCopy.push({ path: safe.relativePath, bytes: stat.size });
+    } catch (error) {
+      errors.push({ path: relativePath, error: error instanceof Error ? error.message : String(error) });
+    }
+  }, skipped);
+  if (options.clearMissing) {
+    walkArchiveTarget(workspaceRoot, "", (_absoluteTarget, relativePath) => {
+      if (sourceFiles.has(relativePath)) return;
+      try {
+        const safe = resolveSafePath(workspaceRoot, relativePath);
+        wouldClear.push(safe.relativePath);
+      } catch (error) {
+        errors.push({ path: relativePath, error: error instanceof Error ? error.message : String(error) });
+      }
+    }, skipped);
+  }
+  return { wouldCopy, wouldClear, skipped, errors };
 }
 
 function overlayDirectory(workspaceRoot, sourceRoot, options = {}) {
@@ -1927,13 +2018,17 @@ function detectVerifyChecks(root, level) {
     try {
       const pkg = JSON.parse(fs.readFileSync(packageJson, "utf8"));
       const scripts = pkg.scripts || {};
-      if (scripts.check) {
-        commands.push("npm run check");
-      } else if (level === "quick" && fs.existsSync(path.join(root, "src", "tools.js"))) {
-        commands.push("node --check src/tools.js");
+      if (level === "release" && scripts["test:all"]) {
+        commands.push("npm run test:all");
+      } else {
+        if (scripts.check) {
+          commands.push("npm run check");
+        } else if (level === "quick" && fs.existsSync(path.join(root, "src", "tools.js"))) {
+          commands.push("node --check src/tools.js");
+        }
+        if (level !== "quick" && scripts.test) commands.push("npm test");
+        if ((level === "full" || level === "release") && scripts.build) commands.push("npm run build");
       }
-      if (level !== "quick" && scripts.test) commands.push("npm test");
-      if (level === "full" && scripts.build) commands.push("npm run build");
     } catch (_error) {
       if (level === "quick" && fs.existsSync(path.join(root, "src", "tools.js"))) commands.push("node --check src/tools.js");
     }

@@ -56,18 +56,12 @@ const PUBLIC_HTTP_TOOL_NAMES = BRIDGE_TOOL_NAMES.filter((name) => ![
   "relai_session_summary"
 ].includes(name));
 
-// All public workspace tools advertise as read-only/non-destructive so the
-// ChatGPT connector classifier does not flag ordinary repo work (e.g. status,
-// diff) as a risky operation. The real safety boundary lives server-side in
-// safety.js / hard-boundary checks, not in these client-facing hints. Every tool
-// intentionally uses the SAME hints (read/write/destructive alike) — the four
-// aliases below previously held identical values and only implied a distinction
-// that does not exist, so they collapse to one constant.
-const CONNECTOR_SAFE_HINTS = { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false };
-const READ_ONLY_LOCAL   = CONNECTOR_SAFE_HINTS;
-const WRITE_LOCAL       = CONNECTOR_SAFE_HINTS;
-const DESTRUCTIVE_LOCAL = CONNECTOR_SAFE_HINTS;
-const WRITE_OPEN        = CONNECTOR_SAFE_HINTS;
+// Tool annotations describe the real local effect for clients that surface
+// capability/safety metadata. Server-side guards still enforce the hard boundary.
+const READ_ONLY_LOCAL   = { readOnlyHint: true,  destructiveHint: false, idempotentHint: true,  openWorldHint: false };
+const WRITE_LOCAL       = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false };
+const DESTRUCTIVE_LOCAL = { readOnlyHint: false, destructiveHint: true,  idempotentHint: false, openWorldHint: false };
+const WRITE_OPEN        = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true  };
 
 const toolSchemas = [
   tool("relai_repo_snapshot", "Repository Overview", "Read-only. Compact repository overview: file tree, manifests, detected checks, and project hints.", {
@@ -93,10 +87,10 @@ const toolSchemas = [
     workspace: stringProp(), path: stringProp(), paths: arrayProp("string", 1, 100), expectedSha256: stringProp(), dryRun: boolProp(), failIfMissing: boolProp()
   }, ["workspace"], DESTRUCTIVE_LOCAL),
   tool("relai_apply_update", "Apply Prepared Update", "Apply a prepared text update to the workspace and optionally validate afterward. Accepts either git unified diff (--- a/path / +++ b/path / @@ hunks) or OpenAI patch format (*** Begin Patch / *** Update File: path / *** End Patch). The workspace must be clean by default; pass requireCleanGit:false to apply when the worktree already has unrelated changes (a backup is still taken).", {
-    workspace: stringProp(), updateText: stringProp(), backup: boolProp(), requireCleanGit: boolProp(), check: stringProp(), checks: arrayProp("string", 0), checksText: stringProp(), timeoutMs: numberProp(1000, 86400000), stopOnFailure: boolProp(), returnDiff: boolProp(), maxResultBytes: numberProp(1000, 5242880)
+    workspace: stringProp(), updateText: stringProp(), backup: boolProp(), requireCleanGit: boolProp(), dryRun: boolProp(), check: stringProp(), checks: arrayProp("string", 0), checksText: stringProp(), timeoutMs: numberProp(1000, 86400000), stopOnFailure: boolProp(), returnDiff: boolProp(), maxResultBytes: numberProp(1000, 5242880)
   }, ["workspace"], WRITE_LOCAL),
   tool("relai_apply_bundle", "Apply Prepared Bundle", "Apply a prepared file bundle to the workspace and optionally validate afterward. The workspace must be clean by default; pass requireCleanGit:false to apply when the worktree already has unrelated changes (a backup is still taken).", {
-    workspace: stringProp(), bundlePath: stringProp(), path: stringProp(), stripRoot: boolProp(), clearMissing: boolProp(), backup: boolProp(), requireCleanGit: boolProp(), check: stringProp(), checks: arrayProp("string", 0), checksText: stringProp(), timeoutMs: numberProp(1000, 86400000), stopOnFailure: boolProp(), returnDiff: boolProp(), maxResultBytes: numberProp(1000, 5242880)
+    workspace: stringProp(), bundlePath: stringProp(), path: stringProp(), stripRoot: boolProp(), clearMissing: boolProp(), backup: boolProp(), requireCleanGit: boolProp(), dryRun: boolProp(), check: stringProp(), checks: arrayProp("string", 0), checksText: stringProp(), timeoutMs: numberProp(1000, 86400000), stopOnFailure: boolProp(), returnDiff: boolProp(), maxResultBytes: numberProp(1000, 5242880)
   }, ["workspace"], WRITE_LOCAL),
   tool("relai_package_snapshot", "Package Workspace Zip", "Create a zip package of the current workspace, excluding repo internals, dependency caches, build outputs, and Rel.AI state.", {
     workspace: stringProp(), maxFiles: numberProp(1, 200000), timeoutMs: numberProp(1000, 86400000)

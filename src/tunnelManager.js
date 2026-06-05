@@ -134,12 +134,11 @@ function killProcess(child) {
 }
 
 function killOrphanedNgrok() {
-  const { spawnSync } = require("node:child_process");
-  if (process.platform === "win32") {
-    spawnSync("taskkill", ["/f", "/im", "ngrok.exe"], { stdio: "ignore", windowsHide: true });
-  } else {
-    spawnSync("pkill", ["-f", "ngrok"], { stdio: "ignore" });
-  }
+  return {
+    ok: true,
+    skipped: true,
+    reason: "Rel.AI only stops tunnel processes it started; untracked ngrok processes are left alone."
+  };
 }
 
 function readNgrokApiUrl(port = 4040) {
