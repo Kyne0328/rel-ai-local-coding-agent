@@ -32,7 +32,7 @@ function summaryCard(payload) {
     <div class="card-body" style="display:grid;gap:14px;">
       <div class="empty" style="text-align:left;padding:12px;line-height:1.55;${payload.permanentUrlConfigured ? 'border-color:rgba(71,221,138,.22);background:rgba(71,221,138,.07);' : 'border-color:rgba(255,194,75,.22);background:rgba(255,194,75,.07);'}">
         ${payload.permanentUrlConfigured
-          ? 'This is the stable URL to paste into ChatGPT. You should only need to update the ChatGPT connector if this URL or its secret path changes.'
+          ? 'This is the stable URL to paste into ChatGPT. You should only need to update the ChatGPT connector if this URL changes.'
           : 'This URL works for local diagnostics, but it is not a durable ChatGPT setup. For a stable connector, configure a permanent HTTPS public URL and relaunch Rel.AI MCP with that URL.'}
       </div>
       <div style="display:grid;gap:8px;">
@@ -44,7 +44,7 @@ function summaryCard(payload) {
         </div>
       </div>
       <div style="display:grid;gap:8px;font-size:13px;">
-        <div style="display:flex;gap:10px;flex-wrap:wrap;"><span style="color:var(--text-muted);min-width:140px;">Auth mode</span><span>${escapeHtml(payload.chatgptAuthMode || 'No Authentication')}</span></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;"><span style="color:var(--text-muted);min-width:140px;">Auth mode</span><span>${escapeHtml(payload.chatgptAuthMode || 'OAuth')}</span></div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;"><span style="color:var(--text-muted);min-width:140px;">Health URL</span><code style="font-size:12px;word-break:break-all;">${escapeHtml(payload.chatgptHealthUrl || '—')}</code></div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;"><span style="color:var(--text-muted);min-width:140px;">Dashboard URL</span><code style="font-size:12px;word-break:break-all;">${escapeHtml(payload.dashboardUrl || '—')}</code></div>
       </div>

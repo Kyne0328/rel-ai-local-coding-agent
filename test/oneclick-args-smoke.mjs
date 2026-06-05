@@ -10,7 +10,7 @@ const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-oneclick-'));
 const configPath = path.join(stateDir, 'config.json');
 
 function run(args) {
-  return spawnSync(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-launch.js'), '--print-only', '--show-token', '--reset-token', '--reset-chatgpt-secret', ...args], {
+  return spawnSync(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-launch.js'), '--print-only', '--show-token', '--reset-token', ...args], {
     cwd: root,
     encoding: 'utf8',
     env: {
@@ -43,8 +43,7 @@ fs.writeFileSync(
   JSON.stringify({
     host: '127.0.0.1',
     port: 39876,
-    publicUrl: 'https://saved.example.test',
-    chatgptSecret: 'saved-secret'
+    publicUrl: 'https://saved.example.test'
   }, null, 2)
 );
 

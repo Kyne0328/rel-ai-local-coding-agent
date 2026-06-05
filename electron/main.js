@@ -280,8 +280,7 @@ function normalizeWizardConfig(config = {}) {
   const port = normalizePort(config.port || 3333);
   const ngrokDomain = normalizeNgrokDomain(config.ngrokDomain || config.domain || '');
   const token = String(config.token || '').trim() || connection.generateToken(32);
-  const chatgptSecret = connection.resolveChatGPTSecret({ value: config.chatgptSecret || '' });
-  return { port, ngrokDomain, token, chatgptSecret };
+  return { port, ngrokDomain, token };
 }
 
 function saveLauncherConfig(config = {}) {
@@ -292,7 +291,6 @@ function saveLauncherConfig(config = {}) {
   connection.writeLaunchEnv({
     REL_AI_MCP_PORT: String(normalized.port),
     REL_AI_MCP_TOKEN: normalized.token,
-    REL_AI_MCP_CHATGPT_SECRET: normalized.chatgptSecret,
     REL_AI_MCP_NGROK_DOMAIN: normalized.ngrokDomain,
     REL_AI_MCP_PUBLIC_URL: publicUrl,
     REL_AI_MCP_TUNNEL_COMMAND: tunnelCommand
@@ -306,7 +304,6 @@ function saveLauncherConfig(config = {}) {
     publicUrl,
     ngrokDomain: normalized.ngrokDomain,
     tunnelProvider: 'custom',
-    chatgptSecret: normalized.chatgptSecret,
     configPath: configModule.getConfigPath()
   });
 
@@ -330,9 +327,6 @@ async function startServer() {
       if (!guiConfig.token) {
         guiConfig.token = connection.generateToken(32);
         connection.writeLaunchEnv({ REL_AI_MCP_TOKEN: guiConfig.token });
-      }
-      if (!guiConfig.chatgptSecret) {
-        guiConfig.chatgptSecret = connection.resolveChatGPTSecret({});
       }
     } catch (error) {
       setStatus({ serverRunning: false, tunnelStatus: 'failed', mcpUrl: '', error: formatError(error) });
@@ -358,7 +352,6 @@ async function startServer() {
         host: '127.0.0.1',
         port: guiConfig.port,
         token: guiConfig.token,
-        chatgptSecret: guiConfig.chatgptSecret,
         publicUrl: `https://${guiConfig.ngrokDomain}`,
         exitOnError: false,
         // Native folder picker for the dashboard "Browse" buttons. Runs in the main
@@ -420,7 +413,6 @@ async function startServer() {
         publicUrl: publicBaseUrl,
         ngrokDomain: guiConfig.ngrokDomain,
         tunnelProvider: 'custom',
-        chatgptSecret: guiConfig.chatgptSecret,
         configPath: configModule.getConfigPath()
       });
       setStatus({ serverRunning: true, tunnelStatus: 'running', mcpUrl, error: '' });

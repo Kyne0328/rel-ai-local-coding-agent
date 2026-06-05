@@ -7,6 +7,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 const port = 39876;
 const token = process.env.TEST_TOKEN ?? 'test-token-please-change';
+// A fabricated value only used to confirm the removed secret-path no longer routes
+// and that the diagnostic never echoes such a string.
 const chatgptSecret = 'chatgpt-smoke-secret';
 
 const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.js'), '--host', '127.0.0.1', '--port', String(port)], {
@@ -15,8 +17,7 @@ const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.j
   env: {
     ...process.env,
     REL_AI_MCP_CONFIG: path.join(root, 'examples', 'config.example.json'),
-    REL_AI_MCP_TOKEN: token,
-    REL_AI_MCP_CHATGPT_SECRET: chatgptSecret
+    REL_AI_MCP_TOKEN: token
   }
 });
 

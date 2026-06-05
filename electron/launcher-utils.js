@@ -77,7 +77,6 @@ function readGuiConfig() {
     port: normalizePort(env.REL_AI_MCP_PORT || profile.port || 3333),
     ngrokDomain: ngrokDomain ? normalizeNgrokDomain(ngrokDomain) : '',
     token: env.REL_AI_MCP_TOKEN || '',
-    chatgptSecret: env.REL_AI_MCP_CHATGPT_SECRET || profile.chatgptSecret || '',
     publicUrl: profile.publicUrl || (ngrokDomain ? `https://${normalizeNgrokDomain(ngrokDomain)}` : '')
   };
 }

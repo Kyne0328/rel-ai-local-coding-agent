@@ -37,8 +37,6 @@ function parseArgs(argv) {
     else if (arg === "--tunnel-command") options.tunnelCommand = readValue(i, arg), i += 1;
     else if (arg === "--tunnel-timeout-ms") options.tunnelTimeoutMs = Number(readValue(i, arg)), i += 1;
     else if (arg === "--reset-token") options.resetToken = true;
-    else if (arg === "--chatgpt-secret") options.chatgptSecret = readValue(i, arg), i += 1;
-    else if (arg === "--reset-chatgpt-secret") options.resetChatgptSecret = true;
     else if (arg === "--show-token") options.showToken = true;
     else if (arg === "--print-only") options.printOnly = true;
     else if (arg === "--allow-no-auth") options.allowNoAuth = true;
@@ -84,9 +82,7 @@ Options:
   --public-url <url>     Stable HTTPS base URL routed to this local server. Skips tunnel startup.
   --token <token>        Use this bearer token for this run.
   --reset-token          Generate and save a new local/API bearer token.
-  --chatgpt-secret <s>   Use this secret in the ChatGPT no-auth MCP URL path.
-  --reset-chatgpt-secret Generate and save a new ChatGPT MCP URL secret.
-  --show-token           Print local/API token and ChatGPT secret in connector summary output.
+  --show-token           Print the local/API bearer token in connector summary output.
   --print-only           Print saved connector settings without starting the server.
   --allow-no-auth        Disable auth for local-only testing.
 
@@ -129,7 +125,6 @@ async function main() {
   const port = Number(options.port || process.env.REL_AI_MCP_PORT || 3333);
   let publicUrl = connection.normalizePublicUrl(options.publicUrl || process.env.REL_AI_MCP_PUBLIC_URL || savedEnv.REL_AI_MCP_PUBLIC_URL || savedProfile.publicUrl || "");
   const token = resolveToken(options);
-  const chatgptSecret = connection.resolveChatGPTSecret({ reset: options.resetChatgptSecret, value: options.chatgptSecret });
   const tunnelProvider = tunnelManager.normalizeTunnel(options.tunnel || process.env.REL_AI_MCP_TUNNEL || savedEnv.REL_AI_MCP_TUNNEL || "none");
   // When user explicitly requests a tunnel (--public/--tunnel/etc) without a stable --public-url,
   // discard the saved URL from the previous session so a fresh tunnel starts instead of reusing a stale one.
@@ -140,16 +135,15 @@ async function main() {
   if (publicUrl) connection.writeLaunchEnv({ REL_AI_MCP_PUBLIC_URL: publicUrl });
   if (tunnelProvider !== "none") connection.writeLaunchEnv({ REL_AI_MCP_TUNNEL: tunnelProvider });
   if (tunnelCommand) connection.writeLaunchEnv({ REL_AI_MCP_TUNNEL_COMMAND: tunnelCommand });
-  connection.writeLaunchEnv({ REL_AI_MCP_CHATGPT_SECRET: chatgptSecret });
-  let profile = connection.writeConnectionProfile({ host, port, publicUrl, tunnelProvider, chatgptSecret, configPath: getConfigPath() });
-  const summary = connection.buildConnectionSummary({ host: profile.host, port: profile.port, publicUrl: profile.publicUrl, token, chatgptSecret, showToken: options.showToken, tunnelProvider });
+  let profile = connection.writeConnectionProfile({ host, port, publicUrl, tunnelProvider, configPath: getConfigPath() });
+  const summary = connection.buildConnectionSummary({ host: profile.host, port: profile.port, publicUrl: profile.publicUrl, token, showToken: options.showToken, tunnelProvider });
 
   if (createdConfig) console.error(`Created default config: ${getConfigPath()}`);
   connection.printConnectionSummary(summary);
 
   if (options.printOnly) return;
 
-  const server = startHttpServer({ host, port, token, chatgptSecret, allowNoAuth: options.allowNoAuth, publicUrl });
+  const server = startHttpServer({ host, port, token, allowNoAuth: options.allowNoAuth, publicUrl });
 
   if (!publicUrl && tunnelProvider !== "none") {
     const localUrl = connection.localBaseUrl(host, port);
@@ -168,9 +162,9 @@ async function main() {
     if (tunnel.ok) {
       publicUrl = connection.normalizePublicUrl(tunnel.publicUrl);
       connection.writeLaunchEnv({ REL_AI_MCP_PUBLIC_URL: publicUrl, REL_AI_MCP_TUNNEL: tunnel.provider });
-      profile = connection.writeConnectionProfile({ host, port, publicUrl, tunnelProvider: tunnel.provider, tunnelCommand: tunnel.command || "", chatgptSecret, configPath: getConfigPath() });
+      profile = connection.writeConnectionProfile({ host, port, publicUrl, tunnelProvider: tunnel.provider, tunnelCommand: tunnel.command || "", configPath: getConfigPath() });
       console.error("\n[rel-ai-mcp] Public tunnel is ready.");
-      connection.printConnectionSummary(connection.buildConnectionSummary({ host: profile.host, port: profile.port, publicUrl: profile.publicUrl, token, chatgptSecret, showToken: options.showToken, tunnelProvider: tunnel.provider }));
+      connection.printConnectionSummary(connection.buildConnectionSummary({ host: profile.host, port: profile.port, publicUrl: profile.publicUrl, token, showToken: options.showToken, tunnelProvider: tunnel.provider }));
       const stopTunnel = () => {
         if (tunnel.process && !tunnel.process.killed) tunnel.process.kill();
       };

@@ -8,7 +8,6 @@ function parseArgs(argv) {
     if (arg === "--host") options.host = argv[++i];
     else if (arg === "--port") options.port = Number(argv[++i]);
     else if (arg === "--token") options.token = argv[++i];
-    else if (arg === "--chatgpt-secret") options.chatgptSecret = argv[++i];
     else if (arg === "--allow-no-auth") options.allowNoAuth = true;
     else if (arg === "--help" || arg === "-h") {
       printHelp();

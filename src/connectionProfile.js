@@ -16,38 +16,12 @@ function getConnectionProfilePath() {
   return path.join(stateDir(), "connection.json");
 }
 
-function getChatGPTSecretPath() {
-  return path.join(stateDir(), "chatgpt-secret");
-}
-
 function ensureStateDir() {
   fs.mkdirSync(stateDir(), { recursive: true, mode: 0o700 });
 }
 
 function generateToken(bytes = 32) {
   return crypto.randomBytes(bytes).toString("base64url");
-}
-
-function resolveChatGPTSecret({ reset = false, value = "" } = {}) {
-  ensureStateDir();
-  const explicit = String(value || "").trim();
-  if (explicit) {
-    fs.writeFileSync(getChatGPTSecretPath(), `${explicit}\n`, { mode: 0o600 });
-    return explicit;
-  }
-  const envValue = String(process.env.REL_AI_MCP_CHATGPT_SECRET || "").trim();
-  if (envValue && !reset) return envValue;
-  const savedEnv = readLaunchEnv();
-  if (savedEnv.REL_AI_MCP_CHATGPT_SECRET && !reset) return String(savedEnv.REL_AI_MCP_CHATGPT_SECRET);
-  const secretPath = getChatGPTSecretPath();
-  if (fs.existsSync(secretPath) && !reset) {
-    const saved = fs.readFileSync(secretPath, "utf8").trim();
-    if (saved) return saved;
-  }
-  const secret = generateToken(24);
-  fs.writeFileSync(secretPath, `${secret}\n`, { mode: 0o600 });
-  writeLaunchEnv({ REL_AI_MCP_CHATGPT_SECRET: secret });
-  return secret;
 }
 
 function parseEnvFile(text) {
@@ -121,11 +95,10 @@ function localBaseUrl(host, port) {
   return `http://${safeHost}:${port}`;
 }
 
-function buildConnectionSummary({ host = "127.0.0.1", port = 3333, publicUrl = "", token = "", showToken = false, chatgptSecret = "", tunnelProvider = "" } = {}) {
+function buildConnectionSummary({ host = "127.0.0.1", port = 3333, publicUrl = "", token = "", showToken = false, tunnelProvider = "" } = {}) {
   const localUrl = localBaseUrl(host, port);
   const publicBaseUrl = publicUrl ? normalizePublicUrl(publicUrl) : "";
   const baseForChatGPT = publicBaseUrl || localUrl;
-  const secret = String(chatgptSecret || "").trim();
   return {
     ok: true,
     localBaseUrl: localUrl,
@@ -142,9 +115,7 @@ function buildConnectionSummary({ host = "127.0.0.1", port = 3333, publicUrl = "
     oauthMetadataUrl: `${baseForChatGPT}/.well-known/oauth-protected-resource`,
     authHeader: token ? "Authorization: Bearer <REL_AI_MCP_TOKEN>" : "not configured",
     token: showToken ? token : token ? "set" : "missing",
-    chatgptSecret: showToken ? secret : secret ? "set" : "missing",
     tokenFile: getEnvPath(),
-    chatgptSecretFile: getChatGPTSecretPath(),
     profileFile: getConnectionProfilePath(),
     permanentUrlConfigured: Boolean(publicBaseUrl),
     tunnelProvider: tunnelProvider || "none",
@@ -179,11 +150,10 @@ function printConnectionSummary(summary) {
     `Local/API MCP only:     ${summary.localBearerMcpUrl}`,
     `Local/API Auth:         ${summary.authHeader}`,
     `Token file:       ${summary.tokenFile}`,
-    `ChatGPT secret:   ${summary.chatgptSecretFile}`,
     `Profile file:     ${summary.profileFile}`,
     "",
     summary.permanentUrlConfigured
-      ? "Permanent URL: configured. Use the COPY THIS FOR CHATGPT URL above. You should not need to recreate the ChatGPT app unless that URL or secret path changes."
+      ? "Permanent URL: configured. Use the COPY THIS FOR CHATGPT URL above. You should not need to recreate the ChatGPT app unless that URL changes."
       : "Permanent URL: not configured. Add one with --public to create a temporary tunnel, or --public-url https://your-domain.example.com for a stable connector URL.",
     "",
     "Important:",
@@ -204,9 +174,7 @@ module.exports = {
   stateDir,
   getEnvPath,
   getConnectionProfilePath,
-  getChatGPTSecretPath,
   generateToken,
-  resolveChatGPTSecret,
   readLaunchEnv,
   writeLaunchEnv,
   readConnectionProfile,

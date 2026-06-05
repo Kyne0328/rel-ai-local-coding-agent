@@ -18,7 +18,6 @@ const root = path.resolve(__dirname, '..');
 const port = 39891;
 const base = `http://127.0.0.1:${port}`;
 const token = 'oauth-smoke-dashboard-token';
-const chatgptSecret = 'oauth-smoke-secret';
 const redirectUri = 'https://chatgpt.com/connector_platform_oauth_redirect';
 
 // Isolated state dir so we never read a real connection.json (which could carry a
@@ -32,7 +31,6 @@ const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.j
     ...process.env,
     REL_AI_MCP_CONFIG: path.join(root, 'examples', 'config.example.json'),
     REL_AI_MCP_TOKEN: token,
-    REL_AI_MCP_CHATGPT_SECRET: chatgptSecret,
     REL_AI_MCP_STATE_DIR: stateDir
   }
 });

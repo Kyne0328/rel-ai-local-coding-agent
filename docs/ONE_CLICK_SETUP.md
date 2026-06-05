@@ -43,7 +43,7 @@ This starts the Rel.AI MCP server first, then tries these tunnel providers in or
 2. ngrok via `ngrok http 3333 --log=stdout`
 3. localtunnel via `npx --yes localtunnel --port 3333`
 
-When a tunnel prints an `https://` URL, Rel.AI MCP saves it in `~/.rel-ai-mcp/.env` and prints a fresh `COPY THIS FOR CHATGPT` URL using `/mcp/<secret>`.
+When a tunnel prints an `https://` URL, Rel.AI MCP saves it in `~/.rel-ai-mcp/.env` and prints a fresh `COPY THIS FOR CHATGPT` URL using the plain `/mcp` endpoint (Authentication: OAuth).
 
 Provider-specific examples:
 
@@ -100,7 +100,7 @@ npm run oneclick -- --public-url https://relai.your-domain.com
 The ChatGPT MCP endpoint will be printed as `COPY THIS FOR CHATGPT` and will look like:
 
 ```text
-https://relai.your-domain.com/mcp/<secret>
+https://relai.your-domain.com/mcp
 ```
 
 You should only need to recreate the ChatGPT app if one of these changes:
@@ -200,23 +200,17 @@ This uses `npx --yes localtunnel --port 3333`, so it requires npm/npx and intern
 After `npm run oneclick -- --public-url ...`, use the printed values:
 
 ```text
-MCP URL: https://your-stable-domain/mcp/<secret>
-Authentication: No Authentication
+MCP URL: https://your-stable-domain/mcp
+Authentication: OAuth
 ```
 
-The ChatGPT URL secret is stored locally in:
-
-```text
-~/.rel-ai-mcp/chatgpt-secret
-```
-
-To rotate the ChatGPT MCP URL secret:
+ChatGPT signs in via OAuth: it opens a page served by your server and asks for your Rel.AI **dashboard token** (`REL_AI_MCP_TOKEN`, stored in `~/.rel-ai-mcp/.env`) to approve the connection. There is no secret embedded in the URL. To rotate the credential, rotate the bearer token:
 
 ```bash
-npm run oneclick -- --reset-chatgpt-secret --show-token
+npm run oneclick -- --reset-token --show-token
 ```
 
-After secret rotation, update the ChatGPT app URL and keep ChatGPT authentication set to `No Authentication`. The local/API bearer token is still stored in `~/.rel-ai-mcp/.env`, but it is not the ChatGPT app authentication mode.
+After rotating the token, the next ChatGPT OAuth sign-in uses the new value; the MCP URL itself does not change.
 
 ## Safer first prompt
 
@@ -239,10 +233,10 @@ If ChatGPT cannot connect:
 1. Open the local dashboard printed by `npm run oneclick`.
 2. Check `http://127.0.0.1:3333/health` locally.
 3. Check that your tunnel points to `http://127.0.0.1:3333`.
-4. Confirm the ChatGPT MCP URL looks like `/mcp/<secret>`, not plain `/mcp`.
-5. Confirm the ChatGPT app authentication is exactly `No Authentication`.
-6. Avoid using the dashboard URL as the MCP URL. ChatGPT needs `/mcp/<secret>`, not `/dashboard`.
-7. Do not judge the connector by opening plain `/mcp` in a browser. MCP uses `POST`; browser `GET` is only a redacted diagnostic and will not show the full secret URL unless you are already authorized.
+4. Confirm the ChatGPT MCP URL is the plain `/mcp` URL.
+5. Confirm the ChatGPT app authentication is set to `OAuth`, and that you completed the dashboard-token sign-in.
+6. Avoid using the dashboard URL as the MCP URL. ChatGPT needs `/mcp`, not `/dashboard`.
+7. Do not judge the connector by opening plain `/mcp` in a browser. MCP uses `POST`; an unauthenticated browser `GET` only returns a diagnostic.
 
 ## If ChatGPT says it cannot find the workspace/tools
 

@@ -38,7 +38,6 @@ function startHttpServer(options = {}) {
   const host = options.host || process.env.REL_AI_MCP_HOST || savedProfile.host || "127.0.0.1";
   const port = Number(options.port ?? process.env.REL_AI_MCP_PORT ?? 3333);
   const token = options.token || process.env.REL_AI_MCP_TOKEN || launchEnv.REL_AI_MCP_TOKEN || "";
-  const chatgptSecret = String(options.chatgptSecret || process.env.REL_AI_MCP_CHATGPT_SECRET || launchEnv.REL_AI_MCP_CHATGPT_SECRET || savedProfile.chatgptSecret || "").trim();
   const publicUrl = connection.normalizePublicUrl(options.publicUrl || process.env.REL_AI_MCP_PUBLIC_URL || launchEnv.REL_AI_MCP_PUBLIC_URL || savedProfile.publicUrl || "");
   const allowNoAuth = Boolean(options.allowNoAuth || process.env.REL_AI_MCP_ALLOW_NO_AUTH === "1");
   const maxBodyBytes = Number(options.maxBodyBytes || process.env.REL_AI_MCP_MAX_BODY_BYTES || DEFAULT_MAX_BODY_BYTES);
@@ -53,7 +52,7 @@ function startHttpServer(options = {}) {
 
   const server = http.createServer(async (req, res) => {
     try {
-      await routeRequest(req, res, { token, chatgptSecret, allowNoAuth, maxBodyBytes, host, port, publicUrl, pickFolder });
+      await routeRequest(req, res, { token, allowNoAuth, maxBodyBytes, host, port, publicUrl, pickFolder });
     } catch (error) {
       sendJson(res, 500, {
         ok: false,
@@ -80,8 +79,8 @@ function startHttpServer(options = {}) {
     const address = server.address();
     const actualPort = address && typeof address === "object" ? address.port : port;
     console.error(`[rel-ai-mcp] HTTP/SSE server listening on http://${host}:${actualPort}`);
-    connection.writeConnectionProfile({ host, port: actualPort, publicUrl, chatgptSecret, configPath: require("./config").getConfigPath() });
-    const summary = connection.buildConnectionSummary({ host, port: actualPort, publicUrl, token, chatgptSecret });
+    connection.writeConnectionProfile({ host, port: actualPort, publicUrl, configPath: require("./config").getConfigPath() });
+    const summary = connection.buildConnectionSummary({ host, port: actualPort, publicUrl, token });
     console.error(`[rel-ai-mcp] Dashboard: ${summary.dashboardUrl}`);
     if (publicUrl) {
       console.error(`[rel-ai-mcp] ChatGPT MCP URL: ${summary.chatgptMcpUrl}`);
@@ -232,7 +231,6 @@ async function routeRequest(req, res, options) {
       port: latestProfile.port || options.port,
       publicUrl: latestProfile.publicUrl || options.publicUrl,
       token: options.token,
-      chatgptSecret: latestProfile.chatgptSecret || options.chatgptSecret,
       tunnelProvider: latestProfile.tunnelProvider || "none",
       showToken: parsed.searchParams.get("showToken") === "1"
     }), ae);

@@ -33,19 +33,19 @@ Internal helper tools such as `relai_edit`, `relai_set_policy`, and `relai_sessi
 
 ## Adding the connector in ChatGPT
 
-Add the connector with **No Authentication**. The MCP URL already contains a secret path segment — no separate auth header is needed.
+Add the connector with **Authentication: OAuth**. ChatGPT opens a sign-in page served by your local server — enter your Rel.AI **dashboard token** (`REL_AI_MCP_TOKEN`) to approve the connection. There is no secret in the URL.
 
 The MCP URL looks like:
 
 ```text
-https://your-domain.example/mcp/<secret>
+https://your-domain.example/mcp
 ```
 
-Treat `<secret>` like a password: do not share it, and rotate it if exposed. Use `npm run oneclick -- --reset-chatgpt-secret` to rotate.
+ChatGPT discovers the OAuth endpoints automatically (`/.well-known/oauth-protected-resource`). OAuth requires the server to be reachable over HTTPS, so use a stable public URL/tunnel.
 
-Opening plain `/mcp` in a browser only shows a redacted diagnostic. Use the printed `COPY THIS FOR CHATGPT` URL or the dashboard connector card for the full `/mcp/<secret>` URL.
+Opening plain `/mcp` in a browser only shows a diagnostic. Use the printed `COPY THIS FOR CHATGPT` URL or the dashboard connector card.
 
-The dashboard URL (`/dashboard`) is not the MCP URL. ChatGPT needs the `/mcp/<secret>` path, not the dashboard path.
+The dashboard URL (`/dashboard`) is not the MCP URL. ChatGPT needs the `/mcp` path, not the dashboard path.
 
 ## Tunnel requirement
 

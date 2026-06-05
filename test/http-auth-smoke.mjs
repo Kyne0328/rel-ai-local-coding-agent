@@ -18,7 +18,6 @@ const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.j
     ...process.env,
     REL_AI_MCP_CONFIG: path.join(root, 'examples', 'config.example.json'),
     REL_AI_MCP_TOKEN: token,
-    REL_AI_MCP_CHATGPT_SECRET: chatgptSecret,
     REL_AI_MCP_MAX_BODY_BYTES: String(maxBodyBytes)
   }
 });

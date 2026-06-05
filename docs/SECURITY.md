@@ -46,7 +46,7 @@ Set `REL_AI_MCP_ALLOW_NO_AUTH=1` only for local-only testing on a trusted networ
 
 ## Limits (what it does NOT protect against)
 
-- **User exposing `/mcp/<secret>` URL** — once the secret URL is known to a third party, that party has full workspace-tool access. Rotate the secret and restart.
+- **User exposing the dashboard token** — the `REL_AI_MCP_TOKEN` approves ChatGPT's OAuth sign-in and authenticates local/API bearer calls. Anyone who obtains it can complete the OAuth flow or call `/mcp` directly. Rotate the token (`--reset-token`) and restart if it leaks.
 - **Unsafe workspace configuration** — pointing a workspace alias at a system directory (e.g. `C:\Windows` or `/etc`) is not prevented; only add paths you trust ChatGPT to modify.
 - **Asking ChatGPT to run destructive validation checks** — `relai_run_checks` executes the commands you configured. Malicious or mistaken prompt engineering can trigger them.
 - **Leaving extension approval enabled unsupervised** — the Chrome auto-approve extension approves MCP tool calls automatically. Disable it when not actively working.

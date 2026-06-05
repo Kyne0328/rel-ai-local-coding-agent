@@ -7,7 +7,7 @@
 - **A protected `/mcp` endpoint drives the OAuth handshake.** `POST /mcp` without a valid credential now returns `401` with a `WWW-Authenticate: Bearer resource_metadata=…` challenge so ChatGPT auto-discovers the auth endpoints; OAuth-issued access tokens (and the existing local bearer token) are accepted.
 - **The OAuth login is gated by your Rel.AI dashboard token.** The `/authorize` sign-in page validates the existing `REL_AI_MCP_TOKEN` before minting a single-use authorization code, so no new password store is introduced; tokens persist to a `0600` `oauth-store.json` so ChatGPT need not re-auth on every restart.
 - **Connector UX, banner, and docs now say OAuth.** The dashboard connector steps, launcher banner, connection summary, and SECURITY.md describe the OAuth flow.
-- **The legacy secret-in-URL no-auth path is removed.** `/mcp/<secret>`, `/sse/<secret>`, and `/messages/<secret>` are no longer special routes (they return 401/404); access to `/mcp` requires OAuth or a Bearer token. The launcher now advertises the plain `/mcp` URL.
+- **The legacy secret-in-URL no-auth path is removed, along with all of its plumbing.** `/mcp/<secret>`, `/sse/<secret>`, and `/messages/<secret>` are no longer special routes (they return 401/404); access to `/mcp` requires OAuth or a Bearer token. The `REL_AI_MCP_CHATGPT_SECRET` env var, the `chatgpt-secret` state file, `resolveChatGPTSecret`/`getChatGPTSecretPath`, the `--chatgpt-secret`/`--reset-chatgpt-secret` CLI flags, and the secret fields in the connection summary/diagnostic are all gone. The launcher advertises the plain `/mcp` URL.
 
 Bump root/electron/extension/status UI/lockfiles to 0.16.0.
 
