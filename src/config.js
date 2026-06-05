@@ -4,32 +4,6 @@ const path = require("node:path");
 const { safeReadJson } = require("./safety");
 const { discoverCommands } = require("./commandDiscovery");
 
-const BRIDGE_TOOLS = [
-  "relai_repo_snapshot",
-  "relai_read",
-  "relai_write",
-  "relai_replace",
-  "relai_clear_files",
-  "relai_apply_update",
-  "relai_apply_bundle",
-  "relai_package_snapshot",
-  "relai_run_checks",
-  "relai_browser",
-  "relai_diff",
-  "relai_restore_changes",
-  "relai_status",
-  "relai_feature_probe",
-  "relai_git_status",
-  "relai_git_fetch",
-  "relai_git_commit",
-  "relai_git_push",
-  "relai_git_merge_branch",
-  "relai_git_merge_remote_branches_plan",
-  "relai_git_abort_merge",
-  "relai_git_create_pr",
-  "relai_remove_file",
-  "relai_refactor_audit"
-];
 
 function makeDefaultAutoApproveConfig() {
   return {
@@ -349,7 +323,7 @@ function publicConfigSummary(config) {
     workflow: normalizeWorkflowConfig(config.workflow),
     localRepoBridge: {
       mode: "trusted",
-      visibleTools: BRIDGE_TOOLS,
+      visibleTools: require("./tools").PUBLIC_HTTP_TOOL_NAMES,
       writeAccess: true,
       verificationAccess: true,
       restoreAccess: true

@@ -38,7 +38,7 @@ async function handleMessage(message, options = {}) {
   const publicHttpOnly = Boolean(options.publicHttpOnly);
   const publicCompatOnly = Boolean(options.publicCompatOnly);
   const publicOnly = publicHttpOnly || publicCompatOnly;
-  const visibleTools = publicOnly ? getPublicToolSchemas(readConfig({ allowMissing: true })) : getToolSchemas(readConfig({ allowMissing: true }));
+  const visibleTools = publicOnly ? getPublicToolSchemas() : getToolSchemas();
   if (!message || message.jsonrpc !== "2.0") {
     return jsonRpcError(message && message.id !== undefined ? message.id : null, -32600, "Invalid Request");
   }

@@ -181,7 +181,7 @@ I still wanted a Codex-like loop:
 understand the repo -> make the change -> run validation -> show the diff
 ```
 
-But I wanted to drive it with ChatGPT web, especially the stronger reasoning models there. Copying files manually, uploading ZIPs, and pasting updatees back into the project was too slow. The older Rel.AI project was my first answer to that problem. Rel.AI MCP is the next version: simpler, more direct, and built around MCP tools instead of a update-heavy browser/native-host flow.
+But I wanted to drive it with ChatGPT web, especially the stronger reasoning models there. Copying files manually, uploading ZIPs, and pasting updates back into the project was too slow. The older Rel.AI project was my first answer to that problem. Rel.AI MCP is the next version: simpler, more direct, and built around MCP tools instead of an update-heavy browser/native-host flow.
 
 The important design choice: ChatGPT does the thinking, but the local bridge keeps the repo access explicit.
 
@@ -452,7 +452,7 @@ npm run test:connector-wording
 Rel.AI MCP is intentionally opinionated now.
 
 - One normal workflow is better than five fallback workflows that fail differently.
-- Full-file writes are easier to reason about than hidden mini-updatees.
+- Full-file writes are easier to reason about than hidden mini-updates.
 - Verification should be visible and repeatable.
 - Request approval assistance belongs in a browser extension, not a fragile userscript.
 - Public tunnel setup should be easy, but local-only should stay the default.

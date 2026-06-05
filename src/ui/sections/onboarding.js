@@ -4,6 +4,7 @@ import { toast } from '/ui/components/toast.js';
 
 let _step = 0;
 let _data = {};
+let _escHandler = null;
 const STEPS = ['Welcome', 'Add workspace', 'Workspace access', 'Connect ChatGPT', 'Done'];
 
 export function openOnboarding() {
@@ -22,10 +23,12 @@ export function openOnboarding() {
 function _showStep() {
   const backdrop = document.getElementById('__relai-modal-backdrop');
   if (backdrop) backdrop.remove();
+  if (_escHandler) { document.removeEventListener('keydown', _escHandler); _escHandler = null; }
 
   const bd = document.createElement('div');
   bd.id = '__relai-modal-backdrop';
   bd.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;z-index:var(--z-modal,60);padding:24px;';
+  bd.addEventListener('click', (e) => { if (e.target === bd && _step < STEPS.length - 1) _skip(); });
 
   const dialog = document.createElement('div');
   dialog.setAttribute('role', 'dialog');
@@ -86,6 +89,28 @@ function _showStep() {
 
   _renderStep(_step, content, nextBtn, skipBtn, backBtn);
   nextBtn.focus();
+
+  // Escape closes at any step except Done (where the backdrop click guard also stops)
+  _escHandler = (e) => {
+    if (e.key !== 'Escape') return;
+    if (!document.getElementById('__relai-modal-backdrop')) return;
+    if (_step < STEPS.length - 1) _skip();
+  };
+  document.addEventListener('keydown', _escHandler);
+
+  // Focus trap: keep Tab/Shift+Tab inside the dialog
+  dialog.addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab') return;
+    const focusable = Array.from(dialog.querySelectorAll('button:not([disabled]),input:not([disabled]),a[href],[tabindex]:not([tabindex="-1"])'));
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey) {
+      if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+    } else {
+      if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  });
 }
 
 function _renderStep(step, content, nextBtn, skipBtn, backBtn) {
@@ -115,6 +140,8 @@ function _renderStep(step, content, nextBtn, skipBtn, backBtn) {
 
     const validation = document.createElement('div');
     validation.style.cssText = 'font-size:12px;color:var(--text-muted);min-height:18px;';
+    validation.setAttribute('aria-live', 'polite');
+    validation.setAttribute('aria-atomic', 'true');
     renderValidation(validation, _data.workspaceCheck);
 
     const createdNote = document.createElement('div');
@@ -237,6 +264,7 @@ function _renderStep(step, content, nextBtn, skipBtn, backBtn) {
       : 'You can add a workspace later from the Workspaces page.';
     content.innerHTML = `<div style="text-align:center;padding:16px 0;display:grid;gap:12px;"><div style="font-size:32px;">✓</div><div style="font-size:16px;font-weight:700;">Setup complete</div><div style="color:var(--text-muted);font-size:13px;line-height:1.5;">${workspaceLine}<br>Select the Rel.AI MCP app in ChatGPT and ask for a read-only status check first.</div></div>`;
     nextBtn.onclick = async () => {
+      if (_escHandler) { document.removeEventListener('keydown', _escHandler); _escHandler = null; }
       await postJson('/api/onboarding/complete', { completed: true });
       const bd = document.getElementById('__relai-modal-backdrop');
       if (bd) bd.remove();
@@ -303,6 +331,7 @@ function _back() {
 }
 
 async function _skip() {
+  if (_escHandler) { document.removeEventListener('keydown', _escHandler); _escHandler = null; }
   await postJson('/api/onboarding/complete', { completed: false, skipped: true });
   const bd = document.getElementById('__relai-modal-backdrop');
   if (bd) bd.remove();

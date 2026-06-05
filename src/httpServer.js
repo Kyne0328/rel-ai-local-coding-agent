@@ -376,6 +376,21 @@ async function routeRequest(req, res, options) {
       sendHtml(res, 400, oauthErrorPage(check.error_description || check.error));
       return;
     }
+    // Refuse OAuth approval over a public URL when no token is configured — no-auth
+    // mode is intended for local-only testing; granting OAuth on a public URL would
+    // open the server to anyone who reaches the authorize endpoint.
+    if (!options.token) {
+      const base = resolveBaseUrl(options);
+      let isLocal = true;
+      try {
+        const { hostname } = new URL(base);
+        isLocal = hostname === "127.0.0.1" || hostname === "localhost" || hostname === "[::1]";
+      } catch (_) {}
+      if (!isLocal) {
+        sendHtml(res, 403, oauthErrorPage("OAuth approval requires REL_AI_MCP_TOKEN when accessed over a public URL. Set a token and restart."));
+        return;
+      }
+    }
     if (!oauth.verifyLogin(body.dashboard_token, options.token)) {
       sendHtml(res, 401, oauth.renderLoginPage(check.request, resolveBaseUrl(options), { error: "Incorrect dashboard token. Try again." }));
       return;
@@ -401,7 +416,7 @@ async function routeRequest(req, res, options) {
   }
 
   if (req.method === "POST" && mcpAccess.kind === "streamable-http") {
-    if (!isMcpAuthorized(req, options, mcpAccess)) return unauthorizedMcp(res, resolveBaseUrl(options));
+    if (!isMcpAuthorized(req, options)) return unauthorizedMcp(res, resolveBaseUrl(options));
     const payload = await readJsonBody(req, options.maxBodyBytes);
     const response = await handleJsonRpcPayload(payload, { publicHttpOnly: true });
     if (response === null) {
@@ -413,13 +428,13 @@ async function routeRequest(req, res, options) {
   }
 
   if (req.method === "GET" && mcpAccess.kind === "sse") {
-    if (!isMcpAuthorized(req, options, mcpAccess)) return unauthorizedMcp(res, resolveBaseUrl(options));
+    if (!isMcpAuthorized(req, options)) return unauthorizedMcp(res, resolveBaseUrl(options));
     openSseSession(res, req, mcpAccess.messagePath);
     return;
   }
 
   if (req.method === "POST" && mcpAccess.kind === "messages") {
-    if (!isMcpAuthorized(req, options, mcpAccess)) return unauthorizedMcp(res, resolveBaseUrl(options));
+    if (!isMcpAuthorized(req, options)) return unauthorizedMcp(res, resolveBaseUrl(options));
     const sessionId = parsed.searchParams.get("sessionId") || "";
     const session = sessions.get(sessionId);
     if (!session) {

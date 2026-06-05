@@ -132,8 +132,13 @@ function collectTextFiles(root, options = {}) {
           skipped.push({ path: rel, reason: "escapes workspace" });
           continue;
         }
-        const data = fs.readFileSync(abs);
-        if (looksBinary(data)) {
+        // Read only the first 8000 bytes for binary detection — avoids loading
+        // entire large source files just to check for null bytes.
+        const buf = Buffer.allocUnsafe(8000);
+        let bytesRead = 0;
+        const fd = fs.openSync(abs, "r");
+        try { bytesRead = fs.readSync(fd, buf, 0, 8000, 0); } finally { fs.closeSync(fd); }
+        if (looksBinary(buf.subarray(0, bytesRead))) {
           skipped.push({ path: rel, reason: "binary-looking file" });
           continue;
         }

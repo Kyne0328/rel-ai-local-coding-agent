@@ -352,6 +352,7 @@ function renderLoginPage(request, baseUrl, options = {}) {
   <form class="card" method="POST" action="/authorize">
     <h1>Authorize ChatGPT</h1>
     <p>Connect ChatGPT to your local Rel.AI MCP workspace bridge. Enter your Rel.AI dashboard token to approve this connection.</p>
+    <p class="who" style="margin-top:0;">Find it in <code style="background:#0b0f1a;padding:1px 4px;border-radius:4px;">~/.rel-ai-mcp/.env</code> (REL_AI_MCP_TOKEN) or in the terminal output when the server started.</p>
     ${errorHtml}
     <label for="dashboard_token">Dashboard token</label>
     <input id="dashboard_token" name="dashboard_token" type="password" autocomplete="off" autofocus required>
