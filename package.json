@@ -22,7 +22,7 @@
     "workspace:add": "node bin/relai-mcp-config.js workspace add",
     "testcmd:add": "node bin/relai-mcp-config.js test-command add",
     "cmd:add": "node bin/relai-mcp-config.js command add",
-    "test": "npm run check && npm run test:repo-health && npm run test:smoke && npm run test:connector-wording && npm run test:regressions && npm run test:windows-archive && npm run test:safety-paths && npm run test:archive-safety",
+    "test": "npm run check && npm run test:release && npm run test:repo-health && npm run test:smoke && npm run test:connector-wording && npm run test:regressions && npm run test:windows-archive && npm run test:safety-paths && npm run test:archive-safety",
     "test:repo-health": "node test/repo-health.mjs",
     "test:smoke": "node test/smoke.mjs",
     "test:windows-archive": "node test/windows-archive-command-smoke.mjs",
@@ -32,6 +32,11 @@
     "oneclick": "node bin/rel-ai-mcp-launch.js",
     "launch": "node bin/rel-ai-mcp-launch.js",
     "connector:print": "node bin/rel-ai-mcp-launch.js --print-only --show-token",
+    "release:bump": "node scripts/release-bump.mjs",
+    "release:check": "node scripts/release-check.mjs",
+    "release:finalize": "node scripts/release-finalize.mjs",
+    "release": "node scripts/release-bump.mjs",
+    "test:release": "node scripts/release-check.mjs && node test/release-workflow-smoke.mjs",
     "test:fast-task": "node test/workspace-fast-task-smoke.mjs",
     "test:auto-approve": "node test/auto-approve-extension-smoke.mjs",
     "test:tunnel": "node test/tunnel-manager-smoke.mjs",
@@ -53,7 +58,7 @@
     "test:checks": "node test/command-checks-smoke.mjs",
     "test:git-workflow": "node test/git-workflow-smoke.mjs",
     "test:staged-write": "node test/staged-write-fallback-unit.mjs",
-    "test:all": "npm run check && npm run test:repo-health && npm run test:smoke && npm run test:http && npm run test:compat && npm run test:connector-wording && npm run test:regressions && npm run test:public-workflow && npm run test:auto-approve && npm run test:tunnel && npm run test:oneclick && npm run test:fast-task && npm run test:electron && npm run test:workflow-config && npm run test:prepared-update && npm run test:safety-paths && npm run test:archive-safety && npm run test:http-auth && npm run test:checks && npm run test:git-workflow && npm run test:staged-write && npm run test:dashboard-wording && npm run test:windows-archive"
+    "test:all": "npm run check && npm run test:release && npm run test:repo-health && npm run test:smoke && npm run test:http && npm run test:compat && npm run test:connector-wording && npm run test:regressions && npm run test:public-workflow && npm run test:auto-approve && npm run test:tunnel && npm run test:oneclick && npm run test:fast-task && npm run test:electron && npm run test:workflow-config && npm run test:prepared-update && npm run test:safety-paths && npm run test:archive-safety && npm run test:http-auth && npm run test:checks && npm run test:git-workflow && npm run test:staged-write && npm run test:dashboard-wording && npm run test:windows-archive"
   },
   "keywords": [
     "mcp",
