@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.15.7] — 2026-06-05
+
+### Security, dashboard consistency, and release metadata audit
+- **`/api/local-connect` no longer exposes the bearer token to arbitrary websites via CORS (security).** The endpoint still supports local discovery for trusted local tools and the Chrome extension, but `Access-Control-Allow-Origin` is now origin-scoped instead of `*`: extension origins and localhost/127.0.0.1 are echoed, while unrelated web origins can no longer read the token-bearing response from browser JavaScript.
+- **Version reporting now follows CHANGELOG.md directly.** Added `src/version.js` as the single human-facing version source, parsing the latest `## [version]` heading from CHANGELOG.md with `package.json` only as a fallback. `/health`, SSE ready events, `relai_status`, release readiness, and the auto-approve settings endpoint now report the same version shown in the changelog.
+- **Workspace upsert now matches the UI promise for not-yet-cloned repos.** The settings form already warned that a missing path could still be saved, but the server rejected it. Upsert now allows absolute missing paths so users can save a workspace before cloning; actual tool calls still fail safely until the path exists.
+- **Dashboard and connector diagnostics now agree on stale commands.** The shared stale-command helper now covers both `commands` and `testCommands`, so `relai_status` and the Diagnostics “Command aliases” card classify stale entries the same way instead of one surface saying “stale” while the other said “All consistent.”
+- **General settings stopped writing an inert auto-approve store.** The dashboard no longer dirty-checks or saves `autoApproveAppRequests`; the Chrome extension popup and `chrome.storage.local` remain the authoritative enable/poll-warning controls, avoiding a second server-side copy that can disagree with the real extension state.
+- **Connector setup steps no longer duplicate themselves.** The dashboard’s Connector card keeps the fixed three core ChatGPT setup steps, then renders only real `payload.nextSteps` as extra numbered guidance instead of falling back to duplicate copies of steps 1–3 as steps 4–6.
+- **Tool counts are now runtime-derived instead of hardcoded.** Dashboard data exposes `toolCount` from the public tool schema list, Workspaces uses that value, and the Home section’s unused `visibleToolCount` fallback was removed so the UI cannot drift from the real public tool count.
+- **Dashboard refresh cadence and live-event wiring are now consistent.** `productUx.dashboardRefreshSeconds` drives the fallback polling interval, `_toggleLive()` no longer re-registers the event system on every toggle, and `initEvents()` itself is idempotent so visibility listeners cannot stack if called again later.
+- **Dead or misleading release/settings knobs were cleaned up or wired.** `minimumReadinessScore` now appears in release readiness with `meetsMinimum`, `requireHttpToken` is honored as the default when the query param is absent, and the dead release endpoint/probe-timeout settings were removed from normalization defaults.
+- **State export now honors `productUx.enableStateExport`.** When the flag is false, `stateExport()` fails with a clear message instead of exporting anyway.
+- **CI, response, and connector-contract cleanup.** CI workflow scanning now resolves `.github/workflows` from the project root instead of `process.cwd()`, the misspelled `cleard` response alias was removed in favor of `cleared`, and identical tool annotation constants were collapsed into one documented connector-safe hint constant.
+- **Regression coverage added for the audit fixes.** Added `test/regression-fixes-smoke.mjs` and wired it into both `npm test` and `npm run test:all`, covering CORS behavior, changelog version sourcing, missing-path workspace save, stale-command scope, dashboard auto-approve persistence, connector step de-duplication, tool counts, state export gating, and live listener idempotency.
+
+Bump root/electron/extension/status UI/lockfiles to 0.15.7.
+
 ## [0.15.6] — 2026-06-05
 
 ### Extension safety + dashboard bug fixes
