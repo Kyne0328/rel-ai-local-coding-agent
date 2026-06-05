@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.15.8] — 2026-06-05
+
+### HTTP auth disclosure hardening
+- **Public MCP diagnostics no longer reveal the ChatGPT secret.** `GET /mcp` now returns a redacted `/mcp/<secret>` value unless the caller already proves access with bearer auth or the secret path, while secret-path and bearer POST clients keep working as before.
+- **Local extension discovery no longer hands out the bearer token unauthenticated.** `/api/local-connect` still reports the local base URL for reachability, but returns token material only to already-authorized callers; the Chrome extension sends Authorization when it has a token.
+- **Dashboard token bootstrapping cleans up the address bar.** The dashboard still accepts `?token=` for launch links, then moves the credential into session storage and removes the query token from the visible URL.
+- **Regression coverage and docs now pin the safer behavior.** HTTP smoke/auth tests assert redaction and token-sync boundaries, and ChatGPT/security/setup docs explain the redacted diagnostic behavior.
+
+Bump root/electron/extension/status UI/lockfiles to 0.15.8.
+
 ## [0.15.7] — 2026-06-05
 
 ### Security, dashboard consistency, and release metadata audit

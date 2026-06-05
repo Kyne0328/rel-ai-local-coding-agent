@@ -1,6 +1,6 @@
 {
   "name": "rel-ai-mcp-launcher",
-  "version": "0.15.7",
+  "version": "0.15.8",
   "private": true,
   "main": "main.js",
   "devDependencies": {

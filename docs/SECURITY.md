@@ -11,6 +11,7 @@ The secret segment of the URL acts as a shared credential. Any client that knows
 - Treat the URL like a password. Do not share it in screenshots, logs, or public issues.
 - Rotate `REL_AI_MCP_CHATGPT_SECRET` if it is exposed.
 - Only publish this URL over a stable HTTPS tunnel; never over plain HTTP on a public interface.
+- Public `GET /mcp` browser diagnostics redact this secret. The full URL is shown only to callers that already have the bearer token or are using the secret path.
 
 ### `POST /mcp` (plain) — Bearer token authentication
 
@@ -23,6 +24,8 @@ Requires `Authorization: Bearer <REL_AI_MCP_TOKEN>` on every request. Intended f
 - `Authorization: Bearer <REL_AI_MCP_TOKEN>` header, or
 - `?token=<REL_AI_MCP_TOKEN>` query parameter (used by the browser dashboard).
 
+`GET /api/local-connect` is a public reachability/discovery endpoint for local tools, but it only returns the bearer token when the caller already proves it has the bearer/query token. Unauthenticated callers receive the base URL without token material.
+
 Set `REL_AI_MCP_ALLOW_NO_AUTH=1` only for local-only testing on a trusted network.
 
 ## Security protections (what the server defends against)
@@ -34,6 +37,7 @@ Set `REL_AI_MCP_ALLOW_NO_AUTH=1` only for local-only testing on a trusted networ
 - **Stale exact replacements** — `relai_replace` accepts an optional content hash; if provided and the file has changed, the replacement is rejected rather than silently applied to the wrong content.
 - **Unreviewed changes through diff/restore loop** — `relai_diff` and `relai_restore_changes` are discrete tools; restoration requires an explicit call, not an automatic side-effect.
 - **Oversized request bodies** — the HTTP server enforces `REL_AI_MCP_MAX_BODY_BYTES` (default 10 MB) and rejects requests that exceed it.
+- **Public diagnostic redaction** — browser-facing MCP diagnostics and local discovery avoid returning the ChatGPT secret or bearer token to unauthenticated callers.
 
 ## Limits (what it does NOT protect against)
 

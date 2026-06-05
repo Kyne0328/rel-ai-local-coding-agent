@@ -242,7 +242,7 @@ If ChatGPT cannot connect:
 4. Confirm the ChatGPT MCP URL looks like `/mcp/<secret>`, not plain `/mcp`.
 5. Confirm the ChatGPT app authentication is exactly `No Authentication`.
 6. Avoid using the dashboard URL as the MCP URL. ChatGPT needs `/mcp/<secret>`, not `/dashboard`.
-7. Do not judge the connector by opening plain `/mcp` in a browser. MCP uses `POST`; browser `GET` is only a diagnostic.
+7. Do not judge the connector by opening plain `/mcp` in a browser. MCP uses `POST`; browser `GET` is only a redacted diagnostic and will not show the full secret URL unless you are already authorized.
 
 ## If ChatGPT says it cannot find the workspace/tools
 

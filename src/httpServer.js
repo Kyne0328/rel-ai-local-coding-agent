@@ -110,7 +110,7 @@ async function routeRequest(req, res, options) {
   }
 
   if (req.method === "GET" && parsed.pathname === "/dashboard") {
-    if (!isAuthorized(req, options) && parsed.searchParams.get("token") !== options.token) return unauthorized(res);
+    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
     sendHtml(res, 200, renderDashboardHtml(options));
     return;
   }
@@ -173,10 +173,17 @@ async function routeRequest(req, res, options) {
     return;
   }
 
-  // Public localhost-only endpoint — Chrome extension reads this to auto-sync token + port.
-  // No auth required: only reachable from 127.0.0.1, token is a local-machine secret.
+  // Public discovery endpoint for local tools. Token sync is only returned to callers
+  // that already prove they have the dashboard/API credential.
   if (req.method === "GET" && parsed.pathname === "/api/local-connect") {
-    sendJson(res, 200, { ok: true, token: options.token || "", baseUrl: `http://${options.host || "127.0.0.1"}:${options.port || 3333}` }, ae);
+    const authorized = isDashboardAuthorized(req, parsed, options);
+    sendJson(res, 200, {
+      ok: true,
+      token: authorized ? options.token || "" : "",
+      tokenAvailable: Boolean(authorized && options.token),
+      requiresAuthorization: Boolean(options.token && !authorized),
+      baseUrl: `http://${options.host || "127.0.0.1"}:${options.port || 3333}`
+    }, ae);
     return;
   }
 
@@ -409,6 +416,18 @@ function getMcpAccess(pathname, options) {
   return { kind: "none", allowed: false };
 }
 
+function hasDashboardQueryToken(parsed, options) {
+  return Boolean(options.token && parsed.searchParams.get("token") === options.token);
+}
+
+function isDashboardAuthorized(req, parsed, options) {
+  return isAuthorized(req, options) || hasDashboardQueryToken(parsed, options);
+}
+
+function canShowSharedSecrets(req, options, mcpAccess = {}) {
+  return isAuthorized(req, options) || Boolean(mcpAccess.allowed);
+}
+
 // Honor an explicit requireHttpToken query param (the dashboard sends "0" because it
 // uses the secret /mcp URL, not bearer auth); when the param is absent, fall back to
 // the configured release.requireHttpToken default instead of silently assuming true.
@@ -447,9 +466,11 @@ function mcpGetDiagnostic(pathname, options, mcpAccess, req) {
   const latestProfile = connection.readConnectionProfile();
   const base = latestProfile.publicUrl || options.publicUrl || connection.localBaseUrl?.(options.host, options.port) || `http://${options.host || "127.0.0.1"}:${options.port || 3333}`;
   const secret = String(latestProfile.chatgptSecret || options.chatgptSecret || "").trim();
-  const chatgptPath = secret ? `/mcp/${encodeURIComponent(secret)}` : "/mcp/<missing-secret>";
-  const bearerAuthorized = isAuthorized(req, options);
-  const usableWithPost = Boolean(mcpAccess.allowed || bearerAuthorized || options.allowNoAuth);
+  const showSecrets = canShowSharedSecrets(req, options, mcpAccess);
+  const chatgptPath = secret
+    ? (showSecrets ? `/mcp/${encodeURIComponent(secret)}` : "/mcp/<secret>")
+    : "/mcp/<missing-secret>";
+  const usableWithPost = Boolean(mcpAccess.allowed || isAuthorized(req, options) || options.allowNoAuth);
   return {
     ok: true,
     endpoint: pathname,
@@ -460,6 +481,7 @@ function mcpGetDiagnostic(pathname, options, mcpAccess, req) {
     plainMcpUrl: "/mcp is for non-ChatGPT clients using Bearer auth. It is not the ChatGPT app URL.",
     postRequired: true,
     usableWithPost,
+    secretRedacted: Boolean(secret && !showSecrets),
     examples: {
       health: "/health",
       dashboard: "/dashboard",

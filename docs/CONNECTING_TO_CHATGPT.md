@@ -43,6 +43,8 @@ https://your-domain.example/mcp/<secret>
 
 Treat `<secret>` like a password: do not share it, and rotate it if exposed. Use `npm run oneclick -- --reset-chatgpt-secret` to rotate.
 
+Opening plain `/mcp` in a browser only shows a redacted diagnostic. Use the printed `COPY THIS FOR CHATGPT` URL or the dashboard connector card for the full `/mcp/<secret>` URL.
+
 The dashboard URL (`/dashboard`) is not the MCP URL. ChatGPT needs the `/mcp/<secret>` path, not the dashboard path.
 
 ## Tunnel requirement

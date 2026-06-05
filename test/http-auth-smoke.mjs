@@ -96,6 +96,50 @@ await check('GET /api/settings — with bearer → 200', async () => {
   if (!body.ok) throw new Error('settings body.ok was not true');
 });
 
+// GET /mcp diagnostic — no token → redacted
+await check('GET /mcp diagnostic — no token → redacted', async () => {
+  const res = await fetch(`${base}/mcp`);
+  if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
+  const body = await res.json();
+  const text = JSON.stringify(body);
+  if (!body.ok || body.secretRedacted !== true || !body.correctChatGPTUrl.includes('/mcp/<secret>')) {
+    throw new Error('diagnostic did not redact the ChatGPT secret');
+  }
+  if (text.includes(chatgptSecret) || text.includes(token)) {
+    throw new Error('diagnostic leaked a secret value');
+  }
+});
+
+// GET /mcp diagnostic — with bearer → full ChatGPT URL
+await check('GET /mcp diagnostic — with bearer → full ChatGPT URL', async () => {
+  const res = await fetch(`${base}/mcp`, { headers: bearer });
+  if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
+  const body = await res.json();
+  if (body.secretRedacted || !body.correctChatGPTUrl.includes(`/mcp/${encodeURIComponent(chatgptSecret)}`)) {
+    throw new Error('authorized diagnostic did not include the ChatGPT URL');
+  }
+});
+
+// GET /api/local-connect — no token → redacted token
+await check('GET /api/local-connect — no token → redacted token', async () => {
+  const res = await fetch(`${base}/api/local-connect`);
+  if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
+  const body = await res.json();
+  if (body.token || body.tokenAvailable || !body.requiresAuthorization) {
+    throw new Error('local-connect exposed token data without authorization');
+  }
+});
+
+// GET /api/local-connect — with bearer → token returned
+await check('GET /api/local-connect — with bearer → token returned', async () => {
+  const res = await fetch(`${base}/api/local-connect`, { headers: bearer });
+  if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
+  const body = await res.json();
+  if (body.token !== token || !body.tokenAvailable || body.requiresAuthorization) {
+    throw new Error('local-connect did not return token data to an authorized caller');
+  }
+});
+
 // POST /mcp — no bearer → 401
 await check('POST /mcp — no bearer → 401', async () => {
   const res = await fetch(`${base}/mcp`, {

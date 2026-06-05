@@ -42,13 +42,24 @@ if (!health.ok || !health.transports.includes('streamable-http')) {
 }
 
 const mcpBrowserDiagnostic = await fetch(`http://127.0.0.1:${port}/mcp`).then((response) => response.json());
-if (!mcpBrowserDiagnostic.ok || !mcpBrowserDiagnostic.postRequired || !mcpBrowserDiagnostic.correctChatGPTUrl.includes(`/mcp/${chatgptSecret}`)) {
-  throw new Error('GET /mcp did not return the browser diagnostic with the correct ChatGPT URL');
+const publicDiagnosticText = JSON.stringify(mcpBrowserDiagnostic);
+if (!mcpBrowserDiagnostic.ok || !mcpBrowserDiagnostic.postRequired || !mcpBrowserDiagnostic.correctChatGPTUrl.includes('/mcp/<secret>') || mcpBrowserDiagnostic.secretRedacted !== true || publicDiagnosticText.includes(chatgptSecret) || publicDiagnosticText.includes(token)) {
+  throw new Error('GET /mcp did not return a redacted browser diagnostic');
 }
 
 const secretBrowserDiagnostic = await fetch(`http://127.0.0.1:${port}/mcp/${chatgptSecret}`).then((response) => response.json());
-if (!secretBrowserDiagnostic.ok || secretBrowserDiagnostic.chatgptAuth !== 'No Authentication' || !secretBrowserDiagnostic.usableWithPost) {
+if (!secretBrowserDiagnostic.ok || secretBrowserDiagnostic.chatgptAuth !== 'No Authentication' || !secretBrowserDiagnostic.usableWithPost || secretBrowserDiagnostic.secretRedacted || !secretBrowserDiagnostic.correctChatGPTUrl.includes(`/mcp/${encodeURIComponent(chatgptSecret)}`)) {
   throw new Error('GET /mcp/<secret> did not return a usable ChatGPT diagnostic');
+}
+
+const publicLocalConnect = await fetch(`http://127.0.0.1:${port}/api/local-connect`).then((response) => response.json());
+if (publicLocalConnect.token || publicLocalConnect.tokenAvailable || !publicLocalConnect.requiresAuthorization) {
+  throw new Error('GET /api/local-connect should not expose the bearer token without authorization');
+}
+
+const authorizedLocalConnect = await fetch(`http://127.0.0.1:${port}/api/local-connect`, { headers: { authorization: `Bearer ${token}` } }).then((response) => response.json());
+if (authorizedLocalConnect.token !== token || authorizedLocalConnect.requiresAuthorization) {
+  throw new Error('GET /api/local-connect did not return the token to an authorized caller');
 }
 
 const dashboardQueryAuth = await fetch(`http://127.0.0.1:${port}/api/dashboard/v10?token=${encodeURIComponent(token)}&requireHttpToken=0`).then((response) => response.json());

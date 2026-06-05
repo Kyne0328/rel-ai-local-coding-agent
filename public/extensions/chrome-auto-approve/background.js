@@ -135,7 +135,8 @@ async function discoverServer(token) {
     try {
       const ctrl = new AbortController();
       const tid = setTimeout(() => ctrl.abort(), 900);
-      const res = await fetch(`http://127.0.0.1:${port}/api/local-connect`, { cache: 'no-store', signal: ctrl.signal });
+      const headers = token ? { Authorization: 'Bearer ' + token } : {};
+      const res = await fetch(`http://127.0.0.1:${port}/api/local-connect`, { headers, cache: 'no-store', signal: ctrl.signal });
       clearTimeout(tid);
       const data = res.ok ? await res.json() : null;
       return { base: `http://127.0.0.1:${port}`, token: (data && data.token) || null };
@@ -160,7 +161,8 @@ async function dashboardAllows(cfg) {
     try {
       const ctrl = new AbortController();
       const tid = setTimeout(() => ctrl.abort(), 900);
-      const res = await fetch(`${base}/api/local-connect`, { cache: 'no-store', signal: ctrl.signal });
+      const headers = cfg.token ? { Authorization: 'Bearer ' + cfg.token } : {};
+      const res = await fetch(`${base}/api/local-connect`, { headers, cache: 'no-store', signal: ctrl.signal });
       clearTimeout(tid);
       const data = res.ok ? await res.json() : null;
       if (data && data.token && data.token !== cfg.token) {

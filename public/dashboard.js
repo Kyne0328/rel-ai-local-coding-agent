@@ -23,6 +23,13 @@ const SETTINGS_SUBROUTES = [
 const urlToken = new URLSearchParams(location.search).get('token') || '';
 const token = urlToken || sessionStorage.getItem('relai_dashboard_token') || '';
 if (token) setToken(token);
+if (urlToken && window.history && typeof window.history.replaceState === 'function') {
+  const params = new URLSearchParams(location.search);
+  params.delete('token');
+  const query = params.toString();
+  const safeUrl = location.pathname + (query ? '?' + query : '') + (location.hash || '');
+  window.history.replaceState(null, '', safeUrl);
+}
 
 function readInitialPayload() {
   try {

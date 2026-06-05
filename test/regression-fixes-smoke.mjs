@@ -112,9 +112,9 @@ assert.equal(getVersion(), latestChangelogVersion());
   assert.throws(() => productUx.stateExport(disabled), /State export is disabled/);
 }
 
-// HTTP/CORS regression: /api/local-connect still serves local extension discovery,
-// but arbitrary web origins must not get an Access-Control-Allow-Origin echo that
-// would let browser JS read the token response cross-origin.
+// HTTP/CORS regression: /api/local-connect still serves local discovery, but it
+// never returns token material unless the caller already proves it has the token.
+// Arbitrary web origins also must not get an Access-Control-Allow-Origin echo.
 const port = 39919;
 const token = 'regression-token-secret';
 const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.js'), '--host', '127.0.0.1', '--port', String(port)], {
@@ -153,17 +153,29 @@ try {
   assert.equal(evil.ok, true);
   assert.equal(evil.headers.get('access-control-allow-origin'), null);
   const evilBody = await evil.json();
-  assert.equal(evilBody.token, token, 'endpoint may still return token to non-browser/server fetches');
+  assert.equal(evilBody.token, '', 'unauthenticated local-connect must not return the bearer token');
+  assert.equal(evilBody.tokenAvailable, false);
+  assert.equal(evilBody.requiresAuthorization, true);
 
   const extension = await fetch(`http://127.0.0.1:${port}/api/local-connect`, {
     headers: { Origin: 'chrome-extension://abcdefghijklmnop' }
   });
   assert.equal(extension.headers.get('access-control-allow-origin'), 'chrome-extension://abcdefghijklmnop');
+  const extensionBody = await extension.json();
+  assert.equal(extensionBody.token, '');
 
   const local = await fetch(`http://127.0.0.1:${port}/api/local-connect`, {
     headers: { Origin: `http://127.0.0.1:${port}` }
   });
   assert.equal(local.headers.get('access-control-allow-origin'), `http://127.0.0.1:${port}`);
+
+  const authorized = await fetch(`http://127.0.0.1:${port}/api/local-connect`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  const authorizedBody = await authorized.json();
+  assert.equal(authorizedBody.token, token);
+  assert.equal(authorizedBody.tokenAvailable, true);
+  assert.equal(authorizedBody.requiresAuthorization, false);
 } finally {
   child.kill('SIGKILL');
   await once(child, 'close');
