@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.15.5] — 2026-06-05
+
+### Dashboard consistency pass (live controls, dead settings, logo)
+- **Refresh is back in the topbar.** 0.15.3 removed it; restored next to the live toggle. (The token field stays gone — it loads from the URL/sessionStorage.)
+- **Activity "Pause live" renamed to "Pause updates"** with a tooltip. It only freezes that table so rows don't shift while you read — it is *not* the same as the top-bar live toggle (which starts/stops the whole dashboard's live stream). The two shared the word "live" and looked redundant; they aren't.
+- **Dead "Poll interval (ms)" removed from dashboard Settings.** It wrote to server config that the extension never read, so it did nothing — and it contradicted the adjacent note that "the extension popup is the only control." Scan cadence is now configured solely in the extension popup…
+- **…and the popup's poll interval now actually works.** The content script read a hardcoded 2s; it now honors `chrome.storage.local.pollMs` (clamped 500–10000 ms) and re-applies live when you change it in the popup.
+- **Tray icon uses the dashboard logo.** The system-tray icon loaded a stale `icon.ico`; it now uses `build/icon.png` (the same `relai-logo.png` art the dashboard and launcher window show), resized for the tray. The unused `icon.ico` was removed.
+
+Bump root/electron/extension/status-UI/lockfiles to 0.15.5.
+
 ## [0.15.4] — 2026-06-05
 
 ### Background-tab auto-approve reliability + easier extension import

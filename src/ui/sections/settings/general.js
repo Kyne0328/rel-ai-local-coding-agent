@@ -91,12 +91,10 @@ function _render(container) {
     span.textContent = 'Install the Chrome extension and use the extension popup to enable or disable auto-approval. The extension popup is the only enable/disable control.';
     return span;
   })(), 'Load unpacked from public/extensions/chrome-auto-approve. The dashboard shows extension status below.'));
-  autoApprove.body.appendChild(field('Poll interval (ms)', numberControl((_draft.autoApproveAppRequests || {}).pollMs || 1200, (v) => {
-    if (!_draft.autoApproveAppRequests) _draft.autoApproveAppRequests = {};
-    _draft.autoApproveAppRequests.pollMs = v;
-    _checkDirty();
-  }, { min: 500, max: 10000, width: '140px' }), 'How often the Chrome extension may scan ChatGPT for a Rel.AI MCP app request.'));
-  autoApprove.body.appendChild(field('Install Chrome extension', extensionInstallControl(), 'Load the unpacked Chrome extension, then use the extension popup to configure the dashboard URL/token and enable or disable it locally.'));
+  // Poll interval is configured in the extension popup (the only place that actually
+  // controls scan cadence). It used to be mirrored here as a server-config field that
+  // the extension never read — a dead setting — so it has been removed.
+  autoApprove.body.appendChild(field('Install Chrome extension', extensionInstallControl(), 'Load the unpacked Chrome extension, then use the extension popup to configure the dashboard URL/token, scan interval, and enable or disable it locally.'));
 
 
   limits.body.appendChild(field('Max output bytes', numberControl(_draft.maxOutputBytes, (v) => { _draft.maxOutputBytes = v; _checkDirty(); }, { min: 10000, max: 20000000, width: '140px' }), 'Maximum validation output returned to ChatGPT. 2 MB is a safe default for test failures without flooding the chat.'));

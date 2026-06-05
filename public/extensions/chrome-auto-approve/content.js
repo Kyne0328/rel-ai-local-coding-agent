@@ -185,9 +185,29 @@
   // backgrounded working tab fell back to the 30s background alarm only — approvals
   // lagged up to 30s and felt stalled. When keep-alive is off (or audio is suspended)
   // a hidden tab's timers are throttled anyway, so the alarm remains the safety net.
-  setInterval(() => {
-    if ((!document.hidden || keepAliveActive) && cardLikely) safeScanAndApprove('poll');
-  }, 2000);
+  // Poll cadence is configurable from the extension popup (chrome.storage.local.pollMs);
+  // default 2s. The interval is recreated when the popup changes the value, so the
+  // setting takes effect without a reload. This is the only place scan cadence is set
+  // (the dashboard no longer mirrors a dead copy of it).
+  let _pollTimer = null;
+  function _startPoll(ms) {
+    const interval = Math.min(Math.max(Number(ms) || 2000, 500), 10000);
+    if (_pollTimer) clearInterval(_pollTimer);
+    _pollTimer = setInterval(() => {
+      if ((!document.hidden || keepAliveActive) && cardLikely) safeScanAndApprove('poll');
+    }, interval);
+  }
+  _startPoll(2000);
+  try {
+    if (chrome.storage && chrome.storage.local) {
+      chrome.storage.local.get({ pollMs: 2000 }, (cfg) => { if (cfg && cfg.pollMs) _startPoll(cfg.pollMs); });
+    }
+    if (chrome.storage && chrome.storage.onChanged) {
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === 'local' && changes.pollMs) _startPoll(changes.pollMs.newValue);
+      });
+    }
+  } catch (_) {}
 
   // --- Background keep-alive (only while the extension is enabled) ---
   // #2 audio: a near-inaudible 19 kHz tone marks the tab "audible" so Chrome exempts

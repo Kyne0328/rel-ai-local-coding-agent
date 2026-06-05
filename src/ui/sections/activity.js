@@ -64,13 +64,18 @@ function _buildActivity() {
     timeRangeWrap.appendChild(btn);
   }
 
+  // Distinct from the top-bar live toggle (which starts/stops the whole dashboard's
+  // live stream). This only freezes THIS table so new rows don't shift under you while
+  // you read — named "updates", not "live", to avoid that collision.
   const pauseBtn = document.createElement('button');
   pauseBtn.className = 'secondary';
   pauseBtn.style.cssText = 'min-height:28px;padding:0 12px;font-size:12px;margin-left:auto;';
-  pauseBtn.textContent = '⏸ Pause live';
+  pauseBtn.textContent = _paused ? '▶ Resume updates' : '⏸ Pause updates';
+  pauseBtn.title = 'Freeze this table so new events don’t shift rows while you read. Independent of the top-bar live toggle.';
+  if (_paused) pauseBtn.style.background = 'rgba(255,194,75,.15)';
   pauseBtn.onclick = () => {
     _paused = !_paused;
-    pauseBtn.textContent = _paused ? '▶ Resume live' : '⏸ Pause live';
+    pauseBtn.textContent = _paused ? '▶ Resume updates' : '⏸ Pause updates';
     pauseBtn.style.background = _paused ? 'rgba(255,194,75,.15)' : '';
   };
 

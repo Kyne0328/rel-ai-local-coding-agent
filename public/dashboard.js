@@ -112,10 +112,11 @@ function _settingsSubPage() {
 
 function _wireTopControls() {
   // Token comes from the URL / sessionStorage at boot (see top of file); the topbar
-  // no longer shows a token field or a Refresh button. Manual refresh and token copy
-  // remain available from the command palette.
+  // no longer shows a token field. Refresh (manual reload) and the live toggle remain.
   const liveBtn = document.getElementById('liveBtn');
   if (liveBtn) liveBtn.onclick = _toggleLive;
+  const refreshBtn = document.getElementById('refreshBtn');
+  if (refreshBtn) refreshBtn.onclick = _doRefresh;
 }
 
 // Single fetch-and-render path shared by boot, manual refresh, and the command

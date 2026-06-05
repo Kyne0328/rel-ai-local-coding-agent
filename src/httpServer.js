@@ -671,6 +671,7 @@ function renderDashboardHtml(options) {
       </div>
       <div class="top-controls">
         <span class="status-pill" id="serverStatus">Connecting…</span>
+        <button class="secondary" id="refreshBtn" type="button">Refresh</button>
         <button class="primary" id="liveBtn">Start live</button>
         <span class="section-action" id="lastUpdated"></span>
       </div>

@@ -180,8 +180,10 @@ function setStatus(next) {
 
 function setupTray() {
   if (tray) return;
-  const iconPath = path.join(__dirname, 'build', 'icon.ico');
-  const image = nativeImage.createFromPath(iconPath);
+  // Use the same logo as the dashboard (build/icon.png), resized for the tray.
+  const iconPath = path.join(__dirname, 'build', 'icon.png');
+  const raw = nativeImage.createFromPath(iconPath);
+  const image = raw.isEmpty() ? raw : raw.resize({ width: 32, height: 32 });
   tray = new Tray(image.isEmpty() ? nativeImage.createEmpty() : image);
   tray.setToolTip('Rel.AI MCP');
   tray.on('double-click', () => {
