@@ -3,7 +3,7 @@ const os = require("node:os");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { publicConfigSummary, resolveWorkspace, writeConfig, readConfig, getConfigPath, makeDefaultConfig } = require("./config");
-const { discoverCommands } = require("./commandDiscovery");
+const { discoverCommands, staleCommandKeys } = require("./commandDiscovery");
 const { resolvePolicy } = require("./policyResolver");
 const { readAudit, getStateDir } = require("./audit");
 const { runProcess, summarizeCommand } = require("./process");
@@ -352,10 +352,7 @@ function aliasConsistencyCheck(config) {
     let discovered = {};
     try { discovered = discoverCommands(ws.path || ''); } catch (_) {}
     const discoveredKeys = Object.keys(discovered);
-    const staleKeys = configuredKeys.filter(k => {
-      const cmd = (ws.testCommands || {})[k];
-      return cmd && !Object.values(discovered).includes(cmd) && !discovered[k];
-    });
+    const staleKeys = staleCommandKeys(ws.testCommands || {}, discovered);
     results.push({ alias, configuredKeys, discoveredKeys, staleKeys, ok: staleKeys.length === 0 });
   }
   return { ok: results.every(r => r.ok), generatedAt: new Date().toISOString(), workspaces: results };

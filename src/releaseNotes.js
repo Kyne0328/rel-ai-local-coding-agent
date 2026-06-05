@@ -1,9 +1,13 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-// Last-resort fallback if CHANGELOG.md cannot be read/parsed.
+// Last-resort fallback if CHANGELOG.md cannot be read/parsed. Use the package
+// version so the dashboard never renders a bare "v" (the packaged launcher hit this
+// when CHANGELOG wasn't bundled).
+let PKG_VERSION = "";
+try { PKG_VERSION = require("../package.json").version || ""; } catch (_error) { /* ignore */ }
 const FALLBACK = {
-  version: "",
+  version: PKG_VERSION,
   headline: "See CHANGELOG.md for the latest changes.",
   bullets: []
 };

@@ -81,7 +81,8 @@ function releaseNotesCard() {
     const safeHeadline = esc(notes.headline || '');
     const bullets = Array.isArray(notes.bullets) ? notes.bullets : [];
     const bulletsHtml = bullets.map(b => `<li>${esc(b)}</li>`).join('');
-    body.innerHTML = `<div class="release-note"><strong>v${safeVersion}</strong> — ${safeHeadline}</div><ul class="release-bullets">${bulletsHtml}</ul>`;
+    const versionLabel = safeVersion ? `v${safeVersion}` : 'Latest';
+    body.innerHTML = `<div class="release-note"><strong>${versionLabel}</strong> — ${safeHeadline}</div><ul class="release-bullets">${bulletsHtml}</ul>`;
   })).catch(() => { body.innerHTML = '<div class="release-note-meta">Failed to load release notes.</div>'; });
 
   return card;

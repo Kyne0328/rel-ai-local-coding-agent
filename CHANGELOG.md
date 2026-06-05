@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.15.6] — 2026-06-05
+
+### Extension safety + dashboard bug fixes
+- **Auto-approve no longer fires while disabled (security).** The manifest injects `content.js` into ChatGPT pages whenever the extension is installed, so the scan/click path ran regardless of the popup toggle — only the background worker honored `enabled`. The content script now hard-gates every scan on `chrome.storage.local.enabled` (`isAutoApproveEnabled()`, fail-closed) before it can find or click an approval, and disabling immediately clears any pending scan timer, the card-likely gate, and the approval-dedupe state.
+- **Extension stops disappearing on launcher restart.** The unpacked extension was loaded from `process.resourcesPath`, which the portable Windows build re-extracts to a new temp dir every launch — so Chrome's "Load unpacked" path went stale and the extension vanished. The launcher now mirrors the bundled extension into a fixed per-user dir (`~/.rel-ai-mcp/chrome-extension`) and hands Chrome (and the Open-folder / Copy-path buttons) that stable path, refreshed on each launch so updates still land.
+- **`relai_status` stale-command misclassification fixed.** It checked `!discovered[cmd]` (indexing the discovered map by the command *string*) instead of `!discovered[key]`, so it flagged commands stale differently from the dashboard diagnostic. Both now use one shared `staleCommandKeys(configured, discovered)` helper.
+- **Dashboard no longer shows a bare "v".** Release notes fell back to an empty version when CHANGELOG.md couldn't be read (packaged launcher); the fallback now uses the package version, and the "What's new" card renders "Latest" instead of a lone "v" if the version is ever empty.
+
+Bump root/electron/extension/status-UI/lockfiles to 0.15.6.
+
 ## [0.15.5] — 2026-06-05
 
 ### Dashboard consistency pass (live controls, dead settings, logo)

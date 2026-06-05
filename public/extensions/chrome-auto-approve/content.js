@@ -106,6 +106,20 @@
     }
   }
 
+  // The popup toggle is the ONLY enable/disable control. The content script is
+  // injected by the manifest whenever the extension is installed, so without this
+  // gate it would keep finding and clicking approval buttons even while disabled.
+  // chrome.storage.local.enabled is the source of truth; fail-closed on any error.
+  async function isAutoApproveEnabled() {
+    try {
+      if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) return false;
+      const cfg = await chrome.storage.local.get({ enabled: false });
+      return cfg.enabled === true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   try {
     if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
       chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -270,7 +284,18 @@
   try {
     if (chrome.storage && chrome.storage.onChanged) {
       chrome.storage.onChanged.addListener((changes, area) => {
-        if (area === 'local' && changes.enabled) refreshKeepAlive();
+        if (area === 'local' && changes.enabled) {
+          refreshKeepAlive();
+          // On disable, immediately drop any pending scan + scan state so an in-flight
+          // timer can't click after the user turned it off.
+          if (changes.enabled.newValue !== true) {
+            if (scheduledTimer) clearTimeout(scheduledTimer);
+            scheduledTimer = 0;
+            cardLikely = false;
+            missStreak = MAX_MISS;
+            recentApprovals.clear();
+          }
+        }
       });
     }
   } catch (_) {}
@@ -304,6 +329,13 @@
 
   async function safeScanAndApprove(reason) {
     try {
+      // Hard gate: never scan or click while the extension is disabled, regardless of
+      // which entry point (poll/mutation/focus/message) triggered this.
+      if (!(await isAutoApproveEnabled())) {
+        cardLikely = false;
+        missStreak = MAX_MISS;
+        return 0;
+      }
       return await scanAndApprove();
     } catch (error) {
       reportContentError(`scan ${reason || ''}`.trim(), error);

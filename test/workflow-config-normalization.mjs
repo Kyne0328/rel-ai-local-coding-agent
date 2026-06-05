@@ -226,4 +226,15 @@ test("release notes are read from CHANGELOG, not a hardcoded version", () => {
   assert.ok(Array.isArray(notes.bullets), "release notes should have bullets array");
 });
 
+test("staleCommandKeys flags missing keys by KEY, not by command string", () => {
+  const { staleCommandKeys } = require(path.join(__dirname, "..", "src", "commandDiscovery.js"));
+  const configured = { test: "npm run gone", build: "npm run build" };
+  const discovered = { build: "npm run build", lint: "npm run lint" };
+  const stale = staleCommandKeys(configured, discovered);
+  assert.deepEqual(stale, ["test"], "only the key whose command is no longer discovered is stale");
+  // A configured key that IS a discovered key must never be stale (the !discovered[cmd] bug
+  // indexed by the command string and misclassified).
+  assert.deepEqual(staleCommandKeys({ build: "anything" }, { build: "x" }), []);
+});
+
 console.log(`\nWorkflow config normalization tests passed. (${passed} tests)`);

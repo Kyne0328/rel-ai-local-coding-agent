@@ -72,6 +72,17 @@ assert.match(content, /function claimApproval/, 'content.js should claim approva
 assert.match(content, /'relai-claim-approval'/, 'content.js should send the cross-tab claim message');
 assert.match(content, /scanInFlight/, 'content.js should guard against overlapping async scans');
 
+// --- Regression: the content script must NOT approve while disabled ---
+// The manifest injects content.js whenever installed; the popup toggle is the only
+// enable control, so the scan path must hard-gate on chrome.storage.local.enabled.
+assert.match(content, /function isAutoApproveEnabled/, 'content.js should check the enabled flag');
+assert.match(
+  content,
+  /if \(!\(await isAutoApproveEnabled\(\)\)\)/,
+  'safeScanAndApprove must short-circuit when the extension is disabled'
+);
+assert.match(content, /recentApprovals\.clear\(\)/, 'disabling should clear pending approval state');
+
 const background = readFileSync(path.join(extDir, 'background.js'), 'utf8');
 assert.match(background, /chrome\.alarms/);
 assert.match(background, /api\/auto-approve\/settings/);

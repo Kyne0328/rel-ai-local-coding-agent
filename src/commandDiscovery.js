@@ -64,4 +64,15 @@ function discoverCommands(workspacePath) {
   return discovered;
 }
 
-module.exports = { discoverCommands };
+// A configured command key is "stale" when its saved command string is no longer
+// among the auto-discovered commands AND the key itself is not a discovered key.
+// Shared by relai_status and the dashboard diagnostics so both classify identically.
+function staleCommandKeys(configured = {}, discovered = {}) {
+  const discoveredValues = new Set(Object.values(discovered || {}));
+  return Object.keys(configured || {}).filter((key) => {
+    const cmd = configured[key];
+    return cmd && !discoveredValues.has(cmd) && !discovered[key];
+  });
+}
+
+module.exports = { discoverCommands, staleCommandKeys };

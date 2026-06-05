@@ -4,7 +4,7 @@ const { collectTextFiles, collectOptionsFromWorkspace, resolveSafePath } = requi
 const { logAudit, readAudit } = require("./audit");
 const sessionCache = require("./sessionCache");
 const { classifyCaution } = require("./cautionZone");
-const { discoverCommands } = require("./commandDiscovery");
+const { discoverCommands, staleCommandKeys: staleCommandKeyList } = require("./commandDiscovery");
 const { summarizeOperations } = require("./journal");
 const { repoSnapshot, relaiRead, relaiWrite, relaiReplace, relaiClear, relaiApplyPatch, relaiApplyArchive, relaiSnapshotArchive, relaiVerify, relaiBrowser, relaiDiff, relaiReset, relaiGitStatus, relaiGitFetch, relaiGitCommit, relaiGitPush, relaiGitMergeBranch, relaiGitMergeRemoteBranchesPlan, relaiGitAbortMerge, relaiGitCreatePr, relaiRemoveFile, relaiRefactorAudit } = require("./localRepoBridge");
 const { planEdit } = require("./executionPlanner");
@@ -432,14 +432,8 @@ function relaiStatus(config, args = {}) {
       const discovered = discoverCommands(workspace.path);
       const commandKeys = Object.keys(workspace.commands || {}).sort();
       const testCommandKeys = Object.keys(workspace.testCommands || {}).sort();
-      const staleCommandKeys = commandKeys.filter((k) => {
-        const cmd = (workspace.commands || {})[k];
-        return cmd && !Object.values(discovered).includes(cmd) && !discovered[cmd];
-      });
-      const staleTestCommandKeys = testCommandKeys.filter((k) => {
-        const cmd = (workspace.testCommands || {})[k];
-        return cmd && !Object.values(discovered).includes(cmd) && !discovered[cmd];
-      });
+      const staleCommandKeys = staleCommandKeyList(workspace.commands || {}, discovered);
+      const staleTestCommandKeys = staleCommandKeyList(workspace.testCommands || {}, discovered);
       selectedWorkspace = {
         alias: workspace.alias,
         root: workspace.path,
