@@ -6,7 +6,6 @@
   "trustedLocalAgent": true,
   "maxOutputBytes": 2097152,
   "maxIndexFiles": 3000,
-  "dashboardEnabled": true,
   "workspaces": {
     "myapp": {
       "path": "/absolute/path/to/myapp",

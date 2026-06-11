@@ -54,9 +54,11 @@ function workflowSummary(config) {
 
 function recommendedFlowForConfig(config) {
   const { isPreparedWorkflow } = require("../config");
-  const base = ["relai_read", "relai_replace", "relai_write", "relai_clear_files", "relai_run_checks", "relai_diff", "relai_restore_changes"];
+  // Only recommend tools that exist on the public connector surface — steering
+  // ChatGPT toward a hidden tool just produces "not available" errors.
+  const base = ["relai_read", "relai_edit", "relai_replace", "relai_write", "relai_clear_files", "relai_run_checks", "relai_diff", "relai_restore_changes"];
   if (!isPreparedWorkflow(config)) return base;
-  return ["relai_repo_snapshot", "relai_read", "relai_replace", "relai_apply_update", "relai_apply_bundle", "relai_package_snapshot", "relai_clear_files", "relai_run_checks", "relai_diff", "relai_restore_changes"];
+  return ["relai_repo_snapshot", "relai_read", "relai_edit", "relai_apply_bundle", "relai_package_snapshot", "relai_clear_files", "relai_run_checks", "relai_diff", "relai_restore_changes"];
 }
 
 function assertPreparedUpdateSafe(workspace, config, args, patch) {

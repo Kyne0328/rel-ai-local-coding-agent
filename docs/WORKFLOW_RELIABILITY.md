@@ -5,7 +5,7 @@ Rel.AI MCP uses one workspace workflow. ChatGPT chooses the change tool by task 
 ```text
 1. Inspect:  relai_repo_snapshot
 2. Read:     relai_read
-3. Change:   relai_replace / relai_write / relai_apply_update / relai_apply_bundle / relai_clear_files
+3. Change:   relai_edit (exact replace / full-file / patch / batch) / relai_apply_bundle / relai_clear_files
 4. Validate: relai_run_checks
 5. Review:   relai_diff
 6. Restore:  relai_restore_changes
@@ -19,10 +19,10 @@ Use the smallest tool that fits the job:
 
 | Situation | Use |
 | --- | --- |
-| Small localized edit inside an existing file | `relai_replace` |
-| Complete replacement of a small or normal-sized file | direct `relai_write` |
-| Complete replacement of a larger file | staged `relai_write` |
-| Multi-file patch-shaped change | `relai_apply_update` |
+| Small localized edit inside an existing file | `relai_edit` with `oldText`/`newText` |
+| Complete replacement of a file (any size) | `relai_edit` with `content` |
+| Multi-file patch-shaped change | `relai_edit` with `updateText` |
+| Several edits in one approval | `relai_edit` with `edits: [...]` |
 | Prepared file bundle update | `relai_apply_bundle` |
 | Obsolete file removal | `relai_clear_files` |
 | Validation | `relai_run_checks` |

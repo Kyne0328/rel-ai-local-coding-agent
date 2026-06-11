@@ -50,7 +50,7 @@ function _render(container) {
     if (!_draft.workflow) _draft.workflow = {};
     _draft.workflow.mode = value;
     _checkDirty();
-  }), 'Both options keep the same workspace-tool surface. Prepared update mode includes relai_apply_update, relai_apply_bundle, and relai_package_snapshot for larger changes.'));
+  }), 'Both options keep the same workspace-tool surface. Prepared update mode adds bundle apply and snapshot packaging (relai_apply_bundle, relai_package_snapshot) alongside relai_edit patch updates for larger changes.'));
   const prepared = (_draft.workflow && _draft.workflow.prepared) || {};
   workflow.body.appendChild(field('Require clean git before prepared apply', toggleControl(prepared.requireCleanGit !== false, (v) => {
     if (!_draft.workflow) _draft.workflow = {};
@@ -75,7 +75,7 @@ function _render(container) {
     if (!_draft.workflow.prepared) _draft.workflow.prepared = {};
     _draft.workflow.prepared.maxUpdateBytes = v;
     _checkDirty();
-  }, { min: 1024, max: 52428800, width: '150px' }), 'Upper bound for relai_apply_update payloads.'));
+  }, { min: 1024, max: 52428800, width: '150px' }), 'Upper bound for prepared update payloads (relai_edit updateText).'));
   workflow.body.appendChild(field('Max archive bytes', numberControl(prepared.maxBundleBytes || 262144000, (v) => {
     if (!_draft.workflow) _draft.workflow = {};
     if (!_draft.workflow.prepared) _draft.workflow.prepared = {};
@@ -122,7 +122,7 @@ function summaryBox() {
   div.style.cssText = 'text-align:left;padding:12px;line-height:1.55;';
   div.innerHTML = `
     <strong style="color:var(--text);">ChatGPT local repo bridge</strong><br>
-    This is the always-on workspace connector between ChatGPT and your configured repositories. It avoids uploading a zip for every task through one reliable workflow: <code>relai_repo_snapshot</code>, <code>relai_read</code>, <code>relai_replace</code> exact edits, <code>relai_write</code> full-file writes, <code>relai_apply_update</code>, <code>relai_apply_bundle</code>, <code>relai_clear_files</code> file clearing, <code>relai_run_checks</code>, <code>relai_browser</code>, <code>relai_diff</code>, and <code>relai_restore_changes</code>.<br>
+    This is the always-on workspace connector between ChatGPT and your configured repositories. It avoids uploading a zip for every task through one reliable workflow: <code>relai_repo_snapshot</code>, <code>relai_read</code>, <code>relai_edit</code> unified edits (exact replace, full-file write, patch, or batch — with optional checks and diff in the same call), <code>relai_apply_bundle</code>, <code>relai_clear_files</code> file clearing, <code>relai_run_checks</code>, <code>relai_browser</code>, <code>relai_diff</code>, and <code>relai_restore_changes</code>.<br>
     Context settings live on each workspace and reduce broad scans/indexing for small tasks across any language stack.
   `;
   return div;

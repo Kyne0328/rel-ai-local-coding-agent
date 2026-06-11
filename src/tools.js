@@ -329,7 +329,7 @@ function enhanceToolError(toolName, error) {
   };
   if (toolName === "relai_replace" || toolName === "relai_edit") {
     if (/Invalid IPv6 URL|Invalid URL|ERR_INVALID_URL/i.test(raw)) {
-      return append("Edit payload was rejected by a URL parser, likely on the client transport. Workarounds:\n  - relai_write { stage: \"direct\", path, content }  // whole-file replace\n  - relai_apply_update { updateText: <unified diff> }    // patch-shaped change\n  - Split into multiple smaller relai_replace calls with shorter oldText/newText blocks");
+      return append("Edit payload was rejected by a URL parser, likely on the client transport. Workarounds:\n  - relai_edit { path, content }                 // whole-file replace\n  - relai_edit { updateText: <unified diff> }    // patch-shaped change\n  - Split into multiple smaller relai_edit calls with shorter oldText/newText blocks");
     }
     if (/found 0 matches/.test(raw)) {
       return append("Fallback: call relai_read on the file to get current contents, then retry with exact current text. For complete rewrites use relai_write { stage: \"direct\", content }.");
@@ -341,9 +341,11 @@ function enhanceToolError(toolName, error) {
       return append("Fallback: use relai_write { stage: \"direct\", content } for a whole-file replacement, or split the change into smaller exact replacements.");
     }
   }
-  if (toolName === "relai_apply_update") {
+  // relai_edit routes updateText through the same patch engine, so it needs the
+  // same patch-format guidance as relai_apply_update.
+  if (toolName === "relai_apply_update" || toolName === "relai_edit") {
     if (/corrupt patch|patch .* invalid|did not contain any valid|patch failed/i.test(raw)) {
-      return append("Accepted patch formats:\n  1) Git unified diff:\n       --- a/path/to/file\n       +++ b/path/to/file\n       @@ -1,3 +1,3 @@\n       - old line\n       + new line\n  2) OpenAI patch format:\n       *** Begin Patch\n       *** Update File: path/to/file\n       @@\n       - old\n       + new\n       *** End Patch\nFor whole-file rewrites prefer relai_write { stage: \"direct\", content }.");
+      return append("Accepted patch formats:\n  1) Git unified diff:\n       --- a/path/to/file\n       +++ b/path/to/file\n       @@ -1,3 +1,3 @@\n       - old line\n       + new line\n  2) OpenAI patch format:\n       *** Begin Patch\n       *** Update File: path/to/file\n       @@\n       - old\n       + new\n       *** End Patch\nFor whole-file rewrites prefer relai_edit { path, content }.");
     }
     if (/context mismatch|delete mismatch|unsupported line/i.test(raw)) {
       return append("The OpenAI patch could not be matched against the current file contents. Re-read the file, regenerate the patch from current text, and make sure each changed block includes enough unchanged context lines.");
@@ -480,9 +482,10 @@ function relaiStatus(config, args = {}) {
     tools: PUBLIC_HTTP_TOOL_NAMES,
     toolGroups: {
       workspace: PUBLIC_HTTP_TOOL_NAMES,
-      git: BRIDGE_TOOL_NAMES.filter((name) => name.startsWith("relai_git_")),
-      audit: ["relai_refactor_audit", "relai_diff", "relai_git_status"],
-      cleanup: ["relai_clear_files", "relai_remove_file", "relai_restore_changes"],
+      // Group lists must only name public tools — this payload is read by ChatGPT.
+      git: PUBLIC_HTTP_TOOL_NAMES.filter((name) => name.startsWith("relai_git_")),
+      audit: ["relai_diff", "relai_git_status"],
+      cleanup: ["relai_clear_files", "relai_restore_changes"],
       internal: BRIDGE_TOOL_NAMES.filter((name) => !PUBLIC_HTTP_TOOL_NAMES.includes(name))
     },
     scripts: Object.keys(scripts).sort(),

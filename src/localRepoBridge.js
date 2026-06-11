@@ -739,7 +739,7 @@ function assertDirectWriteAllowed(relativePath, content) {
   const newlines = countMatches(text, /\n/g);
   const averageLineBytes = bytes / Math.max(1, newlines + 1);
   if (newlines <= 2 && averageLineBytes > 2000) {
-    throw new Error(`relai_write refuses collapsed source-looking content for ${relativePath}. Use relai_replace, relai_apply_update, or staged relai_write with the original line breaks intact.`);
+    throw new Error(`relai_write refuses collapsed source-looking content for ${relativePath}. Use relai_edit with oldText/newText, relai_edit with updateText, or staged relai_write with the original line breaks intact.`);
   }
 }
 
@@ -1206,10 +1206,10 @@ function workspaceWriteGuidance(config) {
         chunkBytes: DEFAULT_STAGED_CHUNK_BYTES
       },
       "apply-update": {
-        tool: "relai_apply_update",
+        tool: "relai_edit",
         when: [
-          "a multi-file change is already represented as a unified patch",
-          "several related files need coordinated text edits"
+          "a multi-file change is already represented as a unified patch (pass updateText)",
+          "several related files need coordinated text edits (pass edits: [...])"
         ]
       },
       "apply-bundle": {
@@ -1238,7 +1238,7 @@ function workspaceWriteGuidance(config) {
       stagedWriteStart: "relai_write { workspace, stage: 'start', path, content }",
       stagedWriteAppend: "relai_write { workspace, stage: 'append', writeId, content }",
       stagedWriteCommit: "relai_write { workspace, stage: 'commit', writeId }",
-      applyUpdate: "relai_apply_update { workspace, updateText, checks }",
+      applyUpdate: "relai_edit { workspace, updateText, runChecks: true, returnDiff: true }",
       applyBundle: "relai_apply_bundle { workspace, bundlePath, checks }",
       clearFile: "relai_clear_files { workspace, path }"
     },
@@ -1278,8 +1278,8 @@ function fileWriteGuidance(relativePath, text) {
       },
       multiFileChange: {
         recommendedMode: "apply-update",
-        tool: "relai_apply_update",
-        reason: "Use a prepared update when the change is patch-shaped across multiple files."
+        tool: "relai_edit",
+        reason: "Use relai_edit with updateText (or edits: [...]) when the change spans multiple files."
       },
       next: "Prefer relai_replace with exact current text. Use staged relai_write for unavoidable whole-file replacement. Use relai_clear_files only for obsolete files."
     };
@@ -1301,8 +1301,8 @@ function fileWriteGuidance(relativePath, text) {
     },
     multiFileChange: {
       recommendedMode: "apply-update",
-      tool: "relai_apply_update",
-      reason: "Use a prepared update when the change is patch-shaped across multiple files."
+      tool: "relai_edit",
+      reason: "Use relai_edit with updateText (or edits: [...]) when the change spans multiple files."
     },
     next: "Use direct relai_write for full-file replacement, or relai_replace for localized edits."
   };

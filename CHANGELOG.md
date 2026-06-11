@@ -12,6 +12,8 @@
 - **Removed the dead dashboardEnabled setting; settings API now rejects unknown productUx/release keys.**
 - **What's-new card now renders in the packaged app (CHANGELOG bundled) and no longer mangles snake_case tool names.**
 - **Local MCP state directory is gitignored and no longer dirties the repo during tests; tunnel npx fallback works on Windows.**
+- **All server guidance now matches the 17-tool surface.** Snapshot write guidance, error-recovery hints, status tool groups, the MCP help resource, README, docs, and dashboard copy steer ChatGPT to relai_edit instead of tools that are no longer publicly visible; relai_edit patch errors get the same format guidance as the old apply_update.
+- **relai_git_fetch reports a clear error when no configured remote matches allowedRemotes instead of a hollow success.**
 
 Bump root/electron/extension/status UI/lockfiles to 0.16.4.
 

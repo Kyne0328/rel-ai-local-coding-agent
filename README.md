@@ -294,20 +294,16 @@ See [`docs/AUTO_APPROVE_EXTENSION.md`](docs/AUTO_APPROVE_EXTENSION.md).
 
 ## MCP tools
 
-Rel.AI exposes one peer-level public workspace-tool surface. ChatGPT chooses the tool from the task shape and file size, not from separate tool tiers. The public surface has 24 tools, including first-class git and refactor-audit flows; newer local stdio sessions can expose 3 additional trusted-session helpers for continuity:
-
-- `relai_edit`
-- `relai_set_policy`
-- `relai_session_summary`
+Rel.AI exposes one curated public workspace-tool surface of 17 tools. `relai_edit` is the primary write path — it routes to exact replacement, full-file write, patch apply, or a batch of edits server-side, and can validate and return a diff in the same call. Additional tools (`relai_apply_update`, `relai_feature_probe`, `relai_git_fetch`, `relai_git_merge_branch`, `relai_git_merge_remote_branches_plan`, `relai_git_abort_merge`, `relai_remove_file`, `relai_refactor_audit`, `relai_set_policy`, `relai_session_summary`) remain callable on local stdio sessions but are hidden from the ChatGPT connector to keep the surface small.
 
 | Tool | Purpose |
 | --- | --- |
 | `relai_repo_snapshot` | Return a filtered project snapshot, manifests, discovered checks, context hints, and size-based write guidance. |
 | `relai_read` | Read focused files or directory summaries and return file-level write guidance. |
-| `relai_write` | Replace one complete file with corrected full-file content. Direct mode is for normal-sized files; staged mode is for larger complete-file replacement. |
-| `relai_replace` | Apply small exact text replacements inside an existing file. This is the preferred tool for large/interpolation-heavy source files, duplicate import cleanup, lint-only string edits, and localized behavior changes. |
-| `relai_clear_files` | Clear obsolete files without update helpers. |
-| `relai_apply_update` | Apply a prepared text update when a change is naturally patch-shaped across files. |
+| `relai_edit` | The primary edit tool. Pass `oldText`+`newText` for exact edits, `content` for full-file writes (large files chunk automatically), `updateText` for unified-diff changes, or `edits: [...]` for a batch — plus `runChecks` / `returnDiff` to validate and review in one call. |
+| `relai_write` | Fallback: replace one complete file with full-file content (direct or staged mode). |
+| `relai_replace` | Fallback: small exact text replacements inside an existing file. |
+| `relai_clear_files` | Clear obsolete files. |
 | `relai_apply_bundle` | Apply a prepared file bundle when many files need to be overlaid together. |
 | `relai_package_snapshot` | Create a workspace zip package on the MCP host. |
 | `relai_run_checks` | Run detected or requested validation checks. |
@@ -315,7 +311,10 @@ Rel.AI exposes one peer-level public workspace-tool surface. ChatGPT chooses the
 | `relai_diff` | Review git status and diff. |
 | `relai_restore_changes` | Restore selected workspace changes. |
 | `relai_status` | Return compact live status for configured workspaces and scripts. |
-| `relai_feature_probe` | Return compact booleans for important runtime behavior. |
+| `relai_git_status` | Branch, ahead/behind, and ownership-split repository state. |
+| `relai_git_commit` | Record a commit with an explicit message (refuses secret-looking staged files). |
+| `relai_git_push` | Publish a branch to an allowlisted remote. |
+| `relai_git_create_pr` | Draft a pull-request title/body from a base/head diff. |
 
 Removed workflows are not part of the MCP anymore: update application loops, generated update helpers, local-edit tools, task runners, isolated worktree orchestration, multi-agent schedulers, Docker runners, and PR/CI repair loops.
 
@@ -368,10 +367,10 @@ Use this guide together with the `writeGuidance` returned by `relai_repo_snapsho
 | --- | --- |
 | Need a repository overview | `relai_repo_snapshot` |
 | Need focused file content | `relai_read` |
-| Small localized edit inside an existing file | `relai_replace` |
-| Complete replacement of a small or normal-sized file | direct `relai_write` |
-| Complete replacement of a larger file | staged `relai_write` |
-| Multi-file patch-shaped change | `relai_apply_update` |
+| Small localized edit inside an existing file | `relai_edit` with `oldText`/`newText` |
+| Complete replacement of a file (any size) | `relai_edit` with `content` |
+| Multi-file patch-shaped change | `relai_edit` with `updateText` |
+| Several edits in one approval | `relai_edit` with `edits: [...]` |
 | Prepared file bundle update | `relai_apply_bundle` |
 | Remove obsolete files | `relai_clear_files` |
 | Run validation | `relai_run_checks` |
@@ -385,7 +384,7 @@ Typical loop:
 inspect -> read -> change -> validate -> review -> restore only if needed
 ```
 
-For large or interpolation-heavy files, prefer `relai_replace` for focused edits. Use staged `relai_write` only when the entire file genuinely needs replacement. For multi-file patch-shaped changes, use `relai_apply_update`. For prepared bundles on the MCP host, use `relai_apply_bundle`.
+For large or interpolation-heavy files, prefer `relai_edit` with `oldText`/`newText` for focused edits. Use `content` only when the entire file genuinely needs replacement. For multi-file patch-shaped changes, use `relai_edit` with `updateText`. For prepared bundles on the MCP host, use `relai_apply_bundle`.
 
 ---
 

@@ -23,8 +23,8 @@ assert.ok(typeof enhanceToolError === 'function', 'enhanceToolError must be expo
 {
   const err = enhanceToolError('relai_replace', new Error('ValueError: Invalid IPv6 URL'));
   assert.ok(/Workarounds/.test(err.message), 'must label workarounds section');
-  assert.ok(/relai_write/.test(err.message), 'must point to relai_write fallback');
-  assert.ok(/relai_apply_update/.test(err.message), 'must point to apply_update fallback');
+  assert.ok(/relai_edit \{ path, content \}/.test(err.message), 'must point to full-file relai_edit fallback');
+  assert.ok(/relai_edit \{ updateText/.test(err.message), 'must point to patch-shaped relai_edit fallback');
 }
 
 // 4. relai_apply_update corrupt patch → shows accepted formats
@@ -51,7 +51,14 @@ assert.ok(typeof enhanceToolError === 'function', 'enhanceToolError must be expo
 // 7. relai_edit gets same fallback as relai_replace
 {
   const err = enhanceToolError('relai_edit', new Error('Invalid IPv6 URL'));
-  assert.ok(/relai_write/.test(err.message), 'relai_edit must get the same hint as relai_replace');
+  assert.ok(/relai_edit \{ path, content \}/.test(err.message), 'relai_edit must get the same hint as relai_replace');
+}
+
+// 7b. relai_edit patch errors get the same format guidance as relai_apply_update
+{
+  const err = enhanceToolError('relai_edit', new Error('error: corrupt patch at line 24'));
+  assert.ok(/Git unified diff/.test(err.message), 'relai_edit must show unified diff example');
+  assert.ok(/\*\*\* Begin Patch/.test(err.message), 'relai_edit must include literal Begin Patch token');
 }
 
 // 8. relai_clear_files safety block → call-shape guidance

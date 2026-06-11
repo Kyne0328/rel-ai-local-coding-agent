@@ -69,15 +69,15 @@ This server exposes one peer-level workspace-tool surface to ChatGPT. Tool choic
 ## First calls to make
 
 1. Call \`relai_repo_snapshot\` with the requested alias, for example \`jjclover\`, to return the workspace profile, safe project tree, and size-based write guidance.
-2. For edits, use only the workspace workflow: \`relai_read\` exact files, then choose the smallest fitting change tool:
-   - \`relai_replace\` for small exact edits inside existing files, especially large/interpolation-heavy Dart or source files.
-   - direct \`relai_write\` for complete replacement of small or normal-sized files.
-   - staged \`relai_write\` for complete replacement of larger files.
-   - \`relai_apply_update\` when a change is naturally patch-shaped across files.
+2. For edits, use only the workspace workflow: \`relai_read\` exact files, then \`relai_edit\` — it routes automatically:
+   - \`oldText\`+\`newText\` for small exact edits inside existing files.
+   - \`content\` for complete file replacement (large files chunk automatically).
+   - \`updateText\` for a unified-diff change across files.
+   - \`edits: [...]\` for several edits in one call; add \`runChecks: true\` and \`returnDiff: true\` to validate and review in the same call.
    - \`relai_apply_bundle\` when a prepared file bundle should overlay many files.
    - \`relai_clear_files\` for obsolete files.
-3. After edits, run \`relai_run_checks\`, then \`relai_diff\` for review.
-4. If a full-file or staged payload is too large, re-read the target and use smaller \`relai_replace\` operations with exact current text.
+3. After edits, run \`relai_run_checks\`, then \`relai_diff\` for review (or pass \`runChecks\`/\`returnDiff\` on the edit itself).
+4. If an edit payload is too large, re-read the target and use smaller \`oldText\`/\`newText\` operations with exact current text.
 5. If ChatGPT still shows removed tools, restart/reconnect the MCP server instead of falling back.
 
 ## Configured workspaces

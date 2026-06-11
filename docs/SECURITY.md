@@ -56,7 +56,7 @@ Set `REL_AI_MCP_ALLOW_NO_AUTH=1` only for local-only testing on a trusted networ
 
 ```text
 inspect:  relai_repo_snapshot -> relai_read
-change:   relai_replace / relai_write / relai_apply_update / relai_apply_bundle / relai_clear_files
+change:   relai_edit (exact replace / full-file / patch / batch) / relai_apply_bundle / relai_clear_files
 validate: relai_run_checks
 review:   relai_diff
 restore:  relai_restore_changes
