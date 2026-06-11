@@ -1,4 +1,18 @@
-const { spawn } = require("node:child_process");
+const { spawn, spawnSync } = require("node:child_process");
+
+// Kill the whole process tree. A plain child.kill() on Windows only terminates the
+// direct child — with shell:true that is cmd.exe, leaving npm/node grandchildren
+// running (and holding workspace files) after a check times out.
+function killProcessTree(child) {
+  if (!child || child.killed) return;
+  if (process.platform === "win32" && child.pid) {
+    try {
+      spawnSync("taskkill", ["/f", "/t", "/pid", String(child.pid)], { stdio: "ignore", windowsHide: true });
+      return;
+    } catch (_error) {}
+  }
+  try { child.kill("SIGTERM"); } catch (_error) {}
+}
 
 function runProcess(command, args, options = {}, config = {}) {
   return new Promise((resolve) => {
@@ -24,7 +38,7 @@ function runProcess(command, args, options = {}, config = {}) {
     if (timeoutMs > 0) {
       timer = setTimeout(() => {
         stderr = appendLimited(stderr, `\n[rel-ai-mcp timed out after ${timeoutMs}ms]\n`, maxOutputBytes);
-        try { child.kill("SIGTERM"); } catch (_error) {}
+        killProcessTree(child);
         finish({
           exitCode: -1,
           signal: "SIGTERM",
@@ -88,5 +102,6 @@ function summarizeCommand(result) {
 module.exports = {
   runProcess,
   summarizeCommand,
-  appendLimited
+  appendLimited,
+  killProcessTree
 };

@@ -23,7 +23,7 @@ const {
   getPreparedConfig, preparedNumber, preparedFlag,
   workflowSummary, recommendedFlowForConfig,
   assertPreparedUpdateSafe, assertPreparedBundleSafe,
-  requireCleanGitIfConfigured, shouldMakePreparedBackup, makePreparedBackup,
+  ensureGitRepo, requireCleanGitIfConfigured, shouldMakePreparedBackup, makePreparedBackup,
   tempStateDir, tempStatePath, validatePatchPaths
 } = require("./repo/gitOps");
 const {

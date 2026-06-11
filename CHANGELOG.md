@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.16.3] — 2026-06-11
+
+### Audit fixes
+- **Fix multi-byte UTF-8 request bodies corrupted when split across network chunks (emoji/CJK content in relai_write payloads).**
+- **Fix relai_apply_update crash: ensureGitRepo was not exported from gitOps, breaking the prepared patch flow.**
+- **Kill the full process tree when a check times out on Windows so npm/node children no longer linger.**
+- **Refuse relai_git_commit when staged files look like secrets (.env, keys) unless allowSecretPaths: true.**
+- **Prune stale OAuth dynamic-registration clients so oauth-store.json no longer grows unbounded.**
+- **Compare the dashboard query token in constant time.**
+- **test:all now auto-discovers every test file via test/run-tests.mjs; twenty unit test files were silently never running in CI.**
+- **Cache dashboard SSE config reads by file mtime to cut per-tab polling cost.**
+
+Bump root/electron/extension/status UI/lockfiles to 0.16.3.
+
 ## [0.16.2] — 2026-06-05
 
 ### MCP audit fixes and release hardening

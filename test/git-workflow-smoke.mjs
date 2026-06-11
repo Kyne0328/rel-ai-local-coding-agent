@@ -91,6 +91,21 @@ assert.ok(/add notes/.test(JSON.stringify(commit.commit)));
 const pushDryRun = await relaiGitPush(workspace, config, { remote: 'origin', branch: 'main', dryRun: true });
 assert.equal(pushDryRun.ok, true);
 
+// addAll commits must refuse secret-looking staged files (e.g. .env picked up by
+// `git add -A`) unless the caller passes allowSecretPaths: true.
+fs.writeFileSync(path.join(workspace.path, '.env'), 'API_KEY=super-secret\n');
+const secretCommit = await relaiGitCommit(workspace, config, { message: 'oops secrets' });
+assert.equal(secretCommit.ok, false, 'commit with staged .env should be refused');
+assert.ok(Array.isArray(secretCommit.secretStagedFiles) && secretCommit.secretStagedFiles.includes('.env'));
+assert.match(secretCommit.error, /allowSecretPaths/);
+execFileSync('git', ['restore', '--staged', '.env'], { cwd: workspace.path });
+
+const secretCommitAllowed = await relaiGitCommit(workspace, config, { message: 'intentional env commit', allowSecretPaths: true });
+assert.equal(secretCommitAllowed.ok, true, 'allowSecretPaths: true should permit the commit');
+execFileSync('git', ['rm', '--cached', '.env'], { cwd: workspace.path, stdio: 'ignore' });
+execFileSync('git', ['commit', '-m', 'remove env'], { cwd: workspace.path, stdio: 'ignore' });
+fs.rmSync(path.join(workspace.path, '.env'), { force: true });
+
 const mergePlan = await relaiGitMergeRemoteBranchesPlan(workspace, config, { remote: 'origin', targetBranch: 'production' });
 assert.equal(mergePlan.ok, true);
 assert.ok(mergePlan.excluded.some((item) => item.name === 'origin/main'));

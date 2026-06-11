@@ -529,7 +529,9 @@ function oauthErrorPage(message) {
 }
 
 function hasDashboardQueryToken(parsed, options) {
-  return Boolean(options.token && parsed.searchParams.get("token") === options.token);
+  if (!options.token) return false;
+  const supplied = parsed.searchParams.get("token");
+  return supplied != null && timingSafeEqual(supplied, options.token);
 }
 
 function isDashboardAuthorized(req, parsed, options) {
@@ -634,6 +636,26 @@ function openSseSession(res, req, messagePath = "/messages") {
   });
 }
 
+// The dashboard SSE loop re-reads + re-normalizes config.json on every tick for
+// every connected client. Cache the parsed config keyed on the file's mtime so N
+// open dashboard tabs cost one parse per actual config change, not N per second.
+const configCache = { path: "", mtimeMs: -1, value: null };
+function readConfigCached() {
+  const configPath = require("./config").getConfigPath();
+  let mtimeMs = null;
+  try { mtimeMs = fs.statSync(configPath).mtimeMs; } catch (_error) {}
+  if (mtimeMs != null && configCache.value && configCache.path === configPath && configCache.mtimeMs === mtimeMs) {
+    return configCache.value;
+  }
+  const value = readConfig();
+  if (mtimeMs != null) {
+    configCache.path = configPath;
+    configCache.mtimeMs = mtimeMs;
+    configCache.value = value;
+  }
+  return value;
+}
+
 function openDashboardEvents(res, req, options) {
   res.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
@@ -643,7 +665,7 @@ function openDashboardEvents(res, req, options) {
   });
   const sendSnapshot = () => {
     try {
-      const config = readConfig();
+      const config = readConfigCached();
       sendSse(res, "dashboard", {
         ...productUx.dashboardData(config, { limit: 100 }),
         readiness: release.releaseReadiness(config, { requireHttpToken: false })
@@ -690,7 +712,9 @@ function unauthorized(res) {
 
 function readRawBody(req, maxBytes) {
   return new Promise((resolve, reject) => {
-    let body = "";
+    // Collect raw buffers and decode once at the end: decoding per-chunk corrupts
+    // multi-byte UTF-8 sequences that straddle a chunk boundary.
+    const chunks = [];
     let bytes = 0;
     req.on("data", (chunk) => {
       bytes += chunk.length;
@@ -699,10 +723,10 @@ function readRawBody(req, maxBytes) {
         req.destroy();
         return;
       }
-      body += chunk.toString("utf8");
+      chunks.push(chunk);
     });
     req.on("error", reject);
-    req.on("end", () => resolve(body));
+    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
   });
 }
 

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Rel.AI MCP Auto-Approve",
-  "version": "0.16.2",
+  "version": "0.16.3",
   "description": "Optional Chrome extension that can auto-approve Rel.AI MCP app requests on ChatGPT after explicit opt-in.",
   "author": "Kyne0328",
   "icons": {
@@ -14,21 +14,42 @@
       "192": "relai-logo-192.png"
     }
   },
-  "permissions": ["storage", "tabs", "scripting", "alarms", "notifications"],
-  "host_permissions": ["https://chatgpt.com/*", "https://chat.openai.com/*", "http://127.0.0.1:*/*", "http://localhost:*/*"],
+  "permissions": [
+    "storage",
+    "tabs",
+    "scripting",
+    "alarms",
+    "notifications"
+  ],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*",
+    "http://127.0.0.1:*/*",
+    "http://localhost:*/*"
+  ],
   "background": {
     "service_worker": "background.js",
     "type": "module"
   },
   "content_scripts": [
     {
-      "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
-      "js": ["content.js"],
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     },
     {
-      "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
-      "js": ["keepalive.js"],
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "js": [
+        "keepalive.js"
+      ],
       "run_at": "document_start",
       "world": "MAIN"
     }

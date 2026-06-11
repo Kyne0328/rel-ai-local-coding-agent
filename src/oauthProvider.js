@@ -64,6 +64,21 @@ function pruneStore(store) {
       if (!entry || (entry.expiresAt && entry.expiresAt <= now)) delete store[key][id];
     }
   }
+  // Registration is unauthenticated (RFC 7591), so clients{} would otherwise grow
+  // forever — ChatGPT mints a fresh client_id every time the connector is re-added.
+  // Keep a client while anything still references it or while it is young enough
+  // that a pending authorize/refresh could still come back for it.
+  const referenced = new Set();
+  for (const key of ["codes", "accessTokens", "refreshTokens"]) {
+    for (const entry of Object.values(store[key] || {})) {
+      if (entry && entry.clientId) referenced.add(entry.clientId);
+    }
+  }
+  for (const [clientId, client] of Object.entries(store.clients || {})) {
+    if (referenced.has(clientId)) continue;
+    const createdAt = client && Number(client.created_at) ? Number(client.created_at) : 0;
+    if (!createdAt || now - createdAt > REFRESH_TOKEN_TTL_MS) delete store.clients[clientId];
+  }
   return store;
 }
 

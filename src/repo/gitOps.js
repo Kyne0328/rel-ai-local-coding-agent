@@ -1,7 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { runProcess, summarizeCommand } = require("../process");
-const { resolveSafePath } = require("../safety");
+const { resolveSafePath, isSecretPath } = require("../safety");
 
 const DEFAULT_MAX_GIT_OUTPUT_BYTES = 1024 * 1024;
 const DEFAULT_AGGRESSIVE_MAX_PATCH_BYTES = 2 * 1024 * 1024;
@@ -312,6 +312,24 @@ async function relaiGitCommit(workspace, config, args = {}) {
     const add = await runProcess("git", ["add", "-A"], { cwd: workspace.path, timeout: 60000 }, config);
     if (add.exitCode !== 0) return { ok: false, workspace: workspace.alias, message, addAll, add: summarizeCommand(add) };
   }
+  // `git add -A` stages anything not gitignored, including files the read/write
+  // tools refuse to touch (.env, keys, credentials). Refuse to commit those unless
+  // the caller explicitly opts in after review.
+  if (args.allowSecretPaths !== true) {
+    const staged = await runProcess("git", ["diff", "--cached", "--name-only"], { cwd: workspace.path, timeout: 60000 }, config);
+    const secretStaged = String(staged.stdout || "").split(/\r?\n/).map((line) => line.trim()).filter((file) => file && isSecretPath(file));
+    if (secretStaged.length > 0) {
+      return {
+        ok: false,
+        workspace: workspace.alias,
+        message,
+        addAll,
+        paths,
+        secretStagedFiles: secretStaged,
+        error: `Refusing to commit staged files that look like secrets: ${secretStaged.join(", ")}. Unstage them (git restore --staged <file>) or pass allowSecretPaths: true after reviewing.`
+      };
+    }
+  }
   const commit = await runProcess("git", ["commit", "-m", message], { cwd: workspace.path, timeout: clampNumber(args.timeoutMs, 1000, 86400000, 120000) }, config);
   const statusAfter = await relaiGitStatus(workspace, config, { maxBytes: args.maxBytes });
   return { ok: commit.exitCode === 0, workspace: workspace.alias, message, addAll, paths, commit: summarizeCommand(commit), statusBefore, statusAfter };
@@ -467,6 +485,7 @@ module.exports = {
   recommendedFlowForConfig,
   assertPreparedUpdateSafe,
   assertPreparedBundleSafe,
+  ensureGitRepo,
   requireCleanGitIfConfigured,
   shouldMakePreparedBackup,
   makePreparedBackup,

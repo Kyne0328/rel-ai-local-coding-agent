@@ -1,5 +1,8 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import http from 'node:http';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -18,7 +21,10 @@ const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.j
     ...process.env,
     REL_AI_MCP_CONFIG: path.join(root, 'examples', 'config.example.json'),
     REL_AI_MCP_TOKEN: token,
-    REL_AI_MCP_MAX_BODY_BYTES: String(maxBodyBytes)
+    REL_AI_MCP_MAX_BODY_BYTES: String(maxBodyBytes),
+    // The /register test below writes the OAuth client store — keep it out of the
+    // user's real ~/.rel-ai-mcp state.
+    REL_AI_MCP_STATE_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'relai-http-auth-smoke-'))
   }
 });
 
@@ -192,6 +198,37 @@ await check('body limit — POST /mcp with 2.5 MB+ body → 4xx or 5xx or connec
     return;
   }
   if (status < 400) throw new Error(`expected error status for oversized body, got ${status}`);
+});
+
+// Regression: a multi-byte UTF-8 character split across two body chunks must
+// decode intact (readRawBody used to decode per-chunk, yielding U+FFFD halves).
+await check('multibyte body split across chunks decodes intact', async () => {
+  const uri = 'https://example.com/cb-\u{1F389}漢字é';
+  const payload = Buffer.from(JSON.stringify({ redirect_uris: [uri] }), 'utf8');
+  // Split inside the 4-byte emoji sequence so each half is invalid UTF-8 alone.
+  const splitAt = payload.indexOf(Buffer.from('\u{1F389}', 'utf8')) + 2;
+  const result = await new Promise((resolve, reject) => {
+    const req = http.request({
+      host: '127.0.0.1',
+      port,
+      path: '/register',
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'content-length': payload.length }
+    }, (res) => {
+      let data = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => resolve({ status: res.statusCode, data }));
+    });
+    req.on('error', reject);
+    req.write(payload.subarray(0, splitAt));
+    setTimeout(() => req.end(payload.subarray(splitAt)), 50);
+  });
+  if (result.status !== 201) throw new Error(`expected 201, got ${result.status}: ${result.data}`);
+  const body = JSON.parse(result.data);
+  if (!Array.isArray(body.redirect_uris) || body.redirect_uris[0] !== uri) {
+    throw new Error(`multibyte content corrupted in transit: ${body.redirect_uris && body.redirect_uris[0]}`);
+  }
 });
 
 child.kill('SIGKILL');
