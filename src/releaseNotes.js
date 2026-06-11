@@ -20,7 +20,9 @@ function stripMarkdown(text) {
     .replace(/`([^`]*)`/g, "$1")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/\*([^*]+)\*/g, "$1")
-    .replace(/_([^_]+)_/g, "$1")
+    // Italic underscores only when bounded by whitespace/edges — never strip the
+    // underscores inside identifiers like relai_apply_update.
+    .replace(/(^|\s)_([^_]+)_(?=\s|$)/g, "$1$2")
     .trim();
 }
 

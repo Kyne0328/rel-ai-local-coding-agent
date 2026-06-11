@@ -141,15 +141,23 @@ function checkCommandAvailability(commands, findings) {
   });
 }
 
+// PATH lookups don't change over a process's life, but releaseReadiness runs on
+// every dashboard poll. Memoize so we spawn `where git`/`where node` once, not
+// several times a second per connected tab.
+const _commandExistsCache = new Map();
 function commandExists(command) {
+  if (_commandExistsCache.has(command)) return _commandExistsCache.get(command);
   const isWindows = process.platform === "win32";
   const lookup = isWindows ? "where" : "which";
+  let result;
   try {
     const child = require("node:child_process").spawnSync(lookup, [command], { shell: false, encoding: "utf8" });
-    return { command, ok: child.status === 0, path: (child.stdout || "").trim().split(/\r?\n/)[0] || "" };
+    result = { command, ok: child.status === 0, path: (child.stdout || "").trim().split(/\r?\n/)[0] || "" };
   } catch (error) {
-    return { command, ok: false, error: error.message };
+    result = { command, ok: false, error: error.message };
   }
+  _commandExistsCache.set(command, result);
+  return result;
 }
 
 function workspaceBrief(config, alias) {

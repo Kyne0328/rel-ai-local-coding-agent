@@ -127,4 +127,74 @@ function makeTempRepo(filename = 'hello.js', content = 'module.exports = {};') {
   }
 }
 
+// 8. batch edits (T3): several edits in one call, best-effort sequential
+{
+  const dir = makeTempRepo('a.js', 'let a = 1;\n');
+  fs.writeFileSync(path.join(dir, 'b.js'), 'let b = 1;\n');
+  execSync('git add . && git commit -m more', { cwd: dir, stdio: 'pipe' });
+  const workspace = { alias: 'test', path: dir };
+  try {
+    const result = await planEdit(workspace, {}, { edits: [
+      { path: 'a.js', oldText: 'let a = 1;', newText: 'let a = 2;' },
+      { path: 'b.js', content: 'let b = 99;\n' }
+    ] });
+    assert.equal(result.plannerPath, 'batch', 'batch: plannerPath must be batch');
+    assert.equal(result.ok, true, 'batch: all edits should succeed');
+    assert.equal(result.editCount, 2, 'batch: two edits reported');
+    assert.equal(fs.readFileSync(path.join(dir, 'a.js'), 'utf8').replace(/\r\n/g, '\n'), 'let a = 2;\n', 'batch: replace applied');
+    assert.equal(fs.readFileSync(path.join(dir, 'b.js'), 'utf8').replace(/\r\n/g, '\n'), 'let b = 99;\n', 'batch: write applied');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// 9. batch best-effort: one bad edit fails, others still reported; overall ok=false
+{
+  const dir = makeTempRepo('a.js', 'let a = 1;\n');
+  const workspace = { alias: 'test', path: dir };
+  try {
+    const result = await planEdit(workspace, {}, { edits: [
+      { path: 'a.js', oldText: 'let a = 1;', newText: 'let a = 2;' },
+      { path: 'a.js', oldText: 'NOT PRESENT', newText: 'x' }
+    ] });
+    assert.equal(result.ok, false, 'batch: overall ok false when one edit fails');
+    assert.equal(result.results.length, 2, 'batch: both results present');
+    assert.ok(result.results.some((r) => r.ok === false), 'batch: a failure is reported');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// 10. runChecks + returnDiff post-actions in one call
+{
+  const dir = makeTempRepo('foo.js', 'const x = 1;\n');
+  const workspace = { alias: 'test', path: dir };
+  try {
+    const result = await planEdit(workspace, {}, { path: 'foo.js', oldText: 'const x = 1;', newText: 'const x = 2;', returnDiff: true });
+    assert.ok(result.diff, 'post-actions: returnDiff attaches a diff');
+    assert.ok(String(result.diff.diff || '').includes('const x = 2'), 'post-actions: diff reflects the edit');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// 11. staged patch (T4): start/append/commit applies the joined diff
+{
+  const dir = makeTempRepo('foo.js', 'const a = 1;\n');
+  const workspace = { alias: 'test', path: dir };
+  const config = { stateDir: path.join(dir, '.state') };
+  try {
+    const patch = `--- a/foo.js\n+++ b/foo.js\n@@ -1 +1 @@\n-const a = 1;\n+const a = 2;\n`;
+    const mid = Math.floor(patch.length / 2);
+    const start = await planEdit(workspace, config, { stage: 'start', updateText: patch.slice(0, mid) });
+    assert.ok(start.writeId, 'staged patch: start returns writeId');
+    await planEdit(workspace, config, { stage: 'append', writeId: start.writeId, updateText: patch.slice(mid) });
+    const commit = await planEdit(workspace, config, { stage: 'commit', writeId: start.writeId });
+    assert.equal(commit.plannerPath, 'apply-update:staged', 'staged patch: commit routes to staged apply-update');
+    assert.equal(fs.readFileSync(path.join(dir, 'foo.js'), 'utf8').replace(/\r\n/g, '\n'), 'const a = 2;\n', 'staged patch: diff applied on commit');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 console.log('execution-planner unit tests passed.');

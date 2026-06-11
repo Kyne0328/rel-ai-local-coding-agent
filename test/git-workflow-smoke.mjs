@@ -91,6 +91,23 @@ assert.ok(/add notes/.test(JSON.stringify(commit.commit)));
 const pushDryRun = await relaiGitPush(workspace, config, { remote: 'origin', branch: 'main', dryRun: true });
 assert.equal(pushDryRun.ok, true);
 
+// allowedRemotes enforcement: a remote not on the allowlist is refused (also blocks
+// git's command-executing ext:: transport via an unexpected remote name).
+await assert.rejects(
+  () => relaiGitPush(workspace, config, { remote: 'evil', branch: 'main', dryRun: true }),
+  /allowedRemotes/,
+  'push to a non-allowlisted remote must be refused'
+);
+
+// Fetch with an allowlist that matches no configured remote must report the
+// mismatch, not a hollow ok:true with zero results.
+{
+  const { relaiGitFetch } = require('../src/localRepoBridge.js');
+  const noMatch = await relaiGitFetch({ ...workspace, allowedRemotes: ['upstream'] }, config, {});
+  assert.equal(noMatch.ok, false, 'fetch with zero allowlisted remotes must not be ok');
+  assert.match(noMatch.error, /allowedRemotes/);
+}
+
 // addAll commits must refuse secret-looking staged files (e.g. .env picked up by
 // `git add -A`) unless the caller passes allowSecretPaths: true.
 fs.writeFileSync(path.join(workspace.path, '.env'), 'API_KEY=super-secret\n');

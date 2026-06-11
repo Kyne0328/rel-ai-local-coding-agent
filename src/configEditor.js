@@ -1,8 +1,14 @@
 const path = require("node:path");
 const { getConfigPath, publicConfigSummary, writeConfig, normalizeAutoApproveConfig, normalizeWorkflowConfig, assertSafeWorkspaceRoot } = require("./config");
 
-const BOOLEAN_KEYS = ["dashboardEnabled"];
 const NUMBER_KEYS = ["maxOutputBytes", "maxIndexFiles"];
+
+// Only these nested keys may be written through the settings API; anything else is
+// rejected so junk keys never persist into config.json.
+const ALLOWED_SECTION_KEYS = {
+  productUx: new Set(["dashboardRefreshSeconds", "liveLogPollSeconds", "staleHours", "cleanupOlderThanHours", "enableStateExport"]),
+  release: new Set(["minimumReadinessScore", "requireHttpToken"])
+};
 
 const DEFAULT_FAST_TASK = {
   enabled: true,
@@ -33,11 +39,6 @@ function updateSettings(current, payload = {}) {
   const changed = [];
   const values = payload.settings && typeof payload.settings === "object" ? payload.settings : payload;
 
-  for (const key of BOOLEAN_KEYS) {
-    if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
-    setIfChanged(next, key, Boolean(values[key]), changed);
-  }
-
   for (const key of NUMBER_KEYS) {
     if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
     setIfChanged(next, key, finiteNumber(values[key], key), changed);
@@ -57,6 +58,9 @@ function updateSettings(current, payload = {}) {
     if (!values[section] || typeof values[section] !== "object") continue;
     if (!next[section] || typeof next[section] !== "object") next[section] = {};
     for (const [key, value] of Object.entries(values[section])) {
+      if (!ALLOWED_SECTION_KEYS[section].has(key)) {
+        throw new Error(`Unknown ${section} setting: ${key}. Allowed: ${[...ALLOWED_SECTION_KEYS[section]].join(", ")}.`);
+      }
       const coerced = typeof value === "boolean" ? Boolean(value) : (typeof value === "number" || /^\d+$/.test(String(value)) ? finiteNumber(value, `${section}.${key}`) : value);
       setNestedIfChanged(next, section, key, coerced, changed);
     }

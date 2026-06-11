@@ -40,19 +40,24 @@ function summaryCard(payload) {
         <code class="copy-box" style="min-height:auto;max-height:none;">${escapeHtml(payload.chatgptMcpUrl || '—')}</code>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button type="button" data-copy="mcp">Copy ChatGPT MCP URL</button>
-          <button class="secondary" type="button" data-copy="dashboard">Copy dashboard URL</button>
+          <button class="secondary" type="button" data-copy="dashboard">Copy dashboard URL (no token)</button>
+          <button class="secondary" type="button" data-copy="dashboardToken">Copy with token</button>
         </div>
       </div>
       <div style="display:grid;gap:8px;font-size:13px;">
         <div style="display:flex;gap:10px;flex-wrap:wrap;"><span style="color:var(--text-muted);min-width:140px;">ChatGPT auth</span><span>${escapeHtml(payload.chatgptAuthMode || 'OAuth')}</span></div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;"><span style="color:var(--text-muted);min-width:140px;">Health URL</span><code style="font-size:12px;word-break:break-all;">${escapeHtml(payload.chatgptHealthUrl || '—')}</code></div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;"><span style="color:var(--text-muted);min-width:140px;">Dashboard URL</span><code style="font-size:12px;word-break:break-all;">${escapeHtml(payload.dashboardUrl || '—')}</code></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;"><span style="color:var(--text-muted);min-width:140px;">Dashboard URL</span><code style="font-size:12px;word-break:break-all;">${escapeHtml(stripToken(payload.dashboardUrl || (payload.localBaseUrl ? payload.localBaseUrl + '/dashboard' : '')) || '—')}</code></div>
       </div>
     </div>
   `;
 
+  // Token-free dashboard URL keeps the secret out of clipboard history. Strip any
+  // ?token= from the URL the server built rather than reconstructing it.
+  const dashboardNoToken = stripToken(payload.dashboardUrl || (payload.localBaseUrl ? payload.localBaseUrl + '/dashboard' : ''));
   card.querySelector('[data-copy="mcp"]').onclick = () => copyValue(payload.chatgptMcpUrl, 'ChatGPT MCP URL copied.');
-  card.querySelector('[data-copy="dashboard"]').onclick = () => copyValue(payload.dashboardUrl, 'Dashboard URL copied.');
+  card.querySelector('[data-copy="dashboard"]').onclick = () => copyValue(dashboardNoToken, 'Dashboard URL copied (no token — sign in with your dashboard token).');
+  card.querySelector('[data-copy="dashboardToken"]').onclick = () => copyValue(payload.dashboardUrl, 'Dashboard URL with token copied — treat it like a password.');
   return card;
 }
 
@@ -87,6 +92,18 @@ async function copyValue(value, message) {
     toast(message, { variant: 'success' });
   } catch (_error) {
     toast('Clipboard access failed.', { variant: 'error' });
+  }
+}
+
+function stripToken(url) {
+  try {
+    // Keep the full absolute URL — this lands in the clipboard, where a relative
+    // path like "/dashboard" would be useless outside this page.
+    const u = new URL(url, location.origin);
+    u.searchParams.delete('token');
+    return u.href;
+  } catch (_) {
+    return String(url || '').replace(/([?&])token=[^&]*/i, '$1').replace(/[?&]$/, '');
   }
 }
 

@@ -36,7 +36,6 @@ function _render(container) {
   const bridge = panel('ChatGPT local repo bridge');
   const workflow = panel('Workspace update style');
   const limits = panel('Runtime limits');
-  const local = panel('Local dashboard');
   const autoApprove = panel('ChatGPT web app-request auto-approve extension');
 
   bridge.body.appendChild(summaryBox());
@@ -58,7 +57,7 @@ function _render(container) {
     if (!_draft.workflow.prepared) _draft.workflow.prepared = {};
     _draft.workflow.prepared.requireCleanGit = v;
     _checkDirty();
-  }, { enabled: 'Require clean git', disabled: 'Allow dirty git' }), 'Recommended on. Turn off only if you want apply tools to operate on a dirty working tree.'));
+  }, { enabled: 'Require clean git', disabled: 'Allow dirty git' }), 'Off by default. Turn on to make prepared apply tools refuse to run on a dirty working tree.'));
   workflow.body.appendChild(field('Backup before prepared apply', toggleControl(prepared.backup !== false, (v) => {
     if (!_draft.workflow) _draft.workflow = {};
     if (!_draft.workflow.prepared) _draft.workflow.prepared = {};
@@ -99,13 +98,10 @@ function _render(container) {
 
   limits.body.appendChild(field('Max output bytes', numberControl(_draft.maxOutputBytes, (v) => { _draft.maxOutputBytes = v; _checkDirty(); }, { min: 10000, max: 20000000, width: '140px' }), 'Maximum validation output returned to ChatGPT. 2 MB is a safe default for test failures without flooding the chat.'));
 
-  local.body.appendChild(field('Dashboard enabled', toggleControl(_draft.dashboardEnabled !== false, (v) => { _draft.dashboardEnabled = v; _checkDirty(); }), 'Controls this local dashboard only.'));
-
   grid.appendChild(bridge.el);
   grid.appendChild(workflow.el);
   grid.appendChild(autoApprove.el);
   grid.appendChild(limits.el);
-  grid.appendChild(local.el);
   container.appendChild(grid);
 
   const save = saveRow(() => _save(container), () => _loadAndRender(container));
@@ -198,7 +194,7 @@ function _getChanges() {
   // autoApproveAppRequests is intentionally NOT listed: the dashboard has no control
   // for it and the server copy is inert (the Chrome extension reads its own
   // chrome.storage.local). Writing it back risked a second store that disagrees.
-  const keys = ['maxOutputBytes', 'dashboardEnabled', 'workflow'];
+  const keys = ['maxOutputBytes', 'workflow'];
   const changes = [];
   for (const key of keys) {
     if (JSON.stringify(_draft[key]) !== JSON.stringify(_original[key])) {
@@ -211,7 +207,6 @@ function _getChanges() {
 async function _save(container) {
   const payload = {
     maxOutputBytes: _draft.maxOutputBytes,
-    dashboardEnabled: _draft.dashboardEnabled,
     workflow: _draft.workflow
   };
   const res = await saveSettings(payload);

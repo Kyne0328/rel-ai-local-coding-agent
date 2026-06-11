@@ -200,7 +200,11 @@ async function startOneTunnel(provider, { port, localUrl, command, timeoutMs, on
 
 function startProcessTunnel(plan, { timeoutMs, onLog, onProcess }) {
   return new Promise((resolve) => {
-    const child = spawn(plan.command, plan.args, { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    // Node refuses to spawn a .cmd shim directly on Windows since 18.20/20.12
+    // (EINVAL). npx.cmd-based fallbacks (cloudflared/ngrok/localtunnel) need a shell.
+    // Args here are server-built constants and a numeric port — no injection surface.
+    const useShell = process.platform === "win32" && /\.cmd$/i.test(plan.command);
+    const child = spawn(plan.command, plan.args, { stdio: ["ignore", "pipe", "pipe"], windowsHide: true, shell: useShell });
     if (typeof onProcess === "function") onProcess(child, plan.provider);
     let settled = false;
     let buffer = "";

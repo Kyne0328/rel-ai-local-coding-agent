@@ -48,7 +48,7 @@ async function handleMessage(message, options = {}) {
   }
   try {
     switch (message.method) {
-      case "initialize":
+      case "initialize": {
         const config = readConfig({ allowMissing: true });
         if (
           !publicHttpOnly &&
@@ -56,12 +56,17 @@ async function handleMessage(message, options = {}) {
           Number(config.sourceVersion || config.version || 0) >= 2
         ) {
           options.publicCompatOnly = false;
+        } else if (!publicHttpOnly && options.publicCompatOnly) {
+          // stdio clients silently get the stripped public surface on older configs;
+          // surface why so a missing relai_edit etc. is diagnosable.
+          console.error("[rel-ai-mcp] stdio compat mode: exposing the public tool surface only (config sourceVersion < 2). Re-run init-config to unlock the full tool set.");
         }
         return result(message.id, {
           protocolVersion: (message.params && message.params.protocolVersion) || "2025-06-18",
           capabilities: { tools: { listChanged: true }, resources: { subscribe: false, listChanged: true } },
           serverInfo: { name: pkg.name, version: pkg.version }
         });
+      }
       case "ping":
         return result(message.id, {});
       case "tools/list":
@@ -131,7 +136,8 @@ function compactToolResult(payload, originalChars) {
     ok: payload.ok !== false,
     truncated: true,
     originalChars,
-    message: "Tool result was truncated to keep ChatGPT responsive. Use narrower reads, lower limits, or job/status tools for large outputs.",
+    // Name the concrete lever so the model retries narrowly instead of guessing.
+    message: "Result was truncated. Re-call with a narrower scope: relai_read { paths:[\"one/file\"], maxBytes } for a single file, a lower limit/maxBytes/maxEntries, or relai_diff { path } for one file's changes.",
     workspace: payload.workspace || null,
     sessionId: payload.sessionId || null,
     keys: Object.keys(payload).slice(0, 50)

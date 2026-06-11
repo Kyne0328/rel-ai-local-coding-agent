@@ -14,6 +14,20 @@ function getAuditPath(config = {}) {
   return config.auditLogPath || path.join(getStateDir(config), "audit.jsonl");
 }
 
+const MAX_AUDIT_BYTES = 5 * 1024 * 1024;   // rotate past 5 MB
+const READ_TAIL_BYTES = 256 * 1024;        // only the recent tail is ever needed
+
+// Keep one rotated generation (audit.jsonl.1) so the live file never grows without
+// bound. Called before each append.
+function rotateIfNeeded(auditPath) {
+  try {
+    const stat = fs.statSync(auditPath);
+    if (stat.size > MAX_AUDIT_BYTES) {
+      fs.renameSync(auditPath, `${auditPath}.1`);
+    }
+  } catch (_error) { /* missing file or rename race — nothing to rotate */ }
+}
+
 function logAudit(config, event) {
   const auditPath = getAuditPath(config);
   const entry = {
@@ -22,15 +36,35 @@ function logAudit(config, event) {
     ...redactEvent(event || {})
   };
   fs.mkdirSync(path.dirname(auditPath), { recursive: true, mode: 0o700 });
+  rotateIfNeeded(auditPath);
   fs.appendFileSync(auditPath, `${JSON.stringify(entry)}\n`, { mode: 0o600 });
   return entry;
+}
+
+// Read only the last READ_TAIL_BYTES instead of the whole file — the dashboard polls
+// this every few seconds and only ever wants the most recent entries.
+function readAuditTail(auditPath) {
+  const stat = fs.statSync(auditPath);
+  const start = Math.max(0, stat.size - READ_TAIL_BYTES);
+  const fd = fs.openSync(auditPath, "r");
+  try {
+    const length = stat.size - start;
+    const buf = Buffer.allocUnsafe(length);
+    fs.readSync(fd, buf, 0, length, start);
+    let text = buf.toString("utf8");
+    // Drop a leading partial line when we started mid-file.
+    if (start > 0) text = text.slice(text.indexOf("\n") + 1);
+    return text;
+  } finally {
+    fs.closeSync(fd);
+  }
 }
 
 function readAudit(config, options = {}) {
   const auditPath = getAuditPath(config);
   const limit = Math.min(Math.max(Number(options.limit || 100), 1), 1000);
   if (!fs.existsSync(auditPath)) return { path: auditPath, entries: [] };
-  const lines = fs.readFileSync(auditPath, "utf8").trim().split(/\r?\n/).filter(Boolean);
+  const lines = readAuditTail(auditPath).trim().split(/\r?\n/).filter(Boolean);
   const entries = lines.slice(-limit).map((line) => {
     try { return JSON.parse(line); } catch (_error) { return { malformed: line }; }
   });

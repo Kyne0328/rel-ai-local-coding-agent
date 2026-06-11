@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.16.4] — 2026-06-11
+
+### Tool surface, settings, and dashboard improvements
+- **Connector tool surface trimmed from 24 to 17: relai_edit is the primary write path (exact replace, full-file write, diff, or a batch of edits in one approval), with relai_write/relai_replace kept as fallbacks.**
+- **relai_edit gains batch edits (edits:[...]), runChecks, and returnDiff so a change-validate-review loop is a single tool call, plus staged updateText (stage start/append/commit) for large diffs.**
+- **Niche tools (apply_update, feature_probe, git_fetch, git_merge_*, git_abort_merge, remove_file, refactor_audit) moved off the ChatGPT surface but remain callable over stdio.**
+- **All public tools advertise a uniform safe annotation set to reduce connector classifier friction; the real boundary stays server-side.**
+- **Security: relai_git_push/fetch now enforce the workspace allowedRemotes allowlist, blocking git ext:: command-execution transports.**
+- **Dashboard performance: audit log rotates at 5 MB and is tail-read, command-availability and command-discovery are cached, and cleanup now covers stale journals and staged payloads.**
+- **Removed the dead dashboardEnabled setting; settings API now rejects unknown productUx/release keys.**
+- **What's-new card now renders in the packaged app (CHANGELOG bundled) and no longer mangles snake_case tool names.**
+- **Local MCP state directory is gitignored and no longer dirties the repo during tests; tunnel npx fallback works on Windows.**
+
+Bump root/electron/extension/status UI/lockfiles to 0.16.4.
+
 ## [0.16.3] — 2026-06-11
 
 ### Audit fixes

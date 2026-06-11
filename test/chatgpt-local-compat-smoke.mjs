@@ -68,9 +68,13 @@ try {
   send(2, 'tools/list');
   const list = await waitFor(2);
   const names = list.result.tools.map((tool) => tool.name);
-  if (names.length !== 24) throw new Error(`Expected 24 visible bridge tools, got ${names.length}`);
-  for (const required of ['relai_apply_update', 'relai_apply_bundle', 'relai_package_snapshot', 'relai_status', 'relai_feature_probe', 'relai_git_status', 'relai_git_commit', 'relai_refactor_audit']) {
-    if (!names.includes(required)) throw new Error(`missing fast tool ${required}`);
+  if (names.length !== 17) throw new Error(`Expected 17 visible bridge tools, got ${names.length}`);
+  for (const required of ['relai_edit', 'relai_apply_bundle', 'relai_package_snapshot', 'relai_status', 'relai_git_status', 'relai_git_commit', 'relai_write', 'relai_replace']) {
+    if (!names.includes(required)) throw new Error(`missing public tool ${required}`);
+  }
+  // These tools moved off the public connector surface (still callable on stdio).
+  for (const hidden of ['relai_apply_update', 'relai_feature_probe', 'relai_refactor_audit', 'relai_remove_file', 'relai_git_fetch']) {
+    if (names.includes(hidden)) throw new Error(`tool ${hidden} should be hidden from the public surface`);
   }
 
   send(3, 'tools/call', { name: 'relai_write', arguments: { workspace: 'repo', path: 'tmp-relai-bridge.txt', content: 'bridge write ok\n' } });
@@ -99,9 +103,10 @@ try {
   if (!shell.result.isError) throw new Error('removed relai_shell should be rejected');
   if (!/Unknown tool/.test(shell.result.content[0].text)) throw new Error('removed tool should return Unknown tool');
 
-  send(5, 'tools/call', { name: 'relai_apply_update', arguments: { workspace: 'repo', updateText: 'bad patch' } });
+  // relai_apply_update moved off the public surface; relai_edit covers patches now.
+  send(5, 'tools/call', { name: 'relai_edit', arguments: { workspace: 'repo', updateText: 'bad patch' } });
   const patch = await waitFor(5);
-  if (!patch.result.isError) throw new Error('relai_apply_update should reject malformed update text');
+  if (!patch.result.isError) throw new Error('relai_edit should reject malformed update text');
 
 
   send(6, 'tools/call', { name: 'relai_read_files', arguments: { workspace: 'repo', paths: ['package.json'] } });

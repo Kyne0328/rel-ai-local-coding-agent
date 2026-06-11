@@ -59,7 +59,6 @@ function makeDefaultConfig() {
     trustedLocalAgent: true,
     trustedBudgetMultiplier: 2,
     cautionZone: { massClearThreshold: 3, bundleFileThreshold: 5, bundleBytesThreshold: 102400 },
-    dashboardEnabled: true,
     productUx: {
       dashboardRefreshSeconds: 5,
       liveLogPollSeconds: 3,
@@ -132,7 +131,6 @@ function normalizeConfig(config) {
     bundleFileThreshold: Number.isFinite(Number(rawCaution.bundleFileThreshold)) && Number(rawCaution.bundleFileThreshold) >= 1 ? Number(rawCaution.bundleFileThreshold) : cautionBase.bundleFileThreshold,
     bundleBytesThreshold: Number.isFinite(Number(rawCaution.bundleBytesThreshold)) && Number(rawCaution.bundleBytesThreshold) >= 1 ? Number(rawCaution.bundleBytesThreshold) : cautionBase.bundleBytesThreshold
   };
-  next.dashboardEnabled = next.dashboardEnabled !== false;
   next.maxOutputBytes = positiveNumber(next.maxOutputBytes, base.maxOutputBytes);
   next.maxIndexFiles = positiveNumber(next.maxIndexFiles, base.maxIndexFiles);
   next.productUx = { ...base.productUx, ...(input.productUx || {}) };
@@ -329,7 +327,6 @@ function publicConfigSummary(config) {
       restoreAccess: true
     },
     removedLegacyWorkflows: ["generated helper scripts", "standalone shell fallback loops", "task-runner", "multi-agent", "approval-gates", "docker", "pr-ci-repair"],
-    dashboardEnabled: Boolean(config.dashboardEnabled),
     productUx: config.productUx,
     release: config.release,
     autoApproveAppRequests: normalizeAutoApproveConfig(config.autoApproveAppRequests),
@@ -352,10 +349,20 @@ function publicConfigSummary(config) {
   };
 }
 
+// publicConfigSummary runs on every dashboard poll and calls this per workspace;
+// each call walks manifest files on disk. Cache keyed on the workspace's
+// package.json mtime so discovery only re-runs when the manifest actually changes.
+const _discoverCache = new Map();
 function safeDiscoverCommands(workspacePath) {
   try {
     if (!workspacePath || !fs.existsSync(workspacePath)) return {};
-    return discoverCommands(workspacePath);
+    let mtimeMs = 0;
+    try { mtimeMs = fs.statSync(path.join(workspacePath, "package.json")).mtimeMs; } catch (_) {}
+    const cached = _discoverCache.get(workspacePath);
+    if (cached && cached.mtimeMs === mtimeMs) return cached.value;
+    const value = discoverCommands(workspacePath);
+    _discoverCache.set(workspacePath, { mtimeMs, value });
+    return value;
   } catch (_error) {
     return {};
   }

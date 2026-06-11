@@ -1491,5 +1491,9 @@ module.exports = {
   overlayDirectory,
   shouldSkipArchivePath,
   STAGED_WRITE_BYTE_THRESHOLD,
-  STAGED_WRITE_LINE_THRESHOLD
+  STAGED_WRITE_LINE_THRESHOLD,
+  writeStagedPayload,
+  readStagedPayload,
+  clearStagedPayload,
+  resolveStagedWriteId
 };

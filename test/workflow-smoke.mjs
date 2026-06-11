@@ -120,26 +120,19 @@ const listed = listedResponse.result || {};
 const names = (listed.tools || []).map((tool) => tool.name).sort();
 const expected = [
   'relai_apply_bundle',
-  'relai_apply_update',
   'relai_browser',
   'relai_clear_files',
   'relai_diff',
-  'relai_feature_probe',
-  'relai_git_abort_merge',
+  'relai_edit',
   'relai_git_commit',
   'relai_git_create_pr',
-  'relai_git_fetch',
-  'relai_git_merge_branch',
-  'relai_git_merge_remote_branches_plan',
   'relai_git_push',
   'relai_git_status',
+  'relai_package_snapshot',
   'relai_read',
-  'relai_refactor_audit',
-  'relai_remove_file',
   'relai_replace',
   'relai_repo_snapshot',
   'relai_restore_changes',
-  'relai_package_snapshot',
   'relai_run_checks',
   'relai_status',
   'relai_write'
@@ -236,13 +229,15 @@ index 4e0946d..38910e4 100644
 -console.log("smoke")
 +console.log("smoke aggressive")
 `;
-call(47, 'relai_apply_update', { workspace: 'smoke', updateText: aggressivePatch, checks: ['node --check src/index.js'], returnDiff: true });
+// relai_apply_update moved off the public surface; relai_edit's updateText path
+// covers patches and supports returnDiff in the same call.
+call(47, 'relai_edit', { workspace: 'smoke', updateText: aggressivePatch, returnDiff: true });
 const appliedPatch = contentOf(await waitFor(47));
 if (!appliedPatch.ok || !appliedPatch.changedFiles.includes('src/index.js')) {
-  throw new Error('relai_apply_update should apply a checked patch in aggressive mode');
+  throw new Error('relai_edit should apply a patch via updateText');
 }
 if (!fs.readFileSync(path.join(workspace, 'src', 'index.js'), 'utf8').includes('smoke aggressive')) {
-  throw new Error('relai_apply_update did not modify the file');
+  throw new Error('relai_edit did not modify the file');
 }
 
 call(48, 'relai_package_snapshot', { workspace: 'smoke', maxFiles: 1000 });
@@ -318,12 +313,9 @@ if (!Array.isArray(diff.sessionChangedFiles) || !diff.sessionChangedFiles.includ
   throw new Error('diff should expose sessionChangedFiles ownership');
 }
 
+// relai_refactor_audit is stdio-only now (off the public connector surface); the
+// residue file is still needed for the untracked-file ownership check below.
 fs.writeFileSync(path.join(workspace, 'stale-zone-label.txt'), 'delivery_zone still present\n');
-call(81, 'relai_refactor_audit', { workspace: 'smoke', oldTerms: ['delivery_zone'], newTerms: ['schedule'] });
-const audit = contentOf(await waitFor(81));
-if (!audit.summary || audit.summary.oldTermHits < 1) {
-  throw new Error('relai_refactor_audit should find stale old terms');
-}
 
 call(82, 'relai_git_status', { workspace: 'smoke' });
 const gitStatus = contentOf(await waitFor(82));
@@ -334,10 +326,11 @@ if (!Array.isArray(gitStatus.untrackedSessionFiles) || !gitStatus.untrackedSessi
   throw new Error('relai_git_status should split untracked session files explicitly');
 }
 
-call(83, 'relai_remove_file', { workspace: 'smoke', path: 'stale-zone-label.txt', reason: 'cleanup workflow smoke residue' });
+// relai_remove_file moved off the public surface; relai_clear_files covers it.
+call(83, 'relai_clear_files', { workspace: 'smoke', path: 'stale-zone-label.txt' });
 const removedAuditResidue = contentOf(await waitFor(83));
 if (!removedAuditResidue.changedFiles.includes('stale-zone-label.txt')) {
-  throw new Error('relai_remove_file should clean up audit residue files');
+  throw new Error('relai_clear_files should clean up audit residue files');
 }
 
 call(9, 'relai_restore_changes', { workspace: 'smoke', paths: ['README.md', 'lib/sms_handler_utils.dart', 'src/index.js'] });

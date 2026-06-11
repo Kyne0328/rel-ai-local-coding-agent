@@ -212,6 +212,25 @@ function validatePatchPaths(workspace, patch) {
   return paths;
 }
 
+// Enforce the workspace's allowedRemotes allowlist. Beyond honoring a configured
+// setting, this blocks git's command-executing transports (ext::, fd::, a remote
+// whose URL starts with a shell command) by refusing any remote name not on the list.
+function allowedRemoteSet(workspace) {
+  const list = Array.isArray(workspace.allowedRemotes) && workspace.allowedRemotes.length
+    ? workspace.allowedRemotes
+    : ["origin"];
+  return new Set(list.map((item) => String(item).trim()).filter(Boolean));
+}
+
+function assertRemoteAllowed(workspace, remote) {
+  const name = String(remote || "").trim();
+  const allowed = allowedRemoteSet(workspace);
+  if (!name || !allowed.has(name)) {
+    throw new Error(`Remote '${name || "(empty)"}' is not in this workspace's allowedRemotes (${[...allowed].join(", ")}). Add it to the workspace config to use it.`);
+  }
+  return name;
+}
+
 async function listGitRemotes(workspace, config) {
   const remotes = await runProcess("git", ["remote"], { cwd: workspace.path, timeout: 30000 }, config);
   if (remotes.exitCode !== 0) throw new Error(`git remote failed for ${workspace.alias}: ${remotes.stderr || remotes.stdout || remotes.exitCode}`);
@@ -273,9 +292,24 @@ async function relaiGitStatus(workspace, config, args = {}) {
 
 async function relaiGitFetch(workspace, config, args = {}) {
   await ensureGitRepo(workspace, config);
+  const allowed = allowedRemoteSet(workspace);
   const remote = String(args.remote || "").trim();
-  const remotes = remote ? [remote] : await listGitRemotes(workspace, config);
+  if (remote) assertRemoteAllowed(workspace, remote);
+  // No explicit remote: fetch only configured remotes that are also on the allowlist.
+  const configuredRemotes = remote ? null : await listGitRemotes(workspace, config);
+  const remotes = remote ? [remote] : configuredRemotes.filter((item) => allowed.has(item));
   const prune = args.prune !== false;
+  if (remotes.length === 0) {
+    // Nothing matched the allowlist — say so instead of reporting a hollow ok:true.
+    return {
+      ok: false,
+      workspace: workspace.alias,
+      remotes,
+      prune,
+      results: [],
+      error: `No configured remote matches allowedRemotes (${[...allowed].join(", ")}). Configured remotes: ${(configuredRemotes || []).join(", ") || "(none)"}.`
+    };
+  }
   const results = [];
   for (const item of remotes) {
     const fetchArgs = ["fetch", item, ...(prune ? ["--prune"] : [])];
@@ -337,7 +371,7 @@ async function relaiGitCommit(workspace, config, args = {}) {
 
 async function relaiGitPush(workspace, config, args = {}) {
   await ensureGitRepo(workspace, config);
-  const remote = String(args.remote || "origin").trim();
+  const remote = assertRemoteAllowed(workspace, String(args.remote || "origin").trim());
   const branch = String(args.branch || await currentGitBranch(workspace, config)).trim();
   if (!branch) throw new Error("relai_git_push could not determine the branch to push.");
   const dryRun = Boolean(args.dryRun);

@@ -5,3 +5,7 @@
 /electron/node_modules
 /dist
 .agents
+# Local MCP runtime state — journals, staged payloads, oauth store. Test artifacts
+# used to land here and dirty the tree.
+/.rel-ai-mcp-state
+/node_modules

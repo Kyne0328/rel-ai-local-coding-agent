@@ -1,11 +1,17 @@
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const crypto = require("node:crypto");
 
 const MAX_RECENT = 50;
 
 function journalDir(config) {
-  const stateDir = config && config.stateDir ? config.stateDir : path.join(process.cwd(), ".rel-ai-mcp-state");
+  // Fall back to the home/env state dir, NOT process.cwd() — the old cwd fallback
+  // wrote .rel-ai-mcp-state/ into whatever repo the process ran from (it kept
+  // dirtying this project's own tree during tests).
+  const stateDir = (config && config.stateDir)
+    || process.env.REL_AI_MCP_STATE_DIR
+    || path.join(os.homedir(), ".rel-ai-mcp");
   return path.join(stateDir, "operation-journal");
 }
 

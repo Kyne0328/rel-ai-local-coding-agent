@@ -238,8 +238,8 @@ const mcpRes = await fetch(`${base}/mcp`, {
 });
 if (mcpRes.status !== 200) fail(`POST /mcp with OAuth token expected 200, got ${mcpRes.status}`);
 const mcpBody = await mcpRes.json();
-if (!Array.isArray(mcpBody.result?.tools) || mcpBody.result.tools.length !== 24) {
-  fail(`OAuth-authenticated tools/list did not return 24 tools: ${mcpBody.result?.tools?.length}`);
+if (!Array.isArray(mcpBody.result?.tools) || mcpBody.result.tools.length !== 17) {
+  fail(`OAuth-authenticated tools/list did not return 17 tools: ${mcpBody.result?.tools?.length}`);
 }
 
 // 10. An invalid bearer is still rejected with a challenge.

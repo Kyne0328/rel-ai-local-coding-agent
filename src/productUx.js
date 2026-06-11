@@ -109,12 +109,16 @@ function cleanupPlan(config, args = {}, apply) {
   const includeAudit = args.includeAudit === true;
   const targets = [];
   if (includeAudit) collectOldJson(targets, path.dirname(config.auditLogPath), olderThanHours, [path.basename(config.auditLogPath)]);
+  // Stale staged-write/patch payload dirs (interrupted edits) and old per-workspace
+  // operation journals — these accumulate during normal use and nothing else clears them.
+  collectOldDirs(targets, path.join(stateDir, "fast"), olderThanHours, /^payload-/);
+  collectOldJson(targets, path.join(stateDir, "operation-journal"), olderThanHours, [".jsonl"]);
   const limited = targets.slice(0, clampNumber(args.maxClears || 500, 1, 5000));
   const cleared = [];
   if (apply) {
     for (const file of limited) {
       try {
-        fs.rmSync(file.path, { force: true });
+        fs.rmSync(file.path, { recursive: file.type === "dir", force: true });
         cleared.push(file);
       } catch (error) {
         file.error = error instanceof Error ? error.message : String(error);
@@ -172,6 +176,12 @@ function setupWizard(args = {}) {
       allowedRemotes: ["origin"]
     };
   }
+  const isWindows = process.platform === "win32";
+  const startCmd = token
+    ? (isWindows
+        ? `$env:REL_AI_MCP_TOKEN='${token}'; npm run start:http -- --host 127.0.0.1 --port 3333`
+        : `REL_AI_MCP_TOKEN=${token} npm run start:http -- --host 127.0.0.1 --port 3333`)
+    : "npm run start:http -- --host 127.0.0.1 --port 3333";
   return {
     ok: true,
     configPath: getConfigPath(),
@@ -180,7 +190,7 @@ function setupWizard(args = {}) {
     nextCommands: [
       "npm run init-config",
       workspacePath ? `npm run workspace:add -- ${alias} ${workspacePath}` : "npm run workspace:add -- myapp /absolute/path/to/project",
-      token ? `REL_AI_MCP_TOKEN=${token} npm run start:http -- --host 127.0.0.1 --port 3333` : "npm run start:http -- --host 127.0.0.1 --port 3333"
+      startCmd
     ]
   };
 }
@@ -248,9 +258,14 @@ function stateImport(config, args = {}) {
 function guessTestCommands(workspacePath) {
   const out = {};
   if (!workspacePath || !fs.existsSync(workspacePath)) return out;
-  if (fs.existsSync(path.join(workspacePath, "package.json"))) {
-    out.test = "npm test";
-    out.lint = "npm run lint";
+  const pkgPath = path.join(workspacePath, "package.json");
+  if (fs.existsSync(pkgPath)) {
+    // Only suggest scripts that actually exist, so we don't seed stale aliases the
+    // dashboard's alias-consistency check then flags.
+    let scripts = {};
+    try { scripts = (safeReadJson(pkgPath) || {}).scripts || {}; } catch (_) {}
+    if (scripts.test) out.test = "npm test";
+    if (scripts.lint) out.lint = "npm run lint";
   }
   if (fs.existsSync(path.join(workspacePath, "pyproject.toml")) || fs.existsSync(path.join(workspacePath, "requirements.txt"))) out.pytest = "pytest";
   if (fs.existsSync(path.join(workspacePath, "Cargo.toml"))) out.cargo = "cargo test";
@@ -281,7 +296,23 @@ function collectOldJson(targets, dir, olderThanHours, suffixes) {
     if (entry.isDirectory()) collectOldJson(targets, full, olderThanHours, suffixes);
     else if (suffixes.some((suffix) => entry.name.endsWith(suffix) || entry.name === suffix)) {
       const stat = fs.statSync(full);
-      if (Date.now() - stat.mtimeMs > olderThanHours * 3600000) targets.push({ path: full, size: stat.size, modifiedAt: stat.mtime.toISOString() });
+      if (Date.now() - stat.mtimeMs > olderThanHours * 3600000) targets.push({ path: full, type: "file", size: stat.size, modifiedAt: stat.mtime.toISOString() });
+    }
+  }
+}
+
+// Recursively find directories whose name matches `namePattern` and whose mtime is
+// older than the cutoff (e.g. abandoned staged-edit payload dirs).
+function collectOldDirs(targets, root, olderThanHours, namePattern) {
+  if (!root || !fs.existsSync(root)) return;
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const full = path.join(root, entry.name);
+    if (namePattern.test(entry.name)) {
+      const stat = fs.statSync(full);
+      if (Date.now() - stat.mtimeMs > olderThanHours * 3600000) targets.push({ path: full, type: "dir", modifiedAt: stat.mtime.toISOString() });
+    } else {
+      collectOldDirs(targets, full, olderThanHours, namePattern);
     }
   }
 }
