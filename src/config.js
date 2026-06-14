@@ -4,17 +4,6 @@ const path = require("node:path");
 const { safeReadJson } = require("./safety");
 const { discoverCommands } = require("./commandDiscovery");
 
-
-function makeDefaultAutoApproveConfig() {
-  return {
-    enabled: false,
-    pollMs: 1200,
-    warningAccepted: false,
-    mode: "chrome_extension"
-  };
-}
-
-
 function getConfigPath() {
   return process.env.REL_AI_MCP_CONFIG || path.join(os.homedir(), ".rel-ai-mcp", "config.json");
 }
@@ -70,7 +59,6 @@ function makeDefaultConfig() {
       minimumReadinessScore: 80,
       requireHttpToken: true
     },
-    autoApproveAppRequests: makeDefaultAutoApproveConfig(),
     workflow: makeDefaultWorkflowConfig(),
     workspaces: {}
   };
@@ -135,7 +123,9 @@ function normalizeConfig(config) {
   next.maxIndexFiles = positiveNumber(next.maxIndexFiles, base.maxIndexFiles);
   next.productUx = { ...base.productUx, ...(input.productUx || {}) };
   next.release = { ...base.release, ...(input.release || {}) };
-  next.autoApproveAppRequests = normalizeAutoApproveConfig(input.autoApproveAppRequests || input.autoApprove || base.autoApproveAppRequests);
+  for (const staleKey of ["auto" + "Approve", "auto" + "ApproveAppRequests", "chatgpt" + "RequestHelper"]) {
+    delete next[staleKey];
+  }
   next.workflow = normalizeWorkflowConfig(input.workflow, input.flow);
   next.release.minimumReadinessScore = clampNumber(next.release.minimumReadinessScore, 0, 100, base.release.minimumReadinessScore);
   next.release.requireHttpToken = next.release.requireHttpToken !== false;
@@ -245,19 +235,6 @@ function isPreparedWorkflow(config) {
   return getWorkflowConfig(config).mode === "prepared";
 }
 
-function normalizeAutoApproveConfig(value) {
-  const base = makeDefaultAutoApproveConfig();
-  const raw = value && typeof value === "object" ? value : {};
-  return {
-    ...base,
-    ...raw,
-    enabled: raw.enabled == null ? base.enabled : Boolean(raw.enabled),
-    pollMs: clampNumber(raw.pollMs, 500, 10000, base.pollMs),
-    warningAccepted: raw.warningAccepted == null ? base.warningAccepted : Boolean(raw.warningAccepted),
-    mode: "chrome_extension"
-  };
-}
-
 function normalizeStringList(value) {
   if (value == null || value === "") return [];
   if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
@@ -329,7 +306,6 @@ function publicConfigSummary(config) {
     removedLegacyWorkflows: ["generated helper scripts", "standalone shell fallback loops", "task-runner", "multi-agent", "approval-gates", "docker", "pr-ci-repair"],
     productUx: config.productUx,
     release: config.release,
-    autoApproveAppRequests: normalizeAutoApproveConfig(config.autoApproveAppRequests),
     workspaces: Object.entries(config.workspaces || {}).map(([alias, entry]) => {
       const discovered = safeDiscoverCommands(entry.path);
       return {
@@ -388,8 +364,6 @@ module.exports = {
   normalizeWorkflowConfig,
   getWorkflowConfig,
   isPreparedWorkflow,
-  makeDefaultAutoApproveConfig,
-  normalizeAutoApproveConfig,
   readConfig,
   writeConfig,
   normalizeConfig,

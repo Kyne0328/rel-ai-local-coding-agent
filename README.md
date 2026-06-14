@@ -49,7 +49,6 @@ It can:
 - restore local changes
 - expose packaging, readiness, and feature-probe helpers on the public workspace-tool surface
 - expose a local or public MCP URL for ChatGPT connectors
-- optionally use Chrome extension approval assistance for ChatGPT app requests
 
 It is built around the practical flow I kept needing:
 
@@ -96,15 +95,7 @@ The activity page is there because I got tired of guessing what the MCP server w
   <img src="docs/images/dashboard-tools-section.png" alt="Rel.AI MCP bridge tools" width="900">
 </p>
 
-The dashboard shows the 24 public workspace tools ChatGPT can use for inspect, change, validate, review, git orchestration, refactor auditing, packaging, and restore workflows. Internal helper tools are not part of the public MCP surface.
-
-### Chrome extension auto-approve
-
-<p align="center">
-  <img src="docs/images/dashboard-settings-auto-approve-section.png" alt="Rel.AI MCP auto-approve settings" width="700">
-</p>
-
-Request approval assistance is handled by a Chrome extension, not a userscript. It is optional and can be turned on when you want ChatGPT to continue through Rel.AI MCP app requests while you supervise the run.
+The dashboard shows the 17 public workspace tools ChatGPT can use for inspect, change, validate, review, git orchestration, packaging, and restore workflows. Internal helper tools are not part of the public MCP surface.
 
 ### Connector setup
 
@@ -205,7 +196,6 @@ Run tests:
 npm test
 npm run test:compat
 npm run test:http
-npm run test:auto-approve
 npm run test:tunnel
 npm run test:oneclick
 ```
@@ -266,31 +256,6 @@ The dashboard connector page prints the final ChatGPT MCP URL.
 4. Copy the MCP URL.
 5. In ChatGPT, add it as an MCP connector.
 6. Set authentication to **OAuth**. ChatGPT opens a sign-in page — enter your Rel.AI dashboard token (`REL_AI_MCP_TOKEN`) to approve.
-
----
-
-## Chrome extension auto-approve
-
-Rel.AI MCP includes an optional Chrome extension for ChatGPT web app-request approval assistance.
-
-Install it as an unpacked extension:
-
-```text
-chrome://extensions
--> Developer mode
--> Load unpacked
--> select public/extensions/chrome-auto-approve
-```
-
-Enable it using the Chrome extension popup toggle. The dashboard does not need to be enabled.
-
-This is meant to reduce repetitive approval clicks during supervised local work. When enabled, it can approve Rel.AI MCP requests for repo reads, writes, run checks, diffs, browser checks, and restores. Use it only while you are actively working, then turn it off when you are done.
-
-The previous userscript workflow was removed because background-tab behavior and selector reliability were not good enough.
-
-See [`docs/AUTO_APPROVE_EXTENSION.md`](docs/AUTO_APPROVE_EXTENSION.md).
-
----
 
 ## MCP tools
 
@@ -453,7 +418,6 @@ Rel.AI MCP is intentionally opinionated now.
 - One normal workflow is better than five fallback workflows that fail differently.
 - Full-file writes are easier to reason about than hidden mini-updates.
 - Verification should be visible and repeatable.
-- Request approval assistance belongs in a browser extension, not a fragile userscript.
 - Public tunnel setup should be easy, but local-only should stay the default.
 - The dashboard should explain what is happening instead of hiding everything in logs.
 

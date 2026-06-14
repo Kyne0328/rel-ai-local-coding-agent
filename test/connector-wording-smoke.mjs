@@ -10,12 +10,9 @@ const scannedFiles = [
   'src/httpServer.js',
   'src/resources.js',
   'README.md',
-  'docs/AUTO_APPROVE_EXTENSION.md',
   'docs/SECURITY.md',
   'docs/WORKFLOW_RELIABILITY.md',
-  'public/dashboard.js',
-  'public/docs/AUTO_APPROVE_EXTENSION.md',
-  'public/extensions/chrome-auto-approve/popup.html'
+  'public/dashboard.js'
 ];
 
 const riskyPatterns = [

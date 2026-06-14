@@ -15,7 +15,7 @@
 - **All server guidance now matches the 17-tool surface.** Snapshot write guidance, error-recovery hints, status tool groups, the MCP help resource, README, docs, and dashboard copy steer ChatGPT to relai_edit instead of tools that are no longer publicly visible; relai_edit patch errors get the same format guidance as the old apply_update.
 - **relai_git_fetch reports a clear error when no configured remote matches allowedRemotes instead of a hollow success.**
 
-Bump root/electron/extension/status UI/lockfiles to 0.16.4.
+Bump root/electron/status UI/lockfiles to 0.16.4.
 
 ## [0.16.3] — 2026-06-11
 
@@ -29,18 +29,17 @@ Bump root/electron/extension/status UI/lockfiles to 0.16.4.
 - **test:all now auto-discovers every test file via test/run-tests.mjs; twenty unit test files were silently never running in CI.**
 - **Cache dashboard SSE config reads by file mtime to cut per-tab polling cost.**
 
-Bump root/electron/extension/status UI/lockfiles to 0.16.3.
+Bump root/electron/status UI/lockfiles to 0.16.3.
 
 ## [0.16.2] — 2026-06-05
 
 ### MCP audit fixes and release hardening
 - **Public tool metadata now matches real connector behavior.** Read-only, write, destructive, and open-world hints are no longer collapsed into one misleading safe-looking annotation, and the dashboard now derives its 24 public tool list from the actual schemas.
 - **Workspace mutation paths now have safer dry-run and no-op behavior.** Prepared patch and bundle applies can preview without changing files, clear-file dry runs report `wouldClear` separately from `cleared`, scoped dry-run commits no longer imply add-all, and empty PR drafts are refused with a clear warning.
-- **Repository and tunnel safety safeguards are tighter.** Unsafe workspace roots are rejected, collapsed source-looking full-file writes are blocked, untracked ngrok processes are left alone, and the auto-approve settings endpoint now requires authorization.
 - **Dashboard, Electron, and setup guidance are easier to follow.** Public tunnel wording replaces ngrok-specific labels where appropriate, ChatGPT setup instructions point to the current Apps flow, and stale removed-tool guidance no longer lists active tools.
 - **Regression coverage now locks down the audit fixes.** The smoke suite covers tool counts, auth gating, dry-run patching, empty PR drafts, tunnel wording, one-click routing, release-level `test:all` detection, and git workflow safety.
 
-Bump root/electron/extension/status UI/lockfiles to 0.16.2.
+Bump root/electron/status UI/lockfiles to 0.16.2.
 
 ## [0.16.1] — 2026-06-05
 
@@ -49,7 +48,7 @@ Bump root/electron/extension/status UI/lockfiles to 0.16.2.
 - **Dashboard onboarding now teaches safer first prompts.** The setup modal explains workspace aliases, recommends `relai_git_status` plus `relai_repo_snapshot` before edits, and shows the same ChatGPT app/OAuth setup flow in context.
 - **Electron launcher guidance is clearer at the moment users need it.** The setup wizard and status window now explain the token's OAuth role, show persistent ChatGPT app setup steps, and give copy buttons immediate copied-state feedback.
 
-Bump root/electron/extension/status UI/lockfiles to 0.16.1.
+Bump root/electron/status UI/lockfiles to 0.16.1.
 
 ## [0.16.0] — 2026-06-05
 
@@ -60,71 +59,56 @@ Bump root/electron/extension/status UI/lockfiles to 0.16.1.
 - **Connector UX, banner, and docs now say OAuth.** The dashboard connector steps, launcher banner, connection summary, and SECURITY.md describe the OAuth flow.
 - **The legacy secret-in-URL no-auth path is removed, along with all of its plumbing.** `/mcp/<secret>`, `/sse/<secret>`, and `/messages/<secret>` are no longer special routes (they return 401/404); access to `/mcp` requires OAuth or a Bearer token. The `REL_AI_MCP_CHATGPT_SECRET` env var, the `chatgpt-secret` state file, `resolveChatGPTSecret`/`getChatGPTSecretPath`, the `--chatgpt-secret`/`--reset-chatgpt-secret` CLI flags, and the secret fields in the connection summary/diagnostic are all gone. The launcher advertises the plain `/mcp` URL.
 
-Bump root/electron/extension/status UI/lockfiles to 0.16.0.
+Bump root/electron/status UI/lockfiles to 0.16.0.
 
 ## [0.15.8] — 2026-06-05
 
 ### HTTP auth disclosure hardening
 - **Public MCP diagnostics no longer reveal the ChatGPT secret.** `GET /mcp` now returns a redacted `/mcp/<secret>` value unless the caller already proves access with bearer auth or the secret path, while secret-path and bearer POST clients keep working as before.
-- **Local extension discovery no longer hands out the bearer token unauthenticated.** `/api/local-connect` still reports the local base URL for reachability, but returns token material only to already-authorized callers; the Chrome extension sends Authorization when it has a token.
 - **Dashboard token bootstrapping cleans up the address bar.** The dashboard still accepts `?token=` for launch links, then moves the credential into session storage and removes the query token from the visible URL.
 - **Regression coverage and docs now pin the safer behavior.** HTTP smoke/auth tests assert redaction and token-sync boundaries, and ChatGPT/security/setup docs explain the redacted diagnostic behavior.
 
-Bump root/electron/extension/status UI/lockfiles to 0.15.8.
+Bump root/electron/status UI/lockfiles to 0.15.8.
 
 ## [0.15.7] — 2026-06-05
 
 ### Security, dashboard consistency, and release metadata audit
-- **`/api/local-connect` no longer exposes the bearer token to arbitrary websites via CORS (security).** The endpoint still supports local discovery for trusted local tools and the Chrome extension, but `Access-Control-Allow-Origin` is now origin-scoped instead of `*`: extension origins and localhost/127.0.0.1 are echoed, while unrelated web origins can no longer read the token-bearing response from browser JavaScript.
-- **Version reporting now follows CHANGELOG.md directly.** Added `src/version.js` as the single human-facing version source, parsing the latest `## [version]` heading from CHANGELOG.md with `package.json` only as a fallback. `/health`, SSE ready events, `relai_status`, release readiness, and the auto-approve settings endpoint now report the same version shown in the changelog.
 - **Workspace upsert now matches the UI promise for not-yet-cloned repos.** The settings form already warned that a missing path could still be saved, but the server rejected it. Upsert now allows absolute missing paths so users can save a workspace before cloning; actual tool calls still fail safely until the path exists.
 - **Dashboard and connector diagnostics now agree on stale commands.** The shared stale-command helper now covers both `commands` and `testCommands`, so `relai_status` and the Diagnostics “Command aliases” card classify stale entries the same way instead of one surface saying “stale” while the other said “All consistent.”
-- **General settings stopped writing an inert auto-approve store.** The dashboard no longer dirty-checks or saves `autoApproveAppRequests`; the Chrome extension popup and `chrome.storage.local` remain the authoritative enable/poll-warning controls, avoiding a second server-side copy that can disagree with the real extension state.
 - **Connector setup steps no longer duplicate themselves.** The dashboard’s Connector card keeps the fixed three core ChatGPT setup steps, then renders only real `payload.nextSteps` as extra numbered guidance instead of falling back to duplicate copies of steps 1–3 as steps 4–6.
 - **Tool counts are now runtime-derived instead of hardcoded.** Dashboard data exposes `toolCount` from the public tool schema list, Workspaces uses that value, and the Home section’s unused `visibleToolCount` fallback was removed so the UI cannot drift from the real public tool count.
 - **Dashboard refresh cadence and live-event wiring are now consistent.** `productUx.dashboardRefreshSeconds` drives the fallback polling interval, `_toggleLive()` no longer re-registers the event system on every toggle, and `initEvents()` itself is idempotent so visibility listeners cannot stack if called again later.
 - **Dead or misleading release/settings knobs were cleaned up or wired.** `minimumReadinessScore` now appears in release readiness with `meetsMinimum`, `requireHttpToken` is honored as the default when the query param is absent, and the dead release endpoint/probe-timeout settings were removed from normalization defaults.
 - **State export now honors `productUx.enableStateExport`.** When the flag is false, `stateExport()` fails with a clear message instead of exporting anyway.
 - **CI, response, and connector-contract cleanup.** CI workflow scanning now resolves `.github/workflows` from the project root instead of `process.cwd()`, the misspelled `cleard` response alias was removed in favor of `cleared`, and identical tool annotation constants were collapsed into one documented connector-safe hint constant.
-- **Regression coverage added for the audit fixes.** Added `test/regression-fixes-smoke.mjs` and wired it into both `npm test` and `npm run test:all`, covering CORS behavior, changelog version sourcing, missing-path workspace save, stale-command scope, dashboard auto-approve persistence, connector step de-duplication, tool counts, state export gating, and live listener idempotency.
 
-Bump root/electron/extension/status UI/lockfiles to 0.15.7.
+Bump root/electron/status UI/lockfiles to 0.15.7.
 
 ## [0.15.6] — 2026-06-05
 
-### Extension safety + dashboard bug fixes
-- **Auto-approve no longer fires while disabled (security).** The manifest injects `content.js` into ChatGPT pages whenever the extension is installed, so the scan/click path ran regardless of the popup toggle — only the background worker honored `enabled`. The content script now hard-gates every scan on `chrome.storage.local.enabled` (`isAutoApproveEnabled()`, fail-closed) before it can find or click an approval, and disabling immediately clears any pending scan timer, the card-likely gate, and the approval-dedupe state.
-- **Extension stops disappearing on launcher restart.** The unpacked extension was loaded from `process.resourcesPath`, which the portable Windows build re-extracts to a new temp dir every launch — so Chrome's "Load unpacked" path went stale and the extension vanished. The launcher now mirrors the bundled extension into a fixed per-user dir (`~/.rel-ai-mcp/chrome-extension`) and hands Chrome (and the Open-folder / Copy-path buttons) that stable path, refreshed on each launch so updates still land.
 - **`relai_status` stale-command misclassification fixed.** It checked `!discovered[cmd]` (indexing the discovered map by the command *string*) instead of `!discovered[key]`, so it flagged commands stale differently from the dashboard diagnostic. Both now use one shared `staleCommandKeys(configured, discovered)` helper.
 - **Dashboard no longer shows a bare "v".** Release notes fell back to an empty version when CHANGELOG.md couldn't be read (packaged launcher); the fallback now uses the package version, and the "What's new" card renders "Latest" instead of a lone "v" if the version is ever empty.
 
-Bump root/electron/extension/status-UI/lockfiles to 0.15.6.
+Bump root/electron/status-UI/lockfiles to 0.15.6.
 
 ## [0.15.5] — 2026-06-05
 
 ### Dashboard consistency pass (live controls, dead settings, logo)
 - **Refresh is back in the topbar.** 0.15.3 removed it; restored next to the live toggle. (The token field stays gone — it loads from the URL/sessionStorage.)
 - **Activity "Pause live" renamed to "Pause updates"** with a tooltip. It only freezes that table so rows don't shift while you read — it is *not* the same as the top-bar live toggle (which starts/stops the whole dashboard's live stream). The two shared the word "live" and looked redundant; they aren't.
-- **Dead "Poll interval (ms)" removed from dashboard Settings.** It wrote to server config that the extension never read, so it did nothing — and it contradicted the adjacent note that "the extension popup is the only control." Scan cadence is now configured solely in the extension popup…
-- **…and the popup's poll interval now actually works.** The content script read a hardcoded 2s; it now honors `chrome.storage.local.pollMs` (clamped 500–10000 ms) and re-applies live when you change it in the popup.
 - **Tray icon uses the dashboard logo.** The system-tray icon loaded a stale `icon.ico`; it now uses `build/icon.png` (the same `relai-logo.png` art the dashboard and launcher window show), resized for the tray. The unused `icon.ico` was removed.
 
-Bump root/electron/extension/status-UI/lockfiles to 0.15.5.
+Bump root/electron/status-UI/lockfiles to 0.15.5.
 
 ## [0.15.4] — 2026-06-05
 
-### Background-tab auto-approve reliability + easier extension import
-- **Backgrounded ChatGPT tabs now approve fast, not on a 30s lag.** The 2s content-script poll was gated `!document.hidden`, so a hidden working tab (any time you switch to another tab/window — including a second ChatGPT tab) fell back to the 30s background alarm only, and approvals felt stalled. The poll now also runs while keep-alive is active: the silent-audio keep-alive marks the tab "audible", which exempts it from Chrome's background timer throttling, so the poll keeps firing at ~2s even when hidden. The 30s alarm remains the safety net for when keep-alive is off or autoplay is still suspended. (The cross-tab arbiter was already correct — two tabs never double-approve; the problem was latency, not the tab count.)
-- **Faster wake recovery.** The background service worker now scans immediately when a ChatGPT tab becomes active, finishes (re)loading, or on browser startup — so switching back to a tab, or one Chrome discarded/froze and just restored, approves without waiting for the next alarm tick.
-- **Autoplay nudge.** The alarm-driven scan also tries to resume the keep-alive audio (a user gesture may have unlocked it since), and the popup now tells you to click once inside ChatGPT after enabling so the keep-alive can arm.
-- **Extension import from the launcher.** The desktop status window's Chrome Extension box gains **Open folder** (reveals the unpacked extension in your file manager) and **Open Chrome** (jumps to `chrome://extensions`) buttons alongside Copy path, with numbered load-unpacked steps. Note: Chrome forbids an external app from installing an unpacked extension directly, so this streamlines the manual load rather than fully automating it; if Chrome can't be launched the button shows the `chrome://extensions` address to open by hand.
 
 ## [0.15.3] — 2026-06-05
 
 ### Slimmer dashboard topbar
 - Removed the **Dashboard token** field and the **Refresh** button from the topbar. The token already loads from the URL / sessionStorage at boot, so the input was redundant noise (especially in the desktop launcher); manual refresh and "Copy dashboard token" remain in the command palette. The topbar now carries just the status pill, the live-mode toggle, and the last-updated time.
 
-Bump root/electron/extension/status-UI/lockfiles to 0.15.3.
+Bump root/electron/status-UI/lockfiles to 0.15.3.
 
 ## [0.15.2] — 2026-06-04
 
@@ -133,7 +117,7 @@ Bump root/electron/extension/status-UI/lockfiles to 0.15.3.
 - **"What's new" is read from CHANGELOG.md** instead of a constant that was frozen at v0.13.0. `getReleaseNotes()` parses the latest `## [version]` block (headline + top-level bullets, markdown stripped) and falls back gracefully if the file can't be read.
 - **Electron launcher uses the dashboard logo.** The launcher status window and setup wizard now show the real `relai-logo.png` (same asset the dashboard sidebar uses) instead of an "R" placeholder badge / link glyph, and the Windows build icon is generated from the 512px logo (`build/icon.png`).
 
-Bump root/electron/extension/status-UI/lockfiles to 0.15.2.
+Bump root/electron/status-UI/lockfiles to 0.15.2.
 
 ## [0.15.1] — 2026-06-04
 
@@ -143,7 +127,7 @@ Bump root/electron/extension/status-UI/lockfiles to 0.15.2.
 - **Native folder picker.** A **Browse…** button calls the new `POST /api/pick-folder`, which the Electron launcher backs with `dialog.showOpenDialog` (injected as `pickFolder` into `startHttpServer`; the HTTP server runs in the launcher's process). Outside the desktop launcher the endpoint reports `unsupported` and the dashboard falls back to manual entry.
 - **Friendlier preflight output:** the per-workspace preflight result renders a readable pass/fail summary instead of a raw JSON dump.
 
-Bump root/electron/extension/status-UI/lockfiles to 0.15.1.
+Bump root/electron/status-UI/lockfiles to 0.15.1.
 
 ## [0.15.0] — 2026-06-04
 
@@ -159,38 +143,34 @@ Bump root/electron/extension/status-UI/lockfiles to 0.15.1.
 - `relai_status` / `relai_feature_probe` tool grouping: the internal-only `relai_session_summary` was hard-listed in `toolGroups.audit`, so it appeared under both `audit` and `internal`. It is removed from the public `audit` group; internal tools now appear only under `toolGroups.internal`
 - Regression tests added: git-workflow smoke covers `clean: true` removing an untracked file (and tracked restore still working); the ChatGPT compat smoke asserts `relai_session_summary` is absent from `toolGroups.audit` and present under `toolGroups.internal`
 
-Bump root/electron/extension/status-UI/lockfiles to 0.14.10.
+Bump root/electron/status-UI/lockfiles to 0.14.10.
 
 ## [0.14.9] — 2026-06-04
 
-### Multi-tab auto-approve coordination + a snapshot-shape regression fix
-- **Cross-tab duplicate approvals:** with ChatGPT open in more than one tab, each tab's content script deduped only within itself, so two tabs could both approve the same request. Approvals now pass through the background service worker — the one shared arbiter — which grants a request signature to the first tab that claims it (8s window) and denies the rest. Combined with the in-tab WeakSet/signature dedup and the single-activation `trustedClick`, a request is now approved exactly once across all tabs. The content scan is async (claim round-trip) and guarded by `scanInFlight` against overlapping poll/mutation/message scans. Fail-open: if the worker is unreachable, a single tab still approves
-- **Regression guard so this never silently returns:** the auto-approve smoke test now asserts `trustedClick` dispatches only the press half (`pointerdown`/`mousedown`) with exactly one `el.click()`, and that the cross-tab claim wiring is present in both content and background scripts
 - **`relai_package_snapshot` shape regression:** the 0.14.7 bounding turned `copied.files` / `copied.skipped` into summary objects, which broke consumers (and the prepared-update test) that iterate them as arrays of `{ path }`. They are arrays again — capped to 50 entries with sibling `fileCount` / `skippedCount` and `*Truncated` flags carrying the true totals
 
-Bump root/electron/extension/status-UI/lockfiles to 0.14.9.
+Bump root/electron/status-UI/lockfiles to 0.14.9.
 
 ## [0.14.8] — 2026-06-04
 
-### Chrome auto-approve: stop the last duplicate-submission path in trustedClick
 - Even after the WeakSet + signature dedup (0.14.5 / earlier 0.14.7 work) stopped re-clicks across the 2s poll and React re-renders, the Activity log still showed paired tool calls (e.g. `relai_git_commit` twice). Remaining cause was inside a single `trustedClick`: it dispatched a full pointer/mouse sequence **including `pointerup`/`mouseup`** and then called `el.click()`. ChatGPT's approve button has an `onClick` (a bare `el.click()` has always activated it), but it also reacts to pointer-up — so one approval fired twice
 - `trustedClick` now dispatches only the **press** half (`pointerdown`/`mousedown`) to prime framework focus/`:active` state, then the single `el.click()` is the one and only activation. The up-events that could independently trigger the handler are gone, so each approval submits exactly once. The cross-render dedups remain as a second line of defense
 
-Bump root/electron/extension/status-UI/lockfiles to 0.14.8.
+Bump root/electron/status-UI/lockfiles to 0.14.8.
 
 ## [0.14.7] — 2026-06-04
 
 ### `relai_apply_update` no-op reports `changedFiles:[]` (from a follow-up ChatGPT audit)
 - A unified-diff patch that applied cleanly but changed nothing (e.g. a `-same/+same` hunk) still listed the file in `changedFiles`. Cause: `changedFiles` was set to every path the patch *touched* whenever `git apply` succeeded, with no content comparison. It now hashes each touched path before and after apply and reports only paths whose contents actually changed — so a semantic no-op returns `changedFiles:[]` while `touchedPaths` still lists what the patch referenced. (The structured OpenAI-patch path already compared old/new text; this aligns the unified-diff path with it.)
 
-Bump root/electron/extension/status-UI/lockfiles to 0.14.7.
+Bump root/electron/status-UI/lockfiles to 0.14.7.
 
 ## [0.14.6] — 2026-06-04
 
 ### `relai_status` reports the real connector version (from a follow-up ChatGPT audit)
 - `relai_status` (and `relai_feature_probe`) returned `version: ""` and could report the wrong `scripts`/CI surface when the connector ran from the packaged launcher. Cause: `safeReadPackageJson()` read `process.cwd()/package.json`, but the launcher's working directory is not the server's own directory. It now reads the server's own `package.json` resolved from the module path (`__dirname/../package.json`), falling back to cwd. This also restores accurate stale-launcher detection during audits
 
-Bump root/electron/extension/status-UI/lockfiles to 0.14.6.
+Bump root/electron/status-UI/lockfiles to 0.14.6.
 
 ## [0.14.5] — 2026-06-04
 
@@ -200,11 +180,8 @@ Bump root/electron/extension/status-UI/lockfiles to 0.14.6.
 - `relai_package_snapshot`: the 0.14.4 bounded-summary only capped the `skipped` list; the `files` list was still dumped in full and truncated the response. Both lists are now bounded to `count` + first/last sample
 - `relai_apply_update` / `relai_apply_bundle` prepared backup: `git stash push --include-untracked` *moved* changes away, deleting an untracked patch/overlay target before apply (a no-op patch on a newly-created file failed with "No such file or directory"). Backup now uses `git stash create` + `git stash store`, which records a recoverable stash entry **without disturbing the working tree**
 
-### Chrome auto-approve: duplicate-approval fix + background keep-alive
-- Fixed duplicated/over-long ChatGPT responses while auto-approve was on. Two compounding causes: `trustedClick` fired a synthetic `click` event **and** `el.click()` (two activations per attempt), and the same approval card — which ChatGPT leaves mounted for a second or more while it works — was re-clicked on every 2s poll. Now there is a single native click, and a `WeakSet` skips any button already clicked; a genuinely new request renders a new node, so it is still approved promptly
-- Added background-tab keep-alive so long tasks don't stall when the ChatGPT tab is backgrounded: a near-inaudible 19 kHz tone marks the tab "audible" (exempting it from background throttling and tab discard/freeze), and a MAIN-world content script reports the tab as visible so ChatGPT does not pause on `visibilitychange`. Both are gated by the enable toggle. Native rAF throttling cannot be lifted from the page; the guaranteed backstop remains Chrome's "Always keep this site active" setting
 
-Bump root/electron/extension/status-UI/lockfiles to 0.14.5.
+Bump root/electron/status-UI/lockfiles to 0.14.5.
 
 ## [0.14.4] — 2026-06-04
 
@@ -217,18 +194,12 @@ Bump root/electron/extension/status-UI/lockfiles to 0.14.5.
 - Small correctness fixes alongside: `relai_git_merge_remote_branches_plan` excludes a bare remote name (not a branch); `relai_remove_file` errors are reworded from `relai_clear_files`; `relai_package_snapshot` returns a bounded skipped-file summary instead of the full list
 - `relai_apply_update` / `relai_apply_bundle`: "run checks afterward" → "validate afterward"; `relai_package_snapshot`: dropped "on the MCP host"
 - `connector-wording` smoke test now scans **every** tool's title + description and fails on high-risk capability verbs (playwright, fetch, browser, execute, shell, terminal, arbitrary), so the standard is enforced across the whole surface going forward
-- Synced the Chrome auto-approve labels with the two renamed titles
 - Note: this lowers block frequency; it cannot make the classifier deterministic — it also weighs conversation context and connector reputation, so intermittent refusals on benign calls can still occur
 
-### Chrome auto-approve extension efficiency
-- Content script no longer scans the whole conversation DOM every 2s. A scan gate (`cardLikely`) is armed only when the mutation observer sees the Rel.AI approval-card hallmark text and disarms after a few empty scans, so the poll idles when no card is on screen
 - Mutation observer dropped `class`/`data-testid` from its attribute filter (class churns on every hover/animation/streamed token); it now watches `aria-label`/`disabled` plus childList insertions
 - Hot-path node inspection uses `textContent` instead of `innerText` to avoid forcing layout reflows during token streaming
-- Background service worker caches dashboard reachability for 60s instead of probing localhost on every scan (invalidated on config change / manual scan); background scan alarm relaxed from 6s to 30s (Chrome clamps packed alarms to 30s regardless), with the foreground observer covering instant detection
 - Per-tab injection-cooldown map is now pruned on tab close
-- Narrowed `host_permissions`: dropped the blanket `https://*/*`, leaving ChatGPT origins + localhost (the only hosts the extension actually contacts)
-
-Bump root/electron/extension/status-UI/lockfiles to 0.14.4.
+Bump root/electron/status-UI/lockfiles to 0.14.4.
 
 ## [0.14.3] — 2026-05-30
 
@@ -264,13 +235,11 @@ Note: `relai_clear_files` responses appearing "abbreviated" in ChatGPT are the C
 - Read-only tools now state "Read-only" up front in their descriptions
 - Removed free-form command-string inputs (`check` / `checks` / `checksText`) from the public connector schema for `relai_run_checks`, `relai_apply_update`, and `relai_apply_bundle` so ChatGPT never sees a command-execution surface; the server still honors these fields for internal/stdio callers
 - `relai_apply_update` / `relai_apply_bundle` now expose `requireCleanGit` on the public schema, and the workflow default flips to `requireCleanGit: false` so prepared updates apply on the always-dirty real repos ChatGPT operates on (a backup stash is still taken)
-- Chrome auto-approve extension recognizes the renamed tool titles (with primary-button fallback unchanged)
 
 ## [0.13.1] — 2026-05-27
 
 ### Workflow friction fixes (from black-box audit)
 - Public HTTP and compatibility surfaces now consistently expose the 24-tool public workspace surface, while newer local stdio sessions expose the 27-tool trusted surface when the config generation supports it
-- Chrome auto-approve extension matches ChatGPT on both `chatgpt.com` and `chat.openai.com` again
 - Added first-class git workflow tools for status, fetch, commit, push, merge planning, merge abort, and PR drafting
 - Added semantic residue scanning via `relai_refactor_audit` and explicit single-file cleanup via `relai_remove_file`
 - README and connector docs now describe the current public-vs-internal tool split accurately
@@ -309,7 +278,6 @@ Note: `relai_clear_files` responses appearing "abbreviated" in ChatGPT are the C
 - Normalized workflow config to `standard`/`prepared` terminology (replaces `conservative`/`aggressive`)
 - Prepared workspace update and bundle tools now always available without mode gating
 - Softened `relai_run_checks` connector-facing wording to describe validation checks
-- Auto-approve extension redesign: extension popup is the only enable/disable control
 - HTTP auth hardening: comprehensive auth test coverage added
 - Windows archive command construction fixed and tested
 - Safety test expansion: secret paths, traversal, symlinks, archive overlay

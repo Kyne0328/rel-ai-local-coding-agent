@@ -1,5 +1,5 @@
 const path = require("node:path");
-const { getConfigPath, publicConfigSummary, writeConfig, normalizeAutoApproveConfig, normalizeWorkflowConfig, assertSafeWorkspaceRoot } = require("./config");
+const { getConfigPath, publicConfigSummary, writeConfig, normalizeWorkflowConfig, assertSafeWorkspaceRoot } = require("./config");
 
 const NUMBER_KEYS = ["maxOutputBytes", "maxIndexFiles"];
 
@@ -42,11 +42,6 @@ function updateSettings(current, payload = {}) {
   for (const key of NUMBER_KEYS) {
     if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
     setIfChanged(next, key, finiteNumber(values[key], key), changed);
-  }
-
-  if (values.autoApproveAppRequests && typeof values.autoApproveAppRequests === "object") {
-    next.autoApproveAppRequests = normalizeAutoApproveConfig({ ...(next.autoApproveAppRequests || {}), ...values.autoApproveAppRequests });
-    changed.push("autoApproveAppRequests");
   }
 
   if (values.workflow && typeof values.workflow === "object") {

@@ -36,7 +36,6 @@ function _render(container) {
   const bridge = panel('ChatGPT local repo bridge');
   const workflow = panel('Workspace update style');
   const limits = panel('Runtime limits');
-  const autoApprove = panel('ChatGPT web app-request auto-approve extension');
 
   bridge.body.appendChild(summaryBox());
   bridge.body.appendChild(field('Workspace access', toggleControl(true, () => {}, { enabled: 'Always enabled', disabled: 'Always enabled' }), 'Configured workspaces are exposed through one peer-level tool surface. Workspace-level context settings control how much context is scanned before structured writes.'));
@@ -83,24 +82,10 @@ function _render(container) {
     _checkDirty();
   }, { min: 1048576, max: 2147483648, width: '150px' }), 'Upper bound for local zip overlays.'));
 
-  autoApprove.body.appendChild(autoApproveWarningBox());
-  autoApprove.body.appendChild(field('Extension approval helper', (() => {
-    const span = document.createElement('span');
-    span.style.cssText = 'font-size:13px;color:var(--text-muted);line-height:1.45;';
-    span.textContent = 'Install the Chrome extension and use the extension popup to enable or disable auto-approval. The extension popup is the only enable/disable control.';
-    return span;
-  })(), 'Load unpacked from public/extensions/chrome-auto-approve. The dashboard shows extension status below.'));
-  // Poll interval is configured in the extension popup (the only place that actually
-  // controls scan cadence). It used to be mirrored here as a server-config field that
-  // the extension never read — a dead setting — so it has been removed.
-  autoApprove.body.appendChild(field('Install Chrome extension', extensionInstallControl(), 'Load the unpacked Chrome extension, then use the extension popup to configure the dashboard URL/token, scan interval, and enable or disable it locally.'));
-
-
   limits.body.appendChild(field('Max output bytes', numberControl(_draft.maxOutputBytes, (v) => { _draft.maxOutputBytes = v; _checkDirty(); }, { min: 10000, max: 20000000, width: '140px' }), 'Maximum validation output returned to ChatGPT. 2 MB is a safe default for test failures without flooding the chat.'));
 
   grid.appendChild(bridge.el);
   grid.appendChild(workflow.el);
-  grid.appendChild(autoApprove.el);
   grid.appendChild(limits.el);
   container.appendChild(grid);
 
@@ -143,43 +128,6 @@ function workflowWarningBox() {
 function confirmFastFlow() {
   return window.confirm('Enable prepared update mode?\n\nThis enables update/bundle apply tools for repo-wide edits. Commit or stash your work first. Rel.AI will still protect .git and workspace boundaries.');
 }
-function autoApproveWarningBox() {
-  const div = document.createElement('div');
-  div.className = 'empty';
-  div.style.cssText = 'text-align:left;padding:12px;line-height:1.55;border-color:rgba(255,184,77,.35);background:rgba(255,184,77,.08);';
-  div.innerHTML = `
-    <strong style="color:var(--text);">Use approval assistance only while supervising work.</strong><br>
-    This optional Chrome extension can click ChatGPT approval buttons for Rel.AI MCP app requests. That can approve local repo reads, full-file writes, validation checks, browser checks, diffs, or restores without a manual click. Keep it off unless you are actively supervising a task on your own machine. The previous userscript workflow has been removed.
-  `;
-  return div;
-}
-
-function extensionInstallControl() {
-  const wrap = document.createElement('div');
-  wrap.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;';
-
-  const docs = document.createElement('a');
-  docs.className = 'buttonlike';
-  docs.textContent = 'Open extension setup docs';
-  docs.href = '/public/docs/AUTO_APPROVE_EXTENSION.md';
-  docs.target = '_blank';
-  docs.rel = 'noopener';
-
-  const manifest = document.createElement('a');
-  manifest.className = 'buttonlike secondary';
-  manifest.textContent = 'View manifest';
-  manifest.href = '/public/extensions/chrome-auto-approve/manifest.json';
-  manifest.target = '_blank';
-  manifest.rel = 'noopener';
-
-  const folderHint = document.createElement('div');
-  folderHint.style.cssText = 'width:100%;font-size:12px;color:var(--text-muted);line-height:1.45;';
-  folderHint.innerHTML = 'Load unpacked extension from <code>public/extensions/chrome-auto-approve</code> in this package. Configure the dashboard URL and token in the extension popup.';
-
-  wrap.append(docs, manifest, folderHint);
-  return wrap;
-}
-
 function _checkDirty() {
   const saveRowEl = document.getElementById('__settings-save-row');
   if (!saveRowEl) return;
@@ -191,9 +139,6 @@ function _checkDirty() {
 
 function _getChanges() {
   if (!_original || !_draft) return [];
-  // autoApproveAppRequests is intentionally NOT listed: the dashboard has no control
-  // for it and the server copy is inert (the Chrome extension reads its own
-  // chrome.storage.local). Writing it back risked a second store that disagrees.
   const keys = ['maxOutputBytes', 'workflow'];
   const changes = [];
   for (const key of keys) {
@@ -212,4 +157,3 @@ async function _save(container) {
   const res = await saveSettings(payload);
   if (res && res.ok) await _loadAndRender(container);
 }
-

@@ -3,7 +3,7 @@ const path = require("node:path");
 
 // Single source of truth for the human-facing product version. Read it straight
 // from CHANGELOG.md (the first "## [version] — date" heading) so every surface —
-// /health, relai_status, the auto-approve settings, release readiness — reports the
+// /health, relai_status, release readiness — reports the
 // same value the release notes advertise. package.json is only a last-resort fallback
 // (e.g. CHANGELOG missing from a partial bundle).
 let _pkgVersion = "";

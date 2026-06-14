@@ -58,16 +58,6 @@ if (removedSecretRoute.status !== 401 && removedSecretRoute.status !== 404) {
   throw new Error(`legacy /mcp/<secret> path should no longer authenticate; got ${removedSecretRoute.status}`);
 }
 
-const publicLocalConnect = await fetch(`http://127.0.0.1:${port}/api/local-connect`).then((response) => response.json());
-if (publicLocalConnect.token || publicLocalConnect.tokenAvailable || !publicLocalConnect.requiresAuthorization) {
-  throw new Error('GET /api/local-connect should not expose the bearer token without authorization');
-}
-
-const authorizedLocalConnect = await fetch(`http://127.0.0.1:${port}/api/local-connect`, { headers: { authorization: `Bearer ${token}` } }).then((response) => response.json());
-if (authorizedLocalConnect.token !== token || authorizedLocalConnect.requiresAuthorization) {
-  throw new Error('GET /api/local-connect did not return the token to an authorized caller');
-}
-
 const dashboardQueryAuth = await fetch(`http://127.0.0.1:${port}/api/dashboard/v10?token=${encodeURIComponent(token)}&requireHttpToken=0`).then((response) => response.json());
 if (!dashboardQueryAuth.ok) {
   throw new Error('dashboard API did not accept token query auth used by browser dashboard');
@@ -92,27 +82,6 @@ if (!dashboardHtml.includes('id="liveBtn"') || !dashboardHtml.includes('id="refr
 // The token field was removed from the topbar (token loads from the URL/sessionStorage).
 if (dashboardHtml.includes('id="token"')) {
   throw new Error('dashboard topbar should no longer expose the token field');
-}
-
-const autoApproveSettings = await fetch(`http://127.0.0.1:${port}/api/auto-approve/settings?token=${encodeURIComponent(token)}`).then((response) => response.json());
-if (!autoApproveSettings.ok || autoApproveSettings.enabled !== false || autoApproveSettings.mode !== 'chrome_extension' || !autoApproveSettings.warning.includes('Chrome extension')) {
-  throw new Error('auto-approve settings endpoint did not expose the disabled extension-only warning state');
-}
-
-const removedUserscript = await fetch(`http://127.0.0.1:${port}/userscripts/chatgpt-auto-approve.user.js?token=${encodeURIComponent(token)}`);
-if (removedUserscript.status !== 404) {
-  throw new Error('removed userscript endpoint should not be served');
-}
-
-const extensionManifestResponse = await fetch(`http://127.0.0.1:${port}/public/extensions/chrome-auto-approve/manifest.json`);
-const extensionManifest = await extensionManifestResponse.text();
-if (!extensionManifestResponse.ok || !extensionManifest.includes('Rel.AI MCP Auto-Approve') || !extensionManifest.includes('Kyne0328')) {
-  throw new Error('auto-approve extension manifest was not served');
-}
-
-const extensionDocs = await fetch(`http://127.0.0.1:${port}/public/docs/AUTO_APPROVE_EXTENSION.md`).then((response) => response.text());
-if (!extensionDocs.includes('Enable/disable control')) {
-  throw new Error('auto-approve extension docs were not served');
 }
 
 const workspaceModule = await fetch(`http://127.0.0.1:${port}/ui/sections/workspaces.js`).then((response) => response.text());

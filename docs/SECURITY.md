@@ -29,8 +29,6 @@ The unauthenticated secret-in-URL path has been **removed**. `/mcp/<secret>`, `/
 - `Authorization: Bearer <REL_AI_MCP_TOKEN>` header, or
 - `?token=<REL_AI_MCP_TOKEN>` query parameter (used by the browser dashboard).
 
-`GET /api/local-connect` is a public reachability/discovery endpoint for local tools, but it only returns the bearer token when the caller already proves it has the bearer/query token. Unauthenticated callers receive the base URL without token material.
-
 Set `REL_AI_MCP_ALLOW_NO_AUTH=1` only for local-only testing on a trusted network.
 
 ## Security protections (what the server defends against)
@@ -42,14 +40,13 @@ Set `REL_AI_MCP_ALLOW_NO_AUTH=1` only for local-only testing on a trusted networ
 - **Stale exact replacements** — `relai_replace` accepts an optional content hash; if provided and the file has changed, the replacement is rejected rather than silently applied to the wrong content.
 - **Unreviewed changes through diff/restore loop** — `relai_diff` and `relai_restore_changes` are discrete tools; restoration requires an explicit call, not an automatic side-effect.
 - **Oversized request bodies** — the HTTP server enforces `REL_AI_MCP_MAX_BODY_BYTES` (default 10 MB) and rejects requests that exceed it.
-- **Public diagnostic redaction** — browser-facing MCP diagnostics and local discovery avoid returning the ChatGPT secret or bearer token to unauthenticated callers.
+- **Public diagnostic redaction** — browser-facing MCP diagnostics avoid returning the ChatGPT secret or bearer token to unauthenticated callers.
 
 ## Limits (what it does NOT protect against)
 
 - **User exposing the dashboard token** — the `REL_AI_MCP_TOKEN` approves ChatGPT's OAuth sign-in and authenticates local/API bearer calls. Anyone who obtains it can complete the OAuth flow or call `/mcp` directly. Rotate the token (`--reset-token`) and restart if it leaks.
 - **Unsafe workspace configuration** — pointing a workspace alias at a system directory (e.g. `C:\Windows` or `/etc`) is not prevented; only add paths you trust ChatGPT to modify.
 - **Asking ChatGPT to run destructive validation checks** — `relai_run_checks` executes the commands you configured. Malicious or mistaken prompt engineering can trigger them.
-- **Leaving extension approval enabled unsupervised** — the Chrome auto-approve extension approves MCP tool calls automatically. Disable it when not actively working.
 - **Malicious code already inside the workspace** — if the repository contains code that harms your system when executed, running `relai_run_checks` on it can trigger that harm.
 
 ## Tool surface

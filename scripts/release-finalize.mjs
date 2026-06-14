@@ -19,8 +19,7 @@ const releaseFiles = new Set([
   'package-lock.json',
   'electron/package.json',
   'electron/package-lock.json',
-  'electron/renderer/status.html',
-  'public/extensions/chrome-auto-approve/manifest.json'
+  'electron/renderer/status.html'
 ]);
 
 function valueAfter(flag) {

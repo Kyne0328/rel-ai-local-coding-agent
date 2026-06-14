@@ -11,7 +11,6 @@ const release = require("./release");
 const configEditor = require("./configEditor");
 const pkg = require("../package.json");
 const connection = require("./connectionProfile");
-const autoApprove = require("./autoApproveExtension");
 const { getVersion } = require("./version");
 const oauth = require("./oauthProvider");
 
@@ -162,28 +161,6 @@ async function routeRequest(req, res, options) {
     } catch (err) {
       sendJson(res, 500, { ok: false, error: err.message }, ae);
     }
-    return;
-  }
-
-
-  if (req.method === "GET" && parsed.pathname === "/api/auto-approve/settings") {
-    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
-    const config = readConfig();
-    sendJson(res, 200, autoApprove.autoApproveSettings(config), ae);
-    return;
-  }
-
-  // Public discovery endpoint for local tools. Token sync is only returned to callers
-  // that already prove they have the dashboard/API credential.
-  if (req.method === "GET" && parsed.pathname === "/api/local-connect") {
-    const authorized = isDashboardAuthorized(req, parsed, options);
-    sendJson(res, 200, {
-      ok: true,
-      token: authorized ? options.token || "" : "",
-      tokenAvailable: Boolean(authorized && options.token),
-      requiresAuthorization: Boolean(options.token && !authorized),
-      baseUrl: `http://${options.host || "127.0.0.1"}:${options.port || 3333}`
-    }, ae);
     return;
   }
 
@@ -760,17 +737,12 @@ async function readFormOrJsonBody(req, maxBytes) {
   return {};
 }
 
-// Origin-scoped CORS. Endpoints like /api/local-connect return the bearer token with
-// no auth (they are meant to be reachable only from this machine). With a blanket
-// "Access-Control-Allow-Origin: *", any website open in the user's browser could
-// fetch http://127.0.0.1:<port>/api/local-connect cross-origin and read the token out
-// of the response. We only echo an allow-origin for callers that legitimately need a
-// cross-origin read: the Chrome extension (chrome-extension:// / moz-extension://) and
-// localhost tooling. A request with no Origin header (server-to-server MCP, curl, the
-// same-origin dashboard) is unaffected — CORS only governs browser cross-origin reads.
+// Origin-scoped CORS. Only local dashboard/tooling origins are allowed to read
+// local HTTP responses cross-origin. Requests with no Origin header (server-to-server
+// MCP, curl, the same-origin dashboard) are unaffected; CORS only governs browser
+// cross-origin reads.
 function isAllowedCorsOrigin(origin) {
   if (!origin) return false;
-  if (/^(chrome-extension|moz-extension):\/\//i.test(origin)) return true;
   try {
     const { hostname } = new URL(origin);
     return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "[::1]";

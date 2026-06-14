@@ -1,30 +1,12 @@
 const { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage, screen } = require('electron');
 const fs = require('node:fs');
 const net = require('node:net');
-const os = require('node:os');
 const path = require('node:path');
 
 function resolveResourcePath(name) {
   const packagedPath = process.resourcesPath ? path.join(process.resourcesPath, name) : '';
   if (packagedPath && fs.existsSync(packagedPath)) return packagedPath;
   return path.join(__dirname, '..', name);
-}
-
-// The unpacked Chrome extension must live at a STABLE path so Chrome's "Load unpacked"
-// keeps working across launches. The portable Windows build extracts to a fresh temp
-// dir every run, so process.resourcesPath (and the bundled extension under it) changes
-// each launch — which made Chrome drop the extension. Mirror the bundled extension into
-// a fixed per-user directory and hand Chrome that path instead.
-function getStableExtensionDir() {
-  const source = resolveResourcePath(path.join('public', 'extensions', 'chrome-auto-approve'));
-  const stable = path.join(os.homedir(), '.rel-ai-mcp', 'chrome-extension');
-  try {
-    fs.mkdirSync(path.dirname(stable), { recursive: true });
-    fs.cpSync(source, stable, { recursive: true, force: true });
-    return stable;
-  } catch (_error) {
-    return source; // fall back to the packaged path if the mirror fails
-  }
 }
 
 const srcPath = resolveResourcePath('src');
@@ -92,9 +74,6 @@ if (!gotLock) {
   });
 
   app.whenReady().then(() => {
-    // Refresh the stable extension mirror each launch so a loaded unpacked extension
-    // picks up updates (e.g. the disabled-gate fix) on the next browser restart.
-    try { getStableExtensionDir(); } catch (_) {}
     if (hasExistingConfig()) {
       createStatusWindow();
       startServer();
@@ -555,42 +534,6 @@ ipcMain.handle('url:copy', (_event, url) => {
 ipcMain.handle('url:open-dashboard', () => {
   openDashboardUrl();
   return { ok: true };
-});
-
-ipcMain.handle('extension:get-path', () => {
-  return getStableExtensionDir();
-});
-
-// Open the unpacked-extension folder in the OS file manager. This is the reliable
-// import helper — Chrome forbids an external app from installing an unpacked/CRX
-// extension into the user's real browser, so the best we can do is reveal the folder
-// for a one-shot "Load unpacked".
-ipcMain.handle('extension:reveal-folder', async () => {
-  const dir = getStableExtensionDir();
-  const err = await shell.openPath(dir); // '' on success
-  return { ok: !err, path: dir, error: err || '' };
-});
-
-// Best-effort jump to chrome://extensions. The chrome:// scheme has no OS protocol
-// handler (so shell.openExternal can't reach it) — launch a Chromium browser directly
-// with the URL. Falls back to ok:false; the UI still offers reveal-folder + copy-path.
-ipcMain.handle('extension:open-extensions-page', async () => {
-  const url = 'chrome://extensions/';
-  const { spawn } = require('node:child_process');
-  const attempts = process.platform === 'win32'
-    ? [['cmd', ['/c', 'start', '', 'chrome', url]]]
-    : process.platform === 'darwin'
-      ? [['open', ['-a', 'Google Chrome', url]]]
-      : [['google-chrome', [url]], ['chromium', [url]], ['chromium-browser', [url]]];
-  for (const [cmd, args] of attempts) {
-    try {
-      const child = spawn(cmd, args, { detached: true, stdio: 'ignore' });
-      child.on('error', () => {});
-      child.unref();
-      return { ok: true };
-    } catch (_) { /* try next */ }
-  }
-  return { ok: false };
 });
 
 ipcMain.on('window:fit-content', (event, payload = {}) => {

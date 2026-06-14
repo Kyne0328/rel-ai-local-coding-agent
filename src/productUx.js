@@ -42,10 +42,6 @@ function dashboardData(config, args = {}) {
       tools: publicTools,
       removedLegacyWorkflows: ["update", "local", "task-runner", "worktree", "multi-agent", "approvals", "docker", "pr-ci-repair"]
     },
-    extensionApprovalHelper: {
-      mode: "chrome_extension",
-      note: "Extension popup is the only enable/disable control. Dashboard does not gate approval."
-    },
     health,
     auditTail
   };

@@ -14,9 +14,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   removeServerStatusListener: () => {
     ipcRenderer.removeAllListeners('server:status');
   },
-  getExtensionPath: () => ipcRenderer.invoke('extension:get-path'),
-  revealExtensionFolder: () => ipcRenderer.invoke('extension:reveal-folder'),
-  openExtensionsPage: () => ipcRenderer.invoke('extension:open-extensions-page'),
   copyText: (text) => ipcRenderer.invoke('url:copy', text),
   fitWindowToContent: (size) => ipcRenderer.send('window:fit-content', size)
 });

@@ -61,7 +61,6 @@ assertJsonVersion('package.json', version);
 assertJsonVersion('package-lock.json', version);
 assertJsonVersion(path.join('electron', 'package.json'), version);
 assertJsonVersion(path.join('electron', 'package-lock.json'), version);
-assertJsonVersion(path.join('public', 'extensions', 'chrome-auto-approve', 'manifest.json'), version);
 
 const statusHtml = read(path.join('electron', 'renderer', 'status.html'));
 expect(statusHtml.includes(`id="appVersion">v${version}</span>`), `electron/renderer/status.html must display v${version}`);

@@ -115,26 +115,6 @@ await check('GET /mcp diagnostic — OAuth, no secret leak', async () => {
   }
 });
 
-// GET /api/local-connect — no token → redacted token
-await check('GET /api/local-connect — no token → redacted token', async () => {
-  const res = await fetch(`${base}/api/local-connect`);
-  if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-  const body = await res.json();
-  if (body.token || body.tokenAvailable || !body.requiresAuthorization) {
-    throw new Error('local-connect exposed token data without authorization');
-  }
-});
-
-// GET /api/local-connect — with bearer → token returned
-await check('GET /api/local-connect — with bearer → token returned', async () => {
-  const res = await fetch(`${base}/api/local-connect`, { headers: bearer });
-  if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-  const body = await res.json();
-  if (body.token !== token || !body.tokenAvailable || body.requiresAuthorization) {
-    throw new Error('local-connect did not return token data to an authorized caller');
-  }
-});
-
 // POST /mcp — no bearer → 401
 await check('POST /mcp — no bearer → 401', async () => {
   const res = await fetch(`${base}/mcp`, {

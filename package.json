@@ -38,7 +38,6 @@
     "release": "node scripts/release-bump.mjs",
     "test:release": "node scripts/release-check.mjs && node test/release-workflow-smoke.mjs",
     "test:fast-task": "node test/workspace-fast-task-smoke.mjs",
-    "test:auto-approve": "node test/auto-approve-extension-smoke.mjs",
     "test:tunnel": "node test/tunnel-manager-smoke.mjs",
     "test:oneclick": "node test/oneclick-args-smoke.mjs",
     "test:compat": "node test/chatgpt-local-compat-smoke.mjs",

@@ -99,7 +99,7 @@ function insertChangelog(nextVersion, releaseDate) {
   const bullets = notes.length
     ? notes.map((note) => `- **${note.replace(/\.$/, '')}.**`).join('\n')
     : '- **TODO: summarize the user-visible change.** Replace this placeholder with the complete release note before finalizing the release.\n- **TODO: list validation coverage.** Mention the tests or checks that prove the release is safe.';
-  const entry = `\n## [${nextVersion}] — ${releaseDate}\n\n### ${headline}\n${bullets}\n\nBump root/electron/extension/status UI/lockfiles to ${nextVersion}.\n`;
+  const entry = `\n## [${nextVersion}] — ${releaseDate}\n\n### ${headline}\n${bullets}\n\nBump root/electron/status UI/lockfiles to ${nextVersion}.\n`;
   write(changelogPath, `${marker}${entry}${content.slice(marker.length)}`);
 }
 
@@ -117,8 +117,7 @@ const files = [
   'package.json',
   'package-lock.json',
   path.join('electron', 'package.json'),
-  path.join('electron', 'package-lock.json'),
-  path.join('public', 'extensions', 'chrome-auto-approve', 'manifest.json')
+  path.join('electron', 'package-lock.json')
 ];
 
 for (const file of files) updateJsonVersion(file, version);

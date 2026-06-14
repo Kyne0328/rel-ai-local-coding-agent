@@ -23,7 +23,6 @@ for (const file of [
   'electron/package.json',
   'electron/package-lock.json',
   'electron/renderer/status.html',
-  'public/extensions/chrome-auto-approve/manifest.json',
   'src/version.js',
   'scripts/release-check.mjs',
   'scripts/release-bump.mjs'
@@ -61,14 +60,13 @@ assert.equal(readJson('package.json').version, '0.99.0');
 assert.equal(readJson('package-lock.json').packages[''].version, '0.99.0');
 assert.equal(readJson('electron/package.json').version, '0.99.0');
 assert.equal(readJson('electron/package-lock.json').packages[''].version, '0.99.0');
-assert.equal(readJson('public/extensions/chrome-auto-approve/manifest.json').version, '0.99.0');
 
 const statusHtml = fs.readFileSync(path.join(tmp, 'electron/renderer/status.html'), 'utf8');
 assert.match(statusHtml, /id="appVersion">v0\.99\.0<\/span>/);
 
 const changelog = fs.readFileSync(path.join(tmp, 'CHANGELOG.md'), 'utf8');
 assert.match(changelog, /^## \[0\.99\.0\] — 2099-01-02/m);
-assert.match(changelog, /Bump root\/electron\/extension\/status UI\/lockfiles to 0\.99\.0\./);
+assert.match(changelog, /Bump root\/electron\/status UI\/lockfiles to 0\.99\.0\./);
 assert.doesNotMatch(changelog.split('## [0.15.7]')[0], /TODO|placeholder/i);
 
 console.log('Release workflow smoke test passed.');

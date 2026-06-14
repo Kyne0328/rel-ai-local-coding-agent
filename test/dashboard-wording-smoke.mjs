@@ -78,23 +78,10 @@ if (!hasStandardOrPrepared) {
   process.exit(1);
 }
 
-const hasChromeExtension = dashboardJson.includes('chrome_extension');
-if (!hasChromeExtension) {
-  child.kill('SIGKILL');
-  console.error('Dashboard wording smoke test FAILED — dashboard JSON must contain "chrome_extension" (extensionApprovalHelper.mode)');
-  process.exit(1);
-}
-
 // Verify specific shape of new fields
 if (!dashboardData.workflow || !dashboardData.workflow.mode) {
   child.kill('SIGKILL');
   console.error('Dashboard wording smoke test FAILED — dashboard JSON must contain workflow.mode');
-  process.exit(1);
-}
-
-if (!dashboardData.extensionApprovalHelper || dashboardData.extensionApprovalHelper.mode !== 'chrome_extension') {
-  child.kill('SIGKILL');
-  console.error('Dashboard wording smoke test FAILED — dashboard JSON must contain extensionApprovalHelper.mode === "chrome_extension"');
   process.exit(1);
 }
 

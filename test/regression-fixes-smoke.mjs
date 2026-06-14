@@ -53,14 +53,6 @@ assert.equal(getVersion(), latestChangelogVersion());
   }), /Unsafe workspace path refused/);
 }
 
-// Dashboard settings must not keep writing the inert server-side autoApproveAppRequests
-// store. The Chrome extension popup/chrome.storage.local is authoritative.
-{
-  const general = read('src/ui/sections/settings/general.js');
-  assert.doesNotMatch(general, /autoApproveAppRequests:\s*_draft\.autoApproveAppRequests/);
-  assert.doesNotMatch(general, /const keys = \[[^\]]*autoApproveAppRequests/s);
-}
-
 // Connector next steps should not duplicate the hardcoded setup steps when payload.nextSteps
 // is absent; it should render only extra steps from the payload.
 {
@@ -137,9 +129,8 @@ assert.equal(getVersion(), latestChangelogVersion());
   assert.throws(() => productUx.stateExport(disabled), /State export is disabled/);
 }
 
-// HTTP/CORS regression: /api/local-connect still serves local discovery, but it
-// never returns token material unless the caller already proves it has the token.
-// Arbitrary web origins also must not get an Access-Control-Allow-Origin echo.
+// HTTP/CORS regression: arbitrary web origins must not get an
+// Access-Control-Allow-Origin echo.
 const port = 39919;
 const token = 'regression-token-secret';
 const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.js'), '--host', '127.0.0.1', '--port', String(port)], {
@@ -171,42 +162,16 @@ try {
   const health = await waitForHealth();
   assert.equal(health.version, latestChangelogVersion());
 
-  const evil = await fetch(`http://127.0.0.1:${port}/api/local-connect`, {
+  const evil = await fetch(`http://127.0.0.1:${port}/health`, {
     headers: { Origin: 'https://evil.example' }
   });
   assert.equal(evil.ok, true);
   assert.equal(evil.headers.get('access-control-allow-origin'), null);
-  const evilBody = await evil.json();
-  assert.equal(evilBody.token, '', 'unauthenticated local-connect must not return the bearer token');
-  assert.equal(evilBody.tokenAvailable, false);
-  assert.equal(evilBody.requiresAuthorization, true);
 
-  const extension = await fetch(`http://127.0.0.1:${port}/api/local-connect`, {
-    headers: { Origin: 'chrome-extension://abcdefghijklmnop' }
-  });
-  assert.equal(extension.headers.get('access-control-allow-origin'), 'chrome-extension://abcdefghijklmnop');
-  const extensionBody = await extension.json();
-  assert.equal(extensionBody.token, '');
-
-  const local = await fetch(`http://127.0.0.1:${port}/api/local-connect`, {
+  const local = await fetch(`http://127.0.0.1:${port}/health`, {
     headers: { Origin: `http://127.0.0.1:${port}` }
   });
   assert.equal(local.headers.get('access-control-allow-origin'), `http://127.0.0.1:${port}`);
-
-  const authorized = await fetch(`http://127.0.0.1:${port}/api/local-connect`, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  const authorizedBody = await authorized.json();
-  assert.equal(authorizedBody.token, token);
-  assert.equal(authorizedBody.tokenAvailable, true);
-  assert.equal(authorizedBody.requiresAuthorization, false);
-
-  const autoUnauth = await fetch(`http://127.0.0.1:${port}/api/auto-approve/settings`);
-  assert.equal(autoUnauth.status, 401);
-  const autoAuth = await fetch(`http://127.0.0.1:${port}/api/auto-approve/settings`, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  assert.equal(autoAuth.ok, true);
 } finally {
   child.kill('SIGKILL');
   await once(child, 'close');

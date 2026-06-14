@@ -115,32 +115,6 @@
   .btn-stop:hover { background: rgba(255,111,136,.2); border-color: var(--red); color: var(--red); }
   .btn-start { background: rgba(79,224,154,.14); border-color: rgba(79,224,154,.35); color: var(--green); font-weight: 700; }
   .btn-start:hover { background: rgba(79,224,154,.22); border-color: var(--green); color: var(--green); }
-  .ext-box {
-    background: var(--surface);
-    border: 1px solid var(--line-soft);
-    border-radius: var(--radius-md);
-    padding: 11px 13px;
-  }
-  .ext-label { font-size: 10px; color: var(--text-muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
-  .ext-path { font-size: 11px; color: var(--text-muted); font-family: ui-monospace, "SF Mono", Consolas, monospace; word-break: break-all; margin-bottom: 7px; min-height: 16px; line-height: 1.4; }
-  .ext-steps { list-style: none; counter-reset: step; margin: 0 0 9px; padding: 0; display: flex; flex-direction: column; gap: 5px; }
-  .ext-steps li { position: relative; padding-left: 22px; font-size: 11px; color: var(--text-dim); line-height: 1.45; counter-increment: step; }
-  .ext-steps li::before {
-    content: counter(step); position: absolute; left: 0; top: 0;
-    width: 15px; height: 15px; border-radius: 50%;
-    background: var(--surface-3); color: var(--text-muted);
-    font-size: 9px; font-weight: 700; display: grid; place-items: center;
-  }
-  .ext-steps strong { color: var(--text-muted); }
-  .ext-actions { display: flex; gap: 6px; }
-  .btn-ext {
-    flex: 1; background: var(--surface-2); border: 1px solid var(--line-soft);
-    border-radius: var(--radius-sm); color: var(--text-muted); padding: 8px 6px; font-size: 11px; font-weight: 600;
-    white-space: nowrap;
-  }
-  .btn-ext:hover { background: var(--surface-3); color: var(--text); border-color: var(--line); }
-  .btn-ext.primary { background: var(--grad-accent); color: #fff; border-color: color-mix(in srgb, var(--blue) 55%, transparent); }
-  .btn-ext.primary:hover { filter: brightness(1.08); box-shadow: var(--glow-accent); color: #fff; }
 </style>
 </head>
 <body>
@@ -182,21 +156,6 @@
   </div>
 
   <div class="error-line" id="errorLine"></div>
-
-  <div class="ext-box">
-    <div class="ext-label">Chrome Extension</div>
-    <div class="ext-path" id="extPath">Loading...</div>
-    <ol class="ext-steps">
-      <li><strong>Open folder</strong> reveals the extension below; <strong>Open Chrome</strong> jumps to the extensions page.</li>
-      <li>Toggle <strong>Developer mode</strong> (top-right of that page).</li>
-      <li>Click <strong>Load unpacked</strong> &rarr; pick the revealed folder.</li>
-    </ol>
-    <div class="ext-actions">
-      <button class="btn-ext primary" id="extRevealBtn">Open folder</button>
-      <button class="btn-ext" id="extOpenChromeBtn">Open Chrome</button>
-      <button class="btn-ext" id="extCopyBtn">Copy path</button>
-    </div>
-  </div>
 
   <div class="actions">
     <button class="btn-action" id="dashboardBtn">Dashboard</button>
