@@ -90,7 +90,8 @@ export function openWorkspaceForm({ mode = 'add', workspace = null, onSaved } = 
     browseBtn.disabled = true;
     const prev = browseBtn.textContent;
     browseBtn.textContent = 'Opening…';
-    const res = await postJson('/api/pick-folder', {});
+    // No timeout — the native dialog blocks until the user picks or cancels.
+    const res = await postJson('/api/pick-folder', {}, { timeout: 0 });
     browseBtn.disabled = false;
     browseBtn.textContent = prev;
     if (res && res.unsupported) {

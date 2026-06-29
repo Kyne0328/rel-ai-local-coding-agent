@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.16.6] — 2026-06-29
+
+### Folder picker fixes (desktop launcher)
+- **Fixed the "Browse" folder picker timing out after ~8 seconds.** The dashboard fetch layer aborted every request at 8s, including the picker POST that blocks on user input. Requests can now opt out of the timeout; the folder picker waits indefinitely until you pick or cancel.
+- **Fixed the picker opening behind the browser and flashing the taskbar.** The dashboard runs in the external browser, so the native dialog had no parent window and Windows refused to bring it to the foreground. The picker now opens against a focused anchor window so it surfaces on top instead of blinking the taskbar icon.
+
+Bump root/electron/status UI/lockfiles to 0.16.6.
+
 ## [0.16.5] — 2026-06-29
 
 ### Dashboard auth fix

@@ -29,7 +29,11 @@ export function reloadWithToken() {
 }
 
 export async function fetchJson(url, opts = {}) {
-  const isGet = !opts.method || opts.method === 'GET';
+  // timeout (ms): overrides the 8s default; 0 or negative disables the abort timer
+  // entirely. The native folder picker blocks on user input and must not be killed
+  // mid-prompt, so it passes timeout: 0.
+  const { timeout, ...fetchOpts } = opts;
+  const isGet = !fetchOpts.method || fetchOpts.method === 'GET';
   const cacheKey = isGet ? url : null;
 
   if (cacheKey && _cache.has(cacheKey)) {
@@ -37,8 +41,9 @@ export async function fetchJson(url, opts = {}) {
     if (Date.now() - ts < 1000) return val;
   }
 
+  const timeoutMs = Number.isFinite(timeout) ? timeout : 8000;
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 8000);
+  const timer = timeoutMs > 0 ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
 
   try {
     const token = getToken();
@@ -47,9 +52,9 @@ export async function fetchJson(url, opts = {}) {
     if (token) headers['Authorization'] = 'Bearer ' + token;
 
     const res = await fetch(urlWithToken, {
-      ...opts,
+      ...fetchOpts,
       signal: ctrl.signal,
-      headers: { ...headers, ...(opts.headers || {}) },
+      headers: { ...headers, ...(fetchOpts.headers || {}) },
     });
 
     let data;
@@ -62,14 +67,14 @@ export async function fetchJson(url, opts = {}) {
     return data;
   } catch (err) {
     const isAbort = err && err.name === 'AbortError';
-    return { ok: false, error: isAbort ? 'Request timed out after 8 seconds.' : String(err) };
+    return { ok: false, error: isAbort ? `Request timed out after ${Math.round(timeoutMs / 1000)} seconds.` : String(err) };
   } finally {
-    clearTimeout(timer);
+    if (timer) clearTimeout(timer);
   }
 }
 
-export async function postJson(url, body) {
-  return fetchJson(url, { method: 'POST', body: JSON.stringify(body) });
+export async function postJson(url, body, opts = {}) {
+  return fetchJson(url, { method: 'POST', body: JSON.stringify(body), ...opts });
 }
 
 export function invalidateCache(url) {

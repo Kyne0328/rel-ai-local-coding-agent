@@ -337,11 +337,33 @@ async function startServer() {
         // process; the dashboard reaches it via POST /api/pick-folder.
         pickFolder: async () => {
           const { dialog } = require('electron');
-          const result = await dialog.showOpenDialog({
-            title: 'Select workspace folder',
-            properties: ['openDirectory']
+          // The dashboard runs in the external browser, so this dialog has no natural
+          // parent window. Parentless, Windows refuses to pull the background Electron
+          // app to the foreground — it shows the dialog behind the browser and flashes
+          // the taskbar instead. Spawn a hidden, focusable anchor window, force the app
+          // foreground, and parent the modal dialog to it so it opens on top.
+          const anchor = new BrowserWindow({
+            width: 1,
+            height: 1,
+            show: false,
+            frame: false,
+            skipTaskbar: true,
+            alwaysOnTop: true,
+            focusable: true
           });
-          return result && !result.canceled && result.filePaths && result.filePaths[0] ? result.filePaths[0] : null;
+          try {
+            anchor.showInactive();
+            anchor.moveTop();
+            app.focus({ steal: true });
+            anchor.focus();
+            const result = await dialog.showOpenDialog(anchor, {
+              title: 'Select workspace folder',
+              properties: ['openDirectory']
+            });
+            return result && !result.canceled && result.filePaths && result.filePaths[0] ? result.filePaths[0] : null;
+          } finally {
+            if (!anchor.isDestroyed()) anchor.destroy();
+          }
         }
       });
       actualPort = await new Promise((resolve, reject) => {
