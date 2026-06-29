@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.5] — 2026-06-29
+
+### Dashboard auth fix
+- **Fixed "Unauthorized. Send Authorization: Bearer <REL_AI_MCP_TOKEN>" shown after dashboard mutations (add workspace, save detected tests, rename, clear, context changes).** The boot script strips `?token` from the URL after reading it, so the post-mutation `location.reload()` re-requested the token-gated `/dashboard` route with no credentials and got a 401. Reloads now re-attach the token (and preserve the current section hash); the boot script strips it again on the next load.
+
+Bump root/electron/status UI/lockfiles to 0.16.5.
+
 ## [0.16.4] — 2026-06-11
 
 ### Tool surface, settings, and dashboard improvements
