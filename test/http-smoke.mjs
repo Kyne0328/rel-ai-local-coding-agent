@@ -127,8 +127,8 @@ const list = await fetch(`http://127.0.0.1:${port}/mcp`, {
   headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
   body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/list', params: {} })
 }).then((response) => response.json());
-if (!Array.isArray(list.result?.tools) || list.result.tools.length !== 17) {
-  throw new Error(`HTTP tools/list should return exactly 17 workspace tools, got ${list.result?.tools?.length}`);
+if (!Array.isArray(list.result?.tools) || list.result.tools.length !== 18) {
+  throw new Error(`HTTP tools/list should return exactly 18 workspace tools, got ${list.result?.tools?.length}`);
 }
 
 const resources = await fetch(`http://127.0.0.1:${port}/mcp`, {

@@ -6,7 +6,7 @@ const sessionCache = require("./sessionCache");
 const { classifyCaution } = require("./cautionZone");
 const { discoverCommands, staleCommandKeys: staleCommandKeyList } = require("./commandDiscovery");
 const { summarizeOperations } = require("./journal");
-const { repoSnapshot, relaiRead, relaiWrite, relaiReplace, relaiClear, relaiApplyPatch, relaiApplyArchive, relaiSnapshotArchive, relaiVerify, relaiBrowser, relaiDiff, relaiReset, relaiGitStatus, relaiGitFetch, relaiGitCommit, relaiGitPush, relaiGitMergeBranch, relaiGitMergeRemoteBranchesPlan, relaiGitAbortMerge, relaiGitCreatePr, relaiRemoveFile, relaiRefactorAudit } = require("./localRepoBridge");
+const { repoSnapshot, relaiRead, relaiWrite, relaiReplace, relaiClear, workspaceTidyPlan, workspaceTidyRun, relaiApplyPatch, relaiApplyArchive, relaiSnapshotArchive, relaiVerify, relaiBrowser, relaiDiff, relaiReset, relaiGitStatus, relaiGitFetch, relaiGitCommit, relaiGitPush, relaiGitMergeBranch, relaiGitMergeRemoteBranchesPlan, relaiGitAbortMerge, relaiGitCreatePr, relaiRemoveFile, relaiRefactorAudit } = require("./localRepoBridge");
 const { planEdit } = require("./executionPlanner");
 const { resolvePolicy, writeSessionPolicy, clearSessionPolicy } = require("./policyResolver");
 const { getVersion } = require("./version");
@@ -16,6 +16,8 @@ const BRIDGE_TOOL_NAMES = [
   "relai_read",
   "relai_write",
   "relai_replace",
+  "relai_tidy_plan",
+  "relai_tidy_run",
   "relai_clear_files",
   "relai_apply_update",
   "relai_apply_bundle",
@@ -53,7 +55,8 @@ const PUBLIC_HTTP_TOOL_NAMES = [
   "relai_edit",          // primary write path (routes to replace/write/patch + batch)
   "relai_write",         // fallback: whole-file write if relai_edit misroutes
   "relai_replace",       // fallback: exact replacement
-  "relai_clear_files",
+  "relai_tidy_plan",
+  "relai_tidy_run",
   "relai_apply_bundle",
   "relai_package_snapshot",   // pairs with relai_apply_bundle (create/apply bundle)
   "relai_run_checks",
@@ -96,6 +99,12 @@ const toolSchemas = [
     replacements: arrayObjectProp({ oldText: stringProp(), newText: stringProp(), occurrence: numberProp(1, 1000000) }, ["oldText", "newText"], 1, 50),
     dryRun: boolProp()
   }, ["workspace", "path"], WRITE_LOCAL),
+  tool("relai_tidy_plan", "Workspace Tidy Plan", "Read-only. Prepare a bounded workspace tidy plan for session-owned untracked artifacts. The server selects candidates; callers do not provide file paths.", {
+    workspace: stringProp(), mode: stringProp(), maxCandidates: numberProp(1, 100)
+  }, ["workspace"], READ_ONLY_LOCAL),
+  tool("relai_tidy_run", "Run Workspace Tidy Plan", "Apply a previously prepared workspace tidy plan by planId. The plan is expiry-bound and hash-checked before any workspace change.", {
+    workspace: stringProp(), planId: stringProp()
+  }, ["workspace", "planId"], WRITE_LOCAL),
   tool("relai_clear_files", "Discard Workspace Files", "Discard one or more generated or temporary files from a configured workspace. Folders are refused. Supports dryRun and failIfMissing.", {
     workspace: stringProp(), path: stringProp(), paths: arrayProp("string", 1, 100), expectedSha256: stringProp(), dryRun: boolProp(), failIfMissing: boolProp()
   }, ["workspace"], DESTRUCTIVE_LOCAL),
@@ -372,6 +381,10 @@ async function dispatchTool(config, name, args) {
       return withWorkspace(config, args, (workspace) => relaiReplace(workspace, config, args));
     case "relai_clear_files":
       return withWorkspace(config, args, (workspace) => relaiClear(workspace, config, args));
+    case "relai_tidy_plan":
+      return withWorkspace(config, args, (workspace) => workspaceTidyPlan(workspace, config, args));
+    case "relai_tidy_run":
+      return withWorkspace(config, args, (workspace) => workspaceTidyRun(workspace, config, args));
     case "relai_apply_update":
       return withWorkspace(config, args, (workspace) => relaiApplyPatch(workspace, config, mapCheckArgs({ ...args, patch: args.updateText || args.patch || args.diff })));
     case "relai_apply_bundle":
@@ -485,7 +498,7 @@ function relaiStatus(config, args = {}) {
       // Group lists must only name public tools — this payload is read by ChatGPT.
       git: PUBLIC_HTTP_TOOL_NAMES.filter((name) => name.startsWith("relai_git_")),
       audit: ["relai_diff", "relai_git_status"],
-      cleanup: ["relai_clear_files", "relai_restore_changes"],
+      cleanup: ["relai_tidy_plan", "relai_tidy_run", "relai_restore_changes"],
       internal: BRIDGE_TOOL_NAMES.filter((name) => !PUBLIC_HTTP_TOOL_NAMES.includes(name))
     },
     scripts: Object.keys(scripts).sort(),

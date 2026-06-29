@@ -65,11 +65,11 @@ assert.equal(getVersion(), latestChangelogVersion());
 {
   const cfg = normalizeConfig(makeDefaultConfig());
   const dashboard = productUx.dashboardData(cfg, { limit: 5 });
-  assert.equal(dashboard.toolCount, 17);
+  assert.equal(dashboard.toolCount, 18);
   assert.equal(Number.isFinite(dashboard.toolCount), true);
-  assert.equal(dashboard.workflow.tools.length, 17);
+  assert.equal(dashboard.workflow.tools.length, 18);
   assert.ok(dashboard.workflow.tools.includes('relai_git_commit'));
-  assert.equal(dashboard.config.localRepoBridge.visibleTools.length, 17);
+  assert.equal(dashboard.config.localRepoBridge.visibleTools.length, 18);
   assert.ok(publicConfigSummary(cfg).localRepoBridge.visibleTools.includes('relai_edit'));
   assert.doesNotMatch(read('src/ui/sections/home.js'), /visibleToolCount/);
   assert.match(read('src/ui/sections/workspaces.js'), /data\.toolCount/);

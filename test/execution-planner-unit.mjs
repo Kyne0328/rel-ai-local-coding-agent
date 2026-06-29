@@ -127,7 +127,7 @@ function makeTempRepo(filename = 'hello.js', content = 'module.exports = {};') {
   }
 }
 
-// 8. batch edits (T3): several edits in one call, best-effort sequential
+// 8. batch edits (T3): several edits in one call after atomic preflight
 {
   const dir = makeTempRepo('a.js', 'let a = 1;\n');
   fs.writeFileSync(path.join(dir, 'b.js'), 'let b = 1;\n');
@@ -148,7 +148,7 @@ function makeTempRepo(filename = 'hello.js', content = 'module.exports = {};') {
   }
 }
 
-// 9. batch best-effort: one bad edit fails, others still reported; overall ok=false
+// 9. batch atomicity: one bad edit fails preflight and no earlier edit is written
 {
   const dir = makeTempRepo('a.js', 'let a = 1;\n');
   const workspace = { alias: 'test', path: dir };
@@ -158,8 +158,11 @@ function makeTempRepo(filename = 'hello.js', content = 'module.exports = {};') {
       { path: 'a.js', oldText: 'NOT PRESENT', newText: 'x' }
     ] });
     assert.equal(result.ok, false, 'batch: overall ok false when one edit fails');
-    assert.equal(result.results.length, 2, 'batch: both results present');
+    assert.equal(result.atomic, true, 'batch: atomic flag must be true');
+    assert.equal(result.appliedCount, 0, 'batch: no edit should be applied after preflight failure');
+    assert.equal(result.results.length, 2, 'batch: both preflight results present');
     assert.ok(result.results.some((r) => r.ok === false), 'batch: a failure is reported');
+    assert.equal(fs.readFileSync(path.join(dir, 'a.js'), 'utf8').replace(/\r\n/g, '\n'), 'let a = 1;\n', 'batch: failed preflight leaves original file unchanged');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

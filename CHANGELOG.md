@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.16.7] — 2026-06-30
+
+### Safer public workspace tidy workflow
+- **Replaced the public direct cleanup surface with a two-step tidy plan/run workflow.** ChatGPT now sees `relai_tidy_plan` and `relai_tidy_run` instead of the direct public `relai_clear_files` path; the server selects bounded session-owned untracked candidates and the apply step only accepts a short-lived plan ID.
+- **Tidy plans are expiry-bound and hash-checked before they change the workspace.** Plans expire after 15 minutes, are tied to the workspace alias/root, and each candidate must still be session-owned, untracked, file-shaped, and SHA-matching before it is touched.
+- **Kept the lower-level clear primitive internal instead of leaving dead code.** `relai_clear_files` remains available on the full local/stdin surface and is still used by trusted internals such as obsolete-file retirement and the tidy runner, but it is no longer advertised on the public ChatGPT connector surface.
+- **Validation is harder to misread.** `relai_run_checks` now reports `validationStatus: "not_run"` with `ok:false` when no checks are detected, and build-only/frontend package projects now run `npm run build` instead of looking validated when nothing ran.
+- **Batch edits are preflight-first.** `relai_edit` batches now validate all requested edits before writing; if any edit fails, zero edits are applied.
+- **Regression coverage now locks down the new behavior.** Added workspace tidy tests for plan/run success and SHA-mismatch refusal, plus updated public tool-count and smoke coverage for the new 18-tool connector surface / 29-tool full surface.
+
+Bump root/electron/status UI/lockfiles to 0.16.7.
+
 ## [0.16.6] — 2026-06-29
 
 ### Folder picker fixes (desktop launcher)

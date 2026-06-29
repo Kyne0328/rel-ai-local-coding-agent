@@ -64,6 +64,29 @@ async function applyOneEdit(workspace, config, edit, dryRun) {
   return { ...result, path, plannerPath: 'write' };
 }
 
+async function preflightBatchEdits(workspace, config, edits, dryRun) {
+  const results = [];
+  let allOk = true;
+
+  for (const edit of edits) {
+    if (!edit || typeof edit !== 'object' || !edit.path) {
+      results.push({ ok: false, error: 'each edit requires a path', preflight: true });
+      allOk = false;
+      continue;
+    }
+    try {
+      const result = await applyOneEdit(workspace, config, edit, true);
+      results.push({ ...result, preflight: true });
+      if (result.ok === false) allOk = false;
+    } catch (error) {
+      results.push({ ok: false, path: edit.path, error: error instanceof Error ? error.message : String(error), preflight: true });
+      allOk = false;
+    }
+  }
+
+  return { ok: allOk, results, dryRun };
+}
+
 // Optional post-actions: validate and/or return a diff in the SAME call, so a
 // change-verify-review loop costs one approval instead of three.
 async function runPostActions(workspace, config, args) {
@@ -144,33 +167,49 @@ async function planEdit(workspace, config, args) {
     return handleStagedPatch(workspace, config, args);
   }
 
-  // Batch: several exact-replace / full-file edits in one approval. Best-effort
-  // sequential — every edit is reported with its own ok/error, and overall ok is
-  // true only if all succeeded.
+  // Batch: several exact-replace / full-file edits in one approval. This is
+  // preflight-first and atomic at the planner level: if any edit cannot be
+  // validated, none of the batch is applied.
   if (Array.isArray(args.edits) && args.edits.length > 0) {
+    const preflight = await preflightBatchEdits(workspace, config, args.edits, Boolean(args.dryRun));
+    if (!preflight.ok || args.dryRun) {
+      const out = {
+        ok: preflight.ok,
+        workspace: workspace.alias,
+        plannerPath: 'batch',
+        plannerReason: preflight.ok
+          ? `preflight passed for ${preflight.results.length} edit(s); dryRun requested so 0 edits were applied`
+          : `preflight failed; applied 0 of ${preflight.results.length} edit(s)`,
+        editCount: preflight.results.length,
+        appliedCount: 0,
+        atomic: true,
+        results: preflight.results
+      };
+      return attachPost(out, await runPostActions(workspace, config, args));
+    }
+
     const results = [];
     let allOk = true;
     for (const edit of args.edits) {
-      if (!edit || typeof edit !== 'object' || !edit.path) {
-        results.push({ ok: false, error: 'each edit requires a path' });
-        allOk = false;
-        continue;
-      }
       try {
-        const r = await applyOneEdit(workspace, config, edit, args.dryRun);
+        const r = await applyOneEdit(workspace, config, edit, false);
         results.push(r);
         if (r.ok === false) allOk = false;
       } catch (error) {
         results.push({ ok: false, path: edit.path, error: error instanceof Error ? error.message : String(error) });
         allOk = false;
+        break;
       }
     }
     const out = {
       ok: allOk,
       workspace: workspace.alias,
       plannerPath: 'batch',
-      plannerReason: `applied ${results.length} edit(s) sequentially`,
+      plannerReason: `preflight passed; applied ${results.filter((item) => item.ok !== false).length} edit(s) atomically`,
       editCount: results.length,
+      appliedCount: results.filter((item) => item.ok !== false).length,
+      atomic: true,
+      preflight: preflight.results,
       results
     };
     return attachPost(out, await runPostActions(workspace, config, args));

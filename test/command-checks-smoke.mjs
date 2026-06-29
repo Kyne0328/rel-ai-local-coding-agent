@@ -40,6 +40,32 @@ fs.writeFileSync(path.join(tmp, 'package.json'), JSON.stringify({
   assert.ok(result.results[0].stdout.includes('release all'));
 }
 
+// 0b. Build-only package scripts are real validation, not "no checks detected".
+{
+  const buildOnly = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-checks-build-only-'));
+  fs.writeFileSync(path.join(buildOnly, 'package.json'), JSON.stringify({
+    scripts: {
+      build: 'node -e "console.log(\'build ok\')"'
+    }
+  }, null, 2));
+  const result = await relaiVerify({ path: buildOnly, alias: 'build-only' }, config, {});
+  assert.equal(result.ok, true, 'build-only package should validate successfully');
+  assert.deepEqual(result.checks, ['npm run build']);
+  assert.ok(result.results[0].stdout.includes('build ok'), 'build script stdout should be present');
+  fs.rmSync(buildOnly, { recursive: true, force: true });
+}
+
+// 0c. No detected checks must be explicit non-validation.
+{
+  const noChecks = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-checks-none-'));
+  const result = await relaiVerify({ path: noChecks, alias: 'no-checks' }, config, {});
+  assert.equal(result.ok, false, 'no-check result must not look like a passed validation');
+  assert.equal(result.validationStatus, 'not_run');
+  assert.equal(result.validated, false);
+  assert.ok(result.message.includes('NOT RUN'));
+  fs.rmSync(noChecks, { recursive: true, force: true });
+}
+
 // 1. Configured check by key — call relaiVerify with explicit check key mapped from commands
 {
   const args = mapCheckArgs({ check: workspace.commands.lint });

@@ -238,7 +238,7 @@ const mcpRes = await fetch(`${base}/mcp`, {
 });
 if (mcpRes.status !== 200) fail(`POST /mcp with OAuth token expected 200, got ${mcpRes.status}`);
 const mcpBody = await mcpRes.json();
-if (!Array.isArray(mcpBody.result?.tools) || mcpBody.result.tools.length !== 17) {
+if (!Array.isArray(mcpBody.result?.tools) || mcpBody.result.tools.length !== 18) {
   fail(`OAuth-authenticated tools/list did not return 17 tools: ${mcpBody.result?.tools?.length}`);
 }
 

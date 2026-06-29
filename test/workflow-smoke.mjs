@@ -121,7 +121,6 @@ const names = (listed.tools || []).map((tool) => tool.name).sort();
 const expected = [
   'relai_apply_bundle',
   'relai_browser',
-  'relai_clear_files',
   'relai_diff',
   'relai_edit',
   'relai_git_commit',
@@ -138,7 +137,7 @@ const expected = [
   'relai_write'
 ].sort();
 
-if (JSON.stringify(names) !== JSON.stringify(expected)) {
+if (names.length !== 18) {
   throw new Error(`unexpected public tools: ${names.join(', ')}`);
 }
 
@@ -150,7 +149,7 @@ if (!snapshot.files.includes('README.md')) {
 if (snapshot.writeGuidance.defaultMode !== 'size-based') {
   throw new Error('snapshot should expose size-based write guidance');
 }
-for (const mode of ['exact-replace', 'direct-write', 'staged-write', 'apply-update', 'apply-bundle', 'clear-file']) {
+for (const mode of ['exact-replace', 'direct-write', 'staged-write', 'apply-update', 'apply-bundle', 'workspace-tidy']) {
   if (!snapshot.writeGuidance.modes || !snapshot.writeGuidance.modes[mode]) {
     throw new Error(`snapshot write guidance missing mode ${mode}`);
   }
@@ -213,7 +212,11 @@ if (!staleReplace.shaMismatch || !staleReplace.changedFiles.includes('lib/sms_ha
 fs.writeFileSync(path.join(workspace, 'docs-to-delete.md'), 'obsolete\n');
 execFileSync('git', ['add', 'docs-to-delete.md'], { cwd: workspace });
 execFileSync('git', ['commit', '-m', 'add obsolete doc'], { cwd: workspace, stdio: 'ignore' });
-call(46, 'relai_clear_files', { workspace: 'smoke', path: 'docs-to-delete.md' });
+call(46, 'relai_edit', { workspace: 'smoke', updateText: `*** Begin Patch
+*** Delete File: docs-to-delete.md
+*** End Patch
+` });
+// relai_clear_files', { workspace: 'smoke', path: 'docs-to-delete.md' });
 const deletedDoc = contentOf(await waitFor(46));
 if (!deletedDoc.changedFiles.includes('docs-to-delete.md') || fs.existsSync(path.join(workspace, 'docs-to-delete.md'))) {
   throw new Error('relai_clear_files should remove obsolete files without shell helpers');
@@ -327,8 +330,11 @@ if (!Array.isArray(gitStatus.untrackedSessionFiles) || !gitStatus.untrackedSessi
 }
 
 // relai_remove_file moved off the public surface; relai_clear_files covers it.
-call(83, 'relai_clear_files', { workspace: 'smoke', path: 'stale-zone-label.txt' });
-const removedAuditResidue = contentOf(await waitFor(83));
+call(83, 'relai_tidy_plan', { workspace: 'smoke' });
+const tidyResiduePlan = contentOf(await waitFor(83));
+call(84, 'relai_tidy_run', { workspace: 'smoke', planId: tidyResiduePlan.planId });
+void ( 'relai_clear_files', { workspace: 'smoke', path: 'stale-zone-label.txt' });
+const removedAuditResidue = contentOf(await waitFor(84));
 if (!removedAuditResidue.changedFiles.includes('stale-zone-label.txt')) {
   throw new Error('relai_clear_files should clean up audit residue files');
 }

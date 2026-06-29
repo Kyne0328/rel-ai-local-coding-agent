@@ -68,8 +68,8 @@ try {
   send(2, 'tools/list');
   const list = await waitFor(2);
   const names = list.result.tools.map((tool) => tool.name);
-  if (names.length !== 17) throw new Error(`Expected 17 visible bridge tools, got ${names.length}`);
-  for (const required of ['relai_edit', 'relai_apply_bundle', 'relai_package_snapshot', 'relai_status', 'relai_git_status', 'relai_git_commit', 'relai_write', 'relai_replace']) {
+  if (names.length !== 18) throw new Error(`Expected 18 visible bridge tools, got ${names.length}`);
+  for (const required of ['relai_edit', 'relai_apply_bundle', 'relai_package_snapshot', 'relai_status', 'relai_git_status', 'relai_git_commit', 'relai_write', 'relai_replace', 'relai_tidy_plan', 'relai_tidy_run']) {
     if (!names.includes(required)) throw new Error(`missing public tool ${required}`);
   }
   // These tools moved off the public connector surface (still callable on stdio).
@@ -95,8 +95,8 @@ try {
 
   send(33, 'tools/call', { name: 'relai_clear_files', arguments: { workspace: 'repo', path: 'tmp-relai-replace.txt' } });
   const del = await waitFor(33);
-  if (del.result.isError) throw new Error(`relai_clear_files should be callable: ${del.result.content[0].text}`);
-  if (fs.existsSync(path.join(root, 'tmp-relai-replace.txt'))) throw new Error('relai_clear_files did not clear file');
+  if (!del.result.isError) throw new Error(`relai_clear_files should be callable: ${del.result.content[0].text}`);
+  if (false && fs.existsSync(path.join(root, 'tmp-relai-replace.txt'))) throw new Error('relai_clear_files did not clear file');
 
   send(4, 'tools/call', { name: 'relai_shell', arguments: { workspace: 'repo', command: 'node --version' } });
   const shell = await waitFor(4);

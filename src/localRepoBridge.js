@@ -51,6 +51,9 @@ const EXACT_REPLACE_MAX_OPERATIONS = 50;
 const CHECK_OUTPUT_TAIL_DEFAULT = 4000;
 const CHECK_OUTPUT_TAIL_FULL = 40000;
 const SOURCE_LIKE_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs', '.dart', '.py', '.go', '.rs', '.java', '.kt', '.swift', '.cs', '.cpp', '.c', '.h', '.hpp', '.rb', '.php', '.css', '.scss', '.html', '.xml', '.yaml', '.yml', '.json', '.md']);
+const TIDY_PLAN_TTL_MS = 15 * 60 * 1000;
+const TIDY_PLAN_ID_PATTERN = /^tidy_[a-z0-9]+_[a-f0-9]{12}$/;
+const TIDY_MODES = new Set(["session_untracked"]);
 
 function repoSnapshot(workspace, config, args = {}) {
   const policy = resolvePolicy(workspace, config || {});
@@ -371,6 +374,165 @@ function relaiClear(workspace, config, args = {}) {
   };
 }
 
+function tidyPlanDir(config, workspace) {
+  const safeAlias = String(workspace.alias || "workspace").replace(/[^A-Za-z0-9_.-]/g, "_");
+  return path.join(config.stateDir || path.join(process.cwd(), ".rel-ai-mcp-state"), "workspace-tidy", safeAlias);
+}
+
+function validateTidyPlanId(planId) {
+  const text = String(planId || "").trim();
+  if (!TIDY_PLAN_ID_PATTERN.test(text)) throw new Error("Invalid or missing workspace tidy planId.");
+  return text;
+}
+
+function tidyPlanPath(config, workspace, planId) {
+  return path.join(tidyPlanDir(config, workspace), `${validateTidyPlanId(planId)}.json`);
+}
+
+function makeTidyPlanId() {
+  return `tidy_${Date.now().toString(36)}_${require("node:crypto").randomBytes(6).toString("hex")}`;
+}
+
+function normalizeTidyMode(raw) {
+  const mode = String(raw || "session_untracked").trim().toLowerCase();
+  if (!TIDY_MODES.has(mode)) throw new Error(`Unsupported tidy mode '${mode}'. Supported modes: ${[...TIDY_MODES].join(", ")}.`);
+  return mode;
+}
+
+async function workspaceTidyPlan(workspace, config, args = {}) {
+  const mode = normalizeTidyMode(args.mode);
+  const maxCandidates = clampNumber(args.maxCandidates, 1, 100, 50);
+  const status = await runProcess("git", ["status", "--short", "--branch"], { cwd: workspace.path, timeout: 30000 }, config);
+  if (status.exitCode !== 0) throw new Error(`git status failed for ${workspace.alias}: ${status.stderr || status.stdout || status.exitCode}`);
+  const ownership = classifyStatusOwnership(workspace, config, status.stdout || "");
+  const candidates = [];
+  const skipped = [];
+  if (mode === "session_untracked") {
+    for (const file of ownership.untrackedSession.slice(0, maxCandidates)) {
+      try {
+        const safe = resolveSafePath(workspace.path, file);
+        if (!fs.existsSync(safe.absolutePath)) { skipped.push({ path: safe.relativePath, reason: "missing" }); continue; }
+        const stat = fs.statSync(safe.absolutePath);
+        if (!stat.isFile()) { skipped.push({ path: safe.relativePath, reason: "not a file" }); continue; }
+        candidates.push({
+          path: safe.relativePath,
+          action: "tidy_untracked_file",
+          status: "untracked",
+          owner: "session",
+          reason: "untracked file owned by the current workspace session",
+          sha256: fileSha256(workspace.path, safe.relativePath),
+          sizeBytes: stat.size,
+          modifiedAt: stat.mtime.toISOString()
+        });
+      } catch (error) {
+        skipped.push({ path: String(file), reason: error instanceof Error ? error.message : String(error) });
+      }
+    }
+  }
+  const now = Date.now();
+  const planId = makeTidyPlanId();
+  const plan = {
+    id: planId,
+    workspace: workspace.alias,
+    root: workspace.path,
+    mode,
+    createdAt: new Date(now).toISOString(),
+    expiresAt: new Date(now + TIDY_PLAN_TTL_MS).toISOString(),
+    candidates,
+    skipped
+  };
+  fs.mkdirSync(tidyPlanDir(config, workspace), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(tidyPlanPath(config, workspace, planId), `${JSON.stringify(plan, null, 2)}\n`, { mode: 0o600 });
+  appendOperation(config, workspace, {
+    id: planId,
+    type: "workspace_tidy_plan",
+    ok: true,
+    paths: [],
+    results: [{ operation: "workspaceTidyPlan", mode, candidateCount: candidates.length }]
+  });
+  return {
+    ok: true,
+    workspace: workspace.alias,
+    operation: "workspaceTidyPlan",
+    mode,
+    planId,
+    expiresAt: plan.expiresAt,
+    ttlSeconds: Math.floor(TIDY_PLAN_TTL_MS / 1000),
+    candidateCount: candidates.length,
+    skippedCount: skipped.length,
+    candidates,
+    skipped,
+    next: candidates.length ? "Call relai_tidy_run with this planId to apply this bounded tidy plan." : "No session-owned untracked files were found."
+  };
+}
+
+function readTidyPlan(config, workspace, planId) {
+  const id = validateTidyPlanId(planId);
+  const file = tidyPlanPath(config, workspace, id);
+  if (!fs.existsSync(file)) throw new Error(`Workspace tidy plan not found or already used: ${id}`);
+  const plan = JSON.parse(fs.readFileSync(file, "utf8"));
+  if (!plan || plan.id !== id) throw new Error(`Workspace tidy plan file is invalid: ${id}`);
+  if (plan.workspace !== workspace.alias || plan.root !== workspace.path) throw new Error(`Workspace tidy plan ${id} belongs to a different workspace.`);
+  const expires = Date.parse(plan.expiresAt || "");
+  if (!Number.isFinite(expires) || Date.now() > expires) throw new Error(`Workspace tidy plan ${id} expired. Create a new plan first.`);
+  return { file, plan };
+}
+
+async function relaiWorkspaceTidyRun(workspace, config, args = {}) {
+  const planId = validateTidyPlanId(args.planId);
+  const { file, plan } = readTidyPlan(config, workspace, planId);
+  const status = await runProcess("git", ["status", "--short", "--branch"], { cwd: workspace.path, timeout: 30000 }, config);
+  if (status.exitCode !== 0) throw new Error(`git status failed for ${workspace.alias}: ${status.stderr || status.stdout || status.exitCode}`);
+  const ownership = classifyStatusOwnership(workspace, config, status.stdout || "");
+  const currentUntracked = new Set(ownership.untrackedSession || []);
+  const candidates = Array.isArray(plan.candidates) ? plan.candidates : [];
+  const preflight = [];
+  const refused = [];
+  for (const candidate of candidates) {
+    const safe = resolveSafePath(workspace.path, candidate.path);
+    if (!currentUntracked.has(safe.relativePath)) { refused.push({ path: safe.relativePath, reason: "path is no longer session-owned and untracked" }); continue; }
+    if (!fs.existsSync(safe.absolutePath)) { refused.push({ path: safe.relativePath, reason: "path is missing" }); continue; }
+    const stat = fs.statSync(safe.absolutePath);
+    if (!stat.isFile()) { refused.push({ path: safe.relativePath, reason: "path is not a file" }); continue; }
+    const currentSha256 = fileSha256(workspace.path, safe.relativePath);
+    if (currentSha256 !== candidate.sha256) { refused.push({ path: safe.relativePath, reason: "sha256 mismatch", expectedSha256: candidate.sha256, currentSha256 }); continue; }
+    preflight.push({ path: safe.relativePath, sha256: currentSha256, sizeBytes: stat.size });
+  }
+  if (refused.length > 0) {
+    return {
+      ok: false,
+      workspace: workspace.alias,
+      operation: "workspaceTidyApply:preflight",
+      planId,
+      changed: false,
+      changedFiles: [],
+      applied: [],
+      refused,
+      message: "Workspace tidy plan was not applied because one or more candidates changed since planning. Create a fresh plan."
+    };
+  }
+  const clearResult = (preflight.length > 0 ? relaiClear(workspace, config, { paths: preflight.map((item) => item.path), failIfMissing: true }) : { ok: true, changedFiles: [] });
+  try { fs.rmSync(file, { force: true }); } catch (_error) {}
+  const applied = preflight.map((item) => ({ path: item.path, action: "tidied_untracked_file", sha256: item.sha256, sizeBytes: item.sizeBytes }));
+  appendOperation(config, workspace, {
+    id: planId,
+    type: "workspace_tidy_apply",
+    ok: clearResult.ok === true,
+    paths: clearResult.changedFiles || [],
+    results: [{ operation: "workspaceTidyApply", appliedCount: applied.length }]
+  });
+  return {
+    ok: clearResult.ok === true,
+    workspace: workspace.alias,
+    operation: "workspaceTidyApply",
+    planId,
+    changed: applied.length > 0,
+    changedFiles: clearResult.changedFiles || [],
+    appliedCount: applied.length,
+    applied,
+    message: applied.length ? `Applied workspace tidy plan to ${applied.length} file(s).` : "Workspace tidy plan had no candidates."
+  };
+}
 
 async function relaiApplyPatch(workspace, config, args = {}) {
   const rawPatch = String(args.patch || args.diff || args.updateText || "");
@@ -923,7 +1085,22 @@ async function relaiVerify(workspace, config, args = {}) {
   const { checks, aliasNormalizations } = normalizeVerifyChecks(args, workspace.path, level);
   const { level: validationLevel, reason: validationLevelReason, changedFiles } = selectValidationLevel(workspace.path, workspace, args.validationLevel);
   const policy = resolvePolicy(workspace, config);
-  if (checks.length === 0) return { ok: true, workspace: workspace.alias, level, checks: [], commands: [], results: [], aliasNormalizations: 0, validationLevel, validationLevelReason, changedFiles, policy, message: "No validation checks detected." };
+  if (checks.length === 0) return {
+    ok: false,
+    workspace: workspace.alias,
+    level,
+    checks: [],
+    commands: [],
+    results: [],
+    aliasNormalizations: 0,
+    validationLevel,
+    validationLevelReason,
+    changedFiles,
+    policy,
+    validated: false,
+    validationStatus: "not_run",
+    message: "Validation status: NOT RUN. No validation checks were detected or executed. This is not a passed validation. Define a check/test/build script or pass an explicit check."
+  };
   const stopOnFailure = args.stopOnFailure !== false;
   const fullOutput = Boolean(args.fullOutput);
   const runConfig = fullOutput
@@ -1219,9 +1396,9 @@ function workspaceWriteGuidance(config) {
           "many files need to be overlaid together"
         ]
       },
-      "clear-file": {
-        tool: "relai_clear_files",
-        when: ["one or more obsolete files should be removed"]
+      "workspace-tidy": {
+        tools: ["relai_tidy_plan", "relai_tidy_run"],
+        when: ["generated session artifacts should be tidied through a bounded plan"]
       }
     },
     selectionOrder: [
@@ -1230,7 +1407,7 @@ function workspaceWriteGuidance(config) {
       "Use staged-write for complete replacement of large files.",
       "Use apply-update when the change is naturally patch-shaped across files.",
       "Use apply-bundle when a prepared archive should overlay many files.",
-      "Use clear-file for obsolete files."
+      "Use workspace-tidy plan/run for generated session artifacts."
     ],
     examples: {
       exactReplace: "relai_replace { workspace, path, expectedSha256, oldText, newText }",
@@ -1240,7 +1417,8 @@ function workspaceWriteGuidance(config) {
       stagedWriteCommit: "relai_write { workspace, stage: 'commit', writeId }",
       applyUpdate: "relai_edit { workspace, updateText, runChecks: true, returnDiff: true }",
       applyBundle: "relai_apply_bundle { workspace, bundlePath, checks }",
-      clearFile: "relai_clear_files { workspace, path }"
+      workspaceTidyPlan: "relai_tidy_plan { workspace, mode: 'session_untracked' }",
+      workspaceTidyRun: "relai_tidy_run { workspace, planId }"
     },
     next: "Choose the edit tool by task shape and file size, then run relai_run_checks and relai_diff."
   };
@@ -1429,7 +1607,7 @@ function detectVerifyChecks(root, level) {
           commands.push("node --check src/tools.js");
         }
         if (level !== "quick" && scripts.test) commands.push("npm test");
-        if ((level === "full" || level === "release") && scripts.build) commands.push("npm run build");
+        if (scripts.build && shouldRunPackageBuild(root, pkg, scripts, level, commands)) commands.push("npm run build");
       }
     } catch (_error) {
       if (level === "quick" && fs.existsSync(path.join(root, "src", "tools.js"))) commands.push("node --check src/tools.js");
@@ -1447,6 +1625,23 @@ function detectVerifyChecks(root, level) {
   if (fs.existsSync(path.join(root, "go.mod"))) commands.push("go test ./...");
   if (fs.existsSync(path.join(root, "Cargo.toml"))) commands.push("cargo test");
   return [...new Set(commands)];
+}
+
+function shouldRunPackageBuild(root, pkg, scripts, level, currentCommands) {
+  if (level === "quick") return false;
+  if (level === "full" || level === "release") return true;
+  if (!currentCommands || currentCommands.length === 0) return true;
+  const allDeps = {
+    ...(pkg && pkg.dependencies && typeof pkg.dependencies === "object" ? pkg.dependencies : {}),
+    ...(pkg && pkg.devDependencies && typeof pkg.devDependencies === "object" ? pkg.devDependencies : {})
+  };
+  const dependencyNames = new Set(Object.keys(allDeps));
+  const buildCriticalDeps = ["next", "vite", "nuxt", "astro", "@remix-run/dev", "@sveltejs/kit", "react-scripts", "webpack", "parcel"];
+  if (buildCriticalDeps.some((name) => dependencyNames.has(name))) return true;
+  const build = String((scripts && scripts.build) || "");
+  if (/\b(next|vite|nuxt|astro|remix|svelte-kit|react-scripts|webpack|parcel)\b/i.test(build)) return true;
+  if (fs.existsSync(path.join(root, "next.config.js")) || fs.existsSync(path.join(root, "next.config.mjs"))) return true;
+  return false;
 }
 
 
@@ -1495,5 +1690,7 @@ module.exports = {
   writeStagedPayload,
   readStagedPayload,
   clearStagedPayload,
-  resolveStagedWriteId
+  resolveStagedWriteId,
+  workspaceTidyPlan,
+  workspaceTidyRun: relaiWorkspaceTidyRun
 };
