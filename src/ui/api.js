@@ -17,6 +17,17 @@ export function getToken() {
   return _token || sessionStorage.getItem(TOKEN_KEY) || '';
 }
 
+// Full-page reload that preserves the dashboard token. The boot script strips
+// ?token from the URL after reading it, so a bare location.reload() re-requests
+// the token-gated /dashboard route with no credentials and gets a 401. Re-attach
+// the token here (boot strips it from the URL again on the next load). The hash
+// is preserved so the user stays on the current section.
+export function reloadWithToken() {
+  const t = getToken();
+  const query = t ? '?token=' + encodeURIComponent(t) : '';
+  location.assign('/dashboard' + query + (location.hash || ''));
+}
+
 export async function fetchJson(url, opts = {}) {
   const isGet = !opts.method || opts.method === 'GET';
   const cacheKey = isGet ? url : null;
