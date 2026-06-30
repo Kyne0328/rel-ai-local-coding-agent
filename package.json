@@ -22,7 +22,7 @@
     "workspace:add": "node bin/relai-mcp-config.js workspace add",
     "testcmd:add": "node bin/relai-mcp-config.js test-command add",
     "cmd:add": "node bin/relai-mcp-config.js command add",
-    "test": "npm run check && npm run test:release && npm run test:repo-health && npm run test:smoke && npm run test:connector-wording && npm run test:regressions && npm run test:windows-archive && npm run test:safety-paths && npm run test:archive-safety && npm run test:http-auth && npm run test:oauth",
+    "test": "npm run check && npm run test:release && npm run test:repo-health && npm run test:smoke && npm run test:connector-wording && npm run test:regressions && npm run test:windows-archive && npm run test:safety-paths && npm run test:archive-safety && npm run test:http-auth && npm run test:oauth && npm run test:public-workflow && npm run test:prepared-update && npm run test:checks && npm run test:git-workflow && npm run test:staged-write",
     "test:repo-health": "node test/repo-health.mjs",
     "test:smoke": "node test/smoke.mjs",
     "test:windows-archive": "node test/windows-archive-command-smoke.mjs",
