@@ -69,6 +69,7 @@ async function boot() {
   await _doRefresh();
 
   _wireTopControls();
+  window.addEventListener('relai:dashboard-refresh', _doRefresh);
   setPollCallback(_doRefresh);
   // Register the SSE/visibility manager ONCE at boot (it adds a visibilitychange
   // listener). _toggleLive previously re-called initEvents on every toggle, stacking

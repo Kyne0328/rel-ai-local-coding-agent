@@ -2,7 +2,7 @@
 // folder picker (desktop launcher only), and warn-but-allow saving so a path that
 // does not exist yet (about to be cloned) is never a hard block.
 import { openModal, closeModal } from '/ui/components/modal.js';
-import { fetchJson, postJson, invalidateCache, reloadWithToken } from '/ui/api.js';
+import { fetchJson, postJson, invalidateCache, requestDashboardRefresh } from '/ui/api.js';
 import { toast } from '/ui/components/toast.js';
 import { esc } from '/ui/utils.js';
 
@@ -135,7 +135,7 @@ export function openWorkspaceForm({ mode = 'add', workspace = null, onSaved } = 
       invalidateCache();
       toast((isEdit ? 'Workspace updated: ' : 'Workspace added: ') + alias, { variant: 'success' });
       if (typeof onSaved === 'function') onSaved();
-      else setTimeout(() => reloadWithToken(), 400);
+      else requestDashboardRefresh();
     } else {
       toast('Could not save workspace: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });
     }

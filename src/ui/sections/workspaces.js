@@ -1,5 +1,5 @@
 // Workspaces section — configured repositories and validation setup
-import { fetchJson, postJson, DASHBOARD_DATA_URL, reloadWithToken } from '/ui/api.js';
+import { fetchJson, postJson, DASHBOARD_DATA_URL, requestDashboardRefresh } from '/ui/api.js';
 import { pillHtml } from '/ui/components/pill.js';
 import { badgeHtml } from '/ui/components/badge.js';
 import { toast } from '/ui/components/toast.js';
@@ -213,8 +213,8 @@ document.addEventListener('click', async (event) => {
     saveDetected.disabled = false;
     saveDetected.textContent = 'Save detected tests';
     if (result && result.ok) {
-      toast('Detected tests saved for ' + alias + '. Refreshing…', { variant: 'success' });
-      setTimeout(() => reloadWithToken(), 500);
+      toast('Detected tests saved for ' + alias + '.', { variant: 'success' });
+      requestDashboardRefresh();
     } else {
       toast('Could not save detected tests: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });
     }
@@ -272,7 +272,7 @@ async function renameWorkspaceFlow(alias) {
   });
   if (result && result.ok) {
     toast('Workspace renamed to ' + nextAlias, { variant: 'success' });
-    setTimeout(() => reloadWithToken(), 400);
+    requestDashboardRefresh();
   } else {
     toast('Could not rename workspace: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });
   }
@@ -286,7 +286,7 @@ async function toggleFastTaskFlow(alias) {
   const result = await saveWorkspaceFastTask(ws, fastTask);
   if (result && result.ok) {
     toast('Focused context ' + (fastTask.enabled ? 'enabled' : 'disabled') + ' for ' + alias, { variant: 'success' });
-    setTimeout(() => reloadWithToken(), 400);
+    requestDashboardRefresh();
   } else {
     toast('Could not update context mode: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });
   }
@@ -314,7 +314,7 @@ async function editFastTaskFlow(alias) {
   const result = await saveWorkspaceFastTask(ws, fastTask);
   if (result && result.ok) {
     toast('Context settings saved for ' + alias, { variant: 'success' });
-    setTimeout(() => reloadWithToken(), 400);
+    requestDashboardRefresh();
   } else {
     toast('Could not save context settings: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });
   }
@@ -327,7 +327,7 @@ async function pruneStaleTestsFlow(alias) {
   if (result && result.ok) {
     const removed = Array.isArray(result.removed) ? result.removed.length : 0;
     toast(removed ? `Removed ${removed} stale test command${removed === 1 ? '' : 's'} from ${alias}. Refreshing…` : `No stale test commands for ${alias}.`, { variant: 'success' });
-    setTimeout(() => reloadWithToken(), 500);
+    requestDashboardRefresh();
   } else {
     toast('Could not remove stale tests: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });
   }
@@ -339,7 +339,7 @@ async function clearWorkspaceFlow(alias) {
   const result = await postJson('/api/workspaces', { action: 'clear', alias, confirmClear: true });
   if (result && result.ok) {
     toast('Workspace cleared: ' + alias, { variant: 'success' });
-    setTimeout(() => reloadWithToken(), 400);
+    requestDashboardRefresh();
   } else {
     toast('Could not clear workspace: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });
   }

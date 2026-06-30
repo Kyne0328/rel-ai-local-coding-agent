@@ -17,15 +17,20 @@ export function getToken() {
   return _token || sessionStorage.getItem(TOKEN_KEY) || '';
 }
 
-// Full-page reload that preserves the dashboard token. The boot script strips
-// ?token from the URL after reading it, so a bare location.reload() re-requests
-// the token-gated /dashboard route with no credentials and gets a 401. Re-attach
-// the token here (boot strips it from the URL again on the next load). The hash
-// is preserved so the user stays on the current section.
+// Full-page fallback reload that preserves the dashboard token and hash. Normal
+// dashboard mutations should prefer requestDashboardRefresh() so the page updates
+// in place without breaking live context.
 export function reloadWithToken() {
   const t = getToken();
   const query = t ? '?token=' + encodeURIComponent(t) : '';
   location.assign('/dashboard' + query + (location.hash || ''));
+}
+
+export function requestDashboardRefresh() {
+  invalidateCache();
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('relai:dashboard-refresh'));
+  }
 }
 
 export async function fetchJson(url, opts = {}) {
