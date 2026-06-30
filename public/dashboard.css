@@ -185,6 +185,18 @@ a.buttonlike.primary {
   background: rgba(5,9,20,.74);
 }
 
+.first-prompt {
+  padding: 11px 12px;
+  margin-bottom: 10px;
+  border-radius: 12px;
+  background: rgba(5,9,20,.74);
+  border: 1px solid var(--line, rgba(148,176,224,.14));
+  color: var(--text-muted, #9aa8c1);
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
 .data-table th {
   top: -1px;
 }

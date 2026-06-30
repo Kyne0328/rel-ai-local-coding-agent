@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { safeReadJson } = require("./safety");
-const { discoverCommands } = require("./commandDiscovery");
+const { discoverCommands, staleCommandKeys } = require("./commandDiscovery");
 
 function getConfigPath() {
   return process.env.REL_AI_MCP_CONFIG || path.join(os.homedir(), ".rel-ai-mcp", "config.json");
@@ -319,7 +319,8 @@ function publicConfigSummary(config) {
         repoSlug: entry.repoSlug || "",
         fastTask: normalizeFastTask(entry.fastTask),
         discoveredCommands: discovered,
-        discoveredTestCommandKeys: Object.keys(discovered).filter((key) => /test|analy[sz]e|lint|check|vet|build/.test(key + " " + discovered[key])).sort()
+        discoveredTestCommandKeys: Object.keys(discovered).filter((key) => /test|analy[sz]e|lint|check|vet|build/.test(key + " " + discovered[key])).sort(),
+        staleTestCommandKeys: staleCommandKeys(entry.testCommands || {}, discovered).sort()
       };
     }).sort((a, b) => a.alias.localeCompare(b.alias))
   };

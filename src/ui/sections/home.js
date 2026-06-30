@@ -40,6 +40,8 @@ function buildHome(data) {
 
   root.appendChild(nextStepsCard(workspaces, findings, audit));
 
+  root.appendChild(firstPromptCard(workspaces));
+
   const grid = document.createElement('div');
   grid.className = 'layout-grid';
   grid.appendChild(workspaceSetupCard(workspaces));
@@ -130,6 +132,18 @@ function buildNextSteps(workspaces, findings, audit) {
     });
   }
 
+  const staleAliasWorkspaces = workspaces.filter(ws => (ws.staleTestCommandKeys || []).length);
+  if (staleAliasWorkspaces.length) {
+    const totalStale = staleAliasWorkspaces.reduce((n, ws) => n + ws.staleTestCommandKeys.length, 0);
+    actions.push({
+      title: 'Clean up stale test commands',
+      description: `${totalStale} saved test command${totalStale === 1 ? '' : 's'} no longer match the workspace package scripts. Remove or refresh them so checks run the right commands.`,
+      href: '#workspaces',
+      cta: 'Review commands',
+      state: 'warn'
+    });
+  }
+
   if (findings.length) {
     actions.push({
       title: 'Review diagnostics',
@@ -161,6 +175,33 @@ function buildNextSteps(workspaces, findings, audit) {
   }
 
   return actions.slice(0, 3);
+}
+
+function firstPromptCard(workspaces) {
+  const alias = (workspaces[0] && workspaces[0].alias) || '<alias>';
+  const prompt = `Use Rel.AI MCP. Call relai_repo_snapshot for workspace "${alias}". Do not modify files yet.`;
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = '<div class="card-head"><h3>Safe first prompt</h3><span class="section-action">paste into ChatGPT</span></div>';
+  const body = document.createElement('div');
+  body.className = 'card-body stack-tight';
+  const text = document.createElement('div');
+  text.className = 'first-prompt mono';
+  text.textContent = prompt;
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'buttonlike secondary';
+  btn.textContent = 'Copy first prompt';
+  btn.addEventListener('click', () => {
+    navigator.clipboard.writeText(prompt).then(() => {
+      btn.textContent = 'Copied';
+      setTimeout(() => { btn.textContent = 'Copy first prompt'; }, 1600);
+    }).catch(() => {});
+  });
+  body.appendChild(text);
+  body.appendChild(btn);
+  card.appendChild(body);
+  return card;
 }
 
 function workspaceSetupCard(workspaces) {

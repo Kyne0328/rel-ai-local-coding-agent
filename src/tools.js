@@ -45,8 +45,8 @@ const BRIDGE_TOOL_NAMES = [
 
 // Curated connector surface. Fewer tools = less classifier scrutiny per session and
 // less context spent on tool schemas. relai_edit is the single write entry point (it
-// routes to replace/write/patch server-side); the lower-level write tools and niche
-// git planners stay callable on the full stdio surface but are hidden from ChatGPT.
+// routes to replace/write/patch server-side); lower-level write tools remain visible
+// only as fallback paths, while niche git planners stay callable on the full stdio surface.
 const PUBLIC_HTTP_TOOL_NAMES = [
   "relai_repo_snapshot",
   "relai_read",
@@ -117,7 +117,7 @@ const toolSchemas = [
   tool("relai_package_snapshot", "Package Workspace Zip", "Create a zip package of the current workspace, excluding repo internals, dependency caches, build outputs, and Rel.AI state.", {
     workspace: stringProp(), maxFiles: numberProp(1, 200000), timeoutMs: numberProp(1000, 86400000)
   }, ["workspace"], WRITE_LOCAL),
-  tool("relai_run_checks", "Workspace Checks", "Run workspace validation checks (tests, linters, analyzers, build). The validation level is auto-selected from the change surface. Output is bounded to each step's tail where failures appear; pass fullOutput:true for a larger tail.", {
+  tool("relai_run_checks", "Workspace Checks", "Run workspace validation checks (tests, linters, analyzers, build). Use level quick, standard, or release. Output is bounded to each step's tail where failures appear; pass fullOutput:true for a larger tail.", {
     workspace: stringProp(),
     level: stringProp(),
     check: stringProp(),
@@ -172,7 +172,7 @@ const toolSchemas = [
   tool("relai_refactor_audit", "Refactor Audit", "Read-only. Scan source, tests, UI text, docs, and data-shaped files for stale old terms and expected new terms after a refactor.", {
     workspace: stringProp(), oldTerms: arrayProp("string", 0, 100), newTerms: arrayProp("string", 0, 100), oldTerm: stringProp(), newTerm: stringProp(), find: stringProp(), expect: stringProp(), includeGenerated: boolProp(), maxEntries: numberProp(1, 20000)
   }, ["workspace"], READ_ONLY_LOCAL),
-  tool("relai_edit", "Unified Workspace Edit", "The one tool for changing files. The server auto-picks the mechanism: oldText+newText for an exact edit, content for a full-file write (large files chunk automatically), updateText for a unified/OpenAI diff, or edits:[...] to apply several edits in one call. Pass runChecks:true to validate and returnDiff:true to review, all in one approval.", {
+  tool("relai_edit", "Unified Workspace Edit", "The one tool for changing files. The server auto-picks the mechanism: oldText+newText for an exact edit, content for a full-file write (large files chunk automatically), updateText for a unified/OpenAI diff, or edits:[...] to apply several edits in one call. Pass runChecks:true to validate (optional level quick/standard/release, default standard) and returnDiff:true to review, all in one approval.", {
     workspace: stringProp(),
     path: stringProp(),
     oldText: stringProp(),
@@ -181,6 +181,7 @@ const toolSchemas = [
     updateText: stringProp(),
     edits: arrayObjectProp({ path: stringProp(), oldText: stringProp(), newText: stringProp(), content: stringProp() }, ["path"], 1, 20),
     runChecks: boolProp(),
+    level: stringProp(),
     returnDiff: boolProp(),
     dryRun: boolProp(),
     stage: stringProp(),

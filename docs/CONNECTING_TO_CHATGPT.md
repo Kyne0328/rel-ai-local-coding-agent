@@ -1,6 +1,6 @@
 # Connecting to ChatGPT
 
-Rel.AI MCP exposes a small local-repo bridge to ChatGPT. On the public connector surface, ChatGPT sees these 17 workspace tools:
+Rel.AI MCP exposes a small local-repo bridge to ChatGPT. On the public connector surface, ChatGPT sees these 18 workspace tools:
 
 - `relai_repo_snapshot`
 - `relai_read`
@@ -9,7 +9,8 @@ Rel.AI MCP exposes a small local-repo bridge to ChatGPT. On the public connector
 - `relai_edit`
 - `relai_write`
 - `relai_replace`
-- `relai_clear_files`
+- `relai_tidy_plan`
+- `relai_tidy_run`
 - `relai_apply_bundle`
 - `relai_package_snapshot`
 - `relai_run_checks`
@@ -20,9 +21,21 @@ Rel.AI MCP exposes a small local-repo bridge to ChatGPT. On the public connector
 - `relai_git_push`
 - `relai_git_create_pr`
 
-Use `relai_repo_snapshot` to inspect a configured workspace, `relai_read` to load exact files, and `relai_edit` for changes — it routes exact replacements, full-file writes, unified-diff updates, and batches automatically, with optional `runChecks`/`returnDiff` in the same call. `relai_write` and `relai_replace` remain as direct fallbacks. Use `relai_clear_files` for cleanup, `relai_run_checks` for validation, `relai_diff` for review, and the `relai_git_*` tools for commit/push/PR flows.
+Use `relai_repo_snapshot` to inspect a configured workspace, `relai_read` to load exact files, and `relai_edit` for changes — it routes exact replacements, full-file writes, unified-diff updates, and batches automatically, with optional `runChecks`/`returnDiff` in the same call. `relai_write` and `relai_replace` remain as direct fallbacks. Use `relai_tidy_plan` then `relai_tidy_run` for cleanup, `relai_run_checks` for validation, `relai_diff` for review, and the `relai_git_*` tools for commit/push/PR flows.
 
 Internal helper tools (`relai_apply_update`, `relai_feature_probe`, `relai_git_fetch`, merge planning/abort, `relai_remove_file`, `relai_refactor_audit`, `relai_set_policy`, `relai_session_summary`) are intentionally not part of the public connector surface — fewer tools means less connector-classifier scrutiny. They remain callable on local stdio sessions.
+
+## Starting the server
+
+Three commands cover every case:
+
+```bash
+npm run oneclick                                              # local dashboard / dev (no public URL)
+npm run oneclick -- --public                                  # temporary ChatGPT connector (auto tunnel)
+npm run oneclick -- --public-url https://your-domain.example  # permanent ChatGPT connector
+```
+
+For ChatGPT you need a public HTTPS endpoint, so use `--public` (temporary) or `--public-url` (permanent). See [`docs/ONE_CLICK_SETUP.md`](ONE_CLICK_SETUP.md) for provider-specific tunnel options.
 
 ## Adding the connector in ChatGPT
 

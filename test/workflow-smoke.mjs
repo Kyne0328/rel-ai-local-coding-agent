@@ -204,10 +204,15 @@ if (!postReplaceRead.items[0].content.includes(newDartLine)) {
 }
 
 call(45, 'relai_replace', { workspace: 'smoke', path: 'lib/sms_handler_utils.dart', expectedSha256: riskySha, oldText: newDartLine, newText: oldDartLine });
-const staleReplace = contentOf(await waitFor(45));
-if (!staleReplace.shaMismatch || !staleReplace.changedFiles.includes('lib/sms_handler_utils.dart')) {
-  throw new Error('relai_replace should report sha mismatch and continue');
+const staleReplaceResponse = await waitFor(45);
+const staleReplace = staleReplaceResponse.result && staleReplaceResponse.result.structuredContent;
+if (!staleReplace || staleReplace.ok !== false || !/stale expectedSha256/.test(staleReplace.error || '')) {
+  throw new Error('relai_replace should refuse stale expectedSha256 values');
 }
+if (!fs.readFileSync(path.join(workspace, 'lib', 'sms_handler_utils.dart'), 'utf8').includes(newDartLine)) {
+  throw new Error('stale expectedSha256 refusal should leave the file unchanged');
+}
+execFileSync('git', ['restore', 'lib/sms_handler_utils.dart'], { cwd: workspace });
 
 fs.writeFileSync(path.join(workspace, 'docs-to-delete.md'), 'obsolete\n');
 execFileSync('git', ['add', 'docs-to-delete.md'], { cwd: workspace });

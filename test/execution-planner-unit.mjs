@@ -141,6 +141,8 @@ function makeTempRepo(filename = 'hello.js', content = 'module.exports = {};') {
     assert.equal(result.plannerPath, 'batch', 'batch: plannerPath must be batch');
     assert.equal(result.ok, true, 'batch: all edits should succeed');
     assert.equal(result.editCount, 2, 'batch: two edits reported');
+    assert.equal(result.preflightAtomic, true, 'batch: preflightAtomic flag must be true');
+    assert.equal(result.rollbackAtomic, false, 'batch: rollbackAtomic must be false (no post-write rollback)');
     assert.equal(fs.readFileSync(path.join(dir, 'a.js'), 'utf8').replace(/\r\n/g, '\n'), 'let a = 2;\n', 'batch: replace applied');
     assert.equal(fs.readFileSync(path.join(dir, 'b.js'), 'utf8').replace(/\r\n/g, '\n'), 'let b = 99;\n', 'batch: write applied');
   } finally {
@@ -158,7 +160,8 @@ function makeTempRepo(filename = 'hello.js', content = 'module.exports = {};') {
       { path: 'a.js', oldText: 'NOT PRESENT', newText: 'x' }
     ] });
     assert.equal(result.ok, false, 'batch: overall ok false when one edit fails');
-    assert.equal(result.atomic, true, 'batch: atomic flag must be true');
+    assert.equal(result.preflightAtomic, true, 'batch: preflightAtomic flag must be true');
+    assert.equal(result.rollbackAtomic, false, 'batch: rollbackAtomic must be false (no post-write rollback)');
     assert.equal(result.appliedCount, 0, 'batch: no edit should be applied after preflight failure');
     assert.equal(result.results.length, 2, 'batch: both preflight results present');
     assert.ok(result.results.some((r) => r.ok === false), 'batch: a failure is reported');

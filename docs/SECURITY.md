@@ -53,10 +53,10 @@ Set `REL_AI_MCP_ALLOW_NO_AUTH=1` only for local-only testing on a trusted networ
 
 ```text
 inspect:  relai_repo_snapshot -> relai_read
-change:   relai_edit (exact replace / full-file / patch / batch) / relai_apply_bundle / relai_clear_files
-validate: relai_run_checks
+change:   relai_edit (exact replace / full-file / patch / batch) / relai_apply_bundle
+validate: relai_run_checks (level quick / standard / release)
 review:   relai_diff
-restore:  relai_restore_changes
+cleanup:  relai_restore_changes (tracked) / relai_tidy_plan + relai_tidy_run (session-owned untracked)
 ```
 
 Keep workspace aliases pointed only at repositories you trust ChatGPT to inspect and modify.

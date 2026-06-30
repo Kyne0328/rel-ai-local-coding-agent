@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.17.0] - 2026-06-30
+
+### Workflow reliability
+- **Workflow contract tightened.** Public guidance favors the unified edit flow before fallback tools.
+- **Stale hash edits now fail closed.** Exact replacements refuse mismatched expected file hashes.
+- **Batch edit wording is safer.** Planner responses report preflight-only atomicity.
+
+Bump root/electron/status UI/lockfiles to 0.17.0.
+
 ## [0.16.9] — 2026-06-30
 
 ### Electron and dashboard UI polish

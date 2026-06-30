@@ -242,7 +242,10 @@ function relaiReplace(workspace, config, args = {}) {
 
   const oldSha256 = fileSha256(workspace.path, safe.relativePath);
   const expectedSha256 = String(args.expectedSha256 || "").trim();
-  const shaMismatch = Boolean(expectedSha256 && oldSha256 !== expectedSha256);
+  if (expectedSha256 && oldSha256 !== expectedSha256) {
+    throw new Error(`relai_replace refused stale expectedSha256 for ${safe.relativePath}. Expected ${expectedSha256}, current ${oldSha256 || "missing"}. Re-read the file and retry with current content.`);
+  }
+  const shaMismatch = false;
 
   const replacements = normalizeExactReplacements(args);
   const oldContent = data.toString("utf8");

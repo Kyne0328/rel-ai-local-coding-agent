@@ -204,19 +204,19 @@ npm run test:oneclick
 
 ## One-click server and public tunnel
 
-Local-only mode:
+Three commands cover every case — pick one:
 
 ```bash
-npm run oneclick
+npm run oneclick                                              # local dashboard / dev (no public URL)
+npm run oneclick -- --public                                  # temporary ChatGPT connector (auto tunnel)
+npm run oneclick -- --public-url https://your-domain.example  # permanent ChatGPT connector
 ```
 
-Start the server and try to create a public HTTPS tunnel automatically:
+The dashboard connector page prints the final ChatGPT MCP URL.
 
-```bash
-npm run oneclick -- --public
-```
+### Choosing a tunnel provider
 
-Provider shortcuts:
+The auto tunnel tries Cloudflare, ngrok, then localtunnel. To pick one explicitly:
 
 ```bash
 npm run oneclick -- --public ngrok
@@ -224,27 +224,13 @@ npm run oneclick -- --public cloudflare
 npm run oneclick -- --public localtunnel
 ```
 
-Shortcut flags are also supported:
-
-```bash
-npm run oneclick -- --ngrok
-npm run oneclick -- --cloudflare
-npm run oneclick -- --localtunnel
-```
-
-For other tunnel providers, use a custom command that prints a public `https://` URL:
+Shortcut flags (`--ngrok`, `--cloudflare`, `--localtunnel`) work too. For any other provider, pass a custom command that prints a public `https://` URL:
 
 ```bash
 npm run oneclick -- --tunnel custom --tunnel-command "your-tunnel http://127.0.0.1:3333"
 ```
 
-For a stable domain:
-
-```bash
-npm run oneclick -- --public-url https://your-domain.example
-```
-
-The dashboard connector page prints the final ChatGPT MCP URL.
+See [docs/ONE_CLICK_SETUP.md](docs/ONE_CLICK_SETUP.md) for permanent-tunnel options (Cloudflare Tunnel, Tailscale Funnel, static ngrok domains).
 
 ---
 
@@ -322,6 +308,8 @@ The point is to avoid scanning unrelated files before touching the obvious files
 ```
 
 If no check is provided, it auto-detects sensible validation checks for the workspace.
+
+Validation depth is chosen with a `level` preset: `quick` (syntax / lightweight checks), `standard` (normal project validation, the default), or `release` (full release gate). `relai_edit` accepts the same `level` alongside `runChecks: true`.
 
 ---
 

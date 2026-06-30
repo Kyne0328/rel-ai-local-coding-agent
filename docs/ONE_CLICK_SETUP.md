@@ -4,6 +4,22 @@ This guide fixes the annoying loop where a temporary ngrok URL changes, forcing 
 
 Rel.AI MCP can now keep a persistent local/API token and connection profile. You start it with one command, then point one permanent HTTPS URL at the local server.
 
+## Setup paths at a glance
+
+Three commands cover every case. Pick one:
+
+```bash
+npm run oneclick                                   # local dashboard / dev (no public URL)
+npm run oneclick -- --public                       # temporary ChatGPT connector (auto tunnel)
+npm run oneclick -- --public-url https://your-domain.example   # permanent ChatGPT connector
+```
+
+- Use the **local** path for the dashboard and workspace management.
+- Use **`--public`** for a quick, throwaway ChatGPT endpoint while testing.
+- Use **`--public-url`** with a stable HTTPS domain for a connector you do not want to recreate.
+
+Provider-specific Cloudflare / ngrok / Tailscale / localtunnel details are advanced options under [Recommended permanent tunnel options](#recommended-permanent-tunnel-options) below; you do not need them for the three paths above.
+
 ## One-command local start
 
 From the project folder:

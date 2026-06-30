@@ -75,7 +75,7 @@ This server exposes one peer-level workspace-tool surface to ChatGPT. Tool choic
    - \`updateText\` for a unified-diff change across files.
    - \`edits: [...]\` for several edits in one call; add \`runChecks: true\` and \`returnDiff: true\` to validate and review in the same call.
    - \`relai_apply_bundle\` when a prepared file bundle should overlay many files.
-   - \`relai_clear_files\` for obsolete files.
+   - \`relai_tidy_plan\` then \`relai_tidy_run\` for session-owned untracked cleanup.
 3. After edits, run \`relai_run_checks\`, then \`relai_diff\` for review (or pass \`runChecks\`/\`returnDiff\` on the edit itself).
 4. If an edit payload is too large, re-read the target and use smaller \`oldText\`/\`newText\` operations with exact current text.
 5. If ChatGPT still shows removed tools, restart/reconnect the MCP server instead of falling back.

@@ -168,8 +168,8 @@ async function planEdit(workspace, config, args) {
   }
 
   // Batch: several exact-replace / full-file edits in one approval. This is
-  // preflight-first and atomic at the planner level: if any edit cannot be
-  // validated, none of the batch is applied.
+  // preflight-first: if any edit cannot be validated, none of the batch is applied.
+  // It does not claim rollback-level atomicity after writes begin.
   if (Array.isArray(args.edits) && args.edits.length > 0) {
     const preflight = await preflightBatchEdits(workspace, config, args.edits, Boolean(args.dryRun));
     if (!preflight.ok || args.dryRun) {
@@ -182,7 +182,8 @@ async function planEdit(workspace, config, args) {
           : `preflight failed; applied 0 of ${preflight.results.length} edit(s)`,
         editCount: preflight.results.length,
         appliedCount: 0,
-        atomic: true,
+        preflightAtomic: true,
+        rollbackAtomic: false,
         results: preflight.results
       };
       return attachPost(out, await runPostActions(workspace, config, args));
@@ -205,10 +206,11 @@ async function planEdit(workspace, config, args) {
       ok: allOk,
       workspace: workspace.alias,
       plannerPath: 'batch',
-      plannerReason: `preflight passed; applied ${results.filter((item) => item.ok !== false).length} edit(s) atomically`,
+      plannerReason: `preflight passed; applied ${results.filter((item) => item.ok !== false).length} edit(s)`,
       editCount: results.length,
       appliedCount: results.filter((item) => item.ok !== false).length,
-      atomic: true,
+      preflightAtomic: true,
+      rollbackAtomic: false,
       preflight: preflight.results,
       results
     };
