@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.16.8] — 2026-06-30
+
+### Bundled managed ngrok + HTTPS-first connection guidance
+- **Rel.AI MCP now ships a managed ngrok agent so users no longer install npm, Node, or ngrok by hand.** The launcher copies a bundled seed binary (`vendor/ngrok/<platform>/`) into the user's writable state folder on first launch, runs the managed copy from there, and lets it self-update on a weekly interval.
+- **Authtoken handling is validated and stored privately.** The ngrok authtoken is normalized (non-empty, no spaces, minimum length) and written to a `0600` config in the managed state dir; the wizard guides ngrok account setup.
+- **Connection UI emphasizes the HTTPS requirement for the ChatGPT integration.** Connection handling and wizard messaging now make clear that ChatGPT requires an HTTPS public URL.
+
+Bump root/electron/status UI/lockfiles to 0.16.8.
+
 ## [0.16.7] — 2026-06-30
 
 ### Safer public workspace tidy workflow
