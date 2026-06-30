@@ -9,3 +9,7 @@
 # used to land here and dirty the tree.
 /.rel-ai-mcp-state
 /node_modules
+# ngrok seed binaries — fetched at build time via scripts/fetch-ngrok.*, never committed.
+/vendor/ngrok/win32/ngrok.exe
+/vendor/ngrok/darwin/ngrok
+/vendor/ngrok/linux/ngrok
