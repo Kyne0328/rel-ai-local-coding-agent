@@ -98,7 +98,7 @@ function localBaseUrl(host, port) {
 function buildConnectionSummary({ host = "127.0.0.1", port = 3333, publicUrl = "", token = "", showToken = false, tunnelProvider = "" } = {}) {
   const localUrl = localBaseUrl(host, port);
   const publicBaseUrl = publicUrl ? normalizePublicUrl(publicUrl) : "";
-  const baseForChatGPT = publicBaseUrl || localUrl;
+  const baseForChatGPT = publicBaseUrl;
   return {
     ok: true,
     localBaseUrl: localUrl,
@@ -107,10 +107,10 @@ function buildConnectionSummary({ host = "127.0.0.1", port = 3333, publicUrl = "
     dashboardDataUrl: `${localUrl}/api/dashboard/v10?limit=100&requireHttpToken=0${token ? `&token=${encodeURIComponent(token)}` : ""}`,
     localBearerMcpUrl: `${localUrl}/mcp`,
     localMcpUrl: `${localUrl}/mcp`,
-    bearerMcpUrl: `${baseForChatGPT}/mcp`,
-    // ChatGPT now uses real OAuth on the plain /mcp endpoint (not the secret path).
-    chatgptMcpUrl: `${baseForChatGPT}/mcp`,
-    chatgptHealthUrl: `${baseForChatGPT}/health`,
+    bearerMcpUrl: baseForChatGPT ? `${baseForChatGPT}/mcp` : "",
+    // ChatGPT requires a reachable HTTPS endpoint for OAuth; localhost is kept for the dashboard/API only.
+    chatgptMcpUrl: baseForChatGPT ? `${baseForChatGPT}/mcp` : "",
+    chatgptHealthUrl: baseForChatGPT ? `${baseForChatGPT}/health` : "",
     chatgptAuthMode: "OAuth — ChatGPT signs in with your Rel.AI dashboard token.",
     oauthMetadataUrl: `${baseForChatGPT}/.well-known/oauth-protected-resource`,
     authHeader: token ? "Authorization: Bearer <REL_AI_MCP_TOKEN>" : "not configured",
@@ -119,7 +119,7 @@ function buildConnectionSummary({ host = "127.0.0.1", port = 3333, publicUrl = "
     profileFile: getConnectionProfilePath(),
     permanentUrlConfigured: Boolean(publicBaseUrl),
     tunnelProvider: tunnelProvider || "none",
-    tunnelMode: publicBaseUrl ? (tunnelProvider && tunnelProvider !== "none" ? `public tunnel via ${tunnelProvider}` : "configured public URL") : "local only",
+    tunnelMode: publicBaseUrl ? (tunnelProvider && tunnelProvider !== "none" ? `cloud tunnel via ${tunnelProvider}` : "configured HTTPS URL") : "cloud connection required",
     nextSteps: publicBaseUrl
       ? [
           "Keep Rel.AI MCP running on this machine while ChatGPT uses the app.",
@@ -130,10 +130,10 @@ function buildConnectionSummary({ host = "127.0.0.1", port = 3333, publicUrl = "
           "In a chat, select the Rel.AI MCP app, then ask it to inspect a workspace before making changes."
         ]
       : [
-          "Open the dashboard on this machine to add workspaces and copy local diagnostics links.",
-          "For ChatGPT, set up a stable HTTPS tunnel first; OAuth requires HTTPS.",
-          "Relaunch with --public-url https://your-domain.example.com, then copy the generated /mcp URL into a ChatGPT app.",
-          "Temporary tunnel URLs work for testing, but a stable URL prevents recreating the ChatGPT app."
+          "ChatGPT will not accept a localhost MCP endpoint for OAuth.",
+          "Start a public HTTPS tunnel or configure --public-url with a stable HTTPS URL.",
+          "After the cloud URL is ready, copy the generated /mcp URL into a ChatGPT app.",
+          "Use the local dashboard only for setup, diagnostics, and workspace management."
         ]
   };
 }
@@ -145,10 +145,10 @@ function printConnectionSummary(summary) {
     "",
     `Local dashboard:        ${summary.dashboardUrl}`,
     `Dashboard data check:   ${summary.dashboardDataUrl}`,
-    `COPY THIS FOR CHATGPT:  ${summary.chatgptMcpUrl}`,
+    `COPY THIS FOR CHATGPT:  ${summary.chatgptMcpUrl || "waiting for HTTPS tunnel"}`,
     `ChatGPT Auth:          OAuth (sign in with your dashboard token)`,
-    `Health URL:            ${summary.chatgptHealthUrl}`,
-    `Public mode:           ${summary.tunnelMode || "local only"}`,
+    `Health URL:            ${summary.chatgptHealthUrl || "waiting for HTTPS tunnel"}`,
+    `Connection mode:       ${summary.tunnelMode || "cloud connection required"}`,
     `Local/API MCP only:     ${summary.localBearerMcpUrl}`,
     `Local/API Auth:         ${summary.authHeader}`,
     `Token file:       ${summary.tokenFile}`,
@@ -156,15 +156,15 @@ function printConnectionSummary(summary) {
     "",
     summary.permanentUrlConfigured
       ? "Permanent URL: configured. Use the COPY THIS FOR CHATGPT URL above. You should not need to recreate the ChatGPT app unless that URL changes."
-      : "Permanent URL: not configured. Add one with --public to create a temporary tunnel, or --public-url https://your-domain.example.com for a stable connector URL.",
+      : "Permanent URL: not configured. ChatGPT requires HTTPS. Start a tunnel with --public, or set --public-url https://your-domain.example.com for a stable connector URL.",
     "",
     "Important:",
-    "  - Create or update a ChatGPT app with the /mcp URL as its MCP endpoint.",
+    "  - Create or update a ChatGPT app only after the HTTPS /mcp URL is available.",
     "  - Choose Authentication: OAuth, then enter your Rel.AI dashboard token when ChatGPT opens the sign-in page.",
     "  - Select the Rel.AI MCP app in a chat before asking it to inspect a workspace.",
     "  - Do not open /mcp in the browser as a dashboard. Use /dashboard instead.",
     "  - If the dashboard says Connecting, open the Dashboard data check URL above.",
-    "  - OAuth requires the server to be reachable over HTTPS (use a stable public URL).",
+    "  - OAuth requires the server to be reachable over HTTPS; localhost is invalid for ChatGPT.",
     "",
     "Next steps:",
     ...summary.nextSteps.map((step, index) => `  ${index + 1}. ${step}`),

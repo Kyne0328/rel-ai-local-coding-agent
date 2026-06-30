@@ -42,7 +42,7 @@ function updateUI(status) {
   } else if (tunnelStatus === 'failed') {
     tunnelEl.textContent = 'Failed';
     tunnelEl.className = 'card-status failed-text';
-    tunnelSub.textContent = error ? error.slice(0, 36) : 'server may still be local';
+    tunnelSub.textContent = error ? error.slice(0, 36) : 'HTTPS tunnel required';
   } else {
     tunnelEl.textContent = 'Offline';
     tunnelEl.className = 'card-status stopped-text';
@@ -56,7 +56,7 @@ function updateUI(status) {
     urlEl.className = 'copy-url';
     copyBtn.disabled = false;
   } else {
-    urlEl.textContent = serverRunning ? 'Waiting for the tunnel to publish the MCP URL...' : 'Start the server to get a ChatGPT MCP URL.';
+    urlEl.textContent = serverRunning ? 'Waiting for the HTTPS tunnel to publish the MCP URL...' : 'Start the server to create an HTTPS ChatGPT MCP URL.';
     urlEl.className = 'copy-url empty';
     copyBtn.disabled = true;
   }

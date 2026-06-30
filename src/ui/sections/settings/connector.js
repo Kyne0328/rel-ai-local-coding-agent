@@ -22,7 +22,7 @@ async function _load(container) {
 function summaryCard(payload) {
   const card = document.createElement('div');
   card.className = 'card';
-  const statusText = payload.permanentUrlConfigured ? 'Permanent URL configured' : 'Local-only URL';
+  const statusText = payload.permanentUrlConfigured ? 'HTTPS URL configured' : 'HTTPS URL required';
   const statusTone = payload.permanentUrlConfigured ? 'ok' : 'warn';
   card.innerHTML = `
     <div class="card-head">
@@ -33,20 +33,20 @@ function summaryCard(payload) {
       <div class="empty" style="text-align:left;padding:12px;line-height:1.55;${payload.permanentUrlConfigured ? 'border-color:rgba(71,221,138,.22);background:rgba(71,221,138,.07);' : 'border-color:rgba(255,194,75,.22);background:rgba(255,194,75,.07);'}">
         ${payload.permanentUrlConfigured
           ? 'Use this /mcp endpoint when creating or updating the ChatGPT app. Keep the URL stable; only update ChatGPT if this URL changes.'
-          : 'Local diagnostics are available, but ChatGPT needs a stable HTTPS URL for OAuth. Add a public URL or tunnel, relaunch Rel.AI MCP, then copy the new /mcp URL.'}
+          : 'ChatGPT rejects localhost MCP endpoints for OAuth. Start a public HTTPS tunnel or configure a stable public URL, then copy the generated /mcp URL.'}
       </div>
       <div style="display:grid;gap:8px;">
         <div style="font-size:12px;color:var(--text-muted);">CHATGPT MCP ENDPOINT</div>
-        <code class="copy-box" style="min-height:auto;max-height:none;">${escapeHtml(payload.chatgptMcpUrl || '—')}</code>
+        <code class="copy-box" style="min-height:auto;max-height:none;">${escapeHtml(payload.chatgptMcpUrl || 'Waiting for HTTPS tunnel')}</code>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button type="button" data-copy="mcp">Copy ChatGPT MCP URL</button>
+          <button type="button" data-copy="mcp" ${payload.chatgptMcpUrl ? '' : 'disabled'}>Copy ChatGPT MCP URL</button>
           <button class="secondary" type="button" data-copy="dashboard">Copy dashboard URL (no token)</button>
           <button class="secondary" type="button" data-copy="dashboardToken">Copy with token</button>
         </div>
       </div>
       <div style="display:grid;gap:8px;font-size:13px;">
         <div style="display:flex;gap:10px;flex-wrap:wrap;"><span style="color:var(--text-muted);min-width:140px;">ChatGPT auth</span><span>${escapeHtml(payload.chatgptAuthMode || 'OAuth')}</span></div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;"><span style="color:var(--text-muted);min-width:140px;">Health URL</span><code style="font-size:12px;word-break:break-all;">${escapeHtml(payload.chatgptHealthUrl || '—')}</code></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;"><span style="color:var(--text-muted);min-width:140px;">Health URL</span><code style="font-size:12px;word-break:break-all;">${escapeHtml(payload.chatgptHealthUrl || 'Waiting for HTTPS tunnel')}</code></div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;"><span style="color:var(--text-muted);min-width:140px;">Dashboard URL</span><code style="font-size:12px;word-break:break-all;">${escapeHtml(stripToken(payload.dashboardUrl || (payload.localBaseUrl ? payload.localBaseUrl + '/dashboard' : '')) || '—')}</code></div>
       </div>
     </div>

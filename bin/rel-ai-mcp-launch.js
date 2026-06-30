@@ -76,7 +76,7 @@ Options:
   --ngrok                 Shortcut for --tunnel ngrok.
   --cloudflare            Shortcut for --tunnel cloudflare.
   --localtunnel           Shortcut for --tunnel localtunnel.
-                          Default: none unless REL_AI_MCP_TUNNEL is set.
+                          Default: auto when no stable public URL is configured.
   --tunnel-command <cmd>  Custom tunnel command. It must print an https:// URL.
   --tunnel-timeout-ms <n> Time to wait for tunnel URL. Default: 30000.
   --public-url <url>     Stable HTTPS base URL routed to this local server. Skips tunnel startup.
@@ -84,7 +84,7 @@ Options:
   --reset-token          Generate and save a new local/API bearer token.
   --show-token           Print the local/API bearer token in connector summary output.
   --print-only           Print saved connector settings without starting the server.
-  --allow-no-auth        Disable auth for local-only testing.
+  --allow-no-auth        Disable auth for local dashboard testing only.
 
 Examples:
   rel-ai-mcp-launch --public
@@ -125,7 +125,8 @@ async function main() {
   const port = Number(options.port || process.env.REL_AI_MCP_PORT || 3333);
   let publicUrl = connection.normalizePublicUrl(options.publicUrl || process.env.REL_AI_MCP_PUBLIC_URL || savedEnv.REL_AI_MCP_PUBLIC_URL || savedProfile.publicUrl || "");
   const token = resolveToken(options);
-  const tunnelProvider = tunnelManager.normalizeTunnel(options.tunnel || process.env.REL_AI_MCP_TUNNEL || savedEnv.REL_AI_MCP_TUNNEL || "none");
+  const tunnelPreference = options.tunnel || process.env.REL_AI_MCP_TUNNEL || savedEnv.REL_AI_MCP_TUNNEL || (publicUrl ? "none" : "auto");
+  const tunnelProvider = tunnelManager.normalizeTunnel(tunnelPreference);
   // When user explicitly requests a tunnel (--public/--tunnel/etc) without a stable --public-url,
   // discard the saved URL from the previous session so a fresh tunnel starts instead of reusing a stale one.
   if (options.tunnel && !options.publicUrl) publicUrl = "";
@@ -172,7 +173,7 @@ async function main() {
       process.once("SIGTERM", () => { stopTunnel(); server.close(() => process.exit(0)); });
     } else {
       console.error(`[rel-ai-mcp] Tunnel startup failed: ${tunnel.error || "unknown error"}`);
-      console.error("[rel-ai-mcp] Server is still running locally. Use --public-url with a stable HTTPS URL, or install cloudflared/ngrok/localtunnel.");
+      console.error("[rel-ai-mcp] ChatGPT connection requires HTTPS. Configure --public-url with a stable HTTPS URL, or fix the tunnel provider and restart.");
     }
   }
 }
