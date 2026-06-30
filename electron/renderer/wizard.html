@@ -115,11 +115,6 @@
     <div class="welcome-center">
       <h1>Rel.AI MCP Launcher</h1>
       <p class="subtitle">Connect ChatGPT through your own ngrok account and permanent HTTPS domain. Rel.AI ships a seed ngrok agent, copies it to a writable app folder, and keeps the managed copy updated automatically.</p>
-      <div class="link-grid">
-        <button class="setup-link" data-link="signup">Create or log in to ngrok <span>opens dashboard</span></button>
-        <button class="setup-link" data-link="authtoken">Get your ngrok token <span>copy from dashboard</span></button>
-        <button class="setup-link" data-link="domains">Find your static domain <span>permanent URL</span></button>
-      </div>
       <button class="btn-primary" id="startWizardBtn">Get Started &rarr;</button>
     </div>
   </div>
@@ -157,11 +152,14 @@
     <label for="ngrokTokenInput">ngrok account key</label>
     <input type="text" id="ngrokTokenInput" placeholder="paste your ngrok account key" autocomplete="off" spellcheck="false">
     <div class="hint">Rel.AI writes this to its own private ngrok.yml file.</div>
+    <div class="link-grid">
+      <button class="setup-link" data-link="signup">Create or log in to ngrok <span>opens dashboard</span></button>
+      <button class="setup-link" data-link="authtoken">Get your ngrok token <span>copy from dashboard</span></button>
+    </div>
     <label for="domainInput">Permanent domain</label>
     <input type="text" id="domainInput" placeholder="your-name.ngrok-free.dev" autocomplete="off" spellcheck="false">
     <div class="link-grid">
-      <button class="setup-link" data-link="domains">Open ngrok Domains <span>copy domain</span></button>
-      <button class="setup-link" data-link="authtoken">Open ngrok token page <span>login first</span></button>
+      <button class="setup-link" data-link="domains">Find your static domain <span>permanent URL</span></button>
     </div>
     <div class="hint">Command that will run: <code id="ngrokCmdPreview">managed ngrok http --url=https://&lt;domain&gt; 3333 --config &lt;Rel.AI ngrok.yml&gt; --log=stdout</code></div>
     <div class="error" id="domainError"></div>
