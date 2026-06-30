@@ -3,8 +3,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
-const testDir = import.meta.dirname;
+const testDir = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(testDir, '..');
 
 // Not tests: the syntax checker runs via `npm run check`, and this file is the runner.
