@@ -640,8 +640,23 @@ function openDashboardEvents(res, req, options) {
     "Connection": "keep-alive",
     "X-Accel-Buffering": "no"
   });
-  const sendSnapshot = () => {
+  const statMtime = (file) => {
+    try { return file ? fs.statSync(file).mtimeMs : 0; } catch (_) { return 0; }
+  };
+  const changeSignature = () => {
+    let config = null;
+    try { config = readConfigCached(); } catch (_) {}
+    return [
+      statMtime(require("./config").getConfigPath()),
+      statMtime(config && config.auditLogPath)
+    ].join(":");
+  };
+  let lastSignature = "";
+  const sendSnapshot = (force = false) => {
     try {
+      const signature = changeSignature();
+      if (!force && signature === lastSignature) return;
+      lastSignature = signature;
       const config = readConfigCached();
       sendSse(res, "dashboard", {
         ...productUx.dashboardData(config, { limit: 100 }),
@@ -651,9 +666,9 @@ function openDashboardEvents(res, req, options) {
       sendSse(res, "error", { ok: false, error: error instanceof Error ? error.message : String(error) });
     }
   };
-  sendSnapshot();
+  sendSnapshot(true);
   const intervalMs = Math.max(1000, Number(readConfig({ allowMissing: true }).productUx?.liveLogPollSeconds || 3) * 1000);
-  const timer = setInterval(sendSnapshot, intervalMs);
+  const timer = setInterval(() => sendSnapshot(false), intervalMs);
   req.on("close", () => clearInterval(timer));
 }
 
@@ -854,7 +869,6 @@ function renderDashboardHtml(options) {
       <div class="top-controls">
         <span class="status-pill" id="serverStatus">Connecting…</span>
         <button class="secondary" id="refreshBtn" type="button">Refresh</button>
-        <button class="primary" id="liveBtn">Start live</button>
         <span class="section-action" id="lastUpdated"></span>
       </div>
     </header>

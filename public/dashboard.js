@@ -1,7 +1,7 @@
 import { setToken, getToken, fetchJson, DASHBOARD_DATA_URL } from '/ui/api.js';
 import { init as initStore, get as getStore } from '/ui/store.js';
 import { initRouter, currentSection, rerender } from '/ui/router.js';
-import { initEvents, startSSE, stopSSE, isLive, setPollCallback, setPollInterval } from '/ui/events.js';
+import { initEvents, startSSE } from '/ui/events.js';
 import { mountHome } from '/ui/sections/home.js';
 import { initCommandPalette } from '/ui/components/command-palette.js';
 
@@ -66,18 +66,14 @@ async function boot() {
   if (!routeRoot) return;
 
   initRouter(routeRoot, getSections());
-  await _doRefresh();
+  await _doRefresh({ source: 'boot', render: true });
 
   _wireTopControls();
-  window.addEventListener('relai:dashboard-refresh', _doRefresh);
-  setPollCallback(_doRefresh);
-  // Register the SSE/visibility manager ONCE at boot (it adds a visibilitychange
-  // listener). _toggleLive previously re-called initEvents on every toggle, stacking
-  // duplicate listeners. The live-update callback is the same one used by SSE.
+  window.addEventListener('relai:dashboard-refresh', () => _doRefresh({ source: 'local-change', render: true }));
+  // Register the SSE manager once at boot. It auto-connects and only sends UI
+  // updates when the server detects dashboard-relevant state changes.
   initEvents(_liveOnEvent);
-  const storeData0 = getStore();
-  const refreshSeconds = storeData0.config && storeData0.config.productUx && storeData0.config.productUx.dashboardRefreshSeconds;
-  if (refreshSeconds) setPollInterval(Number(refreshSeconds) * 1000);
+  startSSE(getToken);
   _checkOnboarding();
 
   const storeData = getStore();
@@ -86,8 +82,7 @@ async function boot() {
     ...SETTINGS_SUBROUTES.map(r => ({ label: r.label, href: '#settings/' + r.id, category: 'Navigation' })),
   ];
   const actionActions = [
-    { label: 'Refresh dashboard', category: 'Actions', action: _doRefresh },
-    { label: 'Toggle live mode', category: 'Actions', action: _toggleLive },
+    { label: 'Refresh dashboard', category: 'Actions', action: () => _doRefresh({ source: 'manual', render: true }) },
     { label: 'Copy dashboard token', category: 'Actions', action: () => { if (getToken()) navigator.clipboard.writeText(getToken()).catch(() => {}); } },
   ];
   const workspaceList = storeData.config && Array.isArray(storeData.config.workspaces) ? storeData.config.workspaces : [];
@@ -123,22 +118,18 @@ function _settingsSubPage() {
 }
 
 function _wireTopControls() {
-  // Token comes from the URL / sessionStorage at boot; the topbar no longer shows
-  // a token field. Refresh and the live toggle remain.
-  const liveBtn = document.getElementById('liveBtn');
-  if (liveBtn) liveBtn.onclick = _toggleLive;
   const refreshBtn = document.getElementById('refreshBtn');
-  if (refreshBtn) refreshBtn.onclick = _doRefresh;
+  if (refreshBtn) refreshBtn.onclick = () => _doRefresh({ source: 'manual', render: true });
 }
 
 // Single fetch-and-render path shared by boot, manual refresh, and the command
 // palette. Re-mounts the current section against fresh store state via the router.
-async function _doRefresh() {
-  const previous = getStore();
+async function _doRefresh(options = {}) {
   const data = await fetchJson(DASHBOARD_DATA_URL);
   if (data && data.ok !== false) {
     initStore(data);
-    rerender();
+    _updateShell(data);
+    if (options.render !== false && !_hasBlockingInteraction()) rerender();
     return data;
   }
 
@@ -151,34 +142,41 @@ async function _doRefresh() {
   }
   const updated = document.getElementById('lastUpdated');
   if (updated && data && data.error) updated.textContent = data.error;
-  if (previous && Object.keys(previous).length) rerender();
   return data;
 }
 
-// Shared live-update handler — fed to initEvents once at boot and reused by SSE.
+// Shared live-update handler — fed by SSE. It updates shell state and Activity
+// rows without re-mounting the current page, so forms, scroll position, and open
+// modals are not reset by background connector activity.
 async function _liveOnEvent(data) {
   if (!data || data.ok === false) return;
   initStore(data);
-  const id = currentSection();
-  if (Object.prototype.hasOwnProperty.call(getSections(), id)) {
-    rerender();
-  }
-  if (id === 'activity') {
+  _updateShell(data);
+  if (currentSection() === 'activity') {
     import('/ui/sections/activity.js')
       .then(m => m.prependEntry((data.auditTail && data.auditTail.entries && data.auditTail.entries[0]) || null))
       .catch(console.error);
   }
 }
 
-function _toggleLive() {
-  const btn = document.getElementById('liveBtn');
-  if (isLive()) {
-    stopSSE();
-    if (btn) btn.textContent = 'Start live';
-  } else {
-    startSSE(getToken);
-    if (btn) btn.textContent = 'Stop live';
+function _updateShell(data) {
+  const cfg = data && data.config ? data.config : {};
+  const subtitle = document.getElementById('subtitle');
+  if (subtitle) subtitle.textContent = `Rel.AI MCP · ChatGPT workspace bridge · ${Array.isArray(cfg.workspaces) ? cfg.workspaces.length : 0} workspaces`;
+  const updated = document.getElementById('lastUpdated');
+  if (updated) updated.textContent = 'Updated ' + new Date().toLocaleTimeString();
+  const statusEl = document.getElementById('serverStatus');
+  if (statusEl) {
+    statusEl.className = 'status-pill ' + (data && data.ok !== false ? 'ok' : 'bad');
+    statusEl.textContent = data && data.ok !== false ? 'Online' : 'Error';
   }
+}
+
+function _hasBlockingInteraction() {
+  if (document.getElementById('__relai-modal-backdrop')) return true;
+  if (document.getElementById('__relai-drawer-backdrop')) return true;
+  const saveRow = document.getElementById('__settings-save-row');
+  return Boolean(saveRow && saveRow.style.display !== 'none');
 }
 
 async function _checkOnboarding() {

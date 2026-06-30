@@ -44,6 +44,7 @@ function _buildActivity() {
   searchInput.type = 'search';
   searchInput.placeholder = 'Search tools, messages…';
   searchInput.style.cssText = 'width:200px;min-height:32px;font-size:13px;';
+  searchInput.value = _filterState.search || '';
   let searchTimer;
   searchInput.addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { _filterState.search = searchInput.value; _renderTable(_applyFilters(_allEntries)); }, 200); });
 
@@ -54,7 +55,7 @@ function _buildActivity() {
     btn.className = 'secondary';
     btn.style.cssText = 'min-height:28px;padding:0 10px;font-size:12px;';
     btn.textContent = range;
-    if (range === '1h') { btn.style.background = 'rgba(78,161,255,.2)'; btn.dataset.active = '1'; }
+    if (range.toLowerCase() === _filterState.timeRange) { btn.style.background = 'rgba(78,161,255,.2)'; btn.dataset.active = '1'; }
     btn.onclick = () => {
       timeRangeWrap.querySelectorAll('button').forEach(b => { b.style.background = ''; delete b.dataset.active; });
       btn.style.background = 'rgba(78,161,255,.2)'; btn.dataset.active = '1';
@@ -64,18 +65,16 @@ function _buildActivity() {
     timeRangeWrap.appendChild(btn);
   }
 
-  // Distinct from the top-bar live toggle (which starts/stops the whole dashboard's
-  // live stream). This only freezes THIS table so new rows don't shift under you while
-  // you read — named "updates", not "live", to avoid that collision.
+  // Freezes only this table so new rows do not shift under the user while reading.
   const pauseBtn = document.createElement('button');
   pauseBtn.className = 'secondary';
   pauseBtn.style.cssText = 'min-height:28px;padding:0 12px;font-size:12px;margin-left:auto;';
-  pauseBtn.textContent = _paused ? '▶ Resume updates' : '⏸ Pause updates';
-  pauseBtn.title = 'Freeze this table so new events don’t shift rows while you read. Independent of the top-bar live toggle.';
+  pauseBtn.textContent = _paused ? 'Resume list' : 'Freeze list';
+  pauseBtn.title = 'Freeze this table so new events do not shift rows while you read.';
   if (_paused) pauseBtn.style.background = 'rgba(255,194,75,.15)';
   pauseBtn.onclick = () => {
     _paused = !_paused;
-    pauseBtn.textContent = _paused ? '▶ Resume updates' : '⏸ Pause updates';
+    pauseBtn.textContent = _paused ? 'Resume list' : 'Freeze list';
     pauseBtn.style.background = _paused ? 'rgba(255,194,75,.15)' : '';
   };
 

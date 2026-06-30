@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.17.1] - 2026-06-30
+
+### Dashboard refresh and status polish
+- **Dashboard refresh no longer breaks active work.** Background connector events update shared state, shell status, and Activity rows without re-mounting the current page, so settings drafts, open modals/drawers, filters, and scroll position are preserved.
+- **Live mode is automatic.** The top-bar **Start live** control was removed; the dashboard connects to server-sent events on load and keeps **Refresh** only as a manual fallback.
+- **Server-sent dashboard events are change-gated.** The server now emits dashboard snapshots only when config or audit state changes instead of pushing repeated no-op refreshes.
+- **Workspace mutations refresh in place.** Add/edit workspace, save detected tests, rename, clear, context changes, and stale-test cleanup trigger an in-page dashboard refresh rather than a full page reload.
+- **Diagnostics is now product-facing.** The page is presented as **System status**, hides release-readiness/temp-resource noise, renames raw output to **Details**, and reframes command/caution checks as validation commands and protected config changes.
+- **Activity wording and state are clearer.** The table uses **Freeze list** instead of pause-live wording and preserves search/time filters across re-renders.
+
+Bump root/electron/status UI/lockfiles to 0.17.1.
+
 ## [0.17.0] - 2026-06-30
 
 ### Workflow reliability
