@@ -23,13 +23,10 @@ const SETTINGS_SUBROUTES = [
 const urlToken = new URLSearchParams(location.search).get('token') || '';
 const token = urlToken || sessionStorage.getItem('relai_dashboard_token') || '';
 if (token) setToken(token);
-if (urlToken && window.history && typeof window.history.replaceState === 'function') {
-  const params = new URLSearchParams(location.search);
-  params.delete('token');
-  const query = params.toString();
-  const safeUrl = location.pathname + (query ? '?' + query : '') + (location.hash || '');
-  window.history.replaceState(null, '', safeUrl);
-}
+// Keep ?token=... in the address bar. /dashboard is protected before client
+// JavaScript runs, so stripping the token makes a browser refresh request the
+// page without credentials and return 401. The fetch layer also stores the token
+// in sessionStorage and attaches it to API calls.
 
 function readInitialPayload() {
   try {
@@ -125,8 +122,8 @@ function _settingsSubPage() {
 }
 
 function _wireTopControls() {
-  // Token comes from the URL / sessionStorage at boot (see top of file); the topbar
-  // no longer shows a token field. Refresh (manual reload) and the live toggle remain.
+  // Token comes from the URL / sessionStorage at boot; the topbar no longer shows
+  // a token field. Refresh and the live toggle remain.
   const liveBtn = document.getElementById('liveBtn');
   if (liveBtn) liveBtn.onclick = _toggleLive;
   const refreshBtn = document.getElementById('refreshBtn');
@@ -136,15 +133,30 @@ function _wireTopControls() {
 // Single fetch-and-render path shared by boot, manual refresh, and the command
 // palette. Re-mounts the current section against fresh store state via the router.
 async function _doRefresh() {
+  const previous = getStore();
   const data = await fetchJson(DASHBOARD_DATA_URL);
-  if (data) {
+  if (data && data.ok !== false) {
     initStore(data);
     rerender();
+    return data;
   }
+
+  // Never replace a valid dashboard store with a 401/network error payload. That
+  // made existing workspaces appear to disappear after a failed refresh.
+  const statusEl = document.getElementById('serverStatus');
+  if (statusEl) {
+    statusEl.className = 'status-pill bad';
+    statusEl.textContent = 'Auth error';
+  }
+  const updated = document.getElementById('lastUpdated');
+  if (updated && data && data.error) updated.textContent = data.error;
+  if (previous && Object.keys(previous).length) rerender();
+  return data;
 }
 
 // Shared live-update handler — fed to initEvents once at boot and reused by SSE.
 async function _liveOnEvent(data) {
+  if (!data || data.ok === false) return;
   initStore(data);
   const id = currentSection();
   if (Object.prototype.hasOwnProperty.call(getSections(), id)) {
