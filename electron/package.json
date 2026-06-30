@@ -17,6 +17,7 @@
       "main.js",
       "preload.js",
       "launcher-utils.js",
+      "managed-ngrok.js",
       "renderer/**",
       "build/**"
     ],
@@ -50,6 +51,13 @@
       {
         "from": "../CHANGELOG.md",
         "to": "CHANGELOG.md"
+      },
+      {
+        "from": "../vendor/ngrok",
+        "to": "bin/ngrok",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {

@@ -64,6 +64,14 @@
     word-break: break-all; margin-bottom: 10px; min-height: 38px; line-height: 1.5;
   }
   .btn-row { display: flex; gap: 8px; margin-bottom: 8px; }
+  .link-grid { display: grid; gap: 8px; margin: 12px 0 18px; }
+  .setup-link {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    width: 100%; padding: 10px 12px; border: 1px solid var(--line-soft); border-radius: var(--radius-sm);
+    background: var(--surface); color: var(--text); text-align: left; font-size: 12px;
+  }
+  .setup-link span { color: var(--text-muted); font-size: 11px; font-weight: 500; }
+  .setup-link:hover { border-color: var(--blue); background: var(--surface-2); box-shadow: 0 0 0 3px rgba(90,166,255,.12); }
   .nav { display: flex; justify-content: space-between; margin-top: 22px; }
   button { padding: 9px 20px; border: none; border-radius: var(--radius-sm); font-size: 13px;
     cursor: pointer; font-family: inherit; font-weight: 600;
@@ -106,7 +114,12 @@
     </div>
     <div class="welcome-center">
       <h1>Rel.AI MCP Launcher</h1>
-      <p class="subtitle">Connect ChatGPT to your local workspaces through a secure ngrok static domain. You will copy one MCP URL, choose OAuth in ChatGPT, and approve with your dashboard token.</p>
+      <p class="subtitle">Connect ChatGPT through your own ngrok account and permanent HTTPS domain. Rel.AI ships a seed ngrok agent, copies it to a writable app folder, and keeps the managed copy updated automatically.</p>
+      <div class="link-grid">
+        <button class="setup-link" data-link="signup">Create or log in to ngrok <span>opens dashboard</span></button>
+        <button class="setup-link" data-link="authtoken">Get your ngrok token <span>copy from dashboard</span></button>
+        <button class="setup-link" data-link="domains">Find your static domain <span>permanent URL</span></button>
+      </div>
       <button class="btn-primary" id="startWizardBtn">Get Started &rarr;</button>
     </div>
   </div>
@@ -139,11 +152,18 @@
   </div>
 
   <div class="step" id="step4">
-    <h2>ngrok static domain</h2>
-    <p class="subtitle">Find your static domain at <strong>ngrok.com &rarr; Dashboard &rarr; Domains</strong>. Paste it below without the https:// prefix.</p>
-    <label for="domainInput">Domain</label>
+    <h2>ngrok account</h2>
+    <p class="subtitle">Paste your ngrok account key and permanent static/dev domain. Rel.AI stores the key in its own private ngrok config file.</p>
+    <label for="ngrokTokenInput">ngrok account key</label>
+    <input type="text" id="ngrokTokenInput" placeholder="paste your ngrok account key" autocomplete="off" spellcheck="false">
+    <div class="hint">Rel.AI writes this to its own private ngrok.yml file.</div>
+    <label for="domainInput">Permanent domain</label>
     <input type="text" id="domainInput" placeholder="your-name.ngrok-free.dev" autocomplete="off" spellcheck="false">
-    <div class="hint">Command that will run: <code id="ngrokCmdPreview">ngrok http --url=&lt;domain&gt; 3333 --log=stdout</code></div>
+    <div class="link-grid">
+      <button class="setup-link" data-link="domains">Open ngrok Domains <span>copy domain</span></button>
+      <button class="setup-link" data-link="authtoken">Open ngrok token page <span>login first</span></button>
+    </div>
+    <div class="hint">Command that will run: <code id="ngrokCmdPreview">managed ngrok http --url=https://&lt;domain&gt; 3333 --config &lt;Rel.AI ngrok.yml&gt; --log=stdout</code></div>
     <div class="error" id="domainError"></div>
     <div class="nav">
       <button class="btn-secondary" data-go="3">&larr; Back</button>

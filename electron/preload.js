@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   stopServer: () => ipcRenderer.invoke('server:stop'),
   copyUrl: (url) => ipcRenderer.invoke('url:copy', url),
   openDashboard: () => ipcRenderer.invoke('url:open-dashboard'),
+  openExternal: (url) => ipcRenderer.invoke('url:open-link', url),
   onServerStatus: (callback) => {
     ipcRenderer.on('server:status', (_event, status) => callback(status));
   },

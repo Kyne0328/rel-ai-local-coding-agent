@@ -14,12 +14,14 @@ const connection = require(path.join(srcPath, 'connectionProfile'));
 const configModule = require(path.join(srcPath, 'config'));
 const { startHttpServer } = require(path.join(srcPath, 'httpServer'));
 const tunnelManager = require(path.join(srcPath, 'tunnelManager'));
+const managedNgrok = require('./managed-ngrok');
 const {
   hasExistingConfig,
   readGuiConfig,
   buildTunnelCommand,
   buildMcpUrl,
   normalizeNgrokDomain,
+  normalizeNgrokAuthtoken,
   normalizePort
 } = require('./launcher-utils');
 
@@ -258,8 +260,9 @@ function isPortAvailable(port) {
 function normalizeWizardConfig(config = {}) {
   const port = normalizePort(config.port || 3333);
   const ngrokDomain = normalizeNgrokDomain(config.ngrokDomain || config.domain || '');
+  const ngrokAuthtoken = normalizeNgrokAuthtoken(config.ngrokAuthtoken || config.ngrokToken || '');
   const token = String(config.token || '').trim() || connection.generateToken(32);
-  return { port, ngrokDomain, token };
+  return { port, ngrokDomain, ngrokAuthtoken, token };
 }
 
 function saveLauncherConfig(config = {}) {
@@ -271,6 +274,7 @@ function saveLauncherConfig(config = {}) {
     REL_AI_MCP_PORT: String(normalized.port),
     REL_AI_MCP_TOKEN: normalized.token,
     REL_AI_MCP_NGROK_DOMAIN: normalized.ngrokDomain,
+    REL_AI_MCP_NGROK_AUTHTOKEN: normalized.ngrokAuthtoken,
     REL_AI_MCP_PUBLIC_URL: publicUrl,
     REL_AI_MCP_TUNNEL_COMMAND: tunnelCommand
   });
@@ -282,7 +286,8 @@ function saveLauncherConfig(config = {}) {
     host: '127.0.0.1',
     publicUrl,
     ngrokDomain: normalized.ngrokDomain,
-    tunnelProvider: 'custom',
+    ngrokAuthtoken: normalized.ngrokAuthtoken,
+    tunnelProvider: 'managed-ngrok',
     configPath: configModule.getConfigPath()
   });
 
@@ -303,6 +308,7 @@ async function startServer() {
       guiConfig = readGuiConfig();
       guiConfig.port = normalizePort(guiConfig.port || 3333);
       guiConfig.ngrokDomain = normalizeNgrokDomain(guiConfig.ngrokDomain || '');
+      guiConfig.ngrokAuthtoken = normalizeNgrokAuthtoken(guiConfig.ngrokAuthtoken || '');
       if (!guiConfig.token) {
         guiConfig.token = connection.generateToken(32);
         connection.writeLaunchEnv({ REL_AI_MCP_TOKEN: guiConfig.token });
@@ -379,18 +385,28 @@ async function startServer() {
 
     setStatus({ serverRunning: true, tunnelStatus: 'connecting', mcpUrl: '', error: '' });
 
-    const command = buildTunnelCommand(guiConfig.ngrokDomain, actualPort);
-    const result = await tunnelManager.startTunnel({
-      provider: 'custom',
-      command,
+    const tunnelLog = (chunk) => {
+      if (statusWindow && !statusWindow.isDestroyed()) {
+        statusWindow.webContents.send('server:log', String(chunk || '').trim());
+      }
+    };
+
+    try {
+      await managedNgrok.prepareManagedNgrok({
+        authtoken: guiConfig.ngrokAuthtoken,
+        onLog: tunnelLog
+      });
+    } catch (error) {
+      setStatus({ serverRunning: true, tunnelStatus: 'failed', mcpUrl: '', error: formatError(error) });
+      startPromise = null;
+      return currentStatus;
+    }
+
+    const result = await managedNgrok.startManagedNgrokTunnel({
+      domain: guiConfig.ngrokDomain,
       port: actualPort,
-      localUrl: `http://127.0.0.1:${actualPort}`,
       timeoutMs: 30000,
-      onLog: (chunk) => {
-        if (statusWindow && !statusWindow.isDestroyed()) {
-          statusWindow.webContents.send('server:log', String(chunk || '').trim());
-        }
-      },
+      onLog: tunnelLog,
       onProcess: (child) => {
         tunnelProcess = child;
       }
@@ -411,7 +427,7 @@ async function startServer() {
         port: actualPort,
         publicUrl: publicBaseUrl,
         ngrokDomain: guiConfig.ngrokDomain,
-        tunnelProvider: 'custom',
+        tunnelProvider: 'managed-ngrok',
         configPath: configModule.getConfigPath()
       });
       setStatus({ serverRunning: true, tunnelStatus: 'running', mcpUrl, error: '' });
@@ -473,7 +489,7 @@ function openSettingsWindow() {
   try {
     config = readGuiConfig();
   } catch (_) {
-    config = { port: 3333, token: '', ngrokDomain: '' };
+    config = { port: 3333, token: '', ngrokDomain: '', ngrokAuthtoken: '' };
   }
   createWizardWindow({
     edit: true,
@@ -482,6 +498,7 @@ function openSettingsWindow() {
       edit: '1',
       port: String(config.port || 3333),
       token: config.token || '',
+      ngrokToken: config.ngrokAuthtoken || '',
       domain: config.ngrokDomain || ''
     }
   });
@@ -555,6 +572,14 @@ ipcMain.handle('url:copy', (_event, url) => {
 
 ipcMain.handle('url:open-dashboard', () => {
   openDashboardUrl();
+  return { ok: true };
+});
+
+ipcMain.handle('url:open-link', (_event, url) => {
+  const target = String(url || '').trim();
+  const allowed = target.startsWith('https://dashboard.ngrok.com/') || target.startsWith('https://ngrok.com/');
+  if (!allowed) throw new Error('Only ngrok setup links can be opened from the setup wizard.');
+  shell.openExternal(target);
   return { ok: true };
 });
 

@@ -41,10 +41,18 @@ function normalizeNgrokDomain(value) {
   return domain;
 }
 
+function normalizeNgrokAuthtoken(value) {
+  const token = String(value || '').trim();
+  if (!token) throw new Error('ngrok authtoken is required.');
+  if (/\s/.test(token)) throw new Error('ngrok authtoken cannot contain spaces.');
+  if (token.length < 8) throw new Error('ngrok authtoken is too short.');
+  return token;
+}
+
 function buildTunnelCommand(domain, port) {
   const safeDomain = normalizeNgrokDomain(domain);
   const safePort = normalizePort(port);
-  return `ngrok http --url=${safeDomain} http://127.0.0.1:${safePort} --log=stdout`;
+  return `managed ngrok http --url=https://${safeDomain} http://127.0.0.1:${safePort} --config <Rel.AI ngrok.yml> --log=stdout`;
 }
 
 // ChatGPT connects to the plain /mcp endpoint with Authentication: OAuth. The
@@ -61,6 +69,7 @@ function hasExistingConfig() {
   try {
     normalizePort(profile.port || env.REL_AI_MCP_PORT || 3333);
     normalizeNgrokDomain(env.REL_AI_MCP_NGROK_DOMAIN || profile.ngrokDomain || String(profile.publicUrl || '').replace(/^https?:\/\//i, ''));
+    normalizeNgrokAuthtoken(env.REL_AI_MCP_NGROK_AUTHTOKEN || profile.ngrokAuthtoken || '');
   } catch (_) {
     return false;
   }
@@ -77,6 +86,7 @@ function readGuiConfig() {
     port: normalizePort(env.REL_AI_MCP_PORT || profile.port || 3333),
     ngrokDomain: ngrokDomain ? normalizeNgrokDomain(ngrokDomain) : '',
     token: env.REL_AI_MCP_TOKEN || '',
+    ngrokAuthtoken: env.REL_AI_MCP_NGROK_AUTHTOKEN || profile.ngrokAuthtoken || '',
     publicUrl: profile.publicUrl || (ngrokDomain ? `https://${normalizeNgrokDomain(ngrokDomain)}` : '')
   };
 }
@@ -85,6 +95,7 @@ module.exports = {
   resolveSrcPath,
   normalizePort,
   normalizeNgrokDomain,
+  normalizeNgrokAuthtoken,
   buildTunnelCommand,
   buildMcpUrl,
   hasExistingConfig,

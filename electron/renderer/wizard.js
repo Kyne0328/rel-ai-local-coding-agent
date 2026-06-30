@@ -1,11 +1,18 @@
 const state = {
   port: 3333,
   token: '',
+  ngrokAuth: '',
   ngrokDomain: '',
   editMode: false
 };
 
 let currentStep = 1;
+
+const ngrokLinks = {
+  signup: 'https://dashboard.ngrok.com/signup',
+  authtoken: 'https://dashboard.ngrok.com/get-started/your-authtoken',
+  domains: 'https://dashboard.ngrok.com/domains'
+};
 
 function requestWindowFit() {
   window.requestAnimationFrame(() => {
@@ -81,17 +88,24 @@ function copyToken() {
 
 function updateNgrokPreview() {
   const domain = normalizeDomain(document.getElementById('domainInput').value);
-  document.getElementById('ngrokCmdPreview').textContent = `ngrok http --url=${domain || '<domain>'} http://127.0.0.1:${state.port} --log=stdout`;
+  document.getElementById('ngrokCmdPreview').textContent = `managed ngrok tunnel for ${domain || '<domain>'} on local port ${state.port}`;
 }
 
 function validateDomain() {
   const domain = normalizeDomain(document.getElementById('domainInput').value);
+  const auth = String(document.getElementById('ngrokTokenInput').value || '').trim();
   const error = document.getElementById('domainError');
+  if (!auth || /\s/.test(auth) || auth.length < 8) {
+    error.textContent = 'Enter your ngrok account key first.';
+    requestWindowFit();
+    return;
+  }
   if (!isValidDomain(domain)) {
     error.textContent = 'Enter a valid domain, for example your-name.ngrok-free.dev.';
     requestWindowFit();
     return;
   }
+  state.ngrokAuth = auth;
   state.ngrokDomain = domain;
   error.textContent = '';
   goTo(5);
@@ -103,6 +117,7 @@ function renderSummary() {
   const rows = [
     ['Port', String(state.port)],
     ['Dashboard token', 'saved to ~/.rel-ai-mcp/.env'],
+    ['ngrok account', 'saved to Rel.AI private config'],
     ['Tunnel domain', state.ngrokDomain]
   ];
   for (const [key, value] of rows) {
@@ -127,6 +142,7 @@ async function launch() {
     await window.electronAPI.wizardDone({
       port: state.port,
       token: state.token,
+      ngrokAuthtoken: state.ngrokAuth,
       ngrokDomain: state.ngrokDomain
     });
   } catch (error) {
@@ -141,8 +157,11 @@ function loadEditParams() {
   state.editMode = true;
   state.port = Number.parseInt(params.get('port') || '3333', 10) || 3333;
   state.token = params.get('token') || '';
+  state.ngrokAuth = params.get('ngrokToken') || '';
   state.ngrokDomain = normalizeDomain(params.get('domain') || '');
   document.getElementById('portInput').value = state.port;
+  const accountInput = document.getElementById('ngrokTokenInput');
+  if (accountInput) accountInput.value = state.ngrokAuth;
   document.getElementById('domainInput').value = state.ngrokDomain;
   document.getElementById('tokenBox').textContent = state.token;
 }
@@ -157,6 +176,14 @@ function bindEvents() {
   document.getElementById('domainInput').addEventListener('input', updateNgrokPreview);
   for (const button of document.querySelectorAll('[data-go]')) {
     button.addEventListener('click', () => goTo(Number.parseInt(button.dataset.go, 10)));
+  }
+  for (const button of document.querySelectorAll('[data-link]')) {
+    button.addEventListener('click', () => {
+      const url = ngrokLinks[button.dataset.link];
+      if (url && window.electronAPI && typeof window.electronAPI.openExternal === 'function') {
+        window.electronAPI.openExternal(url);
+      }
+    });
   }
 }
 
