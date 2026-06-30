@@ -1,5 +1,7 @@
+const fs = require("node:fs");
 const path = require("node:path");
 const { getConfigPath, publicConfigSummary, writeConfig, normalizeWorkflowConfig, assertSafeWorkspaceRoot } = require("./config");
+const { discoverCommands, staleCommandKeys } = require("./commandDiscovery");
 
 const NUMBER_KEYS = ["maxOutputBytes", "maxIndexFiles"];
 
@@ -99,6 +101,42 @@ function updateWorkspace(current, payload = {}) {
     delete next.workspaces[alias];
     const normalized = writeConfig(next);
     return { ok: true, changed: [`workspaces.${alias}`, `workspaces.${newAlias}`], message: `Renamed workspace '${alias}' to '${newAlias}'.`, configPath: getConfigPath(), config: publicConfigSummary(normalized) };
+  }
+
+  // Remove saved test commands that no longer match the workspace's discovered
+  // package scripts. The client cannot do this itself — the dashboard summary
+  // exposes stale keys but never the configured command strings — so the prune
+  // runs server-side where the full config and live discovery are available.
+  if (action === "prune-stale-tests" || action === "prune-tests") {
+    const ws = next.workspaces[alias];
+    if (!ws) throw new Error(`Workspace '${alias}' is not configured.`);
+    const configured = ws.testCommands && typeof ws.testCommands === "object" ? ws.testCommands : {};
+    let discovered = {};
+    try { discovered = discoverCommands(ws.path) || {}; } catch (_) { discovered = {}; }
+    // Guard: if the path is unreadable we cannot tell stale from valid, and every
+    // configured key would look stale. Refuse rather than wipe a temporarily
+    // unavailable workspace's commands.
+    if (Object.keys(discovered).length === 0 && !(ws.path && fs.existsSync(ws.path))) {
+      throw new Error(`Cannot determine stale commands for '${alias}': workspace path is unavailable. Fix the path first.`);
+    }
+    const stale = staleCommandKeys(configured, discovered);
+    if (!stale.length) {
+      return { ok: true, changed: [], removed: [], message: `No stale test commands for '${alias}'.`, configPath: getConfigPath(), config: publicConfigSummary(current) };
+    }
+    const cleaned = {};
+    for (const [key, command] of Object.entries(configured)) {
+      if (!stale.includes(key)) cleaned[key] = command;
+    }
+    ws.testCommands = cleaned;
+    const normalized = writeConfig(next);
+    return {
+      ok: true,
+      changed: [`workspaces.${alias}.testCommands`],
+      removed: stale,
+      message: `Removed ${stale.length} stale test command${stale.length === 1 ? "" : "s"} from '${alias}': ${stale.join(", ")}.`,
+      configPath: getConfigPath(),
+      config: publicConfigSummary(normalized)
+    };
   }
 
   const source = payload.workspaceConfig && typeof payload.workspaceConfig === "object" ? payload.workspaceConfig : payload;

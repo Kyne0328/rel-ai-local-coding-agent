@@ -62,6 +62,7 @@ function workspaceCard(ws, health) {
   const testKeys = Array.isArray(ws.testCommandKeys) ? ws.testCommandKeys : [];
   const commandKeys = Array.isArray(ws.commandKeys) ? ws.commandKeys : [];
   const detected = Array.isArray(ws.discoveredTestCommandKeys) ? ws.discoveredTestCommandKeys : [];
+  const staleKeys = Array.isArray(ws.staleTestCommandKeys) ? ws.staleTestCommandKeys : [];
   const protectedBranches = Array.isArray(ws.protectedBranches) ? ws.protectedBranches : [];
   const status = health && health.ok === false ? 'check' : 'healthy';
   const canSaveDetected = detected.length && !testKeys.length;
@@ -79,6 +80,7 @@ function workspaceCard(ws, health) {
       ${health && health.ok === false ? `<div style="margin-top:8px;padding:8px 10px;border:1px solid var(--red);border-radius:8px;background:rgba(255,111,136,.10);font-size:12px;color:var(--text);display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;"><span>⚠ ${esc(health.error || 'Workspace unavailable')}</span><button class="secondary" type="button" data-fix-path="${esc(ws.alias || '')}">Fix path</button></div>` : ''}
       <div class="badge-row">
         ${badgeHtml('configured tests ' + testKeys.length)}
+        ${staleKeys.length ? badgeHtml('stale tests ' + staleKeys.length, 'warn') : ''}
         ${badgeHtml('detected tests ' + detected.length, detected.length ? 'good' : 'warn')}
         ${badgeHtml('commands ' + commandKeys.length)}
         ${badgeHtml('context mode ' + (ws.fastTask && ws.fastTask.enabled !== false ? 'focused' : 'broad'), ws.fastTask && ws.fastTask.enabled !== false ? 'good' : 'warn')}
@@ -87,6 +89,7 @@ function workspaceCard(ws, health) {
         ${cautionCount > 0 ? badgeHtml('caution ' + cautionCount, 'warn') : ''}
       </div>
       <div class="path">${validationText(testKeys, detected)}</div>
+      ${staleKeys.length ? `<div class="path" style="color:var(--yellow,#ffc24b);">Stale tests (no longer in package scripts): ${esc(staleKeys.join(', '))}</div>` : ''}
       <div class="path">${fastTaskText(ws.fastTask)}</div>
       ${sessionActive && taskHint ? `<div class="path">Task: ${esc(taskHint)}</div>` : ''}
       <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
@@ -97,6 +100,7 @@ function workspaceCard(ws, health) {
         <button class="secondary" type="button" data-rename-workspace="${esc(ws.alias || '')}">Rename</button>
         <button class="secondary danger" type="button" data-clear-workspace="${esc(ws.alias || '')}">Clear</button>
         ${canSaveDetected ? `<button type="button" data-save-detected="${esc(ws.alias || '')}">Save detected tests</button>` : ''}
+        ${staleKeys.length ? `<button class="secondary danger" type="button" data-prune-stale="${esc(ws.alias || '')}">Remove ${esc(staleKeys.length)} stale test${staleKeys.length === 1 ? '' : 's'}</button>` : ''}
       </div>
       <pre class="copy-box" data-preflight-out="${esc(ws.alias || '')}" style="display:none;margin-top:10px;max-height:220px;overflow:auto;"></pre>
     </div>`;
@@ -177,6 +181,13 @@ document.addEventListener('click', async (event) => {
   if (clearWorkspace) {
     const alias = clearWorkspace.getAttribute('data-clear-workspace') || '';
     await clearWorkspaceFlow(alias);
+    return;
+  }
+
+  const pruneStale = event.target && event.target.closest ? event.target.closest('[data-prune-stale]') : null;
+  if (pruneStale) {
+    const alias = pruneStale.getAttribute('data-prune-stale') || '';
+    await pruneStaleTestsFlow(alias);
     return;
   }
 
@@ -306,6 +317,19 @@ async function editFastTaskFlow(alias) {
     setTimeout(() => reloadWithToken(), 400);
   } else {
     toast('Could not save context settings: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });
+  }
+}
+
+async function pruneStaleTestsFlow(alias) {
+  const ok = window.confirm(`Remove stale test commands from '${alias}'? This deletes only saved test-command entries that no longer match the workspace package scripts. It does not touch repo files.`);
+  if (!ok) return;
+  const result = await postJson('/api/workspaces', { action: 'prune-stale-tests', alias });
+  if (result && result.ok) {
+    const removed = Array.isArray(result.removed) ? result.removed.length : 0;
+    toast(removed ? `Removed ${removed} stale test command${removed === 1 ? '' : 's'} from ${alias}. Refreshing…` : `No stale test commands for ${alias}.`, { variant: 'success' });
+    setTimeout(() => reloadWithToken(), 500);
+  } else {
+    toast('Could not remove stale tests: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });
   }
 }
 
