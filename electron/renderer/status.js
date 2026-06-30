@@ -23,14 +23,17 @@ function updateUI(status) {
 
   const serverEl = document.getElementById('serverStatus');
   serverEl.textContent = serverRunning ? 'Running' : 'Stopped';
-  serverEl.className = `card-status ${serverRunning ? 'running-text' : 'stopped-text'}`;
+
+  const serverCardEl = document.getElementById('serverCardStatus');
+  serverCardEl.textContent = serverRunning ? 'Running' : 'Stopped';
+  serverCardEl.className = `card-status ${serverRunning ? 'running-text' : 'stopped-text'}`;
 
   const tunnelEl = document.getElementById('tunnelStatus');
   const tunnelSub = document.getElementById('tunnelSub');
   if (!serverRunning) {
     tunnelEl.textContent = 'Offline';
     tunnelEl.className = 'card-status stopped-text';
-    tunnelSub.textContent = 'public domain';
+    tunnelSub.textContent = 'waiting for domain';
   } else if (tunnelStatus === 'connecting') {
     tunnelEl.textContent = 'Connecting';
     tunnelEl.className = 'card-status connecting-text';
@@ -38,7 +41,7 @@ function updateUI(status) {
   } else if (tunnelStatus === 'running') {
     tunnelEl.textContent = 'Connected';
     tunnelEl.className = 'card-status running-text';
-    tunnelSub.textContent = 'public domain';
+    tunnelSub.textContent = 'ready for ChatGPT';
   } else if (tunnelStatus === 'failed') {
     tunnelEl.textContent = 'Failed';
     tunnelEl.className = 'card-status failed-text';
@@ -46,7 +49,7 @@ function updateUI(status) {
   } else {
     tunnelEl.textContent = 'Offline';
     tunnelEl.className = 'card-status stopped-text';
-    tunnelSub.textContent = 'public domain';
+    tunnelSub.textContent = 'waiting for domain';
   }
 
   const urlEl = document.getElementById('mcpUrl');

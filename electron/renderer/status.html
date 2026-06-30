@@ -6,165 +6,239 @@
 <title>Rel.AI MCP</title>
 <style>
   :root {
-    --bg: #060912;
-    --surface: #0c1424;
-    --surface-2: #131d31;
-    --surface-3: #1d2a47;
-    --text: #e8eef9;
-    --text-muted: #93a0b6;
-    --text-dim: #5a677e;
-    --line: rgba(148,176,224,.10);
-    --line-soft: rgba(148,176,224,.14);
+    --bg: #050914;
+    --panel: #0b1220;
+    --panel-2: #111b2d;
+    --panel-3: #17243a;
+    --text: #edf4ff;
+    --muted: #9aa8c1;
+    --dim: #60708b;
+    --line: rgba(148, 176, 224, .14);
+    --line-strong: rgba(148, 176, 224, .22);
     --blue: #5aa6ff;
-    --blue-dim: rgba(90,166,255,.14);
     --green: #4fe09a;
     --yellow: #ffc24b;
     --red: #ff6f88;
-    --grad-accent: linear-gradient(135deg, #5aa6ff, #3d7fe6);
-    --grad-surface: linear-gradient(180deg, rgba(255,255,255,.025), rgba(255,255,255,0) 70%);
-    --glow-accent: 0 0 0 1px rgba(90,166,255,.35), 0 0 24px -4px rgba(90,166,255,.45);
-    --glow-green: 0 0 12px -2px rgba(79,224,154,.6);
-    --radius-sm: 6px;
-    --radius-md: 10px;
-    --radius-lg: 14px;
-    --ease: cubic-bezier(0.4, 0, 0.2, 1);
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 18px;
+    --shadow: 0 18px 42px -26px rgba(0, 0, 0, .9);
+    --glow-blue: 0 0 0 1px rgba(90, 166, 255, .32), 0 0 26px -8px rgba(90, 166, 255, .75);
+    --glow-green: 0 0 16px -4px rgba(79, 224, 154, .75);
+    --ease: cubic-bezier(.4, 0, .2, 1);
   }
+
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
+    min-height: 100vh;
     font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     font-size: 13px;
-    background: var(--bg);
-    background-image:
-      radial-gradient(900px 420px at 85% -15%, rgba(90,166,255,.08), transparent 60%),
-      radial-gradient(700px 380px at -10% 120%, rgba(79,224,154,.05), transparent 55%);
     color: var(--text);
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
+    background:
+      radial-gradient(780px 360px at 84% -10%, rgba(90, 166, 255, .16), transparent 62%),
+      radial-gradient(620px 360px at 0% 116%, rgba(79, 224, 154, .08), transparent 58%),
+      var(--bg);
     -webkit-font-smoothing: antialiased;
   }
-  .header {
-    background: var(--surface);
-    background-image: var(--grad-surface);
-    padding: 12px 16px;
-    display: flex; align-items: center; justify-content: space-between;
-    border-bottom: 1px solid var(--line-soft);
-    flex-shrink: 0;
+
+  .shell { padding: 16px; display: grid; gap: 12px; }
+  .hero {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.01)), var(--panel);
+    box-shadow: var(--shadow);
+    padding: 16px;
   }
-  .header-left { display: flex; align-items: center; gap: 8px; }
+  .hero::after {
+    content: "";
+    position: absolute;
+    inset: auto -20% -42px 28%;
+    height: 100px;
+    background: radial-gradient(circle, rgba(90,166,255,.18), transparent 68%);
+    pointer-events: none;
+  }
+
+  .hero-top { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 14px; z-index: 1; }
+  .brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
   .brand-badge {
-    width: 22px; height: 22px; border-radius: 6px;
-    object-fit: contain; display: block;
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    object-fit: contain;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.03);
   }
-  .header-title { font-weight: 700; font-size: 14px; letter-spacing: -.01em; }
-  .header-right { display: flex; align-items: center; gap: 8px; }
-  .version { font-size: 11px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
-  .status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text-dim); flex-shrink: 0; transition: background .2s var(--ease), box-shadow .2s var(--ease); }
+  .brand-title { font-size: 15px; font-weight: 800; letter-spacing: -.02em; }
+  .brand-sub { margin-top: 2px; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .version { color: var(--dim); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .status-chip {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 7px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: rgba(17,27,45,.72);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .status-dot { width: 8px; height: 8px; border-radius: 99px; background: var(--dim); transition: background .2s var(--ease), box-shadow .2s var(--ease); }
   .status-dot.running { background: var(--green); box-shadow: var(--glow-green); }
-  .body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 10px; }
-  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+  .status-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .card {
-    background: var(--surface);
-    background-image: var(--grad-surface);
-    border: 1px solid var(--line-soft);
+    min-width: 0;
+    border: 1px solid var(--line);
     border-radius: var(--radius-md);
-    padding: 11px 13px;
+    background: linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.012)), var(--panel);
+    box-shadow: 0 1px 2px rgba(0,0,0,.45);
+    padding: 13px;
   }
-  .card-label { font-size: 10px; color: var(--text-muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
-  .card-status { font-size: 14px; font-weight: 700; letter-spacing: -.01em; }
-  .card-sub { font-size: 11px; color: var(--text-dim); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card-label {
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+  .card-status { margin-top: 7px; font-size: 18px; font-weight: 800; letter-spacing: -.02em; }
+  .card-sub { margin-top: 4px; color: var(--dim); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .running-text { color: var(--green); }
   .connecting-text { color: var(--yellow); }
   .failed-text { color: var(--red); }
-  .stopped-text { color: var(--text-dim); }
-  .copy-box {
-    background: var(--surface);
-    border: 1px solid rgba(79,224,154,.28);
-    border-radius: var(--radius-md);
-    padding: 12px 14px;
+  .stopped-text { color: var(--dim); }
+
+  .copy-panel {
+    border: 1px solid rgba(90,166,255,.22);
+    border-radius: var(--radius-lg);
+    background: linear-gradient(180deg, rgba(90,166,255,.055), rgba(255,255,255,.012)), var(--panel);
+    box-shadow: var(--shadow);
+    padding: 14px;
   }
-  .copy-label { font-size: 10px; color: var(--text-muted); margin-bottom: 7px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 700; }
-  .copy-url { font-size: 12px; color: var(--blue); word-break: break-all; margin-bottom: 10px; font-family: ui-monospace, "SF Mono", Consolas, monospace; min-height: 32px; line-height: 1.5; }
-  .copy-url.empty { color: var(--text-dim); font-style: italic; }
-  .connector-steps { list-style: none; counter-reset: step; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-  .connector-steps li { position: relative; padding-left: 22px; font-size: 11px; color: var(--text-dim); line-height: 1.45; counter-increment: step; }
+  .copy-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .copy-label { font-size: 10px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; font-weight: 800; }
+  .copy-url {
+    min-height: 46px;
+    padding: 11px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: rgba(5,9,20,.78);
+    color: var(--blue);
+    font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    word-break: break-all;
+  }
+  .copy-url.empty { color: var(--dim); font-style: italic; }
+
+  .connector-steps { list-style: none; counter-reset: step; margin: 11px 0 0; display: grid; gap: 7px; }
+  .connector-steps li { position: relative; padding-left: 25px; color: var(--muted); font-size: 11px; line-height: 1.45; counter-increment: step; }
   .connector-steps li::before {
-    content: counter(step); position: absolute; left: 0; top: 0;
-    width: 15px; height: 15px; border-radius: 50%;
-    background: var(--surface-3); color: var(--text-muted);
-    font-size: 9px; font-weight: 700; display: grid; place-items: center;
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 16px;
+    height: 16px;
+    border-radius: 99px;
+    display: grid;
+    place-items: center;
+    background: var(--panel-3);
+    color: var(--text);
+    font-size: 9px;
+    font-weight: 800;
   }
-  .connector-steps strong { color: var(--text-muted); }
-  .error-line { color: var(--red); font-size: 12px; min-height: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  button { cursor: pointer; font-family: inherit; transition: filter .15s var(--ease), background .15s var(--ease), border-color .15s var(--ease), box-shadow .15s var(--ease); }
+  .connector-steps strong { color: var(--text); }
+
+  .error-line {
+    min-height: 18px;
+    color: var(--red);
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  button {
+    min-height: 38px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--panel-2);
+    color: var(--muted);
+    font: inherit;
+    font-weight: 750;
+    cursor: pointer;
+    transition: background .16s var(--ease), border-color .16s var(--ease), color .16s var(--ease), box-shadow .16s var(--ease), transform .1s var(--ease), filter .16s var(--ease);
+  }
+  button:hover { background: var(--panel-3); border-color: var(--line-strong); color: var(--text); }
   button:active { transform: translateY(1px); }
+  button:disabled { opacity: .52; cursor: not-allowed; box-shadow: none; }
   .btn-copy {
-    width: 100%; background: var(--grad-accent); border: none;
-    border-radius: var(--radius-sm); color: #fff; padding: 9px;
-    font-size: 13px; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.45);
+    width: 100%;
+    margin-top: 10px;
+    background: linear-gradient(135deg, #5aa6ff, #3d7fe6);
+    border-color: rgba(90,166,255,.5);
+    color: #fff;
+    box-shadow: 0 8px 24px -14px rgba(90,166,255,.85);
   }
-  .btn-copy:hover { filter: brightness(1.08); box-shadow: var(--glow-accent); }
-  .btn-copy:disabled { background: var(--surface-2); color: var(--text-dim); cursor: not-allowed; box-shadow: none; }
-  .actions { display: flex; gap: 6px; margin-top: 4px; }
-  .btn-action {
-    flex: 1; background: var(--surface-2); border: 1px solid var(--line-soft);
-    border-radius: var(--radius-sm); color: var(--text-muted); padding: 9px; font-size: 12px; font-weight: 600;
-  }
-  .btn-action:hover { background: var(--surface-3); color: var(--text); border-color: var(--line); }
-  .btn-stop { background: rgba(255,111,136,.12); border-color: rgba(255,111,136,.32); color: var(--red); }
-  .btn-stop:hover { background: rgba(255,111,136,.2); border-color: var(--red); color: var(--red); }
-  .btn-start { background: rgba(79,224,154,.14); border-color: rgba(79,224,154,.35); color: var(--green); font-weight: 700; }
-  .btn-start:hover { background: rgba(79,224,154,.22); border-color: var(--green); color: var(--green); }
+  .btn-copy:hover { filter: brightness(1.07); box-shadow: var(--glow-blue); }
+  .btn-copy:disabled { background: var(--panel-2); color: var(--dim); border-color: var(--line); }
+  .btn-stop { color: var(--red); background: rgba(255,111,136,.1); border-color: rgba(255,111,136,.28); }
+  .btn-start { color: var(--green); background: rgba(79,224,154,.12); border-color: rgba(79,224,154,.3); }
 </style>
 </head>
 <body>
-<div class="header">
-  <div class="header-left">
-    <img class="brand-badge" src="relai-logo.png" alt="Rel.AI MCP">
-    <span class="header-title">Rel.AI MCP</span>
-  </div>
-  <div class="header-right">
-    <span class="version" id="appVersion">v0.16.8</span>
-    <div class="status-dot" id="headerDot"></div>
-  </div>
-</div>
+<div class="shell">
+  <section class="hero">
+    <div class="hero-top">
+      <div class="brand">
+        <img class="brand-badge" src="relai-logo.png" alt="Rel.AI MCP">
+        <div>
+          <div class="brand-title">Rel.AI MCP</div>
+          <div class="brand-sub">Cloud connector for local workspaces</div>
+        </div>
+      </div>
+      <div class="status-chip"><span class="status-dot" id="headerDot"></span><span id="serverStatus">Stopped</span><span class="version" id="appVersion">v0.16.9</span></div>
+    </div>
+  </section>
 
-<div class="body">
-  <div class="cards">
+  <section class="status-grid">
     <div class="card">
-      <div class="card-label">MCP Server</div>
-      <div class="card-status stopped-text" id="serverStatus">Stopped</div>
+      <div class="card-label">Local service</div>
+      <div class="card-status stopped-text" id="serverCardStatus">Stopped</div>
       <div class="card-sub" id="serverSub">127.0.0.1</div>
     </div>
     <div class="card">
       <div class="card-label">Public tunnel</div>
       <div class="card-status stopped-text" id="tunnelStatus">Offline</div>
-      <div class="card-sub" id="tunnelSub">public domain</div>
+      <div class="card-sub" id="tunnelSub">waiting for domain</div>
     </div>
-  </div>
+  </section>
 
-  <div class="copy-box">
-    <div class="copy-label">ChatGPT MCP URL</div>
-    <div class="copy-url empty" id="mcpUrl">Waiting for public tunnel...</div>
+  <section class="copy-panel">
+    <div class="copy-head">
+      <div class="copy-label">ChatGPT MCP endpoint</div>
+    </div>
+    <div class="copy-url empty" id="mcpUrl">Waiting for HTTPS tunnel...</div>
     <button class="btn-copy" id="copyBtn" disabled>Copy MCP URL</button>
     <ol class="connector-steps">
-      <li>Copy this URL after the tunnel connects.</li>
-      <li>In ChatGPT, open <strong>Settings &gt; Apps &gt; Create</strong>.</li>
-      <li>Paste the URL as the MCP endpoint and choose <strong>OAuth</strong>.</li>
-      <li>Approve with your dashboard token, then select the app in chat.</li>
+      <li>Wait until the HTTPS tunnel is connected.</li>
+      <li>Open <strong>Settings &gt; Apps &gt; Create</strong> in ChatGPT.</li>
+      <li>Paste this endpoint and choose <strong>OAuth</strong>.</li>
+      <li>Approve using your Rel.AI dashboard token.</li>
     </ol>
-  </div>
+  </section>
 
   <div class="error-line" id="errorLine"></div>
 
   <div class="actions">
-    <button class="btn-action" id="dashboardBtn">Dashboard</button>
-    <button class="btn-action" id="settingsBtn">Settings</button>
-    <button class="btn-action btn-stop" id="stopBtn">Stop</button>
-    <button class="btn-action btn-start" id="startBtn" style="display:none">Start</button>
+    <button id="dashboardBtn">Dashboard</button>
+    <button id="settingsBtn">Settings</button>
+    <button class="btn-stop" id="stopBtn">Stop</button>
+    <button class="btn-start" id="startBtn" style="display:none">Start</button>
   </div>
 </div>
-
 <script src="status.js"></script>
 </body>
 </html>

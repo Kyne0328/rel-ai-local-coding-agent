@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.16.9] — 2026-06-30
+
+### Electron and dashboard UI polish
+- **Electron setup now uses a cleaner card-based wizard flow.** The setup screen has improved spacing, typography, progress treatment, input styling, and review copy while preserving the existing launcher IDs and behavior.
+- **Electron status now presents the cloud connection state more clearly.** The status window has a stronger header, clearer local service and public tunnel cards, and a more readable ChatGPT MCP endpoint copy area.
+- **Dashboard styling now matches the desktop launcher more closely.** The dashboard gets a product-polish CSS layer for tighter spacing, deeper card surfaces, improved sidebar/topbar treatment, cleaner metrics, and better responsive behavior.
+
+Bump root/electron/status UI/lockfiles to 0.16.9.
+
 ## [0.16.8] — 2026-06-30
 
 ### Bundled managed ngrok + HTTPS-first connection guidance
