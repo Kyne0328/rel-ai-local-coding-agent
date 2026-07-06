@@ -26,7 +26,9 @@ The default public ChatGPT workflow is intentionally small and predictable:
 relai_repo_snapshot -> relai_read -> relai_edit (replace/write/patch/batch) -> relai_run_checks -> relai_diff -> relai_restore_changes / relai_tidy_plan + relai_tidy_run
 ```
 
-No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. No old multi-agent/task-runner workflows pretending to be reliable. The public MCP surface stays limited to the workspace tools ChatGPT actually needs, while newer local bridge sessions can opt into a few extra helper tools for trusted continuity.
+No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. The public MCP surface stays limited to the workspace tools ChatGPT actually needs; a few extra helper tools remain available on local stdio sessions.
+
+When ChatGPT first edits a workspace, the server starts a session and records the pre-edit state, so later status/diff output can separate the files this session changed from files that were already modified. The session expires after a period of inactivity.
 
 Rel.AI MCP still lightly nods to the original Rel.AI idea, but this README stands on its own: this is now a local MCP bridge for ChatGPT.
 
@@ -262,7 +264,7 @@ Rel.AI exposes one curated public workspace-tool surface of 18 tools. `relai_edi
 | `relai_browser` | Run a browser/UI check or fetch a route. |
 | `relai_diff` | Review git status and diff. |
 | `relai_restore_changes` | Restore selected workspace changes. |
-| `relai_status` | Return compact live status for configured workspaces and scripts. |
+| `relai_status` | Live status for configured workspaces and scripts. On the ChatGPT connector the result is compacted to workspace state; the full stdio result also lists tool groups and CI references. |
 | `relai_git_status` | Branch, ahead/behind, and ownership-split repository state. |
 | `relai_git_commit` | Record a commit with an explicit message (refuses secret-looking staged files). |
 | `relai_git_push` | Publish a branch to an allowlisted remote. |

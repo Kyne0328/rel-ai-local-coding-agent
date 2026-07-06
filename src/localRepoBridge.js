@@ -10,6 +10,7 @@ const {
   looksBinary
 } = require("./safety");
 const { discoverCommands } = require("./commandDiscovery");
+const { getStateDir } = require("./audit");
 const { appendOperation, makeOperationId, summarizeOperations } = require("./journal");
 const { normalizeCommandAlias } = require("./commandNormalizer");
 const { selectValidationLevel } = require("./validationStrategy");
@@ -379,7 +380,7 @@ function relaiClear(workspace, config, args = {}) {
 
 function tidyPlanDir(config, workspace) {
   const safeAlias = String(workspace.alias || "workspace").replace(/[^A-Za-z0-9_.-]/g, "_");
-  return path.join(config.stateDir || path.join(process.cwd(), ".rel-ai-mcp-state"), "workspace-tidy", safeAlias);
+  return path.join(getStateDir(config), "workspace-tidy", safeAlias);
 }
 
 function validateTidyPlanId(planId) {
@@ -408,6 +409,22 @@ async function workspaceTidyPlan(workspace, config, args = {}) {
   const status = await runProcess("git", ["status", "--short", "--branch"], { cwd: workspace.path, timeout: 30000 }, config);
   if (status.exitCode !== 0) throw new Error(`git status failed for ${workspace.alias}: ${status.stderr || status.stdout || status.exitCode}`);
   const ownership = classifyStatusOwnership(workspace, config, status.stdout || "");
+  // Without a captured session baseline we cannot distinguish this agent's
+  // untracked artifacts from pre-existing user files. Refuse rather than risk
+  // planning a delete of files the user created before any session started.
+  if (mode === "session_untracked" && !ownership.hasSession) {
+    return {
+      ok: false,
+      workspace: workspace.alias,
+      operation: "workspaceTidyPlan",
+      mode,
+      candidateCount: 0,
+      candidates: [],
+      skipped: [],
+      reason: "no_session_baseline",
+      message: "No active session baseline for this workspace, so untracked files cannot be attributed to this session. Start a session (edit a file, or call relai_set_policy) before tidying session-owned untracked files."
+    };
+  }
   const candidates = [];
   const skipped = [];
   if (mode === "session_untracked") {
@@ -969,7 +986,7 @@ function performFullFileWrite(workspace, config, relativePath, content, options 
 
 function stagedDir(config, workspace) {
   const safeAlias = String(workspace.alias || "workspace").replace(/[^A-Za-z0-9_.-]/g, "_");
-  return path.join(config.stateDir || path.join(process.cwd(), ".rel-ai-mcp-state"), "write-staging", safeAlias);
+  return path.join(getStateDir(config), "write-staging", safeAlias);
 }
 
 function stagedPath(config, workspace, writeId) {

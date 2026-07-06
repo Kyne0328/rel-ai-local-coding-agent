@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { workspaceTidyPlan, workspaceTidyRun } = require('../src/localRepoBridge.js');
+const { writeSessionPolicy } = require('../src/policyResolver.js');
 
 function makeTempRepo() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-tidy-'));
@@ -26,6 +27,9 @@ function makeTempRepo() {
   const workspace = { alias: 'test', path: dir };
   const config = { stateDir };
   try {
+    // A session must be active for untracked files to be attributable as
+    // session-owned; the artifact is created after the session starts.
+    writeSessionPolicy(config, workspace.alias, { workspaceRoot: dir });
     const artifact = path.join(dir, 'generated.svg');
     fs.writeFileSync(artifact, '<svg></svg>');
 
@@ -53,6 +57,7 @@ function makeTempRepo() {
   const workspace = { alias: 'test', path: dir };
   const config = { stateDir };
   try {
+    writeSessionPolicy(config, workspace.alias, { workspaceRoot: dir });
     const artifact = path.join(dir, 'generated.svg');
     fs.writeFileSync(artifact, '<svg>old</svg>');
     const plan = await workspaceTidyPlan(workspace, config, {});

@@ -39,8 +39,7 @@ function dashboardData(config, args = {}) {
     },
     workflow: {
       mode: (config.workflow && config.workflow.mode) || "standard",
-      tools: publicTools,
-      removedLegacyWorkflows: ["update", "local", "task-runner", "worktree", "multi-agent", "approvals", "docker", "pr-ci-repair"]
+      tools: publicTools
     },
     health,
     auditTail

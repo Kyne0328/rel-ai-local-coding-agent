@@ -85,7 +85,7 @@ function workspaceCard(ws, health) {
         ${badgeHtml('commands ' + commandKeys.length)}
         ${badgeHtml('context mode ' + (ws.fastTask && ws.fastTask.enabled !== false ? 'focused' : 'broad'), ws.fastTask && ws.fastTask.enabled !== false ? 'good' : 'warn')}
         ${badgeHtml('protected ' + (protectedBranches.join(', ') || 'none'))}
-        ${sessionActive ? badgeHtml('session active', 'good') : badgeHtml('no session', '')}
+        ${sessionActive ? badgeHtml('session active', 'good') : ''}
         ${cautionCount > 0 ? badgeHtml('caution ' + cautionCount, 'warn') : ''}
       </div>
       <div class="path">${validationText(testKeys, detected)}</div>

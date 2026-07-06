@@ -8,7 +8,7 @@ const { discoverCommands, staleCommandKeys: staleCommandKeyList } = require("./c
 const { summarizeOperations } = require("./journal");
 const { repoSnapshot, relaiRead, relaiWrite, relaiReplace, relaiClear, workspaceTidyPlan, workspaceTidyRun, relaiApplyPatch, relaiApplyArchive, relaiSnapshotArchive, relaiVerify, relaiBrowser, relaiDiff, relaiReset, relaiGitStatus, relaiGitFetch, relaiGitCommit, relaiGitPush, relaiGitMergeBranch, relaiGitMergeRemoteBranchesPlan, relaiGitAbortMerge, relaiGitCreatePr, relaiRemoveFile, relaiRefactorAudit } = require("./localRepoBridge");
 const { planEdit } = require("./executionPlanner");
-const { resolvePolicy, writeSessionPolicy, clearSessionPolicy } = require("./policyResolver");
+const { resolvePolicy, writeSessionPolicy, clearSessionPolicy, ensureSessionStarted } = require("./policyResolver");
 const { getVersion } = require("./version");
 
 const BRIDGE_TOOL_NAMES = [
@@ -234,14 +234,16 @@ function isToolCallable(name) {
   return TOOL_NAMES.has(name);
 }
 
-async function callTool(name, args = {}) {
+async function callTool(name, args = {}, context = {}) {
   const config = readConfig();
   const started = Date.now();
   const canonicalName = name;
+  const connector = Boolean(context && context.publicHttpOnly);
   try {
     if (!isToolCallable(name)) {
       throw new Error(`Unknown tool '${name}'. Available tools: ${BRIDGE_TOOL_NAMES.join(", ")}. Restart/reconnect ChatGPT if the tool list looks stale.`);
     }
+    maybeStartSession(config, canonicalName, args || {});
     const value = await dispatchTool(config, canonicalName, args || {});
     const extraAudit = {};
     if (canonicalName === "relai_edit" && value) {
@@ -268,8 +270,6 @@ async function callTool(name, args = {}) {
     } else if (canonicalName === "relai_repo_snapshot" && value) {
       if (value.effectiveMaxEntries != null) extraAudit.effectiveMaxIndexFiles = value.effectiveMaxEntries;
       if (value.budgetMultiplied != null) extraAudit.budgetMultiplied = value.budgetMultiplied;
-    } else if (canonicalName === "relai_status" && value && value.policy && value.policy.sessionActive === true) {
-      value.trustedModeNote = "Trusted workspace mode active — agent operates with continuity inside this workspace.";
     }
     try {
       const caution = classifyCaution(canonicalName, args || {}, value, config);
@@ -322,11 +322,188 @@ async function callTool(name, args = {}) {
       }
     } catch (_) {}
     logAudit(config, { tool: canonicalName, ok: true, workspace: args && args.workspace, ms: Date.now() - started, ...extraAudit });
-    return ok(value);
+    // The full stdio surface keeps every field (tests and local tooling read them).
+    // The ChatGPT connector gets a compacted result: internal telemetry, always-
+    // default policy objects, and duplicated/verbose fields are dropped so the model
+    // spends its context on state it can act on, not implementation leakage.
+    return ok(connector ? compactForConnector(canonicalName, value, args || {}) : value);
   } catch (error) {
     const enhanced = enhanceToolError(canonicalName, error);
     logAudit(config, { tool: canonicalName, ok: false, workspace: args && args.workspace, ms: Date.now() - started, error: enhanced.message });
     throw enhanced;
+  }
+}
+
+// Write tools that mutate the workspace. The first such non-dryRun call starts a
+// session and captures the pre-write baseline, so ownership tracking (and the
+// tidy-plan safety fence) become real on the ChatGPT connector without the agent
+// having to call relai_set_policy explicitly.
+const SESSION_STARTING_TOOLS = new Set([
+  "relai_write", "relai_replace", "relai_edit",
+  "relai_apply_update", "relai_apply_bundle",
+  "relai_clear_files", "relai_remove_file"
+]);
+
+function maybeStartSession(config, toolName, args) {
+  if (!SESSION_STARTING_TOOLS.has(toolName)) return;
+  if (args && args.dryRun === true) return;
+  // Staged writes that do not touch the workspace yet ('start'/'append'/'abort')
+  // should not anchor the baseline — only the committing/direct call does.
+  if ((toolName === "relai_write" || toolName === "relai_edit") && typeof args.stage === "string") {
+    const stage = args.stage.trim().toLowerCase();
+    if (stage === "start" || stage === "append" || stage === "abort") return;
+  }
+  const alias = args && args.workspace;
+  if (!alias) return;
+  try {
+    const workspace = resolveWorkspace(config, alias);
+    if (workspace && workspace.path) ensureSessionStarted(config, workspace.alias, workspace.path);
+  } catch (_) { /* unknown workspace surfaces as a normal dispatch error */ }
+}
+
+// Render an active session/policy object as one short, user-actionable line, or
+// null when there is nothing worth saying (the common idle/default case). This
+// replaces the always-present { trusted, sessionActive:false, baselineDirty:[],
+// source:"default" } object that leaked implementation state without user value.
+function policySentence(policy) {
+  if (!policy || typeof policy !== "object") return null;
+  const parts = [];
+  if (policy.sessionActive === true) {
+    parts.push(policy.taskHint ? `Session active: ${policy.taskHint}` : "Session active");
+    if (Array.isArray(policy.baselineDirty) && policy.baselineDirty.length) {
+      parts.push(`${policy.baselineDirty.length} pre-existing dirty file(s) are not attributed to this session`);
+    }
+    return parts.join(". ") + ".";
+  }
+  return null;
+}
+
+// Drop null/undefined and empty-array fields so a compact result never carries a
+// key that only ever says "nothing here".
+function pruneEmpty(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v == null) continue;
+    if (Array.isArray(v) && v.length === 0) continue;
+    out[k] = v;
+  }
+  return out;
+}
+
+// Compact a tool result for the ChatGPT connector surface. Keeps everything the
+// model needs to decide what to do next; strips internal telemetry, always-default
+// policy objects, duplicated arrays, and verbose raw-status blobs.
+function compactForConnector(name, value, args) {
+  if (!value || typeof value !== "object") return value;
+  switch (name) {
+    case "relai_read": {
+      // Replace the ~1 KB nested writeGuidance object on every file item with a
+      // single short hint, and only when the file shape actually warrants care
+      // (large or interpolation-heavy). Normal files carry no guidance at all.
+      if (!Array.isArray(value.items)) return value;
+      const items = value.items.map((item) => {
+        if (!item || typeof item !== "object") return item;
+        const guidance = item.writeGuidance;
+        const next = { ...item };
+        delete next.writeGuidance;
+        delete next.cacheHit; // debug metadata; audited server-side already
+        if (guidance && guidance.recommendedMode === "exact-replace") {
+          next.writeHint = "Large or interpolation-heavy file — prefer relai_edit with oldText/newText over a full rewrite.";
+        }
+        return next;
+      });
+      return { ...value, items };
+    }
+    case "relai_status": {
+      const ws = value.workspace && typeof value.workspace === "object"
+        ? pruneEmpty({
+            alias: value.workspace.alias,
+            root: value.workspace.root,
+            commandKeys: value.workspace.commandKeys,
+            testCommandKeys: value.workspace.testCommandKeys,
+            staleCommandKeys: value.workspace.staleCommandKeys,
+            staleTestCommandKeys: value.workspace.staleTestCommandKeys,
+            error: value.workspace.error
+          })
+        : value.workspace;
+      const state = ws && value.workspace ? policySentence(value.workspace.policy) : null;
+      // Server-internal fields removed: toolGroups (incl. the internal-only list),
+      // the server's own npm scripts, its CI scan, and the raw policy object.
+      return pruneEmpty({
+        ok: value.ok,
+        version: value.version,
+        workspace: ws,
+        state,
+        workspaceCount: value.workspaceCount
+      });
+    }
+    case "relai_diff":
+    case "relai_git_status": {
+      // Ownership arrays and per-entry raw status lines are only meaningful when a
+      // real session baseline exists; otherwise they are noise (or, pre-fix, lies).
+      const hasSplit = Array.isArray(value.baselineChangedFiles) && value.baselineChangedFiles.length > 0;
+      return pruneEmpty({
+        ok: value.ok,
+        workspace: value.workspace,
+        branch: value.branch,
+        aheadBehind: value.aheadBehind,
+        staged: value.staged,
+        path: value.path,
+        status: value.status,
+        diff: value.diff,
+        // Keep the split only when a baseline actually separates the sets.
+        sessionChangedFiles: hasSplit ? value.sessionChangedFiles : undefined,
+        baselineChangedFiles: hasSplit ? value.baselineChangedFiles : undefined,
+        stderr: value.stderr
+      });
+    }
+    case "relai_run_checks": {
+      // `commands` duplicated `checks`; validationLevel/reason/changedFiles are
+      // internal telemetry (see WORKFLOW_RELIABILITY); policy was default noise.
+      return pruneEmpty({
+        ok: value.ok,
+        workspace: value.workspace,
+        level: value.level,
+        checks: value.checks,
+        results: value.results,
+        validated: value.validated,
+        validationStatus: value.validationStatus,
+        message: value.message,
+        fullOutput: value.fullOutput
+      });
+    }
+    case "relai_repo_snapshot": {
+      // Drop config-forced constants (toolMode, trustedLocalAgent), prepared-workflow
+      // internals (flow), budget telemetry, the operation journal, and the full text
+      // of every manifest — keep the manifest NAMES and the project hints.
+      return pruneEmpty({
+        ok: value.ok,
+        workspace: value.workspace,
+        root: value.root,
+        manifests: value.manifests,
+        discoveredCommands: value.discoveredCommands,
+        fileCount: value.fileCount,
+        files: value.files,
+        skipped: value.skipped,
+        truncated: value.truncated,
+        hints: value.hints,
+        recommendedFlow: value.recommendedFlow
+      });
+    }
+    case "relai_session_summary": {
+      return pruneEmpty({
+        ok: value.ok,
+        workspace: value.workspace,
+        sessionActive: value.sessionActive || undefined,
+        taskHint: value.taskHint,
+        filesChanged: value.filesChanged,
+        checksRun: value.checksRun,
+        diffReviewed: value.diffReviewed || undefined,
+        escalations: value.escalations
+      });
+    }
+    default:
+      return value;
   }
 }
 
@@ -756,4 +933,4 @@ function arrayObjectProp(properties, required = [], minItems, maxItems) {
   return schema;
 }
 
-module.exports = { toolSchemas, allToolSchemas: toolSchemas, getToolSchemas, getPublicToolSchemas, BRIDGE_TOOL_NAMES, PUBLIC_HTTP_TOOL_NAMES, callTool, workspaceList, workspaceInspect, workspaceTree, workspaceProfile, buildSessionSummary, enhanceToolError };
+module.exports = { toolSchemas, allToolSchemas: toolSchemas, getToolSchemas, getPublicToolSchemas, BRIDGE_TOOL_NAMES, PUBLIC_HTTP_TOOL_NAMES, callTool, workspaceList, workspaceInspect, workspaceTree, workspaceProfile, buildSessionSummary, enhanceToolError, compactForConnector, policySentence };
