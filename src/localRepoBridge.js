@@ -408,6 +408,22 @@ async function workspaceTidyPlan(workspace, config, args = {}) {
   const status = await runProcess("git", ["status", "--short", "--branch"], { cwd: workspace.path, timeout: 30000 }, config);
   if (status.exitCode !== 0) throw new Error(`git status failed for ${workspace.alias}: ${status.stderr || status.stdout || status.exitCode}`);
   const ownership = classifyStatusOwnership(workspace, config, status.stdout || "");
+  // Without a captured session baseline we cannot distinguish this agent's
+  // untracked artifacts from pre-existing user files. Refuse rather than risk
+  // planning a delete of files the user created before any session started.
+  if (mode === "session_untracked" && !ownership.hasSession) {
+    return {
+      ok: false,
+      workspace: workspace.alias,
+      operation: "workspaceTidyPlan",
+      mode,
+      candidateCount: 0,
+      candidates: [],
+      skipped: [],
+      reason: "no_session_baseline",
+      message: "No active session baseline for this workspace, so untracked files cannot be attributed to this session. Start a session (edit a file, or call relai_set_policy) before tidying session-owned untracked files."
+    };
+  }
   const candidates = [];
   const skipped = [];
   if (mode === "session_untracked") {

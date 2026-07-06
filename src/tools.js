@@ -8,7 +8,7 @@ const { discoverCommands, staleCommandKeys: staleCommandKeyList } = require("./c
 const { summarizeOperations } = require("./journal");
 const { repoSnapshot, relaiRead, relaiWrite, relaiReplace, relaiClear, workspaceTidyPlan, workspaceTidyRun, relaiApplyPatch, relaiApplyArchive, relaiSnapshotArchive, relaiVerify, relaiBrowser, relaiDiff, relaiReset, relaiGitStatus, relaiGitFetch, relaiGitCommit, relaiGitPush, relaiGitMergeBranch, relaiGitMergeRemoteBranchesPlan, relaiGitAbortMerge, relaiGitCreatePr, relaiRemoveFile, relaiRefactorAudit } = require("./localRepoBridge");
 const { planEdit } = require("./executionPlanner");
-const { resolvePolicy, writeSessionPolicy, clearSessionPolicy } = require("./policyResolver");
+const { resolvePolicy, writeSessionPolicy, clearSessionPolicy, ensureSessionStarted } = require("./policyResolver");
 const { getVersion } = require("./version");
 
 const BRIDGE_TOOL_NAMES = [
@@ -242,6 +242,7 @@ async function callTool(name, args = {}) {
     if (!isToolCallable(name)) {
       throw new Error(`Unknown tool '${name}'. Available tools: ${BRIDGE_TOOL_NAMES.join(", ")}. Restart/reconnect ChatGPT if the tool list looks stale.`);
     }
+    maybeStartSession(config, canonicalName, args || {});
     const value = await dispatchTool(config, canonicalName, args || {});
     const extraAudit = {};
     if (canonicalName === "relai_edit" && value) {
@@ -328,6 +329,33 @@ async function callTool(name, args = {}) {
     logAudit(config, { tool: canonicalName, ok: false, workspace: args && args.workspace, ms: Date.now() - started, error: enhanced.message });
     throw enhanced;
   }
+}
+
+// Write tools that mutate the workspace. The first such non-dryRun call starts a
+// session and captures the pre-write baseline, so ownership tracking (and the
+// tidy-plan safety fence) become real on the ChatGPT connector without the agent
+// having to call relai_set_policy explicitly.
+const SESSION_STARTING_TOOLS = new Set([
+  "relai_write", "relai_replace", "relai_edit",
+  "relai_apply_update", "relai_apply_bundle",
+  "relai_clear_files", "relai_remove_file"
+]);
+
+function maybeStartSession(config, toolName, args) {
+  if (!SESSION_STARTING_TOOLS.has(toolName)) return;
+  if (args && args.dryRun === true) return;
+  // Staged writes that do not touch the workspace yet ('start'/'append'/'abort')
+  // should not anchor the baseline — only the committing/direct call does.
+  if ((toolName === "relai_write" || toolName === "relai_edit") && typeof args.stage === "string") {
+    const stage = args.stage.trim().toLowerCase();
+    if (stage === "start" || stage === "append" || stage === "abort") return;
+  }
+  const alias = args && args.workspace;
+  if (!alias) return;
+  try {
+    const workspace = resolveWorkspace(config, alias);
+    if (workspace && workspace.path) ensureSessionStarted(config, workspace.alias, workspace.path);
+  } catch (_) { /* unknown workspace surfaces as a normal dispatch error */ }
 }
 
 function enhanceToolError(toolName, error) {

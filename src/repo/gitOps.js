@@ -85,16 +85,28 @@ function classifyStatusOwnership(workspace, config, statusOutput) {
   try {
     const { readSessionPolicy } = require("../policyResolver");
     const session = readSessionPolicy(config, workspace.alias);
-    if (session && Array.isArray(session.baselineDirty)) {
-      baselineDirty = session.baselineDirty;
+    // Presence of a (non-expired) session file — not presence of a baselineDirty
+    // key — is what marks ownership as knowable. A session that started against a
+    // clean worktree has no baselineDirty entry, but it is still a real session:
+    // everything dirty now is genuinely session-owned.
+    if (session) {
+      baselineDirty = Array.isArray(session.baselineDirty) ? session.baselineDirty : [];
       baselineSource = "session";
     }
   } catch (_err) {}
+  // With no active session there is no captured baseline, so we CANNOT tell which
+  // dirty files came from this agent vs. were already present. Labeling everything
+  // "session" here was a lie that also let relai_tidy_plan treat pre-existing
+  // untracked user files as disposable session artifacts. When hasSession is false,
+  // ownership is "unknown" and the session-owned arrays stay empty.
+  const hasSession = baselineSource !== null;
   const baselineSet = new Set(baselineDirty);
   const sessionChanged = [];
   const baselineChanged = [];
   const untrackedSession = [];
   const untrackedBaseline = [];
+  const unknownChanged = [];
+  const untrackedUnknown = [];
   const entries = [];
   let branch = null;
   let aheadBehind = null;
@@ -114,17 +126,20 @@ function classifyStatusOwnership(workspace, config, statusOutput) {
     const file = arrow >= 0 ? rawPath.slice(arrow + 4).trim() : rawPath;
     if (!file) continue;
     const untracked = x === "?" && y === "?";
-    const owner = baselineSet.has(file) ? "baseline" : "session";
+    const owner = !hasSession ? "unknown" : (baselineSet.has(file) ? "baseline" : "session");
     entries.push({ path: file, indexStatus: x, worktreeStatus: y, owner, untracked, raw: line });
     if (owner === "baseline") {
       baselineChanged.push(file);
       if (untracked) untrackedBaseline.push(file);
-    } else {
+    } else if (owner === "session") {
       sessionChanged.push(file);
       if (untracked) untrackedSession.push(file);
+    } else {
+      unknownChanged.push(file);
+      if (untracked) untrackedUnknown.push(file);
     }
   }
-  return { branch, aheadBehind, entries, sessionChanged, baselineChanged, untrackedSession, untrackedBaseline, baselineSource };
+  return { branch, aheadBehind, entries, hasSession, sessionChanged, baselineChanged, untrackedSession, untrackedBaseline, unknownChanged, untrackedUnknown, baselineSource };
 }
 
 function parseStatusBranchLine(line) {

@@ -83,15 +83,22 @@ function makeRepo() {
   fs.rmSync(stateDir, { recursive: true, force: true });
 }
 
-// 6. classifyStatusOwnership with no session: everything is sessionChanged
+// 6. classifyStatusOwnership with no session: ownership is UNKNOWN, not session.
+// Claiming session ownership without a captured baseline is a safety bug: it let
+// relai_tidy_plan treat pre-existing untracked user files as disposable session
+// artifacts. With no session the session-owned arrays must stay empty.
 {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-pr-'));
   const config = { stateDir };
   const workspace = { alias: 'noses' };
-  const statusOutput = ' M a.txt\n M b.txt\n';
-  const { sessionChanged, baselineChanged, baselineSource } = classifyStatusOwnership(workspace, config, statusOutput);
-  assert.deepEqual(sessionChanged.sort(), ['a.txt', 'b.txt']);
+  const statusOutput = ' M a.txt\n M b.txt\n?? c.txt\n';
+  const { sessionChanged, baselineChanged, untrackedSession, unknownChanged, untrackedUnknown, hasSession, baselineSource } = classifyStatusOwnership(workspace, config, statusOutput);
+  assert.deepEqual(sessionChanged, []);
+  assert.deepEqual(untrackedSession, []);
   assert.deepEqual(baselineChanged, []);
+  assert.deepEqual(unknownChanged.sort(), ['a.txt', 'b.txt', 'c.txt']);
+  assert.deepEqual(untrackedUnknown, ['c.txt']);
+  assert.equal(hasSession, false);
   assert.equal(baselineSource, null);
   fs.rmSync(stateDir, { recursive: true, force: true });
 }

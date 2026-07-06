@@ -18,6 +18,7 @@ const {
   relaiWrite,
   relaiReset
 } = require('../src/localRepoBridge.js');
+const { writeSessionPolicy } = require('../src/policyResolver.js');
 
 function makeRepo() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-git-workflow-'));
@@ -58,6 +59,10 @@ const workspace = {
 };
 const config = { stateDir: path.join(root, 'state'), workflow: { prepared: { requireCleanGit: false, backup: false } } };
 
+// Start a session against the clean worktree first — this mirrors the real
+// connector flow (a write auto-starts a session before git_status is consulted),
+// so files created afterward are correctly attributed as session-owned.
+writeSessionPolicy(config, workspace.alias, { workspaceRoot: workspacePath });
 fs.writeFileSync(path.join(workspacePath, 'notes.txt'), 'dirty session note\n');
 const status = await relaiGitStatus(workspace, config, {});
 assert.equal(status.ok, true);
