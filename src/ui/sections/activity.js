@@ -165,7 +165,9 @@ function _openDetail(entry) {
     ['Workspace', entry.workspace || '—'],
     ['Status', entry.ok === false ? 'error' : 'ok'],
     ['Time', new Date(entry.ts || entry.at || entry.createdAt || '').toLocaleString()],
-    ['Session', entry.sessionId || '—'],
+    // Tool-call audit entries carry no sessionId, so the row was almost always
+    // an empty "—". Only show it when a session id is actually present.
+    ...(entry.sessionId ? [['Session', entry.sessionId]] : []),
   ];
   for (const [k, v] of fields) {
     const row = document.createElement('div');

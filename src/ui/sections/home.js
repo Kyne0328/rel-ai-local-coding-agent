@@ -12,13 +12,8 @@ function buildHome(data) {
   const cfg = data.config || {};
   const health = data.health || {};
   const audit = sortedAudit(data.auditTail && data.auditTail.entries);
-  const sessions = Array.isArray(data.sessions) ? data.sessions : [];
-  const jobs = Array.isArray(data.jobs) ? data.jobs : [];
   const workspaces = Array.isArray(cfg.workspaces) ? cfg.workspaces : [];
   const findings = Array.isArray(health.findings) ? health.findings.filter(f => f.severity !== 'info') : [];
-  const staleHours = Number((cfg.productUx && cfg.productUx.staleHours) || health.staleHours || 24);
-  const currentSessions = sessions.filter(s => isCurrentWork(s, staleHours));
-  const runningJobs = jobs.filter(j => ['running', 'queued', 'cancelling'].includes(String(j.status || '').toLowerCase()) && !isOlderThan(j.updatedAt || j.startedAt, staleHours));
 
   updateShell(data, cfg);
 
@@ -47,9 +42,6 @@ function buildHome(data) {
   grid.appendChild(workspaceSetupCard(workspaces));
   grid.appendChild(recentActivityCard(audit));
   root.appendChild(grid);
-
-  const current = currentWorkCard(currentSessions, runningJobs, staleHours);
-  root.appendChild(current);
 
   return root;
 }
@@ -235,25 +227,6 @@ function recentActivityCard(audit) {
   return card;
 }
 
-function currentWorkCard(sessions, jobs, staleHours) {
-  const card = document.createElement('div');
-  card.className = 'card';
-  card.innerHTML = `<div class="card-head"><h3>Current work</h3><span class="section-action">active in last ${staleHours}h</span></div>`;
-  const body = document.createElement('div');
-  body.className = 'card-body list';
-  const rows = [
-    ...sessions.slice(0, 4).map(s => row(s.id, `${s.workspace || 'workspace'} · ${s.status || 'active'}`, s.updatedAt || s.createdAt, s.status)),
-    ...jobs.slice(0, 4).map(j => row(j.id, `${j.workspace || 'workspace'} · ${j.commandKey || j.command || 'job'}`, j.updatedAt || j.startedAt, j.status))
-  ];
-  body.innerHTML = rows.join('') || '<div class="empty">No live work. Older stale sessions are hidden from this card and shown only in diagnostics.</div>';
-  card.appendChild(body);
-  return card;
-}
-
-function row(title, sub, ts, status) {
-  return `<div class="list-item"><span class="dot"></span><div><div class="item-title">${esc(shortId(title))}</div><div class="item-sub">${esc(sub)}</div></div><div class="item-time">${pillHtml(status || timeAgo(ts))}</div></div>`;
-}
-
 function validationSummary(workspaces) {
   const ready = workspaces.filter(ws => (ws.testCommandKeys || []).length || (ws.discoveredTestCommandKeys || []).length).length;
   return `${ready}/${workspaces.length || 0}`;
@@ -263,19 +236,3 @@ function sortedAudit(entries) {
   return (Array.isArray(entries) ? [...entries] : []).sort((a, b) => Date.parse(b.ts || b.at || b.createdAt || 0) - Date.parse(a.ts || a.at || a.createdAt || 0));
 }
 
-function isCurrentWork(item, staleHours) {
-  const status = String(item.status || '').toLowerCase();
-  if (!['active', 'running', 'queued', 'needs-repair', 'in-progress'].includes(status)) return false;
-  return !isOlderThan(item.updatedAt || item.createdAt, staleHours);
-}
-
-function isOlderThan(ts, hours) {
-  const value = Date.parse(String(ts || ''));
-  if (!Number.isFinite(value)) return true;
-  return Date.now() - value > hours * 3600000;
-}
-
-function shortId(value) {
-  const text = String(value || 'work');
-  return text.length > 18 ? text.slice(0, 12) + '…' + text.slice(-5) : text;
-}

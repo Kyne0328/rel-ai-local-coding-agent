@@ -43,7 +43,7 @@ Validation depth is selected with a simple public `level` preset:
 | `standard` | Normal project validation. This is the default. |
 | `release` | Full release gate (runs the broadest detected test/build set). |
 
-`relai_edit` accepts the same `level` when called with `runChecks: true`, so an edit can validate at any depth in one approval. The internal `validationLevel` reported in tool results is telemetry describing the change surface; it is separate from this public preset.
+`relai_edit` accepts the same `level` when called with `runChecks: true`, so an edit can validate at any depth in one approval. An internal `validationLevel` describing the change surface is telemetry separate from this public preset; it is stripped from ChatGPT connector results and kept only on the full stdio surface.
 
 ## Exact replacement and complete-file write guards
 

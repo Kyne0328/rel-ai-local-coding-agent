@@ -10,6 +10,7 @@ const {
   looksBinary
 } = require("./safety");
 const { discoverCommands } = require("./commandDiscovery");
+const { getStateDir } = require("./audit");
 const { appendOperation, makeOperationId, summarizeOperations } = require("./journal");
 const { normalizeCommandAlias } = require("./commandNormalizer");
 const { selectValidationLevel } = require("./validationStrategy");
@@ -379,7 +380,7 @@ function relaiClear(workspace, config, args = {}) {
 
 function tidyPlanDir(config, workspace) {
   const safeAlias = String(workspace.alias || "workspace").replace(/[^A-Za-z0-9_.-]/g, "_");
-  return path.join(config.stateDir || path.join(process.cwd(), ".rel-ai-mcp-state"), "workspace-tidy", safeAlias);
+  return path.join(getStateDir(config), "workspace-tidy", safeAlias);
 }
 
 function validateTidyPlanId(planId) {
@@ -985,7 +986,7 @@ function performFullFileWrite(workspace, config, relativePath, content, options 
 
 function stagedDir(config, workspace) {
   const safeAlias = String(workspace.alias || "workspace").replace(/[^A-Za-z0-9_.-]/g, "_");
-  return path.join(config.stateDir || path.join(process.cwd(), ".rel-ai-mcp-state"), "write-staging", safeAlias);
+  return path.join(getStateDir(config), "write-staging", safeAlias);
 }
 
 function stagedPath(config, workspace, writeId) {

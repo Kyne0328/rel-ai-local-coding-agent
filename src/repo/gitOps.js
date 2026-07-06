@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { runProcess, summarizeCommand } = require("../process");
 const { resolveSafePath, isSecretPath } = require("../safety");
+const { getStateDir } = require("../audit");
 
 const DEFAULT_MAX_GIT_OUTPUT_BYTES = 1024 * 1024;
 const DEFAULT_AGGRESSIVE_MAX_PATCH_BYTES = 2 * 1024 * 1024;
@@ -199,7 +200,7 @@ async function makePreparedBackup(workspace, config, operationId, label) {
 
 function tempStateDir(config, workspace, operationId, prefix) {
   const safeAlias = String(workspace.alias || "workspace").replace(/[^A-Za-z0-9_.-]/g, "_");
-  const base = path.join(config.stateDir || path.join(process.cwd(), ".rel-ai-mcp-state"), "fast", safeAlias);
+  const base = path.join(getStateDir(config), "fast", safeAlias);
   fs.mkdirSync(base, { recursive: true, mode: 0o700 });
   return fs.mkdtempSync(path.join(base, `${prefix}-${operationId}-`));
 }
