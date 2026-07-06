@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.18.0] — 2026-07-06
+
+### Session ownership safety and leaner connector output
+- **Auto-start a workspace session on the first edit and capture the pre-edit baseline, so status/diff correctly separate this session's changes from pre-existing dirty files.**
+- **relai_tidy_plan refuses to plan deletions when no session baseline exists, closing a path where pre-existing untracked user files could be treated as disposable session artifacts.**
+- **Compact tool results on the ChatGPT connector: drop always-default policy objects, internal telemetry, duplicated arrays, full manifest text, and per-file write-guidance blobs.**
+- **Remove the dead dashboard Current work card, fix state-dir fallbacks that dirtied the running repo, and correct docs to match real session behavior.**
+- **Add auto-session, tidy-fence, and connector-compaction regression tests.**
+
+Bump root/electron/status UI/lockfiles to 0.18.0.
+
 ## [0.17.1] - 2026-06-30
 
 ### Dashboard refresh and status polish
