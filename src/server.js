@@ -90,7 +90,7 @@ async function handleMessage(message, options = {}) {
           }, true));
         }
         try {
-          const output = await callTool(name, args);
+          const output = await callTool(name, args, { publicHttpOnly });
           return result(message.id, toolResult(output, false));
         } catch (error) {
           const payload = {
