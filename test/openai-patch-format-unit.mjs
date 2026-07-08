@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const bridge = require('../src/localRepoBridge.js');
 
 // Access the non-exported helper via re-require with internal eval trick: re-export via test require.
 // Easier: re-load module text and detect helper presence by reading the module source. Instead, we

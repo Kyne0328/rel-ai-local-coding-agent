@@ -312,7 +312,7 @@ function normalizeFullFileContent(text) {
 
 function guardAgainstCollapsedFullFileWrite(absolutePath, relativePath, newText) {
   if (!fs.existsSync(absolutePath)) return;
-  let oldText = '';
+  let oldText;
   try { oldText = fs.readFileSync(absolutePath, 'utf8'); } catch (_error) { return; }
   const oldLines = oldText.split(/\r?\n/).length;
   const newLines = newText.split(/\r?\n/).length;

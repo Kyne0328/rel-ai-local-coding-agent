@@ -8,7 +8,6 @@ const require = createRequire(import.meta.url);
 const {
   copyWorkspaceForArchive,
   overlayDirectory,
-  shouldSkipArchivePath,
   buildZipCommand,
   buildUnzipCommand
 } = require("../src/localRepoBridge.js");
@@ -174,7 +173,7 @@ console.log("Test 5: overlayDirectory with clearMissing does not remove .git or 
     fs.writeFileSync(path.join(sourceDir, "new-file.txt"), "new");
 
     // Overlay with clearMissing — should NOT delete .git or node_modules
-    const result = overlayDirectory(workspace, sourceDir, { clearMissing: true });
+    overlayDirectory(workspace, sourceDir, { clearMissing: true });
 
     // .git and node_modules should still exist
     assert.ok(

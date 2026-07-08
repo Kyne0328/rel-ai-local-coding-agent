@@ -633,7 +633,7 @@ function readConfigCached() {
   return value;
 }
 
-function openDashboardEvents(res, req, options) {
+function openDashboardEvents(res, req, _options) {
   res.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
     "Cache-Control": "no-cache, no-transform",
@@ -727,7 +727,7 @@ function readJsonBody(req, maxBytes) {
     try {
       return body.trim() ? JSON.parse(body) : {};
     } catch (error) {
-      throw new Error(`Invalid JSON body: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(`Invalid JSON body: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
     }
   });
 }
@@ -739,7 +739,7 @@ async function readFormOrJsonBody(req, maxBytes) {
   const contentType = String((req.headers && req.headers["content-type"]) || "").toLowerCase();
   if (contentType.includes("application/json")) {
     try { return raw.trim() ? JSON.parse(raw) : {}; }
-    catch (error) { throw new Error(`Invalid JSON body: ${error instanceof Error ? error.message : String(error)}`); }
+    catch (error) { throw new Error(`Invalid JSON body: ${error instanceof Error ? error.message : String(error)}`, { cause: error }); }
   }
   if (contentType.includes("application/x-www-form-urlencoded") || raw.includes("=")) {
     const obj = {};
@@ -830,7 +830,7 @@ function jsonForHtmlScript(value) {
   return JSON.stringify(value).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026");
 }
 
-function renderDashboardHtml(options) {
+function renderDashboardHtml(_options) {
   const initialDashboardJson = jsonForHtmlScript(safeInitialDashboardData());
   return `<!doctype html>
 <html lang="en">

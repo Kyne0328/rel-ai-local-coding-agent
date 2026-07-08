@@ -111,7 +111,7 @@ function updateWorkspace(current, payload = {}) {
     const ws = next.workspaces[alias];
     if (!ws) throw new Error(`Workspace '${alias}' is not configured.`);
     const configured = ws.testCommands && typeof ws.testCommands === "object" ? ws.testCommands : {};
-    let discovered = {};
+    let discovered;
     try { discovered = discoverCommands(ws.path) || {}; } catch (_) { discovered = {}; }
     // Guard: if the path is unreadable we cannot tell stale from valid, and every
     // configured key would look stale. Refuse rather than wipe a temporarily

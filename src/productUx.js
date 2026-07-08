@@ -58,7 +58,7 @@ function liveLogTail(config, args = {}) {
   };
 }
 
-function healthMonitor(config, args = {}) {
+function healthMonitor(config, _args = {}) {
   const findings = [];
   const stateDir = getStateDir(config);
   checkDir(findings, "stateDir", stateDir, true);
@@ -325,12 +325,6 @@ function walkState(root, current, files, maxFiles, maxFileBytes) {
       files.push({ path: relative, modifiedAt: stat.mtime.toISOString(), content: fs.readFileSync(full, "utf8") });
     }
   }
-}
-
-function isOlderThan(iso, hours) {
-  const time = Date.parse(iso || "");
-  if (!Number.isFinite(time)) return false;
-  return Date.now() - time > hours * 3600000;
 }
 
 function clampNumber(value, min, max) {

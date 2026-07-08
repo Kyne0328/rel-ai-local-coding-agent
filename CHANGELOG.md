@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.18.1] — 2026-07-08
+
+### Lint pass and code-quality cleanup
+- **Add ESLint config and clear all lint errors across source and tests.**
+- **Remove unused imports, variables, and dead functions; prefix required-but-unused callback params with `_`.**
+- **Attach `cause` to re-thrown JSON-parse and clear-files errors so the original error is preserved.**
+- **Drop an unnecessary regex escape and dead constant-condition test code without changing behavior.**
+
+Bump root/electron/status UI/lockfiles to 0.18.1.
+
 ## [0.18.0] — 2026-07-06
 
 ### Session ownership safety and leaner connector output

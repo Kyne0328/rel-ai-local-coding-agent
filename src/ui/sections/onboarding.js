@@ -302,7 +302,7 @@ async function _withConnection(content, showCopy = false) {
   }
 }
 
-async function _next(nextBtn) {
+async function _next(_nextBtn) {
   _step++;
   if (_step >= STEPS.length) _step = STEPS.length - 1;
   _showStep();

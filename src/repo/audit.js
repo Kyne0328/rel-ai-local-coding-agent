@@ -52,7 +52,7 @@ function relaiRefactorAudit(workspace, _config, args = {}) {
   for (const relativePath of tree.files) {
     if (!includeGenerated && isLikelyGeneratedFile(relativePath)) continue;
     const abs = path.join(workspace.path, relativePath);
-    let text = "";
+    let text;
     try { text = fs.readFileSync(abs, "utf8"); } catch (_error) { continue; }
     const lines = text.split(/\r?\n/);
     for (let index = 0; index < lines.length; index += 1) {

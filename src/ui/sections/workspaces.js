@@ -14,7 +14,6 @@ export function mountWorkspaces(container, data) {
 function buildWorkspaces(data) {
   const cfg = data.config || {};
   const health = data.health || {};
-  const readiness = data.readiness || {};
   const workspaces = Array.isArray(cfg.workspaces) ? cfg.workspaces : [];
   const toolCount = Number.isFinite(Number(data.toolCount)) && Number(data.toolCount) > 0 ? Number(data.toolCount) : 24;
   const healthByAlias = new Map((Array.isArray(health.workspaces) ? health.workspaces : []).map(item => [item.alias, item]));

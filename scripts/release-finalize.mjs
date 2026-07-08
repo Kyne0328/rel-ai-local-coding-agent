@@ -75,7 +75,6 @@ try {
 
   run('git', ['fetch', remote, branch], { stdio: 'inherit' });
   const aheadBehind = run('git', ['rev-list', '--left-right', '--count', `HEAD...${remote}/${branch}`], { check: true }).stdout.trim().split(/\s+/).map(Number);
-  const ahead = aheadBehind[0] || 0;
   const behind = aheadBehind[1] || 0;
   if (behind > 0) die(`${branch} is behind ${remote}/${branch} by ${behind}; pull/rebase before finalizing`);
 

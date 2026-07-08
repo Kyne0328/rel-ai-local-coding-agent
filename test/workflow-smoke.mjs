@@ -118,24 +118,6 @@ send(2, 'tools/list');
 const listedResponse = await waitFor(2);
 const listed = listedResponse.result || {};
 const names = (listed.tools || []).map((tool) => tool.name).sort();
-const expected = [
-  'relai_apply_bundle',
-  'relai_browser',
-  'relai_diff',
-  'relai_edit',
-  'relai_git_commit',
-  'relai_git_create_pr',
-  'relai_git_push',
-  'relai_git_status',
-  'relai_package_snapshot',
-  'relai_read',
-  'relai_replace',
-  'relai_repo_snapshot',
-  'relai_restore_changes',
-  'relai_run_checks',
-  'relai_status',
-  'relai_write'
-].sort();
 
 if (names.length !== 18) {
   throw new Error(`unexpected public tools: ${names.join(', ')}`);

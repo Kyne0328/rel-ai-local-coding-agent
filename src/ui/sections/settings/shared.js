@@ -73,7 +73,7 @@ export function toggleControl(checked, onChange, { enabled = 'Enabled', disabled
   let control;
   control = Toggle({
     checked: Boolean(checked),
-    label: Boolean(checked) ? enabled : disabled,
+    label: checked ? enabled : disabled,
     onChange: (value) => {
       onChange(value);
       const label = control.querySelector('span');

@@ -21,17 +21,16 @@ const {
   relaiGitStatus, relaiGitFetch, relaiGitCommit, relaiGitPush,
   relaiGitMergeBranch, relaiGitMergeRemoteBranchesPlan, relaiGitAbortMerge, relaiGitCreatePr,
   classifyStatusOwnership,
-  getPreparedConfig, preparedNumber, preparedFlag,
+  preparedFlag,
   workflowSummary, recommendedFlowForConfig,
   assertPreparedUpdateSafe, assertPreparedBundleSafe,
   ensureGitRepo, requireCleanGitIfConfigured, shouldMakePreparedBackup, makePreparedBackup,
   tempStateDir, tempStatePath, validatePatchPaths
 } = require("./repo/gitOps");
 const {
-  AGGRESSIVE_ARCHIVE_EXCLUDED_NAMES, AGGRESSIVE_ARCHIVE_EXCLUDED_PATHS,
   resolveHostPath, buildZipCommand, buildUnzipCommand,
   extractZipArchive, createZipArchive, detectArchiveOverlayRoot,
-  previewArchiveOverlay, overlayDirectory, walkArchiveSource, walkArchiveTarget,
+  previewArchiveOverlay, overlayDirectory,
   shouldSkipArchivePath, copyWorkspaceForArchive
 } = require("./repo/archiveUtils");
 const { relaiRefactorAudit } = require("./repo/audit");
@@ -678,19 +677,19 @@ async function applyStructuredOpenAIPatch(workspace, config, args, rawPatch) {
     if (operation.type === "update") {
       const nextText = applyOpenAIPatchUpdate(oldText, operation, safe.relativePath);
       if (nextText !== oldText) {
-        if (!Boolean(args.dryRun)) writeTextFileSafe(workspace.path, safe.relativePath, nextText);
+        if (!args.dryRun) writeTextFileSafe(workspace.path, safe.relativePath, nextText);
         changedFiles.push(safe.relativePath);
       }
       continue;
     }
     if (operation.type === "add") {
       const nextText = joinPatchLines(operation.lines.map((line) => line.slice(1)), true);
-      if (!Boolean(args.dryRun)) writeTextFileSafe(workspace.path, safe.relativePath, nextText);
+      if (!args.dryRun) writeTextFileSafe(workspace.path, safe.relativePath, nextText);
       changedFiles.push(safe.relativePath);
       continue;
     }
     if (operation.type === "delete") {
-      if (!Boolean(args.dryRun)) fs.rmSync(safe.absolutePath, { force: true });
+      if (!args.dryRun) fs.rmSync(safe.absolutePath, { force: true });
       changedFiles.push(safe.relativePath);
     }
   }
@@ -760,7 +759,7 @@ function applyOpenAIPatchUpdate(oldText, operation, relativePath) {
       }
       continue;
     }
-    if (/^[ +\-]/.test(line)) {
+    if (/^[ +-]/.test(line)) {
       current.push(line);
       continue;
     }
@@ -1071,7 +1070,7 @@ function listStagedPayloads(config, workspace) {
       try { fs.rmSync(file, { force: true }); } catch (_) {}
       continue;
     }
-    let payload = null;
+    let payload;
     try { payload = JSON.parse(fs.readFileSync(file, "utf8")); } catch (_) { continue; }
     out.push({ id, path: payload.path || null, mtime, ageMs: mtime ? now - mtime : null });
   }
@@ -1323,7 +1322,7 @@ async function relaiRemoveFile(workspace, config, args = {}) {
     result = relaiClear(workspace, config, { path: relativePath, expectedSha256: args.expectedSha256, dryRun: args.dryRun, failIfMissing: args.failIfMissing });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(message.replace(/relai_clear_files/g, "relai_remove_file"));
+    throw new Error(message.replace(/relai_clear_files/g, "relai_remove_file"), { cause: error });
   }
   if (!args.dryRun && args.stage === true && result.changedFiles.length > 0) {
     const stage = await runProcess("git", ["add", "--", ...result.changedFiles], { cwd: workspace.path, timeout: 60000 }, config);
@@ -1569,14 +1568,6 @@ function hasRequestedChecks(args = {}) {
   return Boolean(args.verify || args.check || args.checks || args.checksText || args.command || args.commands || args.commandsText);
 }
 
-function resolveCommandAlias(raw, discoveredCommands) {
-  const trimmed = String(raw || "").trim();
-  if (!trimmed) return trimmed;
-  if (discoveredCommands && Object.prototype.hasOwnProperty.call(discoveredCommands, trimmed)) {
-    return discoveredCommands[trimmed];
-  }
-  return trimmed;
-}
 
 function normalizeVerifyChecks(args, root, level) {
   const discovered = discoverCommands(root);

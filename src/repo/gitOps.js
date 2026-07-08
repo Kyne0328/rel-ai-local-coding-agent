@@ -39,7 +39,7 @@ function preparedFlag(config, key, fallback) {
 }
 
 function workflowSummary(config) {
-  const { isPreparedWorkflow, getWorkflowConfig } = require("../config");
+  const { getWorkflowConfig } = require("../config");
   const wf = getWorkflowConfig(config);
   return {
     mode: wf.mode,

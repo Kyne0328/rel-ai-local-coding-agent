@@ -1,6 +1,6 @@
 {
   "name": "rel-ai-mcp",
-  "version": "0.18.0",
+  "version": "0.18.1",
   "description": "Local ChatGPT repo bridge: one reliable workflow for snapshot, read, write, verify, diff, and reset configured local workspaces.",
   "private": true,
   "license": "MIT",
@@ -76,5 +76,10 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Kyne0328/rel-ai-mcp.git"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.6.0",
+    "globals": "^17.7.0"
   }
 }

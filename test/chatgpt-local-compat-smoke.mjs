@@ -96,7 +96,6 @@ try {
   send(33, 'tools/call', { name: 'relai_clear_files', arguments: { workspace: 'repo', path: 'tmp-relai-replace.txt' } });
   const del = await waitFor(33);
   if (!del.result.isError) throw new Error(`relai_clear_files should be callable: ${del.result.content[0].text}`);
-  if (false && fs.existsSync(path.join(root, 'tmp-relai-replace.txt'))) throw new Error('relai_clear_files did not clear file');
 
   send(4, 'tools/call', { name: 'relai_shell', arguments: { workspace: 'repo', command: 'node --version' } });
   const shell = await waitFor(4);

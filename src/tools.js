@@ -393,7 +393,7 @@ function pruneEmpty(obj) {
 // Compact a tool result for the ChatGPT connector surface. Keeps everything the
 // model needs to decide what to do next; strips internal telemetry, always-default
 // policy objects, duplicated arrays, and verbose raw-status blobs.
-function compactForConnector(name, value, args) {
+function compactForConnector(name, value, _args) {
   if (!value || typeof value !== "object") return value;
   switch (name) {
     case "relai_read": {
