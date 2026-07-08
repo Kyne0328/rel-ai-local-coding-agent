@@ -125,9 +125,14 @@ function handleHealth(ctx) {
 function handleStaticAsset(ctx) {
   const safePath = ctx.parsed.pathname.replaceAll("\\", "/");
   if (safePath.includes("..")) { ctx.res.writeHead(400); ctx.res.end("Bad path"); return; }
-  const filePath = safePath.startsWith("/ui/")
-    ? path.join(__dirname, "ui", safePath.slice(4))
-    : path.join(__dirname, "..", "public", safePath.slice(8));
+  let filePath;
+  if (safePath.startsWith("/ui/")) {
+    filePath = path.join(__dirname, "ui", safePath.slice(4));
+  } else if (safePath.startsWith("/public/ui/")) {
+    filePath = path.join(__dirname, "ui", safePath.slice(11));
+  } else {
+    filePath = path.join(__dirname, "..", "public", safePath.slice(8));
+  }
   try {
     const content = fs.readFileSync(filePath);
     const ct = contentTypeForStaticAsset(safePath);
