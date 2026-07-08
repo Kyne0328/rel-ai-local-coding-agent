@@ -112,28 +112,22 @@ function clear() { fs.rmSync(sessionPath(ALIAS), { force: true }); }
 }
 
 // 11. Numeric primitive at root -> rejected
-{
-  ensureSessionsDir();
-  fs.writeFileSync(sessionPath(ALIAS), '42', 'utf8');
-  assert.equal(readSessionPolicy(config, ALIAS), null);
-  console.log('11. numeric root: OK');
-}
+ensureSessionsDir();
+fs.writeFileSync(sessionPath(ALIAS), '42', 'utf8');
+assert.equal(readSessionPolicy(config, ALIAS), null);
+console.log('11. numeric root: OK');
 
 // 12. String primitive at root -> rejected
-{
-  ensureSessionsDir();
-  fs.writeFileSync(sessionPath(ALIAS), '"sneaky"', 'utf8');
-  assert.equal(readSessionPolicy(config, ALIAS), null);
-  console.log('12. string root: OK');
-}
+ensureSessionsDir();
+fs.writeFileSync(sessionPath(ALIAS), '"sneaky"', 'utf8');
+assert.equal(readSessionPolicy(config, ALIAS), null);
+console.log('12. string root: OK');
 
 // 13. null at root -> rejected
-{
-  ensureSessionsDir();
-  fs.writeFileSync(sessionPath(ALIAS), 'null', 'utf8');
-  assert.equal(readSessionPolicy(config, ALIAS), null);
-  console.log('13. null root: OK');
-}
+ensureSessionsDir();
+fs.writeFileSync(sessionPath(ALIAS), 'null', 'utf8');
+assert.equal(readSessionPolicy(config, ALIAS), null);
+console.log('13. null root: OK');
 
 // Cleanup
 clear();

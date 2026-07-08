@@ -386,11 +386,11 @@ function walkState(root, current, files, maxFiles, maxFileBytes) {
 }
 
 function objectOrEmpty(value) {
-  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  return Object(value) === value && !Array.isArray(value) ? value : {};
 }
 
 function commandMapOrEmpty(value) {
-  return value && typeof value === "object" ? value : {};
+  return Object(value) === value ? value : {};
 }
 
 function clampNumber(value, min, max) {

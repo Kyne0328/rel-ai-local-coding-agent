@@ -49,11 +49,9 @@ function makeRepo() {
 }
 
 // 3. captureBaselineDirty with null/undefined → []
-{
-  assert.deepEqual(captureBaselineDirty(null), []);
-  assert.deepEqual(captureBaselineDirty(undefined), []);
-  assert.deepEqual(captureBaselineDirty(''), []);
-}
+assert.deepEqual(captureBaselineDirty(null), []);
+assert.deepEqual(captureBaselineDirty(undefined), []);
+assert.deepEqual(captureBaselineDirty(''), []);
 
 // 4. writeSessionPolicy persists baselineDirty and resolvePolicy exposes it
 {

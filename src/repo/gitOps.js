@@ -117,13 +117,18 @@ function statusFileFromLine(line) {
   return arrow >= 0 ? rawPath.slice(arrow + 4).trim() : rawPath;
 }
 
+function statusOwnerForFile(file, hasSession, baselineSet) {
+  if (!hasSession) return "unknown";
+  return baselineSet.has(file) ? "baseline" : "session";
+}
+
 function statusEntryFromLine(line, hasSession, baselineSet) {
   if (line.length < 3) return null;
   const indexStatus = line[0];
   const worktreeStatus = line[1];
   const file = statusFileFromLine(line);
   if (!file) return null;
-  const owner = hasSession && baselineSet.has(file) ? "baseline" : hasSession ? "session" : "unknown";
+  const owner = statusOwnerForFile(file, hasSession, baselineSet);
   return {
     path: file,
     indexStatus,

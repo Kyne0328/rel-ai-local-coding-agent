@@ -131,4 +131,4 @@ if (toolDescriptionFindings.length) {
 
 child.kill('SIGKILL');
 await once(child, 'close');
-console.log(`Dashboard wording smoke test passed. Dashboard fields OK. Tools checked: ${toolsArray.length}. relai_run_checks description present: ${Boolean(runChecksTool?.description)}`);
+console.log('Dashboard wording smoke test passed.');

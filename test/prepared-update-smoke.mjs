@@ -12,16 +12,12 @@ const { relaiApplyPatch, relaiApplyArchive, relaiSnapshotArchive } = require(
   path.join(__dirname, "..", "src", "localRepoBridge.js")
 );
 
-const FIXED_GIT_ENV = Object.freeze({
-  PATH: process.platform === "win32"
-    ? String.raw`C:\Program Files\Git\cmd;C:\Windows\System32;C:\Windows`
-    : "/usr/bin:/bin",
-  SystemRoot: process.env.SystemRoot || process.env.SYSTEMROOT || String.raw`C:\Windows`,
-  SYSTEMROOT: process.env.SYSTEMROOT || process.env.SystemRoot || String.raw`C:\Windows`
-});
+const GIT_EXECUTABLE = process.platform === "win32"
+  ? String.raw`C:\Program Files\Git\cmd\git.exe`
+  : "/usr/bin/git";
 
 function git(args, options = {}) { // NOSONAR - this smoke test intentionally executes the local Git binary.
-  return execFileSync("git", args, { ...options, env: FIXED_GIT_ENV });
+  return execFileSync(GIT_EXECUTABLE, args, options);
 }
 
 // --- Setup: temp workspace ---

@@ -35,7 +35,7 @@ function main() {
 }
 
 async function handleMessage(message, options = {}) {
-  if (!message || message.jsonrpc !== "2.0") {
+  if (message?.jsonrpc !== "2.0") {
     return jsonRpcError(messageId(message), -32600, "Invalid Request");
   }
   if (message.id === undefined) {
