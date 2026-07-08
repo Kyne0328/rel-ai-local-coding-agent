@@ -89,6 +89,16 @@ await check('GET /dashboard — with ?token= → 200', async () => {
   if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
 });
 
+// GET /public/ui/api.js — dashboard module graph alias → 200
+await check('GET /public/ui/api.js — dashboard module graph alias → 200', async () => {
+  const res = await fetch(`${base}/public/ui/api.js`);
+  if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/javascript')) throw new Error(`expected JavaScript content-type, got ${contentType}`);
+  const body = await res.text();
+  if (!body.includes('DASHBOARD_DATA_URL')) throw new Error('dashboard API module body was not served');
+});
+
 // GET /api/settings — no token → 401
 await check('GET /api/settings — no token → 401', async () => {
   const res = await fetch(`${base}/api/settings`);
