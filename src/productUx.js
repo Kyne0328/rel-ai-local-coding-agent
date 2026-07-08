@@ -133,11 +133,7 @@ function cleanupPlan(config, apply, args = {}) {
 
 async function doctorFix(config, args = {}) {
   const fixes = [];
-  const rawWorkspace = String(args.workspacePath || "");
-  if (rawWorkspace && (rawWorkspace.includes("..") || rawWorkspace.includes("~"))) {
-    throw new Error("workspacePath must not contain path traversal patterns");
-  }
-  const workspacePath = rawWorkspace ? path.resolve(rawWorkspace) : "";
+  const workspacePath = args.workspacePath ? existingDirectoryPath(args.workspacePath, "workspacePath") : "";
   if (workspacePath) {
     if (!fs.existsSync(workspacePath)) throw new Error(`workspacePath does not exist: ${workspacePath}`);
     const attrs = path.join(workspacePath, ".gitattributes");
@@ -206,6 +202,16 @@ function assertJsonFileExtension(filePath, label) {
 function canonicalBaseDir(baseDir) {
   const realBase = fs.realpathSync(baseDir);
   return realBase.endsWith(path.sep) ? realBase : realBase + path.sep;
+}
+
+function existingDirectoryPath(rawPath, label, baseDir = process.cwd()) {
+  const base = canonicalBaseDir(baseDir);
+  const relativePath = validateRelativePath(String(rawPath || ""));
+  const candidate = path.join(base, relativePath);
+  const realPath = fs.realpathSync(candidate);
+  if (!realPath.startsWith(base)) throw new Error(`${label} escapes allowed directory: ${rawPath}`);
+  if (!fs.statSync(realPath).isDirectory()) throw new Error(`${label} is not a directory: ${realPath}`);
+  return realPath;
 }
 
 function relativeJsonPath(rawPath, label) {
@@ -406,7 +412,7 @@ function cautionSummary(config, options = {}) {
   const { entries } = readAudit(config, { limit });
   const byAlias = {};
   for (const e of entries || []) {
-    if (!e || e.cautionLevel !== "caution") continue;
+    if (e?.cautionLevel !== "caution") continue;
     const ts = Date.parse(e.ts || "");
     if (!Number.isFinite(ts) || ts < cutoffMs) continue;
     const alias = e.workspace || "__unknown__";
