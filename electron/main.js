@@ -366,7 +366,7 @@ async function startServer() {
               title: 'Select workspace folder',
               properties: ['openDirectory']
             });
-            return result && !result.canceled && result.filePaths && result.filePaths[0] ? result.filePaths[0] : null;
+            return result && !result.canceled && result.filePaths?.[0] ? result.filePaths[0] : null;
           } finally {
             if (!anchor.isDestroyed()) anchor.destroy();
           }
@@ -456,7 +456,9 @@ function stopServer(options = {}) {
   if (httpServer) {
     try {
       httpServer.close();
-    } catch (_) {}
+    } catch (error) {
+      if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] server close:', error);
+    }
   }
   httpServer = null;
   startPromise = null;
@@ -472,13 +474,12 @@ function openDashboardUrl() {
   try {
     // Use the actual bound port from the in-memory server object — this is always authoritative.
     // Fallback to guiConfig only when the server isn't running (e.g. user clicks Dashboard early).
-    const port = (httpServer && httpServer.listening && httpServer.address() && httpServer.address().port)
+    const port = (httpServer?.listening && httpServer.address()?.port)
       || readGuiConfig().port
       || 3333;
     const token = connection.readLaunchEnv().REL_AI_MCP_TOKEN || readGuiConfig().token || '';
-    shell.openExternal(
-      `http://127.0.0.1:${port}/dashboard${token ? `?token=${encodeURIComponent(token)}` : ''}`
-    );
+    const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
+    shell.openExternal(`http://127.0.0.1:${port}/dashboard${tokenQuery}`);
   } catch (error) {
     setStatus({ error: formatError(error) });
   }
@@ -488,7 +489,8 @@ function openSettingsWindow() {
   let config;
   try {
     config = readGuiConfig();
-  } catch (_) {
+  } catch (error) {
+    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] read gui config:', error);
     config = { port: 3333, token: '', ngrokDomain: '', ngrokAuthtoken: '' };
   }
   createWizardWindow({

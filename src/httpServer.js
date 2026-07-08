@@ -19,7 +19,7 @@ function buildToolMetadata() {
   const config = readConfig({ allowMissing: true });
   return getPublicToolSchemas(config).map(tool => ({
     name: tool.name,
-    displayName: tool.name.replace(/^relai_/, "").replace(/_/g, " "),
+    displayName: tool.name.replace(/^relai_/, "").replaceAll("_", " "),
     description: tool.description || "",
     category: "Workspace tools",
     requiredProfile: "workspace",
@@ -96,358 +96,338 @@ function startHttpServer(options = {}) {
   return server;
 }
 
+// ---- Route dispatch infrastructure ------------------------------------------------
+
+function authDashboard(ctx) {
+  if (isDashboardAuthorized(ctx.req, ctx.parsed, ctx.options)) return true;
+  unauthorized(ctx.res); return false;
+}
+function authNone() { return true; }
+
+// ---- Route handlers ---------------------------------------------------------------
+
+async function handleFavicon(ctx) {
+  try {
+    const content = fs.readFileSync(path.join(__dirname, "..", "public", "assets", "favicon.ico"));
+    ctx.res.writeHead(200, { "Content-Type": "image/x-icon", "Cache-Control": "no-cache" });
+    ctx.res.end(content);
+  } catch (_) { ctx.res.writeHead(404); ctx.res.end("Not found"); }
+}
+
+function handleHealth(ctx) {
+  sendJson(ctx.res, 200, {
+    ok: true, name: pkg.name, version: getVersion(),
+    transports: ["streamable-http", "sse"],
+    auth: ctx.options.token ? "bearer" : "disabled"
+  }, ctx.ae);
+}
+
+function handleStaticAsset(ctx) {
+  const safePath = ctx.parsed.pathname.replaceAll("\\", "/");
+  if (safePath.includes("..")) { ctx.res.writeHead(400); ctx.res.end("Bad path"); return; }
+  const filePath = safePath.startsWith("/ui/")
+    ? path.join(__dirname, "ui", safePath.slice(4))
+    : path.join(__dirname, "..", "public", safePath.slice(8));
+  try {
+    const content = fs.readFileSync(filePath);
+    const ct = contentTypeForStaticAsset(safePath);
+    const charset = ct.startsWith("text/") || ct === "application/javascript" ? "; charset=utf-8" : "";
+    ctx.res.writeHead(200, { "Content-Type": ct + charset, "Cache-Control": "no-cache" });
+    ctx.res.end(content);
+  } catch (_) { ctx.res.writeHead(404); ctx.res.end("Not found"); }
+}
+
+function handleDashboard(ctx) { sendHtml(ctx.res, 200, renderDashboardHtml(ctx.options)); }
+
+function handleApiSettingsGet(ctx) {
+  sendJson(ctx.res, 200, configEditor.settingsPayload(readConfig()), ctx.ae);
+}
+
+function handleApiTools(ctx) {
+  try { sendJson(ctx.res, 200, buildToolMetadata(), ctx.ae); }
+  catch (err) { sendJson(ctx.res, 500, { ok: false, error: err.message }, ctx.ae); }
+}
+
+function handleOnboardingStatus(ctx) {
+  const onboardingPath = path.join(require("node:os").homedir(), ".rel-ai-mcp", "onboarding.json");
+  let flag = null;
+  try { flag = JSON.parse(fs.readFileSync(onboardingPath, "utf8")); } catch (_) {}
+  sendJson(ctx.res, 200, {
+    ok: true, completed: flag ? flag.completed : false, skipped: flag ? flag.skipped : false,
+    needsOnboarding: flag?.completed !== true
+  }, ctx.ae);
+}
+
+function handleConnection(ctx) {
+  const latestProfile = connection.readConnectionProfile();
+  sendJson(ctx.res, 200, connection.buildConnectionSummary({
+    host: latestProfile.host || ctx.options.host,
+    port: latestProfile.port || ctx.options.port,
+    publicUrl: latestProfile.publicUrl || ctx.options.publicUrl,
+    token: ctx.options.token,
+    tunnelProvider: latestProfile.tunnelProvider || "none",
+    showToken: ctx.parsed.searchParams.get("showToken") === "1"
+  }), ctx.ae);
+}
+
+function handleDashboardV10(ctx) {
+  const config = readConfig();
+  sendJson(ctx.res, 200, {
+    ...productUx.dashboardData(config, { limit: Number(ctx.parsed.searchParams.get("limit") || 100) }),
+    readiness: release.releaseReadiness(config, { requireHttpToken: resolveRequireHttpToken(ctx.parsed, config) })
+  }, ctx.ae);
+}
+
+const handleApiLogs = (ctx) => sendJson(ctx.res, 200, productUx.liveLogTail(readConfig(), { limit: Number(ctx.parsed.searchParams.get("limit") || 100) }), ctx.ae);
+const handleHealthMonitor = (ctx) => sendJson(ctx.res, 200, productUx.healthMonitor(readConfig(), { limit: Number(ctx.parsed.searchParams.get("limit") || 100) }), ctx.ae);
+const handleAliasDiagnostics = (ctx) => sendJson(ctx.res, 200, productUx.aliasConsistencyCheck(readConfig()), ctx.ae);
+const handleReleaseNotes = (ctx) => sendJson(ctx.res, 200, require("./releaseNotes").getReleaseNotes(), ctx.ae);
+const handleCautionSummary = (ctx) => sendJson(ctx.res, 200, productUx.cautionSummary(readConfig(), { windowHours: Number(ctx.parsed.searchParams.get("windowHours") || 24) }), ctx.ae);
+const handleReadiness = (ctx) => sendJson(ctx.res, 200, release.releaseReadiness(readConfig(), { requireHttpToken: resolveRequireHttpToken(ctx.parsed, readConfig()) }), ctx.ae);
+
+async function handleWorkspacePreflight(ctx) {
+  const rawPath = ctx.parsed.searchParams.get("path") || "";
+  if (rawPath) { sendJson(ctx.res, 200, workspacePathPreflight(rawPath), ctx.ae); return; }
+  const config = readConfig();
+  sendJson(ctx.res, 200, await release.workspacePreflight(config, {
+    workspace: ctx.parsed.searchParams.get("workspace") || "",
+    requireClean: ctx.parsed.searchParams.get("requireClean") !== "0"
+  }), ctx.ae);
+}
+
+function handleEvents(ctx) { openDashboardEvents(ctx.res, ctx.req, ctx.options); }
+
+function handleOauthProtectedResource(ctx) {
+  sendJson(ctx.res, 200, oauth.protectedResourceMetadata(resolveBaseUrl(ctx.options)), ctx.ae);
+}
+function handleOauthMetadata(ctx) {
+  sendJson(ctx.res, 200, oauth.authorizationServerMetadata(resolveBaseUrl(ctx.options)), ctx.ae);
+}
+
+async function handleRegister(ctx) {
+  const body = await readFormOrJsonBody(ctx.req, ctx.options.maxBodyBytes);
+  const result = oauth.registerClient(body);
+  sendJson(ctx.res, result.error ? 400 : 201, result, ctx.ae);
+}
+
+async function handleAuthorizeGet(ctx) {
+  const query = Object.fromEntries(ctx.parsed.searchParams.entries());
+  const check = oauth.validateAuthorizationRequest(query);
+  if (!check.ok) {
+    if (check.redirectError && check.redirectUri) {
+      ctx.res.writeHead(302, { Location: oauth.buildRedirectUrl(check.redirectUri, { error: check.error, error_description: check.error_description, state: check.state }) });
+      ctx.res.end();
+      return;
+    }
+    sendHtml(ctx.res, 400, oauthErrorPage(check.error_description || check.error));
+    return;
+  }
+  sendHtml(ctx.res, 200, oauth.renderLoginPage(check.request, resolveBaseUrl(ctx.options)));
+}
+
+async function handleAuthorizePost(ctx) {
+  const body = await readFormOrJsonBody(ctx.req, ctx.options.maxBodyBytes);
+  const check = oauth.validateAuthorizationRequest(body);
+  if (!check.ok) { sendHtml(ctx.res, 400, oauthErrorPage(check.error_description || check.error)); return; }
+  if (!ctx.options.token) {
+    const base = resolveBaseUrl(ctx.options);
+    let isLocal = true;
+    try { const { hostname } = new URL(base); isLocal = hostname === "127.0.0.1" || hostname === "localhost" || hostname === "[::1]"; }
+    catch (_) {}
+    if (!isLocal) { sendHtml(ctx.res, 403, oauthErrorPage("OAuth approval requires REL_AI_MCP_TOKEN when accessed over a public URL. Set a token and restart.")); return; }
+  }
+  if (!oauth.verifyLogin(body.dashboard_token, ctx.options.token)) {
+    sendHtml(ctx.res, 401, oauth.renderLoginPage(check.request, resolveBaseUrl(ctx.options), { error: "Incorrect dashboard token. Try again." }));
+    return;
+  }
+  const code = oauth.issueAuthorizationCode(check.request);
+  ctx.res.writeHead(302, { Location: oauth.buildRedirectUrl(check.request.redirectUri, { code, state: check.request.state }) });
+  ctx.res.end();
+}
+
+async function handleToken(ctx) {
+  const body = await readFormOrJsonBody(ctx.req, ctx.options.maxBodyBytes);
+  const result = oauth.exchangeToken(body);
+  ctx.res.setHeader("Cache-Control", "no-store");
+  sendJson(ctx.res, result.status, result.body, ctx.ae);
+}
+
+async function handleOnboardingComplete(ctx) {
+  const payload = await readJsonBody(ctx.req, ctx.options.maxBodyBytes);
+  const onboardingDir = path.join(require("node:os").homedir(), ".rel-ai-mcp");
+  fs.mkdirSync(onboardingDir, { recursive: true });
+  fs.writeFileSync(path.join(onboardingDir, "onboarding.json"), JSON.stringify({
+    completed: Boolean(payload.completed), skipped: Boolean(payload.skipped), updatedAt: new Date().toISOString()
+  }));
+  sendJson(ctx.res, 200, { ok: true }, ctx.ae);
+}
+
+async function handleApiSettingsPost(ctx) {
+  const current = readConfig();
+  const payload = await readJsonBody(ctx.req, ctx.options.maxBodyBytes);
+  sendJson(ctx.res, 200, configEditor.updateSettings(current, payload), ctx.ae);
+}
+
+async function handleApiWorkspaces(ctx) {
+  const current = readConfig();
+  const payload = await readJsonBody(ctx.req, ctx.options.maxBodyBytes);
+  sendJson(ctx.res, 200, configEditor.updateWorkspace(current, payload), ctx.ae);
+}
+
+async function handlePickFolder(ctx) {
+  if (typeof ctx.options.pickFolder !== "function") {
+    sendJson(ctx.res, 200, { ok: false, unsupported: true, error: "Native folder picker is only available in the Rel.AI desktop launcher." }, ctx.ae);
+    return;
+  }
+  try {
+    const picked = await ctx.options.pickFolder();
+    if (!picked) { sendJson(ctx.res, 200, { ok: false, canceled: true }, ctx.ae); return; }
+    sendJson(ctx.res, 200, { ok: true, ...workspacePathPreflight(picked) }, ctx.ae);
+  } catch (error) {
+    sendJson(ctx.res, 200, { ok: false, error: error instanceof Error ? error.message : String(error) }, ctx.ae);
+  }
+}
+
+function handleMcpGetDiagnostic(ctx) {
+  sendJson(ctx.res, 200, mcpGetDiagnostic(ctx.parsed.pathname, ctx.options, ctx.mcpAccess, ctx.req), ctx.ae);
+}
+
+async function handleMcpStreamable(ctx) {
+  if (!isMcpAuthorized(ctx.req, ctx.options)) { unauthorizedMcp(ctx.res, resolveBaseUrl(ctx.options)); return; }
+  const payload = await readJsonBody(ctx.req, ctx.options.maxBodyBytes);
+  const response = await handleJsonRpcPayload(payload, { publicHttpOnly: true });
+  if (response === null) { sendJson(ctx.res, 202, { ok: true, accepted: true }, ctx.ae); return; }
+  sendJson(ctx.res, 200, response, ctx.ae);
+}
+
+function handleMcpSse(ctx) {
+  if (!isMcpAuthorized(ctx.req, ctx.options)) { unauthorizedMcp(ctx.res, resolveBaseUrl(ctx.options)); return; }
+  openSseSession(ctx.res, ctx.req, ctx.mcpAccess.messagePath);
+}
+
+async function handleMcpMessages(ctx) {
+  if (!isMcpAuthorized(ctx.req, ctx.options)) { unauthorizedMcp(ctx.res, resolveBaseUrl(ctx.options)); return; }
+  const sessionId = ctx.parsed.searchParams.get("sessionId") || "";
+  const session = sessions.get(sessionId);
+  if (!session) { sendJson(ctx.res, 404, { ok: false, error: "Unknown or expired SSE session." }, ctx.ae); return; }
+  const payload = await readJsonBody(ctx.req, ctx.options.maxBodyBytes);
+  const response = await handleJsonRpcPayload(payload, { publicHttpOnly: true });
+  if (response !== null) sendSse(session.res, "message", response);
+  sendJson(ctx.res, 202, { ok: true, accepted: true }, ctx.ae);
+}
+
+// ---- Route maps (exact pathname → { auth, handler }) --------------------------------
+
+const NOT_FOUND_PAYLOAD = {
+  ok: false, error: "Not found.",
+  endpoints: {
+    health: "GET /health", dashboard: "GET /dashboard", dashboardV10Api: "GET /api/dashboard/v10",
+    logsApi: "GET /api/logs", settingsApi: "GET /api/settings",
+    updateSettingsApi: "POST /api/settings", updateWorkspacesApi: "POST /api/workspaces",
+    healthMonitorApi: "GET /api/health-monitor", readinessApi: "GET /api/readiness",
+    workspacePreflightApi: "GET /api/workspace/preflight?workspace=...", events: "GET /events",
+    streamableHttp: "POST /mcp (Authentication: OAuth, or Bearer token)",
+    sse: "GET /sse (Authentication: OAuth, or Bearer token) then POST /messages...?sessionId=...",
+    oauthDiscovery: "GET /.well-known/oauth-protected-resource"
+  }
+};
+
 async function routeRequest(req, res, options) {
   setBaseHeaders(req, res);
   const ae = req.headers["accept-encoding"] || "";
   const parsed = new URL(req.url || "/", "http://127.0.0.1");
 
-  if (req.method === "OPTIONS") {
-    res.writeHead(204);
-    res.end();
-    return;
-  }
-
-  if (req.method === "GET" && parsed.pathname === "/dashboard") {
-    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
-    sendHtml(res, 200, renderDashboardHtml(options));
-    return;
-  }
-
-  if (req.method === "GET" && parsed.pathname === "/favicon.ico") {
-    try {
-      const content = fs.readFileSync(path.join(__dirname, "..", "public", "assets", "favicon.ico"));
-      res.writeHead(200, { "Content-Type": "image/x-icon", "Cache-Control": "no-cache" });
-      res.end(content);
-    } catch (_) {
-      res.writeHead(404); res.end("Not found");
-    }
-    return;
-  }
-
-
-  // Serve src/ui/* and public/* without token (static assets only; API data remains token-gated)
-  if (req.method === "GET" && (parsed.pathname.startsWith("/ui/") || parsed.pathname.startsWith("/public/"))) {
-    const safePath = parsed.pathname.replace(/\\/g, "/");
-    if (safePath.includes("..")) { res.writeHead(400); res.end("Bad path"); return; }
-    let filePath;
-    if (safePath.startsWith("/ui/")) {
-      filePath = path.join(__dirname, "ui", safePath.slice(4));
-    } else {
-      filePath = path.join(__dirname, "..", "public", safePath.slice(8));
-    }
-    try {
-      const content = fs.readFileSync(filePath);
-      const ct = contentTypeForStaticAsset(safePath);
-      const charset = ct.startsWith("text/") || ct === "application/javascript" ? "; charset=utf-8" : "";
-      res.writeHead(200, { "Content-Type": ct + charset, "Cache-Control": "no-cache" });
-      res.end(content);
-    } catch (_) {
-      res.writeHead(404); res.end("Not found");
-    }
-    return;
-  }
-
-  if (req.method === "GET" && parsed.pathname === "/api/settings") {
-    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
-    const config = readConfig();
-    sendJson(res, 200, configEditor.settingsPayload(config), ae);
-    return;
-  }
-
-  if (req.method === "GET" && parsed.pathname === "/api/tools") {
-    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
-    try {
-      sendJson(res, 200, buildToolMetadata(), ae);
-    } catch (err) {
-      sendJson(res, 500, { ok: false, error: err.message }, ae);
-    }
-    return;
-  }
-
-  if (req.method === "GET" && parsed.pathname === "/api/onboarding/status") {
-    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
-    const onboardingPath = path.join(require("node:os").homedir(), ".rel-ai-mcp", "onboarding.json");
-    let flag = null;
-    try { flag = JSON.parse(fs.readFileSync(onboardingPath, "utf8")); } catch (_) {}
-    const needsOnboarding = !flag || flag.completed !== true;
-    sendJson(res, 200, { ok: true, completed: flag ? flag.completed : false, skipped: flag ? flag.skipped : false, needsOnboarding }, ae);
-    return;
-  }
-
-  if (req.method === "POST" && parsed.pathname === "/api/onboarding/complete") {
-    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
-    const payload = await readJsonBody(req, options.maxBodyBytes);
-    const onboardingDir = path.join(require("node:os").homedir(), ".rel-ai-mcp");
-    fs.mkdirSync(onboardingDir, { recursive: true });
-    const onboardingPath = path.join(onboardingDir, "onboarding.json");
-    fs.writeFileSync(onboardingPath, JSON.stringify({ completed: Boolean(payload.completed), skipped: Boolean(payload.skipped), updatedAt: new Date().toISOString() }));
-    sendJson(res, 200, { ok: true }, ae);
-    return;
-  }
-
-  if (req.method === "POST" && parsed.pathname === "/api/settings") {
-    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
-    const current = readConfig();
-    const payload = await readJsonBody(req, options.maxBodyBytes);
-    sendJson(res, 200, configEditor.updateSettings(current, payload), ae);
-    return;
-  }
-
-  if (req.method === "POST" && parsed.pathname === "/api/workspaces") {
-    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
-    const current = readConfig();
-    const payload = await readJsonBody(req, options.maxBodyBytes);
-    sendJson(res, 200, configEditor.updateWorkspace(current, payload), ae);
-    return;
-  }
-
-  if (req.method === "GET" && parsed.pathname === "/api/connection") {
-    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
-    const latestProfile = connection.readConnectionProfile();
-    sendJson(res, 200, connection.buildConnectionSummary({
-      host: latestProfile.host || options.host,
-      port: latestProfile.port || options.port,
-      publicUrl: latestProfile.publicUrl || options.publicUrl,
-      token: options.token,
-      tunnelProvider: latestProfile.tunnelProvider || "none",
-      showToken: parsed.searchParams.get("showToken") === "1"
-    }), ae);
-    return;
-  }
-
-  if (req.method === "GET" && parsed.pathname === "/api/dashboard/v10") {
-    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
-    const config = readConfig();
-    const limit = Number(parsed.searchParams.get("limit") || 100);
-    sendJson(res, 200, {
-      ...productUx.dashboardData(config, { limit }),
-      readiness: release.releaseReadiness(config, { requireHttpToken: resolveRequireHttpToken(parsed, config) })
-    }, ae);
-    return;
-  }
-
-  if (req.method === "GET" && parsed.pathname === "/api/logs") {
-    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
-    const config = readConfig();
-    sendJson(res, 200, productUx.liveLogTail(config, { limit: Number(parsed.searchParams.get("limit") || 100) }), ae);
-    return;
-  }
-
-  if (req.method === "GET" && parsed.pathname === "/api/health-monitor") {
-    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
-    const config = readConfig();
-    sendJson(res, 200, productUx.healthMonitor(config, { limit: Number(parsed.searchParams.get("limit") || 100) }), ae);
-    return;
-  }
-
-  if (req.method === "GET" && parsed.pathname === "/api/alias-diagnostics") {
-    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
-    const config = readConfig();
-    sendJson(res, 200, productUx.aliasConsistencyCheck(config), ae);
-    return;
-  }
-
-  if (req.method === "GET" && parsed.pathname === "/api/release-notes") {
-    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
-    const { getReleaseNotes } = require("./releaseNotes");
-    sendJson(res, 200, getReleaseNotes(), ae);
-    return;
-  }
-
-  if (req.method === "GET" && parsed.pathname === "/api/caution-summary") {
-    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
-    const config = readConfig();
-    const windowHours = Number(parsed.searchParams.get("windowHours") || 24);
-    sendJson(res, 200, productUx.cautionSummary(config, { windowHours }), ae);
-    return;
-  }
-
-  if (req.method === "GET" && parsed.pathname === "/api/readiness") {
-    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
-    const config = readConfig();
-    sendJson(res, 200, release.releaseReadiness(config, { requireHttpToken: resolveRequireHttpToken(parsed, config) }), ae);
-    return;
-  }
-
-  if (req.method === "GET" && parsed.pathname === "/api/workspace/preflight") {
-    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
-    const rawPath = parsed.searchParams.get("path") || "";
-    if (rawPath) {
-      sendJson(res, 200, workspacePathPreflight(rawPath), ae);
-      return;
-    }
-    const config = readConfig();
-    const payload = await release.workspacePreflight(config, { workspace: parsed.searchParams.get("workspace") || "", requireClean: parsed.searchParams.get("requireClean") !== "0" });
-    sendJson(res, 200, payload, ae);
-    return;
-  }
-
-  if (req.method === "POST" && parsed.pathname === "/api/pick-folder") {
-    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
-    if (typeof options.pickFolder !== "function") {
-      sendJson(res, 200, { ok: false, unsupported: true, error: "Native folder picker is only available in the Rel.AI desktop launcher." }, ae);
-      return;
-    }
-    try {
-      const picked = await options.pickFolder();
-      if (!picked) { sendJson(res, 200, { ok: false, canceled: true }, ae); return; }
-      sendJson(res, 200, { ok: true, ...workspacePathPreflight(picked) }, ae);
-    } catch (error) {
-      sendJson(res, 200, { ok: false, error: error instanceof Error ? error.message : String(error) }, ae);
-    }
-    return;
-  }
-
-  if (req.method === "GET" && parsed.pathname === "/events") {
-    if (!isDashboardAuthorized(req, parsed, options)) return unauthorized(res);
-    openDashboardEvents(res, req, options);
-    return;
-  }
-
-  if (req.method === "GET" && parsed.pathname === "/health") {
-    sendJson(res, 200, {
-      ok: true,
-      name: pkg.name,
-      version: getVersion(),
-      transports: ["streamable-http", "sse"],
-      auth: options.token ? "bearer" : "disabled"
-    }, ae);
-    return;
-  }
-
-  // ---- OAuth 2.1 authorization server (ChatGPT MCP "OAuth" connector) -------
-  // These bootstrap auth and must be reachable without a bearer token.
-  if (req.method === "GET" && parsed.pathname === "/.well-known/oauth-protected-resource") {
-    sendJson(res, 200, oauth.protectedResourceMetadata(resolveBaseUrl(options)), ae);
-    return;
-  }
-  if (req.method === "GET" && (parsed.pathname === "/.well-known/oauth-authorization-server" || parsed.pathname === "/.well-known/openid-configuration")) {
-    sendJson(res, 200, oauth.authorizationServerMetadata(resolveBaseUrl(options)), ae);
-    return;
-  }
-  if (req.method === "POST" && parsed.pathname === "/register") {
-    const body = await readFormOrJsonBody(req, options.maxBodyBytes);
-    const result = oauth.registerClient(body);
-    sendJson(res, result.error ? 400 : 201, result, ae);
-    return;
-  }
-  if (req.method === "GET" && parsed.pathname === "/authorize") {
-    const query = Object.fromEntries(parsed.searchParams.entries());
-    const check = oauth.validateAuthorizationRequest(query);
-    if (!check.ok) {
-      if (check.redirectError && check.redirectUri) {
-        res.writeHead(302, { Location: oauth.buildRedirectUrl(check.redirectUri, { error: check.error, error_description: check.error_description, state: check.state }) });
-        res.end();
-        return;
-      }
-      sendHtml(res, 400, oauthErrorPage(check.error_description || check.error));
-      return;
-    }
-    sendHtml(res, 200, oauth.renderLoginPage(check.request, resolveBaseUrl(options)));
-    return;
-  }
-  if (req.method === "POST" && parsed.pathname === "/authorize") {
-    const body = await readFormOrJsonBody(req, options.maxBodyBytes);
-    const check = oauth.validateAuthorizationRequest(body);
-    if (!check.ok) {
-      sendHtml(res, 400, oauthErrorPage(check.error_description || check.error));
-      return;
-    }
-    // Refuse OAuth approval over a public URL when no token is configured — no-auth
-    // mode is intended for local-only testing; granting OAuth on a public URL would
-    // open the server to anyone who reaches the authorize endpoint.
-    if (!options.token) {
-      const base = resolveBaseUrl(options);
-      let isLocal = true;
-      try {
-        const { hostname } = new URL(base);
-        isLocal = hostname === "127.0.0.1" || hostname === "localhost" || hostname === "[::1]";
-      } catch (_) {}
-      if (!isLocal) {
-        sendHtml(res, 403, oauthErrorPage("OAuth approval requires REL_AI_MCP_TOKEN when accessed over a public URL. Set a token and restart."));
-        return;
-      }
-    }
-    if (!oauth.verifyLogin(body.dashboard_token, options.token)) {
-      sendHtml(res, 401, oauth.renderLoginPage(check.request, resolveBaseUrl(options), { error: "Incorrect dashboard token. Try again." }));
-      return;
-    }
-    const code = oauth.issueAuthorizationCode(check.request);
-    res.writeHead(302, { Location: oauth.buildRedirectUrl(check.request.redirectUri, { code, state: check.request.state }) });
-    res.end();
-    return;
-  }
-  if (req.method === "POST" && parsed.pathname === "/token") {
-    const body = await readFormOrJsonBody(req, options.maxBodyBytes);
-    const result = oauth.exchangeToken(body);
-    res.setHeader("Cache-Control", "no-store");
-    sendJson(res, result.status, result.body, ae);
-    return;
-  }
+  if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
 
   const mcpAccess = getMcpAccess(parsed.pathname);
+  const ctx = { req, res, options, parsed, ae, mcpAccess, p: parsed.pathname };
 
-  if (req.method === "GET" && (parsed.pathname === "/mcp" || mcpAccess.kind === "streamable-http")) {
-    sendJson(res, 200, mcpGetDiagnostic(parsed.pathname, options, mcpAccess, req), ae);
-    return;
+  if (req.method === "GET") {
+    if (dispatchGet(ctx)) return;
+  } else if (req.method === "POST") {
+    if (dispatchPost(ctx)) return;
   }
 
-  if (req.method === "POST" && mcpAccess.kind === "streamable-http") {
-    if (!isMcpAuthorized(req, options)) return unauthorizedMcp(res, resolveBaseUrl(options));
-    const payload = await readJsonBody(req, options.maxBodyBytes);
-    const response = await handleJsonRpcPayload(payload, { publicHttpOnly: true });
-    if (response === null) {
-      sendJson(res, 202, { ok: true, accepted: true }, ae);
-      return;
-    }
-    sendJson(res, 200, response, ae);
-    return;
-  }
-
-  if (req.method === "GET" && mcpAccess.kind === "sse") {
-    if (!isMcpAuthorized(req, options)) return unauthorizedMcp(res, resolveBaseUrl(options));
-    openSseSession(res, req, mcpAccess.messagePath);
-    return;
-  }
-
-  if (req.method === "POST" && mcpAccess.kind === "messages") {
-    if (!isMcpAuthorized(req, options)) return unauthorizedMcp(res, resolveBaseUrl(options));
-    const sessionId = parsed.searchParams.get("sessionId") || "";
-    const session = sessions.get(sessionId);
-    if (!session) {
-      sendJson(res, 404, { ok: false, error: "Unknown or expired SSE session." }, ae);
-      return;
-    }
-    const payload = await readJsonBody(req, options.maxBodyBytes);
-    const response = await handleJsonRpcPayload(payload, { publicHttpOnly: true });
-    if (response !== null) {
-      sendSse(session.res, "message", response);
-    }
-    sendJson(res, 202, { ok: true, accepted: true }, ae);
-    return;
-  }
-
-  sendJson(res, 404, {
-    ok: false,
-    error: "Not found.",
-    endpoints: {
-      health: "GET /health",
-      dashboard: "GET /dashboard",
-      dashboardV10Api: "GET /api/dashboard/v10",
-      logsApi: "GET /api/logs",
-      settingsApi: "GET /api/settings",
-      updateSettingsApi: "POST /api/settings",
-      updateWorkspacesApi: "POST /api/workspaces",
-      healthMonitorApi: "GET /api/health-monitor",
-      readinessApi: "GET /api/readiness",
-      workspacePreflightApi: "GET /api/workspace/preflight?workspace=...",
-      events: "GET /events",
-      streamableHttp: "POST /mcp (Authentication: OAuth, or Bearer token)",
-      sse: "GET /sse (Authentication: OAuth, or Bearer token) then POST /messages...?sessionId=...",
-      oauthDiscovery: "GET /.well-known/oauth-protected-resource"
-    }
-  }, ae);
+  sendJson(res, 404, NOT_FOUND_PAYLOAD, ae);
 }
+
+// ---- GET dispatch -------------------------------------------------------------------
+
+function dispatchGet(ctx) {
+  return tryExactGet(ctx) || tryPrefixGet(ctx) || tryOAuthOrMcpGet(ctx);
+}
+
+function tryExactGet(ctx) {
+  const entry = GET_ROUTES[ctx.p];
+  if (!entry) return false;
+  if (!entry.auth(ctx)) return true;
+  entry.handler(ctx);
+  return true;
+}
+
+function tryPrefixGet(ctx) {
+  const p = ctx.p;
+  if (p.startsWith("/ui/") || p.startsWith("/public/")) { handleStaticAsset(ctx); return true; }
+  return false;
+}
+
+function tryOAuthOrMcpGet(ctx) {
+  if (ctx.p === "/.well-known/oauth-protected-resource") { handleOauthProtectedResource(ctx); return true; }
+  if (ctx.p === "/.well-known/oauth-authorization-server" || ctx.p === "/.well-known/openid-configuration") { handleOauthMetadata(ctx); return true; }
+  if (ctx.p === "/authorize") { handleAuthorizeGet(ctx); return true; }
+  if (ctx.p === "/mcp" || ctx.mcpAccess.kind === "streamable-http") { handleMcpGetDiagnostic(ctx); return true; }
+  if (ctx.mcpAccess.kind === "sse") { handleMcpSse(ctx); return true; }
+  return false;
+}
+
+const GET_ROUTES = {
+  "/dashboard": { auth: authDashboard, handler: handleDashboard },
+  "/favicon.ico": { auth: authNone, handler: handleFavicon },
+  "/health": { auth: authNone, handler: handleHealth },
+  "/api/settings": { auth: authDashboard, handler: handleApiSettingsGet },
+  "/api/tools": { auth: authDashboard, handler: handleApiTools },
+  "/api/onboarding/status": { auth: authDashboard, handler: handleOnboardingStatus },
+  "/api/connection": { auth: authDashboard, handler: handleConnection },
+  "/api/dashboard/v10": { auth: authDashboard, handler: handleDashboardV10 },
+  "/api/logs": { auth: authDashboard, handler: handleApiLogs },
+  "/api/health-monitor": { auth: authDashboard, handler: handleHealthMonitor },
+  "/api/alias-diagnostics": { auth: authDashboard, handler: handleAliasDiagnostics },
+  "/api/release-notes": { auth: authDashboard, handler: handleReleaseNotes },
+  "/api/caution-summary": { auth: authDashboard, handler: handleCautionSummary },
+  "/api/readiness": { auth: authDashboard, handler: handleReadiness },
+  "/api/workspace/preflight": { auth: authDashboard, handler: handleWorkspacePreflight },
+  "/events": { auth: authDashboard, handler: handleEvents }
+};
+
+// ---- POST dispatch ------------------------------------------------------------------
+
+function dispatchPost(ctx) {
+  return tryExactPost(ctx) || tryOAuthOrMcpPost(ctx);
+}
+
+function tryExactPost(ctx) {
+  const entry = POST_ROUTES[ctx.p];
+  if (!entry) return false;
+  if (!entry.auth(ctx)) return true;
+  entry.handler(ctx);
+  return true;
+}
+
+function tryOAuthOrMcpPost(ctx) {
+  if (ctx.p === "/register") { handleRegister(ctx); return true; }
+  if (ctx.p === "/authorize") { handleAuthorizePost(ctx); return true; }
+  if (ctx.p === "/token") { handleToken(ctx); return true; }
+  if (ctx.mcpAccess.kind === "streamable-http") { handleMcpStreamable(ctx); return true; }
+  if (ctx.mcpAccess.kind === "messages") { handleMcpMessages(ctx); return true; }
+  return false;
+}
+
+const POST_ROUTES = {
+  "/api/onboarding/complete": { auth: authDashboard, handler: handleOnboardingComplete },
+  "/api/settings": { auth: authDashboard, handler: handleApiSettingsPost },
+  "/api/workspaces": { auth: authDashboard, handler: handleApiWorkspaces },
+  "/api/pick-folder": { auth: authDashboard, handler: handlePickFolder }
+};
 
 
 // The MCP transport endpoints. The legacy secret-in-URL no-auth path
@@ -469,13 +449,15 @@ function resolveBaseUrl(options) {
     || options.publicUrl
     || (connection.localBaseUrl ? connection.localBaseUrl(options.host, options.port) : "")
     || `http://${options.host || "127.0.0.1"}:${options.port || 3333}`;
-  return String(base || "").replace(/\/+$/, "");
+  let s = String(base || "");
+  while (s.endsWith("/")) s = s.slice(0, -1);
+  return s;
 }
 
 function bearerToken(req) {
-  const header = (req && req.headers && req.headers.authorization) || "";
-  const match = /^Bearer\s+(.+)$/i.exec(header);
-  return match ? match[1].trim() : "";
+  const header = req?.headers?.authorization || "";
+  if (!/^Bearer\s+/i.test(header)) return "";
+  return header.slice(7).trim();
 }
 
 // An OAuth access token issued by our /token endpoint is a valid bearer for /mcp.
@@ -521,7 +503,7 @@ function isDashboardAuthorized(req, parsed, options) {
 function resolveRequireHttpToken(parsed, config) {
   const raw = parsed.searchParams.get("requireHttpToken");
   if (raw != null) return raw !== "0";
-  const configured = config && config.release ? config.release.requireHttpToken : undefined;
+  const configured = config?.release?.requireHttpToken;
   return configured !== false;
 }
 
@@ -531,11 +513,11 @@ function workspacePathPreflight(rawPath) {
   let stat = null;
   try {
     stat = fs.statSync(target);
-  } catch (_error) {
+  } catch (_error) { /* stat failed; report path_not_found below */
     findings.push({ severity: "error", code: "path_not_found", message: `Path does not exist: ${target}` });
   }
   const exists = Boolean(stat);
-  const isDirectory = Boolean(stat && stat.isDirectory());
+  const isDirectory = Boolean(stat?.isDirectory());
   const gitDir = path.join(target, ".git");
   const isGit = isDirectory && fs.existsSync(gitDir);
   if (exists && !isDirectory) findings.push({ severity: "error", code: "path_not_directory", message: `Path is not a directory: ${target}` });
@@ -620,7 +602,7 @@ const configCache = { path: "", mtimeMs: -1, value: null };
 function readConfigCached() {
   const configPath = require("./config").getConfigPath();
   let mtimeMs = null;
-  try { mtimeMs = fs.statSync(configPath).mtimeMs; } catch (_error) {}
+  try { mtimeMs = fs.statSync(configPath).mtimeMs; } catch (_error) { /* config file may not exist yet */ }
   if (mtimeMs != null && configCache.value && configCache.path === configPath && configCache.mtimeMs === mtimeMs) {
     return configCache.value;
   }
@@ -641,14 +623,14 @@ function openDashboardEvents(res, req, _options) {
     "X-Accel-Buffering": "no"
   });
   const statMtime = (file) => {
-    try { return file ? fs.statSync(file).mtimeMs : 0; } catch (_) { return 0; }
+    try { return file ? fs.statSync(file).mtimeMs : 0; } catch (_) { return 0; /* file may not exist; treat as not modified */ }
   };
   const changeSignature = () => {
     let config = null;
-    try { config = readConfigCached(); } catch (_) {}
+    try { config = readConfigCached(); } catch (_) { /* config may be unavailable; signature stays empty */ }
     return [
       statMtime(require("./config").getConfigPath()),
-      statMtime(config && config.auditLogPath)
+      statMtime(config?.auditLogPath)
     ].join(":");
   };
   let lastSignature = "";
@@ -732,22 +714,29 @@ function readJsonBody(req, maxBytes) {
   });
 }
 
+function tryParseJsonOrNull(raw) {
+  if (!raw.trim()) return {};
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
 // OAuth /token uses application/x-www-form-urlencoded; /register and some clients use
 // JSON. Parse by content-type, with a best-effort fallback for unlabeled JSON bodies.
 async function readFormOrJsonBody(req, maxBytes) {
   const raw = await readRawBody(req, maxBytes);
-  const contentType = String((req.headers && req.headers["content-type"]) || "").toLowerCase();
+  const contentType = String(req.headers?.["content-type"] || "").toLowerCase();
   if (contentType.includes("application/json")) {
-    try { return raw.trim() ? JSON.parse(raw) : {}; }
-    catch (error) { throw new Error(`Invalid JSON body: ${error instanceof Error ? error.message : String(error)}`, { cause: error }); }
+    const parsed = tryParseJsonOrNull(raw);
+    if (parsed !== null) return parsed;
+    throw new Error(`Invalid JSON body`);
   }
-  if (contentType.includes("application/x-www-form-urlencoded") || raw.includes("=")) {
+  if (contentType.includes("application/x-www-form-urlencoded")) {
     const obj = {};
     for (const [key, value] of new URLSearchParams(raw)) obj[key] = value;
     if (Object.keys(obj).length) return obj;
   }
   if (raw.trim().startsWith("{")) {
-    try { return JSON.parse(raw); } catch (_) { /* fall through */ }
+    const parsed = tryParseJsonOrNull(raw);
+    if (parsed !== null) return parsed;
   }
   return {};
 }
@@ -767,7 +756,7 @@ function isAllowedCorsOrigin(origin) {
 }
 
 function setBaseHeaders(req, res) {
-  const origin = req && req.headers ? req.headers.origin : "";
+  const origin = req?.headers?.origin ?? "";
   if (isAllowedCorsOrigin(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Vary", "Origin");
@@ -785,7 +774,7 @@ function sendJson(res, status, payload, ae = "") {
       res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Content-Encoding": "gzip", "Vary": "Accept-Encoding" });
       res.end(compressed);
       return;
-    } catch (_) {}
+    } catch (_) { /* gzip failed; fall through to uncompressed response */ }
   }
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
   res.end(json);
@@ -827,7 +816,7 @@ function contentTypeForStaticAsset(filePath) {
 }
 
 function jsonForHtmlScript(value) {
-  return JSON.stringify(value).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026");
+  return JSON.stringify(value).replaceAll("<", String.raw`\u003c`).replaceAll(">", String.raw`\u003e`).replaceAll("&", String.raw`\u0026`);
 }
 
 function renderDashboardHtml(_options) {

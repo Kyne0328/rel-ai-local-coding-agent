@@ -90,7 +90,7 @@ function relaiRead(workspace, config, args = {}) {
   const paths = Array.isArray(args.paths) ? args.paths : [];
   if (paths.length === 0) throw new Error("paths must contain at least one path.");
   const policy = resolvePolicy(workspace, config || {});
-  const sessionActive = policy && policy.sessionActive === true;
+  const sessionActive = policy?.sessionActive === true;
   const defaultMaxBytes = resolveBudget(DEFAULT_MAX_READ_BYTES, policy, config || {});
   const maxBytes = clampNumber(args.maxBytes, 1000, 10 * 1024 * 1024, defaultMaxBytes);
   const items = [];
@@ -318,7 +318,8 @@ function relaiReplace(workspace, config, args = {}) {
 }
 
 function relaiClear(workspace, config, args = {}) {
-  const rawPaths = Array.isArray(args.paths) ? args.paths : (args.path ? [args.path] : []);
+  const singlePath = args.path ? [args.path] : [];
+  const rawPaths = Array.isArray(args.paths) ? args.paths : singlePath;
   if (rawPaths.length === 0) throw new Error("relai_clear_files requires path or paths.");
   if (rawPaths.length > 100) throw new Error("relai_clear_files accepts at most 100 paths per call.");
   const dryRun = Boolean(args.dryRun);
@@ -490,7 +491,7 @@ function readTidyPlan(config, workspace, planId) {
   const file = tidyPlanPath(config, workspace, id);
   if (!fs.existsSync(file)) throw new Error(`Workspace tidy plan not found or already used: ${id}`);
   const plan = JSON.parse(fs.readFileSync(file, "utf8"));
-  if (!plan || plan.id !== id) throw new Error(`Workspace tidy plan file is invalid: ${id}`);
+  if (plan?.id !== id) throw new Error(`Workspace tidy plan file is invalid: ${id}`);
   if (plan.workspace !== workspace.alias || plan.root !== workspace.path) throw new Error(`Workspace tidy plan ${id} belongs to a different workspace.`);
   const expires = Date.parse(plan.expiresAt || "");
   if (!Number.isFinite(expires) || Date.now() > expires) throw new Error(`Workspace tidy plan ${id} expired. Create a new plan first.`);
@@ -531,7 +532,7 @@ async function relaiWorkspaceTidyRun(workspace, config, args = {}) {
     };
   }
   const clearResult = (preflight.length > 0 ? relaiClear(workspace, config, { paths: preflight.map((item) => item.path), failIfMissing: true }) : { ok: true, changedFiles: [] });
-  try { fs.rmSync(file, { force: true }); } catch (_error) {}
+  try { fs.rmSync(file, { force: true }); } catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] tidy plan cleanup:', error); }
   const applied = preflight.map((item) => ({ path: item.path, action: "tidied_untracked_file", sha256: item.sha256, sizeBytes: item.sizeBytes }));
   appendOperation(config, workspace, {
     id: planId,
@@ -1203,8 +1204,8 @@ async function relaiBrowser(workspace, config, args = {}) {
     // Bounded: only named package.json scripts may run, invoked as `npm run <name>`.
     // No arbitrary shell — keeps this a validation bridge, not a command runner.
     const scripts = readPackageScripts(workspace.path);
-    const available = Object.keys(scripts).sort();
-    if (!SAFE_BROWSER_CHECK_NAME.test(command) || !Object.prototype.hasOwnProperty.call(scripts, command)) {
+    const available = Object.keys(scripts).sort((a, b) => a.localeCompare(b));
+    if (!SAFE_BROWSER_CHECK_NAME.test(command) || !Object.hasOwn(scripts, command)) {
       return {
         ok: false,
         workspace: workspace.alias,

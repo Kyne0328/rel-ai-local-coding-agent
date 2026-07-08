@@ -63,19 +63,19 @@ function recommendedFlowForConfig(config) {
 }
 
 function assertPreparedUpdateSafe(workspace, config, args, patch) {
-  if (!patch || !patch.trim()) throw new Error("relai_apply_update requires patch or diff text.");
+  if (!patch?.trim()) throw new Error("relai_apply_update requires patch or diff text.");
   const maxBytes = preparedNumber(config, "maxUpdateBytes", DEFAULT_AGGRESSIVE_MAX_PATCH_BYTES);
   const bytes = Buffer.byteLength(patch, "utf8");
   if (bytes > maxBytes) throw new Error(`relai_apply_update refused ${bytes} byte patch; max is ${maxBytes}.`);
-  if (!workspace || !workspace.path) throw new Error("relai_apply_update requires a valid workspace.");
+  if (!workspace?.path) throw new Error("relai_apply_update requires a valid workspace.");
 }
 
 function assertPreparedBundleSafe(workspace, config, args, archivePath, stat) {
   if (!archivePath) throw new Error("relai_apply_bundle requires bundlePath pointing to a local zip archive on the MCP host.");
-  if (!stat || !stat.isFile()) throw new Error(`Archive path is not a file: ${archivePath}`);
+  if (!stat?.isFile()) throw new Error(`Archive path is not a file: ${archivePath}`);
   const maxBytes = preparedNumber(config, "maxBundleBytes", DEFAULT_AGGRESSIVE_MAX_ARCHIVE_BYTES);
   if (stat.size > maxBytes) throw new Error(`relai_apply_bundle refused ${stat.size} byte archive; max is ${maxBytes}.`);
-  if (!workspace || !workspace.path) throw new Error("relai_apply_bundle requires a valid workspace.");
+  if (!workspace?.path) throw new Error("relai_apply_bundle requires a valid workspace.");
 }
 
 // ---- Git status classification -----------------------------------------------
@@ -94,7 +94,9 @@ function classifyStatusOwnership(workspace, config, statusOutput) {
       baselineDirty = Array.isArray(session.baselineDirty) ? session.baselineDirty : [];
       baselineSource = "session";
     }
-  } catch (_err) {}
+  } catch (error) {
+    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] session policy read:', error);
+  }
   // With no active session there is no captured baseline, so we CANNOT tell which
   // dirty files came from this agent vs. were already present. Labeling everything
   // "session" here was a lie that also let relai_tidy_plan treat pre-existing
@@ -127,7 +129,8 @@ function classifyStatusOwnership(workspace, config, statusOutput) {
     const file = arrow >= 0 ? rawPath.slice(arrow + 4).trim() : rawPath;
     if (!file) continue;
     const untracked = x === "?" && y === "?";
-    const owner = !hasSession ? "unknown" : (baselineSet.has(file) ? "baseline" : "session");
+    const sessionOwner = baselineSet.has(file) ? "baseline" : "session";
+    const owner = !hasSession ? "unknown" : sessionOwner;
     entries.push({ path: file, indexStatus: x, worktreeStatus: y, owner, untracked, raw: line });
     if (owner === "baseline") {
       baselineChanged.push(file);
@@ -465,13 +468,14 @@ async function relaiGitMergeRemoteBranchesPlan(workspace, config, args = {}) {
     const risk = [];
     if (staleDays != null && staleDays > 45) risk.push("stale branch");
     if (short.includes("release") || short.includes("prod")) risk.push("name overlaps release flow");
+    const nonUiGroup = short.includes("admin") ? "admin" : "general";
     branches.push({
       name,
       short,
       lastCommitAt: committerdate || null,
       staleDays,
       alreadyMerged: merged.exitCode === 0,
-      recommendedOrderGroup: short.includes("ui") ? "ui" : short.includes("admin") ? "admin" : "general",
+      recommendedOrderGroup: short.includes("ui") ? "ui" : nonUiGroup,
       risk
     });
   }

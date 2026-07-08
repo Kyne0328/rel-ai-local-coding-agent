@@ -223,7 +223,7 @@ function getPublicToolSchemas() {
     .map((item) => {
       const strip = PUBLIC_STRIPPED_PROPS[item.name];
       if (!strip || !item.inputSchema) return item;
-      const properties = { ...(item.inputSchema.properties || {}) };
+      const properties = { ...item.inputSchema.properties };
       for (const key of strip) delete properties[key];
       const required = (item.inputSchema.required || []).filter((key) => !strip.includes(key));
       return { ...item, inputSchema: { ...item.inputSchema, properties, required } };

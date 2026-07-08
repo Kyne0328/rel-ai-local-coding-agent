@@ -63,7 +63,7 @@ function validSemver(input) {
 }
 
 function compareVersions(a, b) {
-  const parse = (v) => String(v).split('-')[0].split('.').map((part) => Number(part));
+  const parse = (v) => String(v).split('-')[0].split('.').map(Number);
   const aa = parse(a);
   const bb = parse(b);
   for (let i = 0; i < 3; i++) {
@@ -76,7 +76,7 @@ function compareVersions(a, b) {
 function updateJsonVersion(relativePath, nextVersion) {
   const json = readJson(relativePath);
   json.version = nextVersion;
-  if (json.packages && json.packages['']) json.packages[''].version = nextVersion;
+  if (json.packages?.['']) json.packages[''].version = nextVersion;
   writeJson(relativePath, json);
 }
 
@@ -87,7 +87,7 @@ function replaceExact(relativePath, oldText, newText) {
 }
 
 function changelogHasVersion(content, nextVersion) {
-  return new RegExp(`^## \\[${nextVersion.replace(/\./g, '\\.')}\\]`, 'm').test(content);
+  return new RegExp(String.raw`^## \[${nextVersion.replaceAll('.', '\\.')}\]`, 'm').test(content);
 }
 
 function insertChangelog(nextVersion, releaseDate) {

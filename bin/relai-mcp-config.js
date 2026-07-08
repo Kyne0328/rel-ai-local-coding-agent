@@ -146,7 +146,7 @@ function addWorkspaceCommand(field, label, aliasValue, rest) {
   const shellCommand = rest.slice(1).join(" ").trim();
   if (!shellCommand) throw new Error(`Missing ${label}.`);
   const config = readConfig();
-  if (!config.workspaces || !config.workspaces[alias]) throw new Error(`Workspace '${alias}' is not configured.`);
+  if (!config.workspaces?.[alias]) throw new Error(`Workspace '${alias}' is not configured.`);
   config.workspaces[alias][field] = config.workspaces[alias][field] || {};
   config.workspaces[alias][field][key] = shellCommand;
   writeConfig(config);

@@ -6,6 +6,7 @@ const tunnelManager = require('../src/tunnelManager');
 
 const UPDATE_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 const URL_RE = /https:\/\/[^\s"'<>]+/i;
+const MANAGED_NGROK_LABEL = 'managed-ngrok';
 
 function relaiStateDir() {
   return process.env.REL_AI_MCP_STATE_DIR || path.join(os.homedir(), '.rel-ai-mcp');
@@ -46,7 +47,15 @@ function bundledNgrokPath() {
 
 function ensureExecutable(file) {
   if (process.platform !== 'win32') {
-    try { fs.chmodSync(file, 0o755); } catch (_) {}
+    // Owner-only exec (0o700): the same user that downloaded the binary runs it;
+    // no need for group/other bits.
+    try {
+      fs.chmodSync(file, 0o700);
+    } catch (error) {
+      if (process.env.REL_AI_MCP_DEBUG) {
+        console.error(`[rel-ai-mcp:ngrok] Failed to set executable permissions on ${file}:`, error);
+      }
+    }
   }
 }
 
@@ -91,7 +100,10 @@ function writeNgrokConfig(authtoken) {
 function readUpdateState() {
   try {
     return JSON.parse(fs.readFileSync(ngrokStatePath(), 'utf8'));
-  } catch (_) {
+  } catch (error) {
+    if (process.env.REL_AI_MCP_DEBUG) {
+      console.warn(`[rel-ai-mcp:ngrok] Failed to read or parse ngrok update state: ${error.message}`);
+    }
     return {};
   }
 }
@@ -103,11 +115,17 @@ function writeUpdateState(next) {
 
 function runNgrok(args, options = {}) {
   return new Promise((resolve) => {
-    const child = spawn(managedNgrokPath(), args, {
-      cwd: managedRoot(),
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true
-    });
+    let child;
+    try {
+      child = spawn(managedNgrokPath(), args, {
+        cwd: managedRoot(),
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true
+      });
+    } catch (error) {
+      resolve({ ok: false, exitCode: null, stdout: '', stderr: '', error: error.message });
+      return;
+    }
     let stdout = '';
     let stderr = '';
     const timeoutMs = Number(options.timeoutMs || 45000);
@@ -140,7 +158,7 @@ async function maybeUpdateManagedNgrok({ force = false, onLog = () => {} } = {})
   const result = await runNgrok(['update'], { timeoutMs: 90000 });
   writeUpdateState({
     lastCheckedAt: new Date().toISOString(),
-    lastOk: result.ok === true,
+    lastOk: result.ok,
     lastExitCode: result.exitCode,
     lastError: result.error || result.stderr || ''
   });
@@ -162,10 +180,19 @@ function extractPublicUrl(text) {
   return match ? match[0].replace(/[).,;]+$/, '') : '';
 }
 
+function sanitizeDomain(domain) {
+  return String(domain || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '').toLowerCase();
+}
+
+function sanitizePort(port) {
+  const p = Number(port || 3333);
+  return Number.isFinite(p) && p > 0 && p < 65536 ? p : 3333;
+}
+
 function startManagedNgrokTunnel({ domain, port, timeoutMs = 30000, onLog = () => {}, onProcess = () => {} } = {}) {
-  const safeDomain = String(domain || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '').toLowerCase();
+  const safeDomain = sanitizeDomain(domain);
   if (!safeDomain) throw new Error('ngrok domain is required.');
-  const safePort = Number(port || 3333);
+  const safePort = sanitizePort(port);
   const args = [
     'http',
     `http://127.0.0.1:${safePort}`,
@@ -176,13 +203,21 @@ function startManagedNgrokTunnel({ domain, port, timeoutMs = 30000, onLog = () =
     '--log=stdout'
   ];
 
+  const MAX_BUFFER_SIZE = 1048576;
+
   return new Promise((resolve) => {
-    const child = spawn(managedNgrokPath(), args, {
-      cwd: managedRoot(),
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true
-    });
-    if (typeof onProcess === 'function') onProcess(child, 'managed-ngrok');
+    let child;
+    try {
+      child = spawn(managedNgrokPath(), args, {
+        cwd: managedRoot(),
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true
+      });
+    } catch (error) {
+      resolve({ ok: false, provider: MANAGED_NGROK_LABEL, publicUrl: '', process: null, error: error.message });
+      return;
+    }
+    if (typeof onProcess === 'function') onProcess(child, MANAGED_NGROK_LABEL);
     let settled = false;
     let buffer = '';
     const finish = (result) => {
@@ -194,19 +229,21 @@ function startManagedNgrokTunnel({ domain, port, timeoutMs = 30000, onLog = () =
     };
     const handleChunk = (chunk) => {
       const text = String(chunk || '');
-      buffer += text;
-      onLog(text, 'managed-ngrok');
+      if (buffer.length < MAX_BUFFER_SIZE) {
+        buffer += text;
+      }
+      onLog(text, MANAGED_NGROK_LABEL);
       const publicUrl = extractPublicUrl(buffer);
       if (publicUrl) {
-        finish({ ok: true, provider: 'managed-ngrok', publicUrl, process: child, command: [managedNgrokPath(), ...args].join(' ') });
+        finish({ ok: true, provider: MANAGED_NGROK_LABEL, publicUrl, process: child, command: [managedNgrokPath(), ...args].join(' ') });
       }
     };
     const timer = setTimeout(() => {
-      finish({ ok: false, provider: 'managed-ngrok', publicUrl: '', process: null, error: `Timed out after ${timeoutMs}ms waiting for ngrok to publish a public URL.` });
+      finish({ ok: false, provider: MANAGED_NGROK_LABEL, publicUrl: '', process: null, error: `Timed out after ${timeoutMs}ms waiting for ngrok to publish a public URL.` });
     }, Number(timeoutMs || 30000));
-    child.on('error', (error) => finish({ ok: false, provider: 'managed-ngrok', publicUrl: '', process: null, error: error.message }));
+    child.on('error', (error) => finish({ ok: false, provider: MANAGED_NGROK_LABEL, publicUrl: '', process: null, error: error.message }));
     child.on('exit', (code, signal) => {
-      if (!settled) finish({ ok: false, provider: 'managed-ngrok', publicUrl: '', process: null, error: `ngrok exited before publishing a URL (code=${code}, signal=${signal}).` });
+      if (!settled) finish({ ok: false, provider: MANAGED_NGROK_LABEL, publicUrl: '', process: null, error: `ngrok exited before publishing a URL (code=${code}, signal=${signal}).` });
     });
     child.stdout.on('data', handleChunk);
     child.stderr.on('data', handleChunk);
@@ -214,8 +251,8 @@ function startManagedNgrokTunnel({ domain, port, timeoutMs = 30000, onLog = () =
 }
 
 function previewManagedNgrokCommand(domain, port) {
-  const safeDomain = String(domain || '<domain>').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '').toLowerCase();
-  const safePort = Number(port || 3333);
+  const safeDomain = sanitizeDomain(domain || '<domain>');
+  const safePort = sanitizePort(port);
   return `managed ngrok http --url=https://${safeDomain} http://127.0.0.1:${safePort} --config ${ngrokConfigPath()} --log=stdout`;
 }
 

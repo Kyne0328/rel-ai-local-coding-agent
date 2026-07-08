@@ -56,9 +56,11 @@ async function workspacePreflight(config, args = {}) {
   const checks = [];
   const root = workspace.path;
 
-  checks.push(checkWorkspaceFile(findings, root, ".gitattributes", "warning", "Add .gitattributes to stop LF/CRLF churn."));
-  checks.push(checkWorkspaceFile(findings, root, ".editorconfig", "info", "Add .editorconfig to keep editor defaults consistent."));
-  checks.push(checkWorkspaceFile(findings, root, "package.json", "info", "No package.json found; this may be fine for non-Node repos."));
+  checks.push(
+    checkWorkspaceFile(findings, root, ".gitattributes", "warning", "Add .gitattributes to stop LF/CRLF churn."),
+    checkWorkspaceFile(findings, root, ".editorconfig", "info", "Add .editorconfig to keep editor defaults consistent."),
+    checkWorkspaceFile(findings, root, "package.json", "info", "No package.json found; this may be fine for non-Node repos.")
+  );
 
   const gitDir = await runProcess("git", ["rev-parse", "--git-dir"], { cwd: root, shell: false }, config);
   checks.push({ name: "git_repository", ok: gitDir.exitCode === 0, command: "git rev-parse --git-dir", result: summarizeCommand(gitDir) });
@@ -73,8 +75,8 @@ async function workspacePreflight(config, args = {}) {
 
   const statusResult = await runProcess("git", ["status", "--short"], { cwd: root, shell: false }, config);
   const status = summarizeCommand(statusResult);
-  checks.push({ name: "git_status", ok: statusResult.exitCode === 0, dirty: Boolean(statusResult.stdout && statusResult.stdout.trim()), status });
-  if (statusResult.stdout && statusResult.stdout.trim() && args.requireClean !== false) {
+  checks.push({ name: "git_status", ok: statusResult.exitCode === 0, dirty: Boolean(statusResult.stdout?.trim()), status });
+  if (statusResult.stdout?.trim() && args.requireClean !== false) {
     findings.push(finding("warning", "dirty_worktree", "Workspace has uncommitted changes. Review relai_diff before editing."));
   }
 
@@ -92,8 +94,8 @@ async function workspacePreflight(config, args = {}) {
     generatedAt: new Date().toISOString(),
     commandKeys,
     testCommandKeys: testKeys,
-    discoveredCommandKeys: Object.keys(discoveredCommands).sort(),
-    discoveredTestCommandKeys: discoveredTestKeys.sort(),
+    discoveredCommandKeys: Object.keys(discoveredCommands).sort((a, b) => a.localeCompare(b)),
+    discoveredTestCommandKeys: [...discoveredTestKeys].sort((a, b) => a.localeCompare(b)),
     checks,
     findings,
     nextActions: nextActions(findings)
@@ -201,7 +203,7 @@ function nextActions(findings) {
     else if (item.code === "no_validation_commands") actions.push("Add a validation command with npm run testcmd:add -- <alias> <key> <command...>.");
     else if (item.code === "dirty_worktree") actions.push("Commit/stash local changes or review relai_diff before further edits.");
     else if (item.code === "trusted_local_agent_disabled") actions.push("Use the default trusted local bridge mode for ChatGPT repo work.");
-    else if (item.code && item.code.includes("gitattributes")) actions.push("Run relai-mcp-config doctor --fix <workspace-path> to add .gitattributes/.editorconfig.");
+    else if (item.code?.includes("gitattributes")) actions.push("Run relai-mcp-config doctor --fix <workspace-path> to add .gitattributes/.editorconfig.");
   }
   return [...new Set(actions)];
 }

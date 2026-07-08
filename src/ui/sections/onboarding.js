@@ -179,7 +179,7 @@ function _renderStep(step, content, nextBtn, skipBtn, backBtn) {
       const check = await validateWorkspacePath(workspacePath);
       _data.workspaceCheck = check;
       renderValidation(validation, check);
-      if (!check || !check.exists || !check.isDirectory) {
+      if (!check?.exists || !check?.isDirectory) {
         toast('Choose an existing folder path.', { variant: 'error' });
         return;
       }
@@ -201,8 +201,8 @@ function _renderStep(step, content, nextBtn, skipBtn, backBtn) {
       });
       setBusy(nextBtn, false, 'Continue');
 
-      if (!result || result.ok !== true) {
-        toast('Could not add workspace: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });
+      if (result?.ok !== true) {
+        toast('Could not add workspace: ' + (result?.error || 'unknown error'), { variant: 'error' });
         return;
       }
 
@@ -358,7 +358,7 @@ function renderValidation(el, result) {
 
 function deriveAliasFromPath(workspacePath) {
   const clean = String(workspacePath || '').trim().replace(/[\\/]+$/, '');
-  const leaf = clean.split(/[\\/]/).filter(Boolean).pop() || '';
+  const leaf = clean.split(/[\\/]/).findLast(Boolean) || '';
   return leaf.toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32);
 }
 

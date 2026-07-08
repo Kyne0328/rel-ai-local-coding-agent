@@ -10,7 +10,10 @@ function normalizeTunnel(value) {
   const text = String(value || "").trim().toLowerCase();
   if (!text || text === "none" || text === "off" || text === "false" || text === "0") return "none";
   if (text === "public" || text === "auto" || text === "1" || text === "true") return "auto";
-  if (["cloudflare", "cloudflared", "ngrok", "localtunnel", "lt", "custom"].includes(text)) return text === "lt" ? "localtunnel" : text === "cloudflared" ? "cloudflare" : text;
+  if (["cloudflare", "cloudflared", "ngrok", "localtunnel", "lt", "custom"].includes(text)) {
+    const cloudflareAlias = text === "cloudflared" ? "cloudflare" : text;
+    return text === "lt" ? "localtunnel" : cloudflareAlias;
+  }
   throw new Error(`Unknown tunnel provider: ${value}`);
 }
 
@@ -125,11 +128,12 @@ function killProcess(child) {
     try {
       const { spawnSync } = require("node:child_process");
       spawnSync("taskkill", ["/f", "/t", "/pid", String(child.pid)], { stdio: "ignore", windowsHide: true });
-    } catch (_) {
-      try { child.kill(); } catch (__) {}
+    } catch (error) {
+      if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] taskkill:', error);
+      try { child.kill(); } catch (killError) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] kill fallback:', killError); }
     }
   } else {
-    try { child.kill("SIGTERM"); } catch (_) {}
+    try { child.kill("SIGTERM"); } catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] kill SIGTERM:', error); }
   }
 }
 
@@ -141,6 +145,10 @@ function killOrphanedNgrok() {
   };
 }
 
+function isHttpsTunnel(t) {
+  return String(t.public_url || "").startsWith("https://");
+}
+
 function readNgrokApiUrl(port = 4040) {
   return new Promise((resolve) => {
     const req = http.get({ host: "127.0.0.1", port, path: "/api/tunnels", timeout: 800 }, (res) => {
@@ -150,9 +158,10 @@ function readNgrokApiUrl(port = 4040) {
       res.on("end", () => {
         try {
           const data = JSON.parse(body);
-          const tunnel = (data.tunnels || []).find(t => String(t.public_url || "").startsWith("https://"));
+          const tunnel = (data.tunnels || []).find(isHttpsTunnel);
           resolve(tunnel ? tunnel.public_url : "");
-        } catch (_) {
+        } catch (error) {
+          if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] ngrok api parse:', error);
           resolve("");
         }
       });
@@ -164,8 +173,8 @@ function readNgrokApiUrl(port = 4040) {
 
 function extractPublicUrl(text, pattern) {
   const source = String(text || "");
-  const providerMatch = source.match(pattern || HTTPS_URL_RE);
-  const genericMatch = providerMatch || source.match(HTTPS_URL_RE);
+  const providerMatch = (pattern || HTTPS_URL_RE).exec(source);
+  const genericMatch = providerMatch || HTTPS_URL_RE.exec(source);
   return genericMatch ? genericMatch[0].replace(/[).,;]+$/, "") : "";
 }
 

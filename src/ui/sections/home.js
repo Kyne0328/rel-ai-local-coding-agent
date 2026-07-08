@@ -11,7 +11,7 @@ export function mountHome(container, data) {
 function buildHome(data) {
   const cfg = data.config || {};
   const health = data.health || {};
-  const audit = sortedAudit(data.auditTail && data.auditTail.entries);
+  const audit = sortedAudit(data.auditTail?.entries);
   const workspaces = Array.isArray(cfg.workspaces) ? cfg.workspaces : [];
   const findings = Array.isArray(health.findings) ? health.findings.filter(f => f.severity !== 'info') : [];
 
@@ -170,7 +170,7 @@ function buildNextSteps(workspaces, findings, audit) {
 }
 
 function firstPromptCard(workspaces) {
-  const alias = (workspaces[0] && workspaces[0].alias) || '<alias>';
+  const alias = workspaces[0]?.alias || '<alias>';
   const prompt = `Use Rel.AI MCP. Call relai_repo_snapshot for workspace "${alias}". Do not modify files yet.`;
   const card = document.createElement('div');
   card.className = 'card';
@@ -206,7 +206,8 @@ function workspaceSetupCard(workspaces) {
     const configured = Array.isArray(ws.testCommandKeys) ? ws.testCommandKeys : [];
     const detected = Array.isArray(ws.discoveredTestCommandKeys) ? ws.discoveredTestCommandKeys : [];
     const status = detected.length || configured.length ? 'ready' : 'check';
-    const label = configured.length ? `${configured.length} configured` : detected.length ? `${detected.length} auto-detected` : 'no validation found';
+    const detectedLabel = detected.length ? `${detected.length} auto-detected` : 'no validation found';
+    const label = configured.length ? `${configured.length} configured` : detectedLabel;
     return `<div class="list-item"><span class="dot ${status === 'ready' ? 'good' : 'warn'}"></span><div><div class="item-title">${esc(ws.alias || 'workspace')}</div><div class="item-sub">${esc(label)}${detected.length ? ' · ' + esc(detected.slice(0, 3).join(', ')) : ''}</div></div><div class="item-time">${pillHtml(status)}</div></div>`;
   }).join('') : '<div class="empty">No workspaces configured yet. Open <a href="#workspaces">Workspaces</a> to add your first repository.</div>';
   card.appendChild(body);

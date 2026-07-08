@@ -95,7 +95,8 @@ function _buildActivity() {
 async function _loadLogs(token) {
   const data = await fetchJson('/api/logs?limit=500');
   if (token !== _mountToken) return;
-  _allEntries = sortEntries(Array.isArray(data) ? data : (data && Array.isArray(data.entries) ? data.entries : []));
+  const fallbackEntries = data && Array.isArray(data.entries) ? data.entries : [];
+  _allEntries = sortEntries(Array.isArray(data) ? data : fallbackEntries);
   _renderTable(_applyFilters(_allEntries));
 }
 
@@ -194,4 +195,4 @@ function sortEntries(entries) {
   return [...(Array.isArray(entries) ? entries : [])].sort((a, b) => Date.parse(b.ts || b.at || b.createdAt || 0) - Date.parse(a.ts || a.at || a.createdAt || 0));
 }
 
-function _entryKey(entry) { if (!entry) return ''; return entry.id || [entry.ts || entry.at || entry.createdAt || '', entry.tool || entry.type || '', entry.workspace || '', entry.message || entry.error || entry.path || ''].join('|'); }
+function _entryKey(entry) { if (!entry) { return ''; } return entry.id || [entry.ts || entry.at || entry.createdAt || '', entry.tool || entry.type || '', entry.workspace || '', entry.message || entry.error || entry.path || ''].join('|'); }

@@ -17,10 +17,10 @@ function parseArgs(argv) {
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    if (arg === "--host") options.host = readValue(i, arg), i += 1;
-    else if (arg === "--port") options.port = Number(readValue(i, arg)), i += 1;
-    else if (arg === "--token") options.token = readValue(i, arg), i += 1;
-    else if (arg === "--public-url") options.publicUrl = readValue(i, arg), i += 1;
+    if (arg === "--host") { options.host = readValue(i, arg); i += 1; }
+    else if (arg === "--port") { options.port = Number(readValue(i, arg)); i += 1; }
+    else if (arg === "--token") { options.token = readValue(i, arg); i += 1; }
+    else if (arg === "--public-url") { options.publicUrl = readValue(i, arg); i += 1; }
     else if (arg === "--public") {
       const next = argv[i + 1];
       if (next && !String(next).startsWith("--")) {
@@ -30,12 +30,12 @@ function parseArgs(argv) {
         options.tunnel = "auto";
       }
     }
-    else if (arg === "--tunnel") options.tunnel = readValue(i, arg), i += 1;
+    else if (arg === "--tunnel") { options.tunnel = readValue(i, arg); i += 1; }
     else if (arg === "--cloudflare" || arg === "--cloudflared") options.tunnel = "cloudflare";
     else if (arg === "--ngrok") options.tunnel = "ngrok";
     else if (arg === "--localtunnel" || arg === "--lt") options.tunnel = "localtunnel";
-    else if (arg === "--tunnel-command") options.tunnelCommand = readValue(i, arg), i += 1;
-    else if (arg === "--tunnel-timeout-ms") options.tunnelTimeoutMs = Number(readValue(i, arg)), i += 1;
+    else if (arg === "--tunnel-command") { options.tunnelCommand = readValue(i, arg); i += 1; }
+    else if (arg === "--tunnel-timeout-ms") { options.tunnelTimeoutMs = Number(readValue(i, arg)); i += 1; }
     else if (arg === "--reset-token") options.resetToken = true;
     else if (arg === "--show-token") options.showToken = true;
     else if (arg === "--print-only") options.printOnly = true;

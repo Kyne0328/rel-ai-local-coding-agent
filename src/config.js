@@ -99,7 +99,7 @@ function normalizeConfig(config) {
   const next = {
     ...base,
     ...input,
-    workspaces: { ...(input.workspaces || {}) }
+    workspaces: { ...input.workspaces }
   };
 
   next.sourceVersion = Number.isFinite(Number(input.version)) ? Number(input.version) : base.sourceVersion;
@@ -121,8 +121,8 @@ function normalizeConfig(config) {
   };
   next.maxOutputBytes = positiveNumber(next.maxOutputBytes, base.maxOutputBytes);
   next.maxIndexFiles = positiveNumber(next.maxIndexFiles, base.maxIndexFiles);
-  next.productUx = { ...base.productUx, ...(input.productUx || {}) };
-  next.release = { ...base.release, ...(input.release || {}) };
+  next.productUx = { ...base.productUx, ...input.productUx };
+  next.release = { ...base.release, ...input.release };
   for (const staleKey of ["auto" + "Approve", "auto" + "ApproveAppRequests", "chatgpt" + "RequestHelper"]) {
     delete next[staleKey];
   }
@@ -192,28 +192,28 @@ function normalizeWorkflowConfig(value, flowLegacy) {
   const merged = { ...base.prepared, ...oldFlow, ...oldAggressive, ...rawPrepared };
 
   // Apply field renames from old shape to new shape
-  const clearMissingDefault =
-    rawPrepared.clearMissingDefault != null ? Boolean(rawPrepared.clearMissingDefault)
-    : oldAggressive.clearMissingDefault != null ? Boolean(oldAggressive.clearMissingDefault)
-    : oldAggressive.deleteMissingDefault != null ? Boolean(oldAggressive.deleteMissingDefault)
-    : oldFlow.clearMissingDefault != null ? Boolean(oldFlow.clearMissingDefault)
-    : base.prepared.clearMissingDefault;
+  let clearMissingDefault;
+  if (rawPrepared.clearMissingDefault != null) clearMissingDefault = Boolean(rawPrepared.clearMissingDefault);
+  else if (oldAggressive.clearMissingDefault != null) clearMissingDefault = Boolean(oldAggressive.clearMissingDefault);
+  else if (oldAggressive.deleteMissingDefault != null) clearMissingDefault = Boolean(oldAggressive.deleteMissingDefault);
+  else if (oldFlow.clearMissingDefault != null) clearMissingDefault = Boolean(oldFlow.clearMissingDefault);
+  else clearMissingDefault = base.prepared.clearMissingDefault;
 
-  const maxUpdateBytes =
-    rawPrepared.maxUpdateBytes != null ? clampNumber(rawPrepared.maxUpdateBytes, 1024, 50 * 1024 * 1024, base.prepared.maxUpdateBytes)
-    : oldAggressive.maxUpdateBytes != null ? clampNumber(oldAggressive.maxUpdateBytes, 1024, 50 * 1024 * 1024, base.prepared.maxUpdateBytes)
-    : oldAggressive.maxPatchBytes != null ? clampNumber(oldAggressive.maxPatchBytes, 1024, 50 * 1024 * 1024, base.prepared.maxUpdateBytes)
-    : oldFlow.maxUpdateBytes != null ? clampNumber(oldFlow.maxUpdateBytes, 1024, 50 * 1024 * 1024, base.prepared.maxUpdateBytes)
-    : oldFlow.maxPatchBytes != null ? clampNumber(oldFlow.maxPatchBytes, 1024, 50 * 1024 * 1024, base.prepared.maxUpdateBytes)
-    : base.prepared.maxUpdateBytes;
+  let maxUpdateBytes;
+  if (rawPrepared.maxUpdateBytes != null) maxUpdateBytes = clampNumber(rawPrepared.maxUpdateBytes, 1024, 50 * 1024 * 1024, base.prepared.maxUpdateBytes);
+  else if (oldAggressive.maxUpdateBytes != null) maxUpdateBytes = clampNumber(oldAggressive.maxUpdateBytes, 1024, 50 * 1024 * 1024, base.prepared.maxUpdateBytes);
+  else if (oldAggressive.maxPatchBytes != null) maxUpdateBytes = clampNumber(oldAggressive.maxPatchBytes, 1024, 50 * 1024 * 1024, base.prepared.maxUpdateBytes);
+  else if (oldFlow.maxUpdateBytes != null) maxUpdateBytes = clampNumber(oldFlow.maxUpdateBytes, 1024, 50 * 1024 * 1024, base.prepared.maxUpdateBytes);
+  else if (oldFlow.maxPatchBytes != null) maxUpdateBytes = clampNumber(oldFlow.maxPatchBytes, 1024, 50 * 1024 * 1024, base.prepared.maxUpdateBytes);
+  else maxUpdateBytes = base.prepared.maxUpdateBytes;
 
-  const maxBundleBytes =
-    rawPrepared.maxBundleBytes != null ? clampNumber(rawPrepared.maxBundleBytes, 1024 * 1024, 2 * 1024 * 1024 * 1024, base.prepared.maxBundleBytes)
-    : oldAggressive.maxBundleBytes != null ? clampNumber(oldAggressive.maxBundleBytes, 1024 * 1024, 2 * 1024 * 1024 * 1024, base.prepared.maxBundleBytes)
-    : oldAggressive.maxArchiveBytes != null ? clampNumber(oldAggressive.maxArchiveBytes, 1024 * 1024, 2 * 1024 * 1024 * 1024, base.prepared.maxBundleBytes)
-    : oldFlow.maxBundleBytes != null ? clampNumber(oldFlow.maxBundleBytes, 1024 * 1024, 2 * 1024 * 1024 * 1024, base.prepared.maxBundleBytes)
-    : oldFlow.maxArchiveBytes != null ? clampNumber(oldFlow.maxArchiveBytes, 1024 * 1024, 2 * 1024 * 1024 * 1024, base.prepared.maxBundleBytes)
-    : base.prepared.maxBundleBytes;
+  let maxBundleBytes;
+  if (rawPrepared.maxBundleBytes != null) maxBundleBytes = clampNumber(rawPrepared.maxBundleBytes, 1024 * 1024, 2 * 1024 * 1024 * 1024, base.prepared.maxBundleBytes);
+  else if (oldAggressive.maxBundleBytes != null) maxBundleBytes = clampNumber(oldAggressive.maxBundleBytes, 1024 * 1024, 2 * 1024 * 1024 * 1024, base.prepared.maxBundleBytes);
+  else if (oldAggressive.maxArchiveBytes != null) maxBundleBytes = clampNumber(oldAggressive.maxArchiveBytes, 1024 * 1024, 2 * 1024 * 1024 * 1024, base.prepared.maxBundleBytes);
+  else if (oldFlow.maxBundleBytes != null) maxBundleBytes = clampNumber(oldFlow.maxBundleBytes, 1024 * 1024, 2 * 1024 * 1024 * 1024, base.prepared.maxBundleBytes);
+  else if (oldFlow.maxArchiveBytes != null) maxBundleBytes = clampNumber(oldFlow.maxArchiveBytes, 1024 * 1024, 2 * 1024 * 1024 * 1024, base.prepared.maxBundleBytes);
+  else maxBundleBytes = base.prepared.maxBundleBytes;
 
   return {
     mode,
@@ -266,7 +266,7 @@ function resolveWorkspace(config, alias) {
   const key = String(alias || "").trim();
   if (!key) throw new Error("workspace alias is required.");
   if (!/^[A-Za-z0-9._-]{1,80}$/.test(key)) throw new Error(`Invalid workspace alias: ${key}`);
-  const entry = config.workspaces && config.workspaces[key];
+  const entry = config.workspaces?.[key];
   if (!entry) throw new Error(`Workspace '${key}' is not configured.`);
   assertSafeWorkspaceRoot(entry.path, `Workspace '${key}' path`);
   if (!fs.existsSync(entry.path)) throw new Error(`Workspace '${key}' path does not exist: ${entry.path}`);
@@ -311,16 +311,16 @@ function publicConfigSummary(config) {
       return {
         alias,
         path: entry.path,
-        testCommandKeys: Object.keys(entry.testCommands || {}).sort(),
-        commandKeys: Object.keys(entry.commands || {}).sort(),
+        testCommandKeys: Object.keys(entry.testCommands || {}).sort((a, b) => a.localeCompare(b)),
+        commandKeys: Object.keys(entry.commands || {}).sort((a, b) => a.localeCompare(b)),
         protectedBranches: entry.protectedBranches || ["main", "master"],
         defaultBaseBranch: entry.defaultBaseBranch || "main",
         allowedRemotes: entry.allowedRemotes || ["origin"],
         repoSlug: entry.repoSlug || "",
         fastTask: normalizeFastTask(entry.fastTask),
         discoveredCommands: discovered,
-        discoveredTestCommandKeys: Object.keys(discovered).filter((key) => /test|analy[sz]e|lint|check|vet|build/.test(key + " " + discovered[key])).sort(),
-        staleTestCommandKeys: staleCommandKeys(entry.testCommands || {}, discovered).sort()
+        discoveredTestCommandKeys: Object.keys(discovered).filter((key) => /test|analy[sz]e|lint|check|vet|build/.test(key + " " + discovered[key])).sort((a, b) => a.localeCompare(b)),
+        staleTestCommandKeys: staleCommandKeys(entry.testCommands || {}, discovered).sort((a, b) => a.localeCompare(b))
       };
     }).sort((a, b) => a.alias.localeCompare(b.alias))
   };
@@ -334,13 +334,14 @@ function safeDiscoverCommands(workspacePath) {
   try {
     if (!workspacePath || !fs.existsSync(workspacePath)) return {};
     let mtimeMs = 0;
-    try { mtimeMs = fs.statSync(path.join(workspacePath, "package.json")).mtimeMs; } catch (_) {}
+    try { mtimeMs = fs.statSync(path.join(workspacePath, "package.json")).mtimeMs; } catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] package.json stat:', error); }
     const cached = _discoverCache.get(workspacePath);
-    if (cached && cached.mtimeMs === mtimeMs) return cached.value;
+    if (cached?.mtimeMs === mtimeMs) return cached.value;
     const value = discoverCommands(workspacePath);
     _discoverCache.set(workspacePath, { mtimeMs, value });
     return value;
-  } catch (_error) {
+  } catch (error) {
+    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] discover commands:', error);
     return {};
   }
 }

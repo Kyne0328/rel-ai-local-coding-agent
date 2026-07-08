@@ -48,7 +48,7 @@ function firstChangelogEntry(changelog) {
 function assertJsonVersion(relativePath, version) {
   const json = readJson(relativePath);
   expectEqual(json.version, version, `${relativePath} version`);
-  if (json.packages && json.packages['']) {
+  if (json.packages?.['']) {
     expectEqual(json.packages[''].version, version, `${relativePath} packages[""].version`);
   }
 }
@@ -73,7 +73,7 @@ if (entry) {
   expect(/^\d{4}-\d{2}-\d{2}$/.test(entry.date), 'top CHANGELOG.md entry date must be YYYY-MM-DD');
   expect(/###\s+/.test(entry.body), 'top CHANGELOG.md entry must include a section heading');
   expect(/^-\s+\*\*/m.test(entry.body), 'top CHANGELOG.md entry must include detailed bold bullet entries');
-  expect(new RegExp(`Bump .*${version.replace(/\./g, '\\.')}\\.`, 'i').test(entry.body), `top CHANGELOG.md entry must include a bump line for ${version}`);
+  expect(new RegExp(String.raw`Bump .*${version.replaceAll('.', '\\.')}\.`, 'i').test(entry.body), `top CHANGELOG.md entry must include a bump line for ${version}`);
   expect(!/\b(TODO|TBD|WIP|placeholder|fill this in|summarize the user-visible change|list validation coverage)\b/i.test(entry.body), 'top CHANGELOG.md entry must not contain placeholder release-note text');
 }
 

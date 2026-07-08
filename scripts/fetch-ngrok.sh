@@ -34,7 +34,7 @@ for t in "${targets[@]}"; do
   mkdir -p "$ex"
   unzip -oq "$zip" -d "$ex"
   bin="$(find "$ex" -type f \( -name ngrok -o -name ngrok.exe \) | head -n1)"
-  [ -n "$bin" ] || { echo "ngrok binary not found in $asset archive" >&2; exit 1; }
+  [[ -n "$bin" ]] || { echo "ngrok binary not found in $asset archive" >&2; exit 1; }
   dest_dir="$base/$plat"
   mkdir -p "$dest_dir"
   cp -f "$bin" "$dest_dir/$out"
