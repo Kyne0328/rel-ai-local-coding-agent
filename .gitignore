@@ -13,3 +13,5 @@
 /vendor/ngrok/win32/ngrok.exe
 /vendor/ngrok/darwin/ngrok
 /vendor/ngrok/linux/ngrok
+.github/instructions/sonarqube_mcp.instructions.md
+.vscode/settings.json

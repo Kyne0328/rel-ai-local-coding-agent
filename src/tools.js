@@ -238,90 +238,17 @@ async function callTool(name, args = {}, context = {}) {
   const config = readConfig();
   const started = Date.now();
   const canonicalName = name;
-  const connector = Boolean(context && context.publicHttpOnly);
+  const connector = Boolean(context?.publicHttpOnly);
   try {
     if (!isToolCallable(name)) {
       throw new Error(`Unknown tool '${name}'. Available tools: ${BRIDGE_TOOL_NAMES.join(", ")}. Restart/reconnect ChatGPT if the tool list looks stale.`);
     }
     maybeStartSession(config, canonicalName, args || {});
     const value = await dispatchTool(config, canonicalName, args || {});
-    const extraAudit = {};
-    if (canonicalName === "relai_edit" && value) {
-      if (value.plannerPath) extraAudit.plannerPath = value.plannerPath;
-      if (value.plannerReason) extraAudit.plannerReason = value.plannerReason;
-      if (args && args.path) extraAudit.filePath = args.path;
-    } else if (canonicalName === "relai_run_checks" && value) {
-      if (value.validationLevel) extraAudit.validationLevel = value.validationLevel;
-      if (value.validationLevelReason) extraAudit.validationLevelReason = value.validationLevelReason;
-      if (value.aliasNormalizations != null) extraAudit.aliasNormalizations = value.aliasNormalizations;
-      if (value.policy) extraAudit.policySessionActive = value.policy.sessionActive;
-    } else if (canonicalName === "relai_set_policy" && value) {
-      if (value.operation) extraAudit.policyOperation = value.operation;
-      if (value.policy) extraAudit.policySessionActive = value.policy.sessionActive;
-    } else if (canonicalName === "relai_write" && args && args.path) {
-      extraAudit.filePath = args.path;
-    } else if (canonicalName === "relai_replace" && args && args.path) {
-      extraAudit.filePath = args.path;
-    } else if (canonicalName === "relai_clear_files" && args) {
-      if (args.path) extraAudit.filePath = args.path;
-      if (Array.isArray(args.paths) && args.paths.length) extraAudit.filePaths = args.paths;
-    } else if (canonicalName === "relai_read" && value && Array.isArray(value.items)) {
-      extraAudit.cacheHit = value.items.some(i => i && i.cacheHit === true);
-    } else if (canonicalName === "relai_repo_snapshot" && value) {
-      if (value.effectiveMaxEntries != null) extraAudit.effectiveMaxIndexFiles = value.effectiveMaxEntries;
-      if (value.budgetMultiplied != null) extraAudit.budgetMultiplied = value.budgetMultiplied;
-    }
-    try {
-      const caution = classifyCaution(canonicalName, args || {}, value, config);
-      if (caution && caution.level === "caution") {
-        extraAudit.cautionLevel = caution.level;
-        extraAudit.cautionReason = caution.reason;
-      }
-    } catch (_) {}
-    try {
-      const alias = args && args.workspace;
-      if (alias) {
-        const workspace = resolveWorkspace(config, alias);
-        const wsRoot = workspace && workspace.path;
-        if (wsRoot) {
-          if (canonicalName === "relai_set_policy" && args && args.clear === true) {
-            sessionCache.invalidateAlias(alias);
-          } else if (canonicalName === "relai_write" || canonicalName === "relai_replace" || canonicalName === "relai_edit") {
-            // relai_edit can touch many files (edits batch) or unknown files
-            // (updateText patch / staged patch) — invalidate accordingly so a
-            // follow-up relai_read never serves stale cached content.
-            if (canonicalName === "relai_edit" && (args.updateText != null || args.stage != null)) {
-              sessionCache.invalidateAlias(alias);
-            } else {
-              const touched = [];
-              if (args && args.path) touched.push(args.path);
-              if (canonicalName === "relai_edit" && args && Array.isArray(args.edits)) {
-                for (const edit of args.edits) if (edit && edit.path) touched.push(edit.path);
-              }
-              for (const p of touched) {
-                try {
-                  const safe = resolveSafePath(wsRoot, p);
-                  sessionCache.invalidatePath(alias, safe.absolutePath);
-                } catch (_) {}
-              }
-            }
-          } else if (canonicalName === "relai_clear_files") {
-            const paths = [];
-            if (args && args.path) paths.push(args.path);
-            if (args && Array.isArray(args.paths)) for (const p of args.paths) paths.push(p);
-            for (const p of paths) {
-              try {
-                const safe = resolveSafePath(wsRoot, p);
-                sessionCache.invalidatePath(alias, safe.absolutePath);
-              } catch (_) {}
-            }
-          } else if (canonicalName === "relai_apply_update" || canonicalName === "relai_apply_bundle") {
-            sessionCache.invalidateAlias(alias);
-          }
-        }
-      }
-    } catch (_) {}
-    logAudit(config, { tool: canonicalName, ok: true, workspace: args && args.workspace, ms: Date.now() - started, ...extraAudit });
+    const extraAudit = buildExtraAudit(canonicalName, value, args || {});
+    applyCautionAudit(extraAudit, canonicalName, args || {}, value, config);
+    invalidateSessionCacheForCall(config, canonicalName, args || {});
+    logAudit(config, { tool: canonicalName, ok: true, workspace: args?.workspace, ms: Date.now() - started, ...extraAudit });
     // The full stdio surface keeps every field (tests and local tooling read them).
     // The ChatGPT connector gets a compacted result: internal telemetry, always-
     // default policy objects, and duplicated/verbose fields are dropped so the model
@@ -329,8 +256,141 @@ async function callTool(name, args = {}, context = {}) {
     return ok(connector ? compactForConnector(canonicalName, value, args || {}) : value);
   } catch (error) {
     const enhanced = enhanceToolError(canonicalName, error);
-    logAudit(config, { tool: canonicalName, ok: false, workspace: args && args.workspace, ms: Date.now() - started, error: enhanced.message });
+    logAudit(config, { tool: canonicalName, ok: false, workspace: args?.workspace, ms: Date.now() - started, error: enhanced.message });
     throw enhanced;
+  }
+}
+
+// Best-effort side steps (cache invalidation, caution tagging, session anchoring)
+// must never fail an otherwise-successful tool call. Swallow their errors here, and
+// surface them on stderr only when REL_AI_MCP_DEBUG is set, for diagnostics.
+function debugSwallow(context, error) {
+  if (process.env.REL_AI_MCP_DEBUG) {
+    console.error(`[rel-ai-mcp] best-effort '${context}' failed: ${error?.message || error}`);
+  }
+}
+
+// Per-tool audit enrichment. Each builder mutates the shared `extra` object and only
+// reads its own tool's result shape, so the dispatch stays flat. Optional chaining on
+// value/args preserves the original "only when present" guards.
+const EXTRA_AUDIT_BUILDERS = {
+  relai_edit(value, args, extra) {
+    if (value?.plannerPath) extra.plannerPath = value.plannerPath;
+    if (value?.plannerReason) extra.plannerReason = value.plannerReason;
+    if (args?.path) extra.filePath = args.path;
+  },
+  relai_run_checks(value, _args, extra) {
+    if (value?.validationLevel) extra.validationLevel = value.validationLevel;
+    if (value?.validationLevelReason) extra.validationLevelReason = value.validationLevelReason;
+    if (value?.aliasNormalizations != null) extra.aliasNormalizations = value.aliasNormalizations;
+    if (value?.policy) extra.policySessionActive = value.policy.sessionActive;
+  },
+  relai_set_policy(value, _args, extra) {
+    if (value?.operation) extra.policyOperation = value.operation;
+    if (value?.policy) extra.policySessionActive = value.policy.sessionActive;
+  },
+  relai_write(_value, args, extra) {
+    if (args?.path) extra.filePath = args.path;
+  },
+  relai_replace(_value, args, extra) {
+    if (args?.path) extra.filePath = args.path;
+  },
+  relai_clear_files(_value, args, extra) {
+    if (args?.path) extra.filePath = args.path;
+    if (Array.isArray(args?.paths) && args.paths.length) extra.filePaths = args.paths;
+  },
+  relai_read(value, _args, extra) {
+    if (Array.isArray(value?.items)) extra.cacheHit = value.items.some((i) => i?.cacheHit === true);
+  },
+  relai_repo_snapshot(value, _args, extra) {
+    if (value?.effectiveMaxEntries != null) extra.effectiveMaxIndexFiles = value.effectiveMaxEntries;
+    if (value?.budgetMultiplied != null) extra.budgetMultiplied = value.budgetMultiplied;
+  }
+};
+
+function buildExtraAudit(name, value, args) {
+  const extra = {};
+  const build = EXTRA_AUDIT_BUILDERS[name];
+  if (build) build(value, args, extra);
+  return extra;
+}
+
+function applyCautionAudit(extra, name, args, value, config) {
+  try {
+    const caution = classifyCaution(name, args, value, config);
+    if (caution?.level === "caution") {
+      extra.cautionLevel = caution.level;
+      extra.cautionReason = caution.reason;
+    }
+  } catch (error) {
+    debugSwallow("classify-caution", error);
+  }
+}
+
+// Tools whose successful call invalidates the whole workspace cache (whole-tree or
+// unknown-file effects), vs. those that only touch specific paths.
+const CACHE_INVALIDATE_ALL = new Set(["relai_apply_update", "relai_apply_bundle"]);
+const CACHE_INVALIDATE_PATHS = new Set(["relai_write", "relai_replace", "relai_edit"]);
+
+function invalidateSessionCacheForCall(config, name, args) {
+  try {
+    const alias = args?.workspace;
+    if (!alias) return;
+    const workspace = resolveWorkspace(config, alias);
+    const wsRoot = workspace?.path;
+    if (!wsRoot) return;
+
+    if (name === "relai_set_policy") {
+      if (args.clear === true) sessionCache.invalidateAlias(alias);
+      return;
+    }
+    if (CACHE_INVALIDATE_ALL.has(name)) {
+      sessionCache.invalidateAlias(alias);
+      return;
+    }
+    if (CACHE_INVALIDATE_PATHS.has(name)) {
+      // relai_edit can touch many files (edits batch) or unknown files (updateText
+      // patch / staged patch) — invalidate the whole alias so a follow-up relai_read
+      // never serves stale cached content.
+      if (name === "relai_edit" && (args.updateText != null || args.stage != null)) {
+        sessionCache.invalidateAlias(alias);
+        return;
+      }
+      invalidatePaths(alias, wsRoot, collectTouchedPaths(name, args));
+      return;
+    }
+    if (name === "relai_clear_files") {
+      invalidatePaths(alias, wsRoot, collectClearPaths(args));
+    }
+  } catch (error) {
+    debugSwallow("cache-invalidate", error);
+  }
+}
+
+function collectTouchedPaths(name, args) {
+  const touched = [];
+  if (args?.path) touched.push(args.path);
+  if (name === "relai_edit" && Array.isArray(args?.edits)) {
+    for (const edit of args.edits) if (edit?.path) touched.push(edit.path);
+  }
+  return touched;
+}
+
+function collectClearPaths(args) {
+  const paths = [];
+  if (args?.path) paths.push(args.path);
+  if (Array.isArray(args?.paths)) for (const p of args.paths) paths.push(p);
+  return paths;
+}
+
+function invalidatePaths(alias, wsRoot, paths) {
+  for (const p of paths) {
+    try {
+      const safe = resolveSafePath(wsRoot, p);
+      sessionCache.invalidatePath(alias, safe.absolutePath);
+    } catch (error) {
+      debugSwallow("resolve-safe-path", error);
+    }
   }
 }
 
@@ -346,19 +406,22 @@ const SESSION_STARTING_TOOLS = new Set([
 
 function maybeStartSession(config, toolName, args) {
   if (!SESSION_STARTING_TOOLS.has(toolName)) return;
-  if (args && args.dryRun === true) return;
+  if (args?.dryRun === true) return;
   // Staged writes that do not touch the workspace yet ('start'/'append'/'abort')
   // should not anchor the baseline — only the committing/direct call does.
   if ((toolName === "relai_write" || toolName === "relai_edit") && typeof args.stage === "string") {
     const stage = args.stage.trim().toLowerCase();
     if (stage === "start" || stage === "append" || stage === "abort") return;
   }
-  const alias = args && args.workspace;
+  const alias = args?.workspace;
   if (!alias) return;
   try {
     const workspace = resolveWorkspace(config, alias);
-    if (workspace && workspace.path) ensureSessionStarted(config, workspace.alias, workspace.path);
-  } catch (_) { /* unknown workspace surfaces as a normal dispatch error */ }
+    if (workspace?.path) ensureSessionStarted(config, workspace.alias, workspace.path);
+  } catch (error) {
+    // Unknown workspace surfaces as a normal dispatch error later; ignore here.
+    debugSwallow("start-session", error);
+  }
 }
 
 // Render an active session/policy object as one short, user-actionable line, or
@@ -407,7 +470,7 @@ function compactForConnector(name, value, _args) {
         const next = { ...item };
         delete next.writeGuidance;
         delete next.cacheHit; // debug metadata; audited server-side already
-        if (guidance && guidance.recommendedMode === "exact-replace") {
+        if (guidance?.recommendedMode === "exact-replace") {
           next.writeHint = "Large or interpolation-heavy file — prefer relai_edit with oldText/newText over a full rewrite.";
         }
         return next;
@@ -514,37 +577,52 @@ function enhanceToolError(toolName, error) {
     if (error instanceof Error && error.stack) next.stack = error.stack;
     return next;
   };
-  if (toolName === "relai_replace" || toolName === "relai_edit") {
-    if (/Invalid IPv6 URL|Invalid URL|ERR_INVALID_URL/i.test(raw)) {
-      return append("Edit payload was rejected by a URL parser, likely on the client transport. Workarounds:\n  - relai_edit { path, content }                 // whole-file replace\n  - relai_edit { updateText: <unified diff> }    // patch-shaped change\n  - Split into multiple smaller relai_edit calls with shorter oldText/newText blocks");
-    }
-    if (/found 0 matches/.test(raw)) {
-      return append("Fallback: call relai_read on the file to get current contents, then retry with exact current text. For complete rewrites use relai_write { stage: \"direct\", content }.");
-    }
-    if (/found \d+ matches/.test(raw)) {
-      return append("Fallback: pass occurrence: N to target one match, or extend oldText with surrounding lines until it is unique.");
-    }
-    if (/exceeds .* bytes/i.test(raw)) {
-      return append("Fallback: use relai_write { stage: \"direct\", content } for a whole-file replacement, or split the change into smaller exact replacements.");
-    }
+  return editErrorHint(toolName, raw, append)
+    ?? patchErrorHint(toolName, raw, append, error)
+    ?? clearFilesErrorHint(toolName, raw, append)
+    ?? (error instanceof Error ? error : new Error(raw));
+}
+
+// Exact-edit failures for relai_replace / relai_edit. Returns an enhanced Error, or
+// null when no hint applies (so the caller falls through to the next matcher).
+function editErrorHint(toolName, raw, append) {
+  if (toolName !== "relai_replace" && toolName !== "relai_edit") return null;
+  if (/Invalid IPv6 URL|Invalid URL|ERR_INVALID_URL/i.test(raw)) {
+    return append("Edit payload was rejected by a URL parser, likely on the client transport. Workarounds:\n  - relai_edit { path, content }                 // whole-file replace\n  - relai_edit { updateText: <unified diff> }    // patch-shaped change\n  - Split into multiple smaller relai_edit calls with shorter oldText/newText blocks");
   }
-  // relai_edit routes updateText through the same patch engine, so it needs the
-  // same patch-format guidance as relai_apply_update.
-  if (toolName === "relai_apply_update" || toolName === "relai_edit") {
-    if (/corrupt patch|patch .* invalid|did not contain any valid|patch failed/i.test(raw)) {
-      return append("Accepted patch formats:\n  1) Git unified diff:\n       --- a/path/to/file\n       +++ b/path/to/file\n       @@ -1,3 +1,3 @@\n       - old line\n       + new line\n  2) OpenAI patch format:\n       *** Begin Patch\n       *** Update File: path/to/file\n       @@\n       - old\n       + new\n       *** End Patch\nFor whole-file rewrites prefer relai_edit { path, content }.");
-    }
-    if (/context mismatch|delete mismatch|unsupported line/i.test(raw)) {
-      return append("The OpenAI patch could not be matched against the current file contents. Re-read the file, regenerate the patch from current text, and make sure each changed block includes enough unchanged context lines.");
-    }
-    if (/Delete File.*not supported/i.test(raw)) {
-      return error instanceof Error ? error : new Error(raw);
-    }
+  if (/found 0 matches/.test(raw)) {
+    return append("Fallback: call relai_read on the file to get current contents, then retry with exact current text. For complete rewrites use relai_write { stage: \"direct\", content }.");
   }
+  if (/found \d+ matches/.test(raw)) {
+    return append("Fallback: pass occurrence: N to target one match, or extend oldText with surrounding lines until it is unique.");
+  }
+  if (/exceeds .* bytes/i.test(raw)) {
+    return append("Fallback: use relai_write { stage: \"direct\", content } for a whole-file replacement, or split the change into smaller exact replacements.");
+  }
+  return null;
+}
+
+// Patch-format failures. relai_edit routes updateText through the same patch engine,
+// so it needs the same guidance as relai_apply_update.
+function patchErrorHint(toolName, raw, append, error) {
+  if (toolName !== "relai_apply_update" && toolName !== "relai_edit") return null;
+  if (/corrupt patch|patch .* invalid|did not contain any valid|patch failed/i.test(raw)) {
+    return append("Accepted patch formats:\n  1) Git unified diff:\n       --- a/path/to/file\n       +++ b/path/to/file\n       @@ -1,3 +1,3 @@\n       - old line\n       + new line\n  2) OpenAI patch format:\n       *** Begin Patch\n       *** Update File: path/to/file\n       @@\n       - old\n       + new\n       *** End Patch\nFor whole-file rewrites prefer relai_edit { path, content }.");
+  }
+  if (/context mismatch|delete mismatch|unsupported line/i.test(raw)) {
+    return append("The OpenAI patch could not be matched against the current file contents. Re-read the file, regenerate the patch from current text, and make sure each changed block includes enough unchanged context lines.");
+  }
+  if (/Delete File.*not supported/i.test(raw)) {
+    return error instanceof Error ? error : new Error(raw);
+  }
+  return null;
+}
+
+function clearFilesErrorHint(toolName, raw, append) {
   if (toolName === "relai_clear_files" && /blocked sensitive path|refuses non-file/i.test(raw)) {
     return append("Hard-boundary safety block. Accepted call shapes:\n  - { path: \"relative/file\" }\n  - { paths: [\"relative/file\", ...] }\nBoth are equivalent; only the file path itself is checked. Sensitive paths (.env, .ssh, credentials, .git) are always refused.");
   }
-  return error instanceof Error ? error : new Error(raw);
+  return null;
 }
 
 async function dispatchTool(config, name, args) {
@@ -635,8 +713,14 @@ function mapCheckArgs(args = {}) {
   };
 }
 
+// Locale-aware sort of an object's keys. Sonar (S2871) flags Array.sort() on strings
+// without an explicit comparator, so route key sorting through one helper.
+function sortedKeys(obj) {
+  return Object.keys(obj || {}).sort((a, b) => a.localeCompare(b));
+}
+
 async function withWorkspace(config, request, fn) {
-  const alias = request && request.workspace;
+  const alias = request?.workspace;
   const workspace = resolveWorkspace(config, alias);
   return fn(workspace);
 }
@@ -650,8 +734,8 @@ function relaiStatus(config, args = {}) {
     try {
       const workspace = resolveWorkspace(config, args.workspace);
       const discovered = discoverCommands(workspace.path);
-      const commandKeys = Object.keys(workspace.commands || {}).sort();
-      const testCommandKeys = Object.keys(workspace.testCommands || {}).sort();
+      const commandKeys = sortedKeys(workspace.commands);
+      const testCommandKeys = sortedKeys(workspace.testCommands);
       const staleCommandKeys = staleCommandKeyList(workspace.commands || {}, discovered);
       const staleTestCommandKeys = staleCommandKeyList(workspace.testCommands || {}, discovered);
       selectedWorkspace = {
@@ -679,7 +763,7 @@ function relaiStatus(config, args = {}) {
       cleanup: ["relai_tidy_plan", "relai_tidy_run", "relai_restore_changes"],
       internal: BRIDGE_TOOL_NAMES.filter((name) => !PUBLIC_HTTP_TOOL_NAMES.includes(name))
     },
-    scripts: Object.keys(scripts).sort(),
+    scripts: sortedKeys(scripts),
     ci,
     workspace: selectedWorkspace,
     workspaceCount: Object.keys(config.workspaces || {}).length
@@ -744,7 +828,10 @@ function safeReadPackageJson() {
   for (const file of candidates) {
     try {
       return JSON.parse(fs.readFileSync(file, "utf8"));
-    } catch (_error) {}
+    } catch (error) {
+      // Missing/invalid candidate — fall through to the next path.
+      debugSwallow("read-package-json", error);
+    }
   }
   return {};
 }
@@ -754,8 +841,8 @@ function workspaceList(config) {
     alias,
     path: item.path,
     repoSlug: item.repoSlug || "",
-    testCommandKeys: Object.keys(item.testCommands || {}).sort(),
-    commandKeys: Object.keys(item.commands || {}).sort(),
+    testCommandKeys: sortedKeys(item.testCommands),
+    commandKeys: sortedKeys(item.commands),
     protectedBranches: Array.isArray(item.protectedBranches) ? item.protectedBranches : [],
     fastTask: item.fastTask || {}
   })).sort((a, b) => a.alias.localeCompare(b.alias));
@@ -816,7 +903,10 @@ function workspaceProfile(config, args = {}) {
     try {
       const safe = resolveSafePath(workspace.path, manifest);
       if (fs.existsSync(safe.absolutePath)) present.push(manifest);
-    } catch (_error) {}
+    } catch (error) {
+      // Unsafe/unresolvable manifest path — treat as absent.
+      debugSwallow("resolve-manifest", error);
+    }
   }
   const hints = [];
   if (present.includes("package.json")) hints.push("Node/JavaScript/TypeScript project");
@@ -833,15 +923,49 @@ function workspaceProfile(config, args = {}) {
     root: workspace.path,
     manifests: present,
     hints,
-    configuredTestCommands: Object.keys(workspace.testCommands || {}).sort(),
-    configuredCommands: Object.keys(workspace.commands || {}).sort(),
+    configuredTestCommands: sortedKeys(workspace.testCommands),
+    configuredCommands: sortedKeys(workspace.commands),
     discoveredCommands: discovered,
     discoveredCommandCount: Object.keys(discovered).length
   };
 }
 
+const SESSION_WRITE_TOOLS = new Set(["relai_write", "relai_replace", "relai_clear_files", "relai_edit"]);
+
+function addChangedFile(acc, filePath) {
+  if (filePath && !acc.seenFiles.has(filePath)) {
+    acc.seenFiles.add(filePath);
+    acc.filesChanged.push(filePath);
+  }
+}
+
+function recordChangedFiles(entry, acc) {
+  if (!SESSION_WRITE_TOOLS.has(entry.tool)) return;
+  addChangedFile(acc, entry.filePath);
+  if (Array.isArray(entry.filePaths)) {
+    for (const p of entry.filePaths) addChangedFile(acc, p);
+  }
+}
+
+function accumulateSummaryEntry(entry, acc) {
+  recordChangedFiles(entry, acc);
+  if (entry.tool === "relai_run_checks" && entry.validationLevel) {
+    acc.checksRun.push({ validationLevel: entry.validationLevel, passed: entry.ok === true });
+  }
+  if (entry.tool === "relai_diff") {
+    acc.diffReviewed = true;
+  }
+  if (entry.tool === "relai_edit" && entry.plannerPath && !acc.seenPlannerPaths.has(entry.plannerPath)) {
+    acc.seenPlannerPaths.add(entry.plannerPath);
+    acc.plannerDecisions.push({ plannerPath: entry.plannerPath, plannerReason: entry.plannerReason || null });
+  }
+  if (entry.cautionLevel === "caution") {
+    acc.escalations.push({ tool: entry.tool, ts: entry.ts || null, reason: entry.cautionReason || null });
+  }
+}
+
 function buildSessionSummary(entries, alias, policy) {
-  const sessionActive = Boolean(policy && policy.sessionActive);
+  const sessionActive = Boolean(policy?.sessionActive);
   const sessionCreatedAt = sessionActive ? (policy.sessionCreatedAt || null) : null;
 
   let window = (entries || []).filter(e => e.workspace === alias);
@@ -849,60 +973,33 @@ function buildSessionSummary(entries, alias, policy) {
     window = window.filter(e => e.ts >= sessionCreatedAt);
   }
 
-  const filesChanged = [];
-  const seenFiles = new Set();
-  const checksRun = [];
-  let diffReviewed = false;
-  const seenPlannerPaths = new Set();
-  const plannerDecisions = [];
-  const escalations = [];
-
-  for (const entry of window) {
-    if (["relai_write", "relai_replace", "relai_clear_files", "relai_edit"].includes(entry.tool)) {
-      if (entry.filePath && !seenFiles.has(entry.filePath)) {
-        seenFiles.add(entry.filePath);
-        filesChanged.push(entry.filePath);
-      }
-      if (Array.isArray(entry.filePaths)) {
-        for (const p of entry.filePaths) {
-          if (p && !seenFiles.has(p)) {
-            seenFiles.add(p);
-            filesChanged.push(p);
-          }
-        }
-      }
-    }
-    if (entry.tool === "relai_run_checks" && entry.validationLevel) {
-      checksRun.push({ validationLevel: entry.validationLevel, passed: entry.ok === true });
-    }
-    if (entry.tool === "relai_diff") {
-      diffReviewed = true;
-    }
-    if (entry.tool === "relai_edit" && entry.plannerPath && !seenPlannerPaths.has(entry.plannerPath)) {
-      seenPlannerPaths.add(entry.plannerPath);
-      plannerDecisions.push({ plannerPath: entry.plannerPath, plannerReason: entry.plannerReason || null });
-    }
-    if (entry.cautionLevel === "caution") {
-      escalations.push({ tool: entry.tool, ts: entry.ts || null, reason: entry.cautionReason || null });
-    }
-  }
+  const acc = {
+    filesChanged: [],
+    seenFiles: new Set(),
+    checksRun: [],
+    diffReviewed: false,
+    seenPlannerPaths: new Set(),
+    plannerDecisions: [],
+    escalations: []
+  };
+  for (const entry of window) accumulateSummaryEntry(entry, acc);
 
   return {
     windowSource: sessionActive ? "session_file" : "recent_entries",
     sessionActive,
     sessionCreatedAt,
-    taskHint: (policy && policy.taskHint) || null,
+    taskHint: policy?.taskHint || null,
     entryCount: window.length,
-    filesChanged,
-    checksRun,
-    diffReviewed,
-    plannerDecisions,
-    escalations,
+    filesChanged: acc.filesChanged,
+    checksRun: acc.checksRun,
+    diffReviewed: acc.diffReviewed,
+    plannerDecisions: acc.plannerDecisions,
+    escalations: acc.escalations,
   };
 }
 
 function ok(value) {
-  return value && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, "ok")
+  return value && typeof value === "object" && Object.hasOwn(value, "ok")
     ? value
     : { ok: true, ...value };
 }
@@ -926,8 +1023,8 @@ function arrayProp(type, minItems, maxItems) {
   return schema;
 }
 
-function arrayObjectProp(properties, required = [], minItems, maxItems) {
-  const schema = { type: "array", items: { type: "object", properties, required, additionalProperties: false } };
+function arrayObjectProp(properties, required, minItems, maxItems) {
+  const schema = { type: "array", items: { type: "object", properties, required: required || [], additionalProperties: false } };
   if (Number.isFinite(Number(minItems))) schema.minItems = minItems;
   if (Number.isFinite(Number(maxItems))) schema.maxItems = maxItems;
   return schema;
