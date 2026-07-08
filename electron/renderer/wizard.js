@@ -17,7 +17,7 @@ const ngrokLinks = {
 function requestWindowFit() {
   window.requestAnimationFrame(() => {
     const wizard = document.querySelector('.wizard');
-    if (!wizard || !window.electronAPI || typeof window.electronAPI.fitWindowToContent !== 'function') return;
+    if (!wizard || typeof window.electronAPI?.fitWindowToContent !== 'function') return;
     const width = Math.ceil(wizard.getBoundingClientRect().width);
     const height = Math.ceil(document.documentElement.scrollHeight);
     window.electronAPI.fitWindowToContent({ width, height });
@@ -33,8 +33,8 @@ function stripHttpProtocol(value) {
 }
 
 function isDomainEdgeChar(ch) {
-  if (!ch || ch.length !== 1) return false;
-  const code = ch.charCodeAt(0);
+  if (ch?.length !== 1) return false;
+  const code = ch.codePointAt(0);
   return (code >= 97 && code <= 122) || (code >= 48 && code <= 57);
 }
 
@@ -53,7 +53,7 @@ function normalizeDomain(value) {
 
 function isValidDomain(domain) {
   if (!domain || domain.length > 253 || !domain.includes('.')) return false;
-  if (!hasOnlyDomainChars(domain) || !isDomainEdgeChar(domain[0]) || !isDomainEdgeChar(domain[domain.length - 1])) return false;
+  if (!hasOnlyDomainChars(domain) || !isDomainEdgeChar(domain[0]) || !isDomainEdgeChar(domain.at(-1))) return false;
   if (domain.includes('..')) return false;
   return domain.split('.').every((label) => label && label.length <= 63 && !label.startsWith('-') && !label.endsWith('-'));
 }
@@ -169,7 +169,7 @@ async function launch() {
       ngrokDomain: state.ngrokDomain
     });
   } catch (error) {
-    launchError.textContent = error && error.message ? error.message : String(error);
+    launchError.textContent = error?.message || String(error);
     requestWindowFit();
   }
 }
@@ -203,7 +203,7 @@ function bindEvents() {
   for (const button of document.querySelectorAll('[data-link]')) {
     button.addEventListener('click', () => {
       const url = ngrokLinks[button.dataset.link];
-      if (url && window.electronAPI && typeof window.electronAPI.openExternal === 'function') {
+      if (url && typeof window.electronAPI?.openExternal === 'function') {
         window.electronAPI.openExternal(url);
       }
     });

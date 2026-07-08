@@ -45,6 +45,40 @@ function summarizeAuditFindings(findings) {
   return summary;
 }
 
+function termFindings(kind, terms, line, relativePath, lineNumber) {
+  const lowerLine = line.toLowerCase();
+  const category = fileCategory(relativePath);
+  return terms
+    .filter((term) => lowerLine.includes(term.toLowerCase()))
+    .map((term) => ({ kind, term, path: relativePath, line: lineNumber, category, text: line.trim().slice(0, 300) }));
+}
+
+function auditLineFindings(line, relativePath, lineNumber, oldTerms, newTerms) {
+  return [
+    ...termFindings("oldTerm", oldTerms, line, relativePath, lineNumber),
+    ...termFindings("newTerm", newTerms, line, relativePath, lineNumber)
+  ];
+}
+
+function readAuditFile(abs, relativePath) {
+  try {
+    return fs.readFileSync(abs, "utf8");
+  } catch (error) {
+    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] audit read failed:', relativePath, error);
+    return "";
+  }
+}
+
+function scanAuditFile(workspacePath, relativePath, oldTerms, newTerms) {
+  const text = readAuditFile(path.join(workspacePath, relativePath), relativePath);
+  if (!text) return [];
+  return text.split(/\r?\n/).flatMap((line, index) => auditLineFindings(line, relativePath, index + 1, oldTerms, newTerms));
+}
+
+function auditFiles(tree, includeGenerated) {
+  return tree.files.filter((relativePath) => includeGenerated || !isLikelyGeneratedFile(relativePath));
+}
+
 function relaiRefactorAudit(workspace, _config, args = {}) {
   const oldTerms = normalizeAuditTerms(args.oldTerms || args.oldTerm || args.find);
   const newTerms = normalizeAuditTerms(args.newTerms || args.newTerm || args.expect);
@@ -53,28 +87,8 @@ function relaiRefactorAudit(workspace, _config, args = {}) {
   }
   const maxEntries = clampNumber(args.maxEntries, 1, 20000, 5000);
   const tree = collectTextFiles(workspace.path, collectOptionsFromWorkspace(workspace, { maxEntries }));
-  const includeGenerated = args.includeGenerated === true;
-  const findings = [];
-  for (const relativePath of tree.files) {
-    if (!includeGenerated && isLikelyGeneratedFile(relativePath)) continue;
-    const abs = path.join(workspace.path, relativePath);
-    let text;
-    try { text = fs.readFileSync(abs, "utf8"); } catch (_error) { continue; }
-    const lines = text.split(/\r?\n/);
-    for (let index = 0; index < lines.length; index += 1) {
-      const line = lines[index];
-      for (const term of oldTerms) {
-        if (line.toLowerCase().includes(term.toLowerCase())) {
-          findings.push({ kind: "oldTerm", term, path: relativePath, line: index + 1, category: fileCategory(relativePath), text: line.trim().slice(0, 300) });
-        }
-      }
-      for (const term of newTerms) {
-        if (line.toLowerCase().includes(term.toLowerCase())) {
-          findings.push({ kind: "newTerm", term, path: relativePath, line: index + 1, category: fileCategory(relativePath), text: line.trim().slice(0, 300) });
-        }
-      }
-    }
-  }
+  const findings = auditFiles(tree, args.includeGenerated === true)
+    .flatMap((relativePath) => scanAuditFile(workspace.path, relativePath, oldTerms, newTerms));
   return {
     ok: true,
     workspace: workspace.alias,

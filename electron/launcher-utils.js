@@ -28,8 +28,8 @@ function stripHttpProtocol(value) {
 }
 
 function isDomainEdgeChar(ch) {
-  if (!ch || ch.length !== 1) return false;
-  const code = ch.charCodeAt(0);
+  if (ch?.length !== 1) return false;
+  const code = ch.codePointAt(0);
   return (code >= 97 && code <= 122) || (code >= 48 && code <= 57);
 }
 
@@ -47,7 +47,7 @@ function normalizeNgrokDomain(value) {
   if (!domain) throw new Error('ngrok domain is required.');
   if (domain.length > 253) throw new Error('ngrok domain is too long.');
   if (!domain.includes('.')) throw new Error('ngrok domain must include a dot.');
-  if (!hasOnlyDomainChars(domain) || !isDomainEdgeChar(domain[0]) || !isDomainEdgeChar(domain[domain.length - 1])) {
+  if (!hasOnlyDomainChars(domain) || !isDomainEdgeChar(domain[0]) || !isDomainEdgeChar(domain.at(-1))) {
     throw new Error('ngrok domain can only contain letters, numbers, dots, and hyphens.');
   }
   if (domain.includes('..')) throw new Error('ngrok domain cannot contain empty labels.');
@@ -76,7 +76,7 @@ function buildTunnelCommand(domain, port) {
 // ChatGPT connects to the plain /mcp endpoint with Authentication: OAuth. The
 // legacy secret-in-URL path has been removed, so this no longer embeds a secret.
 function buildMcpUrl(publicBaseUrl) {
-  const base = String(publicBaseUrl || '').trim();
+  let base = String(publicBaseUrl || '').trim();
   while (base.endsWith('/')) base = base.slice(0, -1);
   return `${base}/mcp`;
 }

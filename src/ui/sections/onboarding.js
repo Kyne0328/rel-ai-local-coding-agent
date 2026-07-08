@@ -356,14 +356,49 @@ function renderValidation(el, result) {
   el.textContent = finding;
 }
 
+function trimTrailingPathSeparators(value) {
+  let clean = String(value || '').trim();
+  while (clean.endsWith('/') || clean.endsWith('\\')) clean = clean.slice(0, -1);
+  return clean;
+}
+
+function pathLeaf(value) {
+  return trimTrailingPathSeparators(value).split(/[\\/]/).findLast(Boolean) || '';
+}
+
+function aliasChar(ch) {
+  const code = ch.codePointAt(0);
+  const isLower = code >= 97 && code <= 122;
+  const isDigit = code >= 48 && code <= 57;
+  return isLower || isDigit || ch === '.' || ch === '_' || ch === '-' ? ch : '-';
+}
+
+function trimDashes(value) {
+  let text = value;
+  while (text.startsWith('-')) text = text.slice(1);
+  while (text.endsWith('-')) text = text.slice(0, -1);
+  return text;
+}
+
+function collapseDashes(value) {
+  let out = '';
+  for (const ch of value) {
+    if (ch === '-' && out.endsWith('-')) continue;
+    out += ch;
+  }
+  return out;
+}
+
 function deriveAliasFromPath(workspacePath) {
-  const clean = String(workspacePath || '').trim().replace(/[\\/]+$/, '');
-  const leaf = clean.split(/[\\/]/).findLast(Boolean) || '';
-  return leaf.toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32);
+  return trimDashes(collapseDashes([...pathLeaf(workspacePath).toLowerCase()].map(aliasChar).join(''))).slice(0, 32);
 }
 
 function isValidAlias(alias) {
-  return /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(String(alias || ''));
+  const value = String(alias || '');
+  if (!value) return false;
+  const first = value.codePointAt(0);
+  const firstValid = (first >= 65 && first <= 90) || (first >= 97 && first <= 122) || (first >= 48 && first <= 57);
+  return firstValid && [...value].every((ch) => aliasChar(ch.toLowerCase()) === ch.toLowerCase());
 }
 
 function setBusy(button, busy, label) {

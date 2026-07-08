@@ -24,13 +24,13 @@ function countUpdateBytes(args, value) {
   return 0;
 }
 
-const WORKSPACE_CONFIG_PATHS = ['.relaiignore', 'package.json'];
+const WORKSPACE_CONFIG_PATHS = new Set(['.relaiignore', 'package.json']);
 const WORKSPACE_CONFIG_PREFIXES = ['.github/', '.rel-ai-mcp/'];
 
 function isWorkspaceConfigPath(relPath) {
   if (typeof relPath !== 'string' || !relPath) return false;
   const normalized = relPath.replaceAll('\\', '/');
-  if (WORKSPACE_CONFIG_PATHS.includes(normalized)) return true;
+  if (WORKSPACE_CONFIG_PATHS.has(normalized)) return true;
   for (const prefix of WORKSPACE_CONFIG_PREFIXES) if (normalized.startsWith(prefix)) return true;
   return false;
 }

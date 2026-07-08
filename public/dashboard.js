@@ -31,7 +31,7 @@ if (token) setToken(token);
 function readInitialPayload() {
   try {
     const el = document.getElementById('initialDashboardData');
-    return el && el.textContent ? JSON.parse(el.textContent) : null;
+    return el?.textContent ? JSON.parse(el.textContent) : null;
   } catch {
     return null;
   }
@@ -83,9 +83,9 @@ async function boot() {
   ];
   const actionActions = [
     { label: 'Refresh dashboard', category: 'Actions', action: () => _doRefresh({ source: 'manual', render: true }) },
-    { label: 'Copy dashboard token', category: 'Actions', action: () => { if (getToken()) navigator.clipboard.writeText(getToken()).catch(() => {}); } },
+    { label: 'Copy dashboard token', category: 'Actions', action: () => { if (getToken()) navigator.clipboard.writeText(getToken()).catch((error) => { if (window.localStorage?.getItem('relai_debug') === '1') console.error(error); }); } },
   ];
-  const workspaceList = storeData.config && Array.isArray(storeData.config.workspaces) ? storeData.config.workspaces : [];
+  const workspaceList = Array.isArray(storeData.config?.workspaces) ? storeData.config.workspaces : [];
   const wsActions = workspaceList.map(ws => ({
     label: 'Switch to workspace: ' + ws.alias,
     category: 'Workspaces',
@@ -141,7 +141,7 @@ async function _doRefresh(options = {}) {
     statusEl.textContent = 'Auth error';
   }
   const updated = document.getElementById('lastUpdated');
-  if (updated && data && data.error) updated.textContent = data.error;
+  if (updated && data?.error) updated.textContent = data.error;
   return data;
 }
 
@@ -154,21 +154,21 @@ async function _liveOnEvent(data) {
   _updateShell(data);
   if (currentSection() === 'activity') {
     import('./ui/sections/activity.js')
-      .then(m => m.prependEntry((data.auditTail && data.auditTail.entries && data.auditTail.entries[0]) || null))
+      .then(m => m.prependEntry(data.auditTail?.entries?.[0] || null))
       .catch(console.error);
   }
 }
 
 function _updateShell(data) {
-  const cfg = data && data.config ? data.config : {};
+  const cfg = data?.config || {};
   const subtitle = document.getElementById('subtitle');
-  if (subtitle) subtitle.textContent = `Rel.AI MCP · ChatGPT workspace bridge · ${Array.isArray(cfg.workspaces) ? cfg.workspaces.length : 0} workspaces`;
+  if (subtitle) subtitle.textContent = `Rel.AI MCP · ChatGPT workspace bridge · ${cfg.workspaces?.length || 0} workspaces`;
   const updated = document.getElementById('lastUpdated');
   if (updated) updated.textContent = 'Updated ' + new Date().toLocaleTimeString();
   const statusEl = document.getElementById('serverStatus');
   if (statusEl) {
-    statusEl.className = 'status-pill ' + (data && data.ok !== false ? 'ok' : 'bad');
-    statusEl.textContent = data && data.ok !== false ? 'Online' : 'Error';
+    statusEl.className = 'status-pill ' + (data?.ok !== false ? 'ok' : 'bad');
+    statusEl.textContent = data?.ok !== false ? 'Online' : 'Error';
   }
 }
 
@@ -176,17 +176,17 @@ function _hasBlockingInteraction() {
   if (document.getElementById('__relai-modal-backdrop')) return true;
   if (document.getElementById('__relai-drawer-backdrop')) return true;
   const saveRow = document.getElementById('__settings-save-row');
-  return Boolean(saveRow && saveRow.style.display !== 'none');
+  return Boolean(saveRow?.style.display !== 'none');
 }
 
 async function _checkOnboarding() {
   try {
     const status = await fetchJson('/api/onboarding/status');
-    if (status && status.needsOnboarding) {
+    if (status?.needsOnboarding) {
       const { openOnboarding } = await import('./ui/sections/onboarding.js');
       openOnboarding();
     }
-  } catch { /* degrade gracefully */ }
+  } catch (error) { if (window.localStorage?.getItem('relai_debug') === '1') console.error(error); }
 }
 
 boot();

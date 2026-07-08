@@ -57,52 +57,101 @@ function buildWorkspaces(data) {
   return root;
 }
 
+function listValue(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function isFocusedContext(ws) {
+  return ws.fastTask?.enabled !== false;
+}
+
+function workspaceCardView(ws, health) {
+  const testKeys = listValue(ws.testCommandKeys);
+  const detected = listValue(ws.discoveredTestCommandKeys);
+  return {
+    alias: ws.alias || 'workspace',
+    aliasAttr: esc(ws.alias || ''),
+    path: ws.path || '',
+    status: health?.ok === false ? 'check' : 'healthy',
+    testKeys,
+    commandKeys: listValue(ws.commandKeys),
+    detected,
+    staleKeys: listValue(ws.staleTestCommandKeys),
+    protectedBranches: listValue(ws.protectedBranches),
+    sessionActive: ws.sessionPolicy?.sessionActive === true,
+    taskHint: ws.sessionPolicy?.taskHint || '',
+    cautionCount: Number.isFinite(ws.caution?.count) ? ws.caution.count : 0,
+    focused: isFocusedContext(ws),
+    healthWarning: health?.ok === false ? health.error || 'Workspace unavailable' : ''
+  };
+}
+
+function workspaceHealthHtml(view) {
+  if (!view.healthWarning) return '';
+  return `<div style="margin-top:8px;padding:8px 10px;border:1px solid var(--red);border-radius:8px;background:rgba(255,111,136,.10);font-size:12px;color:var(--text);display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;"><span>⚠ ${esc(view.healthWarning)}</span><button class="secondary" type="button" data-fix-path="${view.aliasAttr}">Fix path</button></div>`;
+}
+
+function workspaceBadgeRow(view) {
+  return [
+    badgeHtml('configured tests ' + view.testKeys.length),
+    view.staleKeys.length ? badgeHtml('stale tests ' + view.staleKeys.length, 'warn') : '',
+    badgeHtml('detected tests ' + view.detected.length, view.detected.length ? 'good' : 'warn'),
+    badgeHtml('commands ' + view.commandKeys.length),
+    badgeHtml('context mode ' + (view.focused ? 'focused' : 'broad'), view.focused ? 'good' : 'warn'),
+    badgeHtml('protected ' + (view.protectedBranches.join(', ') || 'none')),
+    view.sessionActive ? badgeHtml('session active', 'good') : '',
+    view.cautionCount > 0 ? badgeHtml('caution ' + view.cautionCount, 'warn') : ''
+  ].join('');
+}
+
+function workspaceExtraLines(view, ws) {
+  const stale = view.staleKeys.length ? `<div class="path" style="color:var(--yellow,#ffc24b);">Stale tests (no longer in package scripts): ${esc(view.staleKeys.join(', '))}</div>` : '';
+  const task = view.sessionActive && view.taskHint ? `<div class="path">Task: ${esc(view.taskHint)}</div>` : '';
+  return `${stale}<div class="path">${fastTaskText(ws.fastTask)}</div>${task}`;
+}
+
+function pluralSuffix(count) {
+  return count === 1 ? '' : 's';
+}
+
+function saveDetectedButton(view) {
+  if (!view.detected.length || view.testKeys.length) return '';
+  return `<button type="button" data-save-detected="${view.aliasAttr}">Save detected tests</button>`;
+}
+
+function pruneStaleButton(view) {
+  if (!view.staleKeys.length) return '';
+  return `<button class="secondary danger" type="button" data-prune-stale="${view.aliasAttr}">Remove ${esc(view.staleKeys.length)} stale test${pluralSuffix(view.staleKeys.length)}</button>`;
+}
+
+function workspaceActionButtons(view) {
+  const saveDetected = saveDetectedButton(view);
+  const prune = pruneStaleButton(view);
+  return `
+    <button class="secondary" type="button" data-preflight="${view.aliasAttr}">Run preflight</button>
+    <button class="secondary" type="button" data-toggle-fast-task="${view.aliasAttr}">${view.focused ? 'Use broad context' : 'Use focused context'}</button>
+    <button class="secondary" type="button" data-edit-fast-task="${view.aliasAttr}">Context settings</button>
+    <button class="secondary" type="button" data-edit-workspace="${view.aliasAttr}">Edit</button>
+    <button class="secondary" type="button" data-rename-workspace="${view.aliasAttr}">Rename</button>
+    <button class="secondary danger" type="button" data-clear-workspace="${view.aliasAttr}">Clear</button>
+    ${saveDetected}${prune}`;
+}
+
 function workspaceCard(ws, health) {
-  const testKeys = Array.isArray(ws.testCommandKeys) ? ws.testCommandKeys : [];
-  const commandKeys = Array.isArray(ws.commandKeys) ? ws.commandKeys : [];
-  const detected = Array.isArray(ws.discoveredTestCommandKeys) ? ws.discoveredTestCommandKeys : [];
-  const staleKeys = Array.isArray(ws.staleTestCommandKeys) ? ws.staleTestCommandKeys : [];
-  const staleSuffix = staleKeys.length === 1 ? '' : 's';
-  const protectedBranches = Array.isArray(ws.protectedBranches) ? ws.protectedBranches : [];
-  const status = health?.ok === false ? 'check' : 'healthy';
-  const canSaveDetected = detected.length && !testKeys.length;
-  const sessionPolicy = ws.sessionPolicy || {};
-  const sessionActive = sessionPolicy.sessionActive === true;
-  const taskHint = sessionPolicy.taskHint || '';
-  const cautionCount = (ws.caution && Number.isFinite(ws.caution.count)) ? ws.caution.count : 0;
+  const view = workspaceCardView(ws, health);
   return `
     <div class="workspace-card">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-        <strong>${esc(ws.alias || 'workspace')}</strong>
-        ${pillHtml(status)}
+        <strong>${esc(view.alias)}</strong>
+        ${pillHtml(view.status)}
       </div>
-      <div class="path">${esc(ws.path || '')}</div>
-      ${health?.ok === false ? `<div style="margin-top:8px;padding:8px 10px;border:1px solid var(--red);border-radius:8px;background:rgba(255,111,136,.10);font-size:12px;color:var(--text);display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;"><span>⚠ ${esc(health.error || 'Workspace unavailable')}</span><button class="secondary" type="button" data-fix-path="${esc(ws.alias || '')}">Fix path</button></div>` : ''}
-      <div class="badge-row">
-        ${badgeHtml('configured tests ' + testKeys.length)}
-        ${staleKeys.length ? badgeHtml('stale tests ' + staleKeys.length, 'warn') : ''}
-        ${badgeHtml('detected tests ' + detected.length, detected.length ? 'good' : 'warn')}
-        ${badgeHtml('commands ' + commandKeys.length)}
-        ${badgeHtml('context mode ' + (ws.fastTask && ws.fastTask.enabled !== false ? 'focused' : 'broad'), ws.fastTask && ws.fastTask.enabled !== false ? 'good' : 'warn')}
-        ${badgeHtml('protected ' + (protectedBranches.join(', ') || 'none'))}
-        ${sessionActive ? badgeHtml('session active', 'good') : ''}
-        ${cautionCount > 0 ? badgeHtml('caution ' + cautionCount, 'warn') : ''}
-      </div>
-      <div class="path">${validationText(testKeys, detected)}</div>
-      ${staleKeys.length ? `<div class="path" style="color:var(--yellow,#ffc24b);">Stale tests (no longer in package scripts): ${esc(staleKeys.join(', '))}</div>` : ''}
-      <div class="path">${fastTaskText(ws.fastTask)}</div>
-      ${sessionActive && taskHint ? `<div class="path">Task: ${esc(taskHint)}</div>` : ''}
-      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
-        <button class="secondary" type="button" data-preflight="${esc(ws.alias || '')}">Run preflight</button>
-        <button class="secondary" type="button" data-toggle-fast-task="${esc(ws.alias || '')}">${ws.fastTask && ws.fastTask.enabled !== false ? 'Use broad context' : 'Use focused context'}</button>
-        <button class="secondary" type="button" data-edit-fast-task="${esc(ws.alias || '')}">Context settings</button>
-        <button class="secondary" type="button" data-edit-workspace="${esc(ws.alias || '')}">Edit</button>
-        <button class="secondary" type="button" data-rename-workspace="${esc(ws.alias || '')}">Rename</button>
-        <button class="secondary danger" type="button" data-clear-workspace="${esc(ws.alias || '')}">Clear</button>
-        ${canSaveDetected ? `<button type="button" data-save-detected="${esc(ws.alias || '')}">Save detected tests</button>` : ''}
-        ${staleKeys.length ? `<button class="secondary danger" type="button" data-prune-stale="${esc(ws.alias || '')}">Remove ${esc(staleKeys.length)} stale test${staleSuffix}</button>` : ''}
-      </div>
-      <pre class="copy-box" data-preflight-out="${esc(ws.alias || '')}" style="display:none;margin-top:10px;max-height:220px;overflow:auto;"></pre>
+      <div class="path">${esc(view.path)}</div>
+      ${workspaceHealthHtml(view)}
+      <div class="badge-row">${workspaceBadgeRow(view)}</div>
+      <div class="path">${validationText(view.testKeys, view.detected)}</div>
+      ${workspaceExtraLines(view, ws)}
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">${workspaceActionButtons(view)}</div>
+      <pre class="copy-box" data-preflight-out="${view.aliasAttr}" style="display:none;margin-top:10px;max-height:220px;overflow:auto;"></pre>
     </div>`;
 }
 
@@ -131,97 +180,65 @@ function findingRow(finding) {
   return `<a class="list-item" href="#settings/diagnostics" style="text-decoration:none;color:inherit;">${inner}<div class="item-time">${pillHtml(finding.severity || 'info')}</div></a>`;
 }
 
-document.addEventListener('click', async (event) => {
-  const addWorkspace = event.target?.closest?.('[data-add-workspace]') ?? null;
-  if (addWorkspace) {
-    openWorkspaceForm({ mode: 'add' });
+const WORKSPACE_CLICK_ACTIONS = [
+  { selector: '[data-add-workspace]', handler: () => openWorkspaceForm({ mode: 'add' }) },
+  { selector: '[data-edit-workspace],[data-fix-path],[data-finding-edit]', handler: editWorkspaceFromTrigger },
+  { selector: '[data-finding-remove]', handler: (trigger) => clearWorkspaceFlow(trigger.dataset.findingRemove || '') },
+  { selector: '[data-rename-workspace]', handler: (trigger) => renameWorkspaceFlow(trigger.dataset.renameWorkspace || '') },
+  { selector: '[data-toggle-fast-task]', handler: (trigger) => toggleFastTaskFlow(trigger.dataset.toggleFastTask || '') },
+  { selector: '[data-edit-fast-task]', handler: (trigger) => editFastTaskFlow(trigger.dataset.editFastTask || '') },
+  { selector: '[data-clear-workspace]', handler: (trigger) => clearWorkspaceFlow(trigger.dataset.clearWorkspace || '') },
+  { selector: '[data-prune-stale]', handler: (trigger) => pruneStaleTestsFlow(trigger.dataset.pruneStale || '') },
+  { selector: '[data-preflight]', handler: runPreflightFromTrigger },
+  { selector: '[data-save-detected]', handler: saveDetectedFromTrigger }
+];
+
+document.addEventListener('click', handleWorkspaceClick);
+
+async function handleWorkspaceClick(event) {
+  for (const action of WORKSPACE_CLICK_ACTIONS) {
+    const trigger = event.target?.closest?.(action.selector) ?? null;
+    if (!trigger) continue;
+    await action.handler(trigger);
     return;
   }
+}
 
-  const editTrigger = event.target?.closest?.('[data-edit-workspace],[data-fix-path],[data-finding-edit]') ?? null;
-  if (editTrigger) {
-    const alias = editTrigger.dataset.editWorkspace
-      || editTrigger.dataset.fixPath
-      || editTrigger.dataset.findingEdit || '';
-    const ws = await loadWorkspace(alias);
-    if (ws) openWorkspaceForm({ mode: 'edit', workspace: ws });
-    return;
-  }
+async function editWorkspaceFromTrigger(trigger) {
+  const alias = trigger.dataset.editWorkspace || trigger.dataset.fixPath || trigger.dataset.findingEdit || '';
+  const ws = await loadWorkspace(alias);
+  if (ws) openWorkspaceForm({ mode: 'edit', workspace: ws });
+}
 
-  const findingRemove = event.target?.closest?.('[data-finding-remove]') ?? null;
-  if (findingRemove) {
-    await clearWorkspaceFlow(findingRemove.dataset.findingRemove || '');
-    return;
-  }
+async function runPreflightFromTrigger(preflight) {
+  const alias = preflight.dataset.preflight || '';
+  const out = preflightOutput(alias);
+  preflight.disabled = true;
+  preflight.textContent = 'Running…';
+  const result = await fetchJson('/api/workspace/preflight?workspace=' + encodeURIComponent(alias) + '&requireClean=0');
+  if (out) { out.style.display = 'block'; renderPreflight(out, result); }
+  preflight.disabled = false;
+  preflight.textContent = 'Run preflight';
+}
 
-  const renameWorkspace = event.target?.closest?.('[data-rename-workspace]') ?? null;
-  if (renameWorkspace) {
-    const alias = renameWorkspace.dataset.renameWorkspace || '';
-    await renameWorkspaceFlow(alias);
-    return;
+async function saveDetectedFromTrigger(saveDetected) {
+  const alias = saveDetected.dataset.saveDetected || '';
+  saveDetected.disabled = true;
+  saveDetected.textContent = 'Saving…';
+  const result = await saveDetectedTests(alias);
+  saveDetected.disabled = false;
+  saveDetected.textContent = 'Save detected tests';
+  if (result?.ok) {
+    toast('Detected tests saved for ' + alias + '.', { variant: 'success' });
+    requestDashboardRefresh();
+  } else {
+    toast('Could not save detected tests: ' + (result?.error || 'unknown error'), { variant: 'error' });
   }
-
-  const toggleFast = event.target?.closest?.('[data-toggle-fast-task]') ?? null;
-  if (toggleFast) {
-    const alias = toggleFast.dataset.toggleFastTask || '';
-    await toggleFastTaskFlow(alias);
-    return;
-  }
-
-  const editFast = event.target?.closest?.('[data-edit-fast-task]') ?? null;
-  if (editFast) {
-    const alias = editFast.dataset.editFastTask || '';
-    await editFastTaskFlow(alias);
-    return;
-  }
-
-  const clearWorkspace = event.target?.closest?.('[data-clear-workspace]') ?? null;
-  if (clearWorkspace) {
-    const alias = clearWorkspace.dataset.clearWorkspace || '';
-    await clearWorkspaceFlow(alias);
-    return;
-  }
-
-  const pruneStale = event.target?.closest?.('[data-prune-stale]') ?? null;
-  if (pruneStale) {
-    const alias = pruneStale.dataset.pruneStale || '';
-    await pruneStaleTestsFlow(alias);
-    return;
-  }
-
-  const preflight = event.target?.closest?.('[data-preflight]') ?? null;
-  if (preflight) {
-    const alias = preflight.dataset.preflight || '';
-    const out = preflightOutput(alias);
-    preflight.disabled = true;
-    preflight.textContent = 'Running…';
-    const result = await fetchJson('/api/workspace/preflight?workspace=' + encodeURIComponent(alias) + '&requireClean=0');
-    if (out) { out.style.display = 'block'; renderPreflight(out, result); }
-    preflight.disabled = false;
-    preflight.textContent = 'Run preflight';
-    return;
-  }
-
-  const saveDetected = event.target?.closest?.('[data-save-detected]') ?? null;
-  if (saveDetected) {
-    const alias = saveDetected.dataset.saveDetected || '';
-    saveDetected.disabled = true;
-    saveDetected.textContent = 'Saving…';
-    const result = await saveDetectedTests(alias);
-    saveDetected.disabled = false;
-    saveDetected.textContent = 'Save detected tests';
-    if (result?.ok) {
-      toast('Detected tests saved for ' + alias + '.', { variant: 'success' });
-      requestDashboardRefresh();
-    } else {
-      toast('Could not save detected tests: ' + (result?.error || 'unknown error'), { variant: 'error' });
-    }
-  }
-});
+}
 
 async function saveDetectedTests(alias) {
   const dashboard = await fetchJson(DASHBOARD_DATA_URL);
-  const ws = dashboard && dashboard.config && Array.isArray(dashboard.config.workspaces)
+  const ws = Array.isArray(dashboard?.config?.workspaces)
     ? dashboard.config.workspaces.find(item => item.alias === alias)
     : null;
   if (!ws) return { ok: false, error: 'workspace not found' };
@@ -253,7 +270,7 @@ function renderPreflight(out, result) {
 }
 
 function preflightOutput(alias) {
-  return Array.from(document.querySelectorAll('[data-preflight-out]')).find(el => el.getAttribute('data-preflight-out') === alias) || null;
+  return Array.from(document.querySelectorAll('[data-preflight-out]')).find(el => el.dataset.preflightOut === alias) || null;
 }
 
 function actionableFindings(health) {
@@ -268,11 +285,11 @@ async function renameWorkspaceFlow(alias) {
     alias,
     newAlias: nextAlias
   });
-  if (result && result.ok) {
+  if (result?.ok) {
     toast('Workspace renamed to ' + nextAlias, { variant: 'success' });
     requestDashboardRefresh();
   } else {
-    toast('Could not rename workspace: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });
+    toast('Could not rename workspace: ' + (result?.error || 'unknown error'), { variant: 'error' });
   }
 }
 
@@ -280,13 +297,13 @@ async function renameWorkspaceFlow(alias) {
 async function toggleFastTaskFlow(alias) {
   const ws = await loadWorkspace(alias);
   if (!ws) return;
-  const fastTask = { ...(ws.fastTask || {}), enabled: !(ws.fastTask && ws.fastTask.enabled !== false) };
+  const fastTask = { ...(ws.fastTask || {}), enabled: ws.fastTask?.enabled === false };
   const result = await saveWorkspaceFastTask(ws, fastTask);
-  if (result && result.ok) {
+  if (result?.ok) {
     toast('Focused context ' + (fastTask.enabled ? 'enabled' : 'disabled') + ' for ' + alias, { variant: 'success' });
     requestDashboardRefresh();
   } else {
-    toast('Could not update context mode: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });
+    toast('Could not update context mode: ' + (result?.error || 'unknown error'), { variant: 'error' });
   }
 }
 
@@ -310,11 +327,11 @@ async function editFastTaskFlow(alias) {
     excludePaths: splitList(excludePaths)
   };
   const result = await saveWorkspaceFastTask(ws, fastTask);
-  if (result && result.ok) {
+  if (result?.ok) {
     toast('Context settings saved for ' + alias, { variant: 'success' });
     requestDashboardRefresh();
   } else {
-    toast('Could not save context settings: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });
+    toast('Could not save context settings: ' + (result?.error || 'unknown error'), { variant: 'error' });
   }
 }
 
@@ -322,30 +339,35 @@ async function pruneStaleTestsFlow(alias) {
   const ok = window.confirm(`Remove stale test commands from '${alias}'? This deletes only saved test-command entries that no longer match the workspace package scripts. It does not touch repo files.`);
   if (!ok) return;
   const result = await postJson('/api/workspaces', { action: 'prune-stale-tests', alias });
-  if (result && result.ok) {
+  if (result?.ok) {
     const removed = Array.isArray(result.removed) ? result.removed.length : 0;
-    toast(removed ? `Removed ${removed} stale test command${removed === 1 ? '' : 's'} from ${alias}. Refreshing…` : `No stale test commands for ${alias}.`, { variant: 'success' });
+    toast(pruneStaleMessage(removed, alias), { variant: 'success' });
     requestDashboardRefresh();
   } else {
-    toast('Could not remove stale tests: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });
+    toast('Could not remove stale tests: ' + (result?.error || 'unknown error'), { variant: 'error' });
   }
+}
+
+function pruneStaleMessage(removed, alias) {
+  if (!removed) return `No stale test commands for ${alias}.`;
+  return `Removed ${removed} stale test command${pluralSuffix(removed)} from ${alias}. Refreshing…`;
 }
 
 async function clearWorkspaceFlow(alias) {
   const ok = window.confirm(`Clear workspace '${alias}' from Rel.AI? This removes only the dashboard/config entry. It does not clear repo files.`);
   if (!ok) return;
   const result = await postJson('/api/workspaces', { action: 'clear', alias, confirmClear: true });
-  if (result && result.ok) {
+  if (result?.ok) {
     toast('Workspace cleared: ' + alias, { variant: 'success' });
     requestDashboardRefresh();
   } else {
-    toast('Could not clear workspace: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });
+    toast('Could not clear workspace: ' + (result?.error || 'unknown error'), { variant: 'error' });
   }
 }
 
 async function loadWorkspace(alias) {
   const dashboard = await fetchJson(DASHBOARD_DATA_URL);
-  const ws = dashboard && dashboard.config && Array.isArray(dashboard.config.workspaces)
+  const ws = Array.isArray(dashboard?.config?.workspaces)
     ? dashboard.config.workspaces.find(item => item.alias === alias)
     : null;
   if (!ws) toast('Workspace not found: ' + alias, { variant: 'error' });

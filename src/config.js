@@ -96,44 +96,65 @@ function expandHome(value) {
 function normalizeConfig(config) {
   const base = makeDefaultConfig();
   const input = config || {};
-  const next = {
-    ...base,
-    ...input,
-    workspaces: { ...input.workspaces }
-  };
+  const next = mergeConfigBase(base, input);
+  normalizeCorePaths(next, base, input);
+  normalizeTrustedMode(next, input);
+  normalizeCautionZone(next, base, input);
+  normalizeProductSettings(next, base, input);
+  stripLegacyApprovalKeys(next);
+  next.workflow = normalizeWorkflowConfig(input.workflow, input.flow);
+  normalizeWorkspaces(next);
+  return next;
+}
 
+function mergeConfigBase(base, input) {
+  return { ...base, ...input, workspaces: { ...(input.workspaces || {}) } };
+}
+
+function normalizeCorePaths(next, base, input) {
   next.sourceVersion = Number.isFinite(Number(input.version)) ? Number(input.version) : base.sourceVersion;
   next.version = 2;
   next.stateDir = expandHome(next.stateDir || base.stateDir);
   if (!path.isAbsolute(next.stateDir)) next.stateDir = path.resolve(next.stateDir);
   next.auditLogPath = next.auditLogPath ? expandHome(next.auditLogPath) : path.join(next.stateDir, "audit.jsonl");
   if (!path.isAbsolute(next.auditLogPath)) next.auditLogPath = path.resolve(next.auditLogPath);
+}
+
+function normalizeTrustedMode(next, input) {
   next.toolMode = "chatgpt_local_repo";
   next.trustedLocalAgent = true;
-  const rawMult = Number(input.trustedBudgetMultiplier);
-  next.trustedBudgetMultiplier = Number.isFinite(rawMult) && rawMult >= 1 && rawMult <= 10 ? rawMult : 2;
-  const rawCaution = input.cautionZone && typeof input.cautionZone === "object" && !Array.isArray(input.cautionZone) ? input.cautionZone : {};
+  next.trustedBudgetMultiplier = clampNumber(input.trustedBudgetMultiplier, 1, 10, 2);
+}
+
+function normalizeCautionZone(next, base, input) {
+  const raw = objectOrEmpty(input.cautionZone);
   const cautionBase = base.cautionZone;
   next.cautionZone = {
-    massClearThreshold: Number.isFinite(Number(rawCaution.massClearThreshold)) && Number(rawCaution.massClearThreshold) >= 1 ? Number(rawCaution.massClearThreshold) : cautionBase.massClearThreshold,
-    bundleFileThreshold: Number.isFinite(Number(rawCaution.bundleFileThreshold)) && Number(rawCaution.bundleFileThreshold) >= 1 ? Number(rawCaution.bundleFileThreshold) : cautionBase.bundleFileThreshold,
-    bundleBytesThreshold: Number.isFinite(Number(rawCaution.bundleBytesThreshold)) && Number(rawCaution.bundleBytesThreshold) >= 1 ? Number(rawCaution.bundleBytesThreshold) : cautionBase.bundleBytesThreshold
+    massClearThreshold: positiveNumber(raw.massClearThreshold, cautionBase.massClearThreshold),
+    bundleFileThreshold: positiveNumber(raw.bundleFileThreshold, cautionBase.bundleFileThreshold),
+    bundleBytesThreshold: positiveNumber(raw.bundleBytesThreshold, cautionBase.bundleBytesThreshold)
   };
+}
+
+function normalizeProductSettings(next, base, input) {
   next.maxOutputBytes = positiveNumber(next.maxOutputBytes, base.maxOutputBytes);
   next.maxIndexFiles = positiveNumber(next.maxIndexFiles, base.maxIndexFiles);
   next.productUx = { ...base.productUx, ...input.productUx };
   next.release = { ...base.release, ...input.release };
-  for (const staleKey of ["auto" + "Approve", "auto" + "ApproveAppRequests", "chatgpt" + "RequestHelper"]) {
-    delete next[staleKey];
-  }
-  next.workflow = normalizeWorkflowConfig(input.workflow, input.flow);
   next.release.minimumReadinessScore = clampNumber(next.release.minimumReadinessScore, 0, 100, base.release.minimumReadinessScore);
   next.release.requireHttpToken = next.release.requireHttpToken !== false;
+}
 
-  for (const [alias, workspace] of Object.entries(next.workspaces)) {
-    next.workspaces[alias] = normalizeWorkspace(workspace || {});
+function stripLegacyApprovalKeys(config) {
+  for (const staleKey of ["auto" + "Approve", "auto" + "ApproveAppRequests", "chatgpt" + "RequestHelper"]) {
+    delete config[staleKey];
   }
-  return next;
+}
+
+function normalizeWorkspaces(config) {
+  for (const [alias, workspace] of Object.entries(config.workspaces)) {
+    config.workspaces[alias] = normalizeWorkspace(workspace || {});
+  }
 }
 
 function normalizeWorkspace(workspace) {
@@ -165,6 +186,10 @@ function normalizeFastTask(value) {
   };
 }
 
+function objectOrEmpty(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
 function _pickPreparedValue(sources, fieldNames, transform, fallback) {
   for (const source of sources) {
     for (const name of fieldNames) {
@@ -175,40 +200,35 @@ function _pickPreparedValue(sources, fieldNames, transform, fallback) {
   return fallback;
 }
 
+function workflowMode(raw, flow) {
+  if (raw.mode === "prepared" || raw.mode === "aggressive") return "prepared";
+  if (raw.mode === "standard" || raw.mode === "conservative") return "standard";
+  return !raw.mode && flow.mode === "fast" ? "prepared" : "standard";
+}
+
+function preparedSources(raw, flow) {
+  return {
+    oldAggressive: objectOrEmpty(raw.aggressive),
+    oldFlow: objectOrEmpty(flow.fast),
+    rawPrepared: objectOrEmpty(raw.prepared)
+  };
+}
+
 function normalizeWorkflowConfig(value, flowLegacy) {
   const base = makeDefaultWorkflowConfig();
-  const raw = value && typeof value === "object" ? value : {};
-  const flow = flowLegacy && typeof flowLegacy === "object" ? flowLegacy : {};
-
-  let mode;
-  if (raw.mode === "prepared" || raw.mode === "aggressive") {
-    mode = "prepared";
-  } else if (raw.mode === "standard" || raw.mode === "conservative") {
-    mode = "standard";
-  } else if (!raw.mode && flow.mode === "fast") {
-    mode = "prepared";
-  } else {
-    mode = "standard";
-  }
-
-  const oldAggressive = raw.aggressive && typeof raw.aggressive === "object" ? raw.aggressive : {};
-  const oldFlow = flow.fast && typeof flow.fast === "object" ? flow.fast : {};
-  const rawPrepared = raw.prepared && typeof raw.prepared === "object" ? raw.prepared : {};
+  const raw = objectOrEmpty(value);
+  const flow = objectOrEmpty(flowLegacy);
+  const { oldAggressive, oldFlow, rawPrepared } = preparedSources(raw, flow);
   const sources = [rawPrepared, oldAggressive, oldFlow];
   const merged = { ...base.prepared, ...oldFlow, ...oldAggressive, ...rawPrepared };
-
-  const clearMissingDefault = _pickPreparedValue(sources, ["clearMissingDefault", "deleteMissingDefault"], Boolean, base.prepared.clearMissingDefault);
-  const maxUpdateBytes = _pickPreparedValue(sources, ["maxUpdateBytes", "maxPatchBytes"], (v) => clampNumber(v, 1024, 50 * 1024 * 1024, base.prepared.maxUpdateBytes), base.prepared.maxUpdateBytes);
-  const maxBundleBytes = _pickPreparedValue(sources, ["maxBundleBytes", "maxArchiveBytes"], (v) => clampNumber(v, 1024 * 1024, 2 * 1024 * 1024 * 1024, base.prepared.maxBundleBytes), base.prepared.maxBundleBytes);
-
   return {
-    mode,
+    mode: workflowMode(raw, flow),
     prepared: {
       backup: merged.backup == null ? base.prepared.backup : Boolean(merged.backup),
       requireCleanGit: merged.requireCleanGit == null ? base.prepared.requireCleanGit : Boolean(merged.requireCleanGit),
-      clearMissingDefault,
-      maxUpdateBytes,
-      maxBundleBytes
+      clearMissingDefault: _pickPreparedValue(sources, ["clearMissingDefault", "deleteMissingDefault"], Boolean, base.prepared.clearMissingDefault),
+      maxUpdateBytes: _pickPreparedValue(sources, ["maxUpdateBytes", "maxPatchBytes"], (v) => clampNumber(v, 1024, 50 * 1024 * 1024, base.prepared.maxUpdateBytes), base.prepared.maxUpdateBytes),
+      maxBundleBytes: _pickPreparedValue(sources, ["maxBundleBytes", "maxArchiveBytes"], (v) => clampNumber(v, 1024 * 1024, 2 * 1024 * 1024 * 1024, base.prepared.maxBundleBytes), base.prepared.maxBundleBytes)
     }
   };
 }
@@ -279,7 +299,7 @@ function resolveWorkspace(config, alias) {
 function isSafeWorkspaceAlias(value) {
   if (!value || value.length > 80) return false;
   for (const ch of value) {
-    const code = ch.charCodeAt(0);
+    const code = ch.codePointAt(0);
     const isUpper = code >= 65 && code <= 90;
     const isLower = code >= 97 && code <= 122;
     const isDigit = code >= 48 && code <= 57;

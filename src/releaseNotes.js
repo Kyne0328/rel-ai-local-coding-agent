@@ -4,13 +4,21 @@ const path = require("node:path");
 // Last-resort fallback if CHANGELOG.md cannot be read/parsed. Use the package
 // version so the dashboard never renders a bare "v" (the packaged launcher hit this
 // when CHANGELOG wasn't bundled).
-let PKG_VERSION = "";
-try { PKG_VERSION = require("../package.json").version || ""; } catch (_error) { /* ignore */ }
+const PKG_VERSION = readPackageVersion();
 const FALLBACK = {
   version: PKG_VERSION,
   headline: "See CHANGELOG.md for the latest changes.",
   bullets: []
 };
+
+function readPackageVersion() {
+  try {
+    return require("../package.json").version || "";
+  } catch (error) {
+    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] package version:', error);
+    return "";
+  }
+}
 
 function replaceDelimited(text, marker) {
   let out = "";
@@ -125,8 +133,8 @@ function getReleaseNotes() {
     const md = fs.readFileSync(path.join(__dirname, "..", "CHANGELOG.md"), "utf8");
     const parsed = parseChangelog(md);
     if (parsed && parsed.version) return parsed;
-  } catch (_error) {
-    // fall through to fallback
+  } catch (error) {
+    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] release notes:', error);
   }
   return { ...FALLBACK, bullets: FALLBACK.bullets.slice() };
 }

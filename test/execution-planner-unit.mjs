@@ -8,16 +8,19 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { planEdit } = require('../src/executionPlanner.js');
 
+function gitShell(command, options = {}) { // NOSONAR - these unit tests intentionally execute the local Git binary.
+  return execSync(command, options);
+}
+
 function makeTempRepo(filename = 'hello.js', content = 'module.exports = {};') {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-ep-'));
-  const env = { ...process.env };
-  execSync('git init', { cwd: dir, stdio: 'pipe', env });
-  execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe', env });
-  execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe', env });
+  gitShell('git init', { cwd: dir, stdio: 'pipe' });
+  gitShell('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe' });
+  gitShell('git config user.name "Test"', { cwd: dir, stdio: 'pipe' });
   fs.mkdirSync(path.dirname(path.join(dir, filename)), { recursive: true });
   fs.writeFileSync(path.join(dir, filename), content);
-  execSync('git add .', { cwd: dir, stdio: 'pipe', env });
-  execSync('git commit -m "init"', { cwd: dir, stdio: 'pipe', env });
+  gitShell('git add .', { cwd: dir, stdio: 'pipe' });
+  gitShell('git commit -m "init"', { cwd: dir, stdio: 'pipe' });
   return dir;
 }
 
@@ -132,7 +135,7 @@ function makeTempRepo(filename = 'hello.js', content = 'module.exports = {};') {
 {
   const dir = makeTempRepo('a.js', 'let a = 1;\n');
   fs.writeFileSync(path.join(dir, 'b.js'), 'let b = 1;\n');
-  execSync('git add . && git commit -m more', { cwd: dir, stdio: 'pipe', env: { ...process.env } });
+  gitShell('git add . && git commit -m more', { cwd: dir, stdio: 'pipe' });
   const workspace = { alias: 'test', path: dir };
   try {
     const result = await planEdit(workspace, {}, { edits: [

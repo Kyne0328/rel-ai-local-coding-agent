@@ -63,11 +63,11 @@ export function openWorkspaceForm({ mode = 'add', workspace = null, onSaved } = 
     </div>
     <div class="status" data-path-status></div>
     <label>Protected branches (comma-separated)</label>
-    <input name="protected" value="${esc((ws.protectedBranches && ws.protectedBranches.length ? ws.protectedBranches : ['main', 'master']).join(', '))}" autocomplete="off">
+    <input name="protected" value="${esc((ws.protectedBranches?.length ? ws.protectedBranches : ['main', 'master']).join(', '))}" autocomplete="off">
     <label>Default base branch</label>
     <input name="base" value="${esc(ws.defaultBaseBranch || 'main')}" autocomplete="off">
     <label>Allowed remotes (comma-separated)</label>
-    <input name="remotes" value="${esc((ws.allowedRemotes && ws.allowedRemotes.length ? ws.allowedRemotes : ['origin']).join(', '))}" autocomplete="off">
+    <input name="remotes" value="${esc((ws.allowedRemotes?.length ? ws.allowedRemotes : ['origin']).join(', '))}" autocomplete="off">
     <div class="actions">
       <button type="button" class="secondary" data-cancel>Cancel</button>
       <button type="submit" class="primary">${isEdit ? 'Save changes' : 'Add workspace'}</button>
@@ -94,16 +94,16 @@ export function openWorkspaceForm({ mode = 'add', workspace = null, onSaved } = 
     const res = await postJson('/api/pick-folder', {}, { timeout: 0 });
     browseBtn.disabled = false;
     browseBtn.textContent = prev;
-    if (res && res.unsupported) {
+    if (res?.unsupported) {
       browseBtn.style.display = 'none';
       toast('Browse needs the Rel.AI desktop launcher — type the path here instead.', { variant: 'info' });
       return;
     }
-    if (res && res.canceled) return;
-    if (res && res.ok && res.path) {
+    if (res?.canceled) return;
+    if (res?.ok && res.path) {
       pathInput.value = res.path;
       renderPathStatus(statusEl, res); // pick-folder already returns preflight fields
-    } else if (res && res.error) {
+    } else if (res?.error) {
       toast('Could not open folder picker: ' + res.error, { variant: 'error' });
     }
   });
@@ -130,18 +130,18 @@ export function openWorkspaceForm({ mode = 'add', workspace = null, onSaved } = 
     });
     submitBtn.disabled = false;
     submitBtn.textContent = isEdit ? 'Save changes' : 'Add workspace';
-    if (result && result.ok) {
+    if (result?.ok) {
       closeModal();
       invalidateCache();
       toast((isEdit ? 'Workspace updated: ' : 'Workspace added: ') + alias, { variant: 'success' });
       if (typeof onSaved === 'function') onSaved();
       else requestDashboardRefresh();
     } else {
-      toast('Could not save workspace: ' + ((result && result.error) || 'unknown error'), { variant: 'error' });
+      toast('Could not save workspace: ' + (result?.error || 'unknown error'), { variant: 'error' });
     }
   });
 
   openModal({ title: isEdit ? `Edit workspace · ${ws.alias || ''}` : 'Add workspace', content: form });
   // Focus the path field directly when fixing an existing (likely broken) workspace.
-  if (isEdit) setTimeout(() => { try { pathInput.focus(); pathInput.select(); } catch (_) {} }, 0);
+  if (isEdit) setTimeout(() => { try { pathInput.focus(); pathInput.select(); } catch (error) { if (window.localStorage?.getItem('relai_debug') === '1') console.error(error); } }, 0);
 }

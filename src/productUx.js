@@ -26,7 +26,7 @@ function dashboardData(config, args = {}) {
   // Single authoritative public-tool list so the UI never hardcodes literals that
   // drift from PUBLIC_HTTP_TOOL_NAMES. Lazy require avoids any load-order cycle.
   let publicTools = Array.isArray(configSummary.localRepoBridge?.visibleTools) ? configSummary.localRepoBridge.visibleTools : [];
-  try { publicTools = require("./tools").getPublicToolSchemas(config).map((tool) => tool.name); } catch {}
+  try { publicTools = require("./tools").getPublicToolSchemas(config).map((tool) => tool.name); } catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] public tool schema discovery:', error); }
   const toolCount = publicTools.length;
   return {
     ok: true,
@@ -90,15 +90,15 @@ function healthMonitor(config, _args = {}) {
 }
 
 function cleanupPreview(config, args = {}) {
-  return cleanupPlan(config, args, false);
+  return cleanupPlan(config, false, args);
 }
 
 function cleanupRun(config, args = {}) {
   if (args.confirm !== true) throw new Error("cleanupRun requires confirm=true.");
-  return cleanupPlan(config, args, true);
+  return cleanupPlan(config, true, args);
 }
 
-function cleanupPlan(config, args = {}, apply) {
+function cleanupPlan(config, apply, args = {}) {
   const stateDir = getStateDir(config);
   const olderThanHours = clampNumber(args.olderThanHours || (config.productUx && config.productUx.cleanupOlderThanHours) || 168, 1, 24 * 365);
   const includeAudit = args.includeAudit === true;
@@ -175,12 +175,7 @@ function setupWizard(args = {}) {
       allowedRemotes: ["origin"]
     };
   }
-  const isWindows = process.platform === "win32";
-  const startCmd = token
-    ? (isWindows
-        ? `$env:REL_AI_MCP_TOKEN='${token}'; npm run start:http -- --host 127.0.0.1 --port 3333`
-        : `REL_AI_MCP_TOKEN=${token} npm run start:http -- --host 127.0.0.1 --port 3333`)
-    : "npm run start:http -- --host 127.0.0.1 --port 3333";
+  const startCmd = setupStartCommand(token);
   return {
     ok: true,
     configPath: getConfigPath(),
@@ -192,6 +187,14 @@ function setupWizard(args = {}) {
       startCmd
     ]
   };
+}
+
+function setupStartCommand(token) {
+  if (!token) return "npm run start:http -- --host 127.0.0.1 --port 3333";
+  if (process.platform === "win32") {
+    return `$env:REL_AI_MCP_TOKEN='${token}'; npm run start:http -- --host 127.0.0.1 --port 3333`;
+  }
+  return `REL_AI_MCP_TOKEN=${token} npm run start:http -- --host 127.0.0.1 --port 3333`;
 }
 
 function importOriginalRelAiConfig(args = {}) {
@@ -262,7 +265,7 @@ function guessTestCommands(workspacePath) {
     // Only suggest scripts that actually exist, so we don't seed stale aliases the
     // dashboard's alias-consistency check then flags.
     let scripts = {};
-    try { scripts = (safeReadJson(pkgPath) || {}).scripts || {}; } catch (_) {}
+    try { scripts = (safeReadJson(pkgPath) || {}).scripts || {}; } catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] package script discovery:', error); }
     if (scripts.test) out.test = "npm test";
     if (scripts.lint) out.lint = "npm run lint";
   }
@@ -371,7 +374,7 @@ function aliasConsistencyCheck(config) {
     const allConfigured = { ...(ws.commands || {}), ...(ws.testCommands || {}) };
     const configuredKeys = Object.keys(allConfigured);
     let discovered = {};
-    try { discovered = discoverCommands(ws.path || ''); } catch (_) {}
+    try { discovered = discoverCommands(ws.path || ''); } catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] alias command discovery:', error); }
     const discoveredKeys = Object.keys(discovered);
     const staleKeys = staleCommandKeys(allConfigured, discovered);
     results.push({ alias, configuredKeys, discoveredKeys, staleKeys, ok: staleKeys.length === 0 });

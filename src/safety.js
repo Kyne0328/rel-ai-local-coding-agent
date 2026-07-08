@@ -2,20 +2,18 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 
-const SECRET_PATH_PATTERNS = [
-  /(^|\/)\.env($|[./-])/i,
-  /(^|\/)\.ssh($|\/)/i,
-  /(^|\/)(id_rsa|id_ed25519|known_hosts)$/i,
-  /(^|\/).*\.(pem|key|p12|pfx)$/i,
-  /(^|\/)(secrets?|credentials?)(\.|\/|$)/i,
-  /(^|\/)(\.npmrc|\.pypirc|\.netrc)$/i,
-  /(^|\/)firebase-adminsdk[^/]*\.json$/i,
-  /(^|\/)service-account[^/]*\.json$/i,
-  /(^|\/)\.aws\//i,
-  /(^|\/)\.azure\//i,
-  /(^|\/)gcloud\/credentials/i,
-  /(^|\/)(kubeconfig|\.kube)(\/|$)/i
-];
+const SECRET_PATH_PATTERNS = Object.freeze({
+  fileNames: ["id_rsa", "id_ed25519", "known_hosts", ".npmrc", ".pypirc", ".netrc", "kubeconfig"],
+  extensions: [".pem", ".key", ".p12", ".pfx"],
+  directories: [".ssh", ".aws", ".azure", ".kube"]
+});
+
+const SECRET_FILE_NAMES = new Set(SECRET_PATH_PATTERNS.fileNames);
+const SECRET_EXTENSIONS = new Set(SECRET_PATH_PATTERNS.extensions);
+const SECRET_DIRECTORIES = new Set(SECRET_PATH_PATTERNS.directories);
+const WINDOWS_SEPARATOR = path.win32.sep;
+const ESCAPED_CRLF = String.raw`\r\n`;
+const ESCAPED_LF = String.raw`\n`;
 
 const DEFAULT_EXCLUDED_NAMES = new Set([
   ".git", "node_modules", "dist", "build", "coverage", ".next", ".nuxt", ".svelte-kit",
@@ -42,14 +40,21 @@ const DEFAULT_EXCLUDED_PATHS = [
   ".relai"
 ];
 
+function hasWindowsDrivePrefix(value) {
+  return value.length >= 3
+    && value[1] === ":"
+    && value[2] === "/"
+    && /[A-Za-z]/.test(value[0]);
+}
+
 function validateRelativePath(relativePath, label = "Path") {
-  const value = String(relativePath || "").replaceAll("\\", "/").trim();
+  const value = String(relativePath || "").replaceAll(WINDOWS_SEPARATOR, "/").trim();
   if (!value) throw new Error(`${label} cannot be empty.`);
-  if (value.startsWith("/") || /^[A-Za-z]:\//.test(value)) {
+  if (value.startsWith("/") || hasWindowsDrivePrefix(value)) {
     throw new Error(`${label} must be relative: ${value}`);
   }
-  const parts = value.split("/");
-  if (parts.includes("..") || parts.includes("")) {
+  const parts = new Set(value.split("/"));
+  if (parts.has("..") || parts.has("")) {
     throw new Error(`${label} must not contain traversal or empty segments: ${value}`);
   }
   if (value.length > 512) throw new Error(`${label} is too long: ${value}`);
@@ -73,9 +78,34 @@ function isPathInside(candidate, root) {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
+function isDotEnvName(leaf) {
+  return leaf === ".env" || leaf.startsWith(".env.") || leaf.startsWith(".env-");
+}
+
+function isSecretNamedSegment(segment) {
+  return segment === "secret" || segment === "secrets" || segment === "credential" || segment === "credentials";
+}
+
+function isSecretNamedFile(leaf) {
+  return leaf.startsWith("secret.")
+    || leaf.startsWith("secrets.")
+    || leaf.startsWith("credential.")
+    || leaf.startsWith("credentials.");
+}
+
+function isSensitiveJsonLeaf(leaf) {
+  return (leaf.startsWith("firebase-adminsdk") || leaf.startsWith("service-account")) && leaf.endsWith(".json");
+}
+
 function isSecretPath(relativePath) {
-  const normalized = String(relativePath || "").replaceAll("\\", "/");
-  return SECRET_PATH_PATTERNS.some((pattern) => pattern.test(normalized));
+  const normalized = String(relativePath || "").replaceAll(WINDOWS_SEPARATOR, "/").toLowerCase();
+  const segments = normalized.split("/").filter(Boolean);
+  const leaf = segments.at(-1) || "";
+  if (isDotEnvName(leaf) || SECRET_FILE_NAMES.has(leaf) || isSensitiveJsonLeaf(leaf)) return true;
+  if (SECRET_EXTENSIONS.has(path.extname(leaf))) return true;
+  if (segments.some((segment) => SECRET_DIRECTORIES.has(segment) || isSecretNamedSegment(segment))) return true;
+  if (isSecretNamedFile(leaf)) return true;
+  return normalized.includes("gcloud/credentials");
 }
 
 function looksBinary(buffer) {
@@ -88,69 +118,84 @@ function looksBinary(buffer) {
 }
 
 function collectTextFiles(root, options = {}) {
-  const maxEntries = options.maxEntries || Infinity;
-  const files = [];
-  const skipped = [];
-  const realRoot = fs.realpathSync(root);
-  const policy = buildCollectionPolicy(realRoot, options);
+  const context = {
+    maxEntries: options.maxEntries || Infinity,
+    files: [],
+    skipped: [],
+    realRoot: fs.realpathSync(root),
+    policy: null
+  };
+  context.policy = buildCollectionPolicy(context.realRoot, options);
+  walkTextFiles(context, context.realRoot, "");
+  return { files: context.files, skipped: context.skipped, truncated: context.files.length >= context.maxEntries };
+}
 
-  function walk(dir, prefix) {
-    if (files.length >= maxEntries) return;
-    let entries;
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch (error) {
-      skipped.push({ path: prefix || ".", reason: error.message });
+function readDirectoryEntries(dir, prefix, skipped) {
+  try {
+    return fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+  } catch (error) {
+    skipped.push({ path: prefix || ".", reason: error.message });
+    return [];
+  }
+}
+
+function walkTextFiles(context, dir, prefix) {
+  if (context.files.length >= context.maxEntries) return;
+  for (const entry of readDirectoryEntries(dir, prefix, context.skipped)) {
+    if (context.files.length >= context.maxEntries) break;
+    processTextEntry(context, dir, prefix, entry);
+  }
+}
+
+function skipReasonForEntry(rel, entry, policy) {
+  if (isSecretPath(rel)) return "blocked sensitive path";
+  const excluded = shouldExcludeRelativePath(rel, entry.name, policy);
+  if (excluded) return excluded;
+  if (entry.isSymbolicLink()) return "symlink skipped";
+  return "";
+}
+
+function processTextEntry(context, dir, prefix, entry) {
+  const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+  const skipReason = skipReasonForEntry(rel, entry, context.policy);
+  if (skipReason) {
+    context.skipped.push({ path: rel, reason: skipReason });
+    return;
+  }
+  const abs = path.join(dir, entry.name);
+  if (entry.isDirectory()) {
+    walkTextFiles(context, abs, rel);
+    return;
+  }
+  if (entry.isFile()) inspectTextFile(context, abs, rel);
+}
+
+function inspectTextFile(context, abs, rel) {
+  try {
+    const real = fs.realpathSync(abs);
+    if (!isPathInside(real, context.realRoot)) {
+      context.skipped.push({ path: rel, reason: "escapes workspace" });
       return;
     }
-    entries.sort((a, b) => a.name.localeCompare(b.name));
-    for (const entry of entries) {
-      if (files.length >= maxEntries) break;
-      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
-      if (isSecretPath(rel)) {
-        skipped.push({ path: rel, reason: "blocked sensitive path" });
-        continue;
-      }
-      const excluded = shouldExcludeRelativePath(rel, entry.name, policy);
-      if (excluded) {
-        skipped.push({ path: rel, reason: excluded });
-        continue;
-      }
-      const abs = path.join(dir, entry.name);
-      if (entry.isSymbolicLink()) {
-        skipped.push({ path: rel, reason: "symlink skipped" });
-        continue;
-      }
-      if (entry.isDirectory()) {
-        walk(abs, rel);
-        continue;
-      }
-      if (!entry.isFile()) continue;
-      try {
-        const real = fs.realpathSync(abs);
-        if (!isPathInside(real, realRoot)) {
-          skipped.push({ path: rel, reason: "escapes workspace" });
-          continue;
-        }
-        // Read only the first 8000 bytes for binary detection — avoids loading
-        // entire large source files just to check for null bytes.
-        const buf = Buffer.allocUnsafe(8000);
-        let bytesRead = 0;
-        const fd = fs.openSync(abs, "r");
-        try { bytesRead = fs.readSync(fd, buf, 0, 8000, 0); } finally { fs.closeSync(fd); }
-        if (looksBinary(buf.subarray(0, bytesRead))) {
-          skipped.push({ path: rel, reason: "binary-looking file" });
-          continue;
-        }
-        files.push(rel);
-      } catch (error) {
-        skipped.push({ path: rel, reason: error.message });
-      }
+    if (fileLooksBinary(abs)) {
+      context.skipped.push({ path: rel, reason: "binary-looking file" });
+      return;
     }
+    context.files.push(rel);
+  } catch (error) {
+    context.skipped.push({ path: rel, reason: error.message });
   }
+}
 
-  walk(realRoot, "");
-  return { files, skipped, truncated: files.length >= maxEntries };
+function fileLooksBinary(abs) {
+  const buf = Buffer.allocUnsafe(8000);
+  const fd = fs.openSync(abs, "r");
+  try {
+    const bytesRead = fs.readSync(fd, buf, 0, 8000, 0);
+    return looksBinary(buf.subarray(0, bytesRead));
+  } finally {
+    fs.closeSync(fd);
+  }
 }
 
 function buildCollectionPolicy(root, options = {}) {
@@ -185,7 +230,8 @@ function readRelaiIgnore(root) {
       .split(/\r?\n/)
       .map((line) => line.split("#")[0].trim())
       .filter(Boolean);
-  } catch (_error) {
+  } catch (error) {
+    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] .relaiignore:', error);
     return [];
   }
 }
@@ -193,16 +239,20 @@ function readRelaiIgnore(root) {
 function normalizePathList(value) {
   const list = Array.isArray(value) ? value : String(value || "").split(/[\n,]/);
   return list.map((item) => {
-    let normalized = String(item || "").replaceAll("\\", "/").trim();
+    let normalized = String(item || "").replaceAll(WINDOWS_SEPARATOR, "/").trim();
     if (normalized.startsWith("./")) normalized = normalized.slice(2);
     while (normalized.endsWith("/")) normalized = normalized.slice(0, -1);
     return normalized;
   }).filter(Boolean);
 }
 
+function isInsideIncludedRoot(normalized, root) {
+  return normalized === root || normalized.startsWith(root + "/") || root.startsWith(normalized + "/");
+}
+
 function shouldExcludeRelativePath(rel, name, policy) {
-  const normalized = String(rel || "").replaceAll("\\", "/");
-  if (policy.includeRoots.length && !policy.includeRoots.some((root) => normalized === root || normalized.startsWith(root + "/") || root.startsWith(normalized + "/"))) {
+  const normalized = String(rel || "").replaceAll(WINDOWS_SEPARATOR, "/");
+  if (policy.includeRoots.length && !policy.includeRoots.some((root) => isInsideIncludedRoot(normalized, root))) {
     return "outside fast-task include roots";
   }
   if (policy.excludeNames.has(name) || policy.excludeNames.has(normalized)) return "excluded generated/cache folder";
@@ -217,7 +267,7 @@ function escapeRegExp(value) {
 }
 
 function matchesIgnorePattern(rel, pattern) {
-  const raw = String(pattern || "").replaceAll("\\", "/").trim();
+  const raw = String(pattern || "").replaceAll(WINDOWS_SEPARATOR, "/").trim();
   if (!raw) return false;
   const anchored = raw.startsWith("/");
   let clean = anchored ? raw.slice(1) : raw;
@@ -265,7 +315,7 @@ function writeTextFileSafe(root, relativePath, content, options = {}) {
     }
     fs.renameSync(tmpPath, resolved.absolutePath);
   } catch (error) {
-    try { if (fs.existsSync(tmpPath)) fs.rmSync(tmpPath, { force: true }); } catch (_cleanupError) {}
+    cleanupTempFile(tmpPath);
     throw error;
   }
 
@@ -281,6 +331,14 @@ function writeTextFileSafe(root, relativePath, content, options = {}) {
     verified: true,
     bytes: Buffer.byteLength(text, "utf8")
   };
+}
+
+function cleanupTempFile(tmpPath) {
+  try {
+    if (fs.existsSync(tmpPath)) fs.rmSync(tmpPath, { force: true });
+  } catch (error) {
+    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] cleanup temp file:', error);
+  }
 }
 
 function safeReadJson(file, fallback = null) {
@@ -310,8 +368,8 @@ module.exports = {
 function normalizeFullFileContent(text) {
   // Some app clients may pass escaped newlines literally. Convert only when
   // there are no real newlines and the payload clearly contains escaped lines.
-  if (!/[\r\n]/.test(text) && text.includes('\\n')) {
-    return text.replaceAll('\\r\\n', '\n').replaceAll('\\n', '\n');
+  if (!text.includes("\r") && !text.includes("\n") && text.includes(ESCAPED_LF)) {
+    return text.replaceAll(ESCAPED_CRLF, '\n').replaceAll(ESCAPED_LF, '\n');
   }
   return text;
 }
@@ -319,11 +377,16 @@ function normalizeFullFileContent(text) {
 function guardAgainstCollapsedFullFileWrite(absolutePath, relativePath, newText) {
   if (!fs.existsSync(absolutePath)) return;
   let oldText;
-  try { oldText = fs.readFileSync(absolutePath, 'utf8'); } catch (_error) { return; }
+  try {
+    oldText = fs.readFileSync(absolutePath, 'utf8');
+  } catch (error) {
+    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] collapsed-write guard:', error);
+    return;
+  }
   const oldLines = oldText.split(/\r?\n/).length;
   const newLines = newText.split(/\r?\n/).length;
   const ext = path.extname(relativePath).toLowerCase();
-  const sourceLike = new Set(['.js','.jsx','.ts','.tsx','.mjs','.cjs','.dart','.py','.go','.rs','.java','.kt','.swift','.cs','.cpp','.c','.h','.hpp','.rb','.php','.css','.scss','.html','.xml','.yaml','.yml','.json','.md']);
+  const sourceLike = new Set(['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs', '.dart', '.py', '.go', '.rs', '.java', '.kt', '.swift', '.cs', '.cpp', '.c', '.h', '.hpp', '.rb', '.php', '.css', '.scss', '.html', '.xml', '.yaml', '.yml', '.json', '.md']);
   if (sourceLike.has(ext) && oldLines >= 8 && newLines <= 2 && newText.length > 500) {
     throw new Error('Refusing likely collapsed full-file write for ' + relativePath + ': existing file has ' + oldLines + ' lines but new content has ' + newLines + '. Use relai_read and pass the complete multiline file content to relai_write.');
   }

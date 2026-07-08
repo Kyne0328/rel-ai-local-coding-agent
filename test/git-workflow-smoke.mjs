@@ -20,30 +20,33 @@ const {
 } = require('../src/localRepoBridge.js');
 const { writeSessionPolicy } = require('../src/policyResolver.js');
 
+function git(args, options = {}) { // NOSONAR - this smoke test intentionally executes the local Git binary.
+  return execFileSync('git', args, options);
+}
+
 function makeRepo() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-git-workflow-'));
   const remote = path.join(root, 'remote.git');
   const workspacePath = path.join(root, 'workspace');
   fs.mkdirSync(workspacePath, { recursive: true });
-  const env = { ...process.env };
-  execFileSync('git', ['init', '--bare', remote], { stdio: 'ignore', env });
-  execFileSync('git', ['init'], { cwd: workspacePath, stdio: 'ignore', env });
-  execFileSync('git', ['config', 'user.email', 'relai@example.test'], { cwd: workspacePath, env });
-  execFileSync('git', ['config', 'user.name', 'RelAI Git Smoke'], { cwd: workspacePath, env });
+  git(['init', '--bare', remote], { stdio: 'ignore' });
+  git(['init'], { cwd: workspacePath, stdio: 'ignore' });
+  git(['config', 'user.email', 'relai@example.test'], { cwd: workspacePath });
+  git(['config', 'user.name', 'RelAI Git Smoke'], { cwd: workspacePath });
   fs.writeFileSync(path.join(workspacePath, 'README.md'), '# Git smoke\n');
-  execFileSync('git', ['add', 'README.md'], { cwd: workspacePath, env });
-  execFileSync('git', ['commit', '-m', 'init'], { cwd: workspacePath, stdio: 'ignore', env });
-  execFileSync('git', ['branch', '-M', 'main'], { cwd: workspacePath, env });
-  execFileSync('git', ['remote', 'add', 'origin', remote], { cwd: workspacePath, env });
-  execFileSync('git', ['push', '-u', 'origin', 'main'], { cwd: workspacePath, stdio: 'ignore', env });
-  execFileSync('git', ['checkout', '-b', 'production'], { cwd: workspacePath, stdio: 'ignore', env });
-  execFileSync('git', ['push', '-u', 'origin', 'production'], { cwd: workspacePath, stdio: 'ignore', env });
-  execFileSync('git', ['checkout', '-b', 'feature/ui-cleanup'], { cwd: workspacePath, stdio: 'ignore', env });
+  git(['add', 'README.md'], { cwd: workspacePath });
+  git(['commit', '-m', 'init'], { cwd: workspacePath, stdio: 'ignore' });
+  git(['branch', '-M', 'main'], { cwd: workspacePath });
+  git(['remote', 'add', 'origin', remote], { cwd: workspacePath });
+  git(['push', '-u', 'origin', 'main'], { cwd: workspacePath, stdio: 'ignore' });
+  git(['checkout', '-b', 'production'], { cwd: workspacePath, stdio: 'ignore' });
+  git(['push', '-u', 'origin', 'production'], { cwd: workspacePath, stdio: 'ignore' });
+  git(['checkout', '-b', 'feature/ui-cleanup'], { cwd: workspacePath, stdio: 'ignore' });
   fs.writeFileSync(path.join(workspacePath, 'ui.txt'), 'feature branch\n');
-  execFileSync('git', ['add', 'ui.txt'], { cwd: workspacePath, env });
-  execFileSync('git', ['commit', '-m', 'feature'], { cwd: workspacePath, stdio: 'ignore', env });
-  execFileSync('git', ['push', '-u', 'origin', 'feature/ui-cleanup'], { cwd: workspacePath, stdio: 'ignore' });
-  execFileSync('git', ['checkout', 'main'], { cwd: workspacePath, stdio: 'ignore' });
+  git(['add', 'ui.txt'], { cwd: workspacePath });
+  git(['commit', '-m', 'feature'], { cwd: workspacePath, stdio: 'ignore' });
+  git(['push', '-u', 'origin', 'feature/ui-cleanup'], { cwd: workspacePath, stdio: 'ignore' });
+  git(['checkout', 'main'], { cwd: workspacePath, stdio: 'ignore' });
   return { root, workspacePath };
 }
 
@@ -121,12 +124,12 @@ const secretCommit = await relaiGitCommit(workspace, config, { message: 'oops se
 assert.equal(secretCommit.ok, false, 'commit with staged .env should be refused');
 assert.ok(Array.isArray(secretCommit.secretStagedFiles) && secretCommit.secretStagedFiles.includes('.env'));
 assert.match(secretCommit.error, /allowSecretPaths/);
-execFileSync('git', ['restore', '--staged', '.env'], { cwd: workspace.path });
+git(['restore', '--staged', '.env'], { cwd: workspace.path });
 
 const secretCommitAllowed = await relaiGitCommit(workspace, config, { message: 'intentional env commit', allowSecretPaths: true });
 assert.equal(secretCommitAllowed.ok, true, 'allowSecretPaths: true should permit the commit');
-execFileSync('git', ['rm', '--cached', '.env'], { cwd: workspace.path, stdio: 'ignore' });
-execFileSync('git', ['commit', '-m', 'remove env'], { cwd: workspace.path, stdio: 'ignore' });
+git(['rm', '--cached', '.env'], { cwd: workspace.path, stdio: 'ignore' });
+git(['commit', '-m', 'remove env'], { cwd: workspace.path, stdio: 'ignore' });
 fs.rmSync(path.join(workspace.path, '.env'), { force: true });
 
 const mergePlan = await relaiGitMergeRemoteBranchesPlan(workspace, config, { remote: 'origin', targetBranch: 'production' });

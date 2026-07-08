@@ -122,19 +122,43 @@ function shellPlan(command) {
   };
 }
 
+function logTunnelDebug(label, error) {
+  if (process.env.REL_AI_MCP_DEBUG) console.error(label, error);
+}
+
+function killChildFallback(child) {
+  try {
+    child.kill();
+  } catch (error) {
+    logTunnelDebug('[rel-ai-mcp] kill fallback:', error);
+  }
+}
+
+function killWindowsProcessTree(child) {
+  try {
+    const { spawnSync } = require("node:child_process");
+    spawnSync(String.raw`C:\Windows\System32\taskkill.exe`, ["/f", "/t", "/pid", String(child.pid)], { stdio: "ignore", windowsHide: true });
+  } catch (error) {
+    logTunnelDebug('[rel-ai-mcp] taskkill:', error);
+    killChildFallback(child);
+  }
+}
+
+function terminateChild(child) {
+  try {
+    child.kill("SIGTERM");
+  } catch (error) {
+    logTunnelDebug('[rel-ai-mcp] kill SIGTERM:', error);
+  }
+}
+
 function killProcess(child) {
   if (!child || child.killed) return;
   if (process.platform === "win32" && child.pid) {
-    try {
-      const { spawnSync } = require("node:child_process");
-      spawnSync("taskkill", ["/f", "/t", "/pid", String(child.pid)], { stdio: "ignore", windowsHide: true, env: { ...process.env } });
-    } catch (error) {
-      if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] taskkill:', error);
-      try { child.kill(); } catch (killError) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] kill fallback:', killError); }
-    }
-  } else {
-    try { child.kill("SIGTERM"); } catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] kill SIGTERM:', error); }
+    killWindowsProcessTree(child);
+    return;
   }
+  terminateChild(child);
 }
 
 function killOrphanedNgrok() {
@@ -186,20 +210,30 @@ function extractPublicUrl(text, pattern) {
   return genericMatch ? trimUrlPunctuation(genericMatch[0]) : "";
 }
 
+function tunnelProvidersFor(normalized) {
+  return normalized === "auto" ? ["cloudflare", "ngrok", "localtunnel"] : [normalized];
+}
+
+async function tryTunnelProvider(candidate, options, errors) {
+  try {
+    const result = await startOneTunnel(candidate, options);
+    if (result.ok) return result;
+    errors.push(`${candidate}: ${result.error || "no public URL detected"}`);
+  } catch (error) {
+    errors.push(`${candidate}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  return null;
+}
+
 async function startTunnel({ provider = "none", port = 3333, localUrl = "", command = "", timeoutMs = 30000, onLog = () => {}, onProcess = () => {} } = {}) {
   const normalized = normalizeTunnel(provider);
   if (normalized === "none") return { ok: false, provider: "none", publicUrl: "", process: null, skipped: true };
 
-  const providers = normalized === "auto" ? ["cloudflare", "ngrok", "localtunnel"] : [normalized];
   const errors = [];
-  for (const candidate of providers) {
-    try {
-      const result = await startOneTunnel(candidate, { port, localUrl, command, timeoutMs, onLog, onProcess });
-      if (result.ok) return result;
-      errors.push(`${candidate}: ${result.error || "no public URL detected"}`);
-    } catch (error) {
-      errors.push(`${candidate}: ${error instanceof Error ? error.message : String(error)}`);
-    }
+  const options = { port, localUrl, command, timeoutMs, onLog, onProcess };
+  for (const candidate of tunnelProvidersFor(normalized)) {
+    const result = await tryTunnelProvider(candidate, options, errors);
+    if (result) return result;
   }
   return { ok: false, provider: normalized, publicUrl: "", process: null, error: errors.join("; ") };
 }

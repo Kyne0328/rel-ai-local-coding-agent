@@ -27,7 +27,7 @@ async function loadTools(container, mountId) {
   if (mountId !== _mounted) return;
   const body = container.querySelector('#toolsBody');
   const count = container.querySelector('.section-action');
-  const tools = Array.isArray(result) ? result : Array.isArray(result?.tools) ? result.tools : [];
+  const tools = toolsFromPayload(result);
   if (count) count.textContent = tools.length + ' available';
   if (!body) return;
   if (!tools.length) {
@@ -45,6 +45,11 @@ async function loadTools(container, mountId) {
     <div class="path" style="padding:12px 14px;border-top:1px solid var(--line);">
       ChatGPT sees one workspace-tool surface. Tool choice is based on the task: inspect, change, validate, review, or restore.
     </div>`;
+}
+
+function toolsFromPayload(result) {
+  if (Array.isArray(result)) return result;
+  return Array.isArray(result?.tools) ? result.tools : [];
 }
 
 function toolRow(tool) {

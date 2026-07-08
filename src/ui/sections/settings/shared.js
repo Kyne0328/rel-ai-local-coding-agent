@@ -26,7 +26,8 @@ export async function saveSettings(settings, { confirmDangerous = false } = {}) 
 export function header(title, body) {
   const wrap = document.createElement('div');
   wrap.style.cssText = 'display:grid;gap:4px;margin:0 0 14px;';
-  wrap.innerHTML = `<h3 style="margin:0;font-size:15px;">${esc(title)}</h3>${body ? `<p style="margin:0;color:var(--text-muted);font-size:13px;">${esc(body)}</p>` : ''}`;
+  const description = body ? `<p style="margin:0;color:var(--text-muted);font-size:13px;">${esc(body)}</p>` : '';
+  wrap.innerHTML = `<h3 style="margin:0;font-size:15px;">${esc(title)}</h3>${description}`;
   return wrap;
 }
 
@@ -97,10 +98,15 @@ export function numberControl(value, onChange, { min = 0, max = 1000000, width =
 export function textAreaControl(value, onChange, rows = 4) {
   const el = document.createElement('textarea');
   el.rows = rows;
-  el.value = Array.isArray(value) ? value.join('\n') : String(value == null ? '' : value);
+  el.value = textAreaValue(value);
   el.style.cssText = 'width:100%;min-height:90px;border:1px solid var(--line);border-radius:10px;padding:10px;color:var(--text);background:#090f1b;font:inherit;';
   el.addEventListener('input', () => onChange(el.value));
   return el;
+}
+
+function textAreaValue(value) {
+  if (Array.isArray(value)) return value.join('\n');
+  return String(value == null ? '' : value);
 }
 
 export function saveRow(onSave, onReload) {

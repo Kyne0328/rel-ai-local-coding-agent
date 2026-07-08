@@ -95,6 +95,46 @@ function localBaseUrl(host, port) {
   return `http://${safeHost}:${port}`;
 }
 
+function tokenQuery(token) {
+  return token ? `?token=${encodeURIComponent(token)}` : "";
+}
+
+function dashboardDataQuery(token) {
+  const tokenPart = token ? `&token=${encodeURIComponent(token)}` : "";
+  return `/api/dashboard/v10?limit=100&requireHttpToken=0${tokenPart}`;
+}
+
+function tokenState(token, showToken) {
+  if (showToken) return token;
+  if (token) return "set";
+  return "missing";
+}
+
+function connectionTunnelMode(publicBaseUrl, tunnelProvider) {
+  if (!publicBaseUrl) return "cloud connection required";
+  if (tunnelProvider && tunnelProvider !== "none") return `cloud tunnel via ${tunnelProvider}`;
+  return "configured HTTPS URL";
+}
+
+function connectionNextSteps(publicBaseUrl, baseForChatGPT, localUrl) {
+  if (!publicBaseUrl) {
+    return [
+      "ChatGPT will not accept a localhost MCP endpoint for OAuth.",
+      "Start a public HTTPS tunnel or configure --public-url with a stable HTTPS URL.",
+      "After the cloud URL is ready, copy the generated /mcp URL into a ChatGPT app.",
+      "Use the local dashboard only for setup, diagnostics, and workspace management."
+    ];
+  }
+  return [
+    "Keep Rel.AI MCP running on this machine while ChatGPT uses the app.",
+    `Keep your tunnel or reverse proxy routing ${baseForChatGPT} to ${localUrl}.`,
+    "In ChatGPT, create a custom app from Settings > Apps > Create. Admins can also use Workspace Settings > Apps > Create.",
+    "Paste the COPY THIS FOR CHATGPT URL as the MCP endpoint and choose OAuth.",
+    "When ChatGPT opens the sign-in page, enter your Rel.AI dashboard token to approve the app.",
+    "In a chat, select the Rel.AI MCP app, then ask it to inspect a workspace before making changes."
+  ];
+}
+
 function buildConnectionSummary({ host = "127.0.0.1", port = 3333, publicUrl = "", token = "", showToken = false, tunnelProvider = "" } = {}) {
   const localUrl = localBaseUrl(host, port);
   const publicBaseUrl = publicUrl ? normalizePublicUrl(publicUrl) : "";
@@ -103,8 +143,8 @@ function buildConnectionSummary({ host = "127.0.0.1", port = 3333, publicUrl = "
     ok: true,
     localBaseUrl: localUrl,
     publicBaseUrl,
-    dashboardUrl: `${localUrl}/dashboard${token ? `?token=${encodeURIComponent(token)}` : ""}`,
-    dashboardDataUrl: `${localUrl}/api/dashboard/v10?limit=100&requireHttpToken=0${token ? `&token=${encodeURIComponent(token)}` : ""}`,
+    dashboardUrl: `${localUrl}/dashboard${tokenQuery(token)}`,
+    dashboardDataUrl: `${localUrl}${dashboardDataQuery(token)}`,
     localBearerMcpUrl: `${localUrl}/mcp`,
     localMcpUrl: `${localUrl}/mcp`,
     bearerMcpUrl: baseForChatGPT ? `${baseForChatGPT}/mcp` : "",
@@ -114,27 +154,13 @@ function buildConnectionSummary({ host = "127.0.0.1", port = 3333, publicUrl = "
     chatgptAuthMode: "OAuth — ChatGPT signs in with your Rel.AI dashboard token.",
     oauthMetadataUrl: `${baseForChatGPT}/.well-known/oauth-protected-resource`,
     authHeader: token ? "Authorization: Bearer <REL_AI_MCP_TOKEN>" : "not configured",
-    token: showToken ? token : token ? "set" : "missing",
+    token: tokenState(token, showToken),
     tokenFile: getEnvPath(),
     profileFile: getConnectionProfilePath(),
     permanentUrlConfigured: Boolean(publicBaseUrl),
     tunnelProvider: tunnelProvider || "none",
-    tunnelMode: publicBaseUrl ? (tunnelProvider && tunnelProvider !== "none" ? `cloud tunnel via ${tunnelProvider}` : "configured HTTPS URL") : "cloud connection required",
-    nextSteps: publicBaseUrl
-      ? [
-          "Keep Rel.AI MCP running on this machine while ChatGPT uses the app.",
-          `Keep your tunnel or reverse proxy routing ${baseForChatGPT} to ${localUrl}.`,
-          "In ChatGPT, create a custom app from Settings > Apps > Create. Admins can also use Workspace Settings > Apps > Create.",
-          "Paste the COPY THIS FOR CHATGPT URL as the MCP endpoint and choose OAuth.",
-          "When ChatGPT opens the sign-in page, enter your Rel.AI dashboard token to approve the app.",
-          "In a chat, select the Rel.AI MCP app, then ask it to inspect a workspace before making changes."
-        ]
-      : [
-          "ChatGPT will not accept a localhost MCP endpoint for OAuth.",
-          "Start a public HTTPS tunnel or configure --public-url with a stable HTTPS URL.",
-          "After the cloud URL is ready, copy the generated /mcp URL into a ChatGPT app.",
-          "Use the local dashboard only for setup, diagnostics, and workspace management."
-        ]
+    tunnelMode: connectionTunnelMode(publicBaseUrl, tunnelProvider),
+    nextSteps: connectionNextSteps(publicBaseUrl, baseForChatGPT, localUrl)
   };
 }
 
