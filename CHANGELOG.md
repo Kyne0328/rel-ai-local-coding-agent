@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.18.2] — 2026-07-08
+
+### Sonar security and accessibility cleanup
+- **Harden CLI-controlled path handling in product UX flows by validating relative input, canonicalizing with `fs.realpathSync()`, and checking separator-terminated base directories before use.**
+- **Tighten local HTTP security by removing request-controlled CORS policy construction and fixed-PATH Git subprocess hotspots.**
+- **Clear remaining Sonar maintainability findings across optional chaining, nested ternaries, redundant test blocks, unsafe test logging, and Electron contrast styling.**
+- **Validate the release with `npm run check`, `npm test`, and `npm run test:all` after the cleanup from f629da1402398c27a1a1d3f73a4836fc35afcbc2.**
+
+Bump root/electron/status UI/lockfiles to 0.18.2.
+
 ## [0.18.1] — 2026-07-08
 
 ### Lint pass and code-quality cleanup
