@@ -2,15 +2,20 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 
-const SECRET_PATH_PATTERNS = Object.freeze({
+const SECRET_PATH_GROUPS = Object.freeze({
   fileNames: ["id_rsa", "id_ed25519", "known_hosts", ".npmrc", ".pypirc", ".netrc", "kubeconfig"],
   extensions: [".pem", ".key", ".p12", ".pfx"],
   directories: [".ssh", ".aws", ".azure", ".kube"]
 });
+const SECRET_PATH_PATTERNS = Object.freeze([
+  ...SECRET_PATH_GROUPS.fileNames,
+  ...SECRET_PATH_GROUPS.extensions,
+  ...SECRET_PATH_GROUPS.directories
+]);
 
-const SECRET_FILE_NAMES = new Set(SECRET_PATH_PATTERNS.fileNames);
-const SECRET_EXTENSIONS = new Set(SECRET_PATH_PATTERNS.extensions);
-const SECRET_DIRECTORIES = new Set(SECRET_PATH_PATTERNS.directories);
+const SECRET_FILE_NAMES = new Set(SECRET_PATH_GROUPS.fileNames);
+const SECRET_EXTENSIONS = new Set(SECRET_PATH_GROUPS.extensions);
+const SECRET_DIRECTORIES = new Set(SECRET_PATH_GROUPS.directories);
 const WINDOWS_SEPARATOR = path.win32.sep;
 const ESCAPED_CRLF = String.raw`\r\n`;
 const ESCAPED_LF = String.raw`\n`;

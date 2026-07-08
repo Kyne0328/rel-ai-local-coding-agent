@@ -123,7 +123,13 @@ function normalizeCorePaths(next, base, input) {
 function normalizeTrustedMode(next, input) {
   next.toolMode = "chatgpt_local_repo";
   next.trustedLocalAgent = true;
-  next.trustedBudgetMultiplier = clampNumber(input.trustedBudgetMultiplier, 1, 10, 2);
+  next.trustedBudgetMultiplier = normalizeTrustedBudgetMultiplier(input.trustedBudgetMultiplier);
+}
+
+function normalizeTrustedBudgetMultiplier(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 1 || number > 10) return 2;
+  return Math.floor(number);
 }
 
 function normalizeCautionZone(next, base, input) {

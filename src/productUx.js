@@ -338,6 +338,10 @@ function objectOrEmpty(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
+function commandMapOrEmpty(value) {
+  return value && typeof value === "object" ? value : {};
+}
+
 function clampNumber(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) return min;
@@ -375,7 +379,7 @@ function aliasConsistencyCheck(config) {
     // Cover BOTH command maps, matching relai_status. Checking only testCommands made
     // the dashboard report "All consistent" while relai_status flagged a stale entry in
     // the plain commands map — two surfaces disagreeing about the same workspace.
-    const allConfigured = { ...objectOrEmpty(ws.commands), ...objectOrEmpty(ws.testCommands) };
+    const allConfigured = { ...commandMapOrEmpty(ws.commands), ...commandMapOrEmpty(ws.testCommands) };
     const configuredKeys = Object.keys(allConfigured);
     let discovered = {};
     try { discovered = discoverCommands(ws.path || ''); } catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] alias command discovery:', error); }

@@ -85,7 +85,7 @@ async function boot() {
     { label: 'Refresh dashboard', category: 'Actions', action: () => _doRefresh({ source: 'manual', render: true }) },
     { label: 'Copy dashboard token', category: 'Actions', action: () => { if (getToken()) navigator.clipboard.writeText(getToken()).catch((error) => { if (window.localStorage?.getItem('relai_debug') === '1') console.error(error); }); } },
   ];
-  const workspaceList = Array.isArray(storeData.config?.workspaces) ? storeData.config.workspaces : [];
+  const workspaceList = storeData.config && Array.isArray(storeData.config.workspaces) ? storeData.config.workspaces : [];
   const wsActions = workspaceList.map(ws => ({
     label: 'Switch to workspace: ' + ws.alias,
     category: 'Workspaces',
