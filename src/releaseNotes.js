@@ -128,6 +128,10 @@ function parseChangelog(md) {
   return { version: heading.version, headline, bullets };
 }
 
+function fallbackReleaseNotes() {
+  return { ...FALLBACK, bullets: FALLBACK.bullets.slice() };
+}
+
 function getReleaseNotes() {
   try {
     const md = fs.readFileSync(path.join(__dirname, "..", "CHANGELOG.md"), "utf8");
@@ -136,7 +140,7 @@ function getReleaseNotes() {
   } catch (error) {
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] release notes:', error);
   }
-  return { ...FALLBACK, bullets: FALLBACK.bullets.slice() };
+  return fallbackReleaseNotes();
 }
 
 module.exports = { getReleaseNotes };

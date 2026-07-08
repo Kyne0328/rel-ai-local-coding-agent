@@ -40,15 +40,15 @@ async function applyOneEdit(workspace, config, edit, dryRun) {
   const hasContent = typeof edit.content === 'string';
 
   if (hasOldText && hasContent) {
-    throw new Error(`edit for ${path}: provide oldText+newText OR content, not both`);
+    throw new TypeError(`edit for ${path}: provide oldText+newText OR content, not both`);
   }
   if (!hasOldText && !hasContent) {
-    throw new Error(`edit for ${path}: must provide oldText+newText (exact replace) or content (full-file write)`);
+    throw new TypeError(`edit for ${path}: must provide oldText+newText (exact replace) or content (full-file write)`);
   }
 
   if (hasOldText) {
     if (typeof edit.newText !== 'string') {
-      throw new Error(`edit for ${path}: newText is required (and must be a string) alongside oldText`);
+      throw new TypeError(`edit for ${path}: newText is required (and must be a string) alongside oldText`);
     }
     const result = relaiReplace(workspace, config, { path, oldText: edit.oldText, newText: edit.newText, dryRun });
     return { ...result, path, plannerPath: 'replace' };
@@ -168,9 +168,7 @@ async function _handleBatchEdits(workspace, config, args) {
       ok: preflight.ok,
       workspace: workspace.alias,
       plannerPath: 'batch',
-      plannerReason: preflight.ok
-        ? `preflight passed for ${preflight.results.length} edit(s); dryRun requested so 0 edits were applied`
-        : `preflight failed; applied 0 of ${preflight.results.length} edit(s)`,
+      plannerReason: preflightPlannerReason(preflight),
       editCount: preflight.results.length,
       appliedCount: 0,
       preflightAtomic: true,
@@ -208,6 +206,17 @@ async function _handleBatchEdits(workspace, config, args) {
   return attachPost(out, await runPostActions(workspace, config, args));
 }
 
+function preflightPlannerReason(preflight) {
+  if (preflight.ok) return `preflight passed for ${preflight.results.length} edit(s); dryRun requested so 0 edits were applied`;
+  return `preflight failed; applied 0 of ${preflight.results.length} edit(s)`;
+}
+
+function singlePlannerReason(hasOldText, plannerPath) {
+  if (hasOldText) return 'oldText provided without content — routing to exact text replacement';
+  if (plannerPath === 'write:staged') return 'content provided — routing to staged chunked write';
+  return 'content provided — routing to direct full-file write';
+}
+
 async function _handleUpdateTextEdit(workspace, config, args) {
   const result = await relaiApplyPatch(workspace, config, { ...args, patch: args.updateText });
   const out = { ...result, plannerPath: 'apply-update', plannerReason: 'updateText provided — routing to patch-shaped apply-update' };
@@ -224,9 +233,7 @@ async function _handleSingleEdit(workspace, config, args) {
     throw new Error('relai_edit: must provide one of: (1) oldText+newText for exact replacement, (2) content for full-file write, (3) updateText for patch-shaped update, (4) edits:[...] for a batch');
   }
   const single = await applyOneEdit(workspace, config, { path: args.path, oldText: args.oldText, newText: args.newText, content: args.content }, args.dryRun);
-  single.plannerReason = hasOldText
-    ? 'oldText provided without content — routing to exact text replacement'
-    : `content provided — routing to ${single.plannerPath === 'write:staged' ? 'staged chunked write' : 'direct full-file write'}`;
+  single.plannerReason = singlePlannerReason(hasOldText, single.plannerPath);
   return attachPost(single, await runPostActions(workspace, config, args));
 }
 

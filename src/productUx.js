@@ -34,11 +34,11 @@ function dashboardData(config, args = {}) {
     config: configSummary,
     toolCount,
     counts: {
-      auditEntries: auditTail.entries ? auditTail.entries.length : 0,
+      auditEntries: auditTail.entries?.length || 0,
       workspaces: Object.keys(config.workspaces || {}).length
     },
     workflow: {
-      mode: (config.workflow && config.workflow.mode) || "standard",
+      mode: config.workflow?.mode || "standard",
       tools: publicTools
     },
     health,
@@ -54,7 +54,7 @@ function liveLogTail(config, args = {}) {
     generatedAt: new Date().toISOString(),
     source: config.auditLogPath,
     entries: audit.entries || [],
-    count: audit.entries ? audit.entries.length : 0
+    count: audit.entries?.length || 0
   };
 }
 
@@ -64,7 +64,7 @@ function healthMonitor(config, _args = {}) {
   checkDir(findings, "stateDir", stateDir, true);
   checkFile(findings, "config", getConfigPath(), false);
 
-  const staleHours = Number(config.productUx && config.productUx.staleHours || 24);
+  const staleHours = Number(config.productUx?.staleHours || 24);
   const workspaces = Object.keys(config.workspaces || {}).map((alias) => {
     try {
       const workspace = resolveWorkspace(config, alias);
@@ -100,7 +100,7 @@ function cleanupRun(config, args = {}) {
 
 function cleanupPlan(config, apply, args = {}) {
   const stateDir = getStateDir(config);
-  const olderThanHours = clampNumber(args.olderThanHours || (config.productUx && config.productUx.cleanupOlderThanHours) || 168, 1, 24 * 365);
+  const olderThanHours = clampNumber(args.olderThanHours || config.productUx?.cleanupOlderThanHours || 168, 1, 24 * 365);
   const includeAudit = args.includeAudit === true;
   const targets = [];
   if (includeAudit) collectOldJson(targets, path.dirname(config.auditLogPath), olderThanHours, [path.basename(config.auditLogPath)]);
@@ -218,7 +218,7 @@ function importOriginalRelAiConfig(args = {}) {
 }
 
 function stateExport(config, args = {}) {
-  if (config.productUx && config.productUx.enableStateExport === false) {
+  if (config.productUx?.enableStateExport === false) {
     throw new Error("State export is disabled (productUx.enableStateExport=false).");
   }
   const stateDir = getStateDir(config);
@@ -247,7 +247,7 @@ function stateImport(config, args = {}) {
   const written = [];
   for (const item of payload.files) {
     if (!item || !item.path || typeof item.content !== "string") continue;
-    const relative = String(item.path).replaceAll("\\", "/");
+    const relative = String(item.path).replaceAll(path.win32.sep, "/");
     if (relative.startsWith("/") || relative.includes("..")) throw new Error(`Unsafe state path: ${relative}`);
     const target = path.join(stateDir, relative);
     fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
@@ -328,10 +328,14 @@ function walkState(root, current, files, maxFiles, maxFileBytes) {
     else {
       const stat = fs.statSync(full);
       if (stat.size > maxFileBytes) continue;
-      const relative = path.relative(root, full).replaceAll("\\", "/");
+      const relative = path.relative(root, full).replaceAll(path.win32.sep, "/");
       files.push({ path: relative, modifiedAt: stat.mtime.toISOString(), content: fs.readFileSync(full, "utf8") });
     }
   }
+}
+
+function objectOrEmpty(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
 function clampNumber(value, min, max) {
@@ -371,7 +375,7 @@ function aliasConsistencyCheck(config) {
     // Cover BOTH command maps, matching relai_status. Checking only testCommands made
     // the dashboard report "All consistent" while relai_status flagged a stale entry in
     // the plain commands map — two surfaces disagreeing about the same workspace.
-    const allConfigured = { ...(ws.commands || {}), ...(ws.testCommands || {}) };
+    const allConfigured = { ...objectOrEmpty(ws.commands), ...objectOrEmpty(ws.testCommands) };
     const configuredKeys = Object.keys(allConfigured);
     let discovered = {};
     try { discovered = discoverCommands(ws.path || ''); } catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] alias command discovery:', error); }

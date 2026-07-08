@@ -23,8 +23,8 @@ export function mountGeneral(container) {
 async function _loadAndRender(container) {
   const cfg = await loadSettingsConfig(container);
   if (!cfg) return;
-  _original = JSON.parse(JSON.stringify(cfg));
-  _draft = JSON.parse(JSON.stringify(cfg));
+  _original = structuredClone(cfg);
+  _draft = structuredClone(cfg);
   _render(container);
 }
 
@@ -46,38 +46,38 @@ function _render(container) {
     { value: 'prepared', label: 'Prepared update and bundle apply' }
   ], (_draft.workflow || {}).mode || 'standard', (value) => {
     if (value === 'prepared' && !confirmFastFlow()) return;
-    if (!_draft.workflow) _draft.workflow = {};
+    _draft.workflow ??= {};
     _draft.workflow.mode = value;
     _checkDirty();
   }), 'Both options keep the same workspace-tool surface. Prepared update mode adds bundle apply and snapshot packaging (relai_apply_bundle, relai_package_snapshot) alongside relai_edit patch updates for larger changes.'));
   const prepared = (_draft.workflow && _draft.workflow.prepared) || {};
   workflow.body.appendChild(field('Require clean git before prepared apply', toggleControl(prepared.requireCleanGit !== false, (v) => {
-    if (!_draft.workflow) _draft.workflow = {};
-    if (!_draft.workflow.prepared) _draft.workflow.prepared = {};
+    _draft.workflow ??= {};
+    _draft.workflow.prepared ??= {};
     _draft.workflow.prepared.requireCleanGit = v;
     _checkDirty();
   }, { enabled: 'Require clean git', disabled: 'Allow dirty git' }), 'Off by default. Turn on to make prepared apply tools refuse to run on a dirty working tree.'));
   workflow.body.appendChild(field('Backup before prepared apply', toggleControl(prepared.backup !== false, (v) => {
-    if (!_draft.workflow) _draft.workflow = {};
-    if (!_draft.workflow.prepared) _draft.workflow.prepared = {};
+    _draft.workflow ??= {};
+    _draft.workflow.prepared ??= {};
     _draft.workflow.prepared.backup = v;
     _checkDirty();
   }, { enabled: 'Backup enabled', disabled: 'No automatic backup' }), 'When dirty edits are allowed, Rel.AI attempts a git stash backup before applying an update or archive.'));
   workflow.body.appendChild(field('Clear missing files during archive overlay', toggleControl(prepared.clearMissingDefault === true, (v) => {
-    if (!_draft.workflow) _draft.workflow = {};
-    if (!_draft.workflow.prepared) _draft.workflow.prepared = {};
+    _draft.workflow ??= {};
+    _draft.workflow.prepared ??= {};
     _draft.workflow.prepared.clearMissingDefault = v;
     _checkDirty();
   }, { enabled: 'Clear missing', disabled: 'Overlay only' }), 'Off means zip/archive apply overwrites and adds files but does not clear live files missing from the archive unless a tool call explicitly asks for clearMissing.'));
   workflow.body.appendChild(field('Max update bytes', numberControl(prepared.maxUpdateBytes || 2097152, (v) => {
-    if (!_draft.workflow) _draft.workflow = {};
-    if (!_draft.workflow.prepared) _draft.workflow.prepared = {};
+    _draft.workflow ??= {};
+    _draft.workflow.prepared ??= {};
     _draft.workflow.prepared.maxUpdateBytes = v;
     _checkDirty();
   }, { min: 1024, max: 52428800, width: '150px' }), 'Upper bound for prepared update payloads (relai_edit updateText).'));
   workflow.body.appendChild(field('Max archive bytes', numberControl(prepared.maxBundleBytes || 262144000, (v) => {
-    if (!_draft.workflow) _draft.workflow = {};
-    if (!_draft.workflow.prepared) _draft.workflow.prepared = {};
+    _draft.workflow ??= {};
+    _draft.workflow.prepared ??= {};
     _draft.workflow.prepared.maxBundleBytes = v;
     _checkDirty();
   }, { min: 1048576, max: 2147483648, width: '150px' }), 'Upper bound for local zip overlays.'));
@@ -155,5 +155,5 @@ async function _save(container) {
     workflow: _draft.workflow
   };
   const res = await saveSettings(payload);
-  if (res && res.ok) await _loadAndRender(container);
+  if (res?.ok) await _loadAndRender(container);
 }

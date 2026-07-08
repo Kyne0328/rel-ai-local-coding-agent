@@ -5,6 +5,10 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 
+function git(args, options = {}) { // NOSONAR - these unit tests intentionally execute the local Git binary.
+  return execFileSync('git', args, options);
+}
+
 const require = createRequire(import.meta.url);
 const {
   ensureSessionStarted,
@@ -21,12 +25,11 @@ function makeRepo() {
   const workspacePath = path.join(root, 'workspace');
   fs.mkdirSync(workspacePath, { recursive: true });
   fs.writeFileSync(path.join(workspacePath, 'README.md'), '# Auto session\n');
-  const env = { ...process.env };
-  execFileSync('git', ['init'], { cwd: workspacePath, stdio: 'ignore', env });
-  execFileSync('git', ['config', 'user.email', 'relai@example.test'], { cwd: workspacePath, env });
-  execFileSync('git', ['config', 'user.name', 'RelAI Auto'], { cwd: workspacePath, env });
-  execFileSync('git', ['add', '.'], { cwd: workspacePath, env });
-  execFileSync('git', ['commit', '-m', 'init'], { cwd: workspacePath, stdio: 'ignore', env });
+  git(['init'], { cwd: workspacePath, stdio: 'ignore' });
+  git(['config', 'user.email', 'relai@example.test'], { cwd: workspacePath });
+  git(['config', 'user.name', 'RelAI Auto'], { cwd: workspacePath });
+  git(['add', '.'], { cwd: workspacePath });
+  git(['commit', '-m', 'init'], { cwd: workspacePath, stdio: 'ignore' });
   return { root, workspacePath, stateDir: path.join(root, 'state') };
 }
 

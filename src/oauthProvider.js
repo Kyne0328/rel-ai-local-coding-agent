@@ -45,10 +45,15 @@ function readStore() {
   try {
     const raw = fs.readFileSync(storePath(), "utf8");
     const parsed = JSON.parse(raw);
-    return { ...emptyStore(), ...(parsed && typeof parsed === "object" ? parsed : {}) };
-  } catch {
+    return { ...emptyStore(), ...objectOrEmpty(parsed) };
+  } catch (error) {
+    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] oauth store read:', error);
     return emptyStore();
   }
+}
+
+function objectOrEmpty(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
 function writeStore(store) {
@@ -180,33 +185,53 @@ function registerClient(body = {}) {
 // Returns { ok: true, request } when the /authorize query is a well-formed code
 // request from a registered client, else { ok: false, ... }. redirectError marks
 // errors that must be reported by redirecting back to the client per RFC 6749.
-function validateAuthorizationRequest(query = {}) {
-  const store = pruneStore(readStore());
+function oauthError(error, description, redirectError = false, extras = {}) {
+  return { ok: false, redirectError, error, error_description: description, ...extras };
+}
+
+function authorizationClient(query, store) {
   const clientId = String(query.client_id || "");
-  const redirectUri = String(query.redirect_uri || "");
   const client = store.clients[clientId];
-  if (!client) {
-    return { ok: false, redirectError: false, error: "invalid_client", error_description: "Unknown client_id. Re-add the connector in ChatGPT." };
-  }
+  if (!client) return { error: oauthError("invalid_client", "Unknown client_id. Re-add the connector in ChatGPT.") };
+  return { clientId, client };
+}
+
+function authorizationRedirect(query, client) {
+  const redirectUri = String(query.redirect_uri || "");
   if (!redirectUri || !client.redirect_uris.includes(redirectUri)) {
-    return { ok: false, redirectError: false, error: "invalid_request", error_description: "redirect_uri does not match a registered value." };
+    return { error: oauthError("invalid_request", "redirect_uri does not match a registered value.") };
   }
+  return { redirectUri };
+}
+
+function authorizationCodeChallenge(query, redirectUri) {
   if (String(query.response_type || "") !== "code") {
-    return { ok: false, redirectError: true, redirectUri, state: query.state, error: "unsupported_response_type", error_description: "Only response_type=code is supported." };
+    return { error: oauthError("unsupported_response_type", "Only response_type=code is supported.", true, { redirectUri, state: query.state }) };
   }
   const codeChallenge = String(query.code_challenge || "");
   const method = String(query.code_challenge_method || "");
   if (!codeChallenge || method !== "S256") {
-    return { ok: false, redirectError: true, redirectUri, state: query.state, error: "invalid_request", error_description: "PKCE with code_challenge_method=S256 is required." };
+    return { error: oauthError("invalid_request", "PKCE with code_challenge_method=S256 is required.", true, { redirectUri, state: query.state }) };
   }
+  return { codeChallenge };
+}
+
+function validateAuthorizationRequest(query = {}) {
+  const store = pruneStore(readStore());
+  const clientResult = authorizationClient(query, store);
+  if (clientResult.error) return clientResult.error;
+  const redirectResult = authorizationRedirect(query, clientResult.client);
+  if (redirectResult.error) return redirectResult.error;
+  const challengeResult = authorizationCodeChallenge(query, redirectResult.redirectUri);
+  if (challengeResult.error) return challengeResult.error;
   return {
     ok: true,
     request: {
-      clientId,
-      clientName: client.client_name || "",
-      redirectUri,
+      clientId: clientResult.clientId,
+      clientName: clientResult.client.client_name || "",
+      redirectUri: redirectResult.redirectUri,
       state: query.state != null ? String(query.state) : "",
-      codeChallenge,
+      codeChallenge: challengeResult.codeChallenge,
       resource: query.resource != null ? String(query.resource) : "",
       scope: query.scope != null ? String(query.scope) : SCOPE
     }

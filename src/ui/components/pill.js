@@ -1,9 +1,13 @@
 // Status pill with sr-only text for accessibility
-export function Pill(value, extraClass = '') {
+function pillClass(value) {
   const s = String(value || 'ok').toLowerCase();
-  const cls = s.includes('fail') || s.includes('error') || s.includes('denied') || s.includes('blocked') || s === 'false' ? 'bad'
-    : s.includes('pending') || s.includes('run') || s.includes('warn') || s.includes('wait') || s.includes('active') ? 'warn'
-    : 'ok';
+  if (s.includes('fail') || s.includes('error') || s.includes('denied') || s.includes('blocked') || s === 'false') return 'bad';
+  if (s.includes('pending') || s.includes('run') || s.includes('warn') || s.includes('wait') || s.includes('active')) return 'warn';
+  return 'ok';
+}
+
+export function Pill(value, extraClass = '') {
+  const cls = pillClass(value);
   const el = document.createElement('span');
   el.className = `status-pill ${cls} ${extraClass}`.trim();
   el.textContent = String(value || 'ok');
@@ -16,10 +20,7 @@ export function Pill(value, extraClass = '') {
 }
 
 export function pillHtml(value) {
-  const s = String(value || 'ok').toLowerCase();
-  const cls = s.includes('fail') || s.includes('error') || s.includes('denied') || s.includes('blocked') || s === 'false' ? 'bad'
-    : s.includes('pending') || s.includes('run') || s.includes('warn') || s.includes('wait') || s.includes('active') ? 'warn'
-    : 'ok';
+  const cls = pillClass(value);
   return `<span class="status-pill ${cls}">${esc(String(value || 'ok'))}<span class="sr-only"> (${cls})</span></span>`;
 }
 

@@ -28,7 +28,8 @@ function readSessionPolicy(config, alias) {
     const last = sessionLastActivity(parsed);
     if (last !== null && Date.now() - last > SESSION_IDLE_TTL_MS) return null;
     return parsed;
-  } catch {
+  } catch (error) {
+    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] session policy read:', error);
     return null;
   }
 }
@@ -36,7 +37,7 @@ function readSessionPolicy(config, alias) {
 function captureBaselineDirty(workspaceRoot) {
   if (!workspaceRoot) return [];
   try {
-    const result = spawnSync('git', ['status', '--short'], { cwd: workspaceRoot, encoding: 'utf8', timeout: 15000, env: { ...process.env } });
+    const result = spawnSync('git', ['status', '--short'], { cwd: workspaceRoot, encoding: 'utf8', timeout: 15000 });
     if (result.status !== 0 || !result.stdout) return [];
     return result.stdout
       .split(/\r?\n/)
@@ -47,7 +48,8 @@ function captureBaselineDirty(workspaceRoot) {
         return arrow >= 0 ? part.slice(arrow + 4).trim() : part;
       })
       .filter(Boolean);
-  } catch {
+  } catch (error) {
+    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] baseline dirty capture:', error);
     return [];
   }
 }
@@ -78,7 +80,8 @@ function touchSessionPolicy(config, alias) {
     parsed.updatedAt = new Date().toISOString();
     fs.writeFileSync(filePath, `${JSON.stringify(parsed, null, 2)}\n`, { mode: 0o600 });
     return true;
-  } catch {
+  } catch (error) {
+    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] session policy touch:', error);
     return false;
   }
 }
@@ -104,7 +107,8 @@ function clearSessionPolicy(config, alias) {
     if (!fs.existsSync(filePath)) return { cleared: false };
     fs.unlinkSync(filePath);
     return { cleared: true };
-  } catch {
+  } catch (error) {
+    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] session policy clear:', error);
     return { cleared: false };
   }
 }

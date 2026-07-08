@@ -108,7 +108,7 @@ function normalizeConfig(config) {
 }
 
 function mergeConfigBase(base, input) {
-  return { ...base, ...input, workspaces: { ...(input.workspaces || {}) } };
+  return { ...base, ...input, workspaces: { ...objectOrEmpty(input.workspaces) } };
 }
 
 function normalizeCorePaths(next, base, input) {

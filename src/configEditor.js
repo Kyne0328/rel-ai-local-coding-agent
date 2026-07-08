@@ -46,22 +46,8 @@ function updateSettings(current, payload = {}) {
     setIfChanged(next, key, finiteNumber(values[key], key), changed);
   }
 
-  if (values.workflow && typeof values.workflow === "object") {
-    next.workflow = normalizeWorkflowConfig({ ...(next.workflow || {}), ...values.workflow, prepared: { ...((next.workflow || {}).prepared || {}), ...((values.workflow || {}).prepared || {}) } });
-    changed.push("workflow");
-  }
-
-  for (const section of ["productUx", "release"]) {
-    if (!values[section] || typeof values[section] !== "object") continue;
-    if (!next[section] || typeof next[section] !== "object") next[section] = {};
-    for (const [key, value] of Object.entries(values[section])) {
-      if (!ALLOWED_SECTION_KEYS[section].has(key)) {
-        throw new Error(`Unknown ${section} setting: ${key}. Allowed: ${[...ALLOWED_SECTION_KEYS[section]].join(", ")}.`);
-      }
-      const coerced = typeof value === "boolean" ? Boolean(value) : (typeof value === "number" || /^\d+$/.test(String(value)) ? finiteNumber(value, `${section}.${key}`) : value);
-      setNestedIfChanged(next, section, key, coerced, changed);
-    }
-  }
+  applyWorkflowSettings(next, values, changed);
+  applyAllowedSections(next, values, changed);
 
   const normalized = writeConfig(next);
   return {
@@ -71,6 +57,44 @@ function updateSettings(current, payload = {}) {
     configPath: getConfigPath(),
     config: publicConfigSummary(normalized)
   };
+}
+
+function objectOrEmpty(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function applyWorkflowSettings(next, values, changed) {
+  if (!values.workflow || typeof values.workflow !== "object") return;
+  const current = objectOrEmpty(next.workflow);
+  const currentPrepared = objectOrEmpty(current.prepared);
+  const incomingPrepared = objectOrEmpty(values.workflow.prepared);
+  next.workflow = normalizeWorkflowConfig({
+    ...current,
+    ...values.workflow,
+    prepared: { ...currentPrepared, ...incomingPrepared }
+  });
+  changed.push("workflow");
+}
+
+function coerceSettingValue(value, label) {
+  if (typeof value === "boolean") return Boolean(value);
+  if (typeof value === "number" || /^\d+$/.test(String(value))) return finiteNumber(value, label);
+  return value;
+}
+
+function applyAllowedSection(next, values, section, changed) {
+  if (!values[section] || typeof values[section] !== "object") return;
+  if (!next[section] || typeof next[section] !== "object") next[section] = {};
+  for (const [key, value] of Object.entries(values[section])) {
+    if (!ALLOWED_SECTION_KEYS[section].has(key)) {
+      throw new Error(`Unknown ${section} setting: ${key}. Allowed: ${[...ALLOWED_SECTION_KEYS[section]].join(", ")}.`);
+    }
+    setNestedIfChanged(next, section, key, coerceSettingValue(value, `${section}.${key}`), changed);
+  }
+}
+
+function applyAllowedSections(next, values, changed) {
+  for (const section of ["productUx", "release"]) applyAllowedSection(next, values, section, changed);
 }
 
 function _handleDeleteWorkspace(alias, payload, next) {
@@ -98,7 +122,7 @@ function _handlePruneCommands(alias, payload, next) {
   if (!ws) throw new Error(`Workspace '${alias}' is not configured.`);
   const configured = ws.testCommands && typeof ws.testCommands === "object" ? ws.testCommands : {};
   let discovered;
-  try { discovered = discoverCommands(ws.path) || {}; } catch { discovered = {}; }
+  try { discovered = discoverCommands(ws.path) || {}; } catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] prune command discovery:', error); discovered = {}; }
   if (Object.keys(discovered).length === 0 && !(ws.path && fs.existsSync(ws.path))) {
     throw new Error(`Cannot determine stale commands for '${alias}': workspace path is unavailable. Fix the path first.`);
   }
@@ -124,7 +148,7 @@ function _handlePruneCommands(alias, payload, next) {
 
 function _handleUpsertWorkspace(alias, payload, next) {
   const source = payload.workspaceConfig && typeof payload.workspaceConfig === "object" ? payload.workspaceConfig : payload;
-  const currentWorkspace = next.workspaces[alias] || {};
+  const currentWorkspace = objectOrEmpty(next.workspaces[alias]);
   const workspacePath = source.path == null || source.path === "" ? currentWorkspace.path : String(source.path).trim();
   if (!workspacePath) throw new Error("Workspace path is required.");
   if (!path.isAbsolute(workspacePath)) throw new Error("Workspace path must be absolute.");
@@ -171,7 +195,7 @@ function updateWorkspace(current, payload = {}) {
 }
 
 function clone(value) {
-  return JSON.parse(JSON.stringify(value || {}));
+  return structuredClone(objectOrEmpty(value));
 }
 
 function finiteNumber(value, label) {
@@ -187,8 +211,8 @@ function parseList(value, fallback = []) {
 }
 
 function parseFastTask(value, fallback = {}) {
-  const source = value && typeof value === "object" ? value : {};
-  const current = fallback && typeof fallback === "object" ? { ...DEFAULT_FAST_TASK, ...fallback } : { ...DEFAULT_FAST_TASK };
+  const source = objectOrEmpty(value);
+  const current = { ...DEFAULT_FAST_TASK, ...objectOrEmpty(fallback) };
   const maxIndexFiles = source.maxIndexFiles == null ? current.maxIndexFiles : finiteNumber(source.maxIndexFiles, "fastTask.maxIndexFiles");
   return {
     ...current,
@@ -202,7 +226,7 @@ function parseFastTask(value, fallback = {}) {
 }
 
 function parseCommandMap(value, fallback = {}) {
-  if (value == null || value === "") return { ...fallback };
+  if (value == null || value === "") return { ...objectOrEmpty(fallback) };
   if (typeof value === "object" && !Array.isArray(value)) {
     const result = {};
     for (const [key, command] of Object.entries(value)) {

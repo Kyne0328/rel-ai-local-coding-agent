@@ -16,18 +16,18 @@ function normalizeAuditTerms(value) {
 }
 
 function isLikelyGeneratedFile(relativePath) {
-  const normalized = String(relativePath || "").replaceAll("\\", "/");
+  const normalized = String(relativePath || "").replaceAll(path.win32.sep, "/");
   const leaf = normalized.split("/").pop() || "";
   const exactGenerated = new Set(["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "pubspec.lock"]);
   return exactGenerated.has(leaf)
     || leaf.includes("generated")
-    || leaf.endsWith("g.dart")
+    || leaf.endsWith(".g.dart")
     || leaf.endsWith("freezed.dart")
     || leaf.endsWith(".g.cs");
 }
 
 function fileCategory(relativePath) {
-  const normalized = String(relativePath || "").replaceAll("\\", "/");
+  const normalized = String(relativePath || "").replaceAll(path.win32.sep, "/");
   if (/(^|\/)(test|tests|__tests__)\//.test(normalized) || /\.test\./.test(normalized) || /\.spec\./.test(normalized)) return "tests";
   if (/(^|\/)(docs|doc)\//.test(normalized) || /\.md$/.test(normalized)) return "docs";
   if (/(^|\/)(public|assets|ui|views|templates)\//.test(normalized)) return "ui";

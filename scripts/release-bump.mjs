@@ -14,6 +14,7 @@ const dateArg = valueAfter('--date');
 const headline = valueAfter('--headline') || 'Release notes';
 const notes = valuesFor('--note');
 const date = dateArg || new Date().toISOString().slice(0, 10);
+const ESCAPED_DOT = String.raw`\.`;
 
 function valueAfter(flag) {
   const index = args.indexOf(flag);
@@ -87,7 +88,7 @@ function replaceExact(relativePath, oldText, newText) {
 }
 
 function changelogHasVersion(content, nextVersion) {
-  return new RegExp(String.raw`^## \[${nextVersion.replaceAll('.', '\\.')}\]`, 'm').test(content);
+  return new RegExp(String.raw`^## \[${nextVersion.replaceAll('.', ESCAPED_DOT)}\]`, 'm').test(content);
 }
 
 function insertChangelog(nextVersion, releaseDate) {

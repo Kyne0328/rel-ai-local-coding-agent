@@ -54,19 +54,24 @@ export function virtualizeTable(tbody, allRows, renderRow) {
     if (entries[0].isIntersecting) _renderChunk();
   }, { rootMargin: '200px' });
 
+  function _appendVirtualRow(row) {
+    const el = renderRow(row);
+    if (sentinel) sentinel.before(el);
+    else tbody.appendChild(el);
+  }
+
+  function _clearSentinel() {
+    if (!sentinel) return;
+    observer.unobserve(sentinel);
+    sentinel.remove();
+    sentinel = null;
+  }
+
   function _renderChunk() {
     const chunk = allRows.slice(rendered, rendered + CHUNK);
-    for (const row of chunk) {
-      const el = renderRow(row);
-      if (sentinel) tbody.insertBefore(el, sentinel);
-      else tbody.appendChild(el);
-    }
+    for (const row of chunk) _appendVirtualRow(row);
     rendered += chunk.length;
-    if (rendered >= allRows.length && sentinel) {
-      observer.unobserve(sentinel);
-      sentinel.remove();
-      sentinel = null;
-    }
+    if (rendered >= allRows.length) _clearSentinel();
   }
 
   // Initial render
@@ -81,7 +86,7 @@ export function virtualizeTable(tbody, allRows, renderRow) {
 
   return {
     reinit(rows) {
-      if (sentinel) { observer.unobserve(sentinel); sentinel = null; }
+      _clearSentinel()
       allRows = rows;
       rendered = 0;
       tbody.innerHTML = '';
@@ -95,7 +100,7 @@ export function virtualizeTable(tbody, allRows, renderRow) {
     },
     getRendered() { return rendered; },
     destroy() {
-      if (sentinel) { observer.unobserve(sentinel); sentinel.remove(); sentinel = null; }
+      _clearSentinel()
       observer.disconnect();
     },
   };

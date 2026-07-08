@@ -7,7 +7,7 @@ const path = require("node:path");
 // same value the release notes advertise. package.json is only a last-resort fallback
 // (e.g. CHANGELOG missing from a partial bundle).
 let _pkgVersion = "";
-try { _pkgVersion = require("../package.json").version || ""; } catch (_error) { /* ignore */ }
+try { _pkgVersion = require("../package.json").version || ""; } catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] package version:', error); }
 
 function readChangelogVersion() {
   try {
@@ -15,7 +15,7 @@ function readChangelogVersion() {
     // Match the first "## [x.y.z] — date" (em dash or hyphen) heading.
     const match = md.match(/^##\s*\[([^\]]+)\]/m);
     if (match?.[1]) return match[1].trim();
-  } catch (_error) { /* fall through to package.json */ }
+  } catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] changelog version:', error); }
   return "";
 }
 

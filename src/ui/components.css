@@ -253,7 +253,7 @@
   .item-sub {
     margin-top: 3px;
     color: var(--text-muted);
-    font-size: var(--font-12); line-height: 1.4; word-break: break-word;
+    font-size: var(--font-12); line-height: 1.4; overflow-wrap: anywhere;
   }
   .item-time { color: var(--text-dim); font-size: var(--font-12); white-space: nowrap; }
   .empty {
@@ -337,7 +337,7 @@
   }
   .copy-box {
     min-height: 164px;
-    white-space: pre-wrap; word-break: break-word;
+    white-space: pre-wrap; overflow-wrap: anywhere;
     border: 1px solid var(--line-soft);
     border-radius: var(--radius-md);
     background: var(--bg);

@@ -33,46 +33,74 @@ export function requestDashboardRefresh() {
   }
 }
 
+function cacheKeyFor(url, fetchOpts) {
+  const isGet = !fetchOpts.method || fetchOpts.method === 'GET';
+  return isGet ? url : null;
+}
+
+function cachedValue(cacheKey) {
+  if (!cacheKey || !_cache.has(cacheKey)) return null;
+  const { ts, val } = _cache.get(cacheKey);
+  return Date.now() - ts < 1000 ? val : null;
+}
+
+function timeoutFor(timeout) {
+  return Number.isFinite(timeout) ? timeout : 8000;
+}
+
+function authHeaders(fetchOpts, token) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = 'Bearer ' + token;
+  return { ...headers, ...(fetchOpts.headers || {}) };
+}
+
+async function parseJsonResponse(res) {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    if (window.localStorage?.getItem('relai_debug') === '1') console.error(error);
+    return { ok: false, error: text, status: res.status };
+  }
+}
+
+function normalizeResponseData(res, data) {
+  if (!res.ok && data.ok !== true) data.ok = false;
+  if (res.status === 401) data.error = data.error || 'Unauthorized — check dashboard token.';
+  return data;
+}
+
+function requestError(err, timeoutMs) {
+  const isAbort = err?.name === 'AbortError';
+  return { ok: false, error: isAbort ? `Request timed out after ${Math.round(timeoutMs / 1000)} seconds.` : String(err) };
+}
+
 export async function fetchJson(url, opts = {}) {
   // timeout (ms): overrides the 8s default; 0 or negative disables the abort timer
   // entirely. The native folder picker blocks on user input and must not be killed
   // mid-prompt, so it passes timeout: 0.
   const { timeout, ...fetchOpts } = opts;
-  const isGet = !fetchOpts.method || fetchOpts.method === 'GET';
-  const cacheKey = isGet ? url : null;
+  const cacheKey = cacheKeyFor(url, fetchOpts);
+  const cached = cachedValue(cacheKey);
+  if (cached) return cached;
 
-  if (cacheKey && _cache.has(cacheKey)) {
-    const { ts, val } = _cache.get(cacheKey);
-    if (Date.now() - ts < 1000) return val;
-  }
-
-  const timeoutMs = Number.isFinite(timeout) ? timeout : 8000;
+  const timeoutMs = timeoutFor(timeout);
   const ctrl = new AbortController();
   const timer = timeoutMs > 0 ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
 
   try {
     const token = getToken();
     const urlWithToken = token ? _addToken(url, token) : url;
-    const headers = { 'Content-Type': 'application/json' };
-    if (token) headers['Authorization'] = 'Bearer ' + token;
-
     const res = await fetch(urlWithToken, {
       ...fetchOpts,
       signal: ctrl.signal,
-      headers: { ...headers, ...(fetchOpts.headers || {}) },
+      headers: authHeaders(fetchOpts, token),
     });
-
-    let data;
-    const text = await res.text();
-    try { data = JSON.parse(text); } catch (_) { data = { ok: false, error: text, status: res.status }; }
-    if (!res.ok && data.ok !== true) data.ok = false;
-    if (res.status === 401) data.error = data.error || 'Unauthorized — check dashboard token.';
-
+    const data = normalizeResponseData(res, await parseJsonResponse(res));
     if (cacheKey && res.ok) _cache.set(cacheKey, { ts: Date.now(), val: data });
     return data;
   } catch (err) {
-    const isAbort = err && err.name === 'AbortError';
-    return { ok: false, error: isAbort ? `Request timed out after ${Math.round(timeoutMs / 1000)} seconds.` : String(err) };
+    return requestError(err, timeoutMs);
   } finally {
     if (timer) clearTimeout(timer);
   }
@@ -94,7 +122,8 @@ function _addToken(url, token) {
       u.searchParams.set('token', token);
     }
     return u.pathname + u.search + u.hash;
-  } catch (_) {
+  } catch (error) {
+    if (window.localStorage?.getItem('relai_debug') === '1') console.error(error);
     return url;
   }
 }

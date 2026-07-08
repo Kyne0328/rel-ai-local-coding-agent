@@ -1,4 +1,4 @@
-const KNOWN_RUNNABLE_PREFIXES = [
+const KNOWN_RUNNABLE_PREFIXES = new Set([
   'npm', 'yarn', 'pnpm', 'npx',
   'make', 'go', 'cargo',
   'flutter', 'dart',
@@ -6,7 +6,7 @@ const KNOWN_RUNNABLE_PREFIXES = [
   'jest', 'mocha', 'vitest',
   'node', 'deno', 'bun',
   'echo', 'sh', 'bash',
-];
+]);
 
 function normalizeCommandAlias(commandKey, commandValue, discoveredCommands) {
   const value = String(commandValue ?? '').trim();
@@ -20,7 +20,7 @@ function normalizeCommandAlias(commandKey, commandValue, discoveredCommands) {
   }
 
   // Key maps to a discovered command (checked BEFORE value-match)
-  if (Object.prototype.hasOwnProperty.call(disc, key)) {
+  if (Object.hasOwn(disc, key)) {
     return { command: disc[key], normalized: true, originalValue: value };
   }
 
@@ -31,7 +31,7 @@ function normalizeCommandAlias(commandKey, commandValue, discoveredCommands) {
 
   // Looks like a directly runnable command
   const firstWord = value.split(/\s+/)[0].toLowerCase();
-  if (KNOWN_RUNNABLE_PREFIXES.includes(firstWord)) {
+  if (KNOWN_RUNNABLE_PREFIXES.has(firstWord)) {
     return { command: value, normalized: false };
   }
 

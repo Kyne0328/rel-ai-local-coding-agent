@@ -50,11 +50,14 @@ export function openModal({ title, content, onClose, escDisabled = false } = {})
     if (e.key !== 'Tab') return;
     const els = Array.from(dialog.querySelectorAll('button,input,select,textarea,[tabindex]:not([tabindex="-1"])'));
     if (!els.length) { e.preventDefault(); return; }
-    const first = els[0], last = els[els.length - 1];
-    if (e.shiftKey) {
-      if (document.activeElement === first) { e.preventDefault(); last.focus(); }
-    } else {
-      if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+    const first = els[0];
+    const last = els.at(-1);
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
     }
   });
 

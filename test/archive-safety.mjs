@@ -34,13 +34,13 @@ console.log("Test 1: copyWorkspaceForArchive excludes .env files...");
 
     const result = copyWorkspaceForArchive(src, dst);
 
-    const copiedPaths = result.files.map((f) => f.path);
+    const copiedPaths = new Set(result.files.map((f) => f.path));
     const skippedPaths = result.skipped.map((s) => s.path);
 
-    assert.ok(!copiedPaths.includes(".env"), ".env must NOT be copied");
-    assert.ok(!copiedPaths.includes(".env.local"), ".env.local must NOT be copied");
-    assert.ok(!copiedPaths.includes(".env.production"), ".env.production must NOT be copied");
-    assert.ok(copiedPaths.includes("safe.txt"), "safe.txt must be copied");
+    assert.ok(!copiedPaths.has(".env"), ".env must NOT be copied");
+    assert.ok(!copiedPaths.has(".env.local"), ".env.local must NOT be copied");
+    assert.ok(!copiedPaths.has(".env.production"), ".env.production must NOT be copied");
+    assert.ok(copiedPaths.has("safe.txt"), "safe.txt must be copied");
 
     // .env* should appear in skipped
     assert.ok(
@@ -124,7 +124,8 @@ console.log("Test 4: copyWorkspaceForArchive skips symlinks...");
     let symlinkSupported = true;
     try {
       fs.symlinkSync(realFile, path.join(src, "link.txt"));
-    } catch (_err) {
+    } catch (error) {
+      if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] symlink creation:', error);
       // Symlink creation may fail without elevated privileges on Windows
       symlinkSupported = false;
       console.log("  SKIP: symlink creation not supported (requires elevated privileges on Windows)");
@@ -218,11 +219,11 @@ console.log("Test 6: buildZipCommand win32 — paths with spaces are quoted...")
   const commandString = cmd.args[4];
   assert.ok(commandString.includes("Compress-Archive"), "must use Compress-Archive");
   assert.ok(
-    commandString.includes("'C:/path with spaces/source") || commandString.includes("'C:\\path with spaces"),
+    commandString.includes("'C:/path with spaces/source") || commandString.includes(String.raw`'C:\path with spaces`),
     `command must quote path with spaces: ${commandString}`
   );
   assert.ok(
-    commandString.includes("'C:/output path/archive.zip") || commandString.includes("'C:\\output path"),
+    commandString.includes("'C:/output path/archive.zip") || commandString.includes(String.raw`'C:\output path`),
     `command must quote archive path with spaces: ${commandString}`
   );
   // Single-quote escaping means no unquoted spaces in paths
@@ -247,12 +248,12 @@ console.log("Test 7: buildUnzipCommand win32 — paths with spaces are quoted...
   assert.ok(commandString.includes("-LiteralPath"), "must use -LiteralPath");
   assert.ok(
     commandString.includes("'C:/download path/my archive.zip") ||
-    commandString.includes("'C:\\download path"),
+    commandString.includes(String.raw`'C:\download path`),
     `command must quote archive path with spaces: ${commandString}`
   );
   assert.ok(
     commandString.includes("'C:/extract path/output folder") ||
-    commandString.includes("'C:\\extract path"),
+    commandString.includes(String.raw`'C:\extract path`),
     `command must quote destination path with spaces: ${commandString}`
   );
   assert.ok(commandString.includes("'"), "PowerShell quoting must use single quotes");

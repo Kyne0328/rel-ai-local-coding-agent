@@ -5,13 +5,17 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 
+function git(args, options = {}) { // NOSONAR - these unit tests intentionally execute the local Git binary.
+  return spawnSync('git', args, options);
+}
+
 const require = createRequire(import.meta.url);
 const { writeSessionPolicy, resolvePolicy, captureBaselineDirty } = require('../src/policyResolver.js');
 const { classifyStatusOwnership } = require('../src/localRepoBridge.js');
 
 function makeRepo() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-baseline-'));
-  const run = (args) => spawnSync('git', args, { cwd: root, encoding: 'utf8', env: { ...process.env } });
+  const run = (args) => git(args, { cwd: root, encoding: 'utf8' });
   run(['init', '-q']);
   run(['config', 'user.email', 'test@example.com']);
   run(['config', 'user.name', 'test']);
@@ -63,7 +67,6 @@ function makeRepo() {
 }
 
 // 5. classifyStatusOwnership splits files into baseline vs. session
-{
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-pr-'));
   const config = { stateDir };
   // Seed session file with baseline
@@ -77,11 +80,10 @@ function makeRepo() {
   const statusOutput = ' M old/generated.cmake\n M old/registrant.swift\n M lib/new_edit.dart\n?? new/untracked.dart\n';
   const workspace = { alias: 'myapp' };
   const { sessionChanged, baselineChanged, baselineSource } = classifyStatusOwnership(workspace, config, statusOutput);
-  assert.deepEqual(baselineChanged.sort((a, b) => a.localeCompare(b)), ['old/generated.cmake', 'old/registrant.swift']);
-  assert.deepEqual(sessionChanged.sort((a, b) => a.localeCompare(b)), ['lib/new_edit.dart', 'new/untracked.dart']);
+  assert.deepEqual(baselineChanged.toSorted((a, b) => a.localeCompare(b)), ['old/generated.cmake', 'old/registrant.swift']);
+  assert.deepEqual(sessionChanged.toSorted((a, b) => a.localeCompare(b)), ['lib/new_edit.dart', 'new/untracked.dart']);
   assert.equal(baselineSource, 'session');
   fs.rmSync(stateDir, { recursive: true, force: true });
-}
 
 // 6. classifyStatusOwnership with no session: ownership is UNKNOWN, not session.
 // Claiming session ownership without a captured baseline is a safety bug: it let
@@ -96,7 +98,7 @@ function makeRepo() {
   assert.deepEqual(sessionChanged, []);
   assert.deepEqual(untrackedSession, []);
   assert.deepEqual(baselineChanged, []);
-  assert.deepEqual(unknownChanged.sort((a, b) => a.localeCompare(b)), ['a.txt', 'b.txt', 'c.txt']);
+  assert.deepEqual(unknownChanged.toSorted((a, b) => a.localeCompare(b)), ['a.txt', 'b.txt', 'c.txt']);
   assert.deepEqual(untrackedUnknown, ['c.txt']);
   assert.equal(hasSession, false);
   assert.equal(baselineSource, null);

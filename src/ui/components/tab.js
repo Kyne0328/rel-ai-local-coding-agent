@@ -18,7 +18,7 @@ export function TabList(tabs, onSelect) {
   });
 
   wrap.addEventListener('keydown', (e) => {
-    const cur = buttons.findIndex(b => b === document.activeElement);
+    const cur = buttons.indexOf(document.activeElement);
     if (cur < 0) return;
     if (e.key === 'ArrowRight') { e.preventDefault(); const next = (cur + 1) % buttons.length; select(next); buttons[next].focus(); }
     if (e.key === 'ArrowLeft') { e.preventDefault(); const prev = (cur - 1 + buttons.length) % buttons.length; select(prev); buttons[prev].focus(); }

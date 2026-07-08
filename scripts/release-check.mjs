@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(process.env.REL_AI_RELEASE_ROOT || path.join(__dirname, '..'));
 const failures = [];
+const ESCAPED_DOT = String.raw`\.`;
 
 function rel(...parts) {
   return path.join(root, ...parts);
@@ -73,7 +74,7 @@ if (entry) {
   expect(/^\d{4}-\d{2}-\d{2}$/.test(entry.date), 'top CHANGELOG.md entry date must be YYYY-MM-DD');
   expect(/###\s+/.test(entry.body), 'top CHANGELOG.md entry must include a section heading');
   expect(/^-\s+\*\*/m.test(entry.body), 'top CHANGELOG.md entry must include detailed bold bullet entries');
-  expect(new RegExp(String.raw`Bump .*${version.replaceAll('.', '\\.')}\.`, 'i').test(entry.body), `top CHANGELOG.md entry must include a bump line for ${version}`);
+  expect(new RegExp(String.raw`Bump .*${version.replaceAll('.', ESCAPED_DOT)}\.`, 'i').test(entry.body), `top CHANGELOG.md entry must include a bump line for ${version}`);
   expect(!/\b(TODO|TBD|WIP|placeholder|fill this in|summarize the user-visible change|list validation coverage)\b/i.test(entry.body), 'top CHANGELOG.md entry must not contain placeholder release-note text');
 }
 

@@ -6,8 +6,8 @@ import { esc, titleize } from '../../utils.js';
 
 export async function loadSettingsConfig(container) {
   const payload = await fetchJson('/api/settings');
-  if (!payload || !payload.ok) {
-    container.innerHTML = `<div class="empty">${esc((payload && payload.error) || 'Failed to load settings.')}</div>`;
+  if (!payload?.ok) {
+    container.innerHTML = `<div class="empty">${esc(payload?.error || 'Failed to load settings.')}</div>`;
     return null;
   }
   return payload.config || {};
@@ -18,8 +18,8 @@ export async function saveSettings(settings, { confirmDangerous = false } = {}) 
   const res = await postJson('/api/settings', body);
   invalidateCache('/api/settings');
   invalidateCache(DASHBOARD_DATA_URL);
-  if (res && res.ok) toast(res.message || 'Settings saved.', { variant: 'success' });
-  else toast('Error: ' + ((res && res.error) || 'settings update failed'), { variant: 'error' });
+  if (res?.ok) toast(res.message || 'Settings saved.', { variant: 'success' });
+  else toast('Error: ' + (res?.error || 'settings update failed'), { variant: 'error' });
   return res;
 }
 

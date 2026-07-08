@@ -49,7 +49,7 @@ function _connect() {
     try {
       const data = JSON.parse(e.data);
       if (_onEvent) _onEvent(data);
-    } catch (_) {}
+    } catch (error) { if (window.localStorage?.getItem('relai_debug') === '1') console.error(error); }
   });
 
   _es.addEventListener('error', () => {

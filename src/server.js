@@ -40,7 +40,7 @@ async function handleMessage(message, options = {}) {
   const publicOnly = publicHttpOnly || publicCompatOnly;
   const visibleTools = publicOnly ? getPublicToolSchemas() : getToolSchemas();
   if (!message || message.jsonrpc !== "2.0") {
-    return jsonRpcError(message && message.id !== undefined ? message.id : null, -32600, "Invalid Request");
+    return jsonRpcError(message?.id !== undefined ? message.id : null, -32600, "Invalid Request");
   }
   if (message.id === undefined) {
     await handleNotification(message);
@@ -52,7 +52,7 @@ async function handleMessage(message, options = {}) {
         const config = readConfig({ allowMissing: true });
         if (
           !publicHttpOnly &&
-          Object.prototype.hasOwnProperty.call(message.params || {}, "protocolVersion") &&
+          Object.hasOwn(message.params || {}, "protocolVersion") &&
           Number(config.sourceVersion || config.version || 0) >= 2
         ) {
           options.publicCompatOnly = false;
@@ -62,7 +62,7 @@ async function handleMessage(message, options = {}) {
           console.error("[rel-ai-mcp] stdio compat mode: exposing the public tool surface only (config sourceVersion < 2). Re-run init-config to unlock the full tool set.");
         }
         return result(message.id, {
-          protocolVersion: (message.params && message.params.protocolVersion) || "2025-06-18",
+          protocolVersion: message.params?.protocolVersion || "2025-06-18",
           capabilities: { tools: { listChanged: true }, resources: { subscribe: false, listChanged: true } },
           serverInfo: { name: pkg.name, version: pkg.version }
         });
@@ -74,7 +74,7 @@ async function handleMessage(message, options = {}) {
       case "resources/list":
         return result(message.id, listResources());
       case "resources/read": {
-        const uri = message.params && message.params.uri;
+        const uri = message.params?.uri;
         if (!uri) return jsonRpcError(message.id, -32602, "Missing resource uri.");
         return result(message.id, readResource(uri));
       }

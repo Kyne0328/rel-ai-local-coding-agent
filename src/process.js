@@ -1,4 +1,5 @@
 const { spawn, spawnSync } = require("node:child_process");
+const TASKKILL_EXE = String.raw`C:\Windows\System32\taskkill.exe`;
 
 // Kill the whole process tree. A plain child.kill() on Windows only terminates the
 // direct child — with shell:true that is cmd.exe, leaving npm/node grandchildren
@@ -7,11 +8,13 @@ function killProcessTree(child) {
   if (!child || child.killed) return;
   if (process.platform === "win32" && child.pid) {
     try {
-      spawnSync("taskkill", ["/f", "/t", "/pid", String(child.pid)], { stdio: "ignore", windowsHide: true, env: { ...process.env } });
+      spawnSync(TASKKILL_EXE, ["/f", "/t", "/pid", String(child.pid)], { stdio: "ignore", windowsHide: true });
       return;
-    } catch {}
+    } catch (error) {
+      if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] taskkill:', error);
+    }
   }
-  try { child.kill("SIGTERM"); } catch {}
+  try { child.kill("SIGTERM"); } catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] kill SIGTERM:', error); }
 }
 
 function runProcess(command, args, options = {}, config = {}) {
@@ -73,11 +76,9 @@ function runProcess(command, args, options = {}, config = {}) {
 }
 
 function makeEnv(extra) {
-  return {
-    ...process.env,
-    ...(extra || {}),
-    REL_AI_MCP: "1"
-  };
+  const env = { ...process.env, REL_AI_MCP: "1" };
+  if (extra && typeof extra === "object") Object.assign(env, extra);
+  return env;
 }
 
 function appendLimited(current, next, maxBytes) {

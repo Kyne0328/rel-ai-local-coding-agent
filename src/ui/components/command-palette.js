@@ -5,6 +5,8 @@ let _registry = [];
 let _backdrop = null;
 let _keyHandler = null;
 let _previousFocus = null;
+let _selectedIndex = 0;
+let _resultsEl = null;
 
 export function initCommandPalette(registry) {
   _registry = registry || [];
@@ -21,6 +23,42 @@ export function initCommandPalette(registry) {
 
 export function registerActions(actions) {
   _registry = [..._registry, ...actions];
+}
+
+function _getCurrentItems(query) {
+  return query ? _fuzzyMatch(query, _registry) : [..._getRecent(), ..._registry.slice(0, 6)];
+}
+
+function categoryHtml(item) {
+  if (!item.category) return '';
+  return `<div style="font-size:11px;color:var(--text-muted);">${esc(item.category)}</div>`;
+}
+
+function itemOptionStyle(index) {
+  const background = index === 0 ? 'var(--blue-dim)' : 'transparent';
+  return `padding:10px 16px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:10px;background:${background};`;
+}
+
+function renderItem(item, index) {
+  const el = document.createElement('div');
+  el.setAttribute('role', 'option');
+  el.setAttribute('aria-selected', index === 0 ? 'true' : 'false');
+  el.style.cssText = itemOptionStyle(index);
+  el.innerHTML = `<div><div style="font-weight:600;">${esc(item.label)}</div>${categoryHtml(item)}</div>`;
+  el.addEventListener('mouseenter', () => { _selectedIndex = index; _highlightSelected(); });
+  el.onclick = () => { _execute(item); };
+  return el;
+}
+
+function _renderResults(query) {
+  const items = _getCurrentItems(query);
+  _resultsEl.innerHTML = '';
+  if (!items.length) {
+    _resultsEl.innerHTML = '<div style="padding:12px 16px;color:var(--text-muted);font-size:13px;">No results</div>';
+    return;
+  }
+  _selectedIndex = 0;
+  items.forEach((item, index) => _resultsEl.appendChild(renderItem(item, index)));
 }
 
 function _open() {
@@ -44,44 +82,9 @@ function _open() {
   input.setAttribute('spellcheck', 'false');
   input.style.cssText = 'width:100%;border:none;border-radius:0;padding:14px 16px;font-size:15px;background:transparent;border-bottom:1px solid var(--line-soft);outline:none;color:var(--text);';
 
-  const results = document.createElement('div');
-  results.setAttribute('role', 'listbox');
-  results.style.cssText = 'max-height:360px;overflow:auto;';
-
-  let _selectedIndex = 0;
-
-  function _getCurrentItems(query) {
-    return query ? _fuzzyMatch(query, _registry) : [..._getRecent(), ..._registry.slice(0, 6)];
-  }
-
-  function _renderResults(query) {
-    const items = _getCurrentItems(query);
-    results.innerHTML = '';
-    if (!items.length) {
-      results.innerHTML = '<div style="padding:12px 16px;color:var(--text-muted);font-size:13px;">No results</div>';
-      return;
-    }
-    _selectedIndex = 0;
-    items.forEach((item, i) => {
-      const el = document.createElement('div');
-      el.setAttribute('role', 'option');
-      el.setAttribute('aria-selected', i === 0 ? 'true' : 'false');
-      el.style.cssText = `padding:10px 16px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:10px;background:${i === 0 ? 'var(--blue-dim)' : 'transparent'};`;
-      el.innerHTML = `<div><div style="font-weight:600;">${esc(item.label)}</div>${item.category ? `<div style="font-size:11px;color:var(--text-muted);">${esc(item.category)}</div>` : ''}</div>`;
-      el.addEventListener('mouseenter', () => { _selectedIndex = i; _highlightSelected(); });
-      el.onclick = () => { _execute(item); };
-      results.appendChild(el);
-    });
-  }
-
-  function _highlightSelected() {
-    Array.from(results.children).forEach((el, i) => {
-      el.style.background = i === _selectedIndex ? 'var(--blue-dim)' : 'transparent';
-      el.setAttribute('aria-selected', i === _selectedIndex ? 'true' : 'false');
-    });
-    const selected = results.children[_selectedIndex];
-    if (selected) selected.scrollIntoView({ block: 'nearest' });
-  }
+  _resultsEl = document.createElement('div');
+  _resultsEl.setAttribute('role', 'listbox');
+  _resultsEl.style.cssText = 'max-height:360px;overflow:auto;';
 
   let searchTimer;
   input.addEventListener('input', () => {
@@ -89,28 +92,39 @@ function _open() {
     searchTimer = setTimeout(() => _renderResults(input.value), 100);
   });
 
-  input.addEventListener('keydown', (e) => {
-    const count = results.children.length;
-    if (!count) return;
-    if (e.key === 'ArrowDown') { e.preventDefault(); _selectedIndex = (_selectedIndex + 1) % count; _highlightSelected(); }
-    if (e.key === 'ArrowUp') { e.preventDefault(); _selectedIndex = (_selectedIndex - 1 + count) % count; _highlightSelected(); }
-    if (e.key === 'Enter') {
-      const selected = results.children[_selectedIndex];
-      if (selected) selected.click();
-    }
-  });
+  input.addEventListener('keydown', _handleInputKeydown);
 
   _renderResults('');
 
   panel.appendChild(input);
-  panel.appendChild(results);
+  panel.appendChild(_resultsEl);
   _backdrop.appendChild(panel);
   document.body.appendChild(_backdrop);
   setTimeout(() => input.focus(), 10);
 }
 
+function _highlightSelected() {
+  Array.from(_resultsEl.children).forEach((el, i) => {
+    el.style.background = i === _selectedIndex ? 'var(--blue-dim)' : 'transparent';
+    el.setAttribute('aria-selected', i === _selectedIndex ? 'true' : 'false');
+  });
+  const selected = _resultsEl.children[_selectedIndex];
+  if (selected) selected.scrollIntoView({ block: 'nearest' });
+}
+
+function _handleInputKeydown(e) {
+  const count = _resultsEl.children.length;
+  if (!count) return;
+  if (e.key === 'ArrowDown') { e.preventDefault(); _selectedIndex = (_selectedIndex + 1) % count; _highlightSelected(); }
+  if (e.key === 'ArrowUp') { e.preventDefault(); _selectedIndex = (_selectedIndex - 1 + count) % count; _highlightSelected(); }
+  if (e.key === 'Enter') {
+    const selected = _resultsEl.children[_selectedIndex];
+    if (selected) selected.click();
+  }
+}
+
 function _close() {
-  if (_backdrop) { _backdrop.remove(); _backdrop = null; }
+  if (_backdrop) { _backdrop.remove(); _backdrop = null; _resultsEl = null; }
   if (_previousFocus && typeof _previousFocus.focus === 'function') {
     _previousFocus.focus();
     _previousFocus = null;
@@ -124,26 +138,32 @@ function _execute(item) {
   else if (item.href) location.hash = item.href;
 }
 
+function _fuzzyScore(label, query) {
+  if (label === query) return 100;
+  if (label.startsWith(query)) return 80;
+  if (label.includes(query)) return 60;
+  let qi = 0;
+  for (let i = 0; i < label.length && qi < query.length; i++) {
+    if (label[i] === query[qi]) qi += 1;
+  }
+  return qi === query.length ? 40 : 0;
+}
+
 function _fuzzyMatch(query, items) {
   const q = query.toLowerCase();
-  const scored = items.map(item => {
-    const label = item.label.toLowerCase();
-    let score = 0;
-    if (label === q) score = 100;
-    else if (label.startsWith(q)) score = 80;
-    else if (label.includes(q)) score = 60;
-    else {
-      let qi = 0;
-      for (let i = 0; i < label.length && qi < q.length; i++) { if (label[i] === q[qi]) qi++; }
-      if (qi === q.length) score = 40;
-    }
-    return { item, score };
-  }).filter(x => x.score > 0).sort((a, b) => b.score - a.score);
+  const scored = items.map(item => ({ item, score: _fuzzyScore(item.label.toLowerCase(), q) }))
+    .filter(x => x.score > 0)
+    .sort((a, b) => b.score - a.score);
   return scored.map(x => x.item);
 }
 
 function _getRecent() {
-  try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch (_) { return []; }
+  try {
+    return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
+  } catch (error) {
+    if (window.localStorage?.getItem('relai_debug') === '1') console.error(error);
+    return [];
+  }
 }
 
 function _saveRecent(item) {
@@ -151,7 +171,11 @@ function _saveRecent(item) {
   const recent = _getRecent().filter(r => r.label !== item.label);
   recent.unshift({ label: item.label, href: item.href, category: 'Recent' });
   if (recent.length > MAX_RECENT) recent.length = MAX_RECENT;
-  try { localStorage.setItem(RECENT_KEY, JSON.stringify(recent)); } catch (_) {}
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify(recent));
+  } catch (error) {
+    if (window.localStorage?.getItem('relai_debug') === '1') console.error(error);
+  }
 }
 
 function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
