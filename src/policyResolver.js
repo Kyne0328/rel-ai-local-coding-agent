@@ -7,13 +7,13 @@ const { spawnSync } = require('node:child_process');
 // captured baseline is stale and can no longer be trusted to fence pre-existing
 // files, so we drop it and let the next write recapture a fresh baseline.
 const SESSION_IDLE_TTL_MS = 8 * 60 * 60 * 1000;
-const FIXED_GIT_ENV = Object.freeze({
-  PATH: process.platform === 'win32'
-    ? String.raw`C:\Program Files\Git\cmd;C:\Windows\System32;C:\Windows`
-    : '/usr/bin:/bin',
-  SystemRoot: process.env.SystemRoot || process.env.SYSTEMROOT || String.raw`C:\Windows`,
-  SYSTEMROOT: process.env.SYSTEMROOT || process.env.SystemRoot || String.raw`C:\Windows`
-});
+const GIT_EXECUTABLE = process.platform === 'win32'
+  ? String.raw`C:\Program Files\Git\cmd\git.exe`
+  : '/usr/bin/git';
+
+function gitExecutable() {
+  return fs.existsSync(GIT_EXECUTABLE) ? GIT_EXECUTABLE : '';
+}
 
 function sessionFilePath(config, alias) {
   const stateDir = config.stateDir || path.join(os.homedir(), '.rel-ai-mcp');
@@ -44,7 +44,9 @@ function readSessionPolicy(config, alias) {
 function captureBaselineDirty(workspaceRoot) {
   if (!workspaceRoot) return [];
   try {
-    const result = spawnSync('git', ['status', '--short'], { cwd: workspaceRoot, encoding: 'utf8', timeout: 15000, env: FIXED_GIT_ENV });
+    const git = gitExecutable();
+    if (!git) return [];
+    const result = spawnSync(git, ['status', '--short'], { cwd: workspaceRoot, encoding: 'utf8', timeout: 15000 });
     if (result.status !== 0 || !result.stdout) return [];
     return result.stdout
       .split(/\r?\n/)

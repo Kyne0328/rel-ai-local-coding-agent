@@ -10,6 +10,13 @@ const root = path.resolve(__dirname, '..');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'rel-ai-mcp-workflow-'));
 const workspace = path.join(temp, 'workspace');
 const stateDir = path.join(temp, 'state');
+const GIT_EXECUTABLE = process.platform === 'win32'
+  ? String.raw`C:\Program Files\Git\cmd\git.exe`
+  : '/usr/bin/git';
+
+function git(args, options = {}) { // NOSONAR - this smoke test intentionally executes the local Git binary.
+  return execFileSync(GIT_EXECUTABLE, args, options);
+}
 
 fs.mkdirSync(workspace, { recursive: true });
 fs.mkdirSync(path.join(workspace, 'src'), { recursive: true });
@@ -31,12 +38,11 @@ fs.writeFileSync(
   }, null, 2)
 );
 
-const gitEnv = { ...process.env };
-execFileSync('git', ['init'], { cwd: workspace, stdio: 'ignore', env: gitEnv });
-execFileSync('git', ['config', 'user.email', 'relai@example.test'], { cwd: workspace, env: gitEnv });
-execFileSync('git', ['config', 'user.name', 'RelAI Smoke'], { cwd: workspace, env: gitEnv });
-execFileSync('git', ['add', '.'], { cwd: workspace, env: gitEnv });
-execFileSync('git', ['commit', '-m', 'init'], { cwd: workspace, stdio: 'ignore', env: gitEnv });
+git(['init'], { cwd: workspace, stdio: 'ignore' });
+git(['config', 'user.email', 'relai@example.test'], { cwd: workspace });
+git(['config', 'user.name', 'RelAI Smoke'], { cwd: workspace });
+git(['add', '.'], { cwd: workspace });
+git(['commit', '-m', 'init'], { cwd: workspace, stdio: 'ignore' });
 
 const configPath = path.join(temp, 'config.json');
 fs.writeFileSync(configPath, JSON.stringify({
@@ -195,11 +201,11 @@ if (staleReplace?.ok !== false || !/stale expectedSha256/.test(staleReplace?.err
 if (!fs.readFileSync(path.join(workspace, 'lib', 'sms_handler_utils.dart'), 'utf8').includes(newDartLine)) {
   throw new Error('stale expectedSha256 refusal should leave the file unchanged');
 }
-execFileSync('git', ['restore', 'lib/sms_handler_utils.dart'], { cwd: workspace, env: gitEnv });
+git(['restore', 'lib/sms_handler_utils.dart'], { cwd: workspace });
 
 fs.writeFileSync(path.join(workspace, 'docs-to-delete.md'), 'obsolete\n');
-execFileSync('git', ['add', 'docs-to-delete.md'], { cwd: workspace, env: gitEnv });
-execFileSync('git', ['commit', '-m', 'add obsolete doc'], { cwd: workspace, stdio: 'ignore', env: gitEnv });
+git(['add', 'docs-to-delete.md'], { cwd: workspace });
+git(['commit', '-m', 'add obsolete doc'], { cwd: workspace, stdio: 'ignore' });
 call(46, 'relai_edit', { workspace: 'smoke', updateText: `*** Begin Patch
 *** Delete File: docs-to-delete.md
 *** End Patch
@@ -210,8 +216,8 @@ if (!deletedDoc.changedFiles.includes('docs-to-delete.md') || fs.existsSync(path
   throw new Error('relai_clear_files should remove obsolete files without shell helpers');
 }
 
-execFileSync('git', ['add', '.'], { cwd: workspace, env: gitEnv });
-execFileSync('git', ['commit', '-m', 'checkpoint before aggressive patch'], { cwd: workspace, stdio: 'ignore', env: gitEnv });
+git(['add', '.'], { cwd: workspace });
+git(['commit', '-m', 'checkpoint before aggressive patch'], { cwd: workspace, stdio: 'ignore' });
 const aggressivePatch = `diff --git a/src/index.js b/src/index.js
 index 4e0946d..38910e4 100644
 --- a/src/index.js

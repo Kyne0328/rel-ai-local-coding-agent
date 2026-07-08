@@ -7,7 +7,7 @@ const { discoverCommands, staleCommandKeys } = require("./commandDiscovery");
 const { resolvePolicy } = require("./policyResolver");
 const { readAudit, getStateDir } = require("./audit");
 const { runProcess, summarizeCommand } = require("./process");
-const { safeReadJson } = require("./safety");
+const { safeReadJson, validateRelativePath } = require("./safety");
 
 function dashboardData(config, args = {}) {
   const limit = clampNumber(args.limit || 100, 1, 500);
@@ -203,27 +203,45 @@ function assertJsonFileExtension(filePath, label) {
   }
 }
 
-function validateReadableJsonFile(rawPath, label) {
-  const filePath = path.resolve(String(rawPath || ""));
-  assertJsonFileExtension(filePath, label);
-  if (!fs.existsSync(filePath)) throw new Error(`${label} not found: ${filePath}`);
-  const realPath = fs.realpathSync(filePath);
-  const stat = fs.statSync(realPath);
-  if (!stat.isFile()) throw new Error(`${label} is not a file: ${realPath}`);
+function canonicalBaseDir(baseDir) {
+  const realBase = fs.realpathSync(baseDir);
+  return realBase.endsWith(path.sep) ? realBase : realBase + path.sep;
+}
+
+function relativeJsonPath(rawPath, label) {
+  const relativePath = validateRelativePath(String(rawPath || ""));
+  assertJsonFileExtension(relativePath, label);
+  return relativePath;
+}
+
+function existingReadableJsonPath(rawPath, label, baseDir = process.cwd()) {
+  const base = canonicalBaseDir(baseDir);
+  const candidate = path.join(base, relativeJsonPath(rawPath, label));
+  const realPath = fs.realpathSync(candidate);
+  if (!realPath.startsWith(base)) throw new Error(`${label} escapes allowed directory: ${rawPath}`);
+  if (!fs.statSync(realPath).isFile()) throw new Error(`${label} is not a file: ${realPath}`);
   return realPath;
 }
 
-function validateWritableJsonFile(rawPath, label) {
-  const filePath = path.resolve(String(rawPath || ""));
-  assertJsonFileExtension(filePath, label);
-  const parent = path.dirname(filePath);
-  const realParent = fs.existsSync(parent) ? fs.realpathSync(parent) : path.resolve(parent);
-  return path.join(realParent, path.basename(filePath));
+function writableJsonPath(rawPath, label, baseDir = process.cwd()) {
+  const base = canonicalBaseDir(baseDir);
+  const relativePath = relativeJsonPath(rawPath, label);
+  const target = path.join(base, relativePath);
+  const parent = path.dirname(target);
+  fs.mkdirSync(parent, { recursive: true, mode: 0o700 });
+  const realParent = fs.realpathSync(parent);
+  if (!realParent.startsWith(base)) throw new Error(`${label} escapes allowed directory: ${rawPath}`);
+  return path.join(realParent, path.basename(relativePath));
+}
+
+function trustedDefaultConfigPath() {
+  return path.join(os.homedir(), ".rel-ai", "opencode.json");
 }
 
 function importOriginalRelAiConfig(args = {}) {
-  const defaultSource = path.join(os.homedir(), ".rel-ai", "opencode.json");
-  const sourcePath = validateReadableJsonFile(args.sourcePath || defaultSource, "sourcePath");
+  const sourcePath = args.sourcePath
+    ? existingReadableJsonPath(args.sourcePath, "sourcePath")
+    : trustedDefaultConfigPath();
   const source = safeReadJson(sourcePath);
   if (!source) throw new Error(`Original Rel.AI config file is corrupted or empty: ${sourcePath}`);
   const config = readConfig({ allowMissing: true });
@@ -251,7 +269,7 @@ function stateExport(config, args = {}) {
   walkState(stateDir, stateDir, files, maxFiles, clampNumber(args.maxFileBytes || 1024 * 1024, 1000, 10 * 1024 * 1024));
   const payload = { version: 1, exportedAt: new Date().toISOString(), stateDir, files };
   if (args.outputPath) {
-    const out = validateWritableJsonFile(args.outputPath, "outputPath");
+    const out = writableJsonPath(args.outputPath, "outputPath");
     fs.mkdirSync(path.dirname(out), { recursive: true });
     fs.writeFileSync(out, JSON.stringify(payload, null, 2) + "\n", { mode: 0o600 });
     return { ok: true, outputPath: out, fileCount: files.length };
@@ -263,20 +281,24 @@ function stateImport(config, args = {}) {
   if (args.confirm !== true) throw new Error("stateImport requires confirm=true.");
   let payload = args.payload;
   if (args.inputPath) {
-    const inputPath = validateReadableJsonFile(args.inputPath, "inputPath");
+    const inputPath = existingReadableJsonPath(args.inputPath, "inputPath");
     payload = safeReadJson(inputPath);
     if (!payload) throw new Error(`State import file is corrupted or empty: ${inputPath}`);
   }
   if (!Array.isArray(payload?.files)) throw new Error("State import payload must contain a files array.");
   const stateDir = getStateDir(config);
+  fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+  const stateBase = canonicalBaseDir(stateDir);
   const written = [];
   for (const item of payload.files) {
     if (!item?.path || typeof item.content !== "string") continue;
-    const relative = String(item.path).replaceAll(path.win32.sep, "/");
-    if (relative.startsWith("/") || relative.includes("..")) throw new Error(`Unsafe state path: ${relative}`);
-    const target = path.join(stateDir, relative);
-    fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
-    fs.writeFileSync(target, item.content, { mode: 0o600 });
+    const relative = validateRelativePath(String(item.path));
+    const target = path.join(stateBase, relative);
+    const parent = path.dirname(target);
+    fs.mkdirSync(parent, { recursive: true, mode: 0o700 });
+    const realParent = fs.realpathSync(parent);
+    if (!realParent.startsWith(stateBase)) throw new Error(`Unsafe state path: ${relative}`);
+    fs.writeFileSync(path.join(realParent, path.basename(relative)), item.content, { mode: 0o600 });
     written.push(relative);
   }
   return { ok: true, stateDir, writtenCount: written.length, written: written.slice(0, 200) };

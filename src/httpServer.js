@@ -747,17 +747,20 @@ async function readFormOrJsonBody(req, maxBytes) {
 // cross-origin reads.
 function fixedCorsOrigins(options = {}) {
   const port = Number(options.port || 3333);
-  return new Set([
-    `http://127.0.0.1:${port}`,
-    `http://localhost:${port}`,
-    `http://[::1]:${port}`
-  ]);
+  return Object.freeze({
+    loopback: `http://127.0.0.1:${port}`,
+    localhost: `http://localhost:${port}`,
+    ipv6Loopback: `http://[::1]:${port}`
+  });
 }
 
 function allowedCorsOrigin(origin, options = {}) {
+  const origins = fixedCorsOrigins(options);
   const value = String(origin || "");
-  if (!value) return "";
-  return fixedCorsOrigins(options).has(value) ? value : "";
+  if (value === origins.loopback) return origins.loopback;
+  if (value === origins.localhost) return origins.localhost;
+  if (value === origins.ipv6Loopback) return origins.ipv6Loopback;
+  return "";
 }
 
 function setBaseHeaders(req, res, options = {}) {

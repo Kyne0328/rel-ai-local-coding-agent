@@ -2,22 +2,29 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { workspaceTidyPlan, workspaceTidyRun } = require('../src/localRepoBridge.js');
 const { writeSessionPolicy } = require('../src/policyResolver.js');
 
+const GIT_EXECUTABLE = process.platform === 'win32'
+  ? String.raw`C:\Program Files\Git\cmd\git.exe`
+  : '/usr/bin/git';
+
+function git(args, cwd) { // NOSONAR - these unit tests intentionally execute the local Git binary.
+  execFileSync(GIT_EXECUTABLE, args, { cwd, stdio: 'pipe' });
+}
+
 function makeTempRepo() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-tidy-'));
-  const env = { ...process.env };
-  execSync('git init', { cwd: dir, stdio: 'pipe', env });
-  execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe', env });
-  execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe', env });
+  git(['init'], dir);
+  git(['config', 'user.email', 'test@test.com'], dir);
+  git(['config', 'user.name', 'Test'], dir);
   fs.writeFileSync(path.join(dir, 'initial.txt'), 'init');
-  execSync('git add .', { cwd: dir, stdio: 'pipe', env });
-  execSync('git commit -m "init"', { cwd: dir, stdio: 'pipe', env });
+  git(['add', '.'], dir);
+  git(['commit', '-m', 'init'], dir);
   return dir;
 }
 
