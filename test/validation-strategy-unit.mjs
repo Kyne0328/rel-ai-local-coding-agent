@@ -10,12 +10,13 @@ const { selectValidationLevel } = require('../src/validationStrategy.js');
 
 function makeTempRepo(filename, content = 'hello') {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-vs-'));
-  execSync('git init', { cwd: dir, stdio: 'pipe' });
-  execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe' });
-  execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe' });
+  const env = { ...process.env };
+  execSync('git init', { cwd: dir, stdio: 'pipe', env });
+  execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe', env });
+  execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe', env });
   fs.writeFileSync(path.join(dir, 'initial.txt'), 'init');
-  execSync('git add .', { cwd: dir, stdio: 'pipe' });
-  execSync('git commit -m "init"', { cwd: dir, stdio: 'pipe' });
+  execSync('git add .', { cwd: dir, stdio: 'pipe', env });
+  execSync('git commit -m "init"', { cwd: dir, stdio: 'pipe', env });
   // Write changed file (unstaged)
   const filePath = path.join(dir, filename);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -42,7 +43,7 @@ function makeTempRepo(filename, content = 'hello') {
 // 3. Config file (package.json) staged → extended
 {
   const dir = makeTempRepo('package.json', '{"name":"test"}');
-  execSync('git add package.json', { cwd: dir, stdio: 'pipe' });
+  execSync('git add package.json', { cwd: dir, stdio: 'pipe', env: { ...process.env } });
   const r = selectValidationLevel(dir, {}, null);
   assert.equal(r.level, 'extended', 'config-file: level must be extended');
   fs.rmSync(dir, { recursive: true, force: true });
@@ -92,12 +93,13 @@ function makeTempRepo(filename, content = 'hello') {
 // 9. 6+ files across multiple top-level directories → broad
 {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-vs-broad-'));
-  execSync('git init', { cwd: dir, stdio: 'pipe' });
-  execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe' });
-  execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe' });
+  const env = { ...process.env };
+  execSync('git init', { cwd: dir, stdio: 'pipe', env });
+  execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe', env });
+  execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe', env });
   fs.writeFileSync(path.join(dir, 'initial.txt'), 'init');
-  execSync('git add .', { cwd: dir, stdio: 'pipe' });
-  execSync('git commit -m "init"', { cwd: dir, stdio: 'pipe' });
+  execSync('git add .', { cwd: dir, stdio: 'pipe', env });
+  execSync('git commit -m "init"', { cwd: dir, stdio: 'pipe', env });
   // Create 6 files in different top-level dirs
   const filesToCreate = [
     'src/a.js', 'lib/b.js', 'utils/c.js',
@@ -117,12 +119,12 @@ function makeTempRepo(filename, content = 'hello') {
 // 10. 2-5 files in one directory → focused (fallback)
 {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-vs-onedir-'));
-  execSync('git init', { cwd: dir, stdio: 'pipe' });
-  execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe' });
-  execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe' });
+  execSync('git init', { cwd: dir, stdio: 'pipe', env: { ...process.env } });
+  execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe', env: { ...process.env } });
+  execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe', env: { ...process.env } });
   fs.writeFileSync(path.join(dir, 'initial.txt'), 'init');
-  execSync('git add .', { cwd: dir, stdio: 'pipe' });
-  execSync('git commit -m "init"', { cwd: dir, stdio: 'pipe' });
+  execSync('git add .', { cwd: dir, stdio: 'pipe', env: { ...process.env } });
+  execSync('git commit -m "init"', { cwd: dir, stdio: 'pipe', env: { ...process.env } });
   // Create 3 source files in the same directory
   for (const name of ['alpha.js', 'beta.js', 'gamma.js']) {
     fs.mkdirSync(path.join(dir, 'src'), { recursive: true });

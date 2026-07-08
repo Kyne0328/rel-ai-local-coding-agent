@@ -26,16 +26,17 @@ fs.writeFileSync(
   JSON.stringify({
     scripts: {
       check: 'node --check src/index.js',
-      test: 'node -e "console.log(\\"ok\\")"'
+      test: String.raw`node -e "console.log(\"ok\")"`
     }
   }, null, 2)
 );
 
-execFileSync('git', ['init'], { cwd: workspace, stdio: 'ignore' });
-execFileSync('git', ['config', 'user.email', 'relai@example.test'], { cwd: workspace });
-execFileSync('git', ['config', 'user.name', 'RelAI Smoke'], { cwd: workspace });
-execFileSync('git', ['add', '.'], { cwd: workspace });
-execFileSync('git', ['commit', '-m', 'init'], { cwd: workspace, stdio: 'ignore' });
+const gitEnv = { ...process.env };
+execFileSync('git', ['init'], { cwd: workspace, stdio: 'ignore', env: gitEnv });
+execFileSync('git', ['config', 'user.email', 'relai@example.test'], { cwd: workspace, env: gitEnv });
+execFileSync('git', ['config', 'user.name', 'RelAI Smoke'], { cwd: workspace, env: gitEnv });
+execFileSync('git', ['add', '.'], { cwd: workspace, env: gitEnv });
+execFileSync('git', ['commit', '-m', 'init'], { cwd: workspace, stdio: 'ignore', env: gitEnv });
 
 const configPath = path.join(temp, 'config.json');
 fs.writeFileSync(configPath, JSON.stringify({
@@ -104,7 +105,7 @@ function waitFor(id, timeoutMs = 10000) {
 }
 
 function contentOf(response) {
-  const payload = response.result && response.result.structuredContent;
+  const payload = response.result?.structuredContent;
   if (!payload || payload.ok === false) {
     throw new Error(JSON.stringify(payload || response));
   }
@@ -132,7 +133,7 @@ if (snapshot.writeGuidance.defaultMode !== 'size-based') {
   throw new Error('snapshot should expose size-based write guidance');
 }
 for (const mode of ['exact-replace', 'direct-write', 'staged-write', 'apply-update', 'apply-bundle', 'workspace-tidy']) {
-  if (!snapshot.writeGuidance.modes || !snapshot.writeGuidance.modes[mode]) {
+  if (!snapshot.writeGuidance?.modes?.[mode]) {
     throw new Error(`snapshot write guidance missing mode ${mode}`);
   }
 }
@@ -187,18 +188,18 @@ if (!postReplaceRead.items[0].content.includes(newDartLine)) {
 
 call(45, 'relai_replace', { workspace: 'smoke', path: 'lib/sms_handler_utils.dart', expectedSha256: riskySha, oldText: newDartLine, newText: oldDartLine });
 const staleReplaceResponse = await waitFor(45);
-const staleReplace = staleReplaceResponse.result && staleReplaceResponse.result.structuredContent;
-if (!staleReplace || staleReplace.ok !== false || !/stale expectedSha256/.test(staleReplace.error || '')) {
+const staleReplace = staleReplaceResponse.result?.structuredContent;
+if (staleReplace?.ok !== false || !/stale expectedSha256/.test(staleReplace?.error ?? '')) {
   throw new Error('relai_replace should refuse stale expectedSha256 values');
 }
 if (!fs.readFileSync(path.join(workspace, 'lib', 'sms_handler_utils.dart'), 'utf8').includes(newDartLine)) {
   throw new Error('stale expectedSha256 refusal should leave the file unchanged');
 }
-execFileSync('git', ['restore', 'lib/sms_handler_utils.dart'], { cwd: workspace });
+execFileSync('git', ['restore', 'lib/sms_handler_utils.dart'], { cwd: workspace, env: gitEnv });
 
 fs.writeFileSync(path.join(workspace, 'docs-to-delete.md'), 'obsolete\n');
-execFileSync('git', ['add', 'docs-to-delete.md'], { cwd: workspace });
-execFileSync('git', ['commit', '-m', 'add obsolete doc'], { cwd: workspace, stdio: 'ignore' });
+execFileSync('git', ['add', 'docs-to-delete.md'], { cwd: workspace, env: gitEnv });
+execFileSync('git', ['commit', '-m', 'add obsolete doc'], { cwd: workspace, stdio: 'ignore', env: gitEnv });
 call(46, 'relai_edit', { workspace: 'smoke', updateText: `*** Begin Patch
 *** Delete File: docs-to-delete.md
 *** End Patch
@@ -209,8 +210,8 @@ if (!deletedDoc.changedFiles.includes('docs-to-delete.md') || fs.existsSync(path
   throw new Error('relai_clear_files should remove obsolete files without shell helpers');
 }
 
-execFileSync('git', ['add', '.'], { cwd: workspace });
-execFileSync('git', ['commit', '-m', 'checkpoint before aggressive patch'], { cwd: workspace, stdio: 'ignore' });
+execFileSync('git', ['add', '.'], { cwd: workspace, env: gitEnv });
+execFileSync('git', ['commit', '-m', 'checkpoint before aggressive patch'], { cwd: workspace, stdio: 'ignore', env: gitEnv });
 const aggressivePatch = `diff --git a/src/index.js b/src/index.js
 index 4e0946d..38910e4 100644
 --- a/src/index.js
@@ -277,7 +278,7 @@ if (!stagedCommit.staged || !stagedCommit.changedFiles.includes('README.md')) {
 
 call(61, 'relai_repo_snapshot', { workspace: 'smoke', maxEntries: 100, includeFiles: false, journalLimit: 5 });
 const postWriteSnapshot = contentOf(await waitFor(61));
-if (!postWriteSnapshot.operationJournal || !postWriteSnapshot.operationJournal.recent.some((item) => item.id === written.operationId)) {
+if (!postWriteSnapshot?.operationJournal?.recent?.some((item) => item.id === written.operationId)) {
   throw new Error('post-write snapshot did not expose the operation journal');
 }
 
@@ -320,7 +321,7 @@ if (!Array.isArray(gitStatus.untrackedSessionFiles) || !gitStatus.untrackedSessi
 call(83, 'relai_tidy_plan', { workspace: 'smoke' });
 const tidyResiduePlan = contentOf(await waitFor(83));
 call(84, 'relai_tidy_run', { workspace: 'smoke', planId: tidyResiduePlan.planId });
-void ( 'relai_clear_files', { workspace: 'smoke', path: 'stale-zone-label.txt' });
+
 const removedAuditResidue = contentOf(await waitFor(84));
 if (!removedAuditResidue.changedFiles.includes('stale-zone-label.txt')) {
   throw new Error('relai_clear_files should clean up audit residue files');

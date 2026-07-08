@@ -40,8 +40,8 @@ const { aliasConsistencyCheck } = require('../src/productUx.js');
   assert.equal(result.ok, false);
   const ws = result.workspaces[0];
   assert.equal(ws.ok, false);
-  assert.deepEqual(ws.configuredKeys.sort(), ['lint', 'test'].sort());
-  assert.deepEqual(ws.staleKeys.sort(), ['lint', 'test'].sort(), 'all keys stale when path nonexistent');
+  assert.deepEqual(ws.configuredKeys.toSorted((a, b) => a.localeCompare(b)), ['lint', 'test'].toSorted((a, b) => a.localeCompare(b)));
+  assert.deepEqual(ws.staleKeys.toSorted((a, b) => a.localeCompare(b)), ['lint', 'test'].toSorted((a, b) => a.localeCompare(b)), 'all keys stale when path nonexistent');
   console.log('3. nonexistent path - all keys stale: OK');
 }
 

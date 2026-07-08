@@ -58,8 +58,8 @@ const list = await waitFor(2);
 if (!Array.isArray(list.result?.tools) || list.result.tools.length !== 29) {
   throw new Error(`tools/list should expose the 29 ChatGPT local repo bridge tools, got ${list.result?.tools?.length}`);
 }
-const names = list.result.tools.map((item) => item.name).sort();
-const expected = ['relai_apply_bundle', 'relai_apply_update', 'relai_browser', 'relai_clear_files', 'relai_diff', 'relai_edit', 'relai_feature_probe', 'relai_git_abort_merge', 'relai_git_commit', 'relai_git_create_pr', 'relai_git_fetch', 'relai_git_merge_branch', 'relai_git_merge_remote_branches_plan', 'relai_git_push', 'relai_git_status', 'relai_package_snapshot', 'relai_read', 'relai_refactor_audit', 'relai_remove_file', 'relai_replace', 'relai_repo_snapshot', 'relai_restore_changes', 'relai_run_checks', 'relai_session_summary', 'relai_set_policy', 'relai_status', 'relai_tidy_plan', 'relai_tidy_run', 'relai_write'].sort();
+const names = list.result.tools.map((item) => item.name).sort((a, b) => a.localeCompare(b));
+const expected = ['relai_apply_bundle', 'relai_apply_update', 'relai_browser', 'relai_clear_files', 'relai_diff', 'relai_edit', 'relai_feature_probe', 'relai_git_abort_merge', 'relai_git_commit', 'relai_git_create_pr', 'relai_git_fetch', 'relai_git_merge_branch', 'relai_git_merge_remote_branches_plan', 'relai_git_push', 'relai_git_status', 'relai_package_snapshot', 'relai_read', 'relai_refactor_audit', 'relai_remove_file', 'relai_replace', 'relai_repo_snapshot', 'relai_restore_changes', 'relai_run_checks', 'relai_session_summary', 'relai_set_policy', 'relai_status', 'relai_tidy_plan', 'relai_tidy_run', 'relai_write'].sort((a, b) => a.localeCompare(b));
 if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error(`Unexpected tool list: ${names.join(', ')}`);
 const writeTool = list.result.tools.find((item) => item.name === 'relai_write');
 if (!writeTool.inputSchema?.properties?.content || writeTool.inputSchema?.properties?.edits) throw new Error('relai_write schema should expose content and not expose edits');

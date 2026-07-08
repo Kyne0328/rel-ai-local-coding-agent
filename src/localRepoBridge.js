@@ -1615,23 +1615,33 @@ function preflightTidyCandidates(candidates, workspace, currentUntracked) {
 
 function collectExplicitChecks(args, resolveAndTrack) {
   const explicit = [];
-  if (typeof args.check === "string" && args.check.trim()) explicit.push(resolveAndTrack(args.check));
-  if (typeof args.command === "string" && args.command.trim()) explicit.push(resolveAndTrack(args.command));
-  if (Array.isArray(args.commands)) {
-    for (const item of args.commands) {
-      const command = resolveAndTrack(String(item || ""));
-      if (command) explicit.push(command);
-    }
-  }
-  if (typeof args.commandsText === "string" && args.commandsText.trim()) {
-    for (const line of args.commandsText.split(/\r?\n/)) {
-      const trimmedLine = line.trim();
-      if (trimmedLine && !trimmedLine.startsWith("#")) {
-        explicit.push(resolveAndTrack(trimmedLine));
-      }
-    }
-  }
+  pushResolvedExplicit(explicit, args.check, resolveAndTrack);
+  pushResolvedExplicit(explicit, args.command, resolveAndTrack);
+  pushResolvedCommands(explicit, args.commands, resolveAndTrack);
+  pushResolvedCommandText(explicit, args.commandsText, resolveAndTrack);
   return explicit;
+}
+
+function pushResolvedExplicit(target, value, resolveAndTrack) {
+  if (typeof value === "string" && value.trim()) target.push(resolveAndTrack(value));
+}
+
+function pushResolvedCommands(target, commands, resolveAndTrack) {
+  if (!Array.isArray(commands)) return;
+  for (const item of commands) {
+    const command = resolveAndTrack(String(item || ""));
+    if (command) target.push(command);
+  }
+}
+
+function pushResolvedCommandText(target, commandsText, resolveAndTrack) {
+  if (typeof commandsText !== "string" || !commandsText.trim()) return;
+  for (const line of commandsText.split(/\r?\n/)) {
+    const trimmedLine = line.trim();
+    if (trimmedLine && !trimmedLine.startsWith("#")) {
+      target.push(resolveAndTrack(trimmedLine));
+    }
+  }
 }
 
 function detectVerifyChecks(root, level) {

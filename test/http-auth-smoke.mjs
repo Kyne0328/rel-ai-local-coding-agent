@@ -48,8 +48,8 @@ async function check(label, fn) {
   try {
     await fn();
     console.log(`  ✓ ${label}`);
-  } catch (err) {
-    console.error(`  ✗ ${label}: ${err.message}`);
+  } catch {
+    console.error(`  ✗ ${label}`);
     process.exitCode = 1;
   }
 }

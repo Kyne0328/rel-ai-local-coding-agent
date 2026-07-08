@@ -18,7 +18,7 @@ function walk(dir) {
 
 walk(root);
 
-for (const file of files.sort()) {
+for (const file of files.sort((a, b) => a.localeCompare(b))) {
   const relative = path.relative(root, file);
   const source = fs.readFileSync(file, 'utf8');
   const parseAsModule = file.endsWith('.mjs') || /(^|\n)\s*(import|export)\s/m.test(source);

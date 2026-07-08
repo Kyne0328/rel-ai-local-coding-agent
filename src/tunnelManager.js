@@ -127,7 +127,7 @@ function killProcess(child) {
   if (process.platform === "win32" && child.pid) {
     try {
       const { spawnSync } = require("node:child_process");
-      spawnSync("taskkill", ["/f", "/t", "/pid", String(child.pid)], { stdio: "ignore", windowsHide: true });
+      spawnSync("taskkill", ["/f", "/t", "/pid", String(child.pid)], { stdio: "ignore", windowsHide: true, env: { ...process.env } });
     } catch (error) {
       if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] taskkill:', error);
       try { child.kill(); } catch (killError) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] kill fallback:', killError); }

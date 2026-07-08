@@ -11,12 +11,13 @@ const { planEdit } = require('../src/executionPlanner.js');
 
 function makeTempRepo() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-p1-'));
-  execSync('git init', { cwd: dir, stdio: 'pipe' });
-  execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe' });
-  execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe' });
-  fs.writeFileSync(path.join(dir, 'initial.txt'), 'init');
-  execSync('git add .', { cwd: dir, stdio: 'pipe' });
-  execSync('git commit -m "init"', { cwd: dir, stdio: 'pipe' });
+  const env = { ...process.env };
+  execSync('git init', { cwd: dir, stdio: 'pipe', env });
+  execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe', env });
+  execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe', env });
+  fs.writeFileSync(path.join(dir, 'readme.md'), '# test\n');
+  execSync('git add .', { cwd: dir, stdio: 'pipe', env });
+  execSync('git commit -m "init"', { cwd: dir, stdio: 'pipe', env });
   return dir;
 }
 

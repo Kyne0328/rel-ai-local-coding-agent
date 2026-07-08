@@ -116,7 +116,7 @@ test("canonical output uses workflow.prepared, not workflow.aggressive", () => {
 // 10. normalizeConfig with old flow top-level: config.workflow is the source of truth
 test("normalizeConfig: config.workflow is source of truth (not config.flow)", () => {
   const raw = {
-    stateDir: "/tmp/test-state",
+    stateDir: "/test-state",
     flow: { mode: "fast", fast: { backup: false } },
     workspaces: {}
   };

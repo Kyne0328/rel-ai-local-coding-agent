@@ -28,7 +28,7 @@ function readSessionPolicy(config, alias) {
     const last = sessionLastActivity(parsed);
     if (last !== null && Date.now() - last > SESSION_IDLE_TTL_MS) return null;
     return parsed;
-  } catch (_err) {
+  } catch {
     return null;
   }
 }
@@ -36,7 +36,7 @@ function readSessionPolicy(config, alias) {
 function captureBaselineDirty(workspaceRoot) {
   if (!workspaceRoot) return [];
   try {
-    const result = spawnSync('git', ['status', '--short'], { cwd: workspaceRoot, encoding: 'utf8', timeout: 15000 });
+    const result = spawnSync('git', ['status', '--short'], { cwd: workspaceRoot, encoding: 'utf8', timeout: 15000, env: { ...process.env } });
     if (result.status !== 0 || !result.stdout) return [];
     return result.stdout
       .split(/\r?\n/)
@@ -47,7 +47,7 @@ function captureBaselineDirty(workspaceRoot) {
         return arrow >= 0 ? part.slice(arrow + 4).trim() : part;
       })
       .filter(Boolean);
-  } catch (_err) {
+  } catch {
     return [];
   }
 }
@@ -78,7 +78,7 @@ function touchSessionPolicy(config, alias) {
     parsed.updatedAt = new Date().toISOString();
     fs.writeFileSync(filePath, `${JSON.stringify(parsed, null, 2)}\n`, { mode: 0o600 });
     return true;
-  } catch (_err) {
+  } catch {
     return false;
   }
 }
@@ -104,13 +104,13 @@ function clearSessionPolicy(config, alias) {
     if (!fs.existsSync(filePath)) return { cleared: false };
     fs.unlinkSync(filePath);
     return { cleared: true };
-  } catch (_err) {
+  } catch {
     return { cleared: false };
   }
 }
 
 function resolvePolicy(workspace, config) {
-  const alias = workspace && workspace.alias ? workspace.alias : String(workspace || '');
+  const alias = workspace?.alias ?? String(workspace || '');
   const session = readSessionPolicy(config, alias);
   if (session) {
     return {

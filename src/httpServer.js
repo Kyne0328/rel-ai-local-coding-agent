@@ -745,20 +745,21 @@ async function readFormOrJsonBody(req, maxBytes) {
 // local HTTP responses cross-origin. Requests with no Origin header (server-to-server
 // MCP, curl, the same-origin dashboard) are unaffected; CORS only governs browser
 // cross-origin reads.
-function isAllowedCorsOrigin(origin) {
-  if (!origin) return false;
+function allowedCorsOrigin(origin) {
+  if (!origin) return "";
   try {
-    const { hostname } = new URL(origin);
-    return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "[::1]";
-  } catch {
-    return false;
-  }
+    const { hostname, protocol, port } = new URL(origin);
+    if (hostname === "127.0.0.1" || hostname === "localhost" || hostname === "[::1]") {
+      return protocol + "//" + hostname + (port ? ":" + port : "");
+    }
+  } catch {}
+  return "";
 }
 
 function setBaseHeaders(req, res) {
-  const origin = req?.headers?.origin ?? "";
-  if (isAllowedCorsOrigin(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
+  const corsOrigin = allowedCorsOrigin(req?.headers?.origin ?? "");
+  if (corsOrigin) {
+    res.setHeader("Access-Control-Allow-Origin", corsOrigin);
     res.setHeader("Vary", "Origin");
   }
   res.setHeader("Access-Control-Allow-Headers", "content-type, authorization");

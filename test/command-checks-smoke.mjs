@@ -111,9 +111,7 @@ fs.writeFileSync(path.join(tmp, 'package.json'), JSON.stringify({
 // 6. Timeout returns structured timeout result (very short timeout)
 {
   // Use a sleep-like command: node -e with a long-running loop
-  const sleepCmd = process.platform === 'win32'
-    ? 'node -e "setTimeout(()=>{},30000)"'
-    : 'node -e "setTimeout(()=>{},30000)"';
+  const sleepCmd = 'node -e "setTimeout(()=>{},30000)"';
   const result = await relaiVerify(workspace, config, mapCheckArgs({ check: sleepCmd, timeoutMs: 50 }));
   assert.equal(result.ok, false, 'timeout should return ok: false');
   assert.ok(

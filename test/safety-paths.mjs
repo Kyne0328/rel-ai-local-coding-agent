@@ -103,7 +103,7 @@ try {
   const resolved = resolveSafePath(tmp, "hello.txt");
   assert.equal(resolved.relativePath, "hello.txt");
   assert.ok(
-    resolved.absolutePath.endsWith("hello.txt") || resolved.absolutePath.endsWith("hello.txt"),
+    resolved.absolutePath.endsWith("hello.txt"),
     `absolutePath should end with hello.txt, got: ${resolved.absolutePath}`
   );
   console.log("  resolveSafePath valid path: OK");

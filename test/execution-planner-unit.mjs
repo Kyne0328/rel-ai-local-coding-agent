@@ -10,13 +10,13 @@ const { planEdit } = require('../src/executionPlanner.js');
 
 function makeTempRepo(filename = 'hello.js', content = 'module.exports = {};') {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-ep-'));
-  execSync('git init', { cwd: dir, stdio: 'pipe' });
-  execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe' });
-  execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe' });
-  fs.mkdirSync(path.dirname(path.join(dir, filename)), { recursive: true });
-  fs.writeFileSync(path.join(dir, filename), content);
-  execSync('git add .', { cwd: dir, stdio: 'pipe' });
-  execSync('git commit -m "init"', { cwd: dir, stdio: 'pipe' });
+  const env = { ...process.env };
+  execSync('git init', { cwd: dir, stdio: 'pipe', env });
+  execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe', env });
+  execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe', env });
+  fs.writeFileSync(path.join(dir, 'README.md'), '# test\n');
+  execSync('git add .', { cwd: dir, stdio: 'pipe', env });
+  execSync('git commit -m "init"', { cwd: dir, stdio: 'pipe', env });
   return dir;
 }
 
@@ -131,7 +131,7 @@ function makeTempRepo(filename = 'hello.js', content = 'module.exports = {};') {
 {
   const dir = makeTempRepo('a.js', 'let a = 1;\n');
   fs.writeFileSync(path.join(dir, 'b.js'), 'let b = 1;\n');
-  execSync('git add . && git commit -m more', { cwd: dir, stdio: 'pipe' });
+  execSync('git add . && git commit -m more', { cwd: dir, stdio: 'pipe', env: { ...process.env } });
   const workspace = { alias: 'test', path: dir };
   try {
     const result = await planEdit(workspace, {}, { edits: [

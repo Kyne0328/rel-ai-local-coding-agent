@@ -21,11 +21,12 @@ function makeRepo() {
   const workspacePath = path.join(root, 'workspace');
   fs.mkdirSync(workspacePath, { recursive: true });
   fs.writeFileSync(path.join(workspacePath, 'README.md'), '# Auto session\n');
-  execFileSync('git', ['init'], { cwd: workspacePath, stdio: 'ignore' });
-  execFileSync('git', ['config', 'user.email', 'relai@example.test'], { cwd: workspacePath });
-  execFileSync('git', ['config', 'user.name', 'RelAI Auto'], { cwd: workspacePath });
-  execFileSync('git', ['add', '.'], { cwd: workspacePath });
-  execFileSync('git', ['commit', '-m', 'init'], { cwd: workspacePath, stdio: 'ignore' });
+  const env = { ...process.env };
+  execFileSync('git', ['init'], { cwd: workspacePath, stdio: 'ignore', env });
+  execFileSync('git', ['config', 'user.email', 'relai@example.test'], { cwd: workspacePath, env });
+  execFileSync('git', ['config', 'user.name', 'RelAI Auto'], { cwd: workspacePath, env });
+  execFileSync('git', ['add', '.'], { cwd: workspacePath, env });
+  execFileSync('git', ['commit', '-m', 'init'], { cwd: workspacePath, stdio: 'ignore', env });
   return { root, workspacePath, stateDir: path.join(root, 'state') };
 }
 
@@ -119,9 +120,9 @@ const sessionFile = (stateDir, alias) => path.join(stateDir, 'sessions', `${alia
   fs.writeFileSync(path.join(workspacePath, 'session-artifact.txt'), 'made during session\n');
   const plan = await workspaceTidyPlan({ alias: 'ws', path: workspacePath }, config, { mode: 'session_untracked' });
   assert.equal(plan.ok, true);
-  const paths = plan.candidates.map((c) => c.path);
-  assert.ok(paths.includes('session-artifact.txt'), 'session file must be a candidate');
-  assert.ok(!paths.includes('pre-existing.txt'), 'baseline file must never be a tidy candidate');
+  const paths = new Set(plan.candidates.map((c) => c.path));
+  assert.ok(paths.has('session-artifact.txt'), 'session file must be a candidate');
+  assert.ok(!paths.has('pre-existing.txt'), 'baseline file must never be a tidy candidate');
   fs.rmSync(root, { recursive: true, force: true });
 }
 

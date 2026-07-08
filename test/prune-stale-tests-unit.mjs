@@ -34,7 +34,7 @@ const config = {
 {
   const result = updateWorkspace(config, { action: 'prune-stale-tests', alias: 'myapp' });
   assert.equal(result.ok, true, 'prune: ok');
-  assert.deepEqual([...result.removed].sort(), ['npm:legacy', 'npm:test:v4'], 'prune: removes the two stale keys');
+  assert.deepEqual([...result.removed].sort((a, b) => a.localeCompare(b)), ['npm:legacy', 'npm:test:v4'], 'prune: removes the two stale keys');
   const ws = result.config.workspaces.find((w) => w.alias === 'myapp');
   assert.deepEqual(ws.testCommandKeys, ['npm:test'], 'prune: keeps the valid key');
   assert.deepEqual(ws.staleTestCommandKeys || [], [], 'prune: no stale keys remain');

@@ -21,15 +21,16 @@ const LEVEL_RULES = [
 
 function getChangedFiles(workspacePath) {
   const opts = { cwd: workspacePath, timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] };
+  const execOpts = { ...opts, env: { ...process.env } };
   try {
-    const unstaged = execSync('git diff --name-only', opts).toString().trim();
-    const staged = execSync('git diff --name-only --cached', opts).toString().trim();
-    const untracked = execSync('git ls-files --others --exclude-standard', opts).toString().trim();
+    const unstaged = execSync('git diff --name-only', execOpts).toString().trim();
+    const staged = execSync('git diff --name-only --cached', execOpts).toString().trim();
+    const untracked = execSync('git ls-files --others --exclude-standard', execOpts).toString().trim();
     const all = [...unstaged.split('\n'), ...staged.split('\n'), ...untracked.split('\n')]
       .map((f) => f.trim())
       .filter(Boolean);
     return [...new Set(all)];
-  } catch (_err) {
+  } catch {
     return null;
   }
 }

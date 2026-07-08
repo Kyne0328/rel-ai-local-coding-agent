@@ -7,11 +7,11 @@ function killProcessTree(child) {
   if (!child || child.killed) return;
   if (process.platform === "win32" && child.pid) {
     try {
-      spawnSync("taskkill", ["/f", "/t", "/pid", String(child.pid)], { stdio: "ignore", windowsHide: true });
+      spawnSync("taskkill", ["/f", "/t", "/pid", String(child.pid)], { stdio: "ignore", windowsHide: true, env: { ...process.env } });
       return;
-    } catch (_error) {}
+    } catch {}
   }
-  try { child.kill("SIGTERM"); } catch (_error) {}
+  try { child.kill("SIGTERM"); } catch {}
 }
 
 function runProcess(command, args, options = {}, config = {}) {

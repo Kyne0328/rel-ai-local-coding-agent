@@ -20,15 +20,15 @@ fs.mkdirSync(workspacePath, { recursive: true });
 fs.mkdirSync(stateDir, { recursive: true });
 
 // Init git repo
-execFileSync("git", ["init"], { cwd: workspacePath, stdio: "ignore" });
-execFileSync("git", ["config", "user.email", "relai@example.test"], { cwd: workspacePath });
-execFileSync("git", ["config", "user.name", "RelAI Prepared Smoke"], { cwd: workspacePath });
-execFileSync("git", ["commit", "--allow-empty", "-m", "init"], { cwd: workspacePath, stdio: "ignore" });
+const gitEnv = { ...process.env };
+execFileSync("git", ["init"], { cwd: workspacePath, stdio: "ignore", env: gitEnv });
+execFileSync("git", ["config", "user.email", "relai@example.test"], { cwd: workspacePath, env: gitEnv });
+execFileSync("git", ["config", "user.name", "RelAI Prepared Smoke"], { cwd: workspacePath, env: gitEnv });
+execFileSync("git", ["commit", "--allow-empty", "-m", "init"], { cwd: workspacePath, stdio: "ignore", env: gitEnv });
 
-// Create and commit a small text file
 fs.writeFileSync(path.join(workspacePath, "hello.txt"), "Hello, world!\n");
-execFileSync("git", ["add", "hello.txt"], { cwd: workspacePath });
-execFileSync("git", ["commit", "-m", "add hello.txt"], { cwd: workspacePath, stdio: "ignore" });
+execFileSync("git", ["add", "hello.txt"], { cwd: workspacePath, env: gitEnv });
+execFileSync("git", ["commit", "-m", "add hello.txt"], { cwd: workspacePath, stdio: "ignore", env: gitEnv });
 
 // Build a minimal config object (standard mode — tools must work without requiring "prepared")
 const config = {
