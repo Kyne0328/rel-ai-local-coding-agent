@@ -42,102 +42,119 @@ function main() {
     return;
   }
 
-  if (command === "init") {
-    const config = makeDefaultConfig();
-    writeConfig(config, { overwrite: false });
-    console.log(`Created config at ${getConfigPath()}`);
-    return;
-  }
-
-  if (command === "show") {
-    console.log(JSON.stringify(readConfig(), null, 2));
-    return;
-  }
-
-  if (command === "doctor") {
-    const config = readConfig({ allowMissing: true });
-    const fix = subcommand === "--fix";
-    const workspacePath = fix ? action : subcommand;
-    Promise.resolve(fix ? productUx.doctorFix(config, { workspacePath, overwrite: false }) : productUx.healthMonitor(config, {}))
-      .then((result) => console.log(JSON.stringify(result, null, 2)))
-      .catch((error) => { console.error(error instanceof Error ? error.message : String(error)); process.exit(1); });
-    return;
-  }
-
-  if (command === "setup") {
-    const result = productUx.setupWizard({ alias: subcommand || "myapp", workspacePath: action || "" });
-    console.log(JSON.stringify(result, null, 2));
-    return;
-  }
-
-  if (command === "import-relai") {
-    const result = productUx.importOriginalRelAiConfig({ sourcePath: subcommand || undefined, dryRun: false });
-    console.log(JSON.stringify(result, null, 2));
-    return;
-  }
-
-  if (command === "state" && subcommand === "export") {
-    const config = readConfig();
-    const result = productUx.stateExport(config, { outputPath: requireArg(action, "output path") });
-    console.log(JSON.stringify(result, null, 2));
-    return;
-  }
-
-  if (command === "state" && subcommand === "import") {
-    const config = readConfig();
-    const result = productUx.stateImport(config, { inputPath: requireArg(action, "input path"), confirm: rest.includes("--confirm") });
-    console.log(JSON.stringify(result, null, 2));
-    return;
-  }
-
-  if (command === "set") {
-    const key = requireArg(subcommand, "setting key");
-    const value = requireArg(action, "setting value");
-    const config = readConfig({ allowMissing: true });
-    if (["dashboardEnabled"].includes(key)) {
-      config[key] = parseBool(value, key);
-    } else if (["maxOutputBytes", "maxIndexFiles"].includes(key)) {
-      const number = Number(value);
-      if (!Number.isFinite(number) || number <= 0) throw new Error(`${key} must be a positive number.`);
-      config[key] = number;
-    } else {
-      throw new Error(`Unsupported setting '${key}'. Supported settings: dashboardEnabled, maxOutputBytes, maxIndexFiles.`);
-    }
-    writeConfig(config);
-    console.log(`Set ${key}=${config[key]}`);
-    return;
-  }
-
-  if (command === "workspace" && subcommand === "add") {
-    const alias = requireArg(action, "workspace alias");
-    const workspacePath = requireArg(rest[0], "absolute workspace path");
-    if (!path.isAbsolute(workspacePath)) throw new Error("Workspace path must be absolute.");
-    const config = readConfig({ allowMissing: true });
-    config.workspaces = config.workspaces || {};
-    config.workspaces[alias] = config.workspaces[alias] || {};
-    config.workspaces[alias].path = workspacePath;
-    config.workspaces[alias].testCommands = config.workspaces[alias].testCommands || {};
-    config.workspaces[alias].commands = config.workspaces[alias].commands || {};
-    config.workspaces[alias].protectedBranches = config.workspaces[alias].protectedBranches || ["main", "master"];
-    config.workspaces[alias].defaultBaseBranch = config.workspaces[alias].defaultBaseBranch || "main";
-    config.workspaces[alias].allowedRemotes = config.workspaces[alias].allowedRemotes || ["origin"];
-    writeConfig(config);
-    console.log(`Added workspace '${alias}' -> ${workspacePath}`);
-    return;
-  }
-
-  if (command === "test-command" && subcommand === "add") {
-    addWorkspaceCommand("testCommands", "test command", action, rest);
-    return;
-  }
-
-  if (command === "command" && subcommand === "add") {
-    addWorkspaceCommand("commands", "dev command", action, rest);
+  const handlers = {
+    init: handleInit,
+    show: handleShow,
+    doctor: handleDoctor,
+    setup: handleSetup,
+    "import-relai": handleImportRelai,
+    state: handleState,
+    set: handleSet,
+    workspace: handleWorkspace,
+    "test-command": handleTestCommand,
+    command: handleCommand
+  };
+  const handler = handlers[command];
+  if (handler) {
+    handler(subcommand, action, rest);
     return;
   }
 
   printUsage();
   process.exitCode = 1;
+}
+
+function handleInit() {
+  const config = makeDefaultConfig();
+  writeConfig(config, { overwrite: false });
+  console.log(`Created config at ${getConfigPath()}`);
+}
+
+function handleShow() {
+  console.log(JSON.stringify(readConfig(), null, 2));
+}
+
+function handleDoctor(subcommand, action) {
+  const config = readConfig({ allowMissing: true });
+  const fix = subcommand === "--fix";
+  const workspacePath = fix ? action : subcommand;
+  Promise.resolve(fix ? productUx.doctorFix(config, { workspacePath, overwrite: false }) : productUx.healthMonitor(config, {}))
+    .then((result) => console.log(JSON.stringify(result, null, 2)))
+    .catch((error) => { console.error(error instanceof Error ? error.message : String(error)); process.exit(1); });
+}
+
+function handleSetup(subcommand, action) {
+  const result = productUx.setupWizard({ alias: subcommand || "myapp", workspacePath: action || "" });
+  console.log(JSON.stringify(result, null, 2));
+}
+
+function handleImportRelai(subcommand) {
+  const result = productUx.importOriginalRelAiConfig({ sourcePath: subcommand || undefined, dryRun: false });
+  console.log(JSON.stringify(result, null, 2));
+}
+
+function handleState(subcommand, action, rest) {
+  if (subcommand === "export") {
+    const config = readConfig();
+    const result = productUx.stateExport(config, { outputPath: requireArg(action, "output path") });
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+  if (subcommand === "import") {
+    const config = readConfig();
+    const result = productUx.stateImport(config, { inputPath: requireArg(action, "input path"), confirm: rest.includes("--confirm") });
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+  printUsage();
+  process.exitCode = 1;
+}
+
+function handleSet(subcommand, action) {
+  const key = requireArg(subcommand, "setting key");
+  const value = requireArg(action, "setting value");
+  const config = readConfig({ allowMissing: true });
+  if (["dashboardEnabled"].includes(key)) {
+    config[key] = parseBool(value, key);
+  } else if (["maxOutputBytes", "maxIndexFiles"].includes(key)) {
+    const number = Number(value);
+    if (!Number.isFinite(number) || number <= 0) throw new Error(`${key} must be a positive number.`);
+    config[key] = number;
+  } else {
+    throw new Error(`Unsupported setting '${key}'. Supported settings: dashboardEnabled, maxOutputBytes, maxIndexFiles.`);
+  }
+  writeConfig(config);
+  console.log(`Set ${key}=${config[key]}`);
+}
+
+function handleWorkspace(subcommand, action, rest) {
+  if (subcommand !== "add") {
+    printUsage();
+    process.exitCode = 1;
+    return;
+  }
+  const alias = requireArg(action, "workspace alias");
+  const workspacePath = requireArg(rest[0], "absolute workspace path");
+  if (!path.isAbsolute(workspacePath)) throw new Error("Workspace path must be absolute.");
+  const config = readConfig({ allowMissing: true });
+  config.workspaces = config.workspaces || {};
+  config.workspaces[alias] = config.workspaces[alias] || {};
+  config.workspaces[alias].path = workspacePath;
+  config.workspaces[alias].testCommands = config.workspaces[alias].testCommands || {};
+  config.workspaces[alias].commands = config.workspaces[alias].commands || {};
+  config.workspaces[alias].protectedBranches = config.workspaces[alias].protectedBranches || ["main", "master"];
+  config.workspaces[alias].defaultBaseBranch = config.workspaces[alias].defaultBaseBranch || "main";
+  config.workspaces[alias].allowedRemotes = config.workspaces[alias].allowedRemotes || ["origin"];
+  writeConfig(config);
+  console.log(`Added workspace '${alias}' -> ${workspacePath}`);
+}
+
+function handleTestCommand(subcommand, action, rest) {
+  addWorkspaceCommand("testCommands", "test command", action, rest);
+}
+
+function handleCommand(subcommand, action, rest) {
+  addWorkspaceCommand("commands", "dev command", action, rest);
 }
 
 function addWorkspaceCommand(field, label, aliasValue, rest) {

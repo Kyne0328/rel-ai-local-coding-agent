@@ -96,138 +96,154 @@ function relaiRead(workspace, config, args = {}) {
   const items = [];
   const skipped = [];
   for (const requested of paths) {
-    try {
-      const safe = resolveSafePath(workspace.path, requested);
-      const stat = fs.statSync(safe.absolutePath);
-      if (stat.isDirectory()) {
-        items.push(readDirectory(workspace, safe.relativePath, args));
-        continue;
-      }
-      if (!stat.isFile()) {
-        skipped.push({ path: String(requested), reason: "not a file or directory" });
-        continue;
-      }
-
-      let text = null;
-      let cacheHit = false;
-      if (sessionActive) {
-        const cached = sessionCache.getCachedRead(workspace.alias, safe.absolutePath, stat.mtimeMs);
-        if (cached !== null) { text = cached; cacheHit = true; }
-      }
-      let data = null;
-      if (text === null) {
-        data = fs.readFileSync(safe.absolutePath);
-        if (looksBinary(data)) {
-          skipped.push({ path: safe.relativePath, reason: "binary-looking file" });
-          continue;
-        }
-        text = data.toString("utf8");
-        if (sessionActive) {
-          sessionCache.setCachedRead(workspace.alias, safe.absolutePath, stat.mtimeMs, text);
-        }
-      }
-
-      const byteLen = Buffer.byteLength(text, "utf8");
-      const truncated = byteLen > maxBytes;
-      const item = {
-        type: "file",
-        path: safe.relativePath,
-        sha256: fileSha256(workspace.path, safe.relativePath),
-        bytes: data ? data.length : byteLen,
-        lineCount: countLines(text),
-        truncated,
-        writeGuidance: fileWriteGuidance(safe.relativePath, text),
-        content: truncated ? text.slice(0, maxBytes) : text
-      };
-      if (sessionActive) item.cacheHit = cacheHit;
-      items.push(item);
-    } catch (error) {
-      skipped.push({ path: String(requested), reason: error instanceof Error ? error.message : String(error) });
-    }
+    const result = readSingleItem(workspace, config, requested, sessionActive, maxBytes, args);
+    if (result.item) items.push(result.item);
+    if (result.skipped) skipped.push(result.skipped);
   }
   return { ok: true, workspace: workspace.alias, items, skipped };
 }
 
+function readSingleItem(workspace, config, requested, sessionActive, maxBytes, args) {
+  try {
+    const safe = resolveSafePath(workspace.path, requested);
+    const stat = fs.statSync(safe.absolutePath);
+    if (!stat.isFile()) {
+      return stat.isDirectory()
+        ? { item: readDirectory(workspace, safe.relativePath, args) }
+        : { skipped: { path: String(requested), reason: "not a file or directory" } };
+    }
+    const { data, text, cacheHit } = readTextContent(workspace, safe, stat, sessionActive);
+    if (data === null) {
+      return { skipped: { path: safe.relativePath, reason: "binary-looking file" } };
+    }
+    const byteLen = Buffer.byteLength(text, "utf8");
+    const truncated = byteLen > maxBytes;
+    const item = {
+      type: "file", path: safe.relativePath,
+      sha256: fileSha256(workspace.path, safe.relativePath),
+      bytes: data ? data.length : byteLen,
+      lineCount: countLines(text), truncated,
+      writeGuidance: fileWriteGuidance(safe.relativePath, text),
+      content: truncated ? text.slice(0, maxBytes) : text,
+      ...(sessionActive ? { cacheHit } : {})
+    };
+    return { item };
+  } catch (error) {
+    return { skipped: { path: String(requested), reason: error instanceof Error ? error.message : String(error) } };
+  }
+}
+
+function readTextContent(workspace, safe, stat, sessionActive) {
+  if (sessionActive) {
+    const cached = sessionCache.getCachedRead(workspace.alias, safe.absolutePath, stat.mtimeMs);
+    if (cached !== null) return { data: null, text: cached, cacheHit: true };
+  }
+  const data = fs.readFileSync(safe.absolutePath);
+  if (looksBinary(data)) return { data: null, text: "", cacheHit: false };
+  const text = data.toString("utf8");
+  if (sessionActive) {
+    sessionCache.setCachedRead(workspace.alias, safe.absolutePath, stat.mtimeMs, text);
+  }
+  return { data, text, cacheHit: false };
+}
+
+const WRITE_STAGE_HANDLERS = {
+  direct: handleWriteDirect,
+  "": handleWriteDirect,
+  start: handleWriteStart,
+  append: handleWriteAppend,
+  commit: handleWriteCommit,
+  abort: handleWriteAbort
+};
+
 function relaiWrite(workspace, config, args = {}) {
   const stage = String(args.stage || "direct").trim().toLowerCase();
-  if (stage === "direct" || stage === "") {
-    const relativePath = String(args.path || "").trim();
-    if (!relativePath) throw new Error("relai_write requires path and content. Expected: { workspace, path, content }.");
-    if (typeof args.content !== "string") throw new Error("relai_write requires content as a string containing the entire target file. Expected: { workspace, path, content }.");
-    assertDirectWriteAllowed(relativePath, args.content);
-    return performFullFileWrite(workspace, config, relativePath, args.content, { dryRun: Boolean(args.dryRun) });
-  }
+  const handler = WRITE_STAGE_HANDLERS[stage];
+  if (!handler) throw new Error("relai_write stage must be one of: direct, start, append, commit, abort.");
+  return handler(workspace, config, args);
+}
 
-  if (stage === "start") {
-    const relativePath = String(args.path || "").trim();
-    if (!relativePath) throw new Error("relai_write stage='start' requires path and content.");
-    if (typeof args.content !== "string") throw new Error("relai_write stage='start' requires a content chunk string.");
-    const safe = resolveSafePath(workspace.path, relativePath);
-    const writeId = makeOperationId();
-    writeStagedPayload(config, workspace, writeId, {
-      id: writeId,
-      workspace: workspace.alias,
-      root: workspace.path,
-      path: safe.relativePath,
-      chunks: [args.content],
-      bytes: Buffer.byteLength(args.content, "utf8"),
-      createdAt: new Date().toISOString()
-    });
-    return {
-      ok: true,
-      workspace: workspace.alias,
-      path: safe.relativePath,
-      operation: "stagedFullFileWrite:start",
-      writeId,
-      chunks: 1,
-      bytes: Buffer.byteLength(args.content, "utf8"),
-      next: "Call relai_write with { workspace, stage: 'append', writeId, content } for more chunks, then { workspace, stage: 'commit', writeId } to write the complete file."
-    };
-  }
+function handleWriteDirect(workspace, config, args) {
+  const relativePath = String(args.path || "").trim();
+  if (!relativePath) throw new Error("relai_write requires path and content. Expected: { workspace, path, content }.");
+  if (typeof args.content !== "string") throw new Error("relai_write requires content as a string containing the entire target file. Expected: { workspace, path, content }.");
+  assertDirectWriteAllowed(relativePath, args.content);
+  return performFullFileWrite(workspace, config, relativePath, args.content, { dryRun: Boolean(args.dryRun) });
+}
 
-  if (stage === "append") {
-    if (typeof args.content !== "string") throw new Error("relai_write stage='append' requires writeId and a content chunk string.");
-    const writeId = resolveStagedWriteId(config, workspace, args.writeId, args.path);
-    const payload = readStagedPayload(config, workspace, writeId);
-    payload.chunks.push(args.content);
-    payload.bytes += Buffer.byteLength(args.content, "utf8");
-    payload.updatedAt = new Date().toISOString();
-    writeStagedPayload(config, workspace, writeId, payload);
-    return {
-      ok: true,
-      workspace: workspace.alias,
-      path: payload.path,
-      operation: "stagedFullFileWrite:append",
-      writeId,
-      chunks: payload.chunks.length,
-      bytes: payload.bytes,
-      next: "Append more chunks or call relai_write with { workspace, stage: 'commit', writeId }."
-    };
-  }
+function handleWriteStart(workspace, config, args) {
+  const relativePath = String(args.path || "").trim();
+  if (!relativePath) throw new Error("relai_write stage='start' requires path and content.");
+  if (typeof args.content !== "string") throw new Error("relai_write stage='start' requires a content chunk string.");
+  const safe = resolveSafePath(workspace.path, relativePath);
+  const writeId = makeOperationId();
+  writeStagedPayload(config, workspace, writeId, {
+    id: writeId, workspace: workspace.alias, root: workspace.path,
+    path: safe.relativePath, chunks: [args.content],
+    bytes: Buffer.byteLength(args.content, "utf8"),
+    createdAt: new Date().toISOString()
+  });
+  return {
+    ok: true, workspace: workspace.alias, path: safe.relativePath,
+    operation: "stagedFullFileWrite:start", writeId, chunks: 1,
+    bytes: Buffer.byteLength(args.content, "utf8"),
+    next: "Call relai_write with { workspace, stage: 'append', writeId, content } for more chunks, then { workspace, stage: 'commit', writeId } to write the complete file."
+  };
+}
 
-  if (stage === "commit") {
-    const writeId = resolveStagedWriteId(config, workspace, args.writeId, args.path);
-    const payload = readStagedPayload(config, workspace, writeId);
-    const content = payload.chunks.join("");
-    const result = performFullFileWrite(workspace, config, payload.path, content, { dryRun: Boolean(args.dryRun), staged: true, writeId });
-    if (!args.dryRun) clearStagedPayload(config, workspace, writeId);
-    return {
-      ...result,
-      operation: "stagedFullFileWrite:commit",
-      writeId,
-      staged: true,
-      chunks: payload.chunks.length,
-      bytes: Buffer.byteLength(content, "utf8")
-    };
-  }
+function handleWriteAppend(workspace, config, args) {
+  if (typeof args.content !== "string") throw new Error("relai_write stage='append' requires writeId and a content chunk string.");
+  const writeId = resolveStagedWriteId(config, workspace, args.writeId, args.path);
+  const payload = readStagedPayload(config, workspace, writeId);
+  payload.chunks.push(args.content);
+  payload.bytes += Buffer.byteLength(args.content, "utf8");
+  payload.updatedAt = new Date().toISOString();
+  writeStagedPayload(config, workspace, writeId, payload);
+  return {
+    ok: true, workspace: workspace.alias, path: payload.path,
+    operation: "stagedFullFileWrite:append", writeId,
+    chunks: payload.chunks.length, bytes: payload.bytes,
+    next: "Append more chunks or call relai_write with { workspace, stage: 'commit', writeId }."
+  };
+}
 
-  if (stage === "abort") {
-    const writeId = validateWriteId(args.writeId);
-    const existed = clearStagedPayload(config, workspace, writeId);
-    return { ok: true, workspace: workspace.alias, operation: "stagedFullFileWrite:abort", writeId, cleared: existed };
-  }
+function handleWriteCommit(workspace, config, args) {
+  const writeId = resolveStagedWriteId(config, workspace, args.writeId, args.path);
+  const payload = readStagedPayload(config, workspace, writeId);
+  const content = payload.chunks.join("");
+  const result = performFullFileWrite(workspace, config, payload.path, content, { dryRun: Boolean(args.dryRun), staged: true, writeId });
+  if (!args.dryRun) clearStagedPayload(config, workspace, writeId);
+  return { ...result, operation: "stagedFullFileWrite:commit", writeId, staged: true, chunks: payload.chunks.length, bytes: Buffer.byteLength(content, "utf8") };
+}
 
-  throw new Error("relai_write stage must be one of: direct, start, append, commit, abort.");
+function handleWriteAbort(workspace, config, args) {
+  const writeId = validateWriteId(args.writeId);
+  const existed = clearStagedPayload(config, workspace, writeId);
+  return { ok: true, workspace: workspace.alias, operation: "stagedFullFileWrite:abort", writeId, cleared: existed };
+}
+
+function applyReplacements(replacements, oldContent, relativePath) {
+  let nextContent = oldContent;
+  const results = [];
+  for (let index = 0; index < replacements.length; index += 1) {
+    const item = replacements[index];
+    const before = nextContent;
+    const totalMatches = countStringOccurrences(before, item.oldText);
+    if (totalMatches === 0) {
+      throw new Error(`relai_replace operation ${index + 1} found 0 matches in ${relativePath}. Re-read the file and use exact current text.`);
+    }
+    const hasExplicitOccurrence = item.occurrence != null;
+    if (!hasExplicitOccurrence && totalMatches !== 1) {
+      throw new Error(`relai_replace operation ${index + 1} found ${totalMatches} matches in ${relativePath}. Pass occurrence to replace exactly one match, or use a larger unique oldText block.`);
+    }
+    const occurrence = hasExplicitOccurrence ? item.occurrence : 1;
+    if (occurrence > totalMatches) {
+      throw new Error(`relai_replace operation ${index + 1} requested occurrence ${occurrence}, but only ${totalMatches} matches exist in ${relativePath}.`);
+    }
+    nextContent = replaceNth(before, item.oldText, item.newText, occurrence);
+    results.push({ index: index + 1, matchesBefore: totalMatches, occurrence, oldBytes: Buffer.byteLength(item.oldText, "utf8"), newBytes: Buffer.byteLength(item.newText, "utf8"), changed: nextContent !== before });
+  }
+  return { nextContent, results };
 }
 
 function relaiReplace(workspace, config, args = {}) {
@@ -249,34 +265,7 @@ function relaiReplace(workspace, config, args = {}) {
 
   const replacements = normalizeExactReplacements(args);
   const oldContent = data.toString("utf8");
-  let nextContent = oldContent;
-  const results = [];
-
-  for (let index = 0; index < replacements.length; index += 1) {
-    const item = replacements[index];
-    const before = nextContent;
-    const totalMatches = countStringOccurrences(before, item.oldText);
-    if (totalMatches === 0) {
-      throw new Error(`relai_replace operation ${index + 1} found 0 matches in ${safe.relativePath}. Re-read the file and use exact current text.`);
-    }
-    const hasExplicitOccurrence = item.occurrence != null;
-    if (!hasExplicitOccurrence && totalMatches !== 1) {
-      throw new Error(`relai_replace operation ${index + 1} found ${totalMatches} matches in ${safe.relativePath}. Pass occurrence to replace exactly one match, or use a larger unique oldText block.`);
-    }
-    const occurrence = hasExplicitOccurrence ? item.occurrence : 1;
-    if (occurrence > totalMatches) {
-      throw new Error(`relai_replace operation ${index + 1} requested occurrence ${occurrence}, but only ${totalMatches} matches exist in ${safe.relativePath}.`);
-    }
-    nextContent = replaceNth(before, item.oldText, item.newText, occurrence);
-    results.push({
-      index: index + 1,
-      matchesBefore: totalMatches,
-      occurrence,
-      oldBytes: Buffer.byteLength(item.oldText, "utf8"),
-      newBytes: Buffer.byteLength(item.newText, "utf8"),
-      changed: nextContent !== before
-    });
-  }
+  const { nextContent, results } = applyReplacements(replacements, oldContent, safe.relativePath);
 
   const changed = nextContent !== oldContent;
   const newSha256 = changed ? sha256Text(nextContent) : oldSha256;
@@ -334,25 +323,10 @@ function relaiClear(workspace, config, args = {}) {
   const results = [];
 
   for (const rawPath of rawPaths) {
-    const safe = resolveSafePath(workspace.path, String(rawPath || "").trim());
-    if (!fs.existsSync(safe.absolutePath)) {
-      const item = { path: safe.relativePath, skipped: true, reason: "missing" };
-      skipped.push(item);
-      if (failIfMissing) throw new Error(`relai_clear_files target does not exist: ${safe.relativePath}`);
-      results.push(item);
-      continue;
-    }
-    const stat = fs.statSync(safe.absolutePath);
-    if (!stat.isFile()) throw new Error(`relai_clear_files refuses non-file path: ${safe.relativePath}`);
-    const oldSha256 = fileSha256(workspace.path, safe.relativePath);
-    const shaMismatch = Boolean(expectedSha256 && oldSha256 !== expectedSha256);
-    const item = { path: safe.relativePath, cleared: !dryRun, dryRun, oldSha256, ...(shaMismatch ? { shaMismatch: { expectedSha256, currentSha256: oldSha256 } } : {}) };
-    wouldClear.push(safe.relativePath);
-    if (!dryRun) {
-      fs.rmSync(safe.absolutePath, { force: true });
-      cleared.push(safe.relativePath);
-    }
-    results.push(item);
+    const result = clearSinglePath(workspace, rawPath, dryRun, failIfMissing, expectedSha256, cleared, wouldClear);
+    if (result instanceof Error) throw result;
+    results.push(result);
+    if (result.skipped) skipped.push(result);
   }
 
   appendOperation(config, workspace, {
@@ -376,6 +350,26 @@ function relaiClear(workspace, config, args = {}) {
     skipped,
     results
   };
+}
+
+function clearSinglePath(workspace, rawPath, dryRun, failIfMissing, expectedSha256, cleared, wouldClear) {
+  const safe = resolveSafePath(workspace.path, String(rawPath || "").trim());
+  if (!fs.existsSync(safe.absolutePath)) {
+    const item = { path: safe.relativePath, skipped: true, reason: "missing" };
+    if (failIfMissing) return new Error(`relai_clear_files target does not exist: ${safe.relativePath}`);
+    return item;
+  }
+  const stat = fs.statSync(safe.absolutePath);
+  if (!stat.isFile()) return new Error(`relai_clear_files refuses non-file path: ${safe.relativePath}`);
+  const oldSha256 = fileSha256(workspace.path, safe.relativePath);
+  const shaMismatch = Boolean(expectedSha256 && oldSha256 !== expectedSha256);
+  const item = { path: safe.relativePath, cleared: !dryRun, dryRun, oldSha256, ...(shaMismatch ? { shaMismatch: { expectedSha256, currentSha256: oldSha256 } } : {}) };
+  wouldClear.push(safe.relativePath);
+  if (!dryRun) {
+    fs.rmSync(safe.absolutePath, { force: true });
+    cleared.push(safe.relativePath);
+  }
+  return item;
 }
 
 function tidyPlanDir(config, workspace) {
@@ -403,6 +397,29 @@ function normalizeTidyMode(raw) {
   return mode;
 }
 
+function scanUntrackedSessionFiles(workspace, ownership, maxCandidates) {
+  const candidates = [];
+  const skipped = [];
+  for (const file of ownership.untrackedSession.slice(0, maxCandidates)) {
+    try {
+      const safe = resolveSafePath(workspace.path, file);
+      if (!fs.existsSync(safe.absolutePath)) { skipped.push({ path: safe.relativePath, reason: "missing" }); continue; }
+      const stat = fs.statSync(safe.absolutePath);
+      if (!stat.isFile()) { skipped.push({ path: safe.relativePath, reason: "not a file" }); continue; }
+      candidates.push({
+        path: safe.relativePath, action: "tidy_untracked_file",
+        status: "untracked", owner: "session",
+        reason: "untracked file owned by the current workspace session",
+        sha256: fileSha256(workspace.path, safe.relativePath),
+        sizeBytes: stat.size, modifiedAt: stat.mtime.toISOString()
+      });
+    } catch (error) {
+      skipped.push({ path: String(file), reason: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  return { candidates, skipped };
+}
+
 async function workspaceTidyPlan(workspace, config, args = {}) {
   const mode = normalizeTidyMode(args.mode);
   const maxCandidates = clampNumber(args.maxCandidates, 1, 100, 50);
@@ -425,30 +442,7 @@ async function workspaceTidyPlan(workspace, config, args = {}) {
       message: "No active session baseline for this workspace, so untracked files cannot be attributed to this session. Start a session (edit a file, or call relai_set_policy) before tidying session-owned untracked files."
     };
   }
-  const candidates = [];
-  const skipped = [];
-  if (mode === "session_untracked") {
-    for (const file of ownership.untrackedSession.slice(0, maxCandidates)) {
-      try {
-        const safe = resolveSafePath(workspace.path, file);
-        if (!fs.existsSync(safe.absolutePath)) { skipped.push({ path: safe.relativePath, reason: "missing" }); continue; }
-        const stat = fs.statSync(safe.absolutePath);
-        if (!stat.isFile()) { skipped.push({ path: safe.relativePath, reason: "not a file" }); continue; }
-        candidates.push({
-          path: safe.relativePath,
-          action: "tidy_untracked_file",
-          status: "untracked",
-          owner: "session",
-          reason: "untracked file owned by the current workspace session",
-          sha256: fileSha256(workspace.path, safe.relativePath),
-          sizeBytes: stat.size,
-          modifiedAt: stat.mtime.toISOString()
-        });
-      } catch (error) {
-        skipped.push({ path: String(file), reason: error instanceof Error ? error.message : String(error) });
-      }
-    }
-  }
+  const { candidates, skipped } = scanUntrackedSessionFiles(workspace, ownership, maxCandidates);
   const now = Date.now();
   const planId = makeTidyPlanId();
   const plan = {
@@ -506,18 +500,7 @@ async function relaiWorkspaceTidyRun(workspace, config, args = {}) {
   const ownership = classifyStatusOwnership(workspace, config, status.stdout || "");
   const currentUntracked = new Set(ownership.untrackedSession || []);
   const candidates = Array.isArray(plan.candidates) ? plan.candidates : [];
-  const preflight = [];
-  const refused = [];
-  for (const candidate of candidates) {
-    const safe = resolveSafePath(workspace.path, candidate.path);
-    if (!currentUntracked.has(safe.relativePath)) { refused.push({ path: safe.relativePath, reason: "path is no longer session-owned and untracked" }); continue; }
-    if (!fs.existsSync(safe.absolutePath)) { refused.push({ path: safe.relativePath, reason: "path is missing" }); continue; }
-    const stat = fs.statSync(safe.absolutePath);
-    if (!stat.isFile()) { refused.push({ path: safe.relativePath, reason: "path is not a file" }); continue; }
-    const currentSha256 = fileSha256(workspace.path, safe.relativePath);
-    if (currentSha256 !== candidate.sha256) { refused.push({ path: safe.relativePath, reason: "sha256 mismatch", expectedSha256: candidate.sha256, currentSha256 }); continue; }
-    preflight.push({ path: safe.relativePath, sha256: currentSha256, sizeBytes: stat.size });
-  }
+  const { preflight, refused } = preflightTidyCandidates(candidates, workspace, currentUntracked);
   if (refused.length > 0) {
     return {
       ok: false,
@@ -532,7 +515,7 @@ async function relaiWorkspaceTidyRun(workspace, config, args = {}) {
     };
   }
   const clearResult = (preflight.length > 0 ? relaiClear(workspace, config, { paths: preflight.map((item) => item.path), failIfMissing: true }) : { ok: true, changedFiles: [] });
-  try { fs.rmSync(file, { force: true }); } catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] tidy plan cleanup:', error); }
+  try { fs.rmSync(file, { force: true }); } catch { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] tidy plan cleanup'); }
   const applied = preflight.map((item) => ({ path: item.path, action: "tidied_untracked_file", sha256: item.sha256, sizeBytes: item.sizeBytes }));
   appendOperation(config, workspace, {
     id: planId,
@@ -557,7 +540,7 @@ async function relaiWorkspaceTidyRun(workspace, config, args = {}) {
 async function relaiApplyPatch(workspace, config, args = {}) {
   const rawPatch = String(args.patch || args.diff || args.updateText || "");
   assertPreparedUpdateSafe(workspace, config, args, rawPatch);
-  if (/^\s*\*\*\* Begin Patch\b/m.test(rawPatch)) {
+  if (/^\*\*\* Begin Patch\b/m.test(rawPatch)) {
     return applyStructuredOpenAIPatch(workspace, config, args, rawPatch);
   }
   const patch = normalizeUnifiedDiffText(rawPatch);
@@ -615,52 +598,54 @@ async function relaiApplyPatch(workspace, config, args = {}) {
 
 function normalizeOpenAIPatchFormat(input) {
   const text = String(input || "");
-  if (!/^\s*\*\*\* Begin Patch\b/m.test(text)) {
+  if (!/^\*\*\* Begin Patch\b/m.test(text)) {
     return { patch: text, converted: false, sourceFormat: "unified-diff" };
   }
   const lines = text.split(/\r?\n/);
   const out = [];
   let i = 0;
-  while (i < lines.length && !/^\s*\*\*\* Begin Patch\b/.test(lines[i])) i += 1;
+  while (i < lines.length && !/^\*\*\* Begin Patch\b/.test(lines[i])) i += 1;
   i += 1;
   while (i < lines.length) {
     const line = lines[i];
-    if (/^\s*\*\*\* End Patch\b/.test(line)) break;
-    const updateMatch = /^\s*\*\*\* Update File:\s*(.+)$/.exec(line);
-    const addMatch = /^\s*\*\*\* Add File:\s*(.+)$/.exec(line);
-    const delMatch = /^\s*\*\*\* Delete File:\s*(.+)$/.exec(line);
-    if (updateMatch) {
-      const filePath = updateMatch[1].trim();
-      out.push(`--- a/${filePath}`);
-      out.push(`+++ b/${filePath}`);
-      i += 1;
-      while (i < lines.length && !/^\s*\*\*\* /.test(lines[i])) {
-        out.push(lines[i]);
-        i += 1;
-      }
-      continue;
-    }
-    if (addMatch) {
-      const filePath = addMatch[1].trim();
-      const body = [];
-      i += 1;
-      while (i < lines.length && !/^\s*\*\*\* /.test(lines[i])) {
-        body.push(lines[i]);
-        i += 1;
-      }
-      const contentLines = body.map((l) => (l.startsWith("+") ? l.slice(1) : l));
-      out.push(`--- /dev/null`);
-      out.push(`+++ b/${filePath}`);
-      out.push(`@@ -0,0 +1,${contentLines.length} @@`);
-      for (const cl of contentLines) out.push(`+${cl}`);
-      continue;
-    }
-    if (delMatch) {
-      throw new Error(`OpenAI patch 'Delete File' is not supported in relai_apply_update. Use relai_clear_files { paths: ["${delMatch[1].trim()}"] } instead.`);
-    }
-    i += 1;
+    if (/^\*\*\* End Patch\b/.test(line)) break;
+    i = handleOpenAIPatchSection(lines, i, out);
   }
   return { patch: `${out.join("\n")}\n`, converted: true, sourceFormat: "openai-patch" };
+}
+
+function handleOpenAIPatchSection(lines, i, out) {
+  const line = lines[i];
+  const updateMatch = /^\*\*\* Update File:\s*([^\n]+)/.exec(line);
+  const addMatch = /^\*\*\* Add File:\s*([^\n]+)/.exec(line);
+  const delMatch = /^\*\*\* Delete File:\s*([^\n]+)/.exec(line);
+  if (updateMatch) {
+    const filePath = updateMatch[1].trim();
+    out.push(`--- a/${filePath}`, `+++ b/${filePath}`);
+    i += 1;
+      while (i < lines.length && !lines[i].startsWith("*** ")) {
+        out.push(lines[i]);
+      i += 1;
+    }
+    return i;
+  }
+  if (addMatch) {
+    const filePath = addMatch[1].trim();
+    const body = [];
+    i += 1;
+      while (i < lines.length && !lines[i].startsWith("*** ")) {
+        body.push(lines[i]);
+      i += 1;
+    }
+    const contentLines = body.map((l) => (l.startsWith("+") ? l.slice(1) : l));
+    out.push(`--- /dev/null`, `+++ b/${filePath}`, `@@ -0,0 +1,${contentLines.length} @@`);
+    for (const cl of contentLines) out.push(`+${cl}`);
+    return i;
+  }
+  if (delMatch) {
+    throw new Error(`OpenAI patch 'Delete File' is not supported in relai_apply_update. Use relai_clear_files { paths: ["${delMatch[1].trim()}"] } instead.`);
+  }
+  return i + 1;
 }
 
 async function applyStructuredOpenAIPatch(workspace, config, args, rawPatch) {
@@ -672,27 +657,7 @@ async function applyStructuredOpenAIPatch(workspace, config, args, rawPatch) {
   if (shouldMakePreparedBackup(config, args)) backup = await makePreparedBackup(workspace, config, operationId, "patch");
   const changedFiles = [];
   for (const operation of document.operations) {
-    const safe = resolveSafePath(workspace.path, operation.path);
-    const exists = fs.existsSync(safe.absolutePath);
-    const oldText = exists ? fs.readFileSync(safe.absolutePath, "utf8").replace(/\r\n/g, "\n") : "";
-    if (operation.type === "update") {
-      const nextText = applyOpenAIPatchUpdate(oldText, operation, safe.relativePath);
-      if (nextText !== oldText) {
-        if (!args.dryRun) writeTextFileSafe(workspace.path, safe.relativePath, nextText);
-        changedFiles.push(safe.relativePath);
-      }
-      continue;
-    }
-    if (operation.type === "add") {
-      const nextText = joinPatchLines(operation.lines.map((line) => line.slice(1)), true);
-      if (!args.dryRun) writeTextFileSafe(workspace.path, safe.relativePath, nextText);
-      changedFiles.push(safe.relativePath);
-      continue;
-    }
-    if (operation.type === "delete") {
-      if (!args.dryRun) fs.rmSync(safe.absolutePath, { force: true });
-      changedFiles.push(safe.relativePath);
-    }
+    applyStructuredPatchOperation(workspace, args, operation, changedFiles);
   }
   const verify = hasRequestedChecks(args) ? await relaiVerify(workspace, config, args) : null;
   const diff = args.returnDiff === false ? null : await relaiDiff(workspace, config, { maxBytes: args.maxDiffBytes || DEFAULT_MAX_DIFF_BYTES });
@@ -714,27 +679,54 @@ async function applyStructuredOpenAIPatch(workspace, config, args, rawPatch) {
   };
 }
 
+function applyStructuredPatchOperation(workspace, args, operation, changedFiles) {
+  const safe = resolveSafePath(workspace.path, operation.path);
+  const exists = fs.existsSync(safe.absolutePath);
+  if (operation.type === "update") {
+    const oldText = exists ? fs.readFileSync(safe.absolutePath, "utf8").replaceAll("\r\n", "\n") : "";
+    const nextText = applyOpenAIPatchUpdate(oldText, operation, safe.relativePath);
+    if (nextText !== oldText) {
+      if (!args.dryRun) writeTextFileSafe(workspace.path, safe.relativePath, nextText);
+      changedFiles.push(safe.relativePath);
+    }
+    return;
+  }
+  if (operation.type === "add") {
+    const nextText = joinPatchLines(operation.lines.map((line) => line.slice(1)), true);
+    if (!args.dryRun) writeTextFileSafe(workspace.path, safe.relativePath, nextText);
+    changedFiles.push(safe.relativePath);
+    return;
+  }
+  if (operation.type === "delete") {
+    if (!args.dryRun) fs.rmSync(safe.absolutePath, { force: true });
+    changedFiles.push(safe.relativePath);
+  }
+}
+
 function parseOpenAIPatchDocument(input) {
-  const lines = String(input || "").replace(/\r\n/g, "\n").split("\n");
+  const lines = String(input || "").replaceAll("\r\n", "\n").split("\n");
   const operations = [];
-  let index = lines.findIndex((line) => /^\s*\*\*\* Begin Patch\b/.test(line));
+  let index = lines.findIndex((line) => /^\*\*\* Begin Patch\b/.test(line));
   if (index === -1) throw new Error("OpenAI patch is missing '*** Begin Patch'.");
   index += 1;
   while (index < lines.length) {
     const line = lines[index];
-    if (/^\s*\*\*\* End Patch\b/.test(line)) break;
-    const updateMatch = /^\s*\*\*\* Update File:\s*(.+)$/.exec(line);
-    const addMatch = /^\s*\*\*\* Add File:\s*(.+)$/.exec(line);
-    const deleteMatch = /^\s*\*\*\* Delete File:\s*(.+)$/.exec(line);
+    if (/^\*\*\* End Patch\b/.test(line)) break;
+    const updateMatch = /^\*\*\* Update File:\s*([^\n]+)/.exec(line);
+    const addMatch = /^\*\*\* Add File:\s*([^\n]+)/.exec(line);
+    const deleteMatch = /^\*\*\* Delete File:\s*([^\n]+)/.exec(line);
     if (!updateMatch && !addMatch && !deleteMatch) {
       index += 1;
       continue;
     }
-    const type = updateMatch ? "update" : addMatch ? "add" : "delete";
+    let type;
+    if (updateMatch) type = "update";
+    else if (addMatch) type = "add";
+    else type = "delete";
     const pathText = (updateMatch || addMatch || deleteMatch)[1].trim();
     const body = [];
     index += 1;
-    while (index < lines.length && !/^\s*\*\*\* (Update File|Add File|Delete File|End Patch)\b/.test(lines[index])) {
+    while (index < lines.length && !/^\*\*\* (?:Update File|Add File|Delete File|End Patch)\b/.test(lines[index])) {
       body.push(lines[index]);
       index += 1;
     }
@@ -747,11 +739,16 @@ function parseOpenAIPatchDocument(input) {
 }
 
 function applyOpenAIPatchUpdate(oldText, operation, relativePath) {
-  const oldEndsWithNewline = /\n$/.test(oldText);
+  const oldEndsWithNewline = oldText.endsWith("\n");
   const oldLines = splitPatchText(oldText);
+  const hunks = parsePatchHunks(operation.lines, relativePath);
+  return joinPatchLines(applyHunksToLines(oldLines, hunks, relativePath), oldEndsWithNewline);
+}
+
+function parsePatchHunks(lines, relativePath) {
   const hunks = [];
   let current = [];
-  for (const line of operation.lines) {
+  for (const line of lines) {
     if (line === "*** End of File") continue;
     if (line.startsWith("@@")) {
       if (current.length > 0) {
@@ -772,43 +769,46 @@ function applyOpenAIPatchUpdate(oldText, operation, relativePath) {
   }
   if (current.length > 0) hunks.push(current);
   if (hunks.length === 0) throw new Error(`OpenAI patch update for ${relativePath} did not contain any hunks.`);
+  return hunks;
+}
 
+function applyHunksToLines(oldLines, hunks, relativePath) {
   let cursor = 0;
   const output = [];
   for (const hunk of hunks) {
-    const matchLines = hunk.filter((line) => !line.startsWith("+")).map((line) => line.slice(1));
-    const start = findHunkStart(oldLines, matchLines, cursor);
-    if (start === -1) {
-      throw new Error(`OpenAI patch context mismatch for ${relativePath}. Re-read the file and regenerate the patch with current text.`);
-    }
-    output.push(...oldLines.slice(cursor, start));
-    let lineIndex = start;
-    for (const line of hunk) {
-      const prefix = line[0];
-      const content = line.slice(1);
-      if (prefix === " ") {
-        if (oldLines[lineIndex] !== content) {
-          throw new Error(`OpenAI patch context mismatch for ${relativePath} at '${content}'.`);
-        }
-        output.push(content);
-        lineIndex += 1;
-      } else if (prefix === "-") {
-        if (oldLines[lineIndex] !== content) {
-          throw new Error(`OpenAI patch delete mismatch for ${relativePath} at '${content}'.`);
-        }
-        lineIndex += 1;
-      } else if (prefix === "+") {
-        output.push(content);
-      }
-    }
-    cursor = lineIndex;
+    cursor = applyHunkToLines(oldLines, hunk, relativePath, cursor, output);
   }
   output.push(...oldLines.slice(cursor));
-  return joinPatchLines(output, oldEndsWithNewline);
+  return output;
+}
+
+function applyHunkToLines(oldLines, hunk, relativePath, cursor, output) {
+  const matchLines = hunk.filter((line) => !line.startsWith("+")).map((line) => line.slice(1));
+  const start = findHunkStart(oldLines, matchLines, cursor);
+  if (start === -1) {
+    throw new Error(`OpenAI patch context mismatch for ${relativePath}. Re-read the file and regenerate the patch with current text.`);
+  }
+  output.push(...oldLines.slice(cursor, start));
+  let lineIndex = start;
+  for (const line of hunk) {
+    const prefix = line[0];
+    const content = line.slice(1);
+    if (prefix === " ") {
+      if (oldLines[lineIndex] !== content) throw new Error(`OpenAI patch context mismatch for ${relativePath} at '${content}'.`);
+      output.push(content);
+      lineIndex += 1;
+    } else if (prefix === "-") {
+      if (oldLines[lineIndex] !== content) throw new Error(`OpenAI patch delete mismatch for ${relativePath} at '${content}'.`);
+      lineIndex += 1;
+    } else if (prefix === "+") {
+      output.push(content);
+    }
+  }
+  return lineIndex;
 }
 
 function splitPatchText(text) {
-  const normalized = String(text || "").replace(/\r\n/g, "\n");
+  const normalized = String(text || "").replaceAll("\r\n", "\n");
   if (!normalized) return [];
   const lines = normalized.split("\n");
   if (normalized.endsWith("\n")) lines.pop();
@@ -836,7 +836,7 @@ function findHunkStart(lines, matchLines, fromIndex) {
 }
 
 function normalizeUnifiedDiffText(input) {
-  return String(input || "").replace(/\r\n/g, "\n");
+  return String(input || "").replaceAll("\r\n", "\n");
 }
 
 function diagnosePatchFailure(stderrText, patch, touchedPaths) {
@@ -910,7 +910,7 @@ async function relaiSnapshotArchive(workspace, config, args = {}) {
 }
 
 function assertDirectWriteAllowed(relativePath, content) {
-  const normalized = String(relativePath || "").replace(/\\/g, "/");
+  const normalized = String(relativePath || "").replaceAll("\\", "/");
   if (/(^|\/)(dist|build|coverage|node_modules)\//.test(normalized) || /\.min\.[^.]+$/i.test(normalized)) return;
   const ext = path.extname(normalized).toLowerCase();
   const collapseGuardExtensions = new Set(['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs', '.dart', '.py', '.go', '.rs', '.java', '.kt', '.swift', '.cs', '.cpp', '.c', '.h', '.hpp', '.rb', '.php', '.css', '.scss', '.html', '.xml', '.yaml', '.yml']);
@@ -1041,14 +1041,17 @@ function stagedRelativePath(workspace, targetPath) {
   if (!raw) return null;
   try {
     return resolveSafePath(workspace.path, raw).relativePath;
-  } catch (_) {
+  } catch {
     return null;
   }
 }
 
+
+
 function stagedAmbiguityError(candidates, suppliedId) {
   if (!candidates.length) {
-    return new Error(`No staged relai_write payload found${suppliedId ? ` for writeId ${suppliedId}` : ""}. Start a staged write with stage='start' first, or use a direct write { stage: 'direct', path, content } (direct write has no size cap).`);
+    const idSuffix = suppliedId ? ` for writeId ${suppliedId}` : "";
+    return new Error(`No staged relai_write payload found${idSuffix}. Start a staged write with stage='start' first, or use a direct write { stage: 'direct', path, content } (direct write has no size cap).`);
   }
   const list = candidates.map((item) => `${item.id} → ${item.path || "(unknown path)"}`).join("; ");
   return new Error(`Multiple staged relai_write payloads are pending; refusing to guess which to use. Pass the exact writeId, or the target path, for the one you mean. Pending: ${list}.`);
@@ -1057,26 +1060,31 @@ function stagedAmbiguityError(candidates, suppliedId) {
 function listStagedPayloads(config, workspace) {
   const dir = stagedDir(config, workspace);
   let names;
-  try { names = fs.readdirSync(dir); } catch (_) { return []; }
+  try { names = fs.readdirSync(dir); } catch { return []; }
   const now = Date.now();
   const out = [];
   for (const name of names) {
-    if (!name.endsWith(".json")) continue;
-    const id = name.slice(0, -5);
-    if (!/^op_[a-z0-9]+_[a-f0-9]{12}$/.test(id)) continue;
-    const file = path.join(dir, name);
-    let mtime = 0;
-    try { mtime = fs.statSync(file).mtimeMs; } catch (_) {}
-    if (mtime && (now - mtime) > STAGED_PRUNE_TTL_MS) {
-      try { fs.rmSync(file, { force: true }); } catch (_) {}
-      continue;
-    }
-    let payload;
-    try { payload = JSON.parse(fs.readFileSync(file, "utf8")); } catch (_) { continue; }
-    out.push({ id, path: payload.path || null, mtime, ageMs: mtime ? now - mtime : null });
+    const item = readStagedFile(dir, name, now);
+    if (item) out.push(item);
   }
   out.sort((a, b) => b.mtime - a.mtime);
   return out;
+}
+
+function readStagedFile(dir, name, now) {
+  if (!name.endsWith(".json")) return null;
+  const id = name.slice(0, -5);
+  if (!/^op_[a-z0-9]+_[a-f0-9]{12}$/.test(id)) return null;
+  const file = path.join(dir, name);
+  let mtime = 0;
+  try { mtime = fs.statSync(file).mtimeMs; } catch { return null; }
+  if (mtime && (now - mtime) > STAGED_PRUNE_TTL_MS) {
+    try { fs.rmSync(file, { force: true }); } catch {}
+    return null;
+  }
+  let payload;
+  try { payload = JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; }
+  return { id, path: payload.path || null, mtime, ageMs: mtime ? now - mtime : null };
 }
 
 function writeStagedPayload(config, workspace, writeId, payload) {
@@ -1164,8 +1172,8 @@ function readPackageScripts(root) {
   if (!fs.existsSync(packageJson)) return {};
   try {
     const pkg = JSON.parse(fs.readFileSync(packageJson, "utf8"));
-    return pkg && pkg.scripts && typeof pkg.scripts === "object" ? pkg.scripts : {};
-  } catch (_error) {
+    return typeof pkg?.scripts === "object" ? pkg.scripts : {};
+  } catch {
     return {};
   }
 }
@@ -1173,12 +1181,12 @@ function readPackageScripts(root) {
 function parseBrowserProbe(stdout) {
   const text = String(stdout || "").trim();
   if (!text) return null;
-  const lastLine = text.split(/\r?\n/).filter(Boolean).pop();
+  const lastLine = text.split(/\r?\n/).findLast(Boolean);
   if (!lastLine) return null;
   try {
     const probe = JSON.parse(lastLine);
     if (probe && typeof probe === "object") return probe;
-  } catch (_error) {}
+  } catch {}
   return null;
 }
 
@@ -1193,7 +1201,7 @@ function resolveBrowserTarget(rawUrl) {
     const profile = connection.readConnectionProfile();
     host = profile.host || host;
     port = Number(profile.port || port || 3333);
-  } catch (_error) {}
+  } catch {}
   return new URL(text, `http://${host}:${port || 3333}`).toString();
 }
 
@@ -1229,11 +1237,11 @@ async function relaiBrowser(workspace, config, args = {}) {
   }
   if (!requestedUrl) throw new Error("url, route, or check is required.");
   const url = resolveBrowserTarget(requestedUrl);
-  const script = `
+  const script = String.raw`
     const target = ${JSON.stringify(url)};
     fetch(target).then(async (res) => {
       const text = await res.text();
-      console.log(JSON.stringify({ ok: res.ok, status: res.status, url: res.url, bytes: text.length, title: ((text.match(/<title[^>]*>([^<]*)<\\/title>/i)||[])[1] || '') }));
+      console.log(JSON.stringify({ ok: res.ok, status: res.status, url: res.url, bytes: text.length, title: ((text.match(/<title[^>]*>([^<]*)<\/title>/i)||[])[1] || '') }));
       process.exit(res.ok ? 0 : 1);
     }).catch((err) => { console.error(err && err.message || String(err)); process.exit(1); });
   `;
@@ -1323,7 +1331,7 @@ async function relaiRemoveFile(workspace, config, args = {}) {
     result = relaiClear(workspace, config, { path: relativePath, expectedSha256: args.expectedSha256, dryRun: args.dryRun, failIfMissing: args.failIfMissing });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(message.replace(/relai_clear_files/g, "relai_remove_file"), { cause: error });
+    throw new Error(message.replaceAll("relai_clear_files", "relai_remove_file"), { cause: error });
   }
   if (!args.dryRun && args.stage === true && result.changedFiles.length > 0) {
     const stage = await runProcess("git", ["add", "--", ...result.changedFiles], { cwd: workspace.path, timeout: 60000 }, config);
@@ -1356,7 +1364,7 @@ function readManifests(root) {
     try {
       const text = fs.readFileSync(abs, "utf8");
       out[name] = text.slice(0, 20000);
-    } catch (_error) {}
+    } catch {}
   }
   return out;
 }
@@ -1510,7 +1518,7 @@ function normalizeExactReplacements(args) {
   let replacements;
   if (Array.isArray(args.replacements)) {
     replacements = args.replacements;
-  } else if (Object.prototype.hasOwnProperty.call(args, "oldText") || Object.prototype.hasOwnProperty.call(args, "newText")) {
+  } else if (Object.hasOwn(args, "oldText") || Object.hasOwn(args, "newText")) {
     replacements = [{ oldText: args.oldText, newText: args.newText, occurrence: args.occurrence }];
   } else {
     throw new Error("relai_replace requires either { oldText, newText } or replacements: [{ oldText, newText, occurrence? }].");
@@ -1572,17 +1580,41 @@ function hasRequestedChecks(args = {}) {
 
 function normalizeVerifyChecks(args, root, level) {
   const discovered = discoverCommands(root);
-  const explicit = [];
-  let aliasNormalizations = 0;
+  const aliasNormalizations = { count: 0 };
+  const resolveAndTrack = makeResolver(discovered, aliasNormalizations);
+  const explicit = collectExplicitChecks(args, resolveAndTrack);
+  if (explicit.length) return { checks: [...new Set(explicit)], aliasNormalizations: aliasNormalizations.count };
+  return { checks: detectVerifyChecks(root, level), aliasNormalizations: aliasNormalizations.count };
+}
 
-  function resolveAndTrack(raw) {
+function makeResolver(discovered, aliasNormalizations) {
+  return (raw) => {
     const trimmed = String(raw || "").trim();
     if (!trimmed) return trimmed;
     const { command, normalized } = normalizeCommandAlias(trimmed, trimmed, discovered);
-    if (normalized) aliasNormalizations++;
+    if (normalized) aliasNormalizations.count++;
     return command;
-  }
+  };
+}
 
+function preflightTidyCandidates(candidates, workspace, currentUntracked) {
+  const preflight = [];
+  const refused = [];
+  for (const candidate of candidates) {
+    const safe = resolveSafePath(workspace.path, candidate.path);
+    if (!currentUntracked.has(safe.relativePath)) { refused.push({ path: safe.relativePath, reason: "path is no longer session-owned and untracked" }); continue; }
+    if (!fs.existsSync(safe.absolutePath)) { refused.push({ path: safe.relativePath, reason: "path is missing" }); continue; }
+    const stat = fs.statSync(safe.absolutePath);
+    if (!stat.isFile()) { refused.push({ path: safe.relativePath, reason: "path is not a file" }); continue; }
+    const currentSha256 = fileSha256(workspace.path, safe.relativePath);
+    if (currentSha256 !== candidate.sha256) { refused.push({ path: safe.relativePath, reason: "sha256 mismatch", expectedSha256: candidate.sha256, currentSha256 }); continue; }
+    preflight.push({ path: safe.relativePath, sha256: currentSha256, sizeBytes: stat.size });
+  }
+  return { preflight, refused };
+}
+
+function collectExplicitChecks(args, resolveAndTrack) {
+  const explicit = [];
   if (typeof args.check === "string" && args.check.trim()) explicit.push(resolveAndTrack(args.check));
   if (typeof args.command === "string" && args.command.trim()) explicit.push(resolveAndTrack(args.command));
   if (Array.isArray(args.commands)) {
@@ -1599,58 +1631,63 @@ function normalizeVerifyChecks(args, root, level) {
       }
     }
   }
-  if (explicit.length) return { checks: [...new Set(explicit)], aliasNormalizations };
-  return { checks: detectVerifyChecks(root, level), aliasNormalizations };
+  return explicit;
 }
 
 function detectVerifyChecks(root, level) {
   const commands = [];
-  const packageJson = path.join(root, "package.json");
-  if (fs.existsSync(packageJson)) {
-    try {
-      const pkg = JSON.parse(fs.readFileSync(packageJson, "utf8"));
-      const scripts = pkg.scripts || {};
-      if (level === "release" && scripts["test:all"]) {
-        commands.push("npm run test:all");
-      } else {
-        if (scripts.check) {
-          commands.push("npm run check");
-        } else if (level === "quick" && fs.existsSync(path.join(root, "src", "tools.js"))) {
-          commands.push("node --check src/tools.js");
-        }
-        if (level !== "quick" && scripts.test) commands.push("npm test");
-        if (scripts.build && shouldRunPackageBuild(root, pkg, scripts, level, commands)) commands.push("npm run build");
-      }
-    } catch (_error) {
-      if (level === "quick" && fs.existsSync(path.join(root, "src", "tools.js"))) commands.push("node --check src/tools.js");
+  detectPackageJsonChecks(root, level, commands);
+  detectManifestChecks(root, level, commands);
+  return [...new Set(commands)];
+}
+
+function detectPackageJsonChecks(root, level, commands) {
+  const pkgPath = path.join(root, "package.json");
+  if (!fs.existsSync(pkgPath)) return;
+  try {
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+    const scripts = pkg.scripts || {};
+    if (level === "release" && scripts["test:all"]) {
+      commands.push("npm run test:all");
+      return;
     }
+    if (scripts.check) {
+      commands.push("npm run check");
+    } else if (level === "quick" && fs.existsSync(path.join(root, "src", "tools.js"))) {
+      commands.push("node --check src/tools.js");
+    }
+    if (level !== "quick" && scripts.test) commands.push("npm test");
+    if (scripts.build && shouldRunPackageBuild(root, pkg, scripts, level, commands)) commands.push("npm run build");
+  } catch {
+    if (level === "quick" && fs.existsSync(path.join(root, "src", "tools.js"))) commands.push("node --check src/tools.js");
   }
+}
+
+function detectManifestChecks(root, level, commands) {
   if (fs.existsSync(path.join(root, "pubspec.yaml"))) {
     if (level === "quick") {
       commands.push("dart analyze");
     } else {
-      commands.push("flutter analyze");
-      commands.push("flutter test");
+      commands.push("flutter analyze", "flutter test");
     }
   }
   if (fs.existsSync(path.join(root, "pyproject.toml")) || fs.existsSync(path.join(root, "requirements.txt"))) commands.push("python -m pytest");
   if (fs.existsSync(path.join(root, "go.mod"))) commands.push("go test ./...");
   if (fs.existsSync(path.join(root, "Cargo.toml"))) commands.push("cargo test");
-  return [...new Set(commands)];
 }
 
 function shouldRunPackageBuild(root, pkg, scripts, level, currentCommands) {
   if (level === "quick") return false;
   if (level === "full" || level === "release") return true;
-  if (!currentCommands || currentCommands.length === 0) return true;
+  if (!currentCommands?.length) return true;
   const allDeps = {
-    ...(pkg && pkg.dependencies && typeof pkg.dependencies === "object" ? pkg.dependencies : {}),
-    ...(pkg && pkg.devDependencies && typeof pkg.devDependencies === "object" ? pkg.devDependencies : {})
+    ...(typeof pkg?.dependencies === "object" ? pkg.dependencies : {}),
+    ...(typeof pkg?.devDependencies === "object" ? pkg.devDependencies : {})
   };
   const dependencyNames = new Set(Object.keys(allDeps));
   const buildCriticalDeps = ["next", "vite", "nuxt", "astro", "@remix-run/dev", "@sveltejs/kit", "react-scripts", "webpack", "parcel"];
   if (buildCriticalDeps.some((name) => dependencyNames.has(name))) return true;
-  const build = String((scripts && scripts.build) || "");
+  const build = String((scripts?.build) || "");
   if (/\b(next|vite|nuxt|astro|remix|svelte-kit|react-scripts|webpack|parcel)\b/i.test(build)) return true;
   if (fs.existsSync(path.join(root, "next.config.js")) || fs.existsSync(path.join(root, "next.config.mjs"))) return true;
   return false;

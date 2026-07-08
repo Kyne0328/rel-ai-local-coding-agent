@@ -38,7 +38,7 @@ async function waitForHealth() {
     try {
       const response = await fetch(url);
       if (response.ok) return response.json();
-    } catch (_error) {}
+    } catch {}
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   throw new Error(`HTTP server did not become healthy. stderr:\n${stderr}`);
@@ -173,7 +173,7 @@ await check('body limit — POST /mcp with 2.5 MB+ body → 4xx or 5xx or connec
       body: payload
     });
     status = res.status;
-  } catch (_err) {
+  } catch {
     // Connection destroyed by server — that counts as the limit being enforced
     return;
   }
@@ -207,7 +207,7 @@ await check('multibyte body split across chunks decodes intact', async () => {
   if (result.status !== 201) throw new Error(`expected 201, got ${result.status}: ${result.data}`);
   const body = JSON.parse(result.data);
   if (!Array.isArray(body.redirect_uris) || body.redirect_uris[0] !== uri) {
-    throw new Error(`multibyte content corrupted in transit: ${body.redirect_uris && body.redirect_uris[0]}`);
+    throw new Error(`multibyte content corrupted in transit: ${body.redirect_uris?.[0]}`);
   }
 });
 

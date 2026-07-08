@@ -28,7 +28,7 @@ async function waitForHealth() {
     try {
       const response = await fetch(url);
       if (response.ok) return response.json();
-    } catch (_error) {}
+    } catch {}
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   throw new Error(`HTTP server did not become healthy within 8s. stderr:\n${stderr}`);
@@ -79,7 +79,7 @@ if (!hasStandardOrPrepared) {
 }
 
 // Verify specific shape of new fields
-if (!dashboardData.workflow || !dashboardData.workflow.mode) {
+if (!dashboardData?.workflow?.mode) {
   child.kill('SIGKILL');
   console.error('Dashboard wording smoke test FAILED — dashboard JSON must contain workflow.mode');
   process.exit(1);
@@ -93,7 +93,14 @@ if (!toolsResponse.ok) {
   throw new Error(`Tools API returned ${toolsResponse.status}`);
 }
 const tools = await toolsResponse.json();
-const toolsArray = Array.isArray(tools) ? tools : Array.isArray(tools?.tools) ? tools.tools : [];
+let toolsArray;
+if (Array.isArray(tools)) {
+  toolsArray = tools;
+} else if (Array.isArray(tools?.tools)) {
+  toolsArray = tools.tools;
+} else {
+  toolsArray = [];
+}
 
 const forbiddenInToolDescriptions = ['shell', 'execute', 'arbitrary', 'command runner'];
 const toolDescriptionFindings = [];

@@ -111,7 +111,7 @@ async function handleFavicon(ctx) {
     const content = fs.readFileSync(path.join(__dirname, "..", "public", "assets", "favicon.ico"));
     ctx.res.writeHead(200, { "Content-Type": "image/x-icon", "Cache-Control": "no-cache" });
     ctx.res.end(content);
-  } catch (_) { ctx.res.writeHead(404); ctx.res.end("Not found"); }
+  } catch { ctx.res.writeHead(404); ctx.res.end("Not found"); }
 }
 
 function handleHealth(ctx) {
@@ -134,7 +134,7 @@ function handleStaticAsset(ctx) {
     const charset = ct.startsWith("text/") || ct === "application/javascript" ? "; charset=utf-8" : "";
     ctx.res.writeHead(200, { "Content-Type": ct + charset, "Cache-Control": "no-cache" });
     ctx.res.end(content);
-  } catch (_) { ctx.res.writeHead(404); ctx.res.end("Not found"); }
+  } catch { ctx.res.writeHead(404); ctx.res.end("Not found"); }
 }
 
 function handleDashboard(ctx) { sendHtml(ctx.res, 200, renderDashboardHtml(ctx.options)); }
@@ -151,7 +151,7 @@ function handleApiTools(ctx) {
 function handleOnboardingStatus(ctx) {
   const onboardingPath = path.join(require("node:os").homedir(), ".rel-ai-mcp", "onboarding.json");
   let flag = null;
-  try { flag = JSON.parse(fs.readFileSync(onboardingPath, "utf8")); } catch (_) {}
+  try { flag = JSON.parse(fs.readFileSync(onboardingPath, "utf8")); } catch {}
   sendJson(ctx.res, 200, {
     ok: true, completed: flag ? flag.completed : false, skipped: flag ? flag.skipped : false,
     needsOnboarding: flag?.completed !== true
@@ -233,7 +233,7 @@ async function handleAuthorizePost(ctx) {
     const base = resolveBaseUrl(ctx.options);
     let isLocal = true;
     try { const { hostname } = new URL(base); isLocal = hostname === "127.0.0.1" || hostname === "localhost" || hostname === "[::1]"; }
-    catch (_) {}
+    catch {}
     if (!isLocal) { sendHtml(ctx.res, 403, oauthErrorPage("OAuth approval requires REL_AI_MCP_TOKEN when accessed over a public URL. Set a token and restart.")); return; }
   }
   if (!oauth.verifyLogin(body.dashboard_token, ctx.options.token)) {
@@ -513,7 +513,7 @@ function workspacePathPreflight(rawPath) {
   let stat = null;
   try {
     stat = fs.statSync(target);
-  } catch (_error) { /* stat failed; report path_not_found below */
+  } catch { /* stat failed; report path_not_found below */
     findings.push({ severity: "error", code: "path_not_found", message: `Path does not exist: ${target}` });
   }
   const exists = Boolean(stat);
@@ -602,7 +602,7 @@ const configCache = { path: "", mtimeMs: -1, value: null };
 function readConfigCached() {
   const configPath = require("./config").getConfigPath();
   let mtimeMs = null;
-  try { mtimeMs = fs.statSync(configPath).mtimeMs; } catch (_error) { /* config file may not exist yet */ }
+  try { mtimeMs = fs.statSync(configPath).mtimeMs; } catch { /* config file may not exist yet */ }
   if (mtimeMs != null && configCache.value && configCache.path === configPath && configCache.mtimeMs === mtimeMs) {
     return configCache.value;
   }
@@ -623,11 +623,11 @@ function openDashboardEvents(res, req, _options) {
     "X-Accel-Buffering": "no"
   });
   const statMtime = (file) => {
-    try { return file ? fs.statSync(file).mtimeMs : 0; } catch (_) { return 0; /* file may not exist; treat as not modified */ }
+    try { return file ? fs.statSync(file).mtimeMs : 0; } catch { return 0; /* file may not exist; treat as not modified */ }
   };
   const changeSignature = () => {
     let config = null;
-    try { config = readConfigCached(); } catch (_) { /* config may be unavailable; signature stays empty */ }
+    try { config = readConfigCached(); } catch { /* config may be unavailable; signature stays empty */ }
     return [
       statMtime(require("./config").getConfigPath()),
       statMtime(config?.auditLogPath)
@@ -750,7 +750,7 @@ function isAllowedCorsOrigin(origin) {
   try {
     const { hostname } = new URL(origin);
     return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "[::1]";
-  } catch (_error) {
+  } catch {
     return false;
   }
 }
@@ -774,7 +774,7 @@ function sendJson(res, status, payload, ae = "") {
       res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Content-Encoding": "gzip", "Vary": "Accept-Encoding" });
       res.end(compressed);
       return;
-    } catch (_) { /* gzip failed; fall through to uncompressed response */ }
+    } catch { /* gzip failed; fall through to uncompressed response */ }
   }
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
   res.end(json);

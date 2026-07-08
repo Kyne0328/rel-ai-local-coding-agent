@@ -176,12 +176,17 @@ async function prepareManagedNgrok({ authtoken, onLog = () => {} } = {}) {
 }
 
 function extractPublicUrl(text) {
-  const match = String(text || '').match(URL_RE);
-  return match ? match[0].replace(/[).,;]+$/, '') : '';
+  const match = URL_RE.exec(String(text || ''));
+  if (!match) return '';
+  let url = match[0];
+  while (url.length && ').,;'.includes(url.at(-1))) url = url.slice(0, -1);
+  return url;
 }
 
 function sanitizeDomain(domain) {
-  return String(domain || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '').toLowerCase();
+  let s = String(domain || '').trim().replace(/^https?:\/\//i, '').toLowerCase();
+  while (s.endsWith('/')) s = s.slice(0, -1);
+  return s;
 }
 
 function sanitizePort(port) {
