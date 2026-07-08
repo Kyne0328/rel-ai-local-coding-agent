@@ -133,7 +133,11 @@ function cleanupPlan(config, args = {}, apply) {
 
 async function doctorFix(config, args = {}) {
   const fixes = [];
-  const workspacePath = args.workspacePath ? path.resolve(String(args.workspacePath)) : "";
+  const rawWorkspace = String(args.workspacePath || "");
+  if (rawWorkspace && (rawWorkspace.includes("..") || rawWorkspace.includes("~"))) {
+    throw new Error("workspacePath must not contain path traversal patterns");
+  }
+  const workspacePath = rawWorkspace ? path.resolve(rawWorkspace) : "";
   if (workspacePath) {
     if (!fs.existsSync(workspacePath)) throw new Error(`workspacePath does not exist: ${workspacePath}`);
     const attrs = path.join(workspacePath, ".gitattributes");
