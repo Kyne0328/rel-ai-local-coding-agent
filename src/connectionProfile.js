@@ -81,13 +81,13 @@ function writeConnectionProfile(profile) {
 }
 
 function normalizePublicUrl(value) {
-  const text = String(value || "").trim();
+  let text = String(value || "").trim();
   if (!text) return "";
-  const withoutSlash = text.replace(/\/+$/, "");
-  if (!/^https:\/\//i.test(withoutSlash)) {
+  while (text.endsWith("/")) text = text.slice(0, -1);
+  if (!/^https:\/\//i.test(text)) {
     throw new Error("Permanent public URL must start with https:// for ChatGPT Developer Mode.");
   }
-  return withoutSlash;
+  return text;
 }
 
 function localBaseUrl(host, port) {

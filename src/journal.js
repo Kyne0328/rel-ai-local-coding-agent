@@ -9,7 +9,7 @@ function journalDir(config) {
   // Fall back to the home/env state dir, NOT process.cwd() — the old cwd fallback
   // wrote .rel-ai-mcp-state/ into whatever repo the process ran from (it kept
   // dirtying this project's own tree during tests).
-  const stateDir = (config && config.stateDir)
+  const stateDir = config?.stateDir
     || process.env.REL_AI_MCP_STATE_DIR
     || path.join(os.homedir(), ".rel-ai-mcp");
   return path.join(stateDir, "operation-journal");
@@ -25,13 +25,13 @@ function makeOperationId() {
 }
 
 function appendOperation(config, workspace, entry) {
-  const file = journalPath(config, workspace && workspace.alias);
+  const file = journalPath(config, workspace?.alias);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const payload = {
     id: entry.id || makeOperationId(),
     ts: new Date().toISOString(),
-    workspace: workspace && workspace.alias,
-    root: workspace && workspace.path,
+    workspace: workspace?.alias,
+    root: workspace?.path,
     ...entry
   };
   fs.appendFileSync(file, `${JSON.stringify(payload)}\n`, "utf8");
@@ -39,18 +39,18 @@ function appendOperation(config, workspace, entry) {
 }
 
 function readRecentOperations(config, workspace, limit = MAX_RECENT) {
-  const file = journalPath(config, workspace && workspace.alias);
+  const file = journalPath(config, workspace?.alias);
   if (!fs.existsSync(file)) return [];
   const lines = fs.readFileSync(file, "utf8").split(/\r?\n/).filter(Boolean);
   return lines.slice(-Math.min(Math.max(Number(limit) || MAX_RECENT, 1), 500)).map((line) => {
-    try { return JSON.parse(line); } catch (_error) { return { malformed: true, line: line.slice(0, 1000) }; }
+    try { return JSON.parse(line); } catch { return { malformed: true, line: line.slice(0, 1000) }; }
   });
 }
 
 function summarizeOperations(config, workspace, limit = 10) {
   const operations = readRecentOperations(config, workspace, limit);
   return {
-    path: journalPath(config, workspace && workspace.alias),
+    path: journalPath(config, workspace?.alias),
     recentCount: operations.length,
     recent: operations.map((item) => ({
       id: item.id,

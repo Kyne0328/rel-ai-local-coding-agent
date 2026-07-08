@@ -5,46 +5,45 @@ const { getConfigPath, makeDefaultConfig, writeConfig } = require("../src/config
 const connection = require("../src/connectionProfile");
 const tunnelManager = require("../src/tunnelManager");
 
+function _reqArg(value, name) {
+  if (!value || String(value).startsWith("--")) throw new Error(`${name} requires a value.`);
+  return value;
+}
+
 function parseArgs(argv) {
   const options = {};
-  const readValue = (index, name) => {
-    const value = argv[index + 1];
-    if (!value || String(value).startsWith("--")) {
-      throw new Error(`${name} requires a value.`);
-    }
-    return value;
+
+  const FLAG = (key, val) => () => ({ [key]: val });
+
+  const ARG_MAP = {
+    "--host":              (v) => ({ host: _reqArg(v, "--host"), _skip: 1 }),
+    "--port":              (v) => ({ port: Number(_reqArg(v, "--port")), _skip: 1 }),
+    "--token":             (v) => ({ token: _reqArg(v, "--token"), _skip: 1 }),
+    "--public-url":        (v) => ({ publicUrl: _reqArg(v, "--public-url"), _skip: 1 }),
+    "--tunnel":            (v) => ({ tunnel: _reqArg(v, "--tunnel"), _skip: 1 }),
+    "--tunnel-command":    (v) => ({ tunnelCommand: _reqArg(v, "--tunnel-command"), _skip: 1 }),
+    "--tunnel-timeout-ms": (v) => ({ tunnelTimeoutMs: Number(_reqArg(v, "--tunnel-timeout-ms")), _skip: 1 }),
+    "--cloudflare":        FLAG("tunnel", "cloudflare"),
+    "--cloudflared":       FLAG("tunnel", "cloudflare"),
+    "--ngrok":             FLAG("tunnel", "ngrok"),
+    "--localtunnel":       FLAG("tunnel", "localtunnel"),
+    "--lt":                FLAG("tunnel", "localtunnel"),
+    "--reset-token":       FLAG("resetToken", true),
+    "--show-token":        FLAG("showToken", true),
+    "--print-only":        FLAG("printOnly", true),
+    "--allow-no-auth":     FLAG("allowNoAuth", true),
+    "--help":              () => { printHelp(); process.exit(0); },
+    "-h":                  () => { printHelp(); process.exit(0); },
+    "--public":            (v) => v && !String(v).startsWith("--") ? { tunnel: v, _skip: 1 } : { tunnel: "auto" }
   };
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    if (arg === "--host") { options.host = readValue(i, arg); i += 1; }
-    else if (arg === "--port") { options.port = Number(readValue(i, arg)); i += 1; }
-    else if (arg === "--token") { options.token = readValue(i, arg); i += 1; }
-    else if (arg === "--public-url") { options.publicUrl = readValue(i, arg); i += 1; }
-    else if (arg === "--public") {
-      const next = argv[i + 1];
-      if (next && !String(next).startsWith("--")) {
-        options.tunnel = next;
-        i += 1;
-      } else {
-        options.tunnel = "auto";
-      }
-    }
-    else if (arg === "--tunnel") { options.tunnel = readValue(i, arg); i += 1; }
-    else if (arg === "--cloudflare" || arg === "--cloudflared") options.tunnel = "cloudflare";
-    else if (arg === "--ngrok") options.tunnel = "ngrok";
-    else if (arg === "--localtunnel" || arg === "--lt") options.tunnel = "localtunnel";
-    else if (arg === "--tunnel-command") { options.tunnelCommand = readValue(i, arg); i += 1; }
-    else if (arg === "--tunnel-timeout-ms") { options.tunnelTimeoutMs = Number(readValue(i, arg)); i += 1; }
-    else if (arg === "--reset-token") options.resetToken = true;
-    else if (arg === "--show-token") options.showToken = true;
-    else if (arg === "--print-only") options.printOnly = true;
-    else if (arg === "--allow-no-auth") options.allowNoAuth = true;
-    else if (arg === "--help" || arg === "-h") {
-      printHelp();
-      process.exit(0);
+    const update = ARG_MAP[arg]?.(argv[i + 1]);
+    if (update) {
+      Object.assign(options, update);
+      if (update._skip) i += Number(update._skip);
     } else if (!String(arg).startsWith("--") && !options.tunnel) {
-      // Convenience form for npm users: npm run oneclick -- --public ngrok
       options.tunnel = arg;
     } else {
       throw new Error(`Unknown argument: ${arg}`);

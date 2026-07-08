@@ -26,7 +26,7 @@ function dashboardData(config, args = {}) {
   // Single authoritative public-tool list so the UI never hardcodes literals that
   // drift from PUBLIC_HTTP_TOOL_NAMES. Lazy require avoids any load-order cycle.
   let publicTools = Array.isArray(configSummary.localRepoBridge?.visibleTools) ? configSummary.localRepoBridge.visibleTools : [];
-  try { publicTools = require("./tools").getPublicToolSchemas(config).map((tool) => tool.name); } catch (_) {}
+  try { publicTools = require("./tools").getPublicToolSchemas(config).map((tool) => tool.name); } catch {}
   const toolCount = publicTools.length;
   return {
     ok: true,

@@ -161,70 +161,60 @@ async function handleStagedPatch(workspace, config, args) {
   throw new Error("relai_edit stage must be one of: start, append, commit, abort.");
 }
 
-async function planEdit(workspace, config, args) {
-  // Staged updateText streaming.
-  if (typeof args.stage === 'string' && args.stage.trim()) {
-    return handleStagedPatch(workspace, config, args);
-  }
-
-  // Batch: several exact-replace / full-file edits in one approval. This is
-  // preflight-first: if any edit cannot be validated, none of the batch is applied.
-  // It does not claim rollback-level atomicity after writes begin.
-  if (Array.isArray(args.edits) && args.edits.length > 0) {
-    const preflight = await preflightBatchEdits(workspace, config, args.edits, Boolean(args.dryRun));
-    if (!preflight.ok || args.dryRun) {
-      const out = {
-        ok: preflight.ok,
-        workspace: workspace.alias,
-        plannerPath: 'batch',
-        plannerReason: preflight.ok
-          ? `preflight passed for ${preflight.results.length} edit(s); dryRun requested so 0 edits were applied`
-          : `preflight failed; applied 0 of ${preflight.results.length} edit(s)`,
-        editCount: preflight.results.length,
-        appliedCount: 0,
-        preflightAtomic: true,
-        rollbackAtomic: false,
-        results: preflight.results
-      };
-      return attachPost(out, await runPostActions(workspace, config, args));
-    }
-
-    const results = [];
-    let allOk = true;
-    for (const edit of args.edits) {
-      try {
-        const r = await applyOneEdit(workspace, config, edit, false);
-        results.push(r);
-        if (r.ok === false) allOk = false;
-      } catch (error) {
-        results.push({ ok: false, path: edit.path, error: error instanceof Error ? error.message : String(error) });
-        allOk = false;
-        break;
-      }
-    }
+async function _handleBatchEdits(workspace, config, args) {
+  const preflight = await preflightBatchEdits(workspace, config, args.edits, Boolean(args.dryRun));
+  if (!preflight.ok || args.dryRun) {
     const out = {
-      ok: allOk,
+      ok: preflight.ok,
       workspace: workspace.alias,
       plannerPath: 'batch',
-      plannerReason: `preflight passed; applied ${results.filter((item) => item.ok !== false).length} edit(s)`,
-      editCount: results.length,
-      appliedCount: results.filter((item) => item.ok !== false).length,
+      plannerReason: preflight.ok
+        ? `preflight passed for ${preflight.results.length} edit(s); dryRun requested so 0 edits were applied`
+        : `preflight failed; applied 0 of ${preflight.results.length} edit(s)`,
+      editCount: preflight.results.length,
+      appliedCount: 0,
       preflightAtomic: true,
       rollbackAtomic: false,
-      preflight: preflight.results,
-      results
+      results: preflight.results
     };
     return attachPost(out, await runPostActions(workspace, config, args));
   }
 
-  // Single update via diff.
-  if (typeof args.updateText === 'string' && args.updateText.length > 0) {
-    const result = await relaiApplyPatch(workspace, config, { ...args, patch: args.updateText });
-    const out = { ...result, plannerPath: 'apply-update', plannerReason: 'updateText provided — routing to patch-shaped apply-update' };
-    return attachPost(out, await runPostActions(workspace, config, args));
+  const results = [];
+  let allOk = true;
+  for (const edit of args.edits) {
+    try {
+      const r = await applyOneEdit(workspace, config, edit, false);
+      results.push(r);
+      if (r.ok === false) allOk = false;
+    } catch (error) {
+      results.push({ ok: false, path: edit.path, error: error instanceof Error ? error.message : String(error) });
+      allOk = false;
+      break;
+    }
   }
+  const out = {
+    ok: allOk,
+    workspace: workspace.alias,
+    plannerPath: 'batch',
+    plannerReason: `preflight passed; applied ${results.filter((item) => item.ok !== false).length} edit(s)`,
+    editCount: results.length,
+    appliedCount: results.filter((item) => item.ok !== false).length,
+    preflightAtomic: true,
+    rollbackAtomic: false,
+    preflight: preflight.results,
+    results
+  };
+  return attachPost(out, await runPostActions(workspace, config, args));
+}
 
-  // Single exact-replace or full-file write.
+async function _handleUpdateTextEdit(workspace, config, args) {
+  const result = await relaiApplyPatch(workspace, config, { ...args, patch: args.updateText });
+  const out = { ...result, plannerPath: 'apply-update', plannerReason: 'updateText provided — routing to patch-shaped apply-update' };
+  return attachPost(out, await runPostActions(workspace, config, args));
+}
+
+async function _handleSingleEdit(workspace, config, args) {
   const hasOldText = typeof args.oldText === 'string' && args.oldText.length > 0;
   const hasContent = typeof args.content === 'string';
   if (hasOldText && hasContent) {
@@ -238,6 +228,13 @@ async function planEdit(workspace, config, args) {
     ? 'oldText provided without content — routing to exact text replacement'
     : `content provided — routing to ${single.plannerPath === 'write:staged' ? 'staged chunked write' : 'direct full-file write'}`;
   return attachPost(single, await runPostActions(workspace, config, args));
+}
+
+async function planEdit(workspace, config, args) {
+  if (typeof args.stage === 'string' && args.stage.trim()) return handleStagedPatch(workspace, config, args);
+  if (Array.isArray(args.edits) && args.edits.length > 0) return _handleBatchEdits(workspace, config, args);
+  if (typeof args.updateText === 'string' && args.updateText.length > 0) return _handleUpdateTextEdit(workspace, config, args);
+  return _handleSingleEdit(workspace, config, args);
 }
 
 module.exports = { planEdit };

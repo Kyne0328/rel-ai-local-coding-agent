@@ -46,7 +46,7 @@ function readStore() {
     const raw = fs.readFileSync(storePath(), "utf8");
     const parsed = JSON.parse(raw);
     return { ...emptyStore(), ...(parsed && typeof parsed === "object" ? parsed : {}) };
-  } catch (_error) {
+  } catch {
     return emptyStore();
   }
 }
@@ -98,7 +98,9 @@ function timingSafeEqual(a, b) {
 }
 
 function stripTrailingSlash(value) {
-  return String(value || "").replace(/\/+$/, "");
+  let result = String(value || "");
+  while (result.endsWith("/")) result = result.slice(0, -1);
+  return result;
 }
 
 // ---- Discovery metadata ----------------------------------------------------
@@ -144,7 +146,7 @@ function registerClient(body = {}) {
     return { error: "invalid_redirect_uri", error_description: "At least one redirect_uri is required." };
   }
   for (const uri of redirectUris) {
-    try { new URL(uri); } catch (_) {
+    try { new URL(uri); } catch {
       return { error: "invalid_redirect_uri", error_description: `Invalid redirect_uri: ${uri}` };
     }
   }
@@ -264,53 +266,54 @@ function issueTokens(store, { clientId, scope, resource }) {
   };
 }
 
+function _exchangeAuthCode(store, body) {
+  const code = String(body.code || "");
+  const entry = store.codes[code];
+  if (!entry) return { status: 400, body: { error: "invalid_grant", error_description: "Authorization code is invalid or expired." } };
+  delete store.codes[code];
+  if (entry.expiresAt <= Date.now()) {
+    writeStore(store);
+    return { status: 400, body: { error: "invalid_grant", error_description: "Authorization code expired." } };
+  }
+  if (String(body.client_id || "") !== entry.clientId) {
+    writeStore(store);
+    return { status: 400, body: { error: "invalid_grant", error_description: "client_id does not match the authorization code." } };
+  }
+  if (String(body.redirect_uri || "") !== entry.redirectUri) {
+    writeStore(store);
+    return { status: 400, body: { error: "invalid_grant", error_description: "redirect_uri does not match the authorization request." } };
+  }
+  const verifier = String(body.code_verifier || "");
+  if (!verifier || base64UrlSha256(verifier) !== entry.codeChallenge) {
+    writeStore(store);
+    return { status: 400, body: { error: "invalid_grant", error_description: "PKCE verification failed." } };
+  }
+  const tokens = issueTokens(store, { clientId: entry.clientId, scope: entry.scope, resource: entry.resource });
+  writeStore(store);
+  return { status: 200, body: tokens };
+}
+
+function _exchangeRefreshToken(store, body) {
+  const refreshToken = String(body.refresh_token || "");
+  const entry = store.refreshTokens[refreshToken];
+  if (!entry || entry.expiresAt <= Date.now()) {
+    return { status: 400, body: { error: "invalid_grant", error_description: "Refresh token is invalid or expired." } };
+  }
+  if (body.client_id && String(body.client_id) !== entry.clientId) {
+    return { status: 400, body: { error: "invalid_grant", error_description: "client_id does not match the refresh token." } };
+  }
+  delete store.refreshTokens[refreshToken];
+  const tokens = issueTokens(store, { clientId: entry.clientId, scope: entry.scope, resource: entry.resource });
+  writeStore(store);
+  return { status: 200, body: tokens };
+}
+
 function exchangeToken(body = {}) {
   const grantType = String(body.grant_type || "");
   const store = pruneStore(readStore());
 
-  if (grantType === "authorization_code") {
-    const code = String(body.code || "");
-    const entry = store.codes[code];
-    if (!entry) return { status: 400, body: { error: "invalid_grant", error_description: "Authorization code is invalid or expired." } };
-    // Single use: consume immediately regardless of outcome.
-    delete store.codes[code];
-    if (entry.expiresAt <= Date.now()) {
-      writeStore(store);
-      return { status: 400, body: { error: "invalid_grant", error_description: "Authorization code expired." } };
-    }
-    if (String(body.client_id || "") !== entry.clientId) {
-      writeStore(store);
-      return { status: 400, body: { error: "invalid_grant", error_description: "client_id does not match the authorization code." } };
-    }
-    if (String(body.redirect_uri || "") !== entry.redirectUri) {
-      writeStore(store);
-      return { status: 400, body: { error: "invalid_grant", error_description: "redirect_uri does not match the authorization request." } };
-    }
-    const verifier = String(body.code_verifier || "");
-    if (!verifier || base64UrlSha256(verifier) !== entry.codeChallenge) {
-      writeStore(store);
-      return { status: 400, body: { error: "invalid_grant", error_description: "PKCE verification failed." } };
-    }
-    const tokens = issueTokens(store, { clientId: entry.clientId, scope: entry.scope, resource: entry.resource });
-    writeStore(store);
-    return { status: 200, body: tokens };
-  }
-
-  if (grantType === "refresh_token") {
-    const refreshToken = String(body.refresh_token || "");
-    const entry = store.refreshTokens[refreshToken];
-    if (!entry || entry.expiresAt <= Date.now()) {
-      return { status: 400, body: { error: "invalid_grant", error_description: "Refresh token is invalid or expired." } };
-    }
-    if (body.client_id && String(body.client_id) !== entry.clientId) {
-      return { status: 400, body: { error: "invalid_grant", error_description: "client_id does not match the refresh token." } };
-    }
-    // Rotate the refresh token.
-    delete store.refreshTokens[refreshToken];
-    const tokens = issueTokens(store, { clientId: entry.clientId, scope: entry.scope, resource: entry.resource });
-    writeStore(store);
-    return { status: 200, body: tokens };
-  }
+  if (grantType === "authorization_code") return _exchangeAuthCode(store, body);
+  if (grantType === "refresh_token") return _exchangeRefreshToken(store, body);
 
   return { status: 400, body: { error: "unsupported_grant_type", error_description: `Unsupported grant_type: ${grantType}` } };
 }

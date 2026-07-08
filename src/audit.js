@@ -25,7 +25,7 @@ function rotateIfNeeded(auditPath) {
     if (stat.size > MAX_AUDIT_BYTES) {
       fs.renameSync(auditPath, `${auditPath}.1`);
     }
-  } catch (_error) { /* missing file or rename race — nothing to rotate */ }
+  } catch { /* missing file or rename race — nothing to rotate */ }
 }
 
 function logAudit(config, event) {
@@ -66,7 +66,7 @@ function readAudit(config, options = {}) {
   if (!fs.existsSync(auditPath)) return { path: auditPath, entries: [] };
   const lines = readAuditTail(auditPath).trim().split(/\r?\n/).filter(Boolean);
   const entries = lines.slice(-limit).map((line) => {
-    try { return JSON.parse(line); } catch (_error) { return { malformed: line }; }
+    try { return JSON.parse(line); } catch { return { malformed: line }; }
   });
   return { path: auditPath, entries };
 }

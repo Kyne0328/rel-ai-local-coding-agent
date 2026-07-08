@@ -20,11 +20,11 @@ function normalizePort(value, fallback = 3333) {
 }
 
 function normalizeNgrokDomain(value) {
-  const domain = String(value || '')
+  let domain = String(value || '')
     .trim()
     .replace(/^https?:\/\//i, '')
-    .replace(/\/+$/, '')
     .toLowerCase();
+  while (domain.endsWith('/')) domain = domain.slice(0, -1);
 
   if (!domain) throw new Error('ngrok domain is required.');
   if (domain.length > 253) throw new Error('ngrok domain is too long.');
@@ -58,7 +58,8 @@ function buildTunnelCommand(domain, port) {
 // ChatGPT connects to the plain /mcp endpoint with Authentication: OAuth. The
 // legacy secret-in-URL path has been removed, so this no longer embeds a secret.
 function buildMcpUrl(publicBaseUrl) {
-  const base = String(publicBaseUrl || '').trim().replace(/\/+$/, '');
+  const base = String(publicBaseUrl || '').trim();
+  while (base.endsWith('/')) base = base.slice(0, -1);
   return `${base}/mcp`;
 }
 
@@ -70,7 +71,7 @@ function hasExistingConfig() {
     normalizePort(profile.port || env.REL_AI_MCP_PORT || 3333);
     normalizeNgrokDomain(env.REL_AI_MCP_NGROK_DOMAIN || profile.ngrokDomain || String(profile.publicUrl || '').replace(/^https?:\/\//i, ''));
     normalizeNgrokAuthtoken(env.REL_AI_MCP_NGROK_AUTHTOKEN || profile.ngrokAuthtoken || '');
-  } catch (_) {
+  } catch {
     return false;
   }
   return Boolean(profile.port || env.REL_AI_MCP_PORT);
@@ -81,7 +82,11 @@ function readGuiConfig() {
   const profile = connection.readConnectionProfile();
   const env = connection.readLaunchEnv();
   let ngrokDomain = env.REL_AI_MCP_NGROK_DOMAIN || profile.ngrokDomain || '';
-  if (!ngrokDomain && profile.publicUrl) ngrokDomain = String(profile.publicUrl).replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  if (!ngrokDomain && profile.publicUrl) {
+    let fromUrl = String(profile.publicUrl).replace(/^https?:\/\//i, '');
+    while (fromUrl.endsWith('/')) fromUrl = fromUrl.slice(0, -1);
+    ngrokDomain = fromUrl;
+  }
   return {
     port: normalizePort(env.REL_AI_MCP_PORT || profile.port || 3333),
     ngrokDomain: ngrokDomain ? normalizeNgrokDomain(ngrokDomain) : '',

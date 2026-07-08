@@ -38,7 +38,7 @@ function getChangedFiles(workspacePath) {
 function classifyFiles(files, workspaceConfig) {
   if (!files || files.length === 0) return { level: 'focused', reason: 'no changed files detected' };
 
-  const rules = (workspaceConfig && workspaceConfig.validationRules) || {};
+  const rules = workspaceConfig?.validationRules || {};
   const broadMultiDirThreshold = Number.isFinite(rules.broadMultiDirThreshold) && rules.broadMultiDirThreshold >= 1
     ? rules.broadMultiDirThreshold : 6;
   const broadMultiDirTopDirs = Number.isFinite(rules.broadMultiDirTopDirs) && rules.broadMultiDirTopDirs >= 1

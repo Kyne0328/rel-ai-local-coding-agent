@@ -165,12 +165,21 @@ function normalizeFastTask(value) {
   };
 }
 
+function _pickPreparedValue(sources, fieldNames, transform, fallback) {
+  for (const source of sources) {
+    for (const name of fieldNames) {
+      const val = source[name];
+      if (val != null) return transform ? transform(val) : val;
+    }
+  }
+  return fallback;
+}
+
 function normalizeWorkflowConfig(value, flowLegacy) {
   const base = makeDefaultWorkflowConfig();
   const raw = value && typeof value === "object" ? value : {};
   const flow = flowLegacy && typeof flowLegacy === "object" ? flowLegacy : {};
 
-  // Determine mode: support old "aggressive"/"conservative" and legacy flow.mode "fast"
   let mode;
   if (raw.mode === "prepared" || raw.mode === "aggressive") {
     mode = "prepared";
@@ -182,38 +191,15 @@ function normalizeWorkflowConfig(value, flowLegacy) {
     mode = "standard";
   }
 
-  // Gather prepared settings from old "aggressive" sub-object (with field renames)
   const oldAggressive = raw.aggressive && typeof raw.aggressive === "object" ? raw.aggressive : {};
   const oldFlow = flow.fast && typeof flow.fast === "object" ? flow.fast : {};
-  // New canonical prepared sub-object (if present)
   const rawPrepared = raw.prepared && typeof raw.prepared === "object" ? raw.prepared : {};
-
-  // Merge order: base < oldFlow < oldAggressive < rawPrepared
+  const sources = [rawPrepared, oldAggressive, oldFlow];
   const merged = { ...base.prepared, ...oldFlow, ...oldAggressive, ...rawPrepared };
 
-  // Apply field renames from old shape to new shape
-  let clearMissingDefault;
-  if (rawPrepared.clearMissingDefault != null) clearMissingDefault = Boolean(rawPrepared.clearMissingDefault);
-  else if (oldAggressive.clearMissingDefault != null) clearMissingDefault = Boolean(oldAggressive.clearMissingDefault);
-  else if (oldAggressive.deleteMissingDefault != null) clearMissingDefault = Boolean(oldAggressive.deleteMissingDefault);
-  else if (oldFlow.clearMissingDefault != null) clearMissingDefault = Boolean(oldFlow.clearMissingDefault);
-  else clearMissingDefault = base.prepared.clearMissingDefault;
-
-  let maxUpdateBytes;
-  if (rawPrepared.maxUpdateBytes != null) maxUpdateBytes = clampNumber(rawPrepared.maxUpdateBytes, 1024, 50 * 1024 * 1024, base.prepared.maxUpdateBytes);
-  else if (oldAggressive.maxUpdateBytes != null) maxUpdateBytes = clampNumber(oldAggressive.maxUpdateBytes, 1024, 50 * 1024 * 1024, base.prepared.maxUpdateBytes);
-  else if (oldAggressive.maxPatchBytes != null) maxUpdateBytes = clampNumber(oldAggressive.maxPatchBytes, 1024, 50 * 1024 * 1024, base.prepared.maxUpdateBytes);
-  else if (oldFlow.maxUpdateBytes != null) maxUpdateBytes = clampNumber(oldFlow.maxUpdateBytes, 1024, 50 * 1024 * 1024, base.prepared.maxUpdateBytes);
-  else if (oldFlow.maxPatchBytes != null) maxUpdateBytes = clampNumber(oldFlow.maxPatchBytes, 1024, 50 * 1024 * 1024, base.prepared.maxUpdateBytes);
-  else maxUpdateBytes = base.prepared.maxUpdateBytes;
-
-  let maxBundleBytes;
-  if (rawPrepared.maxBundleBytes != null) maxBundleBytes = clampNumber(rawPrepared.maxBundleBytes, 1024 * 1024, 2 * 1024 * 1024 * 1024, base.prepared.maxBundleBytes);
-  else if (oldAggressive.maxBundleBytes != null) maxBundleBytes = clampNumber(oldAggressive.maxBundleBytes, 1024 * 1024, 2 * 1024 * 1024 * 1024, base.prepared.maxBundleBytes);
-  else if (oldAggressive.maxArchiveBytes != null) maxBundleBytes = clampNumber(oldAggressive.maxArchiveBytes, 1024 * 1024, 2 * 1024 * 1024 * 1024, base.prepared.maxBundleBytes);
-  else if (oldFlow.maxBundleBytes != null) maxBundleBytes = clampNumber(oldFlow.maxBundleBytes, 1024 * 1024, 2 * 1024 * 1024 * 1024, base.prepared.maxBundleBytes);
-  else if (oldFlow.maxArchiveBytes != null) maxBundleBytes = clampNumber(oldFlow.maxArchiveBytes, 1024 * 1024, 2 * 1024 * 1024 * 1024, base.prepared.maxBundleBytes);
-  else maxBundleBytes = base.prepared.maxBundleBytes;
+  const clearMissingDefault = _pickPreparedValue(sources, ["clearMissingDefault", "deleteMissingDefault"], Boolean, base.prepared.clearMissingDefault);
+  const maxUpdateBytes = _pickPreparedValue(sources, ["maxUpdateBytes", "maxPatchBytes"], (v) => clampNumber(v, 1024, 50 * 1024 * 1024, base.prepared.maxUpdateBytes), base.prepared.maxUpdateBytes);
+  const maxBundleBytes = _pickPreparedValue(sources, ["maxBundleBytes", "maxArchiveBytes"], (v) => clampNumber(v, 1024 * 1024, 2 * 1024 * 1024 * 1024, base.prepared.maxBundleBytes), base.prepared.maxBundleBytes);
 
   return {
     mode,

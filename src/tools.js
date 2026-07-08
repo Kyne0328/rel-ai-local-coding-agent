@@ -574,7 +574,7 @@ function enhanceToolError(toolName, error) {
   const raw = error instanceof Error ? error.message : String(error);
   const append = (extra) => {
     const next = new Error(`${raw}\n\n${extra}`);
-    if (error instanceof Error && error.stack) next.stack = error.stack;
+    if (error?.stack) next.stack = error.stack;
     return next;
   };
   return editErrorHint(toolName, raw, append)

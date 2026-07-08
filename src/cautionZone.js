@@ -5,21 +5,21 @@ function num(value, fallback) {
 
 function collectClearPaths(args) {
   const out = [];
-  if (args && typeof args.path === 'string' && args.path) out.push(args.path);
-  if (args && Array.isArray(args.paths)) for (const p of args.paths) if (typeof p === 'string' && p) out.push(p);
+  if (typeof args?.path === 'string' && args.path) out.push(args.path);
+  if (Array.isArray(args?.paths)) for (const p of args.paths) if (typeof p === 'string' && p) out.push(p);
   return out;
 }
 
 function countUpdateFiles(args, value) {
-  if (value && Array.isArray(value.touchedPaths)) return value.touchedPaths.length;
-  if (value && Array.isArray(value.changedFiles)) return value.changedFiles.length;
-  if (args && Array.isArray(args.touchedPaths)) return args.touchedPaths.length;
+  if (Array.isArray(value?.touchedPaths)) return value.touchedPaths.length;
+  if (Array.isArray(value?.changedFiles)) return value.changedFiles.length;
+  if (Array.isArray(args?.touchedPaths)) return args.touchedPaths.length;
   return 0;
 }
 
 function countUpdateBytes(args, value) {
-  if (value && Number.isFinite(value.patchBytes)) return value.patchBytes;
-  const patch = args && (args.patch || args.diff || args.updateText);
+  if (Number.isFinite(value?.patchBytes)) return value.patchBytes;
+  const patch = args?.patch || args?.diff || args?.updateText;
   if (typeof patch === 'string') return Buffer.byteLength(patch, 'utf8');
   return 0;
 }
@@ -36,7 +36,7 @@ function isWorkspaceConfigPath(relPath) {
 }
 
 function classifyCaution(toolName, args, value, config) {
-  const cfg = (config && config.cautionZone) || {};
+  const cfg = config?.cautionZone || {};
   const massClearThreshold = num(cfg.massClearThreshold, 3);
   const bundleFileThreshold = num(cfg.bundleFileThreshold, 5);
   const bundleBytesThreshold = num(cfg.bundleBytesThreshold, 102400);
@@ -64,7 +64,7 @@ function classifyCaution(toolName, args, value, config) {
   }
 
   if (toolName === 'relai_write' || toolName === 'relai_replace' || toolName === 'relai_edit') {
-    if (args && typeof args.path === 'string' && isWorkspaceConfigPath(args.path)) {
+    if (typeof args?.path === 'string' && isWorkspaceConfigPath(args.path)) {
       return { level: 'caution', reason: 'workspace config path modified' };
     }
   }

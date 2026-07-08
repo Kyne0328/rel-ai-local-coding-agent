@@ -25,7 +25,9 @@ function requestWindowFit() {
 }
 
 function normalizeDomain(value) {
-  return String(value || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '').toLowerCase();
+  let d = String(value || '').trim().replace(/^https?:\/\//i, '').toLowerCase();
+  while (d.endsWith('/')) d = d.slice(0, -1);
+  return d;
 }
 
 function isValidDomain(domain) {
@@ -72,7 +74,7 @@ function validatePort() {
 function regenerateToken() {
   const bytes = new Uint8Array(32);
   window.crypto.getRandomValues(bytes);
-  state.token = btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+  state.token = btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
   document.getElementById('tokenBox').textContent = state.token;
 }
 

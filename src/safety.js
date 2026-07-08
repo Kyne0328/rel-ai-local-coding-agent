@@ -168,7 +168,7 @@ function buildCollectionPolicy(root, options = {}) {
 }
 
 function collectOptionsFromWorkspace(workspace, overrides = {}) {
-  const fastTask = workspace && workspace.fastTask && typeof workspace.fastTask === "object" ? workspace.fastTask : {};
+  const fastTask = workspace?.fastTask && typeof workspace.fastTask === "object" ? workspace.fastTask : {};
   if (fastTask.enabled === false) return { ...overrides };
   return {
     includeRoots: fastTask.includeRoots || fastTask.includePaths || [],

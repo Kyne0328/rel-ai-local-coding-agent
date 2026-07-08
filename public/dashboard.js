@@ -32,7 +32,7 @@ function readInitialPayload() {
   try {
     const el = document.getElementById('initialDashboardData');
     return el && el.textContent ? JSON.parse(el.textContent) : null;
-  } catch (_) {
+  } catch {
     return null;
   }
 }
@@ -186,7 +186,7 @@ async function _checkOnboarding() {
       const { openOnboarding } = await import('/ui/sections/onboarding.js');
       openOnboarding();
     }
-  } catch (_) { /* degrade gracefully */ }
+  } catch { /* degrade gracefully */ }
 }
 
 boot();

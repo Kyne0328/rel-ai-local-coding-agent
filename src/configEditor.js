@@ -42,7 +42,7 @@ function updateSettings(current, payload = {}) {
   const values = payload.settings && typeof payload.settings === "object" ? payload.settings : payload;
 
   for (const key of NUMBER_KEYS) {
-    if (!Object.prototype.hasOwnProperty.call(values, key)) continue;
+    if (!Object.hasOwn(values, key)) continue;
     setIfChanged(next, key, finiteNumber(values[key], key), changed);
   }
 
@@ -73,83 +73,62 @@ function updateSettings(current, payload = {}) {
   };
 }
 
-function updateWorkspace(current, payload = {}) {
-  const action = String(payload.action || "upsert").toLowerCase();
-  const alias = String(payload.alias || payload.workspace || "").trim();
-  validateAlias(alias);
-  const next = clone(current);
-  if (!next.workspaces || typeof next.workspaces !== "object") next.workspaces = {};
+function _handleDeleteWorkspace(alias, payload, next) {
+  if (!payload.confirmDelete && !payload.confirmClear) throw new Error("Workspace removal requires confirmDelete=true (or confirmClear=true).");
+  if (!next.workspaces[alias]) throw new Error(`Workspace '${alias}' is not configured.`);
+  delete next.workspaces[alias];
+  const normalized = writeConfig(next);
+  return { ok: true, changed: [`workspaces.${alias}`], message: `Removed workspace '${alias}'.`, configPath: getConfigPath(), config: publicConfigSummary(normalized) };
+}
 
-  // clear == delete == remove: drop the config entry. This must NOT validate the
-  // workspace path — the whole point of clearing is often to remove an entry whose
-  // path no longer exists (otherwise a broken workspace would be unremovable).
-  if (action === "delete" || action === "remove" || action === "clear") {
-    if (!payload.confirmDelete && !payload.confirmClear) throw new Error("Workspace removal requires confirmDelete=true (or confirmClear=true).");
-    if (!next.workspaces[alias]) throw new Error(`Workspace '${alias}' is not configured.`);
-    delete next.workspaces[alias];
-    const normalized = writeConfig(next);
-    return { ok: true, changed: [`workspaces.${alias}`], message: `Removed workspace '${alias}'.`, configPath: getConfigPath(), config: publicConfigSummary(normalized) };
+function _handleRenameWorkspace(alias, payload, next) {
+  const newAlias = String(payload.newAlias || "").trim();
+  validateAlias(newAlias);
+  if (!next.workspaces[alias]) throw new Error(`Workspace '${alias}' is not configured.`);
+  if (alias === newAlias) return { ok: true, changed: [], message: "Workspace alias unchanged.", configPath: getConfigPath(), config: publicConfigSummary(next) };
+  if (next.workspaces[newAlias]) throw new Error(`Workspace '${newAlias}' already exists.`);
+  next.workspaces[newAlias] = { ...next.workspaces[alias] };
+  delete next.workspaces[alias];
+  const normalized = writeConfig(next);
+  return { ok: true, changed: [`workspaces.${alias}`, `workspaces.${newAlias}`], message: `Renamed workspace '${alias}' to '${newAlias}'.`, configPath: getConfigPath(), config: publicConfigSummary(normalized) };
+}
+
+function _handlePruneCommands(alias, payload, next) {
+  const ws = next.workspaces[alias];
+  if (!ws) throw new Error(`Workspace '${alias}' is not configured.`);
+  const configured = ws.testCommands && typeof ws.testCommands === "object" ? ws.testCommands : {};
+  let discovered;
+  try { discovered = discoverCommands(ws.path) || {}; } catch { discovered = {}; }
+  if (Object.keys(discovered).length === 0 && !(ws.path && fs.existsSync(ws.path))) {
+    throw new Error(`Cannot determine stale commands for '${alias}': workspace path is unavailable. Fix the path first.`);
   }
-
-  if (action === "rename") {
-    const newAlias = String(payload.newAlias || "").trim();
-    validateAlias(newAlias);
-    if (!next.workspaces[alias]) throw new Error(`Workspace '${alias}' is not configured.`);
-    if (alias === newAlias) return { ok: true, changed: [], message: "Workspace alias unchanged.", configPath: getConfigPath(), config: publicConfigSummary(current) };
-    if (next.workspaces[newAlias]) throw new Error(`Workspace '${newAlias}' already exists.`);
-    next.workspaces[newAlias] = { ...next.workspaces[alias] };
-    delete next.workspaces[alias];
-    const normalized = writeConfig(next);
-    return { ok: true, changed: [`workspaces.${alias}`, `workspaces.${newAlias}`], message: `Renamed workspace '${alias}' to '${newAlias}'.`, configPath: getConfigPath(), config: publicConfigSummary(normalized) };
+  const stale = staleCommandKeys(configured, discovered);
+  if (!stale.length) {
+    return { ok: true, changed: [], removed: [], message: `No stale test commands for '${alias}'.`, configPath: getConfigPath(), config: publicConfigSummary(next) };
   }
-
-  // Remove saved test commands that no longer match the workspace's discovered
-  // package scripts. The client cannot do this itself — the dashboard summary
-  // exposes stale keys but never the configured command strings — so the prune
-  // runs server-side where the full config and live discovery are available.
-  if (action === "prune-stale-tests" || action === "prune-tests") {
-    const ws = next.workspaces[alias];
-    if (!ws) throw new Error(`Workspace '${alias}' is not configured.`);
-    const configured = ws.testCommands && typeof ws.testCommands === "object" ? ws.testCommands : {};
-    let discovered;
-    try { discovered = discoverCommands(ws.path) || {}; } catch (_) { discovered = {}; }
-    // Guard: if the path is unreadable we cannot tell stale from valid, and every
-    // configured key would look stale. Refuse rather than wipe a temporarily
-    // unavailable workspace's commands.
-    if (Object.keys(discovered).length === 0 && !(ws.path && fs.existsSync(ws.path))) {
-      throw new Error(`Cannot determine stale commands for '${alias}': workspace path is unavailable. Fix the path first.`);
-    }
-    const stale = staleCommandKeys(configured, discovered);
-    if (!stale.length) {
-      return { ok: true, changed: [], removed: [], message: `No stale test commands for '${alias}'.`, configPath: getConfigPath(), config: publicConfigSummary(current) };
-    }
-    const cleaned = {};
-    for (const [key, command] of Object.entries(configured)) {
-      if (!stale.includes(key)) cleaned[key] = command;
-    }
-    ws.testCommands = cleaned;
-    const normalized = writeConfig(next);
-    return {
-      ok: true,
-      changed: [`workspaces.${alias}.testCommands`],
-      removed: stale,
-      message: `Removed ${stale.length} stale test command${stale.length === 1 ? "" : "s"} from '${alias}': ${stale.join(", ")}.`,
-      configPath: getConfigPath(),
-      config: publicConfigSummary(normalized)
-    };
+  const cleaned = {};
+  for (const [key, command] of Object.entries(configured)) {
+    if (!stale.includes(key)) cleaned[key] = command;
   }
+  ws.testCommands = cleaned;
+  const normalized = writeConfig(next);
+  return {
+    ok: true,
+    changed: [`workspaces.${alias}.testCommands`],
+    removed: stale,
+    message: `Removed ${stale.length} stale test command${stale.length === 1 ? "" : "s"} from '${alias}': ${stale.join(", ")}.`,
+    configPath: getConfigPath(),
+    config: publicConfigSummary(normalized)
+  };
+}
 
+function _handleUpsertWorkspace(alias, payload, next) {
   const source = payload.workspaceConfig && typeof payload.workspaceConfig === "object" ? payload.workspaceConfig : payload;
   const currentWorkspace = next.workspaces[alias] || {};
   const workspacePath = source.path == null || source.path === "" ? currentWorkspace.path : String(source.path).trim();
   if (!workspacePath) throw new Error("Workspace path is required.");
   if (!path.isAbsolute(workspacePath)) throw new Error("Workspace path must be absolute.");
   assertSafeWorkspaceRoot(workspacePath);
-  // A not-yet-existing path is allowed on save (e.g. a repo about to be cloned). The
-  // form's live preflight already warns the user, and the header comment promises
-  // "warn-but-allow" — rejecting here contradicted that and made the warning a dead end.
-  // Tool calls still hard-fail at use time via resolveWorkspace's existence check.
-
   next.workspaces[alias] = {
     ...currentWorkspace,
     path: workspacePath,
@@ -161,7 +140,6 @@ function updateWorkspace(current, payload = {}) {
     testCommands: parseCommandMap(source.testCommands, currentWorkspace.testCommands || {}),
     commands: parseCommandMap(source.commands, currentWorkspace.commands || {})
   };
-
   const normalized = writeConfig(next);
   return {
     ok: true,
@@ -170,6 +148,26 @@ function updateWorkspace(current, payload = {}) {
     configPath: getConfigPath(),
     config: publicConfigSummary(normalized)
   };
+}
+
+const WORKSPACE_ACTION_HANDLERS = {
+  delete: _handleDeleteWorkspace,
+  remove: _handleDeleteWorkspace,
+  clear: _handleDeleteWorkspace,
+  rename: _handleRenameWorkspace,
+  "prune-stale-tests": _handlePruneCommands,
+  "prune-tests": _handlePruneCommands
+};
+
+function updateWorkspace(current, payload = {}) {
+  const action = String(payload.action || "upsert").toLowerCase();
+  const alias = String(payload.alias || payload.workspace || "").trim();
+  validateAlias(alias);
+  const next = clone(current);
+  if (!next.workspaces || typeof next.workspaces !== "object") next.workspaces = {};
+
+  const handler = WORKSPACE_ACTION_HANDLERS[action] || _handleUpsertWorkspace;
+  return handler(alias, payload, next);
 }
 
 function clone(value) {

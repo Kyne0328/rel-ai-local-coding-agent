@@ -14,7 +14,7 @@ function readChangelogVersion() {
     const md = fs.readFileSync(path.join(__dirname, "..", "CHANGELOG.md"), "utf8");
     // Match the first "## [x.y.z] — date" (em dash or hyphen) heading.
     const match = md.match(/^##\s*\[([^\]]+)\]/m);
-    if (match && match[1]) return match[1].trim();
+    if (match?.[1]) return match[1].trim();
   } catch (_error) { /* fall through to package.json */ }
   return "";
 }
