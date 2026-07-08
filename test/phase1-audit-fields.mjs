@@ -2,22 +2,33 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { relaiVerify } = require('../src/localRepoBridge.js');
 const { planEdit } = require('../src/executionPlanner.js');
 
+const FIXED_GIT_ENV = Object.freeze({
+  PATH: process.platform === 'win32'
+    ? String.raw`C:\Program Files\Git\cmd;C:\Windows\System32;C:\Windows`
+    : '/usr/bin:/bin',
+  SystemRoot: process.env.SystemRoot || process.env.SYSTEMROOT || String.raw`C:\Windows`,
+  SYSTEMROOT: process.env.SYSTEMROOT || process.env.SystemRoot || String.raw`C:\Windows`
+});
+
+function git(args, cwd) { // NOSONAR - this smoke test intentionally executes the local Git binary.
+  execFileSync('git', args, { cwd, stdio: 'pipe', env: FIXED_GIT_ENV });
+}
+
 function makeTempRepo() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-p1-'));
-  const env = { ...process.env };
-  execSync('git init', { cwd: dir, stdio: 'pipe', env });
-  execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe', env });
-  execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe', env });
+  git(['init'], dir);
+  git(['config', 'user.email', 'test@test.com'], dir);
+  git(['config', 'user.name', 'Test'], dir);
   fs.writeFileSync(path.join(dir, 'readme.md'), '# test\n');
-  execSync('git add .', { cwd: dir, stdio: 'pipe', env });
-  execSync('git commit -m "init"', { cwd: dir, stdio: 'pipe', env });
+  git(['add', '.'], dir);
+  git(['commit', '-m', 'init'], dir);
   return dir;
 }
 

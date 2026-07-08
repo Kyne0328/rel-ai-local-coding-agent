@@ -197,15 +197,39 @@ function setupStartCommand(token) {
   return `REL_AI_MCP_TOKEN=${token} npm run start:http -- --host 127.0.0.1 --port 3333`;
 }
 
+function assertJsonFileExtension(filePath, label) {
+  if (path.extname(filePath).toLowerCase() !== ".json") {
+    throw new Error(`${label} must point to a .json file: ${filePath}`);
+  }
+}
+
+function validateReadableJsonFile(rawPath, label) {
+  const filePath = path.resolve(String(rawPath || ""));
+  assertJsonFileExtension(filePath, label);
+  if (!fs.existsSync(filePath)) throw new Error(`${label} not found: ${filePath}`);
+  const realPath = fs.realpathSync(filePath);
+  const stat = fs.statSync(realPath);
+  if (!stat.isFile()) throw new Error(`${label} is not a file: ${realPath}`);
+  return realPath;
+}
+
+function validateWritableJsonFile(rawPath, label) {
+  const filePath = path.resolve(String(rawPath || ""));
+  assertJsonFileExtension(filePath, label);
+  const parent = path.dirname(filePath);
+  const realParent = fs.existsSync(parent) ? fs.realpathSync(parent) : path.resolve(parent);
+  return path.join(realParent, path.basename(filePath));
+}
+
 function importOriginalRelAiConfig(args = {}) {
-  const sourcePath = args.sourcePath ? path.resolve(String(args.sourcePath)) : path.join(os.homedir(), ".rel-ai", "opencode.json");
-  if (!fs.existsSync(sourcePath)) throw new Error(`Original Rel.AI config not found: ${sourcePath}`);
+  const defaultSource = path.join(os.homedir(), ".rel-ai", "opencode.json");
+  const sourcePath = validateReadableJsonFile(args.sourcePath || defaultSource, "sourcePath");
   const source = safeReadJson(sourcePath);
   if (!source) throw new Error(`Original Rel.AI config file is corrupted or empty: ${sourcePath}`);
   const config = readConfig({ allowMissing: true });
   const imported = [];
   for (const [alias, entry] of Object.entries(source.workspaces || {})) {
-    if (!entry || !entry.path) continue;
+    if (!entry?.path) continue;
     config.workspaces[alias] = config.workspaces[alias] || {};
     config.workspaces[alias].path = entry.path;
     config.workspaces[alias].testCommands = entry.testCommands || config.workspaces[alias].testCommands || {};
@@ -227,7 +251,7 @@ function stateExport(config, args = {}) {
   walkState(stateDir, stateDir, files, maxFiles, clampNumber(args.maxFileBytes || 1024 * 1024, 1000, 10 * 1024 * 1024));
   const payload = { version: 1, exportedAt: new Date().toISOString(), stateDir, files };
   if (args.outputPath) {
-    const out = path.resolve(String(args.outputPath));
+    const out = validateWritableJsonFile(args.outputPath, "outputPath");
     fs.mkdirSync(path.dirname(out), { recursive: true });
     fs.writeFileSync(out, JSON.stringify(payload, null, 2) + "\n", { mode: 0o600 });
     return { ok: true, outputPath: out, fileCount: files.length };
@@ -239,14 +263,15 @@ function stateImport(config, args = {}) {
   if (args.confirm !== true) throw new Error("stateImport requires confirm=true.");
   let payload = args.payload;
   if (args.inputPath) {
-    payload = safeReadJson(path.resolve(String(args.inputPath)));
-    if (!payload) throw new Error(`State import file is corrupted or empty: ${args.inputPath}`);
+    const inputPath = validateReadableJsonFile(args.inputPath, "inputPath");
+    payload = safeReadJson(inputPath);
+    if (!payload) throw new Error(`State import file is corrupted or empty: ${inputPath}`);
   }
-  if (!payload || !Array.isArray(payload.files)) throw new Error("State import payload must contain a files array.");
+  if (!Array.isArray(payload?.files)) throw new Error("State import payload must contain a files array.");
   const stateDir = getStateDir(config);
   const written = [];
   for (const item of payload.files) {
-    if (!item || !item.path || typeof item.content !== "string") continue;
+    if (!item?.path || typeof item.content !== "string") continue;
     const relative = String(item.path).replaceAll(path.win32.sep, "/");
     if (relative.startsWith("/") || relative.includes("..")) throw new Error(`Unsafe state path: ${relative}`);
     const target = path.join(stateDir, relative);
@@ -265,7 +290,11 @@ function guessTestCommands(workspacePath) {
     // Only suggest scripts that actually exist, so we don't seed stale aliases the
     // dashboard's alias-consistency check then flags.
     let scripts = {};
-    try { scripts = (safeReadJson(pkgPath) || {}).scripts || {}; } catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] package script discovery:', error); }
+    try {
+      scripts = safeReadJson(pkgPath)?.scripts || {};
+    } catch (error) {
+      if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] package script discovery:', error);
+    }
     if (scripts.test) out.test = "npm test";
     if (scripts.lint) out.lint = "npm run lint";
   }

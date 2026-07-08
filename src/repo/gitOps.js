@@ -80,9 +80,7 @@ function assertPreparedBundleSafe(workspace, config, args, archivePath, stat) {
 
 // ---- Git status classification -----------------------------------------------
 
-function classifyStatusOwnership(workspace, config, statusOutput) {
-  let baselineDirty = [];
-  let baselineSource = null;
+function readBaselineOwnership(workspace, config) {
   try {
     const { readSessionPolicy } = require("../policyResolver");
     const session = readSessionPolicy(config, workspace.alias);
@@ -90,60 +88,80 @@ function classifyStatusOwnership(workspace, config, statusOutput) {
     // key — is what marks ownership as knowable. A session that started against a
     // clean worktree has no baselineDirty entry, but it is still a real session:
     // everything dirty now is genuinely session-owned.
-    if (session) {
-      baselineDirty = Array.isArray(session.baselineDirty) ? session.baselineDirty : [];
-      baselineSource = "session";
-    }
+    if (!session) return { baselineDirty: [], baselineSource: null };
+    return {
+      baselineDirty: Array.isArray(session.baselineDirty) ? session.baselineDirty : [],
+      baselineSource: "session"
+    };
   } catch (error) {
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] session policy read:', error);
+    return { baselineDirty: [], baselineSource: null };
   }
-  // With no active session there is no captured baseline, so we CANNOT tell which
-  // dirty files came from this agent vs. were already present. Labeling everything
-  // "session" here was a lie that also let relai_tidy_plan treat pre-existing
-  // untracked user files as disposable session artifacts. When hasSession is false,
-  // ownership is "unknown" and the session-owned arrays stay empty.
+}
+
+function statusGroups() {
+  return {
+    entries: [],
+    sessionChanged: [],
+    baselineChanged: [],
+    untrackedSession: [],
+    untrackedBaseline: [],
+    unknownChanged: [],
+    untrackedUnknown: []
+  };
+}
+
+function statusFileFromLine(line) {
+  const rawPath = line.slice(3).trim();
+  const arrow = rawPath.indexOf(" -> ");
+  return arrow >= 0 ? rawPath.slice(arrow + 4).trim() : rawPath;
+}
+
+function statusEntryFromLine(line, hasSession, baselineSet) {
+  if (line.length < 3) return null;
+  const indexStatus = line[0];
+  const worktreeStatus = line[1];
+  const file = statusFileFromLine(line);
+  if (!file) return null;
+  const owner = hasSession && baselineSet.has(file) ? "baseline" : hasSession ? "session" : "unknown";
+  return {
+    path: file,
+    indexStatus,
+    worktreeStatus,
+    owner,
+    untracked: indexStatus === "?" && worktreeStatus === "?",
+    raw: line
+  };
+}
+
+function recordStatusEntry(groups, entry) {
+  groups.entries.push(entry);
+  const changedKey = `${entry.owner}Changed`;
+  const untrackedKey = `untracked${entry.owner[0].toUpperCase()}${entry.owner.slice(1)}`;
+  groups[changedKey].push(entry.path);
+  if (entry.untracked) groups[untrackedKey].push(entry.path);
+}
+
+function classifyStatusOwnership(workspace, config, statusOutput) {
+  const { baselineDirty, baselineSource } = readBaselineOwnership(workspace, config);
   const hasSession = baselineSource !== null;
   const baselineSet = new Set(baselineDirty);
-  const sessionChanged = [];
-  const baselineChanged = [];
-  const untrackedSession = [];
-  const untrackedBaseline = [];
-  const unknownChanged = [];
-  const untrackedUnknown = [];
-  const entries = [];
+  const groups = statusGroups();
   let branch = null;
   let aheadBehind = null;
-  const lines = String(statusOutput || "").split(/\r?\n/).filter(Boolean);
-  for (const line of lines) {
+
+  for (const line of String(statusOutput || "").split(/\r?\n/).filter(Boolean)) {
     if (line.startsWith("## ")) {
       const branchInfo = parseStatusBranchLine(line);
       branch = branchInfo.branch;
       aheadBehind = branchInfo.aheadBehind;
       continue;
     }
-    if (line.length < 3) continue;
-    const x = line[0];
-    const y = line[1];
-    const rawPath = line.slice(3).trim();
-    const arrow = rawPath.indexOf(" -> ");
-    const file = arrow >= 0 ? rawPath.slice(arrow + 4).trim() : rawPath;
-    if (!file) continue;
-    const untracked = x === "?" && y === "?";
-    const sessionOwner = baselineSet.has(file) ? "baseline" : "session";
-    const owner = !hasSession ? "unknown" : sessionOwner;
-    entries.push({ path: file, indexStatus: x, worktreeStatus: y, owner, untracked, raw: line });
-    if (owner === "baseline") {
-      baselineChanged.push(file);
-      if (untracked) untrackedBaseline.push(file);
-    } else if (owner === "session") {
-      sessionChanged.push(file);
-      if (untracked) untrackedSession.push(file);
-    } else {
-      unknownChanged.push(file);
-      if (untracked) untrackedUnknown.push(file);
-    }
+    const entry = statusEntryFromLine(line, hasSession, baselineSet);
+    if (entry) recordStatusEntry(groups, entry);
   }
-  return { branch, aheadBehind, entries, hasSession, sessionChanged, baselineChanged, untrackedSession, untrackedBaseline, unknownChanged, untrackedUnknown, baselineSource };
+
+  return { branch, aheadBehind, hasSession, baselineSource, ...groups };
 }
 
 function parseStatusBranchLine(line) {
@@ -402,6 +420,46 @@ async function relaiGitPush(workspace, config, args = {}) {
   return { ok: push.exitCode === 0, workspace: workspace.alias, remote, branch, dryRun, setUpstream, push: summarizeCommand(push) };
 }
 
+function protectedBranchList(workspace) {
+  return Array.isArray(workspace.protectedBranches) ? workspace.protectedBranches : ["main", "master"];
+}
+
+function assertMergeTargetAllowed(workspace, target, args) {
+  if (!protectedBranchList(workspace).includes(target) || args.allowProtected === true) return;
+  throw new Error(`Target branch '${target}' is protected. Pass allowProtected: true after reviewing the plan.`);
+}
+
+async function checkoutMergeTarget(workspace, config, target, originalBranch) {
+  if (target === originalBranch) return { exitCode: 0, stdout: "", stderr: "" };
+  return runProcess("git", ["checkout", target], { cwd: workspace.path, timeout: 60000 }, config);
+}
+
+function mergeCommandArgs(source, args, dryRun) {
+  return ["merge", ...(dryRun ? ["--no-commit", "--no-ff"] : []), ...(args.ffOnly ? ["--ff-only"] : []), source];
+}
+
+async function abortDryRunMergeIfNeeded(workspace, config) {
+  const mergeInProgress = await runProcess("git", ["rev-parse", "--verify", "--quiet", "MERGE_HEAD"], { cwd: workspace.path, timeout: 30000 }, config);
+  if (mergeInProgress.exitCode !== 0) return null;
+  return runProcess("git", ["merge", "--abort"], { cwd: workspace.path, timeout: 60000 }, config);
+}
+
+async function restoreOriginalBranchIfNeeded(workspace, config, target, originalBranch) {
+  if (target === originalBranch) return null;
+  return runProcess("git", ["checkout", originalBranch], { cwd: workspace.path, timeout: 60000 }, config);
+}
+
+async function dryRunMergeCleanup(workspace, config, target, originalBranch) {
+  return {
+    aborted: await abortDryRunMergeIfNeeded(workspace, config),
+    restoreBranch: await restoreOriginalBranchIfNeeded(workspace, config, target, originalBranch)
+  };
+}
+
+function mergeBranchOk(merge, aborted, restoreBranch) {
+  return merge.exitCode === 0 && (!aborted || aborted.exitCode === 0) && (!restoreBranch || restoreBranch.exitCode === 0);
+}
+
 async function relaiGitMergeBranch(workspace, config, args = {}) {
   await ensureGitRepo(workspace, config);
   const source = String(args.source || args.branch || "").trim();
@@ -409,76 +467,103 @@ async function relaiGitMergeBranch(workspace, config, args = {}) {
   const target = String(args.target || originalBranch).trim();
   if (!source) throw new Error("relai_git_merge_branch requires source.");
   if (!target) throw new Error("relai_git_merge_branch could not determine target branch.");
-  const protectedBranches = Array.isArray(workspace.protectedBranches) ? workspace.protectedBranches : ["main", "master"];
-  if (protectedBranches.includes(target) && args.allowProtected !== true) {
-    throw new Error(`Target branch '${target}' is protected. Pass allowProtected: true after reviewing the plan.`);
-  }
+  assertMergeTargetAllowed(workspace, target, args);
+
   const dryRun = args.dryRun !== false;
-  const checkout = target === originalBranch
-    ? { exitCode: 0, stdout: "", stderr: "" }
-    : await runProcess("git", ["checkout", target], { cwd: workspace.path, timeout: 60000 }, config);
+  const checkout = await checkoutMergeTarget(workspace, config, target, originalBranch);
   if (checkout.exitCode !== 0) return { ok: false, workspace: workspace.alias, source, target, dryRun, checkout: summarizeCommand(checkout) };
-  const mergeArgs = ["merge", ...(dryRun ? ["--no-commit", "--no-ff"] : []), ...(args.ffOnly ? ["--ff-only"] : []), source];
-  const merge = await runProcess("git", mergeArgs, { cwd: workspace.path, timeout: clampNumber(args.timeoutMs, 1000, 86400000, 120000) }, config);
-  let aborted = null;
-  let restoreBranch = null;
-  if (dryRun) {
-    // Only abort when a merge actually started. "Already up to date" leaves no
-    // MERGE_HEAD, and `git merge --abort` would then fail ("no merge to abort"),
-    // wrongly flipping ok:false on a clean no-op merge.
-    const mergeInProgress = await runProcess("git", ["rev-parse", "--verify", "--quiet", "MERGE_HEAD"], { cwd: workspace.path, timeout: 30000 }, config);
-    if (mergeInProgress.exitCode === 0) {
-      aborted = await runProcess("git", ["merge", "--abort"], { cwd: workspace.path, timeout: 60000 }, config);
-    }
-    if (target !== originalBranch) {
-      restoreBranch = await runProcess("git", ["checkout", originalBranch], { cwd: workspace.path, timeout: 60000 }, config);
-    }
-  }
+
+  const merge = await runProcess("git", mergeCommandArgs(source, args, dryRun), { cwd: workspace.path, timeout: clampNumber(args.timeoutMs, 1000, 86400000, 120000) }, config);
+  const cleanup = dryRun ? await dryRunMergeCleanup(workspace, config, target, originalBranch) : { aborted: null, restoreBranch: null };
   const status = await relaiGitStatus(workspace, config, { maxBytes: args.maxBytes });
-  return { ok: merge.exitCode === 0 && (!aborted || aborted.exitCode === 0) && (!restoreBranch || restoreBranch.exitCode === 0), workspace: workspace.alias, source, target, originalBranch, dryRun, merge: summarizeCommand(merge), ...(aborted ? { abort: summarizeCommand(aborted) } : {}), ...(restoreBranch ? { restoreBranch: summarizeCommand(restoreBranch) } : {}), status };
+  return {
+    ok: mergeBranchOk(merge, cleanup.aborted, cleanup.restoreBranch),
+    workspace: workspace.alias,
+    source,
+    target,
+    originalBranch,
+    dryRun,
+    merge: summarizeCommand(merge),
+    ...(cleanup.aborted ? { abort: summarizeCommand(cleanup.aborted) } : {}),
+    ...(cleanup.restoreBranch ? { restoreBranch: summarizeCommand(cleanup.restoreBranch) } : {}),
+    status
+  };
+}
+
+function protectedRemoteBranches(workspace, targetBranch) {
+  const protectedBranches = new Set(protectedBranchList(workspace));
+  protectedBranches.add(targetBranch);
+  return protectedBranches;
+}
+
+function parseRemoteRefLine(line, remote) {
+  const [name, committerdate] = line.split("|");
+  const short = name ? name.replace(`${remote}/`, "") : "";
+  return { name, short, committerdate };
+}
+
+function remoteRefExclusion(ref, remote, protectedBranches) {
+  if (!ref.name) return { name: ref.name, reason: "empty ref" };
+  if (ref.name === `${remote}/HEAD`) return { name: ref.name, reason: "symbolic remote head" };
+  if (!ref.short || ref.short === remote || ref.name === remote) return { name: ref.name, reason: "remote name, not a branch" };
+  if (protectedBranches.has(ref.short)) return { name: ref.name, reason: "protected or target branch" };
+  return null;
+}
+
+function staleDaysFromCommitDate(committerdate) {
+  if (!committerdate) return null;
+  return Math.max(0, Math.floor((Date.now() - new Date(committerdate).getTime()) / (24 * 60 * 60 * 1000)));
+}
+
+function branchRisk(short, staleDays) {
+  const risk = [];
+  if (staleDays != null && staleDays > 45) risk.push("stale branch");
+  if (short.includes("release") || short.includes("prod")) risk.push("name overlaps release flow");
+  return risk;
+}
+
+function recommendedBranchGroup(short) {
+  if (short.includes("ui")) return "ui";
+  return short.includes("admin") ? "admin" : "general";
+}
+
+async function remoteBranchCandidate(workspace, config, remote, targetBranch, ref) {
+  const merged = await runProcess("git", ["merge-base", "--is-ancestor", ref.name, `${remote}/${targetBranch}`], { cwd: workspace.path, timeout: 30000 }, config);
+  const staleDays = staleDaysFromCommitDate(ref.committerdate);
+  return {
+    name: ref.name,
+    short: ref.short,
+    lastCommitAt: ref.committerdate || null,
+    staleDays,
+    alreadyMerged: merged.exitCode === 0,
+    recommendedOrderGroup: recommendedBranchGroup(ref.short),
+    risk: branchRisk(ref.short, staleDays)
+  };
+}
+
+async function remoteBranchPlanItems(workspace, config, refsOutput, remote, targetBranch, protectedBranches) {
+  const branches = [];
+  const excluded = [];
+  for (const line of String(refsOutput || "").split(/\r?\n/).filter(Boolean)) {
+    const ref = parseRemoteRefLine(line, remote);
+    const exclusion = remoteRefExclusion(ref, remote, protectedBranches);
+    if (exclusion) {
+      if (exclusion.name) excluded.push(exclusion);
+      continue;
+    }
+    branches.push(await remoteBranchCandidate(workspace, config, remote, targetBranch, ref));
+  }
+  return { branches, excluded };
 }
 
 async function relaiGitMergeRemoteBranchesPlan(workspace, config, args = {}) {
   await ensureGitRepo(workspace, config);
   const remote = String(args.remote || "origin").trim();
   const targetBranch = String(args.targetBranch || "production").trim();
-  const protectedBranches = new Set(Array.isArray(workspace.protectedBranches) ? workspace.protectedBranches : ["main", "master"]);
-  protectedBranches.add(targetBranch);
+  const protectedBranches = protectedRemoteBranches(workspace, targetBranch);
   const refs = await runProcess("git", ["for-each-ref", "--format=%(refname:short)|%(committerdate:iso8601)", `refs/remotes/${remote}`], { cwd: workspace.path, timeout: 30000 }, config);
   if (refs.exitCode !== 0) return { ok: false, workspace: workspace.alias, remote, targetBranch, refs: summarizeCommand(refs) };
-  const branches = [];
-  const excluded = [];
-  for (const line of String(refs.stdout || "").split(/\r?\n/).filter(Boolean)) {
-    const [name, committerdate] = line.split("|");
-    if (!name || name === `${remote}/HEAD`) {
-      if (name) excluded.push({ name, reason: "symbolic remote head" });
-      continue;
-    }
-    const short = name.replace(`${remote}/`, "");
-    if (!short || short === remote || name === remote) {
-      excluded.push({ name, reason: "remote name, not a branch" });
-      continue;
-    }
-    if (protectedBranches.has(short)) {
-      excluded.push({ name, reason: "protected or target branch" });
-      continue;
-    }
-    const merged = await runProcess("git", ["merge-base", "--is-ancestor", name, `${remote}/${targetBranch}`], { cwd: workspace.path, timeout: 30000 }, config);
-    const staleDays = committerdate ? Math.max(0, Math.floor((Date.now() - new Date(committerdate).getTime()) / (24 * 60 * 60 * 1000))) : null;
-    const risk = [];
-    if (staleDays != null && staleDays > 45) risk.push("stale branch");
-    if (short.includes("release") || short.includes("prod")) risk.push("name overlaps release flow");
-    const nonUiGroup = short.includes("admin") ? "admin" : "general";
-    branches.push({
-      name,
-      short,
-      lastCommitAt: committerdate || null,
-      staleDays,
-      alreadyMerged: merged.exitCode === 0,
-      recommendedOrderGroup: short.includes("ui") ? "ui" : nonUiGroup,
-      risk
-    });
-  }
+  const { branches, excluded } = await remoteBranchPlanItems(workspace, config, refs.stdout, remote, targetBranch, protectedBranches);
   const mergeCandidates = branches.filter((item) => !item.alreadyMerged).sort(compareMergeCandidates);
   return {
     ok: true,

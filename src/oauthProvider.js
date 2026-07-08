@@ -62,28 +62,47 @@ function writeStore(store) {
 }
 
 // Drop anything past its lifetime so the store does not grow without bound.
-function pruneStore(store) {
-  const now = Date.now();
+function pruneExpiredCollection(collection, now) {
+  for (const [id, entry] of Object.entries(collection || {})) {
+    if (!entry || (entry.expiresAt && entry.expiresAt <= now)) delete collection[id];
+  }
+}
+
+function referencedClientIds(store) {
+  const referenced = new Set();
   for (const key of ["codes", "accessTokens", "refreshTokens"]) {
-    for (const [id, entry] of Object.entries(store[key] || {})) {
-      if (!entry || (entry.expiresAt && entry.expiresAt <= now)) delete store[key][id];
+    for (const entry of Object.values(store[key] || {})) {
+      if (entry?.clientId) referenced.add(entry.clientId);
     }
   }
+  return referenced;
+}
+
+function clientCreatedAt(client) {
+  return client?.created_at && Number(client.created_at) ? Number(client.created_at) : 0;
+}
+
+function shouldPruneClient(clientId, client, referenced, now) {
+  if (referenced.has(clientId)) return false;
+  const createdAt = clientCreatedAt(client);
+  return !createdAt || now - createdAt > REFRESH_TOKEN_TTL_MS;
+}
+
+function pruneStaleClients(store, now) {
+  const referenced = referencedClientIds(store);
+  for (const [clientId, client] of Object.entries(store.clients || {})) {
+    if (shouldPruneClient(clientId, client, referenced, now)) delete store.clients[clientId];
+  }
+}
+
+function pruneStore(store) {
+  const now = Date.now();
+  for (const key of ["codes", "accessTokens", "refreshTokens"]) pruneExpiredCollection(store[key], now);
   // Registration is unauthenticated (RFC 7591), so clients{} would otherwise grow
   // forever — ChatGPT mints a fresh client_id every time the connector is re-added.
   // Keep a client while anything still references it or while it is young enough
   // that a pending authorize/refresh could still come back for it.
-  const referenced = new Set();
-  for (const key of ["codes", "accessTokens", "refreshTokens"]) {
-    for (const entry of Object.values(store[key] || {})) {
-      if (entry && entry.clientId) referenced.add(entry.clientId);
-    }
-  }
-  for (const [clientId, client] of Object.entries(store.clients || {})) {
-    if (referenced.has(clientId)) continue;
-    const createdAt = client && Number(client.created_at) ? Number(client.created_at) : 0;
-    if (!createdAt || now - createdAt > REFRESH_TOKEN_TTL_MS) delete store.clients[clientId];
-  }
+  pruneStaleClients(store, now);
   return store;
 }
 

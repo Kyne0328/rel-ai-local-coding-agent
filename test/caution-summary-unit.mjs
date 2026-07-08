@@ -21,7 +21,7 @@ function isoMinusHours(hours) {
 
 // 1. No audit file -> empty workspaces
 {
-  try { fs.unlinkSync(auditPath); } catch (_) {}
+  fs.rmSync(auditPath, { force: true });
   const r = cautionSummary(config, { windowHours: 24 });
   assert.equal(r.ok, true);
   assert.deepEqual(r.workspaces, []);
@@ -133,7 +133,7 @@ function isoMinusHours(hours) {
 }
 
 // Cleanup
-try { fs.unlinkSync(auditPath); } catch (_) {}
-try { fs.rmdirSync(TMP); } catch (_) {}
+fs.rmSync(auditPath, { force: true });
+fs.rmSync(TMP, { recursive: true, force: true });
 
 console.log('caution-summary unit tests passed.');

@@ -2,22 +2,36 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { selectValidationLevel } = require('../src/validationStrategy.js');
 
+const FIXED_GIT_ENV = Object.freeze({
+  PATH: process.platform === 'win32'
+    ? String.raw`C:\Program Files\Git\cmd;C:\Windows\System32;C:\Windows`
+    : '/usr/bin:/bin',
+  SystemRoot: process.env.SystemRoot || process.env.SYSTEMROOT || String.raw`C:\Windows`,
+  SYSTEMROOT: process.env.SYSTEMROOT || process.env.SystemRoot || String.raw`C:\Windows`
+});
+
+function git(args, cwd) { // NOSONAR - these unit tests intentionally execute the local Git binary.
+  execFileSync('git', args, { cwd, stdio: 'pipe', env: FIXED_GIT_ENV });
+}
+
+function initRepo(dir) {
+  git(['init'], dir);
+  git(['config', 'user.email', 'test@test.com'], dir);
+  git(['config', 'user.name', 'Test'], dir);
+  fs.writeFileSync(path.join(dir, 'initial.txt'), 'init');
+  git(['add', '.'], dir);
+  git(['commit', '-m', 'init'], dir);
+}
+
 function makeTempRepo(filename, content = 'hello') {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-vs-'));
-  const env = { ...process.env };
-  execSync('git init', { cwd: dir, stdio: 'pipe', env });
-  execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe', env });
-  execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe', env });
-  fs.writeFileSync(path.join(dir, 'initial.txt'), 'init');
-  execSync('git add .', { cwd: dir, stdio: 'pipe', env });
-  execSync('git commit -m "init"', { cwd: dir, stdio: 'pipe', env });
-  // Write changed file (unstaged)
+  initRepo(dir);
   const filePath = path.join(dir, filename);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, content);
@@ -31,7 +45,7 @@ function makeTempRepo(filename, content = 'hello') {
   assert.equal(r.reason, 'caller-specified', 'override: reason must be caller-specified');
 }
 
-// 2. Non-git directory → focused fallback
+// 2. Non-git directory -> focused fallback
 {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-vs-nogit-'));
   const r = selectValidationLevel(tmp, {}, null);
@@ -40,16 +54,16 @@ function makeTempRepo(filename, content = 'hello') {
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 
-// 3. Config file (package.json) staged → extended
+// 3. Config file (package.json) staged -> extended
 {
   const dir = makeTempRepo('package.json', '{"name":"test"}');
-  execSync('git add package.json', { cwd: dir, stdio: 'pipe', env: { ...process.env } });
+  git(['add', 'package.json'], dir);
   const r = selectValidationLevel(dir, {}, null);
   assert.equal(r.level, 'extended', 'config-file: level must be extended');
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
-// 4. Single source file unstaged → focused
+// 4. Single source file unstaged -> focused
 {
   const dir = makeTempRepo('src/utils.js', 'module.exports = {}');
   const r = selectValidationLevel(dir, {}, null);
@@ -57,7 +71,7 @@ function makeTempRepo(filename, content = 'hello') {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
-// 5. Markdown file only → minimal
+// 5. Markdown file only -> minimal
 {
   const dir = makeTempRepo('CHANGELOG.md', '# changes');
   const r = selectValidationLevel(dir, {}, null);
@@ -65,7 +79,7 @@ function makeTempRepo(filename, content = 'hello') {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
-// 6. CI workflow file → extended
+// 6. CI workflow file -> extended
 {
   const dir = makeTempRepo('.github/workflows/ci.yml', 'on: push');
   const r = selectValidationLevel(dir, {}, null);
@@ -73,7 +87,7 @@ function makeTempRepo(filename, content = 'hello') {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
-// 7. Invalid override → falls through to auto-select (non-git dir → focused)
+// 7. Invalid override -> falls through to auto-select (non-git dir -> focused)
 {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-vs-inv-'));
   const r = selectValidationLevel(tmp, {}, 'not-a-level');
@@ -81,7 +95,7 @@ function makeTempRepo(filename, content = 'hello') {
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 
-// 8. UI file (contains /ui/) → broad
+// 8. UI file (contains /ui/) -> broad
 {
   const dir = makeTempRepo('src/ui/dashboard.js', 'export default {}');
   const r = selectValidationLevel(dir, {}, null);
@@ -90,22 +104,11 @@ function makeTempRepo(filename, content = 'hello') {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
-// 9. 6+ files across multiple top-level directories → broad
+// 9. 6+ files across multiple top-level directories -> broad
 {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-vs-broad-'));
-  const env = { ...process.env };
-  execSync('git init', { cwd: dir, stdio: 'pipe', env });
-  execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe', env });
-  execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe', env });
-  fs.writeFileSync(path.join(dir, 'initial.txt'), 'init');
-  execSync('git add .', { cwd: dir, stdio: 'pipe', env });
-  execSync('git commit -m "init"', { cwd: dir, stdio: 'pipe', env });
-  // Create 6 files in different top-level dirs
-  const filesToCreate = [
-    'src/a.js', 'lib/b.js', 'utils/c.js',
-    'helpers/d.js', 'core/e.js', 'scripts/f.js'
-  ];
-  for (const f of filesToCreate) {
+  initRepo(dir);
+  for (const f of ['src/a.js', 'lib/b.js', 'utils/c.js', 'helpers/d.js', 'core/e.js', 'scripts/f.js']) {
     const fp = path.join(dir, f);
     fs.mkdirSync(path.dirname(fp), { recursive: true });
     fs.writeFileSync(fp, 'x');
@@ -116,16 +119,10 @@ function makeTempRepo(filename, content = 'hello') {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
-// 10. 2-5 files in one directory → focused (fallback)
+// 10. 2-5 files in one directory -> focused (fallback)
 {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-vs-onedir-'));
-  execSync('git init', { cwd: dir, stdio: 'pipe', env: { ...process.env } });
-  execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe', env: { ...process.env } });
-  execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe', env: { ...process.env } });
-  fs.writeFileSync(path.join(dir, 'initial.txt'), 'init');
-  execSync('git add .', { cwd: dir, stdio: 'pipe', env: { ...process.env } });
-  execSync('git commit -m "init"', { cwd: dir, stdio: 'pipe', env: { ...process.env } });
-  // Create 3 source files in the same directory
+  initRepo(dir);
   for (const name of ['alpha.js', 'beta.js', 'gamma.js']) {
     fs.mkdirSync(path.join(dir, 'src'), { recursive: true });
     fs.writeFileSync(path.join(dir, 'src', name), 'x');

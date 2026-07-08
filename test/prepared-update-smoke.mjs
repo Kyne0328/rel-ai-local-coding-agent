@@ -12,6 +12,18 @@ const { relaiApplyPatch, relaiApplyArchive, relaiSnapshotArchive } = require(
   path.join(__dirname, "..", "src", "localRepoBridge.js")
 );
 
+const FIXED_GIT_ENV = Object.freeze({
+  PATH: process.platform === "win32"
+    ? String.raw`C:\Program Files\Git\cmd;C:\Windows\System32;C:\Windows`
+    : "/usr/bin:/bin",
+  SystemRoot: process.env.SystemRoot || process.env.SYSTEMROOT || String.raw`C:\Windows`,
+  SYSTEMROOT: process.env.SYSTEMROOT || process.env.SystemRoot || String.raw`C:\Windows`
+});
+
+function git(args, options = {}) { // NOSONAR - this smoke test intentionally executes the local Git binary.
+  return execFileSync("git", args, { ...options, env: FIXED_GIT_ENV });
+}
+
 // --- Setup: temp workspace ---
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), "rel-ai-prepared-smoke-"));
 const workspacePath = path.join(temp, "workspace");
@@ -20,15 +32,14 @@ fs.mkdirSync(workspacePath, { recursive: true });
 fs.mkdirSync(stateDir, { recursive: true });
 
 // Init git repo
-const gitEnv = { ...process.env };
-execFileSync("git", ["init"], { cwd: workspacePath, stdio: "ignore", env: gitEnv });
-execFileSync("git", ["config", "user.email", "relai@example.test"], { cwd: workspacePath, env: gitEnv });
-execFileSync("git", ["config", "user.name", "RelAI Prepared Smoke"], { cwd: workspacePath, env: gitEnv });
-execFileSync("git", ["commit", "--allow-empty", "-m", "init"], { cwd: workspacePath, stdio: "ignore", env: gitEnv });
+git(["init"], { cwd: workspacePath, stdio: "ignore" });
+git(["config", "user.email", "relai@example.test"], { cwd: workspacePath });
+git(["config", "user.name", "RelAI Prepared Smoke"], { cwd: workspacePath });
+git(["commit", "--allow-empty", "-m", "init"], { cwd: workspacePath, stdio: "ignore" });
 
 fs.writeFileSync(path.join(workspacePath, "hello.txt"), "Hello, world!\n");
-execFileSync("git", ["add", "hello.txt"], { cwd: workspacePath, env: gitEnv });
-execFileSync("git", ["commit", "-m", "add hello.txt"], { cwd: workspacePath, stdio: "ignore", env: gitEnv });
+git(["add", "hello.txt"], { cwd: workspacePath });
+git(["commit", "-m", "add hello.txt"], { cwd: workspacePath, stdio: "ignore" });
 
 // Build a minimal config object (standard mode — tools must work without requiring "prepared")
 const config = {
@@ -104,9 +115,9 @@ async function testThrows(name, fn, expectedMessage) {
 await test("relaiApplyPatch applies a valid patch in standard mode", async () => {
   // Modify hello.txt so we have a diff
   fs.writeFileSync(path.join(workspacePath, "hello.txt"), "Hello, updated world!\n");
-  const diff = execFileSync("git", ["diff", "hello.txt"], { cwd: workspacePath }).toString("utf8");
+  const diff = git(["diff", "hello.txt"], { cwd: workspacePath }).toString("utf8");
   // Restore to committed state
-  execFileSync("git", ["checkout", "--", "hello.txt"], { cwd: workspacePath });
+  git(["checkout", "--", "hello.txt"], { cwd: workspacePath });
 
   // Now apply the patch
   const result = await relaiApplyPatch(workspace, config, { patch: diff, returnDiff: false });
@@ -115,7 +126,7 @@ await test("relaiApplyPatch applies a valid patch in standard mode", async () =>
   if (!content.includes("updated world")) throw new Error("Patch was not applied to the file");
 
   // Restore
-  execFileSync("git", ["checkout", "--", "hello.txt"], { cwd: workspacePath });
+  git(["checkout", "--", "hello.txt"], { cwd: workspacePath });
 });
 
 // --- Test 2: empty patch fails with correct error ---
@@ -215,11 +226,11 @@ await test("relaiSnapshotArchive excludes .env and .env.local files", async () =
   if (!snapshot.copied) throw new Error("relaiSnapshotArchive did not return copied list");
 
   // Check that .env files are in the skipped list (not in copied)
-  const copiedPaths = snapshot.copied.files.map((f) => f.path);
+  const copiedPaths = new Set(snapshot.copied.files.map((f) => f.path));
   const skippedPaths = snapshot.copied.skipped.map((s) => s.path);
 
-  if (copiedPaths.includes(".env")) throw new Error(".env should be excluded from snapshot");
-  if (copiedPaths.includes(".env.local")) throw new Error(".env.local should be excluded from snapshot");
+  if (copiedPaths.has(".env")) throw new Error(".env should be excluded from snapshot");
+  if (copiedPaths.has(".env.local")) throw new Error(".env.local should be excluded from snapshot");
 
   // Verify .env files are in the skipped list
   const envSkipped = skippedPaths.filter((p) => p === ".env" || p === ".env.local");
@@ -244,14 +255,14 @@ await test("relaiApplyPatch accepts OpenAI patch format directly", async () => {
   if (result.sourceFormat !== "openai-patch") throw new Error(`Expected sourceFormat=openai-patch, got ${result.sourceFormat}`);
   const content = fs.readFileSync(path.join(workspacePath, "hello.txt"), "utf8");
   if (!content.includes("Hello from OpenAI patch")) throw new Error("OpenAI patch did not update hello.txt");
-  execFileSync("git", ["checkout", "--", "hello.txt"], { cwd: workspacePath });
+  git(["checkout", "--", "hello.txt"], { cwd: workspacePath });
 });
 
 // --- Test 10: OpenAI delete file patch is supported ---
 await test("relaiApplyPatch supports OpenAI delete file blocks", async () => {
   fs.writeFileSync(path.join(workspacePath, "obsolete.txt"), "remove me\n");
-  execFileSync("git", ["add", "obsolete.txt"], { cwd: workspacePath });
-  execFileSync("git", ["commit", "-m", "add obsolete.txt"], { cwd: workspacePath, stdio: "ignore" });
+  git(["add", "obsolete.txt"], { cwd: workspacePath });
+  git(["commit", "-m", "add obsolete.txt"], { cwd: workspacePath, stdio: "ignore" });
   const patch = `*** Begin Patch
 *** Delete File: obsolete.txt
 *** End Patch
@@ -262,6 +273,6 @@ await test("relaiApplyPatch supports OpenAI delete file blocks", async () => {
 });
 
 // Cleanup
-try { fs.rmSync(temp, { recursive: true, force: true }); } catch (_e) {}
+fs.rmSync(temp, { recursive: true, force: true });
 
 console.log(`\nPrepared update smoke test passed. (${passed} tests)`);

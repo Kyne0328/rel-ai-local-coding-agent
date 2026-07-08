@@ -46,7 +46,11 @@ export function openModal({ title, content, onClose, escDisabled = false } = {})
 
   // Focus trap
   backdrop.addEventListener('keydown', (e) => {
-    if (!escDisabled && e.key === 'Escape') { closeModal(); if (onClose) onClose(); return; }
+    if (!escDisabled && e.key === 'Escape') {
+      closeModal();
+      if (onClose) onClose();
+      return;
+    }
     if (e.key !== 'Tab') return;
     const els = Array.from(dialog.querySelectorAll('button,input,select,textarea,[tabindex]:not([tabindex="-1"])'));
     if (!els.length) { e.preventDefault(); return; }

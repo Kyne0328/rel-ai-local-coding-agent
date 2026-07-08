@@ -5,8 +5,16 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 
+const FIXED_GIT_ENV = Object.freeze({
+  PATH: process.platform === 'win32'
+    ? String.raw`C:\Program Files\Git\cmd;C:\Windows\System32;C:\Windows`
+    : '/usr/bin:/bin',
+  SystemRoot: process.env.SystemRoot || process.env.SYSTEMROOT || String.raw`C:\Windows`,
+  SYSTEMROOT: process.env.SYSTEMROOT || process.env.SystemRoot || String.raw`C:\Windows`
+});
+
 function git(args, options = {}) { // NOSONAR - these unit tests intentionally execute the local Git binary.
-  return execFileSync('git', args, options);
+  return execFileSync('git', args, { ...options, env: FIXED_GIT_ENV });
 }
 
 const require = createRequire(import.meta.url);

@@ -39,8 +39,8 @@ let stderr = '';
 child.stderr.on('data', (chunk) => { stderr += chunk.toString('utf8'); });
 
 function cleanup() {
-  try { child.kill('SIGKILL'); } catch (_) {}
-  try { fs.rmSync(stateDir, { recursive: true, force: true }); } catch (_) {}
+  if (!child.killed) child.kill('SIGKILL');
+  fs.rmSync(stateDir, { recursive: true, force: true });
 }
 
 function fail(message) {
@@ -54,7 +54,9 @@ async function waitForHealth() {
     try {
       const res = await fetch(`${base}/health`);
       if (res.ok) return;
-    } catch (_) {}
+    } catch (error) {
+      if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] oauth health wait:', error);
+    }
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   fail(`server did not become healthy. stderr:\n${stderr}`);
@@ -144,9 +146,9 @@ if (asm.issuer !== base
   || asm.authorization_endpoint !== `${base}/authorize`
   || asm.token_endpoint !== `${base}/token`
   || asm.registration_endpoint !== `${base}/register`
-  || !asm.code_challenge_methods_supported.includes('S256')
-  || !asm.grant_types_supported.includes('authorization_code')
-  || !asm.grant_types_supported.includes('refresh_token')) {
+  || !asm.code_challenge_methods_supported?.includes('S256')
+  || !asm.grant_types_supported?.includes('authorization_code')
+  || !asm.grant_types_supported?.includes('refresh_token')) {
   fail(`authorization-server metadata malformed: ${JSON.stringify(asm)}`);
 }
 
@@ -198,7 +200,7 @@ const tokenRes = await postForm('/token', {
 });
 if (tokenRes.status !== 200) fail(`POST /token expected 200, got ${tokenRes.status}`);
 const tokens = await tokenRes.json();
-if (!tokens.access_token || tokens.token_type !== 'Bearer' || !tokens.refresh_token || !(tokens.expires_in > 0)) {
+if (!tokens.access_token || tokens.token_type !== 'Bearer' || !tokens.refresh_token || tokens.expires_in <= 0) {
   fail(`token response malformed: ${JSON.stringify(tokens)}`);
 }
 
@@ -270,5 +272,5 @@ const refreshedMcp = await fetch(`${base}/mcp`, {
 if (refreshedMcp.status !== 200) fail(`refreshed access token did not authenticate POST /mcp, got ${refreshedMcp.status}`);
 
 cleanup();
-await once(child, 'close').catch(() => {});
+await once(child, 'close');
 console.log('OAuth smoke test passed: discovery, registration, PKCE authorization-code, token, refresh, and protected /mcp all verified.');

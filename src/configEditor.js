@@ -122,7 +122,14 @@ function _handlePruneCommands(alias, payload, next) {
   if (!ws) throw new Error(`Workspace '${alias}' is not configured.`);
   const configured = ws.testCommands && typeof ws.testCommands === "object" ? ws.testCommands : {};
   let discovered;
-  try { discovered = discoverCommands(ws.path) || {}; } catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] prune command discovery:', error); discovered = {}; }
+  try {
+    discovered = discoverCommands(ws.path) || {};
+  } catch (error) {
+    if (process.env.REL_AI_MCP_DEBUG) {
+      console.error('[rel-ai-mcp] prune command discovery:', error);
+    }
+    discovered = {};
+  }
   if (Object.keys(discovered).length === 0 && !(ws.path && fs.existsSync(ws.path))) {
     throw new Error(`Cannot determine stale commands for '${alias}': workspace path is unavailable. Fix the path first.`);
   }

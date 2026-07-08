@@ -59,7 +59,7 @@ const forbiddenInDashboard = [
 const dashboardFindings = [];
 for (const item of forbiddenInDashboard) {
   if (item.pattern.test(dashboardJson)) {
-    dashboardFindings.push(`Dashboard JSON contains forbidden term: "${item.label}"`);
+    dashboardFindings.push('Dashboard JSON contains a forbidden workflow term.');
   }
 }
 
@@ -109,7 +109,7 @@ for (const tool of toolsArray) {
   const desc = String(tool.description || '').toLowerCase();
   for (const forbidden of forbiddenInToolDescriptions) {
     if (desc.includes(forbidden)) {
-      toolDescriptionFindings.push(`Tool "${tool.name}" description contains forbidden word: "${forbidden}" — found in: "${tool.description}"`);
+      toolDescriptionFindings.push('Tool description contains a forbidden wording pattern.');
     }
   }
 }
@@ -119,7 +119,7 @@ const runChecksTool = toolsArray.find((t) => t.name === 'relai_run_checks');
 if (!runChecksTool) {
   toolDescriptionFindings.push('relai_run_checks tool was not found in /api/tools response');
 } else if (!String(runChecksTool.description || '').toLowerCase().includes('validation checks')) {
-  toolDescriptionFindings.push(`relai_run_checks description must contain "validation checks" — got: "${runChecksTool.description}"`);
+  toolDescriptionFindings.push('relai_run_checks description must contain "validation checks".');
 }
 
 if (toolDescriptionFindings.length) {

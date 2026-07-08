@@ -7,21 +7,33 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const skip = new Set(['node_modules', '.git']);
 const files = [];
 
+function isJavaScriptFile(name) {
+  return name.endsWith('.js') || name.endsWith('.mjs');
+}
+
+function hasModuleSyntax(source) {
+  return String(source || '').split(/\r?\n/).some((line) => {
+    const trimmed = line.trimStart();
+    return trimmed.startsWith('import ') || trimmed.startsWith('export ');
+  });
+}
+
 function walk(dir) {
   for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
     if (skip.has(item.name)) continue;
     const full = path.join(dir, item.name);
     if (item.isDirectory()) walk(full);
-    else if (/\.(?:js|mjs)$/.test(item.name)) files.push(full);
+    else if (isJavaScriptFile(item.name)) files.push(full);
   }
 }
 
 walk(root);
+files.sort((a, b) => a.localeCompare(b));
 
-for (const file of files.sort((a, b) => a.localeCompare(b))) {
+for (const file of files) {
   const relative = path.relative(root, file);
   const source = fs.readFileSync(file, 'utf8');
-  const parseAsModule = file.endsWith('.mjs') || /(^|\n)\s*(import|export)\s/m.test(source);
+  const parseAsModule = file.endsWith('.mjs') || hasModuleSyntax(source);
   const args = parseAsModule ? ['--input-type=module', '--check'] : ['--check', file];
   const options = parseAsModule
     ? { cwd: root, encoding: 'utf8', input: source }

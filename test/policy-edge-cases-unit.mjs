@@ -15,7 +15,7 @@ function sessionPath(alias) { return path.join(TMP, 'sessions', `${alias}-policy
 
 function ensureSessionsDir() { fs.mkdirSync(path.join(TMP, 'sessions'), { recursive: true }); }
 
-function clear() { try { fs.unlinkSync(sessionPath(ALIAS)); } catch (_) {} }
+function clear() { fs.rmSync(sessionPath(ALIAS), { force: true }); }
 
 // 1. resolvePolicy with no session -> inactive
 {
@@ -137,7 +137,7 @@ function clear() { try { fs.unlinkSync(sessionPath(ALIAS)); } catch (_) {} }
 
 // Cleanup
 clear();
-try { fs.rmdirSync(path.join(TMP, 'sessions')); } catch (_) {}
-try { fs.rmdirSync(TMP); } catch (_) {}
+fs.rmSync(path.join(TMP, 'sessions'), { recursive: true, force: true });
+fs.rmSync(TMP, { recursive: true, force: true });
 
 console.log('policy edge-cases unit tests passed.');

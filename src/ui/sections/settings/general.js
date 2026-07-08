@@ -44,13 +44,13 @@ function _render(container) {
   workflow.body.appendChild(field('Mode', selectControl([
     { value: 'standard', label: 'Focused edits and guarded writes' },
     { value: 'prepared', label: 'Prepared update and bundle apply' }
-  ], (_draft.workflow || {}).mode || 'standard', (value) => {
+  ], _draft.workflow?.mode || 'standard', (value) => {
     if (value === 'prepared' && !confirmFastFlow()) return;
     _draft.workflow ??= {};
     _draft.workflow.mode = value;
     _checkDirty();
   }), 'Both options keep the same workspace-tool surface. Prepared update mode adds bundle apply and snapshot packaging (relai_apply_bundle, relai_package_snapshot) alongside relai_edit patch updates for larger changes.'));
-  const prepared = (_draft.workflow && _draft.workflow.prepared) || {};
+  const prepared = _draft.workflow?.prepared || {};
   workflow.body.appendChild(field('Require clean git before prepared apply', toggleControl(prepared.requireCleanGit !== false, (v) => {
     _draft.workflow ??= {};
     _draft.workflow.prepared ??= {};

@@ -35,76 +35,99 @@ function main() {
 }
 
 async function handleMessage(message, options = {}) {
-  const publicHttpOnly = Boolean(options.publicHttpOnly);
-  const publicCompatOnly = Boolean(options.publicCompatOnly);
-  const publicOnly = publicHttpOnly || publicCompatOnly;
-  const visibleTools = publicOnly ? getPublicToolSchemas() : getToolSchemas();
   if (!message || message.jsonrpc !== "2.0") {
-    return jsonRpcError(message?.id !== undefined ? message.id : null, -32600, "Invalid Request");
+    return jsonRpcError(messageId(message), -32600, "Invalid Request");
   }
   if (message.id === undefined) {
     await handleNotification(message);
     return null;
   }
   try {
-    switch (message.method) {
-      case "initialize": {
-        const config = readConfig({ allowMissing: true });
-        if (
-          !publicHttpOnly &&
-          Object.hasOwn(message.params || {}, "protocolVersion") &&
-          Number(config.sourceVersion || config.version || 0) >= 2
-        ) {
-          options.publicCompatOnly = false;
-        } else if (!publicHttpOnly && options.publicCompatOnly) {
-          // stdio clients silently get the stripped public surface on older configs;
-          // surface why so a missing relai_edit etc. is diagnosable.
-          console.error("[rel-ai-mcp] stdio compat mode: exposing the public tool surface only (config sourceVersion < 2). Re-run init-config to unlock the full tool set.");
-        }
-        return result(message.id, {
-          protocolVersion: message.params?.protocolVersion || "2025-06-18",
-          capabilities: { tools: { listChanged: true }, resources: { subscribe: false, listChanged: true } },
-          serverInfo: { name: pkg.name, version: pkg.version }
-        });
-      }
-      case "ping":
-        return result(message.id, {});
-      case "tools/list":
-        return result(message.id, { tools: visibleTools });
-      case "resources/list":
-        return result(message.id, listResources());
-      case "resources/read": {
-        const uri = message.params?.uri;
-        if (!uri) return jsonRpcError(message.id, -32602, "Missing resource uri.");
-        return result(message.id, readResource(uri));
-      }
-      case "tools/call": {
-        const params = message.params || {};
-        const name = params.name;
-        const args = params.arguments || {};
-        if (!name) return jsonRpcError(message.id, -32602, "Missing tool name.");
-        if (publicOnly && BRIDGE_TOOL_NAMES.includes(name) && !PUBLIC_HTTP_TOOL_NAMES.includes(name)) {
-          return result(message.id, toolResult({
-            ok: false,
-            error: `Tool '${name}' is not available on the public workspace-tool surface.`
-          }, true));
-        }
-        try {
-          const output = await callTool(name, args, { publicHttpOnly });
-          return result(message.id, toolResult(output, false));
-        } catch (error) {
-          const payload = {
-            ok: false,
-            error: error instanceof Error ? error.message : String(error)
-          };
-          return result(message.id, toolResult(payload, true));
-        }
-      }
-      default:
-        return jsonRpcError(message.id, -32601, `Method not found: ${message.method}`);
-    }
+    return await dispatchMessage(message, options, requestVisibility(options));
   } catch (error) {
     return jsonRpcError(message.id, -32603, "Internal error", error instanceof Error ? error.message : String(error));
+  }
+}
+
+function messageId(message) {
+  return message?.id !== undefined ? message.id : null;
+}
+
+function requestVisibility(options) {
+  const publicHttpOnly = Boolean(options.publicHttpOnly);
+  const publicCompatOnly = Boolean(options.publicCompatOnly);
+  const publicOnly = publicHttpOnly || publicCompatOnly;
+  return {
+    publicHttpOnly,
+    publicOnly,
+    visibleTools: publicOnly ? getPublicToolSchemas() : getToolSchemas()
+  };
+}
+
+async function dispatchMessage(message, options, visibility) {
+  switch (message.method) {
+    case "initialize":
+      return handleInitialize(message, options, visibility);
+    case "ping":
+      return result(message.id, {});
+    case "tools/list":
+      return result(message.id, { tools: visibility.visibleTools });
+    case "resources/list":
+      return result(message.id, listResources());
+    case "resources/read":
+      return handleResourceRead(message);
+    case "tools/call":
+      return handleToolCall(message, visibility);
+    default:
+      return jsonRpcError(message.id, -32601, `Method not found: ${message.method}`);
+  }
+}
+
+function handleInitialize(message, options, visibility) {
+  const config = readConfig({ allowMissing: true });
+  const hasProtocolVersion = Object.hasOwn(message.params || {}, "protocolVersion");
+  if (!visibility.publicHttpOnly && hasProtocolVersion && Number(config.sourceVersion || config.version || 0) >= 2) {
+    options.publicCompatOnly = false;
+  } else if (!visibility.publicHttpOnly && options.publicCompatOnly) {
+    // stdio clients silently get the stripped public surface on older configs;
+    // surface why so a missing relai_edit etc. is diagnosable.
+    console.error("[rel-ai-mcp] stdio compat mode: exposing the public tool surface only (config sourceVersion < 2). Re-run init-config to unlock the full tool set.");
+  }
+  return result(message.id, {
+    protocolVersion: message.params?.protocolVersion || "2025-06-18",
+    capabilities: { tools: { listChanged: true }, resources: { subscribe: false, listChanged: true } },
+    serverInfo: { name: pkg.name, version: pkg.version }
+  });
+}
+
+function handleResourceRead(message) {
+  const uri = message.params?.uri;
+  if (!uri) return jsonRpcError(message.id, -32602, "Missing resource uri.");
+  return result(message.id, readResource(uri));
+}
+
+function hiddenBridgeTool(name, visibility) {
+  return visibility.publicOnly && BRIDGE_TOOL_NAMES.includes(name) && !PUBLIC_HTTP_TOOL_NAMES.includes(name);
+}
+
+async function handleToolCall(message, visibility) {
+  const params = message.params || {};
+  const name = params.name;
+  if (!name) return jsonRpcError(message.id, -32602, "Missing tool name.");
+  if (hiddenBridgeTool(name, visibility)) {
+    return result(message.id, toolResult({
+      ok: false,
+      error: `Tool '${name}' is not available on the public workspace-tool surface.`
+    }, true));
+  }
+  try {
+    const output = await callTool(name, params.arguments || {}, { publicHttpOnly: visibility.publicHttpOnly });
+    return result(message.id, toolResult(output, false));
+  } catch (error) {
+    return result(message.id, toolResult({
+      ok: false,
+      error: error instanceof Error ? error.message : String(error)
+    }, true));
   }
 }
 

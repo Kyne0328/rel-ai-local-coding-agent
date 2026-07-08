@@ -152,7 +152,9 @@ async function waitForHealth() {
     try {
       const res = await fetch(`http://127.0.0.1:${port}/health`);
       if (res.ok) return res.json();
-    } catch (_error) {}
+    } catch (error) {
+      if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] regression health wait:', error);
+    }
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   throw new Error(`HTTP server did not become healthy. stderr:\n${stderr}`);

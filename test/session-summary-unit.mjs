@@ -50,7 +50,11 @@ const noSessionPolicy = { trusted: true, sessionActive: false, sessionCreatedAt:
     { ts: '2026-05-26T12:02:00.000Z', tool: 'relai_clear_files', workspace: 'myapp', ok: true, filePaths: ['src/old.js', 'src/auth.js'] },
   ];
   const result = buildSessionSummary(entries, 'myapp', noSessionPolicy);
-  assert.deepEqual(result.filesChanged.sort((a, b) => a.localeCompare(b)), ['src/auth.js', 'src/old.js'].sort((a, b) => a.localeCompare(b)));
+  const actualFilesChanged = [...result.filesChanged];
+  const expectedFilesChanged = ['src/auth.js', 'src/old.js'];
+  actualFilesChanged.sort((a, b) => a.localeCompare(b));
+  expectedFilesChanged.sort((a, b) => a.localeCompare(b));
+  assert.deepEqual(actualFilesChanged, expectedFilesChanged);
   console.log('3. filesChanged dedup: OK');
 }
 

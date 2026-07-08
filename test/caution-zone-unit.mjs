@@ -120,7 +120,7 @@ const { classifyCaution } = require('../src/cautionZone.js');
 
 // 16. Backslash path normalized
 {
-  const r = classifyCaution('relai_write', { path: '.github\\workflows\\ci.yml' }, {}, {});
+  const r = classifyCaution('relai_write', { path: String.raw`.github\workflows\ci.yml` }, {}, {});
   assert.equal(r.level, 'caution');
   console.log('16. backslash path: OK');
 }

@@ -242,7 +242,7 @@ async function saveDetectedTests(alias) {
     ? dashboard.config.workspaces.find(item => item.alias === alias)
     : null;
   if (!ws) return { ok: false, error: 'workspace not found' };
-  const discovered = ws.discoveredCommands || {};
+  const discovered = objectOrEmpty(ws.discoveredCommands);
   const keys = Array.isArray(ws.discoveredTestCommandKeys) ? ws.discoveredTestCommandKeys : [];
   const testCommands = {};
   for (const key of keys) if (discovered[key]) testCommands[key] = discovered[key];
@@ -297,7 +297,7 @@ async function renameWorkspaceFlow(alias) {
 async function toggleFastTaskFlow(alias) {
   const ws = await loadWorkspace(alias);
   if (!ws) return;
-  const fastTask = { ...(ws.fastTask || {}), enabled: ws.fastTask?.enabled === false };
+  const fastTask = { ...objectOrEmpty(ws.fastTask), enabled: ws.fastTask?.enabled === false };
   const result = await saveWorkspaceFastTask(ws, fastTask);
   if (result?.ok) {
     toast('Focused context ' + (fastTask.enabled ? 'enabled' : 'disabled') + ' for ' + alias, { variant: 'success' });
@@ -310,7 +310,7 @@ async function toggleFastTaskFlow(alias) {
 async function editFastTaskFlow(alias) {
   const ws = await loadWorkspace(alias);
   if (!ws) return;
-  const current = ws.fastTask || {};
+  const current = objectOrEmpty(ws.fastTask);
   const maxIndexFiles = window.prompt('Max files for focused context', String(current.maxIndexFiles || 750));
   if (maxIndexFiles == null) return;
   const includeRoots = window.prompt('Optional include roots, comma-separated. Leave blank to scan all non-excluded source files.', Array.isArray(current.includeRoots) ? current.includeRoots.join(', ') : '');
@@ -385,6 +385,10 @@ function saveWorkspaceFastTask(ws, fastTask) {
     fastTask,
     confirmDangerous: true
   });
+}
+
+function objectOrEmpty(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 }
 
 function splitList(value) {

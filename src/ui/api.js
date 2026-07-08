@@ -51,7 +51,8 @@ function timeoutFor(timeout) {
 function authHeaders(fetchOpts, token) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers.Authorization = 'Bearer ' + token;
-  return { ...headers, ...(fetchOpts.headers || {}) };
+  if (fetchOpts.headers) Object.assign(headers, fetchOpts.headers);
+  return headers;
 }
 
 async function parseJsonResponse(res) {

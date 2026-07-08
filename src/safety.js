@@ -268,7 +268,7 @@ function shouldExcludeRelativePath(rel, name, policy) {
 }
 
 function escapeRegExp(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }
 
 function matchesIgnorePattern(rel, pattern) {

@@ -136,7 +136,7 @@ function getReleaseNotes() {
   try {
     const md = fs.readFileSync(path.join(__dirname, "..", "CHANGELOG.md"), "utf8");
     const parsed = parseChangelog(md);
-    if (parsed && parsed.version) return parsed;
+    if (parsed?.version) return parsed;
   } catch (error) {
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] release notes:', error);
   }

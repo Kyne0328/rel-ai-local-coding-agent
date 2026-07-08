@@ -113,7 +113,7 @@ function attachPost(result, post) {
   if (post.diff) result.diff = post.diff;
   // A failed post-check makes the whole call not-ok so callers do not treat a
   // broken build as a clean edit.
-  if (post.checks && post.checks.ok === false) result.ok = false;
+  if (post.checks?.ok === false) result.ok = false;
   return result;
 }
 

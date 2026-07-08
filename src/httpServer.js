@@ -333,7 +333,7 @@ const NOT_FOUND_PAYLOAD = {
 };
 
 async function routeRequest(req, res, options) {
-  setBaseHeaders(req, res);
+  setBaseHeaders(req, res, options);
   const ae = req.headers["accept-encoding"] || "";
   const parsed = new URL(req.url || "/", "http://127.0.0.1");
 
@@ -745,19 +745,23 @@ async function readFormOrJsonBody(req, maxBytes) {
 // local HTTP responses cross-origin. Requests with no Origin header (server-to-server
 // MCP, curl, the same-origin dashboard) are unaffected; CORS only governs browser
 // cross-origin reads.
-function allowedCorsOrigin(origin) {
-  if (!origin) return "";
-  try {
-    const { hostname, protocol, port } = new URL(origin);
-    if (hostname === "127.0.0.1" || hostname === "localhost" || hostname === "[::1]") {
-      return protocol + "//" + hostname + (port ? ":" + port : "");
-    }
-  } catch {}
-  return "";
+function fixedCorsOrigins(options = {}) {
+  const port = Number(options.port || 3333);
+  return new Set([
+    `http://127.0.0.1:${port}`,
+    `http://localhost:${port}`,
+    `http://[::1]:${port}`
+  ]);
 }
 
-function setBaseHeaders(req, res) {
-  const corsOrigin = allowedCorsOrigin(req?.headers?.origin ?? "");
+function allowedCorsOrigin(origin, options = {}) {
+  const value = String(origin || "");
+  if (!value) return "";
+  return fixedCorsOrigins(options).has(value) ? value : "";
+}
+
+function setBaseHeaders(req, res, options = {}) {
+  const corsOrigin = allowedCorsOrigin(req?.headers?.origin ?? "", options);
   if (corsOrigin) {
     res.setHeader("Access-Control-Allow-Origin", corsOrigin);
     res.setHeader("Vary", "Origin");

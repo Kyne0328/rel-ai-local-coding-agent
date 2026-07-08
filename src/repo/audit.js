@@ -29,7 +29,7 @@ function isLikelyGeneratedFile(relativePath) {
 function fileCategory(relativePath) {
   const normalized = String(relativePath || "").replaceAll(path.win32.sep, "/");
   if (/(^|\/)(test|tests|__tests__)\//.test(normalized) || /\.test\./.test(normalized) || /\.spec\./.test(normalized)) return "tests";
-  if (/(^|\/)(docs|doc)\//.test(normalized) || /\.md$/.test(normalized)) return "docs";
+  if (/(^|\/)(docs|doc)\//.test(normalized) || normalized.endsWith(".md")) return "docs";
   if (/(^|\/)(public|assets|ui|views|templates)\//.test(normalized)) return "ui";
   if (/(schema|migration|migrations|sql)/i.test(normalized)) return "data";
   return "source";

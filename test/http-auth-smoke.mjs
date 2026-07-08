@@ -50,7 +50,8 @@ async function check(label, fn) {
     console.log(`  ✓ ${label}`);
   } catch (error) {
     console.error(`  ✗ ${label}`);
-    console.error(`    ${error instanceof Error ? error.message : String(error)}`);
+    console.error('    smoke check failed');
+    if (process.env.REL_AI_MCP_DEBUG) console.error(error);
     process.exitCode = 1;
   }
 }
