@@ -86,7 +86,7 @@
   h1 { font-size: 24px; line-height: 1.05; margin-bottom: 10px; letter-spacing: -.04em; }
   h2 { font-size: 19px; line-height: 1.15; margin-bottom: 8px; letter-spacing: -.025em; }
   .subtitle { color: var(--muted); font-size: 13px; line-height: 1.55; margin-bottom: 16px; }
-  label {
+  label, .field-label {
     display: block;
     margin: 14px 0 7px;
     color: var(--muted);
@@ -243,7 +243,7 @@
       <div class="step" id="step3">
         <h2>Dashboard approval token</h2>
         <p class="subtitle">This protects the local dashboard and is also used when ChatGPT opens the OAuth approval page.</p>
-        <label>Your Rel.AI token</label>
+        <div class="field-label">Your Rel.AI token</div>
         <div class="token-box" id="tokenBox"></div>
         <div class="btn-row">
           <button class="btn-secondary" id="copyTokenBtn">Copy token</button>

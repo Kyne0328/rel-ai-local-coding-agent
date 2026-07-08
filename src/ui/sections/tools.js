@@ -1,8 +1,8 @@
 // Tools section - visible ChatGPT local repo bridge tools only
-import { fetchJson } from '/ui/api.js';
-import { badgeHtml } from '/ui/components/badge.js';
-import { EmptyState } from '/ui/components/empty-state.js';
-import { esc } from '/ui/utils.js';
+import { fetchJson } from '../api.js';
+import { badgeHtml } from '../components/badge.js';
+import { EmptyState } from '../components/empty-state.js';
+import { esc } from '../utils.js';
 
 let _mounted = 0;
 

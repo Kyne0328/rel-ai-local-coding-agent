@@ -48,8 +48,9 @@ async function check(label, fn) {
   try {
     await fn();
     console.log(`  ✓ ${label}`);
-  } catch {
+  } catch (error) {
     console.error(`  ✗ ${label}`);
+    console.error(`    ${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 1;
   }
 }
@@ -161,25 +162,6 @@ await check('POST /mcp/wrong-secret — no bearer → 401 or 404', async () => {
   }
 });
 
-// body limit — POST /mcp with 2.5 MB+ body → 413 or error (server configured with 1 MB limit)
-await check('body limit — POST /mcp with 2.5 MB+ body → 4xx or 5xx or connection error', async () => {
-  const oversized = 'x'.repeat(2.5 * 1024 * 1024);
-  const payload = JSON.stringify({ jsonrpc: '2.0', id: 99, method: 'tools/list', params: { _pad: oversized } });
-  let status;
-  try {
-    const res = await fetch(`${base}/mcp`, {
-      method: 'POST',
-      headers: { ...jsonType, ...bearer },
-      body: payload
-    });
-    status = res.status;
-  } catch {
-    // Connection destroyed by server — that counts as the limit being enforced
-    return;
-  }
-  if (status < 400) throw new Error(`expected error status for oversized body, got ${status}`);
-});
-
 // Regression: a multi-byte UTF-8 character split across two body chunks must
 // decode intact (readRawBody used to decode per-chunk, yielding U+FFFD halves).
 await check('multibyte body split across chunks decodes intact', async () => {
@@ -209,6 +191,25 @@ await check('multibyte body split across chunks decodes intact', async () => {
   if (!Array.isArray(body.redirect_uris) || body.redirect_uris[0] !== uri) {
     throw new Error(`multibyte content corrupted in transit: ${body.redirect_uris?.[0]}`);
   }
+});
+
+// body limit — POST /mcp with 2.5 MB+ body → 413 or error (server configured with 1 MB limit)
+await check('body limit — POST /mcp with 2.5 MB+ body → 4xx or 5xx or connection error', async () => {
+  const oversized = 'x'.repeat(2.5 * 1024 * 1024);
+  const payload = JSON.stringify({ jsonrpc: '2.0', id: 99, method: 'tools/list', params: { _pad: oversized } });
+  let status;
+  try {
+    const res = await fetch(`${base}/mcp`, {
+      method: 'POST',
+      headers: { ...jsonType, ...bearer, connection: 'close' },
+      body: payload
+    });
+    status = res.status;
+  } catch {
+    // Connection destroyed by server — that counts as the limit being enforced.
+    return;
+  }
+  if (status < 400) throw new Error(`expected error status for oversized body, got ${status}`);
 });
 
 child.kill('SIGKILL');

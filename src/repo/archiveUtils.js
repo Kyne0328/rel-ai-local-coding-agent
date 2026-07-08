@@ -21,7 +21,7 @@ function resolveHostPath(value) {
 }
 
 function quotePowerShell(value) {
-  return `'${String(value).replace(/'/g, "''")}'`;
+  return `'${String(value).replaceAll("'", "''")}'`;
 }
 
 function buildZipCommand(platform, sourceDir, archivePath) {
@@ -161,11 +161,12 @@ function walkArchiveTarget(root, prefix, onFile, skipped) {
 }
 
 function shouldSkipArchivePath(relativePath, entry) {
-  const normalized = String(relativePath || "").replace(/\\/g, "/");
+  const normalized = String(relativePath || "").replaceAll("\\", "/");
   if (!normalized || normalized.includes("/../") || normalized.startsWith("../")) return true;
   if (AGGRESSIVE_ARCHIVE_EXCLUDED_NAMES.has(entry.name) || AGGRESSIVE_ARCHIVE_EXCLUDED_NAMES.has(normalized)) return true;
   for (const pattern of AGGRESSIVE_ARCHIVE_EXCLUDED_PATHS) {
-    if (normalized === pattern.replace(/\/$/, "") || normalized.startsWith(pattern)) return true;
+    const trimmedPattern = pattern.endsWith("/") ? pattern.slice(0, -1) : pattern;
+    if (normalized === trimmedPattern || normalized.startsWith(pattern)) return true;
   }
   // Skip any .env* files (e.g. .env, .env.local, .env.production, .env-staging)
   if (/^\.env($|[./-])/i.test(entry.name)) return true;

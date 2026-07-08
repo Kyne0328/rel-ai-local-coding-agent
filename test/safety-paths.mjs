@@ -85,7 +85,7 @@ for (const p of traversalPaths) {
 console.log("Testing validateRelativePath — safe paths that must not throw...");
 for (const p of safePaths) {
   const result = validateRelativePath(p);
-  assert.equal(result, p.replace(/\\/g, "/"), `Expected validateRelativePath to return normalised path for: ${p}`);
+  assert.equal(result, p.replaceAll("\\", "/"), `Expected validateRelativePath to return normalised path for: ${p}`);
   console.log(`  OK: ${p}`);
 }
 

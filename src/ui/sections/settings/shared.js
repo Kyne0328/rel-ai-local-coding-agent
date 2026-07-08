@@ -1,8 +1,8 @@
-import { fetchJson, postJson, invalidateCache, DASHBOARD_DATA_URL } from '/ui/api.js';
-import { toast } from '/ui/components/toast.js';
-import { Toggle } from '/ui/components/toggle.js';
-import { Select } from '/ui/components/select.js';
-import { esc, titleize } from '/ui/utils.js';
+import { fetchJson, postJson, invalidateCache, DASHBOARD_DATA_URL } from '../../api.js';
+import { toast } from '../../components/toast.js';
+import { Toggle } from '../../components/toggle.js';
+import { Select } from '../../components/select.js';
+import { esc, titleize } from '../../utils.js';
 
 export async function loadSettingsConfig(container) {
   const payload = await fetchJson('/api/settings');

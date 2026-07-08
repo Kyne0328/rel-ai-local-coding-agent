@@ -1,9 +1,9 @@
 // Activity section — full: toolbar, filters, drawer, pause-live
-import { fetchJson } from '/ui/api.js';
-import { openDrawer } from '/ui/components/drawer.js';
-import { pillHtml } from '/ui/components/pill.js';
-import { virtualizeTable } from '/ui/components/table.js';
-import { esc, timeAgo } from '/ui/utils.js';
+import { fetchJson } from '../api.js';
+import { openDrawer } from '../components/drawer.js';
+import { pillHtml } from '../components/pill.js';
+import { virtualizeTable } from '../components/table.js';
+import { esc, timeAgo } from '../utils.js';
 
 let _allEntries = [];
 let _paused = false;

@@ -244,7 +244,7 @@ function stateImport(config, args = {}) {
   const written = [];
   for (const item of payload.files) {
     if (!item || !item.path || typeof item.content !== "string") continue;
-    const relative = String(item.path).replace(/\\/g, "/");
+    const relative = String(item.path).replaceAll("\\", "/");
     if (relative.startsWith("/") || relative.includes("..")) throw new Error(`Unsafe state path: ${relative}`);
     const target = path.join(stateDir, relative);
     fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
@@ -325,7 +325,7 @@ function walkState(root, current, files, maxFiles, maxFileBytes) {
     else {
       const stat = fs.statSync(full);
       if (stat.size > maxFileBytes) continue;
-      const relative = path.relative(root, full).replace(/\\/g, "/");
+      const relative = path.relative(root, full).replaceAll("\\", "/");
       files.push({ path: relative, modifiedAt: stat.mtime.toISOString(), content: fs.readFileSync(full, "utf8") });
     }
   }

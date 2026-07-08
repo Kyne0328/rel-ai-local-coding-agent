@@ -1,5 +1,5 @@
-import { fetchJson } from '/ui/api.js';
-import { toast } from '/ui/components/toast.js';
+import { fetchJson } from '../../api.js';
+import { toast } from '../../components/toast.js';
 
 export function mountConnector(container) {
   container.innerHTML = '<div style="padding:8px 0;color:var(--text-muted);font-size:13px;">Loading…</div>';

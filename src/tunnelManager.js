@@ -171,11 +171,19 @@ function readNgrokApiUrl(port = 4040) {
   });
 }
 
+function trimUrlPunctuation(value) {
+  let text = String(value || "");
+  while (text.endsWith(")") || text.endsWith(".") || text.endsWith(",") || text.endsWith(";")) {
+    text = text.slice(0, -1);
+  }
+  return text;
+}
+
 function extractPublicUrl(text, pattern) {
   const source = String(text || "");
   const providerMatch = (pattern || HTTPS_URL_RE).exec(source);
   const genericMatch = providerMatch || HTTPS_URL_RE.exec(source);
-  return genericMatch ? genericMatch[0].replace(/[).,;]+$/, "") : "";
+  return genericMatch ? trimUrlPunctuation(genericMatch[0]) : "";
 }
 
 async function startTunnel({ provider = "none", port = 3333, localUrl = "", command = "", timeoutMs = 30000, onLog = () => {}, onProcess = () => {} } = {}) {

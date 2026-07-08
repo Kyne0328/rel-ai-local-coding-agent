@@ -14,7 +14,8 @@ function makeTempRepo(filename = 'hello.js', content = 'module.exports = {};') {
   execSync('git init', { cwd: dir, stdio: 'pipe', env });
   execSync('git config user.email "test@test.com"', { cwd: dir, stdio: 'pipe', env });
   execSync('git config user.name "Test"', { cwd: dir, stdio: 'pipe', env });
-  fs.writeFileSync(path.join(dir, 'README.md'), '# test\n');
+  fs.mkdirSync(path.dirname(path.join(dir, filename)), { recursive: true });
+  fs.writeFileSync(path.join(dir, filename), content);
   execSync('git add .', { cwd: dir, stdio: 'pipe', env });
   execSync('git commit -m "init"', { cwd: dir, stdio: 'pipe', env });
   return dir;
@@ -143,8 +144,8 @@ function makeTempRepo(filename = 'hello.js', content = 'module.exports = {};') {
     assert.equal(result.editCount, 2, 'batch: two edits reported');
     assert.equal(result.preflightAtomic, true, 'batch: preflightAtomic flag must be true');
     assert.equal(result.rollbackAtomic, false, 'batch: rollbackAtomic must be false (no post-write rollback)');
-    assert.equal(fs.readFileSync(path.join(dir, 'a.js'), 'utf8').replace(/\r\n/g, '\n'), 'let a = 2;\n', 'batch: replace applied');
-    assert.equal(fs.readFileSync(path.join(dir, 'b.js'), 'utf8').replace(/\r\n/g, '\n'), 'let b = 99;\n', 'batch: write applied');
+    assert.equal(fs.readFileSync(path.join(dir, 'a.js'), 'utf8').replaceAll('\r\n', '\n'), 'let a = 2;\n', 'batch: replace applied');
+    assert.equal(fs.readFileSync(path.join(dir, 'b.js'), 'utf8').replaceAll('\r\n', '\n'), 'let b = 99;\n', 'batch: write applied');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -165,7 +166,7 @@ function makeTempRepo(filename = 'hello.js', content = 'module.exports = {};') {
     assert.equal(result.appliedCount, 0, 'batch: no edit should be applied after preflight failure');
     assert.equal(result.results.length, 2, 'batch: both preflight results present');
     assert.ok(result.results.some((r) => r.ok === false), 'batch: a failure is reported');
-    assert.equal(fs.readFileSync(path.join(dir, 'a.js'), 'utf8').replace(/\r\n/g, '\n'), 'let a = 1;\n', 'batch: failed preflight leaves original file unchanged');
+    assert.equal(fs.readFileSync(path.join(dir, 'a.js'), 'utf8').replaceAll('\r\n', '\n'), 'let a = 1;\n', 'batch: failed preflight leaves original file unchanged');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -197,7 +198,7 @@ function makeTempRepo(filename = 'hello.js', content = 'module.exports = {};') {
     await planEdit(workspace, config, { stage: 'append', writeId: start.writeId, updateText: patch.slice(mid) });
     const commit = await planEdit(workspace, config, { stage: 'commit', writeId: start.writeId });
     assert.equal(commit.plannerPath, 'apply-update:staged', 'staged patch: commit routes to staged apply-update');
-    assert.equal(fs.readFileSync(path.join(dir, 'foo.js'), 'utf8').replace(/\r\n/g, '\n'), 'const a = 2;\n', 'staged patch: diff applied on commit');
+    assert.equal(fs.readFileSync(path.join(dir, 'foo.js'), 'utf8').replaceAll('\r\n', '\n'), 'const a = 2;\n', 'staged patch: diff applied on commit');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

@@ -1,6 +1,6 @@
 // Home section — simple ChatGPT-local-repo overview
-import { pillHtml } from '/ui/components/pill.js';
-import { esc, metricHtml, timeAgo } from '/ui/utils.js';
+import { pillHtml } from '../components/pill.js';
+import { esc, metricHtml, timeAgo } from '../utils.js';
 
 export function mountHome(container, data) {
   if (!data) return;
@@ -67,7 +67,7 @@ function releaseNotesCard() {
   body.innerHTML = '<div class="release-note-meta">Loading release notes…</div>';
   card.appendChild(body);
 
-  import('/ui/api.js').then(({ fetchJson }) => fetchJson('/api/release-notes').then(notes => {
+  import('../api.js').then(({ fetchJson }) => fetchJson('/api/release-notes').then(notes => {
     if (!notes) { body.innerHTML = '<div class="release-note-meta">No release notes available.</div>'; return; }
     const safeVersion = esc(notes.version || '');
     const safeHeadline = esc(notes.headline || '');

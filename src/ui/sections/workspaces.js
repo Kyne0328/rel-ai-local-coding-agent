@@ -1,10 +1,10 @@
 // Workspaces section — configured repositories and validation setup
-import { fetchJson, postJson, DASHBOARD_DATA_URL, requestDashboardRefresh } from '/ui/api.js';
-import { pillHtml } from '/ui/components/pill.js';
-import { badgeHtml } from '/ui/components/badge.js';
-import { toast } from '/ui/components/toast.js';
-import { esc, metricHtml, statusClass } from '/ui/utils.js';
-import { openWorkspaceForm } from '/ui/sections/workspace-form.js';
+import { fetchJson, postJson, DASHBOARD_DATA_URL, requestDashboardRefresh } from '../api.js';
+import { pillHtml } from '../components/pill.js';
+import { badgeHtml } from '../components/badge.js';
+import { toast } from '../components/toast.js';
+import { esc, metricHtml, statusClass } from '../utils.js';
+import { openWorkspaceForm } from './workspace-form.js';
 
 export function mountWorkspaces(container, data) {
   container.innerHTML = '';

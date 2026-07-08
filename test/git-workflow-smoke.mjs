@@ -88,7 +88,7 @@ const dryPatch = await relaiApplyPatch(workspace, config, {
 assert.equal(dryPatch.ok, true);
 assert.equal(dryPatch.dryRun, true);
 assert.deepEqual(dryPatch.changedFiles, []);
-assert.equal(fs.readFileSync(path.join(workspace.path, 'README.md'), 'utf8').replace(/\r\n/g, '\n'), '# Git smoke\n');
+assert.equal(fs.readFileSync(path.join(workspace.path, 'README.md'), 'utf8').replaceAll('\r\n', '\n'), '# Git smoke\n');
 
 const commit = await relaiGitCommit(workspace, config, { message: 'add notes', paths: ['notes.txt'] });
 assert.equal(commit.ok, true);
@@ -178,7 +178,7 @@ assert.throws(() => relaiWrite(workspace, config, { path: 'collapsed.js', conten
 fs.writeFileSync(path.join(workspace.path, 'README.md'), '# Git smoke\nlocal edit\n');
 const restoreTracked = await relaiReset(workspace, config, { paths: ['README.md'] });
 assert.equal(restoreTracked.ok, true, 'tracked file restore should succeed');
-const revertedReadme = fs.readFileSync(path.join(workspace.path, 'README.md'), 'utf8').replace(/\r\n/g, '\n');
+const revertedReadme = fs.readFileSync(path.join(workspace.path, 'README.md'), 'utf8').replaceAll('\r\n', '\n');
 assert.equal(revertedReadme, '# Git smoke\n', 'README reverted');
 
 fs.rmSync(root, { recursive: true, force: true });

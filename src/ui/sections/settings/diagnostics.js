@@ -1,5 +1,5 @@
-import { fetchJson } from '/ui/api.js';
-import { esc } from '/ui/utils.js';
+import { fetchJson } from '../../api.js';
+import { esc } from '../../utils.js';
 
 export function mountDiagnostics(container) {
   container.innerHTML = '';

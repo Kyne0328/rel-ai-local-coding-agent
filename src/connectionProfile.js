@@ -84,7 +84,7 @@ function normalizePublicUrl(value) {
   let text = String(value || "").trim();
   if (!text) return "";
   while (text.endsWith("/")) text = text.slice(0, -1);
-  if (!/^https:\/\//i.test(text)) {
+  if (!text.toLowerCase().startsWith("https://")) {
     throw new Error("Permanent public URL must start with https:// for ChatGPT Developer Mode.");
   }
   return text;

@@ -76,8 +76,8 @@ const dashboardHtml = await dashboardHtmlResponse.text();
 if (!dashboardHtmlResponse.ok || dashboardHtml.includes('initialDashboardJson is not defined') || !dashboardHtml.includes('id="initialDashboardData"')) {
   throw new Error('dashboard HTML did not render embedded initial dashboard data');
 }
-if (!dashboardHtml.includes('id="liveBtn"') || !dashboardHtml.includes('id="refreshBtn"')) {
-  throw new Error('dashboard HTML did not expose the wired live toggle and refresh button');
+if (!dashboardHtml.includes('id="refreshBtn"')) {
+  throw new Error('dashboard HTML did not expose the wired refresh button');
 }
 // The token field was removed from the topbar (token loads from the URL/sessionStorage).
 if (dashboardHtml.includes('id="token"')) {

@@ -1,10 +1,10 @@
 // Shared add/edit workspace form — modal with live path validation, a native
 // folder picker (desktop launcher only), and warn-but-allow saving so a path that
 // does not exist yet (about to be cloned) is never a hard block.
-import { openModal, closeModal } from '/ui/components/modal.js';
-import { fetchJson, postJson, invalidateCache, requestDashboardRefresh } from '/ui/api.js';
-import { toast } from '/ui/components/toast.js';
-import { esc } from '/ui/utils.js';
+import { openModal, closeModal } from '../components/modal.js';
+import { fetchJson, postJson, invalidateCache, requestDashboardRefresh } from '../api.js';
+import { toast } from '../components/toast.js';
+import { esc } from '../utils.js';
 
 function debounce(fn, ms) {
   let timer = 0;

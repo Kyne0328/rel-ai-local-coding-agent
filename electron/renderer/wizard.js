@@ -24,15 +24,36 @@ function requestWindowFit() {
   });
 }
 
+function stripHttpProtocol(value) {
+  const text = String(value || '');
+  const lower = text.toLowerCase();
+  if (lower.startsWith('https://')) return text.slice(8);
+  if (lower.startsWith('http://')) return text.slice(7);
+  return text;
+}
+
+function isDomainEdgeChar(ch) {
+  if (!ch || ch.length !== 1) return false;
+  const code = ch.charCodeAt(0);
+  return (code >= 97 && code <= 122) || (code >= 48 && code <= 57);
+}
+
+function hasOnlyDomainChars(value) {
+  for (const ch of value) {
+    if (ch !== '.' && ch !== '-' && !isDomainEdgeChar(ch)) return false;
+  }
+  return true;
+}
+
 function normalizeDomain(value) {
-  let d = String(value || '').trim().replace(/^https?:\/\//i, '').toLowerCase();
+  let d = stripHttpProtocol(String(value || '').trim()).toLowerCase();
   while (d.endsWith('/')) d = d.slice(0, -1);
   return d;
 }
 
 function isValidDomain(domain) {
   if (!domain || domain.length > 253 || !domain.includes('.')) return false;
-  if (!/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])$/.test(domain)) return false;
+  if (!hasOnlyDomainChars(domain) || !isDomainEdgeChar(domain[0]) || !isDomainEdgeChar(domain[domain.length - 1])) return false;
   if (domain.includes('..')) return false;
   return domain.split('.').every((label) => label && label.length <= 63 && !label.startsWith('-') && !label.endsWith('-'));
 }
@@ -74,7 +95,7 @@ function validatePort() {
 function regenerateToken() {
   const bytes = new Uint8Array(32);
   window.crypto.getRandomValues(bytes);
-  state.token = btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+  state.token = btoa(String.fromCodePoint(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
   document.getElementById('tokenBox').textContent = state.token;
 }
 

@@ -16,12 +16,18 @@ function normalizeAuditTerms(value) {
 }
 
 function isLikelyGeneratedFile(relativePath) {
-  const normalized = String(relativePath || "").replace(/\\/g, "/");
-  return /(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock|pubspec\.lock|.*generated.*|.*g\.dart|.*freezed\.dart|.*\.g\.cs)$/.test(normalized);
+  const normalized = String(relativePath || "").replaceAll("\\", "/");
+  const leaf = normalized.split("/").pop() || "";
+  const exactGenerated = new Set(["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "pubspec.lock"]);
+  return exactGenerated.has(leaf)
+    || leaf.includes("generated")
+    || leaf.endsWith("g.dart")
+    || leaf.endsWith("freezed.dart")
+    || leaf.endsWith(".g.cs");
 }
 
 function fileCategory(relativePath) {
-  const normalized = String(relativePath || "").replace(/\\/g, "/");
+  const normalized = String(relativePath || "").replaceAll("\\", "/");
   if (/(^|\/)(test|tests|__tests__)\//.test(normalized) || /\.test\./.test(normalized) || /\.spec\./.test(normalized)) return "tests";
   if (/(^|\/)(docs|doc)\//.test(normalized) || /\.md$/.test(normalized)) return "docs";
   if (/(^|\/)(public|assets|ui|views|templates)\//.test(normalized)) return "ui";

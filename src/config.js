@@ -232,7 +232,11 @@ function assertSafeWorkspaceRoot(rawPath, label = "Workspace path") {
   if (!text) throw new Error(`${label} is required.`);
   if (!path.isAbsolute(text)) throw new Error(`${label} must be absolute.`);
   const resolved = path.resolve(text);
-  const strip = (value) => String(value || "").replace(/[\\/]+$/, "") || String(value || "");
+  const strip = (value) => {
+    let text = String(value || "");
+    while (text.endsWith("/") || text.endsWith("\\")) text = text.slice(0, -1);
+    return text || String(value || "");
+  };
   const parsed = path.parse(resolved);
   const root = strip(parsed.root);
   const normalized = strip(resolved).toLowerCase();
@@ -251,7 +255,7 @@ function assertSafeWorkspaceRoot(rawPath, label = "Workspace path") {
 function resolveWorkspace(config, alias) {
   const key = String(alias || "").trim();
   if (!key) throw new Error("workspace alias is required.");
-  if (!/^[A-Za-z0-9._-]{1,80}$/.test(key)) throw new Error(`Invalid workspace alias: ${key}`);
+  if (!isSafeWorkspaceAlias(key)) throw new Error(`Invalid workspace alias: ${key}`);
   const entry = config.workspaces?.[key];
   if (!entry) throw new Error(`Workspace '${key}' is not configured.`);
   assertSafeWorkspaceRoot(entry.path, `Workspace '${key}' path`);
@@ -270,6 +274,18 @@ function resolveWorkspace(config, alias) {
     fastTask: normalizeFastTask(entry.fastTask),
     validationRules: entry.validationRules && typeof entry.validationRules === "object" ? entry.validationRules : {}
   };
+}
+
+function isSafeWorkspaceAlias(value) {
+  if (!value || value.length > 80) return false;
+  for (const ch of value) {
+    const code = ch.charCodeAt(0);
+    const isUpper = code >= 65 && code <= 90;
+    const isLower = code >= 97 && code <= 122;
+    const isDigit = code >= 48 && code <= 57;
+    if (!isUpper && !isLower && !isDigit && ch !== '.' && ch !== '_' && ch !== '-') return false;
+  }
+  return true;
 }
 
 function publicConfigSummary(config) {

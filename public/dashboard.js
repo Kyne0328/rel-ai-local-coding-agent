@@ -1,9 +1,9 @@
-import { setToken, getToken, fetchJson, DASHBOARD_DATA_URL } from '/ui/api.js';
-import { init as initStore, get as getStore } from '/ui/store.js';
-import { initRouter, currentSection, rerender } from '/ui/router.js';
-import { initEvents, startSSE } from '/ui/events.js';
-import { mountHome } from '/ui/sections/home.js';
-import { initCommandPalette } from '/ui/components/command-palette.js';
+import { setToken, getToken, fetchJson, DASHBOARD_DATA_URL } from './ui/api.js';
+import { init as initStore, get as getStore } from './ui/store.js';
+import { initRouter, currentSection, rerender } from './ui/router.js';
+import { initEvents, startSSE } from './ui/events.js';
+import { mountHome } from './ui/sections/home.js';
+import { initCommandPalette } from './ui/components/command-palette.js';
 
 // Single source of truth for navigable sections. The command palette and the
 // live-rerender allowlist derive from this; the sidebar/mobile nav markup lives
@@ -103,12 +103,12 @@ function getSections() {
 function _buildSectionMap() {
   return {
     home:        (el) => mountHome(el, getStore()),
-    workspaces:  (el) => import('/ui/sections/workspaces.js').then(m => m.mountWorkspaces(el, getStore())).catch(console.error),
-    activity:    (el) => import('/ui/sections/activity.js').then(m => m.mountActivity(el)).catch(console.error),
-    tools:       (el) => import('/ui/sections/tools.js').then(m => m.mountTools(el)).catch(console.error),
-    settings:    (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el, _settingsSubPage())).catch(console.error),
-    connector:   (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el, 'connector')).catch(console.error),
-    diagnostics: (el) => import('/ui/sections/settings/index.js').then(m => m.mountSettings(el, 'diagnostics')).catch(console.error),
+    workspaces:  (el) => import('./ui/sections/workspaces.js').then(m => m.mountWorkspaces(el, getStore())).catch(console.error),
+    activity:    (el) => import('./ui/sections/activity.js').then(m => m.mountActivity(el)).catch(console.error),
+    tools:       (el) => import('./ui/sections/tools.js').then(m => m.mountTools(el)).catch(console.error),
+    settings:    (el) => import('./ui/sections/settings/index.js').then(m => m.mountSettings(el, _settingsSubPage())).catch(console.error),
+    connector:   (el) => import('./ui/sections/settings/index.js').then(m => m.mountSettings(el, 'connector')).catch(console.error),
+    diagnostics: (el) => import('./ui/sections/settings/index.js').then(m => m.mountSettings(el, 'diagnostics')).catch(console.error),
   };
 }
 
@@ -153,7 +153,7 @@ async function _liveOnEvent(data) {
   initStore(data);
   _updateShell(data);
   if (currentSection() === 'activity') {
-    import('/ui/sections/activity.js')
+    import('./ui/sections/activity.js')
       .then(m => m.prependEntry((data.auditTail && data.auditTail.entries && data.auditTail.entries[0]) || null))
       .catch(console.error);
   }
@@ -183,7 +183,7 @@ async function _checkOnboarding() {
   try {
     const status = await fetchJson('/api/onboarding/status');
     if (status && status.needsOnboarding) {
-      const { openOnboarding } = await import('/ui/sections/onboarding.js');
+      const { openOnboarding } = await import('./ui/sections/onboarding.js');
       openOnboarding();
     }
   } catch { /* degrade gracefully */ }

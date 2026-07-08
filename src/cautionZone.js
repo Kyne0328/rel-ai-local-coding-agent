@@ -29,7 +29,7 @@ const WORKSPACE_CONFIG_PREFIXES = ['.github/', '.rel-ai-mcp/'];
 
 function isWorkspaceConfigPath(relPath) {
   if (typeof relPath !== 'string' || !relPath) return false;
-  const normalized = relPath.replace(/\\/g, '/');
+  const normalized = relPath.replaceAll('\\', '/');
   if (WORKSPACE_CONFIG_PATHS.includes(normalized)) return true;
   for (const prefix of WORKSPACE_CONFIG_PREFIXES) if (normalized.startsWith(prefix)) return true;
   return false;

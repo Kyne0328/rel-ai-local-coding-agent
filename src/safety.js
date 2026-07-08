@@ -43,7 +43,7 @@ const DEFAULT_EXCLUDED_PATHS = [
 ];
 
 function validateRelativePath(relativePath, label = "Path") {
-  const value = String(relativePath || "").replace(/\\/g, "/").trim();
+  const value = String(relativePath || "").replaceAll("\\", "/").trim();
   if (!value) throw new Error(`${label} cannot be empty.`);
   if (value.startsWith("/") || /^[A-Za-z]:\//.test(value)) {
     throw new Error(`${label} must be relative: ${value}`);
@@ -74,7 +74,7 @@ function isPathInside(candidate, root) {
 }
 
 function isSecretPath(relativePath) {
-  const normalized = String(relativePath || "").replace(/\\/g, "/");
+  const normalized = String(relativePath || "").replaceAll("\\", "/");
   return SECRET_PATH_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
@@ -183,7 +183,7 @@ function readRelaiIgnore(root) {
     if (!fs.existsSync(file)) return [];
     return fs.readFileSync(file, "utf8")
       .split(/\r?\n/)
-      .map((line) => line.replace(/#.*/, "").trim())
+      .map((line) => line.split("#")[0].trim())
       .filter(Boolean);
   } catch (_error) {
     return [];
@@ -192,11 +192,16 @@ function readRelaiIgnore(root) {
 
 function normalizePathList(value) {
   const list = Array.isArray(value) ? value : String(value || "").split(/[\n,]/);
-  return list.map((item) => String(item || "").replace(/\\/g, "/").trim().replace(/^\.\//, "").replace(/\/$/, "")).filter(Boolean);
+  return list.map((item) => {
+    let normalized = String(item || "").replaceAll("\\", "/").trim();
+    if (normalized.startsWith("./")) normalized = normalized.slice(2);
+    while (normalized.endsWith("/")) normalized = normalized.slice(0, -1);
+    return normalized;
+  }).filter(Boolean);
 }
 
 function shouldExcludeRelativePath(rel, name, policy) {
-  const normalized = String(rel || "").replace(/\\/g, "/");
+  const normalized = String(rel || "").replaceAll("\\", "/");
   if (policy.includeRoots.length && !policy.includeRoots.some((root) => normalized === root || normalized.startsWith(root + "/") || root.startsWith(normalized + "/"))) {
     return "outside fast-task include roots";
   }
@@ -212,10 +217,11 @@ function escapeRegExp(value) {
 }
 
 function matchesIgnorePattern(rel, pattern) {
-  const raw = String(pattern || "").replace(/\\/g, "/").trim();
+  const raw = String(pattern || "").replaceAll("\\", "/").trim();
   if (!raw) return false;
   const anchored = raw.startsWith("/");
-  const clean = raw.replace(/^\//, "").replace(/\/$/, "");
+  let clean = anchored ? raw.slice(1) : raw;
+  while (clean.endsWith("/")) clean = clean.slice(0, -1);
   if (!clean) return false;
   if (!clean.includes("*")) {
     if (anchored) return rel === clean || rel.startsWith(clean + "/");
@@ -305,7 +311,7 @@ function normalizeFullFileContent(text) {
   // Some app clients may pass escaped newlines literally. Convert only when
   // there are no real newlines and the payload clearly contains escaped lines.
   if (!/[\r\n]/.test(text) && text.includes('\\n')) {
-    return text.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n');
+    return text.replaceAll('\\r\\n', '\n').replaceAll('\\n', '\n');
   }
   return text;
 }
