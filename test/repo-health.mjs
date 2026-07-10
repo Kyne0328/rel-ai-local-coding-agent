@@ -36,7 +36,27 @@ const sourceLineBudgets = {
   'src/bridge/patch.js': 400,
   'src/bridge/review.js': 100,
   'src/bridge/tidy.js': 320,
-  'src/bridge/validation.js': 240
+  'src/bridge/validation.js': 240,
+  'src/tools.js': 120,
+  'src/tools/schema.js': 300,
+  'src/tools/connector.js': 180,
+  'src/tools/errors.js': 120,
+  'src/tools/session.js': 220,
+  'src/tools/status.js': 360,
+  'src/tools/dispatch.js': 160,
+  'src/httpServer.js': 300,
+  'src/http/dashboard.js': 400,
+  'src/http/mcp.js': 240,
+  'src/http/io.js': 220,
+  'src/http/auth.js': 120,
+  'electron/main.js': 500,
+  'electron/ipc-handlers.js': 100,
+  'electron/launcher-config.js': 100,
+  'electron/window-size.js': 100,
+  'electron/resource-path.js': 50,
+  'src/ui/sections/workspaces.js': 40,
+  'src/ui/sections/workspace-cards.js': 240,
+  'src/ui/sections/workspace-actions.js': 280
 };
 
 for (const [relativePath, maxLines] of Object.entries(sourceLineBudgets)) {

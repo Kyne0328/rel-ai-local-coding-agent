@@ -1,13 +1,9 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage, screen } = require('electron');
-const fs = require('node:fs');
-const net = require('node:net');
+const { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage } = require('electron');
 const path = require('node:path');
-
-function resolveResourcePath(name) {
-  const packagedPath = process.resourcesPath ? path.join(process.resourcesPath, name) : '';
-  if (packagedPath && fs.existsSync(packagedPath)) return packagedPath;
-  return path.join(__dirname, '..', name);
-}
+const { resolveResourcePath } = require('./resource-path');
+const { isPortAvailable, normalizeWizardConfig, saveLauncherConfig } = require('./launcher-config');
+const { fitWindowToContent } = require('./window-size');
+const { registerIpcHandlers } = require('./ipc-handlers');
 
 const srcPath = resolveResourcePath('src');
 const connection = require(path.join(srcPath, 'connectionProfile'));
@@ -38,25 +34,6 @@ let currentStatus = {
   tunnelStatus: 'stopped',
   mcpUrl: '',
   error: ''
-};
-
-const WINDOW_SIZE_LIMITS = {
-  wizard: {
-    minWidth: 480,
-    maxWidth: 720,
-    minHeight: 420,
-    maxHeight: 900,
-    paddingWidth: 24,
-    paddingHeight: 24
-  },
-  status: {
-    minWidth: 440,
-    maxWidth: 760,
-    minHeight: 500,
-    maxHeight: 940,
-    paddingWidth: 20,
-    paddingHeight: 20
-  }
 };
 
 const gotLock = app.requestSingleInstanceLock();
@@ -244,54 +221,6 @@ function updateTrayMenu() {
     }
   ]);
   tray.setContextMenu(menu);
-}
-
-function isPortAvailable(port) {
-  return new Promise((resolve) => {
-    const server = net.createServer();
-    server.once('error', () => resolve(false));
-    server.once('listening', () => {
-      server.close(() => resolve(true));
-    });
-    server.listen(port, '127.0.0.1');
-  });
-}
-
-function normalizeWizardConfig(config = {}) {
-  const port = normalizePort(config.port || 3333);
-  const ngrokDomain = normalizeNgrokDomain(config.ngrokDomain || config.domain || '');
-  const ngrokAuthtoken = normalizeNgrokAuthtoken(config.ngrokAuthtoken || config.ngrokToken || '');
-  const token = String(config.token || '').trim() || connection.generateToken(32);
-  return { port, ngrokDomain, ngrokAuthtoken, token };
-}
-
-function saveLauncherConfig(config = {}) {
-  const normalized = normalizeWizardConfig(config);
-  const publicUrl = `https://${normalized.ngrokDomain}`;
-  const tunnelCommand = buildTunnelCommand(normalized.ngrokDomain, normalized.port);
-
-  connection.writeLaunchEnv({
-    REL_AI_MCP_PORT: String(normalized.port),
-    REL_AI_MCP_TOKEN: normalized.token,
-    REL_AI_MCP_NGROK_DOMAIN: normalized.ngrokDomain,
-    REL_AI_MCP_NGROK_AUTHTOKEN: normalized.ngrokAuthtoken,
-    REL_AI_MCP_PUBLIC_URL: publicUrl,
-    REL_AI_MCP_TUNNEL_COMMAND: tunnelCommand
-  });
-
-  // Do NOT write port here — port in connectionProfile must only come from the running server.
-  // Writing wizard-configured port here would make readGuiConfig return the desired port
-  // before the server has restarted, causing dashboard and ngrok to target the wrong port.
-  connection.writeConnectionProfile({
-    host: '127.0.0.1',
-    publicUrl,
-    ngrokDomain: normalized.ngrokDomain,
-    ngrokAuthtoken: normalized.ngrokAuthtoken,
-    tunnelProvider: 'managed-ngrok',
-    configPath: configModule.getConfigPath()
-  });
-
-  return normalized;
 }
 
 async function startServer() {
@@ -506,98 +435,28 @@ function openSettingsWindow() {
   });
 }
 
-function fitWindowToContent(win, options = {}) {
-  if (!win || win.isDestroyed()) return;
-
-  const type = options.type === 'wizard' ? 'wizard' : 'status';
-  const limits = WINDOW_SIZE_LIMITS[type];
-  const display = screen.getDisplayMatching(win.getBounds());
-  const maxDisplayWidth = Math.max(limits.minWidth, (display?.workAreaSize?.width || limits.maxWidth) - 80);
-  const maxDisplayHeight = Math.max(limits.minHeight, (display?.workAreaSize?.height || limits.maxHeight) - 80);
-
-  const requestedWidth = Number.isFinite(options.width) ? options.width : win.getContentBounds().width;
-  const requestedHeight = Number.isFinite(options.height) ? options.height : win.getContentBounds().height;
-
-  const width = Math.max(
-    limits.minWidth,
-    Math.min(Math.ceil(requestedWidth + limits.paddingWidth), limits.maxWidth, maxDisplayWidth)
-  );
-  const height = Math.max(
-    limits.minHeight,
-    Math.min(Math.ceil(requestedHeight + limits.paddingHeight), limits.maxHeight, maxDisplayHeight)
-  );
-
-  const currentBounds = win.getContentBounds();
-  if (currentBounds.width === width && currentBounds.height === height) return;
-
-  win.setContentSize(width, height, true);
-  win.center();
-}
-
 function formatError(error) {
   return error instanceof Error ? error.message : String(error || 'Unknown error');
 }
 
-ipcMain.handle('wizard:save-config', (_event, config) => {
-  saveLauncherConfig(config);
-  return { ok: true };
-});
-
-ipcMain.handle('wizard:done', async (_event, config) => {
-  saveLauncherConfig(config);
-  if (wizardWindow && !wizardWindow.isDestroyed()) {
-    wizardWindow.destroy();
+registerIpcHandlers({
+  ipcMain,
+  BrowserWindow,
+  clipboard,
+  shell,
+  saveLauncherConfig,
+  getWizardWindow: () => wizardWindow,
+  closeWizard: () => {
+    if (wizardWindow && !wizardWindow.isDestroyed()) wizardWindow.destroy();
     wizardWindow = null;
-  }
-  const win = createStatusWindow();
-  if (win.webContents.isLoading()) {
-    win.webContents.once('did-finish-load', () => startServer());
-  } else {
-    startServer();
-  }
-  return { ok: true };
-});
-
-ipcMain.handle('wizard:open-settings', () => {
-  openSettingsWindow();
-  return { ok: true };
-});
-
-ipcMain.handle('server:start', async () => startServer());
-
-ipcMain.handle('server:stop', () => stopServer());
-
-ipcMain.handle('url:copy', (_event, url) => {
-  clipboard.writeText(String(url || ''));
-  return { ok: true };
-});
-
-ipcMain.handle('url:open-dashboard', () => {
-  openDashboardUrl();
-  return { ok: true };
-});
-
-ipcMain.handle('url:open-link', (_event, url) => {
-  const target = String(url || '').trim();
-  const allowed = target.startsWith('https://dashboard.ngrok.com/') || target.startsWith('https://ngrok.com/');
-  if (!allowed) throw new Error('Only ngrok setup links can be opened from the setup wizard.');
-  shell.openExternal(target);
-  return { ok: true };
-});
-
-ipcMain.on('window:fit-content', (event, payload = {}) => {
-  const win = BrowserWindow.fromWebContents(event.sender);
-  if (!win) return;
-
-  const isWizard = win === wizardWindow;
-  const isStatus = win === statusWindow;
-  if (!isWizard && !isStatus) return;
-
-  fitWindowToContent(win, {
-    type: isWizard ? 'wizard' : 'status',
-    width: Number(payload.width),
-    height: Number(payload.height)
-  });
+  },
+  getStatusWindow: () => statusWindow,
+  createStatusWindow,
+  startServer,
+  stopServer,
+  openSettingsWindow,
+  openDashboardUrl,
+  fitWindowToContent
 });
 
 module.exports = { isPortAvailable, normalizeWizardConfig, saveLauncherConfig };

@@ -72,7 +72,7 @@ assert.equal(getVersion(), latestChangelogVersion());
   assert.equal(dashboard.config.localRepoBridge.visibleTools.length, 18);
   assert.ok(publicConfigSummary(cfg).localRepoBridge.visibleTools.includes('relai_edit'));
   assert.doesNotMatch(read('src/ui/sections/home.js'), /visibleToolCount/);
-  assert.match(read('src/ui/sections/workspaces.js'), /data\.toolCount/);
+  assert.match(read('src/ui/sections/workspace-cards.js'), /data\.toolCount/);
 }
 
 // Audit-fix smoke guards for docs, UI copy, connector hints, and tunnel process safety.
@@ -80,7 +80,7 @@ assert.equal(getVersion(), latestChangelogVersion());
   assert.doesNotMatch(read('README.md'), /Settings -> Connector/);
   assert.match(read('README.md'), /Settings > Apps > Create/);
   assert.doesNotMatch(read('docs/ONE_CLICK_SETUP.md'), /removed tools[^\n]*relai_apply_update/);
-  const toolsSource = read('src/tools.js');
+  const toolsSource = read('src/tools/schema.js');
   // All public tools now advertise the same safe hint set to minimise connector
   // classifier scrutiny; the real boundary stays server-side.
   assert.match(toolsSource, /const SAFE_HINTS\s*=\s*\{ readOnlyHint: true, destructiveHint: false/);

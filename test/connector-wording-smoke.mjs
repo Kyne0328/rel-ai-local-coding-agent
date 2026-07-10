@@ -7,6 +7,7 @@ const root = path.resolve(__dirname, '..');
 
 const scannedFiles = [
   'src/tools.js',
+  'src/tools/schema.js',
   'src/httpServer.js',
   'src/resources.js',
   'README.md',
@@ -67,7 +68,7 @@ if (findings.length) {
 }
 
 // Check relai_run_checks description wording
-const toolsSource = fs.readFileSync(path.join(root, 'src', 'tools.js'), 'utf8');
+const toolsSource = fs.readFileSync(path.join(root, 'src', 'tools', 'schema.js'), 'utf8');
 const runChecksMatch = toolsSource.match(/tool\("relai_run_checks",\s*"[^"]*",\s*"([^"]+)"/);
 const runChecksDescription = runChecksMatch ? runChecksMatch[1] : '';
 
@@ -121,7 +122,7 @@ while ((match = toolDefPattern.exec(toolsSource)) !== null) {
 }
 
 if (toolCount === 0) {
-  console.error('Connector wording smoke test failed. No tool definitions were parsed from src/tools.js.');
+  console.error('Connector wording smoke test failed. No tool definitions were parsed from src/tools/schema.js.');
   process.exit(1);
 }
 
