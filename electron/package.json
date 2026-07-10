@@ -22,6 +22,7 @@
       "launcher-config.js",
       "resource-path.js",
       "window-size.js",
+      "window-smoke.js",
       "installed-smoke.js",
       "renderer/**",
       "build/**"

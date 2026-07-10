@@ -60,6 +60,11 @@ try {
     env,
     timeout: 90 * 1000
   });
+  run(installedExe, ['--window-smoke', `--user-data-dir=${userDataDir}`], {
+    cwd: path.dirname(installedExe),
+    env,
+    timeout: 90 * 1000
+  });
 
   assert.ok(fs.existsSync(resultPath), 'Installed application did not write its smoke result.');
   const result = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
@@ -69,7 +74,7 @@ try {
   assert.ok(result.publicToolCount > 0);
   assert.ok(Object.values(result.resourceChecks).every(Boolean), 'One or more packaged resources are missing.');
   assert.equal(result.health?.ok, true);
-  console.log(`Installed application smoke passed for v${result.version} with ${result.publicToolCount} public tools.`);
+  console.log(`Installed application smoke passed for v${result.version} with ${result.publicToolCount} public tools and both renderer windows.`);
 } finally {
   if (uninstaller && fs.existsSync(uninstaller)) {
     spawnSync(uninstaller, ['/S'], { cwd: path.dirname(uninstaller), env, encoding: 'utf8', timeout: 3 * 60 * 1000 });

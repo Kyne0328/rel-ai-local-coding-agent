@@ -8,6 +8,7 @@
 - **Add responsive product navigation with icons, a visible command launcher, workspace quick jump, an intermediate sidebar rail, mobile bottom navigation, consistent action feedback, and a substantially more capable Activity log with filters and structured event details.**
 - **Add persistent appearance preferences with system, dark, and light themes plus comfortable and compact density modes, including reduced-motion-safe transitions and matching system appearance in the desktop launcher.**
 - **Improve desktop operations with remembered disclosure panels, copyable diagnostics, optional native connection notifications, semantic status output, and accessibility and Sonar maintainability cleanup.**
+- **Fix normal launcher startup by importing the shared window-size limits used by the wizard and status windows, and extend packaged-app verification to boot both renderer surfaces so window-creation regressions fail before release.**
 - **Rename milestone-oriented UI files and tests to responsibility-based production names, and validate the release with JavaScript checks, TypeScript boundary checks, release consistency checks, 51 regression files, and the installed Windows application smoke test.**
 
 Bump root/electron/status UI/lockfiles to 0.19.0.

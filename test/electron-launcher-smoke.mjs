@@ -52,7 +52,15 @@ assert.ok(srcResource, 'electron build must bundle src resources');
 assert.ok(srcResource.filter.includes('**/*.js'), 'electron build must bundle src JavaScript');
 assert.ok(srcResource.filter.includes('**/*.css'), 'electron build must bundle src UI CSS imported by public/dashboard.css');
 assert.ok(electronPkg.build.files.includes('managed-ngrok.js'), 'electron build must include managed ngrok launcher code');
+assert.ok(electronPkg.build.files.includes('window-smoke.js'), 'electron build must include packaged renderer smoke coverage');
 assert.ok(electronPkg.build.extraResources.some((item) => item.from === '../vendor/ngrok'), 'electron build must bundle ngrok seed binaries');
+
+const electronMain = fs.readFileSync(path.join(root, 'electron', 'main.js'), 'utf8');
+assert.match(
+  electronMain,
+  /const \{ fitWindowToContent, WINDOW_SIZE_LIMITS \} = require\('\.\/window-size'\);/,
+  'Electron main must import the window limits used by normal wizard and status startup'
+);
 
 const dashboardJs = fs.readFileSync(path.join(root, 'public', 'dashboard.js'), 'utf8');
 assert.ok(

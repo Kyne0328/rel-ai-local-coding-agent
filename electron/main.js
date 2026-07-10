@@ -2,9 +2,10 @@ const { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage }
 const path = require('node:path');
 const { resolveResourcePath } = require('./resource-path');
 const { isPortAvailable, normalizeWizardConfig, saveLauncherConfig } = require('./launcher-config');
-const { fitWindowToContent } = require('./window-size');
+const { fitWindowToContent, WINDOW_SIZE_LIMITS } = require('./window-size');
 const { registerIpcHandlers } = require('./ipc-handlers');
 const { runInstalledSmoke, writeInstalledSmokeFailure } = require('./installed-smoke');
+const { runWindowSmoke } = require('./window-smoke');
 
 const srcPath = resolveResourcePath('src');
 const connection = require(path.join(srcPath, 'connectionProfile'));
@@ -57,6 +58,16 @@ if (!gotLock) {
   });
 
   app.whenReady().then(async () => {
+    if (process.argv.includes('--window-smoke')) {
+      try {
+        await runWindowSmoke();
+        app.exit(0);
+      } catch (error) {
+        console.error(`[rel-ai-mcp] window smoke failed: ${formatError(error)}`);
+        app.exit(1);
+      }
+      return;
+    }
     if (process.argv.includes('--installed-smoke')) {
       try {
         await runInstalledSmoke(app);
