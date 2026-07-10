@@ -6,7 +6,7 @@ function buildWorkspaces(data) {
   const cfg = data.config || {};
   const health = data.health || {};
   const workspaces = Array.isArray(cfg.workspaces) ? cfg.workspaces : [];
-  const toolCount = Number.isFinite(Number(data.toolCount)) && Number(data.toolCount) > 0 ? Number(data.toolCount) : 24;
+  const toolCount = Number.isFinite(Number(data.toolCount)) && Number(data.toolCount) >= 0 ? Number(data.toolCount) : 0;
   const healthByAlias = new Map((Array.isArray(health.workspaces) ? health.workspaces : []).map(item => [item.alias, item]));
   const validationReady = workspaces.filter(ws => (ws.testCommandKeys || []).length || (ws.discoveredTestCommandKeys || []).length).length;
 

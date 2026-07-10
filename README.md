@@ -97,7 +97,7 @@ The activity page is there because I got tired of guessing what the MCP server w
   <img src="docs/images/dashboard-tools-section.png" alt="Rel.AI MCP bridge tools" width="900">
 </p>
 
-The dashboard shows the 18 public workspace tools ChatGPT can use for inspect, change, validate, review, git orchestration, packaging, tidy, and restore workflows. Internal helper tools are not part of the public MCP surface.
+The dashboard shows the public workspace tools ChatGPT can use for inspect, change, validate, review, git orchestration, packaging, tidy, and restore workflows. Internal helper tools are not part of the public MCP surface.
 
 ### Connector setup
 
@@ -247,7 +247,7 @@ See [docs/ONE_CLICK_SETUP.md](docs/ONE_CLICK_SETUP.md) for permanent-tunnel opti
 
 ## MCP tools
 
-Rel.AI exposes one curated public workspace-tool surface of 18 tools. `relai_edit` is the primary write path — it routes to exact replacement, full-file write, patch apply, or a batch of edits server-side, and can validate and return a diff in the same call. File cleanup is handled by the two-step `relai_tidy_plan` / `relai_tidy_run` workflow (the server selects bounded session-owned untracked candidates; callers never pass arbitrary delete paths). Additional tools (`relai_clear_files`, `relai_apply_update`, `relai_feature_probe`, `relai_git_fetch`, `relai_git_merge_branch`, `relai_git_merge_remote_branches_plan`, `relai_git_abort_merge`, `relai_remove_file`, `relai_refactor_audit`, `relai_set_policy`, `relai_session_summary`) remain callable on local stdio sessions but are hidden from the ChatGPT connector to keep the surface small.
+Rel.AI exposes one curated public workspace-tool surface. `relai_edit` is the primary write path — it routes to exact replacement, full-file write, patch apply, or a batch of edits server-side, and can validate and return a diff in the same call. File cleanup is handled by the two-step `relai_tidy_plan` / `relai_tidy_run` workflow (the server selects bounded session-owned untracked candidates; callers never pass arbitrary delete paths). Additional tools (`relai_clear_files`, `relai_apply_update`, `relai_feature_probe`, `relai_git_fetch`, `relai_git_merge_branch`, `relai_git_merge_remote_branches_plan`, `relai_git_abort_merge`, `relai_remove_file`, `relai_refactor_audit`, `relai_set_policy`, `relai_session_summary`) remain callable on local stdio sessions but are hidden from the ChatGPT connector to keep the surface small.
 
 | Tool | Purpose |
 | --- | --- |

@@ -7,7 +7,7 @@ const { summarizeOperations } = require("../journal");
 const { resolvePolicy } = require("../policyResolver");
 const { getVersion } = require("../version");
 const { debugSwallow } = require("./session");
-const { BRIDGE_TOOL_NAMES, PUBLIC_HTTP_TOOL_NAMES } = require("./schema");
+const { BRIDGE_TOOL_NAMES, PUBLIC_HTTP_TOOL_NAMES, getToolDefinition, getToolGroups } = require("./schema");
 
 // Locale-aware sort of an object's keys. Sonar (S2871) flags Array.sort() on strings
 // without an explicit comparator, so route key sorting through one helper.
@@ -45,14 +45,7 @@ function relaiStatus(config, args = {}) {
     ok: true,
     version: getVersion(),
     tools: PUBLIC_HTTP_TOOL_NAMES,
-    toolGroups: {
-      workspace: PUBLIC_HTTP_TOOL_NAMES,
-      // Group lists must only name public tools — this payload is read by ChatGPT.
-      git: PUBLIC_HTTP_TOOL_NAMES.filter((name) => name.startsWith("relai_git_")),
-      audit: ["relai_diff", "relai_git_status"],
-      cleanup: ["relai_tidy_plan", "relai_tidy_run", "relai_restore_changes"],
-      internal: BRIDGE_TOOL_NAMES.filter((name) => !PUBLIC_HTTP_TOOL_NAMES.includes(name))
-    },
+    toolGroups: getToolGroups(),
     scripts: sortedKeys(scripts),
     ci,
     workspace: selectedWorkspace,
@@ -220,8 +213,6 @@ function workspaceProfile(config, args = {}) {
   };
 }
 
-const SESSION_WRITE_TOOLS = new Set(["relai_write", "relai_replace", "relai_clear_files", "relai_edit"]);
-
 function addChangedFile(acc, filePath) {
   if (filePath && !acc.seenFiles.has(filePath)) {
     acc.seenFiles.add(filePath);
@@ -229,23 +220,24 @@ function addChangedFile(acc, filePath) {
   }
 }
 
-function recordChangedFiles(entry, acc) {
-  if (!SESSION_WRITE_TOOLS.has(entry.tool)) return;
+function recordChangedFiles(entry, acc, behavior) {
+  if (behavior?.sessionWrite !== true) return;
   addChangedFile(acc, entry.filePath);
   if (Array.isArray(entry.filePaths)) {
-    for (const p of entry.filePaths) addChangedFile(acc, p);
+    for (const filePath of entry.filePaths) addChangedFile(acc, filePath);
   }
 }
 
 function accumulateSummaryEntry(entry, acc) {
-  recordChangedFiles(entry, acc);
-  if (entry.tool === "relai_run_checks" && entry.validationLevel) {
+  const behavior = getToolDefinition(entry.tool)?.behavior;
+  recordChangedFiles(entry, acc, behavior);
+  if (behavior?.summary === "checks" && entry.validationLevel) {
     acc.checksRun.push({ validationLevel: entry.validationLevel, passed: entry.ok === true });
   }
-  if (entry.tool === "relai_diff") {
+  if (behavior?.summary === "diff") {
     acc.diffReviewed = true;
   }
-  if (entry.tool === "relai_edit" && entry.plannerPath && !acc.seenPlannerPaths.has(entry.plannerPath)) {
+  if (behavior?.summary === "edit" && entry.plannerPath && !acc.seenPlannerPaths.has(entry.plannerPath)) {
     acc.seenPlannerPaths.add(entry.plannerPath);
     acc.plannerDecisions.push({ plannerPath: entry.plannerPath, plannerReason: entry.plannerReason || null });
   }

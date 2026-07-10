@@ -1,13 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
+const require = createRequire(import.meta.url);
 
 const scannedFiles = [
   'src/tools.js',
   'src/tools/schema.js',
+  'src/tools/registry.js',
   'src/httpServer.js',
   'src/resources.js',
   'README.md',
@@ -67,10 +70,10 @@ if (findings.length) {
   process.exit(1);
 }
 
-// Check relai_run_checks description wording
-const toolsSource = fs.readFileSync(path.join(root, 'src', 'tools', 'schema.js'), 'utf8');
-const runChecksMatch = toolsSource.match(/tool\("relai_run_checks",\s*"[^"]*",\s*"([^"]+)"/);
-const runChecksDescription = runChecksMatch ? runChecksMatch[1] : '';
+// Check relai_run_checks description wording from the authoritative registry.
+const { getToolDefinitions } = require('../src/tools/schema.js');
+const toolDefinitions = getToolDefinitions();
+const runChecksDescription = toolDefinitions.find((definition) => definition.name === 'relai_run_checks')?.description || '';
 
 const forbiddenInRunChecks = ['shell', 'execute', 'arbitrary', 'command runner', 'terminal command'];
 const descriptionFindings = [];
@@ -106,13 +109,9 @@ const highRiskVerbs = [
   { label: 'arbitrary', pattern: /\barbitrary\b/i }
 ];
 
-const toolDefPattern = /tool\("(relai_[a-z_]+)",\s*"([^"]*)",\s*"([^"]*)"/g;
 const surfaceFindings = [];
-let toolCount = 0;
-let match;
-while ((match = toolDefPattern.exec(toolsSource)) !== null) {
-  const [, name, title, description] = match;
-  toolCount += 1;
+const toolCount = toolDefinitions.length;
+for (const { name, title, description } of toolDefinitions) {
   const surface = `${title} ${description}`;
   for (const verb of highRiskVerbs) {
     if (verb.pattern.test(surface)) {
@@ -122,7 +121,7 @@ while ((match = toolDefPattern.exec(toolsSource)) !== null) {
 }
 
 if (toolCount === 0) {
-  console.error('Connector wording smoke test failed. No tool definitions were parsed from src/tools/schema.js.');
+  console.error('Connector wording smoke test failed. The tool registry is empty.');
   process.exit(1);
 }
 

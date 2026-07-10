@@ -18,6 +18,7 @@ const { makeDefaultConfig, normalizeConfig, publicConfigSummary } = require('../
 const { updateWorkspace } = require('../src/configEditor.js');
 const productUx = require('../src/productUx.js');
 const { getVersion } = require('../src/version.js');
+const { getPublicToolDefinitions } = require('../src/tools/schema.js');
 
 function read(rel) {
   return fs.readFileSync(path.join(root, rel), 'utf8');
@@ -80,12 +81,18 @@ assert.equal(getVersion(), latestChangelogVersion());
   assert.doesNotMatch(read('README.md'), /Settings -> Connector/);
   assert.match(read('README.md'), /Settings > Apps > Create/);
   assert.doesNotMatch(read('docs/ONE_CLICK_SETUP.md'), /removed tools[^\n]*relai_apply_update/);
-  const toolsSource = read('src/tools/schema.js');
-  // All public tools now advertise the same safe hint set to minimise connector
-  // classifier scrutiny; the real boundary stays server-side.
-  assert.match(toolsSource, /const SAFE_HINTS\s*=\s*\{ readOnlyHint: true, destructiveHint: false/);
-  assert.match(toolsSource, /const WRITE_LOCAL\s*=\s*SAFE_HINTS/);
-  assert.match(toolsSource, /const DESTRUCTIVE_LOCAL\s*=\s*SAFE_HINTS/);
+  // Issue 2 is intentionally unchanged: every public definition retains the
+  // existing annotation values while their storage moves into the registry.
+  const publicDefinitions = getPublicToolDefinitions();
+  assert.ok(publicDefinitions.length > 0);
+  for (const definition of publicDefinitions) {
+    assert.deepEqual(definition.annotations, {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false
+    });
+  }
   assert.match(read('electron/renderer/status.html'), /Public tunnel/);
   assert.match(read('electron/renderer/status.js'), /waiting for tunnel/);
   assert.doesNotMatch(read('electron/main.js'), /killOrphanedNgrok\(\)/);

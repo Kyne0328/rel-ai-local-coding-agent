@@ -18,17 +18,7 @@ const {
 } = require("./io");
 
 function buildToolMetadata() {
-  const { getPublicToolSchemas } = require("../tools");
-  const config = readConfig({ allowMissing: true });
-  return getPublicToolSchemas(config).map(tool => ({
-    name: tool.name,
-    displayName: tool.name.replace(/^relai_/, "").replaceAll("_", " "),
-    description: tool.description || "",
-    category: "Workspace tools",
-    requiredProfile: "workspace",
-    requiresApproval: false,
-    parameters: tool.inputSchema ? Object.keys(tool.inputSchema.properties || {}) : [],
-  }));
+  return require("../tools").getPublicToolMetadata();
 }
 
 async function handleFavicon(ctx) {
