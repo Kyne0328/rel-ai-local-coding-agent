@@ -1,0 +1,331 @@
+const fs = require("node:fs");
+const path = require("node:path");
+const { runProcess, summarizeCommand } = require("../process");
+const { resolveSafePath, writeTextFileSafe, fileSha256 } = require("../safety");
+const { appendOperation, makeOperationId } = require("../journal");
+const {
+  assertPreparedUpdateSafe, ensureGitRepo, requireCleanGitIfConfigured,
+  shouldMakePreparedBackup, makePreparedBackup, tempStatePath, validatePatchPaths
+} = require("../repo/gitOps");
+const { clampNumber } = require("./limits");
+const { relaiVerify, hasRequestedChecks } = require("./validation");
+const { relaiDiff } = require("./review");
+
+const DEFAULT_MAX_DIFF_BYTES = 1024 * 1024;
+
+async function relaiApplyPatch(workspace, config, args = {}) {
+  const rawPatch = String(args.patch || args.diff || args.updateText || "");
+  assertPreparedUpdateSafe(workspace, config, args, rawPatch);
+  if (/^\*\*\* Begin Patch\b/m.test(rawPatch)) {
+    return applyStructuredOpenAIPatch(workspace, config, args, rawPatch);
+  }
+  const patch = normalizeUnifiedDiffText(rawPatch);
+  const patchBytes = Buffer.byteLength(patch, "utf8");
+  await ensureGitRepo(workspace, config);
+  const touchedPaths = validatePatchPaths(workspace, patch);
+  await requireCleanGitIfConfigured(workspace, config, args);
+  const operationId = makeOperationId();
+  const patchFile = tempStatePath(config, workspace, operationId, ".patch");
+  fs.writeFileSync(patchFile, patch, "utf8");
+  const check = await runProcess("git", ["apply", "--check", "--verbose", "--recount", patchFile], { cwd: workspace.path, timeout: clampNumber(args.timeoutMs, 1000, 86400000, 120000) }, config);
+  if (check.exitCode !== 0) {
+    return {
+      ok: false,
+      workspace: workspace.alias,
+      operationId,
+      operation: "applyPatch:check",
+      touchedPaths,
+      check: summarizeCommand(check),
+      diagnostics: diagnosePatchFailure(check.stderr || check.stdout || "", patch, touchedPaths)
+    };
+  }
+  if (args.dryRun) {
+    appendOperation(config, workspace, { id: operationId, type: "apply_patch:dryRun", ok: true, paths: [], results: [{ operation: "applyPatch:dryRun", bytes: patchBytes, touchedPaths, changedFiles: [] }] });
+    return {
+      ok: true,
+      dryRun: true,
+      workspace: workspace.alias,
+      operationId,
+      operation: "applyPatch:dryRun",
+      changedFiles: [],
+      touchedPaths,
+      patchBytes,
+      check: summarizeCommand(check),
+      sourceFormat: "unified-diff"
+    };
+  }
+  let backup = null;
+  if (shouldMakePreparedBackup(config, args)) backup = await makePreparedBackup(workspace, config, operationId, "patch");
+  // Capture content hashes before apply so changedFiles reflects ACTUAL changes,
+  // not every path the patch touches — a semantic no-op patch applies cleanly but
+  // must report changedFiles:[].
+  const hashOf = (rel) => (fs.existsSync(path.join(workspace.path, rel)) ? fileSha256(workspace.path, rel) : null);
+  const beforeHashes = new Map(touchedPaths.map((rel) => [rel, hashOf(rel)]));
+  const apply = await runProcess("git", ["apply", patchFile], { cwd: workspace.path, timeout: clampNumber(args.timeoutMs, 1000, 86400000, 120000) }, config);
+  const changedFiles = apply.exitCode === 0
+    ? touchedPaths.filter((rel) => hashOf(rel) !== beforeHashes.get(rel))
+    : [];
+  const verify = hasRequestedChecks(args) ? await relaiVerify(workspace, config, args) : null;
+  const diff = args.returnDiff === false ? null : await relaiDiff(workspace, config, { maxBytes: args.maxDiffBytes || DEFAULT_MAX_DIFF_BYTES });
+  const ok = apply.exitCode === 0 && (!verify || verify.ok);
+  appendOperation(config, workspace, { id: operationId, type: "apply_patch", ok, paths: changedFiles, results: [{ operation: "applyPatch", bytes: patchBytes, touchedPaths, changedFiles, verified: verify ? verify.ok : null }] });
+  return { ok, workspace: workspace.alias, operationId, operation: "applyPatch", changedFiles, touchedPaths, patchBytes, backup, apply: summarizeCommand(apply), sourceFormat: "unified-diff", ...(verify ? { verify } : {}), ...(diff ? { diff } : {}) };
+}
+
+function normalizeOpenAIPatchFormat(input) {
+  const text = String(input || "");
+  if (!/^\*\*\* Begin Patch\b/m.test(text)) {
+    return { patch: text, converted: false, sourceFormat: "unified-diff" };
+  }
+  const lines = text.split(/\r?\n/);
+  const out = [];
+  let i = 0;
+  while (i < lines.length && !/^\*\*\* Begin Patch\b/.test(lines[i])) i += 1;
+  i += 1;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (/^\*\*\* End Patch\b/.test(line)) break;
+    i = handleOpenAIPatchSection(lines, i, out);
+  }
+  return { patch: `${out.join("\n")}\n`, converted: true, sourceFormat: "openai-patch" };
+}
+
+function handleOpenAIPatchSection(lines, i, out) {
+  const line = lines[i];
+  const updateMatch = /^\*\*\* Update File:\s*([^\n]+)/.exec(line);
+  const addMatch = /^\*\*\* Add File:\s*([^\n]+)/.exec(line);
+  const delMatch = /^\*\*\* Delete File:\s*([^\n]+)/.exec(line);
+  if (updateMatch) {
+    const filePath = updateMatch[1].trim();
+    out.push(`--- a/${filePath}`, `+++ b/${filePath}`);
+    i += 1;
+      while (i < lines.length && !lines[i].startsWith("*** ")) {
+        out.push(lines[i]);
+      i += 1;
+    }
+    return i;
+  }
+  if (addMatch) {
+    const filePath = addMatch[1].trim();
+    const body = [];
+    i += 1;
+      while (i < lines.length && !lines[i].startsWith("*** ")) {
+        body.push(lines[i]);
+      i += 1;
+    }
+    const contentLines = body.map((l) => (l.startsWith("+") ? l.slice(1) : l));
+    out.push(`--- /dev/null`, `+++ b/${filePath}`, `@@ -0,0 +1,${contentLines.length} @@`);
+    for (const cl of contentLines) out.push(`+${cl}`);
+    return i;
+  }
+  if (delMatch) {
+    throw new Error(`OpenAI patch 'Delete File' is not supported in relai_apply_update. Use relai_clear_files { paths: ["${delMatch[1].trim()}"] } instead.`);
+  }
+  return i + 1;
+}
+
+async function applyStructuredOpenAIPatch(workspace, config, args, rawPatch) {
+  const document = parseOpenAIPatchDocument(rawPatch);
+  const touchedPaths = document.operations.map((item) => item.path);
+  await requireCleanGitIfConfigured(workspace, config, args);
+  const operationId = makeOperationId();
+  let backup = null;
+  if (shouldMakePreparedBackup(config, args)) backup = await makePreparedBackup(workspace, config, operationId, "patch");
+  const changedFiles = [];
+  for (const operation of document.operations) {
+    applyStructuredPatchOperation(workspace, args, operation, changedFiles);
+  }
+  const verify = hasRequestedChecks(args) ? await relaiVerify(workspace, config, args) : null;
+  const diff = args.returnDiff === false ? null : await relaiDiff(workspace, config, { maxBytes: args.maxDiffBytes || DEFAULT_MAX_DIFF_BYTES });
+  const ok = !verify || verify.ok;
+  appendOperation(config, workspace, { id: operationId, type: "apply_patch", ok, paths: changedFiles, results: [{ operation: "applyPatch", bytes: Buffer.byteLength(rawPatch, "utf8"), touchedPaths: changedFiles, verified: verify ? verify.ok : null }] });
+  return {
+    ok,
+    workspace: workspace.alias,
+    operationId,
+    operation: "applyPatch",
+    sourceFormat: "openai-patch",
+    converted: false,
+    patchBytes: Buffer.byteLength(rawPatch, "utf8"),
+    changedFiles,
+    touchedPaths,
+    backup,
+    ...(verify ? { verify } : {}),
+    ...(diff ? { diff } : {})
+  };
+}
+
+function applyStructuredPatchOperation(workspace, args, operation, changedFiles) {
+  const safe = resolveSafePath(workspace.path, operation.path);
+  const exists = fs.existsSync(safe.absolutePath);
+  if (operation.type === "update") {
+    const oldText = exists ? fs.readFileSync(safe.absolutePath, "utf8").replaceAll("\r\n", "\n") : "";
+    const nextText = applyOpenAIPatchUpdate(oldText, operation, safe.relativePath);
+    if (nextText !== oldText) {
+      if (!args.dryRun) writeTextFileSafe(workspace.path, safe.relativePath, nextText);
+      changedFiles.push(safe.relativePath);
+    }
+    return;
+  }
+  if (operation.type === "add") {
+    const nextText = joinPatchLines(operation.lines.map((line) => line.slice(1)), true);
+    if (!args.dryRun) writeTextFileSafe(workspace.path, safe.relativePath, nextText);
+    changedFiles.push(safe.relativePath);
+    return;
+  }
+  if (operation.type === "delete") {
+    if (!args.dryRun) fs.rmSync(safe.absolutePath, { force: true });
+    changedFiles.push(safe.relativePath);
+  }
+}
+
+function parseOpenAIPatchDocument(input) {
+  const lines = String(input || "").replaceAll("\r\n", "\n").split("\n");
+  const operations = [];
+  let index = lines.findIndex((line) => /^\*\*\* Begin Patch\b/.test(line));
+  if (index === -1) throw new Error("OpenAI patch is missing '*** Begin Patch'.");
+  index += 1;
+  while (index < lines.length) {
+    const line = lines[index];
+    if (/^\*\*\* End Patch\b/.test(line)) break;
+    const updateMatch = /^\*\*\* Update File:\s*([^\n]+)/.exec(line);
+    const addMatch = /^\*\*\* Add File:\s*([^\n]+)/.exec(line);
+    const deleteMatch = /^\*\*\* Delete File:\s*([^\n]+)/.exec(line);
+    if (!updateMatch && !addMatch && !deleteMatch) {
+      index += 1;
+      continue;
+    }
+    let type;
+    if (updateMatch) type = "update";
+    else if (addMatch) type = "add";
+    else type = "delete";
+    const pathText = (updateMatch || addMatch || deleteMatch)[1].trim();
+    const body = [];
+    index += 1;
+    while (index < lines.length && !/^\*\*\* (?:Update File|Add File|Delete File|End Patch)\b/.test(lines[index])) {
+      body.push(lines[index]);
+      index += 1;
+    }
+    operations.push({ type, path: pathText, lines: body });
+  }
+  if (operations.length === 0) {
+    throw new Error("OpenAI patch did not contain any file operations.");
+  }
+  return { operations };
+}
+
+function applyOpenAIPatchUpdate(oldText, operation, relativePath) {
+  const oldEndsWithNewline = oldText.endsWith("\n");
+  const oldLines = splitPatchText(oldText);
+  const hunks = parsePatchHunks(operation.lines, relativePath);
+  return joinPatchLines(applyHunksToLines(oldLines, hunks, relativePath), oldEndsWithNewline);
+}
+
+function parsePatchHunks(lines, relativePath) {
+  const hunks = [];
+  let current = [];
+  for (const line of lines) {
+    if (line === "*** End of File") continue;
+    if (line.startsWith("@@")) {
+      if (current.length > 0) {
+        hunks.push(current);
+        current = [];
+      }
+      continue;
+    }
+    if (/^[ +-]/.test(line)) {
+      current.push(line);
+      continue;
+    }
+    if (line.trim() === "") {
+      current.push(" ");
+      continue;
+    }
+    throw new Error(`OpenAI patch update for ${relativePath} contains an unsupported line: ${line}`);
+  }
+  if (current.length > 0) hunks.push(current);
+  if (hunks.length === 0) throw new Error(`OpenAI patch update for ${relativePath} did not contain any hunks.`);
+  return hunks;
+}
+
+function applyHunksToLines(oldLines, hunks, relativePath) {
+  let cursor = 0;
+  const output = [];
+  for (const hunk of hunks) {
+    cursor = applyHunkToLines(oldLines, hunk, relativePath, cursor, output);
+  }
+  output.push(...oldLines.slice(cursor));
+  return output;
+}
+
+function applyHunkToLines(oldLines, hunk, relativePath, cursor, output) {
+  const matchLines = hunk.filter((line) => !line.startsWith("+")).map((line) => line.slice(1));
+  const start = findHunkStart(oldLines, matchLines, cursor);
+  if (start === -1) {
+    throw new Error(`OpenAI patch context mismatch for ${relativePath}. Re-read the file and regenerate the patch with current text.`);
+  }
+  output.push(...oldLines.slice(cursor, start));
+  let lineIndex = start;
+  for (const line of hunk) {
+    const prefix = line[0];
+    const content = line.slice(1);
+    if (prefix === " ") {
+      if (oldLines[lineIndex] !== content) throw new Error(`OpenAI patch context mismatch for ${relativePath} at '${content}'.`);
+      output.push(content);
+      lineIndex += 1;
+    } else if (prefix === "-") {
+      if (oldLines[lineIndex] !== content) throw new Error(`OpenAI patch delete mismatch for ${relativePath} at '${content}'.`);
+      lineIndex += 1;
+    } else if (prefix === "+") {
+      output.push(content);
+    }
+  }
+  return lineIndex;
+}
+
+function splitPatchText(text) {
+  const normalized = String(text || "").replaceAll("\r\n", "\n");
+  if (!normalized) return [];
+  const lines = normalized.split("\n");
+  if (normalized.endsWith("\n")) lines.pop();
+  return lines;
+}
+
+function joinPatchLines(lines, endsWithNewline) {
+  const body = lines.join("\n");
+  return endsWithNewline ? `${body}\n` : body;
+}
+
+function findHunkStart(lines, matchLines, fromIndex) {
+  if (matchLines.length === 0) return fromIndex;
+  for (let index = fromIndex; index <= lines.length - matchLines.length; index += 1) {
+    let matched = true;
+    for (let offset = 0; offset < matchLines.length; offset += 1) {
+      if (lines[index + offset] !== matchLines[offset]) {
+        matched = false;
+        break;
+      }
+    }
+    if (matched) return index;
+  }
+  return -1;
+}
+
+function normalizeUnifiedDiffText(input) {
+  return String(input || "").replaceAll("\r\n", "\n");
+}
+
+function diagnosePatchFailure(stderrText, patch, touchedPaths) {
+  const text = String(stderrText || "");
+  const diagnostics = [];
+  if (/corrupt patch/i.test(text)) diagnostics.push("Patch hunks are malformed or incomplete.");
+  if (/patch does not apply/i.test(text)) diagnostics.push("Patch context does not match the current file contents.");
+  if (/No such file or directory/i.test(text)) diagnostics.push("One or more patch paths do not exist in the workspace.");
+  if (/unrecognized input/i.test(text)) diagnostics.push("Patch format was not recognized by git apply.");
+  if (/\r/.test(patch)) diagnostics.push("Patch contained CRLF line endings; convert to LF before applying.");
+  if (!/^--- a\//m.test(patch) || !/^\+\+\+ b\//m.test(patch)) diagnostics.push("Unified diff headers must include --- a/path and +++ b/path lines.");
+  if (diagnostics.length === 0) diagnostics.push("Re-read the target files and regenerate the patch with current context.");
+  return { touchedPaths, diagnostics, raw: text.trim() };
+}
+
+module.exports = { relaiApplyPatch, normalizeOpenAIPatchFormat };

@@ -29,6 +29,28 @@ for (const file of walk(ciDir)) {
   }
 }
 
+const sourceLineBudgets = {
+  'src/localRepoBridge.js': 900,
+  'src/bridge/archive.js': 120,
+  'src/bridge/browser.js': 150,
+  'src/bridge/patch.js': 400,
+  'src/bridge/review.js': 100,
+  'src/bridge/tidy.js': 320,
+  'src/bridge/validation.js': 240
+};
+
+for (const [relativePath, maxLines] of Object.entries(sourceLineBudgets)) {
+  const file = path.join(root, relativePath);
+  if (!fs.existsSync(file)) {
+    failures.push(`Missing architecture module: ${relativePath}`);
+    continue;
+  }
+  const lineCount = fs.readFileSync(file, 'utf8').split(/\r?\n/).length;
+  if (lineCount > maxLines) {
+    failures.push(`${relativePath} has ${lineCount} lines; architecture budget is ${maxLines}`);
+  }
+}
+
 if (failures.length) {
   for (const failure of failures) console.error(failure);
   process.exit(1);
