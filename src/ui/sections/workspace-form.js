@@ -5,6 +5,7 @@ import { openModal, closeModal } from '../components/modal.js';
 import { fetchJson, postJson, invalidateCache, requestDashboardRefresh } from '../api.js';
 import { toast } from '../components/toast.js';
 import { esc } from '../utils.js';
+import { runButtonAction } from '../action-state.js';
 
 function debounce(fn, ms) {
   let timer = 0;
@@ -20,32 +21,23 @@ async function validatePath(p) {
   return fetchJson('/api/workspace/preflight?path=' + encodeURIComponent(p));
 }
 
-function renderPathStatus(el, info) {
-  if (!info) { el.textContent = ''; return; }
-  const errFinding = (info.findings || []).find(f => f.severity === 'error');
+function renderPathStatus(element, info) {
+  element.className = 'ws-form-status';
+  if (!info) { element.textContent = ''; return; }
+  const errorFinding = (info.findings || []).find(finding => finding.severity === 'error');
   if (info.isGit) {
-    el.textContent = '✓ Git repository found at this path.';
-    el.style.color = 'var(--green)';
+    element.textContent = '✓ Git repository found at this path.';
+    element.classList.add('success');
   } else if (info.exists && info.isDirectory) {
-    el.textContent = '⚠ Folder exists but is not a git repository. You can still save and init/clone it later.';
-    el.style.color = 'var(--yellow)';
-  } else if (errFinding) {
-    el.textContent = '✗ ' + errFinding.message + ' — you can still save (e.g. before cloning).';
-    el.style.color = 'var(--red)';
+    element.textContent = '⚠ Folder exists but is not a git repository. You can still save and initialize or clone it later.';
+    element.classList.add('warn');
+  } else if (errorFinding) {
+    element.textContent = '✗ ' + errorFinding.message + ' — you can still save it before cloning.';
+    element.classList.add('error');
   } else {
-    el.textContent = '';
+    element.textContent = '';
   }
 }
-
-const FORM_STYLE = `
-  .ws-form label { display:block; font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--text-muted); margin:14px 0 5px; }
-  .ws-form label:first-of-type { margin-top:0; }
-  .ws-form input { width:100%; background:var(--bg,#0b0f1a); border:1px solid var(--line-soft); border-radius:8px; color:var(--text); padding:9px 10px; font:inherit; font-size:13px; }
-  .ws-form input[readonly] { opacity:.6; cursor:not-allowed; }
-  .ws-form .row { display:flex; gap:8px; }
-  .ws-form .status { font-size:12px; min-height:16px; margin-top:6px; line-height:1.4; }
-  .ws-form .actions { display:flex; gap:8px; justify-content:flex-end; margin-top:18px; }
-`;
 
 export function openWorkspaceForm({ mode = 'add', workspace = null, onSaved } = {}) {
   const ws = workspace || {};
@@ -53,22 +45,21 @@ export function openWorkspaceForm({ mode = 'add', workspace = null, onSaved } = 
   const form = document.createElement('form');
   form.className = 'ws-form';
   form.innerHTML = `
-    <style>${FORM_STYLE}</style>
     <label>Alias</label>
     <input name="alias" value="${esc(ws.alias || '')}" placeholder="for example jjclover" ${isEdit ? 'readonly' : ''} autocomplete="off">
     <label>Workspace path</label>
-    <div class="row">
-      <input name="path" value="${esc(ws.path || '')}" placeholder="Absolute path to the repository" style="flex:1" autocomplete="off">
+    <div class="ws-form-row">
+      <input class="ws-form-path" name="path" value="${esc(ws.path || '')}" placeholder="Absolute path to the repository" autocomplete="off">
       <button type="button" class="secondary" data-browse>Browse…</button>
     </div>
-    <div class="status" data-path-status></div>
+    <div class="ws-form-status" data-path-status></div>
     <label>Protected branches (comma-separated)</label>
     <input name="protected" value="${esc((ws.protectedBranches?.length ? ws.protectedBranches : ['main', 'master']).join(', '))}" autocomplete="off">
     <label>Default base branch</label>
     <input name="base" value="${esc(ws.defaultBaseBranch || 'main')}" autocomplete="off">
     <label>Allowed remotes (comma-separated)</label>
     <input name="remotes" value="${esc((ws.allowedRemotes?.length ? ws.allowedRemotes : ['origin']).join(', '))}" autocomplete="off">
-    <div class="actions">
+    <div class="ws-form-actions">
       <button type="button" class="secondary" data-cancel>Cancel</button>
       <button type="submit" class="primary">${isEdit ? 'Save changes' : 'Add workspace'}</button>
     </div>
@@ -87,15 +78,14 @@ export function openWorkspaceForm({ mode = 'add', workspace = null, onSaved } = 
   if (pathInput.value.trim()) runValidate();
 
   browseBtn.addEventListener('click', async () => {
-    browseBtn.disabled = true;
-    const prev = browseBtn.textContent;
-    browseBtn.textContent = 'Opening…';
-    // No timeout — the native dialog blocks until the user picks or cancels.
-    const res = await postJson('/api/pick-folder', {}, { timeout: 0 });
-    browseBtn.disabled = false;
-    browseBtn.textContent = prev;
+    const res = await runButtonAction(browseBtn, {
+      idleText: 'Browse…',
+      loadingText: 'Opening folder picker…',
+      successText: 'Folder selected',
+      errorText: 'Browse failed'
+    }, () => postJson('/api/pick-folder', {}, { timeout: 0 }));
     if (res?.unsupported) {
-      browseBtn.style.display = 'none';
+      browseBtn.hidden = true;
       toast('Browse needs the Rel.AI desktop launcher — type the path here instead.', { variant: 'info' });
       return;
     }
@@ -116,9 +106,12 @@ export function openWorkspaceForm({ mode = 'add', workspace = null, onSaved } = 
     const wsPath = pathInput.value.trim();
     if (!alias) { toast('Alias is required.', { variant: 'error' }); return; }
     if (!wsPath) { toast('Workspace path is required.', { variant: 'error' }); return; }
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Saving…';
-    const result = await postJson('/api/workspaces', {
+    const result = await runButtonAction(submitBtn, {
+      idleText: isEdit ? 'Save changes' : 'Add workspace',
+      loadingText: 'Saving workspace…',
+      successText: isEdit ? 'Workspace updated' : 'Workspace added',
+      errorText: 'Save failed'
+    }, () => postJson('/api/workspaces', {
       action: 'upsert',
       alias,
       path: wsPath,
@@ -127,9 +120,7 @@ export function openWorkspaceForm({ mode = 'add', workspace = null, onSaved } = 
       allowedRemotes: splitList(form.querySelector('input[name="remotes"]').value),
       ...(isEdit ? { fastTask: ws.fastTask, testCommands: undefined } : {}),
       confirmDangerous: true
-    });
-    submitBtn.disabled = false;
-    submitBtn.textContent = isEdit ? 'Save changes' : 'Add workspace';
+    }));
     if (result?.ok) {
       closeModal();
       invalidateCache();

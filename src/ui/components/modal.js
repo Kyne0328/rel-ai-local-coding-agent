@@ -1,4 +1,3 @@
-// Modal — role=dialog, focus-trap, Esc-close, restore-focus
 let _opener = null;
 
 export function openModal({ title, content, onClose, escDisabled = false } = {}) {
@@ -7,70 +6,69 @@ export function openModal({ title, content, onClose, escDisabled = false } = {})
 
   const backdrop = document.createElement('div');
   backdrop.id = '__relai-modal-backdrop';
-  backdrop.style.cssText = `
-    position:fixed;inset:0;background:rgba(0,0,0,.65);
-    display:flex;align-items:center;justify-content:center;
-    z-index:var(--z-modal,60);padding:24px;
-  `;
+  backdrop.className = 'overlay-backdrop modal-backdrop';
 
   const dialog = document.createElement('div');
+  dialog.className = 'modal-panel';
   dialog.setAttribute('role', 'dialog');
   dialog.setAttribute('aria-modal', 'true');
   dialog.setAttribute('aria-labelledby', '__relai-modal-title');
-  dialog.style.cssText = `
-    background:var(--surface,#ffffff);border:1px solid var(--line-soft);
-    border-radius:16px;padding:24px;max-width:520px;width:100%;
-    box-shadow:0 24px 64px rgba(0,0,0,.5);
-  `;
 
-  const titleEl = document.createElement('h2');
-  titleEl.id = '__relai-modal-title';
-  titleEl.style.cssText = 'margin:0 0 16px;font-size:16px;';
-  titleEl.textContent = title || '';
-  dialog.appendChild(titleEl);
+  const titleElement = document.createElement('h2');
+  titleElement.id = '__relai-modal-title';
+  titleElement.className = 'modal-title';
+  titleElement.textContent = title || '';
+  dialog.appendChild(titleElement);
 
   if (typeof content === 'string') {
-    const div = document.createElement('div');
-    div.innerHTML = content;
-    dialog.appendChild(div);
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = content;
+    dialog.appendChild(wrapper);
   } else if (content instanceof Node) {
     dialog.appendChild(content);
   }
 
   backdrop.appendChild(dialog);
   document.body.appendChild(backdrop);
-
-  // Focus first focusable
-  const focusable = dialog.querySelectorAll('button,input,select,textarea,[tabindex]:not([tabindex="-1"])');
-  if (focusable[0]) focusable[0].focus();
-
-  // Focus trap
-  backdrop.addEventListener('keydown', (e) => {
-    if (!escDisabled && e.key === 'Escape') {
-      closeModal();
-      if (onClose) onClose();
-      return;
-    }
-    if (e.key !== 'Tab') return;
-    const els = Array.from(dialog.querySelectorAll('button,input,select,textarea,[tabindex]:not([tabindex="-1"])'));
-    if (!els.length) { e.preventDefault(); return; }
-    const first = els[0];
-    const last = els.at(-1);
-    if (e.shiftKey && document.activeElement === first) {
-      e.preventDefault();
-      last.focus();
-    } else if (document.activeElement === last) {
-      e.preventDefault();
-      first.focus();
-    }
+  backdrop.addEventListener('click', event => {
+    if (event.target === backdrop && !escDisabled) finishClose(onClose);
   });
 
-  return { backdrop, dialog, close: () => { closeModal(); if (onClose) onClose(); } };
+  const focusable = dialog.querySelectorAll('button,input,select,textarea,[tabindex]:not([tabindex="-1"])');
+  focusable[0]?.focus();
+  backdrop.addEventListener('keydown', event => trapFocus(event, dialog, escDisabled, onClose));
+  return { backdrop, dialog, close: () => finishClose(onClose) };
+}
+
+function trapFocus(event, dialog, escDisabled, onClose) {
+  if (!escDisabled && event.key === 'Escape') {
+    finishClose(onClose);
+    return;
+  }
+  if (event.key !== 'Tab') return;
+  const elements = Array.from(dialog.querySelectorAll('button,input,select,textarea,[tabindex]:not([tabindex="-1"])'));
+  if (!elements.length) {
+    event.preventDefault();
+    return;
+  }
+  const first = elements[0];
+  const last = elements.at(-1);
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+function finishClose(onClose) {
+  closeModal();
+  if (onClose) onClose();
 }
 
 export function closeModal() {
-  const el = document.getElementById('__relai-modal-backdrop');
-  if (el) el.remove();
+  document.getElementById('__relai-modal-backdrop')?.remove();
   if (_opener && typeof _opener.focus === 'function') _opener.focus();
   _opener = null;
 }

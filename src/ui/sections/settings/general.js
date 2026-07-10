@@ -11,12 +11,13 @@ import {
   selectControl,
   saveRow
 } from './shared.js';
+import { getUiPreferences, setDensityPreference, setThemePreference } from '../../preferences.js';
 
 let _original = null;
 let _draft = null;
 
 export function mountGeneral(container) {
-  container.innerHTML = '<div style="padding:8px 0;color:var(--text-muted);font-size:13px;">Loading…</div>';
+  container.innerHTML = '<div class="settings-loading">Loading settings…</div>'; 
   _loadAndRender(container);
 }
 
@@ -33,9 +34,22 @@ function _render(container) {
   container.appendChild(header('General', 'Rel.AI uses one workspace bridge for ChatGPT: the repo stays on your machine, while ChatGPT gets explicit tools to inspect, change, validate, review, and restore configured workspaces.'));
 
   const grid = formGrid();
+  const appearance = panel('Appearance');
   const bridge = panel('ChatGPT local repo bridge');
   const workflow = panel('Workspace update style');
   const limits = panel('Runtime limits');
+
+  const uiPreferences = getUiPreferences();
+  appearance.body.appendChild(appearancePreview());
+  appearance.body.appendChild(field('Theme', selectControl([
+    { value: 'system', label: 'Follow system appearance' },
+    { value: 'dark', label: 'Dark' },
+    { value: 'light', label: 'Light' }
+  ], uiPreferences.theme, value => setThemePreference(value)), 'Stored locally in this browser. System mode follows the operating system appearance.'));
+  appearance.body.appendChild(field('Interface density', selectControl([
+    { value: 'comfortable', label: 'Comfortable' },
+    { value: 'compact', label: 'Compact' }
+  ], uiPreferences.density, value => setDensityPreference(value)), 'Compact mode reduces card, table, navigation, and control spacing without hiding information.'));
 
   bridge.body.appendChild(summaryBox());
   bridge.body.appendChild(field('Workspace access', toggleControl(true, () => {}, { enabled: 'Always enabled', disabled: 'Always enabled' }), 'Configured workspaces are exposed through one peer-level tool surface. Workspace-level context settings control how much context is scanned before structured writes.'));
@@ -84,6 +98,7 @@ function _render(container) {
 
   limits.body.appendChild(field('Max output bytes', numberControl(_draft.maxOutputBytes, (v) => { _draft.maxOutputBytes = v; _checkDirty(); }, { min: 10000, max: 20000000, width: '140px' }), 'Maximum validation output returned to ChatGPT. 2 MB is a safe default for test failures without flooding the chat.'));
 
+  grid.appendChild(appearance.el);
   grid.appendChild(bridge.el);
   grid.appendChild(workflow.el);
   grid.appendChild(limits.el);
@@ -91,22 +106,29 @@ function _render(container) {
 
   const save = saveRow(() => _save(container), () => _loadAndRender(container));
   save.id = '__settings-save-row';
-  save.style.display = 'none';
+  save.hidden = true;
   const changes = document.createElement('button');
-  changes.className = 'secondary';
+  changes.className = 'secondary compact-button settings-pending-button';
   changes.id = '__settings-changes-link';
-  changes.style.cssText = 'font-size:12px;min-height:28px;padding:0 10px;';
   changes.onclick = () => alert(_getChanges().map(c => `${c.key}: ${JSON.stringify(c.oldValue)} -> ${JSON.stringify(c.newValue)}`).join('\n'));
   save.prepend(changes);
   container.appendChild(save);
 }
 
+function appearancePreview() {
+  const preview = document.createElement('div');
+  preview.className = 'appearance-preview';
+  preview.innerHTML = `
+    <div class="appearance-swatch"><strong>Primary surface</strong><span>Cards, navigation, and dialogs</span></div>
+    <div class="appearance-swatch"><strong>Information density</strong><span>Spacing changes without reducing content</span></div>`;
+  return preview;
+}
+
 function summaryBox() {
   const div = document.createElement('div');
-  div.className = 'empty';
-  div.style.cssText = 'text-align:left;padding:12px;line-height:1.55;';
+  div.className = 'empty settings-summary';
   div.innerHTML = `
-    <strong style="color:var(--text);">ChatGPT local repo bridge</strong><br>
+    <strong>ChatGPT local repo bridge</strong><br>
     This is the always-on workspace connector between ChatGPT and your configured repositories. It avoids uploading a zip for every task through one reliable workflow: <code>relai_repo_snapshot</code>, <code>relai_read</code>, <code>relai_edit</code> unified edits (exact replace, full-file write, patch, or batch — with optional checks and diff in the same call), <code>relai_apply_bundle</code>, <code>relai_clear_files</code> file clearing, <code>relai_run_checks</code>, <code>relai_browser</code>, <code>relai_diff</code>, and <code>relai_restore_changes</code>.<br>
     Context settings live on each workspace and reduce broad scans/indexing for small tasks across any language stack.
   `;
@@ -116,10 +138,9 @@ function summaryBox() {
 
 function workflowWarningBox() {
   const div = document.createElement('div');
-  div.className = 'empty';
-  div.style.cssText = 'text-align:left;padding:12px;line-height:1.55;border-color:rgba(99,102,241,.35);background:rgba(99,102,241,.08);';
+  div.className = 'empty settings-summary settings-warning';
   div.innerHTML = `
-    <strong style="color:var(--text);">Choose how Rel.AI applies workspace updates.</strong><br>
+    <strong>Choose how Rel.AI applies workspace updates.</strong><br>
     Focused edits favor exact replacements, file writes, clears, validation, diff, and restore. Prepared update mode also allows update/bundle application for repo-wide changes. It still preserves <code>.git</code>, keeps path guards, and can require a clean git state before applying.
   `;
   return div;
@@ -132,7 +153,7 @@ function _checkDirty() {
   const saveRowEl = document.getElementById('__settings-save-row');
   if (!saveRowEl) return;
   const changes = _getChanges();
-  saveRowEl.style.display = changes.length ? 'flex' : 'none';
+  saveRowEl.hidden = changes.length === 0;
   const link = document.getElementById('__settings-changes-link');
   if (link) link.textContent = changes.length + ' change' + (changes.length === 1 ? '' : 's') + ' pending';
 }

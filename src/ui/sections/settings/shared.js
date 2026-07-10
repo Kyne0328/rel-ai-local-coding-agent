@@ -1,4 +1,5 @@
 import { fetchJson, postJson, invalidateCache, DASHBOARD_DATA_URL } from '../../api.js';
+import { runButtonAction } from '../../action-state.js';
 import { toast } from '../../components/toast.js';
 import { Toggle } from '../../components/toggle.js';
 import { Select } from '../../components/select.js';
@@ -15,55 +16,52 @@ export async function loadSettingsConfig(container) {
 
 export async function saveSettings(settings, { confirmDangerous = false } = {}) {
   const body = confirmDangerous ? { settings, confirmDangerous: true } : { settings };
-  const res = await postJson('/api/settings', body);
+  const response = await postJson('/api/settings', body);
   invalidateCache('/api/settings');
   invalidateCache(DASHBOARD_DATA_URL);
-  if (res?.ok) toast(res.message || 'Settings saved.', { variant: 'success' });
-  else toast('Error: ' + (res?.error || 'settings update failed'), { variant: 'error' });
-  return res;
+  if (response?.ok) toast(response.message || 'Settings saved.', { variant: 'success' });
+  else toast('Error: ' + (response?.error || 'settings update failed'), { variant: 'error' });
+  return response;
 }
 
 export function header(title, body) {
-  const wrap = document.createElement('div');
-  wrap.style.cssText = 'display:grid;gap:4px;margin:0 0 14px;';
-  const description = body ? `<p style="margin:0;color:var(--text-muted);font-size:13px;">${esc(body)}</p>` : '';
-  wrap.innerHTML = `<h3 style="margin:0;font-size:15px;">${esc(title)}</h3>${description}`;
-  return wrap;
+  const wrapper = document.createElement('div');
+  wrapper.className = 'settings-header';
+  const description = body ? `<p>${esc(body)}</p>` : '';
+  wrapper.innerHTML = `<h3>${esc(title)}</h3>${description}`;
+  return wrapper;
 }
 
 export function panel(title, body) {
-  const el = document.createElement('div');
-  el.className = 'card';
-  el.innerHTML = `<div class="card-head"><h3>${esc(title)}</h3></div>`;
+  const element = document.createElement('div');
+  element.className = 'card';
+  element.innerHTML = `<div class="card-head"><h3>${esc(title)}</h3></div>`;
   const content = document.createElement('div');
-  content.className = 'card-body';
-  content.style.cssText = 'display:grid;gap:12px;';
+  content.className = 'card-body settings-panel-body';
   if (body) content.appendChild(body);
-  el.appendChild(content);
-  return { el, body: content };
+  element.appendChild(content);
+  return { el: element, body: content };
 }
 
 export function formGrid() {
-  const el = document.createElement('div');
-  el.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;max-width:980px;';
-  return el;
+  const element = document.createElement('div');
+  element.className = 'settings-form-grid';
+  return element;
 }
 
 export function field(label, control, help) {
-  const wrap = document.createElement('div');
-  wrap.style.cssText = 'display:grid;gap:6px;';
-  const lbl = document.createElement('label');
-  lbl.style.cssText = 'font-size:13px;font-weight:700;';
-  lbl.textContent = label;
-  wrap.appendChild(lbl);
-  wrap.appendChild(control);
+  const wrapper = document.createElement('div');
+  wrapper.className = 'settings-field';
+  const labelElement = document.createElement('label');
+  labelElement.textContent = label;
+  wrapper.append(labelElement, control);
   if (help) {
-    const p = document.createElement('p');
-    p.style.cssText = 'font-size:12px;color:var(--text-muted);margin:0;';
-    p.textContent = help;
-    wrap.appendChild(p);
+    const paragraph = document.createElement('p');
+    paragraph.className = 'settings-help';
+    paragraph.textContent = help;
+    wrapper.appendChild(paragraph);
   }
-  return wrap;
+  return wrapper;
 }
 
 export function selectControl(options, value, onChange) {
@@ -75,7 +73,7 @@ export function toggleControl(checked, onChange, { enabled = 'Enabled', disabled
   control = Toggle({
     checked: Boolean(checked),
     label: checked ? enabled : disabled,
-    onChange: (value) => {
+    onChange: value => {
       onChange(value);
       const label = control.querySelector('span');
       if (label) label.textContent = value ? enabled : disabled;
@@ -84,24 +82,24 @@ export function toggleControl(checked, onChange, { enabled = 'Enabled', disabled
   return control;
 }
 
-export function numberControl(value, onChange, { min = 0, max = 1000000, width = '96px' } = {}) {
-  const el = document.createElement('input');
-  el.type = 'number';
-  el.value = value == null ? '' : value;
-  el.min = String(min);
-  el.max = String(max);
-  el.style.cssText = `width:${width};`;
-  el.addEventListener('input', () => onChange(Number(el.value)));
-  return el;
+export function numberControl(value, onChange, { min = 0, max = 1000000 } = {}) {
+  const element = document.createElement('input');
+  element.className = 'settings-number-control';
+  element.type = 'number';
+  element.value = value == null ? '' : value;
+  element.min = String(min);
+  element.max = String(max);
+  element.addEventListener('input', () => onChange(Number(element.value)));
+  return element;
 }
 
 export function textAreaControl(value, onChange, rows = 4) {
-  const el = document.createElement('textarea');
-  el.rows = rows;
-  el.value = textAreaValue(value);
-  el.style.cssText = 'width:100%;min-height:90px;border:1px solid var(--line);border-radius:10px;padding:10px;color:var(--text);background:#090f1b;font:inherit;';
-  el.addEventListener('input', () => onChange(el.value));
-  return el;
+  const element = document.createElement('textarea');
+  element.className = 'settings-textarea-control';
+  element.rows = rows;
+  element.value = textAreaValue(value);
+  element.addEventListener('input', () => onChange(element.value));
+  return element;
 }
 
 function textAreaValue(value) {
@@ -111,21 +109,22 @@ function textAreaValue(value) {
 
 export function saveRow(onSave, onReload) {
   const row = document.createElement('div');
-  row.style.cssText = 'display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap;';
-  const saveBtn = document.createElement('button');
-  saveBtn.textContent = 'Save changes';
-  saveBtn.onclick = async () => {
-    saveBtn.disabled = true;
-    saveBtn.textContent = 'Saving…';
-    try { await onSave(); }
-    finally { saveBtn.disabled = false; saveBtn.textContent = 'Save changes'; }
+  row.className = 'settings-save-row';
+  const saveButton = document.createElement('button');
+  saveButton.textContent = 'Save changes';
+  saveButton.onclick = async () => {
+    await runButtonAction(saveButton, {
+      idleText: 'Save changes',
+      loadingText: 'Saving settings…',
+      successText: 'Settings saved',
+      errorText: 'Save failed'
+    }, onSave);
   };
-  const reloadBtn = document.createElement('button');
-  reloadBtn.className = 'secondary';
-  reloadBtn.textContent = 'Reload';
-  reloadBtn.onclick = onReload;
-  row.appendChild(saveBtn);
-  row.appendChild(reloadBtn);
+  const reloadButton = document.createElement('button');
+  reloadButton.className = 'secondary';
+  reloadButton.textContent = 'Reload';
+  reloadButton.onclick = onReload;
+  row.append(saveButton, reloadButton);
   return row;
 }
 
@@ -135,12 +134,12 @@ export function settingsTable(map = {}) {
   table.innerHTML = '<thead><tr><th>Setting</th><th>Value</th></tr></thead><tbody></tbody>';
   const body = table.querySelector('tbody');
   for (const [key, value] of Object.entries(map)) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${esc(titleize(key))}</td><td><code>${esc(Array.isArray(value) ? value.join(', ') : String(value))}</code></td>`;
-    body.appendChild(tr);
+    const row = document.createElement('tr');
+    row.innerHTML = `<td>${esc(titleize(key))}</td><td><code>${esc(Array.isArray(value) ? value.join(', ') : String(value))}</code></td>`;
+    body.appendChild(row);
   }
-  const wrap = document.createElement('div');
-  wrap.className = 'table-wrap';
-  wrap.appendChild(table);
-  return wrap;
+  const wrapper = document.createElement('div');
+  wrapper.className = 'table-wrap';
+  wrapper.appendChild(table);
+  return wrapper;
 }

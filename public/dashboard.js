@@ -1,15 +1,13 @@
 import { setToken, getToken, fetchJson, DASHBOARD_DATA_URL } from './ui/api.js';
 import { init as initStore, get as getStore } from './ui/store.js';
-import { initRouter, currentSection, rerender } from './ui/router.js';
+import { initRouter, currentSection, navigate, rerender } from './ui/router.js';
 import { initEvents, startSSE } from './ui/events.js';
 import { mountHome } from './ui/sections/home.js';
-import { initCommandPalette } from './ui/components/command-palette.js';
+import { initCommandPalette, openCommandPalette } from './ui/components/command-palette.js';
+import { initUiPreferences } from './ui/preferences.js';
 
-// Single source of truth for navigable sections. The command palette and the
-// live-rerender allowlist derive from this; the sidebar/mobile nav markup lives
-// in the server-rendered shell (httpServer.renderDashboardHtml).
 const ROUTES = [
-  { id: 'home', label: 'Home' },
+  { id: 'home', label: 'Overview' },
   { id: 'workspaces', label: 'Workspaces' },
   { id: 'activity', label: 'Activity' },
   { id: 'tools', label: 'Tools' },
@@ -20,18 +18,18 @@ const SETTINGS_SUBROUTES = [
   { id: 'diagnostics', label: 'Settings → Diagnostics' },
 ];
 
+initUiPreferences();
+
 const urlToken = new URLSearchParams(location.search).get('token') || '';
 const token = urlToken || sessionStorage.getItem('relai_dashboard_token') || '';
 if (token) setToken(token);
-// Keep ?token=... in the address bar. /dashboard is protected before client
-// JavaScript runs, so stripping the token makes a browser refresh request the
-// page without credentials and return 401. The fetch layer also stores the token
-// in sessionStorage and attaches it to API calls.
+
+let _routerReady = false;
 
 function readInitialPayload() {
   try {
-    const el = document.getElementById('initialDashboardData');
-    return el?.textContent ? JSON.parse(el.textContent) : null;
+    const element = document.getElementById('initialDashboardData');
+    return element?.textContent ? JSON.parse(element.textContent) : null;
   } catch {
     return null;
   }
@@ -40,76 +38,81 @@ function readInitialPayload() {
 function ensureRouteRoot() {
   const main = document.getElementById('main');
   if (!main) return null;
-
   let routeRoot = document.getElementById('routeRoot');
   if (routeRoot) return routeRoot;
-
   routeRoot = document.createElement('div');
   routeRoot.id = 'routeRoot';
   routeRoot.className = 'route-root';
-
-  const persistent = Array.from(main.children);
-  for (const node of persistent) {
-    const keep = node.classList.contains('mobile-nav') || node.classList.contains('topbar');
-    if (!keep) node.remove();
-  }
-
   main.appendChild(routeRoot);
   return routeRoot;
 }
 
 async function boot() {
   const initial = readInitialPayload();
-  initStore(initial || {});
-
+  initStore(initial?.ok !== false ? initial || {} : {});
   const routeRoot = ensureRouteRoot();
   if (!routeRoot) return;
 
-  initRouter(routeRoot, getSections());
-  await _doRefresh({ source: 'boot', render: true });
-
   _wireTopControls();
+  if (initial?.ok !== false) {
+    _activateRouter(routeRoot);
+    _updateShell(initial || {});
+  } else {
+    _renderDashboardState('loading', 'Loading workspace state…', 'Rel.AI is checking the local service, configuration, and workspace status.');
+  }
+
+  const refreshed = await _doRefresh({ source: 'boot', render: _routerReady });
+  if (refreshed?.ok !== false && !_routerReady) _activateRouter(routeRoot);
+  _setupCommandPalette();
+
   window.addEventListener('relai:dashboard-refresh', () => _doRefresh({ source: 'local-change', render: true }));
-  // Register the SSE manager once at boot. It auto-connects and only sends UI
-  // updates when the server detects dashboard-relevant state changes.
   initEvents(_liveOnEvent);
   startSSE(getToken);
   _checkOnboarding();
+}
 
+function _activateRouter(routeRoot = ensureRouteRoot()) {
+  if (_routerReady || !routeRoot) return;
+  _routerReady = true;
+  initRouter(routeRoot, getSections());
+}
+
+function _setupCommandPalette() {
   const storeData = getStore();
   const navActions = [
-    ...ROUTES.map(r => ({ label: r.label, href: '#' + r.id, category: 'Navigation' })),
-    ...SETTINGS_SUBROUTES.map(r => ({ label: r.label, href: '#settings/' + r.id, category: 'Navigation' })),
+    ...ROUTES.map(route => ({ label: route.label, href: '#' + route.id, category: 'Navigation' })),
+    ...SETTINGS_SUBROUTES.map(route => ({ label: route.label, href: '#settings/' + route.id, category: 'Navigation' })),
   ];
   const actionActions = [
     { label: 'Refresh dashboard', category: 'Actions', action: () => _doRefresh({ source: 'manual', render: true }) },
-    { label: 'Copy dashboard token', category: 'Actions', action: () => { if (getToken()) navigator.clipboard.writeText(getToken()).catch((error) => { if (window.localStorage?.getItem('relai_debug') === '1') console.error(error); }); } },
+    { label: 'Add workspace', category: 'Actions', action: () => navigate('workspaces') },
+    { label: 'Open connector settings', category: 'Actions', href: '#settings/connector' },
+    { label: 'Copy MCP endpoint', category: 'Actions', action: () => {
+      const endpoint = getStore()?.connection?.chatgptMcpUrl;
+      if (endpoint) navigator.clipboard.writeText(endpoint).catch(_debugError);
+    } },
+    { label: 'Copy dashboard token', category: 'Actions', action: () => { if (getToken()) navigator.clipboard.writeText(getToken()).catch(_debugError); } },
   ];
   const workspaceList = storeData.config && Array.isArray(storeData.config.workspaces) ? storeData.config.workspaces : [];
-  const wsActions = workspaceList.map(ws => ({
-    label: 'Switch to workspace: ' + ws.alias,
+  const workspaceActions = workspaceList.map(workspace => ({
+    label: 'Switch to workspace: ' + workspace.alias,
     category: 'Workspaces',
-    action: () => { const el = document.getElementById('workspace'); if (el) el.value = ws.alias; }
+    action: () => { const element = document.getElementById('workspace'); if (element) element.value = workspace.alias; }
   }));
-  initCommandPalette([...navActions, ...actionActions, ...wsActions]);
-
+  initCommandPalette([...navActions, ...actionActions, ...workspaceActions]);
 }
 
 let _sectionsCache = null;
 function getSections() {
-  return _sectionsCache || (_sectionsCache = _buildSectionMap());
-}
-
-function _buildSectionMap() {
-  return {
-    home:        (el) => mountHome(el, getStore()),
-    workspaces:  (el) => import('./ui/sections/workspaces.js').then(m => m.mountWorkspaces(el, getStore())).catch(console.error),
-    activity:    (el) => import('./ui/sections/activity.js').then(m => m.mountActivity(el)).catch(console.error),
-    tools:       (el) => import('./ui/sections/tools.js').then(m => m.mountTools(el)).catch(console.error),
-    settings:    (el) => import('./ui/sections/settings/index.js').then(m => m.mountSettings(el, _settingsSubPage())).catch(console.error),
-    connector:   (el) => import('./ui/sections/settings/index.js').then(m => m.mountSettings(el, 'connector')).catch(console.error),
-    diagnostics: (el) => import('./ui/sections/settings/index.js').then(m => m.mountSettings(el, 'diagnostics')).catch(console.error),
-  };
+  return _sectionsCache || (_sectionsCache = {
+    home:        element => mountHome(element, getStore()),
+    workspaces:  element => import('./ui/sections/workspaces.js').then(module => module.mountWorkspaces(element, getStore())).catch(_debugError),
+    activity:    element => import('./ui/sections/activity.js').then(module => module.mountActivity(element)).catch(_debugError),
+    tools:       element => import('./ui/sections/tools.js').then(module => module.mountTools(element)).catch(_debugError),
+    settings:    element => import('./ui/sections/settings/index.js').then(module => module.mountSettings(element, _settingsSubPage())).catch(_debugError),
+    connector:   element => import('./ui/sections/settings/index.js').then(module => module.mountSettings(element, 'connector')).catch(_debugError),
+    diagnostics: element => import('./ui/sections/settings/index.js').then(module => module.mountSettings(element, 'diagnostics')).catch(_debugError),
+  });
 }
 
 function _settingsSubPage() {
@@ -118,65 +121,151 @@ function _settingsSubPage() {
 }
 
 function _wireTopControls() {
-  const refreshBtn = document.getElementById('refreshBtn');
-  if (refreshBtn) refreshBtn.onclick = () => _doRefresh({ source: 'manual', render: true });
+  const refreshButton = document.getElementById('refreshBtn');
+  if (refreshButton) refreshButton.onclick = () => _doRefresh({ source: 'manual', render: true });
+
+  const commandButton = document.getElementById('commandPaletteBtn');
+  if (commandButton) commandButton.onclick = () => openCommandPalette();
+
+  const workspaceSelect = document.getElementById('workspaceQuickNav');
+  if (workspaceSelect) {
+    workspaceSelect.onchange = () => {
+      const alias = workspaceSelect.value;
+      if (!alias) return;
+      navigate('workspaces');
+      window.setTimeout(() => focusWorkspaceCard(alias), 120);
+      workspaceSelect.value = '';
+    };
+  }
 }
 
-// Single fetch-and-render path shared by boot, manual refresh, and the command
-// palette. Re-mounts the current section against fresh store state via the router.
 async function _doRefresh(options = {}) {
+  _setRefreshState('loading');
   const data = await fetchJson(DASHBOARD_DATA_URL);
   if (data && data.ok !== false) {
     initStore(data);
     _updateShell(data);
-    if (options.render !== false && !_hasBlockingInteraction()) rerender();
+    _setupCommandPalette();
+    const routeRoot = ensureRouteRoot();
+    if (!_routerReady) _activateRouter(routeRoot);
+    else if (options.render !== false && !_hasBlockingInteraction()) rerender();
+    _setRefreshState('idle');
     return data;
   }
 
-  // Never replace a valid dashboard store with a 401/network error payload. That
-  // made existing workspaces appear to disappear after a failed refresh.
-  const statusEl = document.getElementById('serverStatus');
-  if (statusEl) {
-    statusEl.className = 'status-pill bad';
-    statusEl.textContent = 'Auth error';
+  _setRefreshState('error');
+  const message = data?.error || 'The dashboard could not reach the local Rel.AI service.';
+  const status = document.getElementById('serverStatus');
+  if (status) {
+    status.className = 'status-pill bad';
+    status.textContent = data?.status === 401 ? 'Authentication failed' : 'Disconnected';
   }
   const updated = document.getElementById('lastUpdated');
-  if (updated && data?.error) updated.textContent = data.error;
+  if (updated) updated.textContent = message;
+  if (!_routerReady) {
+    _renderDashboardState('error', data?.status === 401 ? 'Dashboard authentication failed.' : 'Rel.AI is not responding.', message);
+  }
   return data;
 }
 
-// Shared live-update handler — fed by SSE. It updates shell state and Activity
-// rows without re-mounting the current page, so forms, scroll position, and open
-// modals are not reset by background connector activity.
+function refreshButtonLabel(state) {
+  if (state === 'loading') return 'Refreshing…';
+  if (state === 'error') return 'Retry';
+  return 'Refresh';
+}
+
+function _setRefreshState(state) {
+  const button = document.getElementById('refreshBtn');
+  if (!button) return;
+  button.disabled = state === 'loading';
+  button.dataset.state = state;
+  button.textContent = refreshButtonLabel(state);
+}
+
+function _renderDashboardState(kind, title, description) {
+  const routeRoot = ensureRouteRoot();
+  if (!routeRoot) return;
+  if (kind === 'loading') {
+    routeRoot.innerHTML = `
+      <div class="dashboard-state">
+        <div class="dashboard-state-card">
+          <div class="loading-mark" aria-hidden="true"></div>
+          <h2>${_escapeHtml(title)}</h2>
+          <p>${_escapeHtml(description)}</p>
+          <div class="skeleton-grid" aria-hidden="true"><div class="skeleton-block"></div><div class="skeleton-block"></div><div class="skeleton-block"></div></div>
+        </div>
+      </div>`;
+    return;
+  }
+  routeRoot.innerHTML = `
+    <div class="dashboard-state">
+      <div class="dashboard-state-card">
+        <span class="status-pill bad">Connection error</span>
+        <h2>${_escapeHtml(title)}</h2>
+        <p>${_escapeHtml(description)}</p>
+        <div class="dashboard-state-actions">
+          <button class="primary" type="button" data-dashboard-retry>Retry connection</button>
+          <a class="buttonlike secondary" href="#settings/diagnostics">Open diagnostics</a>
+        </div>
+      </div>
+    </div>`;
+  routeRoot.querySelector('[data-dashboard-retry]')?.addEventListener('click', () => _doRefresh({ source: 'retry', render: true }));
+}
+
 async function _liveOnEvent(data) {
   if (!data || data.ok === false) return;
   initStore(data);
   _updateShell(data);
+  _setupCommandPalette();
+  if (!_routerReady) _activateRouter();
   if (currentSection() === 'activity') {
     import('./ui/sections/activity.js')
-      .then(m => m.prependEntry(data.auditTail?.entries?.[0] || null))
-      .catch(console.error);
+      .then(module => module.prependEntry(data.auditTail?.entries?.[0] || null))
+      .catch(_debugError);
   }
 }
 
 function _updateShell(data) {
-  const cfg = data?.config || {};
+  const config = data?.config || {};
+  const workspaces = Array.isArray(config.workspaces) ? config.workspaces : [];
+  const count = workspaces.length;
+  populateWorkspaceQuickNav(workspaces);
   const subtitle = document.getElementById('subtitle');
-  if (subtitle) subtitle.textContent = `Rel.AI MCP · ChatGPT workspace bridge · ${cfg.workspaces?.length || 0} workspaces`;
+  if (subtitle) subtitle.textContent = `${count} workspace${count === 1 ? '' : 's'} available to ChatGPT`;
   const updated = document.getElementById('lastUpdated');
-  if (updated) updated.textContent = 'Updated ' + new Date().toLocaleTimeString();
-  const statusEl = document.getElementById('serverStatus');
-  if (statusEl) {
-    statusEl.className = 'status-pill ' + (data?.ok !== false ? 'ok' : 'bad');
-    statusEl.textContent = data?.ok !== false ? 'Online' : 'Error';
+  if (updated) updated.textContent = 'Updated ' + new Date(data.generatedAt || Date.now()).toLocaleTimeString();
+  const status = document.getElementById('serverStatus');
+  if (status) {
+    status.className = 'status-pill ' + (data?.ok !== false ? 'ok' : 'bad');
+    status.textContent = data?.ok !== false ? 'Online' : 'Error';
   }
+}
+
+function populateWorkspaceQuickNav(workspaces) {
+  const select = document.getElementById('workspaceQuickNav');
+  if (!select) return;
+  const options = ['<option value="">Workspaces</option>'];
+  for (const workspace of workspaces) {
+    const alias = _escapeHtml(workspace.alias || 'workspace');
+    options.push(`<option value="${alias}">${alias}</option>`);
+  }
+  select.innerHTML = options.join('');
+}
+
+function focusWorkspaceCard(alias) {
+  const cards = Array.from(document.querySelectorAll('[data-workspace-card]'));
+  const card = cards.find(element => element.dataset.workspaceCard === alias);
+  if (!card) return;
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  card.setAttribute('tabindex', '-1');
+  card.focus({ preventScroll: true });
 }
 
 function _hasBlockingInteraction() {
   if (document.getElementById('__relai-modal-backdrop')) return true;
   if (document.getElementById('__relai-drawer-backdrop')) return true;
   const saveRow = document.getElementById('__settings-save-row');
-  return Boolean(saveRow?.style.display !== 'none');
+  return Boolean(saveRow && !saveRow.hidden);
 }
 
 async function _checkOnboarding() {
@@ -186,7 +275,19 @@ async function _checkOnboarding() {
       const { openOnboarding } = await import('./ui/sections/onboarding.js');
       openOnboarding();
     }
-  } catch (error) { if (window.localStorage?.getItem('relai_debug') === '1') console.error(error); }
+  } catch (error) {
+    _debugError(error);
+  }
+}
+
+function _debugError(error) {
+  if (window.localStorage?.getItem('relai_debug') === '1') console.error(error);
+}
+
+function _escapeHtml(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, character => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[character]);
 }
 
 boot();

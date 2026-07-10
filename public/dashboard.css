@@ -7,6 +7,9 @@
 @import url('/ui/base.css');
 @import url('/ui/layout.css');
 @import url('/ui/components.css');
+@import url('/ui/dashboard-shell.css');
+@import url('/ui/dashboard-interactions.css');
+@import url('/ui/dashboard-preferences.css');
 
 body {
   background: var(--bg);

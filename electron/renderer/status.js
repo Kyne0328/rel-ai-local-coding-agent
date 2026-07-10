@@ -1,91 +1,247 @@
-let currentMcpUrl = '';
+let currentStatus = {
+  serverRunning: false,
+  tunnelStatus: 'stopped',
+  mcpUrl: '',
+  error: '',
+  localUrl: '',
+  version: ''
+};
+let stateKey = '';
+let stateSince = Date.now();
+let elapsedTimer = null;
+let previousViewKey = '';
+let notificationsEnabled = localStorage.getItem('relai_status_notifications') !== 'off';
 
 function requestWindowFit() {
   window.requestAnimationFrame(() => {
-    if (!window.electronAPI || typeof window.electronAPI.fitWindowToContent !== 'function') return;
-    const body = document.querySelector('.body');
-    const widthSource = body || document.documentElement;
-    const width = Math.ceil(widthSource.getBoundingClientRect().width);
-    const height = Math.ceil(document.documentElement.scrollHeight);
-    window.electronAPI.fitWindowToContent({ width, height });
+    const shell = document.querySelector('.status-shell');
+    if (!shell || typeof window.electronAPI?.fitWindowToContent !== 'function') return;
+    window.electronAPI.fitWindowToContent({
+      width: Math.ceil(shell.getBoundingClientRect().width),
+      height: Math.ceil(document.documentElement.scrollHeight)
+    });
   });
 }
 
-function applyTunnelState(tunnelEl, tunnelSub, serverRunning, tunnelStatus, error) {
-  if (serverRunning && tunnelStatus === 'connecting') {
-    tunnelEl.textContent = 'Connecting';
-    tunnelEl.className = 'card-status connecting-text';
-    tunnelSub.textContent = 'waiting for tunnel';
-  } else if (serverRunning && tunnelStatus === 'running') {
-    tunnelEl.textContent = 'Connected';
-    tunnelEl.className = 'card-status running-text';
-    tunnelSub.textContent = 'ready for ChatGPT';
-  } else if (serverRunning && tunnelStatus === 'failed') {
-    tunnelEl.textContent = 'Failed';
-    tunnelEl.className = 'card-status failed-text';
-    tunnelSub.textContent = error ? error.slice(0, 36) : 'HTTPS tunnel required';
-  } else {
-    // Offline: server stopped, or running with no/unknown tunnel state.
-    tunnelEl.textContent = 'Offline';
-    tunnelEl.className = 'card-status stopped-text';
-    tunnelSub.textContent = 'waiting for domain';
+function connectionView(status) {
+  if (status.serverRunning && status.tunnelStatus === 'running' && status.mcpUrl) {
+    return {
+      key: 'ready',
+      badge: 'Connected',
+      eyebrow: 'Ready for ChatGPT',
+      title: 'Your workspace bridge is online.',
+      description: 'Copy the endpoint below when creating or updating the Rel.AI MCP app in ChatGPT.'
+    };
   }
+  if (status.serverRunning && status.tunnelStatus === 'connecting') {
+    return {
+      key: 'connecting',
+      badge: 'Connecting',
+      eyebrow: 'Secure tunnel',
+      title: 'Publishing the ChatGPT endpoint…',
+      description: 'The local service is running and waiting for tunnel publication over HTTPS.'
+    };
+  }
+  if (status.error || status.tunnelStatus === 'failed') {
+    return {
+      key: 'failed',
+      badge: 'Needs attention',
+      eyebrow: 'Connection failed',
+      title: 'Rel.AI could not finish connecting.',
+      description: 'Review the error below, update Settings if needed, then retry the connection.'
+    };
+  }
+  return {
+    key: 'stopped',
+    badge: 'Stopped',
+    eyebrow: 'Service stopped',
+    title: 'Rel.AI is not running.',
+    description: 'Start the service to make your local workspaces available to ChatGPT.'
+  };
+}
+
+function updateStateClock(key) {
+  if (key !== stateKey) {
+    stateKey = key;
+    stateSince = Date.now();
+  }
+  if (elapsedTimer) clearInterval(elapsedTimer);
+  elapsedTimer = key === 'connecting' ? setInterval(renderElapsed, 1000) : null;
+}
+
+function renderElapsed() {
+  if (stateKey !== 'connecting') return;
+  const seconds = Math.max(1, Math.floor((Date.now() - stateSince) / 1000));
+  const description = document.getElementById('statusDescription');
+  description.textContent = `The local service is running and waiting for tunnel publication for ${seconds} second${seconds === 1 ? '' : 's'}.`;
 }
 
 function updateUI(status) {
-  const serverRunning = Boolean(status?.serverRunning);
-  const tunnelStatus = status?.tunnelStatus || 'stopped';
-  const mcpUrl = status?.mcpUrl || '';
-  const error = status?.error || '';
-  currentMcpUrl = mcpUrl;
+  currentStatus = { ...currentStatus, ...(status || {}) };
+  const view = connectionView(currentStatus);
+  updateStateClock(view.key);
+  notifyOnStateChange(view);
 
-  const dot = document.getElementById('headerDot');
-  dot.className = `status-dot${serverRunning ? ' running' : ''}`;
+  const badge = document.getElementById('statusBadge');
+  badge.className = `status-badge ${view.key}`;
+  badge.textContent = view.badge;
+  document.getElementById('statusEyebrow').textContent = view.eyebrow;
+  document.getElementById('statusTitle').textContent = view.title;
+  document.getElementById('statusDescription').textContent = view.description;
 
-  const serverEl = document.getElementById('serverStatus');
-  serverEl.textContent = serverRunning ? 'Running' : 'Stopped';
-
-  const serverCardEl = document.getElementById('serverCardStatus');
-  serverCardEl.textContent = serverRunning ? 'Running' : 'Stopped';
-  serverCardEl.className = `card-status ${serverRunning ? 'running-text' : 'stopped-text'}`;
-
-  const tunnelEl = document.getElementById('tunnelStatus');
-  const tunnelSub = document.getElementById('tunnelSub');
-  applyTunnelState(tunnelEl, tunnelSub, serverRunning, tunnelStatus, error);
-
-  const urlEl = document.getElementById('mcpUrl');
-  const copyBtn = document.getElementById('copyBtn');
-  if (mcpUrl) {
-    urlEl.textContent = mcpUrl;
-    urlEl.className = 'copy-url';
-    copyBtn.disabled = false;
+  const endpoint = document.getElementById('mcpUrl');
+  const copyButton = document.getElementById('copyBtn');
+  if (currentStatus.mcpUrl) {
+    endpoint.textContent = currentStatus.mcpUrl;
+    endpoint.className = 'endpoint-box';
+    copyButton.disabled = false;
   } else {
-    urlEl.textContent = serverRunning ? 'Waiting for the HTTPS tunnel to publish the MCP URL...' : 'Start the server to create an HTTPS ChatGPT MCP URL.';
-    urlEl.className = 'copy-url empty';
-    copyBtn.disabled = true;
+    endpoint.textContent = view.key === 'stopped'
+      ? 'Start the service to create a secure endpoint.'
+      : 'Waiting for a secure endpoint…';
+    endpoint.className = 'endpoint-box empty';
+    copyButton.disabled = true;
   }
 
-  document.getElementById('errorLine').textContent = error;
-  document.getElementById('stopBtn').style.display = serverRunning ? '' : 'none';
-  document.getElementById('startBtn').style.display = serverRunning ? 'none' : '';
+  const toggle = document.getElementById('serverToggleBtn');
+  toggle.textContent = currentStatus.serverRunning ? 'Stop service' : 'Start service';
+  toggle.className = currentStatus.serverRunning ? 'danger' : 'primary';
+
+  const failed = view.key === 'failed';
+  document.getElementById('errorPanel').hidden = !failed;
+  document.getElementById('errorMessage').textContent = currentStatus.error || 'The public tunnel did not become ready.';
+  document.getElementById('retryBtn').hidden = !failed;
+
+  document.getElementById('localService').textContent = currentStatus.localUrl || (currentStatus.serverRunning ? 'Running locally' : 'Not running');
+  document.getElementById('tunnelDetail').textContent = tunnelLabel(currentStatus.tunnelStatus);
+  document.getElementById('appVersion').textContent = currentStatus.version ? `v${currentStatus.version}` : '—';
+  updateNotificationButton();
   requestWindowFit();
 }
 
+function notifyOnStateChange(view) {
+  const previous = previousViewKey;
+  previousViewKey = view.key;
+  if (!notificationsEnabled || previous === view.key) return;
+  if (view.key === 'ready') {
+    showDesktopNotification('Rel.AI MCP is connected', 'The ChatGPT MCP endpoint is ready to use.');
+  } else if (view.key === 'failed') {
+    showDesktopNotification('Rel.AI MCP needs attention', currentStatus.error || 'The secure connection could not be established.');
+  }
+}
+
+async function showDesktopNotification(title, body) {
+  if (typeof Notification !== 'function') return;
+  try {
+    let permission = Notification.permission;
+    if (permission === 'default') permission = await Notification.requestPermission();
+    if (permission === 'granted') new Notification(title, { body });
+  } catch {
+    // Notifications are optional and must never affect connection handling.
+  }
+}
+
+function updateNotificationButton() {
+  const button = document.getElementById('notificationToggleBtn');
+  if (!button) return;
+  button.textContent = notificationsEnabled ? 'On' : 'Off';
+  button.setAttribute('aria-pressed', notificationsEnabled ? 'true' : 'false');
+}
+
+function toggleNotifications() {
+  notificationsEnabled = !notificationsEnabled;
+  localStorage.setItem('relai_status_notifications', notificationsEnabled ? 'on' : 'off');
+  updateNotificationButton();
+}
+
+function diagnosticSummary() {
+  return [
+    `Rel.AI MCP ${currentStatus.version ? `v${currentStatus.version}` : ''}`.trim(),
+    `Local service: ${currentStatus.localUrl || (currentStatus.serverRunning ? 'running' : 'stopped')}`,
+    `Public tunnel: ${tunnelLabel(currentStatus.tunnelStatus)}`,
+    `MCP endpoint: ${currentStatus.mcpUrl || 'unavailable'}`,
+    `Status: ${connectionView(currentStatus).badge}`,
+    ...(currentStatus.error ? [`Error: ${currentStatus.error}`] : [])
+  ].join('\n');
+}
+
+async function copyDiagnostics() {
+  const button = document.getElementById('copyDiagnosticsBtn');
+  await window.electronAPI.copyUrl(diagnosticSummary());
+  const original = button.textContent;
+  button.dataset.state = 'success';
+  button.textContent = 'Copied';
+  window.setTimeout(() => {
+    delete button.dataset.state;
+    button.textContent = original;
+  }, 1300);
+}
+
+function initDisclosures() {
+  for (const details of document.querySelectorAll('[data-disclosure]')) {
+    const key = `relai_status_disclosure_${details.dataset.disclosure}`;
+    const saved = localStorage.getItem(key);
+    if (saved) details.open = saved === 'open';
+    details.addEventListener('toggle', () => {
+      localStorage.setItem(key, details.open ? 'open' : 'closed');
+      requestWindowFit();
+    });
+  }
+}
+
+function tunnelLabel(status) {
+  if (status === 'running') return 'Connected';
+  if (status === 'connecting') return 'Connecting';
+  if (status === 'failed') return 'Failed';
+  return 'Offline';
+}
+
+async function withBusy(button, label, action) {
+  const original = button.textContent;
+  button.disabled = true;
+  button.dataset.state = 'loading';
+  button.textContent = label;
+  try {
+    const result = await action();
+    if (result) updateUI(result);
+  } catch (error) {
+    updateUI({ error: error instanceof Error ? error.message : 'The action failed.', tunnelStatus: 'failed' });
+  } finally {
+    button.disabled = false;
+    delete button.dataset.state;
+    if (button.textContent === label) button.textContent = original;
+  }
+}
+
 function bindEvents() {
-  document.getElementById('copyBtn').addEventListener('click', () => {
-    if (!currentMcpUrl) return;
-    window.electronAPI.copyUrl(currentMcpUrl);
-    const btn = document.getElementById('copyBtn');
-    const original = btn.textContent;
-    btn.textContent = 'Copied MCP URL';
-    window.setTimeout(() => { btn.textContent = original; }, 1600);
+  document.getElementById('copyBtn').addEventListener('click', async () => {
+    if (!currentStatus.mcpUrl) return;
+    const button = document.getElementById('copyBtn');
+    await window.electronAPI.copyUrl(currentStatus.mcpUrl);
+    const original = button.textContent;
+    button.textContent = 'Copied';
+    window.setTimeout(() => { button.textContent = original; }, 1400);
   });
+
+  document.getElementById('serverToggleBtn').addEventListener('click', () => {
+    const button = document.getElementById('serverToggleBtn');
+    const stopping = currentStatus.serverRunning;
+    withBusy(button, stopping ? 'Stopping…' : 'Starting…', () => stopping
+      ? window.electronAPI.stopServer()
+      : window.electronAPI.startServer());
+  });
+
+  document.getElementById('retryBtn').addEventListener('click', () => {
+    const button = document.getElementById('retryBtn');
+    withBusy(button, 'Retrying…', () => window.electronAPI.startServer());
+  });
+  document.getElementById('notificationToggleBtn').addEventListener('click', toggleNotifications);
+  document.getElementById('copyDiagnosticsBtn').addEventListener('click', copyDiagnostics);
   document.getElementById('dashboardBtn').addEventListener('click', () => window.electronAPI.openDashboard());
   document.getElementById('settingsBtn').addEventListener('click', () => window.electronAPI.openSettings());
-  document.getElementById('stopBtn').addEventListener('click', () => window.electronAPI.stopServer());
-  document.getElementById('startBtn').addEventListener('click', () => window.electronAPI.startServer());
 }
 
 window.electronAPI.onServerStatus(updateUI);
+initDisclosures();
 bindEvents();
-updateUI({ serverRunning: false, tunnelStatus: 'stopped', mcpUrl: '', error: '' });
+updateUI(currentStatus);

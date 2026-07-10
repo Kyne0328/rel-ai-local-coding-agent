@@ -66,6 +66,7 @@ async function parseJsonResponse(res) {
 }
 
 function normalizeResponseData(res, data) {
+  data.status = res.status;
   if (!res.ok && data.ok !== true) data.ok = false;
   if (res.status === 401) data.error = data.error || 'Unauthorized — check dashboard token.';
   return data;

@@ -15,7 +15,7 @@ function buildWorkspaces(data) {
   root.innerHTML = `
     <div class="section-head">
       <div><h2>Workspaces</h2><p>Repositories ChatGPT can inspect, change, validate, review, and restore through the same workspace-tool surface.</p></div>
-      <div style="display:flex;gap:8px;align-items:center;">
+      <div class="section-head-actions">
         <button type="button" data-add-workspace>Add workspace</button>
         <span class="section-action">${esc(workspaces.length)} configured</span>
       </div>
@@ -79,7 +79,7 @@ function workspaceCardView(ws, health) {
 
 function workspaceHealthHtml(view) {
   if (!view.healthWarning) return '';
-  return `<div style="margin-top:8px;padding:8px 10px;border:1px solid var(--red);border-radius:8px;background:rgba(255,111,136,.10);font-size:12px;color:var(--text);display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;"><span>⚠ ${esc(view.healthWarning)}</span><button class="secondary" type="button" data-fix-path="${view.aliasAttr}">Fix path</button></div>`;
+  return `<div class="workspace-warning"><span>⚠ ${esc(view.healthWarning)}</span><button class="secondary" type="button" data-fix-path="${view.aliasAttr}">Fix path</button></div>`;
 }
 
 function workspaceBadgeRow(view) {
@@ -96,7 +96,7 @@ function workspaceBadgeRow(view) {
 }
 
 function workspaceExtraLines(view, ws) {
-  const stale = view.staleKeys.length ? `<div class="path" style="color:var(--yellow,#ffc24b);">Stale tests (no longer in package scripts): ${esc(view.staleKeys.join(', '))}</div>` : '';
+  const stale = view.staleKeys.length ? `<div class="path warning-text">Stale tests (no longer in package scripts): ${esc(view.staleKeys.join(', '))}</div>` : '';
   const task = view.sessionActive && view.taskHint ? `<div class="path">Task: ${esc(view.taskHint)}</div>` : '';
   return `${stale}<div class="path">${fastTaskText(ws.fastTask)}</div>${task}`;
 }
@@ -131,8 +131,8 @@ function workspaceActionButtons(view) {
 function workspaceCard(ws, health) {
   const view = workspaceCardView(ws, health);
   return `
-    <div class="workspace-card">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+    <div class="workspace-card" data-workspace-card="${view.aliasAttr}">
+      <div class="workspace-card-head">
         <strong>${esc(view.alias)}</strong>
         ${pillHtml(view.status)}
       </div>
@@ -141,8 +141,8 @@ function workspaceCard(ws, health) {
       <div class="badge-row">${workspaceBadgeRow(view)}</div>
       <div class="path">${validationText(view.testKeys, view.detected)}</div>
       ${workspaceExtraLines(view, ws)}
-      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">${workspaceActionButtons(view)}</div>
-      <pre class="copy-box" data-preflight-out="${view.aliasAttr}" style="display:none;margin-top:10px;max-height:220px;overflow:auto;"></pre>
+      <div class="workspace-actions">${workspaceActionButtons(view)}</div>
+      <pre class="copy-box preflight-output" data-preflight-out="${view.aliasAttr}"></pre>
     </div>`;
 }
 
@@ -164,11 +164,11 @@ function validationText(configured, detected) {
 function findingRow(finding) {
   const alias = finding.workspace || '';
   const actionable = finding.code === 'workspace_unavailable' && alias;
-  const inner = `<span class="dot ${statusClass(finding.severity)}"></span><div style="flex:1;"><div class="item-title">${esc(finding.code || finding.severity || 'finding')}</div><div class="item-sub">${esc(finding.message || '')}</div></div>`;
+  const inner = `<span class="dot ${statusClass(finding.severity)}"></span><div class="finding-main"><div class="item-title">${esc(finding.code || finding.severity || 'finding')}</div><div class="item-sub">${esc(finding.message || '')}</div></div>`;
   if (actionable) {
-    return `<div class="list-item" style="display:flex;align-items:center;gap:10px;">${inner}<div style="display:flex;gap:6px;flex-shrink:0;"><button class="secondary" type="button" data-finding-edit="${esc(alias)}">Edit path</button><button class="secondary danger" type="button" data-finding-remove="${esc(alias)}">Remove</button></div></div>`;
+    return `<div class="list-item finding-row">${inner}<div class="finding-actions"><button class="secondary" type="button" data-finding-edit="${esc(alias)}">Edit path</button><button class="secondary danger" type="button" data-finding-remove="${esc(alias)}">Remove</button></div></div>`;
   }
-  return `<a class="list-item" href="#settings/diagnostics" style="text-decoration:none;color:inherit;">${inner}<div class="item-time">${pillHtml(finding.severity || 'info')}</div></a>`;
+  return `<a class="list-item finding-link" href="#settings/diagnostics">${inner}<div class="item-time">${pillHtml(finding.severity || 'info')}</div></a>`;
 }
 
 function actionableFindings(health) {

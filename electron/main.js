@@ -30,12 +30,15 @@ let tunnelProcess = null;
 let startPromise = null;
 let lifecycleToken = 0;
 let isQuitting = false;
-let currentStatus = {
+const BASE_STATUS = {
   serverRunning: false,
   tunnelStatus: 'stopped',
   mcpUrl: '',
-  error: ''
+  error: '',
+  localUrl: '',
+  version: app.getVersion()
 };
+let currentStatus = { ...BASE_STATUS };
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -324,7 +327,13 @@ async function startServer() {
       return currentStatus;
     }
 
-    setStatus({ serverRunning: true, tunnelStatus: 'connecting', mcpUrl: '', error: '' });
+    setStatus({
+      serverRunning: true,
+      tunnelStatus: 'connecting',
+      mcpUrl: '',
+      error: '',
+      localUrl: `http://127.0.0.1:${actualPort}`
+    });
 
     const tunnelLog = (chunk) => {
       if (statusWindow && !statusWindow.isDestroyed()) {
@@ -405,7 +414,7 @@ function stopServer(options = {}) {
   startPromise = null;
   lifecycleToken += 1;
 
-  currentStatus = { serverRunning: false, tunnelStatus: 'stopped', mcpUrl: '', error: '' };
+  currentStatus = { ...BASE_STATUS };
   if (!options.silent) pushStatus();
   else updateTrayMenu();
   return currentStatus;

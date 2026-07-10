@@ -2,6 +2,7 @@ import { fetchJson, postJson, DASHBOARD_DATA_URL, requestDashboardRefresh } from
 import { toast } from '../components/toast.js';
 import { openWorkspaceForm } from './workspace-form.js';
 import { pluralSuffix } from './workspace-cards.js';
+import { runButtonAction } from '../action-state.js';
 
 const WORKSPACE_CLICK_ACTIONS = [
   { selector: '[data-add-workspace]', handler: () => openWorkspaceForm({ mode: 'add' }) },
@@ -41,21 +42,24 @@ async function editWorkspaceFromTrigger(trigger) {
 async function runPreflightFromTrigger(preflight) {
   const alias = preflight.dataset.preflight || '';
   const out = preflightOutput(alias);
-  preflight.disabled = true;
-  preflight.textContent = 'Running…';
-  const result = await fetchJson('/api/workspace/preflight?workspace=' + encodeURIComponent(alias) + '&requireClean=0');
-  if (out) { out.style.display = 'block'; renderPreflight(out, result); }
-  preflight.disabled = false;
-  preflight.textContent = 'Run preflight';
-}
+  const result = await runButtonAction(preflight, {
+    idleText: 'Run preflight',
+    loadingText: 'Running preflight…',
+    successText: 'Preflight complete',
+    errorText: 'Preflight failed'
+  }, () => fetchJson('/api/workspace/preflight?workspace=' + encodeURIComponent(alias) + '&requireClean=0'));
+  if (out) { out.classList.add('open'); renderPreflight(out, result); }
+  if (result?.ok === false) toast('Preflight needs attention: ' + (result.error || 'review the findings below'), { variant: 'warn' });
+} 
 
 async function saveDetectedFromTrigger(saveDetected) {
   const alias = saveDetected.dataset.saveDetected || '';
-  saveDetected.disabled = true;
-  saveDetected.textContent = 'Saving…';
-  const result = await saveDetectedTests(alias);
-  saveDetected.disabled = false;
-  saveDetected.textContent = 'Save detected tests';
+  const result = await runButtonAction(saveDetected, {
+    idleText: 'Save detected tests',
+    loadingText: 'Saving tests…',
+    successText: 'Tests saved',
+    errorText: 'Save failed'
+  }, () => saveDetectedTests(alias));
   if (result?.ok) {
     toast('Detected tests saved for ' + alias + '.', { variant: 'success' });
     requestDashboardRefresh();

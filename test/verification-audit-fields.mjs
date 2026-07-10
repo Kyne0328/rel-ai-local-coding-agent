@@ -18,7 +18,7 @@ function git(args, cwd) { // NOSONAR - this smoke test intentionally executes th
 }
 
 function makeTempRepo() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-p1-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-audit-'));
   git(['init'], dir);
   git(['config', 'user.email', 'test@test.com'], dir);
   git(['config', 'user.name', 'Test'], dir);
@@ -28,7 +28,7 @@ function makeTempRepo() {
   return dir;
 }
 
-// Test 1: relaiVerify result has Phase 1 audit fields
+// relaiVerify returns the audit fields required by verification reporting.
 {
   const dir = makeTempRepo();
   const workspace = { alias: 'test', path: dir };
@@ -42,7 +42,7 @@ function makeTempRepo() {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
-// Test 2: planEdit result has plannerPath and plannerReason
+// planEdit reports the selected planner path and rationale.
 {
   const dir = makeTempRepo();
   const workspace = { alias: 'test', path: dir };
@@ -54,7 +54,7 @@ function makeTempRepo() {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
-// Test 3: aliasNormalizations = 0 for a recognized runnable command (no alias normalization)
+// Recognized runnable commands report no alias normalization.
 {
   const dir = makeTempRepo();
   const workspace = { alias: 'test', path: dir };
@@ -64,4 +64,4 @@ function makeTempRepo() {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
-console.log('phase1-audit-fields tests passed.');
+console.log('Verification audit field tests passed.');

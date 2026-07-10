@@ -6,7 +6,9 @@ const state = {
   editMode: false
 };
 
+const STEP_COUNT = 4;
 let currentStep = 1;
+let launchPending = false;
 
 const ngrokLinks = {
   signup: 'https://dashboard.ngrok.com/signup',
@@ -18,9 +20,10 @@ function requestWindowFit() {
   window.requestAnimationFrame(() => {
     const wizard = document.querySelector('.wizard');
     if (!wizard || typeof window.electronAPI?.fitWindowToContent !== 'function') return;
-    const width = Math.ceil(wizard.getBoundingClientRect().width);
-    const height = Math.ceil(document.documentElement.scrollHeight);
-    window.electronAPI.fitWindowToContent({ width, height });
+    window.electronAPI.fitWindowToContent({
+      width: Math.ceil(wizard.getBoundingClientRect().width),
+      height: Math.ceil(document.documentElement.scrollHeight)
+    });
   });
 }
 
@@ -32,135 +35,192 @@ function stripHttpProtocol(value) {
   return text;
 }
 
-function isDomainEdgeChar(ch) {
-  if (ch?.length !== 1) return false;
-  const code = ch.codePointAt(0);
+function isDomainEdgeChar(character) {
+  if (character?.length !== 1) return false;
+  const code = character.codePointAt(0);
   return (code >= 97 && code <= 122) || (code >= 48 && code <= 57);
 }
 
 function hasOnlyDomainChars(value) {
-  for (const ch of value) {
-    if (ch !== '.' && ch !== '-' && !isDomainEdgeChar(ch)) return false;
+  for (const character of value) {
+    if (character !== '.' && character !== '-' && !isDomainEdgeChar(character)) return false;
   }
   return true;
 }
 
 function normalizeDomain(value) {
-  let d = stripHttpProtocol(String(value || '').trim()).toLowerCase();
-  while (d.endsWith('/')) d = d.slice(0, -1);
-  return d;
+  let domain = stripHttpProtocol(String(value || '').trim()).toLowerCase();
+  while (domain.endsWith('/')) domain = domain.slice(0, -1);
+  return domain;
 }
 
 function isValidDomain(domain) {
   if (!domain || domain.length > 253 || !domain.includes('.')) return false;
   if (!hasOnlyDomainChars(domain) || !isDomainEdgeChar(domain[0]) || !isDomainEdgeChar(domain.at(-1))) return false;
   if (domain.includes('..')) return false;
-  return domain.split('.').every((label) => label && label.length <= 63 && !label.startsWith('-') && !label.endsWith('-'));
+  return domain.split('.').every(label => label && label.length <= 63 && !label.startsWith('-') && !label.endsWith('-'));
 }
 
-function goTo(stepNumber) {
-  const current = document.getElementById(`step${currentStep}`);
-  if (current) current.classList.remove('active');
-  currentStep = stepNumber;
-  document.getElementById(`step${stepNumber}`).classList.add('active');
-  updateProgress();
-  if (stepNumber === 3 && !state.token) regenerateToken();
-  if (stepNumber === 4) updateNgrokPreview();
-  if (stepNumber === 5) renderSummary();
-  requestWindowFit();
+function isValidPort(value) {
+  return Number.isInteger(value) && value >= 1024 && value <= 65535;
 }
 
-function updateProgress() {
-  for (let i = 1; i <= 5; i += 1) {
-    document.getElementById(`p${i}`).classList.toggle('done', i <= currentStep);
-  }
+function isValidNgrokKey(value) {
+  return Boolean(value) && value.length >= 8 && !/\s/.test(value);
 }
 
-function validatePort() {
-  const value = Number.parseInt(document.getElementById('portInput').value, 10);
-  const hint = document.getElementById('portHint');
-  if (!Number.isInteger(value) || value < 1024 || value > 65535) {
-    hint.textContent = 'Enter a valid port between 1024 and 65535.';
-    hint.style.color = '#f87171';
-    requestWindowFit();
-    return;
-  }
-  state.port = value;
-  hint.textContent = 'Port saved.';
-  hint.style.color = '#22c55e';
-  requestWindowFit();
-  window.setTimeout(() => goTo(3), 200);
+function setMessage(elementId, message, tone = '') {
+  const element = document.getElementById(elementId);
+  if (!element) return;
+  element.textContent = message;
+  element.className = `field-message${tone ? ` ${tone}` : ''}`;
 }
 
-function regenerateToken() {
+function generateToken() {
   const bytes = new Uint8Array(32);
   window.crypto.getRandomValues(bytes);
   state.token = btoa(String.fromCodePoint(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
   document.getElementById('tokenBox').textContent = state.token;
 }
 
-function copyToken() {
+function syncLocalState() {
+  state.port = Number.parseInt(document.getElementById('portInput').value, 10);
+}
+
+function syncConnectionState() {
+  state.ngrokAuth = String(document.getElementById('ngrokTokenInput').value || '').trim();
+  state.ngrokDomain = normalizeDomain(document.getElementById('domainInput').value);
+}
+
+function validateLocalFields({ announce = true } = {}) {
+  syncLocalState();
+  const valid = isValidPort(state.port);
+  if (announce || document.getElementById('portInput').value) {
+    setMessage('portHint', valid ? 'Port is valid.' : 'Enter a port between 1024 and 65535.', valid ? 'success' : 'error');
+  }
+  document.getElementById('continueLocalBtn').disabled = !valid;
+  return valid;
+}
+
+function validateConnectionFields({ announce = true } = {}) {
+  syncConnectionState();
+  const keyValid = isValidNgrokKey(state.ngrokAuth);
+  const domainValid = isValidDomain(state.ngrokDomain);
+
+  if (announce || state.ngrokAuth) {
+    setMessage(
+      'ngrokTokenMessage',
+      keyValid ? 'Account key format looks valid.' : 'Enter an account key with at least 8 characters and no spaces.',
+      keyValid ? 'success' : 'error'
+    );
+  }
+  if (announce || state.ngrokDomain) {
+    setMessage(
+      'domainMessage',
+      domainValid ? 'Static domain is valid.' : 'Enter a valid domain such as your-name.ngrok-free.dev.',
+      domainValid ? 'success' : 'error'
+    );
+  }
+
+  document.getElementById('reviewSetupBtn').disabled = !(keyValid && domainValid);
+  updateNgrokPreview();
+  return keyValid && domainValid;
+}
+
+function goTo(stepNumber) {
+  const nextStep = Math.min(STEP_COUNT, Math.max(1, stepNumber));
+  document.getElementById(`step${currentStep}`)?.classList.remove('active');
+  currentStep = nextStep;
+  document.getElementById(`step${currentStep}`)?.classList.add('active');
+  updateProgress();
+
+  if (currentStep === 2) {
+    if (!state.token) generateToken();
+    validateLocalFields({ announce: false });
+    window.setTimeout(() => document.getElementById('portInput')?.focus(), 0);
+  }
+  if (currentStep === 3) {
+    validateConnectionFields({ announce: false });
+    window.setTimeout(() => document.getElementById('ngrokTokenInput')?.focus(), 0);
+  }
+  if (currentStep === 4) renderSummary();
+  requestWindowFit();
+}
+
+function updateProgress() {
+  for (let index = 1; index <= STEP_COUNT; index += 1) {
+    const step = document.getElementById(`p${index}`);
+    step.classList.toggle('done', index < currentStep);
+    step.classList.toggle('current', index === currentStep);
+    step.setAttribute('aria-current', index === currentStep ? 'step' : 'false');
+  }
+}
+
+async function copyToken() {
   if (!state.token) return;
-  window.electronAPI.copyUrl(state.token);
-  const btn = document.getElementById('copyTokenBtn');
-  if (!btn) return;
-  const original = btn.textContent;
-  btn.textContent = 'Copied';
-  window.setTimeout(() => { btn.textContent = original; }, 1600);
+  const button = document.getElementById('copyTokenBtn');
+  await window.electronAPI.copyUrl(state.token);
+  showButtonSuccess(button, 'Copied', 'Copy token');
+}
+
+function showButtonSuccess(button, successText, idleText) {
+  button.disabled = true;
+  button.dataset.state = 'success';
+  button.textContent = successText;
+  window.setTimeout(() => {
+    button.disabled = false;
+    delete button.dataset.state;
+    button.textContent = idleText;
+  }, 1300);
 }
 
 function updateNgrokPreview() {
   const domain = normalizeDomain(document.getElementById('domainInput').value);
-  document.getElementById('ngrokCmdPreview').textContent = `managed ngrok tunnel for ${domain || '<domain>'} on local port ${state.port}`;
-}
-
-function validateDomain() {
-  const domain = normalizeDomain(document.getElementById('domainInput').value);
-  const auth = String(document.getElementById('ngrokTokenInput').value || '').trim();
-  const error = document.getElementById('domainError');
-  if (!auth || /\s/.test(auth) || auth.length < 8) {
-    error.textContent = 'Enter your ngrok account key first.';
-    requestWindowFit();
-    return;
-  }
-  if (!isValidDomain(domain)) {
-    error.textContent = 'Enter a valid domain, for example your-name.ngrok-free.dev.';
-    requestWindowFit();
-    return;
-  }
-  state.ngrokAuth = auth;
-  state.ngrokDomain = domain;
-  error.textContent = '';
-  goTo(5);
+  const port = Number.parseInt(document.getElementById('portInput').value, 10) || state.port;
+  document.getElementById('ngrokCmdPreview').textContent = `managed ngrok tunnel for ${domain || '<domain>'} on local port ${port}`;
 }
 
 function renderSummary() {
+  syncLocalState();
+  syncConnectionState();
   const box = document.getElementById('summaryBox');
   box.innerHTML = '';
   const rows = [
-    ['Port', String(state.port)],
-    ['Dashboard token', 'saved to ~/.rel-ai-mcp/.env'],
-    ['ngrok account', 'saved to Rel.AI private config'],
-    ['Tunnel domain', state.ngrokDomain]
+    ['Local service', `http://127.0.0.1:${state.port}`],
+    ['Dashboard token', 'Stored privately in ~/.rel-ai-mcp/.env'],
+    ['ngrok account key', 'Stored privately in Rel.AI ngrok.yml'],
+    ['ChatGPT endpoint', `https://${state.ngrokDomain}/mcp`]
   ];
   for (const [key, value] of rows) {
     const row = document.createElement('div');
     row.className = 'summary-row';
-    const keyEl = document.createElement('span');
-    keyEl.className = 'summary-key';
-    keyEl.textContent = key;
-    const valEl = document.createElement('span');
-    valEl.className = 'summary-val';
-    valEl.textContent = value;
-    row.append(keyEl, valEl);
+    const keyElement = document.createElement('span');
+    keyElement.className = 'summary-key';
+    keyElement.textContent = key;
+    const valueElement = document.createElement('span');
+    valueElement.className = 'summary-val';
+    valueElement.textContent = value;
+    row.append(keyElement, valueElement);
     box.append(row);
   }
 }
 
 async function launch() {
-  const launchError = document.getElementById('launchError');
-  launchError.textContent = '';
+  if (launchPending) return;
+  if (!validateLocalFields() || !validateConnectionFields()) {
+    goTo(!isValidPort(state.port) ? 2 : 3);
+    return;
+  }
+
+  launchPending = true;
+  const errorElement = document.getElementById('launchError');
+  const button = document.getElementById('launchBtn');
+  errorElement.textContent = '';
+  button.disabled = true;
+  button.dataset.state = 'loading';
+  button.textContent = state.editMode ? 'Saving and restarting…' : 'Saving and starting…';
   requestWindowFit();
+
   try {
     await window.electronAPI.wizardDone({
       port: state.port,
@@ -169,7 +229,11 @@ async function launch() {
       ngrokDomain: state.ngrokDomain
     });
   } catch (error) {
-    launchError.textContent = error?.message || String(error);
+    launchPending = false;
+    errorElement.textContent = error instanceof Error ? error.message : 'Rel.AI could not launch.';
+    button.disabled = false;
+    button.dataset.state = 'error';
+    button.textContent = 'Try again';
     requestWindowFit();
   }
 }
@@ -177,41 +241,81 @@ async function launch() {
 function loadEditParams() {
   const params = new URLSearchParams(window.location.search);
   if (params.get('edit') !== '1') return;
+
   state.editMode = true;
   state.port = Number.parseInt(params.get('port') || '3333', 10) || 3333;
   state.token = params.get('token') || '';
   state.ngrokAuth = params.get('ngrokToken') || '';
   state.ngrokDomain = normalizeDomain(params.get('domain') || '');
+
+  document.title = 'Rel.AI MCP - Settings';
+  document.getElementById('wizardBrandTitle').textContent = 'Rel.AI MCP Settings';
+  document.getElementById('wizardBrandSub').textContent = 'Connection configuration';
+  document.getElementById('launchBtn').textContent = 'Save and restart Rel.AI MCP';
   document.getElementById('portInput').value = state.port;
-  const accountInput = document.getElementById('ngrokTokenInput');
-  if (accountInput) accountInput.value = state.ngrokAuth;
+  document.getElementById('ngrokTokenInput').value = state.ngrokAuth;
   document.getElementById('domainInput').value = state.ngrokDomain;
-  document.getElementById('tokenBox').textContent = state.token;
+  if (state.token) document.getElementById('tokenBox').textContent = state.token;
+}
+
+function toggleNgrokKeyVisibility() {
+  const input = document.getElementById('ngrokTokenInput');
+  const button = document.getElementById('toggleNgrokTokenBtn');
+  const showing = input.type === 'text';
+  input.type = showing ? 'password' : 'text';
+  button.textContent = showing ? 'Show' : 'Hide';
+  button.setAttribute('aria-pressed', showing ? 'false' : 'true');
+  input.focus();
+}
+
+function continueLocal() {
+  if (validateLocalFields()) goTo(3);
+}
+
+function reviewSetup() {
+  if (validateConnectionFields()) goTo(4);
+}
+
+function handleEnter(event) {
+  if (event.key !== 'Enter' || event.shiftKey || event.target instanceof HTMLButtonElement) return;
+  event.preventDefault();
+  if (currentStep === 2) continueLocal();
+  else if (currentStep === 3) reviewSetup();
+  else if (currentStep === 4) launch();
 }
 
 function bindEvents() {
   document.getElementById('startWizardBtn').addEventListener('click', () => goTo(2));
-  document.getElementById('validatePortBtn').addEventListener('click', validatePort);
+  document.getElementById('continueLocalBtn').addEventListener('click', continueLocal);
   document.getElementById('copyTokenBtn').addEventListener('click', copyToken);
-  document.getElementById('regenTokenBtn').addEventListener('click', regenerateToken);
-  document.getElementById('validateDomainBtn').addEventListener('click', validateDomain);
+  document.getElementById('regenTokenBtn').addEventListener('click', () => {
+    generateToken();
+    showButtonSuccess(document.getElementById('regenTokenBtn'), 'New token ready', 'Generate a new token');
+  });
+  document.getElementById('reviewSetupBtn').addEventListener('click', reviewSetup);
   document.getElementById('launchBtn').addEventListener('click', launch);
-  document.getElementById('domainInput').addEventListener('input', updateNgrokPreview);
+  document.getElementById('toggleNgrokTokenBtn').addEventListener('click', toggleNgrokKeyVisibility);
+  document.getElementById('portInput').addEventListener('input', () => validateLocalFields({ announce: false }));
+  document.getElementById('ngrokTokenInput').addEventListener('input', () => validateConnectionFields({ announce: false }));
+  document.getElementById('domainInput').addEventListener('input', () => validateConnectionFields({ announce: false }));
+  document.addEventListener('keydown', handleEnter);
+
   for (const button of document.querySelectorAll('[data-go]')) {
     button.addEventListener('click', () => goTo(Number.parseInt(button.dataset.go, 10)));
   }
   for (const button of document.querySelectorAll('[data-link]')) {
     button.addEventListener('click', () => {
       const url = ngrokLinks[button.dataset.link];
-      if (url && typeof window.electronAPI?.openExternal === 'function') {
-        window.electronAPI.openExternal(url);
-      }
+      if (url && typeof window.electronAPI?.openExternal === 'function') window.electronAPI.openExternal(url);
     });
   }
 }
 
-bindEvents();
 loadEditParams();
+if (!state.token) generateToken();
+bindEvents();
 updateProgress();
-if (state.token) document.getElementById('tokenBox').textContent = state.token;
-requestWindowFit();
+validateLocalFields({ announce: false });
+validateConnectionFields({ announce: false });
+if (state.editMode) goTo(2);
+else requestWindowFit();
