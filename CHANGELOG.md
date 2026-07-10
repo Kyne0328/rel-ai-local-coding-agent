@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.19.0] — 2026-07-10
+
+### Unified dashboard and desktop experience
+- **Redesign the dashboard Overview and Electron status window around connection readiness, the ChatGPT MCP endpoint, focused metrics, actionable warnings, explicit loading and retry states, and compact technical details.**
+- **Replace the five-page launcher flow with a four-step setup experience that combines local-service configuration, validates fields live, supports Enter-key navigation, protects the ngrok account key with show/hide controls, and presents a clearer launch summary.**
+- **Add responsive product navigation with icons, a visible command launcher, workspace quick jump, an intermediate sidebar rail, mobile bottom navigation, consistent action feedback, and a substantially more capable Activity log with filters and structured event details.**
+- **Add persistent appearance preferences with system, dark, and light themes plus comfortable and compact density modes, including reduced-motion-safe transitions and matching system appearance in the desktop launcher.**
+- **Improve desktop operations with remembered disclosure panels, copyable diagnostics, optional native connection notifications, semantic status output, and accessibility and Sonar maintainability cleanup.**
+- **Rename milestone-oriented UI files and tests to responsibility-based production names, and validate the release with JavaScript checks, TypeScript boundary checks, release consistency checks, 51 regression files, and the installed Windows application smoke test.**
+
+Bump root/electron/status UI/lockfiles to 0.19.0.
+
 ## [0.18.2] — 2026-07-08
 
 ### Sonar security and accessibility cleanup
