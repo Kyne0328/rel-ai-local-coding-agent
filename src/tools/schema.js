@@ -1,4 +1,8 @@
+// @ts-check
 'use strict';
+
+/** @typedef {import('../../types/boundaries').ToolDefinition} ToolDefinition */
+/** @typedef {import('../../types/boundaries').ToolSchema} ToolSchema */
 
 const {
   TOOL_DEFINITIONS,
@@ -12,6 +16,7 @@ const BRIDGE_TOOL_NAMES = TOOL_DEFINITIONS.map((definition) => definition.name);
 const PUBLIC_HTTP_TOOL_NAMES = getPublicToolDefinitions().map((definition) => definition.name);
 const TOOL_NAMES = new Set(BRIDGE_TOOL_NAMES);
 
+/** @param {ToolDefinition} definition @param {boolean} [publicSurface] @returns {ToolSchema} */
 function schemaFromDefinition(definition, publicSurface = false) {
   const properties = { ...(definition.inputSchema?.properties || {}) };
   const stripped = publicSurface ? definition.publicStrip || [] : [];
@@ -30,6 +35,7 @@ function schemaFromDefinition(definition, publicSurface = false) {
   };
 }
 
+/** @type {ToolSchema[]} */
 const toolSchemas = TOOL_DEFINITIONS.map((definition) => schemaFromDefinition(definition));
 
 function getToolSchemas() {

@@ -1,4 +1,9 @@
+// @ts-check
 'use strict';
+
+/** @typedef {import('../../types/boundaries').ToolArgs} ToolArgs */
+/** @typedef {import('../../types/boundaries').ToolResult} ToolResult */
+/** @typedef {(extra: Record<string, unknown>, value: ToolResult, args: ToolArgs) => void} AuditEnricher */
 
 const sessionCache = require("../sessionCache");
 const { classifyCaution } = require("../cautionZone");
@@ -13,6 +18,7 @@ function debugSwallow(context, error) {
   }
 }
 
+/** @type {Readonly<Record<string, AuditEnricher>>} */
 const AUDIT_ENRICHERS = Object.freeze({
   edit: enrichEditAudit,
   checks: enrichChecksAudit,
@@ -23,7 +29,9 @@ const AUDIT_ENRICHERS = Object.freeze({
   snapshot: enrichSnapshotAudit
 });
 
+/** @param {string} name @param {ToolResult} value @param {ToolArgs} args @returns {Record<string, unknown>} */
 function buildExtraAudit(name, value, args) {
+  /** @type {Record<string, unknown>} */
   const extra = {};
   const auditKind = getToolDefinition(name)?.behavior?.audit || "";
   AUDIT_ENRICHERS[auditKind]?.(extra, value, args);

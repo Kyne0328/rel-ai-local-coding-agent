@@ -18,6 +18,11 @@
       "preload.js",
       "launcher-utils.js",
       "managed-ngrok.js",
+      "ipc-handlers.js",
+      "launcher-config.js",
+      "resource-path.js",
+      "window-size.js",
+      "installed-smoke.js",
       "renderer/**",
       "build/**"
     ],

@@ -4,6 +4,7 @@ const { resolveResourcePath } = require('./resource-path');
 const { isPortAvailable, normalizeWizardConfig, saveLauncherConfig } = require('./launcher-config');
 const { fitWindowToContent } = require('./window-size');
 const { registerIpcHandlers } = require('./ipc-handlers');
+const { runInstalledSmoke, writeInstalledSmokeFailure } = require('./installed-smoke');
 
 const srcPath = resolveResourcePath('src');
 const connection = require(path.join(srcPath, 'connectionProfile'));
@@ -52,7 +53,18 @@ if (!gotLock) {
     }
   });
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
+    if (process.argv.includes('--installed-smoke')) {
+      try {
+        await runInstalledSmoke(app);
+        app.exit(0);
+      } catch (error) {
+        writeInstalledSmokeFailure(error);
+        console.error(`[rel-ai-mcp] installed smoke failed: ${formatError(error)}`);
+        app.exit(1);
+      }
+      return;
+    }
     if (hasExistingConfig()) {
       createStatusWindow();
       startServer();

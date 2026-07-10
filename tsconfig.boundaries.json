@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "strict": true,
+    "noImplicitAny": false,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "target": "ES2022",
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "lib": ["ES2022", "DOM"],
+    "types": [],
+    "skipLibCheck": true
+  },
+  "files": [
+    "types/node-lite.d.ts",
+    "types/boundaries.d.ts",
+    "src/tools/registry.js",
+    "src/tools/schema.js",
+    "src/tools/dispatch.js",
+    "src/tools/handlers.js",
+    "src/tools/session.js",
+    "electron/launcher-config.js",
+    "electron/resource-path.js",
+    "electron/installed-smoke.js"
+  ]
+}

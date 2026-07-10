@@ -1,4 +1,7 @@
+// @ts-check
 'use strict';
+
+/** @typedef {import('../../types/boundaries').ToolHandler} ToolHandler */
 
 const { readAudit } = require("../audit");
 const { resolveWorkspace } = require("../config");
@@ -14,6 +17,7 @@ const { planEdit } = require("../executionPlanner");
 const { resolvePolicy, writeSessionPolicy, clearSessionPolicy } = require("../policyResolver");
 const { relaiStatus, relaiFeatureProbe, buildSessionSummary } = require("./status");
 
+/** @type {Readonly<Record<string, ToolHandler>>} */
 const HANDLERS = Object.freeze({
   repoSnapshot: inWorkspace((workspace, config, args) => repoSnapshot(workspace, config, args)),
   read: inWorkspace((workspace, config, args) => relaiRead(workspace, config, args)),

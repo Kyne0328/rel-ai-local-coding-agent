@@ -1,3 +1,7 @@
+// @ts-check
+/** @typedef {import('../types/boundaries').LauncherConfigInput} LauncherConfigInput */
+/** @typedef {import('../types/boundaries').LauncherConfig} LauncherConfig */
+
 const net = require('node:net');
 const path = require('node:path');
 const { resolveResourcePath } = require('./resource-path');
@@ -11,6 +15,7 @@ const {
   normalizePort
 } = require('./launcher-utils');
 
+/** @param {number} port @returns {Promise<boolean>} */
 function isPortAvailable(port) {
   return new Promise((resolve) => {
     const server = net.createServer();
@@ -22,6 +27,7 @@ function isPortAvailable(port) {
   });
 }
 
+/** @param {LauncherConfigInput} [config] @returns {LauncherConfig} */
 function normalizeWizardConfig(config = {}) {
   const port = normalizePort(config.port || 3333);
   const ngrokDomain = normalizeNgrokDomain(config.ngrokDomain || config.domain || '');
@@ -30,6 +36,7 @@ function normalizeWizardConfig(config = {}) {
   return { port, ngrokDomain, ngrokAuthtoken, token };
 }
 
+/** @param {LauncherConfigInput} [config] @returns {LauncherConfig} */
 function saveLauncherConfig(config = {}) {
   const normalized = normalizeWizardConfig(config);
   const publicUrl = `https://${normalized.ngrokDomain}`;

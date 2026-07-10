@@ -1,6 +1,8 @@
+// @ts-check
 'use strict';
 
-const TOOL_DEFINITIONS = Object.freeze([
+/** @typedef {import('../../types/boundaries').ToolDefinition} ToolDefinition */
+const TOOL_DEFINITION_VALUES = /** @satisfies {ToolDefinition[]} */ ([
   {
     name: "relai_repo_snapshot",
     title: "Repository Overview",
@@ -407,17 +409,21 @@ const TOOL_DEFINITIONS = Object.freeze([
     behavior: {"audit":"","cache":"","startsSession":false,"deferStagedSession":false,"sessionWrite":false,"summary":""},
     dashboard: {"category":"Workspace tools","requiredProfile":"workspace","requiresApproval":false}
   }
-].map((definition) => Object.freeze(definition)));
+]);
+const TOOL_DEFINITIONS = Object.freeze(TOOL_DEFINITION_VALUES.map((definition) => Object.freeze(definition)));
 const TOOL_DEFINITION_BY_NAME = new Map(TOOL_DEFINITIONS.map((definition) => [definition.name, definition]));
 
+/** @param {string} name @returns {ToolDefinition | null} */
 function getToolDefinition(name) {
   return TOOL_DEFINITION_BY_NAME.get(String(name || '')) || null;
 }
 
+/** @returns {readonly ToolDefinition[]} */
 function getToolDefinitions() {
   return TOOL_DEFINITIONS;
 }
 
+/** @returns {ToolDefinition[]} */
 function getPublicToolDefinitions() {
   return TOOL_DEFINITIONS
     .filter((definition) => definition.public === true)
@@ -425,8 +431,10 @@ function getPublicToolDefinitions() {
     .sort((left, right) => left.publicOrder - right.publicOrder);
 }
 
+/** @returns {Record<string, string[]>} */
 function getToolGroups() {
   const publicDefinitions = getPublicToolDefinitions();
+  /** @type {Record<string, string[]>} */
   const groups = {
     workspace: publicDefinitions.map((definition) => definition.name),
     git: [],

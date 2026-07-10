@@ -1,8 +1,13 @@
+// @ts-check
 'use strict';
+
+/** @typedef {import('../../types/boundaries').AppConfig} AppConfig */
+/** @typedef {import('../../types/boundaries').ToolArgs} ToolArgs */
 
 const { getToolDefinition } = require("./schema");
 const { getHandler } = require("./handlers");
 
+/** @param {AppConfig} config @param {string} name @param {ToolArgs} [args] */
 async function dispatchTool(config, name, args = {}) {
   const definition = getToolDefinition(name);
   if (!definition) throw new Error(`Unknown tool: ${name}`);

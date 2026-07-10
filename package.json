@@ -18,11 +18,12 @@
     "start": "node bin/rel-ai-mcp.js",
     "start:http": "node bin/rel-ai-mcp-http.js",
     "check": "node test/check-js.mjs",
+    "typecheck": "tsc -p tsconfig.boundaries.json",
     "init-config": "node bin/relai-mcp-config.js init",
     "workspace:add": "node bin/relai-mcp-config.js workspace add",
     "testcmd:add": "node bin/relai-mcp-config.js test-command add",
     "cmd:add": "node bin/relai-mcp-config.js command add",
-    "test": "npm run check && npm run test:release && npm run test:repo-health && npm run test:smoke && npm run test:connector-wording && npm run test:regressions && npm run test:windows-archive && npm run test:safety-paths && npm run test:archive-safety && npm run test:http-auth && npm run test:oauth && npm run test:public-workflow && npm run test:prepared-update && npm run test:checks && npm run test:git-workflow && npm run test:staged-write",
+    "test": "npm run check && npm run typecheck && npm run test:release && npm run test:repo-health && npm run test:smoke && npm run test:connector-wording && npm run test:regressions && npm run test:windows-archive && npm run test:safety-paths && npm run test:archive-safety && npm run test:http-auth && npm run test:oauth && npm run test:public-workflow && npm run test:prepared-update && npm run test:checks && npm run test:git-workflow && npm run test:staged-write",
     "test:repo-health": "node test/repo-health.mjs",
     "test:smoke": "node test/smoke.mjs",
     "test:windows-archive": "node test/windows-archive-command-smoke.mjs",
@@ -48,6 +49,7 @@
     "electron:build": "cd electron && npx electron-builder --win --dir",
     "electron:dist": "cd electron && npx electron-builder --win",
     "test:electron": "node test/electron-launcher-smoke.mjs",
+    "test:installed": "node scripts/installed-app-smoke.mjs",
     "test:http-auth": "node test/http-auth-smoke.mjs",
     "test:oauth": "node test/oauth-smoke.mjs",
     "test:safety-paths": "node test/safety-paths.mjs",
@@ -58,7 +60,7 @@
     "test:checks": "node test/command-checks-smoke.mjs",
     "test:git-workflow": "node test/git-workflow-smoke.mjs",
     "test:staged-write": "node test/staged-write-fallback-unit.mjs",
-    "test:all": "npm run check && node scripts/release-check.mjs && node test/run-tests.mjs"
+    "test:all": "npm run check && npm run typecheck && node scripts/release-check.mjs && node test/run-tests.mjs"
   },
   "keywords": [
     "mcp",
@@ -80,6 +82,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "eslint": "^10.6.0",
-    "globals": "^17.7.0"
+    "globals": "^17.7.0",
+    "typescript": "7.0.2"
   }
 }

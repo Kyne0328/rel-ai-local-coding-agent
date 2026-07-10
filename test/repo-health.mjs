@@ -56,6 +56,7 @@ const sourceLineBudgets = {
   'electron/launcher-config.js': 100,
   'electron/window-size.js': 100,
   'electron/resource-path.js': 50,
+  'electron/installed-smoke.js': 180,
   'src/ui/sections/workspaces.js': 40,
   'src/ui/sections/workspace-cards.js': 240,
   'src/ui/sections/workspace-actions.js': 280
