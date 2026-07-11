@@ -2,6 +2,7 @@ const { URL } = require("node:url");
 const connection = require("../connectionProfile");
 const oauth = require("../oauthProvider");
 const { isAuthorized, timingSafeEqual, sendJson } = require("./io");
+const dashboardSessions = require("./dashboardSessions");
 
 // External origin ChatGPT reaches us on — used as the OAuth issuer and for building
 // absolute authorize/token/registration URLs in discovery metadata. Prefer the
@@ -51,8 +52,15 @@ function hasDashboardQueryToken(parsed, options) {
   return supplied != null && timingSafeEqual(supplied, options.token);
 }
 
-function isDashboardAuthorized(req, parsed, options) {
-  return isAuthorized(req, options) || hasDashboardQueryToken(parsed, options);
+function isDashboardAuthorized(req, parsed, options, res) {
+  if (isAuthorized(req, options) || hasDashboardQueryToken(parsed, options)) return true;
+  if (dashboardSessions.validateDashboardSession(req, options.token)) return true;
+  const bootstrap = parsed.searchParams.get("bootstrap");
+  if (!bootstrap) return false;
+  const sessionId = dashboardSessions.consumeDashboardBootstrap(bootstrap, options.token);
+  if (!sessionId) return false;
+  dashboardSessions.setDashboardSessionCookie(res, sessionId);
+  return true;
 }
 
 // Honor an explicit requireHttpToken query param (the dashboard sends "0" because it

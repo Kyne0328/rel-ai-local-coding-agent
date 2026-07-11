@@ -76,6 +76,11 @@ if (!Array.isArray(dashboardData?.tools) || dashboardData.tools.length !== 16) {
   console.error('Dashboard wording smoke test FAILED — dashboard JSON must expose exactly 16 active tools');
   process.exit(1);
 }
+if (!Array.isArray(dashboardData?.taskActivity?.tasks) || typeof dashboardData?.taskActivity?.activeTaskCount !== 'number') {
+  child.kill('SIGKILL');
+  console.error('Dashboard wording smoke test FAILED — task activity must expose concurrent task records');
+  process.exit(1);
+}
 if (dashboardJson.includes('prepared') || dashboardJson.includes('apply_bundle')) {
   child.kill('SIGKILL');
   console.error('Dashboard wording smoke test FAILED — obsolete prepared/bundle workflow wording remains');

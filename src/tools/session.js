@@ -33,7 +33,21 @@ function buildExtraAudit(name, value, args) {
   const extra = {};
   const auditKind = getToolDefinition(name)?.behavior?.audit || "";
   AUDIT_ENRICHERS[auditKind]?.(extra, value, args);
+  enrichCommonAudit(extra, name, value);
   return extra;
+}
+
+function enrichCommonAudit(extra, name, value) {
+  const changedFiles = Array.isArray(value?.changedFiles)
+    ? value.changedFiles
+    : Array.isArray(value?.statusAfter?.sessionChangedFiles)
+      ? value.statusAfter.sessionChangedFiles
+      : [];
+  if (changedFiles.length) extra.changedFiles = changedFiles.slice(0, 200);
+  assignTruthy(extra, "validationStatus", value?.validationStatus);
+  if (name === "relai_git_commit" && value?.ok !== false) extra.commitCreated = true;
+  if (name === "relai_git_push" && value?.ok !== false) extra.pushPublished = true;
+  if (name === "relai_git_create_pr" && value?.ok !== false) extra.prDrafted = true;
 }
 
 function enrichEditAudit(extra, value, args) {

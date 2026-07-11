@@ -9,6 +9,14 @@ const pkg = require("../../package.json");
 const connection = require("../connectionProfile");
 const { getVersion } = require("../version");
 const { resolveRequireHttpToken } = require("./auth");
+const { buildTaskHistory } = require("../taskHistory");
+const { buildWorkspaceStates } = require("../workspaceState");
+const {
+  handleOpenFolder,
+  handleWorkspaceChecks,
+  handlePickFolder,
+  workspacePathPreflight
+} = require("./dashboardActions");
 const {
   sendJson,
   sendHtml,
@@ -22,22 +30,34 @@ function buildToolMetadata() {
   return require("../tools").getToolMetadata();
 }
 
-const DASHBOARD_NAV_ITEMS = [
+const PRIMARY_NAV_ITEMS = [
   { id: "home", label: "Overview", icon: '<path d="M3 3h8v8H3zM13 3h8v5h-8zM13 10h8v11h-8zM3 13h8v8H3z" />' },
+  { id: "tasks", label: "Tasks", icon: '<path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5" />' },
   { id: "workspaces", label: "Workspaces", icon: '<path d="M3 7.5V19a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7l-2-3H5a2 2 0 0 0-2 2v2.5Z" />' },
-  { id: "activity", label: "Activity", icon: '<path d="M3 12h4l2.3-6 4.2 12 2.3-6H21" />' },
-  { id: "tools", label: "Tools", icon: '<path d="m14.7 6.3 3-3a5 5 0 0 1-6.4 6.4l-6.8 6.8a2.1 2.1 0 0 0 3 3l6.8-6.8a5 5 0 0 1 6.4-6.4l-3 3-3-3Z" />' },
+  { id: "activity", label: "Activity log", icon: '<path d="M3 12h4l2.3-6 4.2 12 2.3-6H21" />' },
   { id: "settings", label: "Settings", icon: '<circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21h-4v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H3v-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6V3h4v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.1v4H21a1.7 1.7 0 0 0-1.6 1Z" />' }
 ];
+const SECONDARY_NAV_ITEMS = [
+  { id: "reference", label: "Reference", icon: '<path d="m14.7 6.3 3-3a5 5 0 0 1-6.4 6.4l-6.8 6.8a2.1 2.1 0 0 0 3 3l6.8-6.8a5 5 0 0 1 6.4-6.4l-3 3-3-3Z" />' }
+];
 
-function renderDashboardNav() {
-  return DASHBOARD_NAV_ITEMS.map((item) => `<a href="#${item.id}" aria-label="${item.label}"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">${item.icon}</svg><span class="nav-label">${item.label}</span></a>`).join("");
+function renderDashboardNav(items) {
+  return items.map((item) => `<a href="#${item.id}" aria-label="${item.label}"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">${item.icon}</svg><span class="nav-label">${item.label}</span></a>`).join("");
 }
 
 function buildDashboardPayload(config, options = {}, requireHttpToken = false) {
   const profile = connection.readConnectionProfile();
+  const taskActivity = typeof options.getTaskActivity === "function"
+    ? options.getTaskActivity()
+    : { state: "idle", activeCalls: 0, activeTaskCount: 0, tasks: [], taskId: "", workspace: "", tool: "", startedAt: null, lastTask: null };
+  const base = productUx.dashboardData(config, { limit: Number(options.limit || 100) });
+  const tasks = buildTaskHistory(base.auditTail?.entries || [], taskActivity, { limit: 100 });
+  const workspaceStates = buildWorkspaceStates(config, tasks, taskActivity);
+  if (Array.isArray(base.config?.workspaces)) {
+    for (const workspace of base.config.workspaces) workspace.operational = workspaceStates[workspace.alias] || null;
+  }
   return {
-    ...productUx.dashboardData(config, { limit: Number(options.limit || 100) }),
+    ...base,
     readiness: release.releaseReadiness(config, { requireHttpToken }),
     connection: connection.buildConnectionSummary({
       host: profile.host || options.host || "127.0.0.1",
@@ -46,9 +66,9 @@ function buildDashboardPayload(config, options = {}, requireHttpToken = false) {
       token: "",
       tunnelProvider: profile.tunnelProvider || "none"
     }),
-    taskActivity: typeof options.getTaskActivity === "function"
-      ? options.getTaskActivity()
-      : { state: "idle", activeCalls: 0, workspace: "", tool: "", startedAt: null, lastTask: null }
+    taskActivity,
+    tasks,
+    workspaceStates
   };
 }
 
@@ -175,44 +195,6 @@ async function handleApiWorkspaces(ctx) {
   sendJson(ctx.res, 200, configEditor.updateWorkspace(current, payload), ctx.ae);
 }
 
-async function handlePickFolder(ctx) {
-  if (typeof ctx.options.pickFolder !== "function") {
-    sendJson(ctx.res, 200, { ok: false, unsupported: true, error: "Native folder picker is only available in the Rel.AI desktop launcher." }, ctx.ae);
-    return;
-  }
-  try {
-    const picked = await ctx.options.pickFolder();
-    if (!picked) { sendJson(ctx.res, 200, { ok: false, canceled: true }, ctx.ae); return; }
-    sendJson(ctx.res, 200, { ok: true, ...workspacePathPreflight(picked) }, ctx.ae);
-  } catch (error) {
-    sendJson(ctx.res, 200, { ok: false, error: error instanceof Error ? error.message : String(error) }, ctx.ae);
-  }
-}
-
-function workspacePathPreflight(rawPath) {
-  const target = path.resolve(String(rawPath || ""));
-  const findings = [];
-  let stat = null;
-  try {
-    stat = fs.statSync(target);
-  } catch { /* stat failed; report path_not_found below */
-    findings.push({ severity: "error", code: "path_not_found", message: `Path does not exist: ${target}` });
-  }
-  const exists = Boolean(stat);
-  const isDirectory = Boolean(stat?.isDirectory());
-  const gitDir = path.join(target, ".git");
-  const isGit = isDirectory && fs.existsSync(gitDir);
-  if (exists && !isDirectory) findings.push({ severity: "error", code: "path_not_directory", message: `Path is not a directory: ${target}` });
-  return {
-    ok: findings.every((item) => item.severity !== "error"),
-    path: target,
-    exists,
-    isDirectory,
-    isGit,
-    findings
-  };
-}
-
 function readConfigCached() {
   const configPath = require("../config").getConfigPath();
   let mtimeMs = null;
@@ -314,19 +296,22 @@ try {
 <div class="app-shell">
   <aside class="sidebar">
     <div class="brand"><div class="logo"><img src="/public/assets/relai-logo.png" alt="Rel.AI logo"></div><div><strong>Rel.AI MCP</strong><span>workspace control</span></div></div>
-    <nav class="nav" aria-label="Primary navigation">${renderDashboardNav()}</nav>
+    <nav class="nav" aria-label="Primary navigation">${renderDashboardNav(PRIMARY_NAV_ITEMS)}</nav>
+    <nav class="secondary-nav" aria-label="Reference navigation">${renderDashboardNav(SECONDARY_NAV_ITEMS)}</nav>
     <div class="sidebar-note">This dashboard mirrors live MCP state.</div>
   </aside>
   <main id="main" class="main">
-    <nav class="mobile-nav" aria-label="Mobile navigation">${renderDashboardNav()}</nav>
+    <nav class="mobile-nav" aria-label="Mobile navigation">${renderDashboardNav(PRIMARY_NAV_ITEMS)}</nav>
     <header class="topbar">
       <div class="title-wrap">
         <h1 class="page-title" id="pageTitle">Rel.AI MCP</h1>
         <div class="page-subtitle" id="subtitle">Checking local workspace state…</div>
       </div>
       <div class="top-controls">
+        <select id="workspaceScope" class="workspace-scope" aria-label="Filter dashboard by workspace"><option value="">All workspaces</option></select>
         <span class="status-pill" id="serverStatus">Connecting…</span>
-        <button class="secondary" id="refreshBtn" type="button">Refresh</button>
+        <span class="status-pill live-state connecting" id="liveStatus">Connecting live</span>
+        <details class="topbar-menu"><summary aria-label="Dashboard actions">•••</summary><button class="secondary" id="refreshBtn" type="button">Refresh now</button></details>
         <span class="section-action" id="lastUpdated"></span>
       </div>
     </header>
@@ -378,5 +363,7 @@ module.exports = {
   handleOnboardingComplete,
   handleApiSettingsPost,
   handleApiWorkspaces,
-  handlePickFolder
+  handlePickFolder,
+  handleOpenFolder,
+  handleWorkspaceChecks
 };

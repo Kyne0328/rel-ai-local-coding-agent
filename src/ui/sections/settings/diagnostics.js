@@ -1,182 +1,168 @@
 import { fetchJson } from '../../api.js';
 import { esc } from '../../utils.js';
+import { getWorkspaceFilter, routeHref } from '../../router.js';
 
 export function mountDiagnostics(container) {
-  container.innerHTML = '';
-  const head = document.createElement('div');
-  head.style.cssText = 'display:grid;gap:4px;margin-bottom:14px;';
-  head.innerHTML = '<h3 style="margin:0;font-size:15px;">System status</h3><p style="margin:0;color:var(--text-muted);font-size:13px;">Runtime checks for the local bridge. Developer details are available only when needed.</p>';
-  container.appendChild(head);
-
-  const cards = document.createElement('div');
-  cards.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;max-width:980px;';
-  container.appendChild(cards);
-
-  const raw = document.createElement('pre');
-  raw.style.cssText = 'background:var(--bg);border:1px solid var(--line-soft);border-radius:8px;padding:12px;font-size:12px;overflow:auto;max-height:340px;margin-top:14px;display:none;';
-  container.appendChild(raw);
-
-  loadAll(cards, raw);
+  container.innerHTML = `
+    <div class="section-head"><div><h2>Diagnostics</h2><p>Blocking errors, warnings, and recommendations with direct recovery actions.</p></div></div>
+    <div id="diagnosticSummary" class="diagnostic-summary"><div class="empty">Loading diagnostics…</div></div>`;
+  loadDiagnostics(document.getElementById('diagnosticSummary')).catch(error => {
+    const root = document.getElementById('diagnosticSummary');
+    if (root) root.innerHTML = `<div class="diagnostic-clear"><strong>Diagnostics unavailable</strong><span>${esc(error instanceof Error ? error.message : String(error))}</span></div>`;
+  });
 }
 
-async function loadAll(cards, raw) {
-  cards.innerHTML = '<div class="empty">Loading system status...</div>';
+async function loadDiagnostics(root) {
   const [health, aliasCheck, cautionData, connection] = await Promise.all([
     fetchJson('/api/health-monitor'),
     fetchJson('/api/alias-diagnostics'),
     fetchJson('/api/caution-summary'),
     fetchJson('/api/connection')
   ]);
-  cards.innerHTML = '';
-  cards.appendChild(healthCard(health, raw));
-  cards.appendChild(connectorCard(connection, raw));
-  cards.appendChild(aliasConsistencyCard(aliasCheck, raw));
-  const cautionCard = cautionEscalationsCard(cautionData, raw);
-  if (cautionCard) cards.appendChild(cautionCard);
+  const workspace = getWorkspaceFilter();
+  const findings = [
+    ...healthFindings(health, workspace),
+    ...aliasFindings(aliasCheck, workspace),
+    ...connectionFindings(connection)
+  ];
+  const caution = cautionFinding(cautionData, workspace);
+  if (caution) findings.push(caution);
+  const ordered = findings.toSorted((left, right) => severityRank(left.severity) - severityRank(right.severity));
+  root.innerHTML = renderDiagnosticSummary(ordered);
 }
 
-function healthCard(data, raw) {
-  const findings = Array.isArray(data?.findings) ? data.findings.filter(f => f.severity !== 'info') : [];
-  const value = healthValue(data, findings);
-  return summaryCard('Health', value, findings, raw, data, {
-    empty: 'No runtime issues found.',
-    goodWhenEmpty: true
-  });
+function healthFindings(health, workspace) {
+  return (health?.findings || [])
+    .filter(finding => !workspace || !finding.workspace || finding.workspace === workspace)
+    .map(normalizeHealthFinding);
 }
 
-function healthValue(data, findings) {
-  if (data == null) return 'Unknown';
-  return data.ok !== false && findings.length === 0 ? 'All clear' : 'Needs attention';
+function aliasFindings(aliasCheck, workspace) {
+  const findings = [];
+  for (const item of aliasCheck?.workspaces || []) {
+    if (workspace && item.alias !== workspace) continue;
+    if (!item.staleKeys?.length) continue;
+    findings.push({
+      severity: 'warning',
+      title: `Stale validation commands in ${item.alias}`,
+      impact: 'Saved validation may fail or give a misleading result.',
+      recommendation: `Remove or replace: ${item.staleKeys.join(', ')}`,
+      action: { label: 'Review workspace', href: routeHref('workspaces', { workspace: item.alias }) },
+      details: item
+    });
+  }
+  return findings;
 }
 
-function connectorCard(data, raw) {
-  const hasPublicUrl = Boolean(data?.chatgptMcpUrl);
-  const hasToken = Boolean(data?.token === 'set');
-  const value = hasPublicUrl ? 'ChatGPT ready' : 'Local only';
-  const details = [];
-  if (hasPublicUrl) details.push('OAuth endpoint is configured for ChatGPT.');
-  else details.push('No public ChatGPT URL is configured. Local dashboard use is still available.');
-  details.push(hasToken ? 'Dashboard token is configured.' : 'Dashboard token is missing.');
-  return textCard('Connector', value, details, raw, data, hasPublicUrl && hasToken ? 'var(--green)' : 'var(--yellow)');
+function connectionFindings(connection) {
+  const findings = [];
+  if (!connection?.chatgptMcpUrl) {
+    findings.push({
+      severity: 'warning',
+      title: 'Public connector is unavailable',
+      impact: 'The local dashboard works, but ChatGPT cannot reach this machine.',
+      recommendation: 'Configure and start the permanent HTTPS tunnel.',
+      action: { label: 'Open connector settings', href: '#settings/connector' },
+      details: connection
+    });
+  }
+  if (connection?.token !== 'set') {
+    findings.push({
+      severity: 'error',
+      title: 'Dashboard token is missing',
+      impact: 'Dashboard and OAuth access are not adequately protected.',
+      recommendation: 'Generate and save a dashboard approval token.',
+      action: { label: 'Open settings', href: '#settings' },
+      details: connection
+    });
+  }
+  return findings;
 }
 
-function summaryCard(title, value, findings, raw, payload, options = {}) {
-  const card = document.createElement('div');
-  card.className = 'card';
-  const list = Array.isArray(findings) ? findings : [];
-  const hasError = list.some(f => f.severity === 'error');
-  const color = summaryColor(hasError, options);
-  card.innerHTML = `<div class="card-head"><h3>${esc(title)}</h3><button class="secondary" style="min-height:24px;padding:0 8px;font-size:11px;">Details</button></div>`;
-  const body = document.createElement('div');
-  body.className = 'card-body';
-  body.style.display = 'grid';
-  body.style.gap = '8px';
-  body.innerHTML = `<div style="font-size:22px;font-weight:800;color:${color};">${esc(value)}</div>` +
-    (list.length ? list.slice(0, 5).map(f => findingHtml(f)).join('') : `<div style="font-size:12px;color:var(--text-muted);">${esc(options.empty || 'No findings.')}</div>`);
-  card.appendChild(body);
-  card.querySelector('button').onclick = () => showRaw(raw, payload);
-  return card;
+function cautionFinding(cautionData, workspace) {
+  const count = (cautionData?.workspaces || [])
+    .filter(item => !workspace || item.alias === workspace)
+    .reduce((sum, item) => sum + Number(item.count || 0), 0);
+  if (!count) return null;
+  const changeLabel = count === 1 ? 'change' : 'changes';
+  return {
+    severity: 'info',
+    title: `${count} protected configuration ${changeLabel}`,
+    impact: 'Rel.AI recorded changes in a caution-sensitive area.',
+    recommendation: 'Review the affected tasks and confirm the resulting configuration.',
+    action: { label: 'Review tasks', href: routeHref('tasks', { workspace }) },
+    details: cautionData
+  };
 }
 
-function summaryColor(hasError, options) {
-  if (hasError) return 'var(--red)';
-  return options.goodWhenEmpty ? 'var(--green)' : 'var(--blue)';
+function renderDiagnosticSummary(findings) {
+  const body = findings.length
+    ? `<div class="diagnostic-list">${findings.map(findingCard).join('')}</div>`
+    : '<div class="diagnostic-clear"><strong>All clear</strong><span>No blocking errors or warnings were found.</span></div>';
+  return summaryCards(findings) + body;
 }
 
-function textCard(title, value, lines, raw, payload, color = 'var(--blue)') {
-  const card = document.createElement('div');
-  card.className = 'card';
-  card.innerHTML = `<div class="card-head"><h3>${esc(title)}</h3><button class="secondary" style="min-height:24px;padding:0 8px;font-size:11px;">Details</button></div>`;
-  const body = document.createElement('div');
-  body.className = 'card-body';
-  body.style.display = 'grid';
-  body.style.gap = '8px';
-  body.innerHTML = `<div style="font-size:22px;font-weight:800;color:${color};">${esc(value)}</div>` +
-    lines.map(line => `<div style="font-size:12px;color:var(--text-muted);">${esc(line)}</div>`).join('');
-  card.appendChild(body);
-  card.querySelector('button').onclick = () => showRaw(raw, payload);
-  return card;
+function normalizeHealthFinding(finding) {
+  const workspace = finding.workspace || '';
+  const action = workspace
+    ? { label: 'Review workspace', href: routeHref('workspaces', { workspace }) }
+    : { label: 'Open settings', href: '#settings' };
+  return {
+    severity: normalizedSeverity(finding.severity),
+    title: humanize(finding.code || 'Runtime finding'),
+    impact: workspace ? `Workspace ${workspace} may be unavailable or unreliable.` : 'The local bridge may not operate as expected.',
+    recommendation: recommendationFor(finding),
+    action,
+    details: finding
+  };
 }
 
-function findingHtml(finding) {
-  const fix = (finding.code === 'workspace_unavailable' && finding.workspace)
-    ? `<br><a href="#workspaces" style="color:var(--blue);text-decoration:none;font-weight:600;">Fix in Workspaces</a>`
-    : '';
-  return `<div style="font-size:12px;color:var(--text-muted);"><strong style="color:var(--text);">${esc(finding.code || finding.severity || 'finding')}</strong><br>${esc(finding.message || '')}${fix}</div>`;
+function normalizedSeverity(value) {
+  if (value === 'error') return 'error';
+  if (value === 'warning') return 'warning';
+  return 'info';
 }
 
-function aliasConsistencyCard(data, raw) {
-  const card = document.createElement('div');
-  card.className = 'card';
-  const workspaces = Array.isArray(data?.workspaces) ? data.workspaces : [];
-  const staleCount = workspaces.reduce((n, ws) => n + (ws.staleKeys?.length || 0), 0);
-  const value = aliasStatusValue(data, staleCount);
-  const valueColor = aliasStatusColor(data, staleCount);
-  card.innerHTML = `<div class="card-head"><h3>Validation commands</h3><button class="secondary" style="min-height:24px;padding:0 8px;font-size:11px;">Details</button></div>`;
-  const body = document.createElement('div');
-  body.className = 'card-body';
-  body.style.display = 'grid';
-  body.style.gap = '8px';
-  const rows = workspaces.length
-    ? workspaces.map(ws => {
-        if (!ws.staleKeys?.length) {
-          return `<div style="font-size:12px;color:var(--text-muted);">${esc(ws.alias)}: ${ws.configuredKeys?.length || 0} configured command${pluralSuffix(ws.configuredKeys?.length || 0)} valid</div>`;
-        }
-        return `<div style="font-size:12px;color:var(--text-muted);"><strong style="color:var(--red);">${esc(ws.alias)}</strong>: stale - ${esc(ws.staleKeys.join(', '))}</div>`;
-      }).join('')
-    : '<div style="font-size:12px;color:var(--text-muted);">No workspaces configured.</div>';
-  body.innerHTML = `<div style="font-size:22px;font-weight:800;color:${valueColor};">${esc(value)}</div>${rows}`;
-  card.appendChild(body);
-  card.querySelector('button').onclick = () => showRaw(raw, data);
-  return card;
+function recommendationFor(finding) {
+  if (finding.code === 'workspace_unavailable') return 'Correct the workspace path or remove the obsolete workspace entry.';
+  if (String(finding.code || '').includes('stateDir')) return 'Confirm that the Rel.AI state directory exists and is writable.';
+  return finding.message || 'Review the technical details and correct the affected configuration.';
 }
 
-function aliasStatusValue(data, staleCount) {
-  if (data == null) return 'Unknown';
-  return staleCount === 0 ? 'All valid' : staleCount + ' stale';
+function summaryCards(findings) {
+  const counts = { error: 0, warning: 0, info: 0 };
+  for (const finding of findings) counts[finding.severity] += 1;
+  return `<div class="diagnostic-metrics">
+    ${metric('Blocking', counts.error, 'error')}
+    ${metric('Warnings', counts.warning, 'warning')}
+    ${metric('Recommendations', counts.info, 'info')}
+  </div>`;
 }
 
-function aliasStatusColor(data, staleCount) {
-  if (data == null) return 'var(--text-muted)';
-  return staleCount === 0 ? 'var(--green)' : 'var(--red)';
+function metric(label, count, severity) {
+  return `<div class="diagnostic-metric ${severity}"><span>${esc(label)}</span><strong>${count}</strong></div>`;
 }
 
-function cautionEscalationsCard(data, raw) {
-  const workspaces = Array.isArray(data?.workspaces) ? data.workspaces : [];
-  const total = workspaces.reduce((n, w) => n + (Number.isFinite(w.count) ? w.count : 0), 0);
-  if (data && total === 0) return null;
-  const value = data == null ? 'Unknown' : total + ' recent change' + pluralSuffix(total);
-  const windowHours = Number.isFinite(data?.windowHours) ? data.windowHours : 24;
-  const card = document.createElement('div');
-  card.className = 'card';
-  card.innerHTML = `<div class="card-head"><h3>Protected config changes</h3><button class="secondary" style="min-height:24px;padding:0 8px;font-size:11px;">Details</button></div>`;
-  const body = document.createElement('div');
-  body.className = 'card-body';
-  body.style.display = 'grid';
-  body.style.gap = '8px';
-  const rows = workspaces.length
-    ? workspaces.map((w) => {
-        const recent = Array.isArray(w.recent) ? w.recent : [];
-        const recentHtml = recent.slice(0, 3).map(recentChangeHtml).join('');
-        return `<div style="font-size:12px;color:var(--text-muted);"><strong style="color:var(--text);">${esc(w.alias)}</strong>: ${esc(w.count)} protected change${pluralSuffix(w.count)} in ${esc(windowHours)}h</div>${recentHtml}`;
-      }).join('')
-    : '<div style="font-size:12px;color:var(--text-muted);">No protected configuration changes in the current window.</div>';
-  body.innerHTML = `<div style="font-size:22px;font-weight:800;color:var(--yellow);">${esc(value)}</div>${rows}`;
-  card.appendChild(body);
-  card.querySelector('button').onclick = () => showRaw(raw, data);
-  return card;
+function findingCard(finding) {
+  return `<article class="diagnostic-finding ${finding.severity}">
+    <div class="diagnostic-severity">${esc(finding.severity)}</div>
+    <div class="diagnostic-copy">
+      <h3>${esc(finding.title)}</h3>
+      <p><strong>Impact:</strong> ${esc(finding.impact)}</p>
+      <p><strong>Recommended action:</strong> ${esc(finding.recommendation)}</p>
+      <a class="buttonlike secondary compact-button" href="${esc(finding.action.href)}">${esc(finding.action.label)}</a>
+      <details><summary>Technical details</summary><pre>${esc(JSON.stringify(finding.details, null, 2))}</pre></details>
+    </div>
+  </article>`;
 }
 
-function pluralSuffix(count) {
-  return count === 1 ? '' : 's';
+function humanize(value) {
+  const text = String(value || '').replaceAll('_', ' ');
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-function recentChangeHtml(change) {
-  const reason = change.reason ? ' - ' + esc(change.reason) : '';
-  return `<div style="font-size:11px;color:var(--text-muted);">Changed by ${esc(change.tool || 'workspace tool')}${reason}</div>`;
-}
-
-function showRaw(raw, payload) {
-  raw.style.display = 'block';
-  raw.textContent = JSON.stringify(payload, null, 2);
+function severityRank(value) {
+  if (value === 'error') return 0;
+  if (value === 'warning') return 1;
+  return 2;
 }

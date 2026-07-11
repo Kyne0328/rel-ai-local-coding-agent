@@ -22,7 +22,7 @@ const installDir = path.join(sandbox, 'InstalledApp');
 const resultPath = path.join(sandbox, 'installed-smoke-result.json');
 const configPath = path.join(sandbox, 'config.json');
 const userDataDir = path.join(sandbox, 'electron-user-data');
-const env = {
+const appEnv = {
   ...process.env,
   LOCALAPPDATA: localAppData,
   APPDATA: appData,
@@ -30,6 +30,10 @@ const env = {
   REL_AI_MCP_STATE_DIR: path.join(sandbox, 'state'),
   REL_AI_MCP_CONFIG: configPath,
   REL_AI_INSTALL_SMOKE_RESULT: resultPath
+};
+const installerEnv = {
+  ...process.env,
+  __COMPAT_LAYER: 'RunAsInvoker'
 };
 
 fs.mkdirSync(distDir, { recursive: true });
@@ -50,19 +54,19 @@ try {
   const installer = findFile(distDir, (file) => /setup.*\.exe$/i.test(path.basename(file)));
   assert.ok(installer, `NSIS installer was not produced under ${distDir}`);
 
-  run(installer, ['/S', `/D=${installDir}`], { cwd: root, env, timeout: 5 * 60 * 1000 });
+  run(installer, ['/S', `/D=${installDir}`], { cwd: root, env: installerEnv, timeout: 5 * 60 * 1000 });
   const installedExe = findFile(installDir, (file) => path.basename(file).toLowerCase() === 'rel.ai mcp.exe');
   assert.ok(installedExe, `Installed executable was not found under explicit install directory: ${installDir}`);
   uninstaller = findFile(installDir, (file) => /^uninstall.*\.exe$/i.test(path.basename(file)));
 
   run(installedExe, ['--installed-smoke', `--user-data-dir=${userDataDir}`], {
     cwd: path.dirname(installedExe),
-    env,
+    env: appEnv,
     timeout: 90 * 1000
   });
   run(installedExe, ['--window-smoke', `--user-data-dir=${userDataDir}`], {
     cwd: path.dirname(installedExe),
-    env,
+    env: appEnv,
     timeout: 90 * 1000
   });
 
@@ -77,7 +81,7 @@ try {
   console.log(`Installed application smoke passed for v${result.version} with ${result.publicToolCount} tools and all renderer surfaces.`);
 } finally {
   if (uninstaller && fs.existsSync(uninstaller)) {
-    spawnSync(uninstaller, ['/S'], { cwd: path.dirname(uninstaller), env, encoding: 'utf8', timeout: 3 * 60 * 1000 });
+    spawnSync(uninstaller, ['/S'], { cwd: path.dirname(uninstaller), env: installerEnv, encoding: 'utf8', timeout: 3 * 60 * 1000 });
   }
   if (!removeWithRetry(sandbox)) {
     console.warn(`Installed smoke passed, but Windows still holds temporary files at ${sandbox}.`);

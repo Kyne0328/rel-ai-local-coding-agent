@@ -24,8 +24,8 @@ export function mountTools(container) {
     <div class="section tools-section">
       <div class="section-head">
         <div>
-          <h2>Tools</h2>
-          <p>Only tools exposed by the active connector are shown. Some require a Git repository, remote, configured route or check, or an approved tidy plan.</p>
+          <h2>Reference</h2>
+          <p>Connector tool reference for inspection, editing, validation, Git publishing, recovery, and workspace administration.</p>
         </div>
         <span class="section-action" id="toolsCount">Loading…</span>
       </div>
@@ -82,7 +82,7 @@ function renderTools(container) {
   if (count) {
     count.textContent = filtered
       ? `Showing ${visible.length} of ${_tools.length} tools`
-      : `${_tools.length} public tools`;
+      : `${_tools.length} connector tools`;
   }
   updateFilterCounts(container);
   body.innerHTML = '';

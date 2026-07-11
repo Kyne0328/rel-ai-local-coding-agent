@@ -1,6 +1,7 @@
 import { pillHtml } from '../components/pill.js';
 import { toast } from '../components/toast.js';
 import { esc, metricHtml, timeAgo } from '../utils.js';
+import { getWorkspaceFilter, routeHref } from '../router.js';
 
 export function mountHome(container, data) {
   container.innerHTML = '';
@@ -11,8 +12,11 @@ function buildOverview(data) {
   const config = data.config || {};
   const health = data.health || {};
   const connection = data.connection || {};
-  const workspaces = Array.isArray(config.workspaces) ? config.workspaces : [];
-  const audit = sortedAudit(data.auditTail?.entries);
+  const workspaceFilter = getWorkspaceFilter();
+  const allWorkspaces = Array.isArray(config.workspaces) ? config.workspaces : [];
+  const workspaces = workspaceFilter ? allWorkspaces.filter(workspace => workspace.alias === workspaceFilter) : allWorkspaces;
+  const tasks = (Array.isArray(data.tasks) ? data.tasks : []).filter(task => !workspaceFilter || task.workspace === workspaceFilter);
+  const audit = sortedAudit(data.auditTail?.entries).filter(entry => !workspaceFilter || entry.workspace === workspaceFilter);
   const findings = actionableFindings(health);
   const endpoint = String(connection.chatgptMcpUrl || '');
   const validationReady = workspaces.filter(hasValidation).length;
@@ -22,9 +26,9 @@ function buildOverview(data) {
 
   const root = document.createElement('div');
   root.className = 'section';
-  root.appendChild(connectionHero(bridgeState, endpoint, connection, workspaces));
-  const taskCard = taskActivityCard(data.taskActivity);
+  const taskCard = taskActivityCard(data.taskActivity, tasks[0]);
   if (taskCard) root.appendChild(taskCard);
+  root.appendChild(connectionHero(bridgeState, endpoint, connection, workspaces));
 
   const metrics = document.createElement('div');
   metrics.className = 'overview-grid overview-grid-compact';
@@ -36,12 +40,12 @@ function buildOverview(data) {
 
   const attention = buildAttention(workspaces, findings, endpoint);
   if (attention.length) root.appendChild(attentionCard(attention));
-  if (!audit.length && workspaces.length) root.appendChild(firstPromptCard(workspaces));
+  if (!audit.some(entry => entry.ok !== false) && workspaces.length) root.appendChild(firstPromptCard(workspaces));
 
   const grid = document.createElement('div');
   grid.className = 'layout-grid';
   grid.appendChild(workspaceSummaryCard(workspaces));
-  grid.appendChild(recentActivityCard(audit));
+  grid.appendChild(recentTasksCard(tasks));
   root.appendChild(grid);
   return root;
 }
@@ -73,14 +77,21 @@ function resolveBridgeState({ endpoint, workspaces, findings }) {
   }
   return {
     tone: 'good',
-    kicker: 'Ready for ChatGPT',
-    title: 'Your local workspace bridge is ready.',
-    description: 'ChatGPT can use the secure MCP endpoint below to inspect, edit, validate, review, and restore your configured repositories.'
+    kicker: 'Connected and ready',
+    title: 'Rel.AI can now receive workspace tasks from ChatGPT.',
+    description: 'Your secure MCP connection is online. Open the dashboard to manage repositories and review task activity. Copy the endpoint only when adding or reconnecting Rel.AI in ChatGPT.'
   };
 }
 
 function connectionHero(state, endpoint, connection, workspaces) {
   const hero = document.createElement('section');
+  const hasWorkspaces = workspaces.length > 0;
+  const primaryAction = endpoint
+    ? '<button class="primary" type="button" data-copy-mcp>Copy MCP endpoint</button>'
+    : '<a class="buttonlike primary" href="#settings/connector">Open connector settings</a>';
+  const secondaryRoute = hasWorkspaces ? routeHref('tasks') : routeHref('workspaces');
+  const secondaryLabel = hasWorkspaces ? 'View tasks' : 'Add workspace';
+  const endpointClass = endpoint ? '' : 'empty';
   hero.className = `overview-hero ${state.tone}`;
   hero.innerHTML = `
     <div class="overview-copy">
@@ -88,15 +99,13 @@ function connectionHero(state, endpoint, connection, workspaces) {
       <h2 class="overview-title">${esc(state.title)}</h2>
       <p class="overview-description">${esc(state.description)}</p>
       <div class="overview-actions">
-        ${endpoint
-          ? '<button class="primary" type="button" data-copy-mcp>Copy MCP endpoint</button>'
-          : '<a class="buttonlike primary" href="#settings/connector">Open connector settings</a>'}
-        <a class="buttonlike secondary" href="${workspaces.length ? '#activity' : '#workspaces'}">${workspaces.length ? 'View activity' : 'Add workspace'}</a>
+        ${primaryAction}
+        <a class="buttonlike secondary" href="${secondaryRoute}">${secondaryLabel}</a>
       </div>
     </div>
     <div class="overview-endpoint">
       <div class="overview-endpoint-label">ChatGPT MCP endpoint</div>
-      <div class="overview-endpoint-value ${endpoint ? '' : 'empty'}">${esc(endpoint || 'Waiting for a permanent HTTPS endpoint')}</div>
+      <div class="overview-endpoint-value ${endpointClass}">${esc(endpoint || 'Waiting for a permanent HTTPS endpoint')}</div>
       <div class="overview-meta">${esc(connection.tunnelMode || 'Cloud connection required')}</div>
     </div>`;
 
@@ -114,38 +123,81 @@ function connectionHero(state, endpoint, connection, workspaces) {
   return hero;
 }
 
-function taskActivityCard(activity = {}) {
-  const active = activity.state === 'working' || activity.state === 'settling';
-  const task = activity.lastTask;
-  if (!active && !task) return null;
+function taskActivityCard(activity = {}, persistedTask = null) {
+  const activeTasks = activeTaskList(activity);
+  const active = activeTasks.length > 0;
+  const task = active ? primaryActiveTask(activeTasks) : persistedTask || activity.lastTask;
+  if (!task) return null;
   const card = document.createElement('section');
-  const attention = !active && task?.status === 'attention';
-  card.className = `card task-overview ${active ? 'active' : attention ? 'attention' : 'completed'}`;
-  if (active) {
-    const settling = activity.state === 'settling';
-    card.innerHTML = `
-      <div class="task-overview-mark" aria-hidden="true"></div>
-      <div class="task-overview-copy">
-        <div class="overview-kicker">ChatGPT activity</div>
-        <h3>${settling ? 'Wrapping up the current task…' : 'ChatGPT is working.'}</h3>
-        <p>${esc(taskAction(activity.tool))} in <strong>${esc(activity.workspace || 'a configured workspace')}</strong>.</p>
-      </div>
-      <div class="task-overview-meta">
-        <span>${activity.activeCalls > 1 ? `${activity.activeCalls} concurrent calls` : settling ? 'Waiting for final actions' : '1 active call'}</span>
-        <strong>${formatDuration(Date.now() - Number(activity.startedAt || Date.now()))}</strong>
-      </div>`;
-    return card;
-  }
-  const failed = Number(task.failures || 0);
+  if (active) renderActiveTaskCard(card, activity, activeTasks, task);
+  else renderCompletedTaskCard(card, task);
+  return card;
+}
+
+function activeTaskList(activity) {
+  if (Array.isArray(activity.tasks)) return activity.tasks;
+  if (activity.taskId && activity.state !== 'idle') return [activity];
+  return [];
+}
+
+function primaryActiveTask(tasks) {
+  return tasks.find(item => Number(item.activeCalls || 0) > 0) || tasks[0];
+}
+
+function renderActiveTaskCard(card, activity, activeTasks, task) {
+  const taskCount = activeTasks.length;
+  const activeCalls = Number(activity.activeCalls || activeTasks.reduce((sum, item) => sum + Number(item.activeCalls || 0), 0));
+  const settling = activeCalls === 0;
+  const location = activeTaskLocation(activeTasks);
+  let title = 'ChatGPT is working.';
+  if (settling) title = `${taskCount} open ${pluralLabel(taskCount, 'task')} waiting for follow-up calls.`;
+  else if (taskCount > 1) title = `${taskCount} ChatGPT tasks are running.`;
+  let description = `${esc(taskAction(task.lastTool || task.tool))} in <strong>${esc(task.workspace || location)}</strong>.`;
+  if (taskCount > 1) description = `${activeCalls} ${pluralLabel(activeCalls, 'active tool call')} across ${location}.`;
+  const activityLabel = settling
+    ? 'Completes after 60s without another call'
+    : `${activeCalls} ${pluralLabel(activeCalls, 'active call')}`;
+  card.className = 'card task-overview active';
   card.innerHTML = `
-    <div class="task-overview-mark" aria-hidden="true">${attention ? '!' : '✓'}</div>
+    <div class="task-overview-mark" aria-hidden="true"></div>
+    <div class="task-overview-copy">
+      <div class="overview-kicker">ChatGPT activity</div>
+      <h3>${title}</h3>
+      <p>${description}</p>
+    </div>
+    <div class="task-overview-meta">
+      <span>${activityLabel}</span>
+      <strong>${formatDuration(Date.now() - Number(task.startedAt || Date.now()))}</strong>
+    </div>`;
+}
+
+function renderCompletedTaskCard(card, task) {
+  const attention = task.status === 'attention';
+  const failed = Number(task.failures || 0);
+  const callCount = Number(task.calls || 0);
+  const mark = attention ? '!' : '✓';
+  const title = attention ? 'Task needs attention' : 'Last task completed';
+  const failureText = failed ? ` · ${failed} failed` : '';
+  card.className = `card task-overview ${attention ? 'attention' : 'completed'}`;
+  card.innerHTML = `
+    <div class="task-overview-mark" aria-hidden="true">${mark}</div>
     <div class="task-overview-copy">
       <div class="overview-kicker">Previous task</div>
-      <h3>${attention ? 'Task needs attention' : 'Last task completed'}</h3>
-      <p>${esc(task.workspace || 'workspace')} · ${Number(task.calls || 0)} tool call${Number(task.calls || 0) === 1 ? '' : 's'}${failed ? ` · ${failed} failed` : ''}</p>
+      <h3>${title}</h3>
+      <p>${esc(task.workspace || 'workspace')} · ${callCount} ${pluralLabel(callCount, 'tool call')}${failureText}</p>
     </div>
     <div class="task-overview-meta"><span>${esc(timeAgo(task.completedAt))}</span><strong>${formatDuration(task.durationMs)}</strong></div>`;
-  return card;
+}
+
+function activeTaskLocation(tasks) {
+  const workspaces = [...new Set(tasks.map(item => item.workspace).filter(Boolean))];
+  if (workspaces.length === 1) return esc(workspaces[0]);
+  if (workspaces.length > 1) return `${workspaces.length} workspaces`;
+  return 'configured workspaces';
+}
+
+function pluralLabel(count, singular) {
+  return Number(count) === 1 ? singular : `${singular}s`;
 }
 
 function taskAction(tool) {
@@ -244,30 +296,31 @@ function workspaceSummaryCard(workspaces) {
   return card;
 }
 
-function recentActivityCard(audit) {
+function recentTasksCard(tasks) {
   const card = document.createElement('section');
   card.className = 'card';
-  card.innerHTML = `<div class="card-head"><h3>Latest activity</h3><a class="section-action" href="#activity">View all</a></div>`;
+  card.innerHTML = `<div class="card-head"><h3>Recent tasks</h3><a class="section-action" href="${routeHref('tasks')}">View all</a></div>`;
   const body = document.createElement('div');
   body.className = 'card-body';
-  body.innerHTML = audit.slice(0, 8).map(entry => {
-    const status = entry.ok === false ? 'failed' : 'ok';
-    return `<div class="activity-row"><span class="activity-time">${esc(timeAgo(entry.ts || entry.at || entry.createdAt))}</span><span class="activity-name truncate mono">${esc(entry.tool || entry.type || 'activity')}</span>${pillHtml(status)}</div>`;
-  }).join('') || '<div class="empty">Activity will appear after ChatGPT calls a Rel.AI tool.</div>';
+  body.innerHTML = tasks.slice(0, 8).map(task => {
+    const status = recentTaskStatus(task.status);
+    const completedAt = task.completedAt ? timeAgo(task.completedAt) : 'now';
+    return `<div class="activity-row"><span class="activity-time">${esc(completedAt)}</span><span class="activity-name truncate"><strong>${esc(task.workspace || 'workspace')}</strong> · ${esc(task.calls || 0)} calls · ${esc(task.changedFileCount || 0)} files</span>${pillHtml(status)}</div>`;
+  }).join('') || '<div class="empty">Tasks will appear after ChatGPT calls a Rel.AI connector tool.</div>';
   card.appendChild(body);
   return card;
 }
 
+function recentTaskStatus(status) {
+  if (status === 'attention') return 'failed';
+  if (status === 'working' || status === 'settling') return 'check';
+  return 'ok';
+}
+
 function updateShell(data, workspaceCount) {
   const subtitle = document.getElementById('subtitle');
-  if (subtitle) subtitle.textContent = `${workspaceCount} workspace${workspaceCount === 1 ? '' : 's'} available to ChatGPT`;
-  const updated = document.getElementById('lastUpdated');
-  if (updated) updated.textContent = data.generatedAt ? `Updated ${new Date(data.generatedAt).toLocaleTimeString()}` : '';
-  const status = document.getElementById('serverStatus');
-  if (status) {
-    status.className = `status-pill ${data.ok === false ? 'bad' : 'ok'}`;
-    status.textContent = data.ok === false ? 'Error' : 'Online';
-  }
+  const task = data.taskActivity || {};
+  if (subtitle && task.state === 'idle') subtitle.textContent = `${workspaceCount} workspace${workspaceCount === 1 ? '' : 's'} available to ChatGPT`;
 }
 
 function hasValidation(workspace) {
