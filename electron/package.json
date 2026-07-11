@@ -23,6 +23,7 @@
       "resource-path.js",
       "window-size.js",
       "window-smoke.js",
+      "tool-sleep-blocker.js",
       "installed-smoke.js",
       "renderer/**",
       "build/**"

@@ -19,6 +19,7 @@
 - **Replace prepared-workflow and bundle settings with focused patch safeguards for backup, clean-git enforcement, and maximum update size.**
 - **Add an obsolete-surface residue scan and validate the release with JavaScript checks, TypeScript boundary checks, release consistency checks, 50 regression files, and the installed Windows application smoke test.**
 - **Make `npm test` delegate to the authoritative `test:all` runner, avoiding duplicate Windows child-process chains.**
+- **Prevent system sleep only while an authenticated connector tool call is executing, using one reference-counted Electron `prevent-app-suspension` blocker for overlapping calls while still allowing the display to turn off.**
 
 Bump root/electron/status UI/lockfiles to 0.19.0.
 

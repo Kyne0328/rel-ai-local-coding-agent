@@ -19,6 +19,7 @@ const {
   maybeStartSession
 } = require('./tools/session');
 const { dispatchTool } = require('./tools/dispatch');
+const { beginConnectorToolCall } = require('./toolActivity');
 const {
   workspaceList,
   workspaceInspect,
@@ -30,9 +31,13 @@ async function callTool(name, args = {}, context = {}) {
   const config = readConfig();
   const started = Date.now();
   const connector = Boolean(context?.publicHttpOnly);
+  let finishActivity = null;
   try {
     if (!isToolCallable(name)) {
       throw new Error(`Unknown tool '${name}'. Available tools: ${TOOL_NAMES.join(', ')}. Restart/reconnect ChatGPT if the tool list looks stale.`);
+    }
+    if (connector) {
+      finishActivity = beginConnectorToolCall({ tool: name, workspace: args?.workspace });
     }
     maybeStartSession(config, name, args || {});
     const value = await dispatchTool(config, name, args || {});
@@ -45,6 +50,8 @@ async function callTool(name, args = {}, context = {}) {
     const enhanced = enhanceToolError(name, error);
     logAudit(config, { tool: name, ok: false, workspace: args?.workspace, ms: Date.now() - started, error: enhanced.message });
     throw enhanced;
+  } finally {
+    finishActivity?.();
   }
 }
 
