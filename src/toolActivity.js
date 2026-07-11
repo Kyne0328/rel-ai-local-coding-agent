@@ -5,6 +5,7 @@ const listeners = new Set();
 
 function beginConnectorToolCall(details = {}) {
   let finished = false;
+  const startedAt = Date.now();
   activeConnectorCalls += 1;
   notify({
     phase: 'started',
@@ -13,7 +14,7 @@ function beginConnectorToolCall(details = {}) {
     workspace: String(details.workspace || '')
   });
 
-  return () => {
+  return (result = {}) => {
     if (finished) return;
     finished = true;
     activeConnectorCalls = Math.max(0, activeConnectorCalls - 1);
@@ -21,7 +22,10 @@ function beginConnectorToolCall(details = {}) {
       phase: 'finished',
       activeConnectorCalls,
       tool: String(details.tool || ''),
-      workspace: String(details.workspace || '')
+      workspace: String(details.workspace || ''),
+      ok: result.ok !== false,
+      error: String(result.error || ''),
+      durationMs: Math.max(0, Date.now() - startedAt)
     });
   };
 }

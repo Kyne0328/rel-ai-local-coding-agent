@@ -1,5 +1,7 @@
 const { screen } = require('electron');
 
+const centeredWindows = new WeakSet();
+
 const WINDOW_SIZE_LIMITS = {
   wizard: {
     minWidth: 480,
@@ -43,8 +45,14 @@ function fitWindowToContent(win, options = {}) {
   const currentBounds = win.getContentBounds();
   if (currentBounds.width === width && currentBounds.height === height) return;
 
+  const bounds = win.getBounds();
   win.setContentSize(width, height, true);
-  win.center();
+  if (!centeredWindows.has(win)) {
+    win.center();
+    centeredWindows.add(win);
+  } else {
+    win.setPosition(bounds.x, bounds.y, false);
+  }
 }
 
 module.exports = { fitWindowToContent, WINDOW_SIZE_LIMITS };

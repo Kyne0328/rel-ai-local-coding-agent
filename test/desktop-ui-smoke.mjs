@@ -19,7 +19,7 @@ for (const name of ['--bg', '--surface', '--surface-2', '--surface-3', '--text',
   assert.equal(tokenValue(electronCss, name), tokenValue(dashboardTokens, name), `${name} must match between Electron and dashboard themes`);
 }
 
-for (const file of ['electron/renderer/status.html', 'electron/renderer/wizard.html']) {
+for (const file of ['electron/renderer/status.html', 'electron/renderer/wizard.html', 'electron/renderer/settings.html']) {
   const html = read(file);
   assert.match(html, /<link rel="stylesheet" href="app\.css">/);
   assert.doesNotMatch(html, /<style\b/i, `${file} must use the shared Electron stylesheet`);
@@ -40,15 +40,44 @@ assert.match(wizardJs, /handleEnter/);
 
 const statusHtml = read('electron/renderer/status.html');
 const statusJs = read('electron/renderer/status.js');
+const preloadJs = read('electron/preload.js');
+const ipcHandlers = read('electron/ipc-handlers.js');
 assert.match(statusHtml, /id="serverToggleBtn"/);
-assert.match(statusHtml, /data-disclosure="connection"/);
+assert.match(statusHtml, /data-disclosure="service"/);
 assert.match(statusHtml, /id="notificationToggleBtn"/);
+assert.match(statusHtml, /Desktop notifications/);
+assert.match(statusHtml, /id="localHealthCard"/);
+assert.match(statusHtml, /id="publicHealthCard"/);
+assert.match(statusHtml, /id="lastTaskCard"/);
+assert.match(statusHtml, /role="switch"/);
 assert.match(statusHtml, /id="copyDiagnosticsBtn"/);
 assert.match(statusJs, /showDesktopNotification/);
+assert.match(statusJs, /syncNotificationPreference/);
+assert.match(statusJs, /setNotificationsEnabled/);
+assert.match(preloadJs, /notifications:get-enabled/);
+assert.match(preloadJs, /notifications:set-enabled/);
+assert.match(ipcHandlers, /getNotificationsEnabled/);
+assert.match(ipcHandlers, /setNotificationsEnabled/);
 assert.match(statusJs, /diagnosticSummary/);
+assert.match(statusJs, /heroView/);
+assert.match(statusJs, /renderLastTask/);
+assert.match(statusJs, /activity-pulse/);
 assert.match(statusJs, /initDisclosures/);
 assert.match(electronCss, /prefers-color-scheme: light/);
 assert.match(electronCss, /status-details::details-content/);
 assert.match(electronCss, /button\[data-state="success"\]/);
+assert.match(electronCss, /status-health-grid/);
+assert.match(electronCss, /notification-switch/);
+assert.match(electronCss, /settings-shell/);
+
+const settingsHtml = read('electron/renderer/settings.html');
+const settingsJs = read('electron/renderer/settings.js');
+assert.match(settingsHtml, /Rel\.AI MCP Settings/);
+assert.match(settingsHtml, /Save and restart/);
+assert.match(settingsHtml, /Dashboard approval token/);
+assert.match(settingsJs, /restart: true/);
+assert.match(settingsJs, /getNotificationsEnabled/);
+assert.match(settingsJs, /closeWizard/);
+assert.doesNotMatch(settingsHtml, /Step \d of 4/);
 
 console.log('Desktop UI smoke test passed.');

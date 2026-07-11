@@ -32,6 +32,7 @@ async function callTool(name, args = {}, context = {}) {
   const started = Date.now();
   const connector = Boolean(context?.publicHttpOnly);
   let finishActivity = null;
+  let activityResult = { ok: true };
   try {
     if (!isToolCallable(name)) {
       throw new Error(`Unknown tool '${name}'. Available tools: ${TOOL_NAMES.join(', ')}. Restart/reconnect ChatGPT if the tool list looks stale.`);
@@ -48,10 +49,11 @@ async function callTool(name, args = {}, context = {}) {
     return ok(connector ? compactForConnector(name, value, args || {}) : value);
   } catch (error) {
     const enhanced = enhanceToolError(name, error);
+    activityResult = { ok: false, error: enhanced.message };
     logAudit(config, { tool: name, ok: false, workspace: args?.workspace, ms: Date.now() - started, error: enhanced.message });
     throw enhanced;
   } finally {
-    finishActivity?.();
+    finishActivity?.(activityResult);
   }
 }
 

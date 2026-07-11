@@ -10,7 +10,7 @@ const {
   onToolActivity,
   getToolActivity
 } = require('../src/toolActivity.js');
-const { createToolSleepBlocker, bindToolActivitySleep } = require('../electron/tool-sleep-blocker.js');
+const { createToolSleepBlocker, createTaskActivityRuntime } = require('../electron/tool-sleep-blocker.js');
 
 const events = [];
 const unsubscribe = onToolActivity(event => events.push(event));
@@ -70,21 +70,24 @@ assert.equal(blocker.stop(), false, 'stopping an inactive blocker must be harmle
 
 let boundListener = null;
 let unsubscribed = false;
-const stopBinding = bindToolActivitySleep({
+const runtime = createTaskActivityRuntime({
   toolActivity: {
     onToolActivity(listener) {
       boundListener = listener;
       return () => { unsubscribed = true; };
-    }
+    },
+    getToolActivity() { return { activeConnectorCalls: 0 }; }
   },
   powerSaveBlocker: fakePowerSaveBlocker,
+  Notification: class { static isSupported() { return false; } },
   isReady: () => true
 });
-boundListener({ activeConnectorCalls: 1 });
+runtime.setNotificationsEnabled(false);
+boundListener({ phase: 'started', activeConnectorCalls: 1 });
 assert.equal(started.has(41), true);
-boundListener({ activeConnectorCalls: 0 });
+boundListener({ phase: 'finished', activeConnectorCalls: 0, ok: true });
 assert.equal(started.has(41), false);
-stopBinding();
+runtime.stop();
 assert.equal(unsubscribed, true);
 
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-tool-activity-'));

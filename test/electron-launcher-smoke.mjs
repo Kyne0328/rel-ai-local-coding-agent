@@ -63,8 +63,11 @@ assert.match(
   'Electron main must import the window limits used by normal wizard and status startup'
 );
 assert.match(electronMain, /powerSaveBlocker/, 'Electron main must use the native sleep-prevention API');
-assert.match(electronMain, /bindToolActivitySleep/, 'Electron main must bind connector activity to native sleep prevention');
-assert.match(electronMain, /stopToolSleepBinding\(\)/, 'sleep prevention must stop during application shutdown');
+assert.match(electronMain, /createTaskActivityRuntime/, 'Electron main must bind connector activity to sleep prevention, live status, and completion alerts');
+assert.match(electronMain, /toolActivityRuntime\.stop\(\)/, 'tool activity runtime must stop during application shutdown');
+assert.match(electronMain, /setNotificationsEnabled: toolActivityRuntime\.setNotificationsEnabled/, 'the desktop notification toggle must control task alerts');
+assert.match(electronMain, /settings\.html/, 'normal settings must use a dedicated renderer instead of wizard edit mode');
+assert.match(electronMain, /onStatusChange: taskActivity => setStatus\(\{ taskActivity \}\)/, 'tool activity must be pushed into the status window');
 
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-gui-test-'));
 process.env.REL_AI_MCP_STATE_DIR = stateDir;
