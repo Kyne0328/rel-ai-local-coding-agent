@@ -216,6 +216,8 @@ npm run oneclick -- --public-url https://your-domain.example  # permanent ChatGP
 
 The dashboard connector page prints the final ChatGPT MCP URL.
 
+In the packaged desktop app, **Open dashboard** now opens the full dashboard inside a secured Electron window. The same dashboard remains available in a normal browser at the local `/dashboard` route; Electron is simply the default desktop host, not a separate implementation.
+
 ### Choosing a tunnel provider
 
 The auto tunnel tries Cloudflare, ngrok, then localtunnel. To pick one explicitly:
@@ -239,7 +241,7 @@ See [docs/ONE_CLICK_SETUP.md](docs/ONE_CLICK_SETUP.md) for permanent-tunnel opti
 ## ChatGPT connector setup
 
 1. Start the server with `npm run oneclick` or a public tunnel command.
-2. Open the dashboard.
+2. Open the dashboard inside the desktop app, or use the local browser dashboard route when running the server directly.
 3. Go to **Settings > Apps > Create**.
 4. Copy the MCP URL.
 5. In ChatGPT, add it as an MCP connector.

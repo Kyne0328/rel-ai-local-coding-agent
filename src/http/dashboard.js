@@ -1,3 +1,4 @@
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const { readConfig } = require("../config");
@@ -44,7 +45,10 @@ function buildDashboardPayload(config, options = {}, requireHttpToken = false) {
       publicUrl: profile.publicUrl || options.publicUrl || "",
       token: "",
       tunnelProvider: profile.tunnelProvider || "none"
-    })
+    }),
+    taskActivity: typeof options.getTaskActivity === "function"
+      ? options.getTaskActivity()
+      : { state: "idle", activeCalls: 0, workspace: "", tool: "", startedAt: null, lastTask: null }
   };
 }
 
@@ -84,7 +88,19 @@ function handleStaticAsset(ctx) {
   } catch { ctx.res.writeHead(404); ctx.res.end("Not found"); }
 }
 
-function handleDashboard(ctx) { sendHtml(ctx.res, 200, renderDashboardHtml(ctx.options)); }
+function handleDashboard(ctx) {
+  const nonce = crypto.randomBytes(18).toString("base64");
+  const csp = [
+    "default-src 'self'", `script-src 'self' 'nonce-${nonce}'`, "style-src 'self'",
+    "img-src 'self' data:", "connect-src 'self'", "object-src 'none'",
+    "base-uri 'none'", "frame-ancestors 'none'", "form-action 'self'"
+  ].join("; ");
+  sendHtml(ctx.res, 200, renderDashboardHtml(ctx.options, nonce), {
+    "Content-Security-Policy": csp,
+    "Referrer-Policy": "no-referrer",
+    "X-Content-Type-Options": "nosniff"
+  });
+}
 
 function handleApiSettingsGet(ctx) {
   sendJson(ctx.res, 200, configEditor.settingsPayload(readConfig()), ctx.ae);
@@ -232,9 +248,11 @@ function openDashboardEvents(res, req, options) {
   const changeSignature = () => {
     let config = null;
     try { config = readConfigCached(); } catch { /* config may be unavailable; signature stays empty */ }
+    const taskActivity = typeof options.getTaskActivity === "function" ? options.getTaskActivity() : null;
     return [
       statSignature(require("../config").getConfigPath()),
-      statSignature(config?.auditLogPath)
+      statSignature(config?.auditLogPath),
+      JSON.stringify(taskActivity)
     ].join("|");
   };
   let lastSignature = "";
@@ -255,10 +273,10 @@ function openDashboardEvents(res, req, options) {
   req.on("close", () => clearInterval(timer));
 }
 
-function safeInitialDashboardData() {
+function safeInitialDashboardData(options = {}) {
   try {
     const config = readConfig();
-    return buildDashboardPayload(config, { limit: 100 }, false);
+    return buildDashboardPayload(config, { ...options, limit: 100 }, false);
   } catch (error) {
     return {
       ok: false,
@@ -267,8 +285,8 @@ function safeInitialDashboardData() {
   }
 }
 
-function renderDashboardHtml(_options) {
-  const initialDashboardJson = jsonForHtmlScript(safeInitialDashboardData());
+function renderDashboardHtml(options, nonce) {
+  const initialDashboardJson = jsonForHtmlScript(safeInitialDashboardData(options));
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -278,7 +296,7 @@ function renderDashboardHtml(_options) {
 <link rel="icon" href="/public/assets/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" href="/public/assets/favicon.png">
 <link rel="apple-touch-icon" href="/public/assets/relai-logo-192.png">
-<script>
+<script nonce="${nonce}">
 try {
   const themePreference = localStorage.getItem('relai_ui_theme') || 'system';
   const resolvedTheme = themePreference === 'system'
@@ -324,7 +342,7 @@ try {
     </div>
   </main>
 </div>
-<script type="application/json" id="initialDashboardData">${initialDashboardJson}</script>
+<script type="application/json" id="initialDashboardData" nonce="${nonce}">${initialDashboardJson}</script>
 <script type="module" src="/public/dashboard.js"></script>
 </body>
 </html>`;

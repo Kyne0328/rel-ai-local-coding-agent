@@ -33,9 +33,11 @@ npm run oneclick -- --public-url https://your-domain.example  # permanent public
 
 ChatGPT requires a public HTTPS endpoint. Use `--public` for a temporary tunnel or `--public-url` for a stable endpoint. See [ONE_CLICK_SETUP.md](ONE_CLICK_SETUP.md) for tunnel options.
 
+The packaged desktop app opens the dashboard in a secured Electron window by default. The same local `/dashboard` route remains accessible in a normal browser when needed; both hosts use the same dashboard code and server APIs.
+
 ## Adding the connector in ChatGPT
 
-1. Start Rel.AI MCP and open the dashboard.
+1. Start Rel.AI MCP and open the dashboard in the desktop app or through the local browser route.
 2. Copy the MCP URL ending in `/mcp`.
 3. In ChatGPT, open **Settings > Apps > Create**.
 4. Add the MCP URL and select **OAuth** authentication.

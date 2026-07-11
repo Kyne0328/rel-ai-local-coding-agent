@@ -135,9 +135,9 @@ function sendJson(res, status, payload, ae = "") {
   res.end(json);
 }
 
-function sendHtml(res, status, html) {
+function sendHtml(res, status, html, headers = {}) {
   if (res.headersSent) return;
-  res.writeHead(status, { "Content-Type": "text/html; charset=utf-8" });
+  res.writeHead(status, { "Content-Type": "text/html; charset=utf-8", ...headers });
   res.end(html);
 }
 

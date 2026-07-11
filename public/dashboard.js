@@ -7,9 +7,17 @@ import { initUiPreferences } from './ui/preferences.js';
 
 initUiPreferences();
 
-const urlToken = new URLSearchParams(location.search).get('token') || '';
+const launchParams = new URLSearchParams(location.search);
+const urlToken = launchParams.get('token') || '';
+const surface = launchParams.get('surface') === 'desktop' ? 'desktop' : 'browser';
+document.documentElement.dataset.surface = surface;
 const token = urlToken || sessionStorage.getItem('relai_dashboard_token') || '';
 if (token) setToken(token);
+if (urlToken) {
+  launchParams.delete('token');
+  const query = launchParams.toString();
+  history.replaceState(null, '', `${location.pathname}${query ? `?${query}` : ''}${location.hash || ''}`);
+}
 
 let _routerReady = false;
 
@@ -167,6 +175,8 @@ async function _liveOnEvent(data) {
     import('./ui/sections/activity.js')
       .then(module => module.mergeEntries(data.auditTail?.entries || []))
       .catch(_debugError);
+  } else if (currentSection() === 'home' && !_hasBlockingInteraction()) {
+    rerender();
   }
 }
 
@@ -175,13 +185,21 @@ function _updateShell(data) {
   const workspaces = Array.isArray(config.workspaces) ? config.workspaces : [];
   const count = workspaces.length;
   const subtitle = document.getElementById('subtitle');
-  if (subtitle) subtitle.textContent = `${count} workspace${count === 1 ? '' : 's'} available to ChatGPT`;
+  const task = data?.taskActivity || {};
+  if (subtitle) {
+    subtitle.textContent = task.state === 'working'
+      ? `ChatGPT is working in ${task.workspace || 'a configured workspace'}`
+      : task.state === 'settling'
+        ? 'ChatGPT is wrapping up the current task'
+        : `${count} workspace${count === 1 ? '' : 's'} available to ChatGPT`;
+  }
   const updated = document.getElementById('lastUpdated');
   if (updated) updated.textContent = 'Updated ' + new Date(data.generatedAt || Date.now()).toLocaleTimeString();
   const status = document.getElementById('serverStatus');
   if (status) {
-    status.className = 'status-pill ' + (data?.ok !== false ? 'ok' : 'bad');
-    status.textContent = data?.ok !== false ? 'Online' : 'Error';
+    const taskState = data?.taskActivity?.state;
+    status.className = 'status-pill ' + (data?.ok === false ? 'bad' : taskState === 'working' ? 'working' : taskState === 'settling' ? 'warn' : 'ok');
+    status.textContent = data?.ok === false ? 'Error' : taskState === 'working' ? 'Working' : taskState === 'settling' ? 'Wrapping up' : 'Online';
   }
 }
 

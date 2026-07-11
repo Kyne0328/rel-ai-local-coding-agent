@@ -56,6 +56,7 @@ function startHttpServer(options = {}) {
   // in the same process). Absent when the server runs standalone — the endpoint then
   // reports unsupported and the dashboard falls back to manual path entry.
   const pickFolder = typeof options.pickFolder === "function" ? options.pickFolder : null;
+  const getTaskActivity = typeof options.getTaskActivity === "function" ? options.getTaskActivity : null;
 
   if (!token && !allowNoAuth) {
     throw new Error("REL_AI_MCP_TOKEN is required for the HTTP/SSE server. Set a strong token, or set REL_AI_MCP_ALLOW_NO_AUTH=1 for local-only testing.");
@@ -63,7 +64,7 @@ function startHttpServer(options = {}) {
 
   const server = http.createServer(async (req, res) => {
     try {
-      await routeRequest(req, res, { token, allowNoAuth, maxBodyBytes, host, port, publicUrl, pickFolder });
+      await routeRequest(req, res, { token, allowNoAuth, maxBodyBytes, host, port, publicUrl, pickFolder, getTaskActivity });
     } catch (error) {
       sendJson(res, 500, {
         ok: false,

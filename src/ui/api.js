@@ -21,9 +21,13 @@ export function getToken() {
 // dashboard mutations should prefer requestDashboardRefresh() so the page updates
 // in place without breaking live context.
 export function reloadWithToken() {
-  const t = getToken();
-  const query = t ? '?token=' + encodeURIComponent(t) : '';
-  location.assign('/dashboard' + query + (location.hash || ''));
+  const params = new URLSearchParams();
+  const token = getToken();
+  const surface = new URLSearchParams(location.search).get('surface');
+  if (token) params.set('token', token);
+  if (surface) params.set('surface', surface);
+  const query = params.toString();
+  location.assign('/dashboard' + (query ? `?${query}` : '') + (location.hash || ''));
 }
 
 export function requestDashboardRefresh() {

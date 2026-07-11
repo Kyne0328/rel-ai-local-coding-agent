@@ -350,7 +350,12 @@ function bindEvents() {
   document.getElementById('copyDiagnosticsBtn').addEventListener('click', () => {
     void copyWithFeedback(document.getElementById('copyDiagnosticsBtn'), diagnosticSummary(), 'Details copied');
   });
-  document.getElementById('dashboardBtn').addEventListener('click', () => window.electronAPI.openDashboard());
+  document.getElementById('dashboardBtn').addEventListener('click', () => {
+    void withBusy(document.getElementById('dashboardBtn'), 'Opening…', async () => {
+      await window.electronAPI.openDashboard();
+      return null;
+    });
+  });
   for (const id of ['settingsBtn', 'errorSettingsBtn']) {
     document.getElementById(id).addEventListener('click', () => window.electronAPI.openSettings());
   }

@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.19.0] — 2026-07-10
+## [0.19.1] — 2026-07-11
 
 ### Unified dashboard and desktop experience
 - **Redesign the dashboard Overview and Electron status window around connection readiness, the ChatGPT MCP endpoint, focused metrics, actionable warnings, explicit loading and retry states, and compact technical details.**
@@ -17,14 +17,16 @@
 - **Replace the public/internal dual registry with one 16-tool schema, handler map, MCP list, dashboard metadata source, and packaged-application contract.**
 - **Retain structured patch deletion and the bounded tidy plan/run path while removing obsolete general-purpose deletion plumbing.**
 - **Replace prepared-workflow and bundle settings with focused patch safeguards for backup, clean-git enforcement, and maximum update size.**
-- **Add an obsolete-surface residue scan and validate the release with JavaScript checks, TypeScript boundary checks, release consistency checks, 52 regression files, and the installed Windows application smoke test.**
+- **Add an obsolete-surface residue scan and validate the release with JavaScript checks, TypeScript boundary checks, release consistency checks, 53 regression files, and the installed Windows application smoke test.**
 - **Make `npm test` delegate to the authoritative `test:all` runner, avoiding duplicate Windows child-process chains.**
 - **Prevent system sleep only while an authenticated connector tool call is executing, using one reference-counted Electron `prevent-app-suspension` blocker for overlapping calls while still allowing the display to turn off.**
 - **Add native task-completion notifications after 10 seconds of connector inactivity, aggregate chained tool calls into one alert, distinguish successful completion from failures, and connect the existing desktop notification toggle to background alerts.**
 - **Redesign the Electron status window around live ChatGPT activity, separate local/public connection health, persistent last-task results, contextual recovery actions, and a true desktop-notification switch.**
 - **Replace wizard-based configuration editing with a dedicated Settings screen for connection, access-token, and notification preferences, and preserve the user’s window position during content-driven resizing.**
+- **Open the full dashboard inside a sandboxed Electron window by default while preserving the existing browser route, inject dashboard authorization only for the exact loopback origin, block native permissions and cross-origin navigation, and remove the launch token from browser history.**
+- **Share live grouped task state with the web dashboard so Overview and the top bar show active, wrapping-up, completed, and attention-required ChatGPT work in both desktop and browser hosts.**
 
-Bump root/electron/status UI/lockfiles to 0.19.0.
+Bump root/electron/status UI/lockfiles to 0.19.1.
 
 ## [0.18.2] — 2026-07-08
 
