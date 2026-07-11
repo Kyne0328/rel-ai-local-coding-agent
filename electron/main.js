@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage, powerSaveBlocker } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage, powerSaveBlocker, Notification } = require('electron');
 const path = require('node:path');
 const { resolveResourcePath } = require('./resource-path');
 const { isPortAvailable, normalizeWizardConfig, saveLauncherConfig } = require('./launcher-config');
@@ -6,7 +6,7 @@ const { fitWindowToContent, WINDOW_SIZE_LIMITS } = require('./window-size');
 const { registerIpcHandlers } = require('./ipc-handlers');
 const { runInstalledSmoke, writeInstalledSmokeFailure } = require('./installed-smoke');
 const { runWindowSmoke } = require('./window-smoke');
-const { bindToolActivitySleep } = require('./tool-sleep-blocker');
+const { createTaskActivityRuntime } = require('./tool-sleep-blocker');
 
 const srcPath = resolveResourcePath('src');
 const connection = require(path.join(srcPath, 'connectionProfile'));
@@ -33,27 +33,31 @@ let tunnelProcess = null;
 let startPromise = null;
 let lifecycleToken = 0;
 let isQuitting = false;
-const stopToolSleepBinding = bindToolActivitySleep({ toolActivity, powerSaveBlocker, isReady: () => app.isReady() });
 const BASE_STATUS = {
   serverRunning: false,
   tunnelStatus: 'stopped',
   mcpUrl: '',
   error: '',
   localUrl: '',
-  version: app.getVersion()
+  version: app.getVersion(),
+  taskActivity: { state: 'idle', activeCalls: 0, workspace: '', tool: '', startedAt: null, lastTask: null }
 };
 let currentStatus = { ...BASE_STATUS };
+const toolActivityRuntime = createTaskActivityRuntime({
+  toolActivity,
+  powerSaveBlocker,
+  Notification,
+  isReady: () => app.isReady(),
+  onNotificationClick: showStatusWindow,
+  onStatusChange: taskActivity => setStatus({ taskActivity })
+});
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    if (statusWindow && !statusWindow.isDestroyed()) {
-      statusWindow.show();
-      statusWindow.focus();
-      return;
-    }
+    if (statusWindow && !statusWindow.isDestroyed()) { showStatusWindow(); return; }
     if (wizardWindow && !wizardWindow.isDestroyed()) {
       wizardWindow.show();
       wizardWindow.focus();
@@ -93,7 +97,7 @@ if (!gotLock) {
 
 app.on('before-quit', () => {
   isQuitting = true;
-  stopToolSleepBinding();
+  toolActivityRuntime.stop();
   stopServer({ silent: true });
 });
 
@@ -126,7 +130,7 @@ function createWizardWindow(options = {}) {
   });
 
   const loadOptions = options.query ? { query: options.query } : undefined;
-  wizardWindow.loadFile(path.join(__dirname, 'renderer', 'wizard.html'), loadOptions);
+  wizardWindow.loadFile(path.join(__dirname, 'renderer', options.edit ? 'settings.html' : 'wizard.html'), loadOptions);
   wizardWindow.webContents.on('did-finish-load', () => {
     fitWindowToContent(wizardWindow, { type: 'wizard' });
   });
@@ -175,6 +179,12 @@ function createStatusWindow() {
   return statusWindow;
 }
 
+function showStatusWindow() {
+  const win = createStatusWindow();
+  win.show();
+  win.focus();
+}
+
 function pushStatus() {
   if (statusWindow && !statusWindow.isDestroyed()) {
     statusWindow.webContents.send('server:status', currentStatus);
@@ -195,11 +205,7 @@ function setupTray() {
   const image = raw.isEmpty() ? raw : raw.resize({ width: 32, height: 32 });
   tray = new Tray(image.isEmpty() ? nativeImage.createEmpty() : image);
   tray.setToolTip('Rel.AI MCP');
-  tray.on('double-click', () => {
-    const win = createStatusWindow();
-    win.show();
-    win.focus();
-  });
+  tray.on('double-click', showStatusWindow);
   updateTrayMenu();
 }
 
@@ -229,14 +235,7 @@ function updateTrayMenu() {
       }
     },
     { type: 'separator' },
-    {
-      label: 'Show Window',
-      click: () => {
-        const win = createStatusWindow();
-        win.show();
-        win.focus();
-      }
-    },
+    { label: 'Show Window', click: showStatusWindow },
     {
       label: 'Settings',
       click: () => openSettingsWindow()
@@ -492,6 +491,8 @@ registerIpcHandlers({
   stopServer,
   openSettingsWindow,
   openDashboardUrl,
+  getNotificationsEnabled: toolActivityRuntime.getNotificationsEnabled,
+  setNotificationsEnabled: toolActivityRuntime.setNotificationsEnabled,
   fitWindowToContent
 });
 

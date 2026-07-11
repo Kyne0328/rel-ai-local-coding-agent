@@ -19,50 +19,83 @@
     <output class="status-badge" id="statusBadge" aria-live="polite">Starting</output>
   </header>
 
-  <section class="app-card status-hero">
+  <section class="app-card status-hero" id="statusHero">
     <div class="status-copy">
       <div class="eyebrow" id="statusEyebrow">Connection status</div>
       <h1 class="status-title" id="statusTitle">Starting Rel.AI…</h1>
       <p class="status-description" id="statusDescription">Preparing the local service and secure public tunnel.</p>
+      <div class="task-meta" id="taskMeta" hidden></div>
 
-      <div class="endpoint-wrap">
+      <div class="endpoint-wrap" id="endpointWrap">
         <div class="eyebrow">ChatGPT MCP endpoint</div>
         <div class="endpoint-box empty" id="mcpUrl">Waiting for a secure endpoint…</div>
       </div>
 
       <div class="status-primary-row">
-        <button class="primary" id="copyBtn" disabled>Copy MCP endpoint</button>
-        <button class="secondary" id="serverToggleBtn">Stop service</button>
+        <button class="primary" id="dashboardBtn">Open dashboard</button>
+        <button class="secondary" id="copyBtn" disabled>Copy endpoint</button>
+        <button class="secondary" id="settingsBtn">Settings</button>
       </div>
     </div>
   </section>
 
-  <section class="status-alert" id="errorPanel" hidden>
-    <strong>Connection needs attention</strong>
-    <p id="errorMessage"></p>
+  <section class="status-health-grid" aria-label="Connection health">
+    <article class="app-card status-health-card" id="localHealthCard">
+      <span class="health-dot" aria-hidden="true"></span>
+      <div><div class="health-label">Local service</div><strong id="localHealthState">Stopped</strong></div>
+      <span class="health-detail mono" id="localService">Not running</span>
+    </article>
+    <article class="app-card status-health-card" id="publicHealthCard">
+      <span class="health-dot" aria-hidden="true"></span>
+      <div><div class="health-label">Public endpoint</div><strong id="publicHealthState">Offline</strong></div>
+      <span class="health-detail" id="tunnelDetail">Not connected</span>
+    </article>
   </section>
 
-  <div class="status-actions">
-    <button id="dashboardBtn">Open dashboard</button>
-    <button id="settingsBtn">Settings</button>
-    <button id="retryBtn" hidden>Retry connection</button>
-  </div>
+  <section class="app-card last-task-card" id="lastTaskCard" hidden>
+    <div class="last-task-icon" id="lastTaskIcon" aria-hidden="true">✓</div>
+    <div class="last-task-copy">
+      <div class="eyebrow">Previous activity</div>
+      <strong id="lastTaskTitle">Last task completed</strong>
+      <span id="lastTaskDetail"></span>
+    </div>
+    <time id="lastTaskTime"></time>
+  </section>
 
-  <details class="app-card status-details" data-disclosure="connection">
-    <summary>Connection details <span aria-hidden="true">⌄</span></summary>
+  <section class="status-alert" id="errorPanel" hidden>
+    <div>
+      <strong>Connection needs attention</strong>
+      <p id="errorMessage"></p>
+    </div>
+    <div class="alert-actions">
+      <button class="primary" id="retryBtn">Retry</button>
+      <button class="secondary" id="errorSettingsBtn">Open settings</button>
+      <button class="secondary" id="copyDiagnosticsBtn">Copy details</button>
+    </div>
+  </section>
+
+  <details class="app-card status-details" data-disclosure="service">
+    <summary>Service controls and preferences <span aria-hidden="true">⌄</span></summary>
     <div class="detail-list">
-      <div class="detail-row"><span class="detail-label">Local service</span><span class="detail-value mono" id="localService">Not running</span></div>
-      <div class="detail-row"><span class="detail-label">Public tunnel</span><span class="detail-value" id="tunnelDetail">Offline</span></div>
+      <div class="detail-row">
+        <span class="detail-label">Service</span>
+        <button class="secondary compact-control" id="serverToggleBtn">Stop service</button>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">Desktop notifications<small>Connection and completed-task alerts</small></span>
+        <button class="notification-switch" id="notificationToggleBtn" type="button" role="switch" aria-checked="true">
+          <span class="switch-track" aria-hidden="true"><span></span></span>
+          <span id="notificationState">On</span>
+        </button>
+      </div>
       <div class="detail-row"><span class="detail-label">Version</span><span class="detail-value mono" id="appVersion">v0.19.0</span></div>
-      <div class="detail-row"><span class="detail-label">Notifications</span><button class="secondary compact-control" id="notificationToggleBtn" type="button">On</button></div>
-      <div class="detail-row"><span class="detail-label">Diagnostics</span><button class="secondary compact-control" id="copyDiagnosticsBtn" type="button">Copy summary</button></div>
     </div>
   </details>
 
   <details class="app-card status-details" data-disclosure="chatgpt-setup">
     <summary>Connect to ChatGPT <span aria-hidden="true">⌄</span></summary>
     <ol class="guide-list">
-      <li>Wait until the secure endpoint is ready.</li>
+      <li>Wait until the public endpoint is connected.</li>
       <li>Open <strong>Settings &gt; Apps &gt; Create</strong> in ChatGPT.</li>
       <li>Paste the endpoint and choose <strong>OAuth</strong>.</li>
       <li>Approve using your Rel.AI dashboard token.</li>

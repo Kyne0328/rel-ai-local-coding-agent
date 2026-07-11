@@ -17,9 +17,12 @@
 - **Replace the public/internal dual registry with one 16-tool schema, handler map, MCP list, dashboard metadata source, and packaged-application contract.**
 - **Retain structured patch deletion and the bounded tidy plan/run path while removing obsolete general-purpose deletion plumbing.**
 - **Replace prepared-workflow and bundle settings with focused patch safeguards for backup, clean-git enforcement, and maximum update size.**
-- **Add an obsolete-surface residue scan and validate the release with JavaScript checks, TypeScript boundary checks, release consistency checks, 50 regression files, and the installed Windows application smoke test.**
+- **Add an obsolete-surface residue scan and validate the release with JavaScript checks, TypeScript boundary checks, release consistency checks, 52 regression files, and the installed Windows application smoke test.**
 - **Make `npm test` delegate to the authoritative `test:all` runner, avoiding duplicate Windows child-process chains.**
 - **Prevent system sleep only while an authenticated connector tool call is executing, using one reference-counted Electron `prevent-app-suspension` blocker for overlapping calls while still allowing the display to turn off.**
+- **Add native task-completion notifications after 10 seconds of connector inactivity, aggregate chained tool calls into one alert, distinguish successful completion from failures, and connect the existing desktop notification toggle to background alerts.**
+- **Redesign the Electron status window around live ChatGPT activity, separate local/public connection health, persistent last-task results, contextual recovery actions, and a true desktop-notification switch.**
+- **Replace wizard-based configuration editing with a dedicated Settings screen for connection, access-token, and notification preferences, and preserve the user’s window position during content-driven resizing.**
 
 Bump root/electron/status UI/lockfiles to 0.19.0.
 

@@ -74,7 +74,7 @@ try {
   assert.equal(result.publicToolCount, 16);
   assert.ok(Object.values(result.resourceChecks).every(Boolean), 'One or more packaged resources are missing.');
   assert.equal(result.health?.ok, true);
-  console.log(`Installed application smoke passed for v${result.version} with ${result.publicToolCount} tools and both renderer windows.`);
+  console.log(`Installed application smoke passed for v${result.version} with ${result.publicToolCount} tools and all renderer surfaces.`);
 } finally {
   if (uninstaller && fs.existsSync(uninstaller)) {
     spawnSync(uninstaller, ['/S'], { cwd: path.dirname(uninstaller), env, encoding: 'utf8', timeout: 3 * 60 * 1000 });

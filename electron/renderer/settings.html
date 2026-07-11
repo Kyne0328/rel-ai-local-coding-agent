@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rel.AI MCP - Settings</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body class="electron-page settings-page">
+<main class="settings-shell">
+  <header class="app-card settings-header">
+    <div class="brand-row">
+      <img class="brand-badge" src="relai-logo.png" alt="Rel.AI MCP">
+      <div>
+        <div class="brand-title">Rel.AI MCP Settings</div>
+        <div class="brand-sub">Connection and desktop preferences</div>
+      </div>
+    </div>
+    <button class="secondary compact-control" id="cancelTopBtn" type="button">Close</button>
+  </header>
+
+  <section class="app-card settings-section">
+    <div class="settings-section-heading">
+      <div><div class="eyebrow">Connection</div><h1>Local service and public endpoint</h1></div>
+      <p>Changes restart the service so ChatGPT reconnects using the updated configuration.</p>
+    </div>
+
+    <div class="settings-grid">
+      <div class="settings-field">
+        <label for="portInput">Local service port</label>
+        <input type="number" id="portInput" min="1024" max="65535" inputmode="numeric">
+        <div class="field-message" id="portHint" aria-live="polite"></div>
+      </div>
+      <div class="settings-field">
+        <label for="domainInput">Permanent ngrok domain</label>
+        <input type="text" id="domainInput" autocomplete="off" spellcheck="false">
+        <div class="field-message" id="domainMessage" aria-live="polite"></div>
+      </div>
+    </div>
+
+    <label for="ngrokTokenInput">ngrok account key</label>
+    <div class="password-field">
+      <input type="password" id="ngrokTokenInput" autocomplete="off" spellcheck="false">
+      <button class="password-toggle secondary" id="toggleNgrokTokenBtn" type="button" aria-pressed="false">Show</button>
+    </div>
+    <div class="field-message" id="ngrokTokenMessage" aria-live="polite"></div>
+  </section>
+
+  <section class="app-card settings-section">
+    <div class="settings-section-heading">
+      <div><div class="eyebrow">Access</div><h2>Dashboard approval token</h2></div>
+      <p>This token protects the local dashboard and approves ChatGPT OAuth access.</p>
+    </div>
+    <div class="token-box mono" id="tokenBox"></div>
+    <div class="btn-row">
+      <button class="secondary" id="copyTokenBtn" type="button">Copy token</button>
+      <button class="secondary" id="regenTokenBtn" type="button">Generate replacement</button>
+    </div>
+    <div class="settings-warning" id="tokenWarning" hidden>Saving a replacement token invalidates the previous approval token.</div>
+  </section>
+
+  <section class="app-card settings-section preference-row">
+    <div>
+      <div class="eyebrow">Desktop</div>
+      <h2>Notifications</h2>
+      <p>Show connection changes and completed-task alerts.</p>
+    </div>
+    <button class="notification-switch" id="notificationToggleBtn" type="button" role="switch" aria-checked="true">
+      <span class="switch-track" aria-hidden="true"><span></span></span>
+      <span id="notificationState">On</span>
+    </button>
+  </section>
+
+  <div class="settings-footer">
+    <div class="error" id="saveError" role="alert"></div>
+    <div class="settings-footer-actions">
+      <button class="secondary" id="cancelBtn" type="button">Cancel</button>
+      <button class="primary" id="saveBtn" type="button">Save and restart</button>
+    </div>
+  </div>
+</main>
+<script src="settings.js"></script>
+</body>
+</html>

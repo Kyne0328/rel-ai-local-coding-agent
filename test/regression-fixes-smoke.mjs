@@ -92,8 +92,8 @@ assert.equal(getVersion(), latestChangelogVersion());
       openWorldHint: false
     });
   }
-  assert.match(read('electron/renderer/status.html'), /Public tunnel/);
-  assert.match(read('electron/renderer/status.js'), /waiting for tunnel/);
+  assert.match(read('electron/renderer/status.html'), /Public endpoint/);
+  assert.match(read('electron/renderer/status.js'), /Publishing tunnel/);
   assert.doesNotMatch(read('electron/main.js'), /killOrphanedNgrok\(\)/);
 }
 
