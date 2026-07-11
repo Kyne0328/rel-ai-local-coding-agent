@@ -60,6 +60,7 @@ function startHttpServer(options = {}) {
   const pickFolder = typeof options.pickFolder === "function" ? options.pickFolder : null;
   const openFolder = typeof options.openFolder === "function" ? options.openFolder : null;
   const getTaskActivity = typeof options.getTaskActivity === "function" ? options.getTaskActivity : null;
+  const getDesktopStatus = typeof options.getDesktopStatus === "function" ? options.getDesktopStatus : null;
 
   if (!token && !allowNoAuth) {
     throw new Error("REL_AI_MCP_TOKEN is required for the HTTP/SSE server. Set a strong token, or set REL_AI_MCP_ALLOW_NO_AUTH=1 for local-only testing.");
@@ -67,7 +68,7 @@ function startHttpServer(options = {}) {
 
   const server = http.createServer(async (req, res) => {
     try {
-      await routeRequest(req, res, { token, allowNoAuth, maxBodyBytes, host, port, publicUrl, pickFolder, openFolder, getTaskActivity });
+      await routeRequest(req, res, { token, allowNoAuth, maxBodyBytes, host, port, publicUrl, pickFolder, openFolder, getTaskActivity, getDesktopStatus });
     } catch (error) {
       sendJson(res, 500, {
         ok: false,

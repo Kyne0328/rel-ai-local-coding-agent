@@ -50,6 +50,7 @@ function buildDashboardPayload(config, options = {}, requireHttpToken = false) {
   const taskActivity = typeof options.getTaskActivity === "function"
     ? options.getTaskActivity()
     : { state: "idle", activeCalls: 0, activeTaskCount: 0, tasks: [], taskId: "", workspace: "", tool: "", startedAt: null, lastTask: null };
+  const desktopStatus = typeof options.getDesktopStatus === "function" ? options.getDesktopStatus() : null;
   const base = productUx.dashboardData(config, { limit: Number(options.limit || 100) });
   const tasks = buildTaskHistory(base.auditTail?.entries || [], taskActivity, { limit: 100 });
   const workspaceStates = buildWorkspaceStates(config, tasks, taskActivity);
@@ -67,6 +68,7 @@ function buildDashboardPayload(config, options = {}, requireHttpToken = false) {
       tunnelProvider: profile.tunnelProvider || "none"
     }),
     taskActivity,
+    desktopStatus,
     tasks,
     workspaceStates
   };
@@ -231,10 +233,12 @@ function openDashboardEvents(res, req, options) {
     let config = null;
     try { config = readConfigCached(); } catch { /* config may be unavailable; signature stays empty */ }
     const taskActivity = typeof options.getTaskActivity === "function" ? options.getTaskActivity() : null;
+    const desktopStatus = typeof options.getDesktopStatus === "function" ? options.getDesktopStatus() : null;
     return [
       statSignature(require("../config").getConfigPath()),
       statSignature(config?.auditLogPath),
-      JSON.stringify(taskActivity)
+      JSON.stringify(taskActivity),
+      JSON.stringify(desktopStatus)
     ].join("|");
   };
   let lastSignature = "";

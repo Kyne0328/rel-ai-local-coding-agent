@@ -8,6 +8,7 @@ const { runInstalledSmoke, writeInstalledSmokeFailure } = require('./installed-s
 const { runWindowSmoke } = require('./window-smoke');
 const { createTaskActivityRuntime } = require('./tool-sleep-blocker');
 const { createDashboardWindowManager } = require('./dashboard-window');
+const { createDesktopTray } = require('./desktop-tray');
 
 const srcPath = resolveResourcePath('src');
 const connection = require(path.join(srcPath, 'connectionProfile'));
@@ -29,7 +30,6 @@ const {
 
 let wizardWindow = null;
 let statusWindow = null;
-let tray = null;
 let httpServer = null;
 let tunnelProcess = null;
 let startPromise = null;
@@ -50,7 +50,7 @@ const toolActivityRuntime = createTaskActivityRuntime({
   powerSaveBlocker,
   Notification,
   isReady: () => app.isReady(),
-  onNotificationClick: showStatusWindow,
+  onNotificationClick: focusActiveWindow,
   onStatusChange: taskActivity => setStatus({ taskActivity })
 });
 const dashboardWindowManager = createDashboardWindowManager({
@@ -59,6 +59,23 @@ const dashboardWindowManager = createDashboardWindowManager({
   app,
   dialog,
   getConnection: buildDashboardConnection,
+  isQuitting: () => isQuitting,
+  onError: error => setStatus({ error: formatError(error) })
+});
+const desktopTray = createDesktopTray({
+  Tray,
+  Menu,
+  nativeImage,
+  clipboard,
+  iconPath: path.join(__dirname, 'build', 'icon.png'),
+  getStatus: () => currentStatus,
+  openDashboard: openDashboardWindow,
+  focusPrimaryWindow: focusActiveWindow,
+  showRecovery: showStatusWindow,
+  openSettings: openSettingsWindow,
+  startServer,
+  stopServer,
+  quit: quitApplication,
   onError: error => setStatus({ error: formatError(error) })
 });
 
@@ -67,11 +84,12 @@ if (!gotLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    if (statusWindow && !statusWindow.isDestroyed()) { showStatusWindow(); return; }
     if (wizardWindow && !wizardWindow.isDestroyed()) {
       wizardWindow.show();
       wizardWindow.focus();
+      return;
     }
+    focusActiveWindow();
   });
 
   app.whenReady().then(async () => {
@@ -96,12 +114,9 @@ if (!gotLock) {
       }
       return;
     }
-    if (hasExistingConfig()) {
-      createStatusWindow();
-      startServer();
-    } else {
-      createWizardWindow();
-    }
+    desktopTray.setup();
+    if (hasExistingConfig()) void launchConfiguredDesktop();
+    else createWizardWindow();
   });
 }
 
@@ -186,21 +201,36 @@ function createStatusWindow() {
   statusWindow.on('closed', () => {
     statusWindow = null;
   });
-  setupTray();
   return statusWindow;
 }
 
 function showStatusWindow() {
+  const dashboardWindow = dashboardWindowManager.getWindow();
+  if (dashboardWindow) dashboardWindow.hide();
   const win = createStatusWindow();
   win.show();
   win.focus();
 }
 
-function pushStatus() {
-  if (statusWindow && !statusWindow.isDestroyed()) {
-    statusWindow.webContents.send('server:status', currentStatus);
+function focusActiveWindow() {
+  const dashboardWindow = dashboardWindowManager.getWindow();
+  if (dashboardWindow && dashboardWindow.isVisible()) {
+    dashboardWindow.show(); dashboardWindow.focus(); return;
   }
-  updateTrayMenu();
+  if (statusWindow && !statusWindow.isDestroyed() && statusWindow.isVisible()) {
+    statusWindow.show(); statusWindow.focus(); return;
+  }
+  if (dashboardWindow) {
+    dashboardWindow.show(); dashboardWindow.focus(); return;
+  }
+  showStatusWindow();
+}
+
+function pushStatus() {
+  if (statusWindow && !statusWindow.isDestroyed()) statusWindow.webContents.send('server:status', currentStatus);
+  const dashboardWindow = dashboardWindowManager.getWindow();
+  if (dashboardWindow) dashboardWindow.webContents.send('server:status', currentStatus);
+  desktopTray.update();
 }
 
 function setStatus(next) {
@@ -208,67 +238,16 @@ function setStatus(next) {
   pushStatus();
 }
 
-function setupTray() {
-  if (tray) return;
-  // Use the same logo as the dashboard (build/icon.png), resized for the tray.
-  const iconPath = path.join(__dirname, 'build', 'icon.png');
-  const raw = nativeImage.createFromPath(iconPath);
-  const image = raw.isEmpty() ? raw : raw.resize({ width: 32, height: 32 });
-  tray = new Tray(image.isEmpty() ? nativeImage.createEmpty() : image);
-  tray.setToolTip('Rel.AI MCP');
-  tray.on('double-click', showStatusWindow);
-  updateTrayMenu();
-}
-
-function updateTrayMenu() {
-  if (!tray) return;
-  const statusLabel = currentStatus.serverRunning ? 'Server: running' : 'Server: stopped';
-  const menu = Menu.buildFromTemplate([
-    { label: statusLabel, enabled: false },
-    { label: `Tunnel: ${currentStatus.tunnelStatus || 'stopped'}`, enabled: false },
-    { type: 'separator' },
-    {
-      label: 'Copy MCP URL',
-      enabled: Boolean(currentStatus.mcpUrl),
-      click: () => {
-        if (currentStatus.mcpUrl) clipboard.writeText(currentStatus.mcpUrl);
-      }
-    },
-    {
-      label: 'Open Dashboard',
-      click: () => { void openDashboardWindow().catch(error => setStatus({ error: formatError(error) })); }
-    },
-    {
-      label: currentStatus.serverRunning ? 'Stop Server' : 'Start Server',
-      click: () => {
-        if (currentStatus.serverRunning) stopServer();
-        else startServer();
-      }
-    },
-    { type: 'separator' },
-    { label: 'Show Window', click: showStatusWindow },
-    {
-      label: 'Settings',
-      click: () => openSettingsWindow()
-    },
-    {
-      label: 'Stop and Quit',
-      click: () => {
-        isQuitting = true;
-        stopServer({ silent: true });
-        app.exit(0);
-      }
-    }
-  ]);
-  tray.setContextMenu(menu);
-}
-
-async function startServer() {
-  if (httpServer) {
+async function startServer(options = {}) {
+  if (httpServer?.listening) {
+    if (options.openDashboard) await showDashboardWindow();
     pushStatus();
     return currentStatus;
   }
-  if (startPromise) return startPromise;
+  if (startPromise) {
+    if (options.openDashboard && httpServer?.listening) await showDashboardWindow();
+    return startPromise;
+  }
 
   const runToken = ++lifecycleToken;
   startPromise = (async () => {
@@ -310,7 +289,8 @@ async function startServer() {
         exitOnError: false,
         pickFolder: () => dashboardWindowManager.pickFolder(),
         openFolder: folderPath => dashboardWindowManager.openFolder(folderPath),
-        getTaskActivity: toolActivityRuntime.getStatus
+        getTaskActivity: toolActivityRuntime.getStatus,
+        getDesktopStatus: () => currentStatus
       });
       actualPort = await new Promise((resolve, reject) => {
         httpServer.once('listening', () => resolve(httpServer.address().port));
@@ -330,6 +310,14 @@ async function startServer() {
       error: '',
       localUrl: `http://127.0.0.1:${actualPort}`
     });
+    if (options.openDashboard) {
+      try {
+        await showDashboardWindow();
+      } catch (error) {
+        setStatus({ error: `Dashboard failed to open: ${formatError(error)}` });
+        showStatusWindow();
+      }
+    }
 
     const tunnelLog = (chunk) => {
       if (statusWindow && !statusWindow.isDestroyed()) {
@@ -414,7 +402,7 @@ function stopServer(options = {}) {
   dashboardSessions.clearDashboardSessions();
   currentStatus = { ...BASE_STATUS };
   if (!options.silent) pushStatus();
-  else updateTrayMenu();
+  else desktopTray.update();
   return currentStatus;
 }
 
@@ -425,11 +413,35 @@ function buildDashboardConnection() {
   return { url: `http://127.0.0.1:${port}/dashboard?surface=desktop&bootstrap=${encodeURIComponent(bootstrap)}` };
 }
 
-async function openDashboardWindow() {
-  if (!httpServer?.listening) await startServer();
-  if (!httpServer?.listening) throw new Error(currentStatus.error || 'Rel.AI local service is not running.');
+async function showDashboardWindow() {
   await dashboardWindowManager.open();
+  if (statusWindow && !statusWindow.isDestroyed()) statusWindow.hide();
+}
+
+async function openDashboardWindow() {
+  if (!httpServer?.listening) await startServer({ openDashboard: true });
+  else await showDashboardWindow();
+  if (!httpServer?.listening) throw new Error(currentStatus.error || 'Rel.AI local service is not running.');
   return { ok: true };
+}
+
+async function launchConfiguredDesktop(options = {}) {
+  try {
+    if (options.restart) stopServer({ silent: true });
+    const status = await startServer({ openDashboard: true });
+    if (!status.serverRunning) showStatusWindow();
+    return status;
+  } catch (error) {
+    setStatus({ serverRunning: false, tunnelStatus: 'failed', error: formatError(error) });
+    showStatusWindow();
+    return currentStatus;
+  }
+}
+
+function quitApplication() {
+  isQuitting = true;
+  stopServer({ silent: true });
+  app.exit(0);
 }
 
 function openSettingsWindow() {
@@ -442,7 +454,7 @@ function openSettingsWindow() {
   }
   createWizardWindow({
     edit: true,
-    parent: statusWindow || undefined,
+    parent: dashboardWindowManager.getWindow() || statusWindow || undefined,
     query: {
       edit: '1',
       port: String(config.port || 3333),
@@ -469,11 +481,13 @@ registerIpcHandlers({
     wizardWindow = null;
   },
   getStatusWindow: () => statusWindow,
-  createStatusWindow,
   startServer,
   stopServer,
+  launchConfiguredDesktop,
   openSettingsWindow,
   openDashboardWindow,
+  showStatusWindow,
+  getCurrentStatus: () => currentStatus,
   getNotificationsEnabled: toolActivityRuntime.getNotificationsEnabled,
   setNotificationsEnabled: toolActivityRuntime.setNotificationsEnabled,
   fitWindowToContent

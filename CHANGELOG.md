@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.19.5] — 2026-07-11
+
+### Desktop window consolidation
+- **Made the Electron dashboard the primary configured-launch window, removing the separate launcher window from the normal taskbar flow.**
+- **Opened the dashboard as soon as the local service is ready while the public ngrok tunnel continues connecting in the background.**
+- **Added live desktop service and tunnel status plus settings, restart, recovery, and stop controls directly to the dashboard.**
+- **Converted the former launcher status window into an on-demand connection recovery surface and kept persistent lifecycle controls in the system tray.**
+- **Changed dashboard close behavior to hide the application to the tray and added startup, restart, focus, packaging, and live-status regression coverage.**
+
+Bump root/electron/status UI/lockfiles to 0.19.5.
+
 ## [0.19.4] — 2026-07-11
 
 ### Explicit validated task completion

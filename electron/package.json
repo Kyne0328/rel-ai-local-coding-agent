@@ -1,6 +1,6 @@
 {
   "name": "rel-ai-mcp-launcher",
-  "version": "0.19.4",
+  "version": "0.19.5",
   "private": true,
   "description": "Desktop launcher and dashboard host for Rel.AI MCP.",
   "author": "Kyne Anthony",
@@ -27,6 +27,8 @@
       "window-smoke.js",
       "tool-sleep-blocker.js",
       "dashboard-window.js",
+      "dashboard-preload.js",
+      "desktop-tray.js",
       "installed-smoke.js",
       "renderer/**",
       "build/**"
