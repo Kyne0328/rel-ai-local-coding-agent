@@ -40,4 +40,13 @@ assert.equal(active.find(task => task.id === 'task-active-a').status, 'working')
 assert.equal(active.find(task => task.id === 'task-active-a').calls, 3);
 assert.equal(active.find(task => task.id === 'task-active-b').status, 'settling');
 
+const legacy = buildTaskHistory([
+  { ts: '2026-07-11T07:00:00.000Z', pid: 42, tool: 'relai_read', workspace: 'repo', ok: true },
+  { ts: '2026-07-11T07:00:20.000Z', pid: 42, tool: 'relai_edit', workspace: 'repo', ok: true, changedFiles: ['src/b.js'] },
+  { ts: '2026-07-11T07:02:00.000Z', pid: 42, tool: 'relai_run_checks', workspace: 'repo', ok: true, validationStatus: 'passed' }
+], { state: 'idle' });
+assert.equal(legacy.length, 2, 'legacy audit rows should be inferred into time-bounded tasks');
+assert.equal(legacy.find(task => task.calls === 2)?.changedFileCount, 1);
+assert.equal(legacy.find(task => task.calls === 1)?.validation, 'passed');
+
 console.log('Persistent and concurrent task history tests passed.');

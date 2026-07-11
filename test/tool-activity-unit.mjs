@@ -131,8 +131,13 @@ try {
 
   callEvents.length = 0;
   await callTool('relai_status', {}, { publicHttpOnly: false });
-  assert.deepEqual(callEvents, [], 'stdio/local calls must not prevent system sleep');
+  assert.deepEqual(callEvents.map(event => [event.phase, event.tool, event.activeConnectorCalls]), [
+    ['started', 'relai_status', 0],
+    ['finished', 'relai_status', 0]
+  ], 'stdio/local calls must be grouped without activating the connector sleep blocker');
+  assert.equal(callEvents[0].taskId, callEvents[1].taskId);
 
+  callEvents.length = 0;
   await assert.rejects(
     () => callTool('relai_read', {}, { publicHttpOnly: true, taskScopeId: 'http-session-a' }),
     /Workspace alias is required|Unknown workspace|workspace/i

@@ -77,7 +77,7 @@ function createTaskActivityRuntime(options) {
     const activity = toolActivity.getToolActivity?.() || {};
     return {
       state: activity.state || 'idle',
-      activeCalls: Number(activity.activeConnectorCalls || activity.activeCalls || 0),
+      activeCalls: Number(activity.activeCalls || 0),
       activeTaskCount: Number(activity.activeTaskCount || activity.tasks?.length || 0),
       tasks: Array.isArray(activity.tasks) ? activity.tasks : [],
       taskId: activity.taskId || '',

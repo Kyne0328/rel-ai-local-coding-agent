@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.19.2] — 2026-07-11
+
+### Dashboard task grouping and compact sidebar fixes
+- **Fix the intermediate-width Electron dashboard sidebar by assigning the compact rail its own 82-pixel grid column, stacking its contents vertically, centering the brand mark, preventing horizontal clipping, and removing the duplicate main-content offset.**
+- **Make Tasks represent grouped work instead of duplicating the Activity log by assigning task IDs to local and stdio tool calls as well as HTTP connector calls, then retaining related follow-up calls within the existing 60-second idle window.**
+- **Infer time-bounded task groups for older audit entries that do not contain task IDs, so existing history can consolidate related calls rather than rendering every event as a one-call task.**
+- **Track all active tool calls separately from connector-only calls, preserving accurate task status while keeping Electron's system-sleep blocker limited to authenticated connector activity.**
+- **Add regression coverage for compact sidebar layout, local task tracking, and legacy audit grouping; the complete validation suite passes all 58 test files.**
+
+Bump root/electron/status UI/lockfiles to 0.19.2.
+
 ## [0.19.1] — 2026-07-11
 
 ### Unified dashboard and desktop experience

@@ -11,6 +11,7 @@ function createToolActivityTracker(options = {}) {
   const idleMs = resolveIdleMs(options.idleMs);
   const tasksByScope = new Map();
   const listeners = new Set();
+  let activeToolCalls = 0;
   let activeConnectorCalls = 0;
   let lastTask = null;
 
@@ -29,7 +30,9 @@ function createToolActivityTracker(options = {}) {
     task.activeCalls += 1;
     task.calls += 1;
     task.lastActivityAt = startedAt;
-    activeConnectorCalls += 1;
+    activeToolCalls += 1;
+    const connectorCall = details.connector !== false;
+    if (connectorCall) activeConnectorCalls += 1;
     notify('started', task, {
       tool: task.lastTool,
       workspace: task.workspace
@@ -44,7 +47,8 @@ function createToolActivityTracker(options = {}) {
       task.lastTool = String(details.tool || task.lastTool || '');
       task.workspace = String(details.workspace || task.workspace || '');
       task.lastActivityAt = finishedAt;
-      activeConnectorCalls = Math.max(0, activeConnectorCalls - 1);
+      activeToolCalls = Math.max(0, activeToolCalls - 1);
+      if (connectorCall) activeConnectorCalls = Math.max(0, activeConnectorCalls - 1);
       notify('finished', task, {
         tool: task.lastTool,
         workspace: task.workspace,
@@ -134,9 +138,9 @@ function createToolActivityTracker(options = {}) {
       .sort((left, right) => left.startedAt - right.startedAt);
     const primary = tasks.find(task => task.activeCalls > 0) || tasks[0] || null;
     return {
-      state: tasks.length ? (activeConnectorCalls > 0 ? 'working' : 'settling') : 'idle',
+      state: tasks.length ? (activeToolCalls > 0 ? 'working' : 'settling') : 'idle',
       activeConnectorCalls,
-      activeCalls: activeConnectorCalls,
+      activeCalls: activeToolCalls,
       activeTaskCount: tasks.length,
       tasks,
       taskId: primary?.id || lastTask?.taskId || '',
@@ -192,6 +196,7 @@ function createToolActivityTracker(options = {}) {
   function reset() {
     for (const task of tasksByScope.values()) cancelCompletion(task);
     tasksByScope.clear();
+    activeToolCalls = 0;
     activeConnectorCalls = 0;
     lastTask = null;
   }
