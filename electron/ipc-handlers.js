@@ -2,7 +2,7 @@ function registerIpcHandlers(deps) {
   const {
     ipcMain, BrowserWindow, clipboard, shell, saveLauncherConfig,
     getWizardWindow, closeWizard, getStatusWindow, createStatusWindow,
-    startServer, stopServer, openSettingsWindow, openDashboardUrl,
+    startServer, stopServer, openSettingsWindow, openDashboardWindow,
     getNotificationsEnabled, setNotificationsEnabled, fitWindowToContent
   } = deps;
 
@@ -26,7 +26,7 @@ function registerIpcHandlers(deps) {
   ipcMain.handle('server:start', async () => startServer());
   ipcMain.handle('server:stop', () => stopServer());
   ipcMain.handle('url:copy', (_event, url) => { clipboard.writeText(String(url || '')); return { ok: true }; });
-  ipcMain.handle('url:open-dashboard', () => { openDashboardUrl(); return { ok: true }; });
+  ipcMain.handle('url:open-dashboard', async () => openDashboardWindow());
   ipcMain.handle('notifications:get-enabled', () => ({ ok: true, enabled: getNotificationsEnabled() }));
   ipcMain.handle('notifications:set-enabled', (_event, enabled) => ({ ok: true, enabled: setNotificationsEnabled(enabled) }));
   ipcMain.handle('url:open-link', (_event, url) => {

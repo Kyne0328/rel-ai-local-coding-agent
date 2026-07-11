@@ -25,7 +25,7 @@ export function mountTools(container) {
       <div class="section-head">
         <div>
           <h2>Tools</h2>
-          <p>Only tools exposed by the active connector are shown. Some require a Git repository, remote, route or check, bundle path, or tidy plan.</p>
+          <p>Only tools exposed by the active connector are shown. Some require a Git repository, remote, configured route or check, or an approved tidy plan.</p>
         </div>
         <span class="section-action" id="toolsCount">Loading…</span>
       </div>
@@ -157,7 +157,7 @@ function toolCapability(name) {
   if (value.startsWith('relai_git_')) return 'git';
   if (/restore|tidy/.test(value)) return 'recover';
   if (/run_checks|browser|diff/.test(value)) return 'validate';
-  if (/edit|write|replace|apply_bundle/.test(value)) return 'edit';
+  if (/edit|write|replace/.test(value)) return 'edit';
   return 'inspect';
 }
 

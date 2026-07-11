@@ -25,6 +25,7 @@ async function runInstalledSmoke(app) {
     config: path.join(resourcesPath, 'src', 'config.js'),
     httpCli: path.join(resourcesPath, 'bin', 'rel-ai-mcp-http.js'),
     dashboard: path.join(resourcesPath, 'public', 'dashboard.js'),
+    dashboardWindow: path.join(__dirname, 'dashboard-window.js'),
     packageJson: path.join(resourcesPath, 'package.json'),
     changelog: path.join(resourcesPath, 'CHANGELOG.md'),
     wizard: path.join(__dirname, 'renderer', 'wizard.html'),

@@ -51,6 +51,7 @@ const sourceLineBudgets = {
   'src/http/io.js': 220,
   'src/http/auth.js': 120,
   'electron/main.js': 500,
+  'electron/dashboard-window.js': 220,
   'electron/ipc-handlers.js': 100,
   'electron/launcher-config.js': 100,
   'electron/window-size.js': 100,

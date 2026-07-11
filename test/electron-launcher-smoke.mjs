@@ -54,6 +54,7 @@ assert.ok(srcResource.filter.includes('**/*.css'), 'electron build must bundle s
 assert.ok(electronPkg.build.files.includes('managed-ngrok.js'), 'electron build must include managed ngrok launcher code');
 assert.ok(electronPkg.build.files.includes('window-smoke.js'), 'electron build must include packaged renderer smoke coverage');
 assert.ok(electronPkg.build.files.includes('tool-sleep-blocker.js'), 'electron build must include tool-call sleep prevention');
+assert.ok(electronPkg.build.files.includes('dashboard-window.js'), 'electron build must include the secured dashboard host');
 assert.ok(electronPkg.build.extraResources.some((item) => item.from === '../vendor/ngrok'), 'electron build must bundle ngrok seed binaries');
 
 const electronMain = fs.readFileSync(path.join(root, 'electron', 'main.js'), 'utf8');
@@ -68,6 +69,10 @@ assert.match(electronMain, /toolActivityRuntime\.stop\(\)/, 'tool activity runti
 assert.match(electronMain, /setNotificationsEnabled: toolActivityRuntime\.setNotificationsEnabled/, 'the desktop notification toggle must control task alerts');
 assert.match(electronMain, /settings\.html/, 'normal settings must use a dedicated renderer instead of wizard edit mode');
 assert.match(electronMain, /onStatusChange: taskActivity => setStatus\(\{ taskActivity \}\)/, 'tool activity must be pushed into the status window');
+assert.match(electronMain, /createDashboardWindowManager/, 'Electron must host the dashboard in a dedicated window');
+assert.match(electronMain, /getTaskActivity: toolActivityRuntime\.getStatus/, 'the web dashboard must receive the shared task model');
+assert.match(electronMain, /dashboard\?surface=desktop/, 'the embedded dashboard must identify the desktop surface without a token query');
+assert.doesNotMatch(electronMain, /shell\.openExternal\(`http:\/\/127\.0\.0\.1:.*dashboard/, 'Open Dashboard must not launch the system browser');
 
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-gui-test-'));
 process.env.REL_AI_MCP_STATE_DIR = stateDir;

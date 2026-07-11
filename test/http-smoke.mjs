@@ -65,6 +65,9 @@ if (!dashboardQueryAuth.ok) {
 if (dashboardQueryAuth.readiness == null) {
   throw new Error('dashboard API did not include readiness data');
 }
+if (dashboardQueryAuth.taskActivity?.state !== 'idle') {
+  throw new Error('standalone dashboard API did not include the default idle task state');
+}
 
 const pathPreflight = await fetch(`http://127.0.0.1:${port}/api/workspace/preflight?token=${encodeURIComponent(token)}&path=${encodeURIComponent(root)}`).then((response) => response.json());
 if (!pathPreflight.ok || !pathPreflight.exists || !pathPreflight.isDirectory) {
@@ -73,6 +76,10 @@ if (!pathPreflight.ok || !pathPreflight.exists || !pathPreflight.isDirectory) {
 
 const dashboardHtmlResponse = await fetch(`http://127.0.0.1:${port}/dashboard?token=${encodeURIComponent(token)}`);
 const dashboardHtml = await dashboardHtmlResponse.text();
+const dashboardCsp = dashboardHtmlResponse.headers.get('content-security-policy') || '';
+if (!dashboardCsp.includes("default-src 'self'") || !dashboardCsp.includes("frame-ancestors 'none'")) {
+  throw new Error(`dashboard response did not include the restrictive CSP: ${dashboardCsp}`);
+}
 if (!dashboardHtmlResponse.ok || dashboardHtml.includes('initialDashboardJson is not defined') || !dashboardHtml.includes('id="initialDashboardData"')) {
   throw new Error('dashboard HTML did not render embedded initial dashboard data');
 }

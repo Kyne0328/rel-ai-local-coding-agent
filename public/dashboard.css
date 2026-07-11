@@ -92,6 +92,48 @@ body {
 .top-controls .status-pill {
   min-height: 34px;
 }
+.status-pill.working::before {
+  background: var(--blue);
+  box-shadow: 0 0 14px -2px rgba(90,166,255,.7);
+  animation: pulse-ring 1.5s var(--ease-out) infinite;
+}
+
+.task-overview {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+}
+.task-overview.active { border-color: rgba(90,166,255,.28); }
+.task-overview.completed { border-color: rgba(79,224,154,.22); }
+.task-overview.attention { border-color: rgba(255,111,136,.28); }
+.task-overview-mark {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--green);
+  background: var(--green-dim);
+  font-weight: 800;
+}
+.task-overview.active .task-overview-mark {
+  color: transparent;
+  background: var(--blue);
+  box-shadow: 0 0 0 7px rgba(90,166,255,.10);
+  animation: task-pulse 1.45s ease-in-out infinite;
+}
+.task-overview.attention .task-overview-mark { color: var(--red); background: var(--red-dim); }
+.task-overview-copy { min-width: 0; }
+.task-overview-copy h3 { margin: 3px 0 4px; font-size: 16px; }
+.task-overview-copy p { margin: 0; color: var(--text-muted); font-size: 12px; }
+.task-overview-meta { display: grid; justify-items: end; gap: 4px; color: var(--text-muted); font-size: 12px; }
+.task-overview-meta strong { color: var(--text); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+@keyframes task-pulse {
+  0%, 100% { opacity: .55; transform: scale(.84); }
+  50% { opacity: 1; transform: scale(1); }
+}
 
 .route-root > .section {
   gap: 14px;

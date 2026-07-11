@@ -23,6 +23,8 @@ function buildOverview(data) {
   const root = document.createElement('div');
   root.className = 'section';
   root.appendChild(connectionHero(bridgeState, endpoint, connection, workspaces));
+  const taskCard = taskActivityCard(data.taskActivity);
+  if (taskCard) root.appendChild(taskCard);
 
   const metrics = document.createElement('div');
   metrics.className = 'overview-grid overview-grid-compact';
@@ -110,6 +112,57 @@ function connectionHero(state, endpoint, connection, workspaces) {
     });
   }
   return hero;
+}
+
+function taskActivityCard(activity = {}) {
+  const active = activity.state === 'working' || activity.state === 'settling';
+  const task = activity.lastTask;
+  if (!active && !task) return null;
+  const card = document.createElement('section');
+  const attention = !active && task?.status === 'attention';
+  card.className = `card task-overview ${active ? 'active' : attention ? 'attention' : 'completed'}`;
+  if (active) {
+    const settling = activity.state === 'settling';
+    card.innerHTML = `
+      <div class="task-overview-mark" aria-hidden="true"></div>
+      <div class="task-overview-copy">
+        <div class="overview-kicker">ChatGPT activity</div>
+        <h3>${settling ? 'Wrapping up the current task…' : 'ChatGPT is working.'}</h3>
+        <p>${esc(taskAction(activity.tool))} in <strong>${esc(activity.workspace || 'a configured workspace')}</strong>.</p>
+      </div>
+      <div class="task-overview-meta">
+        <span>${activity.activeCalls > 1 ? `${activity.activeCalls} concurrent calls` : settling ? 'Waiting for final actions' : '1 active call'}</span>
+        <strong>${formatDuration(Date.now() - Number(activity.startedAt || Date.now()))}</strong>
+      </div>`;
+    return card;
+  }
+  const failed = Number(task.failures || 0);
+  card.innerHTML = `
+    <div class="task-overview-mark" aria-hidden="true">${attention ? '!' : '✓'}</div>
+    <div class="task-overview-copy">
+      <div class="overview-kicker">Previous task</div>
+      <h3>${attention ? 'Task needs attention' : 'Last task completed'}</h3>
+      <p>${esc(task.workspace || 'workspace')} · ${Number(task.calls || 0)} tool call${Number(task.calls || 0) === 1 ? '' : 's'}${failed ? ` · ${failed} failed` : ''}</p>
+    </div>
+    <div class="task-overview-meta"><span>${esc(timeAgo(task.completedAt))}</span><strong>${formatDuration(task.durationMs)}</strong></div>`;
+  return card;
+}
+
+function taskAction(tool) {
+  const value = String(tool || '');
+  if (/run_checks|browser/.test(value)) return 'Validating changes';
+  if (/diff|git_status/.test(value)) return 'Reviewing changes';
+  if (/git_commit|git_push|git_create_pr/.test(value)) return 'Publishing changes';
+  if (/edit|write|replace|tidy_run|restore/.test(value)) return 'Applying changes';
+  return 'Inspecting the workspace';
+}
+
+function formatDuration(milliseconds) {
+  const seconds = Math.max(0, Math.round(Number(milliseconds || 0) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
 }
 
 function buildAttention(workspaces, findings, endpoint) {

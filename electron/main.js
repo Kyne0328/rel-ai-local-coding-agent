@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage, powerSaveBlocker, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage, powerSaveBlocker, Notification, dialog } = require('electron');
 const path = require('node:path');
 const { resolveResourcePath } = require('./resource-path');
 const { isPortAvailable, normalizeWizardConfig, saveLauncherConfig } = require('./launcher-config');
@@ -7,6 +7,7 @@ const { registerIpcHandlers } = require('./ipc-handlers');
 const { runInstalledSmoke, writeInstalledSmokeFailure } = require('./installed-smoke');
 const { runWindowSmoke } = require('./window-smoke');
 const { createTaskActivityRuntime } = require('./tool-sleep-blocker');
+const { createDashboardWindowManager } = require('./dashboard-window');
 
 const srcPath = resolveResourcePath('src');
 const connection = require(path.join(srcPath, 'connectionProfile'));
@@ -50,6 +51,14 @@ const toolActivityRuntime = createTaskActivityRuntime({
   isReady: () => app.isReady(),
   onNotificationClick: showStatusWindow,
   onStatusChange: taskActivity => setStatus({ taskActivity })
+});
+const dashboardWindowManager = createDashboardWindowManager({
+  BrowserWindow,
+  shell,
+  app,
+  dialog,
+  getConnection: buildDashboardConnection,
+  onError: error => setStatus({ error: formatError(error) })
 });
 
 const gotLock = app.requestSingleInstanceLock();
@@ -98,6 +107,7 @@ if (!gotLock) {
 app.on('before-quit', () => {
   isQuitting = true;
   toolActivityRuntime.stop();
+  dashboardWindowManager.close();
   stopServer({ silent: true });
 });
 
@@ -225,7 +235,7 @@ function updateTrayMenu() {
     },
     {
       label: 'Open Dashboard',
-      click: () => openDashboardUrl()
+      click: () => { void openDashboardWindow().catch(error => setStatus({ error: formatError(error) })); }
     },
     {
       label: currentStatus.serverRunning ? 'Stop Server' : 'Start Server',
@@ -297,38 +307,8 @@ async function startServer() {
         token: guiConfig.token,
         publicUrl: `https://${guiConfig.ngrokDomain}`,
         exitOnError: false,
-        // Native folder picker for the dashboard "Browse" buttons. Runs in the main
-        // process; the dashboard reaches it via POST /api/pick-folder.
-        pickFolder: async () => {
-          const { dialog } = require('electron');
-          // The dashboard runs in the external browser, so this dialog has no natural
-          // parent window. Parentless, Windows refuses to pull the background Electron
-          // app to the foreground — it shows the dialog behind the browser and flashes
-          // the taskbar instead. Spawn a hidden, focusable anchor window, force the app
-          // foreground, and parent the modal dialog to it so it opens on top.
-          const anchor = new BrowserWindow({
-            width: 1,
-            height: 1,
-            show: false,
-            frame: false,
-            skipTaskbar: true,
-            alwaysOnTop: true,
-            focusable: true
-          });
-          try {
-            anchor.showInactive();
-            anchor.moveTop();
-            app.focus({ steal: true });
-            anchor.focus();
-            const result = await dialog.showOpenDialog(anchor, {
-              title: 'Select workspace folder',
-              properties: ['openDirectory']
-            });
-            return result && !result.canceled && result.filePaths?.[0] ? result.filePaths[0] : null;
-          } finally {
-            if (!anchor.isDestroyed()) anchor.destroy();
-          }
-        }
+        pickFolder: () => dashboardWindowManager.pickFolder(),
+        getTaskActivity: toolActivityRuntime.getStatus
       });
       actualPort = await new Promise((resolve, reject) => {
         httpServer.once('listening', () => resolve(httpServer.address().port));
@@ -428,25 +408,24 @@ function stopServer(options = {}) {
   startPromise = null;
   lifecycleToken += 1;
 
+  dashboardWindowManager.close();
   currentStatus = { ...BASE_STATUS };
   if (!options.silent) pushStatus();
   else updateTrayMenu();
   return currentStatus;
 }
 
-function openDashboardUrl() {
-  try {
-    // Use the actual bound port from the in-memory server object — this is always authoritative.
-    // Fallback to guiConfig only when the server isn't running (e.g. user clicks Dashboard early).
-    const port = (httpServer?.listening && httpServer.address()?.port)
-      || readGuiConfig().port
-      || 3333;
-    const token = connection.readLaunchEnv().REL_AI_MCP_TOKEN || readGuiConfig().token || '';
-    const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
-    shell.openExternal(`http://127.0.0.1:${port}/dashboard${tokenQuery}`);
-  } catch (error) {
-    setStatus({ error: formatError(error) });
-  }
+function buildDashboardConnection() {
+  const port = (httpServer?.listening && httpServer.address()?.port) || readGuiConfig().port || 3333;
+  const token = connection.readLaunchEnv().REL_AI_MCP_TOKEN || readGuiConfig().token || '';
+  return { url: `http://127.0.0.1:${port}/dashboard?surface=desktop`, token };
+}
+
+async function openDashboardWindow() {
+  if (!httpServer?.listening) await startServer();
+  if (!httpServer?.listening) throw new Error(currentStatus.error || 'Rel.AI local service is not running.');
+  await dashboardWindowManager.open();
+  return { ok: true };
 }
 
 function openSettingsWindow() {
@@ -490,7 +469,7 @@ registerIpcHandlers({
   startServer,
   stopServer,
   openSettingsWindow,
-  openDashboardUrl,
+  openDashboardWindow,
   getNotificationsEnabled: toolActivityRuntime.getNotificationsEnabled,
   setNotificationsEnabled: toolActivityRuntime.setNotificationsEnabled,
   fitWindowToContent
