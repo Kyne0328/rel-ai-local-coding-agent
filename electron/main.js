@@ -45,14 +45,6 @@ const BASE_STATUS = {
   taskActivity: { state: 'idle', activeCalls: 0, activeTaskCount: 0, tasks: [], workspace: '', tool: '', startedAt: null, lastTask: null }
 };
 let currentStatus = { ...BASE_STATUS };
-const toolActivityRuntime = createTaskActivityRuntime({
-  toolActivity,
-  powerSaveBlocker,
-  Notification,
-  isReady: () => app.isReady(),
-  onNotificationClick: focusActiveWindow,
-  onStatusChange: taskActivity => setStatus({ taskActivity })
-});
 const dashboardWindowManager = createDashboardWindowManager({
   BrowserWindow,
   shell,
@@ -77,6 +69,14 @@ const desktopTray = createDesktopTray({
   stopServer,
   quit: quitApplication,
   onError: error => setStatus({ error: formatError(error) })
+});
+const toolActivityRuntime = createTaskActivityRuntime({
+  toolActivity,
+  powerSaveBlocker,
+  Notification,
+  isReady: () => app.isReady(),
+  onNotificationClick: focusActiveWindow,
+  onStatusChange: taskActivity => setStatus({ taskActivity })
 });
 
 const gotLock = app.requestSingleInstanceLock();

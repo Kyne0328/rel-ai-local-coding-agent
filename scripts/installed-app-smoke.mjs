@@ -13,6 +13,8 @@ if (process.platform !== 'win32') {
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
+const { getToolSchemas } = require(path.join(root, 'src', 'tools', 'schema.js'));
+const expectedPublicToolCount = getToolSchemas().length;
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-installed-smoke-'));
 const distDir = path.join(sandbox, 'dist');
 const localAppData = path.join(sandbox, 'LocalAppData');
@@ -75,7 +77,7 @@ try {
   assert.equal(result.ok, true, result.error || 'Installed application smoke failed.');
   assert.equal(result.isPackaged, true);
   assert.equal(result.dashboardStatus, 200);
-  assert.equal(result.publicToolCount, 16);
+  assert.equal(result.publicToolCount, expectedPublicToolCount);
   assert.ok(Object.values(result.resourceChecks).every(Boolean), 'One or more packaged resources are missing.');
   assert.equal(result.health?.ok, true);
   console.log(`Installed application smoke passed for v${result.version} with ${result.publicToolCount} tools and all renderer surfaces.`);

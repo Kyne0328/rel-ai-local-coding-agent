@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.19.6] — 2026-07-11
+
+### Electron startup and task completion regression fixes
+- **Fix the 0.19.5 packaged-app crash `Cannot access 'dashboardWindowManager' before initialization`.** The dashboard window manager and tray controller are now initialized before the task-activity runtime emits its synchronous initial status update.
+- **Keep Rel.AI task identity stable when ChatGPT rotates MCP transport sessions.** Conversation identifiers now take precedence over `Mcp-Session-Id`, allowing `relai_complete_task` to find the successful final validation from the same conversation.
+- **Add regression assertions for launcher initialization order and task completion across rotated MCP transport sessions.**
+- **Make the installed-app smoke test derive its expected tool count from the current public schema, confirming that the packaged 17-tool surface includes `relai_complete_task`.**
+- **Revalidate the complete release suite and Windows Electron package after these corrections.**
+
+Bump root/electron/status UI/lockfiles to 0.19.6.
+
 ## [0.19.5] — 2026-07-11
 
 ### Desktop window consolidation
