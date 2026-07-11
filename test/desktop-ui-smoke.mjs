@@ -63,6 +63,8 @@ assert.match(ipcHandlers, /getNotificationsEnabled/);
 assert.match(ipcHandlers, /setNotificationsEnabled/);
 assert.match(statusJs, /diagnosticSummary/);
 assert.match(statusJs, /heroView/);
+assert.match(statusJs, /Rel\.AI can now receive workspace tasks from ChatGPT/);
+assert.match(statusJs, /60 seconds after its latest tool call/);
 assert.match(statusJs, /renderLastTask/);
 assert.match(statusJs, /activity-pulse/);
 assert.match(statusJs, /initDisclosures/);
@@ -85,7 +87,8 @@ assert.doesNotMatch(settingsHtml, /Step \d of 4/);
 
 assert.match(dashboardJs, /dataset\.surface = surface/);
 assert.match(dashboardJs, /history\.replaceState/);
-assert.match(dashboardJs, /ChatGPT is working in/);
+assert.match(dashboardJs, /activeTaskCount/);
+assert.match(dashboardJs, /active tool call/);
 assert.match(dashboardHome, /taskActivityCard/);
 assert.match(dashboardHome, /ChatGPT is working/);
 assert.doesNotMatch(dashboardTools, /bundle path|apply_bundle/);

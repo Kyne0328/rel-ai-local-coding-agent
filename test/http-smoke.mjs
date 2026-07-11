@@ -68,6 +68,9 @@ if (dashboardQueryAuth.readiness == null) {
 if (dashboardQueryAuth.taskActivity?.state !== 'idle') {
   throw new Error('standalone dashboard API did not include the default idle task state');
 }
+if (!Array.isArray(dashboardQueryAuth.tasks) || typeof dashboardQueryAuth.workspaceStates !== 'object') {
+  throw new Error('dashboard API did not include persistent tasks and operational workspace state');
+}
 
 const pathPreflight = await fetch(`http://127.0.0.1:${port}/api/workspace/preflight?token=${encodeURIComponent(token)}&path=${encodeURIComponent(root)}`).then((response) => response.json());
 if (!pathPreflight.ok || !pathPreflight.exists || !pathPreflight.isDirectory) {
@@ -83,8 +86,11 @@ if (!dashboardCsp.includes("default-src 'self'") || !dashboardCsp.includes("fram
 if (!dashboardHtmlResponse.ok || dashboardHtml.includes('initialDashboardJson is not defined') || !dashboardHtml.includes('id="initialDashboardData"')) {
   throw new Error('dashboard HTML did not render embedded initial dashboard data');
 }
-if (!dashboardHtml.includes('id="refreshBtn"')) {
-  throw new Error('dashboard HTML did not expose the wired refresh button');
+if (!dashboardHtml.includes('id="refreshBtn"') || !dashboardHtml.includes('id="workspaceScope"') || !dashboardHtml.includes('id="liveStatus"')) {
+  throw new Error('dashboard HTML did not expose refresh, workspace scope, and live-state controls');
+}
+if (!dashboardHtml.includes('href="#tasks"') || !dashboardHtml.includes('href="#reference"')) {
+  throw new Error('dashboard navigation did not include Tasks and Reference');
 }
 // The token field was removed from the topbar (token loads from the URL/sessionStorage).
 if (dashboardHtml.includes('id="token"')) {
@@ -94,6 +100,10 @@ if (dashboardHtml.includes('id="token"')) {
 const workspaceModule = await fetch(`http://127.0.0.1:${port}/ui/sections/workspaces.js`).then((response) => response.text());
 if (!workspaceModule.includes('mountWorkspaces') || workspaceModule.includes('Full workspace editor coming in Phase 2')) {
   throw new Error('workspace dashboard section is still incomplete or placeholder-only');
+}
+const tasksModule = await fetch(`http://127.0.0.1:${port}/ui/sections/tasks.js`).then((response) => response.text());
+if (!tasksModule.includes('mountTasks') || !tasksModule.includes('Task history')) {
+  throw new Error('dashboard Tasks section is missing or incomplete');
 }
 
 const unauthorized = await fetch(`http://127.0.0.1:${port}/mcp`, {
@@ -117,11 +127,16 @@ if (oauthChallenge.status !== 401 || !/Bearer/i.test(challengeHeader) || !challe
   throw new Error(`POST /mcp without auth did not return a Bearer resource_metadata challenge: ${oauthChallenge.status} ${challengeHeader}`);
 }
 
-const initialized = await fetch(`http://127.0.0.1:${port}/mcp`, {
+const initializeResponse = await fetch(`http://127.0.0.1:${port}/mcp`, {
   method: 'POST',
   headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
   body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'initialize', params: { protocolVersion: '2025-06-18' } })
-}).then((response) => response.json());
+});
+const mcpSessionId = initializeResponse.headers.get('mcp-session-id') || '';
+const initialized = await initializeResponse.json();
+if (!mcpSessionId) {
+  throw new Error('HTTP initialize did not issue an Mcp-Session-Id for stable task grouping');
+}
 if (!initialized.result?.capabilities?.tools) {
   throw new Error('HTTP initialize did not advertise tools');
 }
@@ -131,7 +146,7 @@ if (!initialized.result?.capabilities?.resources) {
 
 const list = await fetch(`http://127.0.0.1:${port}/mcp`, {
   method: 'POST',
-  headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+  headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, 'mcp-session-id': mcpSessionId },
   body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/list', params: {} })
 }).then((response) => response.json());
 if (!Array.isArray(list.result?.tools) || list.result.tools.length !== 16) {
@@ -140,7 +155,7 @@ if (!Array.isArray(list.result?.tools) || list.result.tools.length !== 16) {
 
 const resources = await fetch(`http://127.0.0.1:${port}/mcp`, {
   method: 'POST',
-  headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+  headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, 'mcp-session-id': mcpSessionId },
   body: JSON.stringify({ jsonrpc: '2.0', id: 4, method: 'resources/list', params: {} })
 }).then((response) => response.json());
 if (!Array.isArray(resources.result?.resources) || !resources.result.resources.some((item) => item.uri === 'relai://server/workspaces')) {
@@ -149,7 +164,7 @@ if (!Array.isArray(resources.result?.resources) || !resources.result.resources.s
 
 const removedConfigTool = await fetch(`http://127.0.0.1:${port}/mcp`, {
   method: 'POST',
-  headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+  headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, 'mcp-session-id': mcpSessionId },
   body: JSON.stringify({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'relai_config', arguments: {} } })
 }).then((response) => response.json());
 if (!removedConfigTool.result?.isError) {

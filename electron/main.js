@@ -12,6 +12,7 @@ const { createDashboardWindowManager } = require('./dashboard-window');
 const srcPath = resolveResourcePath('src');
 const connection = require(path.join(srcPath, 'connectionProfile'));
 const toolActivity = require(path.join(srcPath, 'toolActivity'));
+const dashboardSessions = require(path.join(srcPath, 'http', 'dashboardSessions'));
 const configModule = require(path.join(srcPath, 'config'));
 const { startHttpServer } = require(path.join(srcPath, 'httpServer'));
 const tunnelManager = require(path.join(srcPath, 'tunnelManager'));
@@ -41,7 +42,7 @@ const BASE_STATUS = {
   error: '',
   localUrl: '',
   version: app.getVersion(),
-  taskActivity: { state: 'idle', activeCalls: 0, workspace: '', tool: '', startedAt: null, lastTask: null }
+  taskActivity: { state: 'idle', activeCalls: 0, activeTaskCount: 0, tasks: [], workspace: '', tool: '', startedAt: null, lastTask: null }
 };
 let currentStatus = { ...BASE_STATUS };
 const toolActivityRuntime = createTaskActivityRuntime({
@@ -308,6 +309,7 @@ async function startServer() {
         publicUrl: `https://${guiConfig.ngrokDomain}`,
         exitOnError: false,
         pickFolder: () => dashboardWindowManager.pickFolder(),
+        openFolder: folderPath => dashboardWindowManager.openFolder(folderPath),
         getTaskActivity: toolActivityRuntime.getStatus
       });
       actualPort = await new Promise((resolve, reject) => {
@@ -409,6 +411,7 @@ function stopServer(options = {}) {
   lifecycleToken += 1;
 
   dashboardWindowManager.close();
+  dashboardSessions.clearDashboardSessions();
   currentStatus = { ...BASE_STATUS };
   if (!options.silent) pushStatus();
   else updateTrayMenu();
@@ -418,7 +421,8 @@ function stopServer(options = {}) {
 function buildDashboardConnection() {
   const port = (httpServer?.listening && httpServer.address()?.port) || readGuiConfig().port || 3333;
   const token = connection.readLaunchEnv().REL_AI_MCP_TOKEN || readGuiConfig().token || '';
-  return { url: `http://127.0.0.1:${port}/dashboard?surface=desktop`, token };
+  const bootstrap = dashboardSessions.createDashboardBootstrap(token);
+  return { url: `http://127.0.0.1:${port}/dashboard?surface=desktop&bootstrap=${encodeURIComponent(bootstrap)}` };
 }
 
 async function openDashboardWindow() {

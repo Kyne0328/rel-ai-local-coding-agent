@@ -38,19 +38,23 @@ async function callTool(name, args = {}, context = {}) {
       throw new Error(`Unknown tool '${name}'. Available tools: ${TOOL_NAMES.join(', ')}. Restart/reconnect ChatGPT if the tool list looks stale.`);
     }
     if (connector) {
-      finishActivity = beginConnectorToolCall({ tool: name, workspace: args?.workspace });
+      finishActivity = beginConnectorToolCall({
+        tool: name,
+        workspace: args?.workspace,
+        scopeId: context?.taskScopeId
+      });
     }
     maybeStartSession(config, name, args || {});
     const value = await dispatchTool(config, name, args || {});
     const extraAudit = buildExtraAudit(name, value, args || {});
     applyCautionAudit(extraAudit, name, args || {}, value, config);
     invalidateSessionCacheForCall(config, name, args || {});
-    logAudit(config, { tool: name, ok: true, workspace: args?.workspace, ms: Date.now() - started, ...extraAudit });
+    logAudit(config, { taskId: finishActivity?.taskId, tool: name, ok: true, workspace: args?.workspace, ms: Date.now() - started, ...extraAudit });
     return ok(connector ? compactForConnector(name, value, args || {}) : value);
   } catch (error) {
     const enhanced = enhanceToolError(name, error);
     activityResult = { ok: false, error: enhanced.message };
-    logAudit(config, { tool: name, ok: false, workspace: args?.workspace, ms: Date.now() - started, error: enhanced.message });
+    logAudit(config, { taskId: finishActivity?.taskId, tool: name, ok: false, workspace: args?.workspace, ms: Date.now() - started, error: enhanced.message });
     throw enhanced;
   } finally {
     finishActivity?.(activityResult);

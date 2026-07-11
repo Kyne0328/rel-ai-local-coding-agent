@@ -17,7 +17,7 @@
 - **Replace the public/internal dual registry with one 16-tool schema, handler map, MCP list, dashboard metadata source, and packaged-application contract.**
 - **Retain structured patch deletion and the bounded tidy plan/run path while removing obsolete general-purpose deletion plumbing.**
 - **Replace prepared-workflow and bundle settings with focused patch safeguards for backup, clean-git enforcement, and maximum update size.**
-- **Add an obsolete-surface residue scan and validate the release with JavaScript checks, TypeScript boundary checks, release consistency checks, 53 regression files, and the installed Windows application smoke test.**
+- **Add an obsolete-surface residue scan and validate the release with JavaScript checks, TypeScript boundary checks, release consistency checks, 57 regression files, and the installed Windows application smoke test.**
 - **Make `npm test` delegate to the authoritative `test:all` runner, avoiding duplicate Windows child-process chains.**
 - **Prevent system sleep only while an authenticated connector tool call is executing, using one reference-counted Electron `prevent-app-suspension` blocker for overlapping calls while still allowing the display to turn off.**
 - **Add native task-completion notifications after 10 seconds of connector inactivity, aggregate chained tool calls into one alert, distinguish successful completion from failures, and connect the existing desktop notification toggle to background alerts.**
@@ -25,6 +25,14 @@
 - **Replace wizard-based configuration editing with a dedicated Settings screen for connection, access-token, and notification preferences, and preserve the user’s window position during content-driven resizing.**
 - **Open the full dashboard inside a sandboxed Electron window by default while preserving the existing browser route, inject dashboard authorization only for the exact loopback origin, block native permissions and cross-origin navigation, and remove the launch token from browser history.**
 - **Share live grouped task state with the web dashboard so Overview and the top bar show active, wrapping-up, completed, and attention-required ChatGPT work in both desktop and browser hosts.**
+- **Persist connector task identity into audit events and add a Tasks view with duration, tool events, changed files, validation outcomes, failures, commit/push state, and workspace-scoped drill-down into the Activity log.**
+- **Replace the unreliable single global 10-second task bucket with per-MCP-session task scopes, multiple concurrent task records, parallel JSON-RPC batch handling, and one renewable 60-second idle lease so normal ChatGPT reasoning and approval gaps stay grouped into the same task.**
+- **Harden the Windows installed-application smoke test by keeping NSIS on the runner's real Windows profile while isolating only the launched application, and run the installer as the current user to avoid hosted-runner access violations.**
+- **Remove ambient `PATH` lookup from dashboard Git-state inspection; Rel.AI now invokes Git only from fixed trusted installation directories and reports Git as unavailable otherwise.**
+- **Resolve the new dashboard Sonar findings for nested conditionals/templates, in-place sorting, unnecessary `void`, default-value reassignment, and cognitive complexity, with a regression scan for the reported new-code patterns.**
+- **Add a global workspace scope across Overview, Tasks, Workspaces, Activity, and Diagnostics; enrich workspace cards with branch, ahead/behind, dirty/session-owned files, validation history, recent activity, native folder opening, and direct validation.**
+- **Reorganize dashboard navigation around Overview, Tasks, Workspaces, Activity log, and Settings, move tool schemas into secondary Reference navigation, and add explicit Live, Reconnecting, Paused, and last-event indicators.**
+- **Replace the Electron dashboard bearer-header bridge with a single-use bootstrap exchange and HttpOnly SameSite session cookie, persist dashboard bounds and the last route, and redesign Diagnostics around severity, impact, recommendations, direct actions, and disclosed technical details.**
 
 Bump root/electron/status UI/lockfiles to 0.19.1.
 

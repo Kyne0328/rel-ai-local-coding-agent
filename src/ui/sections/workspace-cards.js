@@ -1,11 +1,14 @@
 import { pillHtml } from '../components/pill.js';
 import { badgeHtml } from '../components/badge.js';
-import { esc, metricHtml, statusClass } from '../utils.js';
+import { esc, metricHtml, statusClass, timeAgo } from '../utils.js';
+import { getWorkspaceFilter, routeHref } from '../router.js';
 
 function buildWorkspaces(data) {
   const cfg = data.config || {};
   const health = data.health || {};
-  const workspaces = Array.isArray(cfg.workspaces) ? cfg.workspaces : [];
+  const workspaceFilter = getWorkspaceFilter();
+  const allWorkspaces = Array.isArray(cfg.workspaces) ? cfg.workspaces : [];
+  const workspaces = workspaceFilter ? allWorkspaces.filter(workspace => workspace.alias === workspaceFilter) : allWorkspaces;
   const toolCount = Number.isFinite(Number(data.toolCount)) && Number(data.toolCount) >= 0 ? Number(data.toolCount) : 0;
   const healthByAlias = new Map((Array.isArray(health.workspaces) ? health.workspaces : []).map(item => [item.alias, item]));
   const validationReady = workspaces.filter(ws => (ws.testCommandKeys || []).length || (ws.discoveredTestCommandKeys || []).length).length;
@@ -73,7 +76,8 @@ function workspaceCardView(ws, health) {
     taskHint: ws.sessionPolicy?.taskHint || '',
     cautionCount: Number.isFinite(ws.caution?.count) ? ws.caution.count : 0,
     focused: isFocusedContext(ws),
-    healthWarning: health?.ok === false ? health.error || 'Workspace unavailable' : ''
+    healthWarning: health?.ok === false ? health.error || 'Workspace unavailable' : '',
+    operational: ws.operational || {}
   };
 }
 
@@ -96,9 +100,21 @@ function workspaceBadgeRow(view) {
 }
 
 function workspaceExtraLines(view, ws) {
-  const stale = view.staleKeys.length ? `<div class="path warning-text">Stale tests (no longer in package scripts): ${esc(view.staleKeys.join(', '))}</div>` : '';
+  const stale = view.staleKeys.length ? `<div class="path warning-text">Stale tests: ${esc(view.staleKeys.join(', '))}</div>` : '';
   const task = view.sessionActive && view.taskHint ? `<div class="path">Task: ${esc(view.taskHint)}</div>` : '';
-  return `${stale}<div class="path">${fastTaskText(ws.fastTask)}</div>${task}`;
+  const op = view.operational || {};
+  const branch = branchSummary(op);
+  const worktree = op.dirty ? `${esc(op.changedFileCount || 0)} changed · ${esc(op.sessionChangedFileCount || 0)} session-owned` : 'Clean worktree';
+  const validation = op.lastValidation ? `Last validation ${esc(op.lastValidation.status)} · ${esc(timeAgo(op.lastValidation.completedAt))}` : 'No validation task recorded';
+  const lastTask = op.lastTask ? `Last task ${esc(op.lastTask.status)} · ${esc(timeAgo(op.lastTask.completedAt || op.lastTask.startedAt))}` : 'No task history';
+  return `${stale}<div class="workspace-operational"><div><span>Branch</span><strong>${branch}</strong></div><div><span>Worktree</span><strong>${worktree}</strong></div><div><span>Validation</span><strong>${validation}</strong></div><div><span>Activity</span><strong>${lastTask}</strong></div></div><div class="path">${fastTaskText(ws.fastTask)}</div>${task}`;
+}
+
+function branchSummary(operational) {
+  if (!operational.branch) return 'Git state unavailable';
+  const branch = esc(operational.branch);
+  if (!operational.ahead && !operational.behind) return branch;
+  return `${branch} · ↑${esc(operational.ahead || 0)} ↓${esc(operational.behind || 0)}`;
 }
 
 function pluralSuffix(count) {
@@ -119,7 +135,11 @@ function workspaceActionButtons(view) {
   const saveDetected = saveDetectedButton(view);
   const prune = pruneStaleButton(view);
   return `
-    <button class="secondary" type="button" data-preflight="${view.aliasAttr}">Run preflight</button>
+    <a class="buttonlike secondary" href="${routeHref('tasks', { workspace: view.alias })}">Tasks</a>
+    <a class="buttonlike secondary" href="${routeHref('activity', { workspace: view.alias })}">Activity</a>
+    <button class="secondary" type="button" data-run-validation="${view.aliasAttr}">Run validation</button>
+    <button class="secondary" type="button" data-open-folder="${view.aliasAttr}">Open folder</button>
+    <button class="secondary" type="button" data-preflight="${view.aliasAttr}">Review Git state</button>
     <button class="secondary" type="button" data-toggle-fast-task="${view.aliasAttr}">${view.focused ? 'Use broad context' : 'Use focused context'}</button>
     <button class="secondary" type="button" data-edit-fast-task="${view.aliasAttr}">Context settings</button>
     <button class="secondary" type="button" data-edit-workspace="${view.aliasAttr}">Edit</button>

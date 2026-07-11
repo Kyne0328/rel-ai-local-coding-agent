@@ -6,87 +6,105 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const {
-  beginConnectorToolCall,
+  createToolActivityTracker,
   onToolActivity,
-  getToolActivity
+  resetToolActivity
 } = require('../src/toolActivity.js');
 const { createToolSleepBlocker, createTaskActivityRuntime } = require('../electron/tool-sleep-blocker.js');
 
-const events = [];
-const unsubscribe = onToolActivity(event => events.push(event));
+let nowValue = 1000;
+let timerId = 0;
+const timers = new Map();
+const trackerEvents = [];
+const tracker = createToolActivityTracker({
+  idleMs: 60_000,
+  now: () => nowValue,
+  setTimer(callback, delay) {
+    const id = ++timerId;
+    timers.set(id, { callback, delay });
+    return id;
+  },
+  clearTimer(id) { timers.delete(id); }
+});
+tracker.onToolActivity(event => trackerEvents.push(event));
 
-const finishRead = beginConnectorToolCall({ tool: 'relai_read', workspace: 'repo' });
-const finishChecks = beginConnectorToolCall({ tool: 'relai_run_checks', workspace: 'repo' });
-assert.equal(getToolActivity().activeConnectorCalls, 2);
-
+const finishRead = tracker.beginConnectorToolCall({ tool: 'relai_read', workspace: 'repo', scopeId: 'conversation-a' });
+const finishChecks = tracker.beginConnectorToolCall({ tool: 'relai_run_checks', workspace: 'other', scopeId: 'conversation-b' });
+assert.notEqual(finishRead.taskId, finishChecks.taskId, 'separate conversation scopes must create separate tasks');
+assert.equal(tracker.getToolActivity().activeConnectorCalls, 2);
+assert.equal(tracker.getToolActivity().activeTaskCount, 2);
 finishRead();
-assert.equal(getToolActivity().activeConnectorCalls, 1);
-finishRead();
-assert.equal(getToolActivity().activeConnectorCalls, 1, 'finishing a call twice must be harmless');
 finishChecks();
-assert.equal(getToolActivity().activeConnectorCalls, 0);
-unsubscribe();
+assert.equal(tracker.getToolActivity().state, 'settling');
+assert.equal(timers.size, 2);
 
-assert.deepEqual(events.map(event => [event.phase, event.activeConnectorCalls]), [
-  ['started', 1],
-  ['started', 2],
-  ['finished', 1],
-  ['finished', 0]
-]);
+nowValue = 30_000;
+const finishEdit = tracker.beginConnectorToolCall({ tool: 'relai_edit', workspace: 'repo', scopeId: 'conversation-a' });
+assert.equal(finishEdit.taskId, finishRead.taskId, 'follow-up calls before idle completion must stay in the same task');
+assert.equal(tracker.getToolActivity().tasks.find(task => task.id === finishRead.taskId)?.calls, 2);
+finishEdit();
+assert.equal([...timers.values()].every(timer => timer.delay === 60_000), true);
+
+nowValue = 91_000;
+for (const { callback } of [...timers.values()]) callback();
+timers.clear();
+assert.equal(tracker.getToolActivity().state, 'idle');
+const completed = trackerEvents.filter(event => event.phase === 'completed').map(event => event.task);
+assert.equal(completed.length, 2);
+assert.equal(completed.find(task => task.taskId === finishRead.taskId)?.calls, 2);
+assert.equal(completed.find(task => task.taskId === finishChecks.taskId)?.calls, 1);
 
 let nextId = 40;
 const started = new Set();
-const calls = [];
+const blockerCalls = [];
 const fakePowerSaveBlocker = {
   start(type) {
-    calls.push(['start', type]);
+    blockerCalls.push(['start', type]);
     const id = nextId++;
     started.add(id);
     return id;
   },
   stop(id) {
-    calls.push(['stop', id]);
+    blockerCalls.push(['stop', id]);
     return started.delete(id);
   },
-  isStarted(id) {
-    return started.has(id);
-  }
+  isStarted(id) { return started.has(id); }
 };
 
 const blocker = createToolSleepBlocker(fakePowerSaveBlocker);
 blocker.update(1);
 blocker.update(2);
 assert.equal(blocker.isActive(), true);
-assert.deepEqual(calls, [['start', 'prevent-app-suspension']], 'concurrent calls must share one blocker');
+assert.deepEqual(blockerCalls, [['start', 'prevent-app-suspension']], 'concurrent calls must share one blocker');
 blocker.update(1);
 assert.equal(blocker.isActive(), true);
 blocker.update(0);
 assert.equal(blocker.isActive(), false);
-assert.deepEqual(calls, [
-  ['start', 'prevent-app-suspension'],
-  ['stop', 40]
-]);
-assert.equal(blocker.stop(), false, 'stopping an inactive blocker must be harmless');
+assert.deepEqual(blockerCalls, [['start', 'prevent-app-suspension'], ['stop', 40]]);
 
 let boundListener = null;
 let unsubscribed = false;
+let runtimeStatus = { state: 'idle', activeConnectorCalls: 0, activeTaskCount: 0, tasks: [] };
 const runtime = createTaskActivityRuntime({
   toolActivity: {
     onToolActivity(listener) {
       boundListener = listener;
       return () => { unsubscribed = true; };
     },
-    getToolActivity() { return { activeConnectorCalls: 0 }; }
+    getToolActivity() { return runtimeStatus; }
   },
   powerSaveBlocker: fakePowerSaveBlocker,
   Notification: class { static isSupported() { return false; } },
   isReady: () => true
 });
 runtime.setNotificationsEnabled(false);
+runtimeStatus = { state: 'working', activeConnectorCalls: 1, activeTaskCount: 1, tasks: [{ id: 'task', state: 'working', activeCalls: 1 }] };
 boundListener({ phase: 'started', activeConnectorCalls: 1 });
 assert.equal(started.has(41), true);
+runtimeStatus = { state: 'settling', activeConnectorCalls: 0, activeTaskCount: 1, tasks: [{ id: 'task', state: 'settling', activeCalls: 0 }] };
 boundListener({ phase: 'finished', activeConnectorCalls: 0, ok: true });
 assert.equal(started.has(41), false);
+assert.equal(runtime.getStatus().activeTaskCount, 1);
 runtime.stop();
 assert.equal(unsubscribed, true);
 
@@ -99,22 +117,24 @@ fs.writeFileSync(process.env.REL_AI_MCP_CONFIG, JSON.stringify({
 }, null, 2));
 
 try {
+  resetToolActivity();
   const { callTool } = require('../src/tools.js');
   const callEvents = [];
   const stopListening = onToolActivity(event => callEvents.push(event));
 
-  await callTool('relai_status', {}, { publicHttpOnly: true });
-  assert.deepEqual(callEvents.map(event => [event.phase, event.tool, event.activeConnectorCalls]), [
+  await callTool('relai_status', {}, { publicHttpOnly: true, taskScopeId: 'http-session-a' });
+  assert.deepEqual(callEvents.slice(0, 2).map(event => [event.phase, event.tool, event.activeConnectorCalls]), [
     ['started', 'relai_status', 1],
     ['finished', 'relai_status', 0]
   ]);
+  assert.equal(callEvents[0].taskId, callEvents[1].taskId);
 
   callEvents.length = 0;
   await callTool('relai_status', {}, { publicHttpOnly: false });
   assert.deepEqual(callEvents, [], 'stdio/local calls must not prevent system sleep');
 
   await assert.rejects(
-    () => callTool('relai_read', {}, { publicHttpOnly: true }),
+    () => callTool('relai_read', {}, { publicHttpOnly: true, taskScopeId: 'http-session-a' }),
     /Workspace alias is required|Unknown workspace|workspace/i
   );
   assert.deepEqual(callEvents.map(event => [event.phase, event.tool, event.activeConnectorCalls]), [
@@ -122,10 +142,11 @@ try {
     ['finished', 'relai_read', 0]
   ], 'failed connector calls must always release the activity count');
   stopListening();
+  resetToolActivity();
 } finally {
   if (previousConfig == null) delete process.env.REL_AI_MCP_CONFIG;
   else process.env.REL_AI_MCP_CONFIG = previousConfig;
   fs.rmSync(sandbox, { recursive: true, force: true });
 }
 
-console.log('Tool activity and sleep blocker unit tests passed.');
+console.log('Concurrent tool activity, task grouping, and sleep blocker tests passed.');

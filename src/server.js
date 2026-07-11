@@ -82,7 +82,10 @@ async function handleToolCall(message, options) {
   const name = params.name;
   if (!name) return jsonRpcError(message.id, -32602, 'Missing tool name.');
   try {
-    const output = await callTool(name, params.arguments || {}, { publicHttpOnly: Boolean(options.publicHttpOnly) });
+    const output = await callTool(name, params.arguments || {}, {
+      publicHttpOnly: Boolean(options.publicHttpOnly),
+      taskScopeId: String(options.taskScopeId || '')
+    });
     return result(message.id, toolResult(output, false));
   } catch (error) {
     return result(message.id, toolResult({

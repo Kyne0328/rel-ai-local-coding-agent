@@ -24,7 +24,9 @@ const {
   handleOnboardingComplete,
   handleApiSettingsPost,
   handleApiWorkspaces,
-  handlePickFolder
+  handlePickFolder,
+  handleOpenFolder,
+  handleWorkspaceChecks
 } = require("./http/dashboard");
 const {
   handleOauthProtectedResource,
@@ -56,6 +58,7 @@ function startHttpServer(options = {}) {
   // in the same process). Absent when the server runs standalone — the endpoint then
   // reports unsupported and the dashboard falls back to manual path entry.
   const pickFolder = typeof options.pickFolder === "function" ? options.pickFolder : null;
+  const openFolder = typeof options.openFolder === "function" ? options.openFolder : null;
   const getTaskActivity = typeof options.getTaskActivity === "function" ? options.getTaskActivity : null;
 
   if (!token && !allowNoAuth) {
@@ -64,7 +67,7 @@ function startHttpServer(options = {}) {
 
   const server = http.createServer(async (req, res) => {
     try {
-      await routeRequest(req, res, { token, allowNoAuth, maxBodyBytes, host, port, publicUrl, pickFolder, getTaskActivity });
+      await routeRequest(req, res, { token, allowNoAuth, maxBodyBytes, host, port, publicUrl, pickFolder, openFolder, getTaskActivity });
     } catch (error) {
       sendJson(res, 500, {
         ok: false,
@@ -110,7 +113,7 @@ function startHttpServer(options = {}) {
 }
 
 function authDashboard(ctx) {
-  if (isDashboardAuthorized(ctx.req, ctx.parsed, ctx.options)) return true;
+  if (isDashboardAuthorized(ctx.req, ctx.parsed, ctx.options, ctx.res)) return true;
   unauthorized(ctx.res);
   return false;
 }
@@ -220,7 +223,9 @@ const POST_ROUTES = {
   "/api/onboarding/complete": { auth: authDashboard, handler: handleOnboardingComplete },
   "/api/settings": { auth: authDashboard, handler: handleApiSettingsPost },
   "/api/workspaces": { auth: authDashboard, handler: handleApiWorkspaces },
-  "/api/pick-folder": { auth: authDashboard, handler: handlePickFolder }
+  "/api/pick-folder": { auth: authDashboard, handler: handlePickFolder },
+  "/api/open-folder": { auth: authDashboard, handler: handleOpenFolder },
+  "/api/workspace/checks": { auth: authDashboard, handler: handleWorkspaceChecks }
 };
 
 module.exports = {

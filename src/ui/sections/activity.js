@@ -4,6 +4,7 @@ import { pillHtml } from '../components/pill.js';
 import { toast } from '../components/toast.js';
 import { virtualizeTable } from '../components/table.js';
 import { esc, timeAgo } from '../utils.js';
+import { getRouteParams, getWorkspaceFilter, setWorkspaceFilter } from '../router.js';
 
 let _allEntries = [];
 let _paused = false;
@@ -13,6 +14,9 @@ let _mountToken = 0;
 
 export function mountActivity(container) {
   const token = ++_mountToken;
+  const params = getRouteParams();
+  _filterState.workspace = getWorkspaceFilter();
+  _filterState.task = params.get('task') || '';
   _virtualizer?.destroy();
   _virtualizer = null;
   container.innerHTML = '';
@@ -39,7 +43,7 @@ export function prependEntry(entry) {
 function buildActivity() {
   const root = document.createElement('div');
   root.className = 'section';
-  root.innerHTML = '<div class="section-head"><div><h2>Activity</h2><p>Search and filter recent Rel.AI tool calls, then open any row for the full event details.</p></div></div>';
+  root.innerHTML = '<div class="section-head"><div><h2>Activity log</h2><p>Inspect individual Rel.AI tool events. Use Tasks for grouped ChatGPT work.</p></div></div>';
 
   const toolbar = document.createElement('div');
   toolbar.className = 'activity-toolbar';
@@ -78,6 +82,7 @@ function buildActivity() {
 
   const workspaceFilter = createFilterSelect('activityWorkspaceFilter', 'All workspaces', value => {
     _filterState.workspace = value;
+    setWorkspaceFilter(value);
     renderFilteredTable();
   });
   const toolFilter = createFilterSelect('activityToolFilter', 'All tools', value => {
@@ -96,7 +101,8 @@ function buildActivity() {
   clearButton.className = 'secondary activity-clear-filters';
   clearButton.textContent = 'Clear filters';
   clearButton.onclick = () => {
-    _filterState = { search: '', timeRange: '1h', workspace: '', tool: '', status: '' };
+    _filterState = { search: '', timeRange: '1h', workspace: '', tool: '', status: '', task: '' };
+    setWorkspaceFilter('');
     searchInput.value = '';
     workspaceFilter.value = '';
     toolFilter.value = '';
@@ -176,7 +182,8 @@ function renderFilteredTable() {
     _filterState.search && `search “${_filterState.search}”`,
     _filterState.workspace && `workspace ${_filterState.workspace}`,
     _filterState.tool && `tool ${_filterState.tool}`,
-    _filterState.status && (_filterState.status === 'ok' ? 'successful only' : 'failed only')
+    _filterState.status && (_filterState.status === 'ok' ? 'successful only' : 'failed only'),
+    _filterState.task && `task ${_filterState.task.slice(0, 8)}`
   ].filter(Boolean);
   summary.textContent = active.length
     ? `Showing ${filtered.length} of ${_allEntries.length} events · ${active.join(' · ')}`
@@ -201,6 +208,7 @@ function applyFilters(entries) {
     if (_filterState.workspace && entry.workspace !== _filterState.workspace) return false;
     if (_filterState.tool && (entry.tool || entry.type) !== _filterState.tool) return false;
     if (_filterState.status && (entry.ok === false ? 'error' : 'ok') !== _filterState.status) return false;
+    if (_filterState.task && entry.taskId !== _filterState.task) return false;
     return true;
   });
 }
@@ -260,6 +268,7 @@ function openDetail(entry) {
     ['Workspace', entry.workspace || '—'],
     ...(entry.path ? [['Path', entry.path]] : []),
     ...(entry.sessionId ? [['Session', entry.sessionId]] : []),
+    ...(entry.taskId ? [['Task', entry.taskId]] : []),
   ];
   const fieldGroup = document.createElement('div');
   fieldGroup.className = 'activity-detail-section';

@@ -33,7 +33,9 @@ npm run oneclick -- --public-url https://your-domain.example  # permanent public
 
 ChatGPT requires a public HTTPS endpoint. Use `--public` for a temporary tunnel or `--public-url` for a stable endpoint. See [ONE_CLICK_SETUP.md](ONE_CLICK_SETUP.md) for tunnel options.
 
-The packaged desktop app opens the dashboard in a secured Electron window by default. The same local `/dashboard` route remains accessible in a normal browser when needed; both hosts use the same dashboard code and server APIs.
+The packaged desktop app opens the dashboard in a secured Electron window by default. The same local `/dashboard` route remains accessible in a normal browser when needed; both hosts use the same dashboard code and server APIs. Electron uses a single-use bootstrap exchange and an HttpOnly local session cookie instead of exposing the permanent dashboard token to the embedded renderer.
+
+Use **Tasks** for grouped ChatGPT work and **Activity log** for individual tool calls. Rel.AI keeps each task open for 60 seconds after its latest tool call, renewing the window when ChatGPT continues, so ordinary approval and reasoning gaps stay grouped. Separate MCP sessions can run as concurrent tasks. The workspace selector scopes Overview, Tasks, Workspaces, Activity, and Diagnostics to one configured repository.
 
 ## Adding the connector in ChatGPT
 

@@ -5,7 +5,7 @@ let currentStatus = {
   error: '',
   localUrl: '',
   version: '',
-  taskActivity: { state: 'idle', activeCalls: 0, workspace: '', tool: '', startedAt: null, lastTask: null }
+  taskActivity: { state: 'idle', activeCalls: 0, activeTaskCount: 0, tasks: [], workspace: '', tool: '', startedAt: null, lastTask: null }
 };
 let previousConnectionKey = '';
 let notificationsEnabled = localStorage.getItem('relai_status_notifications') !== 'off';
@@ -25,9 +25,9 @@ function requestWindowFit() {
 function connectionView(status) {
   if (status.serverRunning && status.tunnelStatus === 'running' && status.mcpUrl) {
     return {
-      key: 'ready', badge: 'Connected', eyebrow: 'Ready for ChatGPT',
-      title: 'Your workspace bridge is online.',
-      description: 'Open the dashboard to manage workspaces or copy the MCP endpoint for ChatGPT.'
+      key: 'ready', badge: 'Connected', eyebrow: 'Connected and ready',
+      title: 'Rel.AI can now receive workspace tasks from ChatGPT.',
+      description: 'Open the dashboard to manage repositories and review task activity. Copy the endpoint only when adding or reconnecting Rel.AI in ChatGPT.'
     };
   }
   if (status.serverRunning && status.tunnelStatus === 'connecting') {
@@ -53,29 +53,52 @@ function connectionView(status) {
 
 function heroView(status) {
   const activity = status.taskActivity || {};
-  if (activity.state === 'working') {
-    return {
-      key: 'working', badge: 'Working', eyebrow: 'ChatGPT activity',
-      title: 'ChatGPT is working.',
-      description: activityDescription(activity, false)
-    };
-  }
-  if (activity.state === 'settling') {
-    return {
-      key: 'settling', badge: 'Wrapping up', eyebrow: 'ChatGPT activity',
-      title: 'Wrapping up the task…',
-      description: activityDescription(activity, true)
-    };
-  }
+  const taskCount = Math.max(1, Number(activity.activeTaskCount || activity.tasks?.length || 0));
+  if (activity.state === 'working') return workingHero(activity, taskCount);
+  if (activity.state === 'settling') return settlingHero(activity, taskCount);
   return connectionView(status);
 }
 
+function workingHero(activity, taskCount) {
+  const title = taskCount > 1 ? `${taskCount} ChatGPT tasks are running.` : 'ChatGPT is working.';
+  return {
+    key: 'working',
+    badge: `${taskCount} running`,
+    eyebrow: 'ChatGPT activity',
+    title,
+    description: activityDescription(activity, false)
+  };
+}
+
+function settlingHero(activity, taskCount) {
+  return {
+    key: 'settling',
+    badge: `${taskCount} open`,
+    eyebrow: 'ChatGPT activity',
+    title: `${taskCount} ${pluralize(taskCount, 'task')} waiting for follow-up calls.`,
+    description: activityDescription(activity, true)
+  };
+}
+
 function activityDescription(activity, settling) {
-  const action = toolLabel(activity.tool);
-  const workspace = activity.workspace || 'configured workspace';
-  return settling
-    ? `Waiting briefly for any final ChatGPT actions in ${workspace}.`
-    : `${action} in ${workspace}. The computer will stay awake until active tool calls finish.`;
+  const tasks = Array.isArray(activity.tasks) ? activity.tasks : [];
+  const taskCount = Number(activity.activeTaskCount || tasks.length || 1);
+  const activeCalls = Number(activity.activeCalls || 0);
+  const location = activityLocation(activity, tasks);
+  if (settling) return 'The task remains grouped for 60 seconds after its latest tool call. Any follow-up call renews that window.';
+  if (taskCount > 1) return `${activeCalls} ${pluralize(activeCalls, 'active tool call')} across ${location}. The computer stays awake while calls are running.`;
+  return `${toolLabel(activity.tool)} in ${location}. The computer stays awake until the active tool call finishes.`;
+}
+
+function activityLocation(activity, tasks) {
+  const workspaces = [...new Set(tasks.map(task => task.workspace).filter(Boolean))];
+  if (workspaces.length === 1) return workspaces[0];
+  if (workspaces.length > 1) return `${workspaces.length} workspaces`;
+  return activity.workspace || 'configured workspaces';
+}
+
+function pluralize(count, singular) {
+  return Number(count) === 1 ? singular : `${singular}s`;
 }
 
 function toolLabel(tool) {
@@ -116,9 +139,15 @@ function renderTaskMeta() {
   const active = activity.state === 'working' || activity.state === 'settling';
   element.hidden = !active;
   if (!active) return;
-  const calls = activity.activeCalls > 1 ? `${activity.activeCalls} concurrent calls` : activity.state === 'working' ? '1 active call' : 'Waiting for final calls';
-  const workspace = activity.workspace || 'Workspace';
-  element.innerHTML = `<span class="activity-pulse" aria-hidden="true"></span><strong>${escapeText(workspace)}</strong><span>${escapeText(toolLabel(activity.tool))}</span><span>${escapeText(calls)}</span><time id="taskElapsed"></time>`;
+  const tasks = Array.isArray(activity.tasks) ? activity.tasks : [];
+  const taskCount = Number(activity.activeTaskCount || tasks.length || 1);
+  const activeCalls = Number(activity.activeCalls || 0);
+  const calls = activity.state === 'working'
+    ? `${activeCalls} ${pluralize(activeCalls, 'active call')}`
+    : '60-second follow-up window';
+  const workspace = activityLocation(activity, tasks);
+  const taskLabel = `${taskCount} ${pluralize(taskCount, 'task')}`;
+  element.innerHTML = `<span class="activity-pulse" aria-hidden="true"></span><strong>${escapeText(taskLabel)}</strong><span>${escapeText(workspace)}</span><span>${escapeText(calls)}</span><time id="taskElapsed"></time>`;
   renderTemporalText();
 }
 
@@ -132,9 +161,8 @@ function renderEndpoint(view) {
     endpoint.className = 'endpoint-box';
     copyButton.disabled = false;
   } else {
-    endpoint.textContent = view.key === 'stopped'
-      ? 'Start the service to create a secure endpoint.'
-      : 'Waiting for a secure endpoint…';
+    endpoint.textContent = 'Waiting for a secure endpoint…';
+    if (view.key === 'stopped') endpoint.textContent = 'Start the service to create a secure endpoint.';
     endpoint.className = 'endpoint-box empty';
     copyButton.disabled = true;
   }
@@ -145,16 +173,23 @@ function renderConnectionHealth() {
   document.getElementById('localHealthState').textContent = currentStatus.serverRunning ? 'Running' : 'Stopped';
   document.getElementById('localService').textContent = currentStatus.localUrl || (currentStatus.serverRunning ? 'Running locally' : 'Not running');
 
-  const publicState = currentStatus.tunnelStatus === 'running'
-    ? 'ready'
-    : currentStatus.tunnelStatus === 'failed'
-      ? 'failed'
-      : currentStatus.tunnelStatus === 'connecting'
-        ? 'connecting'
-        : 'offline';
+  const publicState = publicHealthState(currentStatus.tunnelStatus);
   setHealthCard('publicHealthCard', publicState);
   document.getElementById('publicHealthState').textContent = tunnelLabel(currentStatus.tunnelStatus);
-  document.getElementById('tunnelDetail').textContent = currentStatus.mcpUrl ? 'HTTPS MCP ready' : publicState === 'connecting' ? 'Publishing tunnel' : 'Not connected';
+  document.getElementById('tunnelDetail').textContent = tunnelDetail(publicState, currentStatus.mcpUrl);
+}
+
+function publicHealthState(tunnelStatus) {
+  if (tunnelStatus === 'running') return 'ready';
+  if (tunnelStatus === 'failed') return 'failed';
+  if (tunnelStatus === 'connecting') return 'connecting';
+  return 'offline';
+}
+
+function tunnelDetail(publicState, mcpUrl) {
+  if (mcpUrl) return 'HTTPS MCP ready';
+  if (publicState === 'connecting') return 'Publishing tunnel';
+  return 'Not connected';
 }
 
 function setHealthCard(id, state) {
@@ -270,19 +305,23 @@ function toggleNotifications() {
   notificationsEnabled = !notificationsEnabled;
   localStorage.setItem('relai_status_notifications', notificationsEnabled ? 'on' : 'off');
   updateNotificationButton();
-  void syncNotificationPreference();
+  runAsync(syncNotificationPreference());
 }
 
 function diagnosticSummary() {
   const activity = currentStatus.taskActivity || {};
-  return [
-    `Rel.AI MCP ${currentStatus.version ? `v${currentStatus.version}` : ''}`.trim(),
-    `Local service: ${currentStatus.localUrl || (currentStatus.serverRunning ? 'running' : 'stopped')}`,
+  const versionLabel = currentStatus.version ? `v${currentStatus.version}` : '';
+  const serviceState = currentStatus.serverRunning ? 'running' : 'stopped';
+  const taskCount = activity.activeTaskCount || activity.tasks?.length || 0;
+  const lines = [
+    `Rel.AI MCP ${versionLabel}`.trim(),
+    `Local service: ${currentStatus.localUrl || serviceState}`,
     `Public tunnel: ${tunnelLabel(currentStatus.tunnelStatus)}`,
     `MCP endpoint: ${currentStatus.mcpUrl || 'unavailable'}`,
-    `Task activity: ${activity.state || 'idle'}${activity.workspace ? ` in ${activity.workspace}` : ''}`,
-    ...(currentStatus.error ? [`Error: ${currentStatus.error}`] : [])
-  ].join('\n');
+    `Task activity: ${activity.state || 'idle'} · ${taskCount} open task(s) · ${activity.activeCalls || 0} active call(s)`
+  ];
+  if (currentStatus.error) lines.push(`Error: ${currentStatus.error}`);
+  return lines.join('\n');
 }
 
 async function copyWithFeedback(button, text, successText = 'Copied') {
@@ -334,31 +373,37 @@ async function withBusy(button, label, action) {
 
 function bindEvents() {
   document.getElementById('copyBtn').addEventListener('click', () => {
-    if (currentStatus.mcpUrl) void copyWithFeedback(document.getElementById('copyBtn'), currentStatus.mcpUrl, 'Endpoint copied');
+    if (currentStatus.mcpUrl) runAsync(copyWithFeedback(document.getElementById('copyBtn'), currentStatus.mcpUrl, 'Endpoint copied'));
   });
   document.getElementById('serverToggleBtn').addEventListener('click', () => {
     const button = document.getElementById('serverToggleBtn');
     const stopping = currentStatus.serverRunning;
-    void withBusy(button, stopping ? 'Stopping…' : 'Starting…', () => stopping
+    runAsync(withBusy(button, stopping ? 'Stopping…' : 'Starting…', () => stopping
       ? window.electronAPI.stopServer()
-      : window.electronAPI.startServer());
+      : window.electronAPI.startServer()));
   });
   document.getElementById('retryBtn').addEventListener('click', () => {
-    void withBusy(document.getElementById('retryBtn'), 'Retrying…', () => window.electronAPI.startServer());
+    runAsync(withBusy(document.getElementById('retryBtn'), 'Retrying…', () => window.electronAPI.startServer()));
   });
   document.getElementById('notificationToggleBtn').addEventListener('click', toggleNotifications);
   document.getElementById('copyDiagnosticsBtn').addEventListener('click', () => {
-    void copyWithFeedback(document.getElementById('copyDiagnosticsBtn'), diagnosticSummary(), 'Details copied');
+    runAsync(copyWithFeedback(document.getElementById('copyDiagnosticsBtn'), diagnosticSummary(), 'Details copied'));
   });
   document.getElementById('dashboardBtn').addEventListener('click', () => {
-    void withBusy(document.getElementById('dashboardBtn'), 'Opening…', async () => {
+    runAsync(withBusy(document.getElementById('dashboardBtn'), 'Opening…', async () => {
       await window.electronAPI.openDashboard();
       return null;
-    });
+    }));
   });
   for (const id of ['settingsBtn', 'errorSettingsBtn']) {
     document.getElementById(id).addEventListener('click', () => window.electronAPI.openSettings());
   }
+}
+
+function runAsync(promise) {
+  Promise.resolve(promise).catch(error => {
+    if (localStorage.getItem('relai_debug') === '1') console.error(error);
+  });
 }
 
 function escapeText(value) {
@@ -374,4 +419,4 @@ window.electronAPI.onServerStatus(updateUI);
 initDisclosures();
 bindEvents();
 updateUI(currentStatus);
-void syncNotificationPreference();
+runAsync(syncNotificationPreference());

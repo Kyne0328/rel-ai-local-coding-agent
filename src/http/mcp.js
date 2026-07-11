@@ -78,7 +78,12 @@ function handleMcpGetDiagnostic(ctx) {
 async function handleMcpStreamable(ctx) {
   if (!isMcpAuthorized(ctx.req, ctx.options)) { unauthorizedMcp(ctx.res, resolveBaseUrl(ctx.options)); return; }
   const payload = await readJsonBody(ctx.req, ctx.options.maxBodyBytes);
-  const response = await handleJsonRpcPayload(payload, { publicHttpOnly: true });
+  const sessionId = streamableSessionId(ctx.req, payload);
+  if (sessionId) ctx.res.setHeader('Mcp-Session-Id', sessionId);
+  const response = await handleJsonRpcPayload(payload, {
+    publicHttpOnly: true,
+    taskScopeId: resolveTaskScopeId(ctx.req, payload, sessionId)
+  });
   if (response === null) { sendJson(ctx.res, 202, { ok: true, accepted: true }, ctx.ae); return; }
   sendJson(ctx.res, 200, response, ctx.ae);
 }
@@ -94,7 +99,10 @@ async function handleMcpMessages(ctx) {
   const session = sessions.get(sessionId);
   if (!session) { sendJson(ctx.res, 404, { ok: false, error: "Unknown or expired SSE session." }, ctx.ae); return; }
   const payload = await readJsonBody(ctx.req, ctx.options.maxBodyBytes);
-  const response = await handleJsonRpcPayload(payload, { publicHttpOnly: true });
+  const response = await handleJsonRpcPayload(payload, {
+    publicHttpOnly: true,
+    taskScopeId: resolveTaskScopeId(ctx.req, payload, sessionId)
+  });
   if (response !== null) sendSse(session.res, "message", response);
   sendJson(ctx.res, 202, { ok: true, accepted: true }, ctx.ae);
 }
@@ -138,14 +146,41 @@ function mcpGetDiagnostic(pathname, options, mcpAccess, req) {
 
 async function handleJsonRpcPayload(payload, options = {}) {
   if (Array.isArray(payload)) {
-    const responses = [];
-    for (const item of payload) {
-      const response = await handleMessage(item, options);
-      if (response) responses.push(response);
-    }
-    return responses.length > 0 ? responses : null;
+    const responses = await Promise.all(payload.map(item => handleMessage(item, options)));
+    const visible = responses.filter(Boolean);
+    return visible.length > 0 ? visible : null;
   }
   return handleMessage(payload, options);
+}
+
+function streamableSessionId(req, payload) {
+  const existing = req?.headers?.['mcp-session-id'];
+  if (existing) return String(Array.isArray(existing) ? existing[0] : existing);
+  const messages = Array.isArray(payload) ? payload : [payload];
+  return messages.some(message => message?.method === 'initialize') ? crypto.randomUUID() : '';
+}
+
+function resolveTaskScopeId(req, payload, explicitSessionId = '') {
+  const headers = req?.headers || {};
+  const headerValue = [
+    headers['mcp-session-id'],
+    headers['x-openai-conversation-id'],
+    headers['x-chatgpt-conversation-id'],
+    headers['openai-conversation-id'],
+    headers['x-openai-session-id']
+  ].map(value => Array.isArray(value) ? value[0] : value).find(Boolean);
+  const message = Array.isArray(payload) ? payload[0] : payload;
+  const meta = message?.params?._meta || message?._meta || {};
+  const metadataValue = [
+    meta['openai/conversationId'],
+    meta['openai/sessionId'],
+    meta.conversationId,
+    meta.sessionId
+  ].find(Boolean);
+  const authorization = String(headers.authorization || '');
+  const fallback = authorization || req?.socket?.remoteAddress || 'connector-default';
+  const source = String(explicitSessionId || headerValue || metadataValue || fallback);
+  return `mcp:${crypto.createHash('sha256').update(source).digest('hex').slice(0, 24)}`;
 }
 
 function openSseSession(res, req, messagePath = "/messages") {
@@ -185,5 +220,7 @@ module.exports = {
   handleMcpSse,
   handleMcpMessages,
   getMcpAccess,
-  handleJsonRpcPayload
+  handleJsonRpcPayload,
+  resolveTaskScopeId,
+  streamableSessionId
 };

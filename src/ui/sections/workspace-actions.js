@@ -14,6 +14,8 @@ const WORKSPACE_CLICK_ACTIONS = [
   { selector: '[data-clear-workspace]', handler: (trigger) => clearWorkspaceFlow(trigger.dataset.clearWorkspace || '') },
   { selector: '[data-prune-stale]', handler: (trigger) => pruneStaleTestsFlow(trigger.dataset.pruneStale || '') },
   { selector: '[data-preflight]', handler: runPreflightFromTrigger },
+  { selector: '[data-run-validation]', handler: runValidationFromTrigger },
+  { selector: '[data-open-folder]', handler: openFolderFromTrigger },
   { selector: '[data-save-detected]', handler: saveDetectedFromTrigger }
 ];
 
@@ -51,6 +53,23 @@ async function runPreflightFromTrigger(preflight) {
   if (out) { out.classList.add('open'); renderPreflight(out, result); }
   if (result?.ok === false) toast('Preflight needs attention: ' + (result.error || 'review the findings below'), { variant: 'warn' });
 } 
+
+async function runValidationFromTrigger(trigger) {
+  const alias = trigger.dataset.runValidation || '';
+  const result = await runButtonAction(trigger, {
+    idleText: 'Run validation', loadingText: 'Validating…', successText: 'Validation complete', errorText: 'Validation failed'
+  }, () => postJson('/api/workspace/checks', { workspace: alias }, { timeout: 0 }));
+  toast(result?.ok === false ? `Validation failed for ${alias}: ${result.error || 'review task details'}` : `Validation completed for ${alias}.`, { variant: result?.ok === false ? 'error' : 'success' });
+  requestDashboardRefresh();
+}
+
+async function openFolderFromTrigger(trigger) {
+  const alias = trigger.dataset.openFolder || '';
+  const result = await runButtonAction(trigger, {
+    idleText: 'Open folder', loadingText: 'Opening…', successText: 'Folder opened', errorText: 'Open failed'
+  }, () => postJson('/api/open-folder', { workspace: alias }));
+  if (result?.ok === false) toast(result.error || 'Folder opening is only available in the desktop app.', { variant: 'warn' });
+}
 
 async function saveDetectedFromTrigger(saveDetected) {
   const alias = saveDetected.dataset.saveDetected || '';

@@ -216,7 +216,9 @@ npm run oneclick -- --public-url https://your-domain.example  # permanent ChatGP
 
 The dashboard connector page prints the final ChatGPT MCP URL.
 
-In the packaged desktop app, **Open dashboard** now opens the full dashboard inside a secured Electron window. The same dashboard remains available in a normal browser at the local `/dashboard` route; Electron is simply the default desktop host, not a separate implementation.
+In the packaged desktop app, **Open dashboard** opens the full dashboard inside a secured Electron window. The same dashboard remains available in a normal browser at the local `/dashboard` route; Electron is the default desktop host, not a separate implementation. The desktop host exchanges a single-use bootstrap code for an HttpOnly local session cookie, so the long-lived dashboard token is not stored in the embedded renderer or left in its URL.
+
+The dashboard includes grouped **Tasks**, a lower-level **Activity log**, workspace-scoped filtering, operational Git and validation state, actionable diagnostics, live/reconnecting status, and persistent desktop window and route state. Task grouping is scoped per MCP session, supports concurrent ChatGPT work, and uses a renewable 60-second idle lease instead of closing after a short fixed delay.
 
 ### Choosing a tunnel provider
 
