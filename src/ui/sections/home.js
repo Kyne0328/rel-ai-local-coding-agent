@@ -19,8 +19,10 @@ function buildOverview(data) {
   const audit = sortedAudit(data.auditTail?.entries).filter(entry => !workspaceFilter || entry.workspace === workspaceFilter);
   const findings = actionableFindings(health);
   const endpoint = String(connection.chatgptMcpUrl || '');
+  const desktopStatus = data.desktopStatus || null;
+  const effectiveEndpoint = desktopStatus && desktopStatus.tunnelStatus !== 'running' ? '' : endpoint;
   const validationReady = workspaces.filter(hasValidation).length;
-  const bridgeState = resolveBridgeState({ endpoint, workspaces, findings });
+  const bridgeState = resolveBridgeState({ endpoint: effectiveEndpoint, workspaces, findings, desktopStatus });
 
   updateShell(data, workspaces.length);
 
@@ -28,7 +30,9 @@ function buildOverview(data) {
   root.className = 'section';
   const taskCard = taskActivityCard(data.taskActivity, tasks[0]);
   if (taskCard) root.appendChild(taskCard);
-  root.appendChild(connectionHero(bridgeState, endpoint, connection, workspaces));
+  root.appendChild(connectionHero(bridgeState, effectiveEndpoint, connection, workspaces));
+  const desktopCard = desktopRuntimeCard(desktopStatus);
+  if (desktopCard) root.appendChild(desktopCard);
 
   const metrics = document.createElement('div');
   metrics.className = 'overview-grid overview-grid-compact';
@@ -50,7 +54,31 @@ function buildOverview(data) {
   return root;
 }
 
-function resolveBridgeState({ endpoint, workspaces, findings }) {
+function resolveBridgeState({ endpoint, workspaces, findings, desktopStatus }) {
+  if (desktopStatus?.tunnelStatus === 'connecting') {
+    return {
+      tone: 'warn',
+      kicker: 'Secure connection',
+      title: 'Publishing the ChatGPT endpoint…',
+      description: 'The dashboard is ready locally while Rel.AI establishes the permanent HTTPS tunnel.'
+    };
+  }
+  if (desktopStatus?.error || desktopStatus?.tunnelStatus === 'failed') {
+    return {
+      tone: 'bad',
+      kicker: 'Connection needs attention',
+      title: 'The local dashboard is running, but the public endpoint failed.',
+      description: desktopStatus.error || 'Restart the desktop connection or review the recovery details.'
+    };
+  }
+  if (desktopStatus && !desktopStatus.serverRunning) {
+    return {
+      tone: 'warn',
+      kicker: 'Service stopped',
+      title: 'Rel.AI is not running.',
+      description: 'Restart the desktop service to restore the dashboard and ChatGPT connector.'
+    };
+  }
   if (!workspaces.length) {
     return {
       tone: 'warn',
@@ -121,6 +149,45 @@ function connectionHero(state, endpoint, connection, workspaces) {
     });
   }
   return hero;
+}
+
+function desktopRuntimeCard(status) {
+  if (!window.relaiDesktop || !status) return null;
+  const card = document.createElement('section');
+  const tunnel = status.tunnelStatus || 'stopped';
+  let tone = 'warn';
+  let tunnelLabel = 'Stopped';
+  if (tunnel === 'running') {
+    tone = 'ok';
+    tunnelLabel = 'Connected';
+  } else if (tunnel === 'connecting') {
+    tunnelLabel = 'Connecting';
+  } else if (tunnel === 'failed') {
+    tone = 'bad';
+    tunnelLabel = 'Failed';
+  }
+  card.className = 'card desktop-runtime-card';
+  card.innerHTML = `
+    <div class="card-head"><h3>Desktop service</h3><span class="status-pill ${tone}">${esc(tunnelLabel)}</span></div>
+    <div class="card-body connection-stack">
+      <div class="connection-facts">
+        <div class="connection-fact"><span class="connection-fact-label">Local service</span><span>${status.serverRunning ? 'Running' : 'Stopped'}</span></div>
+        <div class="connection-fact"><span class="connection-fact-label">Local address</span><code>${esc(status.localUrl || 'Not available')}</code></div>
+        <div class="connection-fact"><span class="connection-fact-label">Public tunnel</span><span>${esc(tunnelLabel)}</span></div>
+      </div>
+      ${status.error ? `<div class="connection-notice bad">${esc(status.error)}</div>` : ''}
+      <div class="connection-actions">
+        <button type="button" data-desktop-settings>Desktop settings</button>
+        <button class="secondary" type="button" data-desktop-restart>Restart connection</button>
+        <button class="secondary" type="button" data-desktop-recovery>Recovery details</button>
+        <button class="secondary" type="button" data-desktop-stop>Stop service</button>
+      </div>
+    </div>`;
+  card.querySelector('[data-desktop-settings]').onclick = () => window.relaiDesktop.openSettings();
+  card.querySelector('[data-desktop-restart]').onclick = () => window.relaiDesktop.restartService();
+  card.querySelector('[data-desktop-recovery]').onclick = () => window.relaiDesktop.openRecovery();
+  card.querySelector('[data-desktop-stop]').onclick = () => window.relaiDesktop.stopService();
+  return card;
 }
 
 function taskActivityCard(activity = {}, persistedTask = null) {

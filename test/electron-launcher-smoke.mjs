@@ -55,9 +55,13 @@ assert.ok(electronPkg.build.files.includes('managed-ngrok.js'), 'electron build 
 assert.ok(electronPkg.build.files.includes('window-smoke.js'), 'electron build must include packaged renderer smoke coverage');
 assert.ok(electronPkg.build.files.includes('tool-sleep-blocker.js'), 'electron build must include tool-call sleep prevention');
 assert.ok(electronPkg.build.files.includes('dashboard-window.js'), 'electron build must include the secured dashboard host');
+assert.ok(electronPkg.build.files.includes('dashboard-preload.js'), 'electron build must include the desktop dashboard bridge');
+assert.ok(electronPkg.build.files.includes('desktop-tray.js'), 'electron build must include the desktop tray controller');
 assert.ok(electronPkg.build.extraResources.some((item) => item.from === '../vendor/ngrok'), 'electron build must bundle ngrok seed binaries');
 
 const electronMain = fs.readFileSync(path.join(root, 'electron', 'main.js'), 'utf8');
+const desktopTray = fs.readFileSync(path.join(root, 'electron', 'desktop-tray.js'), 'utf8');
+const dashboardPreload = fs.readFileSync(path.join(root, 'electron', 'dashboard-preload.js'), 'utf8');
 assert.match(
   electronMain,
   /const \{ fitWindowToContent, WINDOW_SIZE_LIMITS \} = require\('\.\/window-size'\);/,
@@ -68,9 +72,19 @@ assert.match(electronMain, /createTaskActivityRuntime/, 'Electron main must bind
 assert.match(electronMain, /toolActivityRuntime\.stop\(\)/, 'tool activity runtime must stop during application shutdown');
 assert.match(electronMain, /setNotificationsEnabled: toolActivityRuntime\.setNotificationsEnabled/, 'the desktop notification toggle must control task alerts');
 assert.match(electronMain, /settings\.html/, 'normal settings must use a dedicated renderer instead of wizard edit mode');
-assert.match(electronMain, /onStatusChange: taskActivity => setStatus\(\{ taskActivity \}\)/, 'tool activity must be pushed into the status window');
+assert.match(electronMain, /onStatusChange: taskActivity => setStatus\(\{ taskActivity \}\)/, 'tool activity must be pushed into desktop surfaces');
 assert.match(electronMain, /createDashboardWindowManager/, 'Electron must host the dashboard in a dedicated window');
+assert.match(electronMain, /desktopTray\.setup\(\)/, 'the tray must exist independently of the recovery window');
+assert.match(electronMain, /if \(hasExistingConfig\(\)\) void launchConfiguredDesktop\(\)/, 'configured launches must open the dashboard-first desktop flow');
+assert.match(electronMain, /function launchConfiguredDesktop\(/, 'desktop startup must have a dashboard-first lifecycle');
+assert.match(electronMain, /function focusActiveWindow\(\)/, 'single-instance and notification focus must prefer the active application window');
+assert.match(electronMain, /if \(dashboardWindow\) dashboardWindow\.hide\(\);/, 'showing recovery status must hide the dashboard to avoid duplicate taskbar windows');
+assert.match(electronMain, /if \(statusWindow && !statusWindow\.isDestroyed\(\)\) statusWindow\.hide\(\);/, 'opening the dashboard must hide the recovery window');
 assert.match(electronMain, /getTaskActivity: toolActivityRuntime\.getStatus/, 'the web dashboard must receive the shared task model');
+assert.match(electronMain, /getDesktopStatus: \(\) => currentStatus/, 'the dashboard payload must receive live Electron connection state');
+assert.doesNotMatch(electronMain, /createStatusWindow\(\);\s*startServer\(\)/, 'configured startup must not open the legacy status window');
+assert.match(desktopTray, /Connection Recovery/, 'the tray must expose the legacy status surface only as recovery');
+assert.match(dashboardPreload, /exposeInMainWorld\('relaiDesktop'/, 'the dashboard preload must expose constrained desktop controls');
 assert.match(electronMain, /dashboard\?surface=desktop/, 'the embedded dashboard must identify the desktop surface without a token query');
 assert.doesNotMatch(electronMain, /shell\.openExternal\(`http:\/\/127\.0\.0\.1:.*dashboard/, 'Open Dashboard must not launch the system browser');
 

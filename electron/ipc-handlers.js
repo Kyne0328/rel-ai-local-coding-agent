@@ -1,9 +1,9 @@
 function registerIpcHandlers(deps) {
   const {
     ipcMain, BrowserWindow, clipboard, shell, saveLauncherConfig,
-    getWizardWindow, closeWizard, getStatusWindow, createStatusWindow,
-    startServer, stopServer, openSettingsWindow, openDashboardWindow,
-    getNotificationsEnabled, setNotificationsEnabled, fitWindowToContent
+    getWizardWindow, closeWizard, getStatusWindow,
+    startServer, stopServer, launchConfiguredDesktop, openSettingsWindow, openDashboardWindow,
+    showStatusWindow, getCurrentStatus, getNotificationsEnabled, setNotificationsEnabled, fitWindowToContent
   } = deps;
 
   ipcMain.handle('wizard:save-config', (_event, config) => {
@@ -13,11 +13,8 @@ function registerIpcHandlers(deps) {
 
   ipcMain.handle('wizard:done', async (_event, config) => {
     saveLauncherConfig(config);
-    if (config?.restart === true) stopServer({ silent: true });
     closeWizard();
-    const win = createStatusWindow();
-    if (win.webContents.isLoading()) win.webContents.once('did-finish-load', () => startServer());
-    else startServer();
+    await launchConfiguredDesktop({ restart: config?.restart === true });
     return { ok: true };
   });
   ipcMain.handle('wizard:cancel', () => { closeWizard(); return { ok: true }; });
@@ -27,6 +24,11 @@ function registerIpcHandlers(deps) {
   ipcMain.handle('server:stop', () => stopServer());
   ipcMain.handle('url:copy', (_event, url) => { clipboard.writeText(String(url || '')); return { ok: true }; });
   ipcMain.handle('url:open-dashboard', async () => openDashboardWindow());
+  ipcMain.handle('desktop:get-status', () => getCurrentStatus());
+  ipcMain.handle('desktop:open-settings', () => { openSettingsWindow(); return { ok: true }; });
+  ipcMain.handle('desktop:open-recovery', () => { showStatusWindow(); return { ok: true }; });
+  ipcMain.on('desktop:restart-service', () => { void launchConfiguredDesktop({ restart: true }); });
+  ipcMain.on('desktop:stop-service', () => { setImmediate(() => stopServer()); });
   ipcMain.handle('notifications:get-enabled', () => ({ ok: true, enabled: getNotificationsEnabled() }));
   ipcMain.handle('notifications:set-enabled', (_event, enabled) => ({ ok: true, enabled: setNotificationsEnabled(enabled) }));
   ipcMain.handle('url:open-link', (_event, url) => {

@@ -7,6 +7,13 @@ const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-dashboard-events-')
 const configPath = path.join(sandbox, 'config.json');
 const auditPath = path.join(sandbox, 'audit.jsonl');
 const token = 'dashboard-live-events-token';
+let desktopStatus = {
+  serverRunning: true,
+  tunnelStatus: 'connecting',
+  mcpUrl: '',
+  error: '',
+  localUrl: 'http://127.0.0.1:3333'
+};
 
 fs.writeFileSync(configPath, JSON.stringify({
   version: 2,
@@ -28,7 +35,13 @@ fs.writeFileSync(configPath, JSON.stringify({
 
 process.env.REL_AI_MCP_CONFIG = configPath;
 const { startHttpServer } = await import('../src/httpServer.js');
-const server = startHttpServer({ host: '127.0.0.1', port: 0, token, exitOnError: false });
+const server = startHttpServer({
+  host: '127.0.0.1',
+  port: 0,
+  token,
+  exitOnError: false,
+  getDesktopStatus: () => desktopStatus
+});
 const controller = new AbortController();
 
 try {
@@ -45,6 +58,7 @@ try {
   const stream = createEventReader(response.body.getReader());
   const initial = await stream.nextDashboardEvent();
   assert.equal(initial.ok, true);
+  assert.equal(initial.desktopStatus?.tunnelStatus, 'connecting');
 
   const entry = {
     ts: new Date().toISOString(),
@@ -60,6 +74,15 @@ try {
     updated.auditTail?.entries?.some(item => item.tool === 'relai_read' && item.workspace === 'test'),
     'dashboard SSE must emit newly appended audit entries without a manual refresh'
   );
+
+  desktopStatus = {
+    ...desktopStatus,
+    tunnelStatus: 'running',
+    mcpUrl: 'https://example.ngrok-free.dev/mcp'
+  };
+  const desktopUpdated = await stream.nextDashboardEvent();
+  assert.equal(desktopUpdated.desktopStatus?.tunnelStatus, 'running');
+  assert.equal(desktopUpdated.desktopStatus?.mcpUrl, 'https://example.ngrok-free.dev/mcp');
 } finally {
   controller.abort();
   await closeServer(server);

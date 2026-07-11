@@ -68,6 +68,7 @@ async function boot() {
   const routeRoot = ensureRouteRoot();
   if (!routeRoot) return;
   wireTopControls();
+  initDesktopBridge();
   window.addEventListener('relai:route-change', updateWorkspaceScope);
   if (initial?.ok !== false) {
     activateRouter(routeRoot);
@@ -112,6 +113,21 @@ function settingsSubPage() {
 function wireTopControls() {
   document.getElementById('refreshBtn')?.addEventListener('click', () => doRefresh({ source: 'manual', render: true }));
   document.getElementById('workspaceScope')?.addEventListener('change', event => setWorkspaceFilter(event.target.value));
+}
+
+function initDesktopBridge() {
+  const desktop = window.relaiDesktop;
+  if (!desktop) return;
+  desktop.onStatus(applyDesktopStatus);
+  desktop.getStatus().then(applyDesktopStatus).catch(debugError);
+}
+
+function applyDesktopStatus(status) {
+  if (!status) return;
+  const data = { ...getStore(), desktopStatus: status };
+  initStore(data);
+  updateShell(data);
+  if (_routerReady && !hasBlockingInteraction()) rerender();
 }
 
 async function doRefresh(options = {}) {
@@ -180,7 +196,7 @@ function updateShell(data) {
   const config = data?.config || {};
   const workspaces = Array.isArray(config.workspaces) ? config.workspaces : [];
   const task = data?.taskActivity || {};
-  const presentation = shellPresentation(data?.ok !== false, task, workspaces.length);
+  const presentation = shellPresentation(data?.ok !== false, task, workspaces.length, data?.desktopStatus);
   const subtitle = document.getElementById('subtitle');
   if (subtitle) subtitle.textContent = presentation.subtitle;
   setConnectionStatus(presentation.label, presentation.tone);
@@ -189,8 +205,14 @@ function updateShell(data) {
   renderLastEventTime();
 }
 
-function shellPresentation(ok, task, workspaceCount) {
+function shellPresentation(ok, task, workspaceCount, desktopStatus) {
   if (!ok) return { subtitle: 'The dashboard reported an error.', label: 'Error', tone: 'bad' };
+  if (desktopStatus?.tunnelStatus === 'connecting') {
+    return { subtitle: 'Local dashboard ready · publishing the ChatGPT endpoint', label: 'Connecting', tone: 'warn' };
+  }
+  if (desktopStatus?.error || desktopStatus?.tunnelStatus === 'failed') {
+    return { subtitle: desktopStatus.error || 'The public tunnel failed.', label: 'Needs attention', tone: 'bad' };
+  }
   const taskCount = Number(task.activeTaskCount || task.tasks?.length || 0) || 1;
   const callCount = Number(task.activeCalls || 0);
   if (task.state === 'working') {

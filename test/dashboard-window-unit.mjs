@@ -42,7 +42,8 @@ class FakeWindow {
   async loadURL(url) { this.webContents.url = url; }
   once(name, listener) { this.events.set(name, listener); }
   on(name, listener) { this.events.set(name, listener); }
-  show() { this.shown = true; }
+  show() { this.shown = true; this.hidden = false; }
+  hide() { this.hidden = true; }
   showInactive() { this.shownInactive = true; }
   moveTop() { this.movedTop = true; }
   focus() { this.focused = true; }
@@ -62,6 +63,7 @@ const dependencies = {
     focus() {}
   },
   dialog: { async showOpenDialog() { return { canceled: false, filePaths: [folderToOpen] }; } },
+  isQuitting: () => false,
   getConnection: async () => ({
     url: 'http://127.0.0.1:3333/dashboard?surface=desktop&bootstrap=one-time-code'
   })
@@ -73,6 +75,7 @@ try {
   assert.equal(windows.length, 1);
   assert.equal(win.options.webPreferences.nodeIntegration, false);
   assert.equal(win.options.webPreferences.contextIsolation, true);
+  assert.ok(win.options.webPreferences.preload.endsWith('dashboard-preload.js'));
   assert.equal(win.options.webPreferences.sandbox, true);
   assert.equal(win.options.webPreferences.partition, 'relai-dashboard');
   assert.equal(win.webContents.url, 'http://127.0.0.1:3333/dashboard?surface=desktop&bootstrap=one-time-code');
@@ -97,6 +100,10 @@ try {
   const reused = await manager.open();
   assert.equal(reused, win);
   assert.equal(windows.length, 1);
+  let closePrevented = false;
+  win.events.get('close')({ preventDefault() { closePrevented = true; } });
+  assert.equal(closePrevented, true);
+  assert.equal(win.hidden, true, 'normal close must hide the dashboard to the tray');
 
   manager.close();
   assert.equal(manager.getWindow(), null);

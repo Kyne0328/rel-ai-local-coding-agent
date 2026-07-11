@@ -5,7 +5,7 @@ const path = require('node:path');
 const { URL } = require('node:url');
 
 function createDashboardWindowManager(deps) {
-  const { BrowserWindow, shell, app, dialog, getConnection, onError = () => {} } = deps;
+  const { BrowserWindow, shell, app, dialog, getConnection, isQuitting = () => false, onError = () => {} } = deps;
   const userDataPath = typeof app.getPath === 'function' ? app.getPath('userData') : process.cwd();
   const statePath = path.join(userDataPath, 'dashboard-window-state.json');
   let dashboardWindow = null;
@@ -40,6 +40,7 @@ function createDashboardWindowManager(deps) {
       title: 'Rel.AI MCP Dashboard',
       backgroundColor: '#060912',
       webPreferences: {
+        preload: path.join(__dirname, 'dashboard-preload.js'),
         nodeIntegration: false,
         contextIsolation: true,
         sandbox: true,
@@ -54,7 +55,12 @@ function createDashboardWindowManager(deps) {
     dashboardWindow.once('ready-to-show', () => dashboardWindow?.show());
     dashboardWindow.on('resize', schedulePersist);
     dashboardWindow.on('move', schedulePersist);
-    dashboardWindow.on('close', persistBounds);
+    dashboardWindow.on('close', event => {
+      persistBounds();
+      if (isQuitting()) return;
+      event.preventDefault();
+      dashboardWindow.hide();
+    });
     dashboardWindow.on('closed', () => { dashboardWindow = null; });
     return dashboardWindow;
   }
