@@ -53,6 +53,7 @@ assert.ok(srcResource.filter.includes('**/*.js'), 'electron build must bundle sr
 assert.ok(srcResource.filter.includes('**/*.css'), 'electron build must bundle src UI CSS imported by public/dashboard.css');
 assert.ok(electronPkg.build.files.includes('managed-ngrok.js'), 'electron build must include managed ngrok launcher code');
 assert.ok(electronPkg.build.files.includes('window-smoke.js'), 'electron build must include packaged renderer smoke coverage');
+assert.ok(electronPkg.build.files.includes('tool-sleep-blocker.js'), 'electron build must include tool-call sleep prevention');
 assert.ok(electronPkg.build.extraResources.some((item) => item.from === '../vendor/ngrok'), 'electron build must bundle ngrok seed binaries');
 
 const electronMain = fs.readFileSync(path.join(root, 'electron', 'main.js'), 'utf8');
@@ -61,6 +62,9 @@ assert.match(
   /const \{ fitWindowToContent, WINDOW_SIZE_LIMITS \} = require\('\.\/window-size'\);/,
   'Electron main must import the window limits used by normal wizard and status startup'
 );
+assert.match(electronMain, /powerSaveBlocker/, 'Electron main must use the native sleep-prevention API');
+assert.match(electronMain, /bindToolActivitySleep/, 'Electron main must bind connector activity to native sleep prevention');
+assert.match(electronMain, /stopToolSleepBinding\(\)/, 'sleep prevention must stop during application shutdown');
 
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-gui-test-'));
 process.env.REL_AI_MCP_STATE_DIR = stateDir;

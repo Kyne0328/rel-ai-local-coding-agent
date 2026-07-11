@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage, powerSaveBlocker } = require('electron');
 const path = require('node:path');
 const { resolveResourcePath } = require('./resource-path');
 const { isPortAvailable, normalizeWizardConfig, saveLauncherConfig } = require('./launcher-config');
@@ -6,9 +6,11 @@ const { fitWindowToContent, WINDOW_SIZE_LIMITS } = require('./window-size');
 const { registerIpcHandlers } = require('./ipc-handlers');
 const { runInstalledSmoke, writeInstalledSmokeFailure } = require('./installed-smoke');
 const { runWindowSmoke } = require('./window-smoke');
+const { bindToolActivitySleep } = require('./tool-sleep-blocker');
 
 const srcPath = resolveResourcePath('src');
 const connection = require(path.join(srcPath, 'connectionProfile'));
+const toolActivity = require(path.join(srcPath, 'toolActivity'));
 const configModule = require(path.join(srcPath, 'config'));
 const { startHttpServer } = require(path.join(srcPath, 'httpServer'));
 const tunnelManager = require(path.join(srcPath, 'tunnelManager'));
@@ -31,6 +33,7 @@ let tunnelProcess = null;
 let startPromise = null;
 let lifecycleToken = 0;
 let isQuitting = false;
+const stopToolSleepBinding = bindToolActivitySleep({ toolActivity, powerSaveBlocker, isReady: () => app.isReady() });
 const BASE_STATUS = {
   serverRunning: false,
   tunnelStatus: 'stopped',
@@ -90,6 +93,7 @@ if (!gotLock) {
 
 app.on('before-quit', () => {
   isQuitting = true;
+  stopToolSleepBinding();
   stopServer({ silent: true });
 });
 
