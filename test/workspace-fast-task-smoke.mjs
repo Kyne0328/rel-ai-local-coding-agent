@@ -9,6 +9,7 @@ const require = createRequire(import.meta.url);
 const { normalizeConfig } = require('../src/config.js');
 const { updateWorkspace } = require('../src/configEditor.js');
 const { collectTextFiles } = require('../src/safety.js');
+const { repoSnapshot } = require('../src/localRepoBridge.js');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-fast-'));
 const configPath = path.join(tmp, 'config.json');
@@ -24,9 +25,12 @@ fs.writeFileSync(path.join(repo, '.relaiignore'), `tmp-cache/\n`);
 fs.mkdirSync(path.join(repo, 'tmp-cache'), { recursive: true });
 fs.writeFileSync(path.join(repo, 'tmp-cache', 'ignored.txt'), `ignored\n`);
 
-let config = normalizeConfig({ workspaces: { app: { path: repo } } });
+let config = normalizeConfig({ workspaces: { app: { path: repo, fastTask: { maxIndexFiles: 1, includeRoots: ['src'] } } } });
 assert.equal(config.workspaces.app.fastTask.enabled, true);
 assert.ok(config.workspaces.app.fastTask.excludePaths.includes('.dart_tool'));
+const snapshot = repoSnapshot({ alias: 'app', ...config.workspaces.app }, config);
+assert.equal(snapshot.effectiveMaxEntries, 1, 'workspace index limit must control the default repository overview size');
+assert.deepEqual(snapshot.files, ['src/app.js']);
 
 fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 let updated = updateWorkspace(config, { action: 'upsert', alias: 'app', path: repo, fastTask: { enabled: false, maxIndexFiles: 123, includeRoots: ['src'], excludePaths: ['custom-cache'] }, confirmDangerous: true });

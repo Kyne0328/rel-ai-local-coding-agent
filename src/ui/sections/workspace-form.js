@@ -45,8 +45,9 @@ export function openWorkspaceForm({ mode = 'add', workspace = null, onSaved } = 
   const form = document.createElement('form');
   form.className = 'ws-form';
   form.innerHTML = `
-    <label>Alias</label>
+    <label>Workspace alias${isEdit ? ' (fixed)' : ''}</label>
     <input name="alias" value="${esc(ws.alias || '')}" placeholder="for example jjclover" ${isEdit ? 'readonly' : ''} autocomplete="off">
+    <div class="ws-form-help">Used in ChatGPT tool calls. Remove and re-add the workspace to use a different alias.</div>
     <label>Workspace path</label>
     <div class="ws-form-row">
       <input class="ws-form-path" name="path" value="${esc(ws.path || '')}" placeholder="Absolute path to the repository" autocomplete="off">

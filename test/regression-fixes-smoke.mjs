@@ -62,7 +62,8 @@ assert.equal(getVersion(), latestChangelogVersion());
   assert.doesNotMatch(connector, /Open ChatGPT settings and add an MCP server[\s\S]*steps\.slice\(0, 3\)/);
 }
 
-// Tool count is derived from backend dashboard data; the Home fallback dead var is gone.
+// Tool count is derived from backend dashboard data; workspace cards no longer repeat
+// the global tool count as an unrelated workspace metric.
 {
   const cfg = normalizeConfig(makeDefaultConfig());
   const dashboard = productUx.dashboardData(cfg, { limit: 5 });
@@ -73,7 +74,7 @@ assert.equal(getVersion(), latestChangelogVersion());
   assert.equal(dashboard.config.localRepoBridge.visibleTools.length, 16);
   assert.ok(publicConfigSummary(cfg).localRepoBridge.visibleTools.includes('relai_edit'));
   assert.doesNotMatch(read('src/ui/sections/home.js'), /visibleToolCount/);
-  assert.match(read('src/ui/sections/workspace-cards.js'), /data\.toolCount/);
+  assert.doesNotMatch(read('src/ui/sections/workspace-cards.js'), /data\.toolCount|ChatGPT tools/);
 }
 
 // Audit-fix smoke guards for docs, UI copy, connector hints, and tunnel process safety.

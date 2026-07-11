@@ -9,6 +9,13 @@
 - **Track all active tool calls separately from connector-only calls, preserving accurate task status while keeping Electron's system-sleep blocker limited to authenticated connector activity.**
 - **Add regression coverage for compact sidebar layout, local task tracking, and legacy audit grouping; the complete validation suite passes all 58 test files.**
 
+### Workspace dashboard cleanup
+- **Replace the crowded workspace badge and button wall with a structured card showing repository identity, branch and worktree state, last validation, recent activity, automatic validation commands, repository policy, and a smaller set of useful actions.**
+- **Remove the separate Rename, Context settings, context-mode toggle, Git preflight, Save detected tests, and stale-test controls from the workspace UI; rename Clear to Remove workspace and keep repository files explicitly untouched.**
+- **Show the exact standard validation commands that Rel.AI will execute instead of legacy configured-test counts, and hide Run validation when no executable validation plan is detected.**
+- **Make the saved workspace index limit control the default repository overview size, and refresh command discovery when any supported project manifest changes rather than watching only package.json.**
+- **Hide the global workspace selector on pages where it has no effect, hide desktop-only folder actions in the browser, clear stale workspace filters after removal, scope health metrics to the selected workspace, and direct missing-token diagnostics to relevant connector guidance.**
+
 Bump root/electron/status UI/lockfiles to 0.19.2.
 
 ## [0.19.1] — 2026-07-11

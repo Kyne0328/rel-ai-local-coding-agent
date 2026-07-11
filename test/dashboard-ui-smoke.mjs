@@ -56,6 +56,7 @@ assert.match(preferencesCss, /prefers-reduced-motion/);
 
 const actionState = read('src/ui/action-state.js');
 const workspaceActions = read('src/ui/sections/workspace-actions.js');
+const workspaceCards = read('src/ui/sections/workspace-cards.js');
 const workspaceForm = read('src/ui/sections/workspace-form.js');
 const settingsShared = read('src/ui/sections/settings/shared.js');
 const settingsGeneral = read('src/ui/sections/settings/general.js');
@@ -63,6 +64,11 @@ assert.match(actionState, /runButtonAction/);
 assert.match(workspaceActions, /runButtonAction/);
 assert.match(workspaceForm, /runButtonAction/);
 assert.match(settingsShared, /runButtonAction/);
+assert.match(workspaceCards, /Automatic validation/);
+assert.match(workspaceCards, /validationCommands/);
+assert.match(workspaceCards, /Remove workspace/);
+assert.doesNotMatch(workspaceCards, /Configured tests|Context settings|Rename|Review Git state|Save detected tests|data-preflight/);
+assert.doesNotMatch(workspaceActions, /renameWorkspaceFlow|editFastTaskFlow|toggleFastTaskFlow|pruneStaleTestsFlow|runPreflightFromTrigger|saveDetectedFromTrigger/);
 assert.match(settingsGeneral, /Appearance/);
 assert.match(settingsGeneral, /Interface density/);
 assert.match(settingsGeneral, /Patch safeguards/);
@@ -71,6 +77,9 @@ assert.match(settingsGeneral, /Maximum stdout and stderr retained/);
 assert.doesNotMatch(settingsGeneral, /ChatGPT local repo bridge|Workspace update style|Focused edits and guarded writes|bundle|clearMissing|maxBundleBytes|settings-pending-button|__settings-changes-link/);
 assert.doesNotMatch(workspaceForm, /<style>|style="|style\.cssText/);
 assert.doesNotMatch(settingsShared, /style\.cssText|style="/);
+assert.match(dashboardCss, /workspace-grid-detailed/);
+assert.match(dashboardCss, /workspace-validation/);
+assert.match(dashboardCss, /workspace-remove/);
 
 const activity = read('src/ui/sections/activity.js');
 assert.match(activity, /activityWorkspaceFilter/);
@@ -86,6 +95,8 @@ assert.match(dashboardJs, /getWorkspaceFilter/);
 assert.match(dashboardJs, /Reconnecting/);
 assert.match(dashboardJs, /activeTaskCount/);
 assert.match(dashboardJs, /active tool call/);
+assert.match(dashboardJs, /supportsWorkspaceScope/);
+assert.match(dashboardJs, /select\.hidden = !supportsWorkspaceScope/);
 assert.match(dashboardJs, /relai_dashboard_route/);
 assert.match(dashboardServer, /stat\.mtimeMs.*stat\.size/s);
 

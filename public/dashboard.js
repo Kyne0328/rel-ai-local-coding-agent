@@ -221,6 +221,9 @@ function pluralLabel(count, singular) {
 function updateWorkspaceScope() {
   const select = document.getElementById('workspaceScope');
   if (!select) return;
+  const supportsWorkspaceScope = ['home', 'tasks', 'workspaces', 'activity'].includes(currentSection());
+  select.hidden = !supportsWorkspaceScope;
+  if (!supportsWorkspaceScope) return;
   const workspaces = getStore()?.config?.workspaces || [];
   const selected = getWorkspaceFilter();
   select.innerHTML = '<option value="">All workspaces</option>' + workspaces.map(workspace => `<option value="${escapeHtml(workspace.alias)}">${escapeHtml(workspace.alias)}</option>`).join('');
