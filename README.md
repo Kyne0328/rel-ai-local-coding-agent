@@ -20,13 +20,13 @@ The goal is simple: I want the reasoning power of ChatGPT on the web, but I stil
 ChatGPT asks -> Rel.AI MCP inspects, changes, validates, and reviews locally -> I inspect the diff -> I keep or restore it
 ```
 
-The default public ChatGPT workflow is intentionally small and predictable:
+The ChatGPT workflow is intentionally small and predictable:
 
 ```text
 relai_repo_snapshot -> relai_read -> relai_edit (replace/write/patch/batch) -> relai_run_checks -> relai_diff -> relai_restore_changes / relai_tidy_plan + relai_tidy_run
 ```
 
-No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. The public MCP surface stays limited to the workspace tools ChatGPT actually needs; a few extra helper tools remain available on local stdio sessions.
+No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. The MCP server exposes one 16-tool workspace surface across local and connector transports.
 
 When ChatGPT first edits a workspace, the server starts a session and records the pre-edit state, so later status/diff output can separate the files this session changed from files that were already modified. The session expires after a period of inactivity.
 
@@ -42,14 +42,14 @@ It can:
 
 - snapshot a filtered repo tree
 - read selected files or small directory summaries
-- write full files, apply exact localized replacements, clear obsolete files, and stage whole-file writes only when unavoidable
-- optionally apply prepared text updates or file bundles for larger workspace edits
-- run validation checks such as tests/analyzers
+- write full files, apply exact localized replacements, apply structured patches, and stage whole-file writes only when unavoidable
+- delete tracked files through structured patch operations
+- tidy session-owned untracked artifacts through an expiry-bound plan
+- run validation checks such as tests and analyzers
 - inspect git diffs
-- run explicit git status, fetch, commit, push, merge-planning, merge-abort, and PR-draft flows
-- scan for semantic refactor residue across source, tests, docs, UI, and data-shaped files
+- run explicit git status, commit, push, and PR-draft flows
 - restore local changes
-- expose packaging, readiness, and feature-probe helpers on the public workspace-tool surface
+- expose compact workspace readiness and status information
 - expose a local or public MCP URL for ChatGPT connectors
 
 It is built around the practical flow I kept needing:
@@ -97,7 +97,7 @@ The activity page is there because I got tired of guessing what the MCP server w
   <img src="docs/images/dashboard-tools-section.png" alt="Rel.AI MCP bridge tools" width="900">
 </p>
 
-The dashboard shows the public workspace tools ChatGPT can use for inspect, change, validate, review, git orchestration, packaging, tidy, and restore workflows. Internal helper tools are not part of the public MCP surface.
+The dashboard shows the 16 workspace tools ChatGPT can use for inspection, editing, validation, review, Git publishing, tidy, and restore workflows.
 
 ### Connector setup
 
@@ -247,7 +247,7 @@ See [docs/ONE_CLICK_SETUP.md](docs/ONE_CLICK_SETUP.md) for permanent-tunnel opti
 
 ## MCP tools
 
-Rel.AI exposes one curated public workspace-tool surface. `relai_edit` is the primary write path — it routes to exact replacement, full-file write, patch apply, or a batch of edits server-side, and can validate and return a diff in the same call. File cleanup is handled by the two-step `relai_tidy_plan` / `relai_tidy_run` workflow (the server selects bounded session-owned untracked candidates; callers never pass arbitrary delete paths). Additional tools (`relai_clear_files`, `relai_apply_update`, `relai_feature_probe`, `relai_git_fetch`, `relai_git_merge_branch`, `relai_git_merge_remote_branches_plan`, `relai_git_abort_merge`, `relai_remove_file`, `relai_refactor_audit`, `relai_set_policy`, `relai_session_summary`) remain callable on local stdio sessions but are hidden from the ChatGPT connector to keep the surface small.
+Rel.AI exposes one 16-tool workspace surface. `relai_edit` is the primary write path: it routes to exact replacement, full-file write, structured patch application, or a batch of edits server-side, and can validate and return a diff in the same call. Tracked-file deletion is supported through structured `Delete File` patches. Untracked cleanup uses the two-step `relai_tidy_plan` / `relai_tidy_run` workflow, where the server selects bounded session-owned candidates and verifies them again before deletion.
 
 | Tool | Purpose |
 | --- | --- |
@@ -258,8 +258,6 @@ Rel.AI exposes one curated public workspace-tool surface. `relai_edit` is the pr
 | `relai_replace` | Fallback: small exact text replacements inside an existing file. |
 | `relai_tidy_plan` | Read-only. Prepare a bounded tidy plan of session-owned untracked artifacts (server selects candidates). |
 | `relai_tidy_run` | Apply a prepared tidy plan by `planId` (expiry-bound and hash-checked before any change). |
-| `relai_apply_bundle` | Apply a prepared file bundle when many files need to be overlaid together. |
-| `relai_package_snapshot` | Create a workspace zip package on the MCP host. |
 | `relai_run_checks` | Run detected or requested validation checks. |
 | `relai_browser` | Run a browser/UI check or fetch a route. |
 | `relai_diff` | Review git status and diff. |
@@ -327,7 +325,6 @@ Use this guide together with the `writeGuidance` returned by `relai_repo_snapsho
 | Complete replacement of a file (any size) | `relai_edit` with `content` |
 | Multi-file patch-shaped change | `relai_edit` with `updateText` |
 | Several edits in one approval | `relai_edit` with `edits: [...]` |
-| Prepared file bundle update | `relai_apply_bundle` |
 | Tidy session-created files | `relai_tidy_plan` then `relai_tidy_run` |
 | Run validation | `relai_run_checks` |
 | Browser or UI route check | `relai_browser` |
@@ -340,7 +337,7 @@ Typical loop:
 inspect -> read -> change -> validate -> review -> restore only if needed
 ```
 
-For large or interpolation-heavy files, prefer `relai_edit` with `oldText`/`newText` for focused edits. Use `content` only when the entire file genuinely needs replacement. For multi-file patch-shaped changes, use `relai_edit` with `updateText`. For prepared bundles on the MCP host, use `relai_apply_bundle`.
+For large or interpolation-heavy files, prefer `relai_edit` with `oldText`/`newText` for focused edits. Use `content` only when the entire file genuinely needs replacement. For multi-file patch-shaped changes or tracked-file deletion, use `relai_edit` with `updateText`.
 
 ---
 
@@ -378,11 +375,15 @@ Preferred localized edit inside a large or interpolation-heavy source file:
 }
 ```
 
-Obsolete file file clearing:
+Tracked-file deletion uses a structured patch through `relai_edit`:
 
-```json
-{ "workspace": "myapp", "paths": ["docs/old-plan.md"] }
+```text
+*** Begin Patch
+*** Delete File: docs/old-plan.md
+*** End Patch
 ```
+
+Untracked artifacts created during the current session are removed only through `relai_tidy_plan` followed by `relai_tidy_run`.
 
 For long, large, or interpolation-heavy source files, prefer `relai_replace` for small exact edits. Use staged `relai_write` only when the whole file genuinely needs replacement. If a full-file or staged payload is too large, re-read the file and retry with smaller `relai_replace` operations. If a multiline source file is accidentally collapsed into one long line, the write is rejected instead of damaging formatting.
 

@@ -31,7 +31,6 @@ for (const file of walk(ciDir)) {
 
 const sourceLineBudgets = {
   'src/localRepoBridge.js': 900,
-  'src/bridge/archive.js': 120,
   'src/bridge/browser.js': 150,
   'src/bridge/patch.js': 400,
   'src/bridge/review.js': 100,

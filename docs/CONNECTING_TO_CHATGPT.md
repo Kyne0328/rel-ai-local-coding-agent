@@ -1,62 +1,56 @@
 # Connecting to ChatGPT
 
-Rel.AI MCP exposes a small local-repo bridge to ChatGPT. On the public connector surface, ChatGPT sees these 18 workspace tools:
+Rel.AI MCP exposes one 16-tool workspace surface across local MCP and the ChatGPT connector:
 
 - `relai_repo_snapshot`
 - `relai_read`
-- `relai_status`
-- `relai_diff`
-- `relai_edit`
 - `relai_write`
 - `relai_replace`
 - `relai_tidy_plan`
 - `relai_tidy_run`
-- `relai_apply_bundle`
-- `relai_package_snapshot`
 - `relai_run_checks`
 - `relai_browser`
+- `relai_diff`
 - `relai_restore_changes`
+- `relai_status`
 - `relai_git_status`
 - `relai_git_commit`
 - `relai_git_push`
 - `relai_git_create_pr`
+- `relai_edit`
 
-Use `relai_repo_snapshot` to inspect a configured workspace, `relai_read` to load exact files, and `relai_edit` for changes — it routes exact replacements, full-file writes, unified-diff updates, and batches automatically, with optional `runChecks`/`returnDiff` in the same call. `relai_write` and `relai_replace` remain as direct fallbacks. Use `relai_tidy_plan` then `relai_tidy_run` for cleanup, `relai_run_checks` for validation, `relai_diff` for review, and the `relai_git_*` tools for commit/push/PR flows.
+Use `relai_repo_snapshot` for repository context, `relai_read` for focused content, and `relai_edit` as the primary change tool. It supports exact replacement, complete-file content, structured patch updates, and batches, with optional validation and diff review in the same call. `relai_write` and `relai_replace` remain direct fallback tools.
 
-Internal helper tools (`relai_apply_update`, `relai_feature_probe`, `relai_git_fetch`, merge planning/abort, `relai_remove_file`, `relai_refactor_audit`, `relai_set_policy`, `relai_session_summary`) are intentionally not part of the public connector surface — fewer tools means less connector-classifier scrutiny. They remain callable on local stdio sessions.
+Tracked-file deletion is handled through a structured `Delete File` patch sent to `relai_edit`. Session-owned untracked artifacts are removed only through `relai_tidy_plan` followed by `relai_tidy_run`.
 
 ## Starting the server
 
-Three commands cover every case:
-
 ```bash
-npm run oneclick                                              # local dashboard / dev (no public URL)
-npm run oneclick -- --public                                  # temporary ChatGPT connector (auto tunnel)
-npm run oneclick -- --public-url https://your-domain.example  # permanent ChatGPT connector
+npm run oneclick                                              # local dashboard and development
+npm run oneclick -- --public                                  # temporary public connector
+npm run oneclick -- --public-url https://your-domain.example  # permanent public connector
 ```
 
-For ChatGPT you need a public HTTPS endpoint, so use `--public` (temporary) or `--public-url` (permanent). See [`docs/ONE_CLICK_SETUP.md`](ONE_CLICK_SETUP.md) for provider-specific tunnel options.
+ChatGPT requires a public HTTPS endpoint. Use `--public` for a temporary tunnel or `--public-url` for a stable endpoint. See [ONE_CLICK_SETUP.md](ONE_CLICK_SETUP.md) for tunnel options.
 
 ## Adding the connector in ChatGPT
 
-Add the connector with **Authentication: OAuth**. ChatGPT opens a sign-in page served by your local server — enter your Rel.AI **dashboard token** (`REL_AI_MCP_TOKEN`) to approve the connection. There is no secret in the URL.
+1. Start Rel.AI MCP and open the dashboard.
+2. Copy the MCP URL ending in `/mcp`.
+3. In ChatGPT, open **Settings > Apps > Create**.
+4. Add the MCP URL and select **OAuth** authentication.
+5. When the Rel.AI authorization page opens, enter the dashboard token from `REL_AI_MCP_TOKEN`.
 
-The MCP URL looks like:
+Example MCP URL:
 
 ```text
 https://your-domain.example/mcp
 ```
 
-ChatGPT discovers the OAuth endpoints automatically (`/.well-known/oauth-protected-resource`). OAuth requires the server to be reachable over HTTPS, so use a stable public URL/tunnel.
-
-Opening plain `/mcp` in a browser only shows a diagnostic. Use the printed `COPY THIS FOR CHATGPT` URL or the dashboard connector card.
-
-The dashboard URL (`/dashboard`) is not the MCP URL. ChatGPT needs the `/mcp` path, not the dashboard path.
+ChatGPT discovers the OAuth endpoints through `/.well-known/oauth-protected-resource`. Opening `/mcp` in a browser displays only a diagnostic; the dashboard URL is not the MCP endpoint.
 
 ## Tunnel requirement
 
-Use a stable HTTPS tunnel (such as ngrok with a static domain, or a Cloudflare Tunnel with your own domain). Do not expose plain HTTP to the internet. ChatGPT requires HTTPS for connectors.
-
-See [`docs/ONE_CLICK_SETUP.md`](ONE_CLICK_SETUP.md) for tunnel setup options.
+Use a stable HTTPS tunnel such as ngrok with a static domain or Cloudflare Tunnel with your own domain. Do not expose plain HTTP to the public internet.
 
 Maintained by [@Kyne0328](https://github.com/Kyne0328).

@@ -71,17 +71,14 @@ if (dashboardFindings.length) {
 }
 
 // --- 2. Check required terms are present in dashboard JSON ---
-const hasStandardOrPrepared = /\b(standard|prepared)\b/.test(dashboardJson);
-if (!hasStandardOrPrepared) {
+if (!Array.isArray(dashboardData?.tools) || dashboardData.tools.length !== 16) {
   child.kill('SIGKILL');
-  console.error('Dashboard wording smoke test FAILED — dashboard JSON must contain "standard" or "prepared" as workflow mode');
+  console.error('Dashboard wording smoke test FAILED — dashboard JSON must expose exactly 16 active tools');
   process.exit(1);
 }
-
-// Verify specific shape of new fields
-if (!dashboardData?.workflow?.mode) {
+if (dashboardJson.includes('prepared') || dashboardJson.includes('apply_bundle')) {
   child.kill('SIGKILL');
-  console.error('Dashboard wording smoke test FAILED — dashboard JSON must contain workflow.mode');
+  console.error('Dashboard wording smoke test FAILED — obsolete prepared/bundle workflow wording remains');
   process.exit(1);
 }
 

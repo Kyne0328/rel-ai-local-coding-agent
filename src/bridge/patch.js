@@ -4,8 +4,8 @@ const { runProcess, summarizeCommand } = require("../process");
 const { resolveSafePath, writeTextFileSafe, fileSha256 } = require("../safety");
 const { appendOperation, makeOperationId } = require("../journal");
 const {
-  assertPreparedUpdateSafe, ensureGitRepo, requireCleanGitIfConfigured,
-  shouldMakePreparedBackup, makePreparedBackup, tempStatePath, validatePatchPaths
+  assertPatchUpdateSafe, ensureGitRepo, requireCleanGitIfConfigured,
+  shouldMakePatchBackup, makePatchBackup, tempStatePath, validatePatchPaths
 } = require("../repo/gitOps");
 const { clampNumber } = require("./limits");
 const { relaiVerify, hasRequestedChecks } = require("./validation");
@@ -15,7 +15,7 @@ const DEFAULT_MAX_DIFF_BYTES = 1024 * 1024;
 
 async function relaiApplyPatch(workspace, config, args = {}) {
   const rawPatch = String(args.patch || args.diff || args.updateText || "");
-  assertPreparedUpdateSafe(workspace, config, args, rawPatch);
+  assertPatchUpdateSafe(workspace, config, args, rawPatch);
   if (/^\*\*\* Begin Patch\b/m.test(rawPatch)) {
     return applyStructuredOpenAIPatch(workspace, config, args, rawPatch);
   }
@@ -55,7 +55,7 @@ async function relaiApplyPatch(workspace, config, args = {}) {
     };
   }
   let backup = null;
-  if (shouldMakePreparedBackup(config, args)) backup = await makePreparedBackup(workspace, config, operationId, "patch");
+  if (shouldMakePatchBackup(config, args)) backup = await makePatchBackup(workspace, config, operationId, "patch");
   // Capture content hashes before apply so changedFiles reflects ACTUAL changes,
   // not every path the patch touches — a semantic no-op patch applies cleanly but
   // must report changedFiles:[].
@@ -119,7 +119,7 @@ function handleOpenAIPatchSection(lines, i, out) {
     return i;
   }
   if (delMatch) {
-    throw new Error(`OpenAI patch 'Delete File' is not supported in relai_apply_update. Use relai_clear_files { paths: ["${delMatch[1].trim()}"] } instead.`);
+    throw new Error(`Delete File cannot be converted to a unified diff for ${delMatch[1].trim()}. Pass the structured OpenAI patch directly to relai_edit updateText.`);
   }
   return i + 1;
 }
@@ -130,7 +130,7 @@ async function applyStructuredOpenAIPatch(workspace, config, args, rawPatch) {
   await requireCleanGitIfConfigured(workspace, config, args);
   const operationId = makeOperationId();
   let backup = null;
-  if (shouldMakePreparedBackup(config, args)) backup = await makePreparedBackup(workspace, config, operationId, "patch");
+  if (shouldMakePatchBackup(config, args)) backup = await makePatchBackup(workspace, config, operationId, "patch");
   const changedFiles = [];
   for (const operation of document.operations) {
     applyStructuredPatchOperation(workspace, args, operation, changedFiles);

@@ -1,7 +1,7 @@
 export type ToolName = string;
 export type ToolGroup = 'git' | 'audit' | 'cleanup';
-export type AuditKind = '' | 'snapshot' | 'read' | 'path' | 'clearPaths' | 'checks' | 'policy' | 'edit';
-export type CacheKind = '' | 'workspace' | 'paths' | 'clearPaths' | 'policy' | 'edit';
+export type AuditKind = '' | 'snapshot' | 'read' | 'path' | 'checks' | 'edit';
+export type CacheKind = '' | 'paths' | 'edit';
 export type SummaryKind = '' | 'checks' | 'diff' | 'edit';
 
 export interface JsonSchema {
@@ -52,9 +52,7 @@ export interface ToolDefinition {
   inputSchema: ObjectJsonSchema;
   annotations: ToolAnnotations;
   handler: string;
-  public: boolean;
-  publicOrder: number;
-  publicStrip: string[];
+  connectorStrip: string[];
   groups: ToolGroup[];
   behavior: ToolBehavior;
   dashboard: ToolDashboardMetadata;
@@ -76,7 +74,6 @@ export interface ToolArgs extends Record<string, unknown> {
   stage?: string;
   updateText?: string;
   edits?: Array<{ path?: string }>;
-  clear?: boolean;
 }
 
 export interface ToolResult extends Record<string, unknown> {

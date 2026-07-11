@@ -57,9 +57,10 @@ assert.match(workspaceForm, /runButtonAction/);
 assert.match(settingsShared, /runButtonAction/);
 assert.match(settingsGeneral, /Appearance/);
 assert.match(settingsGeneral, /Interface density/);
-assert.match(settingsGeneral, /Prepared update safeguards/);
-assert.match(settingsGeneral, /Applies only to prepared patches and zip bundles/);
-assert.doesNotMatch(settingsGeneral, /ChatGPT local repo bridge|Workspace update style|Focused edits and guarded writes/);
+assert.match(settingsGeneral, /Patch safeguards/);
+assert.match(settingsGeneral, /These settings are active defaults/);
+assert.match(settingsGeneral, /Maximum stdout and stderr retained/);
+assert.doesNotMatch(settingsGeneral, /ChatGPT local repo bridge|Workspace update style|Focused edits and guarded writes|bundle|clearMissing|maxBundleBytes|settings-pending-button|__settings-changes-link/);
 assert.doesNotMatch(workspaceForm, /<style>|style="|style\.cssText/);
 assert.doesNotMatch(settingsShared, /style\.cssText|style="/);
 
@@ -80,8 +81,14 @@ assert.match(tools, /id="toolsSearch"/);
 assert.match(tools, /class="tools-grid"/);
 assert.match(tools, /toolCapability/);
 assert.match(tools, /View parameters/);
+assert.match(tools, /updateFilterCounts/);
+assert.match(tools, /public tools/);
+assert.doesNotMatch(tools, /relai_apply_bundle|relai_package_snapshot/);
+assert.match(tools, /Showing \$\{visible\.length\} of \$\{_tools\.length\} tools/);
+assert.match(tools, /aria-pressed/);
 assert.match(interactionsCss, /\.tool-card/);
 assert.match(interactionsCss, /\.tools-filter\.active/);
+assert.doesNotMatch(interactionsCss, /settings-pending-button/);
 assert.match(toolSchema, /title: definition\.title/);
 
 console.log('Dashboard UI smoke test passed.');

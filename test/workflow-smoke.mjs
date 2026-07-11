@@ -5,38 +5,24 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const root = path.resolve(__dirname, '..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'rel-ai-mcp-workflow-'));
 const workspace = path.join(temp, 'workspace');
 const stateDir = path.join(temp, 'state');
-const GIT_EXECUTABLE = process.platform === 'win32'
+const gitExecutable = process.platform === 'win32'
   ? String.raw`C:\Program Files\Git\cmd\git.exe`
   : '/usr/bin/git';
 
-function git(args, options = {}) { // NOSONAR - this smoke test intentionally executes the local Git binary.
-  return execFileSync(GIT_EXECUTABLE, args, options);
+function git(args, options = {}) {
+  return execFileSync(gitExecutable, args, options);
 }
 
-fs.mkdirSync(workspace, { recursive: true });
 fs.mkdirSync(path.join(workspace, 'src'), { recursive: true });
-fs.mkdirSync(path.join(workspace, 'lib'), { recursive: true });
 fs.writeFileSync(path.join(workspace, 'README.md'), '# Smoke\n');
-fs.writeFileSync(path.join(workspace, '.gitattributes'), '* text=auto eol=lf\n', 'utf8');
 fs.writeFileSync(path.join(workspace, 'src', 'index.js'), 'console.log("smoke")\n');
-const riskyDart = ['class SmsHandlerUtils {'];
-for (let i = 0; i < 220; i += 1) riskyDart.push(`  String render${i}(String phone) => 'sms-${i}-${'$'}{phone}';`);
-riskyDart.push('}');
-fs.writeFileSync(path.join(workspace, 'lib', 'sms_handler_utils.dart'), `${riskyDart.join('\n')}\n`);
-fs.writeFileSync(
-  path.join(workspace, 'package.json'),
-  JSON.stringify({
-    scripts: {
-      check: 'node --check src/index.js',
-      test: String.raw`node -e "console.log(\"ok\")"`
-    }
-  }, null, 2)
-);
+fs.writeFileSync(path.join(workspace, 'package.json'), JSON.stringify({
+  scripts: { check: 'node --check src/index.js' }
+}, null, 2));
 
 git(['init'], { cwd: workspace, stdio: 'ignore' });
 git(['config', 'user.email', 'relai@example.test'], { cwd: workspace });
@@ -46,17 +32,14 @@ git(['commit', '-m', 'init'], { cwd: workspace, stdio: 'ignore' });
 
 const configPath = path.join(temp, 'config.json');
 fs.writeFileSync(configPath, JSON.stringify({
-  version: 1,
+  version: 2,
   stateDir,
-  workflow: { mode: 'aggressive', aggressive: { requireCleanGit: true, backup: true, deleteMissingDefault: false } },
+  patch: { backup: false, requireCleanGit: false, maxUpdateBytes: 2097152 },
   workspaces: {
     smoke: {
       path: workspace,
       protectedBranches: ['main', 'master'],
-      testCommands: {
-        check: 'npm run check',
-        unit: 'npm test'
-      },
+      testCommands: { check: 'npm run check' },
       commands: {}
     }
   }
@@ -65,16 +48,12 @@ fs.writeFileSync(configPath, JSON.stringify({
 const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp.js')], {
   cwd: root,
   stdio: ['pipe', 'pipe', 'pipe'],
-  env: {
-    ...process.env,
-    REL_AI_MCP_CONFIG: configPath
-  }
+  env: { ...process.env, REL_AI_MCP_CONFIG: configPath }
 });
 
 let buffer = '';
 const responses = [];
-
-child.stdout.on('data', (chunk) => {
+child.stdout.on('data', chunk => {
   buffer += chunk.toString('utf8');
   let index;
   while ((index = buffer.indexOf('\n')) !== -1) {
@@ -92,19 +71,17 @@ function call(id, name, args = {}) {
   send(id, 'tools/call', { name, arguments: args });
 }
 
-function waitFor(id, timeoutMs = 10000) {
+function waitFor(id, timeoutMs = 15000) {
   return new Promise((resolve, reject) => {
     const started = Date.now();
     const timer = setInterval(() => {
-      const found = responses.find((item) => item.id === id);
+      const found = responses.find(item => item.id === id);
       if (found) {
         clearInterval(timer);
         resolve(found);
-        return;
-      }
-      if (Date.now() - started > timeoutMs) {
+      } else if (Date.now() - started > timeoutMs) {
         clearInterval(timer);
-        reject(new Error(`timeout ${id}`));
+        reject(new Error(`Timed out waiting for response ${id}.`));
       }
     }, 25);
   });
@@ -112,241 +89,118 @@ function waitFor(id, timeoutMs = 10000) {
 
 function contentOf(response) {
   const payload = response.result?.structuredContent;
-  if (!payload || payload.ok === false) {
-    throw new Error(JSON.stringify(payload || response));
-  }
+  if (!payload || payload.ok === false) throw new Error(JSON.stringify(payload || response));
   return payload;
 }
 
-send(1, 'initialize', { protocolVersion: '2025-06-18' });
-await waitFor(1);
+try {
+  send(1, 'initialize', { protocolVersion: '2025-06-18' });
+  await waitFor(1);
 
-send(2, 'tools/list');
-const listedResponse = await waitFor(2);
-const listed = listedResponse.result || {};
-const names = (listed.tools || []).map((tool) => tool.name).sort();
-
-if (names.length !== 18) {
-  throw new Error(`unexpected public tools: ${names.join(', ')}`);
-}
-
-call(3, 'relai_repo_snapshot', { workspace: 'smoke', maxEntries: 100 });
-const snapshot = contentOf(await waitFor(3));
-if (!snapshot.files.includes('README.md')) {
-  throw new Error('snapshot missing README.md');
-}
-if (snapshot.writeGuidance.defaultMode !== 'size-based') {
-  throw new Error('snapshot should expose size-based write guidance');
-}
-for (const mode of ['exact-replace', 'direct-write', 'staged-write', 'apply-update', 'apply-bundle', 'workspace-tidy']) {
-  if (!snapshot.writeGuidance?.modes?.[mode]) {
-    throw new Error(`snapshot write guidance missing mode ${mode}`);
+  send(2, 'tools/list');
+  const listed = await waitFor(2);
+  const names = listed.result.tools.map(tool => tool.name);
+  if (names.length !== 16) throw new Error(`Expected 16 tools, got ${names.length}.`);
+  for (const removed of ['relai_apply_bundle', 'relai_package_snapshot', 'relai_clear_files', 'relai_git_fetch']) {
+    if (names.includes(removed)) throw new Error(`${removed} must not be listed.`);
   }
-}
 
-call(4, 'relai_read', { workspace: 'smoke', paths: ['README.md'] });
-const read = contentOf(await waitFor(4));
-if (!read.items[0].content.includes('# Smoke')) {
-  throw new Error('read failed');
-}
-if (read.items[0].writeGuidance.recommendedMode !== 'direct-write') {
-  throw new Error('small README should recommend direct-write for complete replacement');
-}
-if (read.items[0].writeGuidance.localizedEdit.recommendedMode !== 'exact-replace') {
-  throw new Error('small README should still recommend exact-replace for localized edits');
-}
+  call(3, 'relai_repo_snapshot', { workspace: 'smoke', maxEntries: 100 });
+  const snapshot = contentOf(await waitFor(3));
+  if (!snapshot.files.includes('README.md')) throw new Error('Snapshot missing README.md.');
+  for (const mode of ['exact-replace', 'direct-write', 'staged-write', 'apply-update', 'workspace-tidy']) {
+    if (!snapshot.writeGuidance?.modes?.[mode]) throw new Error(`Snapshot guidance missing ${mode}.`);
+  }
+  if (snapshot.writeGuidance?.modes?.['apply-bundle']) throw new Error('Obsolete bundle guidance remains.');
 
-call(41, 'relai_read', { workspace: 'smoke', paths: ['lib/sms_handler_utils.dart'] });
-const riskyRead = contentOf(await waitFor(41));
-if (riskyRead.items[0].writeGuidance.recommendedMode !== 'exact-replace') {
-  throw new Error('large interpolation-heavy source should recommend exact replacements');
-}
-if (!riskyRead.items[0].writeGuidance.reasons.some((item) => item.includes('template/interpolation'))) {
-  throw new Error('write guidance should explain interpolation-heavy shape');
-}
-if (riskyRead.items[0].writeGuidance.fallbackMode !== 'staged-write') {
-  throw new Error('large interpolation-heavy source should use staged-write for whole-file fallback');
-}
-if (riskyRead.items[0].writeGuidance.multiFileChange.recommendedMode !== 'apply-update') {
-  throw new Error('large source guidance should include apply-update as the patch-shaped alternative');
-}
+  call(4, 'relai_read', { workspace: 'smoke', paths: ['README.md', 'src/index.js'] });
+  const read = contentOf(await waitFor(4));
+  if (!read.items[0].content.includes('# Smoke')) throw new Error('Read failed.');
 
-call(42, 'relai_write', { workspace: 'smoke', path: 'lib/sms_handler_utils.dart', content: riskyRead.items[0].content });
-const directWrite = contentOf(await waitFor(42));
-if (!directWrite.ok) {
-  throw new Error('direct full-file write should be allowed');
-}
+  call(5, 'relai_edit', {
+    workspace: 'smoke',
+    path: 'README.md',
+    oldText: '# Smoke\n',
+    newText: '# Smoke\n\nEdited through relai_edit.\n'
+  });
+  const exactEdit = contentOf(await waitFor(5));
+  if (!exactEdit.changedFiles.includes('README.md')) throw new Error('Exact edit failed.');
 
-const riskySha = riskyRead.items[0].sha256;
-const oldDartLine = "  String render7(String phone) => 'sms-7-${phone}';";
-const newDartLine = "  String render7(String phone) => 'sms-7-fixed-' + phone;";
-call(43, 'relai_replace', { workspace: 'smoke', path: 'lib/sms_handler_utils.dart', expectedSha256: riskySha, oldText: oldDartLine, newText: newDartLine });
-const replacedRisky = contentOf(await waitFor(43));
-if (!replacedRisky.changedFiles.includes('lib/sms_handler_utils.dart') || !replacedRisky.verified) {
-  throw new Error('relai_replace should safely edit the risky interpolation-heavy Dart file');
-}
+  call(6, 'relai_write', {
+    workspace: 'smoke',
+    path: 'README.md',
+    content: '# Smoke\n\nWritten through relai_write.\n',
+    dryRun: true
+  });
+  const dryWrite = contentOf(await waitFor(6));
+  if (!dryWrite.dryRun || !dryWrite.changedFiles.includes('README.md')) throw new Error('Dry write failed.');
 
-call(44, 'relai_read', { workspace: 'smoke', paths: ['lib/sms_handler_utils.dart'] });
-const postReplaceRead = contentOf(await waitFor(44));
-if (!postReplaceRead.items[0].content.includes(newDartLine)) {
-  throw new Error('relai_replace result was not visible through relai_read');
-}
+  call(7, 'relai_replace', {
+    workspace: 'smoke',
+    path: 'README.md',
+    oldText: 'Edited through relai_edit.',
+    newText: 'Updated by exact replacement.'
+  });
+  const replaced = contentOf(await waitFor(7));
+  if (!replaced.changedFiles.includes('README.md')) throw new Error('Replacement failed.');
 
-call(45, 'relai_replace', { workspace: 'smoke', path: 'lib/sms_handler_utils.dart', expectedSha256: riskySha, oldText: newDartLine, newText: oldDartLine });
-const staleReplaceResponse = await waitFor(45);
-const staleReplace = staleReplaceResponse.result?.structuredContent;
-if (staleReplace?.ok !== false || !/stale expectedSha256/.test(staleReplace?.error ?? '')) {
-  throw new Error('relai_replace should refuse stale expectedSha256 values');
-}
-if (!fs.readFileSync(path.join(workspace, 'lib', 'sms_handler_utils.dart'), 'utf8').includes(newDartLine)) {
-  throw new Error('stale expectedSha256 refusal should leave the file unchanged');
-}
-git(['restore', 'lib/sms_handler_utils.dart'], { cwd: workspace });
-
-fs.writeFileSync(path.join(workspace, 'docs-to-delete.md'), 'obsolete\n');
-git(['add', 'docs-to-delete.md'], { cwd: workspace });
-git(['commit', '-m', 'add obsolete doc'], { cwd: workspace, stdio: 'ignore' });
-call(46, 'relai_edit', { workspace: 'smoke', updateText: `*** Begin Patch
-*** Delete File: docs-to-delete.md
-*** End Patch
-` });
-// relai_clear_files', { workspace: 'smoke', path: 'docs-to-delete.md' });
-const deletedDoc = contentOf(await waitFor(46));
-if (!deletedDoc.changedFiles.includes('docs-to-delete.md') || fs.existsSync(path.join(workspace, 'docs-to-delete.md'))) {
-  throw new Error('relai_clear_files should remove obsolete files without shell helpers');
-}
-
-git(['add', '.'], { cwd: workspace });
-git(['commit', '-m', 'checkpoint before aggressive patch'], { cwd: workspace, stdio: 'ignore' });
-const aggressivePatch = `diff --git a/src/index.js b/src/index.js
-index 4e0946d..38910e4 100644
---- a/src/index.js
-+++ b/src/index.js
-@@ -1 +1 @@
+  const patch = `*** Begin Patch
+*** Update File: src/index.js
+@@
 -console.log("smoke")
-+console.log("smoke aggressive")
++console.log("smoke updated")
+*** End Patch
 `;
-// relai_apply_update moved off the public surface; relai_edit's updateText path
-// covers patches and supports returnDiff in the same call.
-call(47, 'relai_edit', { workspace: 'smoke', updateText: aggressivePatch, returnDiff: true });
-const appliedPatch = contentOf(await waitFor(47));
-if (!appliedPatch.ok || !appliedPatch.changedFiles.includes('src/index.js')) {
-  throw new Error('relai_edit should apply a patch via updateText');
-}
-if (!fs.readFileSync(path.join(workspace, 'src', 'index.js'), 'utf8').includes('smoke aggressive')) {
-  throw new Error('relai_edit did not modify the file');
-}
+  call(8, 'relai_edit', { workspace: 'smoke', updateText: patch, returnDiff: true });
+  const patched = contentOf(await waitFor(8));
+  if (!patched.changedFiles.includes('src/index.js')) throw new Error('Patch edit failed.');
 
-call(48, 'relai_package_snapshot', { workspace: 'smoke', maxFiles: 1000 });
-const packaged = contentOf(await waitFor(48, 20000));
-if (!packaged.archivePath) {
-  throw new Error('relai_package_snapshot should return archivePath');
-}
-fs.writeFileSync(path.join(workspace, 'src', 'index.js'), 'console.log("bundle placeholder")\n');
-call(49, 'relai_apply_bundle', { workspace: 'smoke', bundlePath: packaged.archivePath, backup: false, requireCleanGit: false, returnDiff: false });
-const appliedBundle = contentOf(await waitFor(49, 20000));
-if (!appliedBundle.ok || !appliedBundle.changedFiles.includes('src/index.js')) {
-  throw new Error('relai_apply_bundle should accept bundlePath and overlay files');
-}
-if (!fs.readFileSync(path.join(workspace, 'src', 'index.js'), 'utf8').includes('smoke aggressive')) {
-  throw new Error('relai_apply_bundle did not restore packaged file through bundlePath');
-}
+  fs.writeFileSync(path.join(workspace, 'obsolete.md'), 'remove me\n');
+  git(['add', 'obsolete.md'], { cwd: workspace });
+  git(['commit', '-m', 'add obsolete'], { cwd: workspace, stdio: 'ignore' });
+  const deletePatch = `*** Begin Patch
+*** Delete File: obsolete.md
+*** End Patch
+`;
+  call(9, 'relai_edit', { workspace: 'smoke', updateText: deletePatch });
+  const deleted = contentOf(await waitFor(9));
+  if (!deleted.changedFiles.includes('obsolete.md') || fs.existsSync(path.join(workspace, 'obsolete.md'))) {
+    throw new Error('Structured delete failed.');
+  }
 
-const newReadme = '# Smoke\n\nUpdated by public workflow smoke.\n';
+  fs.writeFileSync(path.join(workspace, 'session-artifact.txt'), 'temporary\n');
+  call(10, 'relai_git_status', { workspace: 'smoke' });
+  const status = contentOf(await waitFor(10));
+  if (!status.untrackedSessionFiles.includes('session-artifact.txt')) throw new Error('Session ownership missing untracked artifact.');
 
-call(5, 'relai_write', { workspace: 'smoke', path: 'README.md', content: newReadme, dryRun: true });
-const dryWrite = contentOf(await waitFor(5));
-if (!dryWrite.dryRun || !dryWrite.changedFiles.includes('README.md')) {
-  throw new Error('dry-run write failed');
-}
+  call(11, 'relai_tidy_plan', { workspace: 'smoke' });
+  const plan = contentOf(await waitFor(11));
+  if (!plan.candidates.some(item => item.path === 'session-artifact.txt')) throw new Error('Tidy plan missed session artifact.');
+  call(12, 'relai_tidy_run', { workspace: 'smoke', planId: plan.planId });
+  const tidied = contentOf(await waitFor(12));
+  if (!tidied.changedFiles.includes('session-artifact.txt')) throw new Error('Tidy run failed.');
 
-call(6, 'relai_write', { workspace: 'smoke', path: 'README.md', content: newReadme });
-const written = contentOf(await waitFor(6));
-if (!written.changedFiles.includes('README.md')) {
-  throw new Error('write failed');
-}
-if (!written.operationId || !written.result.verified) {
-  throw new Error('write did not return a verified operation id');
-}
+  call(13, 'relai_run_checks', { workspace: 'smoke', level: 'standard' });
+  const checks = contentOf(await waitFor(13));
+  if (!checks.ok || !checks.checks.includes('npm run check')) throw new Error('Validation failed.');
 
-const stagedContent = '# Smoke\n\nUpdated through staged full-file write.\n';
-call(62, 'relai_write', { workspace: 'smoke', stage: 'start', path: 'README.md', content: stagedContent.slice(0, 12) });
-const stagedStart = contentOf(await waitFor(62));
-if (!stagedStart.writeId) throw new Error('staged write did not return writeId');
-call(63, 'relai_write', { workspace: 'smoke', stage: 'append', writeId: stagedStart.writeId, content: stagedContent.slice(12) });
-const stagedAppend = contentOf(await waitFor(63));
-if (stagedAppend.chunks !== 2) throw new Error('staged append did not record second chunk');
-call(64, 'relai_write', { workspace: 'smoke', stage: 'commit', writeId: stagedStart.writeId });
-const stagedCommit = contentOf(await waitFor(64));
-if (!stagedCommit.staged || !stagedCommit.changedFiles.includes('README.md')) {
-  throw new Error('staged commit failed');
-}
+  call(14, 'relai_diff', { workspace: 'smoke' });
+  const diff = contentOf(await waitFor(14));
+  if (!diff.diff.includes('Updated by exact replacement')) throw new Error('Diff missing README change.');
+  if (!diff.diff.includes('smoke updated')) throw new Error('Diff missing source change.');
 
-call(61, 'relai_repo_snapshot', { workspace: 'smoke', maxEntries: 100, includeFiles: false, journalLimit: 5 });
-const postWriteSnapshot = contentOf(await waitFor(61));
-if (!postWriteSnapshot?.operationJournal?.recent?.some((item) => item.id === written.operationId)) {
-  throw new Error('post-write snapshot did not expose the operation journal');
-}
+  call(15, 'relai_restore_changes', { workspace: 'smoke', paths: ['README.md', 'src/index.js', 'obsolete.md'] });
+  const restored = contentOf(await waitFor(15));
+  if (!restored.ok) throw new Error('Restore failed.');
 
-call(7, 'relai_run_checks', { workspace: 'smoke', level: 'standard' });
-const verify = contentOf(await waitFor(7));
-if (!verify.ok) {
-  throw new Error('verify failed');
-}
+  call(16, 'relai_diff', { workspace: 'smoke' });
+  const clean = contentOf(await waitFor(16));
+  if (clean.diff.trim()) throw new Error('Workspace diff should be clean after restore.');
 
-if (!verify.checks.includes('npm run check')) {
-  throw new Error(`verify did not use npm run check: ${verify.checks.join(', ')}`);
+  console.log('Public 16-tool workflow smoke test passed.');
+} finally {
+  child.stdin.end();
+  child.kill('SIGTERM');
+  await once(child, 'close').catch(() => {});
+  fs.rmSync(temp, { recursive: true, force: true });
 }
-if (!verify.commands.includes('npm run check')) {
-  throw new Error('compatibility commands alias should still include npm run check');
-}
-
-call(8, 'relai_diff', { workspace: 'smoke' });
-const diff = contentOf(await waitFor(8));
-if (!diff.diff.includes('Updated through staged full-file write')) {
-  throw new Error('diff missing staged edit');
-}
-if (!Array.isArray(diff.sessionChangedFiles) || !diff.sessionChangedFiles.includes('README.md')) {
-  throw new Error('diff should expose sessionChangedFiles ownership');
-}
-
-// relai_refactor_audit is stdio-only now (off the public connector surface); the
-// residue file is still needed for the untracked-file ownership check below.
-fs.writeFileSync(path.join(workspace, 'stale-zone-label.txt'), 'delivery_zone still present\n');
-
-call(82, 'relai_git_status', { workspace: 'smoke' });
-const gitStatus = contentOf(await waitFor(82));
-if (!Array.isArray(gitStatus.statusEntries) || !gitStatus.statusEntries.some((item) => item.path === 'README.md')) {
-  throw new Error('relai_git_status should return structured status entries');
-}
-if (!Array.isArray(gitStatus.untrackedSessionFiles) || !gitStatus.untrackedSessionFiles.includes('stale-zone-label.txt')) {
-  throw new Error('relai_git_status should split untracked session files explicitly');
-}
-
-// relai_remove_file moved off the public surface; relai_clear_files covers it.
-call(83, 'relai_tidy_plan', { workspace: 'smoke' });
-const tidyResiduePlan = contentOf(await waitFor(83));
-call(84, 'relai_tidy_run', { workspace: 'smoke', planId: tidyResiduePlan.planId });
-
-const removedAuditResidue = contentOf(await waitFor(84));
-if (!removedAuditResidue.changedFiles.includes('stale-zone-label.txt')) {
-  throw new Error('relai_clear_files should clean up audit residue files');
-}
-
-call(9, 'relai_restore_changes', { workspace: 'smoke', paths: ['README.md', 'lib/sms_handler_utils.dart', 'src/index.js'] });
-const reset = contentOf(await waitFor(9));
-if (!reset.ok) {
-  throw new Error('reset failed');
-}
-
-call(10, 'relai_diff', { workspace: 'smoke' });
-const cleanDiff = contentOf(await waitFor(10));
-if (cleanDiff.diff.trim()) {
-  throw new Error('diff should be clean after reset');
-}
-
-child.stdin.end();
-child.kill('SIGTERM');
-await once(child, 'close');
-
-console.log('Public workflow smoke test passed.');

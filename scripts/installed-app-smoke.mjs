@@ -71,10 +71,10 @@ try {
   assert.equal(result.ok, true, result.error || 'Installed application smoke failed.');
   assert.equal(result.isPackaged, true);
   assert.equal(result.dashboardStatus, 200);
-  assert.ok(result.publicToolCount > 0);
+  assert.equal(result.publicToolCount, 16);
   assert.ok(Object.values(result.resourceChecks).every(Boolean), 'One or more packaged resources are missing.');
   assert.equal(result.health?.ok, true);
-  console.log(`Installed application smoke passed for v${result.version} with ${result.publicToolCount} public tools and both renderer windows.`);
+  console.log(`Installed application smoke passed for v${result.version} with ${result.publicToolCount} tools and both renderer windows.`);
 } finally {
   if (uninstaller && fs.existsSync(uninstaller)) {
     spawnSync(uninstaller, ['/S'], { cwd: path.dirname(uninstaller), env, encoding: 'utf8', timeout: 3 * 60 * 1000 });

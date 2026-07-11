@@ -54,7 +54,6 @@
   .settings-summary { padding: var(--space-3); text-align: left; line-height: 1.55; }
   .settings-summary strong { color: var(--text); }
   .settings-warning { border-color: rgba(90,166,255,.35); background: var(--blue-dim); }
-  .settings-pending-button { order: -1; }
 
   .settings-panel-intro {
     display: grid;
