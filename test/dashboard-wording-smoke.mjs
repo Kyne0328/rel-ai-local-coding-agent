@@ -71,9 +71,9 @@ if (dashboardFindings.length) {
 }
 
 // --- 2. Check required terms are present in dashboard JSON ---
-if (!Array.isArray(dashboardData?.tools) || dashboardData.tools.length !== 16) {
+if (!Array.isArray(dashboardData?.tools) || dashboardData.tools.length !== 17) {
   child.kill('SIGKILL');
-  console.error('Dashboard wording smoke test FAILED — dashboard JSON must expose exactly 16 active tools');
+  console.error('Dashboard wording smoke test FAILED — dashboard JSON must expose exactly 17 active tools');
   process.exit(1);
 }
 if (!Array.isArray(dashboardData?.taskActivity?.tasks) || typeof dashboardData?.taskActivity?.activeTaskCount !== 'number') {

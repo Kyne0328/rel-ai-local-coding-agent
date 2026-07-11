@@ -22,6 +22,7 @@ function debugSwallow(context, error) {
 const AUDIT_ENRICHERS = Object.freeze({
   edit: enrichEditAudit,
   checks: enrichChecksAudit,
+  completion: enrichCompletionAudit,
   path: enrichPathAudit,
   read: enrichReadAudit,
   snapshot: enrichSnapshotAudit
@@ -61,6 +62,13 @@ function enrichChecksAudit(extra, value) {
   assignTruthy(extra, "validationLevelReason", value?.validationLevelReason);
   assignDefined(extra, "aliasNormalizations", value?.aliasNormalizations);
   if (value?.policy) extra.policySessionActive = value.policy.sessionActive;
+}
+
+function enrichCompletionAudit(extra, value) {
+  assignDefined(extra, "completionKnown", value?.completionKnown === true);
+  assignTruthy(extra, "endReason", value?.endReason);
+  assignTruthy(extra, "taskSummary", value?.summary);
+  assignTruthy(extra, "validationAt", value?.validationAt);
 }
 
 function enrichPathAudit(extra, _value, args) {

@@ -52,14 +52,17 @@ send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '
 const init = await waitFor(1);
 if (!init.result?.capabilities?.tools) throw new Error('initialize did not advertise tools capability');
 if (!init.result?.capabilities?.resources) throw new Error('initialize did not advertise resources capability');
+if (!String(init.result?.instructions || '').includes('relai_complete_task')) {
+  throw new Error('initialize did not advertise the explicit final-completion contract');
+}
 
 send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
 const list = await waitFor(2);
-if (!Array.isArray(list.result?.tools) || list.result.tools.length !== 16) {
-  throw new Error(`tools/list should expose the 16 active workspace tools, got ${list.result?.tools?.length}`);
+if (!Array.isArray(list.result?.tools) || list.result.tools.length !== 17) {
+  throw new Error(`tools/list should expose the 17 active workspace tools, got ${list.result?.tools?.length}`);
 }
 const names = list.result.tools.map((item) => item.name).sort((a, b) => a.localeCompare(b));
-const expected = ['relai_browser', 'relai_diff', 'relai_edit', 'relai_git_commit', 'relai_git_create_pr', 'relai_git_push', 'relai_git_status', 'relai_read', 'relai_replace', 'relai_repo_snapshot', 'relai_restore_changes', 'relai_run_checks', 'relai_status', 'relai_tidy_plan', 'relai_tidy_run', 'relai_write'].sort((a, b) => a.localeCompare(b));
+const expected = ['relai_browser', 'relai_complete_task', 'relai_diff', 'relai_edit', 'relai_git_commit', 'relai_git_create_pr', 'relai_git_push', 'relai_git_status', 'relai_read', 'relai_replace', 'relai_repo_snapshot', 'relai_restore_changes', 'relai_run_checks', 'relai_status', 'relai_tidy_plan', 'relai_tidy_run', 'relai_write'].sort((a, b) => a.localeCompare(b));
 if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error(`Unexpected tool list: ${names.join(', ')}`);
 const writeTool = list.result.tools.find((item) => item.name === 'relai_write');
 if (!writeTool.inputSchema?.properties?.content || writeTool.inputSchema?.properties?.edits) throw new Error('relai_write schema should expose content and not expose edits');

@@ -28,14 +28,17 @@ const tracker = createToolActivityTracker({
 });
 tracker.onToolActivity(event => trackerEvents.push(event));
 
-const finishRead = tracker.beginConnectorToolCall({ tool: 'relai_read', workspace: 'repo', scopeId: 'conversation-a' });
+const finishRead = tracker.beginConnectorToolCall({ tool: 'relai_read', workspace: 'repo', scopeId: 'conversation-a', operation: 'Reading src/app.js' });
+assert.equal(tracker.getToolActivity().tasks.find(task => task.id === finishRead.taskId)?.operation, 'Reading src/app.js');
+finishRead.update({ operation: 'Reading src/config.js' });
+assert.equal(tracker.getToolActivity().tasks.find(task => task.id === finishRead.taskId)?.operation, 'Reading src/config.js');
 const finishChecks = tracker.beginConnectorToolCall({ tool: 'relai_run_checks', workspace: 'other', scopeId: 'conversation-b' });
 assert.notEqual(finishRead.taskId, finishChecks.taskId, 'separate conversation scopes must create separate tasks');
 assert.equal(tracker.getToolActivity().activeConnectorCalls, 2);
 assert.equal(tracker.getToolActivity().activeTaskCount, 2);
 finishRead();
 finishChecks();
-assert.equal(tracker.getToolActivity().state, 'settling');
+assert.equal(tracker.getToolActivity().state, 'waiting');
 assert.equal(timers.size, 2);
 
 nowValue = 30_000;
@@ -49,10 +52,11 @@ nowValue = 91_000;
 for (const { callback } of [...timers.values()]) callback();
 timers.clear();
 assert.equal(tracker.getToolActivity().state, 'idle');
-const completed = trackerEvents.filter(event => event.phase === 'completed').map(event => event.task);
-assert.equal(completed.length, 2);
-assert.equal(completed.find(task => task.taskId === finishRead.taskId)?.calls, 2);
-assert.equal(completed.find(task => task.taskId === finishChecks.taskId)?.calls, 1);
+const inactive = trackerEvents.filter(event => event.phase === 'inactive').map(event => event.task);
+assert.equal(inactive.length, 2);
+assert.equal(inactive.find(task => task.taskId === finishRead.taskId)?.calls, 2);
+assert.equal(inactive.find(task => task.taskId === finishChecks.taskId)?.calls, 1);
+assert.equal(inactive.every(task => task.status === 'inactive' && task.endReason === 'inactivity_window'), true);
 
 let nextId = 40;
 const started = new Set();
@@ -101,7 +105,7 @@ runtime.setNotificationsEnabled(false);
 runtimeStatus = { state: 'working', activeConnectorCalls: 1, activeTaskCount: 1, tasks: [{ id: 'task', state: 'working', activeCalls: 1 }] };
 boundListener({ phase: 'started', activeConnectorCalls: 1 });
 assert.equal(started.has(41), true);
-runtimeStatus = { state: 'settling', activeConnectorCalls: 0, activeTaskCount: 1, tasks: [{ id: 'task', state: 'settling', activeCalls: 0 }] };
+runtimeStatus = { state: 'waiting', activeConnectorCalls: 0, activeTaskCount: 1, tasks: [{ id: 'task', state: 'waiting', activeCalls: 0 }] };
 boundListener({ phase: 'finished', activeConnectorCalls: 0, ok: true });
 assert.equal(started.has(41), false);
 assert.equal(runtime.getStatus().activeTaskCount, 1);

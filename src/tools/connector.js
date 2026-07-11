@@ -106,6 +106,7 @@ function compactForConnector(name, value, _args) {
         validated: value.validated,
         validationStatus: value.validationStatus,
         message: value.message,
+        nextAction: value.nextAction,
         fullOutput: value.fullOutput
       });
     }

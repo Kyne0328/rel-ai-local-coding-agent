@@ -1,8 +1,8 @@
 export type ToolName = string;
 export type ToolGroup = 'git' | 'audit' | 'cleanup';
-export type AuditKind = '' | 'snapshot' | 'read' | 'path' | 'checks' | 'edit';
+export type AuditKind = '' | 'snapshot' | 'read' | 'path' | 'checks' | 'edit' | 'completion';
 export type CacheKind = '' | 'paths' | 'edit';
-export type SummaryKind = '' | 'checks' | 'diff' | 'edit';
+export type SummaryKind = '' | 'checks' | 'diff' | 'edit' | 'completion';
 
 export interface JsonSchema {
   type?: string | string[];
@@ -14,6 +14,8 @@ export interface JsonSchema {
   maximum?: number;
   minItems?: number;
   maxItems?: number;
+  minLength?: number;
+  maxLength?: number;
 }
 
 export interface ObjectJsonSchema extends JsonSchema {
@@ -88,6 +90,12 @@ export interface ToolResult extends Record<string, unknown> {
   items?: Array<{ cacheHit?: boolean }>;
   effectiveMaxEntries?: number;
   budgetMultiplied?: boolean;
+  completionKnown?: boolean;
+  endReason?: string;
+  summary?: string;
+  validationAt?: string;
+  changedFiles?: string[];
+  nextAction?: string;
 }
 
 export type AppConfig = Record<string, unknown> & {

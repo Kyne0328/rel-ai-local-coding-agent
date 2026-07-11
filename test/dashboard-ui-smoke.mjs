@@ -28,7 +28,7 @@ assert.match(interactionsCss, /@layer dashboard-interactions/);
 
 assert.match(dashboardServer, /PRIMARY_NAV_ITEMS/);
 assert.match(dashboardServer, /SECONDARY_NAV_ITEMS/);
-assert.match(dashboardServer, /id: "tasks", label: "Tasks"/);
+assert.match(dashboardServer, /id: "tasks", label: "Sessions"/);
 assert.match(dashboardServer, /id: "reference", label: "Reference"/);
 assert.match(dashboardServer, /renderDashboardNav/);
 assert.match(dashboardServer, /id="workspaceScope"/);
@@ -80,6 +80,17 @@ assert.doesNotMatch(settingsShared, /style\.cssText|style="/);
 assert.match(dashboardCss, /workspace-grid-detailed/);
 assert.match(dashboardCss, /workspace-validation/);
 assert.match(dashboardCss, /workspace-remove/);
+
+const home = read('src/ui/sections/home.js');
+const sessions = read('src/ui/sections/tasks.js');
+assert.match(home, /Connector online/);
+assert.match(home, /does not infer ChatGPT\\'s private reasoning/);
+assert.match(home, /No Rel\.AI tool call is active/);
+assert.doesNotMatch(home, /Last task completed|Completes after 60s|ChatGPT is working/);
+assert.match(sessions, /Work sessions/);
+assert.match(sessions, /completion was not reported|completion not reported/);
+assert.match(sessions, /Running operations/);
+assert.doesNotMatch(sessions, /task remains open for 60 seconds|Grouped tool calls/);
 
 const activity = read('src/ui/sections/activity.js');
 assert.match(activity, /activityWorkspaceFilter/);

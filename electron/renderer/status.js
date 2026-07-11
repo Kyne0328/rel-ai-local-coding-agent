@@ -5,7 +5,7 @@ let currentStatus = {
   error: '',
   localUrl: '',
   version: '',
-  taskActivity: { state: 'idle', activeCalls: 0, activeTaskCount: 0, tasks: [], workspace: '', tool: '', startedAt: null, lastTask: null }
+  taskActivity: { state: 'idle', activeCalls: 0, activeTaskCount: 0, tasks: [], workspace: '', tool: '', operation: '', completionKnown: false, startedAt: null, lastTask: null }
 };
 let previousConnectionKey = '';
 let notificationsEnabled = localStorage.getItem('relai_status_notifications') !== 'off';
@@ -25,9 +25,9 @@ function requestWindowFit() {
 function connectionView(status) {
   if (status.serverRunning && status.tunnelStatus === 'running' && status.mcpUrl) {
     return {
-      key: 'ready', badge: 'Connected', eyebrow: 'Connected and ready',
-      title: 'Rel.AI can now receive workspace tasks from ChatGPT.',
-      description: 'Open the dashboard to manage repositories and review task activity. Copy the endpoint only when adding or reconnecting Rel.AI in ChatGPT.'
+      key: 'ready', badge: 'Connected', eyebrow: 'Connector online',
+      title: 'Rel.AI is available to ChatGPT.',
+      description: 'The endpoint is authenticated and reachable. Rel.AI reports exact tool activity, but it cannot observe ChatGPT reasoning or infer when the overall chat request is finished.'
     };
   }
   if (status.serverRunning && status.tunnelStatus === 'connecting') {
@@ -55,39 +55,41 @@ function heroView(status) {
   const activity = status.taskActivity || {};
   const taskCount = Math.max(1, Number(activity.activeTaskCount || activity.tasks?.length || 0));
   if (activity.state === 'working') return workingHero(activity, taskCount);
-  if (activity.state === 'settling') return settlingHero(activity, taskCount);
+  if (activity.state === 'waiting' || activity.state === 'settling') return waitingHero(activity, taskCount);
   return connectionView(status);
 }
 
 function workingHero(activity, taskCount) {
-  const title = taskCount > 1 ? `${taskCount} ChatGPT tasks are running.` : 'ChatGPT is working.';
+  const title = taskCount > 1
+    ? `${activity.activeCalls || taskCount} Rel.AI tool calls are running.`
+    : activity.operation || toolLabel(activity.tool);
   return {
     key: 'working',
-    badge: `${taskCount} running`,
-    eyebrow: 'ChatGPT activity',
+    badge: `${activity.activeCalls || taskCount} running`,
+    eyebrow: 'Observed Rel.AI activity',
     title,
     description: activityDescription(activity, false)
   };
 }
 
-function settlingHero(activity, taskCount) {
+function waitingHero(activity, taskCount) {
   return {
-    key: 'settling',
-    badge: `${taskCount} open`,
-    eyebrow: 'ChatGPT activity',
-    title: `${taskCount} ${pluralize(taskCount, 'task')} waiting for follow-up calls.`,
+    key: 'waiting',
+    badge: `${taskCount} waiting`,
+    eyebrow: 'Observed Rel.AI activity',
+    title: 'No Rel.AI tool call is active.',
     description: activityDescription(activity, true)
   };
 }
 
-function activityDescription(activity, settling) {
+function activityDescription(activity, waiting) {
   const tasks = Array.isArray(activity.tasks) ? activity.tasks : [];
   const taskCount = Number(activity.activeTaskCount || tasks.length || 1);
   const activeCalls = Number(activity.activeCalls || 0);
   const location = activityLocation(activity, tasks);
-  if (settling) return 'The task remains grouped for 60 seconds after its latest tool call. Any follow-up call renews that window.';
+  if (waiting) return 'ChatGPT may still be reasoning, waiting for approval, or already finished. Rel.AI cannot determine that from tool traffic alone.';
   if (taskCount > 1) return `${activeCalls} ${pluralize(activeCalls, 'active tool call')} across ${location}. The computer stays awake while calls are running.`;
-  return `${toolLabel(activity.tool)} in ${location}. The computer stays awake until the active tool call finishes.`;
+  return `${activity.operation || toolLabel(activity.tool)} in ${location}. The computer stays awake until the tool call returns.`;
 }
 
 function activityLocation(activity, tasks) {
@@ -136,7 +138,7 @@ function updateUI(status) {
 function renderTaskMeta() {
   const activity = currentStatus.taskActivity || {};
   const element = document.getElementById('taskMeta');
-  const active = activity.state === 'working' || activity.state === 'settling';
+  const active = activity.state === 'working' || activity.state === 'waiting' || activity.state === 'settling';
   element.hidden = !active;
   if (!active) return;
   const tasks = Array.isArray(activity.tasks) ? activity.tasks : [];
@@ -144,9 +146,9 @@ function renderTaskMeta() {
   const activeCalls = Number(activity.activeCalls || 0);
   const calls = activity.state === 'working'
     ? `${activeCalls} ${pluralize(activeCalls, 'active call')}`
-    : '60-second follow-up window';
+    : 'no active Rel.AI call';
   const workspace = activityLocation(activity, tasks);
-  const taskLabel = `${taskCount} ${pluralize(taskCount, 'task')}`;
+  const taskLabel = `${taskCount} ${pluralize(taskCount, 'session')}`;
   element.innerHTML = `<span class="activity-pulse" aria-hidden="true"></span><strong>${escapeText(taskLabel)}</strong><span>${escapeText(workspace)}</span><span>${escapeText(calls)}</span><time id="taskElapsed"></time>`;
   renderTemporalText();
 }
@@ -155,7 +157,7 @@ function renderEndpoint(view) {
   const endpoint = document.getElementById('mcpUrl');
   const copyButton = document.getElementById('copyBtn');
   const wrap = document.getElementById('endpointWrap');
-  wrap.classList.toggle('compact', view.key === 'working' || view.key === 'settling');
+  wrap.classList.toggle('compact', view.key === 'working' || view.key === 'waiting' || view.key === 'settling');
   if (currentStatus.mcpUrl) {
     endpoint.textContent = currentStatus.mcpUrl;
     endpoint.className = 'endpoint-box';
@@ -203,13 +205,26 @@ function renderLastTask() {
   card.hidden = !task;
   if (!task) return;
   const attention = task.status === 'attention';
+  const completed = task.status === 'completed' && task.completionKnown === true;
   card.className = `app-card last-task-card ${attention ? 'attention' : 'completed'}`;
-  document.getElementById('lastTaskIcon').textContent = attention ? '!' : '✓';
-  document.getElementById('lastTaskTitle').textContent = attention ? 'Task needs attention' : 'Last task completed';
+  let icon = '•';
+  let title = 'Last Rel.AI session is inactive';
+  if (attention) {
+    icon = '!';
+    title = 'Last Rel.AI session had a failed call';
+  } else if (completed) {
+    icon = '✓';
+    title = 'Task completion reported';
+  }
+  document.getElementById('lastTaskIcon').textContent = icon;
+  document.getElementById('lastTaskTitle').textContent = title;
   const workspace = task.workspace || 'workspace';
   const calls = `${task.calls} tool call${task.calls === 1 ? '' : 's'}`;
   const failures = attention ? ` · ${task.failures} failed` : '';
-  document.getElementById('lastTaskDetail').textContent = `${workspace} · ${calls}${failures} · ${formatDuration(task.durationMs)}`;
+  const completion = completed
+    ? ` · ${task.summary || 'final validation passed'}`
+    : ' · overall ChatGPT completion not reported';
+  document.getElementById('lastTaskDetail').textContent = `${workspace} · ${calls}${failures}${completion} · ${formatDuration(task.durationMs)}`;
   renderTemporalText();
 }
 
@@ -243,9 +258,10 @@ function renderTemporalText() {
   if (elapsed && activity.startedAt) elapsed.textContent = formatDuration(Date.now() - activity.startedAt);
   const task = activity.lastTask;
   const lastTime = document.getElementById('lastTaskTime');
-  if (lastTime && task?.completedAt) {
-    lastTime.dateTime = new Date(task.completedAt).toISOString();
-    lastTime.textContent = relativeTime(task.completedAt);
+  const endedAt = task?.endedAt || task?.completedAt;
+  if (lastTime && endedAt) {
+    lastTime.dateTime = new Date(endedAt).toISOString();
+    lastTime.textContent = relativeTime(endedAt);
   }
 }
 

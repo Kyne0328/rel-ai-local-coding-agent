@@ -90,7 +90,7 @@ if (!dashboardHtml.includes('id="refreshBtn"') || !dashboardHtml.includes('id="w
   throw new Error('dashboard HTML did not expose refresh, workspace scope, and live-state controls');
 }
 if (!dashboardHtml.includes('href="#tasks"') || !dashboardHtml.includes('href="#reference"')) {
-  throw new Error('dashboard navigation did not include Tasks and Reference');
+  throw new Error('dashboard navigation did not include Sessions and Reference');
 }
 // The token field was removed from the topbar (token loads from the URL/sessionStorage).
 if (dashboardHtml.includes('id="token"')) {
@@ -102,8 +102,8 @@ if (!workspaceModule.includes('mountWorkspaces') || workspaceModule.includes('Fu
   throw new Error('workspace dashboard section is still incomplete or placeholder-only');
 }
 const tasksModule = await fetch(`http://127.0.0.1:${port}/ui/sections/tasks.js`).then((response) => response.text());
-if (!tasksModule.includes('mountTasks') || !tasksModule.includes('Task history')) {
-  throw new Error('dashboard Tasks section is missing or incomplete');
+if (!tasksModule.includes('mountTasks') || !tasksModule.includes('Session history') || !tasksModule.includes('completion was not reported')) {
+  throw new Error('dashboard work-session section is missing or incomplete');
 }
 
 const unauthorized = await fetch(`http://127.0.0.1:${port}/mcp`, {
@@ -143,14 +143,17 @@ if (!initialized.result?.capabilities?.tools) {
 if (!initialized.result?.capabilities?.resources) {
   throw new Error('HTTP initialize did not advertise resources');
 }
+if (!String(initialized.result?.instructions || '').includes('relai_complete_task')) {
+  throw new Error('HTTP initialize did not advertise the explicit final-completion contract');
+}
 
 const list = await fetch(`http://127.0.0.1:${port}/mcp`, {
   method: 'POST',
   headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, 'mcp-session-id': mcpSessionId },
   body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/list', params: {} })
 }).then((response) => response.json());
-if (!Array.isArray(list.result?.tools) || list.result.tools.length !== 16) {
-  throw new Error(`HTTP tools/list should return exactly 16 workspace tools, got ${list.result?.tools?.length}`);
+if (!Array.isArray(list.result?.tools) || list.result.tools.length !== 17) {
+  throw new Error(`HTTP tools/list should return exactly 17 workspace tools, got ${list.result?.tools?.length}`);
 }
 
 const resources = await fetch(`http://127.0.0.1:${port}/mcp`, {

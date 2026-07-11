@@ -51,24 +51,33 @@ function createTaskActivityRuntime(options) {
 
   function handleActivity(event) {
     blocker.update(event.activeConnectorCalls);
-    if (event.phase === 'completed' && event.task) showCompletionNotification(event.task);
+    if (event.phase === 'finished' && event.ok === false) showFailureNotification(event);
+    if (event.phase === 'completed' && event.task?.completionKnown === true) showCompletionNotification(event.task);
     emitStatus();
+  }
+
+  function showFailureNotification(event) {
+    if (!notificationsEnabled || !isReady()) return;
+    if (typeof Notification?.isSupported === 'function' && !Notification.isSupported()) return;
+    const location = event.workspace ? ` in ${event.workspace}` : '';
+    const operation = event.operation || event.tool || 'Rel.AI tool call';
+    const body = `${operation} failed${location}.${event.error ? ` ${event.error}` : ''}`;
+    const notification = new Notification({ title: 'Rel.AI tool call failed', body, silent: false });
+    if (typeof notification.on === 'function') notification.on('click', onNotificationClick);
+    notification.show();
   }
 
   function showCompletionNotification(task) {
     if (!notificationsEnabled || !isReady()) return;
     if (typeof Notification?.isSupported === 'function' && !Notification.isSupported()) return;
-    const failed = task.status === 'attention';
-    const title = failed ? 'Rel.AI task needs attention' : 'Rel.AI task completed';
     const location = task.workspace ? ` in ${task.workspace}` : '';
-    const callLabel = task.calls === 1 ? 'tool call' : 'tool calls';
-    const count = `${task.calls} ${callLabel}`;
-    let body = `ChatGPT finished ${count}${location}.`;
-    if (failed) {
-      const failureLabel = task.failures === 1 ? 'failure' : 'failures';
-      body = `ChatGPT finished ${count}${location}, with ${task.failures} ${failureLabel}.`;
-    }
-    const notification = new Notification({ title, body, silent: false });
+    const validation = task.validationLevel ? ` Final ${task.validationLevel} validation passed.` : ' Final validation passed.';
+    const summary = task.summary ? ` ${task.summary}` : '';
+    const notification = new Notification({
+      title: 'Rel.AI task completion reported',
+      body: `ChatGPT explicitly reported the coding task complete${location}.${validation}${summary}`,
+      silent: false
+    });
     if (typeof notification.on === 'function') notification.on('click', onNotificationClick);
     notification.show();
   }
@@ -79,12 +88,14 @@ function createTaskActivityRuntime(options) {
       state: activity.state || 'idle',
       activeCalls: Number(activity.activeCalls || 0),
       activeTaskCount: Number(activity.activeTaskCount || activity.tasks?.length || 0),
+      completionKnown: activity.completionKnown === true,
       tasks: Array.isArray(activity.tasks) ? activity.tasks : [],
       taskId: activity.taskId || '',
       calls: Number(activity.calls || 0),
       failures: Number(activity.failures || 0),
       workspace: activity.workspace || '',
       tool: activity.tool || '',
+      operation: activity.operation || '',
       startedAt: activity.startedAt || null,
       lastTask: activity.lastTask || null
     };

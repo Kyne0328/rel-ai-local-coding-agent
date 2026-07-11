@@ -33,10 +33,11 @@ const expected = [
   'relai_git_commit',
   'relai_git_push',
   'relai_git_create_pr',
-  'relai_edit'
+  'relai_edit',
+  'relai_complete_task'
 ];
 
-assert.equal(definitions.length, 16);
+assert.equal(definitions.length, 17);
 assert.deepEqual(names, expected);
 assert.deepEqual(TOOL_NAMES, expected);
 assert.equal(new Set(names).size, names.length, 'tool names must be unique');
@@ -53,6 +54,13 @@ for (const definition of definitions) {
   assert.equal(Object.hasOwn(definition, 'publicOrder'), false, `${definition.name} must not retain public ordering`);
 }
 
+const completionTool = definitions.find(definition => definition.name === 'relai_complete_task');
+assert.ok(completionTool, 'completion tool must be registered');
+assert.deepEqual(completionTool.inputSchema.required, ['workspace', 'summary']);
+assert.equal(completionTool.inputSchema.properties.summary.minLength, 1);
+assert.equal(completionTool.inputSchema.properties.summary.maxLength, 2000);
+assert.match(completionTool.description, /final relai_run_checks call succeeds/);
+
 const groups = getToolGroups();
 assert.deepEqual(groups.workspace, expected);
 assert.equal(Object.hasOwn(groups, 'internal'), false);
@@ -64,7 +72,7 @@ for (const [groupName, groupTools] of Object.entries(groups)) {
 const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
 const mcpSection = readme.split('## MCP tools')[1]?.split('\n---')[0] || '';
 const documented = [...mcpSection.matchAll(/^\| `([^`]+)` \|/gm)].map(match => match[1]);
-assert.deepEqual(new Set(documented), new Set(expected), 'README tool table must match the 16-tool registry');
+assert.deepEqual(new Set(documented), new Set(expected), 'README tool table must match the 17-tool registry');
 assert.equal(documented.length, expected.length, 'README tool table must not contain duplicate rows');
 
-console.log('Tool registry consistency passed for one 16-tool surface.');
+console.log('Tool registry consistency passed for one 17-tool surface.');
