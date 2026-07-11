@@ -23,11 +23,10 @@ function dashboardData(config, args = {}) {
       ws.caution = { count: c ? c.count : 0, recent: c ? c.recent : [] };
     }
   }
-  // Single authoritative public-tool list so the UI never hardcodes literals that
-  // drift from PUBLIC_HTTP_TOOL_NAMES. Lazy require avoids any load-order cycle.
-  let publicTools = Array.isArray(configSummary.localRepoBridge?.visibleTools) ? configSummary.localRepoBridge.visibleTools : [];
-  try { publicTools = require("./tools").getPublicToolSchemas(config).map((tool) => tool.name); } catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] public tool schema discovery:', error); }
-  const toolCount = publicTools.length;
+  // Read the active connector registry so the dashboard never hardcodes tool names.
+  let tools = Array.isArray(configSummary.localRepoBridge?.visibleTools) ? configSummary.localRepoBridge.visibleTools : [];
+  try { tools = require("./tools").getToolSchemas().map((tool) => tool.name); } catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] tool schema discovery:', error); }
+  const toolCount = tools.length;
   return {
     ok: true,
     generatedAt: new Date().toISOString(),
@@ -37,10 +36,7 @@ function dashboardData(config, args = {}) {
       auditEntries: auditTail.entries?.length || 0,
       workspaces: Object.keys(config.workspaces || {}).length
     },
-    workflow: {
-      mode: config.workflow?.mode || "standard",
-      tools: publicTools
-    },
+    tools,
     health,
     auditTail
   };

@@ -7,7 +7,7 @@ const { summarizeOperations } = require("../journal");
 const { resolvePolicy } = require("../policyResolver");
 const { getVersion } = require("../version");
 const { debugSwallow } = require("./session");
-const { BRIDGE_TOOL_NAMES, PUBLIC_HTTP_TOOL_NAMES, getToolDefinition, getToolGroups } = require("./schema");
+const { TOOL_NAMES, getToolGroups } = require("./schema");
 
 // Locale-aware sort of an object's keys. Sonar (S2871) flags Array.sort() on strings
 // without an explicit comparator, so route key sorting through one helper.
@@ -44,29 +44,12 @@ function relaiStatus(config, args = {}) {
   return {
     ok: true,
     version: getVersion(),
-    tools: PUBLIC_HTTP_TOOL_NAMES,
+    tools: TOOL_NAMES,
     toolGroups: getToolGroups(),
     scripts: sortedKeys(scripts),
     ci,
     workspace: selectedWorkspace,
     workspaceCount: Object.keys(config.workspaces || {}).length
-  };
-}
-
-function relaiFeatureProbe(config, args = {}) {
-  const scripts = safeReadPackageJson().scripts || {};
-  const ci = ciScriptStatus(scripts);
-  return {
-    ok: true,
-    lenientHash: true,
-    directWrites: true,
-    fastUpdateDefault: true,
-    cleanCheckOptIn: true,
-    ciHealthCheck: Boolean(scripts["test:repo-health"] && ci.ok),
-    softerToolNames: true,
-    sessionPolicySupport: true,
-    tools: PUBLIC_HTTP_TOOL_NAMES,
-    workspaceRequested: args.workspace || ""
   };
 }
 
@@ -148,7 +131,7 @@ function workspaceInspect(config, args = {}) {
         skipped: tree.skipped,
         truncated: tree.truncated
       },
-      requiredFlow: BRIDGE_TOOL_NAMES,
+      requiredFlow: TOOL_NAMES,
       operationJournal: summarizeOperations(config, { alias: profile.workspace, path: profile.root }, args.journalLimit || 10)
     };
   } catch (error) {
@@ -213,79 +196,10 @@ function workspaceProfile(config, args = {}) {
   };
 }
 
-function addChangedFile(acc, filePath) {
-  if (filePath && !acc.seenFiles.has(filePath)) {
-    acc.seenFiles.add(filePath);
-    acc.filesChanged.push(filePath);
-  }
-}
-
-function recordChangedFiles(entry, acc, behavior) {
-  if (behavior?.sessionWrite !== true) return;
-  addChangedFile(acc, entry.filePath);
-  if (Array.isArray(entry.filePaths)) {
-    for (const filePath of entry.filePaths) addChangedFile(acc, filePath);
-  }
-}
-
-function accumulateSummaryEntry(entry, acc) {
-  const behavior = getToolDefinition(entry.tool)?.behavior;
-  recordChangedFiles(entry, acc, behavior);
-  if (behavior?.summary === "checks" && entry.validationLevel) {
-    acc.checksRun.push({ validationLevel: entry.validationLevel, passed: entry.ok === true });
-  }
-  if (behavior?.summary === "diff") {
-    acc.diffReviewed = true;
-  }
-  if (behavior?.summary === "edit" && entry.plannerPath && !acc.seenPlannerPaths.has(entry.plannerPath)) {
-    acc.seenPlannerPaths.add(entry.plannerPath);
-    acc.plannerDecisions.push({ plannerPath: entry.plannerPath, plannerReason: entry.plannerReason || null });
-  }
-  if (entry.cautionLevel === "caution") {
-    acc.escalations.push({ tool: entry.tool, ts: entry.ts || null, reason: entry.cautionReason || null });
-  }
-}
-
-function buildSessionSummary(entries, alias, policy) {
-  const sessionActive = Boolean(policy?.sessionActive);
-  const sessionCreatedAt = sessionActive ? (policy.sessionCreatedAt || null) : null;
-
-  let window = (entries || []).filter(e => e.workspace === alias);
-  if (sessionActive && sessionCreatedAt) {
-    window = window.filter(e => e.ts >= sessionCreatedAt);
-  }
-
-  const acc = {
-    filesChanged: [],
-    seenFiles: new Set(),
-    checksRun: [],
-    diffReviewed: false,
-    seenPlannerPaths: new Set(),
-    plannerDecisions: [],
-    escalations: []
-  };
-  for (const entry of window) accumulateSummaryEntry(entry, acc);
-
-  return {
-    windowSource: sessionActive ? "session_file" : "recent_entries",
-    sessionActive,
-    sessionCreatedAt,
-    taskHint: policy?.taskHint || null,
-    entryCount: window.length,
-    filesChanged: acc.filesChanged,
-    checksRun: acc.checksRun,
-    diffReviewed: acc.diffReviewed,
-    plannerDecisions: acc.plannerDecisions,
-    escalations: acc.escalations,
-  };
-}
-
 module.exports = {
   relaiStatus,
-  relaiFeatureProbe,
   workspaceList,
   workspaceInspect,
   workspaceTree,
-  workspaceProfile,
-  buildSessionSummary
+  workspaceProfile
 };

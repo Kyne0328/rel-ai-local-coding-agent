@@ -1,52 +1,67 @@
 # Workflow reliability
 
-Rel.AI MCP uses one workspace workflow. ChatGPT chooses the change tool by task shape and file size instead of separate tool tiers.
+Rel.AI MCP uses one workspace workflow and one 16-tool surface.
 
 ```text
 1. Inspect:  relai_repo_snapshot
 2. Read:     relai_read
-3. Change:   relai_edit (exact replace / full-file / patch / batch) / relai_apply_bundle
+3. Change:   relai_edit / relai_write / relai_replace
 4. Validate: relai_run_checks
-5. Review:   relai_diff
+5. Review:   relai_diff / relai_git_status
 6. Cleanup:  relai_restore_changes / relai_tidy_plan + relai_tidy_run
+7. Publish:  relai_git_commit -> relai_git_push -> relai_git_create_pr
 ```
 
-Removed fallback loops are not hidden backdoors. The server should not generate helper scripts, switch to ad-hoc one-liners for repo edits, or route around the public workspace tools.
+The server does not generate helper scripts, expose hidden tool tiers, or route around the registered workspace tools.
 
 ## Tool selection
 
-Use the smallest tool that fits the job:
-
 | Situation | Use |
 | --- | --- |
-| Small localized edit inside an existing file | `relai_edit` with `oldText`/`newText` |
-| Complete replacement of a file (any size) | `relai_edit` with `content` |
-| Multi-file patch-shaped change | `relai_edit` with `updateText` |
-| Several edits in one approval | `relai_edit` with `edits: [...]` |
-| Prepared file bundle update | `relai_apply_bundle` |
+| Repository overview | `relai_repo_snapshot` |
+| Focused file content | `relai_read` |
+| Small localized edit | `relai_edit` with `oldText` and `newText` |
+| Complete file replacement | `relai_edit` with `content` |
+| Multi-file patch or tracked-file deletion | `relai_edit` with `updateText` |
+| Several edits in one request | `relai_edit` with `edits` |
+| Direct complete-file fallback | `relai_write` |
+| Direct exact-replacement fallback | `relai_replace` |
 | Session-owned untracked cleanup | `relai_tidy_plan` then `relai_tidy_run` |
-| Validation | `relai_run_checks` (level `quick` / `standard` / `release`) |
-| Review | `relai_diff` |
+| Validation | `relai_run_checks` |
+| Browser or route validation | `relai_browser` |
+| Review | `relai_diff` or `relai_git_status` |
 | Restore selected changes | `relai_restore_changes` |
 
-`relai_repo_snapshot` and `relai_read` return `writeGuidance` so ChatGPT can choose among `exact-replace`, `direct-write`, `staged-write`, `apply-update`, `apply-bundle`, and `workspace-tidy`.
+`relai_repo_snapshot` and `relai_read` return write guidance for exact replacement, direct complete-file writes, staged complete-file writes, patch-shaped updates, and bounded workspace tidy operations.
 
-## Validation check behavior
+## Validation behavior
 
-`relai_run_checks` accepts `check`, `checks`, or `checksText`. These are the preferred public names. Compatibility aliases are still accepted internally for older callers. When no check is provided, it auto-detects sensible validation checks for the workspace.
+`relai_run_checks` exposes `level` presets:
 
-Validation depth is selected with a simple public `level` preset:
-
-| `level` | Meaning |
+| Level | Meaning |
 | --- | --- |
-| `quick` | Syntax / lightweight checks for a fast inner loop. |
+| `quick` | Syntax and lightweight checks. |
 | `standard` | Normal project validation. This is the default. |
-| `release` | Full release gate (runs the broadest detected test/build set). |
+| `release` | Broad release validation. |
 
-`relai_edit` accepts the same `level` when called with `runChecks: true`, so an edit can validate at any depth in one approval. An internal `validationLevel` describing the change surface is telemetry separate from this public preset; it is stripped from ChatGPT connector results and kept only on the full stdio surface.
+When no explicit check is supplied through an internal or local call path, Rel.AI detects configured workspace checks. `relai_edit` accepts the same level when `runChecks: true` is used.
 
-## Exact replacement and complete-file write guards
+## Edit safeguards
 
-`relai_replace` requires exact current text and optionally an `expectedSha256` from `relai_read`. Ambiguous duplicate matches are refused unless an explicit `occurrence` is provided. This keeps payloads small and deterministic for files like Dart SMS handlers that can trigger connector filtering.
+`relai_replace` requires exact current text. An optional `expectedSha256` from `relai_read` makes stale edits fail closed. Duplicate matches require an explicit occurrence or a larger unique text block.
 
-`relai_write` accepts complete file content only. For larger whole-file replacements, use staged chunks (`stage: start`, `append`, then `commit`) so ChatGPT does not have to send one oversized request. If a multiline source file is accidentally collapsed into one long line, the write is rejected instead of damaging formatting.
+`relai_write` accepts complete-file content. Staged mode exists only for transports that cannot send a complete large payload in one request.
+
+Patch-shaped `relai_edit` calls can enforce a clean worktree, create a tracked-change backup, and reject updates above the configured maximum size.
+
+## Deletion safeguards
+
+Tracked files are deleted through structured patch operations:
+
+```text
+*** Begin Patch
+*** Delete File: path/to/file
+*** End Patch
+```
+
+Untracked files are not accepted as arbitrary deletion arguments. `relai_tidy_plan` selects current-session candidates, and `relai_tidy_run` verifies the plan ID, expiry, workspace, ownership, file shape, and content hash before deletion.

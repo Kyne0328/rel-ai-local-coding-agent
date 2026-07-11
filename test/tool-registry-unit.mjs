@@ -8,61 +8,63 @@ const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const {
   getToolDefinitions,
-  getPublicToolDefinitions,
   getToolSchemas,
-  getPublicToolSchemas,
-  getPublicToolMetadata,
+  getToolMetadata,
   getToolGroups,
-  BRIDGE_TOOL_NAMES,
-  PUBLIC_HTTP_TOOL_NAMES
+  TOOL_NAMES
 } = require('../src/tools/schema.js');
 const { HANDLERS } = require('../src/tools/handlers.js');
 
 const definitions = getToolDefinitions();
-const publicDefinitions = getPublicToolDefinitions();
-const names = definitions.map((definition) => definition.name);
-const publicNames = publicDefinitions.map((definition) => definition.name);
+const names = definitions.map(definition => definition.name);
+const expected = [
+  'relai_repo_snapshot',
+  'relai_read',
+  'relai_write',
+  'relai_replace',
+  'relai_tidy_plan',
+  'relai_tidy_run',
+  'relai_run_checks',
+  'relai_browser',
+  'relai_diff',
+  'relai_restore_changes',
+  'relai_status',
+  'relai_git_status',
+  'relai_git_commit',
+  'relai_git_push',
+  'relai_git_create_pr',
+  'relai_edit'
+];
 
-assert.equal(definitions.length, 29);
-assert.equal(publicDefinitions.length, 18);
+assert.equal(definitions.length, 16);
+assert.deepEqual(names, expected);
+assert.deepEqual(TOOL_NAMES, expected);
 assert.equal(new Set(names).size, names.length, 'tool names must be unique');
-assert.equal(new Set(publicNames).size, publicNames.length, 'public tool names must be unique');
-assert.deepEqual(BRIDGE_TOOL_NAMES, names);
-assert.deepEqual(PUBLIC_HTTP_TOOL_NAMES, publicNames);
-assert.deepEqual(getToolSchemas().map((schema) => schema.name), names);
-assert.deepEqual(getPublicToolSchemas().map((schema) => schema.name), publicNames);
-assert.deepEqual(getPublicToolMetadata().map((tool) => tool.name), publicNames);
+assert.deepEqual(getToolSchemas().map(schema => schema.name), expected);
+assert.deepEqual(getToolMetadata().map(tool => tool.name), expected);
 
 for (const definition of definitions) {
-  assert.equal(typeof definition.handler, 'string', `${definition.name} must declare a handler`);
   assert.equal(typeof HANDLERS[definition.handler], 'function', `${definition.name} references missing handler ${definition.handler}`);
-  assert.ok(definition.inputSchema?.type === 'object', `${definition.name} must define an object schema`);
-  assert.ok(definition.behavior && typeof definition.behavior === 'object', `${definition.name} must define behavior metadata`);
-  for (const stripped of definition.publicStrip || []) {
-    assert.ok(Object.hasOwn(definition.inputSchema.properties || {}, stripped), `${definition.name} strips unknown public property ${stripped}`);
+  assert.equal(definition.inputSchema?.type, 'object', `${definition.name} must define an object schema`);
+  for (const stripped of definition.connectorStrip || []) {
+    assert.ok(Object.hasOwn(definition.inputSchema.properties || {}, stripped), `${definition.name} strips unknown connector property ${stripped}`);
   }
-  if (definition.public) assert.ok(definition.publicOrder >= 0, `${definition.name} must define public order`);
-  else assert.equal(definition.publicOrder, -1, `${definition.name} must not define public order`);
+  assert.equal(Object.hasOwn(definition, 'public'), false, `${definition.name} must not retain public/internal flags`);
+  assert.equal(Object.hasOwn(definition, 'publicOrder'), false, `${definition.name} must not retain public ordering`);
 }
 
 const groups = getToolGroups();
-assert.deepEqual(groups.workspace, publicNames);
-assert.deepEqual(groups.internal, definitions.filter((definition) => !definition.public).map((definition) => definition.name));
+assert.deepEqual(groups.workspace, expected);
+assert.equal(Object.hasOwn(groups, 'internal'), false);
 for (const [groupName, groupTools] of Object.entries(groups)) {
   assert.equal(new Set(groupTools).size, groupTools.length, `${groupName} group contains duplicate tools`);
-  if (groupName !== 'internal') {
-    for (const name of groupTools) assert.ok(publicNames.includes(name), `${groupName} exposes non-public tool ${name}`);
-  }
+  for (const name of groupTools) assert.ok(expected.includes(name), `${groupName} contains an unknown tool ${name}`);
 }
 
 const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
 const mcpSection = readme.split('## MCP tools')[1]?.split('\n---')[0] || '';
-const documentedPublicTools = [...mcpSection.matchAll(/^\| `([^`]+)` \|/gm)].map((match) => match[1]);
-assert.deepEqual(
-  new Set(documentedPublicTools),
-  new Set(publicNames),
-  'README public tool table must match the registry'
-);
-assert.equal(documentedPublicTools.length, publicNames.length, 'README public tool table must not contain duplicate rows');
+const documented = [...mcpSection.matchAll(/^\| `([^`]+)` \|/gm)].map(match => match[1]);
+assert.deepEqual(new Set(documented), new Set(expected), 'README tool table must match the 16-tool registry');
+assert.equal(documented.length, expected.length, 'README tool table must not contain duplicate rows');
 
-console.log(`Tool registry consistency passed for ${definitions.length} tools (${publicDefinitions.length} public).`);
+console.log('Tool registry consistency passed for one 16-tool surface.');

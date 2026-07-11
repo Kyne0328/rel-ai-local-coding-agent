@@ -41,7 +41,7 @@ async function runInstalledSmoke(app) {
   if (!fs.existsSync(configPath)) configModule.writeConfig(configModule.makeDefaultConfig());
 
   const { startHttpServer } = require(requiredResources.httpServer);
-  const { getPublicToolSchemas } = require(path.join(resourcesPath, 'src', 'tools', 'schema.js'));
+  const { getToolSchemas } = require(path.join(resourcesPath, 'src', 'tools', 'schema.js'));
   const token = 'installed-smoke-token';
   const server = startHttpServer({
     host: '127.0.0.1',
@@ -67,7 +67,7 @@ async function runInstalledSmoke(app) {
     const toolsResponse = await fetch(`${baseUrl}/api/tools?token=${encodeURIComponent(token)}`);
     if (!toolsResponse.ok) throw new Error(`Packaged tools endpoint returned HTTP ${toolsResponse.status}.`);
     const tools = await toolsResponse.json();
-    if (!Array.isArray(tools) || tools.length !== getPublicToolSchemas().length) {
+    if (!Array.isArray(tools) || tools.length !== getToolSchemas().length) {
       throw new Error('Packaged tools endpoint does not match the tool registry.');
     }
 

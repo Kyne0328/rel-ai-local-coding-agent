@@ -23,16 +23,11 @@ function makeDefaultFastTaskConfig() {
   };
 }
 
-function makeDefaultWorkflowConfig() {
+function makeDefaultPatchConfig() {
   return {
-    mode: "standard",
-    prepared: {
-      backup: true,
-      requireCleanGit: false,
-      clearMissingDefault: false,
-      maxUpdateBytes: 2 * 1024 * 1024,
-      maxBundleBytes: 250 * 1024 * 1024
-    }
+    backup: true,
+    requireCleanGit: false,
+    maxUpdateBytes: 2 * 1024 * 1024
   };
 }
 
@@ -47,7 +42,6 @@ function makeDefaultConfig() {
     toolMode: "chatgpt_local_repo",
     trustedLocalAgent: true,
     trustedBudgetMultiplier: 2,
-    cautionZone: { massClearThreshold: 3, bundleFileThreshold: 5, bundleBytesThreshold: 102400 },
     productUx: {
       dashboardRefreshSeconds: 5,
       liveLogPollSeconds: 3,
@@ -59,7 +53,7 @@ function makeDefaultConfig() {
       minimumReadinessScore: 80,
       requireHttpToken: true
     },
-    workflow: makeDefaultWorkflowConfig(),
+    patch: makeDefaultPatchConfig(),
     workspaces: {}
   };
 }
@@ -99,10 +93,12 @@ function normalizeConfig(config) {
   const next = mergeConfigBase(base, input);
   normalizeCorePaths(next, base, input);
   normalizeTrustedMode(next, input);
-  normalizeCautionZone(next, base, input);
   normalizeProductSettings(next, base, input);
   stripLegacyApprovalKeys(next);
-  next.workflow = normalizeWorkflowConfig(input.workflow, input.flow);
+  next.patch = normalizePatchConfig(input.patch, input.workflow, input.flow);
+  delete next.workflow;
+  delete next.flow;
+  delete next.cautionZone;
   normalizeWorkspaces(next);
   return next;
 }
@@ -130,16 +126,6 @@ function normalizeTrustedBudgetMultiplier(value) {
   const number = Number(value);
   if (!Number.isFinite(number) || number < 1 || number > 10) return 2;
   return Math.floor(number);
-}
-
-function normalizeCautionZone(next, base, input) {
-  const raw = objectOrEmpty(input.cautionZone);
-  const cautionBase = base.cautionZone;
-  next.cautionZone = {
-    massClearThreshold: positiveNumber(raw.massClearThreshold, cautionBase.massClearThreshold),
-    bundleFileThreshold: positiveNumber(raw.bundleFileThreshold, cautionBase.bundleFileThreshold),
-    bundleBytesThreshold: positiveNumber(raw.bundleBytesThreshold, cautionBase.bundleBytesThreshold)
-  };
 }
 
 function normalizeProductSettings(next, base, input) {
@@ -196,55 +182,31 @@ function objectOrEmpty(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
-function _pickPreparedValue(sources, fieldNames, transform, fallback) {
-  for (const source of sources) {
-    for (const name of fieldNames) {
-      const val = source[name];
-      if (val != null) return transform ? transform(val) : val;
-    }
-  }
-  return fallback;
-}
-
-function workflowMode(raw, flow) {
-  if (raw.mode === "prepared" || raw.mode === "aggressive") return "prepared";
-  if (raw.mode === "standard" || raw.mode === "conservative") return "standard";
-  return !raw.mode && flow.mode === "fast" ? "prepared" : "standard";
-}
-
-function preparedSources(raw, flow) {
-  return {
-    oldAggressive: objectOrEmpty(raw.aggressive),
-    oldFlow: objectOrEmpty(flow.fast),
-    rawPrepared: objectOrEmpty(raw.prepared)
+function normalizePatchConfig(value, legacyWorkflow, legacyFlow) {
+  const base = makeDefaultPatchConfig();
+  const current = objectOrEmpty(value);
+  const workflow = objectOrEmpty(legacyWorkflow);
+  const flow = objectOrEmpty(legacyFlow);
+  const legacyPrepared = objectOrEmpty(workflow.prepared);
+  const legacyAggressive = objectOrEmpty(workflow.aggressive);
+  const legacyFast = objectOrEmpty(flow.fast);
+  const merged = {
+    ...base,
+    ...legacyFast,
+    ...legacyAggressive,
+    ...legacyPrepared,
+    ...current
   };
-}
-
-function normalizeWorkflowConfig(value, flowLegacy) {
-  const base = makeDefaultWorkflowConfig();
-  const raw = objectOrEmpty(value);
-  const flow = objectOrEmpty(flowLegacy);
-  const { oldAggressive, oldFlow, rawPrepared } = preparedSources(raw, flow);
-  const sources = [rawPrepared, oldAggressive, oldFlow];
-  const merged = { ...base.prepared, ...oldFlow, ...oldAggressive, ...rawPrepared };
+  const maxUpdateBytes = current.maxUpdateBytes ?? current.maxPatchBytes
+    ?? legacyPrepared.maxUpdateBytes ?? legacyPrepared.maxPatchBytes
+    ?? legacyAggressive.maxUpdateBytes ?? legacyAggressive.maxPatchBytes
+    ?? legacyFast.maxUpdateBytes ?? legacyFast.maxPatchBytes
+    ?? base.maxUpdateBytes;
   return {
-    mode: workflowMode(raw, flow),
-    prepared: {
-      backup: merged.backup == null ? base.prepared.backup : Boolean(merged.backup),
-      requireCleanGit: merged.requireCleanGit == null ? base.prepared.requireCleanGit : Boolean(merged.requireCleanGit),
-      clearMissingDefault: _pickPreparedValue(sources, ["clearMissingDefault", "deleteMissingDefault"], Boolean, base.prepared.clearMissingDefault),
-      maxUpdateBytes: _pickPreparedValue(sources, ["maxUpdateBytes", "maxPatchBytes"], (v) => clampNumber(v, 1024, 50 * 1024 * 1024, base.prepared.maxUpdateBytes), base.prepared.maxUpdateBytes),
-      maxBundleBytes: _pickPreparedValue(sources, ["maxBundleBytes", "maxArchiveBytes"], (v) => clampNumber(v, 1024 * 1024, 2 * 1024 * 1024 * 1024, base.prepared.maxBundleBytes), base.prepared.maxBundleBytes)
-    }
+    backup: merged.backup == null ? base.backup : Boolean(merged.backup),
+    requireCleanGit: merged.requireCleanGit == null ? base.requireCleanGit : Boolean(merged.requireCleanGit),
+    maxUpdateBytes: clampNumber(maxUpdateBytes, 1024, 50 * 1024 * 1024, base.maxUpdateBytes)
   };
-}
-
-function getWorkflowConfig(config) {
-  return config.workflow || makeDefaultWorkflowConfig();
-}
-
-function isPreparedWorkflow(config) {
-  return getWorkflowConfig(config).mode === "prepared";
 }
 
 function normalizeStringList(value) {
@@ -323,10 +285,10 @@ function publicConfigSummary(config) {
     maxIndexFiles: config.maxIndexFiles,
     toolMode: "chatgpt_local_repo",
     trustedLocalAgent: true,
-    workflow: normalizeWorkflowConfig(config.workflow),
+    patch: normalizePatchConfig(config.patch),
     localRepoBridge: {
       mode: "trusted",
-      visibleTools: require("./tools").PUBLIC_HTTP_TOOL_NAMES,
+      visibleTools: require("./tools").TOOL_NAMES,
       writeAccess: true,
       verificationAccess: true,
       restoreAccess: true
@@ -390,10 +352,8 @@ module.exports = {
   makeDefaultConfig,
   makeDefaultFastTaskConfig,
   normalizeFastTask,
-  makeDefaultWorkflowConfig,
-  normalizeWorkflowConfig,
-  getWorkflowConfig,
-  isPreparedWorkflow,
+  makeDefaultPatchConfig,
+  normalizePatchConfig,
   readConfig,
   writeConfig,
   normalizeConfig,

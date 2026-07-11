@@ -25,7 +25,7 @@ export function mountTools(container) {
       <div class="section-head">
         <div>
           <h2>Tools</h2>
-          <p>Browse the workspace capabilities available to ChatGPT. Search by task, tool name, or parameter.</p>
+          <p>Only tools exposed by the active connector are shown. Some require a Git repository, remote, route or check, bundle path, or tidy plan.</p>
         </div>
         <span class="section-action" id="toolsCount">Loading…</span>
       </div>
@@ -48,9 +48,14 @@ function bindToolbar(container) {
     button.className = `secondary tools-filter${capability.id === _capability ? ' active' : ''}`;
     button.textContent = capability.label;
     button.dataset.capability = capability.id;
+    button.setAttribute('aria-pressed', String(capability.id === _capability));
     button.onclick = () => {
       _capability = capability.id;
-      filters.querySelectorAll('button').forEach(item => item.classList.toggle('active', item === button));
+      filters.querySelectorAll('button').forEach(item => {
+        const active = item === button;
+        item.classList.toggle('active', active);
+        item.setAttribute('aria-pressed', String(active));
+      });
       renderTools(container);
     };
     filters.appendChild(button);
@@ -73,13 +78,34 @@ function renderTools(container) {
   const count = container.querySelector('#toolsCount');
   if (!body) return;
   const visible = _tools.filter(matchesFilters);
-  if (count) count.textContent = `${visible.length} of ${_tools.length} available`;
+  const filtered = _capability !== 'all' || Boolean(_search);
+  if (count) {
+    count.textContent = filtered
+      ? `Showing ${visible.length} of ${_tools.length} tools`
+      : `${_tools.length} public tools`;
+  }
+  updateFilterCounts(container);
   body.innerHTML = '';
   if (!visible.length) {
     body.appendChild(EmptyState({ title: 'No matching tools', description: 'Change the search or capability filter.' }));
     return;
   }
   for (const tool of visible) body.appendChild(toolCard(tool));
+}
+
+function updateFilterCounts(container) {
+  const filters = container.querySelector('#toolsFilters');
+  if (!filters) return;
+  for (const button of filters.querySelectorAll('button[data-capability]')) {
+    const capabilityId = button.dataset.capability || 'all';
+    const definition = CAPABILITIES.find(item => item.id === capabilityId);
+    const label = definition?.label || capabilityId;
+    const total = capabilityId === 'all'
+      ? _tools.length
+      : _tools.filter(tool => toolCapability(tool.name) === capabilityId).length;
+    button.textContent = `${label} ${total}`;
+    button.setAttribute('aria-label', `${label}: ${total} tools`);
+  }
 }
 
 function matchesFilters(tool) {

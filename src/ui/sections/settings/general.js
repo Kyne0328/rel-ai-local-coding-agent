@@ -21,27 +21,27 @@ export function mountGeneral(container) {
 }
 
 async function _loadAndRender(container) {
-  const cfg = await loadSettingsConfig(container);
-  if (!cfg) return;
-  _original = structuredClone(cfg);
-  _draft = structuredClone(cfg);
+  const config = await loadSettingsConfig(container);
+  if (!config) return;
+  _original = structuredClone(config);
+  _draft = structuredClone(config);
   _render(container);
 }
 
 function _render(container) {
   container.innerHTML = '';
-  container.appendChild(header('General', 'Manage dashboard appearance, safeguards for prepared updates, and runtime output limits.'));
+  container.appendChild(header('General', 'Manage dashboard appearance, patch safeguards, and command-output limits.'));
 
   const grid = formGrid();
   const appearance = panel('Appearance');
-  const preparedUpdates = panel('Prepared update safeguards');
+  const patch = panel('Patch safeguards');
   const limits = panel('Runtime limits');
 
   renderAppearanceSettings(appearance.body);
-  renderPreparedUpdateSettings(preparedUpdates.body);
+  renderPatchSettings(patch.body);
   renderRuntimeSettings(limits.body);
 
-  grid.append(appearance.el, preparedUpdates.el, limits.el);
+  grid.append(appearance.el, patch.el, limits.el);
   container.appendChild(grid);
   container.appendChild(buildSaveRow(container));
 }
@@ -60,37 +60,30 @@ function renderAppearanceSettings(body) {
   ], uiPreferences.density, value => setDensityPreference(value)), 'Compact mode reduces card, table, navigation, and control spacing without hiding information.'));
 }
 
-function renderPreparedUpdateSettings(body) {
-  const prepared = _draft.workflow?.prepared || {};
-  body.appendChild(preparedSafeguardsIntro());
-  body.appendChild(field('Require clean git before apply', toggleControl(prepared.requireCleanGit === true, value => {
-    updatePreparedSetting('requireCleanGit', value);
-  }, { enabled: 'Require clean git', disabled: 'Allow existing changes' }), 'When enabled, prepared patch and bundle operations refuse to run while the workspace has uncommitted changes.'));
-  body.appendChild(field('Create backup before apply', toggleControl(prepared.backup !== false, value => {
-    updatePreparedSetting('backup', value);
-  }, { enabled: 'Backup enabled', disabled: 'No automatic backup' }), 'When the workspace already has tracked changes, Rel.AI records a git stash backup without removing those changes from the working tree.'));
-  body.appendChild(field('Clear files missing from a bundle', toggleControl(prepared.clearMissingDefault === true, value => {
-    updatePreparedSetting('clearMissingDefault', value);
-  }, { enabled: 'Clear missing files', disabled: 'Overlay only' }), 'Overlay only adds or replaces files. Clear missing also removes live files that are absent from the applied bundle.'));
-  body.appendChild(field('Maximum patch size', numberControl(prepared.maxUpdateBytes || 2097152, value => {
-    updatePreparedSetting('maxUpdateBytes', value);
+function renderPatchSettings(body) {
+  const patch = _draft.patch || {};
+  body.appendChild(patchSafeguardsIntro());
+  body.appendChild(field('Require clean git before patch', toggleControl(patch.requireCleanGit === true, value => {
+    updatePatchSetting('requireCleanGit', value);
+  }, { enabled: 'Require clean git', disabled: 'Allow existing changes' }), 'When enabled, relai_edit updateText refuses to apply while the workspace has uncommitted changes.'));
+  body.appendChild(field('Create backup before patch', toggleControl(patch.backup !== false, value => {
+    updatePatchSetting('backup', value);
+  }, { enabled: 'Backup enabled', disabled: 'No automatic backup' }), 'When tracked changes already exist, Rel.AI records a git stash backup without removing those changes from the working tree.'));
+  body.appendChild(field('Maximum patch size', numberControl(patch.maxUpdateBytes || 2097152, value => {
+    updatePatchSetting('maxUpdateBytes', value);
   }, { min: 1024, max: 52428800, width: '150px' }), 'Maximum size in bytes for patch-shaped updates sent through relai_edit updateText.'));
-  body.appendChild(field('Maximum bundle size', numberControl(prepared.maxBundleBytes || 262144000, value => {
-    updatePreparedSetting('maxBundleBytes', value);
-  }, { min: 1048576, max: 2147483648, width: '150px' }), 'Maximum size in bytes for local zip bundles applied through relai_apply_bundle.'));
 }
 
 function renderRuntimeSettings(body) {
   body.appendChild(field('Max output bytes', numberControl(_draft.maxOutputBytes, value => {
     _draft.maxOutputBytes = value;
     _checkDirty();
-  }, { min: 10000, max: 20000000, width: '140px' }), 'Maximum validation output returned to ChatGPT. The default keeps useful failure details without flooding the conversation.'));
+  }, { min: 10000, max: 20000000, width: '140px' }), 'Maximum stdout and stderr retained for each spawned command, including checks, browser checks, and Git operations. Larger output is truncated.'));
 }
 
-function updatePreparedSetting(key, value) {
-  _draft.workflow ??= {};
-  _draft.workflow.prepared ??= {};
-  _draft.workflow.prepared[key] = value;
+function updatePatchSetting(key, value) {
+  _draft.patch ??= {};
+  _draft.patch[key] = value;
   _checkDirty();
 }
 
@@ -103,12 +96,12 @@ function appearancePreview() {
   return preview;
 }
 
-function preparedSafeguardsIntro() {
+function patchSafeguardsIntro() {
   const intro = document.createElement('div');
   intro.className = 'settings-panel-intro';
   intro.innerHTML = `
-    <strong>Applies only to prepared patches and zip bundles.</strong>
-    <span>Normal exact replacements, file writes, validation, diff, and restore operations are unaffected.</span>`;
+    <strong>These settings are active defaults.</strong>
+    <span>They apply only when <code>relai_edit</code> receives an <code>updateText</code> patch. Exact replacements and full-file writes are unaffected.</span>`;
   return intro;
 }
 
@@ -116,39 +109,27 @@ function buildSaveRow(container) {
   const save = saveRow(() => _save(container), () => _loadAndRender(container));
   save.id = '__settings-save-row';
   save.hidden = true;
-  const changes = document.createElement('button');
-  changes.className = 'secondary compact-button settings-pending-button';
-  changes.id = '__settings-changes-link';
-  changes.onclick = () => alert(_getChanges().map(change => `${change.key}: ${JSON.stringify(change.oldValue)} -> ${JSON.stringify(change.newValue)}`).join('\n'));
-  save.prepend(changes);
   return save;
 }
 
 function _checkDirty() {
-  const saveRowEl = document.getElementById('__settings-save-row');
-  if (!saveRowEl) return;
-  const changes = _getChanges();
-  saveRowEl.hidden = changes.length === 0;
-  const link = document.getElementById('__settings-changes-link');
-  if (link) link.textContent = `${changes.length} change${changes.length === 1 ? '' : 's'} pending`;
+  const saveRowElement = document.getElementById('__settings-save-row');
+  if (!saveRowElement) return;
+  saveRowElement.hidden = _getChanges().length === 0;
 }
 
 function _getChanges() {
   if (!_original || !_draft) return [];
-  const keys = ['maxOutputBytes', 'workflow'];
-  const changes = [];
-  for (const key of keys) {
-    if (JSON.stringify(_draft[key]) !== JSON.stringify(_original[key])) {
-      changes.push({ key, oldValue: _original[key], newValue: _draft[key] });
-    }
-  }
-  return changes;
+  const keys = ['maxOutputBytes', 'patch'];
+  return keys
+    .filter(key => JSON.stringify(_draft[key]) !== JSON.stringify(_original[key]))
+    .map(key => ({ key, oldValue: _original[key], newValue: _draft[key] }));
 }
 
 async function _save(container) {
   const response = await saveSettings({
     maxOutputBytes: _draft.maxOutputBytes,
-    workflow: _draft.workflow
+    patch: _draft.patch
   });
   if (response?.ok) await _loadAndRender(container);
 }

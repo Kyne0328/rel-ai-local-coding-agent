@@ -18,7 +18,7 @@ const {
 } = require("./io");
 
 function buildToolMetadata() {
-  return require("../tools").getPublicToolMetadata();
+  return require("../tools").getToolMetadata();
 }
 
 const DASHBOARD_NAV_ITEMS = [

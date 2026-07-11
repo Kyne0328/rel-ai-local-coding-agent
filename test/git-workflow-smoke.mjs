@@ -10,11 +10,8 @@ const {
   relaiGitStatus,
   relaiGitCommit,
   relaiGitPush,
-  relaiGitMergeBranch,
-  relaiGitMergeRemoteBranchesPlan,
   relaiGitCreatePr,
   relaiApplyPatch,
-  relaiClear,
   relaiWrite,
   relaiReset
 } = require('../src/localRepoBridge.js');
@@ -65,7 +62,7 @@ const workspace = {
   commands: {},
   fastTask: { enabled: false }
 };
-const config = { stateDir: path.join(root, 'state'), workflow: { prepared: { requireCleanGit: false, backup: false } } };
+const config = { stateDir: path.join(root, 'state'), patch: { requireCleanGit: false, backup: false, maxUpdateBytes: 2 * 1024 * 1024 } };
 
 // Start a session against the clean worktree first — this mirrors the real
 // connector flow (a write auto-starts a session before git_status is consulted),
@@ -112,15 +109,6 @@ await assert.rejects(
   'push to a non-allowlisted remote must be refused'
 );
 
-// Fetch with an allowlist that matches no configured remote must report the
-// mismatch, not a hollow ok:true with zero results.
-{
-  const { relaiGitFetch } = require('../src/localRepoBridge.js');
-  const noMatch = await relaiGitFetch({ ...workspace, allowedRemotes: ['upstream'] }, config, {});
-  assert.equal(noMatch.ok, false, 'fetch with zero allowlisted remotes must not be ok');
-  assert.match(noMatch.error, /allowedRemotes/);
-}
-
 // addAll commits must refuse secret-looking staged files (e.g. .env picked up by
 // `git add -A`) unless the caller passes allowSecretPaths: true.
 fs.writeFileSync(path.join(workspace.path, '.env'), 'API_KEY=super-secret\n');
@@ -136,25 +124,10 @@ git(['rm', '--cached', '.env'], { cwd: workspace.path, stdio: 'ignore' });
 git(['commit', '-m', 'remove env'], { cwd: workspace.path, stdio: 'ignore' });
 fs.rmSync(path.join(workspace.path, '.env'), { force: true });
 
-const mergePlan = await relaiGitMergeRemoteBranchesPlan(workspace, config, { remote: 'origin', targetBranch: 'production' });
-assert.equal(mergePlan.ok, true);
-assert.ok(mergePlan.excluded.some((item) => item.name === 'origin/main'));
-assert.ok(mergePlan.excluded.some((item) => item.name === 'origin/production'));
-assert.ok(mergePlan.recommendedMergeOrder.includes('origin/feature/ui-cleanup'));
-
 const emptyPr = await relaiGitCreatePr(workspace, config, { base: 'main', head: 'main' });
 assert.equal(emptyPr.ok, false);
 assert.equal(emptyPr.emptyDiff, true);
 assert.match(emptyPr.warning, /No diff/);
-
-// merge dry-run of an already-up-to-date source must report ok:true. Previously
-// the dry-run ran `git merge --abort` unconditionally, which fails when no merge
-// started ("Already up to date"), wrongly flipping ok:false.
-const mergeNoop = await relaiGitMergeBranch(workspace, config, { source: 'main', target: 'main', dryRun: true, allowProtected: true });
-assert.equal(mergeNoop.ok, true);
-assert.equal(mergeNoop.dryRun, true);
-assert.ok(/up to date/i.test(JSON.stringify(mergeNoop.merge)));
-assert.equal(mergeNoop.abort, undefined);
 
 // relai_restore_changes paths-mode: clean:true must remove an UNTRACKED disposable
 // file (git restore alone cannot — it only knows tracked paths). Regression guard for
@@ -172,12 +145,6 @@ fs.writeFileSync(path.join(workspace.path, untrackedRel), 'disposable again\n');
 const restoreNoClean = await relaiReset(workspace, config, { paths: [untrackedRel] });
 assert.equal(restoreNoClean.ok, false, 'untracked restore without clean still fails');
 fs.rmSync(path.join(workspace.path, untrackedRel), { force: true });
-
-const clearDryRun = relaiClear(workspace, config, { path: 'README.md', dryRun: true });
-assert.equal(clearDryRun.ok, true);
-assert.deepEqual(clearDryRun.cleared, []);
-assert.deepEqual(clearDryRun.wouldClear, ['README.md']);
-assert.equal(fs.existsSync(path.join(workspace.path, 'README.md')), true);
 
 assert.throws(() => relaiWrite(workspace, config, { path: 'collapsed.js', content: 'const value = 1;'.repeat(400) }), /collapsed source-looking content/);
 

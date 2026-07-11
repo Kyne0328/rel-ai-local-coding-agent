@@ -6,7 +6,6 @@ const { getStateDir } = require("../audit");
 
 const DEFAULT_MAX_GIT_OUTPUT_BYTES = 1024 * 1024;
 const DEFAULT_AGGRESSIVE_MAX_PATCH_BYTES = 2 * 1024 * 1024;
-const DEFAULT_AGGRESSIVE_MAX_ARCHIVE_BYTES = 250 * 1024 * 1024;
 
 function clampNumber(value, min, max, fallback) {
   const n = Number(value);
@@ -20,62 +19,29 @@ function truncateUtf8(text, maxBytes, label) {
   return value.slice(0, maxBytes) + `\n[rel-ai-mcp ${label} truncated at ${maxBytes} bytes]`;
 }
 
-// ---- Prepared-workflow config helpers ----------------------------------------
+// ---- Patch configuration ----------------------------------------------------
 
-function getPreparedConfig(config) {
-  const wf = config.workflow && typeof config.workflow === "object" ? config.workflow : {};
-  return wf.prepared && typeof wf.prepared === "object" ? wf.prepared : {};
+function getPatchConfig(config) {
+  return config.patch && typeof config.patch === "object" ? config.patch : {};
 }
 
-function preparedNumber(config, key, fallback) {
-  const value = getPreparedConfig(config)[key];
+function patchNumber(config, key, fallback) {
+  const value = getPatchConfig(config)[key];
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-function preparedFlag(config, key, fallback) {
-  const value = getPreparedConfig(config)[key];
+function patchFlag(config, key, fallback) {
+  const value = getPatchConfig(config)[key];
   return value == null ? fallback : Boolean(value);
 }
 
-function workflowSummary(config) {
-  const { getWorkflowConfig } = require("../config");
-  const wf = getWorkflowConfig(config);
-  return {
-    mode: wf.mode,
-    prepared: {
-      requireCleanGit: preparedFlag(config, "requireCleanGit", false),
-      backup: preparedFlag(config, "backup", true),
-      clearMissingDefault: preparedFlag(config, "clearMissingDefault", false),
-      maxUpdateBytes: preparedNumber(config, "maxUpdateBytes", DEFAULT_AGGRESSIVE_MAX_PATCH_BYTES),
-      maxBundleBytes: preparedNumber(config, "maxBundleBytes", DEFAULT_AGGRESSIVE_MAX_ARCHIVE_BYTES)
-    }
-  };
-}
-
-function recommendedFlowForConfig(config) {
-  const { isPreparedWorkflow } = require("../config");
-  // Only recommend tools that exist on the public connector surface — steering
-  // ChatGPT toward a hidden tool just produces "not available" errors.
-  const base = ["relai_read", "relai_edit", "relai_replace", "relai_write", "relai_tidy_plan", "relai_tidy_run", "relai_run_checks", "relai_diff", "relai_restore_changes"];
-  if (!isPreparedWorkflow(config)) return base;
-  return ["relai_repo_snapshot", "relai_read", "relai_edit", "relai_apply_bundle", "relai_package_snapshot", "relai_tidy_plan", "relai_tidy_run", "relai_run_checks", "relai_diff", "relai_restore_changes"];
-}
-
-function assertPreparedUpdateSafe(workspace, config, args, patch) {
-  if (!patch?.trim()) throw new Error("relai_apply_update requires patch or diff text.");
-  const maxBytes = preparedNumber(config, "maxUpdateBytes", DEFAULT_AGGRESSIVE_MAX_PATCH_BYTES);
+function assertPatchUpdateSafe(workspace, config, _args, patch) {
+  if (!patch?.trim()) throw new Error("relai_edit requires non-empty updateText for patch-shaped edits.");
+  const maxBytes = patchNumber(config, "maxUpdateBytes", DEFAULT_AGGRESSIVE_MAX_PATCH_BYTES);
   const bytes = Buffer.byteLength(patch, "utf8");
-  if (bytes > maxBytes) throw new Error(`relai_apply_update refused ${bytes} byte patch; max is ${maxBytes}.`);
-  if (!workspace?.path) throw new Error("relai_apply_update requires a valid workspace.");
-}
-
-function assertPreparedBundleSafe(workspace, config, args, archivePath, stat) {
-  if (!archivePath) throw new Error("relai_apply_bundle requires bundlePath pointing to a local zip archive on the MCP host.");
-  if (!stat?.isFile()) throw new Error(`Archive path is not a file: ${archivePath}`);
-  const maxBytes = preparedNumber(config, "maxBundleBytes", DEFAULT_AGGRESSIVE_MAX_ARCHIVE_BYTES);
-  if (stat.size > maxBytes) throw new Error(`relai_apply_bundle refused ${stat.size} byte archive; max is ${maxBytes}.`);
-  if (!workspace?.path) throw new Error("relai_apply_bundle requires a valid workspace.");
+  if (bytes > maxBytes) throw new Error(`relai_edit refused ${bytes} byte patch; max is ${maxBytes}.`);
+  if (!workspace?.path) throw new Error("relai_edit requires a valid workspace.");
 }
 
 // ---- Git status classification -----------------------------------------------
@@ -197,20 +163,20 @@ async function gitStatusShort(workspace, config) {
 }
 
 async function requireCleanGitIfConfigured(workspace, config, args) {
-  const required = args.requireCleanGit == null ? preparedFlag(config, "requireCleanGit", false) : Boolean(args.requireCleanGit);
+  const required = args.requireCleanGit == null ? patchFlag(config, "requireCleanGit", false) : Boolean(args.requireCleanGit);
   if (!required) return;
   const status = await gitStatusShort(workspace, config);
   if (status.trim()) throw new Error(`Workspace '${workspace.alias}' is not clean.\n${status}`);
 }
 
-function shouldMakePreparedBackup(config, args) {
-  return args.backup == null ? preparedFlag(config, "backup", true) : Boolean(args.backup);
+function shouldMakePatchBackup(config, args) {
+  return args.backup == null ? patchFlag(config, "backup", true) : Boolean(args.backup);
 }
 
-async function makePreparedBackup(workspace, config, operationId, label) {
+async function makePatchBackup(workspace, config, operationId, label) {
   const status = await gitStatusShort(workspace, config);
   if (!status.trim()) return { type: "none", reason: "workspace clean" };
-  const message = `rel-ai-mcp prepared ${label} backup ${operationId}`;
+  const message = `rel-ai-mcp ${label} backup ${operationId}`;
   // Snapshot tracked changes WITHOUT disturbing the working tree: `stash create`
   // builds a stash commit but leaves the tree intact, then `stash store` records it
   // in the stash list for manual recovery. The previous `stash push --include-untracked`
@@ -275,24 +241,10 @@ function assertRemoteAllowed(workspace, remote) {
   return name;
 }
 
-async function listGitRemotes(workspace, config) {
-  const remotes = await runProcess("git", ["remote"], { cwd: workspace.path, timeout: 30000 }, config);
-  if (remotes.exitCode !== 0) throw new Error(`git remote failed for ${workspace.alias}: ${remotes.stderr || remotes.stdout || remotes.exitCode}`);
-  return String(remotes.stdout || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-}
-
 async function currentGitBranch(workspace, config) {
   const branch = await runProcess("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: workspace.path, timeout: 30000 }, config);
   if (branch.exitCode !== 0) return "";
   return String(branch.stdout || "").trim();
-}
-
-function compareMergeCandidates(left, right) {
-  const staleLeft = left.staleDays == null ? -1 : left.staleDays;
-  const staleRight = right.staleDays == null ? -1 : right.staleDays;
-  if (left.risk.length !== right.risk.length) return left.risk.length - right.risk.length;
-  if (left.recommendedOrderGroup !== right.recommendedOrderGroup) return left.recommendedOrderGroup.localeCompare(right.recommendedOrderGroup);
-  return staleLeft - staleRight;
 }
 
 function buildPrBodyFromDiff(diffText) {
@@ -332,36 +284,6 @@ async function relaiGitStatus(workspace, config, args = {}) {
     ...(ownership.baselineSource ? { baselineSource: ownership.baselineSource } : {}),
     ...(status.stderr ? { stderr: truncateUtf8(status.stderr, maxBytes, "git status stderr") } : {})
   };
-}
-
-async function relaiGitFetch(workspace, config, args = {}) {
-  await ensureGitRepo(workspace, config);
-  const allowed = allowedRemoteSet(workspace);
-  const remote = String(args.remote || "").trim();
-  if (remote) assertRemoteAllowed(workspace, remote);
-  // No explicit remote: fetch only configured remotes that are also on the allowlist.
-  const configuredRemotes = remote ? null : await listGitRemotes(workspace, config);
-  const remotes = remote ? [remote] : configuredRemotes.filter((item) => allowed.has(item));
-  const prune = args.prune !== false;
-  if (remotes.length === 0) {
-    // Nothing matched the allowlist — say so instead of reporting a hollow ok:true.
-    return {
-      ok: false,
-      workspace: workspace.alias,
-      remotes,
-      prune,
-      results: [],
-      error: `No configured remote matches allowedRemotes (${[...allowed].join(", ")}). Configured remotes: ${(configuredRemotes || []).join(", ") || "(none)"}.`
-    };
-  }
-  const results = [];
-  for (const item of remotes) {
-    const fetchArgs = ["fetch", item, ...(prune ? ["--prune"] : [])];
-    const result = await runProcess("git", fetchArgs, { cwd: workspace.path, timeout: clampNumber(args.timeoutMs, 1000, 86400000, 120000) }, config);
-    results.push({ remote: item, ...summarizeCommand(result) });
-    if (result.exitCode !== 0 && args.stopOnFailure !== false) break;
-  }
-  return { ok: results.every((item) => item.ok), workspace: workspace.alias, remotes, prune, results };
 }
 
 async function relaiGitCommit(workspace, config, args = {}) {
@@ -425,170 +347,6 @@ async function relaiGitPush(workspace, config, args = {}) {
   return { ok: push.exitCode === 0, workspace: workspace.alias, remote, branch, dryRun, setUpstream, push: summarizeCommand(push) };
 }
 
-function protectedBranchList(workspace) {
-  return Array.isArray(workspace.protectedBranches) ? workspace.protectedBranches : ["main", "master"];
-}
-
-function assertMergeTargetAllowed(workspace, target, args) {
-  if (!protectedBranchList(workspace).includes(target) || args.allowProtected === true) return;
-  throw new Error(`Target branch '${target}' is protected. Pass allowProtected: true after reviewing the plan.`);
-}
-
-async function checkoutMergeTarget(workspace, config, target, originalBranch) {
-  if (target === originalBranch) return { exitCode: 0, stdout: "", stderr: "" };
-  return runProcess("git", ["checkout", target], { cwd: workspace.path, timeout: 60000 }, config);
-}
-
-function mergeCommandArgs(source, args, dryRun) {
-  return ["merge", ...(dryRun ? ["--no-commit", "--no-ff"] : []), ...(args.ffOnly ? ["--ff-only"] : []), source];
-}
-
-async function abortDryRunMergeIfNeeded(workspace, config) {
-  const mergeInProgress = await runProcess("git", ["rev-parse", "--verify", "--quiet", "MERGE_HEAD"], { cwd: workspace.path, timeout: 30000 }, config);
-  if (mergeInProgress.exitCode !== 0) return null;
-  return runProcess("git", ["merge", "--abort"], { cwd: workspace.path, timeout: 60000 }, config);
-}
-
-async function restoreOriginalBranchIfNeeded(workspace, config, target, originalBranch) {
-  if (target === originalBranch) return null;
-  return runProcess("git", ["checkout", originalBranch], { cwd: workspace.path, timeout: 60000 }, config);
-}
-
-async function dryRunMergeCleanup(workspace, config, target, originalBranch) {
-  return {
-    aborted: await abortDryRunMergeIfNeeded(workspace, config),
-    restoreBranch: await restoreOriginalBranchIfNeeded(workspace, config, target, originalBranch)
-  };
-}
-
-function mergeBranchOk(merge, aborted, restoreBranch) {
-  return merge.exitCode === 0 && (!aborted || aborted.exitCode === 0) && (!restoreBranch || restoreBranch.exitCode === 0);
-}
-
-async function relaiGitMergeBranch(workspace, config, args = {}) {
-  await ensureGitRepo(workspace, config);
-  const source = String(args.source || args.branch || "").trim();
-  const originalBranch = await currentGitBranch(workspace, config);
-  const target = String(args.target || originalBranch).trim();
-  if (!source) throw new Error("relai_git_merge_branch requires source.");
-  if (!target) throw new Error("relai_git_merge_branch could not determine target branch.");
-  assertMergeTargetAllowed(workspace, target, args);
-
-  const dryRun = args.dryRun !== false;
-  const checkout = await checkoutMergeTarget(workspace, config, target, originalBranch);
-  if (checkout.exitCode !== 0) return { ok: false, workspace: workspace.alias, source, target, dryRun, checkout: summarizeCommand(checkout) };
-
-  const merge = await runProcess("git", mergeCommandArgs(source, args, dryRun), { cwd: workspace.path, timeout: clampNumber(args.timeoutMs, 1000, 86400000, 120000) }, config);
-  const cleanup = dryRun ? await dryRunMergeCleanup(workspace, config, target, originalBranch) : { aborted: null, restoreBranch: null };
-  const status = await relaiGitStatus(workspace, config, { maxBytes: args.maxBytes });
-  return {
-    ok: mergeBranchOk(merge, cleanup.aborted, cleanup.restoreBranch),
-    workspace: workspace.alias,
-    source,
-    target,
-    originalBranch,
-    dryRun,
-    merge: summarizeCommand(merge),
-    ...(cleanup.aborted ? { abort: summarizeCommand(cleanup.aborted) } : {}),
-    ...(cleanup.restoreBranch ? { restoreBranch: summarizeCommand(cleanup.restoreBranch) } : {}),
-    status
-  };
-}
-
-function protectedRemoteBranches(workspace, targetBranch) {
-  const protectedBranches = new Set(protectedBranchList(workspace));
-  protectedBranches.add(targetBranch);
-  return protectedBranches;
-}
-
-function parseRemoteRefLine(line, remote) {
-  const [name, committerdate] = line.split("|");
-  const short = name ? name.replace(`${remote}/`, "") : "";
-  return { name, short, committerdate };
-}
-
-function remoteRefExclusion(ref, remote, protectedBranches) {
-  if (!ref.name) return { name: ref.name, reason: "empty ref" };
-  if (ref.name === `${remote}/HEAD`) return { name: ref.name, reason: "symbolic remote head" };
-  if (!ref.short || ref.short === remote || ref.name === remote) return { name: ref.name, reason: "remote name, not a branch" };
-  if (protectedBranches.has(ref.short)) return { name: ref.name, reason: "protected or target branch" };
-  return null;
-}
-
-function staleDaysFromCommitDate(committerdate) {
-  if (!committerdate) return null;
-  return Math.max(0, Math.floor((Date.now() - new Date(committerdate).getTime()) / (24 * 60 * 60 * 1000)));
-}
-
-function branchRisk(short, staleDays) {
-  const risk = [];
-  if (staleDays != null && staleDays > 45) risk.push("stale branch");
-  if (short.includes("release") || short.includes("prod")) risk.push("name overlaps release flow");
-  return risk;
-}
-
-function recommendedBranchGroup(short) {
-  if (short.includes("ui")) return "ui";
-  return short.includes("admin") ? "admin" : "general";
-}
-
-async function remoteBranchCandidate(workspace, config, remote, targetBranch, ref) {
-  const merged = await runProcess("git", ["merge-base", "--is-ancestor", ref.name, `${remote}/${targetBranch}`], { cwd: workspace.path, timeout: 30000 }, config);
-  const staleDays = staleDaysFromCommitDate(ref.committerdate);
-  return {
-    name: ref.name,
-    short: ref.short,
-    lastCommitAt: ref.committerdate || null,
-    staleDays,
-    alreadyMerged: merged.exitCode === 0,
-    recommendedOrderGroup: recommendedBranchGroup(ref.short),
-    risk: branchRisk(ref.short, staleDays)
-  };
-}
-
-async function remoteBranchPlanItems(workspace, config, refsOutput, remote, targetBranch, protectedBranches) {
-  const branches = [];
-  const excluded = [];
-  for (const line of String(refsOutput || "").split(/\r?\n/).filter(Boolean)) {
-    const ref = parseRemoteRefLine(line, remote);
-    const exclusion = remoteRefExclusion(ref, remote, protectedBranches);
-    if (exclusion) {
-      if (exclusion.name) excluded.push(exclusion);
-      continue;
-    }
-    branches.push(await remoteBranchCandidate(workspace, config, remote, targetBranch, ref));
-  }
-  return { branches, excluded };
-}
-
-async function relaiGitMergeRemoteBranchesPlan(workspace, config, args = {}) {
-  await ensureGitRepo(workspace, config);
-  const remote = String(args.remote || "origin").trim();
-  const targetBranch = String(args.targetBranch || "production").trim();
-  const protectedBranches = protectedRemoteBranches(workspace, targetBranch);
-  const refs = await runProcess("git", ["for-each-ref", "--format=%(refname:short)|%(committerdate:iso8601)", `refs/remotes/${remote}`], { cwd: workspace.path, timeout: 30000 }, config);
-  if (refs.exitCode !== 0) return { ok: false, workspace: workspace.alias, remote, targetBranch, refs: summarizeCommand(refs) };
-  const { branches, excluded } = await remoteBranchPlanItems(workspace, config, refs.stdout, remote, targetBranch, protectedBranches);
-  const mergeCandidates = branches.filter((item) => !item.alreadyMerged).sort(compareMergeCandidates);
-  return {
-    ok: true,
-    workspace: workspace.alias,
-    remote,
-    targetBranch,
-    protectedBranches: [...protectedBranches],
-    excluded,
-    branches,
-    recommendedMergeOrder: mergeCandidates.map((item) => item.name),
-    riskSummary: mergeCandidates.filter((item) => item.risk.length > 0).map((item) => ({ name: item.name, risk: item.risk }))
-  };
-}
-
-async function relaiGitAbortMerge(workspace, config) {
-  await ensureGitRepo(workspace, config);
-  const abort = await runProcess("git", ["merge", "--abort"], { cwd: workspace.path, timeout: 60000 }, config);
-  return { ok: abort.exitCode === 0, workspace: workspace.alias, abort: summarizeCommand(abort) };
-}
-
 async function relaiGitCreatePr(workspace, config, args = {}) {
   await ensureGitRepo(workspace, config);
   const head = String(args.head || await currentGitBranch(workspace, config)).trim();
@@ -616,30 +374,22 @@ async function relaiGitCreatePr(workspace, config, args = {}) {
 
 module.exports = {
   relaiGitStatus,
-  relaiGitFetch,
   relaiGitCommit,
   relaiGitPush,
-  relaiGitMergeBranch,
-  relaiGitMergeRemoteBranchesPlan,
-  relaiGitAbortMerge,
   relaiGitCreatePr,
   classifyStatusOwnership,
-  getPreparedConfig,
-  preparedNumber,
-  preparedFlag,
-  workflowSummary,
-  recommendedFlowForConfig,
-  assertPreparedUpdateSafe,
-  assertPreparedBundleSafe,
+  getPatchConfig,
+  patchNumber,
+  patchFlag,
+  assertPatchUpdateSafe,
   ensureGitRepo,
   requireCleanGitIfConfigured,
-  shouldMakePreparedBackup,
-  makePreparedBackup,
+  shouldMakePatchBackup,
+  makePatchBackup,
   tempStateDir,
   tempStatePath,
   validatePatchPaths,
   clampNumber,
   truncateUtf8,
-  DEFAULT_AGGRESSIVE_MAX_PATCH_BYTES,
-  DEFAULT_AGGRESSIVE_MAX_ARCHIVE_BYTES
+  DEFAULT_AGGRESSIVE_MAX_PATCH_BYTES
 };

@@ -18,7 +18,7 @@ const { makeDefaultConfig, normalizeConfig, publicConfigSummary } = require('../
 const { updateWorkspace } = require('../src/configEditor.js');
 const productUx = require('../src/productUx.js');
 const { getVersion } = require('../src/version.js');
-const { getPublicToolDefinitions } = require('../src/tools/schema.js');
+const { getToolDefinitions } = require('../src/tools/schema.js');
 
 function read(rel) {
   return fs.readFileSync(path.join(root, rel), 'utf8');
@@ -66,11 +66,11 @@ assert.equal(getVersion(), latestChangelogVersion());
 {
   const cfg = normalizeConfig(makeDefaultConfig());
   const dashboard = productUx.dashboardData(cfg, { limit: 5 });
-  assert.equal(dashboard.toolCount, 18);
+  assert.equal(dashboard.toolCount, 16);
   assert.equal(Number.isFinite(dashboard.toolCount), true);
-  assert.equal(dashboard.workflow.tools.length, 18);
-  assert.ok(dashboard.workflow.tools.includes('relai_git_commit'));
-  assert.equal(dashboard.config.localRepoBridge.visibleTools.length, 18);
+  assert.equal(dashboard.tools.length, 16);
+  assert.ok(dashboard.tools.includes('relai_git_commit'));
+  assert.equal(dashboard.config.localRepoBridge.visibleTools.length, 16);
   assert.ok(publicConfigSummary(cfg).localRepoBridge.visibleTools.includes('relai_edit'));
   assert.doesNotMatch(read('src/ui/sections/home.js'), /visibleToolCount/);
   assert.match(read('src/ui/sections/workspace-cards.js'), /data\.toolCount/);
@@ -81,11 +81,10 @@ assert.equal(getVersion(), latestChangelogVersion());
   assert.doesNotMatch(read('README.md'), /Settings -> Connector/);
   assert.match(read('README.md'), /Settings > Apps > Create/);
   assert.doesNotMatch(read('docs/ONE_CLICK_SETUP.md'), /removed tools[^\n]*relai_apply_update/);
-  // Issue 2 is intentionally unchanged: every public definition retains the
-  // existing annotation values while their storage moves into the registry.
-  const publicDefinitions = getPublicToolDefinitions();
-  assert.ok(publicDefinitions.length > 0);
-  for (const definition of publicDefinitions) {
+  // Every active definition retains the established annotation values.
+  const definitions = getToolDefinitions();
+  assert.equal(definitions.length, 16);
+  for (const definition of definitions) {
     assert.deepEqual(definition.annotations, {
       readOnlyHint: true,
       destructiveHint: false,

@@ -11,70 +11,24 @@ const TIDY_PLAN_TTL_MS = 15 * 60 * 1000;
 const TIDY_PLAN_ID_PATTERN = /^tidy_[a-z0-9]+_[a-f0-9]{12}$/;
 const TIDY_MODES = new Set(["session_untracked"]);
 
-function relaiClear(workspace, config, args = {}) {
-  const singlePath = args.path ? [args.path] : [];
-  const rawPaths = Array.isArray(args.paths) ? args.paths : singlePath;
-  if (rawPaths.length === 0) throw new Error("relai_clear_files requires path or paths.");
-  if (rawPaths.length > 100) throw new Error("relai_clear_files accepts at most 100 paths per call.");
-  const dryRun = Boolean(args.dryRun);
-  const failIfMissing = Boolean(args.failIfMissing);
-  const expectedSha256 = String(args.expectedSha256 || "").trim();
-  if (expectedSha256 && rawPaths.length !== 1) throw new Error("relai_clear_files expectedSha256 can only be used with one path.");
-
+function clearTidyFiles(workspace, config, paths) {
   const operationId = makeOperationId();
   const cleared = [];
-  const wouldClear = [];
-  const skipped = [];
-  const results = [];
-
-  for (const rawPath of rawPaths) {
-    const result = clearSinglePath(workspace, rawPath, dryRun, failIfMissing, expectedSha256, cleared, wouldClear);
-    if (result instanceof Error) throw result;
-    results.push(result);
-    if (result.skipped) skipped.push(result);
-  }
-
-  appendOperation(config, workspace, {
-    id: operationId,
-    type: dryRun ? "clear:dryRun" : "clear",
-    ok: true,
-    paths: cleared,
-    results
-  });
-
-  return {
-    ok: true,
-    dryRun,
-    workspace: workspace.alias,
-    operationId,
-    operation: "clearFiles",
-    changed: !dryRun && cleared.length > 0,
-    changedFiles: cleared,
-    cleared,
-    wouldClear: dryRun ? wouldClear : [],
-    skipped,
-    results
-  };
-}
-
-function clearSinglePath(workspace, rawPath, dryRun, failIfMissing, expectedSha256, cleared, wouldClear) {
-  const safe = resolveSafePath(workspace.path, String(rawPath || "").trim());
-  if (!fs.existsSync(safe.absolutePath)) {
-    const item = { path: safe.relativePath, skipped: true, reason: "missing" };
-    if (failIfMissing) return new Error(`relai_clear_files target does not exist: ${safe.relativePath}`);
-    return item;
-  }
-  const stat = fs.statSync(safe.absolutePath);
-  if (!stat.isFile()) return new Error(`relai_clear_files refuses non-file path: ${safe.relativePath}`);
-  const oldSha256 = fileSha256(workspace.path, safe.relativePath);
-  const shaMismatch = Boolean(expectedSha256 && oldSha256 !== expectedSha256);
-  const item = { path: safe.relativePath, cleared: !dryRun, dryRun, oldSha256, ...(shaMismatch ? { shaMismatch: { expectedSha256, currentSha256: oldSha256 } } : {}) };
-  wouldClear.push(safe.relativePath);
-  if (!dryRun) {
+  for (const rawPath of paths) {
+    const safe = resolveSafePath(workspace.path, rawPath);
+    if (!fs.existsSync(safe.absolutePath)) throw new Error(`Tidy target does not exist: ${safe.relativePath}`);
+    if (!fs.statSync(safe.absolutePath).isFile()) throw new Error(`Tidy refuses non-file path: ${safe.relativePath}`);
     fs.rmSync(safe.absolutePath, { force: true });
     cleared.push(safe.relativePath);
   }
-  return item;
+  appendOperation(config, workspace, {
+    id: operationId,
+    type: "workspace_tidy_clear",
+    ok: true,
+    paths: cleared,
+    results: []
+  });
+  return { ok: true, changedFiles: cleared };
 }
 
 function tidyPlanDir(config, workspace) {
@@ -144,7 +98,7 @@ async function workspaceTidyPlan(workspace, config, args = {}) {
       candidates: [],
       skipped: [],
       reason: "no_session_baseline",
-      message: "No active session baseline for this workspace, so untracked files cannot be attributed to this session. Start a session (edit a file, or call relai_set_policy) before tidying session-owned untracked files."
+      message: "No active session baseline for this workspace, so untracked files cannot be attributed to this session. Make an edit first so Rel.AI can capture a session baseline before tidying session-owned untracked files."
     };
   }
   const { candidates, skipped } = scanUntrackedSessionFiles(workspace, ownership, maxCandidates);
@@ -219,7 +173,9 @@ async function relaiWorkspaceTidyRun(workspace, config, args = {}) {
       message: "Workspace tidy plan was not applied because one or more candidates changed since planning. Create a fresh plan."
     };
   }
-  const clearResult = (preflight.length > 0 ? relaiClear(workspace, config, { paths: preflight.map((item) => item.path), failIfMissing: true }) : { ok: true, changedFiles: [] });
+  const clearResult = preflight.length > 0
+    ? clearTidyFiles(workspace, config, preflight.map((item) => item.path))
+    : { ok: true, changedFiles: [] };
   try { fs.rmSync(file, { force: true }); } catch { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] tidy plan cleanup'); }
   const applied = preflight.map((item) => ({ path: item.path, action: "tidied_untracked_file", sha256: item.sha256, sizeBytes: item.sizeBytes }));
   appendOperation(config, workspace, {
@@ -259,7 +215,6 @@ function preflightTidyCandidates(candidates, workspace, currentUntracked) {
 }
 
 module.exports = {
-  relaiClear,
   workspaceTidyPlan,
   workspaceTidyRun: relaiWorkspaceTidyRun
 };

@@ -64,7 +64,7 @@ function compactForConnector(name, value, _args) {
           })
         : value.workspace;
       const state = ws && value.workspace ? policySentence(value.workspace.policy) : null;
-      // Server-internal fields removed: toolGroups (incl. the internal-only list),
+      // Server-internal fields removed: tool groups,
       // the server's own npm scripts, its CI scan, and the raw policy object.
       return pruneEmpty({
         ok: value.ok,
@@ -110,8 +110,7 @@ function compactForConnector(name, value, _args) {
       });
     }
     case "relai_repo_snapshot": {
-      // Drop config-forced constants (toolMode, trustedLocalAgent), prepared-workflow
-      // internals (flow), budget telemetry, the operation journal, and the full text
+      // Drop config-forced constants, budget telemetry, the operation journal, and the full text
       // of every manifest — keep the manifest NAMES and the project hints.
       return pruneEmpty({
         ok: value.ok,
@@ -125,18 +124,6 @@ function compactForConnector(name, value, _args) {
         truncated: value.truncated,
         hints: value.hints,
         recommendedFlow: value.recommendedFlow
-      });
-    }
-    case "relai_session_summary": {
-      return pruneEmpty({
-        ok: value.ok,
-        workspace: value.workspace,
-        sessionActive: value.sessionActive || undefined,
-        taskHint: value.taskHint,
-        filesChanged: value.filesChanged,
-        checksRun: value.checksRun,
-        diffReviewed: value.diffReviewed || undefined,
-        escalations: value.escalations
       });
     }
     default:

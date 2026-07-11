@@ -25,18 +25,13 @@ assert.deepEqual(
 );
 
 assert.deepEqual(
-  buildExtraAudit('relai_set_policy', { operation: 'clear', policy: { sessionActive: true } }, {}),
-  { policyOperation: 'clear', policySessionActive: true }
-);
-
-assert.deepEqual(
   buildExtraAudit('relai_write', {}, { path: 'src/write.js' }),
   { filePath: 'src/write.js' }
 );
 
 assert.deepEqual(
-  buildExtraAudit('relai_clear_files', {}, { path: 'tmp/one.txt', paths: ['tmp/one.txt', 'tmp/two.txt'] }),
-  { filePath: 'tmp/one.txt', filePaths: ['tmp/one.txt', 'tmp/two.txt'] }
+  buildExtraAudit('relai_replace', {}, { path: 'src/replace.js' }),
+  { filePath: 'src/replace.js' }
 );
 
 assert.deepEqual(
@@ -51,5 +46,6 @@ assert.deepEqual(
 
 assert.deepEqual(buildExtraAudit('relai_status', {}, {}), {});
 assert.deepEqual(buildExtraAudit('relai_edit', { plannerPath: '', plannerReason: '' }, {}), {});
+assert.deepEqual(buildExtraAudit('removed_tool', {}, {}), {});
 
-console.log('Tool session audit enrichment tests passed.');
+console.log('Tool session audit enrichment tests passed for active tools.');

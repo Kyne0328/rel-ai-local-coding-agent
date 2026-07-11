@@ -45,13 +45,14 @@ assert.ok(typeof normalizeOpenAIPatchFormat === 'function', 'normalizeOpenAIPatc
   assert.ok(patch.includes('+line2'), 'add file content preserved');
 }
 
-// 4. OpenAI Delete File raises explicit error pointing at relai_clear_files
+// 4. Delete File cannot be converted to a unified diff helper; callers should pass
+// the structured patch directly to relai_edit, which handles deletion natively.
 {
   const input = `*** Begin Patch\n*** Delete File: lib/old.dart\n*** End Patch\n`;
   assert.throws(
     () => normalizeOpenAIPatchFormat(input),
-    /relai_clear_files.*lib\/old\.dart/,
-    'Delete File must throw with relai_clear_files hint'
+    /structured OpenAI patch directly to relai_edit updateText/,
+    'Delete File must direct callers to the active relai_edit path'
   );
 }
 

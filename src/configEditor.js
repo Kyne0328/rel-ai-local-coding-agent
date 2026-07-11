@@ -1,6 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const { getConfigPath, publicConfigSummary, writeConfig, normalizeWorkflowConfig, assertSafeWorkspaceRoot } = require("./config");
+const { getConfigPath, publicConfigSummary, writeConfig, normalizePatchConfig, assertSafeWorkspaceRoot } = require("./config");
 const { discoverCommands, staleCommandKeys } = require("./commandDiscovery");
 
 const NUMBER_KEYS = ["maxOutputBytes", "maxIndexFiles"];
@@ -46,7 +46,7 @@ function updateSettings(current, payload = {}) {
     setIfChanged(next, key, finiteNumber(values[key], key), changed);
   }
 
-  applyWorkflowSettings(next, values, changed);
+  applyPatchSettings(next, values, changed);
   applyAllowedSections(next, values, changed);
 
   const normalized = writeConfig(next);
@@ -63,17 +63,10 @@ function objectOrEmpty(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
-function applyWorkflowSettings(next, values, changed) {
-  if (!values.workflow || typeof values.workflow !== "object") return;
-  const current = objectOrEmpty(next.workflow);
-  const currentPrepared = objectOrEmpty(current.prepared);
-  const incomingPrepared = objectOrEmpty(values.workflow.prepared);
-  next.workflow = normalizeWorkflowConfig({
-    ...current,
-    ...values.workflow,
-    prepared: { ...currentPrepared, ...incomingPrepared }
-  });
-  changed.push("workflow");
+function applyPatchSettings(next, values, changed) {
+  if (!values.patch || typeof values.patch !== "object") return;
+  next.patch = normalizePatchConfig({ ...objectOrEmpty(next.patch), ...values.patch });
+  changed.push("patch");
 }
 
 function coerceSettingValue(value, label) {

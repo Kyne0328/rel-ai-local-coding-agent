@@ -1,6 +1,5 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const { runProcess, summarizeCommand } = require("./process");
 const {
   collectTextFiles,
   collectOptionsFromWorkspace,
@@ -16,23 +15,18 @@ const { resolvePolicy } = require("./policyResolver");
 const { resolveBudget } = require("./budgetResolver");
 const sessionCache = require("./sessionCache");
 const {
-  relaiGitStatus, relaiGitFetch, relaiGitCommit, relaiGitPush,
-  relaiGitMergeBranch, relaiGitMergeRemoteBranchesPlan, relaiGitAbortMerge, relaiGitCreatePr,
-  classifyStatusOwnership,
-  workflowSummary, recommendedFlowForConfig
+  relaiGitStatus,
+  relaiGitCommit,
+  relaiGitPush,
+  relaiGitCreatePr,
+  classifyStatusOwnership
 } = require("./repo/gitOps");
-const {
-  buildZipCommand, buildUnzipCommand,
-  overlayDirectory, shouldSkipArchivePath, copyWorkspaceForArchive
-} = require("./repo/archiveUtils");
-const { relaiRefactorAudit } = require("./repo/audit");
 const { clampNumber } = require("./bridge/limits");
 const { relaiVerify } = require("./bridge/validation");
 const { relaiBrowser } = require("./bridge/browser");
 const { relaiDiff, relaiReset } = require("./bridge/review");
-const { relaiClear, workspaceTidyPlan, workspaceTidyRun: relaiWorkspaceTidyRun } = require("./bridge/tidy");
+const { workspaceTidyPlan, workspaceTidyRun: relaiWorkspaceTidyRun } = require("./bridge/tidy");
 const { relaiApplyPatch, normalizeOpenAIPatchFormat } = require("./bridge/patch");
-const { relaiApplyArchive, relaiSnapshotArchive } = require("./bridge/archive");
 
 const DEFAULT_MAX_READ_BYTES = 1024 * 1024;
 const DEFAULT_MAX_SNAPSHOT_FILES = 1000;
@@ -57,7 +51,6 @@ function repoSnapshot(workspace, config, args = {}) {
     root: workspace.path,
     toolMode: config.toolMode || "chatgpt_local_repo",
     trustedLocalAgent: Boolean(config.trustedLocalAgent),
-    flow: workflowSummary(config),
     manifests: Object.keys(manifests),
     manifestContents: manifests,
     discoveredCommands,
@@ -68,7 +61,7 @@ function repoSnapshot(workspace, config, args = {}) {
     skipped: tree.skipped.slice(0, 200),
     truncated: tree.truncated,
     hints: projectHints(Object.keys(manifests)),
-    recommendedFlow: recommendedFlowForConfig(config),
+    recommendedFlow: ["relai_repo_snapshot", "relai_read", "relai_edit", "relai_write", "relai_replace", "relai_tidy_plan", "relai_tidy_run", "relai_run_checks", "relai_diff", "relai_restore_changes"],
     writeGuidance: workspaceWriteGuidance(config),
     operationJournal: summarizeOperations(config, workspace, args.journalLimit || 10)
   };
@@ -491,24 +484,6 @@ function clearStagedPayload(config, workspace, writeId) {
   return existed;
 }
 
-async function relaiRemoveFile(workspace, config, args = {}) {
-  const relativePath = String(args.path || "").trim();
-  if (!relativePath) throw new Error("relai_remove_file requires path.");
-  const reason = String(args.reason || "").trim();
-  let result;
-  try {
-    result = relaiClear(workspace, config, { path: relativePath, expectedSha256: args.expectedSha256, dryRun: args.dryRun, failIfMissing: args.failIfMissing });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(message.replaceAll("relai_clear_files", "relai_remove_file"), { cause: error });
-  }
-  if (!args.dryRun && args.stage === true && result.changedFiles.length > 0) {
-    const stage = await runProcess("git", ["add", "--", ...result.changedFiles], { cwd: workspace.path, timeout: 60000 }, config);
-    return { ...result, reason, stage: summarizeCommand(stage), ok: result.ok && stage.exitCode === 0 };
-  }
-  return { ...result, reason };
-}
-
 function readDirectory(workspace, relativePath, args) {
   const maxEntries = clampNumber(args.maxEntries, 1, 20000, 1000);
   const prefix = relativePath === "." ? "" : relativePath;
@@ -548,9 +523,7 @@ function projectHints(manifests) {
 }
 
 function workspaceWriteGuidance(config) {
-  const flow = workflowSummary(config);
   return {
-    flow,
     defaultMode: "size-based",
     recommendedChunkBytes: DEFAULT_STAGED_CHUNK_BYTES,
     modes: {
@@ -585,13 +558,6 @@ function workspaceWriteGuidance(config) {
           "several related files need coordinated text edits (pass edits: [...])"
         ]
       },
-      "apply-bundle": {
-        tool: "relai_apply_bundle",
-        when: [
-          "a prepared file bundle already exists on the MCP host",
-          "many files need to be overlaid together"
-        ]
-      },
       "workspace-tidy": {
         tools: ["relai_tidy_plan", "relai_tidy_run"],
         when: ["generated session artifacts should be tidied through a bounded plan"]
@@ -602,7 +568,6 @@ function workspaceWriteGuidance(config) {
       "Use direct-write for complete replacement of small or normal-sized files.",
       "Use staged-write for complete replacement of large files.",
       "Use apply-update when the change is naturally patch-shaped across files.",
-      "Use apply-bundle when a prepared archive should overlay many files.",
       "Use workspace-tidy plan/run for generated session artifacts."
     ],
     examples: {
@@ -612,7 +577,6 @@ function workspaceWriteGuidance(config) {
       stagedWriteAppend: "relai_write { workspace, stage: 'append', writeId, content }",
       stagedWriteCommit: "relai_write { workspace, stage: 'commit', writeId }",
       applyUpdate: "relai_edit { workspace, updateText, runChecks: true, returnDiff: true }",
-      applyBundle: "relai_apply_bundle { workspace, bundlePath, checks }",
       workspaceTidyPlan: "relai_tidy_plan { workspace, mode: 'session_untracked' }",
       workspaceTidyRun: "relai_tidy_run { workspace, planId }"
     },
@@ -655,7 +619,7 @@ function fileWriteGuidance(relativePath, text) {
         tool: "relai_edit",
         reason: "Use relai_edit with updateText (or edits: [...]) when the change spans multiple files."
       },
-      next: "Prefer relai_replace with exact current text. Use staged relai_write for unavoidable whole-file replacement. Use relai_clear_files only for obsolete files."
+      next: "Prefer relai_replace with exact current text. Use staged relai_write for unavoidable whole-file replacement. Use relai_tidy_plan and relai_tidy_run for session-owned untracked artifacts."
     };
   }
 
@@ -750,31 +714,17 @@ module.exports = {
   relaiRead,
   relaiWrite,
   relaiReplace,
-  relaiClear,
   relaiApplyPatch,
-  relaiApplyArchive,
-  relaiSnapshotArchive,
   relaiVerify,
   relaiBrowser,
   relaiDiff,
   relaiReset,
   relaiGitStatus,
-  relaiGitFetch,
   relaiGitCommit,
   relaiGitPush,
-  relaiGitMergeBranch,
-  relaiGitMergeRemoteBranchesPlan,
-  relaiGitAbortMerge,
   relaiGitCreatePr,
-  relaiRemoveFile,
-  relaiRefactorAudit,
   normalizeOpenAIPatchFormat,
   classifyStatusOwnership,
-  buildZipCommand,
-  buildUnzipCommand,
-  copyWorkspaceForArchive,
-  overlayDirectory,
-  shouldSkipArchivePath,
   STAGED_WRITE_BYTE_THRESHOLD,
   STAGED_WRITE_LINE_THRESHOLD,
   writeStagedPayload,
