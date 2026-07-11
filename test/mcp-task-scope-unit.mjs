@@ -19,6 +19,23 @@ assert.notEqual(
   resolveTaskScopeId({ headers: { 'x-openai-conversation-id': 'conversation-a' } }, payload),
   resolveTaskScopeId({ headers: { 'x-openai-conversation-id': 'conversation-b' } }, payload)
 );
+const rotatedTransportA = {
+  headers: {
+    'mcp-session-id': 'transport-a',
+    'x-openai-conversation-id': 'conversation-shared'
+  }
+};
+const rotatedTransportB = {
+  headers: {
+    'mcp-session-id': 'transport-b',
+    'x-openai-conversation-id': 'conversation-shared'
+  }
+};
+assert.equal(
+  resolveTaskScopeId(rotatedTransportA, payload, 'transport-a'),
+  resolveTaskScopeId(rotatedTransportB, payload, 'transport-b'),
+  'conversation identity must survive MCP transport session rotation'
+);
 assert.equal(
   resolveTaskScopeId({ headers: {} }, { ...payload, params: { ...payload.params, _meta: { conversationId: 'meta-conversation' } } }),
   resolveTaskScopeId({ headers: {} }, { ...payload, params: { ...payload.params, _meta: { conversationId: 'meta-conversation' } } })

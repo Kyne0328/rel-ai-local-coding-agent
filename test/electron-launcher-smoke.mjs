@@ -62,6 +62,11 @@ assert.ok(electronPkg.build.extraResources.some((item) => item.from === '../vend
 const electronMain = fs.readFileSync(path.join(root, 'electron', 'main.js'), 'utf8');
 const desktopTray = fs.readFileSync(path.join(root, 'electron', 'desktop-tray.js'), 'utf8');
 const dashboardPreload = fs.readFileSync(path.join(root, 'electron', 'dashboard-preload.js'), 'utf8');
+const dashboardManagerInit = electronMain.indexOf('const dashboardWindowManager =');
+const desktopTrayInit = electronMain.indexOf('const desktopTray =');
+const taskActivityRuntimeInit = electronMain.indexOf('const toolActivityRuntime =');
+assert.ok(dashboardManagerInit >= 0 && dashboardManagerInit < taskActivityRuntimeInit, 'dashboard manager must exist before the eager task-status callback runs');
+assert.ok(desktopTrayInit >= 0 && desktopTrayInit < taskActivityRuntimeInit, 'desktop tray must exist before the eager task-status callback runs');
 assert.match(
   electronMain,
   /const \{ fitWindowToContent, WINDOW_SIZE_LIMITS \} = require\('\.\/window-size'\);/,

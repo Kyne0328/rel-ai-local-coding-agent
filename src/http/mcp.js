@@ -162,24 +162,35 @@ function streamableSessionId(req, payload) {
 
 function resolveTaskScopeId(req, payload, explicitSessionId = '') {
   const headers = req?.headers || {};
-  const headerValue = [
-    headers['mcp-session-id'],
+  const first = values => values.map(value => Array.isArray(value) ? value[0] : value).find(Boolean);
+  const conversationHeader = first([
     headers['x-openai-conversation-id'],
     headers['x-chatgpt-conversation-id'],
-    headers['openai-conversation-id'],
-    headers['x-openai-session-id']
-  ].map(value => Array.isArray(value) ? value[0] : value).find(Boolean);
+    headers['openai-conversation-id']
+  ]);
+  const transportHeader = first([
+    headers['x-openai-session-id'],
+    headers['mcp-session-id']
+  ]);
   const message = Array.isArray(payload) ? payload[0] : payload;
   const meta = message?.params?._meta || message?._meta || {};
-  const metadataValue = [
+  const metadataConversation = first([
     meta['openai/conversationId'],
+    meta.conversationId
+  ]);
+  const metadataSession = first([
     meta['openai/sessionId'],
-    meta.conversationId,
     meta.sessionId
-  ].find(Boolean);
+  ]);
   const authorization = String(headers.authorization || '');
   const fallback = authorization || req?.socket?.remoteAddress || 'connector-default';
-  const source = String(explicitSessionId || headerValue || metadataValue || fallback);
+  // Conversation identity must outlive a transport reconnect. Using Mcp-Session-Id
+  // first split validation and relai_complete_task into separate work sessions when
+  // ChatGPT rotated the HTTP transport between tool calls.
+  const source = String(
+    conversationHeader || metadataConversation || metadataSession ||
+    transportHeader || explicitSessionId || fallback
+  );
   return `mcp:${crypto.createHash('sha256').update(source).digest('hex').slice(0, 24)}`;
 }
 
