@@ -132,16 +132,6 @@
   .toast-error { background: color-mix(in srgb, var(--red-dim) 72%, var(--surface)); }
   .toast-success { background: color-mix(in srgb, var(--green-dim) 72%, var(--surface)); }
 
-  .command-backdrop { display: flex; align-items: flex-start; justify-content: center; padding: 80px 24px 24px; }
-  .command-panel { width: min(560px, 100%); overflow: hidden; border: 1px solid var(--line-soft); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--elev-3); }
-  .command-input { width: 100%; min-height: 52px; padding: 0 var(--space-4); border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; font-size: var(--font-16); }
-  .command-results { max-height: 360px; overflow: auto; }
-  .command-option { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: 10px var(--space-4); cursor: pointer; }
-  .command-option[aria-selected="true"] { background: var(--blue-dim); }
-  .command-label { font-weight: var(--weight-medium); }
-  .command-category { color: var(--text-muted); font-size: var(--font-11); }
-  .command-empty { padding: var(--space-3) var(--space-4); color: var(--text-muted); }
-
   .activity-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
   .activity-search { width: 220px; min-height: 34px; }
   .segment-group { display: flex; gap: 4px; padding: 3px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); }

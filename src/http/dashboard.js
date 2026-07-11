@@ -220,16 +220,22 @@ function openDashboardEvents(res, req, options) {
     "Connection": "keep-alive",
     "X-Accel-Buffering": "no"
   });
-  const statMtime = (file) => {
-    try { return file ? fs.statSync(file).mtimeMs : 0; } catch { return 0; /* file may not exist; treat as not modified */ }
+  const statSignature = (file) => {
+    try {
+      if (!file) return "0:0";
+      const stat = fs.statSync(file);
+      return `${stat.mtimeMs}:${stat.size}`;
+    } catch {
+      return "0:0";
+    }
   };
   const changeSignature = () => {
     let config = null;
     try { config = readConfigCached(); } catch { /* config may be unavailable; signature stays empty */ }
     return [
-      statMtime(require("../config").getConfigPath()),
-      statMtime(config?.auditLogPath)
-    ].join(":");
+      statSignature(require("../config").getConfigPath()),
+      statSignature(config?.auditLogPath)
+    ].join("|");
   };
   let lastSignature = "";
   const sendSnapshot = (force = false) => {
@@ -301,16 +307,6 @@ try {
         <div class="page-subtitle" id="subtitle">Checking local workspace state…</div>
       </div>
       <div class="top-controls">
-        <label class="workspace-quick-nav" for="workspaceQuickNav">
-          <span class="sr-only">Jump to workspace</span>
-          <select id="workspaceQuickNav" class="workspace-quick-select" aria-label="Jump to workspace">
-            <option value="">Workspaces</option>
-          </select>
-        </label>
-        <button class="secondary command-trigger" id="commandPaletteBtn" type="button" aria-label="Open command palette">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4"></path></svg>
-          <span>Commands</span><kbd>Ctrl K</kbd>
-        </button>
         <span class="status-pill" id="serverStatus">Connecting…</span>
         <button class="secondary" id="refreshBtn" type="button">Refresh</button>
         <span class="section-action" id="lastUpdated"></span>

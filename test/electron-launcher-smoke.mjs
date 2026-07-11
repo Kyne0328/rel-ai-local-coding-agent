@@ -62,16 +62,6 @@ assert.match(
   'Electron main must import the window limits used by normal wizard and status startup'
 );
 
-const dashboardJs = fs.readFileSync(path.join(root, 'public', 'dashboard.js'), 'utf8');
-assert.ok(
-  dashboardJs.includes('const workspaceList = storeData.config && Array.isArray(storeData.config.workspaces) ? storeData.config.workspaces : [];'),
-  'dashboard boot must normalize workspace actions before calling map'
-);
-assert.ok(
-  !dashboardJs.includes('Array.isArray(storeData.config && storeData.config.workspaces ? storeData.config.workspaces : []).map'),
-  'dashboard boot must not call .map on the boolean returned by Array.isArray'
-);
-
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-gui-test-'));
 process.env.REL_AI_MCP_STATE_DIR = stateDir;
 

@@ -20,14 +20,20 @@ export function mountActivity(container) {
   loadLogs(token);
 }
 
-export function prependEntry(entry) {
-  if (!entry || typeof entry !== 'object' || _paused) return;
-  const key = entryKey(entry);
-  if (key && _allEntries.some(item => entryKey(item) === key)) return;
-  _allEntries.unshift(entry);
-  _allEntries = sortEntries(_allEntries).slice(0, 1000);
+export function mergeEntries(entries) {
+  if (_paused || !Array.isArray(entries) || entries.length === 0) return;
+  const byKey = new Map(_allEntries.map(entry => [entryKey(entry), entry]));
+  for (const entry of entries) {
+    if (!entry || typeof entry !== 'object') continue;
+    byKey.set(entryKey(entry), entry);
+  }
+  _allEntries = sortEntries([...byKey.values()]).slice(0, 1000);
   updateFilterOptions();
   renderFilteredTable();
+}
+
+export function prependEntry(entry) {
+  mergeEntries(entry ? [entry] : []);
 }
 
 function buildActivity() {

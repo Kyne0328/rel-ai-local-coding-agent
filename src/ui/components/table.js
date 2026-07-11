@@ -1,4 +1,4 @@
-// Table — sticky header; virtualizer added in Phase 3
+// Table with a sticky header and incremental row rendering.
 function renderHeader(columns) {
   const thead = document.createElement('thead');
   const row = document.createElement('tr');

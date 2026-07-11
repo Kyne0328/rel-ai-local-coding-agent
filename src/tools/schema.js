@@ -49,6 +49,7 @@ function getPublicToolSchemas() {
 function getPublicToolMetadata() {
   return getPublicToolDefinitions().map((definition) => ({
     name: definition.name,
+    title: definition.title || definition.name,
     displayName: definition.name.replace(/^relai_/, '').replaceAll('_', ' '),
     description: definition.description || '',
     category: definition.dashboard?.category || 'Workspace tools',
@@ -58,6 +59,7 @@ function getPublicToolMetadata() {
   }));
 }
 
+/** @param {string} name @returns {boolean} */
 function isToolCallable(name) {
   return TOOL_NAMES.has(name);
 }

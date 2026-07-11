@@ -1,22 +1,9 @@
 import { setToken, getToken, fetchJson, DASHBOARD_DATA_URL } from './ui/api.js';
 import { init as initStore, get as getStore } from './ui/store.js';
-import { initRouter, currentSection, navigate, rerender } from './ui/router.js';
+import { initRouter, currentSection, rerender } from './ui/router.js';
 import { initEvents, startSSE } from './ui/events.js';
 import { mountHome } from './ui/sections/home.js';
-import { initCommandPalette, openCommandPalette } from './ui/components/command-palette.js';
 import { initUiPreferences } from './ui/preferences.js';
-
-const ROUTES = [
-  { id: 'home', label: 'Overview' },
-  { id: 'workspaces', label: 'Workspaces' },
-  { id: 'activity', label: 'Activity' },
-  { id: 'tools', label: 'Tools' },
-  { id: 'settings', label: 'Settings' },
-];
-const SETTINGS_SUBROUTES = [
-  { id: 'connector', label: 'Settings → Connector' },
-  { id: 'diagnostics', label: 'Settings → Diagnostics' },
-];
 
 initUiPreferences();
 
@@ -63,7 +50,6 @@ async function boot() {
 
   const refreshed = await _doRefresh({ source: 'boot', render: _routerReady });
   if (refreshed?.ok !== false && !_routerReady) _activateRouter(routeRoot);
-  _setupCommandPalette();
 
   window.addEventListener('relai:dashboard-refresh', () => _doRefresh({ source: 'local-change', render: true }));
   initEvents(_liveOnEvent);
@@ -75,31 +61,6 @@ function _activateRouter(routeRoot = ensureRouteRoot()) {
   if (_routerReady || !routeRoot) return;
   _routerReady = true;
   initRouter(routeRoot, getSections());
-}
-
-function _setupCommandPalette() {
-  const storeData = getStore();
-  const navActions = [
-    ...ROUTES.map(route => ({ label: route.label, href: '#' + route.id, category: 'Navigation' })),
-    ...SETTINGS_SUBROUTES.map(route => ({ label: route.label, href: '#settings/' + route.id, category: 'Navigation' })),
-  ];
-  const actionActions = [
-    { label: 'Refresh dashboard', category: 'Actions', action: () => _doRefresh({ source: 'manual', render: true }) },
-    { label: 'Add workspace', category: 'Actions', action: () => navigate('workspaces') },
-    { label: 'Open connector settings', category: 'Actions', href: '#settings/connector' },
-    { label: 'Copy MCP endpoint', category: 'Actions', action: () => {
-      const endpoint = getStore()?.connection?.chatgptMcpUrl;
-      if (endpoint) navigator.clipboard.writeText(endpoint).catch(_debugError);
-    } },
-    { label: 'Copy dashboard token', category: 'Actions', action: () => { if (getToken()) navigator.clipboard.writeText(getToken()).catch(_debugError); } },
-  ];
-  const workspaceList = storeData.config && Array.isArray(storeData.config.workspaces) ? storeData.config.workspaces : [];
-  const workspaceActions = workspaceList.map(workspace => ({
-    label: 'Switch to workspace: ' + workspace.alias,
-    category: 'Workspaces',
-    action: () => { const element = document.getElementById('workspace'); if (element) element.value = workspace.alias; }
-  }));
-  initCommandPalette([...navActions, ...actionActions, ...workspaceActions]);
 }
 
 let _sectionsCache = null;
@@ -123,20 +84,6 @@ function _settingsSubPage() {
 function _wireTopControls() {
   const refreshButton = document.getElementById('refreshBtn');
   if (refreshButton) refreshButton.onclick = () => _doRefresh({ source: 'manual', render: true });
-
-  const commandButton = document.getElementById('commandPaletteBtn');
-  if (commandButton) commandButton.onclick = () => openCommandPalette();
-
-  const workspaceSelect = document.getElementById('workspaceQuickNav');
-  if (workspaceSelect) {
-    workspaceSelect.onchange = () => {
-      const alias = workspaceSelect.value;
-      if (!alias) return;
-      navigate('workspaces');
-      window.setTimeout(() => focusWorkspaceCard(alias), 120);
-      workspaceSelect.value = '';
-    };
-  }
 }
 
 async function _doRefresh(options = {}) {
@@ -145,7 +92,6 @@ async function _doRefresh(options = {}) {
   if (data && data.ok !== false) {
     initStore(data);
     _updateShell(data);
-    _setupCommandPalette();
     const routeRoot = ensureRouteRoot();
     if (!_routerReady) _activateRouter(routeRoot);
     else if (options.render !== false && !_hasBlockingInteraction()) rerender();
@@ -216,11 +162,10 @@ async function _liveOnEvent(data) {
   if (!data || data.ok === false) return;
   initStore(data);
   _updateShell(data);
-  _setupCommandPalette();
   if (!_routerReady) _activateRouter();
   if (currentSection() === 'activity') {
     import('./ui/sections/activity.js')
-      .then(module => module.prependEntry(data.auditTail?.entries?.[0] || null))
+      .then(module => module.mergeEntries(data.auditTail?.entries || []))
       .catch(_debugError);
   }
 }
@@ -229,7 +174,6 @@ function _updateShell(data) {
   const config = data?.config || {};
   const workspaces = Array.isArray(config.workspaces) ? config.workspaces : [];
   const count = workspaces.length;
-  populateWorkspaceQuickNav(workspaces);
   const subtitle = document.getElementById('subtitle');
   if (subtitle) subtitle.textContent = `${count} workspace${count === 1 ? '' : 's'} available to ChatGPT`;
   const updated = document.getElementById('lastUpdated');
@@ -239,26 +183,6 @@ function _updateShell(data) {
     status.className = 'status-pill ' + (data?.ok !== false ? 'ok' : 'bad');
     status.textContent = data?.ok !== false ? 'Online' : 'Error';
   }
-}
-
-function populateWorkspaceQuickNav(workspaces) {
-  const select = document.getElementById('workspaceQuickNav');
-  if (!select) return;
-  const options = ['<option value="">Workspaces</option>'];
-  for (const workspace of workspaces) {
-    const alias = _escapeHtml(workspace.alias || 'workspace');
-    options.push(`<option value="${alias}">${alias}</option>`);
-  }
-  select.innerHTML = options.join('');
-}
-
-function focusWorkspaceCard(alias) {
-  const cards = Array.from(document.querySelectorAll('[data-workspace-card]'));
-  const card = cards.find(element => element.dataset.workspaceCard === alias);
-  if (!card) return;
-  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  card.setAttribute('tabindex', '-1');
-  card.focus({ preventScroll: true });
 }
 
 function _hasBlockingInteraction() {

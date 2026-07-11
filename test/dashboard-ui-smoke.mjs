@@ -28,16 +28,16 @@ assert.match(interactionsCss, /@layer dashboard-interactions/);
 
 assert.match(dashboardServer, /DASHBOARD_NAV_ITEMS/);
 assert.match(dashboardServer, /renderDashboardNav/);
-assert.match(dashboardServer, /id="commandPaletteBtn"/);
-assert.match(dashboardServer, /id="workspaceQuickNav"/);
 assert.match(dashboardServer, /relai_ui_theme/);
-assert.match(dashboardJs, /openCommandPalette/);
-assert.match(dashboardJs, /populateWorkspaceQuickNav/);
-assert.match(dashboardJs, /focusWorkspaceCard/);
+assert.doesNotMatch(dashboardServer, /id="commandPaletteBtn"/);
+assert.doesNotMatch(dashboardServer, /id="workspaceQuickNav"/);
+assert.doesNotMatch(dashboardJs, /openCommandPalette|populateWorkspaceQuickNav|focusWorkspaceCard/);
 assert.match(dashboardJs, /initUiPreferences/);
 assert.match(interactionsCss, /max-width: 1250px/);
 assert.match(interactionsCss, /grid-template-columns: repeat\(5/);
 assert.match(interactionsCss, /\.nav-icon/);
+assert.doesNotMatch(interactionsCss, /command-trigger|workspace-quick/);
+assert.doesNotMatch(shellCss, /command-backdrop|command-panel|command-option/);
 
 assert.match(preferencesJs, /setThemePreference/);
 assert.match(preferencesJs, /setDensityPreference/);
@@ -57,6 +57,9 @@ assert.match(workspaceForm, /runButtonAction/);
 assert.match(settingsShared, /runButtonAction/);
 assert.match(settingsGeneral, /Appearance/);
 assert.match(settingsGeneral, /Interface density/);
+assert.match(settingsGeneral, /Prepared update safeguards/);
+assert.match(settingsGeneral, /Applies only to prepared patches and zip bundles/);
+assert.doesNotMatch(settingsGeneral, /ChatGPT local repo bridge|Workspace update style|Focused edits and guarded writes/);
 assert.doesNotMatch(workspaceForm, /<style>|style="|style\.cssText/);
 assert.doesNotMatch(settingsShared, /style\.cssText|style="/);
 
@@ -67,5 +70,18 @@ assert.match(activity, /activityStatusFilter/);
 assert.match(activity, /Clear filters/);
 assert.match(activity, /Copy event JSON/);
 assert.match(activity, /row\.onkeydown/);
+assert.match(activity, /export function mergeEntries/);
+assert.match(dashboardJs, /module\.mergeEntries\(data\.auditTail\?\.entries \|\| \[\]\)/);
+assert.match(dashboardServer, /stat\.mtimeMs.*stat\.size/s);
+
+const tools = read('src/ui/sections/tools.js');
+const toolSchema = read('src/tools/schema.js');
+assert.match(tools, /id="toolsSearch"/);
+assert.match(tools, /class="tools-grid"/);
+assert.match(tools, /toolCapability/);
+assert.match(tools, /View parameters/);
+assert.match(interactionsCss, /\.tool-card/);
+assert.match(interactionsCss, /\.tools-filter\.active/);
+assert.match(toolSchema, /title: definition\.title/);
 
 console.log('Dashboard UI smoke test passed.');

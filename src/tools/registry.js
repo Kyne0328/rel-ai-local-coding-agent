@@ -2,7 +2,8 @@
 'use strict';
 
 /** @typedef {import('../../types/boundaries').ToolDefinition} ToolDefinition */
-const TOOL_DEFINITION_VALUES = /** @satisfies {ToolDefinition[]} */ ([
+/** @type {ToolDefinition[]} */
+const TOOL_DEFINITION_VALUES = [
   {
     name: "relai_repo_snapshot",
     title: "Repository Overview",
@@ -409,7 +410,8 @@ const TOOL_DEFINITION_VALUES = /** @satisfies {ToolDefinition[]} */ ([
     behavior: {"audit":"","cache":"","startsSession":false,"deferStagedSession":false,"sessionWrite":false,"summary":""},
     dashboard: {"category":"Workspace tools","requiredProfile":"workspace","requiresApproval":false}
   }
-]);
+];
+/** @type {readonly ToolDefinition[]} */
 const TOOL_DEFINITIONS = Object.freeze(TOOL_DEFINITION_VALUES.map((definition) => Object.freeze(definition)));
 const TOOL_DEFINITION_BY_NAME = new Map(TOOL_DEFINITIONS.map((definition) => [definition.name, definition]));
 
