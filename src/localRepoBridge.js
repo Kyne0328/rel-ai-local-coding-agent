@@ -39,7 +39,10 @@ const SOURCE_LIKE_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx', '.mjs', '.
 
 function repoSnapshot(workspace, config, args = {}) {
   const policy = resolvePolicy(workspace, config || {});
-  const effectiveDefault = resolveBudget(DEFAULT_MAX_SNAPSHOT_FILES, policy, config || {});
+  const configuredDefault = workspace.fastTask?.enabled === false
+    ? DEFAULT_MAX_SNAPSHOT_FILES
+    : clampNumber(workspace.fastTask?.maxIndexFiles, 1, 20000, DEFAULT_MAX_SNAPSHOT_FILES);
+  const effectiveDefault = resolveBudget(configuredDefault, policy, config || {});
   const maxEntries = clampNumber(args.maxEntries, 1, 20000, effectiveDefault);
   const includeFiles = args.includeFiles !== false;
   const tree = collectTextFiles(workspace.path, collectOptionsFromWorkspace(workspace, { maxEntries }));
@@ -56,7 +59,7 @@ function repoSnapshot(workspace, config, args = {}) {
     discoveredCommands,
     fileCount: tree.files.length,
     effectiveMaxEntries: maxEntries,
-    budgetMultiplied: effectiveDefault !== DEFAULT_MAX_SNAPSHOT_FILES,
+    budgetMultiplied: effectiveDefault !== configuredDefault,
     ...(includeFiles ? { files: tree.files } : {}),
     skipped: tree.skipped.slice(0, 200),
     truncated: tree.truncated,

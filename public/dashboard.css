@@ -323,10 +323,31 @@ a.buttonlike.primary {
 .task-file-list { margin: 0; padding-left: 20px; display: grid; gap: 5px; }
 .task-event-list { display: grid; gap: 6px; }
 .task-event { padding: 8px 10px; display: grid; grid-template-columns: 80px minmax(0, 1fr) auto; gap: 10px; align-items: center; border: 1px solid var(--line-soft); border-radius: 8px; }
-.workspace-operational { margin: 10px 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
-.workspace-operational > div { padding: 8px 10px; display: grid; gap: 3px; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--surface-2); }
+.workspace-grid-detailed { grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); gap: 14px; }
+.workspace-card-detailed { display: grid; gap: 14px; padding: 16px; }
+.workspace-card-detailed:hover { transform: none; }
+.workspace-identity { min-width: 0; }
+.workspace-identity > strong { font-size: 16px; }
+.workspace-path { margin-top: 4px; overflow: hidden; color: var(--text-muted); font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-operational { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
+.workspace-operational > div { min-width: 0; padding: 9px 10px; display: grid; gap: 4px; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--surface-2); }
 .workspace-operational span { color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: .05em; }
 .workspace-operational strong { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-validation { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line-soft); border-radius: 12px; background: rgba(5,9,20,.42); }
+.workspace-validation.ready { border-color: rgba(79,224,154,.22); }
+.workspace-validation.missing { border-color: rgba(255,194,75,.22); }
+.workspace-validation-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.workspace-validation-head > div { display: grid; gap: 3px; }
+.workspace-section-label { color: var(--text-muted); font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.validation-command-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.validation-command { max-width: 100%; padding: 5px 8px; overflow: hidden; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--surface-2); color: var(--code); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-validation-empty { margin: 0; color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+.workspace-policy { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--text-muted); font-size: 12px; }
+.workspace-policy strong { color: var(--text); }
+.workspace-notice { display: flex; flex-wrap: wrap; gap: 6px; }
+.workspace-notice span { padding: 5px 8px; border: 1px solid rgba(255,194,75,.22); border-radius: 8px; background: var(--yellow-dim); color: var(--yellow); font-size: 11px; }
+.workspace-card-detailed .workspace-actions { margin-top: 0; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+.workspace-card-detailed .workspace-remove { margin-left: auto; }
 .diagnostic-summary { display: grid; gap: 14px; }
 .diagnostic-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .diagnostic-metric { padding: 14px; display: flex; align-items: center; justify-content: space-between; border: 1px solid var(--line-soft); border-radius: 14px; background: var(--surface); }
@@ -364,4 +385,12 @@ a.buttonlike.primary {
   .top-controls > * {
     flex: 1 1 auto;
   }
+  .workspace-operational { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .workspace-card-detailed .workspace-remove { margin-left: 0; }
+}
+
+@media (max-width: 520px) {
+  .workspace-operational { grid-template-columns: minmax(0, 1fr); }
+  .workspace-validation-head { align-items: flex-start; flex-direction: column; }
+  .workspace-card-detailed .workspace-actions > * { width: 100%; }
 }

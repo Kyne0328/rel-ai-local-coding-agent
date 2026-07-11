@@ -298,6 +298,7 @@ function publicConfigSummary(config) {
     release: config.release,
     workspaces: Object.entries(config.workspaces || {}).map(([alias, entry]) => {
       const discovered = safeDiscoverCommands(entry.path);
+      const validationCommands = safeDetectValidationChecks(entry.path);
       return {
         alias,
         path: entry.path,
@@ -309,6 +310,7 @@ function publicConfigSummary(config) {
         repoSlug: entry.repoSlug || "",
         fastTask: normalizeFastTask(entry.fastTask),
         discoveredCommands: discovered,
+        validationCommands,
         discoveredTestCommandKeys: Object.keys(discovered).filter((key) => /test|analy[sz]e|lint|check|vet|build/.test(key + " " + discovered[key])).sort((a, b) => a.localeCompare(b)),
         staleTestCommandKeys: staleCommandKeys(entry.testCommands || {}, discovered).sort((a, b) => a.localeCompare(b))
       };
@@ -316,23 +318,59 @@ function publicConfigSummary(config) {
   };
 }
 
-// publicConfigSummary runs on every dashboard poll and calls this per workspace;
-// each call walks manifest files on disk. Cache keyed on the workspace's
-// package.json mtime so discovery only re-runs when the manifest actually changes.
+// publicConfigSummary runs on every dashboard poll and calls this per workspace.
+// Cache against every manifest that command discovery understands, not only
+// package.json, so Go, Rust, Python, Flutter, and Makefile changes refresh too.
 const _discoverCache = new Map();
+const DISCOVERY_MANIFESTS = [
+  'package.json', 'Makefile', 'pubspec.yaml', 'go.mod', 'Cargo.toml',
+  'pyproject.toml', 'requirements.txt'
+];
+
+function discoverySignature(workspacePath) {
+  return DISCOVERY_MANIFESTS.map(name => {
+    try {
+      const stat = fs.statSync(path.join(workspacePath, name));
+      return `${name}:${stat.mtimeMs}:${stat.size}`;
+    } catch {
+      return `${name}:0:0`;
+    }
+  }).join('|');
+}
+
 function safeDiscoverCommands(workspacePath) {
   try {
     if (!workspacePath || !fs.existsSync(workspacePath)) return {};
-    let mtimeMs = 0;
-    try { mtimeMs = fs.statSync(path.join(workspacePath, "package.json")).mtimeMs; } catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] package.json stat:', error); }
+    const signature = discoverySignature(workspacePath);
     const cached = _discoverCache.get(workspacePath);
-    if (cached?.mtimeMs === mtimeMs) return cached.value;
+    if (cached?.signature === signature) return cached.value;
     const value = discoverCommands(workspacePath);
-    _discoverCache.set(workspacePath, { mtimeMs, value });
+    _discoverCache.set(workspacePath, { signature, value, validationCommands: null });
     return value;
   } catch (error) {
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] discover commands:', error);
     return {};
+  }
+}
+
+function safeDetectValidationChecks(workspacePath) {
+  try {
+    if (!workspacePath || !fs.existsSync(workspacePath)) return [];
+    const signature = discoverySignature(workspacePath);
+    const cached = _discoverCache.get(workspacePath);
+    if (cached?.signature === signature && Array.isArray(cached.validationCommands)) {
+      return cached.validationCommands;
+    }
+    const validationCommands = require('./bridge/validation').detectVerifyChecks(workspacePath, 'standard');
+    _discoverCache.set(workspacePath, {
+      signature,
+      value: cached?.signature === signature ? cached.value : discoverCommands(workspacePath),
+      validationCommands
+    });
+    return validationCommands;
+  } catch (error) {
+    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] detect validation checks:', error);
+    return [];
   }
 }
 

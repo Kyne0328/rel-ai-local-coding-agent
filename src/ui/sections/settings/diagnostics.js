@@ -71,8 +71,8 @@ function connectionFindings(connection) {
       severity: 'error',
       title: 'Dashboard token is missing',
       impact: 'Dashboard and OAuth access are not adequately protected.',
-      recommendation: 'Generate and save a dashboard approval token.',
-      action: { label: 'Open settings', href: '#settings' },
+      recommendation: 'Set the dashboard approval token in the Rel.AI desktop app, then restart the connection.',
+      action: { label: 'Open connector guidance', href: '#settings/connector' },
       details: connection
     });
   }

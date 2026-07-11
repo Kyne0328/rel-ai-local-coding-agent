@@ -105,6 +105,7 @@
   .ws-form label:first-of-type { margin-top: 0; }
   .ws-form input { width: 100%; padding: 9px 10px; border: 1px solid var(--line-soft); border-radius: var(--radius-md); color: var(--text); background: var(--bg); font: inherit; font-size: var(--font-13); }
   .ws-form input[readonly] { opacity: .6; cursor: not-allowed; }
+  .ws-form-help { margin-top: 5px; color: var(--text-muted); font-size: var(--font-12); line-height: 1.45; }
   .ws-form-row { display: flex; gap: var(--space-2); }
   .ws-form-path { flex: 1; }
   .ws-form-status.success { color: var(--green); }

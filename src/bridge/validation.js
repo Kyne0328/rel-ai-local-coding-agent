@@ -180,4 +180,4 @@ function shouldRunPackageBuild(root, pkg, scripts, level, currentCommands) {
   return false;
 }
 
-module.exports = { relaiVerify, hasRequestedChecks };
+module.exports = { relaiVerify, hasRequestedChecks, detectVerifyChecks };
