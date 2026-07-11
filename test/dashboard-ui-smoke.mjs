@@ -40,6 +40,9 @@ assert.doesNotMatch(dashboardJs, /openCommandPalette|populateWorkspaceQuickNav|f
 assert.match(dashboardJs, /initUiPreferences/);
 assert.match(interactionsCss, /max-width: 1250px/);
 assert.match(interactionsCss, /grid-template-columns: repeat\(5/);
+assert.match(interactionsCss, /grid-template-columns: 82px minmax\(0, 1fr\)/);
+assert.match(interactionsCss, /flex-direction: column/);
+assert.match(interactionsCss, /\.main \{ margin-left: 0 !important; \}/);
 assert.match(interactionsCss, /\.nav-icon/);
 assert.doesNotMatch(interactionsCss, /command-trigger|workspace-quick/);
 assert.doesNotMatch(shellCss, /command-backdrop|command-panel|command-option/);

@@ -37,13 +37,12 @@ async function callTool(name, args = {}, context = {}) {
     if (!isToolCallable(name)) {
       throw new Error(`Unknown tool '${name}'. Available tools: ${TOOL_NAMES.join(', ')}. Restart/reconnect ChatGPT if the tool list looks stale.`);
     }
-    if (connector) {
-      finishActivity = beginConnectorToolCall({
-        tool: name,
-        workspace: args?.workspace,
-        scopeId: context?.taskScopeId
-      });
-    }
+    finishActivity = beginConnectorToolCall({
+      tool: name,
+      workspace: args?.workspace,
+      scopeId: context?.taskScopeId || (connector ? '' : 'local:default'),
+      connector
+    });
     maybeStartSession(config, name, args || {});
     const value = await dispatchTool(config, name, args || {});
     const extraAudit = buildExtraAudit(name, value, args || {});

@@ -1,14 +1,10 @@
 'use strict';
 
+const { DEFAULT_TASK_IDLE_MS } = require('./toolActivity');
+
 function buildTaskHistory(entries = [], activity = {}, options = {}) {
   const limit = clamp(options.limit || 100, 1, 500);
-  const groups = new Map();
-  for (const entry of Array.isArray(entries) ? entries : []) {
-    if (!entry || typeof entry !== 'object') continue;
-    const taskId = String(entry.taskId || legacyTaskId(entry));
-    if (!groups.has(taskId)) groups.set(taskId, []);
-    groups.get(taskId).push(entry);
-  }
+  const groups = groupTaskEntries(entries, options.legacyGapMs);
 
   const activeTasks = activityTasks(activity);
   const activeById = new Map(activeTasks.map(task => [task.id || task.taskId, task]));
@@ -97,8 +93,41 @@ function eventChangedFiles(entry) {
   return values.map(String).filter(Boolean);
 }
 
-function legacyTaskId(entry) {
-  return `legacy-${entry.ts || 'unknown'}-${entry.pid || 0}-${entry.tool || 'event'}`;
+function groupTaskEntries(entries, legacyGapMs = DEFAULT_TASK_IDLE_MS) {
+  const groups = new Map();
+  const legacyByProcess = new Map();
+  const gapMs = clamp(legacyGapMs, 15_000, 10 * 60_000);
+  const ordered = (Array.isArray(entries) ? entries : [])
+    .filter(entry => entry && typeof entry === 'object')
+    .sort((left, right) => eventTimestamp(left) - eventTimestamp(right));
+
+  for (const entry of ordered) {
+    const explicitTaskId = String(entry.taskId || '').trim();
+    let taskId = explicitTaskId;
+    if (!taskId) {
+      const processKey = String(entry.pid || 'unknown');
+      const timestamp = eventTimestamp(entry);
+      let legacy = legacyByProcess.get(processKey);
+      if (!legacy || timestamp < legacy.lastAt || timestamp - legacy.lastAt > gapMs) {
+        legacy = {
+          id: `legacy-${processKey}-${Number.isFinite(timestamp) ? timestamp : groups.size}`,
+          lastAt: timestamp
+        };
+        legacyByProcess.set(processKey, legacy);
+      } else {
+        legacy.lastAt = Math.max(legacy.lastAt, timestamp);
+      }
+      taskId = legacy.id;
+    }
+    if (!groups.has(taskId)) groups.set(taskId, []);
+    groups.get(taskId).push(entry);
+  }
+  return groups;
+}
+
+function eventTimestamp(entry) {
+  const value = Date.parse(entry?.ts || entry?.at || entry?.createdAt || '');
+  return Number.isFinite(value) ? value : 0;
 }
 
 function unique(values) {

@@ -113,15 +113,23 @@
   .ws-form-actions { display: flex; gap: var(--space-2); justify-content: flex-end; margin-top: 18px; }
 
   @media (min-width: 721px) and (max-width: 1250px) {
+    .app-shell {
+      grid-template-columns: 82px minmax(0, 1fr) !important;
+    }
     .sidebar {
       display: flex !important;
-      width: 82px !important;
+      width: auto !important;
+      min-width: 0;
+      flex-direction: column;
+      align-items: stretch;
       padding-inline: 12px !important;
+      overflow-x: hidden;
     }
+    .sidebar .brand { justify-content: center; }
     .sidebar .brand > div:last-child, .sidebar-note, .nav-label { display: none !important; }
     .nav a { justify-content: center; min-height: 44px; padding-inline: 0; }
     .nav-icon { width: 20px; height: 20px; }
-    .main { margin-left: 82px !important; }
+    .main { margin-left: 0 !important; }
     .mobile-nav { display: none !important; }
   }
 

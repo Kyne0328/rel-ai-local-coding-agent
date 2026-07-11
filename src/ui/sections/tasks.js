@@ -42,7 +42,7 @@ function taskRow(task) {
       <span class="task-row-status">${pillHtml(status)}</span>
       <span class="task-row-main">
         <strong>${esc(workspace)}</strong>
-        <span>${task.calls} grouped call${task.calls === 1 ? '' : 's'}${active ? ` · ${task.activeCalls || 0} active` : ''} · ${task.changedFileCount || 0} file${task.changedFileCount === 1 ? '' : 's'} changed · ${validation}</span>
+        <span>${task.calls} tool call${task.calls === 1 ? '' : 's'}${active ? ` · ${task.activeCalls || 0} active` : ''} · ${task.changedFileCount || 0} file${task.changedFileCount === 1 ? '' : 's'} changed · ${validation}</span>
       </span>
       <span class="task-row-publish">${publishLabel(task)}</span>
       <span class="task-row-time">${active ? formatDuration(task.durationMs) : esc(timeAgo(task.completedAt))}</span>
