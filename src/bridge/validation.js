@@ -6,6 +6,7 @@ const { normalizeCommandAlias } = require("../commandNormalizer");
 const { selectValidationLevel } = require("../validationStrategy");
 const { resolvePolicy } = require("../policyResolver");
 const { clampNumber } = require("./limits");
+const { updateCurrentToolActivity } = require("../toolActivity");
 
 const CHECK_OUTPUT_TAIL_DEFAULT = 4000;
 const CHECK_OUTPUT_TAIL_FULL = 40000;
@@ -15,7 +16,9 @@ async function relaiVerify(workspace, config, args = {}) {
   const { checks, aliasNormalizations } = normalizeVerifyChecks(args, workspace.path, level);
   const { level: validationLevel, reason: validationLevelReason, changedFiles } = selectValidationLevel(workspace.path, workspace, args.validationLevel);
   const policy = resolvePolicy(workspace, config);
-  if (checks.length === 0) return {
+  if (checks.length === 0) {
+    updateCurrentToolActivity({ operation: `No ${level} validation commands were detected` });
+    return {
     ok: false,
     workspace: workspace.alias,
     level,
@@ -30,7 +33,8 @@ async function relaiVerify(workspace, config, args = {}) {
     validated: false,
     validationStatus: "not_run",
     message: "Validation status: NOT RUN. No validation checks were detected or executed. This is not a passed validation. Define a check/test/build script or pass an explicit check."
-  };
+    };
+  }
   const stopOnFailure = args.stopOnFailure !== false;
   const fullOutput = Boolean(args.fullOutput);
   const runConfig = fullOutput
@@ -38,7 +42,12 @@ async function relaiVerify(workspace, config, args = {}) {
     : config;
   const tailChars = fullOutput ? CHECK_OUTPUT_TAIL_FULL : CHECK_OUTPUT_TAIL_DEFAULT;
   const results = [];
-  for (const command of checks) {
+  for (let index = 0; index < checks.length; index += 1) {
+    const command = checks[index];
+    updateCurrentToolActivity({
+      operation: `Running validation ${index + 1}/${checks.length}: ${command}`,
+      detail: command
+    });
     const result = await runProcess(command, [], {
       cwd: workspace.path,
       shell: true,
@@ -49,7 +58,27 @@ async function relaiVerify(workspace, config, args = {}) {
     results.push(summary);
     if (!summary.ok && stopOnFailure) break;
   }
-  return { ok: results.every((item) => item.ok), workspace: workspace.alias, level, checks, commands: checks, results, aliasNormalizations, validationLevel, validationLevelReason, changedFiles, policy, ...(fullOutput ? { fullOutput: true } : {}) };
+  const ok = results.length === checks.length && results.every((item) => item.ok);
+  const nextAction = ok
+    ? "If this is the final validation and no more code changes are planned, call relai_complete_task exactly once with a concise summary."
+    : "Fix the failing validation before reporting task completion.";
+  return {
+    ok,
+    workspace: workspace.alias,
+    level,
+    checks,
+    commands: checks,
+    results,
+    aliasNormalizations,
+    validationLevel,
+    validationLevelReason,
+    changedFiles,
+    policy,
+    validated: results.length > 0,
+    validationStatus: ok ? "passed" : "failed",
+    nextAction,
+    ...(fullOutput ? { fullOutput: true } : {})
+  };
 }
 
 // Keep the last maxChars of a command stream so the failing tail survives the

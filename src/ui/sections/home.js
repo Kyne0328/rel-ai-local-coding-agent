@@ -77,9 +77,9 @@ function resolveBridgeState({ endpoint, workspaces, findings }) {
   }
   return {
     tone: 'good',
-    kicker: 'Connected and ready',
-    title: 'Rel.AI can now receive workspace tasks from ChatGPT.',
-    description: 'Your secure MCP connection is online. Open the dashboard to manage repositories and review task activity. Copy the endpoint only when adding or reconnecting Rel.AI in ChatGPT.'
+    kicker: 'Connector online',
+    title: 'Rel.AI is available to ChatGPT.',
+    description: 'The secure MCP endpoint is authenticated and reachable. Rel.AI reports observed tool calls exactly; it does not infer ChatGPT\'s private reasoning or claim that the overall chat request is finished.'
   };
 }
 
@@ -90,7 +90,7 @@ function connectionHero(state, endpoint, connection, workspaces) {
     ? '<button class="primary" type="button" data-copy-mcp>Copy MCP endpoint</button>'
     : '<a class="buttonlike primary" href="#settings/connector">Open connector settings</a>';
   const secondaryRoute = hasWorkspaces ? routeHref('tasks') : routeHref('workspaces');
-  const secondaryLabel = hasWorkspaces ? 'View tasks' : 'Add workspace';
+  const secondaryLabel = hasWorkspaces ? 'View work sessions' : 'Add workspace';
   const endpointClass = endpoint ? '' : 'empty';
   hero.className = `overview-hero ${state.tone}`;
   hero.innerHTML = `
@@ -129,8 +129,8 @@ function taskActivityCard(activity = {}, persistedTask = null) {
   const task = active ? primaryActiveTask(activeTasks) : persistedTask || activity.lastTask;
   if (!task) return null;
   const card = document.createElement('section');
-  if (active) renderActiveTaskCard(card, activity, activeTasks, task);
-  else renderCompletedTaskCard(card, task);
+  if (active) renderObservedSessionCard(card, activity, activeTasks, task);
+  else renderInactiveSessionCard(card, task);
   return card;
 }
 
@@ -144,25 +144,27 @@ function primaryActiveTask(tasks) {
   return tasks.find(item => Number(item.activeCalls || 0) > 0) || tasks[0];
 }
 
-function renderActiveTaskCard(card, activity, activeTasks, task) {
-  const taskCount = activeTasks.length;
+function renderObservedSessionCard(card, activity, activeTasks, task) {
+  const sessionCount = activeTasks.length;
   const activeCalls = Number(activity.activeCalls || activeTasks.reduce((sum, item) => sum + Number(item.activeCalls || 0), 0));
-  const settling = activeCalls === 0;
+  const waiting = activeCalls === 0;
   const location = activeTaskLocation(activeTasks);
-  let title = 'ChatGPT is working.';
-  if (settling) title = `${taskCount} open ${pluralLabel(taskCount, 'task')} waiting for follow-up calls.`;
-  else if (taskCount > 1) title = `${taskCount} ChatGPT tasks are running.`;
-  let description = `${esc(taskAction(task.lastTool || task.tool))} in <strong>${esc(task.workspace || location)}</strong>.`;
-  if (taskCount > 1) description = `${activeCalls} ${pluralLabel(activeCalls, 'active tool call')} across ${location}.`;
-  const activityLabel = settling
-    ? 'Completes after 60s without another call'
+  const operation = task.operation || taskAction(task.lastTool || task.tool);
+  let title = waiting ? 'No Rel.AI tool call is active.' : operation;
+  if (!waiting && sessionCount > 1) title = `${activeCalls} Rel.AI tool calls are running.`;
+  let description = waiting
+    ? 'ChatGPT may still be reasoning, waiting for approval, or already finished. Rel.AI cannot determine that from tool traffic alone.'
+    : `${esc(operation)} in <strong>${esc(task.workspace || location)}</strong>.`;
+  if (!waiting && sessionCount > 1) description = `${activeCalls} ${pluralLabel(activeCalls, 'active tool call')} across ${location}.`;
+  const activityLabel = waiting
+    ? 'Waiting for another observed call'
     : `${activeCalls} ${pluralLabel(activeCalls, 'active call')}`;
-  card.className = 'card task-overview active';
+  card.className = `card task-overview ${waiting ? 'waiting' : 'active'}`;
   card.innerHTML = `
-    <div class="task-overview-mark" aria-hidden="true"></div>
+    <div class="task-overview-mark" aria-hidden="true">${waiting ? '…' : ''}</div>
     <div class="task-overview-copy">
-      <div class="overview-kicker">ChatGPT activity</div>
-      <h3>${title}</h3>
+      <div class="overview-kicker">Observed Rel.AI activity</div>
+      <h3>${esc(title)}</h3>
       <p>${description}</p>
     </div>
     <div class="task-overview-meta">
@@ -171,22 +173,32 @@ function renderActiveTaskCard(card, activity, activeTasks, task) {
     </div>`;
 }
 
-function renderCompletedTaskCard(card, task) {
+function renderInactiveSessionCard(card, task) {
   const attention = task.status === 'attention';
+  const completed = task.status === 'completed' && task.completionKnown === true;
   const failed = Number(task.failures || 0);
   const callCount = Number(task.calls || 0);
-  const mark = attention ? '!' : '✓';
-  const title = attention ? 'Task needs attention' : 'Last task completed';
+  let mark = '•';
+  let title = 'Last Rel.AI session is inactive';
+  if (attention) {
+    mark = '!';
+    title = 'Last Rel.AI session had a failed call';
+  } else if (completed) {
+    mark = '✓';
+    title = 'Task completion reported';
+  }
   const failureText = failed ? ` · ${failed} failed` : '';
+  let completionText = ' · overall ChatGPT completion not reported';
+  if (completed) completionText = ` · ${esc(task.summary || 'final validation passed')}`;
   card.className = `card task-overview ${attention ? 'attention' : 'completed'}`;
   card.innerHTML = `
     <div class="task-overview-mark" aria-hidden="true">${mark}</div>
     <div class="task-overview-copy">
-      <div class="overview-kicker">Previous task</div>
+      <div class="overview-kicker">Previous observed session</div>
       <h3>${title}</h3>
-      <p>${esc(task.workspace || 'workspace')} · ${callCount} ${pluralLabel(callCount, 'tool call')}${failureText}</p>
+      <p>${esc(task.workspace || 'workspace')} · ${callCount} ${pluralLabel(callCount, 'tool call')}${failureText}${completionText}</p>
     </div>
-    <div class="task-overview-meta"><span>${esc(timeAgo(task.completedAt))}</span><strong>${formatDuration(task.durationMs)}</strong></div>`;
+    <div class="task-overview-meta"><span>${esc(timeAgo(task.endedAt || task.completedAt))}</span><strong>${formatDuration(task.durationMs)}</strong></div>`;
 }
 
 function activeTaskLocation(tasks) {
@@ -299,22 +311,26 @@ function workspaceSummaryCard(workspaces) {
 function recentTasksCard(tasks) {
   const card = document.createElement('section');
   card.className = 'card';
-  card.innerHTML = `<div class="card-head"><h3>Recent tasks</h3><a class="section-action" href="${routeHref('tasks')}">View all</a></div>`;
+  card.innerHTML = `<div class="card-head"><h3>Recent work sessions</h3><a class="section-action" href="${routeHref('tasks')}">View all</a></div>`;
   const body = document.createElement('div');
   body.className = 'card-body';
   body.innerHTML = tasks.slice(0, 8).map(task => {
     const status = recentTaskStatus(task.status);
-    const completedAt = task.completedAt ? timeAgo(task.completedAt) : 'now';
-    return `<div class="activity-row"><span class="activity-time">${esc(completedAt)}</span><span class="activity-name truncate"><strong>${esc(task.workspace || 'workspace')}</strong> · ${esc(task.calls || 0)} calls · ${esc(task.changedFileCount || 0)} files</span>${pillHtml(status)}</div>`;
-  }).join('') || '<div class="empty">Tasks will appear after ChatGPT calls a Rel.AI connector tool.</div>';
+    const endedAt = task.endedAt || task.completedAt;
+    const time = endedAt ? timeAgo(endedAt) : 'now';
+    const operation = task.operation || taskAction(task.lastTool);
+    return `<div class="activity-row"><span class="activity-time">${esc(time)}</span><span class="activity-name truncate"><strong>${esc(operation)}</strong> · ${esc(task.workspace || 'workspace')} · ${esc(task.calls || 0)} calls</span>${status}</div>`;
+  }).join('') || '<div class="empty">Sessions appear after ChatGPT or the local dashboard calls a Rel.AI tool.</div>';
   card.appendChild(body);
   return card;
 }
 
 function recentTaskStatus(status) {
-  if (status === 'attention') return 'failed';
-  if (status === 'working' || status === 'settling') return 'check';
-  return 'ok';
+  if (status === 'attention') return pillHtml('failed');
+  if (status === 'completed') return pillHtml('completed');
+  if (status === 'working') return pillHtml('working');
+  if (status === 'waiting' || status === 'settling') return '<span class="status-pill warn">waiting</span>';
+  return '<span class="status-pill">inactive</span>';
 }
 
 function updateShell(data, workspaceCount) {

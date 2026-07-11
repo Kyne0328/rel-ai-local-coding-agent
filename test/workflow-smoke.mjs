@@ -100,7 +100,7 @@ try {
   send(2, 'tools/list');
   const listed = await waitFor(2);
   const names = listed.result.tools.map(tool => tool.name);
-  if (names.length !== 16) throw new Error(`Expected 16 tools, got ${names.length}.`);
+  if (names.length !== 17) throw new Error(`Expected 17 tools, got ${names.length}.`);
   for (const removed of ['relai_apply_bundle', 'relai_package_snapshot', 'relai_clear_files', 'relai_git_fetch']) {
     if (names.includes(removed)) throw new Error(`${removed} must not be listed.`);
   }
@@ -197,7 +197,7 @@ try {
   const clean = contentOf(await waitFor(16));
   if (clean.diff.trim()) throw new Error('Workspace diff should be clean after restore.');
 
-  console.log('Public 16-tool workflow smoke test passed.');
+  console.log('Public 17-tool workflow smoke test passed.');
 } finally {
   child.stdin.end();
   child.kill('SIGTERM');

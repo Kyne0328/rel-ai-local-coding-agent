@@ -54,41 +54,54 @@ const runtime = createTaskActivityRuntime({
   onStatusChange: status => statuses.push(structuredClone(status))
 });
 
-const finishRead = tracker.beginConnectorToolCall({ tool: 'relai_read', workspace: 'repo', scopeId: 'conversation-a' });
-const finishOther = tracker.beginConnectorToolCall({ tool: 'relai_read', workspace: 'other', scopeId: 'conversation-b' });
+const finishRead = tracker.beginConnectorToolCall({
+  tool: 'relai_read',
+  operation: 'Reading src/app.js',
+  workspace: 'repo',
+  scopeId: 'conversation-a'
+});
+const finishOther = tracker.beginConnectorToolCall({
+  tool: 'relai_read',
+  operation: 'Reading README.md',
+  workspace: 'other',
+  scopeId: 'conversation-b'
+});
 assert.equal(runtime.getStatus().state, 'working');
 assert.equal(runtime.getStatus().activeTaskCount, 2);
 assert.equal(runtime.getStatus().activeCalls, 2);
 assert.equal(startedBlockers.size, 1);
 finishRead();
 finishOther();
-assert.equal(runtime.getStatus().state, 'settling');
+assert.equal(runtime.getStatus().state, 'waiting');
 assert.equal(runtime.getStatus().activeTaskCount, 2);
 assert.equal(startedBlockers.size, 0);
-assert.equal(notifications.length, 0, 'tasks must not notify before the idle lease expires');
-
-nowValue = 30_000;
-const finishEdit = tracker.beginConnectorToolCall({ tool: 'relai_edit', workspace: 'repo', scopeId: 'conversation-a' });
-assert.equal(finishEdit.taskId, finishRead.taskId);
-finishEdit();
-assert.equal([...timers.values()].every(timer => timer.delay === 60_000), true);
+assert.equal(notifications.length, 0, 'successful tool calls must not be presented as completed ChatGPT tasks');
 
 nowValue = 91_000;
 for (const [id, timer] of [...timers]) {
   timers.delete(id);
   timer.callback();
 }
-const completed = runtime.getStatus();
-assert.equal(completed.state, 'idle');
-assert.equal(completed.activeTaskCount, 0);
-assert.equal(notifications.length, 2);
-const repoNotification = notifications.find(item => /repo/.test(item.options.body));
-assert.match(repoNotification.options.body, /2 tool calls in repo/);
-repoNotification.click();
+const inactive = runtime.getStatus();
+assert.equal(inactive.state, 'idle');
+assert.equal(inactive.activeTaskCount, 0);
+assert.equal(inactive.lastTask.status, 'inactive');
+assert.equal(inactive.lastTask.endReason, 'inactivity_window');
+assert.equal(notifications.length, 0, 'inactivity must not generate a false task-completed notification');
+
+const finishFailed = tracker.beginConnectorToolCall({
+  tool: 'relai_run_checks',
+  operation: 'Running validation 1/2: npm run check',
+  workspace: 'repo',
+  scopeId: 'conversation-c'
+});
+finishFailed({ ok: false, error: 'check failed' });
+assert.equal(notifications.length, 1);
+assert.equal(notifications[0].options.title, 'Rel.AI tool call failed');
+assert.match(notifications[0].options.body, /Running validation 1\/2: npm run check failed in repo/);
+notifications[0].click();
 assert.equal(clicked, 1);
 
-const finishFailed = tracker.beginConnectorToolCall({ tool: 'relai_run_checks', workspace: 'repo', scopeId: 'conversation-c' });
-finishFailed({ ok: false });
 nowValue = 152_000;
 for (const [id, timer] of [...timers]) {
   timers.delete(id);
@@ -96,21 +109,44 @@ for (const [id, timer] of [...timers]) {
 }
 assert.equal(runtime.getStatus().lastTask.status, 'attention');
 assert.equal(runtime.getStatus().lastTask.failures, 1);
-assert.equal(notifications.at(-1).options.title, 'Rel.AI task needs attention');
+
+const finishCompleted = tracker.beginConnectorToolCall({
+  tool: 'relai_complete_task',
+  operation: 'Reporting task completion',
+  workspace: 'repo',
+  scopeId: 'conversation-completed'
+});
+finishCompleted.requestCompletion({
+  summary: 'Implemented and validated the requested changes.',
+  validationStatus: 'passed',
+  validationLevel: 'standard',
+  validationAt: '2026-07-11T09:30:00.000Z',
+  changedFiles: ['src/app.js']
+});
+finishCompleted();
+assert.equal(runtime.getStatus().state, 'idle');
+assert.equal(runtime.getStatus().lastTask.status, 'completed');
+assert.equal(runtime.getStatus().lastTask.completionKnown, true);
+assert.equal(runtime.getStatus().lastTask.endReason, 'explicit_completion');
+assert.equal(notifications.length, 2);
+assert.equal(notifications[1].options.title, 'Rel.AI task completion reported');
+assert.match(notifications[1].options.body, /explicitly reported the coding task complete in repo/i);
+assert.match(notifications[1].options.body, /Final standard validation passed/);
 
 runtime.setNotificationsEnabled(false);
-const finishMuted = tracker.beginConnectorToolCall({ tool: 'relai_diff', workspace: 'repo', scopeId: 'conversation-d' });
-finishMuted();
-nowValue = 213_000;
-for (const [id, timer] of [...timers]) {
-  timers.delete(id);
-  timer.callback();
-}
-assert.equal(notifications.length, 3, 'muted completion must not notify');
+const finishMuted = tracker.beginConnectorToolCall({
+  tool: 'relai_diff',
+  operation: 'Reviewing repository changes',
+  workspace: 'repo',
+  scopeId: 'conversation-d'
+});
+finishMuted({ ok: false, error: 'diff failed' });
+assert.equal(notifications.length, 2, 'muted failed calls must not notify');
 
 assert.ok(statuses.some(status => status.activeTaskCount === 2 && status.activeCalls === 2));
-assert.ok(statuses.some(status => status.state === 'settling'));
-assert.ok(statuses.some(status => status.lastTask?.status === 'completed'));
+assert.ok(statuses.some(status => status.state === 'waiting'));
+assert.ok(statuses.some(status => status.lastTask?.status === 'inactive'));
+assert.ok(statuses.some(status => status.lastTask?.status === 'completed' && status.lastTask?.completionKnown === true));
 runtime.stop();
 
-console.log('Concurrent task completion and notification tests passed.');
+console.log('Exact tool activity, failure, and explicit completion notification tests passed.');

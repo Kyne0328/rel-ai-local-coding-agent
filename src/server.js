@@ -54,7 +54,8 @@ async function dispatchMessage(message, options) {
       return result(message.id, {
         protocolVersion: message.params?.protocolVersion || '2025-06-18',
         capabilities: { tools: { listChanged: true }, resources: { subscribe: false, listChanged: true } },
-        serverInfo: { name: pkg.name, version: pkg.version }
+        serverInfo: { name: pkg.name, version: pkg.version },
+        instructions: 'For coding tasks, make the required changes, run one final relai_run_checks validation, then call relai_complete_task exactly once as the final Rel.AI tool with a concise summary. Do not call relai_complete_task if more edits or validation remain.'
       });
     case 'ping':
       return result(message.id, {});

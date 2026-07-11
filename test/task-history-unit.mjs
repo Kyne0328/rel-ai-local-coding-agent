@@ -5,48 +5,60 @@ const require = createRequire(import.meta.url);
 const { buildTaskHistory } = require('../src/taskHistory.js');
 
 const entries = [
-  { taskId: 'task-1', ts: '2026-07-11T06:00:00.000Z', tool: 'relai_edit', workspace: 'repo', ok: true, ms: 1000, changedFiles: ['src/a.js'] },
-  { taskId: 'task-1', ts: '2026-07-11T06:00:02.000Z', tool: 'relai_run_checks', workspace: 'repo', ok: true, ms: 2000, validationStatus: 'passed' },
-  { taskId: 'task-1', ts: '2026-07-11T06:00:05.000Z', tool: 'relai_git_commit', workspace: 'repo', ok: true, ms: 500, changedFiles: ['src/a.js', 'test/a.test.js'] },
-  { taskId: 'task-2', ts: '2026-07-11T05:00:00.000Z', tool: 'relai_run_checks', workspace: 'other', ok: false, ms: 500, validationStatus: 'failed' }
+  { taskId: 'task-1', ts: '2026-07-11T06:00:00.000Z', tool: 'relai_edit', operation: 'Editing src/a.js', workspace: 'repo', ok: true, ms: 1000, changedFiles: ['src/a.js'] },
+  { taskId: 'task-1', ts: '2026-07-11T06:00:02.000Z', tool: 'relai_run_checks', operation: 'Running validation 1/1: npm test', workspace: 'repo', ok: true, ms: 2000, validationStatus: 'passed' },
+  { taskId: 'task-1', ts: '2026-07-11T06:00:05.000Z', tool: 'relai_git_commit', operation: 'Creating a Git commit', workspace: 'repo', ok: true, ms: 500, changedFiles: ['src/a.js', 'test/a.test.js'] },
+  { taskId: 'task-2', ts: '2026-07-11T05:00:00.000Z', tool: 'relai_run_checks', operation: 'Running validation 1/1: npm test', workspace: 'other', ok: false, ms: 500, validationStatus: 'failed' },
+  { taskId: 'task-3', ts: '2026-07-11T08:00:00.000Z', tool: 'relai_run_checks', operation: 'Running validation 1/1: npm test', workspace: 'completed-repo', ok: true, ms: 2000, validationStatus: 'passed' },
+  { taskId: 'task-3', ts: '2026-07-11T08:00:03.000Z', tool: 'relai_complete_task', operation: 'Reporting task completion', workspace: 'completed-repo', ok: true, ms: 20, completionKnown: true, endReason: 'explicit_completion', taskSummary: 'Implemented and validated the requested change.' }
 ];
 
-const tasks = buildTaskHistory(entries, { state: 'idle' });
-assert.equal(tasks.length, 2);
-const completed = tasks.find(task => task.id === 'task-1');
-assert.equal(completed.status, 'completed');
-assert.equal(completed.calls, 3);
-assert.equal(completed.changedFileCount, 2);
-assert.deepEqual(completed.changedFiles, ['src/a.js', 'test/a.test.js']);
-assert.equal(completed.validation, 'passed');
-assert.equal(completed.committed, true);
-assert.equal(completed.pushed, false);
-const failed = tasks.find(task => task.id === 'task-2');
+const sessions = buildTaskHistory(entries, { state: 'idle' });
+assert.equal(sessions.length, 3);
+const inactive = sessions.find(session => session.id === 'task-1');
+assert.equal(inactive.status, 'inactive');
+assert.equal(inactive.completionKnown, false);
+assert.equal(inactive.endReason, 'inactivity_window');
+assert.equal(inactive.calls, 3);
+assert.equal(inactive.changedFileCount, 2);
+assert.deepEqual(inactive.changedFiles, ['src/a.js', 'test/a.test.js']);
+assert.equal(inactive.validation, 'passed');
+assert.equal(inactive.committed, true);
+assert.equal(inactive.pushed, false);
+assert.equal(inactive.operation, 'Creating a Git commit');
+const failed = sessions.find(session => session.id === 'task-2');
 assert.equal(failed.status, 'attention');
 assert.equal(failed.failures, 1);
 assert.equal(failed.validation, 'failed');
+const completed = sessions.find(session => session.id === 'task-3');
+assert.equal(completed.status, 'completed');
+assert.equal(completed.completionKnown, true);
+assert.equal(completed.endReason, 'explicit_completion');
+assert.equal(completed.summary, 'Implemented and validated the requested change.');
 
 const active = buildTaskHistory([], {
   state: 'working',
   activeTaskCount: 2,
   activeCalls: 3,
   tasks: [
-    { id: 'task-active-a', state: 'working', workspace: 'repo', tool: 'relai_read', startedAt: Date.now() - 1000, activeCalls: 2, calls: 3 },
-    { id: 'task-active-b', state: 'settling', workspace: 'other', tool: 'relai_diff', startedAt: Date.now() - 2000, activeCalls: 0, calls: 2 }
+    { id: 'task-active-a', state: 'working', workspace: 'repo', tool: 'relai_read', operation: 'Reading src/app.js', startedAt: Date.now() - 1000, activeCalls: 2, calls: 3 },
+    { id: 'task-active-b', state: 'waiting', workspace: 'other', tool: 'relai_diff', operation: 'Reviewing repository changes', startedAt: Date.now() - 2000, activeCalls: 0, calls: 2 }
   ]
 });
 assert.equal(active.length, 2);
-assert.equal(active.find(task => task.id === 'task-active-a').status, 'working');
-assert.equal(active.find(task => task.id === 'task-active-a').calls, 3);
-assert.equal(active.find(task => task.id === 'task-active-b').status, 'settling');
+assert.equal(active.find(session => session.id === 'task-active-a').status, 'working');
+assert.equal(active.find(session => session.id === 'task-active-a').calls, 3);
+assert.equal(active.find(session => session.id === 'task-active-a').operation, 'Reading src/app.js');
+assert.equal(active.find(session => session.id === 'task-active-b').status, 'waiting');
 
 const legacy = buildTaskHistory([
   { ts: '2026-07-11T07:00:00.000Z', pid: 42, tool: 'relai_read', workspace: 'repo', ok: true },
   { ts: '2026-07-11T07:00:20.000Z', pid: 42, tool: 'relai_edit', workspace: 'repo', ok: true, changedFiles: ['src/b.js'] },
   { ts: '2026-07-11T07:02:00.000Z', pid: 42, tool: 'relai_run_checks', workspace: 'repo', ok: true, validationStatus: 'passed' }
 ], { state: 'idle' });
-assert.equal(legacy.length, 2, 'legacy audit rows should be inferred into time-bounded tasks');
-assert.equal(legacy.find(task => task.calls === 2)?.changedFileCount, 1);
-assert.equal(legacy.find(task => task.calls === 1)?.validation, 'passed');
+assert.equal(legacy.length, 2, 'legacy audit rows should be inferred into time-bounded sessions');
+assert.equal(legacy.find(session => session.calls === 2)?.changedFileCount, 1);
+assert.equal(legacy.find(session => session.calls === 1)?.validation, 'passed');
+assert.equal(legacy.every(session => session.status === 'inactive'), true);
 
-console.log('Persistent and concurrent task history tests passed.');
+console.log('Persistent and concurrent work-session history tests passed.');

@@ -23,10 +23,10 @@ ChatGPT asks -> Rel.AI MCP inspects, changes, validates, and reviews locally -> 
 The ChatGPT workflow is intentionally small and predictable:
 
 ```text
-relai_repo_snapshot -> relai_read -> relai_edit (replace/write/patch/batch) -> relai_run_checks -> relai_diff -> relai_restore_changes / relai_tidy_plan + relai_tidy_run
+relai_repo_snapshot -> relai_read -> relai_edit (replace/write/patch/batch) -> relai_run_checks -> relai_complete_task
 ```
 
-No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. The MCP server exposes one 16-tool workspace surface across local and connector transports.
+No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. The MCP server exposes one 17-tool workspace surface across local and connector transports.
 
 When ChatGPT first edits a workspace, the server starts a session and records the pre-edit state, so later status/diff output can separate the files this session changed from files that were already modified. The session expires after a period of inactivity.
 
@@ -51,6 +51,7 @@ It can:
 - restore local changes
 - expose compact workspace readiness and status information
 - expose a local or public MCP URL for ChatGPT connectors
+- explicitly report coding-task completion after final validation
 
 It is built around the practical flow I kept needing:
 
@@ -59,8 +60,9 @@ I describe the coding task
 ChatGPT reasons about it
 Rel.AI MCP gives it only the repo access it asks for
 ChatGPT edits through exact replacements or full-file writes
-Rel.AI MCP runs tests
-I inspect the diff
+Rel.AI MCP runs final validation
+ChatGPT reports completion through Rel.AI
+I inspect the result and session record
 ```
 
 ---
@@ -81,7 +83,7 @@ The home screen shows the current bridge health, configured workspaces, validati
   <img src="docs/images/dashboard-workspaces-section.png" alt="Rel.AI MCP workspace cards" width="900">
 </p>
 
-Workspace cards show detected checks, workspace scope settings, protected branches, preflight actions, rename, and clear controls.
+Workspace cards show repository state, automatic validation commands, protected branches, allowed remotes, recent activity, and focused workspace actions.
 
 ### Activity
 
@@ -97,7 +99,7 @@ The activity page is there because I got tired of guessing what the MCP server w
   <img src="docs/images/dashboard-tools-section.png" alt="Rel.AI MCP bridge tools" width="900">
 </p>
 
-The dashboard shows the 16 workspace tools ChatGPT can use for inspection, editing, validation, review, Git publishing, tidy, and restore workflows.
+The dashboard shows the 17 workspace tools ChatGPT can use for inspection, editing, validation, explicit completion reporting, review, Git publishing, tidy, and restore workflows.
 
 ### Connector setup
 
@@ -218,7 +220,7 @@ The dashboard connector page prints the final ChatGPT MCP URL.
 
 In the packaged desktop app, **Open dashboard** opens the full dashboard inside a secured Electron window. The same dashboard remains available in a normal browser at the local `/dashboard` route; Electron is the default desktop host, not a separate implementation. The desktop host exchanges a single-use bootstrap code for an HttpOnly local session cookie, so the long-lived dashboard token is not stored in the embedded renderer or left in its URL.
 
-The dashboard includes grouped **Tasks**, a lower-level **Activity log**, workspace-scoped filtering, operational Git and validation state, actionable diagnostics, live/reconnecting status, and persistent desktop window and route state. Task grouping is scoped per MCP session, supports concurrent ChatGPT work, and uses a renewable 60-second idle lease instead of closing after a short fixed delay.
+The dashboard includes grouped **Sessions**, a lower-level **Activity log**, workspace-scoped filtering, operational Git and validation state, actionable diagnostics, live/reconnecting status, and persistent desktop window and route state. Session grouping is scoped per MCP connection and supports concurrent ChatGPT work. A session is marked completed only when ChatGPT calls `relai_complete_task`; otherwise inactivity closes it as inactive without claiming the overall request finished.
 
 ### Choosing a tunnel provider
 
@@ -251,7 +253,7 @@ See [docs/ONE_CLICK_SETUP.md](docs/ONE_CLICK_SETUP.md) for permanent-tunnel opti
 
 ## MCP tools
 
-Rel.AI exposes one 16-tool workspace surface. `relai_edit` is the primary write path: it routes to exact replacement, full-file write, structured patch application, or a batch of edits server-side, and can validate and return a diff in the same call. Tracked-file deletion is supported through structured `Delete File` patches. Untracked cleanup uses the two-step `relai_tidy_plan` / `relai_tidy_run` workflow, where the server selects bounded session-owned candidates and verifies them again before deletion.
+Rel.AI exposes one 17-tool workspace surface. `relai_edit` is the primary write path: it routes to exact replacement, full-file write, structured patch application, or a batch of edits server-side, and can validate and return a diff in the same call. Tracked-file deletion is supported through structured `Delete File` patches. Untracked cleanup uses the two-step `relai_tidy_plan` / `relai_tidy_run` workflow, where the server selects bounded session-owned candidates and verifies them again before deletion. `relai_complete_task` is the final workflow signal and is accepted only after a passed validation with no later code changes.
 
 | Tool | Purpose |
 | --- | --- |
@@ -271,6 +273,7 @@ Rel.AI exposes one 16-tool workspace surface. `relai_edit` is the primary write 
 | `relai_git_commit` | Record a commit with an explicit message (refuses secret-looking staged files). |
 | `relai_git_push` | Publish a branch to an allowlisted remote. |
 | `relai_git_create_pr` | Draft a pull-request title/body from a base/head diff. |
+| `relai_complete_task` | Explicitly report that ChatGPT finished the coding task after final validation. Rejects missing validation or code changes made after validation. |
 
 Removed workflows are not part of the MCP anymore: update application loops, generated update helpers, local-edit tools, task runners, isolated worktree orchestration, multi-agent schedulers, Docker runners, and PR/CI repair loops.
 
@@ -331,6 +334,7 @@ Use this guide together with the `writeGuidance` returned by `relai_repo_snapsho
 | Several edits in one approval | `relai_edit` with `edits: [...]` |
 | Tidy session-created files | `relai_tidy_plan` then `relai_tidy_run` |
 | Run validation | `relai_run_checks` |
+| Report the coding task finished | `relai_complete_task` after the final successful validation |
 | Browser or UI route check | `relai_browser` |
 | Review changes | `relai_diff` |
 | Restore selected changes | `relai_restore_changes` |
@@ -338,7 +342,7 @@ Use this guide together with the `writeGuidance` returned by `relai_repo_snapsho
 Typical loop:
 
 ```text
-inspect -> read -> change -> validate -> review -> restore only if needed
+inspect -> read -> change -> final validation -> relai_complete_task
 ```
 
 For large or interpolation-heavy files, prefer `relai_edit` with `oldText`/`newText` for focused edits. Use `content` only when the entire file genuinely needs replacement. For multi-file patch-shaped changes or tracked-file deletion, use `relai_edit` with `updateText`.

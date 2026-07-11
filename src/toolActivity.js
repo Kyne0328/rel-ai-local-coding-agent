@@ -1,8 +1,10 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const { AsyncLocalStorage } = require('node:async_hooks');
 
 const DEFAULT_TASK_IDLE_MS = 60_000;
+const activityContext = new AsyncLocalStorage();
 
 function createToolActivityTracker(options = {}) {
   const now = options.now || Date.now;
@@ -25,41 +27,112 @@ function createToolActivityTracker(options = {}) {
       tasksByScope.set(scopeId, task);
     }
     cancelCompletion(task);
-    task.workspace = String(details.workspace || task.workspace || '');
-    task.lastTool = String(details.tool || task.lastTool || '');
+
+    const connectorCall = details.connector !== false;
+    const operationId = crypto.randomUUID();
+    const operation = {
+      id: operationId,
+      tool: String(details.tool || ''),
+      label: String(details.operation || defaultOperation(details.tool)),
+      detail: String(details.detail || ''),
+      workspace: String(details.workspace || task.workspace || ''),
+      startedAt
+    };
+
+    task.workspace = operation.workspace;
+    task.lastTool = operation.tool;
+    task.lastOperation = operation.label;
+    task.lastOutcome = '';
     task.activeCalls += 1;
     task.calls += 1;
     task.lastActivityAt = startedAt;
+    task.currentOperations.set(operationId, operation);
     activeToolCalls += 1;
-    const connectorCall = details.connector !== false;
     if (connectorCall) activeConnectorCalls += 1;
+
     notify('started', task, {
-      tool: task.lastTool,
-      workspace: task.workspace
+      tool: operation.tool,
+      workspace: operation.workspace,
+      operation: operation.label,
+      operationId
     });
 
-    const finish = (result = {}) => {
+    let finish;
+    const requestCompletion = (completion = {}) => {
+      if (finished) throw new Error('Cannot complete a session after the tool call has finished.');
+      if (task.activeCalls !== 1) {
+        throw new Error('Cannot complete the session while another Rel.AI tool call is still active.');
+      }
+      task.completionRequest = {
+        summary: String(completion.summary || '').trim(),
+        validationStatus: String(completion.validationStatus || 'passed'),
+        validationLevel: String(completion.validationLevel || ''),
+        validationAt: String(completion.validationAt || ''),
+        changedFiles: Array.isArray(completion.changedFiles) ? completion.changedFiles.map(String).filter(Boolean).slice(0, 200) : []
+      };
+      return { taskId: task.id, scopeId: task.scopeId };
+    };
+    const update = (patch = {}) => {
+      if (finished) return;
+      const current = task.currentOperations.get(operationId);
+      if (!current) return;
+      if (patch.operation != null) current.label = String(patch.operation);
+      if (patch.detail != null) current.detail = String(patch.detail);
+      if (patch.workspace != null) current.workspace = String(patch.workspace);
+      if (patch.tool != null) current.tool = String(patch.tool);
+      task.workspace = current.workspace || task.workspace;
+      task.lastTool = current.tool || task.lastTool;
+      task.lastOperation = current.label || task.lastOperation;
+      task.lastActivityAt = now();
+      finish.operation = task.lastOperation;
+      notify('progress', task, {
+        tool: current.tool,
+        workspace: current.workspace,
+        operation: current.label,
+        detail: current.detail,
+        operationId
+      });
+    };
+
+    finish = (result = {}) => {
       if (finished) return;
       finished = true;
       const finishedAt = now();
+      const current = task.currentOperations.get(operationId) || operation;
+      task.currentOperations.delete(operationId);
       task.activeCalls = Math.max(0, task.activeCalls - 1);
       task.failures += result.ok === false ? 1 : 0;
-      task.lastTool = String(details.tool || task.lastTool || '');
-      task.workspace = String(details.workspace || task.workspace || '');
+      task.lastTool = current.tool || task.lastTool;
+      task.workspace = current.workspace || task.workspace;
+      task.lastOperation = current.label || task.lastOperation;
+      task.lastOutcome = result.ok === false ? 'failed' : 'succeeded';
       task.lastActivityAt = finishedAt;
       activeToolCalls = Math.max(0, activeToolCalls - 1);
       if (connectorCall) activeConnectorCalls = Math.max(0, activeConnectorCalls - 1);
+      finish.operation = task.lastOperation;
+
       notify('finished', task, {
         tool: task.lastTool,
         workspace: task.workspace,
+        operation: task.lastOperation,
+        operationId,
         ok: result.ok !== false,
         error: String(result.error || ''),
         durationMs: Math.max(0, finishedAt - startedAt)
       });
-      if (task.activeCalls === 0) scheduleCompletion(task);
+      if (result.ok === false) task.completionRequest = null;
+      if (task.activeCalls === 0) {
+        if (task.completionRequest) completeTask(task.scopeId, task.id);
+        else scheduleInactivity(task);
+      }
     };
+
     finish.taskId = task.id;
     finish.scopeId = scopeId;
+    finish.operationId = operationId;
+    finish.operation = operation.label;
+    finish.update = update;
+    finish.requestCompletion = requestCompletion;
     return finish;
   }
 
@@ -72,9 +145,13 @@ function createToolActivityTracker(options = {}) {
       failures: 0,
       workspace: String(details.workspace || ''),
       lastTool: String(details.tool || ''),
+      lastOperation: String(details.operation || defaultOperation(details.tool)),
+      lastOutcome: '',
+      completionRequest: null,
       startedAt: timestamp,
       lastActivityAt: timestamp,
-      completionTimer: null
+      completionTimer: null,
+      currentOperations: new Map()
     };
   }
 
@@ -93,31 +170,67 @@ function createToolActivityTracker(options = {}) {
     return 'connector:default';
   }
 
-  function scheduleCompletion(task) {
+  function scheduleInactivity(task) {
     cancelCompletion(task);
-    task.completionTimer = setTimer(() => completeTask(task.scopeId, task.id), idleMs);
+    task.completionTimer = setTimer(() => closeInactiveSession(task.scopeId, task.id), idleMs);
     task.completionTimer?.unref?.();
   }
 
-  function completeTask(scopeId, taskId) {
+  function closeInactiveSession(scopeId, taskId) {
     const task = tasksByScope.get(scopeId);
     if (!task || task.id !== taskId || task.activeCalls > 0) return;
     task.completionTimer = null;
     tasksByScope.delete(scopeId);
-    const completedAt = now();
+    const endedAt = now();
     lastTask = {
       taskId: task.id,
       id: task.id,
-      status: task.failures > 0 ? 'attention' : 'completed',
+      status: task.failures > 0 ? 'attention' : 'inactive',
+      endReason: 'inactivity_window',
       calls: task.calls,
       failures: task.failures,
       workspace: task.workspace,
       lastTool: task.lastTool,
+      operation: task.lastOperation,
+      lastOutcome: task.lastOutcome,
       startedAt: task.startedAt,
+      endedAt,
+      completedAt: endedAt,
+      durationMs: Math.max(0, endedAt - task.startedAt)
+    };
+    notify('inactive', task, { task: lastTask, endReason: lastTask.endReason });
+  }
+
+  function completeTask(scopeId, taskId) {
+    const task = tasksByScope.get(scopeId);
+    if (!task || task.id !== taskId || task.activeCalls > 0 || !task.completionRequest) return;
+    cancelCompletion(task);
+    tasksByScope.delete(scopeId);
+    const completedAt = now();
+    const completion = task.completionRequest;
+    lastTask = {
+      taskId: task.id,
+      id: task.id,
+      status: 'completed',
+      completionKnown: true,
+      endReason: 'explicit_completion',
+      summary: completion.summary,
+      validationStatus: completion.validationStatus,
+      validationLevel: completion.validationLevel,
+      validationAt: completion.validationAt,
+      changedFiles: completion.changedFiles,
+      calls: task.calls,
+      failures: task.failures,
+      workspace: task.workspace,
+      lastTool: task.lastTool,
+      operation: task.lastOperation,
+      lastOutcome: task.lastOutcome,
+      startedAt: task.startedAt,
+      endedAt: completedAt,
       completedAt,
       durationMs: Math.max(0, completedAt - task.startedAt)
     };
-    notify('completed', task, { task: lastTask });
+    notify('completed', task, { task: lastTask, endReason: lastTask.endReason });
   }
 
   function cancelCompletion(task) {
@@ -138,7 +251,8 @@ function createToolActivityTracker(options = {}) {
       .sort((left, right) => left.startedAt - right.startedAt);
     const primary = tasks.find(task => task.activeCalls > 0) || tasks[0] || null;
     return {
-      state: tasks.length ? (activeToolCalls > 0 ? 'working' : 'settling') : 'idle',
+      state: tasks.length ? (activeToolCalls > 0 ? 'working' : 'waiting') : 'idle',
+      completionKnown: false,
       activeConnectorCalls,
       activeCalls: activeToolCalls,
       activeTaskCount: tasks.length,
@@ -148,23 +262,33 @@ function createToolActivityTracker(options = {}) {
       failures: primary?.failures || 0,
       workspace: tasks.length === 1 ? primary?.workspace || '' : '',
       tool: primary?.lastTool || '',
+      operation: primary?.operation || '',
       startedAt: primary?.startedAt || null,
       lastTask
     };
   }
 
   function taskSnapshot(task) {
+    const currentOperations = [...task.currentOperations.values()]
+      .map(item => ({ ...item }))
+      .sort((left, right) => left.startedAt - right.startedAt);
+    const current = currentOperations[0] || null;
     return {
       id: task.id,
       taskId: task.id,
       scopeId: task.scopeId,
-      state: task.activeCalls > 0 ? 'working' : 'settling',
+      state: task.activeCalls > 0 ? 'working' : 'waiting',
+      completionKnown: false,
       activeCalls: task.activeCalls,
       calls: task.calls,
       failures: task.failures,
       workspace: task.workspace,
-      tool: task.lastTool,
+      tool: current?.tool || task.lastTool,
       lastTool: task.lastTool,
+      operation: current?.label || task.lastOperation,
+      lastOperation: task.lastOperation,
+      lastOutcome: task.lastOutcome,
+      currentOperations,
       startedAt: task.startedAt,
       lastActivityAt: task.lastActivityAt
     };
@@ -175,6 +299,7 @@ function createToolActivityTracker(options = {}) {
     const snapshot = Object.freeze({
       phase,
       activeConnectorCalls,
+      activeCalls: status.activeCalls,
       activeTaskCount: status.activeTaskCount,
       tasks: status.tasks,
       taskId: task.id,
@@ -210,6 +335,40 @@ function createToolActivityTracker(options = {}) {
   };
 }
 
+function runWithToolActivity(activity, callback) {
+  if (!activity || typeof callback !== 'function') return callback();
+  return activityContext.run(activity, callback);
+}
+
+function updateCurrentToolActivity(details = {}) {
+  const activity = activityContext.getStore();
+  activity?.update?.(details);
+}
+
+function requestCurrentTaskCompletion(details = {}) {
+  const activity = activityContext.getStore();
+  if (!activity?.requestCompletion) {
+    throw new Error('Task completion is only available inside an active Rel.AI tool call.');
+  }
+  return activity.requestCompletion(details);
+}
+
+function getCurrentToolActivityContext() {
+  const activity = activityContext.getStore();
+  if (!activity) return null;
+  return {
+    taskId: activity.taskId || '',
+    scopeId: activity.scopeId || '',
+    operationId: activity.operationId || '',
+    operation: activity.operation || ''
+  };
+}
+
+function defaultOperation(tool) {
+  const value = String(tool || '').replace(/^relai_/, '').replaceAll('_', ' ');
+  return value ? value.charAt(0).toUpperCase() + value.slice(1) : 'Using Rel.AI';
+}
+
 function resolveIdleMs(value) {
   const configured = Number(value ?? process.env.REL_AI_MCP_TASK_IDLE_MS ?? DEFAULT_TASK_IDLE_MS);
   if (!Number.isFinite(configured)) return DEFAULT_TASK_IDLE_MS;
@@ -224,5 +383,9 @@ module.exports = {
   beginConnectorToolCall: defaultTracker.beginConnectorToolCall,
   onToolActivity: defaultTracker.onToolActivity,
   getToolActivity: defaultTracker.getToolActivity,
-  resetToolActivity: defaultTracker.reset
+  resetToolActivity: defaultTracker.reset,
+  runWithToolActivity,
+  updateCurrentToolActivity,
+  requestCurrentTaskCompletion,
+  getCurrentToolActivityContext
 };

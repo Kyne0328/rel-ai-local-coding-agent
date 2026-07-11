@@ -196,6 +196,18 @@ const TOOL_DEFINITION_VALUES = [
     behavior: {"audit":"edit","cache":"edit","startsSession":true,"deferStagedSession":true,"sessionWrite":true,"summary":"edit"},
     dashboard: {"category":"Workspace tools","requiredProfile":"workspace","requiresApproval":false}
   },
+  {
+    name: "relai_complete_task",
+    title: "Report Task Completion",
+    description: "Call exactly once as the final Rel.AI tool after the final relai_run_checks call succeeds and no further code changes are planned. Rel.AI rejects completion if this work session has no passed validation or if code changed after it. This explicitly tells the dashboard that ChatGPT finished the coding task.",
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"summary":{"type":"string","minLength":1,"maxLength":2000}},"required":["workspace","summary"],"additionalProperties":false},
+    annotations: {"readOnlyHint":true,"destructiveHint":false,"idempotentHint":true,"openWorldHint":false},
+    handler: "completeTask",
+    connectorStrip: [],
+    groups: [],
+    behavior: {"audit":"completion","cache":"","startsSession":false,"deferStagedSession":false,"sessionWrite":false,"summary":"completion"},
+    dashboard: {"category":"Workflow","requiredProfile":"workspace","requiresApproval":false}
+  },
 ];
 /** @type {readonly ToolDefinition[]} */
 const TOOL_DEFINITIONS = Object.freeze(TOOL_DEFINITION_VALUES.map((definition) => Object.freeze(definition)));

@@ -67,11 +67,11 @@ assert.equal(getVersion(), latestChangelogVersion());
 {
   const cfg = normalizeConfig(makeDefaultConfig());
   const dashboard = productUx.dashboardData(cfg, { limit: 5 });
-  assert.equal(dashboard.toolCount, 16);
+  assert.equal(dashboard.toolCount, 17);
   assert.equal(Number.isFinite(dashboard.toolCount), true);
-  assert.equal(dashboard.tools.length, 16);
+  assert.equal(dashboard.tools.length, 17);
   assert.ok(dashboard.tools.includes('relai_git_commit'));
-  assert.equal(dashboard.config.localRepoBridge.visibleTools.length, 16);
+  assert.equal(dashboard.config.localRepoBridge.visibleTools.length, 17);
   assert.ok(publicConfigSummary(cfg).localRepoBridge.visibleTools.includes('relai_edit'));
   assert.doesNotMatch(read('src/ui/sections/home.js'), /visibleToolCount/);
   assert.doesNotMatch(read('src/ui/sections/workspace-cards.js'), /data\.toolCount|ChatGPT tools/);
@@ -84,7 +84,7 @@ assert.equal(getVersion(), latestChangelogVersion());
   assert.doesNotMatch(read('docs/ONE_CLICK_SETUP.md'), /removed tools[^\n]*relai_apply_update/);
   // Every active definition retains the established annotation values.
   const definitions = getToolDefinitions();
-  assert.equal(definitions.length, 16);
+  assert.equal(definitions.length, 17);
   for (const definition of definitions) {
     assert.deepEqual(definition.annotations, {
       readOnlyHint: true,

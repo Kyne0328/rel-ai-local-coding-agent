@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.19.4] — 2026-07-11
+
+### Explicit validated task completion
+- **Add `relai_complete_task` as the final workflow signal ChatGPT can call after the coding work is finished, increasing the unified MCP surface to 17 tools.**
+- **Advertise the completion contract through MCP initialization instructions and the tool description: run one final `relai_run_checks`, then call `relai_complete_task` exactly once as the final Rel.AI tool.**
+- **Reject completion when the current work session has no successful validation, when code changed after the latest passed validation, or while another Rel.AI tool call remains active.**
+- **Record explicit completion with `completionKnown: true`, an `explicit_completion` end reason, validation metadata, changed files, and a concise ChatGPT-provided summary.**
+- **Show confirmed completion distinctly from inactivity throughout Sessions, Overview, audit-derived history, and the Electron status window; restore desktop completion notifications only for this explicit validated signal.**
+- **Make successful validation results consistently expose `validated` and `validationStatus`, and add end-to-end regression coverage for missing validation, changed-after-validation refusal, explicit completion persistence, and trusted completion notifications.**
+
+Bump root/electron/status UI/lockfiles to 0.19.4.
+
+## [0.19.3] — 2026-07-11
+
+### Deterministic tool-session observability
+- **Stop presenting a 60-second inactivity timeout as proof that ChatGPT completed a task. Rel.AI now distinguishes exact running tool calls, waiting sessions with no active call, and sessions closed only as inactive after the grouping window.**
+- **Track each active operation with its own identifier, tool, workspace, start time, human-readable action, and live progress text; validation now reports the exact command currently running.**
+- **Persist operation descriptions in the audit log and surface them throughout the dashboard session list, session drawer, Overview activity card, and Electron status window.**
+- **Rename the dashboard Tasks navigation to Sessions and replace completion-oriented copy with explicit statements about what Rel.AI can observe and what remains unknown about ChatGPT reasoning or overall request completion.**
+- **Remove successful task-completion notifications. Desktop notifications now fire only for observed failed tool calls and identify the failed operation and workspace.**
+- **Keep the 60-second window only as a grouping boundary for related calls, with `completionKnown: false` and an `inactivity_window` end reason instead of a fabricated completed state.**
+
+Bump root/electron/status UI/lockfiles to 0.19.3.
+
 ## [0.19.2] — 2026-07-11
 
 ### Dashboard task grouping and compact sidebar fixes

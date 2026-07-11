@@ -22,6 +22,7 @@ const {
 } = require('../localRepoBridge');
 const { planEdit } = require('../executionPlanner');
 const { relaiStatus } = require('./status');
+const { completeTask } = require('./completion');
 
 /** @type {Readonly<Record<string, ToolHandler>>} */
 const HANDLERS = Object.freeze({
@@ -40,7 +41,8 @@ const HANDLERS = Object.freeze({
   gitCommit: inWorkspace((workspace, config, args) => relaiGitCommit(workspace, config, args)),
   gitPush: inWorkspace((workspace, config, args) => relaiGitPush(workspace, config, args)),
   gitCreatePr: inWorkspace((workspace, config, args) => relaiGitCreatePr(workspace, config, args)),
-  edit: inWorkspace((workspace, config, args) => planEdit(workspace, config, args))
+  edit: inWorkspace((workspace, config, args) => planEdit(workspace, config, args)),
+  completeTask: (config, args) => completeTask(config, args)
 });
 
 /**

@@ -59,8 +59,8 @@ try {
   send(2, 'tools/list');
   const list = await waitFor(2);
   const names = list.result.tools.map(tool => tool.name);
-  assert.equal(names.length, 16);
-  for (const required of ['relai_edit', 'relai_write', 'relai_replace', 'relai_status', 'relai_git_status', 'relai_git_commit', 'relai_git_push', 'relai_git_create_pr']) {
+  assert.equal(names.length, 17);
+  for (const required of ['relai_edit', 'relai_write', 'relai_replace', 'relai_status', 'relai_git_status', 'relai_git_commit', 'relai_git_push', 'relai_git_create_pr', 'relai_complete_task']) {
     assert.ok(names.includes(required), `missing active tool ${required}`);
   }
   for (const removed of ['relai_apply_bundle', 'relai_package_snapshot', 'relai_apply_update', 'relai_clear_files', 'relai_feature_probe', 'relai_git_fetch', 'relai_session_summary']) {
@@ -75,10 +75,10 @@ try {
   const status = await waitFor(3);
   assert.equal(status.result.isError, false);
   const payload = JSON.parse(status.result.content[0].text);
-  assert.equal(payload.tools.length, 16);
+  assert.equal(payload.tools.length, 17);
   assert.equal(Object.hasOwn(payload.toolGroups || {}, 'internal'), false);
 
-  console.log('Single 16-tool MCP surface smoke test passed.');
+  console.log('Single 17-tool MCP surface smoke test passed.');
 } finally {
   child.stdin.end();
   child.kill('SIGTERM');
