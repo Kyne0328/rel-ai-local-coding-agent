@@ -241,7 +241,7 @@ function openDashboardEvents(res, req, options) {
       JSON.stringify(desktopStatus)
     ].join("|");
   };
-  let lastSignature = "";
+  let lastSignature = changeSignature();
   const sendSnapshot = (force = false) => {
     try {
       const signature = changeSignature();
@@ -253,7 +253,7 @@ function openDashboardEvents(res, req, options) {
       sendSse(res, "error", { ok: false, error: error instanceof Error ? error.message : String(error) });
     }
   };
-  sendSnapshot(true);
+  sendSse(res, "ready", { ok: true, generatedAt: new Date().toISOString() });
   const intervalMs = Math.max(1000, Number(readConfig({ allowMissing: true }).productUx?.liveLogPollSeconds || 3) * 1000);
   const timer = setInterval(() => sendSnapshot(false), intervalMs);
   req.on("close", () => clearInterval(timer));

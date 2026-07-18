@@ -121,6 +121,13 @@ assert.equal(readCompact.items[0].writeHint, undefined, 'normal file gets no hin
 assert.equal(readCompact.items[1].writeGuidance, undefined, 'nested guidance dropped on large file');
 assert.match(readCompact.items[1].writeHint, /oldText\/newText/, 'large file gets a compact hint');
 assert.equal(readCompact.items[1].content, '...', 'file content preserved');
+
+const fullRead = compactForConnector('relai_read', {
+  ok: true,
+  items: [{ path: 'big.dart', cacheHit: true, writeGuidance: { recommendedMode: 'exact-replace' } }]
+}, { guidanceMode: 'full' });
+assert.equal(fullRead.items[0].cacheHit, undefined, 'cache metadata stays hidden in full guidance mode');
+assert.deepEqual(fullRead.items[0].writeGuidance, { recommendedMode: 'exact-replace' });
 console.log('8. relai_read compacted: OK');
 
 console.log('connector compaction unit tests passed.');

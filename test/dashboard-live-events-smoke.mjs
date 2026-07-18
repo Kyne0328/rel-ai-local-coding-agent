@@ -56,9 +56,9 @@ try {
   assert.ok(response.body, 'dashboard event stream must expose a response body');
 
   const stream = createEventReader(response.body.getReader());
-  const initial = await stream.nextDashboardEvent();
-  assert.equal(initial.ok, true);
-  assert.equal(initial.desktopStatus?.tunnelStatus, 'connecting');
+  const ready = await stream.nextEvent();
+  assert.equal(ready.event, 'ready');
+  assert.equal(JSON.parse(ready.data).ok, true);
 
   const entry = {
     ts: new Date().toISOString(),
@@ -70,6 +70,7 @@ try {
   fs.appendFileSync(auditPath, `${JSON.stringify(entry)}\n`, 'utf8');
 
   const updated = await stream.nextDashboardEvent();
+  assert.equal(updated.desktopStatus?.tunnelStatus, 'connecting');
   assert.ok(
     updated.auditTail?.entries?.some(item => item.tool === 'relai_read' && item.workspace === 'test'),
     'dashboard SSE must emit newly appended audit entries without a manual refresh'
@@ -94,15 +95,11 @@ function createEventReader(reader) {
   let buffer = '';
 
   return {
-    async nextDashboardEvent(timeoutMs = 6000) {
+    async nextEvent(timeoutMs = 6000) {
       const deadline = Date.now() + timeoutMs;
       while (Date.now() < deadline) {
         const block = takeEventBlock();
-        if (block) {
-          const parsed = parseEventBlock(block);
-          if (parsed.event === 'dashboard') return JSON.parse(parsed.data);
-          continue;
-        }
+        if (block) return parseEventBlock(block);
 
         const remaining = deadline - Date.now();
         const result = await Promise.race([
@@ -111,6 +108,14 @@ function createEventReader(reader) {
         ]);
         if (result.done) throw new Error('Dashboard SSE stream closed unexpectedly.');
         buffer += decoder.decode(result.value, { stream: true }).replaceAll('\r\n', '\n');
+      }
+      throw new Error('Timed out waiting for a dashboard SSE event.');
+    },
+    async nextDashboardEvent(timeoutMs = 6000) {
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        const parsed = await this.nextEvent(deadline - Date.now());
+        if (parsed.event === 'dashboard') return JSON.parse(parsed.data);
       }
       throw new Error('Timed out waiting for a dashboard SSE event.');
     }

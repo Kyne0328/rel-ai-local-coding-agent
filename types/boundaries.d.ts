@@ -16,6 +16,7 @@ export interface JsonSchema {
   maxItems?: number;
   minLength?: number;
   maxLength?: number;
+  enum?: string[];
 }
 
 export interface ObjectJsonSchema extends JsonSchema {
@@ -72,6 +73,9 @@ export interface ToolArgs extends Record<string, unknown> {
   workspace?: string;
   path?: string;
   paths?: string[];
+  startLine?: number;
+  endLine?: number;
+  guidanceMode?: string;
   dryRun?: boolean;
   stage?: string;
   updateText?: string;
@@ -102,7 +106,7 @@ export type AppConfig = Record<string, unknown> & {
   workspaces?: Record<string, unknown>;
 };
 
-export type ToolHandler = (config: AppConfig, args: ToolArgs) => unknown | Promise<unknown>;
+export type ToolHandler = (config: AppConfig, args: ToolArgs, context?: { connector?: boolean }) => unknown | Promise<unknown>;
 
 export interface LauncherConfigInput {
   port?: number | string;

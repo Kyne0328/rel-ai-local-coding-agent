@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { getCachedRead, setCachedRead, invalidatePath, invalidateAlias, invalidateAll, cacheStats } = require('../src/sessionCache.js');
+const { getCachedRead, getCachedReadEntry, setCachedRead, invalidatePath, invalidateAlias, invalidateAll, cacheStats } = require('../src/sessionCache.js');
 
 function reset() { invalidateAll(); }
 
@@ -11,9 +11,10 @@ assert.equal(getCachedRead('a', '/x', 1), null);
 console.log('1. cold get: OK');
 
 reset();
-setCachedRead('a', '/x', 5, 'hello');
+setCachedRead('a', '/x', 5, 'hello', { sha256: 'abc123', bytes: 9 });
 assert.equal(getCachedRead('a', '/x', 5), 'hello');
-console.log('2. hit: OK');
+assert.deepEqual(getCachedReadEntry('a', '/x', 5), { content: 'hello', sha256: 'abc123', bytes: 9 });
+console.log('2. hit with metadata: OK');
 
 reset();
 setCachedRead('a', '/x', 5, 'hello');

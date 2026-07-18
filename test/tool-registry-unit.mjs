@@ -54,6 +54,13 @@ for (const definition of definitions) {
   assert.equal(Object.hasOwn(definition, 'publicOrder'), false, `${definition.name} must not retain public ordering`);
 }
 
+const readTool = definitions.find(definition => definition.name === 'relai_read');
+assert.ok(readTool, 'read tool must be registered');
+assert.ok(readTool.inputSchema.properties.startLine, 'read schema must expose startLine');
+assert.ok(readTool.inputSchema.properties.endLine, 'read schema must expose endLine');
+assert.ok(readTool.inputSchema.properties.guidanceMode, 'read schema must expose guidanceMode');
+assert.match(readTool.description, /bounded line range/);
+
 const completionTool = definitions.find(definition => definition.name === 'relai_complete_task');
 assert.ok(completionTool, 'completion tool must be registered');
 assert.deepEqual(completionTool.inputSchema.required, ['workspace', 'summary']);

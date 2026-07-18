@@ -42,6 +42,33 @@ if (!health.ok || !health.transports.includes('streamable-http')) {
   throw new Error('health endpoint did not advertise streamable-http');
 }
 
+const smallGzipResponse = await fetch(`http://127.0.0.1:${port}/health`, {
+  headers: { 'accept-encoding': 'gzip' }
+});
+if (smallGzipResponse.headers.get('content-encoding')) {
+  throw new Error('small JSON responses should stay uncompressed below the gzip threshold');
+}
+await smallGzipResponse.json();
+
+const compressedToolsResponse = await fetch(`http://127.0.0.1:${port}/api/tools?token=${encodeURIComponent(token)}`, {
+  headers: { 'accept-encoding': 'gzip' }
+});
+if (compressedToolsResponse.headers.get('content-encoding') !== 'gzip') {
+  throw new Error('large JSON responses should use gzip when the client accepts it');
+}
+const compressedTools = await compressedToolsResponse.json();
+if (!Array.isArray(compressedTools) || compressedTools.length !== 17) {
+  throw new Error('compressed tools API response was not decoded correctly');
+}
+
+const disabledGzipResponse = await fetch(`http://127.0.0.1:${port}/api/tools?token=${encodeURIComponent(token)}`, {
+  headers: { 'accept-encoding': 'gzip;q=0' }
+});
+if (disabledGzipResponse.headers.get('content-encoding')) {
+  throw new Error('gzip;q=0 must disable response compression');
+}
+await disabledGzipResponse.json();
+
 const mcpBrowserDiagnostic = await fetch(`http://127.0.0.1:${port}/mcp`).then((response) => response.json());
 const publicDiagnosticText = JSON.stringify(mcpBrowserDiagnostic);
 if (!mcpBrowserDiagnostic.ok || !mcpBrowserDiagnostic.postRequired || mcpBrowserDiagnostic.chatgptAuth !== 'OAuth' || !mcpBrowserDiagnostic.correctChatGPTUrl.endsWith('/mcp') || !mcpBrowserDiagnostic.oauthProtectedResource.includes('/.well-known/oauth-protected-resource') || publicDiagnosticText.includes(chatgptSecret) || publicDiagnosticText.includes(token)) {
@@ -69,7 +96,7 @@ if (dashboardQueryAuth.taskActivity?.state !== 'idle') {
   throw new Error('standalone dashboard API did not include the default idle task state');
 }
 if (!Array.isArray(dashboardQueryAuth.tasks) || typeof dashboardQueryAuth.workspaceStates !== 'object') {
-  throw new Error('dashboard API did not include persistent tasks and operational workspace state');
+  throw new TypeError('dashboard API did not include persistent tasks and operational workspace state');
 }
 
 const pathPreflight = await fetch(`http://127.0.0.1:${port}/api/workspace/preflight?token=${encodeURIComponent(token)}&path=${encodeURIComponent(root)}`).then((response) => response.json());

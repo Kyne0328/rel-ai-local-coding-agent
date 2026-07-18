@@ -70,14 +70,16 @@ async function boot() {
   wireTopControls();
   initDesktopBridge();
   window.addEventListener('relai:route-change', updateWorkspaceScope);
-  if (initial?.ok !== false) {
+  if (initial && initial.ok !== false) {
     activateRouter(routeRoot);
-    updateShell(initial || {});
+    updateShell(initial);
   } else {
     renderDashboardState('loading', 'Loading workspace state…', 'Rel.AI is checking the local service, configuration, and workspace status.');
   }
-  const refreshed = await doRefresh({ source: 'boot', render: _routerReady });
-  if (refreshed?.ok !== false && !_routerReady) activateRouter(routeRoot);
+  if (initial?.ok === false || !initial) {
+    const refreshed = await doRefresh({ source: 'boot', render: _routerReady });
+    if (refreshed?.ok !== false && !_routerReady) activateRouter(routeRoot);
+  }
   window.addEventListener('relai:dashboard-refresh', () => doRefresh({ source: 'local-change', render: true }));
   initEvents(liveOnEvent, liveStateChange);
   startSSE(getToken);

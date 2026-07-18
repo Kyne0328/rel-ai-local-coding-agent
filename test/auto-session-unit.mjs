@@ -22,7 +22,7 @@ const {
   writeSessionPolicy,
   SESSION_IDLE_TTL_MS
 } = require('../src/policyResolver.js');
-const { workspaceTidyPlan } = require('../src/localRepoBridge.js');
+const { relaiRead, workspaceTidyPlan } = require('../src/localRepoBridge.js');
 
 function makeRepo() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-auto-session-'));
@@ -130,6 +130,23 @@ const sessionFile = (stateDir, alias) => path.join(stateDir, 'sessions', `${alia
   const paths = new Set(plan.candidates.map((c) => c.path));
   assert.ok(paths.has('session-artifact.txt'), 'session file must be a candidate');
   assert.ok(!paths.has('pre-existing.txt'), 'baseline file must never be a tidy candidate');
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// 7. Repeated reads during an active session must return cached text instead of
+//    misclassifying the cache hit as a binary file.
+{
+  const { root, workspacePath, stateDir } = makeRepo();
+  const config = { stateDir };
+  const workspace = { alias: 'ws', path: workspacePath };
+  writeSessionPolicy(config, 'ws', { workspaceRoot: workspacePath });
+  const first = relaiRead(workspace, config, { paths: ['README.md'] });
+  const second = relaiRead(workspace, config, { paths: ['README.md'] });
+  assert.equal(first.items[0]?.content, '# Auto session\n');
+  assert.equal(first.items[0]?.cacheHit, false);
+  assert.equal(second.items[0]?.content, '# Auto session\n');
+  assert.equal(second.items[0]?.cacheHit, true);
+  assert.deepEqual(second.skipped, []);
   fs.rmSync(root, { recursive: true, force: true });
 }
 

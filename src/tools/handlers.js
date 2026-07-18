@@ -27,7 +27,7 @@ const { completeTask } = require('./completion');
 /** @type {Readonly<Record<string, ToolHandler>>} */
 const HANDLERS = Object.freeze({
   repoSnapshot: inWorkspace((workspace, config, args) => repoSnapshot(workspace, config, args)),
-  read: inWorkspace((workspace, config, args) => relaiRead(workspace, config, args)),
+  read: inWorkspace((workspace, config, args, context) => relaiRead(workspace, config, args, context)),
   write: inWorkspace((workspace, config, args) => relaiWrite(workspace, config, args)),
   replace: inWorkspace((workspace, config, args) => relaiReplace(workspace, config, args)),
   tidyPlan: inWorkspace((workspace, config, args) => workspaceTidyPlan(workspace, config, args)),
@@ -46,16 +46,17 @@ const HANDLERS = Object.freeze({
 });
 
 /**
- * @param {(workspace: any, config: unknown, args: Record<string, any>) => any} handler
+ * @param {(workspace: any, config: unknown, args: Record<string, any>, context: { connector?: boolean }) => any} handler
  */
 function inWorkspace(handler) {
   /**
    * @param {unknown} config
    * @param {Record<string, any>} [args]
+   * @param {{ connector?: boolean }} [context]
    */
-  return (config, args = {}) => {
+  return (config, args = {}, context = {}) => {
     const workspace = resolveWorkspace(config, args.workspace);
-    return handler(workspace, config, args);
+    return handler(workspace, config, args, context);
   };
 }
 

@@ -66,6 +66,10 @@ const expected = ['relai_browser', 'relai_complete_task', 'relai_diff', 'relai_e
 if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error(`Unexpected tool list: ${names.join(', ')}`);
 const writeTool = list.result.tools.find((item) => item.name === 'relai_write');
 if (!writeTool.inputSchema?.properties?.content || writeTool.inputSchema?.properties?.edits) throw new Error('relai_write schema should expose content and not expose edits');
+const readTool = list.result.tools.find((item) => item.name === 'relai_read');
+if (!readTool.inputSchema?.properties?.startLine || !readTool.inputSchema?.properties?.endLine || !readTool.inputSchema?.properties?.guidanceMode) {
+  throw new Error('relai_read schema should expose bounded line ranges and guidance mode');
+}
 
 send({ jsonrpc: '2.0', id: 3, method: 'resources/list', params: {} });
 const resources = await waitFor(3);
