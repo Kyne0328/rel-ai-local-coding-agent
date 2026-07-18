@@ -110,6 +110,21 @@ assert.equal(getVersion(), latestChangelogVersion());
   assert.match(events, /document\.addEventListener\('visibilitychange', _handleVisibilityChange\)/);
 }
 
+// Manual refresh must bypass the shared GET cache, collapse overlapping requests,
+// and always restore the control state. The workspace scope uses the styled,
+// accessible header control instead of an unadorned native select.
+{
+  const dashboard = read('public/dashboard.js');
+  const dashboardHtml = read('src/http/dashboard.js');
+  const dashboardCss = read('public/dashboard.css');
+  assert.match(dashboard, /invalidateCache\(DASHBOARD_DATA_URL\)/);
+  assert.match(dashboard, /let _refreshPromise = null/);
+  assert.match(dashboard, /finally \{\s*setRefreshState\(refreshState\);\s*\}/);
+  assert.match(dashboardHtml, /id="workspaceScopeControl" class="workspace-scope-control"/);
+  assert.match(dashboardCss, /\.workspace-scope-control:focus-within/);
+  assert.match(dashboardCss, /appearance: none/);
+}
+
 // Stale-command diagnostics cover commands AND testCommands, matching relai_status.
 {
   const workspaceRoot = fs.mkdtempSync(path.join(tmpRoot, 'workspace-'));

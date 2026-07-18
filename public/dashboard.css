@@ -266,7 +266,63 @@ a.buttonlike.primary {
 }
 .secondary-nav a.active,
 .secondary-nav a:hover { color: var(--text); background: var(--surface-2); border-color: var(--line-soft); }
-.workspace-scope { min-width: 150px; min-height: 34px; }
+.workspace-scope-control {
+  position: relative;
+  min-width: 184px;
+  min-height: 34px;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) 14px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--surface-2) 88%, var(--surface));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.025);
+  transition: border-color var(--dur) var(--ease), background-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.workspace-scope-control[hidden] { display: none; }
+.workspace-scope-control:hover {
+  color: var(--text);
+  border-color: var(--line);
+  background: var(--surface-2);
+}
+.workspace-scope-control:focus-within {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 68%, var(--line));
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+.workspace-scope-icon,
+.workspace-scope-chevron {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+.workspace-scope-chevron { width: 14px; height: 14px; }
+.workspace-scope {
+  width: 100%;
+  min-width: 0;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  appearance: none;
+  color: var(--text);
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  outline: none;
+}
+.workspace-scope:focus { border: 0; box-shadow: none; }
+.workspace-scope option { color: var(--text); background: var(--surface-2); }
 .topbar-menu { position: relative; }
 .topbar-menu summary {
   width: 36px;

@@ -312,7 +312,11 @@ try {
         <div class="page-subtitle" id="subtitle">Checking local workspace state…</div>
       </div>
       <div class="top-controls">
-        <select id="workspaceScope" class="workspace-scope" aria-label="Filter dashboard by workspace"><option value="">All workspaces</option></select>
+        <label id="workspaceScopeControl" class="workspace-scope-control" aria-label="Workspace filter">
+          <svg class="workspace-scope-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5V19a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7l-2-3H5a2 2 0 0 0-2 2v2.5Z" /></svg>
+          <select id="workspaceScope" class="workspace-scope" aria-label="Filter dashboard by workspace"><option value="">All workspaces</option></select>
+          <svg class="workspace-scope-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
+        </label>
         <span class="status-pill warn" id="connectionStatus">Connecting…</span>
         <details class="topbar-menu"><summary aria-label="Dashboard actions">•••</summary><button class="secondary" id="refreshBtn" type="button">Refresh now</button></details>
         <span class="section-action" id="lastUpdated"></span>
