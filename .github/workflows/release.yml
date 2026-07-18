@@ -1,0 +1,172 @@
+name: Publish GitHub Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - package.json
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-github-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Test, build, and publish Windows release
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            electron/package-lock.json
+
+      - name: Detect package version change
+        id: version
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $currentVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if (-not $currentVersion) {
+            throw 'package.json does not contain a version.'
+          }
+
+          $beforeSha = '${{ github.event.before }}'
+          if (-not $beforeSha -or $beforeSha -match '^0+$') {
+            throw 'The previous commit could not be determined; refusing to publish a release.'
+          }
+
+          $previousPackageJson = git show "$($beforeSha):package.json"
+          if ($LASTEXITCODE -ne 0 -or -not $previousPackageJson) {
+            throw "Could not read package.json from previous commit $beforeSha."
+          }
+
+          $previousVersion = ($previousPackageJson | ConvertFrom-Json).version
+          if ($previousVersion -eq $currentVersion) {
+            "changed=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            Write-Host "package.json changed, but its version remains $currentVersion. No release will be published."
+            exit 0
+          }
+
+          "changed=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "version=$currentVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Version changed from $previousVersion to $currentVersion."
+
+      - name: Refuse an existing tag or release
+        if: steps.version.outputs.changed == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $existingTag = git ls-remote --tags origin "refs/tags/$env:VERSION"
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Could not check the remote tags.'
+          }
+          if ($existingTag) {
+            throw "Tag $env:VERSION already exists. Refusing to overwrite an existing release."
+          }
+
+          gh release view $env:VERSION --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            throw "GitHub release $env:VERSION already exists. Refusing to overwrite it."
+          }
+
+      - name: Install project dependencies
+        if: steps.version.outputs.changed == 'true'
+        run: npm ci --ignore-scripts
+
+      - name: Run tests
+        if: steps.version.outputs.changed == 'true'
+        run: npm test
+
+      - name: Install Electron dependencies
+        if: steps.version.outputs.changed == 'true'
+        run: npm ci
+        working-directory: electron
+
+      - name: Build Windows executables
+        if: steps.version.outputs.changed == 'true'
+        run: npm run electron:dist
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Prepare release assets and notes
+        if: steps.version.outputs.changed == 'true'
+        id: notes
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $assets = @(Get-ChildItem -Path dist -Filter '*.exe' -File)
+          if ($assets.Count -eq 0) {
+            throw 'electron:dist completed without producing any .exe files in dist/.'
+          }
+          $assets.FullName | Set-Content -Path release-assets.txt -Encoding utf8
+
+          $changelog = Get-Content CHANGELOG.md -Raw
+          $escapedVersion = [regex]::Escape($env:VERSION)
+          $pattern = "(?ms)^##\s+\[$escapedVersion\]\s+(?:—|-)\s+\d{4}-\d{2}-\d{2}\s*\r?\n(.*?)(?=^##\s+\[|\z)"
+          $match = [regex]::Match($changelog, $pattern)
+
+          if ($match.Success -and $match.Groups[1].Value.Trim()) {
+            $match.Groups[1].Value.Trim() | Set-Content -Path release-notes.md -Encoding utf8
+            "found=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            Write-Host "Using CHANGELOG.md notes for $env:VERSION."
+          } else {
+            "found=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            Write-Host "No matching changelog section found. GitHub will generate the release notes."
+          }
+
+      - name: Publish GitHub release
+        if: steps.version.outputs.changed == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          CHANGELOG_NOTES_FOUND: ${{ steps.notes.outputs.found }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $assets = @(Get-Content release-assets.txt | Where-Object { $_.Trim() })
+          if ($assets.Count -eq 0) {
+            throw 'No release assets were prepared.'
+          }
+
+          $arguments = @(
+            'release', 'create', $env:VERSION
+          ) + $assets + @(
+            '--repo', $env:GITHUB_REPOSITORY,
+            '--target', $env:GITHUB_SHA,
+            '--title', "Rel.AI MCP $env:VERSION"
+          )
+
+          if ($env:CHANGELOG_NOTES_FOUND -eq 'true') {
+            $arguments += @('--notes-file', 'release-notes.md')
+          } else {
+            $arguments += '--generate-notes'
+          }
+
+          & gh @arguments
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to publish GitHub release $env:VERSION."
+          }
