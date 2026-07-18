@@ -1,7 +1,7 @@
 import { setToken, getToken, fetchJson, invalidateCache, DASHBOARD_DATA_URL } from './ui/api.js';
 import { init as initStore, get as getStore } from './ui/store.js';
 import { initRouter, currentSection, currentRoutePath, getWorkspaceFilter, setWorkspaceFilter, rerender } from './ui/router.js';
-import { initEvents, startSSE } from './ui/events.js';
+import { initEvents, startSSE, restartSSE } from './ui/events.js';
 import { mountHome } from './ui/sections/home.js';
 import { initUiPreferences } from './ui/preferences.js';
 
@@ -22,6 +22,8 @@ let _clockTimer = null;
 let _shellStatus = { label: 'Connecting', tone: 'warn' };
 let _liveState = 'connecting';
 let _refreshPromise = null;
+let _fallbackRefreshTimer = null;
+let _livePollSeconds = null;
 
 function cleanLaunchQuery() {
   const clean = new URLSearchParams(location.search);
@@ -76,6 +78,7 @@ async function boot() {
   if (initial && initial.ok !== false) {
     activateRouter(routeRoot);
     updateShell(initial);
+    configureLiveRefresh(initial);
   } else {
     renderDashboardState('loading', 'Loading workspace state…', 'Rel.AI is checking the local service, configuration, and workspace status.');
   }
@@ -158,6 +161,7 @@ async function performRefresh(options = {}) {
     if (data && data.ok !== false) {
       initStore(data);
       updateShell(data);
+      configureLiveRefresh(data);
       if (!_routerReady) activateRouter(ensureRouteRoot());
       else if (options.render !== false && !hasBlockingInteraction()) rerender();
       refreshState = 'idle';
@@ -208,12 +212,33 @@ async function liveOnEvent(data) {
   if (!data || data.ok === false) return;
   initStore(data);
   updateShell(data);
+  configureLiveRefresh(data);
   if (!_routerReady) activateRouter();
   if (currentSection() === 'activity') {
     import('./ui/sections/activity.js').then(module => module.mergeEntries(data.auditTail?.entries || [])).catch(debugError);
   } else if (!hasBlockingInteraction()) {
     rerender();
   }
+}
+
+function configureLiveRefresh(data) {
+  const productUx = data?.config?.productUx || {};
+  const refreshSeconds = boundedSeconds(productUx.dashboardRefreshSeconds, 5, 1, 3600);
+  if (_fallbackRefreshTimer) clearInterval(_fallbackRefreshTimer);
+  _fallbackRefreshTimer = window.setInterval(() => {
+    if (_liveState !== 'live' && document.visibilityState !== 'hidden') {
+      void doRefresh({ source: 'fallback', render: true });
+    }
+  }, refreshSeconds * 1000);
+
+  const nextPollSeconds = boundedSeconds(productUx.liveLogPollSeconds, 3, 1, 300);
+  if (_livePollSeconds != null && nextPollSeconds !== _livePollSeconds) restartSSE(getToken);
+  _livePollSeconds = nextPollSeconds;
+}
+
+function boundedSeconds(value, fallback, min, max) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.min(Math.max(Math.floor(number), min), max) : fallback;
 }
 
 function liveStateChange(detail) {

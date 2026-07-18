@@ -17,9 +17,6 @@ const SECRET_FILE_NAMES = new Set(SECRET_PATH_GROUPS.fileNames);
 const SECRET_EXTENSIONS = new Set(SECRET_PATH_GROUPS.extensions);
 const SECRET_DIRECTORIES = new Set(SECRET_PATH_GROUPS.directories);
 const WINDOWS_SEPARATOR = path.win32.sep;
-const ESCAPED_CRLF = String.raw`\r\n`;
-const ESCAPED_LF = String.raw`\n`;
-
 const DEFAULT_EXCLUDED_NAMES = new Set([
   ".git", "node_modules", "dist", "build", "coverage", ".next", ".nuxt", ".svelte-kit",
   ".turbo", ".cache", ".parcel-cache", ".vite", ".pytest_cache", "__pycache__",
@@ -30,7 +27,7 @@ const DEFAULT_EXCLUDED_NAMES = new Set([
   ".coverage", ".angular", ".expo", ".serverless",
   ".terraform", ".bloop", ".metals", ".scala-build", ".stack-work", ".cabal",
   "Pods", "Carthage", "xcuserdata", ".vs", "cmake-build-debug", "cmake-build-release",
-  ".rel-ai-mcp", ".relai"
+  ".rel-ai-mcp", ".rel-ai-mcp-state", ".relai"
 ]);
 
 const DEFAULT_EXCLUDED_PATHS = [
@@ -42,6 +39,7 @@ const DEFAULT_EXCLUDED_PATHS = [
   ".claude/skills",
   ".superpowers",
   ".rel-ai-mcp",
+  ".rel-ai-mcp-state",
   ".relai"
 ];
 
@@ -297,7 +295,7 @@ function fileSha256(root, relativePath) {
 
 function writeTextFileSafe(root, relativePath, content, options = {}) {
   const resolved = resolveSafePath(root, relativePath);
-  const text = normalizeFullFileContent(String(content ?? ""));
+  const text = String(content ?? "");
   if (looksBinary(Buffer.from(text, "utf8"))) throw new Error("Refusing to write binary-looking content.");
   guardAgainstCollapsedFullFileWrite(resolved.absolutePath, resolved.relativePath, text);
   if (options.expectedSha256) {
@@ -308,12 +306,14 @@ function writeTextFileSafe(root, relativePath, content, options = {}) {
   }
 
   const expectedWrittenSha256 = crypto.createHash("sha256").update(text, "utf8").digest("hex");
+  const existingMode = fs.existsSync(resolved.absolutePath) ? fs.statSync(resolved.absolutePath).mode & 0o7777 : null;
   fs.mkdirSync(path.dirname(resolved.absolutePath), { recursive: true });
 
   const tmpName = `.${path.basename(resolved.absolutePath)}.${process.pid}.${Date.now()}.tmp`;
   const tmpPath = path.join(path.dirname(resolved.absolutePath), tmpName);
   try {
     fs.writeFileSync(tmpPath, text, "utf8");
+    if (existingMode != null) fs.chmodSync(tmpPath, existingMode);
     const tmpSha256 = crypto.createHash("sha256").update(fs.readFileSync(tmpPath)).digest("hex");
     if (tmpSha256 !== expectedWrittenSha256) {
       throw new Error(`Temporary write verification failed for ${resolved.relativePath}. Expected ${expectedWrittenSha256}, got ${tmpSha256}.`);
@@ -369,15 +369,6 @@ module.exports = {
   fileSha256,
   safeReadJson
 };
-
-function normalizeFullFileContent(text) {
-  // Some app clients may pass escaped newlines literally. Convert only when
-  // there are no real newlines and the payload clearly contains escaped lines.
-  if (!text.includes("\r") && !text.includes("\n") && text.includes(ESCAPED_LF)) {
-    return text.replaceAll(ESCAPED_CRLF, '\n').replaceAll(ESCAPED_LF, '\n');
-  }
-  return text;
-}
 
 function guardAgainstCollapsedFullFileWrite(absolutePath, relativePath, newText) {
   if (!fs.existsSync(absolutePath)) return;

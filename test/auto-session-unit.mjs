@@ -49,7 +49,23 @@ const sessionFile = (stateDir, alias) => path.join(stateDir, 'sessions', `${alia
   assert.equal(started, true, 'first call must start a session');
   const policy = resolvePolicy({ alias: 'ws', path: workspacePath }, config);
   assert.equal(policy.sessionActive, true);
+  assert.equal(policy.baselineCaptured, true);
+  assert.equal(policy.trusted, true);
   assert.ok(policy.baselineDirty.includes('preexisting.txt'), 'pre-existing untracked file must be in baseline');
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// 2b. A new task ID must recapture ownership rather than inheriting another task.
+{
+  const { root, workspacePath, stateDir } = makeRepo();
+  const config = { stateDir };
+  ensureSessionStarted(config, 'ws', workspacePath, { taskId: 'task-a' });
+  fs.writeFileSync(path.join(workspacePath, 'between-tasks.txt'), 'new baseline\n');
+  const restarted = ensureSessionStarted(config, 'ws', workspacePath, { taskId: 'task-b' });
+  assert.equal(restarted, true);
+  const session = readSessionPolicy(config, 'ws');
+  assert.equal(session.taskId, 'task-b');
+  assert.ok(session.baselineDirty.includes('between-tasks.txt'));
   fs.rmSync(root, { recursive: true, force: true });
 }
 

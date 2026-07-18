@@ -1,5 +1,44 @@
 'use strict';
 
+const NOTIFICATION_BODY_LIMIT = 260;
+const NOTIFICATION_SUMMARY_LIMIT = 150;
+const NOTIFICATION_ERROR_LIMIT = 170;
+
+function cleanNotificationText(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function truncateNotificationText(value, limit) {
+  const text = cleanNotificationText(value);
+  if (text.length <= limit) return text;
+  return `${text.slice(0, Math.max(0, limit - 1)).trimEnd()}…`;
+}
+
+function buildFailureNotification(event = {}) {
+  const operation = truncateNotificationText(event.operation || event.tool || 'Workspace action', 80);
+  const workspace = truncateNotificationText(event.workspace, 64);
+  const error = truncateNotificationText(event.error, NOTIFICATION_ERROR_LIMIT);
+  const location = workspace ? ` in ${workspace}` : '';
+  const detail = error ? ` ${error}` : ' Open Rel.AI for details.';
+  return {
+    title: 'Workspace action failed',
+    body: truncateNotificationText(`${operation} failed${location}.${detail}`, NOTIFICATION_BODY_LIMIT)
+  };
+}
+
+function buildCompletionNotification(task = {}) {
+  const summary = truncateNotificationText(task.summary, NOTIFICATION_SUMMARY_LIMIT);
+  const workspace = truncateNotificationText(task.workspace, 64);
+  const validationLevel = truncateNotificationText(task.validationLevel, 24).toLowerCase();
+  const parts = [summary || 'The coding task completed successfully.'];
+  if (workspace) parts.push(`Workspace: ${workspace}.`);
+  parts.push(validationLevel ? `Final ${validationLevel} checks passed.` : 'Final checks passed.');
+  return {
+    title: 'Task completed',
+    body: truncateNotificationText(parts.join(' '), NOTIFICATION_BODY_LIMIT)
+  };
+}
+
 function createToolSleepBlocker(powerSaveBlocker) {
   if (!powerSaveBlocker || typeof powerSaveBlocker.start !== 'function') {
     throw new TypeError('A valid Electron powerSaveBlocker is required.');
@@ -38,6 +77,7 @@ function createTaskActivityRuntime(options) {
     toolActivity,
     powerSaveBlocker,
     Notification,
+    iconPath = '',
     isReady = () => true,
     onNotificationClick = () => {},
     onStatusChange = () => {}
@@ -56,30 +96,22 @@ function createTaskActivityRuntime(options) {
     emitStatus();
   }
 
-  function showFailureNotification(event) {
+  function showNativeNotification(content) {
     if (!notificationsEnabled || !isReady()) return;
     if (typeof Notification?.isSupported === 'function' && !Notification.isSupported()) return;
-    const location = event.workspace ? ` in ${event.workspace}` : '';
-    const operation = event.operation || event.tool || 'Rel.AI tool call';
-    const body = `${operation} failed${location}.${event.error ? ` ${event.error}` : ''}`;
-    const notification = new Notification({ title: 'Rel.AI tool call failed', body, silent: false });
+    const options = { ...content, silent: false };
+    if (iconPath) options.icon = iconPath;
+    const notification = new Notification(options);
     if (typeof notification.on === 'function') notification.on('click', onNotificationClick);
     notification.show();
   }
 
+  function showFailureNotification(event) {
+    showNativeNotification(buildFailureNotification(event));
+  }
+
   function showCompletionNotification(task) {
-    if (!notificationsEnabled || !isReady()) return;
-    if (typeof Notification?.isSupported === 'function' && !Notification.isSupported()) return;
-    const location = task.workspace ? ` in ${task.workspace}` : '';
-    const validation = task.validationLevel ? ` Final ${task.validationLevel} validation passed.` : ' Final validation passed.';
-    const summary = task.summary ? ` ${task.summary}` : '';
-    const notification = new Notification({
-      title: 'Rel.AI task completion reported',
-      body: `ChatGPT explicitly reported the coding task complete${location}.${validation}${summary}`,
-      silent: false
-    });
-    if (typeof notification.on === 'function') notification.on('click', onNotificationClick);
-    notification.show();
+    showNativeNotification(buildCompletionNotification(task));
   }
 
   function currentStatus() {
@@ -124,6 +156,10 @@ function createTaskActivityRuntime(options) {
 }
 
 module.exports = {
+  buildCompletionNotification,
+  buildFailureNotification,
+  cleanNotificationText,
   createToolSleepBlocker,
-  createTaskActivityRuntime
+  createTaskActivityRuntime,
+  truncateNotificationText
 };

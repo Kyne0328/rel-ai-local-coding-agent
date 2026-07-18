@@ -6,126 +6,129 @@ import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { selectValidationLevel } = require('../src/validationStrategy.js');
-
+const { classifyFiles, selectValidationLevel } = require('../src/validationStrategy.js');
 const GIT_EXECUTABLE = process.platform === 'win32'
   ? String.raw`C:\Program Files\Git\cmd\git.exe`
   : '/usr/bin/git';
 
-function git(args, cwd) { // NOSONAR - these unit tests intentionally execute the local Git binary.
+const classificationCases = [
+  { name: 'no changes', files: [], level: 'focused', reason: /no changed files/ },
+  { name: 'single documentation file', files: ['README.md'], level: 'minimal', reason: /single low-risk/ },
+  { name: 'single source file', files: ['src/foo.js'], level: 'focused', reason: /single source/ },
+  { name: 'package manifest', files: ['package.json'], level: 'extended', reason: /config or CI/ },
+  { name: 'CI workflow', files: ['.github/workflows/ci.yml'], level: 'extended' },
+  { name: 'server source', files: ['src/server.js'], level: 'broad', reason: /HTTP, core operator/ },
+  { name: 'UI source', files: ['src/ui/foo.js'], level: 'broad' },
+  { name: 'HTML source', files: ['index.html'], level: 'broad' },
+  { name: 'CSS source', files: ['styles.css'], level: 'broad' },
+  { name: 'six files across two directories', files: ['a/1.js', 'a/2.js', 'a/3.js', 'b/1.js', 'b/2.js', 'b/3.js'], level: 'broad', reason: /multiple directories/ },
+  { name: 'five files across two directories', files: ['a/1.js', 'a/2.js', 'a/3.js', 'b/1.js', 'b/2.js'], level: 'focused' },
+  { name: 'six files in one directory', files: ['a/1.js', 'a/2.js', 'a/3.js', 'a/4.js', 'a/5.js', 'a/6.js'], level: 'focused' },
+  { name: 'config rule outranks source', files: ['src/foo.js', 'config.json'], level: 'extended' },
+  { name: 'HTML rule across multiple files', files: ['src/foo.js', 'index.html'], level: 'broad' },
+  {
+    name: 'custom threshold',
+    files: ['a/1.js', 'a/2.js', 'b/1.js', 'b/2.js'],
+    config: { validationRules: { broadMultiDirThreshold: 4 } },
+    level: 'broad',
+    reason: /4 files across multiple directories/
+  },
+  {
+    name: 'custom path rule',
+    files: ['src/payments/api.js'],
+    config: { validationRules: { customRules: [{ level: 'broad', pattern: 'src/payments/', reason: 'payments touched' }] } },
+    level: 'broad',
+    reason: /payments touched/
+  },
+  {
+    name: 'custom rule overrides default',
+    files: ['package.json'],
+    config: { validationRules: { customRules: [{ level: 'broad', pattern: 'package.json', reason: 'manifest policy' }] } },
+    level: 'broad',
+    reason: /manifest policy/
+  },
+  {
+    name: 'non-matching custom rule falls through',
+    files: ['package.json'],
+    config: { validationRules: { customRules: [{ level: 'broad', pattern: 'src/payments/' }] } },
+    level: 'extended'
+  },
+  {
+    name: 'invalid custom level is ignored',
+    files: ['src/foo.js'],
+    config: { validationRules: { customRules: [{ level: 'invalid', pattern: 'src/' }] } },
+    level: 'focused'
+  },
+  {
+    name: 'custom top-directory threshold',
+    files: ['a/1.js', 'a/2.js', 'a/3.js', 'b/1.js', 'b/2.js', 'b/3.js'],
+    config: { validationRules: { broadMultiDirTopDirs: 3 } },
+    level: 'focused'
+  }
+];
+
+for (const testCase of classificationCases) {
+  const result = classifyFiles(testCase.files, testCase.config);
+  assert.equal(result.level, testCase.level, `${testCase.name}: ${result.reason}`);
+  if (testCase.reason) assert.match(result.reason, testCase.reason, testCase.name);
+}
+
+assert.deepEqual(selectValidationLevel(os.tmpdir(), {}, 'extended'), {
+  level: 'extended',
+  reason: 'caller-specified',
+  changedFiles: []
+});
+
+const nonGit = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-vs-nogit-'));
+try {
+  const result = selectValidationLevel(nonGit, {}, null);
+  assert.equal(result.level, 'focused');
+  assert.match(result.reason, /unavailable/);
+} finally {
+  fs.rmSync(nonGit, { recursive: true, force: true });
+}
+
+const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-vs-repo-'));
+try {
+  git(['init'], repo);
+  git(['config', 'user.email', 'test@test.com'], repo);
+  git(['config', 'user.name', 'Test'], repo);
+  fs.writeFileSync(path.join(repo, 'initial.txt'), 'init');
+  git(['add', '.'], repo);
+  git(['commit', '-m', 'init'], repo);
+
+  assertDetected('package.json', '{}', 'extended', { stage: true });
+  assertDetected('src/ui/dashboard.js', 'export default {};', 'broad');
+  assertDetected('CHANGELOG.md', '# changes', 'minimal');
+
+  resetRepo();
+  for (const file of ['a/1.js', 'a/2.js', 'a/3.js', 'b/1.js', 'b/2.js', 'b/3.js']) write(file, 'x');
+  assert.equal(selectValidationLevel(repo, {}, null).level, 'broad');
+} finally {
+  fs.rmSync(repo, { recursive: true, force: true });
+}
+
+function assertDetected(relativePath, content, expectedLevel, options = {}) {
+  resetRepo();
+  write(relativePath, content);
+  if (options.stage) git(['add', relativePath], repo);
+  const result = selectValidationLevel(repo, {}, null);
+  assert.equal(result.level, expectedLevel, `${relativePath}: ${result.reason}`);
+}
+
+function write(relativePath, content) {
+  const target = path.join(repo, relativePath);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, content);
+}
+
+function resetRepo() {
+  git(['reset', '--hard', 'HEAD'], repo);
+  git(['clean', '-fd'], repo);
+}
+
+function git(args, cwd) {
   execFileSync(GIT_EXECUTABLE, args, { cwd, stdio: 'pipe' });
 }
 
-function initRepo(dir) {
-  git(['init'], dir);
-  git(['config', 'user.email', 'test@test.com'], dir);
-  git(['config', 'user.name', 'Test'], dir);
-  fs.writeFileSync(path.join(dir, 'initial.txt'), 'init');
-  git(['add', '.'], dir);
-  git(['commit', '-m', 'init'], dir);
-}
-
-function makeTempRepo(filename, content = 'hello') {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-vs-'));
-  initRepo(dir);
-  const filePath = path.join(dir, filename);
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, content);
-  return dir;
-}
-
-// 1. Override level respected, no git needed
-{
-  const r = selectValidationLevel(os.tmpdir(), {}, 'extended');
-  assert.equal(r.level, 'extended', 'override: level must be extended');
-  assert.equal(r.reason, 'caller-specified', 'override: reason must be caller-specified');
-}
-
-// 2. Non-git directory -> focused fallback
-{
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-vs-nogit-'));
-  const r = selectValidationLevel(tmp, {}, null);
-  assert.equal(r.level, 'focused', 'no-git: level must be focused');
-  assert.ok(r.reason.includes('unavailable'), 'no-git: reason must mention unavailable');
-  fs.rmSync(tmp, { recursive: true, force: true });
-}
-
-// 3. Config file (package.json) staged -> extended
-{
-  const dir = makeTempRepo('package.json', '{"name":"test"}');
-  git(['add', 'package.json'], dir);
-  const r = selectValidationLevel(dir, {}, null);
-  assert.equal(r.level, 'extended', 'config-file: level must be extended');
-  fs.rmSync(dir, { recursive: true, force: true });
-}
-
-// 4. Single source file unstaged -> focused
-{
-  const dir = makeTempRepo('src/utils.js', 'module.exports = {}');
-  const r = selectValidationLevel(dir, {}, null);
-  assert.equal(r.level, 'focused', 'source-file: level must be focused');
-  fs.rmSync(dir, { recursive: true, force: true });
-}
-
-// 5. Markdown file only -> minimal
-{
-  const dir = makeTempRepo('CHANGELOG.md', '# changes');
-  const r = selectValidationLevel(dir, {}, null);
-  assert.equal(r.level, 'minimal', 'markdown: level must be minimal');
-  fs.rmSync(dir, { recursive: true, force: true });
-}
-
-// 6. CI workflow file -> extended
-{
-  const dir = makeTempRepo('.github/workflows/ci.yml', 'on: push');
-  const r = selectValidationLevel(dir, {}, null);
-  assert.equal(r.level, 'extended', 'ci-workflow: level must be extended');
-  fs.rmSync(dir, { recursive: true, force: true });
-}
-
-// 7. Invalid override -> falls through to auto-select (non-git dir -> focused)
-{
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-vs-inv-'));
-  const r = selectValidationLevel(tmp, {}, 'not-a-level');
-  assert.equal(r.level, 'focused', 'invalid-override: falls through to auto-select');
-  fs.rmSync(tmp, { recursive: true, force: true });
-}
-
-// 8. UI file (contains /ui/) -> broad
-{
-  const dir = makeTempRepo('src/ui/dashboard.js', 'export default {}');
-  const r = selectValidationLevel(dir, {}, null);
-  assert.equal(r.level, 'broad', 'ui-file: level must be broad');
-  assert.ok(r.reason.includes('UI') || r.reason.includes('HTTP') || r.reason.includes('operator'), 'ui-file: reason must mention UI/HTTP/operator');
-  fs.rmSync(dir, { recursive: true, force: true });
-}
-
-// 9. 6+ files across multiple top-level directories -> broad
-{
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-vs-broad-'));
-  initRepo(dir);
-  for (const f of ['src/a.js', 'lib/b.js', 'utils/c.js', 'helpers/d.js', 'core/e.js', 'scripts/f.js']) {
-    const fp = path.join(dir, f);
-    fs.mkdirSync(path.dirname(fp), { recursive: true });
-    fs.writeFileSync(fp, 'x');
-  }
-  const r = selectValidationLevel(dir, {}, null);
-  assert.equal(r.level, 'broad', 'multi-dir: level must be broad');
-  assert.ok(r.reason.includes('multiple') || r.reason.includes('directories'), 'multi-dir: reason must mention multiple directories');
-  fs.rmSync(dir, { recursive: true, force: true });
-}
-
-// 10. 2-5 files in one directory -> focused (fallback)
-{
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-vs-onedir-'));
-  initRepo(dir);
-  for (const name of ['alpha.js', 'beta.js', 'gamma.js']) {
-    fs.mkdirSync(path.join(dir, 'src'), { recursive: true });
-    fs.writeFileSync(path.join(dir, 'src', name), 'x');
-  }
-  const r = selectValidationLevel(dir, {}, null);
-  assert.equal(r.level, 'focused', 'one-dir: level must be focused');
-  fs.rmSync(dir, { recursive: true, force: true });
-}
-
-console.log('validationStrategy unit tests passed.');
+console.log(`Validation strategy tests passed across ${classificationCases.length} classification cases and Git integration coverage.`);

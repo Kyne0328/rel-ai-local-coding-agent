@@ -150,20 +150,24 @@ function invalidatePaths(alias, wsRoot, paths) {
   }
 }
 
-function maybeStartSession(config, toolName, args) {
+function maybeStartSession(config, toolName, args, details = {}) {
   const behavior = getToolDefinition(toolName)?.behavior;
-  if (behavior?.startsSession !== true || args?.dryRun === true) return;
+  if (behavior?.startsSession !== true || args?.dryRun === true) return { started: false, alias: '' };
   if (behavior.deferStagedSession === true && typeof args.stage === "string") {
     const stage = args.stage.trim().toLowerCase();
-    if (stage === "start" || stage === "append" || stage === "abort") return;
+    if (stage === "start" || stage === "append" || stage === "abort") return { started: false, alias: '' };
   }
   const alias = args?.workspace;
-  if (!alias) return;
+  if (!alias) return { started: false, alias: '' };
   try {
     const workspace = resolveWorkspace(config, alias);
-    if (workspace?.path) ensureSessionStarted(config, workspace.alias, workspace.path);
+    const started = workspace?.path
+      ? ensureSessionStarted(config, workspace.alias, workspace.path, { taskId: details.taskId })
+      : false;
+    return { started, alias: workspace.alias };
   } catch (error) {
     debugSwallow("start-session", error);
+    return { started: false, alias: String(alias || '') };
   }
 }
 

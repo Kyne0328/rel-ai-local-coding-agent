@@ -366,6 +366,23 @@ a.buttonlike.primary {
 .task-file-list { margin: 0; padding-left: 20px; display: grid; gap: 5px; }
 .task-event-list { display: grid; gap: 6px; }
 .task-event { padding: 8px 10px; display: grid; grid-template-columns: 80px minmax(0, 1fr) auto; gap: 10px; align-items: center; border: 1px solid var(--line-soft); border-radius: 8px; }
+.task-event-link {
+  color: inherit;
+  background: var(--surface-2);
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color var(--dur) var(--ease), background-color var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+.task-event-link:hover {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line-soft));
+  background: var(--accent-dim);
+  transform: translateX(2px);
+}
+.task-event-link:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.activity-requested-row { background: var(--accent-dim); }
 .workspace-grid-detailed { grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); gap: 14px; }
 .workspace-card-detailed { display: grid; gap: 14px; padding: 16px; }
 .workspace-card-detailed:hover { transform: none; }

@@ -12,6 +12,7 @@ const sleepBlocker = read('electron/tool-sleep-blocker.js');
 const dashboard = read('public/dashboard.js');
 const home = read('src/ui/sections/home.js');
 const workspaceState = read('src/workspaceState.js');
+const gitExecutable = read('src/gitExecutable.js');
 
 assert.doesNotMatch(dashboardWindow, /\bvoid\s+shell\.openExternal/);
 assert.doesNotMatch(status, /\bvoid\s+/);
@@ -20,7 +21,8 @@ assert.doesNotMatch(sleepBlocker, /\?[^:\n]+:[^\n]+\?/);
 assert.doesNotMatch(dashboard, /\?[^:\n]+:[^\n]+\?/);
 assert.doesNotMatch(home, /\?[^:\n]+:[^\n]+\?/);
 assert.doesNotMatch(workspaceState, /spawnSync\(['"]git['"]/);
-assert.match(workspaceState, /C:\\\\Program Files\\\\Git\\\\cmd\\\\git\.exe/);
 assert.match(workspaceState, /resolveGitExecutable/);
+assert.match(gitExecutable, /C:\\Program Files\\Git\\cmd\\git\.exe/);
+assert.match(gitExecutable, /process\.env\.REL_AI_MCP_GIT/);
 
 console.log('Sonar new-code regression scan passed.');

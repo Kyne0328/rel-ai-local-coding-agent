@@ -49,6 +49,7 @@ const runtime = createTaskActivityRuntime({
     stop(id) { return startedBlockers.delete(id); }
   },
   Notification: FakeNotification,
+  iconPath: 'C:\\RelAI\\icon.png',
   isReady: () => true,
   onNotificationClick: () => { clicked += 1; },
   onStatusChange: status => statuses.push(structuredClone(status))
@@ -97,8 +98,10 @@ const finishFailed = tracker.beginConnectorToolCall({
 });
 finishFailed({ ok: false, error: 'check failed' });
 assert.equal(notifications.length, 1);
-assert.equal(notifications[0].options.title, 'Rel.AI tool call failed');
+assert.equal(notifications[0].options.title, 'Workspace action failed');
 assert.match(notifications[0].options.body, /Running validation 1\/2: npm run check failed in repo/);
+assert.match(notifications[0].options.body, /check failed/);
+assert.equal(notifications[0].options.icon, 'C:\\RelAI\\icon.png');
 notifications[0].click();
 assert.equal(clicked, 1);
 
@@ -129,9 +132,12 @@ assert.equal(runtime.getStatus().lastTask.status, 'completed');
 assert.equal(runtime.getStatus().lastTask.completionKnown, true);
 assert.equal(runtime.getStatus().lastTask.endReason, 'explicit_completion');
 assert.equal(notifications.length, 2);
-assert.equal(notifications[1].options.title, 'Rel.AI task completion reported');
-assert.match(notifications[1].options.body, /explicitly reported the coding task complete in repo/i);
-assert.match(notifications[1].options.body, /Final standard validation passed/);
+assert.equal(notifications[1].options.title, 'Task completed');
+assert.match(notifications[1].options.body, /Implemented and validated the requested changes\./);
+assert.match(notifications[1].options.body, /Workspace: repo\./);
+assert.match(notifications[1].options.body, /Final standard checks passed\./);
+assert.doesNotMatch(notifications[1].options.body, /completion reported|ChatGPT explicitly/i);
+assert.equal(notifications[1].options.icon, 'C:\\RelAI\\icon.png');
 
 runtime.setNotificationsEnabled(false);
 const finishMuted = tracker.beginConnectorToolCall({

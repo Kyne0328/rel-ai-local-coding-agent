@@ -20,6 +20,8 @@ const {
 } = require('./tools/session');
 const { dispatchTool } = require('./tools/dispatch');
 const { beginConnectorToolCall, runWithToolActivity } = require('./toolActivity');
+const { runWorkspaceOperation } = require('./workspaceOperationQueue');
+const { clearSessionPolicy } = require('./policyResolver');
 const {
   workspaceList,
   workspaceInspect,
@@ -33,6 +35,7 @@ async function callTool(name, args = {}, context = {}) {
   const connector = Boolean(context?.publicHttpOnly);
   let finishActivity = null;
   let activityResult = { ok: true };
+  let sessionStart = { started: false, alias: '' };
   try {
     if (!isToolCallable(name)) {
       throw new Error(`Unknown tool '${name}'. Available tools: ${TOOL_NAMES.join(', ')}. Restart/reconnect ChatGPT if the tool list looks stale.`);
@@ -44,12 +47,20 @@ async function callTool(name, args = {}, context = {}) {
       connector,
       operation: describeToolOperation(name, args || {})
     });
-    maybeStartSession(config, name, args || {});
-    const value = await runWithToolActivity(finishActivity, () => dispatchTool(config, name, args || {}, { connector }));
+    const value = await runWithToolActivity(finishActivity, () => runWorkspaceOperation(args?.workspace, () => {
+      sessionStart = maybeStartSession(config, name, args || {}, { taskId: finishActivity?.taskId });
+      return dispatchTool(config, name, args || {}, { connector });
+    }));
+    const valueOk = value?.ok !== false;
+    activityResult = {
+      ok: valueOk,
+      ...(valueOk ? {} : { error: String(value?.error || value?.message || `${name} returned ok:false`) })
+    };
+    if (sessionStart.started && !hasWorkspaceChanges(value)) clearSessionPolicy(config, sessionStart.alias);
     const extraAudit = buildExtraAudit(name, value, args || {});
     applyCautionAudit(extraAudit, name, args || {}, value, config);
     invalidateSessionCacheForCall(config, name, args || {});
-    logAudit(config, { taskId: finishActivity?.taskId, tool: name, operation: finishActivity?.operation, ok: true, workspace: args?.workspace, ms: Date.now() - started, ...extraAudit });
+    logAudit(config, { taskId: finishActivity?.taskId, tool: name, operation: finishActivity?.operation, ok: valueOk, workspace: args?.workspace, ms: Date.now() - started, ...extraAudit, ...(valueOk ? {} : { error: activityResult.error }) });
     return ok(connector ? compactForConnector(name, value, args || {}) : value);
   } catch (error) {
     const enhanced = enhanceToolError(name, error);
@@ -59,6 +70,14 @@ async function callTool(name, args = {}, context = {}) {
   } finally {
     finishActivity?.(activityResult);
   }
+}
+
+function hasWorkspaceChanges(value) {
+  if (!value || typeof value !== 'object') return false;
+  if (value.changed === true) return true;
+  if (Array.isArray(value.changedFiles) && value.changedFiles.length > 0) return true;
+  if (Array.isArray(value.statusAfter?.sessionChangedFiles) && value.statusAfter.sessionChangedFiles.length > 0) return true;
+  return false;
 }
 
 function describeToolOperation(name, args = {}) {

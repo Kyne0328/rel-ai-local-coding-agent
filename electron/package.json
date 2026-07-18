@@ -1,6 +1,6 @@
 {
   "name": "rel-ai-mcp-launcher",
-  "version": "0.19.7",
+  "version": "0.19.8",
   "private": true,
   "description": "Desktop launcher and dashboard host for Rel.AI MCP.",
   "author": "Kyne Anthony",

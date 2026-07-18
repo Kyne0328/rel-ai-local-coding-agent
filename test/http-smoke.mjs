@@ -89,6 +89,16 @@ const dashboardQueryAuth = await fetch(`http://127.0.0.1:${port}/api/dashboard/v
 if (!dashboardQueryAuth.ok) {
   throw new Error('dashboard API did not accept token query auth used by browser dashboard');
 }
+
+const invalidAsyncPost = await fetch(`http://127.0.0.1:${port}/api/settings?token=${encodeURIComponent(token)}`, {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: '{invalid json'
+});
+const invalidAsyncPayload = await invalidAsyncPost.json();
+if (invalidAsyncPost.status !== 500 || invalidAsyncPayload.ok !== false) {
+  throw new Error('async route rejection was not converted into a controlled HTTP 500 response');
+}
 if (dashboardQueryAuth.readiness == null) {
   throw new Error('dashboard API did not include readiness data');
 }

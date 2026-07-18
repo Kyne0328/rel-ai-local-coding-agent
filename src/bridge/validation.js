@@ -10,7 +10,6 @@ const { updateCurrentToolActivity } = require("../toolActivity");
 
 const CHECK_OUTPUT_TAIL_DEFAULT = 4000;
 const CHECK_OUTPUT_TAIL_FULL = 40000;
-
 async function relaiVerify(workspace, config, args = {}) {
   const level = String(args.level || "standard").toLowerCase();
   const { checks, aliasNormalizations } = normalizeVerifyChecks(args, workspace.path, level);
@@ -165,18 +164,46 @@ function detectPackageJsonChecks(root, level, commands) {
     const scripts = pkg.scripts || {};
     if (level === "release" && scripts["test:all"]) {
       commands.push("npm run test:all");
+      if (scripts["electron:build"] && !npmScriptInvokes(scripts, "test:all", "electron:build")) {
+        commands.push("npm run electron:build");
+      } else if (scripts.build && !npmScriptInvokes(scripts, "test:all", "build")) {
+        commands.push("npm run build");
+      }
       return;
     }
-    if (scripts.check) {
+    const hasStandardTest = level !== "quick" && Boolean(scripts.test);
+    const testCoversCheck = hasStandardTest && npmScriptInvokes(scripts, "test", "check");
+    if (scripts.check && !testCoversCheck) {
       commands.push("npm run check");
     } else if (level === "quick" && fs.existsSync(path.join(root, "src", "tools.js"))) {
       commands.push("node --check src/tools.js");
     }
-    if (level !== "quick" && scripts.test) commands.push("npm test");
-    if (scripts.build && shouldRunPackageBuild(root, pkg, scripts, level, commands)) commands.push("npm run build");
+    if (hasStandardTest) commands.push(canonicalNpmScriptCommand(scripts, "test"));
+    const testCoversBuild = hasStandardTest && npmScriptInvokes(scripts, "test", "build");
+    if (scripts.build && !testCoversBuild && shouldRunPackageBuild(root, pkg, scripts, level, commands)) commands.push("npm run build");
   } catch {
     if (level === "quick" && fs.existsSync(path.join(root, "src", "tools.js"))) commands.push("node --check src/tools.js");
   }
+}
+
+function npmScriptInvokes(scripts, sourceName, targetName, seen = new Set()) {
+  if (!sourceName || seen.has(sourceName)) return false;
+  seen.add(sourceName);
+  const script = String(scripts?.[sourceName] || "");
+  const references = [...script.matchAll(/\bnpm(?:\.cmd)?\s+(?:(?:run|run-script)\s+)?([A-Za-z0-9:_-]+)/g)]
+    .map((match) => match[1]);
+  for (const reference of references) {
+    if (reference === targetName) return true;
+    if (npmScriptInvokes(scripts, reference, targetName, seen)) return true;
+  }
+  return false;
+}
+
+function canonicalNpmScriptCommand(scripts, scriptName) {
+  const script = String(scripts?.[scriptName] || "").trim();
+  const alias = /^npm(?:\.cmd)?\s+(?:run|run-script)\s+([A-Za-z0-9:_-]+)$/.exec(script);
+  if (alias) return `npm run ${alias[1]}`;
+  return scriptName === "test" ? "npm test" : `npm run ${scriptName}`;
 }
 
 function detectManifestChecks(root, level, commands) {

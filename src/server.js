@@ -3,7 +3,7 @@ const { getToolSchemas, callTool } = require('./tools');
 const { listResources, readResource } = require('./resources');
 const pkg = require('../package.json');
 
-const MAX_TOOL_RESULT_CHARS = Number(process.env.REL_AI_MCP_MAX_TOOL_RESULT_CHARS || 120000);
+const MAX_TOOL_RESULT_BYTES = Number(process.env.REL_AI_MCP_MAX_TOOL_RESULT_BYTES || process.env.REL_AI_MCP_MAX_TOOL_RESULT_CHARS || 120000);
 
 function main() {
   const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
@@ -103,11 +103,12 @@ async function handleNotification(message) {
 
 function toolResult(payload, isError) {
   const text = JSON.stringify(payload, null, 2);
-  if (text.length > MAX_TOOL_RESULT_CHARS) {
-    const preview = text.slice(0, MAX_TOOL_RESULT_CHARS) + `\n\n[rel-ai-mcp truncated tool result: ${text.length} chars total]`;
+  const bytes = Buffer.byteLength(text, 'utf8');
+  if (bytes > MAX_TOOL_RESULT_BYTES) {
+    const preview = truncateUtf8Head(text, MAX_TOOL_RESULT_BYTES) + `\n\n[rel-ai-mcp truncated tool result: ${bytes} bytes total]`;
     return {
       content: [{ type: 'text', text: preview }],
-      structuredContent: compactToolResult(payload, text.length),
+      structuredContent: compactToolResult(payload, bytes),
       isError: Boolean(isError)
     };
   }
@@ -116,6 +117,11 @@ function toolResult(payload, isError) {
     structuredContent: payload,
     isError: Boolean(isError)
   };
+}
+
+function truncateUtf8Head(text, maxBytes) {
+  const buffer = Buffer.from(String(text), 'utf8');
+  return buffer.subarray(0, maxBytes).toString('utf8').replace(/\uFFFD+$/u, '');
 }
 
 function compactToolResult(payload, originalChars) {

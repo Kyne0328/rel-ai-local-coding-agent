@@ -37,6 +37,10 @@ function storePath() {
   return path.join(stateDir(), "oauth-store.json");
 }
 
+function lockPath() {
+  return path.join(stateDir(), "oauth-store.lock");
+}
+
 function emptyStore() {
   return { clients: {}, codes: {}, accessTokens: {}, refreshTokens: {} };
 }
@@ -58,7 +62,49 @@ function objectOrEmpty(value) {
 
 function writeStore(store) {
   fs.mkdirSync(stateDir(), { recursive: true, mode: 0o700 });
-  fs.writeFileSync(storePath(), `${JSON.stringify(store, null, 2)}\n`, { mode: 0o600 });
+  const target = storePath();
+  const temporary = `${target}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;
+  try {
+    fs.writeFileSync(temporary, `${JSON.stringify(store, null, 2)}\n`, { mode: 0o600 });
+    fs.renameSync(temporary, target);
+  } catch (error) {
+    try { fs.rmSync(temporary, { force: true }); } catch {}
+    throw error;
+  }
+}
+
+const LOCK_STALE_MS = 30_000;
+const LOCK_WAIT_MS = 10;
+const LOCK_TIMEOUT_MS = 5_000;
+const lockSleeper = new Int32Array(new SharedArrayBuffer(4));
+
+function withStoreLock(callback) {
+  fs.mkdirSync(stateDir(), { recursive: true, mode: 0o700 });
+  const file = lockPath();
+  const started = Date.now();
+  let descriptor = null;
+  while (descriptor == null) {
+    try {
+      descriptor = fs.openSync(file, 'wx', 0o600);
+    } catch (error) {
+      if (error?.code !== 'EEXIST') throw error;
+      try {
+        const stat = fs.statSync(file);
+        if (Date.now() - stat.mtimeMs > LOCK_STALE_MS) {
+          fs.rmSync(file, { force: true });
+          continue;
+        }
+      } catch {}
+      if (Date.now() - started >= LOCK_TIMEOUT_MS) throw new Error('OAuth state is busy. Retry the request.');
+      Atomics.wait(lockSleeper, 0, 0, LOCK_WAIT_MS);
+    }
+  }
+  try {
+    return callback();
+  } finally {
+    try { fs.closeSync(descriptor); } catch {}
+    try { fs.rmSync(file, { force: true }); } catch {}
+  }
 }
 
 // Drop anything past its lifetime so the store does not grow without bound.
@@ -174,29 +220,31 @@ function registerClient(body = {}) {
       return { error: "invalid_redirect_uri", error_description: `Invalid redirect_uri: ${uri}` };
     }
   }
-  const store = pruneStore(readStore());
-  const clientId = randomId("relai_client_", 16);
-  const client = {
-    client_id: clientId,
-    redirect_uris: redirectUris,
-    client_name: typeof body.client_name === "string" ? body.client_name.slice(0, 200) : "",
-    grant_types: ["authorization_code", "refresh_token"],
-    response_types: ["code"],
-    token_endpoint_auth_method: "none",
-    scope: SCOPE,
-    created_at: Date.now()
-  };
-  store.clients[clientId] = client;
-  writeStore(store);
-  return {
-    client_id: clientId,
-    client_id_issued_at: Math.floor(client.created_at / 1000),
-    redirect_uris: redirectUris,
-    grant_types: client.grant_types,
-    response_types: client.response_types,
-    token_endpoint_auth_method: "none",
-    scope: SCOPE
-  };
+  return withStoreLock(() => {
+    const store = pruneStore(readStore());
+    const clientId = randomId("relai_client_", 16);
+    const client = {
+      client_id: clientId,
+      redirect_uris: redirectUris,
+      client_name: typeof body.client_name === "string" ? body.client_name.slice(0, 200) : "",
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+      token_endpoint_auth_method: "none",
+      scope: SCOPE,
+      created_at: Date.now()
+    };
+    store.clients[clientId] = client;
+    writeStore(store);
+    return {
+      client_id: clientId,
+      client_id_issued_at: Math.floor(client.created_at / 1000),
+      redirect_uris: redirectUris,
+      grant_types: client.grant_types,
+      response_types: client.response_types,
+      token_endpoint_auth_method: "none",
+      scope: SCOPE
+    };
+  });
 }
 
 // ---- Authorization request validation --------------------------------------
@@ -259,18 +307,20 @@ function validateAuthorizationRequest(query = {}) {
 
 // Mint a single-use authorization code after the user has proven identity.
 function issueAuthorizationCode(request) {
-  const store = pruneStore(readStore());
-  const code = randomId("relai_code_", 32);
-  store.codes[code] = {
-    clientId: request.clientId,
-    redirectUri: request.redirectUri,
-    codeChallenge: request.codeChallenge,
-    resource: request.resource || "",
-    scope: request.scope || SCOPE,
-    expiresAt: Date.now() + AUTH_CODE_TTL_MS
-  };
-  writeStore(store);
-  return code;
+  return withStoreLock(() => {
+    const store = pruneStore(readStore());
+    const code = randomId("relai_code_", 32);
+    store.codes[code] = {
+      clientId: request.clientId,
+      redirectUri: request.redirectUri,
+      codeChallenge: request.codeChallenge,
+      resource: request.resource || "",
+      scope: request.scope || SCOPE,
+      expiresAt: Date.now() + AUTH_CODE_TTL_MS
+    };
+    writeStore(store);
+    return code;
+  });
 }
 
 function buildRedirectUrl(redirectUri, params) {
@@ -353,13 +403,15 @@ function _exchangeRefreshToken(store, body) {
 }
 
 function exchangeToken(body = {}) {
-  const grantType = String(body.grant_type || "");
-  const store = pruneStore(readStore());
+  return withStoreLock(() => {
+    const grantType = String(body.grant_type || "");
+    const store = pruneStore(readStore());
 
-  if (grantType === "authorization_code") return _exchangeAuthCode(store, body);
-  if (grantType === "refresh_token") return _exchangeRefreshToken(store, body);
+    if (grantType === "authorization_code") return _exchangeAuthCode(store, body);
+    if (grantType === "refresh_token") return _exchangeRefreshToken(store, body);
 
-  return { status: 400, body: { error: "unsupported_grant_type", error_description: `Unsupported grant_type: ${grantType}` } };
+    return { status: 400, body: { error: "unsupported_grant_type", error_description: `Unsupported grant_type: ${grantType}` } };
+  });
 }
 
 // ---- Resource-server token validation --------------------------------------

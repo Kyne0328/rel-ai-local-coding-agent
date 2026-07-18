@@ -256,7 +256,15 @@ function openDashboardEvents(res, req, options) {
   sendSse(res, "ready", { ok: true, generatedAt: new Date().toISOString() });
   const intervalMs = Math.max(1000, Number(readConfig({ allowMissing: true }).productUx?.liveLogPollSeconds || 3) * 1000);
   const timer = setInterval(() => sendSnapshot(false), intervalMs);
-  req.on("close", () => clearInterval(timer));
+  const heartbeat = setInterval(() => {
+    if (!res.destroyed) res.write(`: keepalive ${Date.now()}\n\n`);
+  }, 15000);
+  timer.unref?.();
+  heartbeat.unref?.();
+  req.on("close", () => {
+    clearInterval(timer);
+    clearInterval(heartbeat);
+  });
 }
 
 function safeInitialDashboardData(options = {}) {

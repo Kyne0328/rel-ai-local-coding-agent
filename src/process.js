@@ -1,4 +1,5 @@
 const { spawn, spawnSync } = require("node:child_process");
+const { resolveGitExecutable } = require("./gitExecutable");
 const TASKKILL_EXE = String.raw`C:\Windows\System32\taskkill.exe`;
 
 // Kill the whole process tree. A plain child.kill() on Windows only terminates the
@@ -14,6 +15,14 @@ function killProcessTree(child) {
       if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] taskkill:', error);
     }
   }
+  if (process.platform !== "win32" && child.pid) {
+    try {
+      process.kill(-child.pid, "SIGTERM");
+      return;
+    } catch (error) {
+      if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] kill process group:', error);
+    }
+  }
   try { child.kill("SIGTERM"); } catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] kill SIGTERM:', error); }
 }
 
@@ -26,9 +35,20 @@ function runProcess(command, args, options = {}, config = {}) {
     const timeoutMs = Number.isFinite(Number(options.timeout)) && Number(options.timeout) > 0
       ? Number(options.timeout)
       : 0;
+    const executable = command === "git" ? (resolveGitExecutable() || command) : command;
+    const spawnOptions = {
+      cwd: options.cwd,
+      env: makeEnv(options.env),
+      detached: process.platform !== "win32"
+    };
     const child = options.shell
-      ? spawn(options.commandString || command, { cwd: options.cwd, shell: true, env: makeEnv(options.env) })
-      : spawn(command, args || [], { cwd: options.cwd, shell: false, env: makeEnv(options.env) });
+      ? spawn(options.commandString || executable, { ...spawnOptions, shell: true })
+      : spawn(executable, args || [], { ...spawnOptions, shell: false });
+
+    if (child.stdin) {
+      if (options.input != null) child.stdin.end(String(options.input));
+      else child.stdin.end();
+    }
 
     let timer = null;
     function finish(payload) {
@@ -86,7 +106,9 @@ function appendLimited(current, next, maxBytes) {
   if (Buffer.byteLength(combined, "utf8") <= maxBytes) return combined;
   const marker = "\n[rel-ai-mcp truncated output]\n";
   const allowed = Math.max(0, maxBytes - Buffer.byteLength(marker, "utf8"));
-  return combined.slice(Math.max(0, combined.length - allowed)) + marker;
+  const buffer = Buffer.from(combined, "utf8");
+  const tail = buffer.subarray(Math.max(0, buffer.length - allowed)).toString("utf8").replace(/^\uFFFD+/u, "");
+  return marker + tail;
 }
 
 function summarizeCommand(result) {

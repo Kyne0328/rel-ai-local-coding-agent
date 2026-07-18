@@ -245,10 +245,11 @@ function handleWriteDirect(workspace, config, args) {
   if (!relativePath) throw new Error("relai_write requires path and content. Expected: { workspace, path, content }.");
   if (typeof args.content !== "string") throw new Error("relai_write requires content as a string containing the entire target file. Expected: { workspace, path, content }.");
   assertDirectWriteAllowed(relativePath, args.content);
-  return performFullFileWrite(workspace, config, relativePath, args.content, { dryRun: Boolean(args.dryRun) });
+  return performFullFileWrite(workspace, config, relativePath, args.content, { dryRun: Boolean(args.dryRun), suppressJournal: args.suppressJournal === true });
 }
 
 function handleWriteStart(workspace, config, args) {
+  if (args.dryRun === true) throw new Error("relai_write staged start does not persist dry-run payloads. Use a direct dryRun write to preview the full file.");
   const relativePath = String(args.path || "").trim();
   if (!relativePath) throw new Error("relai_write stage='start' requires path and content.");
   if (typeof args.content !== "string") throw new Error("relai_write stage='start' requires a content chunk string.");
@@ -269,6 +270,7 @@ function handleWriteStart(workspace, config, args) {
 }
 
 function handleWriteAppend(workspace, config, args) {
+  if (args.dryRun === true) throw new Error("relai_write staged append does not persist dry-run payloads.");
   if (typeof args.content !== "string") throw new Error("relai_write stage='append' requires writeId and a content chunk string.");
   const writeId = resolveStagedWriteId(config, workspace, args.writeId, args.path);
   const payload = readStagedPayload(config, workspace, writeId);
@@ -288,7 +290,7 @@ function handleWriteCommit(workspace, config, args) {
   const writeId = resolveStagedWriteId(config, workspace, args.writeId, args.path);
   const payload = readStagedPayload(config, workspace, writeId);
   const content = payload.chunks.join("");
-  const result = performFullFileWrite(workspace, config, payload.path, content, { dryRun: Boolean(args.dryRun), staged: true, writeId });
+  const result = performFullFileWrite(workspace, config, payload.path, content, { dryRun: Boolean(args.dryRun), staged: true, writeId, suppressJournal: args.suppressJournal === true });
   if (!args.dryRun) clearStagedPayload(config, workspace, writeId);
   return { ...result, operation: "stagedFullFileWrite:commit", writeId, staged: true, chunks: payload.chunks.length, bytes: Buffer.byteLength(content, "utf8") };
 }
@@ -372,13 +374,15 @@ function relaiReplace(workspace, config, args = {}) {
     result.bytes = write.bytes;
   }
 
-  appendOperation(config, workspace, {
-    id: operationId,
-    type: dryRun ? "replace:dryRun" : "replace",
-    ok: true,
-    paths: result.changedFiles,
-    results: [{ path: safe.relativePath, operation: "exactReplace", changed, oldSha256, newSha256, verified: dryRun || !changed || result.verified === true }]
-  });
+  if (!dryRun && args.suppressJournal !== true) {
+    appendOperation(config, workspace, {
+      id: operationId,
+      type: "replace",
+      ok: true,
+      paths: result.changedFiles,
+      results: [{ path: safe.relativePath, operation: "exactReplace", changed, oldSha256, newSha256, verified: !changed || result.verified === true }]
+    });
+  }
 
   return result;
 }
@@ -440,20 +444,22 @@ function performFullFileWrite(workspace, config, relativePath, content, options 
     result
   };
 
-  appendOperation(config, workspace, {
-    id: operationId,
-    type: dryRun ? "write:dryRun" : "write",
-    ok: true,
-    paths: summary.changedFiles,
-    results: [{
-      path: safe.relativePath,
-      operation: result.operation,
-      changed,
-      oldSha256,
-      newSha256: result.newSha256,
-      verified: dryRun || result.verified === true || !changed
-    }]
-  });
+  if (!dryRun && options.suppressJournal !== true) {
+    appendOperation(config, workspace, {
+      id: operationId,
+      type: "write",
+      ok: true,
+      paths: summary.changedFiles,
+      results: [{
+        path: safe.relativePath,
+        operation: result.operation,
+        changed,
+        oldSha256,
+        newSha256: result.newSha256,
+        verified: result.verified === true || !changed
+      }]
+    });
+  }
 
   return summary;
 }

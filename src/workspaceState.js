@@ -4,6 +4,7 @@ const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const { classifyStatusOwnership } = require('./repo/gitOps');
+const { resolveGitExecutable } = require('./gitExecutable');
 
 const configuredWorkspaceStateTtlMs = Number(process.env.REL_AI_MCP_WORKSPACE_STATE_TTL_MS || 1000);
 const WORKSPACE_GIT_STATE_TTL_MS = Number.isFinite(configuredWorkspaceStateTtlMs) ? Math.max(0, configuredWorkspaceStateTtlMs) : 1000;
@@ -81,21 +82,6 @@ function resolveActiveTasks(activity) {
   if (Array.isArray(activity?.tasks)) return activity.tasks;
   if (activity?.state && activity.state !== 'idle') return [activity];
   return [];
-}
-
-function fixedGitCandidates() {
-  if (process.platform === 'win32') {
-    return [
-      'C:\\Program Files\\Git\\cmd\\git.exe',
-      'C:\\Program Files\\Git\\bin\\git.exe',
-      'C:\\Program Files (x86)\\Git\\cmd\\git.exe'
-    ];
-  }
-  return ['/usr/bin/git', '/usr/local/bin/git', '/opt/homebrew/bin/git'];
-}
-
-function resolveGitExecutable() {
-  return fixedGitCandidates().find(candidate => fs.existsSync(candidate)) || '';
 }
 
 function runGit(cwd, args) {

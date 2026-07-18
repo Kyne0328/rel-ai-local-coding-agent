@@ -5,7 +5,7 @@ const { resolveSafePath, writeTextFileSafe, fileSha256 } = require("../safety");
 const { appendOperation, makeOperationId } = require("../journal");
 const {
   assertPatchUpdateSafe, ensureGitRepo, requireCleanGitIfConfigured,
-  shouldMakePatchBackup, makePatchBackup, tempStatePath, validatePatchPaths
+  shouldMakePatchBackup, makePatchBackup, validatePatchPaths
 } = require("../repo/gitOps");
 const { clampNumber } = require("./limits");
 const { relaiVerify, hasRequestedChecks } = require("./validation");
@@ -25,9 +25,7 @@ async function relaiApplyPatch(workspace, config, args = {}) {
   const touchedPaths = validatePatchPaths(workspace, patch);
   await requireCleanGitIfConfigured(workspace, config, args);
   const operationId = makeOperationId();
-  const patchFile = tempStatePath(config, workspace, operationId, ".patch");
-  fs.writeFileSync(patchFile, patch, "utf8");
-  const check = await runProcess("git", ["apply", "--check", "--verbose", "--recount", patchFile], { cwd: workspace.path, timeout: clampNumber(args.timeoutMs, 1000, 86400000, 120000) }, config);
+  const check = await runProcess("git", ["apply", "--check", "--verbose", "--recount", "-"], { cwd: workspace.path, input: patch, timeout: clampNumber(args.timeoutMs, 1000, 86400000, 120000) }, config);
   if (check.exitCode !== 0) {
     return {
       ok: false,
@@ -40,7 +38,6 @@ async function relaiApplyPatch(workspace, config, args = {}) {
     };
   }
   if (args.dryRun) {
-    appendOperation(config, workspace, { id: operationId, type: "apply_patch:dryRun", ok: true, paths: [], results: [{ operation: "applyPatch:dryRun", bytes: patchBytes, touchedPaths, changedFiles: [] }] });
     return {
       ok: true,
       dryRun: true,
@@ -61,7 +58,7 @@ async function relaiApplyPatch(workspace, config, args = {}) {
   // must report changedFiles:[].
   const hashOf = (rel) => (fs.existsSync(path.join(workspace.path, rel)) ? fileSha256(workspace.path, rel) : null);
   const beforeHashes = new Map(touchedPaths.map((rel) => [rel, hashOf(rel)]));
-  const apply = await runProcess("git", ["apply", patchFile], { cwd: workspace.path, timeout: clampNumber(args.timeoutMs, 1000, 86400000, 120000) }, config);
+  const apply = await runProcess("git", ["apply", "-"], { cwd: workspace.path, input: patch, timeout: clampNumber(args.timeoutMs, 1000, 86400000, 120000) }, config);
   const changedFiles = apply.exitCode === 0
     ? touchedPaths.filter((rel) => hashOf(rel) !== beforeHashes.get(rel))
     : [];
@@ -126,15 +123,43 @@ function handleOpenAIPatchSection(lines, i, out) {
 
 async function applyStructuredOpenAIPatch(workspace, config, args, rawPatch) {
   const document = parseOpenAIPatchDocument(rawPatch);
-  const touchedPaths = document.operations.map((item) => item.path);
+  const plan = planStructuredPatch(workspace, document);
+  const touchedPaths = plan.touchedPaths;
   await requireCleanGitIfConfigured(workspace, config, args);
   const operationId = makeOperationId();
+  if (args.dryRun) {
+    return {
+      ok: true,
+      dryRun: true,
+      workspace: workspace.alias,
+      operationId,
+      operation: "applyPatch:dryRun",
+      sourceFormat: "openai-patch",
+      converted: false,
+      patchBytes: Buffer.byteLength(rawPatch, "utf8"),
+      changedFiles: plan.changedFiles,
+      touchedPaths
+    };
+  }
   let backup = null;
   if (shouldMakePatchBackup(config, args)) backup = await makePatchBackup(workspace, config, operationId, "patch");
-  const changedFiles = [];
-  for (const operation of document.operations) {
-    applyStructuredPatchOperation(workspace, args, operation, changedFiles);
+  const applied = applyStructuredPlan(workspace, plan);
+  if (!applied.ok) {
+    appendOperation(config, workspace, { id: operationId, type: "apply_patch", ok: false, paths: [], results: [{ operation: "applyPatch", rollback: applied.rollback, error: applied.error }] });
+    return {
+      ok: false,
+      workspace: workspace.alias,
+      operationId,
+      operation: "applyPatch",
+      sourceFormat: "openai-patch",
+      changedFiles: [],
+      touchedPaths,
+      backup,
+      rollback: applied.rollback,
+      error: applied.error
+    };
   }
+  const changedFiles = plan.changedFiles;
   const verify = hasRequestedChecks(args) ? await relaiVerify(workspace, config, args) : null;
   const diff = args.returnDiff === false ? null : await relaiDiff(workspace, config, { maxBytes: args.maxDiffBytes || DEFAULT_MAX_DIFF_BYTES });
   const ok = !verify || verify.ok;
@@ -155,28 +180,82 @@ async function applyStructuredOpenAIPatch(workspace, config, args, rawPatch) {
   };
 }
 
-function applyStructuredPatchOperation(workspace, args, operation, changedFiles) {
-  const safe = resolveSafePath(workspace.path, operation.path);
-  const exists = fs.existsSync(safe.absolutePath);
-  if (operation.type === "update") {
-    const oldText = exists ? fs.readFileSync(safe.absolutePath, "utf8").replaceAll("\r\n", "\n") : "";
-    const nextText = applyOpenAIPatchUpdate(oldText, operation, safe.relativePath);
-    if (nextText !== oldText) {
-      if (!args.dryRun) writeTextFileSafe(workspace.path, safe.relativePath, nextText);
-      changedFiles.push(safe.relativePath);
+function planStructuredPatch(workspace, document) {
+  const states = new Map();
+  const snapshots = new Map();
+  const touchedPaths = [];
+  for (const operation of document.operations) {
+    const safe = resolveSafePath(workspace.path, operation.path);
+    if (!states.has(safe.relativePath)) {
+      const exists = fs.existsSync(safe.absolutePath);
+      const snapshot = {
+        path: safe.relativePath,
+        absolutePath: safe.absolutePath,
+        exists,
+        content: exists ? fs.readFileSync(safe.absolutePath) : null,
+        mode: exists ? fs.statSync(safe.absolutePath).mode : null
+      };
+      snapshots.set(safe.relativePath, snapshot);
+      states.set(safe.relativePath, {
+        ...snapshot,
+        text: exists ? snapshot.content.toString('utf8').replaceAll("\r\n", "\n") : ''
+      });
+      touchedPaths.push(safe.relativePath);
     }
-    return;
+    const state = states.get(safe.relativePath);
+    if (operation.type === 'update') {
+      if (!state.exists) throw new Error(`OpenAI patch Update File target does not exist: ${safe.relativePath}`);
+      state.text = applyOpenAIPatchUpdate(state.text, operation, safe.relativePath);
+      continue;
+    }
+    if (operation.type === 'add') {
+      if (state.exists) throw new Error(`OpenAI patch Add File target already exists: ${safe.relativePath}`);
+      for (const line of operation.lines) {
+        if (line && !line.startsWith('+')) throw new Error(`OpenAI patch Add File for ${safe.relativePath} contains a non-addition line.`);
+      }
+      state.exists = true;
+      state.text = joinPatchLines(operation.lines.map(line => line.startsWith('+') ? line.slice(1) : line), true);
+      continue;
+    }
+    if (!state.exists) throw new Error(`OpenAI patch Delete File target does not exist: ${safe.relativePath}`);
+    state.exists = false;
+    state.text = '';
   }
-  if (operation.type === "add") {
-    const nextText = joinPatchLines(operation.lines.map((line) => line.slice(1)), true);
-    if (!args.dryRun) writeTextFileSafe(workspace.path, safe.relativePath, nextText);
-    changedFiles.push(safe.relativePath);
-    return;
+  const changedFiles = [...states.values()]
+    .filter(state => state.exists !== snapshots.get(state.path).exists || (state.exists && state.text !== snapshots.get(state.path).content.toString('utf8').replaceAll("\r\n", "\n")))
+    .map(state => state.path);
+  return { states: [...states.values()], snapshots: [...snapshots.values()], touchedPaths, changedFiles };
+}
+
+function applyStructuredPlan(workspace, plan) {
+  try {
+    for (const state of plan.states) {
+      if (!plan.changedFiles.includes(state.path)) continue;
+      if (!state.exists) fs.rmSync(state.absolutePath, { force: true });
+      else writeTextFileSafe(workspace.path, state.path, state.text);
+    }
+    return { ok: true };
+  } catch (error) {
+    const rollback = rollbackStructuredPlan(plan.snapshots);
+    return { ok: false, error: error instanceof Error ? error.message : String(error), rollback };
   }
-  if (operation.type === "delete") {
-    if (!args.dryRun) fs.rmSync(safe.absolutePath, { force: true });
-    changedFiles.push(safe.relativePath);
+}
+
+function rollbackStructuredPlan(snapshots) {
+  const errors = [];
+  for (const snapshot of snapshots) {
+    try {
+      if (!snapshot.exists) fs.rmSync(snapshot.absolutePath, { force: true });
+      else {
+        fs.mkdirSync(path.dirname(snapshot.absolutePath), { recursive: true });
+        fs.writeFileSync(snapshot.absolutePath, snapshot.content);
+        if (snapshot.mode != null) fs.chmodSync(snapshot.absolutePath, snapshot.mode);
+      }
+    } catch (error) {
+      errors.push({ path: snapshot.path, error: error instanceof Error ? error.message : String(error) });
+    }
   }
+  return { ok: errors.length === 0, restored: snapshots.map(item => item.path), errors };
 }
 
 function parseOpenAIPatchDocument(input) {

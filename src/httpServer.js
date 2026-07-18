@@ -145,38 +145,40 @@ async function routeRequest(req, res, options) {
   const ctx = { req, res, options, parsed, ae, mcpAccess, p: parsed.pathname };
 
   if (req.method === "GET") {
-    if (dispatchGet(ctx)) return;
+    if (await dispatchGet(ctx)) return;
   } else if (req.method === "POST") {
-    if (dispatchPost(ctx)) return;
+    if (await dispatchPost(ctx)) return;
   }
 
   sendJson(res, 404, NOT_FOUND_PAYLOAD, ae);
 }
 
-function dispatchGet(ctx) {
-  return tryExactGet(ctx) || tryPrefixGet(ctx) || tryOAuthOrMcpGet(ctx);
+async function dispatchGet(ctx) {
+  if (await tryExactGet(ctx)) return true;
+  if (await tryPrefixGet(ctx)) return true;
+  return tryOAuthOrMcpGet(ctx);
 }
 
-function tryExactGet(ctx) {
+async function tryExactGet(ctx) {
   const entry = GET_ROUTES[ctx.p];
   if (!entry) return false;
   if (!entry.auth(ctx)) return true;
-  entry.handler(ctx);
+  await entry.handler(ctx);
   return true;
 }
 
-function tryPrefixGet(ctx) {
+async function tryPrefixGet(ctx) {
   const p = ctx.p;
   if (p.startsWith("/ui/") || p.startsWith("/public/")) { handleStaticAsset(ctx); return true; }
   return false;
 }
 
-function tryOAuthOrMcpGet(ctx) {
-  if (ctx.p === "/.well-known/oauth-protected-resource") { handleOauthProtectedResource(ctx); return true; }
-  if (ctx.p === "/.well-known/oauth-authorization-server" || ctx.p === "/.well-known/openid-configuration") { handleOauthMetadata(ctx); return true; }
-  if (ctx.p === "/authorize") { handleAuthorizeGet(ctx); return true; }
-  if (ctx.p === "/mcp" || ctx.mcpAccess.kind === "streamable-http") { handleMcpGetDiagnostic(ctx); return true; }
-  if (ctx.mcpAccess.kind === "sse") { handleMcpSse(ctx); return true; }
+async function tryOAuthOrMcpGet(ctx) {
+  if (ctx.p === "/.well-known/oauth-protected-resource") { await handleOauthProtectedResource(ctx); return true; }
+  if (ctx.p === "/.well-known/oauth-authorization-server" || ctx.p === "/.well-known/openid-configuration") { await handleOauthMetadata(ctx); return true; }
+  if (ctx.p === "/authorize") { await handleAuthorizeGet(ctx); return true; }
+  if (ctx.p === "/mcp" || ctx.mcpAccess.kind === "streamable-http") { await handleMcpGetDiagnostic(ctx); return true; }
+  if (ctx.mcpAccess.kind === "sse") { await handleMcpSse(ctx); return true; }
   return false;
 }
 
@@ -199,24 +201,25 @@ const GET_ROUTES = {
   "/events": { auth: authDashboard, handler: handleEvents }
 };
 
-function dispatchPost(ctx) {
-  return tryExactPost(ctx) || tryOAuthOrMcpPost(ctx);
+async function dispatchPost(ctx) {
+  if (await tryExactPost(ctx)) return true;
+  return tryOAuthOrMcpPost(ctx);
 }
 
-function tryExactPost(ctx) {
+async function tryExactPost(ctx) {
   const entry = POST_ROUTES[ctx.p];
   if (!entry) return false;
   if (!entry.auth(ctx)) return true;
-  entry.handler(ctx);
+  await entry.handler(ctx);
   return true;
 }
 
-function tryOAuthOrMcpPost(ctx) {
-  if (ctx.p === "/register") { handleRegister(ctx); return true; }
-  if (ctx.p === "/authorize") { handleAuthorizePost(ctx); return true; }
-  if (ctx.p === "/token") { handleToken(ctx); return true; }
-  if (ctx.mcpAccess.kind === "streamable-http") { handleMcpStreamable(ctx); return true; }
-  if (ctx.mcpAccess.kind === "messages") { handleMcpMessages(ctx); return true; }
+async function tryOAuthOrMcpPost(ctx) {
+  if (ctx.p === "/register") { await handleRegister(ctx); return true; }
+  if (ctx.p === "/authorize") { await handleAuthorizePost(ctx); return true; }
+  if (ctx.p === "/token") { await handleToken(ctx); return true; }
+  if (ctx.mcpAccess.kind === "streamable-http") { await handleMcpStreamable(ctx); return true; }
+  if (ctx.mcpAccess.kind === "messages") { await handleMcpMessages(ctx); return true; }
   return false;
 }
 

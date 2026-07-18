@@ -104,6 +104,9 @@ assert.doesNotMatch(home, /Last task completed|Completes after 60s|ChatGPT is wo
 assert.match(sessions, /Work sessions/);
 assert.match(sessions, /completion was not reported|completion not reported/);
 assert.match(sessions, /Running operations/);
+assert.match(sessions, /data-task-event-link/);
+assert.match(sessions, /activityEventId/);
+assert.match(sessions, /time: 'all'/);
 assert.doesNotMatch(sessions, /task remains open for 60 seconds|Grouped tool calls/);
 
 const activity = read('src/ui/sections/activity.js');
@@ -116,6 +119,9 @@ assert.match(activity, /params\.get\('tool'\)/);
 assert.match(activity, /params\.get\('time'\)/);
 assert.match(activity, /params\.get\('search'\)/);
 assert.match(activity, /row\.onkeydown/);
+assert.match(activity, /params\.get\('event'\)/);
+assert.match(activity, /maybeOpenRequestedEvent/);
+assert.match(activity, /activity-requested-row/);
 assert.match(activity, /export function mergeEntries/);
 assert.match(dashboardJs, /module\.mergeEntries\(data\.auditTail\?\.entries \|\| \[\]\)/);
 assert.match(dashboardJs, /mountTasks/);
@@ -132,7 +138,10 @@ assert.match(dashboardJs, /active tool call/);
 assert.match(dashboardJs, /supportsWorkspaceScope/);
 assert.match(dashboardJs, /select\.hidden = !supportsWorkspaceScope/);
 assert.match(dashboardJs, /relai_dashboard_route/);
+assert.match(dashboardJs, /configureLiveRefresh/);
+assert.match(dashboardJs, /restartSSE/);
 assert.match(dashboardServer, /stat\.mtimeMs.*stat\.size/s);
+assert.match(dashboardServer, /: keepalive/);
 
 const tools = read('src/ui/sections/tools.js');
 const toolSchema = read('src/tools/schema.js');
@@ -148,6 +157,7 @@ assert.match(tools, /Showing \$\{visible\.length\} of \$\{_tools\.length\} tools
 assert.match(tools, /aria-pressed/);
 assert.match(interactionsCss, /\.tool-card/);
 assert.match(interactionsCss, /\.tools-filter\.active/);
+assert.match(dashboardCss, /\.task-event-link/);
 assert.doesNotMatch(interactionsCss, /settings-pending-button/);
 assert.match(toolSchema, /title: definition\.title/);
 

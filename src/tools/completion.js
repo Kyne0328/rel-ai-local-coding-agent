@@ -2,6 +2,7 @@
 
 const { readAudit } = require('../audit');
 const { resolveWorkspace } = require('../config');
+const { clearSessionPolicy } = require('../policyResolver');
 const {
   getCurrentToolActivityContext,
   requestCurrentTaskCompletion
@@ -26,7 +27,7 @@ function completeTask(config, args = {}) {
     throw new Error('Task completion requires an active Rel.AI work session.');
   }
 
-  const taskEvents = readAudit(config, { limit: 1000 }).entries
+  const taskEvents = readAudit(config, { limit: 10000, taskId: context.taskId }).entries
     .filter(entry => entry && entry.taskId === context.taskId)
     .filter(entry => !entry.workspace || entry.workspace === workspace.alias)
     .sort((left, right) => eventTime(left) - eventTime(right));
@@ -54,6 +55,7 @@ function completeTask(config, args = {}) {
     validationAt: validation.ts || '',
     changedFiles
   });
+  clearSessionPolicy(config, workspace.alias);
 
   return {
     ok: true,

@@ -1,5 +1,8 @@
 'use strict';
 
+const fs = require('node:fs');
+const path = require('node:path');
+
 const {
   relaiReplace,
   relaiWrite,
@@ -13,28 +16,29 @@ const {
   STAGED_WRITE_BYTE_THRESHOLD,
   STAGED_WRITE_LINE_THRESHOLD
 } = require('./localRepoBridge');
-const { makeOperationId } = require('./journal');
+const { makeOperationId, appendOperation } = require('./journal');
+const { resolveSafePath } = require('./safety');
 
 const STAGED_CHUNK_BYTES = 12000;
 
-async function runStagedWrite(workspace, config, path, content, dryRun) {
+async function runStagedWrite(workspace, config, path, content, dryRun, suppressJournal = false) {
   const chunks = [];
   let offset = 0;
   while (offset < content.length) {
     chunks.push(content.slice(offset, offset + STAGED_CHUNK_BYTES));
     offset += STAGED_CHUNK_BYTES;
   }
-  const startResult = relaiWrite(workspace, config, { stage: 'start', path, content: chunks[0], dryRun });
+  const startResult = relaiWrite(workspace, config, { stage: 'start', path, content: chunks[0], dryRun, suppressJournal });
   const { writeId } = startResult;
   for (let i = 1; i < chunks.length; i++) {
-    relaiWrite(workspace, config, { stage: 'append', writeId, content: chunks[i] });
+    relaiWrite(workspace, config, { stage: 'append', writeId, content: chunks[i], suppressJournal });
   }
-  return relaiWrite(workspace, config, { stage: 'commit', writeId, dryRun });
+  return relaiWrite(workspace, config, { stage: 'commit', writeId, dryRun, suppressJournal });
 }
 
 // Apply one logical edit: exact replacement when oldText is given, otherwise a
 // full-file write (large content auto-routes to the staged chunked write).
-async function applyOneEdit(workspace, config, edit, dryRun) {
+async function applyOneEdit(workspace, config, edit, dryRun, options = {}) {
   const path = edit.path;
   const hasOldText = typeof edit.oldText === 'string' && edit.oldText.length > 0;
   const hasContent = typeof edit.content === 'string';
@@ -50,17 +54,21 @@ async function applyOneEdit(workspace, config, edit, dryRun) {
     if (typeof edit.newText !== 'string') {
       throw new TypeError(`edit for ${path}: newText is required (and must be a string) alongside oldText`);
     }
-    const result = relaiReplace(workspace, config, { path, oldText: edit.oldText, newText: edit.newText, dryRun });
+    const result = relaiReplace(workspace, config, { path, oldText: edit.oldText, newText: edit.newText, dryRun, suppressJournal: options.suppressJournal === true });
     return { ...result, path, plannerPath: 'replace' };
   }
 
   const contentBytes = Buffer.byteLength(edit.content, 'utf8');
   const lineCount = edit.content.split(/\r?\n/).length;
   if (contentBytes > STAGED_WRITE_BYTE_THRESHOLD || lineCount > STAGED_WRITE_LINE_THRESHOLD) {
-    const result = await runStagedWrite(workspace, config, path, edit.content, dryRun);
+    if (dryRun) {
+      const result = relaiWrite(workspace, config, { path, content: edit.content, dryRun: true, suppressJournal: true });
+      return { ...result, path, plannerPath: 'write:staged' };
+    }
+    const result = await runStagedWrite(workspace, config, path, edit.content, false, options.suppressJournal === true);
     return { ...result, path, plannerPath: 'write:staged' };
   }
-  const result = relaiWrite(workspace, config, { path, content: edit.content, dryRun });
+  const result = relaiWrite(workspace, config, { path, content: edit.content, dryRun, suppressJournal: options.suppressJournal === true });
   return { ...result, path, plannerPath: 'write' };
 }
 
@@ -75,7 +83,7 @@ async function preflightBatchEdits(workspace, config, edits, dryRun) {
       continue;
     }
     try {
-      const result = await applyOneEdit(workspace, config, edit, true);
+      const result = await applyOneEdit(workspace, config, edit, true, { suppressJournal: true });
       results.push({ ...result, preflight: true });
       if (result.ok === false) allOk = false;
     } catch (error) {
@@ -172,17 +180,18 @@ async function _handleBatchEdits(workspace, config, args) {
       editCount: preflight.results.length,
       appliedCount: 0,
       preflightAtomic: true,
-      rollbackAtomic: false,
+      rollbackAtomic: true,
       results: preflight.results
     };
     return attachPost(out, await runPostActions(workspace, config, args));
   }
 
+  const snapshots = captureEditSnapshots(workspace, args.edits);
   const results = [];
   let allOk = true;
   for (const edit of args.edits) {
     try {
-      const r = await applyOneEdit(workspace, config, edit, false);
+      const r = await applyOneEdit(workspace, config, edit, false, { suppressJournal: true });
       results.push(r);
       if (r.ok === false) allOk = false;
     } catch (error) {
@@ -191,19 +200,69 @@ async function _handleBatchEdits(workspace, config, args) {
       break;
     }
   }
+  let rollback = null;
+  if (!allOk) rollback = restoreEditSnapshots(snapshots);
+  const changedFiles = allOk
+    ? [...new Set(results.flatMap(item => Array.isArray(item.changedFiles) ? item.changedFiles : []))]
+    : [];
+  appendOperation(config, workspace, {
+    id: makeOperationId(),
+    type: 'batch_edit',
+    ok: allOk,
+    paths: changedFiles,
+    results: results.map(item => ({ path: item.path, ok: item.ok !== false, changedFiles: item.changedFiles || [] })),
+    ...(rollback ? { rollback } : {})
+  });
   const out = {
     ok: allOk,
     workspace: workspace.alias,
     plannerPath: 'batch',
     plannerReason: `preflight passed; applied ${results.filter((item) => item.ok !== false).length} edit(s)`,
-    editCount: results.length,
-    appliedCount: results.filter((item) => item.ok !== false).length,
+    editCount: args.edits.length,
+    appliedCount: allOk ? results.filter((item) => item.ok !== false).length : 0,
     preflightAtomic: true,
-    rollbackAtomic: false,
+    rollbackAtomic: rollback ? rollback.ok : true,
+    changedFiles,
+    ...(rollback ? { rollback } : {}),
     preflight: preflight.results,
     results
   };
   return attachPost(out, await runPostActions(workspace, config, args));
+}
+
+function captureEditSnapshots(workspace, edits) {
+  const snapshots = new Map();
+  for (const edit of edits) {
+    const safe = resolveSafePath(workspace.path, edit.path);
+    if (snapshots.has(safe.relativePath)) continue;
+    const exists = fs.existsSync(safe.absolutePath);
+    snapshots.set(safe.relativePath, {
+      path: safe.relativePath,
+      absolutePath: safe.absolutePath,
+      exists,
+      content: exists ? fs.readFileSync(safe.absolutePath) : null,
+      mode: exists ? fs.statSync(safe.absolutePath).mode : null
+    });
+  }
+  return [...snapshots.values()];
+}
+
+function restoreEditSnapshots(snapshots) {
+  const errors = [];
+  for (const snapshot of snapshots) {
+    try {
+      if (!snapshot.exists) {
+        fs.rmSync(snapshot.absolutePath, { force: true });
+        continue;
+      }
+      fs.mkdirSync(path.dirname(snapshot.absolutePath), { recursive: true });
+      fs.writeFileSync(snapshot.absolutePath, snapshot.content);
+      if (snapshot.mode != null) fs.chmodSync(snapshot.absolutePath, snapshot.mode);
+    } catch (error) {
+      errors.push({ path: snapshot.path, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  return { ok: errors.length === 0, restored: snapshots.map(item => item.path), errors };
 }
 
 function preflightPlannerReason(preflight) {

@@ -35,6 +35,7 @@ try {
   const { getToolActivity, resetToolActivity } = require('../src/toolActivity.js');
   const { readConfig } = require('../src/config.js');
   const { readAudit } = require('../src/audit.js');
+  const { resolvePolicy } = require('../src/policyResolver.js');
 
   resetToolActivity();
   await assert.rejects(
@@ -63,6 +64,7 @@ try {
   assert.equal(completion.completionKnown, true);
   assert.equal(completion.endReason, 'explicit_completion');
   assert.equal(completion.validationStatus, 'passed');
+  assert.equal(resolvePolicy({ alias: 'app', path: workspace }, readConfig()).sessionActive, false, 'explicit completion must clear workspace ownership state');
 
   const status = getToolActivity();
   assert.equal(status.state, 'idle');

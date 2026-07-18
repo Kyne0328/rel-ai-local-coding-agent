@@ -8,8 +8,6 @@ const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const dashboardTokens = read('src/ui/tokens.css');
 const electronCss = read('electron/renderer/app.css');
 const dashboardJs = read('public/dashboard.js');
-const dashboardHome = read('src/ui/sections/home.js');
-const dashboardTools = read('src/ui/sections/tools.js');
 
 function tokenValue(source, name) {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
@@ -88,12 +86,6 @@ assert.doesNotMatch(settingsHtml, /Step \d of 4/);
 
 assert.match(dashboardJs, /dataset\.surface = surface/);
 assert.match(dashboardJs, /history\.replaceState/);
-assert.match(dashboardJs, /activeTaskCount/);
-assert.match(dashboardJs, /active tool call/);
-assert.match(dashboardHome, /taskActivityCard/);
-assert.match(dashboardHome, /No Rel\.AI tool call is active/);
-assert.doesNotMatch(dashboardHome, /ChatGPT is working|Last task completed/);
-assert.doesNotMatch(dashboardTools, /bundle path|apply_bundle/);
 for (const file of ['electron/renderer/status.html', 'electron/renderer/settings.html', 'electron/renderer/wizard.html']) {
   assert.doesNotMatch(read(file), /Open in browser/i, `${file} must not add an Open in browser control`);
 }

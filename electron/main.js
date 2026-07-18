@@ -9,7 +9,9 @@ const { runWindowSmoke } = require('./window-smoke');
 const { createTaskActivityRuntime } = require('./tool-sleep-blocker');
 const { createDashboardWindowManager } = require('./dashboard-window');
 const { createDesktopTray } = require('./desktop-tray');
-
+const APP_ICON_PATH = path.join(__dirname, 'build', 'icon.png');
+app.setName('Rel.AI MCP');
+if (process.platform === 'win32') app.setAppUserModelId('com.relai.mcp');
 const srcPath = resolveResourcePath('src');
 const connection = require(path.join(srcPath, 'connectionProfile'));
 const toolActivity = require(path.join(srcPath, 'toolActivity'));
@@ -59,7 +61,7 @@ const desktopTray = createDesktopTray({
   Menu,
   nativeImage,
   clipboard,
-  iconPath: path.join(__dirname, 'build', 'icon.png'),
+  iconPath: APP_ICON_PATH,
   getStatus: () => currentStatus,
   openDashboard: openDashboardWindow,
   focusPrimaryWindow: focusActiveWindow,
@@ -74,6 +76,7 @@ const toolActivityRuntime = createTaskActivityRuntime({
   toolActivity,
   powerSaveBlocker,
   Notification,
+  iconPath: APP_ICON_PATH,
   isReady: () => app.isReady(),
   onNotificationClick: focusActiveWindow,
   onStatusChange: taskActivity => setStatus({ taskActivity })

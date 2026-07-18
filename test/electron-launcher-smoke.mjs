@@ -6,6 +6,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const utils = await import(pathToFileURL(path.join(root, 'electron', 'launcher-utils.js')).href);
+const managedNgrokModule = await import(pathToFileURL(path.join(root, 'electron', 'managed-ngrok.js')).href);
+const { extractPublicUrl } = managedNgrokModule.default || managedNgrokModule;
 const {
   buildTunnelCommand,
   buildMcpUrl,
@@ -26,6 +28,12 @@ assert.throws(() => normalizeNgrokAuthtoken(''), /required/);
 assert.throws(() => normalizeNgrokAuthtoken('abc 12345'), /spaces/);
 assert.throws(() => normalizeNgrokDomain('example.com; rm -rf /'), /letters, numbers, dots, and hyphens|invalid/);
 assert.throws(() => normalizeNgrokDomain('-bad.example.com'), /letters, numbers, dots, and hyphens|invalid DNS label/);
+assert.equal(
+  extractPublicUrl('Docs: https://ngrok.com/docs tunnel: https://my-domain.ngrok-free.dev', 'my-domain.ngrok-free.dev'),
+  'https://my-domain.ngrok-free.dev',
+  'managed ngrok must ignore unrelated HTTPS URLs and select the configured domain'
+);
+assert.equal(extractPublicUrl('https://wrong.ngrok-free.dev', 'my-domain.ngrok-free.dev'), '');
 
 const tunnelCommand3333 = buildTunnelCommand('my-domain.ngrok-free.dev', 3333);
 const tunnelCommand4444 = buildTunnelCommand('MY-DOMAIN.ngrok-free.dev', 4444);
@@ -53,6 +61,8 @@ assert.ok(srcResource.filter.includes('**/*.js'), 'electron build must bundle sr
 assert.ok(srcResource.filter.includes('**/*.css'), 'electron build must bundle src UI CSS imported by public/dashboard.css');
 assert.ok(electronPkg.build.files.includes('managed-ngrok.js'), 'electron build must include managed ngrok launcher code');
 assert.ok(electronPkg.build.files.includes('window-smoke.js'), 'electron build must include packaged renderer smoke coverage');
+assert.match(fs.readFileSync(path.join(root, 'electron', 'window-smoke.js'), 'utf8'), /data-task-event-link/, 'packaged dashboard smoke must click a session tool event');
+assert.match(fs.readFileSync(path.join(root, 'electron', 'window-smoke.js'), 'utf8'), /exact activity event detail/, 'packaged dashboard smoke must verify the matching Activity detail opens');
 assert.ok(electronPkg.build.files.includes('tool-sleep-blocker.js'), 'electron build must include tool-call sleep prevention');
 assert.ok(electronPkg.build.files.includes('dashboard-window.js'), 'electron build must include the secured dashboard host');
 assert.ok(electronPkg.build.files.includes('dashboard-preload.js'), 'electron build must include the desktop dashboard bridge');
@@ -72,6 +82,8 @@ assert.match(
   /const \{ fitWindowToContent, WINDOW_SIZE_LIMITS \} = require\('\.\/window-size'\);/,
   'Electron main must import the window limits used by normal wizard and status startup'
 );
+assert.match(electronMain, /app\.setName\('Rel\.AI MCP'\)/, 'Electron must expose the product name instead of the generic Electron app name');
+assert.match(electronMain, /app\.setAppUserModelId\('com\.relai\.mcp'\)/, 'Windows notifications must use the packaged Rel.AI application identity');
 assert.match(electronMain, /powerSaveBlocker/, 'Electron main must use the native sleep-prevention API');
 assert.match(electronMain, /createTaskActivityRuntime/, 'Electron main must bind connector activity to sleep prevention, live status, and completion alerts');
 assert.match(electronMain, /toolActivityRuntime\.stop\(\)/, 'tool activity runtime must stop during application shutdown');
