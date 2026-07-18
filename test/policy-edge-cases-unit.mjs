@@ -69,15 +69,13 @@ function clear() { fs.rmSync(sessionPath(ALIAS), { force: true }); }
   console.log('6. array root: OK');
 }
 
-// 7. Empty object {} -> readSessionPolicy returns {} (truthy), session treated active with null createdAt
+// 7. Empty object lacks the required workspace identity and is rejected.
 {
   ensureSessionsDir();
   fs.writeFileSync(sessionPath(ALIAS), '{}', 'utf8');
   const p = resolvePolicy({ alias: ALIAS }, config);
-  assert.equal(p.sessionActive, true);
-  assert.equal(p.sessionCreatedAt, null);
-  assert.equal(p.taskHint, null);
-  assert.equal(p.source, 'session_file');
+  assert.equal(p.sessionActive, false);
+  assert.equal(readSessionPolicy(config, ALIAS), null);
   console.log('7. empty object: OK');
 }
 
@@ -88,6 +86,8 @@ function clear() { fs.rmSync(sessionPath(ALIAS), { force: true }); }
   const p = resolvePolicy({ alias: ALIAS }, config);
   assert.equal(p.sessionActive, true);
   assert.equal(p.taskHint, 'fix bug');
+  assert.equal(p.baselineCaptured, false);
+  assert.equal(p.trusted, false);
   assert.match(p.sessionCreatedAt, /^\d{4}-\d{2}-\d{2}T/);
   console.log('8. write then resolve: OK');
 }

@@ -5,12 +5,16 @@ import { toast } from '../components/toast.js';
 import { virtualizeTable } from '../components/table.js';
 import { esc, timeAgo } from '../utils.js';
 import { getRouteParams, getWorkspaceFilter, setWorkspaceFilter } from '../router.js';
+import { activityEventId } from '../activity-event.js';
 
 let _allEntries = [];
 let _paused = false;
 let _filterState = { search: '', timeRange: '1h', workspace: '', tool: '', status: '', task: '' };
 let _virtualizer = null;
 let _mountToken = 0;
+let _requestedEventId = '';
+let _requestedEventRoute = '';
+let _openedRequestedEvent = false;
 
 export function mountActivity(container) {
   const token = ++_mountToken;
@@ -19,6 +23,12 @@ export function mountActivity(container) {
   _filterState.task = params.get('task') || '';
   _filterState.tool = params.get('tool') || '';
   _filterState.search = params.get('search') || '';
+  _requestedEventId = params.get('event') || '';
+  const requestedEventRoute = _requestedEventId ? `${_filterState.task}|${_requestedEventId}` : '';
+  if (requestedEventRoute !== _requestedEventRoute) {
+    _requestedEventRoute = requestedEventRoute;
+    _openedRequestedEvent = false;
+  }
   const requestedRange = String(params.get('time') || '').toLowerCase();
   if (['15m', '1h', '24h', '7d', 'all'].includes(requestedRange)) _filterState.timeRange = requestedRange;
   _virtualizer?.destroy();
@@ -38,6 +48,7 @@ export function mergeEntries(entries) {
   _allEntries = sortEntries([...byKey.values()]).slice(0, 1000);
   updateFilterOptions();
   renderFilteredTable();
+  maybeOpenRequestedEvent();
 }
 
 export function prependEntry(entry) {
@@ -157,6 +168,7 @@ async function loadLogs(token) {
   _allEntries = sortEntries(Array.isArray(data) ? data : fallbackEntries);
   updateFilterOptions();
   renderFilteredTable();
+  maybeOpenRequestedEvent();
 }
 
 function updateFilterOptions() {
@@ -238,6 +250,7 @@ function renderTable(entries) {
     const message = entry.error || entry.message || entry.path || '';
     const row = document.createElement('tr');
     row.className = 'clickable-row';
+    if (_requestedEventId && activityEventId(entry) === _requestedEventId) row.classList.add('activity-requested-row');
     row.tabIndex = 0;
     row.setAttribute('aria-label', `Open ${entry.tool || entry.type || 'activity'} event details`);
     row.innerHTML = `
@@ -256,6 +269,14 @@ function renderTable(entries) {
     };
     return row;
   });
+}
+
+function maybeOpenRequestedEvent() {
+  if (!_requestedEventId || _openedRequestedEvent) return;
+  const entry = _allEntries.find(item => activityEventId(item) === _requestedEventId);
+  if (!entry) return;
+  _openedRequestedEvent = true;
+  openDetail(entry);
 }
 
 function openDetail(entry) {

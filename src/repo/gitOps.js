@@ -16,7 +16,7 @@ function clampNumber(value, min, max, fallback) {
 function truncateUtf8(text, maxBytes, label) {
   const value = String(text || "");
   if (Buffer.byteLength(value, "utf8") <= maxBytes) return value;
-  return value.slice(0, maxBytes) + `\n[rel-ai-mcp ${label} truncated at ${maxBytes} bytes]`;
+  return Buffer.from(value, 'utf8').subarray(0, maxBytes).toString('utf8').replace(/\uFFFD+$/u, '') + `\n[rel-ai-mcp ${label} truncated at ${maxBytes} bytes]`;
 }
 
 // ---- Patch configuration ----------------------------------------------------
@@ -54,7 +54,7 @@ function readBaselineOwnership(workspace, config) {
     // key — is what marks ownership as knowable. A session that started against a
     // clean worktree has no baselineDirty entry, but it is still a real session:
     // everything dirty now is genuinely session-owned.
-    if (!session) return { baselineDirty: [], baselineSource: null };
+    if (!session || session.baselineCaptured !== true) return { baselineDirty: [], baselineSource: null };
     return {
       baselineDirty: Array.isArray(session.baselineDirty) ? session.baselineDirty : [],
       baselineSource: "session"
@@ -305,6 +305,13 @@ async function relaiGitCommit(workspace, config, args = {}) {
       status: statusBefore
     };
   }
+  const indexTree = await runProcess("git", ["write-tree"], { cwd: workspace.path, timeout: 60000 }, config);
+  if (indexTree.exitCode !== 0) throw new Error(`Could not snapshot the Git index before staging: ${indexTree.stderr || indexTree.stdout || indexTree.exitCode}`);
+  const restoreIndex = async () => {
+    const tree = String(indexTree.stdout || "").trim();
+    if (!tree) return null;
+    return runProcess("git", ["read-tree", tree], { cwd: workspace.path, timeout: 60000 }, config);
+  };
   if (paths.length > 0) {
     const add = await runProcess("git", ["add", "--", ...paths], { cwd: workspace.path, timeout: 60000 }, config);
     if (add.exitCode !== 0) return { ok: false, workspace: workspace.alias, message, addAll, paths, add: summarizeCommand(add) };
@@ -319,6 +326,7 @@ async function relaiGitCommit(workspace, config, args = {}) {
     const staged = await runProcess("git", ["diff", "--cached", "--name-only"], { cwd: workspace.path, timeout: 60000 }, config);
     const secretStaged = String(staged.stdout || "").split(/\r?\n/).map((line) => line.trim()).filter((file) => file && isSecretPath(file));
     if (secretStaged.length > 0) {
+      const indexRestore = await restoreIndex();
       return {
         ok: false,
         workspace: workspace.alias,
@@ -326,7 +334,8 @@ async function relaiGitCommit(workspace, config, args = {}) {
         addAll,
         paths,
         secretStagedFiles: secretStaged,
-        error: `Refusing to commit staged files that look like secrets: ${secretStaged.join(", ")}. Unstage them (git restore --staged <file>) or pass allowSecretPaths: true after reviewing.`
+        indexRestored: indexRestore?.exitCode === 0,
+        error: `Refusing to commit staged files that look like secrets: ${secretStaged.join(", ")}. The pre-operation index was restored. Pass allowSecretPaths: true only after reviewing those files.`
       };
     }
   }

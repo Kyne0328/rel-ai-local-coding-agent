@@ -1,83 +1,46 @@
-import { spawn } from 'node:child_process';
-import { once } from 'node:events';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { startMcpClient } from './helpers/mcp-client.mjs';
+import { activeToolNames } from './helpers/tool-surface.mjs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const root = path.resolve(__dirname, '..');
-const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp.js')], {
-  cwd: root,
-  stdio: ['pipe', 'pipe', 'pipe'],
-  env: {
-    ...process.env,
-    REL_AI_MCP_CONFIG: path.join(root, 'examples', 'config.example.json')
-  }
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const client = startMcpClient({
+  root,
+  configPath: path.join(root, 'examples', 'config.example.json'),
+  timeoutMs: 3000
 });
 
-let buffer = '';
-const responses = [];
-child.stdout.on('data', (chunk) => {
-  buffer += chunk.toString('utf8');
-  let index;
-  while ((index = buffer.indexOf('\n')) !== -1) {
-    const line = buffer.slice(0, index).trim();
-    buffer = buffer.slice(index + 1);
-    if (line) responses.push(JSON.parse(line));
+try {
+  client.send(1, 'initialize', { protocolVersion: '2025-06-18' });
+  const init = await client.waitFor(1);
+  if (!init.result?.capabilities?.tools) throw new Error('initialize did not advertise tools capability');
+  if (!init.result?.capabilities?.resources) throw new Error('initialize did not advertise resources capability');
+  if (!String(init.result?.instructions || '').includes('relai_complete_task')) {
+    throw new Error('initialize did not advertise the explicit final-completion contract');
   }
-});
 
-function send(message) {
-  child.stdin.write(`${JSON.stringify(message)}\n`);
-}
+  client.send(2, 'tools/list');
+  const list = await client.waitFor(2);
+  if (!Array.isArray(list.result?.tools) || list.result.tools.length !== activeToolNames.length) {
+    throw new Error(`tools/list should expose ${activeToolNames.length} active workspace tools, got ${list.result?.tools?.length}`);
+  }
+  const names = list.result.tools.map(item => item.name).sort((a, b) => a.localeCompare(b));
+  const expected = [...activeToolNames].sort((a, b) => a.localeCompare(b));
+  if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error(`Unexpected tool list: ${names.join(', ')}`);
+  const writeTool = list.result.tools.find(item => item.name === 'relai_write');
+  if (!writeTool.inputSchema?.properties?.content || writeTool.inputSchema?.properties?.edits) throw new Error('relai_write schema should expose content and not expose edits');
+  const readTool = list.result.tools.find(item => item.name === 'relai_read');
+  if (!readTool.inputSchema?.properties?.startLine || !readTool.inputSchema?.properties?.endLine || !readTool.inputSchema?.properties?.guidanceMode) {
+    throw new Error('relai_read schema should expose bounded line ranges and guidance mode');
+  }
 
-function waitFor(id, timeoutMs = 3000) {
-  return new Promise((resolve, reject) => {
-    const started = Date.now();
-    const timer = setInterval(() => {
-      const found = responses.find((item) => item.id === id);
-      if (found) {
-        clearInterval(timer);
-        resolve(found);
-        return;
-      }
-      if (Date.now() - started > timeoutMs) {
-        clearInterval(timer);
-        reject(new Error(`Timed out waiting for response id ${id}. stderr may contain details.`));
-      }
-    }, 25);
-  });
-}
+  client.send(3, 'resources/list');
+  const resources = await client.waitFor(3);
+  if (!Array.isArray(resources.result?.resources) || !resources.result.resources.some(item => item.uri === 'relai://server/workspaces')) {
+    throw new Error('resources/list did not expose workspace resource');
+  }
 
-send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } });
-const init = await waitFor(1);
-if (!init.result?.capabilities?.tools) throw new Error('initialize did not advertise tools capability');
-if (!init.result?.capabilities?.resources) throw new Error('initialize did not advertise resources capability');
-if (!String(init.result?.instructions || '').includes('relai_complete_task')) {
-  throw new Error('initialize did not advertise the explicit final-completion contract');
+  console.log(`Smoke test passed. Tools: ${list.result.tools.length}`);
+} finally {
+  await client.close();
 }
-
-send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
-const list = await waitFor(2);
-if (!Array.isArray(list.result?.tools) || list.result.tools.length !== 17) {
-  throw new Error(`tools/list should expose the 17 active workspace tools, got ${list.result?.tools?.length}`);
-}
-const names = list.result.tools.map((item) => item.name).sort((a, b) => a.localeCompare(b));
-const expected = ['relai_browser', 'relai_complete_task', 'relai_diff', 'relai_edit', 'relai_git_commit', 'relai_git_create_pr', 'relai_git_push', 'relai_git_status', 'relai_read', 'relai_replace', 'relai_repo_snapshot', 'relai_restore_changes', 'relai_run_checks', 'relai_status', 'relai_tidy_plan', 'relai_tidy_run', 'relai_write'].sort((a, b) => a.localeCompare(b));
-if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error(`Unexpected tool list: ${names.join(', ')}`);
-const writeTool = list.result.tools.find((item) => item.name === 'relai_write');
-if (!writeTool.inputSchema?.properties?.content || writeTool.inputSchema?.properties?.edits) throw new Error('relai_write schema should expose content and not expose edits');
-const readTool = list.result.tools.find((item) => item.name === 'relai_read');
-if (!readTool.inputSchema?.properties?.startLine || !readTool.inputSchema?.properties?.endLine || !readTool.inputSchema?.properties?.guidanceMode) {
-  throw new Error('relai_read schema should expose bounded line ranges and guidance mode');
-}
-
-send({ jsonrpc: '2.0', id: 3, method: 'resources/list', params: {} });
-const resources = await waitFor(3);
-if (!Array.isArray(resources.result?.resources) || !resources.result.resources.some((item) => item.uri === 'relai://server/workspaces')) {
-  throw new Error('resources/list did not expose workspace resource');
-}
-
-child.stdin.end();
-child.kill('SIGTERM');
-await once(child, 'close');
-console.log(`Smoke test passed. Tools: ${list.result.tools.length}`);

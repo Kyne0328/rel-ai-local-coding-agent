@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.19.8] — 2026-07-18
+
+### Reliability, safety, and release hardening
+- **Make workspace mutations transactional and accurately observable.** Batch edits and structured patches now preflight all targets, roll back previously applied files after runtime failures, avoid journals and staging payloads during dry runs, serialize operations per workspace, and record returned `ok: false` results as real failures.
+- **Tighten session ownership and Git safety.** Workspace sessions are scoped to the active task, failed baseline capture is explicit and untrusted, completion clears ownership state, Git discovery is centralized across supported platforms, and secret-path commit refusal restores the original index.
+- **Harden HTTP, OAuth, and process lifecycle behavior.** Async routes are awaited, OAuth state uses locked atomic persistence, quiet SSE connections receive heartbeats, timed-out Unix checks terminate their process groups, and large UTF-8 output is truncated without corrupting characters.
+- **Improve dashboard and Electron reliability.** Manual refresh bypasses stale request cache, overlapping refreshes collapse safely, refresh controls always recover after errors, workspace filtering uses a focused accessible control, live polling responds to configuration changes, and packaged Electron smoke coverage now exercises refresh and workspace selection interactions.
+- **Improve review and repository boundaries.** Untracked file contents are included in review diffs, safe replacements preserve file permissions where supported, literal escaped newlines remain unchanged, runtime state directories are excluded from snapshots, and managed ngrok accepts only the configured public domain.
+- **Make session tool events directly inspectable.** Persisted events in the Sessions drawer now link to the matching Activity entry, preserve workspace and task filters, highlight the selected row, and open its exact detail drawer with packaged Electron interaction coverage.
+- **Keep validation comprehensive without redundant execution.** Standard validation follows transitive npm-script aliases instead of rerunning covered checks, MCP smoke tests share one process harness, overlapping validation-strategy suites are consolidated into a single table plus Git integration test, and the complete gate passes all 62 focused test files.
+
+Bump root/electron/status UI/lockfiles to 0.19.8.
+
 ## [0.19.7] — 2026-07-18
 
 ### HTTP, dashboard, and MCP read performance

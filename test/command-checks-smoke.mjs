@@ -27,12 +27,21 @@ const config = {};
 fs.writeFileSync(path.join(tmp, 'package.json'), JSON.stringify({
   scripts: {
     check: 'node -e "console.log(\'check should not run for release\')"',
-    test: 'node -e "console.log(\'test should not run for release\')"',
-    'test:all': 'node -e "console.log(\'release all\')"'
+    test: 'npm run test:all',
+    'test:all': 'npm run check && node -e "console.log(\'release all\')"'
   }
 }, null, 2));
 
-// 0. Release level prefers test:all over piecemeal check/test scripts.
+// 0a. Standard validation must not run check twice when npm test already
+// delegates to a script that includes it.
+{
+  const result = await relaiVerify(workspace, config, { level: 'standard' });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.checks, ['npm run test:all']);
+  assert.ok(result.results[0].stdout.includes('release all'));
+}
+
+// 0b. Release level prefers test:all over piecemeal check/test scripts.
 {
   const result = await relaiVerify(workspace, config, { level: 'release' });
   assert.equal(result.ok, true);
@@ -40,7 +49,22 @@ fs.writeFileSync(path.join(tmp, 'package.json'), JSON.stringify({
   assert.ok(result.results[0].stdout.includes('release all'));
 }
 
-// 0b. Build-only package scripts are real validation, not "no checks detected".
+// 0c. Independent check and test scripts both run when neither covers the other.
+{
+  const independent = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-checks-independent-'));
+  fs.writeFileSync(path.join(independent, 'package.json'), JSON.stringify({
+    scripts: {
+      check: 'node -e "console.log(\'independent check\')"',
+      test: 'node -e "console.log(\'independent test\')"'
+    }
+  }, null, 2));
+  const result = await relaiVerify({ path: independent, alias: 'independent' }, config, { level: 'standard' });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.checks, ['npm run check', 'npm test']);
+  fs.rmSync(independent, { recursive: true, force: true });
+}
+
+// 0d. Build-only package scripts are real validation, not "no checks detected".
 {
   const buildOnly = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-checks-build-only-'));
   fs.writeFileSync(path.join(buildOnly, 'package.json'), JSON.stringify({
@@ -55,7 +79,7 @@ fs.writeFileSync(path.join(tmp, 'package.json'), JSON.stringify({
   fs.rmSync(buildOnly, { recursive: true, force: true });
 }
 
-// 0c. No detected checks must be explicit non-validation.
+// 0e. No detected checks must be explicit non-validation.
 {
   const noChecks = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-checks-none-'));
   const result = await relaiVerify({ path: noChecks, alias: 'no-checks' }, config, {});

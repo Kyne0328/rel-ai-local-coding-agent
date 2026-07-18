@@ -31,6 +31,10 @@ try {
     workspaces: {
       myapp: {
         path: wsDir,
+        commands: {
+          'npm:build': 'npm run build',
+          'npm:gone-command': 'npm run gone-command'
+        },
         testCommands: {
           'npm:test': 'npm run test',       // valid — matches a discovered script
           'npm:test:v4': 'npm run test:v4', // stale — no such script
@@ -44,8 +48,9 @@ try {
   {
     const result = updateWorkspace(config, { action: 'prune-stale-tests', alias: 'myapp' });
     assert.equal(result.ok, true, 'prune: ok');
-    assert.deepEqual([...result.removed].sort((a, b) => a.localeCompare(b)), ['npm:legacy', 'npm:test:v4'], 'prune: removes the two stale keys');
+    assert.deepEqual([...result.removed].sort((a, b) => a.localeCompare(b)), ['npm:gone-command', 'npm:legacy', 'npm:test:v4'], 'prune: removes stale regular and test commands');
     const ws = result.config.workspaces.find((w) => w.alias === 'myapp');
+    assert.deepEqual(ws.commandKeys, ['npm:build'], 'prune: keeps the valid regular command');
     assert.deepEqual(ws.testCommandKeys, ['npm:test'], 'prune: keeps the valid key');
     assert.deepEqual(ws.staleTestCommandKeys || [], [], 'prune: no stale keys remain');
   }

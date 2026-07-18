@@ -62,13 +62,20 @@ function readAuditTail(auditPath) {
 
 function readAudit(config, options = {}) {
   const auditPath = getAuditPath(config);
-  const limit = Math.min(Math.max(Number(options.limit || 100), 1), 1000);
+  const taskId = String(options.taskId || '').trim();
+  const limit = Math.min(Math.max(Number(options.limit || 100), 1), taskId ? 10000 : 1000);
   if (!fs.existsSync(auditPath)) return { path: auditPath, entries: [] };
-  const lines = readAuditTail(auditPath).trim().split(/\r?\n/).filter(Boolean);
-  const entries = lines.slice(-limit).map((line) => {
+  const text = taskId ? readAuditGenerations(auditPath) : readAuditTail(auditPath);
+  const lines = text.trim().split(/\r?\n/).filter(Boolean);
+  const entries = lines.map((line) => {
     try { return JSON.parse(line); } catch { return { malformed: line }; }
-  });
+  }).filter(entry => !taskId || entry.taskId === taskId).slice(-limit);
   return { path: auditPath, entries };
+}
+
+function readAuditGenerations(auditPath) {
+  const files = [`${auditPath}.1`, auditPath].filter(file => fs.existsSync(file));
+  return files.map(file => fs.readFileSync(file, 'utf8')).join('');
 }
 
 function redactEvent(value) {

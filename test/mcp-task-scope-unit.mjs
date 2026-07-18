@@ -36,6 +36,14 @@ assert.equal(
   resolveTaskScopeId(rotatedTransportB, payload, 'transport-b'),
   'conversation identity must survive MCP transport session rotation'
 );
+
+const sameBearerDifferentSocketsA = { headers: { authorization: 'Bearer shared-token' }, socket: { remoteAddress: '127.0.0.1', remotePort: 41001 } };
+const sameBearerDifferentSocketsB = { headers: { authorization: 'Bearer shared-token' }, socket: { remoteAddress: '127.0.0.1', remotePort: 41002 } };
+assert.notEqual(
+  resolveTaskScopeId(sameBearerDifferentSocketsA, payload),
+  resolveTaskScopeId(sameBearerDifferentSocketsB, payload),
+  'missing conversation metadata must not merge unrelated connections solely because they share a bearer token'
+);
 assert.equal(
   resolveTaskScopeId({ headers: {} }, { ...payload, params: { ...payload.params, _meta: { conversationId: 'meta-conversation' } } }),
   resolveTaskScopeId({ headers: {} }, { ...payload, params: { ...payload.params, _meta: { conversationId: 'meta-conversation' } } })

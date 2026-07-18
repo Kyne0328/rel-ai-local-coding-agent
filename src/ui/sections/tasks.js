@@ -1,7 +1,8 @@
-import { openDrawer } from '../components/drawer.js';
+import { closeDrawer, openDrawer } from '../components/drawer.js';
 import { pillHtml } from '../components/pill.js';
 import { esc, metricHtml, timeAgo } from '../utils.js';
 import { getWorkspaceFilter, routeHref } from '../router.js';
+import { activityEventId } from '../activity-event.js';
 
 export function mountTasks(container, data = {}) {
   const workspace = getWorkspaceFilter();
@@ -127,8 +128,11 @@ function openSession(session) {
     ${session.summary ? `<section><h3>Completion summary</h3><div class="muted">${esc(session.summary)}</div></section>` : ''}
     ${operations}
     <section><h3>Changed files</h3>${changed}</section>
-    <section><h3>Tool events</h3><div class="task-event-list">${(session.events || []).map(eventRow).join('') || '<div class="muted">No persisted events.</div>'}</div></section>
+    <section><h3>Tool events</h3><div class="task-event-list">${(session.events || []).map(event => eventRow(event, session)).join('') || '<div class="muted">No persisted events.</div>'}</div></section>
     <a class="buttonlike secondary" href="${routeHref('activity', { workspace: session.workspace, task: session.id })}">Open in Activity log</a>`;
+  for (const link of content.querySelectorAll('[data-task-event-link]')) {
+    link.addEventListener('click', closeDrawer);
+  }
   openDrawer({ title: `Session ${session.id.slice(0, 8)}`, content });
 }
 
@@ -150,9 +154,15 @@ function detail(label, value) {
   return `<div><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`;
 }
 
-function eventRow(event) {
+function eventRow(event, session) {
   const operation = event.operation || operationForTool(event.tool);
-  return `<div class="task-event"><span>${esc(timeAgo(event.ts))}</span><code title="${esc(event.tool || '')}">${esc(operation)}</code>${pillHtml(event.ok === false ? 'error' : 'ok')}</div>`;
+  const href = routeHref('activity', {
+    workspace: event.workspace || session.workspace,
+    task: event.taskId || session.id,
+    event: activityEventId(event),
+    time: 'all'
+  });
+  return `<a class="task-event task-event-link" data-task-event-link href="${esc(href)}" aria-label="Open ${esc(operation)} event in Activity log"><span>${esc(timeAgo(event.ts))}</span><code title="${esc(event.tool || '')}">${esc(operation)}</code>${pillHtml(event.ok === false ? 'error' : 'ok')}</a>`;
 }
 
 function operationForTool(tool) {

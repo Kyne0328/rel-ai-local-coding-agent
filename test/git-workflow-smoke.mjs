@@ -115,8 +115,9 @@ fs.writeFileSync(path.join(workspace.path, '.env'), 'API_KEY=super-secret\n');
 const secretCommit = await relaiGitCommit(workspace, config, { message: 'oops secrets' });
 assert.equal(secretCommit.ok, false, 'commit with staged .env should be refused');
 assert.ok(Array.isArray(secretCommit.secretStagedFiles) && secretCommit.secretStagedFiles.includes('.env'));
+assert.equal(secretCommit.indexRestored, true, 'secret refusal must restore the pre-operation index');
 assert.match(secretCommit.error, /allowSecretPaths/);
-git(['restore', '--staged', '.env'], { cwd: workspace.path });
+assert.equal(git(['diff', '--cached', '--name-only'], { cwd: workspace.path }).toString('utf8').trim(), '', 'secret file must not remain staged');
 
 const secretCommitAllowed = await relaiGitCommit(workspace, config, { message: 'intentional env commit', allowSecretPaths: true });
 assert.equal(secretCommitAllowed.ok, true, 'allowSecretPaths: true should permit the commit');
@@ -154,6 +155,11 @@ const restoreTracked = await relaiReset(workspace, config, { paths: ['README.md'
 assert.equal(restoreTracked.ok, true, 'tracked file restore should succeed');
 const revertedReadme = fs.readFileSync(path.join(workspace.path, 'README.md'), 'utf8').replaceAll('\r\n', '\n');
 assert.equal(revertedReadme, '# Git smoke\n', 'README reverted');
+
+fs.writeFileSync(path.join(workspace.path, 'untracked-review.txt'), 'review this content\n');
+const untrackedReview = await require('../src/localRepoBridge.js').relaiDiff(workspace, config, { path: 'untracked-review.txt' });
+assert.match(untrackedReview.diff, /new file mode/);
+assert.match(untrackedReview.diff, /\+review this content/);
 
 fs.rmSync(root, { recursive: true, force: true });
 console.log('Git workflow smoke test passed.');

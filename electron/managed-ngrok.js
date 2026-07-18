@@ -175,12 +175,17 @@ async function prepareManagedNgrok({ authtoken, onLog = () => {} } = {}) {
   return { ok: true, path: ensured.path, copied: ensured.copied, configPath, update };
 }
 
-function extractPublicUrl(text) {
-  const match = URL_RE.exec(String(text || ''));
-  if (!match) return '';
-  let url = match[0];
-  while (url.length && ').,;'.includes(url.at(-1))) url = url.slice(0, -1);
-  return url;
+function extractPublicUrl(text, expectedDomain = '') {
+  const input = String(text || '');
+  const pattern = new RegExp(URL_RE.source, 'ig');
+  for (const match of input.matchAll(pattern)) {
+    let url = match[0];
+    while (url.length && ').,;'.includes(url.at(-1))) url = url.slice(0, -1);
+    try {
+      if (!expectedDomain || new URL(url).hostname.toLowerCase() === expectedDomain.toLowerCase()) return url;
+    } catch {}
+  }
+  return '';
 }
 
 function sanitizeDomain(domain) {
@@ -238,7 +243,7 @@ function startManagedNgrokTunnel({ domain, port, timeoutMs = 30000, onLog = () =
         buffer += text;
       }
       onLog(text, MANAGED_NGROK_LABEL);
-      const publicUrl = extractPublicUrl(buffer);
+      const publicUrl = extractPublicUrl(buffer, safeDomain);
       if (publicUrl) {
         finish({ ok: true, provider: MANAGED_NGROK_LABEL, publicUrl, process: child, command: [managedNgrokPath(), ...args].join(' ') });
       }
@@ -272,5 +277,6 @@ module.exports = {
   maybeUpdateManagedNgrok,
   prepareManagedNgrok,
   startManagedNgrokTunnel,
-  previewManagedNgrokCommand
+  previewManagedNgrokCommand,
+  extractPublicUrl
 };

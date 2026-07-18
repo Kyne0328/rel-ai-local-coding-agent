@@ -146,7 +146,7 @@ function makeTempRepo(filename = 'hello.js', content = 'module.exports = {};') {
     assert.equal(result.ok, true, 'batch: all edits should succeed');
     assert.equal(result.editCount, 2, 'batch: two edits reported');
     assert.equal(result.preflightAtomic, true, 'batch: preflightAtomic flag must be true');
-    assert.equal(result.rollbackAtomic, false, 'batch: rollbackAtomic must be false (no post-write rollback)');
+    assert.equal(result.rollbackAtomic, true, 'batch: rollback support must be active');
     assert.equal(fs.readFileSync(path.join(dir, 'a.js'), 'utf8').replaceAll('\r\n', '\n'), 'let a = 2;\n', 'batch: replace applied');
     assert.equal(fs.readFileSync(path.join(dir, 'b.js'), 'utf8').replaceAll('\r\n', '\n'), 'let b = 99;\n', 'batch: write applied');
   } finally {
@@ -165,7 +165,7 @@ function makeTempRepo(filename = 'hello.js', content = 'module.exports = {};') {
     ] });
     assert.equal(result.ok, false, 'batch: overall ok false when one edit fails');
     assert.equal(result.preflightAtomic, true, 'batch: preflightAtomic flag must be true');
-    assert.equal(result.rollbackAtomic, false, 'batch: rollbackAtomic must be false (no post-write rollback)');
+    assert.equal(result.rollbackAtomic, true, 'batch: preflight refusal is atomic');
     assert.equal(result.appliedCount, 0, 'batch: no edit should be applied after preflight failure');
     assert.equal(result.results.length, 2, 'batch: both preflight results present');
     assert.ok(result.results.some((r) => r.ok === false), 'batch: a failure is reported');
@@ -175,7 +175,26 @@ function makeTempRepo(filename = 'hello.js', content = 'module.exports = {};') {
   }
 }
 
-// 10. runChecks + returnDiff post-actions in one call
+// 10. batch runtime rollback: a later write failure restores earlier applied files.
+{
+  const dir = makeTempRepo('a.js', 'let a = 1;\n');
+  const workspace = { alias: 'test', path: dir };
+  try {
+    const result = await planEdit(workspace, {}, { edits: [
+      { path: 'a.js', oldText: 'let a = 1;', newText: 'let a = 2;' },
+      { path: 'a.js', oldText: 'let a = 1;', newText: 'let a = 3;' }
+    ] });
+    assert.equal(result.ok, false);
+    assert.equal(result.rollbackAtomic, true);
+    assert.equal(result.rollback?.ok, true);
+    assert.equal(result.appliedCount, 0);
+    assert.equal(fs.readFileSync(path.join(dir, 'a.js'), 'utf8').replaceAll('\r\n', '\n'), 'let a = 1;\n');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// 11. runChecks + returnDiff post-actions in one call
 {
   const dir = makeTempRepo('foo.js', 'const x = 1;\n');
   const workspace = { alias: 'test', path: dir };
@@ -188,7 +207,7 @@ function makeTempRepo(filename = 'hello.js', content = 'module.exports = {};') {
   }
 }
 
-// 11. staged patch (T4): start/append/commit applies the joined diff
+// 12. staged patch (T4): start/append/commit applies the joined diff
 {
   const dir = makeTempRepo('foo.js', 'const a = 1;\n');
   const workspace = { alias: 'test', path: dir };
@@ -202,6 +221,27 @@ function makeTempRepo(filename = 'hello.js', content = 'module.exports = {};') {
     const commit = await planEdit(workspace, config, { stage: 'commit', writeId: start.writeId });
     assert.equal(commit.plannerPath, 'apply-update:staged', 'staged patch: commit routes to staged apply-update');
     assert.equal(fs.readFileSync(path.join(dir, 'foo.js'), 'utf8').replaceAll('\r\n', '\n'), 'const a = 2;\n', 'staged patch: diff applied on commit');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// 13. large batch dry-run must not create files, journals, or staged payloads.
+{
+  const dir = makeTempRepo();
+  const stateDir = path.join(dir, '.state');
+  const workspace = { alias: 'test', path: dir };
+  const config = { stateDir };
+  try {
+    const result = await planEdit(workspace, config, {
+      dryRun: true,
+      edits: [{ path: 'large.txt', content: `${'line\n'.repeat(2000)}` }]
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.appliedCount, 0);
+    assert.equal(fs.existsSync(path.join(dir, 'large.txt')), false);
+    assert.equal(fs.existsSync(path.join(stateDir, 'write-staging')), false);
+    assert.equal(fs.existsSync(path.join(stateDir, 'operation-journal')), false);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

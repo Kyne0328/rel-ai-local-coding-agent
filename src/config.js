@@ -18,7 +18,7 @@ function makeDefaultFastTaskConfig() {
     excludePaths: [
       ".git", "node_modules", "build", "dist", "coverage", ".next", ".nuxt", ".svelte-kit",
       ".dart_tool", ".gradle", "target", "obj", "vendor", ".venv", "venv",
-      ".claude/skills", ".superpowers"
+      ".claude/skills", ".superpowers", ".rel-ai-mcp-state"
     ]
   };
 }
@@ -131,10 +131,24 @@ function normalizeTrustedBudgetMultiplier(value) {
 function normalizeProductSettings(next, base, input) {
   next.maxOutputBytes = positiveNumber(next.maxOutputBytes, base.maxOutputBytes);
   next.maxIndexFiles = positiveNumber(next.maxIndexFiles, base.maxIndexFiles);
-  next.productUx = { ...base.productUx, ...input.productUx };
-  next.release = { ...base.release, ...input.release };
+  const product = { ...base.productUx, ...objectOrEmpty(input.productUx) };
+  next.productUx = {
+    dashboardRefreshSeconds: clampNumber(product.dashboardRefreshSeconds, 1, 3600, base.productUx.dashboardRefreshSeconds),
+    liveLogPollSeconds: clampNumber(product.liveLogPollSeconds, 1, 300, base.productUx.liveLogPollSeconds),
+    staleHours: clampNumber(product.staleHours, 1, 24 * 365, base.productUx.staleHours),
+    cleanupOlderThanHours: clampNumber(product.cleanupOlderThanHours, 1, 24 * 365, base.productUx.cleanupOlderThanHours),
+    enableStateExport: normalizeBoolean(product.enableStateExport, base.productUx.enableStateExport)
+  };
+  next.release = { ...base.release, ...objectOrEmpty(input.release) };
   next.release.minimumReadinessScore = clampNumber(next.release.minimumReadinessScore, 0, 100, base.release.minimumReadinessScore);
-  next.release.requireHttpToken = next.release.requireHttpToken !== false;
+  next.release.requireHttpToken = normalizeBoolean(next.release.requireHttpToken, base.release.requireHttpToken);
+}
+
+function normalizeBoolean(value, fallback) {
+  if (typeof value === 'boolean') return value;
+  if (String(value).toLowerCase() === 'true') return true;
+  if (String(value).toLowerCase() === 'false') return false;
+  return fallback;
 }
 
 function stripLegacyApprovalKeys(config) {
@@ -312,6 +326,7 @@ function publicConfigSummary(config) {
         discoveredCommands: discovered,
         validationCommands,
         discoveredTestCommandKeys: Object.keys(discovered).filter((key) => /test|analy[sz]e|lint|check|vet|build/.test(key + " " + discovered[key])).sort((a, b) => a.localeCompare(b)),
+        staleCommandKeys: staleCommandKeys(entry.commands || {}, discovered).sort((a, b) => a.localeCompare(b)),
         staleTestCommandKeys: staleCommandKeys(entry.testCommands || {}, discovered).sort((a, b) => a.localeCompare(b))
       };
     }).sort((a, b) => a.alias.localeCompare(b.alias))

@@ -283,20 +283,45 @@ function formatDuration(milliseconds) {
   return seconds ? `${minutes}m ${seconds}s` : `${minutes}m`;
 }
 
+function notificationText(value, limit = 240) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (text.length <= limit) return text;
+  return `${text.slice(0, Math.max(0, limit - 1)).trimEnd()}…`;
+}
+
 function notifyOnConnectionChange(view) {
   const previous = previousConnectionKey;
   previousConnectionKey = view.key;
   if (!notificationsEnabled || previous === view.key) return;
-  if (view.key === 'ready') showDesktopNotification('Rel.AI MCP is connected', 'The ChatGPT MCP endpoint is ready to use.');
-  else if (view.key === 'failed') showDesktopNotification('Rel.AI MCP needs attention', currentStatus.error || 'The secure connection could not be established.');
+  if (view.key === 'ready') {
+    showDesktopNotification(
+      'Connection ready',
+      'The secure ChatGPT connection is active and configured workspaces are available.',
+      'relai-connection'
+    );
+  } else if (view.key === 'failed') {
+    const detail = notificationText(currentStatus.error, 150);
+    showDesktopNotification(
+      'Connection failed',
+      detail ? `Rel.AI could not publish the ChatGPT endpoint. ${detail}` : 'Rel.AI could not publish the ChatGPT endpoint. Open the app for details.',
+      'relai-connection'
+    );
+  }
 }
 
-async function showDesktopNotification(title, body) {
+async function showDesktopNotification(title, body, tag) {
   if (typeof Notification !== 'function') return;
   try {
     let permission = Notification.permission;
     if (permission === 'default') permission = await Notification.requestPermission();
-    if (permission === 'granted') new Notification(title, { body });
+    if (permission === 'granted') {
+      new Notification(title, {
+        body: notificationText(body),
+        icon: 'relai-logo.png',
+        tag,
+        silent: false
+      });
+    }
   } catch {
     // Optional notifications must not affect connection handling.
   }

@@ -162,6 +162,21 @@ if (reg.status !== 201) fail(`POST /register expected 201, got ${reg.status}`);
 const client = await reg.json();
 if (!client.client_id || client.token_endpoint_auth_method !== 'none') fail(`registration response malformed: ${JSON.stringify(client)}`);
 
+// Concurrent registrations must not lose updates or leave lock/temp files.
+const concurrentRegistrations = await Promise.all(Array.from({ length: 12 }, (_, index) => fetch(`${base}/register`, {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ client_name: `Concurrent ${index}`, redirect_uris: [redirectUri] })
+}).then(async response => ({ status: response.status, body: await response.json() }))));
+if (concurrentRegistrations.some(item => item.status !== 201 || !item.body.client_id)) {
+  fail(`concurrent client registration failed: ${JSON.stringify(concurrentRegistrations)}`);
+}
+const oauthStorePath = path.join(stateDir, 'oauth-store.json');
+const oauthStore = JSON.parse(fs.readFileSync(oauthStorePath, 'utf8'));
+if (Object.keys(oauthStore.clients || {}).length < 13) fail('concurrent OAuth registrations lost persisted clients');
+if (fs.existsSync(path.join(stateDir, 'oauth-store.lock'))) fail('OAuth store lock was not cleaned up');
+if (fs.readdirSync(stateDir).some(name => name.startsWith('oauth-store.json.') && name.endsWith('.tmp'))) fail('OAuth temporary file was not cleaned up');
+
 // Registration must reject a missing redirect_uri.
 const badReg = await fetch(`${base}/register`, {
   method: 'POST',

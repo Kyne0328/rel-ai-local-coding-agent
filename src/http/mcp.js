@@ -182,8 +182,9 @@ function resolveTaskScopeId(req, payload, explicitSessionId = '') {
     meta['openai/sessionId'],
     meta.sessionId
   ]);
-  const authorization = String(headers.authorization || '');
-  const fallback = authorization || req?.socket?.remoteAddress || 'connector-default';
+  const remoteAddress = String(req?.socket?.remoteAddress || 'connector');
+  const remotePort = String(req?.socket?.remotePort || 'unknown');
+  const fallback = `${remoteAddress}:${remotePort}`;
   // Conversation identity must outlive a transport reconnect. Using Mcp-Session-Id
   // first split validation and relai_complete_task into separate work sessions when
   // ChatGPT rotated the HTTP transport between tool calls.

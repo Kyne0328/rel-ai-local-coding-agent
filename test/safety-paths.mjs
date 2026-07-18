@@ -5,7 +5,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { isSecretPath, validateRelativePath, resolveSafePath } = require("../src/safety.js");
+const { isSecretPath, validateRelativePath, resolveSafePath, collectTextFiles, writeTextFileSafe } = require("../src/safety.js");
 
 // ---------------------------------------------------------------------------
 // isSecretPath — paths that MUST be blocked
@@ -123,6 +123,22 @@ try {
     "Expected resolveSafePath to throw for /absolute/path"
   );
   console.log("  resolveSafePath /absolute/path: threw as expected");
+
+  fs.mkdirSync(path.join(tmp, '.rel-ai-mcp-state'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, '.rel-ai-mcp-state', 'payload.patch'), 'private runtime state');
+  const collected = collectTextFiles(tmp);
+  assert.ok(!collected.files.some(file => file.startsWith('.rel-ai-mcp-state/')), 'runtime state must be excluded from snapshots');
+
+  const executable = path.join(tmp, 'run.sh');
+  fs.writeFileSync(executable, '#!/bin/sh\necho old\n');
+  fs.chmodSync(executable, 0o755);
+  writeTextFileSafe(tmp, 'run.sh', '#!/bin/sh\necho new\n');
+  if (process.platform !== 'win32') {
+    assert.equal(fs.statSync(executable).mode & 0o777, 0o755, 'safe replacement must preserve executable mode');
+  }
+
+  writeTextFileSafe(tmp, 'literal.json', '{"value":"line\\ntext"}');
+  assert.equal(fs.readFileSync(path.join(tmp, 'literal.json'), 'utf8'), '{"value":"line\\ntext"}', 'literal escaped newlines must remain literal');
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
 }

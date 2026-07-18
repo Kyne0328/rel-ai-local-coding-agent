@@ -69,10 +69,15 @@ function applyPatchSettings(next, values, changed) {
   changed.push("patch");
 }
 
-function coerceSettingValue(value, label) {
-  if (typeof value === "boolean") return Boolean(value);
-  if (typeof value === "number" || /^\d+$/.test(String(value))) return finiteNumber(value, label);
-  return value;
+function coerceSettingValue(value, label, currentValue) {
+  if (typeof currentValue === "boolean") {
+    if (typeof value === "boolean") return value;
+    if (String(value).toLowerCase() === "true") return true;
+    if (String(value).toLowerCase() === "false") return false;
+    throw new Error(`${label} must be true or false.`);
+  }
+  if (typeof currentValue === "number") return finiteNumber(value, label);
+  return String(value);
 }
 
 function applyAllowedSection(next, values, section, changed) {
@@ -82,7 +87,7 @@ function applyAllowedSection(next, values, section, changed) {
     if (!ALLOWED_SECTION_KEYS[section].has(key)) {
       throw new Error(`Unknown ${section} setting: ${key}. Allowed: ${[...ALLOWED_SECTION_KEYS[section]].join(", ")}.`);
     }
-    setNestedIfChanged(next, section, key, coerceSettingValue(value, `${section}.${key}`), changed);
+    setNestedIfChanged(next, section, key, coerceSettingValue(value, `${section}.${key}`, next[section][key]), changed);
   }
 }
 
@@ -113,7 +118,8 @@ function _handleRenameWorkspace(alias, payload, next) {
 function _handlePruneCommands(alias, payload, next) {
   const ws = next.workspaces[alias];
   if (!ws) throw new Error(`Workspace '${alias}' is not configured.`);
-  const configured = ws.testCommands && typeof ws.testCommands === "object" ? ws.testCommands : {};
+  const configuredTests = ws.testCommands && typeof ws.testCommands === "object" ? ws.testCommands : {};
+  const configuredCommands = ws.commands && typeof ws.commands === "object" ? ws.commands : {};
   let discovered;
   try {
     discovered = discoverCommands(ws.path) || {};
@@ -126,21 +132,28 @@ function _handlePruneCommands(alias, payload, next) {
   if (Object.keys(discovered).length === 0 && !(ws.path && fs.existsSync(ws.path))) {
     throw new Error(`Cannot determine stale commands for '${alias}': workspace path is unavailable. Fix the path first.`);
   }
-  const stale = staleCommandKeys(configured, discovered);
+  const staleTests = staleCommandKeys(configuredTests, discovered);
+  const staleCommands = staleCommandKeys(configuredCommands, discovered);
+  const stale = [...new Set([...staleCommands, ...staleTests])];
   if (!stale.length) {
-    return { ok: true, changed: [], removed: [], message: `No stale test commands for '${alias}'.`, configPath: getConfigPath(), config: publicConfigSummary(next) };
+    return { ok: true, changed: [], removed: [], message: `No stale commands for '${alias}'.`, configPath: getConfigPath(), config: publicConfigSummary(next) };
   }
-  const cleaned = {};
-  for (const [key, command] of Object.entries(configured)) {
-    if (!stale.includes(key)) cleaned[key] = command;
+  const cleanedTests = {};
+  for (const [key, command] of Object.entries(configuredTests)) {
+    if (!staleTests.includes(key)) cleanedTests[key] = command;
   }
-  ws.testCommands = cleaned;
+  const cleanedCommands = {};
+  for (const [key, command] of Object.entries(configuredCommands)) {
+    if (!staleCommands.includes(key)) cleanedCommands[key] = command;
+  }
+  ws.testCommands = cleanedTests;
+  ws.commands = cleanedCommands;
   const normalized = writeConfig(next);
   return {
     ok: true,
-    changed: [`workspaces.${alias}.testCommands`],
+    changed: [`workspaces.${alias}.commands`, `workspaces.${alias}.testCommands`],
     removed: stale,
-    message: `Removed ${stale.length} stale test command${stale.length === 1 ? "" : "s"} from '${alias}': ${stale.join(", ")}.`,
+    message: `Removed ${stale.length} stale command${stale.length === 1 ? "" : "s"} from '${alias}': ${stale.join(", ")}.`,
     configPath: getConfigPath(),
     config: publicConfigSummary(normalized)
   };

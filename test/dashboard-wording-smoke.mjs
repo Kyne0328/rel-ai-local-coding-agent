@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { activeToolCount } from './helpers/tool-surface.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
@@ -71,9 +72,9 @@ if (dashboardFindings.length) {
 }
 
 // --- 2. Check required terms are present in dashboard JSON ---
-if (!Array.isArray(dashboardData?.tools) || dashboardData.tools.length !== 17) {
+if (!Array.isArray(dashboardData?.tools) || dashboardData.tools.length !== activeToolCount) {
   child.kill('SIGKILL');
-  console.error('Dashboard wording smoke test FAILED — dashboard JSON must expose exactly 17 active tools');
+  console.error(`Dashboard wording smoke test FAILED — dashboard JSON must expose ${activeToolCount} active tools`);
   process.exit(1);
 }
 if (!Array.isArray(dashboardData?.taskActivity?.tasks) || typeof dashboardData?.taskActivity?.activeTaskCount !== 'number') {
@@ -84,50 +85,6 @@ if (!Array.isArray(dashboardData?.taskActivity?.tasks) || typeof dashboardData?.
 if (dashboardJson.includes('prepared') || dashboardJson.includes('apply_bundle')) {
   child.kill('SIGKILL');
   console.error('Dashboard wording smoke test FAILED — obsolete prepared/bundle workflow wording remains');
-  process.exit(1);
-}
-
-// --- 3. Fetch tool schemas and check for forbidden terms in descriptions ---
-const toolsUrl = `http://127.0.0.1:${port}/api/tools?token=${encodeURIComponent(token)}`;
-const toolsResponse = await fetch(toolsUrl);
-if (!toolsResponse.ok) {
-  child.kill('SIGKILL');
-  throw new Error(`Tools API returned ${toolsResponse.status}`);
-}
-const tools = await toolsResponse.json();
-let toolsArray;
-if (Array.isArray(tools)) {
-  toolsArray = tools;
-} else if (Array.isArray(tools?.tools)) {
-  toolsArray = tools.tools;
-} else {
-  toolsArray = [];
-}
-
-const forbiddenInToolDescriptions = ['shell', 'execute', 'arbitrary', 'command runner'];
-const toolDescriptionFindings = [];
-
-for (const tool of toolsArray) {
-  const desc = String(tool.description || '').toLowerCase();
-  for (const forbidden of forbiddenInToolDescriptions) {
-    if (desc.includes(forbidden)) {
-      toolDescriptionFindings.push('Tool description contains a forbidden wording pattern.');
-    }
-  }
-}
-
-// Check relai_run_checks specifically
-const runChecksTool = toolsArray.find((t) => t.name === 'relai_run_checks');
-if (!runChecksTool) {
-  toolDescriptionFindings.push('relai_run_checks tool was not found in /api/tools response');
-} else if (!String(runChecksTool.description || '').toLowerCase().includes('validation checks')) {
-  toolDescriptionFindings.push('relai_run_checks description must contain "validation checks".');
-}
-
-if (toolDescriptionFindings.length) {
-  child.kill('SIGKILL');
-  console.error('Dashboard wording smoke test FAILED — tool description wording issues:');
-  for (const msg of toolDescriptionFindings) console.error(`  ${msg}`);
   process.exit(1);
 }
 

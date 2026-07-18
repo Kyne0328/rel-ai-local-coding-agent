@@ -2,19 +2,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { spawnSync } = require('node:child_process');
+const { resolveGitExecutable } = require('./gitExecutable');
 
 // A session whose last activity is older than this is treated as expired: its
 // captured baseline is stale and can no longer be trusted to fence pre-existing
 // files, so we drop it and let the next write recapture a fresh baseline.
 const SESSION_IDLE_TTL_MS = 8 * 60 * 60 * 1000;
-const GIT_EXECUTABLE = process.platform === 'win32'
-  ? String.raw`C:\Program Files\Git\cmd\git.exe`
-  : '/usr/bin/git';
-
-function gitExecutable() {
-  return fs.existsSync(GIT_EXECUTABLE) ? GIT_EXECUTABLE : '';
-}
-
 function sessionFilePath(config, alias) {
   const stateDir = config.stateDir || path.join(os.homedir(), '.rel-ai-mcp');
   return path.join(stateDir, 'sessions', `${alias}-policy.json`);
@@ -32,6 +25,7 @@ function readSessionPolicy(config, alias) {
     if (!fs.existsSync(filePath)) return null;
     const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    if (parsed.workspace !== alias) return null;
     const last = sessionLastActivity(parsed);
     if (last !== null && Date.now() - last > SESSION_IDLE_TTL_MS) return null;
     return parsed;
@@ -41,14 +35,16 @@ function readSessionPolicy(config, alias) {
   }
 }
 
-function captureBaselineDirty(workspaceRoot) {
-  if (!workspaceRoot) return [];
+function captureBaselineState(workspaceRoot) {
+  if (!workspaceRoot) return { ok: false, files: [], error: 'workspace root is missing' };
   try {
-    const git = gitExecutable();
-    if (!git) return [];
+    const git = resolveGitExecutable();
+    if (!git) return { ok: false, files: [], error: 'Git executable was not found' };
     const result = spawnSync(git, ['status', '--short'], { cwd: workspaceRoot, encoding: 'utf8', timeout: 15000 });
-    if (result.status !== 0 || !result.stdout) return [];
-    return result.stdout
+    if (result.status !== 0) {
+      return { ok: false, files: [], error: String(result.stderr || result.stdout || `git status exited ${result.status}`).trim() };
+    }
+    const files = String(result.stdout || '')
       .split(/\r?\n/)
       .filter((line) => line && line.length > 3)
       .map((line) => {
@@ -57,23 +53,31 @@ function captureBaselineDirty(workspaceRoot) {
         return arrow >= 0 ? part.slice(arrow + 4).trim() : part;
       })
       .filter(Boolean);
+    return { ok: true, files, error: '' };
   } catch (error) {
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] baseline dirty capture:', error);
-    return [];
+    return { ok: false, files: [], error: error instanceof Error ? error.message : String(error) };
   }
 }
 
-function writeSessionPolicy(config, alias, { taskHint, workspaceRoot } = {}) {
+function captureBaselineDirty(workspaceRoot) {
+  return captureBaselineState(workspaceRoot).files;
+}
+
+function writeSessionPolicy(config, alias, { taskHint, workspaceRoot, taskId } = {}) {
   const filePath = sessionFilePath(config, alias);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  const baselineDirty = captureBaselineDirty(workspaceRoot);
+  const baseline = captureBaselineState(workspaceRoot);
   const now = new Date().toISOString();
   const data = {
     workspace: alias,
     createdAt: now,
     updatedAt: now,
+    baselineCaptured: baseline.ok,
+    baselineDirty: baseline.files,
+    ...(baseline.error ? { baselineCaptureError: baseline.error } : {}),
+    ...(taskId ? { taskId } : {}),
     ...(taskHint ? { taskHint } : {}),
-    ...(baselineDirty.length ? { baselineDirty } : {})
   };
   fs.writeFileSync(filePath, `${JSON.stringify(data, null, 2)}\n`, { mode: 0o600 });
 }
@@ -99,14 +103,15 @@ function touchSessionPolicy(config, alias) {
 // baseline so pre-existing dirty/untracked files are correctly fenced. If a valid
 // session already exists, just refresh its idle clock. Returns true if a new
 // session was started.
-function ensureSessionStarted(config, alias, workspaceRoot) {
+function ensureSessionStarted(config, alias, workspaceRoot, options = {}) {
   if (!alias) return false;
   const existing = readSessionPolicy(config, alias);
-  if (existing) {
+  const taskId = String(options.taskId || '').trim();
+  if (existing && (!taskId || existing.taskId === taskId)) {
     touchSessionPolicy(config, alias);
     return false;
   }
-  writeSessionPolicy(config, alias, { workspaceRoot });
+  writeSessionPolicy(config, alias, { workspaceRoot, taskId, taskHint: options.taskHint });
   return true;
 }
 
@@ -127,11 +132,14 @@ function resolvePolicy(workspace, config) {
   const session = readSessionPolicy(config, alias);
   if (session) {
     return {
-      trusted: true,
+      trusted: session.baselineCaptured === true,
       sessionActive: true,
       sessionCreatedAt: session.createdAt || null,
+      taskId: session.taskId || null,
       taskHint: session.taskHint || null,
       baselineDirty: Array.isArray(session.baselineDirty) ? session.baselineDirty : [],
+      baselineCaptured: session.baselineCaptured === true,
+      baselineCaptureError: session.baselineCaptureError || null,
       source: 'session_file'
     };
   }
@@ -139,10 +147,13 @@ function resolvePolicy(workspace, config) {
     trusted: true,
     sessionActive: false,
     sessionCreatedAt: null,
+    taskId: null,
     taskHint: null,
     baselineDirty: [],
+    baselineCaptured: false,
+    baselineCaptureError: null,
     source: 'default'
   };
 }
 
-module.exports = { resolvePolicy, writeSessionPolicy, touchSessionPolicy, ensureSessionStarted, clearSessionPolicy, readSessionPolicy, captureBaselineDirty, SESSION_IDLE_TTL_MS };
+module.exports = { resolvePolicy, writeSessionPolicy, touchSessionPolicy, ensureSessionStarted, clearSessionPolicy, readSessionPolicy, captureBaselineDirty, captureBaselineState, SESSION_IDLE_TTL_MS };

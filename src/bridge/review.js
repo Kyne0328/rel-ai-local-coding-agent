@@ -1,5 +1,6 @@
 const { runProcess, summarizeCommand } = require("../process");
-const { resolveSafePath } = require("../safety");
+const fs = require("node:fs");
+const { resolveSafePath, looksBinary } = require("../safety");
 const { classifyStatusOwnership } = require("../repo/gitOps");
 const { clampNumber } = require("./limits");
 
@@ -13,8 +14,13 @@ async function relaiDiff(workspace, config, args = {}) {
   if (filterPath) diffArgs.push("--", filterPath);
   const diff = await runProcess("git", diffArgs, { cwd: workspace.path, timeout: 60000 }, config);
   const maxBytes = clampNumber(args.maxBytes, 1000, 5 * 1024 * 1024, DEFAULT_MAX_DIFF_BYTES);
-  const diffText = diff.stdout || "";
+  let diffText = diff.stdout || "";
   const ownership = classifyStatusOwnership(workspace, config, stat.stdout || "");
+  if (!staged) {
+    const untracked = ownership.entries.filter(entry => entry.untracked).map(entry => entry.path);
+    const selected = filterPath ? untracked.filter(file => file === filterPath) : untracked;
+    diffText += buildUntrackedDiff(workspace, selected);
+  }
   return {
     ok: stat.exitCode === 0 && diff.exitCode === 0,
     workspace: workspace.alias,
@@ -29,10 +35,44 @@ async function relaiDiff(workspace, config, args = {}) {
     untrackedSessionFiles: ownership.untrackedSession,
     untrackedBaselineFiles: ownership.untrackedBaseline,
     ...(ownership.baselineSource ? { baselineSource: ownership.baselineSource } : {}),
-    diff: Buffer.byteLength(diffText, "utf8") > maxBytes ? diffText.slice(0, maxBytes) + `\n[rel-ai-mcp diff truncated at ${maxBytes} bytes]` : diffText,
+    diff: truncateDiff(diffText, maxBytes),
     exitCode: diff.exitCode,
     ...(diff.stderr ? { stderr: diff.stderr } : {})
   };
+}
+
+function truncateDiff(text, maxBytes) {
+  if (Buffer.byteLength(text, 'utf8') <= maxBytes) return text;
+  return Buffer.from(text, 'utf8').subarray(0, maxBytes).toString('utf8').replace(/\uFFFD+$/u, '') + `\n[rel-ai-mcp diff truncated at ${maxBytes} bytes]`;
+}
+
+function buildUntrackedDiff(workspace, paths) {
+  const sections = [];
+  for (const relativePath of paths) {
+    try {
+      const safe = resolveSafePath(workspace.path, relativePath);
+      const data = fs.readFileSync(safe.absolutePath);
+      if (looksBinary(data)) {
+        sections.push(`\ndiff --git a/${safe.relativePath} b/${safe.relativePath}\nnew file mode 100644\nBinary files /dev/null and b/${safe.relativePath} differ\n`);
+        continue;
+      }
+      const text = data.toString('utf8').replaceAll('\r\n', '\n');
+      const lines = text.endsWith('\n') ? text.slice(0, -1).split('\n') : text.split('\n');
+      sections.push([
+        '',
+        `diff --git a/${safe.relativePath} b/${safe.relativePath}`,
+        'new file mode 100644',
+        '--- /dev/null',
+        `+++ b/${safe.relativePath}`,
+        `@@ -0,0 +1,${lines.length} @@`,
+        ...lines.map(line => `+${line}`),
+        ''
+      ].join('\n'));
+    } catch (error) {
+      sections.push(`\n[rel-ai-mcp could not read untracked file ${relativePath}: ${error instanceof Error ? error.message : String(error)}]\n`);
+    }
+  }
+  return sections.join('');
 }
 
 async function relaiReset(workspace, config, args = {}) {

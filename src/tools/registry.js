@@ -152,7 +152,7 @@ const TOOL_DEFINITION_VALUES = [
     name: "relai_git_commit",
     title: "Record Commit",
     description: "Record a commit with an explicit message, with optional dry-run planning and path scoping.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"message":{"type":"string"},"dryRun":{"type":"boolean"},"addAll":{"type":"boolean"},"paths":{"type":"array","items":{"type":"string"},"minItems":0,"maxItems":200},"maxBytes":{"type":"number","minimum":1000,"maximum":5242880},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000}},"required":["workspace","message"],"additionalProperties":false},
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"message":{"type":"string"},"dryRun":{"type":"boolean"},"addAll":{"type":"boolean"},"allowSecretPaths":{"type":"boolean"},"paths":{"type":"array","items":{"type":"string"},"minItems":0,"maxItems":200},"maxBytes":{"type":"number","minimum":1000,"maximum":5242880},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000}},"required":["workspace","message"],"additionalProperties":false},
     annotations: {"readOnlyHint":true,"destructiveHint":false,"idempotentHint":true,"openWorldHint":false},
     handler: "gitCommit",
     connectorStrip: [],
@@ -209,8 +209,30 @@ const TOOL_DEFINITION_VALUES = [
     dashboard: {"category":"Workflow","requiredProfile":"workspace","requiresApproval":false}
   },
 ];
+const READ_ONLY_TOOLS = new Set([
+  'relai_repo_snapshot', 'relai_read', 'relai_diff', 'relai_status',
+  'relai_git_status', 'relai_git_create_pr'
+]);
+const DESTRUCTIVE_TOOLS = new Set([
+  'relai_write', 'relai_replace', 'relai_tidy_run', 'relai_restore_changes', 'relai_edit'
+]);
+const OPEN_WORLD_TOOLS = new Set(['relai_git_push']);
+
+function annotationsFor(name) {
+  const readOnly = READ_ONLY_TOOLS.has(name);
+  return {
+    readOnlyHint: readOnly,
+    destructiveHint: DESTRUCTIVE_TOOLS.has(name),
+    idempotentHint: readOnly,
+    openWorldHint: OPEN_WORLD_TOOLS.has(name)
+  };
+}
+
 /** @type {readonly ToolDefinition[]} */
-const TOOL_DEFINITIONS = Object.freeze(TOOL_DEFINITION_VALUES.map((definition) => Object.freeze(definition)));
+const TOOL_DEFINITIONS = Object.freeze(TOOL_DEFINITION_VALUES.map((definition) => Object.freeze({
+  ...definition,
+  annotations: annotationsFor(definition.name)
+})));
 const TOOL_DEFINITION_BY_NAME = new Map(TOOL_DEFINITIONS.map((definition) => [definition.name, definition]));
 
 /** @param {string} name @returns {ToolDefinition | null} */

@@ -46,12 +46,26 @@ function makeTempStateDir() {
   const workspace = { alias: 'myapp', path: stateDir };
   writeSessionPolicy(config, 'myapp', { taskHint: 'implement feature X' });
   const policy = resolvePolicy(workspace, config);
-  assert.equal(policy.trusted, true);
+  assert.equal(policy.trusted, false);
   assert.equal(policy.sessionActive, true, 'with session: sessionActive must be true');
+  assert.equal(policy.baselineCaptured, false);
   assert.equal(policy.taskHint, 'implement feature X', 'taskHint must be populated');
   assert.equal(policy.source, 'session_file', 'source must be session_file');
   assert.ok(typeof policy.sessionCreatedAt === 'string', 'sessionCreatedAt must be a string');
   assert.ok(/^\d{4}-\d{2}-\d{2}T/.test(policy.sessionCreatedAt), 'sessionCreatedAt must be ISO date string');
+  fs.rmSync(stateDir, { recursive: true, force: true });
+}
+
+// Failed baseline capture remains active for diagnostics but is never trusted.
+{
+  const stateDir = makeTempStateDir();
+  const config = { stateDir };
+  writeSessionPolicy(config, 'myapp', { workspaceRoot: path.join(stateDir, 'missing-workspace') });
+  const policy = resolvePolicy({ alias: 'myapp' }, config);
+  assert.equal(policy.sessionActive, true);
+  assert.equal(policy.baselineCaptured, false);
+  assert.equal(policy.trusted, false);
+  assert.ok(policy.baselineCaptureError);
   fs.rmSync(stateDir, { recursive: true, force: true });
 }
 

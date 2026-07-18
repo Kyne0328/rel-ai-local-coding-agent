@@ -68,6 +68,22 @@ assert.equal(completionTool.inputSchema.properties.summary.minLength, 1);
 assert.equal(completionTool.inputSchema.properties.summary.maxLength, 2000);
 assert.match(completionTool.description, /final relai_run_checks call succeeds/);
 
+const commitTool = definitions.find(definition => definition.name === 'relai_git_commit');
+assert.ok(commitTool.inputSchema.properties.allowSecretPaths, 'commit schema must expose the reviewed secret-path override');
+assert.deepEqual(definitions.find(definition => definition.name === 'relai_read').annotations, {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false
+});
+assert.deepEqual(definitions.find(definition => definition.name === 'relai_write').annotations, {
+  readOnlyHint: false,
+  destructiveHint: true,
+  idempotentHint: false,
+  openWorldHint: false
+});
+assert.equal(definitions.find(definition => definition.name === 'relai_git_push').annotations.openWorldHint, true);
+
 const groups = getToolGroups();
 assert.deepEqual(groups.workspace, expected);
 assert.equal(Object.hasOwn(groups, 'internal'), false);

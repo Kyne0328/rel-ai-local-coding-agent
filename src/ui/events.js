@@ -27,6 +27,12 @@ export function stopSSE() {
   emitState('stopped');
 }
 
+export function restartSSE(tokenFn) {
+  stopSSE();
+  _paused = false;
+  startSSE(tokenFn || _tokenFn);
+}
+
 export function isLive() { return _es !== null && _es.readyState === EventSource.OPEN; }
 
 function _handleVisibilityChange() {

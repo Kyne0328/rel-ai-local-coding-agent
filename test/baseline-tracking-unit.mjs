@@ -78,6 +78,7 @@ assert.deepEqual(captureBaselineDirty(''), []);
   const sessionFile = path.join(stateDir, 'sessions', 'myapp-policy.json');
   const data = JSON.parse(fs.readFileSync(sessionFile, 'utf8'));
   data.baselineDirty = ['old/generated.cmake', 'old/registrant.swift'];
+  data.baselineCaptured = true;
   fs.writeFileSync(sessionFile, JSON.stringify(data));
 
   const statusOutput = ' M old/generated.cmake\n M old/registrant.swift\n M lib/new_edit.dart\n?? new/untracked.dart\n';
@@ -117,6 +118,7 @@ assert.deepEqual(captureBaselineDirty(''), []);
   const sessionFile = path.join(stateDir, 'sessions', 'myapp-policy.json');
   const data = JSON.parse(fs.readFileSync(sessionFile, 'utf8'));
   data.baselineDirty = ['lib/old/zone_validator.dart'];
+  data.baselineCaptured = true;
   fs.writeFileSync(sessionFile, JSON.stringify(data));
   const status = 'R  lib/old/zone_validator.dart -> lib/new/schedule_validator.dart\n';
   const { sessionChanged, baselineChanged } = classifyStatusOwnership({ alias: 'myapp' }, config, status);

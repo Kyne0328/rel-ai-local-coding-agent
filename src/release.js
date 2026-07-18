@@ -5,6 +5,7 @@ const { runProcess, summarizeCommand } = require("./process");
 const { discoverCommands } = require("./commandDiscovery");
 const pkg = require("../package.json");
 const { getVersion } = require("./version");
+const { resolveGitExecutable } = require('./gitExecutable');
 
 function releaseReadiness(config, args = {}) {
   const findings = [];
@@ -150,6 +151,17 @@ const _commandExistsCache = new Map();
 function commandExists(command) {
   if (_commandExistsCache.has(command)) return _commandExistsCache.get(command);
   const isWindows = process.platform === "win32";
+  if (command === 'git') {
+    const executable = resolveGitExecutable();
+    const result = { command, ok: Boolean(executable), path: executable };
+    _commandExistsCache.set(command, result);
+    return result;
+  }
+  if (command === 'node') {
+    const result = { command, ok: Boolean(process.execPath), path: process.execPath };
+    _commandExistsCache.set(command, result);
+    return result;
+  }
   const lookup = isWindows ? "where" : "which";
   let result;
   try {
