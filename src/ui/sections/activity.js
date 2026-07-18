@@ -8,7 +8,7 @@ import { getRouteParams, getWorkspaceFilter, setWorkspaceFilter } from '../route
 
 let _allEntries = [];
 let _paused = false;
-let _filterState = { search: '', timeRange: '1h', workspace: '', tool: '', status: '' };
+let _filterState = { search: '', timeRange: '1h', workspace: '', tool: '', status: '', task: '' };
 let _virtualizer = null;
 let _mountToken = 0;
 
@@ -17,6 +17,10 @@ export function mountActivity(container) {
   const params = getRouteParams();
   _filterState.workspace = getWorkspaceFilter();
   _filterState.task = params.get('task') || '';
+  _filterState.tool = params.get('tool') || '';
+  _filterState.search = params.get('search') || '';
+  const requestedRange = String(params.get('time') || '').toLowerCase();
+  if (['15m', '1h', '24h', '7d', 'all'].includes(requestedRange)) _filterState.timeRange = requestedRange;
   _virtualizer?.destroy();
   _virtualizer = null;
   container.innerHTML = '';
@@ -167,10 +171,11 @@ function uniqueValues(entries, selector) {
 function replaceDynamicOptions(id, values, allLabel, selected) {
   const select = document.getElementById(id);
   if (!select) return;
+  const options = selected && !values.includes(selected) ? [selected, ...values] : values;
   select.innerHTML = '';
   select.appendChild(new Option(allLabel, ''));
-  for (const value of values) select.appendChild(new Option(value, value));
-  select.value = values.includes(selected) ? selected : '';
+  for (const value of options) select.appendChild(new Option(value, value));
+  select.value = selected || '';
 }
 
 function renderFilteredTable() {

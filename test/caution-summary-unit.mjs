@@ -42,13 +42,16 @@ function isoMinusHours(hours) {
 // 3. Caution entries inside window counted
 {
   writeEntries([
-    { ts: isoMinusHours(1), tool: 'relai_clear_files', workspace: 'a', cautionLevel: 'caution', cautionReason: 'cleared 3 files' },
+    { ts: isoMinusHours(1), tool: 'relai_clear_files', workspace: 'a', taskId: 'task-new', filePath: 'config.json', cautionLevel: 'caution', cautionReason: 'cleared 3 files' },
     { ts: isoMinusHours(2), tool: 'relai_apply_bundle', workspace: 'a', cautionLevel: 'caution', cautionReason: 'applied prepared bundle' }
   ]);
   const r = cautionSummary(config, { windowHours: 24 });
   assert.equal(r.workspaces.length, 1);
   assert.equal(r.workspaces[0].count, 2);
   assert.equal(r.workspaces[0].recent.length, 2);
+  assert.equal(r.workspaces[0].recent[0].taskId, 'task-new');
+  assert.equal(r.workspaces[0].recent[0].path, 'config.json');
+  assert.equal(r.workspaces[0].recent[0].reason, 'cleared 3 files');
   console.log('3. caution counted: OK');
 }
 

@@ -407,9 +407,10 @@ function cautionSummary(config, options = {}) {
   const windowHours = clampNumber(options.windowHours || 24, 1, 720);
   const limit = clampNumber(options.limit || 200, 1, 2000);
   const cutoffMs = Date.now() - windowHours * 3600000;
-  const entries = Array.isArray(options.entries)
+  const sourceEntries = Array.isArray(options.entries)
     ? options.entries.slice(-limit)
     : readAudit(config, { limit }).entries;
+  const entries = [...(sourceEntries || [])].sort((left, right) => Date.parse(right.ts || 0) - Date.parse(left.ts || 0));
   const byAlias = {};
   for (const e of entries || []) {
     if (e?.cautionLevel !== "caution") continue;
@@ -419,7 +420,13 @@ function cautionSummary(config, options = {}) {
     if (!byAlias[alias]) byAlias[alias] = { alias, count: 0, recent: [] };
     byAlias[alias].count += 1;
     if (byAlias[alias].recent.length < 5) {
-      byAlias[alias].recent.push({ tool: e.tool, ts: e.ts || null, reason: e.cautionReason || null });
+      byAlias[alias].recent.push({
+        tool: e.tool,
+        ts: e.ts || null,
+        reason: e.cautionReason || null,
+        taskId: e.taskId || null,
+        path: e.filePath || e.path || null
+      });
     }
   }
   return {

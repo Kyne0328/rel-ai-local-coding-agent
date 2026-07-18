@@ -19,6 +19,8 @@ restoreRoute();
 let _routerReady = false;
 let _lastEventAt = null;
 let _clockTimer = null;
+let _shellStatus = { label: 'Connecting', tone: 'warn' };
+let _liveState = 'connecting';
 
 function cleanLaunchQuery() {
   const clean = new URLSearchParams(location.search);
@@ -145,7 +147,8 @@ async function doRefresh(options = {}) {
   }
   setRefreshState('error');
   const message = data?.error || 'The dashboard could not reach the local Rel.AI service.';
-  setConnectionStatus(data?.status === 401 ? 'Authentication failed' : 'Disconnected', 'bad');
+  _shellStatus = { label: data?.status === 401 ? 'Authentication failed' : 'Disconnected', tone: 'bad' };
+  renderConnectionStatus();
   const updated = document.getElementById('lastUpdated');
   if (updated) updated.textContent = message;
   if (!_routerReady) renderDashboardState('error', data?.status === 401 ? 'Dashboard authentication failed.' : 'Rel.AI is not responding.', message);
@@ -185,12 +188,9 @@ async function liveOnEvent(data) {
 }
 
 function liveStateChange(detail) {
-  const live = document.getElementById('liveStatus');
-  if (!live) return;
-  const labels = { connecting: 'Connecting live', live: 'Live', reconnecting: 'Reconnecting', paused: 'Paused', stopped: 'Offline' };
-  live.textContent = labels[detail.state] || detail.state;
-  live.className = `status-pill live-state ${detail.state}`;
+  _liveState = detail.state || 'connecting';
   if (detail.lastEventAt) _lastEventAt = detail.lastEventAt;
+  renderConnectionStatus();
   ensureClock();
 }
 
@@ -201,7 +201,8 @@ function updateShell(data) {
   const presentation = shellPresentation(data?.ok !== false, task, workspaces.length, data?.desktopStatus);
   const subtitle = document.getElementById('subtitle');
   if (subtitle) subtitle.textContent = presentation.subtitle;
-  setConnectionStatus(presentation.label, presentation.tone);
+  _shellStatus = presentation;
+  renderConnectionStatus();
   updateWorkspaceScope();
   _lastEventAt ||= Date.parse(data.generatedAt || '') || Date.now();
   renderLastEventTime();
@@ -233,7 +234,7 @@ function shellPresentation(ok, task, workspaceCount, desktopStatus) {
   }
   return {
     subtitle: `${workspaceCount} ${pluralLabel(workspaceCount, 'workspace')} available to ChatGPT`,
-    label: 'Online',
+    label: 'Ready',
     tone: 'ok'
   };
 }
@@ -254,11 +255,22 @@ function updateWorkspaceScope() {
   select.value = workspaces.some(workspace => workspace.alias === selected) ? selected : '';
 }
 
-function setConnectionStatus(label, tone) {
-  const status = document.getElementById('serverStatus');
+function renderConnectionStatus() {
+  const status = document.getElementById('connectionStatus');
   if (!status) return;
-  status.className = `status-pill ${tone}`;
-  status.textContent = label;
+  let presentation = _shellStatus;
+  if (presentation.tone === 'ok') {
+    const liveStates = {
+      connecting: { label: 'Connecting', tone: 'warn' },
+      live: { label: 'Connected', tone: 'ok' },
+      reconnecting: { label: 'Reconnecting', tone: 'warn' },
+      paused: { label: 'Updates paused', tone: 'warn' },
+      stopped: { label: 'Offline', tone: 'bad' }
+    };
+    presentation = liveStates[_liveState] || presentation;
+  }
+  status.className = `status-pill ${presentation.tone}`;
+  status.textContent = presentation.label;
 }
 
 function ensureClock() {

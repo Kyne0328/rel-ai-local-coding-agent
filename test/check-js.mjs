@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const skip = new Set(['node_modules', '.git']);
+const skip = new Set(['node_modules', '.git', 'dist']);
 const files = [];
 
 function isJavaScriptFile(name) {

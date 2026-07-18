@@ -1,6 +1,5 @@
 import { pillHtml } from '../components/pill.js';
-import { toast } from '../components/toast.js';
-import { esc, metricHtml, timeAgo } from '../utils.js';
+import { esc, timeAgo } from '../utils.js';
 import { getWorkspaceFilter, routeHref } from '../router.js';
 
 export function mountHome(container, data) {
@@ -16,12 +15,10 @@ function buildOverview(data) {
   const allWorkspaces = Array.isArray(config.workspaces) ? config.workspaces : [];
   const workspaces = workspaceFilter ? allWorkspaces.filter(workspace => workspace.alias === workspaceFilter) : allWorkspaces;
   const tasks = (Array.isArray(data.tasks) ? data.tasks : []).filter(task => !workspaceFilter || task.workspace === workspaceFilter);
-  const audit = sortedAudit(data.auditTail?.entries).filter(entry => !workspaceFilter || entry.workspace === workspaceFilter);
   const findings = actionableFindings(health);
   const endpoint = String(connection.chatgptMcpUrl || '');
   const desktopStatus = data.desktopStatus || null;
   const effectiveEndpoint = desktopStatus && desktopStatus.tunnelStatus !== 'running' ? '' : endpoint;
-  const validationReady = workspaces.filter(hasValidation).length;
   const bridgeState = resolveBridgeState({ endpoint: effectiveEndpoint, workspaces, findings, desktopStatus });
 
   updateShell(data, workspaces.length);
@@ -30,21 +27,10 @@ function buildOverview(data) {
   root.className = 'section';
   const taskCard = taskActivityCard(data.taskActivity, tasks[0]);
   if (taskCard) root.appendChild(taskCard);
-  root.appendChild(connectionHero(bridgeState, effectiveEndpoint, connection, workspaces));
-  const desktopCard = desktopRuntimeCard(desktopStatus);
-  if (desktopCard) root.appendChild(desktopCard);
-
-  const metrics = document.createElement('div');
-  metrics.className = 'overview-grid overview-grid-compact';
-  metrics.innerHTML =
-    metricHtml('Workspaces', workspaces.length, 'repositories available to ChatGPT', workspaces.length ? 'blue' : 'warn') +
-    metricHtml('Validation', `${validationReady}/${workspaces.length}`, 'workspaces with detected or saved checks', validationReady === workspaces.length && workspaces.length ? 'good' : 'warn') +
-    metricHtml('Recent activity', audit.length, 'latest tool calls in the dashboard log', audit.length ? 'blue' : 'warn');
-  root.appendChild(metrics);
+  root.appendChild(connectionHero(bridgeState, effectiveEndpoint, workspaces));
 
   const attention = buildAttention(workspaces, findings, endpoint);
   if (attention.length) root.appendChild(attentionCard(attention));
-  if (!audit.some(entry => entry.ok !== false) && workspaces.length) root.appendChild(firstPromptCard(workspaces));
 
   const grid = document.createElement('div');
   grid.className = 'layout-grid';
@@ -111,15 +97,17 @@ function resolveBridgeState({ endpoint, workspaces, findings, desktopStatus }) {
   };
 }
 
-function connectionHero(state, endpoint, connection, workspaces) {
+function connectionHero(state, endpoint, workspaces) {
   const hero = document.createElement('section');
   const hasWorkspaces = workspaces.length > 0;
-  const primaryAction = endpoint
-    ? '<button class="primary" type="button" data-copy-mcp>Copy MCP endpoint</button>'
-    : '<a class="buttonlike primary" href="#settings/connector">Open connector settings</a>';
-  const secondaryRoute = hasWorkspaces ? routeHref('tasks') : routeHref('workspaces');
-  const secondaryLabel = hasWorkspaces ? 'View work sessions' : 'Add workspace';
-  const endpointClass = endpoint ? '' : 'empty';
+  let primaryAction = '<a class="buttonlike primary" href="#settings/connector">Set up connector</a>';
+  let secondaryAction = '<a class="buttonlike secondary" href="#workspaces">Manage workspaces</a>';
+  if (!hasWorkspaces) {
+    primaryAction = '<a class="buttonlike primary" href="#workspaces">Add workspace</a>';
+    secondaryAction = '<a class="buttonlike secondary" href="#settings/connector">Connector settings</a>';
+  } else if (endpoint) {
+    primaryAction = `<a class="buttonlike primary" href="${routeHref('tasks')}">Open work sessions</a>`;
+  }
   hero.className = `overview-hero ${state.tone}`;
   hero.innerHTML = `
     <div class="overview-copy">
@@ -128,71 +116,16 @@ function connectionHero(state, endpoint, connection, workspaces) {
       <p class="overview-description">${esc(state.description)}</p>
       <div class="overview-actions">
         ${primaryAction}
-        <a class="buttonlike secondary" href="${secondaryRoute}">${secondaryLabel}</a>
+        ${secondaryAction}
       </div>
-    </div>
-    <div class="overview-endpoint">
-      <div class="overview-endpoint-label">ChatGPT MCP endpoint</div>
-      <div class="overview-endpoint-value ${endpointClass}">${esc(endpoint || 'Waiting for a permanent HTTPS endpoint')}</div>
-      <div class="overview-meta">${esc(connection.tunnelMode || 'Cloud connection required')}</div>
     </div>`;
-
-  const copy = hero.querySelector('[data-copy-mcp]');
-  if (copy) {
-    copy.addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText(endpoint);
-        toast('ChatGPT MCP endpoint copied.', { variant: 'success' });
-      } catch {
-        toast('Clipboard access failed. Copy the endpoint manually.', { variant: 'error' });
-      }
-    });
-  }
   return hero;
-}
-
-function desktopRuntimeCard(status) {
-  if (!window.relaiDesktop || !status) return null;
-  const card = document.createElement('section');
-  const tunnel = status.tunnelStatus || 'stopped';
-  let tone = 'warn';
-  let tunnelLabel = 'Stopped';
-  if (tunnel === 'running') {
-    tone = 'ok';
-    tunnelLabel = 'Connected';
-  } else if (tunnel === 'connecting') {
-    tunnelLabel = 'Connecting';
-  } else if (tunnel === 'failed') {
-    tone = 'bad';
-    tunnelLabel = 'Failed';
-  }
-  card.className = 'card desktop-runtime-card';
-  card.innerHTML = `
-    <div class="card-head"><h3>Desktop service</h3><span class="status-pill ${tone}">${esc(tunnelLabel)}</span></div>
-    <div class="card-body connection-stack">
-      <div class="connection-facts">
-        <div class="connection-fact"><span class="connection-fact-label">Local service</span><span>${status.serverRunning ? 'Running' : 'Stopped'}</span></div>
-        <div class="connection-fact"><span class="connection-fact-label">Local address</span><code>${esc(status.localUrl || 'Not available')}</code></div>
-        <div class="connection-fact"><span class="connection-fact-label">Public tunnel</span><span>${esc(tunnelLabel)}</span></div>
-      </div>
-      ${status.error ? `<div class="connection-notice bad">${esc(status.error)}</div>` : ''}
-      <div class="connection-actions">
-        <button type="button" data-desktop-settings>Desktop settings</button>
-        <button class="secondary" type="button" data-desktop-restart>Restart connection</button>
-        <button class="secondary" type="button" data-desktop-recovery>Recovery details</button>
-        <button class="secondary" type="button" data-desktop-stop>Stop service</button>
-      </div>
-    </div>`;
-  card.querySelector('[data-desktop-settings]').onclick = () => window.relaiDesktop.openSettings();
-  card.querySelector('[data-desktop-restart]').onclick = () => window.relaiDesktop.restartService();
-  card.querySelector('[data-desktop-recovery]').onclick = () => window.relaiDesktop.openRecovery();
-  card.querySelector('[data-desktop-stop]').onclick = () => window.relaiDesktop.stopService();
-  return card;
 }
 
 function taskActivityCard(activity = {}, persistedTask = null) {
   const activeTasks = activeTaskList(activity);
   const active = activeTasks.length > 0;
+  if (!active && persistedTask?.status !== 'attention') return null;
   const task = active ? primaryActiveTask(activeTasks) : persistedTask || activity.lastTask;
   if (!task) return null;
   const card = document.createElement('section');
@@ -330,34 +263,6 @@ function attentionCard(items) {
   return card;
 }
 
-function firstPromptCard(workspaces) {
-  const alias = workspaces[0]?.alias || '<alias>';
-  const prompt = `Use Rel.AI MCP. Call relai_repo_snapshot for workspace "${alias}". Do not modify files yet.`;
-  const card = document.createElement('section');
-  card.className = 'card';
-  card.innerHTML = '<div class="card-head"><h3>Run a safe first task</h3><span class="section-action">paste into ChatGPT</span></div>';
-  const body = document.createElement('div');
-  body.className = 'card-body stack-tight';
-  const text = document.createElement('div');
-  text.className = 'first-prompt mono';
-  text.textContent = prompt;
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'secondary';
-  button.textContent = 'Copy first prompt';
-  button.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(prompt);
-      toast('First prompt copied.', { variant: 'success' });
-    } catch {
-      toast('Clipboard access failed.', { variant: 'error' });
-    }
-  });
-  body.append(text, button);
-  card.appendChild(body);
-  return card;
-}
-
 function workspaceSummaryCard(workspaces) {
   const card = document.createElement('section');
   card.className = 'card';
@@ -378,10 +283,10 @@ function workspaceSummaryCard(workspaces) {
 function recentTasksCard(tasks) {
   const card = document.createElement('section');
   card.className = 'card';
-  card.innerHTML = `<div class="card-head"><h3>Recent work sessions</h3><a class="section-action" href="${routeHref('tasks')}">View all</a></div>`;
+  card.innerHTML = `<div class="card-head"><h3>Latest work sessions</h3><a class="section-action" href="${routeHref('tasks')}">Open session history</a></div>`;
   const body = document.createElement('div');
   body.className = 'card-body';
-  body.innerHTML = tasks.slice(0, 8).map(task => {
+  body.innerHTML = tasks.slice(0, 5).map(task => {
     const status = recentTaskStatus(task.status);
     const endedAt = task.endedAt || task.completedAt;
     const time = endedAt ? timeAgo(endedAt) : 'now';
@@ -414,6 +319,3 @@ function actionableFindings(health) {
   return Array.isArray(health.findings) ? health.findings.filter(item => item.severity !== 'info') : [];
 }
 
-function sortedAudit(entries) {
-  return (Array.isArray(entries) ? [...entries] : []).sort((a, b) => Date.parse(b.ts || b.at || b.createdAt || 0) - Date.parse(a.ts || a.at || a.createdAt || 0));
-}

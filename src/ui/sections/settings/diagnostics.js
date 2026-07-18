@@ -1,5 +1,5 @@
 import { fetchJson } from '../../api.js';
-import { esc } from '../../utils.js';
+import { esc, timeAgo } from '../../utils.js';
 import { getWorkspaceFilter, routeHref } from '../../router.js';
 
 export function mountDiagnostics(container) {
@@ -25,8 +25,7 @@ async function loadDiagnostics(root) {
     ...aliasFindings(aliasCheck, workspace),
     ...connectionFindings(connection)
   ];
-  const caution = cautionFinding(cautionData, workspace);
-  if (caution) findings.push(caution);
+  findings.push(...cautionFindings(cautionData, workspace));
   const ordered = findings.toSorted((left, right) => severityRank(left.severity) - severityRank(right.severity));
   root.innerHTML = renderDiagnosticSummary(ordered);
 }
@@ -79,20 +78,37 @@ function connectionFindings(connection) {
   return findings;
 }
 
-function cautionFinding(cautionData, workspace) {
-  const count = (cautionData?.workspaces || [])
+function cautionFindings(cautionData, workspace) {
+  return (cautionData?.workspaces || [])
+    .filter(item => Number(item.count || 0) > 0)
     .filter(item => !workspace || item.alias === workspace)
-    .reduce((sum, item) => sum + Number(item.count || 0), 0);
-  if (!count) return null;
-  const changeLabel = count === 1 ? 'change' : 'changes';
-  return {
-    severity: 'info',
-    title: `${count} protected configuration ${changeLabel}`,
-    impact: 'Rel.AI recorded changes in a caution-sensitive area.',
-    recommendation: 'Review the affected tasks and confirm the resulting configuration.',
-    action: { label: 'Review tasks', href: routeHref('tasks', { workspace }) },
-    details: cautionData
-  };
+    .map(item => {
+      const alias = item.alias === '__unknown__' ? '' : item.alias;
+      const latest = Array.isArray(item.recent) ? item.recent[0] : null;
+      const count = Number(item.count || 0);
+      const params = { workspace: alias, time: activityTimeRange(cautionData.windowHours) };
+      if (latest?.tool) params.tool = latest.tool;
+      if (latest?.taskId) params.task = latest.taskId;
+      else if (latest?.path) params.search = latest.path;
+      return {
+        severity: 'info',
+        title: `Protected configuration ${count === 1 ? 'change' : 'changes'}${alias ? ` in ${alias}` : ''}`,
+        impact: `${count} recorded in the last ${cautionData.windowHours || 24} hours${latest?.tool ? `; latest: ${latest.tool} ${timeAgo(latest.ts)}` : ''}.`,
+        recommendation: 'Open the matching activity and confirm the change was expected.',
+        action: { label: 'Open matching activity', href: routeHref('activity', params) },
+        context: item.recent || [],
+        details: { windowHours: cautionData.windowHours, workspace: item }
+      };
+    });
+}
+
+function activityTimeRange(windowHours) {
+  const hours = Number(windowHours || 24);
+  if (hours <= 0.25) return '15m';
+  if (hours <= 1) return '1h';
+  if (hours <= 24) return '24h';
+  if (hours <= 168) return '7d';
+  return 'all';
 }
 
 function renderDiagnosticSummary(findings) {
@@ -150,10 +166,21 @@ function findingCard(finding) {
       <h3>${esc(finding.title)}</h3>
       <p><strong>Impact:</strong> ${esc(finding.impact)}</p>
       <p><strong>Recommended action:</strong> ${esc(finding.recommendation)}</p>
+      ${findingContext(finding.context)}
       <a class="buttonlike secondary compact-button" href="${esc(finding.action.href)}">${esc(finding.action.label)}</a>
-      <details><summary>Technical details</summary><pre>${esc(JSON.stringify(finding.details, null, 2))}</pre></details>
+      <details><summary>Raw event data</summary><pre>${esc(JSON.stringify(finding.details, null, 2))}</pre></details>
     </div>
   </article>`;
+}
+
+function findingContext(entries) {
+  if (!Array.isArray(entries) || !entries.length) return '';
+  return `<div class="diagnostic-context">${entries.map(entry => `
+    <div class="diagnostic-context-row">
+      <code>${esc(entry.tool || 'configuration change')}</code>
+      <span>${esc(timeAgo(entry.ts))}</span>
+      <small>${esc(entry.path || entry.reason || 'No additional context recorded.')}</small>
+    </div>`).join('')}</div>`;
 }
 
 function humanize(value) {

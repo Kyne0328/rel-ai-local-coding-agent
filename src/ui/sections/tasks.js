@@ -24,7 +24,7 @@ export function mountTasks(container, data = {}) {
     <div class="overview-grid overview-grid-compact">
       ${metricHtml('Running now', working, 'tool calls currently executing', working ? 'blue' : 'good')}
       ${metricHtml('Waiting', waiting, 'no active Rel.AI call', waiting ? 'warn' : 'good')}
-      ${metricHtml('Observed sessions', sessions.length, 'grouped by connector scope', 'blue')}
+      ${metricHtml('History loaded', sessions.length, 'grouped from the latest 200 tool events', 'blue')}
     </div>`;
 
   const card = document.createElement('section');

@@ -82,13 +82,14 @@ export function toggleControl(checked, onChange, { enabled = 'Enabled', disabled
   return control;
 }
 
-export function numberControl(value, onChange, { min = 0, max = 1000000 } = {}) {
+export function numberControl(value, onChange, { min = 0, max = 1000000, step = 1 } = {}) {
   const element = document.createElement('input');
   element.className = 'settings-number-control';
   element.type = 'number';
   element.value = value == null ? '' : value;
   element.min = String(min);
   element.max = String(max);
+  element.step = String(step);
   element.addEventListener('input', () => onChange(Number(element.value)));
   return element;
 }

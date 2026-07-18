@@ -1,6 +1,6 @@
 @layer dashboard-interactions {
-  button[data-state="success"] { color: var(--green); border-color: rgba(79,224,154,.32); background: var(--green-dim); }
-  button[data-state="error"] { color: var(--red); border-color: rgba(255,111,136,.32); background: var(--red-dim); }
+  button[data-state="success"] { color: var(--green); border-color: color-mix(in srgb, var(--green) 38%, transparent); background: var(--green-dim); }
+  button[data-state="error"] { color: var(--red); border-color: color-mix(in srgb, var(--red) 38%, transparent); background: var(--red-dim); }
 
   .nav a, .mobile-nav a {
     display: flex;
@@ -53,7 +53,7 @@
   .settings-save-row { margin-top: 14px; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
   .settings-summary { padding: var(--space-3); text-align: left; line-height: 1.55; }
   .settings-summary strong { color: var(--text); }
-  .settings-warning { border-color: rgba(90,166,255,.35); background: var(--blue-dim); }
+  .settings-warning { border-color: color-mix(in srgb, var(--accent) 40%, transparent); background: var(--accent-dim); }
 
   .settings-panel-intro {
     display: grid;
@@ -70,7 +70,7 @@
   .tools-search { width: min(320px, 100%); min-height: 36px; }
   .tools-filters { display: flex; flex-wrap: wrap; gap: 6px; }
   .tools-filter { min-height: 32px; padding-inline: 12px; font-size: var(--font-12); }
-  .tools-filter.active { color: var(--accent); border-color: rgba(90,166,255,.28); background: var(--blue-dim); }
+  .tools-filter.active { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 34%, transparent); background: var(--accent-dim); }
   .tools-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: var(--space-3); }
   .tool-card {
     min-width: 0;
@@ -83,7 +83,7 @@
     background: var(--surface);
     box-shadow: var(--elev-1);
   }
-  .tool-card:hover { border-color: rgba(90,166,255,.28); box-shadow: var(--elev-2); }
+  .tool-card:hover { border-color: color-mix(in srgb, var(--accent) 34%, transparent); box-shadow: var(--elev-2); }
   .tool-card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
   .tool-capability { color: var(--accent); font-size: var(--font-11); font-weight: var(--weight-bold); letter-spacing: var(--track-wide); text-transform: uppercase; }
   .tool-parameter-count { color: var(--text-dim); font-size: var(--font-11); }
@@ -167,7 +167,7 @@
       font-size: 10px;
       text-decoration: none;
     }
-    .mobile-nav a.active { color: var(--text); background: var(--blue-dim); }
+    .mobile-nav a.active { color: var(--text); background: var(--accent-dim); }
     .mobile-nav .nav-icon { width: 19px; height: 19px; }
     .mobile-nav .nav-label { display: block; width: 100%; }
     #lastUpdated { display: none; }

@@ -63,7 +63,7 @@
     to   { opacity: 1; transform: translateY(0); }
   }
   @keyframes pulse-ring {
-    0%   { box-shadow: 0 0 0 0 var(--pulse-color, rgba(79,224,154,.5)); }
+    0%   { box-shadow: 0 0 0 0 var(--pulse-color, color-mix(in srgb, var(--green) 50%, transparent)); }
     70%  { box-shadow: 0 0 0 6px rgba(0,0,0,0); }
     100% { box-shadow: 0 0 0 0 rgba(0,0,0,0); }
   }
