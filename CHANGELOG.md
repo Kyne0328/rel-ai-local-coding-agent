@@ -10,6 +10,7 @@
 - **Improve review and repository boundaries.** Untracked file contents are included in review diffs, safe replacements preserve file permissions where supported, literal escaped newlines remain unchanged, runtime state directories are excluded from snapshots, and managed ngrok accepts only the configured public domain.
 - **Make session tool events directly inspectable.** Persisted events in the Sessions drawer now link to the matching Activity entry, preserve workspace and task filters, highlight the selected row, and open its exact detail drawer with packaged Electron interaction coverage.
 - **Keep validation comprehensive without redundant execution.** Standard validation follows transitive npm-script aliases instead of rerunning covered checks, MCP smoke tests share one process harness, overlapping validation-strategy suites are consolidated into a single table plus Git integration test, and the complete gate passes all 62 focused test files.
+- **Align CI with supported Node.js releases.** The required test matrix now covers Node.js 22 and 24 LTS, removes end-of-life Node.js 18 and 20 jobs, and declares Node.js 22.13 as the minimum supported runtime to match the current toolchain.
 
 Bump root/electron/status UI/lockfiles to 0.19.8.
 

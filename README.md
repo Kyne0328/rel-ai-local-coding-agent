@@ -184,6 +184,8 @@ The important design choice: ChatGPT does the thinking, but the local bridge kee
 
 ## Install
 
+Requires Node.js 22.13 or newer. CI tests the supported Node.js 22 and 24 LTS lines.
+
 ```bash
 npm install
 ```

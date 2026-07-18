@@ -8,6 +8,21 @@ const scripts = packageJson.scripts || {};
 const ciDir = path.join(root, '.github', 'workflows');
 const failures = [];
 
+if (packageJson.engines?.node !== '>=22.13.0') {
+  failures.push(`package.json must declare the supported Node.js minimum as >=22.13.0; got ${packageJson.engines?.node || 'none'}`);
+}
+
+const ciWorkflowPath = path.join(ciDir, 'ci.yml');
+if (fs.existsSync(ciWorkflowPath)) {
+  const ciWorkflow = fs.readFileSync(ciWorkflowPath, 'utf8');
+  if (!/node-version:\s*\[22,\s*24\]/.test(ciWorkflow)) {
+    failures.push('CI must test the supported Node.js 22 and 24 LTS lines.');
+  }
+  if (/node-version:\s*\[[^\]]*\b(?:18|20)\b/.test(ciWorkflow)) {
+    failures.push('CI must not block updates on end-of-life Node.js 18 or 20 jobs.');
+  }
+}
+
 function walk(dir) {
   if (!fs.existsSync(dir)) return [];
   const out = [];
