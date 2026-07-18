@@ -36,6 +36,13 @@ function walk(dir) {
 
 for (const file of walk(ciDir)) {
   const text = fs.readFileSync(file, 'utf8');
+  for (const match of text.matchAll(/uses:\s*actions\/(checkout|setup-node)@v(\d+)/g)) {
+    const [, action, majorText] = match;
+    const major = Number(majorText);
+    if (major < 5) {
+      failures.push(`${path.relative(root, file)} uses actions/${action}@v${major}, which still targets deprecated Node.js 20.`);
+    }
+  }
   for (const match of text.matchAll(/npm\s+run\s+([A-Za-z0-9:_-]+)/g)) {
     const script = match[1];
     if (!scripts[script]) {
