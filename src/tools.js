@@ -45,7 +45,7 @@ async function callTool(name, args = {}, context = {}) {
       operation: describeToolOperation(name, args || {})
     });
     maybeStartSession(config, name, args || {});
-    const value = await runWithToolActivity(finishActivity, () => dispatchTool(config, name, args || {}));
+    const value = await runWithToolActivity(finishActivity, () => dispatchTool(config, name, args || {}, { connector }));
     const extraAudit = buildExtraAudit(name, value, args || {});
     applyCautionAudit(extraAudit, name, args || {}, value, config);
     invalidateSessionCacheForCall(config, name, args || {});

@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const crypto = require("node:crypto");
 const {
   collectTextFiles,
   collectOptionsFromWorkspace,
@@ -70,24 +71,26 @@ function repoSnapshot(workspace, config, args = {}) {
   };
 }
 
-function relaiRead(workspace, config, args = {}) {
+function relaiRead(workspace, config, args = {}, context = {}) {
   const paths = Array.isArray(args.paths) ? args.paths : [];
   if (paths.length === 0) throw new Error("paths must contain at least one path.");
   const policy = resolvePolicy(workspace, config || {});
   const sessionActive = policy?.sessionActive === true;
   const defaultMaxBytes = resolveBudget(DEFAULT_MAX_READ_BYTES, policy, config || {});
   const maxBytes = clampNumber(args.maxBytes, 1000, 10 * 1024 * 1024, defaultMaxBytes);
+  const lineRange = normalizeReadLineRange(args);
+  const guidanceMode = normalizeReadGuidanceMode(args.guidanceMode, context.connector ? "compact" : "full");
   const items = [];
   const skipped = [];
   for (const requested of paths) {
-    const result = readSingleItem(workspace, config, requested, sessionActive, maxBytes, args);
+    const result = readSingleItem(workspace, config, requested, sessionActive, maxBytes, args, { lineRange, guidanceMode });
     if (result.item) items.push(result.item);
     if (result.skipped) skipped.push(result.skipped);
   }
   return { ok: true, workspace: workspace.alias, items, skipped };
 }
 
-function readSingleItem(workspace, config, requested, sessionActive, maxBytes, args) {
+function readSingleItem(workspace, config, requested, sessionActive, maxBytes, args, options) {
   try {
     const safe = resolveSafePath(workspace.path, requested);
     const stat = fs.statSync(safe.absolutePath);
@@ -96,19 +99,22 @@ function readSingleItem(workspace, config, requested, sessionActive, maxBytes, a
         ? { item: readDirectory(workspace, safe.relativePath, args) }
         : { skipped: { path: String(requested), reason: "not a file or directory" } };
     }
-    const { data, text, cacheHit } = readTextContent(workspace, safe, stat, sessionActive);
-    if (data === null) {
+    const { data, text, cacheHit, sha256 } = readTextContent(workspace, safe, stat, sessionActive);
+    if (data === null && !cacheHit) {
       return { skipped: { path: safe.relativePath, reason: "binary-looking file" } };
     }
-    const byteLen = Buffer.byteLength(text, "utf8");
-    const truncated = byteLen > maxBytes;
+    const selection = selectReadContent(text, options.lineRange, maxBytes);
     const item = {
-      type: "file", path: safe.relativePath,
-      sha256: fileSha256(workspace.path, safe.relativePath),
-      bytes: data ? data.length : byteLen,
-      lineCount: countLines(text), truncated,
-      writeGuidance: fileWriteGuidance(safe.relativePath, text),
-      content: truncated ? text.slice(0, maxBytes) : text,
+      type: "file",
+      path: safe.relativePath,
+      sha256,
+      bytes: stat.size,
+      returnedBytes: selection.returnedBytes,
+      lineCount: selection.totalLines,
+      truncated: selection.truncated,
+      ...(selection.lineRange ? { lineRange: selection.lineRange } : {}),
+      ...readGuidanceFields(options.guidanceMode, safe.relativePath, text),
+      content: selection.content,
       ...(sessionActive ? { cacheHit } : {})
     };
     return { item };
@@ -119,16 +125,103 @@ function readSingleItem(workspace, config, requested, sessionActive, maxBytes, a
 
 function readTextContent(workspace, safe, stat, sessionActive) {
   if (sessionActive) {
-    const cached = sessionCache.getCachedRead(workspace.alias, safe.absolutePath, stat.mtimeMs);
-    if (cached !== null) return { data: null, text: cached, cacheHit: true };
+    const cached = sessionCache.getCachedReadEntry(workspace.alias, safe.absolutePath, stat.mtimeMs);
+    if (cached !== null) {
+      return {
+        data: null,
+        text: cached.content,
+        cacheHit: true,
+        sha256: cached.sha256 || sha256Text(cached.content)
+      };
+    }
   }
   const data = fs.readFileSync(safe.absolutePath);
-  if (looksBinary(data)) return { data: null, text: "", cacheHit: false };
+  if (looksBinary(data)) return { data: null, text: "", cacheHit: false, sha256: null };
   const text = data.toString("utf8");
+  const sha256 = sha256Buffer(data);
   if (sessionActive) {
-    sessionCache.setCachedRead(workspace.alias, safe.absolutePath, stat.mtimeMs, text);
+    sessionCache.setCachedRead(workspace.alias, safe.absolutePath, stat.mtimeMs, text, { sha256, bytes: data.length });
   }
-  return { data, text, cacheHit: false };
+  return { data, text, cacheHit: false, sha256 };
+}
+
+function normalizeReadLineRange(args = {}) {
+  const startLine = optionalPositiveInteger(args.startLine, "startLine");
+  const endLine = optionalPositiveInteger(args.endLine, "endLine");
+  if (startLine != null && endLine != null && endLine < startLine) {
+    throw new Error("relai_read endLine must be greater than or equal to startLine.");
+  }
+  return startLine == null && endLine == null ? null : { startLine: startLine || 1, endLine };
+}
+
+function optionalPositiveInteger(value, label) {
+  if (value == null || value === "") return null;
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 1 || number > 10000000) {
+    throw new Error(`relai_read ${label} must be a positive integer no greater than 10000000.`);
+  }
+  return number;
+}
+
+function normalizeReadGuidanceMode(value, fallback) {
+  const mode = String(value || fallback || "full").trim().toLowerCase();
+  if (!["full", "compact", "none"].includes(mode)) {
+    throw new Error("relai_read guidanceMode must be one of: full, compact, none.");
+  }
+  return mode;
+}
+
+function selectReadContent(text, requestedRange, maxBytes) {
+  const totalLines = countLines(text);
+  let selected = text;
+  let lineRange = null;
+  if (requestedRange) {
+    const startLine = requestedRange.startLine || 1;
+    const requestedEndLine = requestedRange.endLine || totalLines;
+    const endLine = Math.min(requestedEndLine, totalLines);
+    selected = sliceLines(text, startLine, endLine, totalLines);
+    lineRange = {
+      startLine,
+      endLine: startLine <= endLine ? endLine : startLine - 1,
+      totalLines
+    };
+  }
+  const selectedBytes = Buffer.byteLength(selected, "utf8");
+  const truncated = selectedBytes > maxBytes;
+  const content = truncated ? truncateUtf8(selected, maxBytes) : selected;
+  return {
+    content,
+    returnedBytes: Buffer.byteLength(content, "utf8"),
+    totalLines,
+    truncated,
+    lineRange
+  };
+}
+
+function sliceLines(text, startLine, endLine, totalLines) {
+  if (!text || totalLines === 0 || startLine > totalLines || endLine < startLine) return "";
+  const starts = [0];
+  for (let index = 0; index < text.length; index += 1) {
+    if (text.charCodeAt(index) === 10) starts.push(index + 1);
+  }
+  const startOffset = starts[startLine - 1];
+  const endOffset = endLine < totalLines ? starts[endLine] : text.length;
+  return text.slice(startOffset, endOffset);
+}
+
+function truncateUtf8(text, maxBytes) {
+  const buffer = Buffer.from(text, "utf8");
+  if (buffer.length <= maxBytes) return text;
+  return buffer.subarray(0, maxBytes).toString("utf8").replace(/\uFFFD+$/u, "");
+}
+
+function readGuidanceFields(mode, relativePath, text) {
+  if (mode === "none") return {};
+  if (mode === "full") return { writeGuidance: fileWriteGuidance(relativePath, text) };
+  const shape = analyzeFileShape(relativePath, text);
+  return shape.reasons.length
+    ? { writeHint: "Large or interpolation-heavy file — prefer relai_edit with oldText/newText over a full rewrite." }
+    : {};
 }
 
 const WRITE_STAGE_HANDLERS = {
@@ -587,19 +680,23 @@ function workspaceWriteGuidance(config) {
   };
 }
 
-function fileWriteGuidance(relativePath, text) {
+function analyzeFileShape(relativePath, text) {
   const bytes = Buffer.byteLength(text, "utf8");
   const lineCount = countLines(text);
   const ext = path.extname(relativePath).toLowerCase();
   const isSourceLike = SOURCE_LIKE_EXTENSIONS.has(ext);
   const interpolationMarkers = countMatches(text, /\$\{|\{\{/g);
   const reasons = [];
-
   if (bytes >= STAGED_WRITE_BYTE_THRESHOLD) reasons.push(`file is ${bytes} bytes`);
   if (lineCount >= STAGED_WRITE_LINE_THRESHOLD) reasons.push(`file has ${lineCount} lines`);
   if (isSourceLike && (interpolationMarkers >= 4 || (interpolationMarkers >= 1 && bytes >= 4000))) {
     reasons.push(`source contains dense template/interpolation syntax (${interpolationMarkers} markers)`);
   }
+  return { bytes, lineCount, ext, interpolationMarkers, reasons };
+}
+
+function fileWriteGuidance(relativePath, text) {
+  const { bytes, lineCount, ext, interpolationMarkers, reasons } = analyzeFileShape(relativePath, text);
 
   if (reasons.length) {
     return {
@@ -708,8 +805,12 @@ function countLines(text) {
   return String(text).split(/\r?\n/).length;
 }
 
+function sha256Buffer(buffer) {
+  return crypto.createHash("sha256").update(buffer).digest("hex");
+}
+
 function sha256Text(text) {
-  return require("node:crypto").createHash("sha256").update(String(text), "utf8").digest("hex");
+  return crypto.createHash("sha256").update(String(text), "utf8").digest("hex");
 }
 
 module.exports = {

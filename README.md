@@ -258,7 +258,7 @@ Rel.AI exposes one 17-tool workspace surface. `relai_edit` is the primary write 
 | Tool | Purpose |
 | --- | --- |
 | `relai_repo_snapshot` | Return a filtered project snapshot, manifests, discovered checks, context hints, and size-based write guidance. |
-| `relai_read` | Read focused files or directory summaries and return file-level write guidance. |
+| `relai_read` | Read focused files or directory summaries. Optional `startLine`/`endLine` returns only the needed line range; `guidanceMode` controls full, compact, or omitted write guidance. |
 | `relai_edit` | The primary edit tool. Pass `oldText`+`newText` for exact edits, `content` for full-file writes (large files chunk automatically), `updateText` for unified-diff changes, or `edits: [...]` for a batch — plus `runChecks` / `returnDiff` to validate and review in one call. |
 | `relai_write` | Fallback: replace one complete file with full-file content (direct or staged mode). |
 | `relai_replace` | Fallback: small exact text replacements inside an existing file. |
@@ -327,7 +327,7 @@ Use this guide together with the `writeGuidance` returned by `relai_repo_snapsho
 | Situation | Use |
 | --- | --- |
 | Need a repository overview | `relai_repo_snapshot` |
-| Need focused file content | `relai_read` |
+| Need focused file content | `relai_read`; add `startLine` / `endLine` for large files |
 | Small localized edit inside an existing file | `relai_edit` with `oldText`/`newText` |
 | Complete replacement of a file (any size) | `relai_edit` with `content` |
 | Multi-file patch-shaped change | `relai_edit` with `updateText` |
@@ -344,6 +344,8 @@ Typical loop:
 ```text
 inspect -> read -> change -> final validation -> relai_complete_task
 ```
+
+For large files, request only the relevant lines when possible, for example `{ "workspace": "myapp", "paths": ["src/server.js"], "startLine": 120, "endLine": 220 }`. Connector reads use compact guidance by default; pass `guidanceMode: "none"` when only content and metadata are needed.
 
 For large or interpolation-heavy files, prefer `relai_edit` with `oldText`/`newText` for focused edits. Use `content` only when the entire file genuinely needs replacement. For multi-file patch-shaped changes or tracked-file deletion, use `relai_edit` with `updateText`.
 

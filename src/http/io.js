@@ -120,19 +120,53 @@ function setBaseHeaders(req, res, options = {}) {
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
 }
 
+const configuredMinGzipBytes = Number(process.env.REL_AI_MCP_MIN_GZIP_BYTES || 2048);
+const MIN_GZIP_BYTES = Number.isFinite(configuredMinGzipBytes) ? Math.max(0, configuredMinGzipBytes) : 2048;
+
+function acceptsGzip(acceptEncoding = "") {
+  return String(acceptEncoding)
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .some((value) => value.startsWith("gzip") && !/;\s*q=0(?:\.0+)?(?:\s*;|$)/.test(value));
+}
+
+function mergedVaryHeader(res, value) {
+  const values = String(res.getHeader("Vary") || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (!values.some((item) => item.toLowerCase() === value.toLowerCase())) values.push(value);
+  return values.join(", ");
+}
+
 function sendJson(res, status, payload, ae = "") {
   if (res.headersSent) return;
-  const json = `${JSON.stringify(payload)}\n`;
-  if (ae.includes("gzip")) {
-    try {
-      const compressed = zlib.gzipSync(Buffer.from(json, "utf8"), { level: 6 });
-      res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Content-Encoding": "gzip", "Vary": "Accept-Encoding" });
-      res.end(compressed);
-      return;
-    } catch { /* gzip failed; fall through to uncompressed response */ }
+  const body = Buffer.from(`${JSON.stringify(payload)}\n`, "utf8");
+  const compressible = body.length >= MIN_GZIP_BYTES;
+  const headers = {
+    "Content-Type": "application/json; charset=utf-8",
+    ...(compressible ? { "Vary": mergedVaryHeader(res, "Accept-Encoding") } : {})
+  };
+  if (!compressible || !acceptsGzip(ae)) {
+    res.writeHead(status, { ...headers, "Content-Length": body.length });
+    res.end(body);
+    return;
   }
-  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
-  res.end(json);
+
+  zlib.gzip(body, { level: 4 }, (error, compressed) => {
+    if (res.headersSent || res.destroyed) return;
+    if (error) {
+      res.writeHead(status, { ...headers, "Content-Length": body.length });
+      res.end(body);
+      return;
+    }
+    res.writeHead(status, {
+      ...headers,
+      "Content-Encoding": "gzip",
+      "Content-Length": compressed.length
+    });
+    res.end(compressed);
+  });
 }
 
 function sendHtml(res, status, html, headers = {}) {

@@ -45,6 +45,9 @@ try {
   assert.ok(state.branch);
   assert.equal(state.lastValidation.status, 'passed');
   assert.equal(state.currentActivity.state, 'working');
+
+  const refreshed = buildWorkspaceStates(config, tasks, { state: 'working', workspace: 'repo', tool: 'relai_edit', startedAt: Date.now() });
+  assert.equal(refreshed.repo.currentActivity.tool, 'relai_edit', 'dynamic activity must not be frozen by the Git-state cache');
 } finally {
   fs.rmSync(sandbox, { recursive: true, force: true });
 }

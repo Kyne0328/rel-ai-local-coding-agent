@@ -3,20 +3,35 @@ const MAX_BYTES_PER_ENTRY = 1024 * 1024;
 
 const cache = new Map();
 
-function getCachedRead(alias, absPath, currentMtimeMs) {
+function getCachedReadEntry(alias, absPath, currentMtimeMs) {
   const key = `${alias}::${absPath}`;
   const entry = cache.get(key);
   if (!entry) return null;
   if (entry.mtimeMs !== currentMtimeMs) { cache.delete(key); return null; }
   entry.lastAccessMs = Date.now();
-  return entry.content;
+  return {
+    content: entry.content,
+    sha256: entry.sha256 || null,
+    bytes: entry.sourceBytes ?? entry.bytes
+  };
 }
 
-function setCachedRead(alias, absPath, mtimeMs, content) {
+function getCachedRead(alias, absPath, currentMtimeMs) {
+  return getCachedReadEntry(alias, absPath, currentMtimeMs)?.content ?? null;
+}
+
+function setCachedRead(alias, absPath, mtimeMs, content, metadata = {}) {
   const bytes = Buffer.byteLength(String(content || ''), 'utf8');
   if (bytes > MAX_BYTES_PER_ENTRY) return;
   const key = `${alias}::${absPath}`;
-  cache.set(key, { mtimeMs, content, lastAccessMs: Date.now(), bytes });
+  cache.set(key, {
+    mtimeMs,
+    content,
+    sha256: metadata.sha256 || null,
+    sourceBytes: Number.isFinite(metadata.bytes) ? metadata.bytes : bytes,
+    lastAccessMs: Date.now(),
+    bytes
+  });
   if (cache.size > MAX_ENTRIES) evictLru();
 }
 
@@ -46,4 +61,4 @@ function evictLru() {
   if (oldestKey) cache.delete(oldestKey);
 }
 
-module.exports = { getCachedRead, setCachedRead, invalidatePath, invalidateAlias, invalidateAll, cacheStats };
+module.exports = { getCachedRead, getCachedReadEntry, setCachedRead, invalidatePath, invalidateAlias, invalidateAll, cacheStats };

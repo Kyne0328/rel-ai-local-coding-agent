@@ -19,8 +19,8 @@ const TOOL_DEFINITION_VALUES = [
   {
     name: "relai_read",
     title: "Read Local Repo Paths",
-    description: "Read-only. Batch-read files or directory summaries from the workspace.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"paths":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":100},"maxBytes":{"type":"number","minimum":1000,"maximum":10485760},"maxEntries":{"type":"number","minimum":1,"maximum":20000}},"required":["workspace","paths"],"additionalProperties":false},
+    description: "Read-only. Batch-read files or directory summaries. Use startLine/endLine for a bounded line range. guidanceMode accepts full, compact, or none.",
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"paths":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":100},"maxBytes":{"type":"number","minimum":1000,"maximum":10485760},"maxEntries":{"type":"number","minimum":1,"maximum":20000},"startLine":{"type":"number","minimum":1,"maximum":10000000},"endLine":{"type":"number","minimum":1,"maximum":10000000},"guidanceMode":{"type":"string","enum":["full","compact","none"]}},"required":["workspace","paths"],"additionalProperties":false},
     annotations: {"readOnlyHint":true,"destructiveHint":false,"idempotentHint":true,"openWorldHint":false},
     handler: "read",
     connectorStrip: [],

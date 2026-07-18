@@ -11,10 +11,12 @@ const { safeReadJson, validateRelativePath } = require("./safety");
 
 function dashboardData(config, args = {}) {
   const limit = clampNumber(args.limit || 100, 1, 500);
-  const auditTail = readAudit(config, { limit: Math.min(limit, 200) });
+  const auditLimit = Math.min(limit, 200);
+  const auditSource = readAudit(config, { limit: Math.max(auditLimit, 500) });
+  const auditTail = { ...auditSource, entries: auditSource.entries.slice(-auditLimit) };
   const health = healthMonitor(config, { limit: 25 });
   const configSummary = publicConfigSummary(config);
-  const cs = cautionSummary(config, { windowHours: 24, limit: 500 });
+  const cs = cautionSummary(config, { windowHours: 24, limit: 500, entries: auditSource.entries });
   const cautionByAlias = new Map(cs.workspaces.map((w) => [w.alias, w]));
   if (Array.isArray(configSummary.workspaces)) {
     for (const ws of configSummary.workspaces) {
@@ -405,7 +407,9 @@ function cautionSummary(config, options = {}) {
   const windowHours = clampNumber(options.windowHours || 24, 1, 720);
   const limit = clampNumber(options.limit || 200, 1, 2000);
   const cutoffMs = Date.now() - windowHours * 3600000;
-  const { entries } = readAudit(config, { limit });
+  const entries = Array.isArray(options.entries)
+    ? options.entries.slice(-limit)
+    : readAudit(config, { limit }).entries;
   const byAlias = {};
   for (const e of entries || []) {
     if (e?.cautionLevel !== "caution") continue;

@@ -30,7 +30,7 @@ function pruneEmpty(obj) {
 // Compact a tool result for the ChatGPT connector surface. Keeps everything the
 // model needs to decide what to do next; strips internal telemetry, always-default
 // policy objects, duplicated arrays, and verbose raw-status blobs.
-function compactForConnector(name, value, _args) {
+function compactForConnector(name, value, args = {}) {
   if (!value || typeof value !== "object") return value;
   switch (name) {
     case "relai_read": {
@@ -42,10 +42,12 @@ function compactForConnector(name, value, _args) {
         if (!item || typeof item !== "object") return item;
         const guidance = item.writeGuidance;
         const next = { ...item };
-        delete next.writeGuidance;
         delete next.cacheHit; // debug metadata; audited server-side already
-        if (guidance?.recommendedMode === "exact-replace") {
-          next.writeHint = "Large or interpolation-heavy file — prefer relai_edit with oldText/newText over a full rewrite.";
+        if (String(args.guidanceMode || "").toLowerCase() !== "full") {
+          delete next.writeGuidance;
+          if (guidance?.recommendedMode === "exact-replace") {
+            next.writeHint = "Large or interpolation-heavy file — prefer relai_edit with oldText/newText over a full rewrite.";
+          }
         }
         return next;
       });

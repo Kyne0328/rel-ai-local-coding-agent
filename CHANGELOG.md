@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.19.7] — 2026-07-18
+
+### HTTP, dashboard, and MCP read performance
+- **Move dynamic JSON compression off the main thread.** Large responses now use asynchronous level-4 gzip above a configurable size threshold, respect `gzip;q=0`, preserve cache-variant headers, and leave small responses uncompressed.
+- **Remove redundant dashboard work during startup and live updates.** The dashboard uses its embedded bootstrap state without immediately refetching it, SSE begins with a lightweight readiness event, repeated audit parsing is consolidated, and expensive workspace Git state is briefly cached while live task activity remains current.
+- **Add bounded MCP file reads.** `relai_read` now accepts `startLine` and `endLine`, reports the returned range and byte count, and truncates UTF-8 content without returning broken characters.
+- **Eliminate duplicate file I/O and repeated hashing.** File SHA-256 values are calculated from the already-read buffer, and active-session cache entries retain digest and source-size metadata for subsequent reads.
+- **Reduce connector payload size before serialization.** Connector reads default to compact write guidance, support explicit `full`, `compact`, or `none` modes, and retain compatibility for clients that need the complete guidance object.
+- **Fix cached text reads being misclassified as binary files and add regression coverage for compression, SSE startup, Git-state caching, ranged reads, CRLF preservation, UTF-8 truncation, schema discovery, and cache metadata.** The complete release gate passes all 60 test files.
+
+Bump root/electron/status UI/lockfiles to 0.19.7.
+
 ## [0.19.6] — 2026-07-11
 
 ### Electron startup and task completion regression fixes
