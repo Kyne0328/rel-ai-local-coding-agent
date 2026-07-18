@@ -51,7 +51,7 @@ function buildDashboardPayload(config, options = {}, requireHttpToken = false) {
     ? options.getTaskActivity()
     : { state: "idle", activeCalls: 0, activeTaskCount: 0, tasks: [], taskId: "", workspace: "", tool: "", startedAt: null, lastTask: null };
   const desktopStatus = typeof options.getDesktopStatus === "function" ? options.getDesktopStatus() : null;
-  const base = productUx.dashboardData(config, { limit: Number(options.limit || 100) });
+  const base = productUx.dashboardData(config, { limit: Math.max(Number(options.limit || 100), 200) });
   const tasks = buildTaskHistory(base.auditTail?.entries || [], taskActivity, { limit: 100 });
   const workspaceStates = buildWorkspaceStates(config, tasks, taskActivity);
   if (Array.isArray(base.config?.workspaces)) {
@@ -313,8 +313,7 @@ try {
       </div>
       <div class="top-controls">
         <select id="workspaceScope" class="workspace-scope" aria-label="Filter dashboard by workspace"><option value="">All workspaces</option></select>
-        <span class="status-pill" id="serverStatus">Connecting…</span>
-        <span class="status-pill live-state connecting" id="liveStatus">Connecting live</span>
+        <span class="status-pill warn" id="connectionStatus">Connecting…</span>
         <details class="topbar-menu"><summary aria-label="Dashboard actions">•••</summary><button class="secondary" id="refreshBtn" type="button">Refresh now</button></details>
         <span class="section-action" id="lastUpdated"></span>
       </div>

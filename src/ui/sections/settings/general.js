@@ -2,7 +2,6 @@ import {
   loadSettingsConfig,
   saveSettings,
   header,
-  formGrid,
   panel,
   field,
   toggleControl,
@@ -12,6 +11,7 @@ import {
 } from './shared.js';
 import { getUiPreferences, setDensityPreference, setThemePreference } from '../../preferences.js';
 
+const MIB = 1024 * 1024;
 let _original = null;
 let _draft = null;
 
@@ -30,19 +30,12 @@ async function _loadAndRender(container) {
 
 function _render(container) {
   container.innerHTML = '';
-  container.appendChild(header('General', 'Manage dashboard appearance, patch safeguards, and command-output limits.'));
+  container.appendChild(header('General', 'Choose how the dashboard looks. Safety and output limits are available under Advanced.'));
 
-  const grid = formGrid();
   const appearance = panel('Appearance');
-  const patch = panel('Patch safeguards');
-  const limits = panel('Runtime limits');
-
   renderAppearanceSettings(appearance.body);
-  renderPatchSettings(patch.body);
-  renderRuntimeSettings(limits.body);
-
-  grid.append(appearance.el, patch.el, limits.el);
-  container.appendChild(grid);
+  container.appendChild(appearance.el);
+  container.appendChild(advancedSettings());
   container.appendChild(buildSaveRow(container));
 }
 
@@ -57,7 +50,23 @@ function renderAppearanceSettings(body) {
   body.appendChild(field('Interface density', selectControl([
     { value: 'comfortable', label: 'Comfortable' },
     { value: 'compact', label: 'Compact' }
-  ], uiPreferences.density, value => setDensityPreference(value)), 'Compact mode reduces card, table, navigation, and control spacing without hiding information.'));
+  ], uiPreferences.density, value => setDensityPreference(value)), 'Compact mode reduces spacing without hiding information.'));
+}
+
+function advancedSettings() {
+  const details = document.createElement('details');
+  details.className = 'card settings-advanced';
+  details.innerHTML = `
+    <summary class="settings-advanced-summary">
+      <span><strong>Advanced safety and limits</strong><small>Patch safeguards and retained command output</small></span>
+      <span aria-hidden="true">›</span>
+    </summary>`;
+  const body = document.createElement('div');
+  body.className = 'card-body settings-panel-body';
+  renderPatchSettings(body);
+  renderRuntimeSettings(body);
+  details.appendChild(body);
+  return details;
 }
 
 function renderPatchSettings(body) {
@@ -65,20 +74,29 @@ function renderPatchSettings(body) {
   body.appendChild(patchSafeguardsIntro());
   body.appendChild(field('Require clean git before patch', toggleControl(patch.requireCleanGit === true, value => {
     updatePatchSetting('requireCleanGit', value);
-  }, { enabled: 'Require clean git', disabled: 'Allow existing changes' }), 'When enabled, relai_edit updateText refuses to apply while the workspace has uncommitted changes.'));
+  }, { enabled: 'Require clean git', disabled: 'Allow existing changes' }), 'Blocks updateText patches when the workspace already has uncommitted changes.'));
   body.appendChild(field('Create backup before patch', toggleControl(patch.backup !== false, value => {
     updatePatchSetting('backup', value);
-  }, { enabled: 'Backup enabled', disabled: 'No automatic backup' }), 'When tracked changes already exist, Rel.AI records a git stash backup without removing those changes from the working tree.'));
-  body.appendChild(field('Maximum patch size', numberControl(patch.maxUpdateBytes || 2097152, value => {
+  }, { enabled: 'Backup enabled', disabled: 'No automatic backup' }), 'Records a git stash backup before patching over tracked changes.'));
+  body.appendChild(field('Patch limit (MiB)', megabyteControl(patch.maxUpdateBytes || 2 * MIB, value => {
     updatePatchSetting('maxUpdateBytes', value);
-  }, { min: 1024, max: 52428800, width: '150px' }), 'Maximum size in bytes for patch-shaped updates sent through relai_edit updateText.'));
+  }, 50), 'Current per-update limit for updateText patches.'));
 }
 
 function renderRuntimeSettings(body) {
-  body.appendChild(field('Max output bytes', numberControl(_draft.maxOutputBytes, value => {
+  body.appendChild(field('Command output retained (MiB)', megabyteControl(_draft.maxOutputBytes || 2 * MIB, value => {
     _draft.maxOutputBytes = value;
     _checkDirty();
-  }, { min: 10000, max: 20000000, width: '140px' }), 'Maximum stdout and stderr retained for each spawned command, including checks, browser checks, and Git operations. Larger output is truncated.'));
+  }, 19), 'Current stdout and stderr retention limit per operation. Larger output is truncated.'));
+}
+
+function megabyteControl(bytes, onChange, max) {
+  const value = Number((Number(bytes || MIB) / MIB).toFixed(1));
+  return numberControl(value, next => {
+    if (!Number.isFinite(next)) return;
+    const bounded = Math.min(Math.max(next, 1), max);
+    onChange(Math.round(bounded * MIB));
+  }, { min: 1, max, step: 0.5 });
 }
 
 function updatePatchSetting(key, value) {
@@ -100,8 +118,8 @@ function patchSafeguardsIntro() {
   const intro = document.createElement('div');
   intro.className = 'settings-panel-intro';
   intro.innerHTML = `
-    <strong>These settings are active defaults.</strong>
-    <span>They apply only when <code>relai_edit</code> receives an <code>updateText</code> patch. Exact replacements and full-file writes are unaffected.</span>`;
+    <strong>Patch safeguards</strong>
+    <span>These defaults apply to <code>relai_edit</code> updateText patches. Exact replacements and full-file writes are unaffected.</span>`;
   return intro;
 }
 

@@ -113,8 +113,11 @@ if (!dashboardCsp.includes("default-src 'self'") || !dashboardCsp.includes("fram
 if (!dashboardHtmlResponse.ok || dashboardHtml.includes('initialDashboardJson is not defined') || !dashboardHtml.includes('id="initialDashboardData"')) {
   throw new Error('dashboard HTML did not render embedded initial dashboard data');
 }
-if (!dashboardHtml.includes('id="refreshBtn"') || !dashboardHtml.includes('id="workspaceScope"') || !dashboardHtml.includes('id="liveStatus"')) {
-  throw new Error('dashboard HTML did not expose refresh, workspace scope, and live-state controls');
+if (!dashboardHtml.includes('id="refreshBtn"') || !dashboardHtml.includes('id="workspaceScope"') || !dashboardHtml.includes('id="connectionStatus"')) {
+  throw new Error('dashboard HTML did not expose refresh, workspace scope, and connection status controls');
+}
+if (dashboardHtml.includes('id="liveStatus"') || dashboardHtml.includes('id="serverStatus"')) {
+  throw new Error('dashboard HTML should expose one canonical connection status control');
 }
 if (!dashboardHtml.includes('href="#tasks"') || !dashboardHtml.includes('href="#reference"')) {
   throw new Error('dashboard navigation did not include Sessions and Reference');
