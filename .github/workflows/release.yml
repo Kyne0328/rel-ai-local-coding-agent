@@ -84,9 +84,20 @@ jobs:
             throw "Tag $env:VERSION already exists. Refusing to overwrite an existing release."
           }
 
-          gh release view $env:VERSION --repo $env:GITHUB_REPOSITORY *> $null
-          if ($LASTEXITCODE -eq 0) {
+          $previousNativeErrorPreference = $PSNativeCommandUseErrorActionPreference
+          $PSNativeCommandUseErrorActionPreference = $false
+          try {
+            gh release view $env:VERSION --repo $env:GITHUB_REPOSITORY *> $null
+            $releaseExitCode = $LASTEXITCODE
+          } finally {
+            $PSNativeCommandUseErrorActionPreference = $previousNativeErrorPreference
+          }
+
+          if ($releaseExitCode -eq 0) {
             throw "GitHub release $env:VERSION already exists. Refusing to overwrite it."
+          }
+          if ($releaseExitCode -ne 1) {
+            throw "Could not check whether GitHub release $env:VERSION already exists. gh exited with code $releaseExitCode."
           }
 
       - name: Install project dependencies

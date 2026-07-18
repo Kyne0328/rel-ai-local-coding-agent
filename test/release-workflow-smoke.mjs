@@ -25,7 +25,8 @@ for (const file of [
   'electron/renderer/status.html',
   'src/version.js',
   'scripts/release-check.mjs',
-  'scripts/release-bump.mjs'
+  'scripts/release-bump.mjs',
+  '.github/workflows/release.yml'
 ]) copyFile(file);
 
 function run(script, args = []) {
@@ -68,5 +69,16 @@ const changelog = fs.readFileSync(path.join(tmp, 'CHANGELOG.md'), 'utf8');
 assert.match(changelog, /^## \[0\.99\.0\] — 2099-01-02/m);
 assert.match(changelog, /Bump root\/electron\/status UI\/lockfiles to 0\.99\.0\./);
 assert.doesNotMatch(changelog.split('## [0.15.7]')[0], /TODO|placeholder/i);
+
+const releaseWorkflow = fs.readFileSync(path.join(tmp, '.github/workflows/release.yml'), 'utf8');
+assert.match(releaseWorkflow, /\$PSNativeCommandUseErrorActionPreference\s*=\s*\$false/);
+assert.match(releaseWorkflow, /\$releaseExitCode\s*=\s*\$LASTEXITCODE/);
+assert.match(releaseWorkflow, /if \(\$releaseExitCode -eq 0\)/);
+assert.match(releaseWorkflow, /if \(\$releaseExitCode -ne 1\)/);
+assert.doesNotMatch(
+  releaseWorkflow,
+  /gh release view[^\n]*\r?\n\s*if \(\$LASTEXITCODE -eq 0\)/,
+  'Expected release absence must not terminate the PowerShell step before its exit code is handled.'
+);
 
 console.log('Release workflow smoke test passed.');
