@@ -1,4 +1,4 @@
-import { setToken, getToken, fetchJson, DASHBOARD_DATA_URL } from './ui/api.js';
+import { setToken, getToken, fetchJson, invalidateCache, DASHBOARD_DATA_URL } from './ui/api.js';
 import { init as initStore, get as getStore } from './ui/store.js';
 import { initRouter, currentSection, currentRoutePath, getWorkspaceFilter, setWorkspaceFilter, rerender } from './ui/router.js';
 import { initEvents, startSSE } from './ui/events.js';
@@ -21,6 +21,7 @@ let _lastEventAt = null;
 let _clockTimer = null;
 let _shellStatus = { label: 'Connecting', tone: 'warn' };
 let _liveState = 'connecting';
+let _refreshPromise = null;
 
 function cleanLaunchQuery() {
   const clean = new URLSearchParams(location.search);
@@ -115,7 +116,11 @@ function settingsSubPage() {
 }
 
 function wireTopControls() {
-  document.getElementById('refreshBtn')?.addEventListener('click', () => doRefresh({ source: 'manual', render: true }));
+  document.getElementById('refreshBtn')?.addEventListener('click', event => {
+    event.preventDefault();
+    event.currentTarget.closest('details')?.removeAttribute('open');
+    void doRefresh({ source: 'manual', render: true });
+  });
   document.getElementById('workspaceScope')?.addEventListener('change', event => setWorkspaceFilter(event.target.value));
 }
 
@@ -135,17 +140,41 @@ function applyDesktopStatus(status) {
 }
 
 async function doRefresh(options = {}) {
-  setRefreshState('loading');
-  const data = await fetchJson(DASHBOARD_DATA_URL);
-  if (data && data.ok !== false) {
-    initStore(data);
-    updateShell(data);
-    if (!_routerReady) activateRouter(ensureRouteRoot());
-    else if (options.render !== false && !hasBlockingInteraction()) rerender();
-    setRefreshState('idle');
-    return data;
+  if (_refreshPromise) return _refreshPromise;
+  _refreshPromise = performRefresh(options);
+  try {
+    return await _refreshPromise;
+  } finally {
+    _refreshPromise = null;
   }
-  setRefreshState('error');
+}
+
+async function performRefresh(options = {}) {
+  let refreshState = 'error';
+  setRefreshState('loading');
+  invalidateCache(DASHBOARD_DATA_URL);
+  try {
+    const data = await fetchJson(DASHBOARD_DATA_URL);
+    if (data && data.ok !== false) {
+      initStore(data);
+      updateShell(data);
+      if (!_routerReady) activateRouter(ensureRouteRoot());
+      else if (options.render !== false && !hasBlockingInteraction()) rerender();
+      refreshState = 'idle';
+      return data;
+    }
+    return renderRefreshFailure(data);
+  } catch (error) {
+    return renderRefreshFailure({
+      ok: false,
+      error: error instanceof Error ? error.message : String(error)
+    });
+  } finally {
+    setRefreshState(refreshState);
+  }
+}
+
+function renderRefreshFailure(data) {
   const message = data?.error || 'The dashboard could not reach the local Rel.AI service.';
   _shellStatus = { label: data?.status === 401 ? 'Authentication failed' : 'Disconnected', tone: 'bad' };
   renderConnectionStatus();
@@ -246,8 +275,10 @@ function pluralLabel(count, singular) {
 function updateWorkspaceScope() {
   const select = document.getElementById('workspaceScope');
   if (!select) return;
+  const control = document.getElementById('workspaceScopeControl');
   const supportsWorkspaceScope = ['home', 'tasks', 'workspaces', 'activity'].includes(currentSection());
-  select.hidden = !supportsWorkspaceScope;
+  if (control) control.hidden = !supportsWorkspaceScope;
+  else select.hidden = !supportsWorkspaceScope;
   if (!supportsWorkspaceScope) return;
   const workspaces = getStore()?.config?.workspaces || [];
   const selected = getWorkspaceFilter();
