@@ -31,7 +31,7 @@ async function relaiSearch(workspace, config, args = {}) {
 
   const matches = [];
   let total = 0;
-  for (const line of String(result.stdout || "").split("\n")) {
+  for (const line of String(result.stdout || "").split(/\r?\n/)) {
     if (!line) continue;
     const first = line.indexOf(":");
     const second = line.indexOf(":", first + 1);
