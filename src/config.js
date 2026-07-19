@@ -4,6 +4,11 @@ const path = require("node:path");
 const { safeReadJson } = require("./safety");
 const { discoverCommands, staleCommandKeys } = require("./commandDiscovery");
 
+const REMOVED_WORKSPACE_COMMAND_KEYS = new Set([
+  'npm:test:oneclick',
+  'npm:test:tunnel'
+]);
+
 function getConfigPath() {
   return process.env.REL_AI_MCP_CONFIG || path.join(os.homedir(), ".rel-ai-mcp", "config.json");
 }
@@ -166,8 +171,8 @@ function normalizeWorkspaces(config) {
 function normalizeWorkspace(workspace) {
   return {
     path: workspace.path,
-    testCommands: workspace.testCommands || {},
-    commands: workspace.commands || {},
+    testCommands: normalizeWorkspaceCommandMap(workspace.testCommands),
+    commands: normalizeWorkspaceCommandMap(workspace.commands),
     protectedBranches: workspace.protectedBranches || ["main", "master"],
     defaultBaseBranch: workspace.defaultBaseBranch || "main",
     allowedRemotes: Array.isArray(workspace.allowedRemotes) ? workspace.allowedRemotes : ["origin"],
@@ -175,6 +180,11 @@ function normalizeWorkspace(workspace) {
     fastTask: normalizeFastTask(workspace.fastTask),
     validationRules: workspace.validationRules && typeof workspace.validationRules === "object" ? workspace.validationRules : {}
   };
+}
+
+function normalizeWorkspaceCommandMap(value) {
+  const source = objectOrEmpty(value);
+  return Object.fromEntries(Object.entries(source).filter(([key]) => !REMOVED_WORKSPACE_COMMAND_KEYS.has(key)));
 }
 
 function normalizeFastTask(value) {

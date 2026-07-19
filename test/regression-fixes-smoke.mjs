@@ -4,6 +4,7 @@ import { once } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import net from 'node:net';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
@@ -129,7 +130,7 @@ function read(rel) {
 
 // HTTP/CORS regression: arbitrary web origins must not get an
 // Access-Control-Allow-Origin echo.
-const port = 39919;
+const port = await availablePort();
 const token = 'regression-token-secret';
 const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.js'), '--host', '127.0.0.1', '--port', String(port)], {
   cwd: root,
@@ -178,3 +179,16 @@ try {
 }
 
 console.log('Regression fixes smoke test passed.');
+
+function availablePort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      const port = address && typeof address !== 'string' ? address.port : 0;
+      server.close(error => error ? reject(error) : resolve(port));
+    });
+  });
+}

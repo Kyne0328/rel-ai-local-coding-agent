@@ -58,6 +58,14 @@ assert.equal(inactive.find(task => task.taskId === finishRead.taskId)?.calls, 2)
 assert.equal(inactive.find(task => task.taskId === finishChecks.taskId)?.calls, 1);
 assert.equal(inactive.every(task => task.status === 'inactive' && task.endReason === 'inactivity_window'), true);
 
+const reconnectTracker = createToolActivityTracker({ idleMs: 60_000 });
+const firstTransport = reconnectTracker.beginConnectorToolCall({ tool: 'relai_run_checks', workspace: 'repo', scopeId: 'transport-a' });
+firstTransport();
+const rotatedTransport = reconnectTracker.beginConnectorToolCall({ tool: 'relai_complete_task', workspace: 'repo', scopeId: 'transport-b' });
+assert.equal(rotatedTransport.taskId, firstTransport.taskId, 'a single waiting workspace task must survive connector transport rotation');
+rotatedTransport();
+reconnectTracker.reset();
+
 let nextId = 40;
 const started = new Set();
 const blockerCalls = [];

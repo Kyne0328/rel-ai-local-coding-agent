@@ -2,6 +2,7 @@
 import { openModal, closeModal } from '../components/modal.js';
 import { fetchJson, postJson } from '../api.js';
 import { toast } from '../components/toast.js';
+import { copyText } from '../clipboard.js';
 
 let _step = 0;
 let _data = {};
@@ -270,9 +271,13 @@ async function _withConnection(content, showCopy = false) {
     copyBtn.style.cssText = 'min-height:28px;padding:0 10px;font-size:12px;flex-shrink:0;';
     copyBtn.textContent = 'Copy';
     copyBtn.onclick = async () => {
-      await navigator.clipboard.writeText(conn.chatgptMcpUrl);
-      copyBtn.textContent = 'Copied';
-      setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1800);
+      try {
+        await copyText(conn.chatgptMcpUrl);
+        copyBtn.textContent = 'Copied';
+        setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1800);
+      } catch {
+        toast('Clipboard access failed.', { variant: 'error' });
+      }
     };
     urlBox.appendChild(code);
     urlBox.appendChild(copyBtn);

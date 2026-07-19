@@ -63,13 +63,15 @@ function readAuditTail(auditPath) {
 function readAudit(config, options = {}) {
   const auditPath = getAuditPath(config);
   const taskId = String(options.taskId || '').trim();
-  const limit = Math.min(Math.max(Number(options.limit || 100), 1), taskId ? 10000 : 1000);
+  const workspace = String(options.workspace || '').trim();
+  const fullScan = Boolean(taskId || workspace);
+  const limit = Math.min(Math.max(Number(options.limit || 100), 1), fullScan ? 10000 : 1000);
   if (!fs.existsSync(auditPath)) return { path: auditPath, entries: [] };
-  const text = taskId ? readAuditGenerations(auditPath) : readAuditTail(auditPath);
+  const text = fullScan ? readAuditGenerations(auditPath) : readAuditTail(auditPath);
   const lines = text.trim().split(/\r?\n/).filter(Boolean);
   const entries = lines.map((line) => {
     try { return JSON.parse(line); } catch { return { malformed: line }; }
-  }).filter(entry => !taskId || entry.taskId === taskId).slice(-limit);
+  }).filter(entry => (!taskId || entry.taskId === taskId) && (!workspace || entry.workspace === workspace)).slice(-limit);
   return { path: auditPath, entries };
 }
 

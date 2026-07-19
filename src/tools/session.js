@@ -69,6 +69,9 @@ function enrichCompletionAudit(extra, value) {
   assignTruthy(extra, "endReason", value?.endReason);
   assignTruthy(extra, "taskSummary", value?.summary);
   assignTruthy(extra, "validationAt", value?.validationAt);
+  assignTruthy(extra, "validationTaskId", value?.validationTaskId);
+  if (Array.isArray(value?.relatedTaskIds) && value.relatedTaskIds.length) extra.relatedTaskIds = value.relatedTaskIds.slice(0, 20);
+  assignDefined(extra, "recoveredValidationSession", value?.recoveredValidationSession === true);
 }
 
 function enrichPathAudit(extra, _value, args) {

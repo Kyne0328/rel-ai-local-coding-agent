@@ -7,6 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(process.env.REL_AI_RELEASE_ROOT || path.join(__dirname, '..'));
 const failures = [];
 const ESCAPED_DOT = String.raw`\.`;
+const MIN_NGROK_SEED_BYTES = 5 * 1024 * 1024;
 
 function rel(...parts) {
   return path.join(root, ...parts);
@@ -54,6 +55,19 @@ function assertJsonVersion(relativePath, version) {
   }
 }
 
+function assertNgrokSeed() {
+  const platform = String(process.env.REL_AI_TARGET_PLATFORM || (process.platform === 'win32' ? 'win32' : '')).trim();
+  if (!platform) return;
+  const fileName = platform === 'win32' ? 'ngrok.exe' : 'ngrok';
+  const seedPath = rel('vendor', 'ngrok', platform, fileName);
+  if (!fs.existsSync(seedPath)) {
+    fail(`bundled ngrok seed is missing for ${platform}: ${path.relative(root, seedPath)}`);
+    return;
+  }
+  const size = fs.statSync(seedPath).size;
+  expect(size >= MIN_NGROK_SEED_BYTES, `bundled ngrok seed for ${platform} is too small (${size} bytes)`);
+}
+
 const packageJson = readJson('package.json');
 const version = packageJson.version;
 expect(validSemver(version), `package.json version must be semver-like x.y.z, got ${version}`);
@@ -62,6 +76,7 @@ assertJsonVersion('package.json', version);
 assertJsonVersion('package-lock.json', version);
 assertJsonVersion(path.join('electron', 'package.json'), version);
 assertJsonVersion(path.join('electron', 'package-lock.json'), version);
+assertNgrokSeed();
 
 const statusHtml = read(path.join('electron', 'renderer', 'status.html'));
 expect(statusHtml.includes(`id="appVersion">v${version}</span>`), `electron/renderer/status.html must display v${version}`);

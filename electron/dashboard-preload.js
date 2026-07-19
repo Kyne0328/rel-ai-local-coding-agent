@@ -4,6 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('relaiDesktop', {
   getStatus: () => ipcRenderer.invoke('desktop:get-status'),
+  copyText: text => ipcRenderer.invoke('url:copy', text),
   openSettings: () => ipcRenderer.invoke('desktop:open-settings'),
   openRecovery: () => ipcRenderer.invoke('desktop:open-recovery'),
   restartService: () => ipcRenderer.send('desktop:restart-service'),

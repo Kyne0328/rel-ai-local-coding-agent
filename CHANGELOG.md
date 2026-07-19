@@ -5,9 +5,17 @@
 ### Electron-only packaging and release integrity
 - **Fix released installers shipping without the bundled ngrok agent, which made tunnels fail on clean machines. CI and the release workflow now fetch the ngrok seed before packaging.**
 - **Add a packaging preflight (npm run verify:ngrok) that refuses to build an installer without a valid ngrok seed, and assert the seed in the packaged-app smoke test.**
+- **Make the release consistency gate itself reject a missing or truncated Windows ngrok seed, and fetch that seed before the release test suite runs.**
 - **Bundle only the build platform's ngrok binary, cutting packaged resources from roughly 83 MB to 33 MB.**
 - **Remove the pre-Electron CLI launcher, the npx-based Cloudflare/localtunnel providers, and the manual install scripts, so no path requires installing Node, npm, or ngrok by hand.**
 - **Rewrite the README and setup docs around the desktop installer instead of npm run oneclick.**
+
+### Desktop workflow reliability
+- **Fix Activity event JSON copying in the sandboxed Electron dashboard by routing clipboard writes through the main process, with browser clipboard and legacy-copy fallbacks.**
+- **Recover safe passed validations when ChatGPT rotates connector or task identity before calling relai_complete_task, while still rejecting every successful workspace mutation made after that validation.**
+- **Keep one waiting workspace session grouped across connector reconnects, extend the grouping window to five minutes, merge recovered completion history, and let a later successful validation supersede an earlier failed attempt.**
+- **Remove release-validation flakiness by allocating an available HTTP test port and writing unpacked validation builds to a dedicated directory that is not locked by a running installed app.**
+- **Remove stale launcher metadata, obsolete Cloudflare setup material, outdated tool counts, and legacy one-click/tunnel validation aliases from normalized workspace configuration.**
 
 Bump root/electron/status UI/lockfiles to 0.20.2.
 

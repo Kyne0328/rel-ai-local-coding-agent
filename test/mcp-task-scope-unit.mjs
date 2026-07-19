@@ -39,10 +39,17 @@ assert.equal(
 
 const sameBearerDifferentSocketsA = { headers: { authorization: 'Bearer shared-token' }, socket: { remoteAddress: '127.0.0.1', remotePort: 41001 } };
 const sameBearerDifferentSocketsB = { headers: { authorization: 'Bearer shared-token' }, socket: { remoteAddress: '127.0.0.1', remotePort: 41002 } };
+const workspacePayloadA = { ...payload, params: { ...payload.params, arguments: { workspace: 'repo-a' } } };
+const workspacePayloadB = { ...payload, params: { ...payload.params, arguments: { workspace: 'repo-b' } } };
+assert.equal(
+  resolveTaskScopeId(sameBearerDifferentSocketsA, workspacePayloadA),
+  resolveTaskScopeId(sameBearerDifferentSocketsB, workspacePayloadA),
+  'socket reconnects without conversation metadata must remain grouped for the same workspace'
+);
 assert.notEqual(
-  resolveTaskScopeId(sameBearerDifferentSocketsA, payload),
-  resolveTaskScopeId(sameBearerDifferentSocketsB, payload),
-  'missing conversation metadata must not merge unrelated connections solely because they share a bearer token'
+  resolveTaskScopeId(sameBearerDifferentSocketsA, workspacePayloadA),
+  resolveTaskScopeId(sameBearerDifferentSocketsA, workspacePayloadB),
+  'workspace identity must keep fallback scopes from merging unrelated repositories'
 );
 assert.equal(
   resolveTaskScopeId({ headers: {} }, { ...payload, params: { ...payload.params, _meta: { conversationId: 'meta-conversation' } } }),
