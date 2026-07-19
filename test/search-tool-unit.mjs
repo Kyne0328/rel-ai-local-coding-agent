@@ -73,11 +73,14 @@ try {
   );
 
   // CRLF-terminated lines must not have trailing \r in matched text (Windows autocrlf regression).
-  fs.writeFileSync(path.join(wsRoot, 'src', 'crlf.js'), 'function alphaThing() {\r\n  return 1;\r\n}\r\n');
+  // Fixture has match on line 1 (not the last line) so whole-blob trim doesn't strip the CRLF before split logic runs.
+  fs.writeFileSync(path.join(wsRoot, 'src', 'crlf.js'), 'function alphaThing() {\r\n  alphaThing();\r\n  return 1;\r\n}\r\n');
   const crlfResult = await relaiSearch(workspace, config, { pattern: 'alphaThing', glob: 'src/crlf.js' });
   assert.ok(crlfResult.matches.length > 0, 'should find match in CRLF file');
-  const crlfMatch = crlfResult.matches[0];
-  assert.ok(!crlfMatch.text.endsWith('\r'), `CRLF match text should not end with \\r, got: ${JSON.stringify(crlfMatch.text)}`);
+  const line1Match = crlfResult.matches.find(m => m.line === 1);
+  assert.ok(line1Match, 'should find match on line 1');
+  assert.ok(!line1Match.text.endsWith('\r'), `CRLF line 1 text should not end with \\r, got: ${JSON.stringify(line1Match.text)}`);
+  assert.equal(line1Match.text, 'function alphaThing() {', 'line 1 text should match expected clean text');
 
   console.log('Search tool unit test passed.');
 } finally {
