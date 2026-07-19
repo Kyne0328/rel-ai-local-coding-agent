@@ -30,6 +30,16 @@ const DEFAULT_EXCLUDED_NAMES = new Set([
   ".rel-ai-mcp", ".rel-ai-mcp-state", ".relai"
 ]);
 
+// Files with these extensions skip the per-file 8 KB binary sniff during the
+// snapshot walk — the open/read per file dominates snapshot cost on Windows.
+const KNOWN_TEXT_EXTENSIONS = new Set([
+  '.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs', '.dart', '.py', '.go', '.rs',
+  '.java', '.kt', '.swift', '.cs', '.cpp', '.c', '.h', '.hpp', '.rb', '.php',
+  '.css', '.scss', '.html', '.xml', '.yaml', '.yml', '.json', '.md', '.txt',
+  '.sql', '.sh', '.bat', '.ps1', '.toml', '.ini', '.cfg', '.conf', '.lock',
+  '.svg', '.csv', '.tsv', '.properties', '.gradle', '.vue', '.svelte', '.env.example'
+]);
+
 const DEFAULT_EXCLUDED_PATHS = [
   "android/.gradle",
   "ios/Flutter/ephemeral",
@@ -180,7 +190,8 @@ function inspectTextFile(context, abs, rel) {
       context.skipped.push({ path: rel, reason: "escapes workspace" });
       return;
     }
-    if (fileLooksBinary(abs)) {
+    const ext = path.extname(rel).toLowerCase();
+    if (!KNOWN_TEXT_EXTENSIONS.has(ext) && fileLooksBinary(abs)) {
       context.skipped.push({ path: rel, reason: "binary-looking file" });
       return;
     }
