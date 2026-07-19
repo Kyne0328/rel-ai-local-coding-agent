@@ -22,6 +22,7 @@ const {
   relaiGitCreatePr,
   classifyStatusOwnership
 } = require("./repo/gitOps");
+const { runProcess } = require("./process");
 const { clampNumber } = require("./bridge/limits");
 const { relaiVerify } = require("./bridge/validation");
 const { relaiBrowser } = require("./bridge/browser");
@@ -39,7 +40,7 @@ const EXACT_REPLACE_TEXT_BYTE_LIMIT = 50000;
 const EXACT_REPLACE_MAX_OPERATIONS = 50;
 const SOURCE_LIKE_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs', '.dart', '.py', '.go', '.rs', '.java', '.kt', '.swift', '.cs', '.cpp', '.c', '.h', '.hpp', '.rb', '.php', '.css', '.scss', '.html', '.xml', '.yaml', '.yml', '.json', '.md']);
 
-function repoSnapshot(workspace, config, args = {}) {
+async function repoSnapshot(workspace, config, args = {}) {
   const policy = resolvePolicy(workspace, config || {});
   const configuredDefault = workspace.fastTask?.enabled === false
     ? DEFAULT_MAX_SNAPSHOT_FILES
@@ -50,6 +51,7 @@ function repoSnapshot(workspace, config, args = {}) {
   const tree = collectTextFiles(workspace.path, collectOptionsFromWorkspace(workspace, { maxEntries }));
   const manifests = readManifests(workspace.path);
   const discoveredCommands = discoverCommands(workspace.path);
+  const git = await snapshotGitSummary(workspace, config);
   return {
     ok: true,
     workspace: workspace.alias,
@@ -66,10 +68,29 @@ function repoSnapshot(workspace, config, args = {}) {
     skipped: tree.skipped.slice(0, 200),
     truncated: tree.truncated,
     hints: projectHints(Object.keys(manifests)),
+    ...(git ? { git } : {}),
     recommendedFlow: ["relai_repo_snapshot", "relai_read", "relai_edit", "relai_write", "relai_replace", "relai_tidy_plan", "relai_tidy_run", "relai_run_checks", "relai_diff", "relai_restore_changes"],
     writeGuidance: workspaceWriteGuidance(config),
     operationJournal: summarizeOperations(config, workspace, args.journalLimit || 10)
   };
+}
+
+// One bounded git status keeps snapshot+status a single round trip. Failure
+// (non-git workspace, git missing) is silent: the snapshot stays useful without it.
+async function snapshotGitSummary(workspace, config) {
+  try {
+    const stat = await runProcess("git", ["status", "--short", "--branch"], { cwd: workspace.path, timeout: 5000 }, config);
+    if (stat.exitCode !== 0) return null;
+    const ownership = classifyStatusOwnership(workspace, config, stat.stdout || "");
+    return {
+      branch: ownership.branch,
+      aheadBehind: ownership.aheadBehind,
+      dirtyFiles: ownership.entries.length,
+      ...(ownership.entries.length ? { changedFiles: ownership.entries.slice(0, 20).map((entry) => entry.path) } : {})
+    };
+  } catch {
+    return null;
+  }
 }
 
 function relaiRead(workspace, config, args = {}, context = {}) {

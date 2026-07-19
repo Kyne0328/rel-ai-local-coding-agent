@@ -28,7 +28,7 @@ fs.writeFileSync(path.join(repo, 'tmp-cache', 'ignored.txt'), `ignored\n`);
 let config = normalizeConfig({ workspaces: { app: { path: repo, fastTask: { maxIndexFiles: 1, includeRoots: ['src'] } } } });
 assert.equal(config.workspaces.app.fastTask.enabled, true);
 assert.ok(config.workspaces.app.fastTask.excludePaths.includes('.dart_tool'));
-const snapshot = repoSnapshot({ alias: 'app', ...config.workspaces.app }, config);
+const snapshot = await repoSnapshot({ alias: 'app', ...config.workspaces.app }, config);
 assert.equal(snapshot.effectiveMaxEntries, 1, 'workspace index limit must control the default repository overview size');
 assert.deepEqual(snapshot.files, ['src/app.js']);
 
