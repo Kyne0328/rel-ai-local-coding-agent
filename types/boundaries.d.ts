@@ -80,6 +80,7 @@ export interface ToolArgs extends Record<string, unknown> {
   stage?: string;
   updateText?: string;
   edits?: Array<{ path?: string }>;
+  timeoutMs?: number;
 }
 
 export interface ToolResult extends Record<string, unknown> {

@@ -1,6 +1,6 @@
 # Connecting to ChatGPT
 
-Rel.AI MCP exposes one 18-tool workspace surface across local MCP and the ChatGPT connector:
+Rel.AI MCP exposes one 18-tool workspace surface across local MCP and the ChatGPT connector.
 
 - `relai_repo_snapshot`
 - `relai_search`

@@ -1,6 +1,6 @@
 {
   "name": "rel-ai-mcp",
-  "version": "0.20.2",
+  "version": "0.20.4",
   "description": "Local ChatGPT repo bridge: one reliable workflow for snapshot, read, write, verify, diff, and reset configured local workspaces.",
   "private": true,
   "license": "MIT",

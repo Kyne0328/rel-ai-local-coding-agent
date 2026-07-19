@@ -77,4 +77,23 @@ assert.equal(legacy[0].changedFileCount, 1);
 assert.equal(legacy[0].validation, 'passed');
 assert.equal(legacy.every(session => session.status === 'inactive'), true);
 
+const fragmented = buildTaskHistory([
+  { taskId: 'fragment-a', scopeId: 'mcp:111111111111111111111111', pid: 77, ts: '2026-07-11T11:00:00.000Z', tool: 'relai_read', workspace: 'repo', ok: true },
+  { taskId: 'fragment-b', scopeId: 'mcp:222222222222222222222222', pid: 77, ts: '2026-07-11T11:01:00.000Z', tool: 'relai_search', workspace: 'repo', ok: true },
+  { taskId: 'fragment-c', scopeId: 'mcp:333333333333333333333333', pid: 77, ts: '2026-07-11T11:02:00.000Z', tool: 'relai_run_checks', workspace: 'repo', ok: true, validationStatus: 'passed' }
+], {
+  state: 'waiting',
+  tasks: [{ id: 'fragment-c', state: 'waiting', workspace: 'repo', tool: 'relai_run_checks', startedAt: Date.parse('2026-07-11T11:02:00.000Z'), activeCalls: 0, calls: 1 }]
+});
+assert.equal(fragmented.length, 1, 'opaque transport fragments from the same process and workspace must be stitched within the grouping window');
+assert.equal(fragmented[0].calls, 3);
+assert.equal(fragmented[0].status, 'waiting', 'an active fragment must keep the stitched session live');
+assert.equal(fragmented[0].validation, 'passed');
+
+const separateConversations = buildTaskHistory([
+  { taskId: 'conversation-a', scopeId: 'mcp:conversation:aaaaaaaaaaaaaaaaaaaaaaaa', pid: 77, ts: '2026-07-11T12:00:00.000Z', tool: 'relai_read', workspace: 'repo', ok: true },
+  { taskId: 'conversation-b', scopeId: 'mcp:conversation:bbbbbbbbbbbbbbbbbbbbbbbb', pid: 77, ts: '2026-07-11T12:01:00.000Z', tool: 'relai_read', workspace: 'repo', ok: true }
+], { state: 'idle' });
+assert.equal(separateConversations.length, 2, 'different stable ChatGPT conversation identities must not be stitched');
+
 console.log('Persistent and concurrent work-session history tests passed.');

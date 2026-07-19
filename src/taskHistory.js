@@ -7,10 +7,16 @@ function buildTaskHistory(entries = [], activity = {}, options = {}) {
   const groups = groupTaskEntries(entries, options.legacyGapMs);
   const activeTasks = activityTasks(activity);
   const activeById = new Map(activeTasks.map(task => [task.id || task.taskId, task]));
-  const tasks = [...groups.entries()].map(([taskId, events]) => summarizeTask(taskId, events, activeById.get(taskId)));
+  const representedTaskIds = new Set();
+  const tasks = [...groups.entries()].map(([taskId, events]) => {
+    const eventTaskIds = unique(events.map(entry => String(entry.taskId || '').trim()).filter(Boolean));
+    for (const id of [taskId, ...eventTaskIds]) representedTaskIds.add(id);
+    const activeTask = activeById.get(taskId) || eventTaskIds.map(id => activeById.get(id)).find(Boolean);
+    return summarizeTask(taskId, events, activeTask);
+  });
   for (const active of activeTasks) {
     const taskId = active.id || active.taskId;
-    if (taskId && !groups.has(taskId)) tasks.push(activeTaskFromActivity(active));
+    if (taskId && !representedTaskIds.has(taskId)) tasks.push(activeTaskFromActivity(active));
   }
   return tasks
     .sort((left, right) => Date.parse(right.endedAt || right.completedAt || right.startedAt || 0) - Date.parse(left.endedAt || left.completedAt || left.startedAt || 0))
@@ -148,7 +154,67 @@ function groupTaskEntries(entries, legacyGapMs = DEFAULT_TASK_IDLE_MS) {
     if (!groups.has(taskId)) groups.set(taskId, []);
     groups.get(taskId).push(entry);
   }
-  return groups;
+  return stitchFragmentedTaskGroups(groups, gapMs);
+}
+
+function stitchFragmentedTaskGroups(groups, gapMs) {
+  const records = [...groups.entries()].map(([id, events]) => taskGroupRecord(id, events))
+    .sort((left, right) => left.firstAt - right.firstAt);
+  const stitched = [];
+  for (const record of records) {
+    const previous = [...stitched].reverse().find(item => item.workspace && item.workspace === record.workspace);
+    if (!previous || !canStitchTaskGroups(previous, record, gapMs)) {
+      stitched.push(record);
+      continue;
+    }
+    previous.events.push(...record.events);
+    previous.lastAt = Math.max(previous.lastAt, record.lastAt);
+    previous.completed ||= record.completed;
+    for (const value of record.scopeIds) previous.scopeIds.add(value);
+    for (const value of record.pids) previous.pids.add(value);
+  }
+  return new Map(stitched.map(record => [record.id, record.events.sort((a, b) => eventTimestamp(a) - eventTimestamp(b))]));
+}
+
+function taskGroupRecord(id, events) {
+  const ordered = [...events].sort((a, b) => eventTimestamp(a) - eventTimestamp(b));
+  const firstAt = eventTimestamp(ordered[0]);
+  const lastAt = Math.max(...ordered.map(entry => eventTimestamp(entry) + Math.max(0, Number(entry.ms || 0))));
+  return {
+    id,
+    events: ordered,
+    workspace: String(ordered.find(entry => entry.workspace)?.workspace || ''),
+    firstAt,
+    lastAt,
+    completed: ordered.some(entry => entry.ok !== false && (entry.completionKnown === true || entry.tool === 'relai_complete_task')),
+    scopeIds: new Set(ordered.map(entry => String(entry.scopeId || '')).filter(Boolean)),
+    pids: new Set(ordered.map(entry => String(entry.pid || '')).filter(Boolean))
+  };
+}
+
+function canStitchTaskGroups(previous, next, gapMs) {
+  if (previous.completed || next.firstAt < previous.lastAt || next.firstAt - previous.lastAt > gapMs) return false;
+  const previousStrong = strongConversationScopes(previous.scopeIds);
+  const nextStrong = strongConversationScopes(next.scopeIds);
+  if (previousStrong.size && nextStrong.size && !setsIntersect(previousStrong, nextStrong)) return false;
+  if (hasWeakScope(previous.scopeIds) || hasWeakScope(next.scopeIds)) return true;
+  return hasLegacyOpaqueScope(previous.scopeIds) && hasLegacyOpaqueScope(next.scopeIds) && setsIntersect(previous.pids, next.pids);
+}
+
+function strongConversationScopes(values) {
+  return new Set([...values].filter(value => /^mcp:conversation:/.test(value)));
+}
+
+function hasWeakScope(values) {
+  return [...values].some(value => /^mcp:(?:session|transport|fallback):/.test(value));
+}
+
+function hasLegacyOpaqueScope(values) {
+  return [...values].some(value => /^mcp:[a-f0-9]{24}$/i.test(value));
+}
+
+function setsIntersect(left, right) {
+  return [...left].some(value => right.has(value));
 }
 
 function completionTaskAliases(entries) {
