@@ -91,6 +91,7 @@ function describeToolOperation(name, args = {}) {
       if (paths.length === 1) return `Reading ${paths[0]}${suffix}`;
       return `Reading ${paths.length || 'workspace'} paths${suffix}`;
     }
+    case 'relai_search': return `Searching for ${String(args.pattern || '').slice(0, 60) || 'a pattern'}${suffix}`;
     case 'relai_write': return path ? `Writing ${path}${suffix}` : `Writing a workspace file${suffix}`;
     case 'relai_replace': return path ? `Editing ${path}${suffix}` : `Applying an exact edit${suffix}`;
     case 'relai_edit': {

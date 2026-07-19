@@ -20,6 +20,7 @@ const names = definitions.map(definition => definition.name);
 const expected = [
   'relai_repo_snapshot',
   'relai_read',
+  'relai_search',
   'relai_write',
   'relai_replace',
   'relai_tidy_plan',
@@ -37,7 +38,7 @@ const expected = [
   'relai_complete_task'
 ];
 
-assert.equal(definitions.length, 17);
+assert.equal(definitions.length, 18);
 assert.deepEqual(names, expected);
 assert.deepEqual(TOOL_NAMES, expected);
 assert.equal(new Set(names).size, names.length, 'tool names must be unique');
@@ -95,7 +96,7 @@ for (const [groupName, groupTools] of Object.entries(groups)) {
 const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
 const mcpSection = readme.split('## MCP tools')[1]?.split('\n---')[0] || '';
 const documented = [...mcpSection.matchAll(/^\| `([^`]+)` \|/gm)].map(match => match[1]);
-assert.deepEqual(new Set(documented), new Set(expected), 'README tool table must match the 17-tool registry');
+assert.deepEqual(new Set(documented), new Set(expected), 'README tool table must match the 18-tool registry');
 assert.equal(documented.length, expected.length, 'README tool table must not contain duplicate rows');
 
-console.log('Tool registry consistency passed for one 17-tool surface.');
+console.log('Tool registry consistency passed for one 18-tool surface.');
