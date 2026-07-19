@@ -1,14 +1,19 @@
-const { runProcess } = require("../process");
+const { spawn } = require("node:child_process");
+const { StringDecoder } = require("node:string_decoder");
+const { resolveGitExecutable } = require("../gitExecutable");
+const { appendLimited, killProcessTree } = require("../process");
 const { isSecretPath } = require("../safety");
 const { clampNumber } = require("./limits");
 
 const DEFAULT_MAX_RESULTS = 200;
 const MAX_LINE_CHARS = 400;
+const SEARCH_TIMEOUT_MS = 15000;
+const MAX_STDERR_BYTES = 64 * 1024;
 
-// git grep does the heavy lifting: it respects .gitignore, skips binaries (-I),
-// and includes untracked files (--untracked) so freshly written files are found
-// before any commit exists.
-async function relaiSearch(workspace, config, args = {}) {
+// Stream git grep output instead of buffering it through runProcess. Broad searches
+// can exceed the generic process-output cap; streaming preserves the earliest
+// matches while still counting every visible result with bounded memory use.
+async function relaiSearch(workspace, _config, args = {}) {
   const pattern = String(args.pattern || "");
   if (!pattern.trim()) throw new Error("relai_search requires a non-empty pattern.");
   if (pattern.length > 1000) throw new Error("relai_search pattern must be 1000 characters or fewer.");
@@ -19,7 +24,7 @@ async function relaiSearch(workspace, config, args = {}) {
   const glob = String(args.glob || "").trim();
   if (glob) gitArgs.push("--", glob);
 
-  const result = await runProcess("git", gitArgs, { cwd: workspace.path, timeout: 15000 }, config);
+  const result = await runGitGrep(workspace, gitArgs, maxResults);
   // Exit 1 means "no matches" — a valid empty result. Anything else is a failure.
   if (result.exitCode !== 0 && result.exitCode !== 1) {
     const stderr = String(result.stderr || result.error || "");
@@ -29,34 +34,114 @@ async function relaiSearch(workspace, config, args = {}) {
     throw new Error(`relai_search failed: ${stderr || `git grep exited ${result.exitCode}`}`);
   }
 
-  const matches = [];
-  let total = 0;
-  for (const line of String(result.stdout || "").split(/\r?\n/)) {
-    if (!line) continue;
-    const first = line.indexOf(":");
-    const second = line.indexOf(":", first + 1);
-    if (first <= 0 || second <= first) continue;
-    const relativePath = line.slice(0, first);
-    const lineNumber = Number(line.slice(first + 1, second));
-    if (!Number.isInteger(lineNumber) || lineNumber < 1) continue;
-    if (isSecretPath(relativePath)) continue;
-    total += 1;
-    if (matches.length < maxResults) {
-      matches.push({ path: relativePath, line: lineNumber, text: line.slice(second + 1).slice(0, MAX_LINE_CHARS) });
-    }
-  }
-
   return {
     ok: true,
     workspace: workspace.alias,
     pattern,
     ...(glob ? { glob } : {}),
-    matches,
-    matchCount: total,
-    truncated: total > matches.length,
-    next: matches.length
+    matches: result.matches,
+    matchCount: result.matchCount,
+    truncated: result.matchCount > result.matches.length,
+    next: result.matches.length
       ? "Read only the relevant ranges with relai_read { paths, startLine, endLine }."
       : "No matches. Try a shorter pattern, ignoreCase:true, or relai_repo_snapshot for the file list."
+  };
+}
+
+function runGitGrep(workspace, gitArgs, maxResults) {
+  return new Promise((resolve) => {
+    const executable = resolveGitExecutable() || "git";
+    const child = spawn(executable, gitArgs, {
+      cwd: workspace.path,
+      env: { ...process.env, REL_AI_MCP: "1" },
+      shell: false,
+      detached: process.platform !== "win32"
+    });
+    const decoder = new StringDecoder("utf8");
+    const matches = [];
+    let matchCount = 0;
+    let pending = "";
+    let stderr = "";
+    let settled = false;
+
+    function consumeLine(rawLine) {
+      const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
+      if (!line) return;
+      const match = parseGitGrepLine(line);
+      if (!match || isSecretPath(match.path)) return;
+      matchCount += 1;
+      if (matches.length < maxResults) matches.push(match);
+    }
+
+    function consumeChunk(text, flush = false) {
+      pending += text;
+      let newlineIndex = pending.indexOf("\n");
+      while (newlineIndex >= 0) {
+        consumeLine(pending.slice(0, newlineIndex));
+        pending = pending.slice(newlineIndex + 1);
+        newlineIndex = pending.indexOf("\n");
+      }
+      if (flush && pending) {
+        consumeLine(pending);
+        pending = "";
+      }
+    }
+
+    let timer = setTimeout(() => {
+      killProcessTree(child);
+      finish({
+        exitCode: -1,
+        signal: "SIGTERM",
+        matches,
+        matchCount,
+        stderr: appendLimited(stderr, `\n[rel-ai-mcp timed out after ${SEARCH_TIMEOUT_MS}ms]\n`, MAX_STDERR_BYTES).trim(),
+        error: `Timed out after ${SEARCH_TIMEOUT_MS}ms`
+      });
+    }, SEARCH_TIMEOUT_MS);
+    if (typeof timer.unref === "function") timer.unref();
+
+    function finish(payload) {
+      if (settled) return;
+      settled = true;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      resolve(payload);
+    }
+
+    child.stdout.on("data", (chunk) => consumeChunk(decoder.write(chunk)));
+    child.stderr.on("data", (chunk) => {
+      stderr = appendLimited(stderr, chunk.toString("utf8"), MAX_STDERR_BYTES);
+    });
+    child.on("error", (error) => {
+      finish({ exitCode: -1, matches, matchCount, stderr: stderr.trim(), error: error.message });
+    });
+    child.on("close", (code, signal) => {
+      if (settled) return;
+      consumeChunk(decoder.end(), true);
+      finish({
+        exitCode: typeof code === "number" ? code : -1,
+        signal: signal || undefined,
+        matches,
+        matchCount,
+        stderr: stderr.trim()
+      });
+    });
+  });
+}
+
+function parseGitGrepLine(line) {
+  const first = line.indexOf(":");
+  const second = line.indexOf(":", first + 1);
+  if (first <= 0 || second <= first) return null;
+  const relativePath = line.slice(0, first);
+  const lineNumber = Number(line.slice(first + 1, second));
+  if (!Number.isInteger(lineNumber) || lineNumber < 1) return null;
+  return {
+    path: relativePath,
+    line: lineNumber,
+    text: line.slice(second + 1).slice(0, MAX_LINE_CHARS)
   };
 }
 

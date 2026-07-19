@@ -82,6 +82,26 @@ try {
   assert.ok(!line1Match.text.endsWith('\r'), `CRLF line 1 text should not end with \\r, got: ${JSON.stringify(line1Match.text)}`);
   assert.equal(line1Match.text, 'function alphaThing() {', 'line 1 text should match expected clean text');
 
+  // Search output larger than the generic 1 MiB process cap must preserve the
+  // earliest match and report the complete visible match count.
+  const overflowDir = path.join(wsRoot, 'overflow');
+  fs.mkdirSync(overflowDir, { recursive: true });
+  const overflowLineCount = 12000;
+  fs.writeFileSync(path.join(overflowDir, '000-early.txt'), 'overflowMarker early\n');
+  fs.writeFileSync(
+    path.join(overflowDir, 'zzz-large.txt'),
+    (`overflowMarker ${'x'.repeat(96)}\n`).repeat(overflowLineCount)
+  );
+  const overflow = await relaiSearch(workspace, config, {
+    pattern: 'overflowMarker',
+    fixed: true,
+    glob: 'overflow/*.txt',
+    maxResults: 1
+  });
+  assert.equal(overflow.matches[0]?.path, 'overflow/000-early.txt', 'large search must retain the earliest match');
+  assert.equal(overflow.matchCount, overflowLineCount + 1, 'large search must count every visible match');
+  assert.equal(overflow.truncated, true);
+
   console.log('Search tool unit test passed.');
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
