@@ -91,7 +91,7 @@ const TOOL_DEFINITION_VALUES = [
   {
     name: "relai_run_checks",
     title: "Workspace Checks",
-    description: "Run workspace validation checks (tests, linters, analyzers, build). Use level quick, standard, or release. Output is bounded to each step's tail where failures appear; pass fullOutput:true for a larger tail.",
+    description: "Run workspace validation checks (tests, linters, analyzers, build). Use level quick, standard, or release. Output is bounded to each step's tail where failures appear; pass fullOutput:true for a larger tail. Use level quick while iterating; run standard or release once before relai_complete_task.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"level":{"type":"string"},"check":{"type":"string"},"checks":{"type":"array","items":{"type":"string"},"minItems":0},"checksText":{"type":"string"},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000},"stopOnFailure":{"type":"boolean"},"fullOutput":{"type":"boolean"}},"required":["workspace"],"additionalProperties":false},
     annotations: {"readOnlyHint":true,"destructiveHint":false,"idempotentHint":true,"openWorldHint":false},
     handler: "runChecks",
