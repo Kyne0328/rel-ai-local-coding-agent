@@ -69,7 +69,7 @@ async function repoSnapshot(workspace, config, args = {}) {
     truncated: tree.truncated,
     hints: projectHints(Object.keys(manifests)),
     ...(git ? { git } : {}),
-    recommendedFlow: ["relai_repo_snapshot", "relai_read", "relai_edit", "relai_write", "relai_replace", "relai_tidy_plan", "relai_tidy_run", "relai_run_checks", "relai_diff", "relai_restore_changes"],
+    recommendedFlow: ["relai_repo_snapshot", "relai_search", "relai_read (startLine/endLine)", "relai_edit { runChecks: true, returnDiff: true }", "relai_complete_task"],
     writeGuidance: workspaceWriteGuidance(config),
     operationJournal: summarizeOperations(config, workspace, args.journalLimit || 10)
   };

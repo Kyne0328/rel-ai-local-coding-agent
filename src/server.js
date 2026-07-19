@@ -55,7 +55,7 @@ async function dispatchMessage(message, options) {
         protocolVersion: message.params?.protocolVersion || '2025-06-18',
         capabilities: { tools: { listChanged: true }, resources: { subscribe: false, listChanged: true } },
         serverInfo: { name: pkg.name, version: pkg.version },
-        instructions: 'For coding tasks, make the required changes, run one final relai_run_checks validation, then call relai_complete_task exactly once as the final Rel.AI tool with a concise summary. Do not call relai_complete_task if more edits or validation remain.'
+        instructions: 'For coding tasks: locate code with relai_search, read only the needed ranges with relai_read (startLine/endLine), then apply changes with relai_edit — pass runChecks:true and returnDiff:true to validate and review in the same call. Use level "quick" checks while iterating and one final standard or release relai_run_checks before finishing. Then call relai_complete_task exactly once with a concise summary. Do not call relai_complete_task if more edits or validation remain.'
       });
     case 'ping':
       return result(message.id, {});

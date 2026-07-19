@@ -23,7 +23,7 @@ ChatGPT asks -> Rel.AI MCP inspects, changes, validates, and reviews locally -> 
 The ChatGPT workflow is intentionally small and predictable:
 
 ```text
-relai_repo_snapshot -> relai_read -> relai_edit (replace/write/patch/batch) -> relai_run_checks -> relai_complete_task
+relai_repo_snapshot -> relai_search -> relai_read (line ranges) -> relai_edit (runChecks + returnDiff) -> relai_complete_task
 ```
 
 No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. The MCP server exposes one 18-tool workspace surface across local and connector transports.
@@ -330,6 +330,7 @@ Use this guide together with the `writeGuidance` returned by `relai_repo_snapsho
 | Situation | Use |
 | --- | --- |
 | Need a repository overview | `relai_repo_snapshot` |
+| Locate code by content | `relai_search`; then `relai_read` with `startLine` / `endLine` |
 | Need focused file content | `relai_read`; add `startLine` / `endLine` for large files |
 | Small localized edit inside an existing file | `relai_edit` with `oldText`/`newText` |
 | Complete replacement of a file (any size) | `relai_edit` with `content` |
