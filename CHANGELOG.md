@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.20.0] — 2026-07-19
+
+### Connector speed improvements
+- **Added relai_search: git-grep-backed workspace text search (18-tool surface).**
+- **relai_repo_snapshot now inlines a git summary (branch, ahead/behind, changed files).**
+- **Connector relai_read defaults to 128KB with a line-range hint on truncation.**
+- **Connector snapshot replaces the skipped-entry list with a count.**
+- **Snapshot walk skips the binary sniff for known text extensions.**
+- **Initialize instructions and recommendedFlow now advertise the search-first, one-call edit workflow.**
+
+Bump root/electron/status UI/lockfiles to 0.20.0.
+
 ## [0.19.8] — 2026-07-18
 
 ### Reliability, safety, and release hardening
