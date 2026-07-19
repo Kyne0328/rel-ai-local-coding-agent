@@ -23,11 +23,13 @@ const {
 const { planEdit } = require('../executionPlanner');
 const { relaiStatus } = require('./status');
 const { completeTask } = require('./completion');
+const { relaiSearch } = require('../bridge/search');
 
 /** @type {Readonly<Record<string, ToolHandler>>} */
 const HANDLERS = Object.freeze({
   repoSnapshot: inWorkspace((workspace, config, args) => repoSnapshot(workspace, config, args)),
   read: inWorkspace((workspace, config, args, context) => relaiRead(workspace, config, args, context)),
+  search: inWorkspace((workspace, config, args) => relaiSearch(workspace, config, args)),
   write: inWorkspace((workspace, config, args) => relaiWrite(workspace, config, args)),
   replace: inWorkspace((workspace, config, args) => relaiReplace(workspace, config, args)),
   tidyPlan: inWorkspace((workspace, config, args) => workspaceTidyPlan(workspace, config, args)),

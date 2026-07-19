@@ -29,6 +29,18 @@ const TOOL_DEFINITION_VALUES = [
     dashboard: {"category":"Workspace tools","requiredProfile":"workspace","requiresApproval":false}
   },
   {
+    name: "relai_search",
+    title: "Search Workspace Text",
+    description: "Read-only. Search workspace files (tracked and untracked) for a pattern and return path, line, and matching text. Extended regex by default; pass fixed:true for a literal string, ignoreCase:true for case-insensitive matching, and glob (e.g. 'src/*.js') to narrow scope. Prefer one search over reading several files when locating code.",
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"pattern":{"type":"string","minLength":1,"maxLength":1000},"glob":{"type":"string","maxLength":256},"fixed":{"type":"boolean"},"ignoreCase":{"type":"boolean"},"maxResults":{"type":"number","minimum":1,"maximum":1000}},"required":["workspace","pattern"],"additionalProperties":false},
+    annotations: {"readOnlyHint":true,"destructiveHint":false,"idempotentHint":true,"openWorldHint":false},
+    handler: "search",
+    connectorStrip: [],
+    groups: [],
+    behavior: {"audit":"","cache":"","startsSession":false,"deferStagedSession":false,"sessionWrite":false,"summary":""},
+    dashboard: {"category":"Workspace tools","requiredProfile":"workspace","requiresApproval":false}
+  },
+  {
     name: "relai_write",
     title: "Write Local Repo File",
     description: "Full-file replacement. Prefer direct { workspace, path, content } for complete-file updates — direct write has no size cap. Staged mode (stage:'start'/'append'/'commit') exists only for transports that cap a single message; if used and writeId is omitted, append/commit resolve the single in-flight staged write (or pass path to disambiguate when several are pending).",
@@ -210,7 +222,7 @@ const TOOL_DEFINITION_VALUES = [
   },
 ];
 const READ_ONLY_TOOLS = new Set([
-  'relai_repo_snapshot', 'relai_read', 'relai_diff', 'relai_status',
+  'relai_repo_snapshot', 'relai_read', 'relai_search', 'relai_diff', 'relai_status',
   'relai_git_status', 'relai_git_create_pr'
 ]);
 const DESTRUCTIVE_TOOLS = new Set([

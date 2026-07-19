@@ -26,7 +26,7 @@ The ChatGPT workflow is intentionally small and predictable:
 relai_repo_snapshot -> relai_read -> relai_edit (replace/write/patch/batch) -> relai_run_checks -> relai_complete_task
 ```
 
-No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. The MCP server exposes one 17-tool workspace surface across local and connector transports.
+No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. The MCP server exposes one 18-tool workspace surface across local and connector transports.
 
 When ChatGPT first edits a workspace, the server starts a session and records the pre-edit state, so later status/diff output can separate the files this session changed from files that were already modified. The session expires after a period of inactivity.
 
@@ -99,7 +99,7 @@ The activity page is there because I got tired of guessing what the MCP server w
   <img src="docs/images/dashboard-tools-section.png" alt="Rel.AI MCP bridge tools" width="900">
 </p>
 
-The dashboard shows the 17 workspace tools ChatGPT can use for inspection, editing, validation, explicit completion reporting, review, Git publishing, tidy, and restore workflows.
+The dashboard shows the 18 workspace tools ChatGPT can use for inspection, editing, validation, explicit completion reporting, review, Git publishing, tidy, and restore workflows.
 
 ### Connector setup
 
@@ -255,12 +255,13 @@ See [docs/ONE_CLICK_SETUP.md](docs/ONE_CLICK_SETUP.md) for permanent-tunnel opti
 
 ## MCP tools
 
-Rel.AI exposes one 17-tool workspace surface. `relai_edit` is the primary write path: it routes to exact replacement, full-file write, structured patch application, or a batch of edits server-side, and can validate and return a diff in the same call. Tracked-file deletion is supported through structured `Delete File` patches. Untracked cleanup uses the two-step `relai_tidy_plan` / `relai_tidy_run` workflow, where the server selects bounded session-owned candidates and verifies them again before deletion. `relai_complete_task` is the final workflow signal and is accepted only after a passed validation with no later code changes.
+Rel.AI exposes one 18-tool workspace surface. `relai_edit` is the primary write path: it routes to exact replacement, full-file write, structured patch application, or a batch of edits server-side, and can validate and return a diff in the same call. Tracked-file deletion is supported through structured `Delete File` patches. Untracked cleanup uses the two-step `relai_tidy_plan` / `relai_tidy_run` workflow, where the server selects bounded session-owned candidates and verifies them again before deletion. `relai_complete_task` is the final workflow signal and is accepted only after a passed validation with no later code changes.
 
 | Tool | Purpose |
 | --- | --- |
 | `relai_repo_snapshot` | Return a filtered project snapshot, manifests, discovered checks, context hints, and size-based write guidance. |
 | `relai_read` | Read focused files or directory summaries. Optional `startLine`/`endLine` returns only the needed line range; `guidanceMode` controls full, compact, or omitted write guidance. |
+| `relai_search` | Search workspace files for a pattern and return path/line matches. Extended regex by default; `fixed:true` for literal strings, `ignoreCase:true`, and `glob` to narrow scope. |
 | `relai_edit` | The primary edit tool. Pass `oldText`+`newText` for exact edits, `content` for full-file writes (large files chunk automatically), `updateText` for unified-diff changes, or `edits: [...]` for a batch — plus `runChecks` / `returnDiff` to validate and review in one call. |
 | `relai_write` | Fallback: replace one complete file with full-file content (direct or staged mode). |
 | `relai_replace` | Fallback: small exact text replacements inside an existing file. |
