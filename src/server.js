@@ -3,7 +3,8 @@ const { getToolSchemas, callTool } = require('./tools');
 const { listResources, readResource } = require('./resources');
 const pkg = require('../package.json');
 
-const MAX_TOOL_RESULT_BYTES = Number(process.env.REL_AI_MCP_MAX_TOOL_RESULT_BYTES || process.env.REL_AI_MCP_MAX_TOOL_RESULT_CHARS || 120000);
+const DEFAULT_MAX_TOOL_RESULT_BYTES = 512 * 1024;
+const MAX_TOOL_RESULT_BYTES = Number(process.env.REL_AI_MCP_MAX_TOOL_RESULT_BYTES || process.env.REL_AI_MCP_MAX_TOOL_RESULT_CHARS || DEFAULT_MAX_TOOL_RESULT_BYTES);
 
 function main() {
   const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });

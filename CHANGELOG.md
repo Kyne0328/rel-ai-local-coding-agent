@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.20.1] — 2026-07-19
+
+### Connector result integrity fixes
+- **Raised the default MCP tool-result ceiling from 120,000 bytes to 512 KiB.** Connector reads up to the active-session 256 KiB budget now retain their full `items` payload instead of collapsing into the generic outer truncation summary.
+- **Streamed `git grep` output inside `relai_search`.** Searches larger than the generic process-output budget now preserve their earliest matches and report the complete visible `matchCount` without buffering the entire result.
+- **Added regression coverage for a 256 KiB connector read and more than 1 MiB of search output.**
+
+Bump root/electron/status UI/lockfiles to 0.20.1.
+
 ## [0.20.0] — 2026-07-19
 
 ### Connector speed improvements
