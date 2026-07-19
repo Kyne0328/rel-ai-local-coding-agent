@@ -164,14 +164,31 @@ function createToolActivityTracker(options = {}) {
       task.workspace === workspace &&
       timestamp >= task.lastActivityAt &&
       timestamp - task.lastActivityAt <= idleMs
-    );
-    if (candidates.length !== 1) return null;
-    const task = candidates[0];
+    ).sort((left, right) => right.lastActivityAt - left.lastActivityAt);
+    const incomingWeak = isWeakTaskScope(scopeId);
+    const weakCandidates = candidates.filter(task => isWeakTaskScope(task.scopeId));
+    let compatible = weakCandidates;
+    if (incomingWeak && compatible.length === 0 && candidates.length === 1) compatible = candidates;
+    if (compatible.length === 0) return null;
+    const task = compatible[0];
+    if (incomingWeak || isWeakTaskScope(task.scopeId)) {
+      for (const sibling of weakCandidates) {
+        if (sibling !== task) absorbFragmentedTask(task, sibling);
+      }
+    }
     cancelCompletion(task);
     tasksByScope.delete(task.scopeId);
     task.scopeId = scopeId;
     tasksByScope.set(scopeId, task);
     return task;
+  }
+
+  function absorbFragmentedTask(target, source) {
+    cancelCompletion(source);
+    tasksByScope.delete(source.scopeId);
+    target.calls += source.calls;
+    target.failures += source.failures;
+    target.startedAt = Math.min(target.startedAt, source.startedAt);
   }
 
   function resolveScopeId(details) {
@@ -392,6 +409,11 @@ function resolveIdleMs(value) {
   const configured = Number(value ?? process.env.REL_AI_MCP_TASK_IDLE_MS ?? DEFAULT_TASK_IDLE_MS);
   if (!Number.isFinite(configured)) return DEFAULT_TASK_IDLE_MS;
   return Math.min(Math.max(configured, 15_000), 10 * 60_000);
+}
+
+function isWeakTaskScope(scopeId) {
+  const value = String(scopeId || '');
+  return /^mcp:(?:session|transport|fallback):/.test(value) || /^mcp:[a-f0-9]{24}$/i.test(value);
 }
 
 const defaultTracker = createToolActivityTracker();

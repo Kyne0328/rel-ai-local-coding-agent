@@ -59,12 +59,39 @@ assert.equal(inactive.find(task => task.taskId === finishChecks.taskId)?.calls, 
 assert.equal(inactive.every(task => task.status === 'inactive' && task.endReason === 'inactivity_window'), true);
 
 const reconnectTracker = createToolActivityTracker({ idleMs: 60_000 });
-const firstTransport = reconnectTracker.beginConnectorToolCall({ tool: 'relai_run_checks', workspace: 'repo', scopeId: 'transport-a' });
+const firstTransport = reconnectTracker.beginConnectorToolCall({ tool: 'relai_run_checks', workspace: 'repo', scopeId: 'mcp:transport:a' });
 firstTransport();
-const rotatedTransport = reconnectTracker.beginConnectorToolCall({ tool: 'relai_complete_task', workspace: 'repo', scopeId: 'transport-b' });
+const rotatedTransport = reconnectTracker.beginConnectorToolCall({ tool: 'relai_complete_task', workspace: 'repo', scopeId: 'mcp:transport:b' });
 assert.equal(rotatedTransport.taskId, firstTransport.taskId, 'a single waiting workspace task must survive connector transport rotation');
 rotatedTransport();
 reconnectTracker.reset();
+
+let fragmentedNow = 1000;
+const fragmentedTracker = createToolActivityTracker({ idleMs: 60_000, now: () => fragmentedNow });
+const fragmentedA = fragmentedTracker.beginConnectorToolCall({ tool: 'relai_read', workspace: 'repo', scopeId: 'mcp:transport:a' });
+fragmentedNow = 2000;
+const fragmentedB = fragmentedTracker.beginConnectorToolCall({ tool: 'relai_search', workspace: 'repo', scopeId: 'mcp:transport:b' });
+assert.notEqual(fragmentedA.taskId, fragmentedB.taskId, 'overlapping connector calls may begin as separate weak transport tasks');
+fragmentedNow = 3000;
+fragmentedA();
+fragmentedNow = 4000;
+fragmentedB();
+assert.equal(fragmentedTracker.getToolActivity().activeTaskCount, 2);
+fragmentedNow = 5000;
+const repaired = fragmentedTracker.beginConnectorToolCall({ tool: 'relai_read', workspace: 'repo', scopeId: 'mcp:transport:c' });
+assert.equal(repaired.taskId, fragmentedB.taskId, 'the newest weak transport task must absorb fragmented waiting siblings');
+assert.equal(fragmentedTracker.getToolActivity().activeTaskCount, 1, 'fragmented weak sessions must not permanently poison future grouping');
+assert.equal(fragmentedTracker.getToolActivity().tasks[0].calls, 3);
+repaired();
+fragmentedTracker.reset();
+
+const strongTracker = createToolActivityTracker({ idleMs: 60_000 });
+const strongA = strongTracker.beginConnectorToolCall({ tool: 'relai_read', workspace: 'repo', scopeId: 'mcp:conversation:a' });
+strongA();
+const strongB = strongTracker.beginConnectorToolCall({ tool: 'relai_read', workspace: 'repo', scopeId: 'mcp:conversation:b' });
+assert.notEqual(strongA.taskId, strongB.taskId, 'different stable conversation scopes must remain separate');
+strongB();
+strongTracker.reset();
 
 let nextId = 40;
 const started = new Set();

@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.20.4] — 2026-07-19
+
+### Connector session tracking repair
+- **Fix every connector tool call appearing as a separate one-call work session.** Weak ChatGPT transport and session identifiers are now classified separately from stable conversation identifiers.
+- **Repair the poisoned-session state caused by multiple waiting transport fragments.** A new weak transport call selects the most recent compatible workspace task and absorbs older weak waiting siblings instead of refusing to reconnect forever.
+- **Retroactively stitch existing one-call audit groups in the dashboard.** Legacy opaque MCP scopes from the same process and workspace are grouped inside the five-minute window, while different stable ChatGPT conversation scopes remain separate.
+- **Keep live state attached when the active task is one of the stitched fragment IDs.** The dashboard now shows the combined session as working or waiting rather than rendering each persisted event as inactive.
+- **Prevent audit-log write failures from replacing the original tool error.** Audit persistence is best-effort on failure paths, with diagnostics emitted only when debug logging is enabled.
+- **Add regression coverage for overlapping transport calls, permanent fragmentation recovery, legacy history repair, active-session matching, and stable-conversation isolation.**
+
+Bump root/electron/status UI/lockfiles to 0.20.4.
+
 ## [0.20.2] — 2026-07-19
 
 ### Electron-only packaging and release integrity

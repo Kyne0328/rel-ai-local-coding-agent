@@ -69,7 +69,7 @@ const sourceLineBudgets = {
   'src/tools/dispatch.js': 80,
   'src/httpServer.js': 300,
   'src/http/dashboard.js': 400,
-  'src/http/mcp.js': 240,
+  'src/http/mcp.js': 255,
   'src/http/io.js': 220,
   'src/http/auth.js': 120,
   'electron/main.js': 500,

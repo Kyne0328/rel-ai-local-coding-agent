@@ -15,6 +15,7 @@ const requestB = { headers: { 'mcp-session-id': 'session-b', authorization: 'Bea
 const payload = { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'relai_status', arguments: {} } };
 assert.equal(resolveTaskScopeId(requestA, payload), resolveTaskScopeId(requestA, payload));
 assert.notEqual(resolveTaskScopeId(requestA, payload), resolveTaskScopeId(requestB, payload));
+assert.match(resolveTaskScopeId(requestA, payload), /^mcp:transport:[a-f0-9]{24}$/);
 assert.notEqual(
   resolveTaskScopeId({ headers: { 'x-openai-conversation-id': 'conversation-a' } }, payload),
   resolveTaskScopeId({ headers: { 'x-openai-conversation-id': 'conversation-b' } }, payload)
@@ -36,6 +37,10 @@ assert.equal(
   resolveTaskScopeId(rotatedTransportB, payload, 'transport-b'),
   'conversation identity must survive MCP transport session rotation'
 );
+assert.match(
+  resolveTaskScopeId({ headers: { 'x-openai-conversation-id': 'conversation-a' } }, payload),
+  /^mcp:conversation:[a-f0-9]{24}$/
+);
 
 const sameBearerDifferentSocketsA = { headers: { authorization: 'Bearer shared-token' }, socket: { remoteAddress: '127.0.0.1', remotePort: 41001 } };
 const sameBearerDifferentSocketsB = { headers: { authorization: 'Bearer shared-token' }, socket: { remoteAddress: '127.0.0.1', remotePort: 41002 } };
@@ -45,6 +50,10 @@ assert.equal(
   resolveTaskScopeId(sameBearerDifferentSocketsA, workspacePayloadA),
   resolveTaskScopeId(sameBearerDifferentSocketsB, workspacePayloadA),
   'socket reconnects without conversation metadata must remain grouped for the same workspace'
+);
+assert.match(
+  resolveTaskScopeId({ headers: {} }, workspacePayloadA),
+  /^mcp:fallback:[a-f0-9]{24}$/
 );
 assert.notEqual(
   resolveTaskScopeId(sameBearerDifferentSocketsA, workspacePayloadA),

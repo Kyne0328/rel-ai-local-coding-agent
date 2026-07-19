@@ -189,11 +189,17 @@ function resolveTaskScopeId(req, payload, explicitSessionId = '') {
   // Conversation identity must outlive a transport reconnect. Using Mcp-Session-Id
   // first split validation and relai_complete_task into separate work sessions when
   // ChatGPT rotated the HTTP transport between tool calls.
-  const source = String(
-    conversationHeader || metadataConversation || metadataSession ||
-    transportHeader || explicitSessionId || fallback
-  );
-  return `mcp:${crypto.createHash('sha256').update(source).digest('hex').slice(0, 24)}`;
+  if (conversationHeader) return hashedTaskScope('conversation', conversationHeader);
+  if (metadataConversation) return hashedTaskScope('conversation', metadataConversation);
+  if (metadataSession) return hashedTaskScope('session', metadataSession);
+  if (transportHeader) return hashedTaskScope('transport', transportHeader);
+  if (explicitSessionId) return hashedTaskScope('transport', explicitSessionId);
+  return hashedTaskScope('fallback', fallback);
+}
+
+function hashedTaskScope(kind, value) {
+  const hash = crypto.createHash('sha256').update(String(value)).digest('hex').slice(0, 24);
+  return `mcp:${kind}:${hash}`;
 }
 
 function openSseSession(res, req, messagePath = "/messages") {

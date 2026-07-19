@@ -60,15 +60,23 @@ async function callTool(name, args = {}, context = {}) {
     const extraAudit = buildExtraAudit(name, value, args || {});
     applyCautionAudit(extraAudit, name, args || {}, value, config);
     invalidateSessionCacheForCall(config, name, args || {});
-    logAudit(config, { taskId: finishActivity?.taskId, scopeId: finishActivity?.scopeId, tool: name, operation: finishActivity?.operation, ok: valueOk, workspace: args?.workspace, ms: Date.now() - started, ...extraAudit, ...(valueOk ? {} : { error: activityResult.error }) });
+    safeLogAudit(config, { taskId: finishActivity?.taskId, scopeId: finishActivity?.scopeId, tool: name, operation: finishActivity?.operation, ok: valueOk, workspace: args?.workspace, ms: Date.now() - started, ...extraAudit, ...(valueOk ? {} : { error: activityResult.error }) });
     return ok(connector ? compactForConnector(name, value, args || {}) : value);
   } catch (error) {
     const enhanced = enhanceToolError(name, error);
     activityResult = { ok: false, error: enhanced.message };
-    logAudit(config, { taskId: finishActivity?.taskId, scopeId: finishActivity?.scopeId, tool: name, operation: finishActivity?.operation, ok: false, workspace: args?.workspace, ms: Date.now() - started, error: enhanced.message });
+    safeLogAudit(config, { taskId: finishActivity?.taskId, scopeId: finishActivity?.scopeId, tool: name, operation: finishActivity?.operation, ok: false, workspace: args?.workspace, ms: Date.now() - started, error: enhanced.message });
     throw enhanced;
   } finally {
     finishActivity?.(activityResult);
+  }
+}
+
+function safeLogAudit(config, event) {
+  try {
+    logAudit(config, event);
+  } catch (error) {
+    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] audit write:', error);
   }
 }
 
