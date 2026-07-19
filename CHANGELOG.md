@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.20.2] — 2026-07-19
+
+### Electron-only packaging and release integrity
+- **Fix released installers shipping without the bundled ngrok agent, which made tunnels fail on clean machines. CI and the release workflow now fetch the ngrok seed before packaging.**
+- **Add a packaging preflight (npm run verify:ngrok) that refuses to build an installer without a valid ngrok seed, and assert the seed in the packaged-app smoke test.**
+- **Bundle only the build platform's ngrok binary, cutting packaged resources from roughly 83 MB to 33 MB.**
+- **Remove the pre-Electron CLI launcher, the npx-based Cloudflare/localtunnel providers, and the manual install scripts, so no path requires installing Node, npm, or ngrok by hand.**
+- **Rewrite the README and setup docs around the desktop installer instead of npm run oneclick.**
+
+Bump root/electron/status UI/lockfiles to 0.20.2.
+
 ## [0.20.1] — 2026-07-19
 
 ### Connector result integrity fixes

@@ -5,7 +5,8 @@
 # (see vendor/ngrok/README.md); run this before packaging the Electron app.
 #
 # Usage:   pwsh scripts/fetch-ngrok.ps1
-#          $env:NGROK_ARCH='arm64'; pwsh scripts/fetch-ngrok.ps1   # darwin/linux arm64
+#          $env:NGROK_ARCH='arm64'; pwsh scripts/fetch-ngrok.ps1        # darwin/linux arm64
+#          $env:NGROK_PLATFORMS='win32'; pwsh scripts/fetch-ngrok.ps1   # only the win32 seed
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
@@ -21,6 +22,14 @@ $targets = @(
   @{ plat = 'darwin'; asset = "darwin-$arch";  out = 'ngrok' },
   @{ plat = 'linux';  asset = "linux-$arch";   out = 'ngrok' }
 )
+
+# Packaging only bundles the build host's platform, so CI fetches just that seed.
+if ($env:NGROK_PLATFORMS) {
+  $wanted = $env:NGROK_PLATFORMS.Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+  $unknown = $wanted | Where-Object { $_ -notin $targets.plat }
+  if ($unknown) { throw "Unknown NGROK_PLATFORMS value(s): $($unknown -join ', '). Valid: win32, darwin, linux." }
+  $targets = $targets | Where-Object { $_.plat -in $wanted }
+}
 
 foreach ($t in $targets) {
   $url = "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-$($t.asset).zip"

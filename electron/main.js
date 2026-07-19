@@ -18,7 +18,7 @@ const toolActivity = require(path.join(srcPath, 'toolActivity'));
 const dashboardSessions = require(path.join(srcPath, 'http', 'dashboardSessions'));
 const configModule = require(path.join(srcPath, 'config'));
 const { startHttpServer } = require(path.join(srcPath, 'httpServer'));
-const tunnelManager = require(path.join(srcPath, 'tunnelManager'));
+const { killProcess } = require(path.join(srcPath, 'processKill'));
 const managedNgrok = require('./managed-ngrok');
 const {
   hasExistingConfig,
@@ -350,7 +350,7 @@ async function startServer(options = {}) {
     });
 
     if (runToken !== lifecycleToken) {
-      if (result.process) tunnelManager.killProcess(result.process);
+      if (result.process) killProcess(result.process);
       startPromise = null;
       return currentStatus;
     }
@@ -386,7 +386,7 @@ async function startServer(options = {}) {
 
 function stopServer(options = {}) {
   if (tunnelProcess) {
-    tunnelManager.killProcess(tunnelProcess);
+    killProcess(tunnelProcess);
   }
   tunnelProcess = null;
 

@@ -34,7 +34,9 @@ async function runInstalledSmoke(app) {
     packageJson: path.join(resourcesPath, 'package.json'),
     changelog: path.join(resourcesPath, 'CHANGELOG.md'),
     wizard: path.join(__dirname, 'renderer', 'wizard.html'),
-    status: path.join(__dirname, 'renderer', 'status.html')
+    status: path.join(__dirname, 'renderer', 'status.html'),
+    // Without the seed the app installs fine and only fails when a user starts a tunnel.
+    ngrokSeed: path.join(resourcesPath, 'bin', 'ngrok', process.platform, process.platform === 'win32' ? 'ngrok.exe' : 'ngrok')
   };
   const resourceChecks = Object.fromEntries(
     Object.entries(requiredResources).map(([name, file]) => [name, fs.existsSync(file)])

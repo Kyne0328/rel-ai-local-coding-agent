@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const tunnelManager = require('../src/tunnelManager');
+const { killProcess } = require('../src/processKill');
 
 const UPDATE_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 const URL_RE = /https:\/\/[^\s"'<>]+/i;
@@ -130,7 +130,7 @@ function runNgrok(args, options = {}) {
     let stderr = '';
     const timeoutMs = Number(options.timeoutMs || 45000);
     const timer = setTimeout(() => {
-      tunnelManager.killProcess(child);
+      killProcess(child);
       resolve({ ok: false, exitCode: null, stdout, stderr, error: `Timed out after ${timeoutMs}ms.` });
     }, timeoutMs);
     child.stdout.on('data', (chunk) => { stdout += String(chunk || ''); });
@@ -234,7 +234,7 @@ function startManagedNgrokTunnel({ domain, port, timeoutMs = 30000, onLog = () =
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      if (!result.ok && child.exitCode === null && !child.killed) tunnelManager.killProcess(child);
+      if (!result.ok && child.exitCode === null && !child.killed) killProcess(child);
       resolve(result);
     };
     const handleChunk = (chunk) => {

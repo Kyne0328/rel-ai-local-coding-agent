@@ -102,7 +102,7 @@ function startHttpServer(options = {}) {
       console.error(`[rel-ai-mcp] ChatGPT MCP URL: ${summary.chatgptMcpUrl}`);
       console.error("[rel-ai-mcp] ChatGPT Auth: OAuth (sign in with your dashboard token)");
     } else {
-      console.error("[rel-ai-mcp] No permanent public URL configured. Use rel-ai-mcp-launch --public-url https://your-domain.example.com when your tunnel is ready.");
+      console.error("[rel-ai-mcp] No public URL configured. Open the Rel.AI MCP desktop app to set your ngrok domain and start the tunnel.");
       console.error(`[rel-ai-mcp] Local ChatGPT-style URL for diagnostics only: ${summary.chatgptMcpUrl}`);
     }
     if (!token) {

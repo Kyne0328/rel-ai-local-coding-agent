@@ -6,7 +6,8 @@
 # (see vendor/ngrok/README.md); run this before packaging the Electron app.
 #
 # Usage:   scripts/fetch-ngrok.sh
-#          NGROK_ARCH=arm64 scripts/fetch-ngrok.sh   # darwin/linux arm64
+#          NGROK_ARCH=arm64 scripts/fetch-ngrok.sh        # darwin/linux arm64
+#          NGROK_PLATFORMS=linux scripts/fetch-ngrok.sh   # only the linux seed
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -23,6 +24,23 @@ targets=(
   "darwin:darwin-${arch}:ngrok"
   "linux:linux-${arch}:ngrok"
 )
+
+# Packaging only bundles the build host's platform, so CI fetches just that seed.
+if [[ -n "${NGROK_PLATFORMS:-}" ]]; then
+  selected=()
+  IFS=',' read -ra wanted <<<"$NGROK_PLATFORMS"
+  for want in "${wanted[@]}"; do
+    want="$(echo "$want" | tr -d '[:space:]')"
+    [[ -n "$want" ]] || continue
+    match=""
+    for t in "${targets[@]}"; do
+      [[ "${t%%:*}" == "$want" ]] && match="$t" && break
+    done
+    [[ -n "$match" ]] || { echo "Unknown NGROK_PLATFORMS value: $want. Valid: win32, darwin, linux." >&2; exit 1; }
+    selected+=("$match")
+  done
+  targets=("${selected[@]}")
+fi
 
 for t in "${targets[@]}"; do
   IFS=':' read -r plat asset out <<<"$t"
