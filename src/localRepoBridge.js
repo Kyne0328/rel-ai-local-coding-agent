@@ -30,6 +30,7 @@ const { workspaceTidyPlan, workspaceTidyRun: relaiWorkspaceTidyRun } = require("
 const { relaiApplyPatch, normalizeOpenAIPatchFormat } = require("./bridge/patch");
 
 const DEFAULT_MAX_READ_BYTES = 1024 * 1024;
+const DEFAULT_CONNECTOR_READ_BYTES = 128 * 1024;
 const DEFAULT_MAX_SNAPSHOT_FILES = 1000;
 const DEFAULT_STAGED_CHUNK_BYTES = 12000;
 const STAGED_WRITE_BYTE_THRESHOLD = 8000;
@@ -76,7 +77,8 @@ function relaiRead(workspace, config, args = {}, context = {}) {
   if (paths.length === 0) throw new Error("paths must contain at least one path.");
   const policy = resolvePolicy(workspace, config || {});
   const sessionActive = policy?.sessionActive === true;
-  const defaultMaxBytes = resolveBudget(DEFAULT_MAX_READ_BYTES, policy, config || {});
+  const baseReadBytes = context.connector ? DEFAULT_CONNECTOR_READ_BYTES : DEFAULT_MAX_READ_BYTES;
+  const defaultMaxBytes = resolveBudget(baseReadBytes, policy, config || {});
   const maxBytes = clampNumber(args.maxBytes, 1000, 10 * 1024 * 1024, defaultMaxBytes);
   const lineRange = normalizeReadLineRange(args);
   const guidanceMode = normalizeReadGuidanceMode(args.guidanceMode, context.connector ? "compact" : "full");
@@ -112,6 +114,7 @@ function readSingleItem(workspace, config, requested, sessionActive, maxBytes, a
       returnedBytes: selection.returnedBytes,
       lineCount: selection.totalLines,
       truncated: selection.truncated,
+      ...(selection.truncated ? { hint: `Content truncated. Re-call relai_read with startLine/endLine (file has ${selection.totalLines} lines).` } : {}),
       ...(selection.lineRange ? { lineRange: selection.lineRange } : {}),
       ...readGuidanceFields(options.guidanceMode, safe.relativePath, text),
       content: selection.content,
