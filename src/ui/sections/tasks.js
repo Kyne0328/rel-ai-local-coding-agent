@@ -10,6 +10,7 @@ export function mountTasks(container, data = {}) {
     .filter(session => !workspace || session.workspace === workspace);
   const working = sessions.filter(session => session.status === 'working').length;
   const waiting = sessions.filter(session => session.status === 'waiting').length;
+  const completed = sessions.filter(session => session.status === 'completed').length;
 
   container.innerHTML = '';
   const root = document.createElement('div');
@@ -25,12 +26,12 @@ export function mountTasks(container, data = {}) {
     <div class="overview-grid overview-grid-compact">
       ${metricHtml('Running now', working, 'tool calls currently executing', working ? 'blue' : 'good')}
       ${metricHtml('Waiting', waiting, 'no active Rel.AI call', waiting ? 'warn' : 'good')}
-      ${metricHtml('History loaded', sessions.length, 'grouped from the latest 200 tool events', 'blue')}
+      ${metricHtml('Completed', completed, 'explicitly completed after validation', completed ? 'good' : 'blue')}
     </div>`;
 
   const card = document.createElement('section');
   card.className = 'card';
-  card.innerHTML = '<div class="card-head"><h3>Session history</h3><a class="section-action" href="#activity">Open individual tool events</a></div>';
+  card.innerHTML = '<div class="card-head"><h3>Session history</h3><div class="card-head-actions"><a class="section-action" href="#activity">Open tool events</a><a class="section-action" href="#settings/dashboard">History controls</a></div></div>';
   const body = document.createElement('div');
   body.className = 'card-body task-list';
   body.innerHTML = sessions.length

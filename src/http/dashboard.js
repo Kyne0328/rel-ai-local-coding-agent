@@ -326,7 +326,7 @@ try {
           <svg class="workspace-scope-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
         </label>
         <span class="status-pill warn" id="connectionStatus">Connecting…</span>
-        <details class="topbar-menu"><summary aria-label="Dashboard actions">•••</summary><button class="secondary" id="refreshBtn" type="button">Refresh now</button></details>
+        <button class="secondary topbar-refresh" id="refreshBtn" type="button" aria-busy="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" /></svg><span>Refresh now</span></button>
         <span class="section-action" id="lastUpdated"></span>
       </div>
     </header>

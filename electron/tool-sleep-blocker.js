@@ -142,6 +142,16 @@ function createTaskActivityRuntime(options) {
     return notificationsEnabled;
   }
 
+  function resetHistory() {
+    const activity = toolActivity.getToolActivity?.() || {};
+    if (Number(activity.activeCalls || 0) > 0) {
+      return { ok: false, error: 'Cannot clear session history while a Rel.AI tool call is running.' };
+    }
+    toolActivity.resetToolActivity?.();
+    emitStatus();
+    return { ok: true };
+  }
+
   function stop() {
     unsubscribe();
     blocker.stop();
@@ -151,6 +161,7 @@ function createTaskActivityRuntime(options) {
     getStatus: currentStatus,
     getNotificationsEnabled: () => notificationsEnabled,
     setNotificationsEnabled,
+    resetHistory,
     stop
   };
 }

@@ -95,11 +95,14 @@ function read(rel) {
   const dashboardHtml = read('src/http/dashboard.js');
   const dashboardCss = read('public/dashboard.css');
   assert.match(dashboard, /invalidateCache\(DASHBOARD_DATA_URL\)/);
+  assert.match(dashboard, /fetchJson\(DASHBOARD_DATA_URL, \{ cache: 'no-store' \}\)/);
   assert.match(dashboard, /let _refreshPromise = null/);
   assert.match(dashboard, /finally \{\s*setRefreshState\(refreshState\);\s*\}/);
   assert.match(dashboardHtml, /id="workspaceScopeControl" class="workspace-scope-control"/);
   assert.match(dashboardCss, /\.workspace-scope-control:focus-within/);
   assert.match(dashboardCss, /appearance: none/);
+  assert.match(dashboardHtml, /class="secondary topbar-refresh"/);
+  assert.match(read('src/ui/router.js'), /window\.scrollTo\(view\.scrollX, view\.scrollY\)/);
 }
 
 // Stale-command diagnostics cover commands AND testCommands, matching relai_status.

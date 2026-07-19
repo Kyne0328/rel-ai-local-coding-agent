@@ -6,7 +6,7 @@ export function mountDiagnostics(container) {
   container.innerHTML = `
     <div class="section-head"><div><h2>Diagnostics</h2><p>Blocking errors, warnings, and recommendations with direct recovery actions.</p></div></div>
     <div id="diagnosticSummary" class="diagnostic-summary"><div class="empty">Loading diagnostics…</div></div>`;
-  loadDiagnostics(document.getElementById('diagnosticSummary')).catch(error => {
+  return loadDiagnostics(document.getElementById('diagnosticSummary')).catch(error => {
     const root = document.getElementById('diagnosticSummary');
     if (root) root.innerHTML = `<div class="diagnostic-clear"><strong>Diagnostics unavailable</strong><span>${esc(error instanceof Error ? error.message : String(error))}</span></div>`;
   });

@@ -118,14 +118,25 @@ async function loadDashboardInteractionSmoke() {
       };
       await waitFor(() => document.querySelector('#refreshBtn') && document.querySelector('#workspaceScope option[value="smoke"]'), 'dashboard controls');
       const refresh = document.querySelector('#refreshBtn');
+      document.body.style.minHeight = '3000px';
+      window.scrollTo(0, 700);
+      await waitFor(() => window.scrollY >= 650, 'test scroll position');
+      const scrollBefore = window.scrollY;
       const before = performance.getEntriesByType('resource').filter(entry => entry.name.includes('/api/dashboard/v10')).length;
       refresh.click();
       await waitFor(() => performance.getEntriesByType('resource').filter(entry => entry.name.includes('/api/dashboard/v10')).length > before, 'refresh request');
       await waitFor(() => !refresh.disabled, 'refresh completion');
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const scrollPreserved = Math.abs(window.scrollY - scrollBefore) <= 4;
+      const refreshIconPreserved = Boolean(refresh.querySelector('svg'));
+      document.body.style.minHeight = '';
       const scope = document.querySelector('#workspaceScope');
       scope.value = 'smoke';
       scope.dispatchEvent(new Event('change', { bubbles: true }));
       await waitFor(() => location.hash.includes('workspace=smoke'), 'workspace route update');
+      location.hash = '#settings/dashboard';
+      await waitFor(() => document.querySelector('[data-sub-page="dashboard"].active') && [...document.querySelectorAll('button')].some(button => button.textContent.includes('Clear session and activity history')), 'dashboard settings');
+      const settingsPresent = Boolean(document.querySelector('[data-sub-page="dashboard"].active'));
       location.hash = '#tasks?workspace=smoke';
       await waitFor(() => document.querySelector('[data-task-id="window-smoke-task"]'), 'session row');
       document.querySelector('[data-task-id="window-smoke-task"]').click();
@@ -136,13 +147,16 @@ async function loadDashboardInteractionSmoke() {
       return {
         hasDesktopApi: Boolean(window.relaiDesktop),
         refreshEnabled: !refresh.disabled,
+        scrollPreserved,
+        refreshIconPreserved,
+        settingsPresent,
         workspace: scope.value,
         hash: location.hash,
         connectionText: document.querySelector('#connectionStatus')?.textContent || '',
         sessionEventOpened: document.querySelector('#__relai-drawer-title')?.textContent === 'relai_read'
       };
     })()`);
-    if (!result?.hasDesktopApi || !result.refreshEnabled || result.workspace !== 'smoke' || !result.hash.includes('workspace=smoke') || !result.sessionEventOpened) {
+    if (!result?.hasDesktopApi || !result.refreshEnabled || !result.scrollPreserved || !result.refreshIconPreserved || !result.settingsPresent || result.workspace !== 'smoke' || !result.hash.includes('workspace=smoke') || !result.sessionEventOpened) {
       throw new Error(`Dashboard interaction smoke failed: ${JSON.stringify(result)}`);
     }
   } finally {

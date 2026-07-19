@@ -292,8 +292,8 @@ async function startServer(options = {}) {
         exitOnError: false,
         pickFolder: () => dashboardWindowManager.pickFolder(),
         openFolder: folderPath => dashboardWindowManager.openFolder(folderPath),
-        getTaskActivity: toolActivityRuntime.getStatus,
-        getDesktopStatus: () => currentStatus
+        getTaskActivity: toolActivityRuntime.getStatus, getDesktopStatus: () => currentStatus,
+        resetTaskActivity: toolActivityRuntime.resetHistory
       });
       actualPort = await new Promise((resolve, reject) => {
         httpServer.once('listening', () => resolve(httpServer.address().port));

@@ -4,7 +4,7 @@ import { copyText } from '../../clipboard.js';
 
 export function mountConnector(container) {
   container.innerHTML = '<div class="connection-loading">Loading connector details…</div>';
-  loadConnector(container).catch(error => {
+  return loadConnector(container).catch(error => {
     container.innerHTML = `<div class="empty">${escapeHtml(error instanceof Error ? error.message : String(error))}</div>`;
   });
 }

@@ -21,6 +21,9 @@
   .nav-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
   .top-controls { flex-wrap: wrap; }
+  .topbar-refresh { min-height: 34px; display: inline-flex; align-items: center; gap: 7px; }
+  .topbar-refresh svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  .topbar-refresh[aria-busy="true"] svg { animation: dashboard-spin .8s linear infinite; }
 
   .activity-filter-select {
     min-height: 34px;
@@ -54,6 +57,10 @@
   .settings-summary { padding: var(--space-3); text-align: left; line-height: 1.55; }
   .settings-summary strong { color: var(--text); }
   .settings-warning { border-color: color-mix(in srgb, var(--accent) 40%, transparent); background: var(--accent-dim); }
+  .settings-history-copy { display: grid; gap: 5px; }
+  .settings-history-copy span { max-width: 760px; color: var(--text-muted); font-size: var(--font-12); line-height: 1.5; }
+  .settings-history-panel { border-color: color-mix(in srgb, var(--red) 24%, var(--line-soft)); }
+  .card-head-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 
   .settings-panel-intro {
     display: grid;

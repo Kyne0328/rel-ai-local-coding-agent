@@ -28,6 +28,7 @@ const {
   handleOpenFolder,
   handleWorkspaceChecks
 } = require("./http/dashboard");
+const { handleApiHistoryReset } = require("./http/dashboardHistory");
 const {
   handleOauthProtectedResource,
   handleOauthMetadata,
@@ -61,6 +62,7 @@ function startHttpServer(options = {}) {
   const openFolder = typeof options.openFolder === "function" ? options.openFolder : null;
   const getTaskActivity = typeof options.getTaskActivity === "function" ? options.getTaskActivity : null;
   const getDesktopStatus = typeof options.getDesktopStatus === "function" ? options.getDesktopStatus : null;
+  const resetTaskActivity = typeof options.resetTaskActivity === "function" ? options.resetTaskActivity : null;
 
   if (!token && !allowNoAuth) {
     throw new Error("REL_AI_MCP_TOKEN is required for the HTTP/SSE server. Set a strong token, or set REL_AI_MCP_ALLOW_NO_AUTH=1 for local-only testing.");
@@ -68,7 +70,7 @@ function startHttpServer(options = {}) {
 
   const server = http.createServer(async (req, res) => {
     try {
-      await routeRequest(req, res, { token, allowNoAuth, maxBodyBytes, host, port, publicUrl, pickFolder, openFolder, getTaskActivity, getDesktopStatus });
+      await routeRequest(req, res, { token, allowNoAuth, maxBodyBytes, host, port, publicUrl, pickFolder, openFolder, getTaskActivity, getDesktopStatus, resetTaskActivity });
     } catch (error) {
       sendJson(res, 500, {
         ok: false,
@@ -227,6 +229,7 @@ const POST_ROUTES = {
   "/api/onboarding/complete": { auth: authDashboard, handler: handleOnboardingComplete },
   "/api/settings": { auth: authDashboard, handler: handleApiSettingsPost },
   "/api/workspaces": { auth: authDashboard, handler: handleApiWorkspaces },
+  "/api/history/reset": { auth: authDashboard, handler: handleApiHistoryReset },
   "/api/pick-folder": { auth: authDashboard, handler: handlePickFolder },
   "/api/open-folder": { auth: authDashboard, handler: handleOpenFolder },
   "/api/workspace/checks": { auth: authDashboard, handler: handleWorkspaceChecks }

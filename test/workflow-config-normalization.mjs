@@ -46,6 +46,8 @@ assert.equal(Object.hasOwn(migrated, 'flow'), false);
 assert.equal(Object.hasOwn(migrated, 'cautionZone'), false);
 assert.equal(Object.hasOwn(migrated.patch, 'maxBundleBytes'), false);
 assert.equal(Object.hasOwn(migrated.patch, 'clearMissingDefault'), false);
+assert.equal(migrated.productUx.showAutomaticValidation, true);
+assert.equal(normalizeConfig({ productUx: { showAutomaticValidation: false }, workspaces: {} }).productUx.showAutomaticValidation, false);
 
 {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-cfg-'));

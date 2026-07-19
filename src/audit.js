@@ -80,6 +80,26 @@ function readAuditGenerations(auditPath) {
   return files.map(file => fs.readFileSync(file, 'utf8')).join('');
 }
 
+function clearAuditHistory(config) {
+  const auditPath = getAuditPath(config);
+  const files = [`${auditPath}.1`, auditPath];
+  let removedFiles = 0;
+  let removedBytes = 0;
+  for (const file of files) {
+    try {
+      const stat = fs.statSync(file);
+      removedBytes += stat.size;
+      fs.rmSync(file, { force: true });
+      removedFiles += 1;
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+    }
+  }
+  fs.mkdirSync(path.dirname(auditPath), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(auditPath, '', { mode: 0o600 });
+  return { auditPath, removedFiles, removedBytes };
+}
+
 function redactEvent(value) {
   if (Array.isArray(value)) return value.map(redactEvent);
   if (!value || typeof value !== "object") return value;
@@ -100,5 +120,6 @@ module.exports = {
   getStateDir,
   getAuditPath,
   logAudit,
-  readAudit
+  readAudit,
+  clearAuditHistory
 };

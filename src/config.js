@@ -50,6 +50,7 @@ function makeDefaultConfig() {
     productUx: {
       dashboardRefreshSeconds: 5,
       liveLogPollSeconds: 3,
+      showAutomaticValidation: true,
       staleHours: 24,
       cleanupOlderThanHours: 168,
       enableStateExport: true
@@ -140,6 +141,7 @@ function normalizeProductSettings(next, base, input) {
   next.productUx = {
     dashboardRefreshSeconds: clampNumber(product.dashboardRefreshSeconds, 1, 3600, base.productUx.dashboardRefreshSeconds),
     liveLogPollSeconds: clampNumber(product.liveLogPollSeconds, 1, 300, base.productUx.liveLogPollSeconds),
+    showAutomaticValidation: normalizeBoolean(product.showAutomaticValidation, base.productUx.showAutomaticValidation),
     staleHours: clampNumber(product.staleHours, 1, 24 * 365, base.productUx.staleHours),
     cleanupOlderThanHours: clampNumber(product.cleanupOlderThanHours, 1, 24 * 365, base.productUx.cleanupOlderThanHours),
     enableStateExport: normalizeBoolean(product.enableStateExport, base.productUx.enableStateExport)

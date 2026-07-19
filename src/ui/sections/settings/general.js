@@ -17,7 +17,7 @@ let _draft = null;
 
 export function mountGeneral(container) {
   container.innerHTML = '<div class="settings-loading">Loading settings…</div>';
-  _loadAndRender(container);
+  return _loadAndRender(container);
 }
 
 async function _loadAndRender(container) {
@@ -30,7 +30,7 @@ async function _loadAndRender(container) {
 
 function _render(container) {
   container.innerHTML = '';
-  container.appendChild(header('General', 'Choose how the dashboard looks. Safety and output limits are available under Advanced.'));
+  container.appendChild(header('General', 'Control appearance and local editing safeguards. Dashboard refresh and history controls have their own section.'));
 
   const appearance = panel('Appearance');
   renderAppearanceSettings(appearance.body);
@@ -58,7 +58,7 @@ function advancedSettings() {
   details.className = 'card settings-advanced';
   details.innerHTML = `
     <summary class="settings-advanced-summary">
-      <span><strong>Advanced safety and limits</strong><small>Patch safeguards and retained command output</small></span>
+      <span><strong>Safety and resource limits</strong><small>Patch safeguards and retained command output</small></span>
       <span aria-hidden="true">›</span>
     </summary>`;
   const body = document.createElement('div');
