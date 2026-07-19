@@ -3,23 +3,22 @@
 ## Pre-release verification
 
 - [ ] `npm run test:all` passes
-- [ ] Manual oneclick smoke: `npm run oneclick` starts and prints ChatGPT URL
+- [ ] `npm run test:installed` passes on Windows (builds, installs, and smoke-tests the packaged app)
+- [ ] Manual first-run smoke: install the built app on a clean machine, complete the wizard, confirm the tunnel reaches **running**
 - [ ] Manual dashboard smoke: open dashboard, verify workspaces and workflow mode display
 - [ ] Manual ChatGPT connector smoke: add `/mcp` to ChatGPT with Authentication: OAuth, complete the dashboard-token sign-in, call relai_status
-- [ ] Manual Electron launch smoke: open Electron app, start server, copy MCP URL
-- [ ] OAuth credential rotation: rotate `REL_AI_MCP_TOKEN` and verify the next ChatGPT OAuth sign-in requires the new token
-- [ ] Windows command construction: `npm run test:windows-archive` passes on Windows
+- [ ] OAuth credential rotation: rotate the dashboard token in Settings and verify the next ChatGPT OAuth sign-in requires the new value
 
 ## Supported platforms
 
-- Windows (Node.js >= 18, tested on Node 22)
-- macOS (Node.js >= 18)
-- Linux (Node.js >= 18)
+The shipped product is a self-contained Windows desktop app; end users install nothing else.
 
-## Publishing (when ready)
+Building from source requires Node.js >= 22.13 (CI tests 22 and 24). The packaging config currently targets Windows only.
 
-1. Remove `"private": true` from `package.json`
-2. Update version in `package.json` and `CHANGELOG.md`
-3. `npm publish`
+## Publishing
 
-**Do not publish until all checklist items pass.**
+Releases are published automatically. Pushing a version bump to `main` triggers `.github/workflows/release.yml`, which runs the tests, fetches the ngrok seed, builds the installers, and creates the GitHub release from the matching `CHANGELOG.md` section.
+
+See [../RELEASE.md](../RELEASE.md) for the full release process.
+
+**Do not bump the version until all checklist items pass.**

@@ -25,13 +25,9 @@ Tracked-file deletion is handled through a structured `Delete File` patch sent t
 
 ## Starting the server
 
-```bash
-npm run oneclick                                              # local dashboard and development
-npm run oneclick -- --public                                  # temporary public connector
-npm run oneclick -- --public-url https://your-domain.example  # permanent public connector
-```
+Launch the **Rel.AI MCP** desktop app. It starts the local server and the public tunnel together, using the ngrok authtoken and static domain you entered in the setup wizard.
 
-ChatGPT requires a public HTTPS endpoint. Use `--public` for a temporary tunnel or `--public-url` for a stable endpoint. See [ONE_CLICK_SETUP.md](ONE_CLICK_SETUP.md) for tunnel options.
+ChatGPT requires a public HTTPS endpoint, which the bundled ngrok agent provides. Nothing has to be installed or started separately. See [ONE_CLICK_SETUP.md](ONE_CLICK_SETUP.md) for the full first-run walkthrough.
 
 The packaged desktop app opens the dashboard in a secured Electron window by default. The same local `/dashboard` route remains accessible in a normal browser when needed; both hosts use the same dashboard code and server APIs. Electron uses a single-use bootstrap exchange and an HttpOnly local session cookie instead of exposing the permanent dashboard token to the embedded renderer.
 
@@ -39,7 +35,7 @@ Use **Tasks** for grouped ChatGPT work and **Activity log** for individual tool 
 
 ## Adding the connector in ChatGPT
 
-1. Start Rel.AI MCP and open the dashboard in the desktop app or through the local browser route.
+1. Launch the Rel.AI MCP desktop app and open the dashboard from the tray or the main window.
 2. Copy the MCP URL ending in `/mcp`.
 3. In ChatGPT, open **Settings > Apps > Create**.
 4. Add the MCP URL and select **OAuth** authentication.

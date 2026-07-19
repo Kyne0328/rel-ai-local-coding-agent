@@ -38,4 +38,9 @@ jobs:
       - run: npm ci
       - run: npm ci
         working-directory: electron
+      - name: Fetch bundled ngrok seed binary
+        shell: pwsh
+        env:
+          NGROK_PLATFORMS: win32
+        run: pwsh scripts/fetch-ngrok.ps1
       - run: npm run test:installed

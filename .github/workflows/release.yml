@@ -113,6 +113,13 @@ jobs:
         run: npm ci
         working-directory: electron
 
+      - name: Fetch bundled ngrok seed binary
+        if: steps.version.outputs.changed == 'true'
+        shell: pwsh
+        env:
+          NGROK_PLATFORMS: win32
+        run: pwsh scripts/fetch-ngrok.ps1
+
       - name: Build Windows executables
         if: steps.version.outputs.changed == 'true'
         run: npm run electron:dist

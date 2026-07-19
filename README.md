@@ -184,74 +184,66 @@ The important design choice: ChatGPT does the thinking, but the local bridge kee
 
 ## Install
 
-Requires Node.js 22.13 or newer. CI tests the supported Node.js 22 and 24 LTS lines.
+Rel.AI MCP is a self-contained Windows desktop app. Download the latest installer from the [Releases page](https://github.com/Kyne0328/rel-ai-mcp/releases) and run it.
 
-```bash
-npm install
-```
+You do **not** need to install Node.js, npm, or ngrok. The app ships its own runtime and its own ngrok agent, and it keeps that agent updated on its own.
 
-Run the local MCP server:
+The one thing it cannot create for you is an ngrok account. Before first launch, sign up at [ngrok.com](https://ngrok.com) (the free tier is enough) and grab two things:
 
-```bash
-npm run oneclick
-```
+- your **authtoken**, from the ngrok dashboard
+- a **static domain**, from **Domains** in the same dashboard
 
-Run tests:
+The setup wizard asks for both on first run, stores them locally, and starts the server and tunnel for you. Every launch after that goes straight to the dashboard.
 
-```bash
-npm test
-npm run test:compat
-npm run test:http
-npm run test:tunnel
-npm run test:oneclick
-```
+The app lives in the system tray. Closing a window leaves it running; quit it from the tray menu.
 
 ---
 
-## One-click server and public tunnel
+## Connecting to ChatGPT
 
-Three commands cover every case — pick one:
+1. Launch Rel.AI MCP and let the wizard finish. The tray icon turns active once the tunnel is up.
+2. Open the dashboard and go to the **Connector** page. It shows your MCP URL.
+3. In ChatGPT, go to **Settings > Apps > Create** and paste that URL.
+4. Set authentication to **OAuth**. ChatGPT opens a sign-in page — enter your Rel.AI dashboard token to approve.
 
-```bash
-npm run oneclick                                              # local dashboard / dev (no public URL)
-npm run oneclick -- --public                                  # temporary ChatGPT connector (auto tunnel)
-npm run oneclick -- --public-url https://your-domain.example  # permanent ChatGPT connector
-```
+Because the domain is static, the connector keeps working across restarts. You configure it once.
 
-The dashboard connector page prints the final ChatGPT MCP URL.
+See [docs/ONE_CLICK_SETUP.md](docs/ONE_CLICK_SETUP.md) for the full setup walkthrough, and [docs/CONNECTING_TO_CHATGPT.md](docs/CONNECTING_TO_CHATGPT.md) for connector troubleshooting.
 
-In the packaged desktop app, **Open dashboard** opens the full dashboard inside a secured Electron window. The same dashboard remains available in a normal browser at the local `/dashboard` route; Electron is the default desktop host, not a separate implementation. The desktop host exchanges a single-use bootstrap code for an HttpOnly local session cookie, so the long-lived dashboard token is not stored in the embedded renderer or left in its URL.
+---
+
+## The dashboard
+
+**Open dashboard** shows the full dashboard inside a secured Electron window. The same dashboard is also reachable in a normal browser at the local `/dashboard` route; Electron is the default host, not a separate implementation. The desktop host exchanges a single-use bootstrap code for an HttpOnly local session cookie, so the long-lived dashboard token is never stored in the embedded renderer or left in its URL.
 
 The dashboard includes grouped **Sessions**, a lower-level **Activity log**, workspace-scoped filtering, operational Git and validation state, actionable diagnostics, live/reconnecting status, and persistent desktop window and route state. Session grouping is scoped per MCP connection and supports concurrent ChatGPT work. A session is marked completed only when ChatGPT calls `relai_complete_task`; otherwise inactivity closes it as inactive without claiming the overall request finished.
 
-### Choosing a tunnel provider
-
-The auto tunnel tries Cloudflare, ngrok, then localtunnel. To pick one explicitly:
-
-```bash
-npm run oneclick -- --public ngrok
-npm run oneclick -- --public cloudflare
-npm run oneclick -- --public localtunnel
-```
-
-Shortcut flags (`--ngrok`, `--cloudflare`, `--localtunnel`) work too. For any other provider, pass a custom command that prints a public `https://` URL:
-
-```bash
-npm run oneclick -- --tunnel custom --tunnel-command "your-tunnel http://127.0.0.1:3333"
-```
-
-See [docs/ONE_CLICK_SETUP.md](docs/ONE_CLICK_SETUP.md) for permanent-tunnel options (Cloudflare Tunnel, Tailscale Funnel, static ngrok domains).
-
 ---
 
-## ChatGPT connector setup
+## Building from source
 
-1. Start the server with `npm run oneclick` or a public tunnel command.
-2. Open the dashboard inside the desktop app, or use the local browser dashboard route when running the server directly.
-3. Go to **Settings > Apps > Create**.
-4. Copy the MCP URL.
-5. In ChatGPT, add it as an MCP connector.
-6. Set authentication to **OAuth**. ChatGPT opens a sign-in page — enter your Rel.AI dashboard token (`REL_AI_MCP_TOKEN`) to approve.
+Only needed if you want to develop or package the app yourself. Requires Node.js 22.13 or newer; CI tests the Node.js 22 and 24 LTS lines.
+
+```bash
+npm install
+npm ci --prefix electron
+```
+
+The ngrok agent binaries are not committed to git, so fetch the seed before running or packaging:
+
+```bash
+npm run fetch:ngrok          # Windows (pwsh); use scripts/fetch-ngrok.sh elsewhere
+```
+
+Then:
+
+```bash
+npm run electron:dev         # run the desktop app from source
+npm run electron:dist        # build the Windows installer into dist/
+npm test                     # full suite
+```
+
+`electron:build` and `electron:dist` refuse to run when the ngrok seed is missing — packaging without it produces an installer whose tunnel cannot start.
 
 ## MCP tools
 

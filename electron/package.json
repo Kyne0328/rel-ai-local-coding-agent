@@ -1,6 +1,6 @@
 {
   "name": "rel-ai-mcp-launcher",
-  "version": "0.20.1",
+  "version": "0.20.2",
   "private": true,
   "description": "Desktop launcher and dashboard host for Rel.AI MCP.",
   "author": "Kyne Anthony",
@@ -68,7 +68,7 @@
         "from": "../vendor/ngrok",
         "to": "bin/ngrok",
         "filter": [
-          "**/*"
+          "win32/**"
         ]
       }
     ],

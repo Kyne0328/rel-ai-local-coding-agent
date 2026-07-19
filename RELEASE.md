@@ -14,7 +14,9 @@ npm run test:staged-write      # large-file staged-write fallback
 npm run test:all               # full suite (also what CI runs)
 ```
 
-CI runs `npm run test:all` on Node 18, 20, and 22 (the package supports Node `>=18`). A release should be green on all three.
+CI runs `npm run test:all` on Node 22 and 24 (the package requires Node `>=22.13`). A release should be green on both.
+
+CI also builds and installs the packaged Windows app (`npm run test:installed`), which asserts that every bundled resource is present — including the ngrok seed binary.
 
 ## 2. Inspect, validate, review (via the MCP tools)
 
@@ -55,3 +57,16 @@ Before tagging, confirm the public connector surface is still consistent:
 - Public cleanup guidance uses `relai_tidy_plan` / `relai_tidy_run` (+ `relai_restore_changes`), never `relai_clear_files`.
 
 `npm run test:public-workflow` and `npm run test:connector-wording` enforce most of these.
+
+## 5. Packaging
+
+Pushing a version bump to `main` triggers `.github/workflows/release.yml`, which fetches the ngrok seed binary, builds the Windows installers, and publishes a GitHub release with the matching `CHANGELOG.md` section.
+
+To package locally, fetch the seed first — the binaries are gitignored, so a clean checkout has none:
+
+```bash
+npm run fetch:ngrok        # Windows (pwsh); use scripts/fetch-ngrok.sh elsewhere
+npm run electron:dist      # installers into dist/
+```
+
+`electron:build` and `electron:dist` run `npm run verify:ngrok` first and refuse to package without a valid seed. An installer built without it starts normally and only fails when the user tries to open a tunnel, so this gate exists to keep that failure out of a release.

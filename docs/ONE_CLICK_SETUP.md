@@ -1,232 +1,63 @@
-# One-command launch and permanent ChatGPT connector setup
+# One-click setup and permanent ChatGPT connector
 
-This guide fixes the annoying loop where a temporary ngrok URL changes, forcing you to clear and recreate the ChatGPT app.
+This guide takes you from a downloaded installer to a working ChatGPT connector that survives restarts.
 
-Rel.AI MCP can now keep a persistent local/API token and connection profile. You start it with one command, then point one permanent HTTPS URL at the local server.
+Rel.AI MCP is a self-contained Windows desktop app. It bundles its own runtime and its own ngrok agent, so there is nothing to install manually — no Node.js, no npm, no separate ngrok download. The app also keeps its ngrok agent up to date on its own.
 
-## Setup paths at a glance
+## What you need first
 
-Three commands cover every case. Pick one:
+The installer cannot create an ngrok account for you, so do that once before first launch. Sign up at [ngrok.com](https://ngrok.com) — the free tier is enough — and collect:
 
-```bash
-npm run oneclick                                   # local dashboard / dev (no public URL)
-npm run oneclick -- --public                       # temporary ChatGPT connector (auto tunnel)
-npm run oneclick -- --public-url https://your-domain.example   # permanent ChatGPT connector
-```
+| Value | Where to find it | Why |
+| --- | --- | --- |
+| **Authtoken** | ngrok dashboard, under *Your Authtoken* | Authenticates the bundled agent |
+| **Static domain** | ngrok dashboard, under *Domains* | Keeps your connector URL stable |
 
-- Use the **local** path for the dashboard and workspace management.
-- Use **`--public`** for a quick, throwaway ChatGPT endpoint while testing.
-- Use **`--public-url`** with a stable HTTPS domain for a connector you do not want to recreate.
+The static domain is the part that matters for a permanent setup. A random temporary tunnel URL changes every restart, which forces you to delete and recreate the ChatGPT app each time. A static domain is issued once and stays yours.
 
-Provider-specific Cloudflare / ngrok / Tailscale / localtunnel details are advanced options under [Recommended permanent tunnel options](#recommended-permanent-tunnel-options) below; you do not need them for the three paths above.
+## Install and first run
 
-## One-command local start
+1. Download the latest installer from the [Releases page](https://github.com/Kyne0328/rel-ai-mcp/releases) and run it. It installs per-user, no admin prompt.
+2. Launch **Rel.AI MCP**. The setup wizard appears on first run only.
+3. Paste your ngrok authtoken and static domain, and pick a local port (`3333` by default).
+4. Save. The app writes its config, generates a dashboard token, starts the local server, and brings up the tunnel.
 
-From the project folder:
+On first launch the app copies its bundled ngrok agent into `~/.rel-ai-mcp/managed-ngrok/` and runs it from there, so it can update the agent later without touching the installed program files.
 
-```bash
-npm install
-npm run oneclick
-```
+Every launch after this goes straight to the dashboard. The app lives in the system tray — closing a window leaves it running, and you quit it from the tray menu.
 
-This command:
+## What the app creates
 
-- creates `~/.rel-ai-mcp/config.json` if it does not exist
-- creates a strong local/API bearer token in `~/.rel-ai-mcp/.env` if one does not exist
-- stores connection details in `~/.rel-ai-mcp/connection.json`
-- starts the MCP HTTP server on `http://127.0.0.1:3333`
-- prints the local dashboard URL and ChatGPT MCP endpoint
+All state lives under `~/.rel-ai-mcp/`:
 
-## One-command public start
+| File | Contents |
+| --- | --- |
+| `config.json` | Workspaces, validation commands, safety settings |
+| `.env` | Your dashboard bearer token (`REL_AI_MCP_TOKEN`) — keep private |
+| `connection.json` | Host, port, and public URL of the current session |
+| `managed-ngrok/` | The managed ngrok agent, its config, and update state |
 
-For a quick ChatGPT-accessible endpoint, let one-click start the local server and try a public tunnel automatically:
+## Connect ChatGPT
 
-```bash
-npm run oneclick -- --public
-```
+1. Open the dashboard from the tray or the main window.
+2. Go to the **Connector** page. It shows your MCP URL — it will look like `https://your-domain.ngrok-free.app/mcp`.
+3. In ChatGPT, go to **Settings > Apps > Create**.
+4. Paste the MCP URL.
+5. Set authentication to **OAuth**.
 
-You can also choose the provider directly after `--public`:
+ChatGPT then opens a sign-in page served by your own machine and asks for your Rel.AI **dashboard token** to approve the connection. The token is in `~/.rel-ai-mcp/.env`, and the dashboard Connector page can show it to you directly. No secret is ever embedded in the URL.
 
-```bash
-npm run oneclick -- --public ngrok
-npm run oneclick -- --public cloudflare
-npm run oneclick -- --public localtunnel
-```
+Because the domain is static, this survives restarts. You set it up once.
 
-This starts the Rel.AI MCP server first, then tries these tunnel providers in order if no `--public-url` is already configured:
+### Rotating the token
 
-1. Cloudflare Quick Tunnel via `cloudflared tunnel --url http://127.0.0.1:3333`
-2. ngrok via `ngrok http 3333 --log=stdout`
-3. localtunnel via `npx --yes localtunnel --port 3333`
+Open **Settings** in the desktop app and regenerate the dashboard token. The next ChatGPT OAuth sign-in uses the new value; the MCP URL itself does not change.
 
-When a tunnel prints an `https://` URL, Rel.AI MCP saves it in `~/.rel-ai-mcp/.env` and prints a fresh `COPY THIS FOR CHATGPT` URL using the plain `/mcp` endpoint (Authentication: OAuth).
+## Adding workspaces
 
-Provider-specific examples:
+A workspace is a local folder ChatGPT is allowed to touch, under an alias. Add one from the dashboard's **Workspaces** page with **Add workspace**, which opens a folder picker and lets you set the alias, validation commands, protected branches, and allowed remotes.
 
-```bash
-npm run oneclick -- --tunnel cloudflare
-npm run oneclick -- --tunnel ngrok
-npm run oneclick -- --tunnel localtunnel
-```
-
-Custom tunnel command support is available for other providers. The command must keep running and print its public HTTPS URL to stdout or stderr:
-
-```bash
-npm run oneclick -- --tunnel custom --tunnel-command "your-tunnel http://127.0.0.1:3333"
-```
-
-Temporary tunnel URLs can change. They are good for quick setup/testing. For a permanent ChatGPT connector, use `--public-url` with a stable domain.
-
-To print the saved connector settings again:
-
-```bash
-npm run connector:print
-```
-
-On macOS/Linux you can also run:
-
-```bash
-./scripts/relai-start.sh
-```
-
-On Windows:
-
-```cmd
-scripts\relai-start.cmd
-```
-
-## Permanent URL rule
-
-ChatGPT Developer Mode needs a reachable HTTPS endpoint. A random temporary tunnel URL is not permanent. If the URL changes, ChatGPT sees it as a different connector target.
-
-`--public` is the fastest path to a working public endpoint when Cloudflare/ngrok/localtunnel is installed. `--public-url` is the stable path for a connector you do not want to recreate.
-
-Use one stable public URL and keep routing it to:
-
-```text
-http://127.0.0.1:3333
-```
-
-Then launch Rel.AI MCP with that same public URL:
-
-```bash
-npm run oneclick -- --public-url https://relai.your-domain.com
-```
-
-The ChatGPT MCP endpoint will be printed as `COPY THIS FOR CHATGPT` and will look like:
-
-```text
-https://relai.your-domain.com/mcp
-```
-
-You should only need to recreate the ChatGPT app if one of these changes:
-
-- public URL
-- ChatGPT MCP URL secret
-- ChatGPT app settings
-
-## Recommended permanent tunnel options
-
-### Option A: Cloudflare Tunnel
-
-For a quick temporary Cloudflare URL, install `cloudflared` and run:
-
-```bash
-npm run oneclick -- --tunnel cloudflare
-```
-
-For a stable public connector URL, use a Cloudflare Tunnel with your own domain.
-
-```bash
-cloudflared tunnel login
-cloudflared tunnel create rel-ai-mcp
-cloudflared tunnel route dns rel-ai-mcp relai.your-domain.com
-```
-
-Create a Cloudflare config similar to:
-
-```yaml
-tunnel: rel-ai-mcp
-credentials-file: /Users/you/.cloudflared/<tunnel-id>.json
-
-ingress:
-  - hostname: relai.your-domain.com
-    service: http://127.0.0.1:3333
-  - service: http_status:404
-```
-
-A template is included at:
-
-```text
-examples/cloudflared-config.example.yml
-```
-
-Run the tunnel:
-
-```bash
-cloudflared tunnel run rel-ai-mcp
-```
-
-Then start Rel.AI MCP:
-
-```bash
-npm run oneclick -- --public-url https://relai.your-domain.com
-```
-
-For a more permanent machine setup, install `cloudflared` as a service using the Cloudflare instructions for your operating system.
-
-### Option B: Tailscale Funnel
-
-Use this if your Tailscale setup supports Funnel and gives you a stable public HTTPS hostname.
-
-```bash
-tailscale funnel 3333
-npm run oneclick -- --public-url https://your-machine.your-tailnet.ts.net
-```
-
-### Option C: ngrok
-
-For a quick ngrok URL, install and sign in to ngrok, then run:
-
-```bash
-npm run oneclick -- --tunnel ngrok
-```
-
-Use a static/reserved ngrok domain if your account supports it.
-
-```bash
-ngrok http --domain=your-static-domain.ngrok.app 3333
-npm run oneclick -- --public-url https://your-static-domain.ngrok.app
-```
-
-Do not use random temporary ngrok/localtunnel/quick-tunnel URLs for a permanent ChatGPT app. They solve testing, not long-term setup.
-
-### Option D: localtunnel
-
-Use this as a low-friction fallback when Cloudflare/ngrok are not installed:
-
-```bash
-npm run oneclick -- --tunnel localtunnel
-```
-
-This uses `npx --yes localtunnel --port 3333`, so it requires npm/npx and internet access.
-
-## ChatGPT app setup
-
-After `npm run oneclick -- --public-url ...`, use the printed values:
-
-```text
-MCP URL: https://your-stable-domain/mcp
-Authentication: OAuth
-```
-
-ChatGPT signs in via OAuth: it opens a page served by your server and asks for your Rel.AI **dashboard token** (`REL_AI_MCP_TOKEN`, stored in `~/.rel-ai-mcp/.env`) to approve the connection. There is no secret embedded in the URL. To rotate the credential, rotate the bearer token:
-
-```bash
-npm run oneclick -- --reset-token --show-token
-```
-
-After rotating the token, the next ChatGPT OAuth sign-in uses the new value; the MCP URL itself does not change.
+Changes apply immediately. There is no restart needed after adding a workspace.
 
 ## Safer first prompt
 
@@ -246,15 +77,22 @@ Use Rel.AI MCP on workspace myapp. Show the workspace profile and the first 100 
 
 If ChatGPT cannot connect:
 
-1. Open the local dashboard printed by `npm run oneclick`.
-2. Check `http://127.0.0.1:3333/health` locally.
-3. Check that your tunnel points to `http://127.0.0.1:3333`.
-4. Confirm the ChatGPT MCP URL is the plain `/mcp` URL.
-5. Confirm the ChatGPT app authentication is set to `OAuth`, and that you completed the dashboard-token sign-in.
-6. Avoid using the dashboard URL as the MCP URL. ChatGPT needs `/mcp`, not `/dashboard`.
-7. Do not judge the connector by opening plain `/mcp` in a browser. MCP uses `POST`; an unauthenticated browser `GET` only returns a diagnostic.
+1. Check the desktop app's status window. It reports server state, tunnel state, and the last error.
+2. Confirm the tunnel status reads **running**. If it failed, the status window shows the ngrok log.
+3. Check `http://127.0.0.1:3333/health` in a browser (adjust the port if you changed it).
+4. Confirm the ChatGPT MCP URL is the plain `/mcp` URL, not `/dashboard`.
+5. Confirm the ChatGPT app authentication is set to **OAuth**, and that you completed the dashboard-token sign-in.
+6. Do not judge the connector by opening `/mcp` in a browser. MCP uses `POST`; an unauthenticated browser `GET` only returns a diagnostic.
 
-## If ChatGPT says it cannot find the workspace/tools
+Common tunnel failures:
+
+| Symptom | Cause |
+| --- | --- |
+| `Port 3333 is already in use.` | Another program holds the port. Change the port in Settings. |
+| ngrok exits immediately | Bad or expired authtoken. Re-enter it in Settings. |
+| `failed to start tunnel` naming the domain | The domain is not on your ngrok account, or is already claimed by another running agent. |
+
+## If ChatGPT says it cannot find the workspace or tools
 
 That usually means ChatGPT searched connector files instead of calling the MCP tools, or the workspace alias is not configured.
 
@@ -262,25 +100,16 @@ Use this exact diagnostic prompt:
 
 ```text
 Use the Rel.AI MCP connector tools directly.
-Call relai_repo_snapshot with workspace "jjclover" and maxEntries 200.
+Call relai_repo_snapshot with workspace "myapp" and maxEntries 200.
 Do not use file search. Do not modify files.
-If ChatGPT still shows removed tools such as relai_workspace_list, relai_read_files, or relai_run_command, restart/reconnect the MCP server and refresh the connector.
 ```
 
 Expected result:
 
 - `relai_repo_snapshot` returns the project profile, filtered tree, discovered commands, and workspace context.
-- If `jjclover` is not configured, the response shows a workspace resolution error; add the alias locally and restart the MCP server.
+- If `myapp` is not configured, the response shows a workspace resolution error; add the alias from the dashboard's Workspaces page.
 
-Add a missing workspace alias with:
-
-```bash
-npm run workspace:add -- jjclover /absolute/path/to/jjclover
-```
-
-Restart `npm run oneclick` after editing workspace config.
-
-Rel.AI MCP now also exposes MCP resources:
+Rel.AI MCP also exposes MCP resources:
 
 ```text
 relai://server/help
@@ -291,6 +120,5 @@ relai://workspace/<alias>/tree
 ```
 
 These resources make the connector easier for ChatGPT to discover, but tools are still the preferred path for app actions.
-
 
 Maintained by [@Kyne0328](https://github.com/Kyne0328).
