@@ -37,7 +37,7 @@
     "test:connector-wording": "node test/connector-wording-smoke.mjs",
     "test:regressions": "node test/regression-fixes-smoke.mjs",
     "electron:dev": "cd electron && npx electron .",
-    "electron:build": "npm run verify:ngrok && cd electron && npx electron-builder --win --dir",
+    "electron:build": "npm run verify:ngrok && cd electron && npx electron-builder --win --dir --config.directories.output=../dist/build-check",
     "electron:dist": "npm run verify:ngrok && cd electron && npx electron-builder --win",
     "fetch:ngrok": "pwsh scripts/fetch-ngrok.ps1",
     "verify:ngrok": "node scripts/verify-ngrok-seed.mjs",

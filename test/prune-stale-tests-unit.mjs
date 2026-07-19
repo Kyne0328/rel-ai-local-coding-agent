@@ -73,6 +73,25 @@ try {
       'prune: refuses when the workspace path is unavailable'
     );
   }
+
+  // 4. removed pre-Electron test aliases are discarded during config normalization
+  {
+    fs.writeFileSync(configPath, JSON.stringify({
+      stateDir,
+      workspaces: {
+        myapp: {
+          path: wsDir,
+          testCommands: {
+            'npm:test': 'npm run test',
+            'npm:test:oneclick': 'npm run test:oneclick',
+            'npm:test:tunnel': 'npm run test:tunnel'
+          }
+        }
+      }
+    }, null, 2));
+    const normalized = readConfig();
+    assert.deepEqual(Object.keys(normalized.workspaces.myapp.testCommands), ['npm:test']);
+  }
 } finally {
   if (previousConfigPath == null) delete process.env.REL_AI_MCP_CONFIG;
   else process.env.REL_AI_MCP_CONFIG = previousConfigPath;

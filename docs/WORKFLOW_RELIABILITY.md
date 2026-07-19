@@ -1,6 +1,6 @@
 # Workflow reliability
 
-Rel.AI MCP uses one workspace workflow and one 16-tool surface.
+Rel.AI MCP uses one workspace workflow and one 18-tool surface.
 
 ```text
 1. Inspect:  relai_repo_snapshot
@@ -10,6 +10,7 @@ Rel.AI MCP uses one workspace workflow and one 16-tool surface.
 5. Review:   relai_diff / relai_git_status
 6. Cleanup:  relai_restore_changes / relai_tidy_plan + relai_tidy_run
 7. Publish:  relai_git_commit -> relai_git_push -> relai_git_create_pr
+8. Complete: relai_complete_task
 ```
 
 The server does not generate helper scripts, expose hidden tool tiers, or route around the registered workspace tools.

@@ -1,8 +1,9 @@
 # Connecting to ChatGPT
 
-Rel.AI MCP exposes one 16-tool workspace surface across local MCP and the ChatGPT connector:
+Rel.AI MCP exposes one 18-tool workspace surface across local MCP and the ChatGPT connector:
 
 - `relai_repo_snapshot`
+- `relai_search`
 - `relai_read`
 - `relai_write`
 - `relai_replace`
@@ -18,6 +19,7 @@ Rel.AI MCP exposes one 16-tool workspace surface across local MCP and the ChatGP
 - `relai_git_push`
 - `relai_git_create_pr`
 - `relai_edit`
+- `relai_complete_task`
 
 Use `relai_repo_snapshot` for repository context, `relai_read` for focused content, and `relai_edit` as the primary change tool. It supports exact replacement, complete-file content, structured patch updates, and batches, with optional validation and diff review in the same call. `relai_write` and `relai_replace` remain direct fallback tools.
 
@@ -31,7 +33,7 @@ ChatGPT requires a public HTTPS endpoint, which the bundled ngrok agent provides
 
 The packaged desktop app opens the dashboard in a secured Electron window by default. The same local `/dashboard` route remains accessible in a normal browser when needed; both hosts use the same dashboard code and server APIs. Electron uses a single-use bootstrap exchange and an HttpOnly local session cookie instead of exposing the permanent dashboard token to the embedded renderer.
 
-Use **Tasks** for grouped ChatGPT work and **Activity log** for individual tool calls. Rel.AI keeps each task open for 60 seconds after its latest tool call, renewing the window when ChatGPT continues, so ordinary approval and reasoning gaps stay grouped. Separate MCP sessions can run as concurrent tasks. The workspace selector scopes Overview, Tasks, Workspaces, Activity, and Diagnostics to one configured repository.
+Use **Sessions** for grouped ChatGPT work and **Activity log** for individual tool calls. Rel.AI keeps each session open for five minutes after its latest tool call, renewing the window when ChatGPT continues, so ordinary approval, reasoning, and connector-reconnect gaps stay grouped. Separate concurrent sessions remain distinct when Rel.AI has stable conversation identity. The workspace selector scopes Overview, Sessions, Workspaces, Activity, and Diagnostics to one configured repository.
 
 ## Adding the connector in ChatGPT
 
@@ -51,6 +53,6 @@ ChatGPT discovers the OAuth endpoints through `/.well-known/oauth-protected-reso
 
 ## Tunnel requirement
 
-Use a stable HTTPS tunnel such as ngrok with a static domain or Cloudflare Tunnel with your own domain. Do not expose plain HTTP to the public internet.
+Use the bundled ngrok agent with a static domain. Do not expose plain HTTP to the public internet.
 
 Maintained by [@Kyne0328](https://github.com/Kyne0328).

@@ -29,6 +29,10 @@ for (const file of [
   '.github/workflows/release.yml'
 ]) copyFile(file);
 
+const seedPath = path.join(tmp, 'vendor', 'ngrok', 'win32', 'ngrok.exe');
+fs.mkdirSync(path.dirname(seedPath), { recursive: true });
+fs.writeFileSync(seedPath, Buffer.alloc(5 * 1024 * 1024));
+
 function run(script, args = []) {
   const result = spawnSync(process.execPath, [path.join(tmp, 'scripts', script), ...args], {
     cwd: tmp,
@@ -41,6 +45,14 @@ function run(script, args = []) {
   }
   assert.equal(result.status, 0, `${script} ${args.join(' ')} should pass`);
   return result;
+}
+
+function runWithEnv(script, env = {}) {
+  return spawnSync(process.execPath, [path.join(tmp, 'scripts', script)], {
+    cwd: tmp,
+    encoding: 'utf8',
+    env: { ...process.env, REL_AI_RELEASE_ROOT: tmp, ...env }
+  });
 }
 
 function readJson(relativePath) {
@@ -71,6 +83,12 @@ assert.match(changelog, /Bump root\/electron\/status UI\/lockfiles to 0\.99\.0\.
 assert.doesNotMatch(changelog.split('## [0.15.7]')[0], /TODO|placeholder/i);
 
 const releaseWorkflow = fs.readFileSync(path.join(tmp, '.github/workflows/release.yml'), 'utf8');
+const fetchSeedIndex = releaseWorkflow.indexOf('- name: Fetch bundled ngrok seed binary');
+const runTestsIndex = releaseWorkflow.indexOf('- name: Run tests');
+const buildIndex = releaseWorkflow.indexOf('- name: Build Windows executables');
+assert.ok(fetchSeedIndex >= 0, 'release workflow must fetch the bundled ngrok seed');
+assert.ok(fetchSeedIndex < runTestsIndex, 'ngrok seed must be fetched before release consistency tests');
+assert.ok(fetchSeedIndex < buildIndex, 'ngrok seed must be fetched before packaging');
 assert.match(releaseWorkflow, /\$PSNativeCommandUseErrorActionPreference\s*=\s*\$false/);
 assert.match(releaseWorkflow, /\$releaseExitCode\s*=\s*\$LASTEXITCODE/);
 assert.match(releaseWorkflow, /if \(\$releaseExitCode -eq 0\)/);
@@ -80,5 +98,10 @@ assert.doesNotMatch(
   /gh release view[^\n]*\r?\n\s*if \(\$LASTEXITCODE -eq 0\)/,
   'Expected release absence must not terminate the PowerShell step before its exit code is handled.'
 );
+
+fs.rmSync(seedPath, { force: true });
+const missingSeed = runWithEnv('release-check.mjs', { REL_AI_TARGET_PLATFORM: 'win32' });
+assert.notEqual(missingSeed.status, 0, 'release consistency must fail when the target ngrok seed is missing');
+assert.match(`${missingSeed.stdout}\n${missingSeed.stderr}`, /bundled ngrok seed is missing for win32/i);
 
 console.log('Release workflow smoke test passed.');

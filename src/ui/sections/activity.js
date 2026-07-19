@@ -6,6 +6,7 @@ import { virtualizeTable } from '../components/table.js';
 import { esc, timeAgo } from '../utils.js';
 import { getRouteParams, getWorkspaceFilter, setWorkspaceFilter } from '../router.js';
 import { activityEventId } from '../activity-event.js';
+import { copyText } from '../clipboard.js';
 
 let _allEntries = [];
 let _paused = false;
@@ -319,7 +320,7 @@ function openDetail(entry) {
   copyButton.textContent = 'Copy event JSON';
   copyButton.onclick = async () => {
     try {
-      await navigator.clipboard.writeText(JSON.stringify(entry, null, 2));
+      await copyText(JSON.stringify(entry, null, 2));
       copyButton.dataset.state = 'success';
       copyButton.textContent = 'Copied';
       window.setTimeout(() => {

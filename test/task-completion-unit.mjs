@@ -81,6 +81,19 @@ try {
   assert.equal(completionEvent.taskSummary, 'Implemented and validated the requested code changes.');
 
   resetToolActivity();
+  const rotatedValidationContext = { publicHttpOnly: true, taskScopeId: 'validation-before-restart' };
+  await callTool('relai_run_checks', { workspace: 'app', level: 'standard' }, rotatedValidationContext);
+  resetToolActivity();
+  const recoveredCompletion = await callTool('relai_complete_task', {
+    workspace: 'app',
+    summary: 'Recovered completion after the connector task identity changed.'
+  }, { publicHttpOnly: true, taskScopeId: 'completion-after-restart' });
+  assert.equal(recoveredCompletion.ok, true);
+  assert.equal(recoveredCompletion.recoveredValidationSession, true);
+  assert.ok(recoveredCompletion.validationTaskId);
+  assert.ok(recoveredCompletion.relatedTaskIds.includes(recoveredCompletion.validationTaskId));
+
+  resetToolActivity();
   const changedContext = { publicHttpOnly: true, taskScopeId: 'changed-after-validation' };
   await callTool('relai_run_checks', { workspace: 'app', level: 'standard' }, changedContext);
   await callTool('relai_replace', {

@@ -110,11 +110,18 @@ assert.match(sessions, /time: 'all'/);
 assert.doesNotMatch(sessions, /task remains open for 60 seconds|Grouped tool calls/);
 
 const activity = read('src/ui/sections/activity.js');
+const clipboard = read('src/ui/clipboard.js');
+const dashboardPreload = read('electron/dashboard-preload.js');
 assert.match(activity, /activityWorkspaceFilter/);
 assert.match(activity, /activityToolFilter/);
 assert.match(activity, /activityStatusFilter/);
 assert.match(activity, /Clear filters/);
 assert.match(activity, /Copy event JSON/);
+assert.match(activity, /copyText\(JSON\.stringify/);
+assert.match(clipboard, /relaiDesktop/);
+assert.match(clipboard, /navigator\.clipboard/);
+assert.match(clipboard, /execCommand\('copy'\)/);
+assert.match(dashboardPreload, /copyText: text => ipcRenderer\.invoke\('url:copy', text\)/);
 assert.match(activity, /params\.get\('tool'\)/);
 assert.match(activity, /params\.get\('time'\)/);
 assert.match(activity, /params\.get\('search'\)/);

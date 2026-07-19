@@ -1,5 +1,6 @@
 import { fetchJson } from '../../api.js';
 import { toast } from '../../components/toast.js';
+import { copyText } from '../../clipboard.js';
 
 export function mountConnector(container) {
   container.innerHTML = '<div class="connection-loading">Loading connector details…</div>';
@@ -165,7 +166,7 @@ async function copyValue(value, message) {
     return;
   }
   try {
-    await navigator.clipboard.writeText(value);
+    await copyText(value);
     toast(message, { variant: 'success' });
   } catch (error) {
     debugError(error);

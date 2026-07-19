@@ -3,7 +3,7 @@
 const crypto = require('node:crypto');
 const { AsyncLocalStorage } = require('node:async_hooks');
 
-const DEFAULT_TASK_IDLE_MS = 60_000;
+const DEFAULT_TASK_IDLE_MS = 5 * 60_000;
 const activityContext = new AsyncLocalStorage();
 
 function createToolActivityTracker(options = {}) {
@@ -22,6 +22,7 @@ function createToolActivityTracker(options = {}) {
     const startedAt = now();
     const scopeId = resolveScopeId(details);
     let task = tasksByScope.get(scopeId);
+    if (!task) task = reconnectWaitingTask(scopeId, details, startedAt);
     if (!task) {
       task = createTask(scopeId, details, startedAt);
       tasksByScope.set(scopeId, task);
@@ -153,6 +154,24 @@ function createToolActivityTracker(options = {}) {
       completionTimer: null,
       currentOperations: new Map()
     };
+  }
+
+  function reconnectWaitingTask(scopeId, details, timestamp) {
+    const workspace = String(details.workspace || '').trim();
+    if (!workspace) return null;
+    const candidates = [...tasksByScope.values()].filter(task =>
+      task.activeCalls === 0 &&
+      task.workspace === workspace &&
+      timestamp >= task.lastActivityAt &&
+      timestamp - task.lastActivityAt <= idleMs
+    );
+    if (candidates.length !== 1) return null;
+    const task = candidates[0];
+    cancelCompletion(task);
+    tasksByScope.delete(task.scopeId);
+    task.scopeId = scopeId;
+    tasksByScope.set(scopeId, task);
+    return task;
   }
 
   function resolveScopeId(details) {

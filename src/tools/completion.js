@@ -2,7 +2,7 @@
 
 const { readAudit } = require('../audit');
 const { resolveWorkspace } = require('../config');
-const { clearSessionPolicy } = require('../policyResolver');
+const { clearSessionPolicy, readSessionPolicy } = require('../policyResolver');
 const {
   getCurrentToolActivityContext,
   requestCurrentTaskCompletion
@@ -15,6 +15,7 @@ const CODE_MUTATING_TOOLS = new Set([
   'relai_tidy_run',
   'relai_restore_changes'
 ]);
+const COMPLETION_VALIDATION_MAX_AGE_MS = 2 * 60 * 60 * 1000;
 
 function completeTask(config, args = {}) {
   const workspace = resolveWorkspace(config, args.workspace);
@@ -27,18 +28,32 @@ function completeTask(config, args = {}) {
     throw new Error('Task completion requires an active Rel.AI work session.');
   }
 
-  const taskEvents = readAudit(config, { limit: 10000, taskId: context.taskId }).entries
-    .filter(entry => entry && entry.taskId === context.taskId)
-    .filter(entry => !entry.workspace || entry.workspace === workspace.alias)
+  const sessionPolicy = readSessionPolicy(config, workspace.alias);
+  const preferredTaskIds = unique([
+    context.taskId,
+    String(sessionPolicy?.taskId || '').trim()
+  ].filter(Boolean));
+  const workspaceEvents = readAudit(config, { limit: 10000, workspace: workspace.alias }).entries
+    .filter(entry => entry && (!entry.workspace || entry.workspace === workspace.alias))
     .sort((left, right) => eventTime(left) - eventTime(right));
+  const preferredEvents = workspaceEvents.filter(entry => preferredTaskIds.includes(String(entry.taskId || '')));
 
-  const validation = findLatestPassedValidation(taskEvents);
+  let validation = findLatestPassedValidation(preferredEvents);
+  let recoveredValidationSession = false;
   if (!validation) {
-    throw new Error('Cannot report completion: this session has no successful final validation. Run relai_run_checks and call relai_complete_task only after it passes.');
+    const latestWorkspaceValidation = findLatestPassedValidation(workspaceEvents);
+    if (latestWorkspaceValidation && isRecentValidation(latestWorkspaceValidation)) {
+      validation = latestWorkspaceValidation;
+      recoveredValidationSession = true;
+    }
+  }
+  if (!validation) {
+    throw new Error('Cannot report completion: no successful final validation could be linked to this workspace session. Run relai_run_checks now, then call relai_complete_task again.');
   }
 
-  const validationIndex = taskEvents.lastIndexOf(validation);
-  const changedAfterValidation = taskEvents.slice(validationIndex + 1).filter(entry =>
+  const validationAtMs = eventTime(validation);
+  const changedAfterValidation = workspaceEvents.filter(entry =>
+    eventTime(entry) > validationAtMs &&
     entry.ok !== false &&
     CODE_MUTATING_TOOLS.has(String(entry.tool || ''))
   );
@@ -47,7 +62,10 @@ function completeTask(config, args = {}) {
     throw new Error(`Cannot report completion: code changed after the last passed validation (${tools.join(', ')}). Run final validation again first.`);
   }
 
-  const changedFiles = unique(taskEvents.flatMap(eventChangedFiles));
+  const validationTaskId = String(validation.taskId || '').trim();
+  const relatedTaskIds = unique([...preferredTaskIds, validationTaskId].filter(Boolean));
+  const relatedEvents = workspaceEvents.filter(entry => relatedTaskIds.includes(String(entry.taskId || '')));
+  const changedFiles = unique(relatedEvents.flatMap(eventChangedFiles));
   const completion = requestCurrentTaskCompletion({
     summary,
     validationStatus: 'passed',
@@ -67,8 +85,13 @@ function completeTask(config, args = {}) {
     validationStatus: 'passed',
     validationLevel: validation.validationLevel || '',
     validationAt: validation.ts || '',
+    validationTaskId,
+    relatedTaskIds,
+    recoveredValidationSession: recoveredValidationSession || Boolean(validationTaskId && validationTaskId !== context.taskId),
     changedFiles,
-    message: 'Task completion accepted. Rel.AI will close this work session when this final tool call returns.'
+    message: recoveredValidationSession
+      ? 'Task completion accepted using the latest safe passed validation for this workspace. Rel.AI will close this work session when this final tool call returns.'
+      : 'Task completion accepted. Rel.AI will close this work session when this final tool call returns.'
   };
 }
 
@@ -78,6 +101,11 @@ function findLatestPassedValidation(events) {
     entry.ok !== false &&
     entry.validationStatus === 'passed'
   ) || null;
+}
+
+function isRecentValidation(entry) {
+  const timestamp = eventTime(entry);
+  return timestamp > 0 && Date.now() - timestamp <= COMPLETION_VALIDATION_MAX_AGE_MS;
 }
 
 function eventChangedFiles(entry) {
@@ -97,4 +125,4 @@ function unique(values) {
   return [...new Set(values)];
 }
 
-module.exports = { completeTask, CODE_MUTATING_TOOLS };
+module.exports = { completeTask, CODE_MUTATING_TOOLS, COMPLETION_VALIDATION_MAX_AGE_MS };

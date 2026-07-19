@@ -36,6 +36,21 @@ assert.equal(completed.completionKnown, true);
 assert.equal(completed.endReason, 'explicit_completion');
 assert.equal(completed.summary, 'Implemented and validated the requested change.');
 
+const reconnected = buildTaskHistory([
+  { taskId: 'validation-task', ts: '2026-07-11T09:00:00.000Z', tool: 'relai_run_checks', workspace: 'repo', ok: true, validationStatus: 'passed' },
+  { taskId: 'completion-task', ts: '2026-07-11T09:00:03.000Z', tool: 'relai_complete_task', workspace: 'repo', ok: true, completionKnown: true, validationTaskId: 'validation-task', relatedTaskIds: ['validation-task', 'completion-task'], taskSummary: 'Completed after reconnect.' }
+], { state: 'idle' });
+assert.equal(reconnected.length, 1, 'completion metadata must merge a rotated completion task into its validation session');
+assert.equal(reconnected[0].id, 'validation-task');
+assert.equal(reconnected[0].status, 'completed');
+assert.equal(reconnected[0].calls, 2);
+
+const recoveredValidation = buildTaskHistory([
+  { taskId: 'retry-task', ts: '2026-07-11T10:00:00.000Z', tool: 'relai_run_checks', workspace: 'repo', ok: false, validationStatus: 'failed' },
+  { taskId: 'retry-task', ts: '2026-07-11T10:02:00.000Z', tool: 'relai_run_checks', workspace: 'repo', ok: true, validationStatus: 'passed' }
+], { state: 'idle' });
+assert.equal(recoveredValidation[0].validation, 'passed', 'the latest validation result must determine session validation state');
+
 const active = buildTaskHistory([], {
   state: 'working',
   activeTaskCount: 2,
@@ -56,9 +71,10 @@ const legacy = buildTaskHistory([
   { ts: '2026-07-11T07:00:20.000Z', pid: 42, tool: 'relai_edit', workspace: 'repo', ok: true, changedFiles: ['src/b.js'] },
   { ts: '2026-07-11T07:02:00.000Z', pid: 42, tool: 'relai_run_checks', workspace: 'repo', ok: true, validationStatus: 'passed' }
 ], { state: 'idle' });
-assert.equal(legacy.length, 2, 'legacy audit rows should be inferred into time-bounded sessions');
-assert.equal(legacy.find(session => session.calls === 2)?.changedFileCount, 1);
-assert.equal(legacy.find(session => session.calls === 1)?.validation, 'passed');
+assert.equal(legacy.length, 1, 'legacy audit rows within the five-minute grouping window should remain one session');
+assert.equal(legacy[0].calls, 3);
+assert.equal(legacy[0].changedFileCount, 1);
+assert.equal(legacy[0].validation, 'passed');
 assert.equal(legacy.every(session => session.status === 'inactive'), true);
 
 console.log('Persistent and concurrent work-session history tests passed.');

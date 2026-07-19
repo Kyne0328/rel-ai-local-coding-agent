@@ -104,8 +104,10 @@ function normalizeActiveState(state) {
 function validationSummary(events) {
   const checks = events.filter(entry => entry.tool === 'relai_run_checks');
   if (!checks.length) return 'not_run';
-  if (checks.some(entry => entry.ok === false || entry.validationStatus === 'failed')) return 'failed';
-  return 'passed';
+  const latest = checks.at(-1);
+  if (latest.ok === false || latest.validationStatus === 'failed') return 'failed';
+  if (latest.validationStatus === 'not_run') return 'not_run';
+  return latest.validationStatus === 'passed' ? 'passed' : 'not_run';
 }
 
 function eventChangedFiles(entry) {
@@ -123,10 +125,11 @@ function groupTaskEntries(entries, legacyGapMs = DEFAULT_TASK_IDLE_MS) {
   const ordered = (Array.isArray(entries) ? entries : [])
     .filter(entry => entry && typeof entry === 'object')
     .sort((left, right) => eventTimestamp(left) - eventTimestamp(right));
+  const taskAliases = completionTaskAliases(ordered);
 
   for (const entry of ordered) {
     const explicitTaskId = String(entry.taskId || '').trim();
-    let taskId = explicitTaskId;
+    let taskId = taskAliases.get(explicitTaskId) || explicitTaskId;
     if (!taskId) {
       const processKey = String(entry.pid || 'unknown');
       const timestamp = eventTimestamp(entry);
@@ -146,6 +149,21 @@ function groupTaskEntries(entries, legacyGapMs = DEFAULT_TASK_IDLE_MS) {
     groups.get(taskId).push(entry);
   }
   return groups;
+}
+
+function completionTaskAliases(entries) {
+  const aliases = new Map();
+  for (const entry of entries) {
+    if (entry?.tool !== 'relai_complete_task' || entry.ok === false) continue;
+    const canonical = String(entry.validationTaskId || entry.taskId || '').trim();
+    if (!canonical) continue;
+    const related = Array.isArray(entry.relatedTaskIds) ? entry.relatedTaskIds : [];
+    for (const taskId of [entry.taskId, ...related]) {
+      const value = String(taskId || '').trim();
+      if (value) aliases.set(value, canonical);
+    }
+  }
+  return aliases;
 }
 
 function eventTimestamp(entry) {
