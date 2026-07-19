@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.20.5] — 2026-07-19
+
+### Live dashboard refresh and settings controls
+- **Fix manual and live dashboard refreshes.** Aggregate dashboard reads now bypass the short client cache, the refresh action is directly visible, overlapping requests remain collapsed, and the control keeps its icon and loading state.
+- **Preserve scroll position and focused controls across live remounts.** The router holds the current section height while asynchronous content remounts, then restores the exact view only when the route and render generation still match.
+- **Add a Dashboard settings section.** Refresh intervals, the automatic-validation card visibility, and stored history controls are grouped separately from appearance, connector, and diagnostics settings.
+- **Make automatic-validation status optional and neutral when unavailable.** Workspace cards can hide the validation summary and panel; otherwise missing commands are shown as not configured rather than as a warning.
+- **Show Clear filters only when Activity filters differ from their defaults.**
+- **Replace the Sessions history-load counter with explicit completion count and add guarded history reset.** Clearing removes current and rotated audit history plus waiting desktop sessions, but refuses while any Rel.AI tool call is active.
+- **Improve the settings layout with a sticky navigation rail, clearer section names, responsive four-section navigation, and asynchronous mount completion.**
+
+Bump root/electron/status UI/lockfiles to 0.20.5.
+
 ## [0.20.4] — 2026-07-19
 
 ### Connector session tracking repair

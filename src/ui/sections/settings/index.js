@@ -1,9 +1,11 @@
 import { mountGeneral } from './general.js';
+import { mountDashboard } from './dashboard.js';
 import { mountConnector } from './connector.js';
 import { mountDiagnostics } from './diagnostics.js';
 
 const SUB_PAGES = [
   { id: 'general', label: 'General', mount: mountGeneral },
+  { id: 'dashboard', label: 'Dashboard', mount: mountDashboard },
   { id: 'connector', label: 'Connector', mount: mountConnector },
   { id: 'diagnostics', label: 'Diagnostics', mount: mountDiagnostics },
 ];
@@ -34,7 +36,7 @@ export function mountSettings(container, subPageId = 'general') {
 
   shell.append(rail, content);
   container.appendChild(shell);
-  (SUB_PAGES.find(page => page.id === _currentSubPage) || SUB_PAGES[0]).mount(content);
+  return (SUB_PAGES.find(page => page.id === _currentSubPage) || SUB_PAGES[0]).mount(content);
 }
 
 function openPage(page, rail, content) {

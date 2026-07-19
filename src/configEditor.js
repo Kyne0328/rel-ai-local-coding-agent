@@ -8,7 +8,7 @@ const NUMBER_KEYS = ["maxOutputBytes", "maxIndexFiles"];
 // Only these nested keys may be written through the settings API; anything else is
 // rejected so junk keys never persist into config.json.
 const ALLOWED_SECTION_KEYS = {
-  productUx: new Set(["dashboardRefreshSeconds", "liveLogPollSeconds", "staleHours", "cleanupOlderThanHours", "enableStateExport"]),
+  productUx: new Set(["dashboardRefreshSeconds", "liveLogPollSeconds", "showAutomaticValidation", "staleHours", "cleanupOlderThanHours", "enableStateExport"]),
   release: new Set(["minimumReadinessScore", "requireHttpToken"])
 };
 

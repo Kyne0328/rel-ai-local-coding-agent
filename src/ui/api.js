@@ -39,7 +39,8 @@ export function requestDashboardRefresh() {
 
 function cacheKeyFor(url, fetchOpts) {
   const isGet = !fetchOpts.method || fetchOpts.method === 'GET';
-  return isGet ? url : null;
+  const bypassCache = fetchOpts.cache === 'no-store' || fetchOpts.cache === 'reload';
+  return isGet && !bypassCache ? url : null;
 }
 
 function cachedValue(cacheKey) {

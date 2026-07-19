@@ -121,7 +121,6 @@ function settingsSubPage() {
 function wireTopControls() {
   document.getElementById('refreshBtn')?.addEventListener('click', event => {
     event.preventDefault();
-    event.currentTarget.closest('details')?.removeAttribute('open');
     void doRefresh({ source: 'manual', render: true });
   });
   document.getElementById('workspaceScope')?.addEventListener('change', event => setWorkspaceFilter(event.target.value));
@@ -139,7 +138,7 @@ function applyDesktopStatus(status) {
   const data = { ...getStore(), desktopStatus: status };
   initStore(data);
   updateShell(data);
-  if (_routerReady && !hasBlockingInteraction()) rerender();
+  if (_routerReady && !hasBlockingInteraction()) void rerender({ preserveView: true });
 }
 
 async function doRefresh(options = {}) {
@@ -157,13 +156,14 @@ async function performRefresh(options = {}) {
   setRefreshState('loading');
   invalidateCache(DASHBOARD_DATA_URL);
   try {
-    const data = await fetchJson(DASHBOARD_DATA_URL);
+    const data = await fetchJson(DASHBOARD_DATA_URL, { cache: 'no-store' });
     if (data && data.ok !== false) {
       initStore(data);
       updateShell(data);
       configureLiveRefresh(data);
       if (!_routerReady) activateRouter(ensureRouteRoot());
-      else if (options.render !== false && !hasBlockingInteraction()) rerender();
+      else if (options.render !== false && !hasBlockingInteraction()) await rerender({ preserveView: true });
+      _lastEventAt = Date.now();
       refreshState = 'idle';
       return data;
     }
@@ -193,8 +193,11 @@ function setRefreshState(state) {
   if (!button) return;
   const labels = { loading: 'Refreshing…', error: 'Retry now', idle: 'Refresh now' };
   button.disabled = state === 'loading';
+  button.setAttribute('aria-busy', state === 'loading' ? 'true' : 'false');
   button.dataset.state = state;
-  button.textContent = labels[state] || labels.idle;
+  const label = button.querySelector('span');
+  if (label) label.textContent = labels[state] || labels.idle;
+  else button.textContent = labels[state] || labels.idle;
 }
 
 function renderDashboardState(kind, title, description) {
@@ -215,9 +218,9 @@ async function liveOnEvent(data) {
   configureLiveRefresh(data);
   if (!_routerReady) activateRouter();
   if (currentSection() === 'activity') {
-    import('./ui/sections/activity.js').then(module => module.mergeEntries(data.auditTail?.entries || [])).catch(debugError);
+    await import('./ui/sections/activity.js').then(module => module.mergeEntries(data.auditTail?.entries || [])).catch(debugError);
   } else if (!hasBlockingInteraction()) {
-    rerender();
+    await rerender({ preserveView: true });
   }
 }
 

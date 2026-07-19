@@ -323,27 +323,6 @@ a.buttonlike.primary {
 }
 .workspace-scope:focus { border: 0; box-shadow: none; }
 .workspace-scope option { color: var(--text); background: var(--surface-2); }
-.topbar-menu { position: relative; }
-.topbar-menu summary {
-  width: 36px;
-  min-height: 34px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  cursor: pointer;
-  list-style: none;
-}
-.topbar-menu summary::-webkit-details-marker { display: none; }
-.topbar-menu[open] > button {
-  position: absolute;
-  z-index: 20;
-  top: 42px;
-  right: 0;
-  min-width: 130px;
-  background: var(--surface-2);
-  box-shadow: var(--elev-2);
-}
 .task-list { display: grid; gap: 8px; }
 .task-row {
   width: 100%;

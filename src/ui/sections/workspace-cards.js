@@ -13,6 +13,7 @@ function buildWorkspaces(data) {
   const healthByAlias = new Map((Array.isArray(health.workspaces) ? health.workspaces : []).map(item => [item.alias, item]));
   const findings = actionableFindings(health, workspaceFilter);
   const validationReady = workspaces.filter(workspace => validationCommands(workspace).length > 0).length;
+  const showAutomaticValidation = config.productUx?.showAutomaticValidation !== false;
 
   const root = document.createElement('div');
   root.className = 'section';
@@ -27,16 +28,16 @@ function buildWorkspaces(data) {
         <span class="section-action">${workspaceCountLabel(workspaces.length, allWorkspaces.length, Boolean(workspaceFilter))}</span>
       </div>
     </div>
-    <div class="overview-grid overview-grid-compact">
+    <div class="overview-grid overview-grid-compact${showAutomaticValidation ? '' : ' overview-grid-two'}">
       ${metricHtml('Workspaces', workspaces.length, workspaceFilter ? 'shown by the current filter' : 'configured repositories', 'blue')}
-      ${metricHtml('Validation ready', `${validationReady}/${workspaces.length}`, 'automatic standard checks detected', validationReady === workspaces.length && workspaces.length ? 'good' : 'warn')}
+      ${showAutomaticValidation ? metricHtml('Validation ready', `${validationReady}/${workspaces.length}`, 'automatic standard checks detected', validationReady === workspaces.length && workspaces.length ? 'good' : 'warn') : ''}
       ${metricHtml('Needs attention', findings.length, findings.length ? 'workspace or configuration findings' : 'no blocking findings', findings.length ? 'bad' : 'good')}
     </div>`;
 
   const grid = document.createElement('div');
   grid.className = 'workspace-grid workspace-grid-detailed';
   grid.innerHTML = workspaces.length
-    ? workspaces.map(workspace => workspaceCard(workspace, healthByAlias.get(workspace.alias))).join('')
+    ? workspaces.map(workspace => workspaceCard(workspace, healthByAlias.get(workspace.alias), showAutomaticValidation)).join('')
     : emptyWorkspaceMessage(workspaceFilter);
   root.appendChild(grid);
 
@@ -56,7 +57,7 @@ function emptyWorkspaceMessage(workspaceFilter) {
   return '<div class="empty">No workspaces configured. Add a repository to make it available to ChatGPT.</div>';
 }
 
-function workspaceCard(workspace, health) {
+function workspaceCard(workspace, health, showAutomaticValidation) {
   const view = workspaceCardView(workspace, health);
   return `
     <article class="workspace-card workspace-card-detailed" data-workspace-card="${view.aliasAttr}">
@@ -69,7 +70,7 @@ function workspaceCard(workspace, health) {
       </header>
       ${workspaceHealthHtml(view)}
       ${workspaceOperationalHtml(view)}
-      ${workspaceValidationHtml(view)}
+      ${showAutomaticValidation ? workspaceValidationHtml(view) : ''}
       ${workspacePolicyHtml(view)}
       ${workspaceActivityNotice(view)}
       <footer class="workspace-actions">${workspaceActionButtons(view)}</footer>
@@ -143,15 +144,15 @@ function workspaceValidationHtml(view) {
   const ready = commands.length > 0;
   const commandHtml = ready
     ? `<div class="validation-command-list">${commands.map(command => `<code class="validation-command">${esc(command)}</code>`).join('')}</div>`
-    : '<p class="workspace-validation-empty">No standard validation commands were detected. Add a check, test, or build script to the repository manifest.</p>';
+    : '<p class="workspace-validation-empty">Automatic validation is not configured for this repository. Rel.AI will report validation as not run until a check, test, lint, or build script is available.</p>';
   const statusPill = ready
     ? pillHtml('ready')
-    : '<span class="status-pill warn">not detected<span class="sr-only"> (warning)</span></span>';
+    : '<span class="status-pill">not configured<span class="sr-only"> (not configured)</span></span>';
   return `<section class="workspace-validation ${ready ? 'ready' : 'missing'}">
     <div class="workspace-validation-head">
       <div>
         <span class="workspace-section-label">Automatic validation</span>
-        <strong>${ready ? `${commands.length} command${commands.length === 1 ? '' : 's'} will run` : 'No commands detected'}</strong>
+        <strong>${ready ? `${commands.length} command${commands.length === 1 ? '' : 's'} will run` : 'Not configured'}</strong>
       </div>
       ${statusPill}
     </div>

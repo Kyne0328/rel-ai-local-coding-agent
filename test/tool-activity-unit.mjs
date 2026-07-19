@@ -123,6 +123,7 @@ assert.deepEqual(blockerCalls, [['start', 'prevent-app-suspension'], ['stop', 40
 
 let boundListener = null;
 let unsubscribed = false;
+let resetCalls = 0;
 let runtimeStatus = { state: 'idle', activeConnectorCalls: 0, activeTaskCount: 0, tasks: [] };
 const runtime = createTaskActivityRuntime({
   toolActivity: {
@@ -130,7 +131,11 @@ const runtime = createTaskActivityRuntime({
       boundListener = listener;
       return () => { unsubscribed = true; };
     },
-    getToolActivity() { return runtimeStatus; }
+    getToolActivity() { return runtimeStatus; },
+    resetToolActivity() {
+      resetCalls += 1;
+      runtimeStatus = { state: 'idle', activeConnectorCalls: 0, activeTaskCount: 0, tasks: [] };
+    }
   },
   powerSaveBlocker: fakePowerSaveBlocker,
   Notification: class { static isSupported() { return false; } },
@@ -144,6 +149,10 @@ runtimeStatus = { state: 'waiting', activeConnectorCalls: 0, activeTaskCount: 1,
 boundListener({ phase: 'finished', activeConnectorCalls: 0, ok: true });
 assert.equal(started.has(41), false);
 assert.equal(runtime.getStatus().activeTaskCount, 1);
+assert.deepEqual(runtime.resetHistory(), { ok: true });
+assert.equal(resetCalls, 1);
+runtimeStatus = { state: 'working', activeCalls: 1, activeConnectorCalls: 1, activeTaskCount: 1, tasks: [{ id: 'task', state: 'working', activeCalls: 1 }] };
+assert.equal(runtime.resetHistory().ok, false, 'history reset must refuse while a tool call is active');
 runtime.stop();
 assert.equal(unsubscribed, true);
 

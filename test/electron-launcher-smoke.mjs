@@ -63,6 +63,8 @@ assert.ok(electronPkg.build.files.includes('managed-ngrok.js'), 'electron build 
 assert.ok(electronPkg.build.files.includes('window-smoke.js'), 'electron build must include packaged renderer smoke coverage');
 assert.match(fs.readFileSync(path.join(root, 'electron', 'window-smoke.js'), 'utf8'), /data-task-event-link/, 'packaged dashboard smoke must click a session tool event');
 assert.match(fs.readFileSync(path.join(root, 'electron', 'window-smoke.js'), 'utf8'), /exact activity event detail/, 'packaged dashboard smoke must verify the matching Activity detail opens');
+assert.match(fs.readFileSync(path.join(root, 'electron', 'window-smoke.js'), 'utf8'), /scrollPreserved/, 'packaged dashboard smoke must verify refresh preserves scroll position');
+assert.match(fs.readFileSync(path.join(root, 'electron', 'window-smoke.js'), 'utf8'), /settingsPresent/, 'packaged dashboard smoke must verify Dashboard settings load');
 assert.ok(electronPkg.build.files.includes('tool-sleep-blocker.js'), 'electron build must include tool-call sleep prevention');
 assert.ok(electronPkg.build.files.includes('dashboard-window.js'), 'electron build must include the secured dashboard host');
 assert.ok(electronPkg.build.files.includes('dashboard-preload.js'), 'electron build must include the desktop dashboard bridge');

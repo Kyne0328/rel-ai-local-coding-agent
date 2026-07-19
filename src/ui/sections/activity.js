@@ -114,8 +114,10 @@ function buildActivity() {
 
   const clearButton = document.createElement('button');
   clearButton.type = 'button';
+  clearButton.id = '__activity-clear-filters';
   clearButton.className = 'secondary activity-clear-filters';
   clearButton.textContent = 'Clear filters';
+  clearButton.hidden = !hasActiveFilters();
   clearButton.onclick = () => {
     _filterState = { search: '', timeRange: '1h', workspace: '', tool: '', status: '', task: '' };
     setWorkspaceFilter('');
@@ -194,6 +196,8 @@ function replaceDynamicOptions(id, values, allLabel, selected) {
 function renderFilteredTable() {
   const filtered = applyFilters(_allEntries);
   renderTable(filtered);
+  const clearButton = document.getElementById('__activity-clear-filters');
+  if (clearButton) clearButton.hidden = !hasActiveFilters();
   const summary = document.getElementById('__activity-filter-summary');
   if (!summary) return;
   const active = [
@@ -206,6 +210,17 @@ function renderFilteredTable() {
   summary.textContent = active.length
     ? `Showing ${filtered.length} of ${_allEntries.length} events · ${active.join(' · ')}`
     : `Showing ${filtered.length} events from the selected time range.`;
+}
+
+function hasActiveFilters() {
+  return Boolean(
+    _filterState.search ||
+    _filterState.workspace ||
+    _filterState.tool ||
+    _filterState.status ||
+    _filterState.task ||
+    _filterState.timeRange !== '1h'
+  );
 }
 
 function applyFilters(entries) {

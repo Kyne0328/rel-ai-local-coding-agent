@@ -39,6 +39,7 @@
   @keyframes dashboard-shimmer { to { background-position: -220% 0; } }
 
   .overview-grid-compact { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .overview-grid-two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
   .overview-hero {
     position: relative;
@@ -122,9 +123,9 @@
   .detail-field-label { min-width: 80px; color: var(--text-muted); }
   .detail-pre { padding: 10px; overflow: auto; border: 1px solid var(--line-soft); border-radius: var(--radius-md); background: var(--bg); font-size: var(--font-12); white-space: pre-wrap; }
 
-  .settings-shell { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: var(--space-4); align-items: start; }
-  .settings-rail { display: grid; gap: 4px; align-content: start; padding: 4px 0; }
-  .settings-nav-button { min-height: 34px; justify-content: flex-start; padding: 8px 12px; border-color: transparent; text-align: left; }
+  .settings-shell { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: clamp(16px, 2.4vw, 28px); align-items: start; }
+  .settings-rail { position: sticky; top: 96px; display: grid; gap: 5px; align-content: start; padding: 8px; border: 1px solid var(--line-soft); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--elev-1); }
+  .settings-nav-button { min-height: 38px; justify-content: flex-start; padding: 9px 12px; border-color: transparent; text-align: left; }
   .settings-nav-button.active { color: #fff; border-color: color-mix(in srgb, var(--accent) 42%, transparent); background: var(--accent-strong); }
 
   .connection-loading { padding: var(--space-2) 0; color: var(--text-muted); }
@@ -192,7 +193,7 @@
     .attention-item { grid-template-columns: auto minmax(0, 1fr); }
     .attention-item > :last-child { grid-column: 2; justify-self: start; }
     .settings-shell { grid-template-columns: minmax(0, 1fr); }
-    .settings-rail { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .settings-rail { position: static; grid-template-columns: repeat(4, minmax(0, 1fr)); }
     .activity-freeze { margin-left: 0; }
     .connection-fact { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   }
