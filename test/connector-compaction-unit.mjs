@@ -93,7 +93,9 @@ const snapshotCompact = compactForConnector('relai_repo_snapshot', {
   effectiveMaxEntries: 1000, budgetMultiplied: false,
   recommendedFlow: ['relai_read'],
   operationJournal: { path: '/state/journal', recent: [] },
-  writeGuidance: { flow: {}, modes: {} }
+  writeGuidance: { flow: {}, modes: {} },
+  skipped: [{ path: 'x.bin', reason: 'binary-looking file' }],
+  git: { branch: 'main', aheadBehind: { ahead: 0, behind: 0 }, dirtyFiles: 1, changedFiles: ['src/app.js'] },
 }, {});
 assert.equal(snapshotCompact.manifestContents, undefined, 'manifest full text dropped');
 assert.equal(snapshotCompact.toolMode, undefined, 'config constant dropped');
@@ -103,6 +105,9 @@ assert.equal(snapshotCompact.operationJournal, undefined, 'journal dropped');
 assert.equal(snapshotCompact.writeGuidance, undefined, 'static guidance blob dropped');
 assert.deepEqual(snapshotCompact.manifests, ['package.json'], 'manifest names kept');
 assert.deepEqual(snapshotCompact.hints, ['Node']);
+assert.equal(snapshotCompact.skipped, undefined, 'skipped entry list dropped on connector');
+assert.equal(snapshotCompact.skippedCount, 1, 'skipped list replaced by a count');
+assert.deepEqual(snapshotCompact.git, { branch: 'main', aheadBehind: { ahead: 0, behind: 0 }, dirtyFiles: 1, changedFiles: ['src/app.js'] }, 'git summary passes through compaction');
 console.log('7. repo snapshot compacted: OK');
 
 const readCompact = compactForConnector('relai_read', {

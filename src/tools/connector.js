@@ -113,8 +113,9 @@ function compactForConnector(name, value, args = {}) {
       });
     }
     case "relai_repo_snapshot": {
-      // Drop config-forced constants, budget telemetry, the operation journal, and the full text
-      // of every manifest — keep the manifest NAMES and the project hints.
+      // Drop config-forced constants, budget telemetry, the operation journal, the full text
+      // of every manifest, and the skipped-entry list (kept as a count) — keep manifest
+      // NAMES, project hints, and the inline git summary.
       return pruneEmpty({
         ok: value.ok,
         workspace: value.workspace,
@@ -123,9 +124,10 @@ function compactForConnector(name, value, args = {}) {
         discoveredCommands: value.discoveredCommands,
         fileCount: value.fileCount,
         files: value.files,
-        skipped: value.skipped,
+        skippedCount: Array.isArray(value.skipped) ? value.skipped.length : undefined,
         truncated: value.truncated,
         hints: value.hints,
+        git: value.git,
         recommendedFlow: value.recommendedFlow
       });
     }
