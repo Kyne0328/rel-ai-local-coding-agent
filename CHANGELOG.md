@@ -41,6 +41,7 @@
 ### GitHub release reliability and analysis cleanup
 - **Make the release preflight use the GitHub REST API instead of `gh release view` exit codes.** HTTP 404 is now the only expected “release does not exist” result; HTTP 200 blocks duplicates and any other response fails with the actual status.
 - **Remove SonarQube-specific GitHub instructions and annotations.** The repository keeps its project-owned maintainability regression checks without depending on SonarQube naming, directives, or workflow integration.
+- **Allow failed release attempts to recover without another version bump.** Changes to the release workflow and manual dispatches can retry the current package version; existing tags or releases now produce a successful no-op instead of a failed job.
 
 Bump root/electron/status UI/lockfiles to 0.20.6.
 

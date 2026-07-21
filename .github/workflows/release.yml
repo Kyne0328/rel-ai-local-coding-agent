@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - package.json
+      - .github/workflows/release.yml
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -46,6 +48,13 @@ jobs:
             throw 'package.json does not contain a version.'
           }
 
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            "changed=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            "version=$currentVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            Write-Host "Manual release requested for current package version $currentVersion."
+            exit 0
+          }
+
           $beforeSha = '${{ github.event.before }}'
           if (-not $beforeSha -or $beforeSha -match '^0+$') {
             throw 'The previous commit could not be determined; refusing to publish a release.'
@@ -58,9 +67,16 @@ jobs:
 
           $previousVersion = ($previousPackageJson | ConvertFrom-Json).version
           if ($previousVersion -eq $currentVersion) {
-            "changed=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-            Write-Host "package.json changed, but its version remains $currentVersion. No release will be published."
-            exit 0
+            $changedFiles = @(git diff --name-only $beforeSha $env:GITHUB_SHA)
+            if ($LASTEXITCODE -ne 0) {
+              throw "Could not inspect files changed since $beforeSha."
+            }
+            if ($changedFiles -notcontains '.github/workflows/release.yml') {
+              "changed=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+              Write-Host "package.json changed, but its version remains $currentVersion. No release will be published."
+              exit 0
+            }
+            Write-Host "Release workflow changed while package version remains $currentVersion. Retrying the unpublished version."
           }
 
           "changed=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -69,6 +85,7 @@ jobs:
 
       - name: Refuse an existing tag or release
         if: steps.version.outputs.changed == 'true'
+        id: preflight
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -81,7 +98,9 @@ jobs:
             throw 'Could not check the remote tags.'
           }
           if ($existingTag) {
-            throw "Tag $env:VERSION already exists. Refusing to overwrite an existing release."
+            "publish=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            Write-Host "Tag $env:VERSION already exists. Nothing will be republished."
+            exit 0
           }
 
           $apiBase = if ($env:GITHUB_API_URL) { $env:GITHUB_API_URL.TrimEnd('/') } else { 'https://api.github.com' }
@@ -96,41 +115,44 @@ jobs:
           $releaseStatus = [int]$response.StatusCode
 
           if ($releaseStatus -eq 200) {
-            throw "GitHub release $env:VERSION already exists. Refusing to overwrite it."
+            "publish=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            Write-Host "GitHub release $env:VERSION already exists. Nothing will be republished."
+            exit 0
           }
           if ($releaseStatus -ne 404) {
             throw "Could not check whether GitHub release $env:VERSION already exists. GitHub API returned HTTP $releaseStatus."
           }
+          "publish=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           Write-Host "No existing tag or GitHub release was found for $env:VERSION."
 
       - name: Install project dependencies
-        if: steps.version.outputs.changed == 'true'
+        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         run: npm ci --ignore-scripts
 
       - name: Fetch bundled ngrok seed binary
-        if: steps.version.outputs.changed == 'true'
+        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         shell: pwsh
         env:
           NGROK_PLATFORMS: win32
         run: pwsh scripts/fetch-ngrok.ps1
 
       - name: Run tests
-        if: steps.version.outputs.changed == 'true'
+        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         run: npm test
 
       - name: Install Electron dependencies
-        if: steps.version.outputs.changed == 'true'
+        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         run: npm ci
         working-directory: electron
 
       - name: Build Windows executables
-        if: steps.version.outputs.changed == 'true'
+        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         run: npm run electron:dist
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
       - name: Prepare release assets and notes
-        if: steps.version.outputs.changed == 'true'
+        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         id: notes
         shell: pwsh
         env:
@@ -159,7 +181,7 @@ jobs:
           }
 
       - name: Publish GitHub release
-        if: steps.version.outputs.changed == 'true'
+        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
