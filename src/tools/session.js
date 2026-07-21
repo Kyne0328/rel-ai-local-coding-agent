@@ -83,7 +83,7 @@ function enrichReadAudit(extra, value) {
 }
 
 function enrichSnapshotAudit(extra, value) {
-  assignDefined(extra, "effectiveMaxIndexFiles", value?.effectiveMaxEntries);
+  assignDefined(extra, "effectiveSnapshotMaxFiles", value?.effectiveMaxEntries);
   assignDefined(extra, "budgetMultiplied", value?.budgetMultiplied);
 }
 

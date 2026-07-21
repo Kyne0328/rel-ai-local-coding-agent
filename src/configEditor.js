@@ -3,7 +3,7 @@ const path = require("node:path");
 const { getConfigPath, publicConfigSummary, writeConfig, normalizePatchConfig, assertSafeWorkspaceRoot } = require("./config");
 const { discoverCommands, staleCommandKeys } = require("./commandDiscovery");
 
-const NUMBER_KEYS = ["maxOutputBytes", "maxIndexFiles"];
+const NUMBER_KEYS = ["maxOutputBytes"];
 
 // Only these nested keys may be written through the settings API; anything else is
 // rejected so junk keys never persist into config.json.
@@ -12,11 +12,8 @@ const ALLOWED_SECTION_KEYS = {
   release: new Set(["minimumReadinessScore", "requireHttpToken"])
 };
 
-const DEFAULT_FAST_TASK = {
-  enabled: true,
-  skipIndexForSmallTasks: true,
-  preferChangedFiles: true,
-  maxIndexFiles: 750,
+const DEFAULT_CONTEXT = {
+  snapshotMaxFiles: 3000,
   includeRoots: [],
   excludePaths: [
     ".git", "node_modules", "build", "dist", "coverage", ".next", ".nuxt", ".svelte-kit",
@@ -173,7 +170,7 @@ function _handleUpsertWorkspace(alias, payload, next) {
     defaultBaseBranch: String(source.defaultBaseBranch || currentWorkspace.defaultBaseBranch || "main"),
     allowedRemotes: parseList(source.allowedRemotes, currentWorkspace.allowedRemotes || ["origin"]),
     repoSlug: String(source.repoSlug || currentWorkspace.repoSlug || ""),
-    fastTask: parseFastTask(source.fastTask, currentWorkspace.fastTask),
+    context: parseContext(source.context || source.fastTask, currentWorkspace.context || currentWorkspace.fastTask),
     testCommands: parseCommandMap(source.testCommands, currentWorkspace.testCommands || {}),
     commands: parseCommandMap(source.commands, currentWorkspace.commands || {})
   };
@@ -223,16 +220,16 @@ function parseList(value, fallback = []) {
   return String(value).split(/[\n,]/).map((item) => item.trim()).filter(Boolean);
 }
 
-function parseFastTask(value, fallback = {}) {
+function parseContext(value, fallback = {}) {
   const source = objectOrEmpty(value);
-  const current = { ...DEFAULT_FAST_TASK, ...objectOrEmpty(fallback) };
-  const maxIndexFiles = source.maxIndexFiles == null ? current.maxIndexFiles : finiteNumber(source.maxIndexFiles, "fastTask.maxIndexFiles");
+  const current = { ...DEFAULT_CONTEXT, ...objectOrEmpty(fallback) };
+  const rawSnapshotMaxFiles = source.snapshotMaxFiles == null ? source.maxIndexFiles : source.snapshotMaxFiles;
+  const snapshotMaxFiles = rawSnapshotMaxFiles == null
+    ? current.snapshotMaxFiles
+    : finiteNumber(rawSnapshotMaxFiles, "context.snapshotMaxFiles");
   return {
     ...current,
-    enabled: source.enabled == null ? current.enabled !== false : Boolean(source.enabled),
-    skipIndexForSmallTasks: source.skipIndexForSmallTasks == null ? current.skipIndexForSmallTasks !== false : Boolean(source.skipIndexForSmallTasks),
-    preferChangedFiles: source.preferChangedFiles == null ? current.preferChangedFiles !== false : Boolean(source.preferChangedFiles),
-    maxIndexFiles: maxIndexFiles || 750,
+    snapshotMaxFiles: snapshotMaxFiles || DEFAULT_CONTEXT.snapshotMaxFiles,
     includeRoots: parseList(source.includeRoots, current.includeRoots || []),
     excludePaths: parseList(source.excludePaths, current.excludePaths || [])
   };

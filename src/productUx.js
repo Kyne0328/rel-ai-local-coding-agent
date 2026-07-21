@@ -67,7 +67,7 @@ function healthMonitor(config, _args = {}) {
   const workspaces = Object.keys(config.workspaces || {}).map((alias) => {
     try {
       const workspace = resolveWorkspace(config, alias);
-      return { alias, ok: true, path: workspace.path, fastTask: workspace.fastTask || {} };
+      return { alias, ok: true, path: workspace.path, context: workspace.context || {} };
     } catch (error) {
       findings.push({ severity: "error", code: "workspace_unavailable", workspace: alias, message: error instanceof Error ? error.message : String(error) });
       return { alias, ok: false, error: error instanceof Error ? error.message : String(error) };

@@ -185,7 +185,72 @@ const badReg = await fetch(`${base}/register`, {
 });
 if (badReg.status !== 400) fail(`POST /register with no redirect_uris expected 400, got ${badReg.status}`);
 
-// 5. Negative: wrong dashboard token at /authorize must NOT issue a code.
+// 5. Existing connector recovery on a fresh computer. Simulate the same static
+// endpoint moving to another installation by removing only the registered client.
+const portableReg = await fetch(`${base}/register`, {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ client_name: 'Portable ChatGPT Connector', redirect_uris: [redirectUri] })
+});
+if (portableReg.status !== 201) fail(`portable POST /register expected 201, got ${portableReg.status}`);
+const portableClient = await portableReg.json();
+const portableStore = JSON.parse(fs.readFileSync(oauthStorePath, 'utf8'));
+delete portableStore.clients[portableClient.client_id];
+fs.writeFileSync(oauthStorePath, `${JSON.stringify(portableStore, null, 2)}\n`);
+
+const portablePkce = pkcePair();
+const portableState = 'portable-state';
+const portableQuery = new URLSearchParams({
+  response_type: 'code',
+  client_id: portableClient.client_id,
+  redirect_uri: redirectUri,
+  code_challenge: portablePkce.challenge,
+  code_challenge_method: 'S256',
+  scope: 'mcp',
+  state: portableState
+});
+const recoveryPage = await fetch(`${base}/authorize?${portableQuery.toString()}`);
+if (recoveryPage.status !== 200) fail(`portable recovery GET /authorize expected 200, got ${recoveryPage.status}`);
+const recoveryHtml = await recoveryPage.text();
+if (!/New computer detected|restores the same connector/i.test(recoveryHtml)) fail('portable recovery page did not explain connector restoration');
+
+const rejectedRecovery = await postForm('/authorize', {
+  response_type: 'code',
+  client_id: portableClient.client_id,
+  redirect_uri: redirectUri,
+  code_challenge: portablePkce.challenge,
+  code_challenge_method: 'S256',
+  scope: 'mcp',
+  state: portableState,
+  dashboard_token: 'WRONG-TOKEN'
+}, { manual: true });
+if (rejectedRecovery.status !== 401) fail(`portable recovery with wrong token expected 401, got ${rejectedRecovery.status}`);
+const storeAfterRejectedRecovery = JSON.parse(fs.readFileSync(oauthStorePath, 'utf8'));
+if (storeAfterRejectedRecovery.clients?.[portableClient.client_id]) fail('wrong dashboard token persisted a recovered OAuth client');
+
+const portableCode = await getAuthCode(portableClient, portablePkce.challenge, portableState);
+const storeAfterRecovery = JSON.parse(fs.readFileSync(oauthStorePath, 'utf8'));
+if (!storeAfterRecovery.clients?.[portableClient.client_id]?.recovered_at) fail('approved portable connector was not persisted as recovered');
+const portableTokenRes = await postForm('/token', {
+  grant_type: 'authorization_code',
+  code: portableCode,
+  redirect_uri: redirectUri,
+  client_id: portableClient.client_id,
+  code_verifier: portablePkce.verifier
+});
+if (portableTokenRes.status !== 200) fail(`portable recovered connector token exchange expected 200, got ${portableTokenRes.status}`);
+
+const foreignClientQuery = new URLSearchParams({
+  response_type: 'code',
+  client_id: 'foreign-client-id',
+  redirect_uri: redirectUri,
+  code_challenge: portablePkce.challenge,
+  code_challenge_method: 'S256'
+});
+const foreignClientPage = await fetch(`${base}/authorize?${foreignClientQuery.toString()}`);
+if (foreignClientPage.status !== 400) fail(`non-Rel.AI client recovery expected 400, got ${foreignClientPage.status}`);
+
+// 6. Negative: wrong dashboard token at /authorize must NOT issue a code.
 {
   const { challenge } = pkcePair();
   const res = await postForm('/authorize', {

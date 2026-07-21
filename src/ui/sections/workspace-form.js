@@ -119,7 +119,7 @@ export function openWorkspaceForm({ mode = 'add', workspace = null, onSaved } = 
       protectedBranches: splitList(form.querySelector('input[name="protected"]').value),
       defaultBaseBranch: String(form.querySelector('input[name="base"]').value || 'main').trim() || 'main',
       allowedRemotes: splitList(form.querySelector('input[name="remotes"]').value),
-      ...(isEdit ? { fastTask: ws.fastTask, testCommands: undefined } : {}),
+      ...(isEdit ? { context: ws.context, testCommands: undefined } : {}),
       confirmDangerous: true
     }));
     if (result?.ok) {

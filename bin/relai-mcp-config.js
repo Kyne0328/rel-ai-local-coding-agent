@@ -17,7 +17,6 @@ function printUsage() {
   relai-mcp-config state import <input-path> --confirm
   relai-mcp-config set dashboardEnabled <true|false>
   relai-mcp-config set maxOutputBytes <number>
-  relai-mcp-config set maxIndexFiles <number>
 
 Config path: ${getConfigPath()}`);
 }
@@ -116,12 +115,12 @@ function handleSet(subcommand, action) {
   const config = readConfig({ allowMissing: true });
   if (["dashboardEnabled"].includes(key)) {
     config[key] = parseBool(value, key);
-  } else if (["maxOutputBytes", "maxIndexFiles"].includes(key)) {
+  } else if (["maxOutputBytes"].includes(key)) {
     const number = Number(value);
     if (!Number.isFinite(number) || number <= 0) throw new Error(`${key} must be a positive number.`);
     config[key] = number;
   } else {
-    throw new Error(`Unsupported setting '${key}'. Supported settings: dashboardEnabled, maxOutputBytes, maxIndexFiles.`);
+    throw new Error(`Unsupported setting '${key}'. Supported settings: dashboardEnabled, maxOutputBytes.`);
   }
   writeConfig(config);
   console.log(`Set ${key}=${config[key]}`);

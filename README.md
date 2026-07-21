@@ -20,10 +20,10 @@ The goal is simple: I want the reasoning power of ChatGPT on the web, but I stil
 ChatGPT asks -> Rel.AI MCP inspects, changes, validates, and reviews locally -> I inspect the diff -> I keep or restore it
 ```
 
-The ChatGPT workflow is intentionally small and predictable:
+Tool use is intentionally small but flexible. ChatGPT should skip stages it does not need. A common workflow is:
 
 ```text
-relai_repo_snapshot -> relai_search -> relai_read (line ranges) -> relai_edit (runChecks + returnDiff) -> relai_complete_task
+relai_repo_snapshot (when useful) -> relai_search (when location is unknown) -> relai_read -> relai_edit (runChecks + returnDiff) -> relai_complete_task
 ```
 
 No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. The MCP server exposes one 18-tool workspace surface across local and connector transports.
@@ -263,7 +263,7 @@ Rel.AI exposes one 18-tool workspace surface. `relai_edit` is the primary write 
 | `relai_browser` | Run a browser/UI check or fetch a route. |
 | `relai_diff` | Review git status and diff. |
 | `relai_restore_changes` | Restore selected workspace changes. |
-| `relai_status` | Live status for configured workspaces and scripts. On the ChatGPT connector the result is compacted to workspace state; the full stdio result also lists tool groups and CI references. |
+| `relai_status` | Live status for configured workspaces and scripts. The compact ChatGPT response includes the configured workspace aliases so the model can select an exact alias without guessing; the full stdio result also lists tool groups and CI references. |
 | `relai_git_status` | Branch, ahead/behind, and ownership-split repository state. |
 | `relai_git_commit` | Record a commit with an explicit message (refuses secret-looking staged files). |
 | `relai_git_push` | Publish a branch to an allowlisted remote. |
@@ -274,17 +274,14 @@ Removed workflows are not part of the MCP anymore: update application loops, gen
 
 ---
 
-## Workspace context mode
+## Workspace context policy
 
-Each workspace can define how repository context is collected:
+Each workspace can define the size and shape of its initial repository map:
 
 ```json
 {
-  "fastTask": {
-    "enabled": true,
-    "preferChangedFiles": true,
-    "skipIndexForSmallTasks": true,
-    "maxIndexFiles": 750,
+  "context": {
+    "snapshotMaxFiles": 3000,
     "includeRoots": [],
     "excludePaths": [".git", "node_modules", "build", "dist", "coverage"]
   }
@@ -293,7 +290,9 @@ Each workspace can define how repository context is collected:
 
 Use `.relaiignore` in a repo to add repo-specific AI-context exclusions.
 
-The point is to avoid scanning unrelated files before touching the obvious files.
+The snapshot is only a structural map. It does not restrict `relai_search` or direct `relai_read` calls: ChatGPT may continue locating and reading any relevant non-sensitive file inside the configured workspace. The default map contains up to 3,000 files while generated and cache directories remain excluded.
+
+The implementation plan for general workspace commands, persistent processes, project instructions, managed worktrees, task plans, and optional independent workers is in [docs/CHATGPT_CODING_RUNTIME_ROADMAP.md](docs/CHATGPT_CODING_RUNTIME_ROADMAP.md).
 
 ---
 
@@ -335,7 +334,7 @@ Use this guide together with the `writeGuidance` returned by `relai_repo_snapsho
 | Review changes | `relai_diff` |
 | Restore selected changes | `relai_restore_changes` |
 
-Typical loop:
+Common loop when every stage is useful:
 
 ```text
 inspect -> read -> change -> final validation -> relai_complete_task

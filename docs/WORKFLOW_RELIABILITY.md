@@ -1,19 +1,20 @@
 # Workflow reliability
 
-Rel.AI MCP uses one workspace workflow and one 18-tool surface.
+Rel.AI MCP uses one 18-tool surface. The sequence is flexible: use only the stages the task requires.
 
 ```text
-1. Inspect:  relai_repo_snapshot
-2. Read:     relai_read
-3. Change:   relai_edit / relai_write / relai_replace
-4. Validate: relai_run_checks
-5. Review:   relai_diff / relai_git_status
-6. Cleanup:  relai_restore_changes / relai_tidy_plan + relai_tidy_run
-7. Publish:  relai_git_commit -> relai_git_push -> relai_git_create_pr
-8. Complete: relai_complete_task
+1. Inspect:  relai_repo_snapshot when an overview is useful
+2. Locate:   relai_search when the code location is unknown
+3. Read:     relai_read for relevant files or line ranges
+4. Change:   relai_edit / relai_write / relai_replace
+5. Validate: relai_run_checks
+6. Review:   relai_diff / relai_git_status
+7. Cleanup:  relai_restore_changes / relai_tidy_plan + relai_tidy_run
+8. Publish:  relai_git_commit -> relai_git_push -> relai_git_create_pr
+9. Complete: relai_complete_task
 ```
 
-The server does not generate helper scripts, expose hidden tool tiers, or route around the registered workspace tools.
+The initial snapshot is a bounded repository map, not an access boundary. Search and direct reads can continue anywhere inside the configured workspace. The server does not generate helper scripts, expose hidden tool tiers, or route around the registered workspace tools.
 
 ## Tool selection
 

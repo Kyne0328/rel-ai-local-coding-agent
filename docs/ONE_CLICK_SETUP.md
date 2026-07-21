@@ -22,6 +22,8 @@ The static domain is the part that matters for a permanent setup. A random tempo
 3. Paste your ngrok authtoken and static domain, and pick a local port (`3333` by default).
 4. Save. The app writes its config, generates a dashboard token, starts the local server, and brings up the tunnel.
 
+The desktop app creates `config.json` automatically. Skipping the dashboard onboarding leaves an empty but valid workspace configuration, so the app remains usable and workspaces can be added later. The `npm run init-config` command is only for repository/CLI development and is not required by the installed application.
+
 On first launch the app copies its bundled ngrok agent into `~/.rel-ai-mcp/managed-ngrok/` and runs it from there, so it can update the agent later without touching the installed program files.
 
 Every launch after this goes straight to the dashboard. The app lives in the system tray — closing a window leaves it running, and you quit it from the tray menu.
@@ -48,6 +50,19 @@ All state lives under `~/.rel-ai-mcp/`:
 ChatGPT then opens a sign-in page served by your own machine and asks for your Rel.AI **dashboard token** to approve the connection. The token is in `~/.rel-ai-mcp/.env`, and the dashboard Connector page can show it to you directly. No secret is ever embedded in the URL.
 
 Because the domain is static, this survives restarts. You set it up once.
+
+### Use the same connector on another computer
+
+The ChatGPT app is tied to the static MCP URL, not to one Windows installation. On another computer:
+
+1. Stop Rel.AI MCP on the previous computer so the static ngrok domain is free.
+2. Install Rel.AI MCP and configure the same ngrok account key and static domain.
+3. Open ChatGPT and use the existing Rel.AI MCP app. Do not delete or recreate it.
+4. When ChatGPT opens the authorization page, enter the dashboard token shown by the new computer.
+
+Rel.AI recognizes the existing connector client ID and restores its registration after dashboard-token approval. Workspace configuration remains computer-specific, so add the folders available on that computer from the Workspaces page.
+
+Only one computer can publish the same ngrok static domain at a time. Quit Rel.AI from the tray before handing the connector to another computer.
 
 ### Rotating the token
 

@@ -39,6 +39,7 @@ function normalizeWizardConfig(config = {}) {
 /** @param {LauncherConfigInput} [config] @returns {LauncherConfig} */
 function saveLauncherConfig(config = {}) {
   const normalized = normalizeWizardConfig(config);
+  configModule.ensureConfig();
   const publicUrl = `https://${normalized.ngrokDomain}`;
   const tunnelCommand = buildTunnelCommand(normalized.ngrokDomain, normalized.port);
 

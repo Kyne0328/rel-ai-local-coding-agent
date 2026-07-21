@@ -68,18 +68,18 @@ function helpMarkdown(config) {
 
 This server exposes one peer-level workspace-tool surface to ChatGPT. Tool choice is based on task shape and file size.
 
-## First calls to make
+## Tool choice
 
-1. Call \`relai_repo_snapshot\` with the requested alias, for example \`jjclover\`, to return the workspace profile, safe project tree, and size-based write guidance.
-2. For edits, use only the workspace workflow: \`relai_read\` exact files, then \`relai_edit\` — it routes automatically:
+Use the minimum number of calls needed for the task. \`relai_repo_snapshot\` is an optional repository map, not a limit on later access. Use \`relai_search\` when the code location is unknown, and use \`relai_read\` for every relevant file or line range before editing. Search and direct reads may continue anywhere inside the configured workspace even when a file was not listed in the initial snapshot.
+
+For edits, prefer \`relai_edit\`; it routes automatically:
    - \`oldText\`+\`newText\` for small exact edits inside existing files.
    - \`content\` for complete file replacement (large files chunk automatically).
    - \`updateText\` for a unified-diff change across files.
    - \`edits: [...]\` for several edits in one call; add \`runChecks: true\` and \`returnDiff: true\` to validate and review in the same call.
    - \`relai_tidy_plan\` then \`relai_tidy_run\` for session-owned untracked cleanup.
-3. After edits, run \`relai_run_checks\`, then \`relai_diff\` for review (or pass \`runChecks\`/\`returnDiff\` on the edit itself).
-4. If an edit payload is too large, re-read the target and use smaller \`oldText\`/\`newText\` operations with exact current text.
-5. If ChatGPT still shows removed tools, restart/reconnect the MCP server instead of falling back.
+
+Use quick validation while iterating. Before completion, run one final standard or release \`relai_run_checks\`; review with \`relai_diff\` when the edit did not already return a diff, then call \`relai_complete_task\` exactly once. If an edit payload is too large, re-read the target and use smaller exact replacements. If ChatGPT still shows removed tools, restart or reconnect the MCP server instead of falling back.
 
 ## Configured workspaces
 

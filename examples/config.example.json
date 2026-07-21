@@ -5,18 +5,14 @@
   "toolMode": "chatgpt_local_repo",
   "trustedLocalAgent": true,
   "maxOutputBytes": 2097152,
-  "maxIndexFiles": 3000,
   "workspaces": {
     "myapp": {
       "path": "/absolute/path/to/myapp",
       "protectedBranches": ["main", "master"],
       "defaultBaseBranch": "main",
       "allowedRemotes": ["origin"],
-      "fastTask": {
-        "enabled": true,
-        "preferChangedFiles": true,
-        "skipIndexForSmallTasks": true,
-        "maxIndexFiles": 750,
+      "context": {
+        "snapshotMaxFiles": 3000,
         "includeRoots": [],
         "excludePaths": [".git", "node_modules", "build", "dist", "coverage"]
       },

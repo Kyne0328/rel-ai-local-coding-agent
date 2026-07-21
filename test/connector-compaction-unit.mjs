@@ -15,7 +15,8 @@ const idleStatus = compactForConnector('relai_status', {
     alias: 'app', root: '/repo', commandKeys: [], testCommandKeys: ['test'],
     policy: { trusted: true, sessionActive: false, baselineDirty: [], source: 'default' }
   },
-  workspaceCount: 1
+  workspaceCount: 2,
+  workspaceAliases: ['app', 'worker']
 }, {});
 assert.equal(idleStatus.toolGroups, undefined, 'toolGroups must be dropped');
 assert.equal(idleStatus.scripts, undefined, 'server scripts must be dropped');
@@ -26,10 +27,12 @@ assert.equal(idleStatus.state, undefined, 'idle workspace must have no state lin
 assert.equal(idleStatus.workspace.commandKeys, undefined, 'empty arrays pruned');
 assert.deepEqual(idleStatus.workspace.testCommandKeys, ['test']);
 assert.equal(idleStatus.version, '0.17.1');
+assert.equal(idleStatus.workspaceCount, 2);
+assert.deepEqual(idleStatus.workspaceAliases, ['app', 'worker'], 'compact status must retain configured aliases');
 console.log('1. idle relai_status compacted: OK');
 
 const activeStatus = compactForConnector('relai_status', {
-  ok: true, version: '0.17.1', workspaceCount: 1,
+  ok: true, version: '0.17.1', workspaceCount: 2, workspaceAliases: ['app', 'worker'],
   workspace: {
     alias: 'app', root: '/repo',
     policy: { trusted: true, sessionActive: true, taskHint: 'add login', baselineDirty: ['a.txt'], source: 'session_file' }
@@ -37,6 +40,7 @@ const activeStatus = compactForConnector('relai_status', {
 }, {});
 assert.match(activeStatus.state, /Session active: add login/);
 assert.match(activeStatus.state, /1 pre-existing dirty file/);
+assert.deepEqual(activeStatus.workspaceAliases, ['app', 'worker']);
 console.log('2. active relai_status compacted: OK');
 
 assert.equal(policySentence(null), null);

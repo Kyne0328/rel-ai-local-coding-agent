@@ -227,11 +227,10 @@ function buildCollectionPolicy(root, options = {}) {
 }
 
 function collectOptionsFromWorkspace(workspace, overrides = {}) {
-  const fastTask = workspace?.fastTask && typeof workspace.fastTask === "object" ? workspace.fastTask : {};
-  if (fastTask.enabled === false) return { ...overrides };
+  const context = workspace?.context && typeof workspace.context === "object" ? workspace.context : {};
   return {
-    includeRoots: fastTask.includeRoots || fastTask.includePaths || [],
-    excludePaths: fastTask.excludePaths || [],
+    includeRoots: context.includeRoots || context.includePaths || [],
+    excludePaths: context.excludePaths || [],
     ...overrides
   };
 }
@@ -267,7 +266,7 @@ function isInsideIncludedRoot(normalized, root) {
 function shouldExcludeRelativePath(rel, name, policy) {
   const normalized = String(rel || "").replaceAll(WINDOWS_SEPARATOR, "/");
   if (policy.includeRoots.length && !policy.includeRoots.some((root) => isInsideIncludedRoot(normalized, root))) {
-    return "outside fast-task include roots";
+    return "outside context include roots";
   }
   if (policy.excludeNames.has(name) || policy.excludeNames.has(normalized)) return "excluded generated/cache folder";
   for (const pattern of policy.excludePaths) {

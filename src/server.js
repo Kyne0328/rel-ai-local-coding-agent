@@ -56,7 +56,7 @@ async function dispatchMessage(message, options) {
         protocolVersion: message.params?.protocolVersion || '2025-06-18',
         capabilities: { tools: { listChanged: true }, resources: { subscribe: false, listChanged: true } },
         serverInfo: { name: pkg.name, version: pkg.version },
-        instructions: 'For coding tasks: locate code with relai_search, read only the needed ranges with relai_read (startLine/endLine), then apply changes with relai_edit — pass runChecks:true and returnDiff:true to validate and review in the same call. Use level "quick" checks while iterating and one final standard or release relai_run_checks before finishing. Then call relai_complete_task exactly once with a concise summary. Do not call relai_complete_task if more edits or validation remain.'
+        instructions: 'Use the minimum number of workspace-tool calls needed. Call relai_repo_snapshot when a repository overview is useful, relai_search when the code location is unknown, and relai_read for every relevant file or line range before editing. The snapshot is only an initial map; continue searching and reading anywhere inside the configured workspace as needed. Prefer relai_edit with runChecks:true and returnDiff:true when one call can change, validate, and review the result. Use quick checks while iterating, run one final standard or release relai_run_checks, then call relai_complete_task exactly once. Do not call relai_complete_task while more edits or validation remain.'
       });
     case 'ping':
       return result(message.id, {});
