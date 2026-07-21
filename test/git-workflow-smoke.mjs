@@ -21,7 +21,7 @@ const GIT_EXECUTABLE = process.platform === 'win32'
   ? String.raw`C:\Program Files\Git\cmd\git.exe`
   : '/usr/bin/git';
 
-function git(args, options = {}) { // NOSONAR - this smoke test intentionally executes the local Git binary.
+function git(args, options = {}) {
   return execFileSync(GIT_EXECUTABLE, args, options);
 }
 

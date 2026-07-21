@@ -9,8 +9,7 @@ const { getVersion } = require("../version");
 const { debugSwallow } = require("./session");
 const { TOOL_NAMES, getToolGroups } = require("./schema");
 
-// Locale-aware sort of an object's keys. Sonar (S2871) flags Array.sort() on strings
-// without an explicit comparator, so route key sorting through one helper.
+// Locale-aware sort of an object's keys so ordering remains explicit and stable.
 function sortedKeys(obj) {
   return Object.keys(obj || {}).sort((a, b) => a.localeCompare(b));
 }
