@@ -38,6 +38,10 @@
 - **Migrate existing configured installations automatically.** When an older installation has one or more workspaces but no onboarding marker, Rel.AI records it as already configured instead of presenting first-run setup after an upgrade.
 - **Add the native folder picker to the onboarding workspace step.** Desktop users can select the repository with Browse… using the same no-timeout picker behavior as the main workspace form, while browser-only use retains manual path entry.
 
+### GitHub release reliability and analysis cleanup
+- **Make the release preflight use the GitHub REST API instead of `gh release view` exit codes.** HTTP 404 is now the only expected “release does not exist” result; HTTP 200 blocks duplicates and any other response fails with the actual status.
+- **Remove SonarQube-specific GitHub instructions and annotations.** The repository keeps its project-owned maintainability regression checks without depending on SonarQube naming, directives, or workflow integration.
+
 Bump root/electron/status UI/lockfiles to 0.20.6.
 
 ## [0.20.4] — 2026-07-19

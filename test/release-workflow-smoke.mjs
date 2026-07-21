@@ -89,15 +89,11 @@ const buildIndex = releaseWorkflow.indexOf('- name: Build Windows executables');
 assert.ok(fetchSeedIndex >= 0, 'release workflow must fetch the bundled ngrok seed');
 assert.ok(fetchSeedIndex < runTestsIndex, 'ngrok seed must be fetched before release consistency tests');
 assert.ok(fetchSeedIndex < buildIndex, 'ngrok seed must be fetched before packaging');
-assert.match(releaseWorkflow, /\$PSNativeCommandUseErrorActionPreference\s*=\s*\$false/);
-assert.match(releaseWorkflow, /\$releaseExitCode\s*=\s*\$LASTEXITCODE/);
-assert.match(releaseWorkflow, /if \(\$releaseExitCode -eq 0\)/);
-assert.match(releaseWorkflow, /if \(\$releaseExitCode -ne 1\)/);
-assert.doesNotMatch(
-  releaseWorkflow,
-  /gh release view[^\n]*\r?\n\s*if \(\$LASTEXITCODE -eq 0\)/,
-  'Expected release absence must not terminate the PowerShell step before its exit code is handled.'
-);
+assert.match(releaseWorkflow, /Invoke-WebRequest[^\n]*-SkipHttpErrorCheck/);
+assert.match(releaseWorkflow, /\$releaseStatus\s*=\s*\[int\]\$response\.StatusCode/);
+assert.match(releaseWorkflow, /if \(\$releaseStatus -eq 200\)/);
+assert.match(releaseWorkflow, /if \(\$releaseStatus -ne 404\)/);
+assert.doesNotMatch(releaseWorkflow, /gh release view/, 'Release existence checks must not depend on gh CLI exit-code conventions.');
 
 fs.rmSync(seedPath, { force: true });
 const missingSeed = runWithEnv('release-check.mjs', { REL_AI_TARGET_PLATFORM: 'win32' });

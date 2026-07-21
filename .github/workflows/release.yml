@@ -84,21 +84,24 @@ jobs:
             throw "Tag $env:VERSION already exists. Refusing to overwrite an existing release."
           }
 
-          $previousNativeErrorPreference = $PSNativeCommandUseErrorActionPreference
-          $PSNativeCommandUseErrorActionPreference = $false
-          try {
-            gh release view $env:VERSION --repo $env:GITHUB_REPOSITORY *> $null
-            $releaseExitCode = $LASTEXITCODE
-          } finally {
-            $PSNativeCommandUseErrorActionPreference = $previousNativeErrorPreference
+          $apiBase = if ($env:GITHUB_API_URL) { $env:GITHUB_API_URL.TrimEnd('/') } else { 'https://api.github.com' }
+          $encodedVersion = [Uri]::EscapeDataString($env:VERSION)
+          $releaseUri = "$apiBase/repos/$env:GITHUB_REPOSITORY/releases/tags/$encodedVersion"
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = 'application/vnd.github+json'
+            'X-GitHub-Api-Version' = '2022-11-28'
           }
+          $response = Invoke-WebRequest -Uri $releaseUri -Headers $headers -Method Get -SkipHttpErrorCheck
+          $releaseStatus = [int]$response.StatusCode
 
-          if ($releaseExitCode -eq 0) {
+          if ($releaseStatus -eq 200) {
             throw "GitHub release $env:VERSION already exists. Refusing to overwrite it."
           }
-          if ($releaseExitCode -ne 1) {
-            throw "Could not check whether GitHub release $env:VERSION already exists. gh exited with code $releaseExitCode."
+          if ($releaseStatus -ne 404) {
+            throw "Could not check whether GitHub release $env:VERSION already exists. GitHub API returned HTTP $releaseStatus."
           }
+          Write-Host "No existing tag or GitHub release was found for $env:VERSION."
 
       - name: Install project dependencies
         if: steps.version.outputs.changed == 'true'

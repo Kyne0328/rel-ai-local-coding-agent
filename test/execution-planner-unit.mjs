@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { planEdit } = require('../src/executionPlanner.js');
 
-function gitShell(command, options = {}) { // NOSONAR - these unit tests intentionally execute the local Git binary.
+function gitShell(command, options = {}) {
   return execSync(command, options);
 }
 

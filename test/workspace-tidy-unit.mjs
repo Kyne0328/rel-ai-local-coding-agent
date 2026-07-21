@@ -13,7 +13,7 @@ const GIT_EXECUTABLE = process.platform === 'win32'
   ? String.raw`C:\Program Files\Git\cmd\git.exe`
   : '/usr/bin/git';
 
-function git(args, cwd) { // NOSONAR - these unit tests intentionally execute the local Git binary.
+function git(args, cwd) {
   execFileSync(GIT_EXECUTABLE, args, { cwd, stdio: 'pipe' });
 }
 

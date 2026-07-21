@@ -25,4 +25,4 @@ assert.match(workspaceState, /resolveGitExecutable/);
 assert.match(gitExecutable, /C:\\Program Files\\Git\\cmd\\git\.exe/);
 assert.match(gitExecutable, /process\.env\.REL_AI_MCP_GIT/);
 
-console.log('Sonar new-code regression scan passed.');
+console.log('Maintainability regression scan passed.');
