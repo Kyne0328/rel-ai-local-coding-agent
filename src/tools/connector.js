@@ -73,7 +73,8 @@ function compactForConnector(name, value, args = {}) {
         version: value.version,
         workspace: ws,
         state,
-        workspaceCount: value.workspaceCount
+        workspaceCount: value.workspaceCount,
+        workspaceAliases: value.workspaceAliases
       });
     }
     case "relai_diff":

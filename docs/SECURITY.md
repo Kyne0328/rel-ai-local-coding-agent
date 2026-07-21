@@ -13,6 +13,7 @@ ChatGPT connects with **OAuth**. Rel.AI MCP acts as both authorization server an
 - The `/authorize` page requires `REL_AI_MCP_TOKEN` before issuing a short-lived, single-use authorization code.
 - Access tokens expire after one hour and can be renewed with rotating refresh tokens.
 - OAuth state is stored in the Rel.AI state directory with restricted file permissions.
+- When the same static MCP URL moves to another computer, an existing Rel.AI-issued client ID can be restored only through a fresh dashboard-token approval. Recovery accepts only Rel.AI client-ID format, requires an HTTPS redirect URI, and does not import old access or refresh tokens.
 - A public ChatGPT connection must use HTTPS.
 
 ### Local and automation clients: Bearer token

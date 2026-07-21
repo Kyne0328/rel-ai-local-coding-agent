@@ -251,11 +251,11 @@ async function startServer(options = {}) {
     if (options.openDashboard && httpServer?.listening) await showDashboardWindow();
     return startPromise;
   }
-
   const runToken = ++lifecycleToken;
   startPromise = (async () => {
     let guiConfig;
     try {
+      configModule.ensureConfig();
       guiConfig = readGuiConfig();
       guiConfig.port = normalizePort(guiConfig.port || 3333);
       guiConfig.ngrokDomain = normalizeNgrokDomain(guiConfig.ngrokDomain || '');

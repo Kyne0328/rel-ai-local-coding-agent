@@ -19,6 +19,7 @@ function relaiStatus(config, args = {}) {
   const packageJson = safeReadPackageJson();
   const scripts = packageJson.scripts || {};
   const ci = ciScriptStatus(scripts);
+  const workspaceAliases = sortedKeys(config.workspaces);
   let selectedWorkspace = null;
   if (args.workspace) {
     try {
@@ -49,7 +50,8 @@ function relaiStatus(config, args = {}) {
     scripts: sortedKeys(scripts),
     ci,
     workspace: selectedWorkspace,
-    workspaceCount: Object.keys(config.workspaces || {}).length
+    workspaceCount: workspaceAliases.length,
+    workspaceAliases
   };
 }
 
@@ -110,7 +112,7 @@ function workspaceList(config) {
     testCommandKeys: sortedKeys(item.testCommands),
     commandKeys: sortedKeys(item.commands),
     protectedBranches: Array.isArray(item.protectedBranches) ? item.protectedBranches : [],
-    fastTask: item.fastTask || {}
+    context: item.context || {}
   })).sort((a, b) => a.alias.localeCompare(b.alias));
   return { ok: true, count: workspaces.length, workspaces };
 }

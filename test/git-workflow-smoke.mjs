@@ -60,7 +60,7 @@ const workspace = {
   allowedRemotes: ['origin'],
   testCommands: {},
   commands: {},
-  fastTask: { enabled: false }
+  context: { snapshotMaxFiles: 3000 }
 };
 const config = { stateDir: path.join(root, 'state'), patch: { requireCleanGit: false, backup: false, maxUpdateBytes: 2 * 1024 * 1024 } };
 

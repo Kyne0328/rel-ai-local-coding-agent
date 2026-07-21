@@ -256,17 +256,37 @@ function oauthError(error, description, redirectError = false, extras = {}) {
   return { ok: false, redirectError, error, error_description: description, ...extras };
 }
 
-function authorizationClient(query, store) {
-  const clientId = String(query.client_id || "");
-  const client = store.clients[clientId];
-  if (!client) return { error: oauthError("invalid_client", "Unknown client_id. Re-add the connector in ChatGPT.") };
-  return { clientId, client };
+function isRecoverableClientId(clientId) {
+  return /^relai_client_[A-Za-z0-9_-]{16,128}$/.test(clientId);
 }
 
-function authorizationRedirect(query, client) {
+function authorizationClient(query, store, options = {}) {
+  const clientId = String(query.client_id || "");
+  const client = store.clients[clientId];
+  if (client) return { clientId, client, recoverClient: false };
+  if (options.allowClientRecovery && isRecoverableClientId(clientId)) {
+    return { clientId, client: null, recoverClient: true };
+  }
+  return { error: oauthError("invalid_client", "Unknown client_id. This connector cannot be recovered automatically.") };
+}
+
+function authorizationRedirect(query, client, options = {}) {
   const redirectUri = String(query.redirect_uri || "");
-  if (!redirectUri || !client.redirect_uris.includes(redirectUri)) {
+  if (!redirectUri) {
+    return { error: oauthError("invalid_request", "redirect_uri is required.") };
+  }
+  if (client && !client.redirect_uris.includes(redirectUri)) {
     return { error: oauthError("invalid_request", "redirect_uri does not match a registered value.") };
+  }
+  if (!client && options.recoverClient) {
+    try {
+      const parsed = new URL(redirectUri);
+      if (parsed.protocol !== "https:") {
+        return { error: oauthError("invalid_request", "Recovered connector redirect_uri must use HTTPS.") };
+      }
+    } catch {
+      return { error: oauthError("invalid_request", "Recovered connector redirect_uri is invalid.") };
+    }
   }
   return { redirectUri };
 }
@@ -283,11 +303,11 @@ function authorizationCodeChallenge(query, redirectUri) {
   return { codeChallenge };
 }
 
-function validateAuthorizationRequest(query = {}) {
+function validateAuthorizationRequest(query = {}, options = {}) {
   const store = pruneStore(readStore());
-  const clientResult = authorizationClient(query, store);
+  const clientResult = authorizationClient(query, store, options);
   if (clientResult.error) return clientResult.error;
-  const redirectResult = authorizationRedirect(query, clientResult.client);
+  const redirectResult = authorizationRedirect(query, clientResult.client, clientResult);
   if (redirectResult.error) return redirectResult.error;
   const challengeResult = authorizationCodeChallenge(query, redirectResult.redirectUri);
   if (challengeResult.error) return challengeResult.error;
@@ -295,12 +315,13 @@ function validateAuthorizationRequest(query = {}) {
     ok: true,
     request: {
       clientId: clientResult.clientId,
-      clientName: clientResult.client.client_name || "",
+      clientName: clientResult.client?.client_name || "ChatGPT connector",
       redirectUri: redirectResult.redirectUri,
       state: query.state != null ? String(query.state) : "",
       codeChallenge: challengeResult.codeChallenge,
       resource: query.resource != null ? String(query.resource) : "",
-      scope: query.scope != null ? String(query.scope) : SCOPE
+      scope: query.scope != null ? String(query.scope) : SCOPE,
+      recoverClient: clientResult.recoverClient === true
     }
   };
 }
@@ -309,6 +330,22 @@ function validateAuthorizationRequest(query = {}) {
 function issueAuthorizationCode(request) {
   return withStoreLock(() => {
     const store = pruneStore(readStore());
+    if (!store.clients[request.clientId]) {
+      if (!request.recoverClient || !isRecoverableClientId(request.clientId)) {
+        throw new Error("OAuth client registration disappeared before authorization completed.");
+      }
+      store.clients[request.clientId] = {
+        client_id: request.clientId,
+        redirect_uris: [request.redirectUri],
+        client_name: request.clientName || "ChatGPT connector",
+        grant_types: ["authorization_code", "refresh_token"],
+        response_types: ["code"],
+        token_endpoint_auth_method: "none",
+        scope: SCOPE,
+        created_at: Date.now(),
+        recovered_at: Date.now()
+      };
+    }
     const code = randomId("relai_code_", 32);
     store.codes[code] = {
       clientId: request.clientId,
@@ -444,6 +481,9 @@ function renderLoginPage(request, baseUrl, options = {}) {
   const errorHtml = options.error
     ? `<div class="err">${escapeHtml(options.error)}</div>`
     : "";
+  const recoveryHtml = request.recoverClient
+    ? `<div class="notice"><strong>New computer detected.</strong><br>This existing ChatGPT connector was registered on another Rel.AI installation. Approving below restores the same connector on this computer; you do not need to recreate it in ChatGPT.</div>`
+    : "";
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -459,6 +499,7 @@ function renderLoginPage(request, baseUrl, options = {}) {
   input[type=password] { width:100%; box-sizing:border-box; background:#0b0f1a; border:1px solid #243049; border-radius:8px; color:#e6eaf2; padding:10px; font-size:14px; }
   button { width:100%; margin-top:16px; background:#3b6cf0; color:#fff; border:0; border-radius:8px; padding:11px; font-size:14px; font-weight:600; cursor:pointer; }
   .err { background:rgba(255,99,120,.12); border:1px solid rgba(255,99,120,.4); color:#ff9aa8; font-size:12px; padding:9px 11px; border-radius:8px; margin-bottom:14px; }
+  .notice { background:rgba(82,145,255,.12); border:1px solid rgba(82,145,255,.45); color:#bfd2ff; font-size:12px; line-height:1.45; padding:10px 12px; border-radius:8px; margin-bottom:14px; }
   .who { font-size:12px; color:#9aa6bd; margin-top:14px; }
 </style>
 </head>
@@ -468,6 +509,7 @@ function renderLoginPage(request, baseUrl, options = {}) {
     <p>Connect ChatGPT to your local Rel.AI MCP workspace bridge. Enter your Rel.AI dashboard token to approve this connection.</p>
     <p class="who" style="margin-top:0;">Find it in <code style="background:#0b0f1a;padding:1px 4px;border-radius:4px;">~/.rel-ai-mcp/.env</code> (REL_AI_MCP_TOKEN) or in the terminal output when the server started.</p>
     ${errorHtml}
+    ${recoveryHtml}
     <label for="dashboard_token">Dashboard token</label>
     <input id="dashboard_token" name="dashboard_token" type="password" autocomplete="off" autofocus required>
     ${hiddenInputs}

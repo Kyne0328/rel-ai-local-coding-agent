@@ -32,7 +32,7 @@ const { relaiApplyPatch, normalizeOpenAIPatchFormat } = require("./bridge/patch"
 
 const DEFAULT_MAX_READ_BYTES = 1024 * 1024;
 const DEFAULT_CONNECTOR_READ_BYTES = 128 * 1024;
-const DEFAULT_MAX_SNAPSHOT_FILES = 1000;
+const DEFAULT_MAX_SNAPSHOT_FILES = 3000;
 const DEFAULT_STAGED_CHUNK_BYTES = 12000;
 const STAGED_WRITE_BYTE_THRESHOLD = 8000;
 const STAGED_WRITE_LINE_THRESHOLD = 180;
@@ -42,9 +42,7 @@ const SOURCE_LIKE_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx', '.mjs', '.
 
 async function repoSnapshot(workspace, config, args = {}) {
   const policy = resolvePolicy(workspace, config || {});
-  const configuredDefault = workspace.fastTask?.enabled === false
-    ? DEFAULT_MAX_SNAPSHOT_FILES
-    : clampNumber(workspace.fastTask?.maxIndexFiles, 1, 20000, DEFAULT_MAX_SNAPSHOT_FILES);
+  const configuredDefault = clampNumber(workspace.context?.snapshotMaxFiles, 1, 20000, DEFAULT_MAX_SNAPSHOT_FILES);
   const effectiveDefault = resolveBudget(configuredDefault, policy, config || {});
   const maxEntries = clampNumber(args.maxEntries, 1, 20000, effectiveDefault);
   const includeFiles = args.includeFiles !== false;
@@ -69,7 +67,7 @@ async function repoSnapshot(workspace, config, args = {}) {
     truncated: tree.truncated,
     hints: projectHints(Object.keys(manifests)),
     ...(git ? { git } : {}),
-    recommendedFlow: ["relai_repo_snapshot", "relai_search", "relai_read (startLine/endLine)", "relai_edit { runChecks: true, returnDiff: true }", "relai_complete_task"],
+    recommendedFlow: ["Use the minimum tool calls needed", "relai_search when the code location is unknown", "relai_read relevant files or line ranges before editing", "relai_edit { runChecks: true, returnDiff: true } when practical", "relai_complete_task after final validation"],
     writeGuidance: workspaceWriteGuidance(config),
     operationJournal: summarizeOperations(config, workspace, args.journalLimit || 10)
   };

@@ -73,7 +73,7 @@ async function loadDashboardInteractionSmoke() {
         allowedRemotes: ['origin'],
         commands: {},
         testCommands: { check: 'npm run check' },
-        fastTask: { enabled: false }
+        context: { snapshotMaxFiles: 3000 }
       }
     };
     configModule.writeConfig(config);

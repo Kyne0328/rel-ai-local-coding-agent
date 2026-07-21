@@ -41,7 +41,7 @@ assert.deepEqual(
 
 assert.deepEqual(
   buildExtraAudit('relai_repo_snapshot', { effectiveMaxEntries: 0, budgetMultiplied: false }, {}),
-  { effectiveMaxIndexFiles: 0, budgetMultiplied: false }
+  { effectiveSnapshotMaxFiles: 0, budgetMultiplied: false }
 );
 
 assert.deepEqual(buildExtraAudit('relai_status', {}, {}), {});

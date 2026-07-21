@@ -25,7 +25,6 @@ fs.writeFileSync(configPath, JSON.stringify({
   toolMode: 'chatgpt_local_repo',
   trustedLocalAgent: true,
   maxOutputBytes: 2097152,
-  maxIndexFiles: 3000,
   workspaces: {},
   productUx: {
     dashboardRefreshSeconds: 5,

@@ -1,7 +1,7 @@
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
-const { readConfig } = require("../config");
+const { readConfig, ensureConfig } = require("../config");
 const productUx = require("../productUx");
 const release = require("../release");
 const configEditor = require("../configEditor");
@@ -134,7 +134,7 @@ function handleApiTools(ctx) {
 }
 
 function handleOnboardingStatus(ctx) {
-  const onboardingPath = path.join(require("node:os").homedir(), ".rel-ai-mcp", "onboarding.json");
+  const onboardingPath = path.join(connection.stateDir(), "onboarding.json");
   let flag = null;
   try { flag = JSON.parse(fs.readFileSync(onboardingPath, "utf8")); } catch {}
   sendJson(ctx.res, 200, {
@@ -177,7 +177,8 @@ function handleEvents(ctx) { openDashboardEvents(ctx.res, ctx.req, ctx.options);
 
 async function handleOnboardingComplete(ctx) {
   const payload = await readJsonBody(ctx.req, ctx.options.maxBodyBytes);
-  const onboardingDir = path.join(require("node:os").homedir(), ".rel-ai-mcp");
+  ensureConfig();
+  const onboardingDir = connection.stateDir();
   fs.mkdirSync(onboardingDir, { recursive: true });
   fs.writeFileSync(path.join(onboardingDir, "onboarding.json"), JSON.stringify({
     completed: Boolean(payload.completed), skipped: Boolean(payload.skipped), updatedAt: new Date().toISOString()

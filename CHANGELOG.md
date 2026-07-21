@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.20.5] — 2026-07-19
+## [0.20.6] — 2026-07-21
 
 ### Live dashboard refresh and settings controls
 - **Fix manual and live dashboard refreshes.** Aggregate dashboard reads now bypass the short client cache, the refresh action is directly visible, overlapping requests remain collapsed, and the control keeps its icon and loading state.
@@ -11,7 +11,29 @@
 - **Replace the Sessions history-load counter with explicit completion count and add guarded history reset.** Clearing removes current and rotated audit history plus waiting desktop sessions, but refuses while any Rel.AI tool call is active.
 - **Improve the settings layout with a sticky navigation rail, clearer section names, responsive four-section navigation, and asynchronous mount completion.**
 
-Bump root/electron/status UI/lockfiles to 0.20.5.
+### Repository context policy
+- **Replace the misleading per-workspace `fastTask` configuration with a focused `context` policy.** The active settings are now `snapshotMaxFiles`, `includeRoots`, and `excludePaths`; the unused changed-file and small-task flags are removed.
+- **Raise the default initial repository map from 750 files to 3,000 files without restricting later investigation.** `relai_search` and direct `relai_read` calls remain available for relevant files outside the initial map or include roots.
+- **Migrate existing configuration automatically.** Legacy workspace `fastTask.maxIndexFiles` and top-level `maxIndexFiles` values are accepted on read, converted to `context.snapshotMaxFiles`, and no longer written back.
+- **Make connector guidance task-shaped instead of rigid.** Repository overview and search calls are optional when the file location is already known, while final validation and explicit completion remain required.
+- **Add regression coverage for context migration, the 3,000-file default, snapshot scoping, and unrestricted on-demand search and direct reads.**
+- **Document the next runtime phases in `docs/CHATGPT_CODING_RUNTIME_ROADMAP.md`.** The roadmap specifies unrestricted one-shot commands, persistent interactive processes, project instructions, managed worktrees, optional task plans, and independent model workers with exact integration and test requirements.
+
+### Portable ChatGPT connector identity
+- **Let an existing ChatGPT connector recover on another computer without deleting and recreating the app.** When the same static MCP URL moves to a fresh Rel.AI installation, the OAuth authorization page accepts the previously issued Rel.AI client ID as a recovery candidate and persists it only after successful dashboard-token approval.
+- **Constrain connector recovery.** Recovery requires the Rel.AI-generated client-ID format, an HTTPS redirect URI, PKCE S256, and the current computer's dashboard token; old access and refresh tokens are not trusted or imported.
+- **Document multi-computer handoff.** The same static ngrok domain can move between computers, but only one Rel.AI tunnel may claim it at a time and workspace paths remain local to each computer.
+
+### First-run configuration recovery
+- **Create the core Rel.AI configuration automatically during desktop setup and server startup.** Fresh installed applications no longer depend on the repository-only `npm run init-config` command.
+- **Make dashboard onboarding safe to skip.** Completing or skipping onboarding now guarantees an empty valid `config.json`, allowing workspaces to be added later without leaving the dashboard in an initialization error state.
+- **Recover existing affected installations.** A laptop that already has connection/ngrok settings but no core config repairs itself on the next application restart without overwriting an existing configuration.
+
+### Connector workspace discovery
+- **Expose configured workspace aliases in compact `relai_status` responses.** ChatGPT now receives the sorted alias list alongside `workspaceCount`, including when a requested alias is invalid, so it can select the exact workspace instead of probing likely names.
+- **Add regression coverage for status generation and connector compaction.** Tests verify all aliases remain visible while paths and verbose server metadata stay omitted.
+
+Bump root/electron/status UI/lockfiles to 0.20.6.
 
 ## [0.20.4] — 2026-07-19
 

@@ -13,12 +13,9 @@ function getConfigPath() {
   return process.env.REL_AI_MCP_CONFIG || path.join(os.homedir(), ".rel-ai-mcp", "config.json");
 }
 
-function makeDefaultFastTaskConfig() {
+function makeDefaultContextConfig() {
   return {
-    enabled: true,
-    skipIndexForSmallTasks: true,
-    preferChangedFiles: true,
-    maxIndexFiles: 750,
+    snapshotMaxFiles: 3000,
     includeRoots: [],
     excludePaths: [
       ".git", "node_modules", "build", "dist", "coverage", ".next", ".nuxt", ".svelte-kit",
@@ -43,7 +40,6 @@ function makeDefaultConfig() {
     stateDir: path.join(os.homedir(), ".rel-ai-mcp"),
     auditLogPath: "",
     maxOutputBytes: 2 * 1024 * 1024,
-    maxIndexFiles: 3000,
     toolMode: "chatgpt_local_repo",
     trustedLocalAgent: true,
     trustedBudgetMultiplier: 2,
@@ -86,6 +82,19 @@ function writeConfig(config, options = {}) {
   return normalized;
 }
 
+function ensureConfig() {
+  const configPath = getConfigPath();
+  if (fs.existsSync(configPath)) return readConfig();
+  try {
+    return writeConfig(makeDefaultConfig(), { overwrite: false });
+  } catch (error) {
+    // Another startup path may have created the file between the existence check
+    // and the guarded write. In that case, use the newly created config.
+    if (fs.existsSync(configPath)) return readConfig();
+    throw error;
+  }
+}
+
 function expandHome(value) {
   const text = String(value || "");
   if (text === "~") return os.homedir();
@@ -105,7 +114,9 @@ function normalizeConfig(config) {
   delete next.workflow;
   delete next.flow;
   delete next.cautionZone;
-  normalizeWorkspaces(next);
+  const legacySnapshotMaxFiles = positiveNumber(input.maxIndexFiles, makeDefaultContextConfig().snapshotMaxFiles);
+  delete next.maxIndexFiles;
+  normalizeWorkspaces(next, legacySnapshotMaxFiles);
   return next;
 }
 
@@ -136,7 +147,6 @@ function normalizeTrustedBudgetMultiplier(value) {
 
 function normalizeProductSettings(next, base, input) {
   next.maxOutputBytes = positiveNumber(next.maxOutputBytes, base.maxOutputBytes);
-  next.maxIndexFiles = positiveNumber(next.maxIndexFiles, base.maxIndexFiles);
   const product = { ...base.productUx, ...objectOrEmpty(input.productUx) };
   next.productUx = {
     dashboardRefreshSeconds: clampNumber(product.dashboardRefreshSeconds, 1, 3600, base.productUx.dashboardRefreshSeconds),
@@ -164,13 +174,13 @@ function stripLegacyApprovalKeys(config) {
   }
 }
 
-function normalizeWorkspaces(config) {
+function normalizeWorkspaces(config, defaultSnapshotMaxFiles) {
   for (const [alias, workspace] of Object.entries(config.workspaces)) {
-    config.workspaces[alias] = normalizeWorkspace(workspace || {});
+    config.workspaces[alias] = normalizeWorkspace(workspace || {}, defaultSnapshotMaxFiles);
   }
 }
 
-function normalizeWorkspace(workspace) {
+function normalizeWorkspace(workspace, defaultSnapshotMaxFiles) {
   return {
     path: workspace.path,
     testCommands: normalizeWorkspaceCommandMap(workspace.testCommands),
@@ -179,7 +189,7 @@ function normalizeWorkspace(workspace) {
     defaultBaseBranch: workspace.defaultBaseBranch || "main",
     allowedRemotes: Array.isArray(workspace.allowedRemotes) ? workspace.allowedRemotes : ["origin"],
     repoSlug: workspace.repoSlug || "",
-    fastTask: normalizeFastTask(workspace.fastTask),
+    context: normalizeContextConfig(workspace.context || workspace.fastTask, defaultSnapshotMaxFiles),
     validationRules: workspace.validationRules && typeof workspace.validationRules === "object" ? workspace.validationRules : {}
   };
 }
@@ -189,16 +199,16 @@ function normalizeWorkspaceCommandMap(value) {
   return Object.fromEntries(Object.entries(source).filter(([key]) => !REMOVED_WORKSPACE_COMMAND_KEYS.has(key)));
 }
 
-function normalizeFastTask(value) {
-  const base = makeDefaultFastTaskConfig();
+function normalizeContextConfig(value, defaultSnapshotMaxFiles) {
+  const base = {
+    ...makeDefaultContextConfig(),
+    ...(defaultSnapshotMaxFiles ? { snapshotMaxFiles: defaultSnapshotMaxFiles } : {})
+  };
   const raw = value && typeof value === "object" ? value : {};
+  const snapshotMaxFiles = raw.snapshotMaxFiles == null ? raw.maxIndexFiles : raw.snapshotMaxFiles;
   return {
     ...base,
-    ...raw,
-    enabled: raw.enabled == null ? base.enabled : Boolean(raw.enabled),
-    skipIndexForSmallTasks: raw.skipIndexForSmallTasks == null ? base.skipIndexForSmallTasks : Boolean(raw.skipIndexForSmallTasks),
-    preferChangedFiles: raw.preferChangedFiles == null ? base.preferChangedFiles : Boolean(raw.preferChangedFiles),
-    maxIndexFiles: clampNumber(raw.maxIndexFiles, 1, 100000, base.maxIndexFiles),
+    snapshotMaxFiles: clampNumber(snapshotMaxFiles, 1, 100000, base.snapshotMaxFiles),
     includeRoots: normalizeStringList(raw.includeRoots || raw.includePaths || base.includeRoots),
     excludePaths: normalizeStringList(raw.excludePaths || base.excludePaths)
   };
@@ -285,7 +295,7 @@ function resolveWorkspace(config, alias) {
     defaultBaseBranch: entry.defaultBaseBranch || "main",
     allowedRemotes: entry.allowedRemotes || ["origin"],
     repoSlug: entry.repoSlug || "",
-    fastTask: normalizeFastTask(entry.fastTask),
+    context: normalizeContextConfig(entry.context || entry.fastTask),
     validationRules: entry.validationRules && typeof entry.validationRules === "object" ? entry.validationRules : {}
   };
 }
@@ -308,7 +318,6 @@ function publicConfigSummary(config) {
     stateDir: config.stateDir,
     auditLogPath: config.auditLogPath,
     maxOutputBytes: config.maxOutputBytes,
-    maxIndexFiles: config.maxIndexFiles,
     toolMode: "chatgpt_local_repo",
     trustedLocalAgent: true,
     patch: normalizePatchConfig(config.patch),
@@ -334,7 +343,7 @@ function publicConfigSummary(config) {
         defaultBaseBranch: entry.defaultBaseBranch || "main",
         allowedRemotes: entry.allowedRemotes || ["origin"],
         repoSlug: entry.repoSlug || "",
-        fastTask: normalizeFastTask(entry.fastTask),
+        context: normalizeContextConfig(entry.context || entry.fastTask),
         discoveredCommands: discovered,
         validationCommands,
         discoveredTestCommandKeys: Object.keys(discovered).filter((key) => /test|analy[sz]e|lint|check|vet|build/.test(key + " " + discovered[key])).sort((a, b) => a.localeCompare(b)),
@@ -415,11 +424,12 @@ function clampNumber(value, min, max, fallback) {
 module.exports = {
   getConfigPath,
   makeDefaultConfig,
-  makeDefaultFastTaskConfig,
-  normalizeFastTask,
+  makeDefaultContextConfig,
+  normalizeContextConfig,
   makeDefaultPatchConfig,
   normalizePatchConfig,
   readConfig,
+  ensureConfig,
   writeConfig,
   normalizeConfig,
   expandHome,

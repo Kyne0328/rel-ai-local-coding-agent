@@ -6,7 +6,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const utils = await import(pathToFileURL(path.join(root, 'electron', 'launcher-utils.js')).href);
+const launcherConfigModule = await import(pathToFileURL(path.join(root, 'electron', 'launcher-config.js')).href);
 const managedNgrokModule = await import(pathToFileURL(path.join(root, 'electron', 'managed-ngrok.js')).href);
+const { saveLauncherConfig } = launcherConfigModule.default || launcherConfigModule;
 const { extractPublicUrl } = managedNgrokModule.default || managedNgrokModule;
 const {
   buildTunnelCommand,
@@ -127,5 +129,33 @@ assert.deepEqual(
 
 fs.writeFileSync(path.join(stateDir, 'connection.json'), JSON.stringify({}));
 assert.equal(hasExistingConfig(), false);
+
+const freshStateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-gui-config-init-'));
+const freshConfigPath = path.join(freshStateDir, 'config.json');
+process.env.REL_AI_MCP_STATE_DIR = freshStateDir;
+process.env.REL_AI_MCP_CONFIG = freshConfigPath;
+saveLauncherConfig({
+  port: 3333,
+  ngrokDomain: 'portable-domain.ngrok-free.dev',
+  ngrokAuthtoken: 'abc12345',
+  token: 'dashboard-token'
+});
+assert.equal(fs.existsSync(freshConfigPath), true, 'desktop setup must create the core config automatically');
+const createdConfig = JSON.parse(fs.readFileSync(freshConfigPath, 'utf8'));
+assert.deepEqual(createdConfig.workspaces, {}, 'skipped onboarding must start with an empty valid workspace map');
+
+createdConfig.workspaces.keep = { path: freshStateDir };
+fs.writeFileSync(freshConfigPath, `${JSON.stringify(createdConfig, null, 2)}\n`);
+saveLauncherConfig({
+  port: 3333,
+  ngrokDomain: 'portable-domain.ngrok-free.dev',
+  ngrokAuthtoken: 'abc12345',
+  token: 'dashboard-token'
+});
+const preservedConfig = JSON.parse(fs.readFileSync(freshConfigPath, 'utf8'));
+assert.equal(preservedConfig.workspaces.keep.path, freshStateDir, 'desktop setup must not overwrite an existing config');
+
+fs.rmSync(stateDir, { recursive: true, force: true });
+fs.rmSync(freshStateDir, { recursive: true, force: true });
 
 console.log('electron-launcher-smoke passed.');

@@ -31,7 +31,7 @@ async function handleRegister(ctx) {
 
 async function handleAuthorizeGet(ctx) {
   const query = Object.fromEntries(ctx.parsed.searchParams.entries());
-  const check = oauth.validateAuthorizationRequest(query);
+  const check = oauth.validateAuthorizationRequest(query, { allowClientRecovery: true });
   if (!check.ok) {
     if (check.redirectError && check.redirectUri) {
       ctx.res.writeHead(302, { Location: oauth.buildRedirectUrl(check.redirectUri, { error: check.error, error_description: check.error_description, state: check.state }) });
@@ -46,7 +46,7 @@ async function handleAuthorizeGet(ctx) {
 
 async function handleAuthorizePost(ctx) {
   const body = await readFormOrJsonBody(ctx.req, ctx.options.maxBodyBytes);
-  const check = oauth.validateAuthorizationRequest(body);
+  const check = oauth.validateAuthorizationRequest(body, { allowClientRecovery: true });
   if (!check.ok) { sendHtml(ctx.res, 400, oauthErrorPage(check.error_description || check.error)); return; }
   if (!ctx.options.token) {
     const base = resolveBaseUrl(ctx.options);
