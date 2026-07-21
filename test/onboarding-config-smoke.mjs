@@ -49,6 +49,24 @@ try {
   const onboarding = JSON.parse(fs.readFileSync(path.join(stateDir, 'onboarding.json'), 'utf8'));
   assert.equal(onboarding.skipped, true);
   assert.equal(onboarding.completed, false);
+
+  const skippedStatus = await fetch(`${base}/api/onboarding/status`, {
+    headers: { authorization: `Bearer ${token}` }
+  }).then(response => response.json());
+  assert.equal(skippedStatus.skipped, true);
+  assert.equal(skippedStatus.needsOnboarding, false, 'skipped onboarding must stay dismissed after restart');
+
+  fs.rmSync(path.join(stateDir, 'onboarding.json'));
+  config.workspaces.existing = { path: stateDir };
+  fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+  const migratedStatus = await fetch(`${base}/api/onboarding/status`, {
+    headers: { authorization: `Bearer ${token}` }
+  }).then(response => response.json());
+  assert.equal(migratedStatus.completed, true);
+  assert.equal(migratedStatus.migrated, true);
+  assert.equal(migratedStatus.needsOnboarding, false, 'existing configured workspaces must suppress first-run onboarding');
+  const migratedOnboarding = JSON.parse(fs.readFileSync(path.join(stateDir, 'onboarding.json'), 'utf8'));
+  assert.equal(migratedOnboarding.workspaceCount, 1);
 } finally {
   if (server.listening) await new Promise(resolve => server.close(resolve));
   fs.rmSync(stateDir, { recursive: true, force: true });

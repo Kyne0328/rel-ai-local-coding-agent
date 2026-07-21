@@ -33,6 +33,11 @@
 - **Expose configured workspace aliases in compact `relai_status` responses.** ChatGPT now receives the sorted alias list alongside `workspaceCount`, including when a requested alias is invalid, so it can select the exact workspace instead of probing likely names.
 - **Add regression coverage for status generation and connector compaction.** Tests verify all aliases remain visible while paths and verbose server metadata stay omitted.
 
+### Onboarding persistence and workspace picker
+- **Keep onboarding dismissed after completion or Skip for now.** The status endpoint now treats both states as acknowledged instead of reopening the modal on the next launch.
+- **Migrate existing configured installations automatically.** When an older installation has one or more workspaces but no onboarding marker, Rel.AI records it as already configured instead of presenting first-run setup after an upgrade.
+- **Add the native folder picker to the onboarding workspace step.** Desktop users can select the repository with Browse… using the same no-timeout picker behavior as the main workspace form, while browser-only use retains manual path entry.
+
 Bump root/electron/status UI/lockfiles to 0.20.6.
 
 ## [0.20.4] — 2026-07-19

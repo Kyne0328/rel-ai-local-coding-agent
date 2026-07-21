@@ -3,6 +3,7 @@ import { openModal, closeModal } from '../components/modal.js';
 import { fetchJson, postJson } from '../api.js';
 import { toast } from '../components/toast.js';
 import { copyText } from '../clipboard.js';
+import { runButtonAction } from '../action-state.js';
 
 let _step = 0;
 let _data = {};
@@ -19,7 +20,8 @@ export function openOnboarding() {
     workspaceCreated: false,
     createdWorkspaceAlias: '',
     createdWorkspacePath: '',
-    workspaceCheck: null
+    workspaceCheck: null,
+    aliasEdited: false
   };
 
   _wrapper = document.createElement('div');
@@ -119,6 +121,16 @@ function _renderStep(step, content, nextBtn, skipBtn, backBtn) {
     pathInput.style.cssText = 'width:100%;';
     pathInput.value = _data.workspacePath || '';
 
+    const pathRow = document.createElement('div');
+    pathRow.className = 'ws-form-row';
+
+    const browseBtn = document.createElement('button');
+    browseBtn.type = 'button';
+    browseBtn.className = 'secondary';
+    browseBtn.textContent = 'Browse…';
+    pathRow.appendChild(pathInput);
+    pathRow.appendChild(browseBtn);
+
     const hint = document.createElement('div');
     hint.style.cssText = 'font-size:12px;color:var(--text-muted);line-height:1.45;';
     hint.textContent = 'Tip: the alias can be short. The folder path must be absolute.';
@@ -141,7 +153,7 @@ function _renderStep(step, content, nextBtn, skipBtn, backBtn) {
     pathInput.addEventListener('input', () => {
       _data.workspacePath = pathInput.value.trim();
       const suggested = deriveAliasFromPath(_data.workspacePath);
-      if (!aliasInput.value.trim() || aliasInput.value.trim() === deriveAliasFromPath(_data.workspaceAlias)) {
+      if (!_data.aliasEdited) {
         aliasInput.value = suggested;
         _data.workspaceAlias = suggested;
       }
@@ -160,6 +172,36 @@ function _renderStep(step, content, nextBtn, skipBtn, backBtn) {
 
     aliasInput.addEventListener('input', () => {
       _data.workspaceAlias = aliasInput.value.trim();
+      _data.aliasEdited = true;
+    });
+
+    browseBtn.addEventListener('click', async () => {
+      clearTimeout(validTimer);
+      const res = await runButtonAction(browseBtn, {
+        idleText: 'Browse…',
+        loadingText: 'Opening folder picker…',
+        successText: 'Folder selected',
+        errorText: 'Browse failed'
+      }, () => postJson('/api/pick-folder', {}, { timeout: 0 }));
+      if (res?.unsupported) {
+        browseBtn.hidden = true;
+        toast('Browse needs the Rel.AI desktop launcher — type the path here instead.', { variant: 'info' });
+        return;
+      }
+      if (res?.canceled) return;
+      if (res?.ok && res.path) {
+        pathInput.value = res.path;
+        _data.workspacePath = res.path;
+        if (!_data.aliasEdited) {
+          const suggested = deriveAliasFromPath(res.path);
+          aliasInput.value = suggested;
+          _data.workspaceAlias = suggested;
+        }
+        _data.workspaceCheck = res;
+        renderValidation(validation, res);
+      } else if (res?.error) {
+        toast('Could not open folder picker: ' + res.error, { variant: 'error' });
+      }
     });
 
     const submitWorkspace = async () => {
@@ -223,7 +265,7 @@ function _renderStep(step, content, nextBtn, skipBtn, backBtn) {
     });
 
     content.appendChild(aliasInput);
-    content.appendChild(pathInput);
+    content.appendChild(pathRow);
     content.appendChild(hint);
     content.appendChild(validation);
     content.appendChild(createdNote);

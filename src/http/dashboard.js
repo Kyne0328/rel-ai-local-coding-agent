@@ -7,6 +7,7 @@ const release = require("../release");
 const configEditor = require("../configEditor");
 const pkg = require("../../package.json");
 const connection = require("../connectionProfile");
+const { getOnboardingStatus, writeOnboardingState } = require("../onboardingState");
 const { getVersion } = require("../version");
 const { resolveRequireHttpToken } = require("./auth");
 const { buildTaskHistory } = require("../taskHistory");
@@ -134,13 +135,7 @@ function handleApiTools(ctx) {
 }
 
 function handleOnboardingStatus(ctx) {
-  const onboardingPath = path.join(connection.stateDir(), "onboarding.json");
-  let flag = null;
-  try { flag = JSON.parse(fs.readFileSync(onboardingPath, "utf8")); } catch {}
-  sendJson(ctx.res, 200, {
-    ok: true, completed: flag ? flag.completed : false, skipped: flag ? flag.skipped : false,
-    needsOnboarding: flag?.completed !== true
-  }, ctx.ae);
+  sendJson(ctx.res, 200, { ok: true, ...getOnboardingStatus() }, ctx.ae);
 }
 
 function handleConnection(ctx) {
@@ -178,11 +173,9 @@ function handleEvents(ctx) { openDashboardEvents(ctx.res, ctx.req, ctx.options);
 async function handleOnboardingComplete(ctx) {
   const payload = await readJsonBody(ctx.req, ctx.options.maxBodyBytes);
   ensureConfig();
-  const onboardingDir = connection.stateDir();
-  fs.mkdirSync(onboardingDir, { recursive: true });
-  fs.writeFileSync(path.join(onboardingDir, "onboarding.json"), JSON.stringify({
+  writeOnboardingState({
     completed: Boolean(payload.completed), skipped: Boolean(payload.skipped), updatedAt: new Date().toISOString()
-  }));
+  });
   sendJson(ctx.res, 200, { ok: true }, ctx.ae);
 }
 
