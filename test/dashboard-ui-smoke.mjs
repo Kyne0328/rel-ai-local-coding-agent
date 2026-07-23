@@ -73,6 +73,8 @@ assert.match(onboarding, /timeout: 0/);
 assert.match(onboarding, /Opening folder picker/);
 assert.match(settingsShared, /runButtonAction/);
 assert.match(workspaceCards, /Automatic validation/);
+assert.match(workspaceCards, /Project instructions/);
+assert.doesNotMatch(workspaceCards, /managed worktree|Latest plan|data-remove-worktree/);
 assert.match(workspaceCards, /validationCommands/);
 assert.match(workspaceCards, /Remove workspace/);
 assert.doesNotMatch(workspaceCards, /Configured tests|Context settings|Rename|Review Git state|Save detected tests|data-preflight/);
@@ -118,12 +120,16 @@ assert.doesNotMatch(home, /Last task completed|Completes after 60s|ChatGPT is wo
 assert.match(sessions, /Work sessions/);
 assert.match(sessions, /completion was not reported|completion not reported/);
 assert.match(sessions, /Running operations/);
+assert.doesNotMatch(sessions, /Task plan|plan\.progress\.completed/);
 assert.match(sessions, /data-task-event-link/);
 assert.match(sessions, /activityEventId/);
 assert.match(sessions, /time: 'all'/);
 assert.match(sessions, /History controls/);
 assert.doesNotMatch(sessions, /History loaded|latest 200 tool events/);
 assert.doesNotMatch(sessions, /task remains open for 60 seconds|Grouped tool calls/);
+assert.doesNotMatch(dashboardServer, /id: "processes", label: "Processes"/);
+assert.doesNotMatch(dashboardJs, /sections\/processes\.js/);
+assert.doesNotMatch(workspaceActions, /api\/worktree\/remove|confirmationToken/);
 
 const activity = read('src/ui/sections/activity.js');
 const clipboard = read('src/ui/clipboard.js');

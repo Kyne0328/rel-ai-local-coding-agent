@@ -8,6 +8,7 @@ const { resolvePolicy } = require("../policyResolver");
 const { getVersion } = require("../version");
 const { debugSwallow } = require("./session");
 const { TOOL_NAMES, getToolGroups } = require("./schema");
+const { readProjectInstructions, summarizeProjectInstructions } = require('../projectInstructions');
 
 // Locale-aware sort of an object's keys so ordering remains explicit and stable.
 function sortedKeys(obj) {
@@ -112,7 +113,7 @@ function workspaceList(config) {
     commandKeys: sortedKeys(item.commands),
     protectedBranches: Array.isArray(item.protectedBranches) ? item.protectedBranches : [],
     context: item.context || {}
-  })).sort((a, b) => a.alias.localeCompare(b.alias));
+  })).sort((left, right) => left.alias.localeCompare(right.alias));
   return { ok: true, count: workspaces.length, workspaces };
 }
 
@@ -126,6 +127,7 @@ function workspaceInspect(config, args = {}) {
       workspace: profile.workspace,
       root: profile.root,
       profile,
+      projectInstructions: readProjectInstructions({ alias: profile.workspace, path: profile.root }),
       tree: {
         fileCount: tree.fileCount,
         files: tree.files,
@@ -185,6 +187,7 @@ function workspaceProfile(config, args = {}) {
   if (present.includes("go.mod")) hints.push("Go project");
   if (present.includes("pubspec.yaml")) hints.push("Flutter/Dart project");
   const discovered = discoverCommands(workspace.path);
+  const projectInstructions = summarizeProjectInstructions(readProjectInstructions(workspace));
   return {
     workspace: workspace.alias,
     root: workspace.path,
@@ -193,7 +196,8 @@ function workspaceProfile(config, args = {}) {
     configuredTestCommands: sortedKeys(workspace.testCommands),
     configuredCommands: sortedKeys(workspace.commands),
     discoveredCommands: discovered,
-    discoveredCommandCount: Object.keys(discovered).length
+    discoveredCommandCount: Object.keys(discovered).length,
+    projectInstructions
   };
 }
 

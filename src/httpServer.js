@@ -82,7 +82,6 @@ function startHttpServer(options = {}) {
   server.on("clientError", (_error, socket) => {
     socket.end("HTTP/1.1 400 Bad Request\r\n\r\n");
   });
-
   server.on("error", (error) => {
     if (error.code === "EADDRINUSE") {
       console.error(`[rel-ai-mcp] Port ${port} is already in use. Stop the other process or use --port to pick a different port.`);

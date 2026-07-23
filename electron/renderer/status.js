@@ -104,6 +104,7 @@ function pluralize(count, singular) {
 }
 
 function toolLabel(tool) {
+  if (tool === 'relai_exec') return 'Running a workspace command';
   if (tool === 'relai_run_checks' || tool === 'relai_browser') return 'Validating changes';
   if (tool === 'relai_diff' || tool === 'relai_git_status') return 'Reviewing changes';
   if (tool === 'relai_git_commit' || tool === 'relai_git_push' || tool === 'relai_git_create_pr') return 'Publishing changes';

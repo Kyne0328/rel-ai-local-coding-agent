@@ -29,7 +29,6 @@ const {
   normalizeNgrokAuthtoken,
   normalizePort
 } = require('./launcher-utils');
-
 let wizardWindow = null;
 let statusWindow = null;
 let httpServer = null;

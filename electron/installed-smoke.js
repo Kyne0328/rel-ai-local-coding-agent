@@ -30,6 +30,7 @@ async function runInstalledSmoke(app) {
     workspaceState: path.join(resourcesPath, 'src', 'workspaceState.js'),
     dashboardSessions: path.join(resourcesPath, 'src', 'http', 'dashboardSessions.js'),
     dashboardActions: path.join(resourcesPath, 'src', 'http', 'dashboardActions.js'),
+    projectInstructions: path.join(resourcesPath, 'src', 'projectInstructions.js'),
     dashboardWindow: path.join(__dirname, 'dashboard-window.js'),
     packageJson: path.join(resourcesPath, 'package.json'),
     changelog: path.join(resourcesPath, 'CHANGELOG.md'),

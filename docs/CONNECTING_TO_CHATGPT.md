@@ -1,9 +1,10 @@
 # Connecting to ChatGPT
 
-Rel.AI MCP exposes one 18-tool workspace surface across local MCP and the ChatGPT connector.
+Rel.AI MCP exposes one 19-tool workspace surface across local MCP and the ChatGPT connector.
 
 - `relai_repo_snapshot`
 - `relai_search`
+- `relai_exec`
 - `relai_read`
 - `relai_write`
 - `relai_replace`
@@ -21,7 +22,13 @@ Rel.AI MCP exposes one 18-tool workspace surface across local MCP and the ChatGP
 - `relai_edit`
 - `relai_complete_task`
 
-Use `relai_repo_snapshot` for repository context, `relai_read` for focused content, and `relai_edit` as the primary change tool. It supports exact replacement, complete-file content, structured patch updates, and batches, with optional validation and diff review in the same call. `relai_write` and `relai_replace` remain direct fallback tools.
+Use `relai_repo_snapshot` for repository context, `relai_search` for locating code, `relai_read` for source beyond the returned ranges, and `relai_edit` as the primary change tool. Search defaults to adaptive `mode:"auto"`: focused searches receive broader context, while noisy searches receive smaller prioritized ranges. Use explicit `mode:"compact"` for path/line-only results or `mode:"context"` for fixed caller-controlled limits. Context results are grouped by file, merge overlapping ranges, and include file hashes. `relai_write` and `relai_replace` remain direct fallback tools.
+
+Use `relai_exec` for one-shot project commands such as dependency installation, migrations, compilers, and repository utilities. It returns the exit status, bounded output, timeout state, and detected file changes. It does not replace the final `relai_run_checks` call required before `relai_complete_task`.
+
+Repository snapshots automatically include guidance from `REL_AI.md` and `.relai/instructions.md` when present. `REL_AI.md` has higher precedence. The combined connector payload is capped at 64 KiB and reports its sources and truncation state; use `relai_read` on the named file when the complete text is needed. Instruction text is never executed automatically.
+
+Persistent process management, managed worktrees, and persistent task plans are currently deferred and are not exposed by this build.
 
 Tracked-file deletion is handled through a structured `Delete File` patch sent to `relai_edit`. Session-owned untracked artifacts are removed only through `relai_tidy_plan` followed by `relai_tidy_run`.
 

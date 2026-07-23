@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.20.7] — 2026-07-23
+
+### Context-rich repository search
+- **Make adaptive search context the default without adding another tool.** `mode:"auto"` selects focused, moderate, or broad context budgets from the total match count, while explicit `compact` and `context` modes remain deterministic overrides.
+- **Prioritize likely implementation files in auto mode.** File-path relevance and bounded match density decide which matched files receive context first; the raw match list remains available separately.
+- **Merge overlapping and adjacent result windows by default.** Callers can disable merging, request flat ranges, and cap files, ranges per file, lines per range, and returned context bytes.
+- **Make contextual results safe to reuse.** Each returned file includes its SHA-256 digest, line count, source byte count, match count, and explicit context truncation metadata.
+- **Preserve broad-search observability.** Raw `matchCount` and `truncated` remain separate from `contextMatchCount`, omitted files, omitted ranges, and `contextTruncated`.
+
+### One-shot commands and project guidance
+- **Add `relai_exec` as the nineteenth connector tool.** ChatGPT can run bounded one-shot project commands with workspace-relative working directories, environment overrides, explicit output limits, and complete nonzero-exit diagnostics.
+- **Track command side effects conservatively.** Command calls invalidate workspace caches, report changed files, redact sensitive audit details, and never replace the final structured validation requirement.
+- **Load persistent repository instructions automatically.** Workspace inspection reads `REL_AI.md` and `.relai/instructions.md` with explicit precedence, bounded UTF-8-safe payloads, cache invalidation, and path hardening.
+- **Keep the current runtime scope focused.** Repository context, one-shot commands, and project instructions are included; persistent processes, managed worktrees, task plans, and independent workers remain deferred.
+- **Update documentation, desktop behavior, connector registration, type boundaries, and regression coverage for the new runtime capabilities.**
+
+Bump root/electron/status UI/lockfiles to 0.20.7.
+
 ## [0.20.6] — 2026-07-21
 
 ### Live dashboard refresh and settings controls

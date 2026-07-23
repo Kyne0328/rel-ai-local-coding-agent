@@ -36,7 +36,7 @@ function dashboardData(config, args = {}) {
     toolCount,
     counts: {
       auditEntries: auditTail.entries?.length || 0,
-      workspaces: Object.keys(config.workspaces || {}).length
+      workspaces: configSummary.workspaces?.length || 0
     },
     tools,
     health,

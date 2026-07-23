@@ -28,10 +28,18 @@ function killProcessTree(child) {
 
 function runProcess(command, args, options = {}, config = {}) {
   return new Promise((resolve) => {
+    const startedAt = Date.now();
     let stdout = "";
     let stderr = "";
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
+    let stdoutTruncated = false;
+    let stderrTruncated = false;
     let settled = false;
-    const maxOutputBytes = config.maxOutputBytes || 1024 * 1024;
+    const configuredMaxOutputBytes = Number(options.maxOutputBytes ?? config.maxOutputBytes ?? 1024 * 1024);
+    const maxOutputBytes = Number.isFinite(configuredMaxOutputBytes) && configuredMaxOutputBytes > 0
+      ? configuredMaxOutputBytes
+      : 1024 * 1024;
     const timeoutMs = Number.isFinite(Number(options.timeout)) && Number(options.timeout) > 0
       ? Number(options.timeout)
       : 0;
@@ -39,7 +47,8 @@ function runProcess(command, args, options = {}, config = {}) {
     const spawnOptions = {
       cwd: options.cwd,
       env: makeEnv(options.env),
-      detached: process.platform !== "win32"
+      detached: process.platform !== "win32",
+      windowsHide: true
     };
     const child = options.shell
       ? spawn(options.commandString || executable, { ...spawnOptions, shell: true })
@@ -55,33 +64,57 @@ function runProcess(command, args, options = {}, config = {}) {
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
-      resolve(payload);
+      resolve({
+        ...payload,
+        durationMs: Date.now() - startedAt,
+        stdoutBytes,
+        stderrBytes,
+        stdoutTruncated,
+        stderrTruncated
+      });
     }
 
     if (timeoutMs > 0) {
       timer = setTimeout(() => {
-        stderr = appendLimited(stderr, `\n[rel-ai-mcp timed out after ${timeoutMs}ms]\n`, maxOutputBytes);
+        const marker = `\n[rel-ai-mcp timed out after ${timeoutMs}ms]\n`;
+        stderrTruncated = stderrTruncated || Buffer.byteLength(stderr + marker, "utf8") > maxOutputBytes;
+        stderr = appendLimited(stderr, marker, maxOutputBytes);
         killProcessTree(child);
         finish({
           exitCode: -1,
           signal: "SIGTERM",
           stdout: stdout.trim(),
           stderr: stderr.trim(),
-          error: `Timed out after ${timeoutMs}ms`
+          error: `Timed out after ${timeoutMs}ms`,
+          timedOut: true
         });
       }, timeoutMs);
       if (typeof timer.unref === "function") timer.unref();
     }
 
-    child.stdout.on("data", (chunk) => {
-      stdout = appendLimited(stdout, chunk.toString("utf8"), maxOutputBytes);
+    child.stdout?.on("data", (chunk) => {
+      const text = chunk.toString("utf8");
+      stdoutBytes += Buffer.byteLength(text, "utf8");
+      stdoutTruncated = stdoutTruncated || stdoutBytes > maxOutputBytes;
+      stdout = appendLimited(stdout, text, maxOutputBytes);
     });
-    child.stderr.on("data", (chunk) => {
-      stderr = appendLimited(stderr, chunk.toString("utf8"), maxOutputBytes);
+    child.stderr?.on("data", (chunk) => {
+      const text = chunk.toString("utf8");
+      stderrBytes += Buffer.byteLength(text, "utf8");
+      stderrTruncated = stderrTruncated || stderrBytes > maxOutputBytes;
+      stderr = appendLimited(stderr, text, maxOutputBytes);
     });
     child.on("error", (error) => {
       if (settled) return;
-      finish({ exitCode: -1, signal: undefined, stdout: stdout.trim(), stderr: stderr.trim(), error: error.message });
+      finish({
+        exitCode: -1,
+        signal: undefined,
+        stdout: stdout.trim(),
+        stderr: stderr.trim(),
+        error: error.message,
+        spawnError: true,
+        timedOut: false
+      });
     });
     child.on("close", (code, signal) => {
       if (settled) return;
@@ -89,7 +122,8 @@ function runProcess(command, args, options = {}, config = {}) {
         exitCode: typeof code === "number" ? code : -1,
         signal: signal || undefined,
         stdout: stdout.trim(),
-        stderr: stderr.trim()
+        stderr: stderr.trim(),
+        timedOut: false
       });
     });
   });
@@ -117,6 +151,12 @@ function summarizeCommand(result) {
     exitCode: result.exitCode,
     ...(result.signal ? { signal: result.signal } : {}),
     ...(result.error ? { error: result.error } : {}),
+    ...(result.durationMs != null ? { durationMs: result.durationMs } : {}),
+    ...(result.stdoutBytes != null ? { stdoutBytes: result.stdoutBytes } : {}),
+    ...(result.stderrBytes != null ? { stderrBytes: result.stderrBytes } : {}),
+    ...(result.stdoutTruncated ? { stdoutTruncated: true } : {}),
+    ...(result.stderrTruncated ? { stderrTruncated: true } : {}),
+    ...(result.timedOut ? { timedOut: true } : {}),
     ...(result.stdout ? { stdout: result.stdout } : {}),
     ...(result.stderr ? { stderr: result.stderr } : {})
   };

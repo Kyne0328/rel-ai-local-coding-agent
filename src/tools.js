@@ -22,6 +22,7 @@ const { dispatchTool } = require('./tools/dispatch');
 const { beginConnectorToolCall, runWithToolActivity } = require('./toolActivity');
 const { runWorkspaceOperation } = require('./workspaceOperationQueue');
 const { clearSessionPolicy } = require('./policyResolver');
+const { redactCommandForAudit } = require('./bridge/exec');
 const {
   workspaceList,
   workspaceInspect,
@@ -100,6 +101,7 @@ function describeToolOperation(name, args = {}) {
       return `Reading ${paths.length || 'workspace'} paths${suffix}`;
     }
     case 'relai_search': return `Searching for ${String(args.pattern || '').slice(0, 60) || 'a pattern'}${suffix}`;
+    case 'relai_exec': return `Running ${redactCommandForAudit(args.command) || 'a workspace command'}${suffix}`;
     case 'relai_write': return path ? `Writing ${path}${suffix}` : `Writing a workspace file${suffix}`;
     case 'relai_replace': return path ? `Editing ${path}${suffix}` : `Applying an exact edit${suffix}`;
     case 'relai_edit': {

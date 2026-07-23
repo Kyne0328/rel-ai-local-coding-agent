@@ -40,6 +40,37 @@ assert.deepEqual(
 );
 
 assert.deepEqual(
+  buildExtraAudit('relai_exec', {
+    commandSummary: 'npm test --token [REDACTED]',
+    cwd: '.',
+    exitCode: 1,
+    durationMs: 42,
+    stdoutBytes: 100,
+    stderrBytes: 20,
+    stdoutTruncated: false,
+    stderrTruncated: true,
+    timedOut: false,
+    mutationTracking: 'git',
+    environmentKeys: ['CI'],
+    changedFiles: ['package-lock.json']
+  }, {}),
+  {
+    commandSummary: 'npm test --token [REDACTED]',
+    cwd: '.',
+    exitCode: 1,
+    durationMs: 42,
+    stdoutBytes: 100,
+    stderrBytes: 20,
+    stdoutTruncated: false,
+    stderrTruncated: true,
+    timedOut: false,
+    mutationTracking: 'git',
+    environmentKeys: ['CI'],
+    changedFiles: ['package-lock.json']
+  }
+);
+
+assert.deepEqual(
   buildExtraAudit('relai_repo_snapshot', { effectiveMaxEntries: 0, budgetMultiplied: false }, {}),
   { effectiveSnapshotMaxFiles: 0, budgetMultiplied: false }
 );

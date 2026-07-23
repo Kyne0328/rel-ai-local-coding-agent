@@ -4,6 +4,8 @@ const { resolveGitExecutable } = require("../gitExecutable");
 const { appendLimited, killProcessTree } = require("../process");
 const { isSecretPath } = require("../safety");
 const { clampNumber } = require("./limits");
+const { buildContextualSearch } = require("./searchContext");
+const { resolveSearchPlan } = require("./searchPlanner");
 
 const DEFAULT_MAX_RESULTS = 200;
 const MAX_LINE_CHARS = 400;
@@ -34,16 +36,41 @@ async function relaiSearch(workspace, _config, args = {}) {
     throw new Error(`relai_search failed: ${stderr || `git grep exited ${result.exitCode}`}`);
   }
 
-  return {
+  const baseResult = {
     ok: true,
     workspace: workspace.alias,
     pattern,
     ...(glob ? { glob } : {}),
     matches: result.matches,
     matchCount: result.matchCount,
-    truncated: result.matchCount > result.matches.length,
+    truncated: result.matchCount > result.matches.length
+  };
+  const searchPlan = resolveSearchPlan(args, result);
+  if (searchPlan.effectiveMode === "compact") {
+    return {
+      ...baseResult,
+      ...(searchPlan.requestedMode === "auto" ? {
+        mode: "auto",
+        effectiveMode: "compact",
+        autoTier: searchPlan.autoTier
+      } : {}),
+      next: result.matches.length
+        ? "Read only the relevant ranges with relai_read { paths, startLine, endLine }."
+        : "No matches. Try a shorter pattern, ignoreCase:true, or relai_repo_snapshot for the file list."
+    };
+  }
+  return {
+    ...baseResult,
+    ...buildContextualSearch(workspace, result.matches, searchPlan.contextArgs, {
+      requestedMode: searchPlan.requestedMode,
+      autoTier: searchPlan.autoTier,
+      selectionStrategy: searchPlan.selectionStrategy,
+      prioritizeFiles: searchPlan.requestedMode === "auto"
+    }),
     next: result.matches.length
-      ? "Read only the relevant ranges with relai_read { paths, startLine, endLine }."
+      ? searchPlan.requestedMode === "auto"
+        ? "Adaptive context is included for prioritized matches. Use relai_read only when a wider range or complete file is needed."
+        : "Context is included. Use relai_read only when a wider range or complete file is needed."
       : "No matches. Try a shorter pattern, ignoreCase:true, or relai_repo_snapshot for the file list."
   };
 }

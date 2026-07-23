@@ -62,6 +62,34 @@ assert.equal(checksCompact.policy, undefined, 'default policy dropped');
 assert.deepEqual(checksCompact.checks, ['npm run check']);
 console.log('4. relai_run_checks compacted: OK');
 
+const execCompact = compactForConnector('relai_exec', {
+  ok: false,
+  workspace: 'app',
+  command: 'npm test',
+  commandSummary: 'npm test',
+  cwd: '.',
+  shell: 'PowerShell 7',
+  exitCode: 2,
+  durationMs: 500,
+  stdout: 'test output',
+  stderr: 'test failed',
+  stdoutBytes: 11,
+  stderrBytes: 11,
+  stdoutTruncated: false,
+  stderrTruncated: false,
+  timedOut: false,
+  environmentKeys: ['CI'],
+  changedFiles: ['package-lock.json'],
+  changedFilesTruncated: false,
+  mutationTracking: 'git'
+}, {});
+assert.equal(execCompact.commandSummary, undefined, 'audit-only command summary must stay internal');
+assert.equal(execCompact.exitCode, 2);
+assert.equal(execCompact.stderr, 'test failed');
+assert.deepEqual(execCompact.changedFiles, ['package-lock.json']);
+assert.deepEqual(execCompact.environmentKeys, ['CI']);
+console.log('5. relai_exec compacted: OK');
+
 const statusNoBaseline = compactForConnector('relai_git_status', {
   ok: true, workspace: 'app', branch: 'main', aheadBehind: null,
   status: ' M a.txt\n?? b.txt\n',
@@ -74,7 +102,7 @@ assert.equal(statusNoBaseline.sessionChangedFiles, undefined, 'empty ownership s
 assert.equal(statusNoBaseline.baselineChangedFiles, undefined);
 assert.equal(statusNoBaseline.branch, 'main');
 assert.equal(statusNoBaseline.status, ' M a.txt\n?? b.txt\n');
-console.log('5. git status without baseline compacted: OK');
+console.log('6. git status without baseline compacted: OK');
 
 const statusWithBaseline = compactForConnector('relai_git_status', {
   ok: true, workspace: 'app', branch: 'main',
@@ -84,7 +112,7 @@ const statusWithBaseline = compactForConnector('relai_git_status', {
 }, {});
 assert.deepEqual(statusWithBaseline.sessionChangedFiles, ['a.txt']);
 assert.deepEqual(statusWithBaseline.baselineChangedFiles, ['b.txt']);
-console.log('6. git status with baseline compacted: OK');
+console.log('7. git status with baseline compacted: OK');
 
 const snapshotCompact = compactForConnector('relai_repo_snapshot', {
   ok: true, workspace: 'app', root: '/repo',
@@ -93,6 +121,7 @@ const snapshotCompact = compactForConnector('relai_repo_snapshot', {
   manifests: ['package.json'],
   manifestContents: { 'package.json': '{"a":1}'.repeat(500) },
   discoveredCommands: { test: 'npm test' },
+  projectInstructions: { sources: ['REL_AI.md'], content: 'Follow the repository rules.', truncated: false },
   fileCount: 10, files: ['a.js'], hints: ['Node'],
   effectiveMaxEntries: 1000, budgetMultiplied: false,
   recommendedFlow: ['relai_read'],
@@ -109,10 +138,11 @@ assert.equal(snapshotCompact.operationJournal, undefined, 'journal dropped');
 assert.equal(snapshotCompact.writeGuidance, undefined, 'static guidance blob dropped');
 assert.deepEqual(snapshotCompact.manifests, ['package.json'], 'manifest names kept');
 assert.deepEqual(snapshotCompact.hints, ['Node']);
+assert.deepEqual(snapshotCompact.projectInstructions, { sources: ['REL_AI.md'], content: 'Follow the repository rules.', truncated: false });
 assert.equal(snapshotCompact.skipped, undefined, 'skipped entry list dropped on connector');
 assert.equal(snapshotCompact.skippedCount, 1, 'skipped list replaced by a count');
 assert.deepEqual(snapshotCompact.git, { branch: 'main', aheadBehind: { ahead: 0, behind: 0 }, dirtyFiles: 1, changedFiles: ['src/app.js'] }, 'git summary passes through compaction');
-console.log('7. repo snapshot compacted: OK');
+console.log('8. repo snapshot compacted: OK');
 
 const readCompact = compactForConnector('relai_read', {
   ok: true, workspace: 'app',
@@ -137,6 +167,6 @@ const fullRead = compactForConnector('relai_read', {
 }, { guidanceMode: 'full' });
 assert.equal(fullRead.items[0].cacheHit, undefined, 'cache metadata stays hidden in full guidance mode');
 assert.deepEqual(fullRead.items[0].writeGuidance, { recommendedMode: 'exact-replace' });
-console.log('8. relai_read compacted: OK');
+console.log('9. relai_read compacted: OK');
 
 console.log('connector compaction unit tests passed.');
