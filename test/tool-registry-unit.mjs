@@ -21,6 +21,7 @@ const expected = [
   'relai_repo_snapshot',
   'relai_read',
   'relai_search',
+  'relai_exec',
   'relai_write',
   'relai_replace',
   'relai_tidy_plan',
@@ -38,7 +39,7 @@ const expected = [
   'relai_complete_task'
 ];
 
-assert.equal(definitions.length, 18);
+assert.equal(definitions.length, 19);
 assert.deepEqual(names, expected);
 assert.deepEqual(TOOL_NAMES, expected);
 assert.equal(new Set(names).size, names.length, 'tool names must be unique');
@@ -62,12 +63,34 @@ assert.ok(readTool.inputSchema.properties.endLine, 'read schema must expose endL
 assert.ok(readTool.inputSchema.properties.guidanceMode, 'read schema must expose guidanceMode');
 assert.match(readTool.description, /bounded line range/);
 
+const searchTool = definitions.find(definition => definition.name === 'relai_search');
+assert.ok(searchTool, 'search tool must be registered');
+assert.deepEqual(searchTool.inputSchema.properties.mode.enum, ['auto', 'compact', 'context']);
+for (const field of ['contextBefore', 'contextAfter', 'groupByFile', 'mergeOverlaps', 'maxFiles', 'maxRangesPerFile', 'maxRangeLines', 'maxBytes']) {
+  assert.ok(searchTool.inputSchema.properties[field], `search schema must expose ${field}`);
+}
+assert.match(searchTool.description, /Auto mode is the default/);
+
 const completionTool = definitions.find(definition => definition.name === 'relai_complete_task');
 assert.ok(completionTool, 'completion tool must be registered');
 assert.deepEqual(completionTool.inputSchema.required, ['workspace', 'summary']);
 assert.equal(completionTool.inputSchema.properties.summary.minLength, 1);
 assert.equal(completionTool.inputSchema.properties.summary.maxLength, 2000);
 assert.match(completionTool.description, /final relai_run_checks call succeeds/);
+
+const execTool = definitions.find(definition => definition.name === 'relai_exec');
+assert.ok(execTool, 'exec tool must be registered');
+assert.deepEqual(execTool.inputSchema.required, ['workspace', 'command']);
+assert.ok(execTool.inputSchema.properties.cwd);
+assert.ok(execTool.inputSchema.properties.env);
+assert.ok(execTool.inputSchema.properties.maxOutputBytes);
+assert.equal(execTool.connectorStrip.length, 0, 'connector must retain the command field');
+assert.deepEqual(execTool.annotations, {
+  readOnlyHint: false,
+  destructiveHint: true,
+  idempotentHint: false,
+  openWorldHint: true
+});
 
 const commitTool = definitions.find(definition => definition.name === 'relai_git_commit');
 assert.ok(commitTool.inputSchema.properties.allowSecretPaths, 'commit schema must expose the reviewed secret-path override');
@@ -84,7 +107,6 @@ assert.deepEqual(definitions.find(definition => definition.name === 'relai_write
   openWorldHint: false
 });
 assert.equal(definitions.find(definition => definition.name === 'relai_git_push').annotations.openWorldHint, true);
-
 const groups = getToolGroups();
 assert.deepEqual(groups.workspace, expected);
 assert.equal(Object.hasOwn(groups, 'internal'), false);
@@ -96,7 +118,7 @@ for (const [groupName, groupTools] of Object.entries(groups)) {
 const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
 const mcpSection = readme.split('## MCP tools')[1]?.split('\n---')[0] || '';
 const documented = [...mcpSection.matchAll(/^\| `([^`]+)` \|/gm)].map(match => match[1]);
-assert.deepEqual(new Set(documented), new Set(expected), 'README tool table must match the 18-tool registry');
+assert.deepEqual(new Set(documented), new Set(expected), 'README tool table must match the 19-tool registry');
 assert.equal(documented.length, expected.length, 'README tool table must not contain duplicate rows');
 
-console.log('Tool registry consistency passed for one 18-tool surface.');
+console.log('Tool registry consistency passed for one 19-tool surface.');

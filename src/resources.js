@@ -70,7 +70,7 @@ This server exposes one peer-level workspace-tool surface to ChatGPT. Tool choic
 
 ## Tool choice
 
-Use the minimum number of calls needed for the task. \`relai_repo_snapshot\` is an optional repository map, not a limit on later access. Use \`relai_search\` when the code location is unknown, and use \`relai_read\` for every relevant file or line range before editing. Search and direct reads may continue anywhere inside the configured workspace even when a file was not listed in the initial snapshot.
+Use the minimum number of calls needed for the task. \`relai_repo_snapshot\` is an optional repository map, not a limit on later access. Use \`relai_search\` when the code location is unknown; adaptive bounded context is included by default. Use \`mode: "compact"\` for path/line-only output or \`mode: "context"\` for fixed caller-controlled limits. Use \`relai_read\` only when a wider range or complete file is still needed before editing. Search and direct reads may continue anywhere inside the configured workspace even when a file was not listed in the initial snapshot.
 
 For edits, prefer \`relai_edit\`; it routes automatically:
    - \`oldText\`+\`newText\` for small exact edits inside existing files.
@@ -78,6 +78,10 @@ For edits, prefer \`relai_edit\`; it routes automatically:
    - \`updateText\` for a unified-diff change across files.
    - \`edits: [...]\` for several edits in one call; add \`runChecks: true\` and \`returnDiff: true\` to validate and review in the same call.
    - \`relai_tidy_plan\` then \`relai_tidy_run\` for session-owned untracked cleanup.
+
+Use \`relai_exec\` when a task needs a one-shot project command such as dependency installation, a migration, a compiler, or another repository utility. Its result preserves exit status and bounded output, but it is not the final validation record.
+
+When \`relai_repo_snapshot\` or the workspace inspect resource returns \`projectInstructions\`, follow those repository-specific instructions before making changes. Sources are ordered by precedence; earlier files override later files. Read the named source directly with \`relai_read\` when the combined payload is truncated.
 
 Use quick validation while iterating. Before completion, run one final standard or release \`relai_run_checks\`; review with \`relai_diff\` when the edit did not already return a diff, then call \`relai_complete_task\` exactly once. If an edit payload is too large, re-read the target and use smaller exact replacements. If ChatGPT still shows removed tools, restart or reconnect the MCP server instead of falling back.
 

@@ -57,7 +57,7 @@ if (compressedToolsResponse.headers.get('content-encoding') !== 'gzip') {
   throw new Error('large JSON responses should use gzip when the client accepts it');
 }
 const compressedTools = await compressedToolsResponse.json();
-if (!Array.isArray(compressedTools) || compressedTools.length !== 18) {
+if (!Array.isArray(compressedTools) || compressedTools.length !== 19) {
   throw new Error('compressed tools API response was not decoded correctly');
 }
 
@@ -192,8 +192,19 @@ const list = await fetch(`http://127.0.0.1:${port}/mcp`, {
   headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, 'mcp-session-id': mcpSessionId },
   body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/list', params: {} })
 }).then((response) => response.json());
-if (!Array.isArray(list.result?.tools) || list.result.tools.length !== 18) {
-  throw new Error(`HTTP tools/list should return exactly 18 workspace tools, got ${list.result?.tools?.length}`);
+if (!Array.isArray(list.result?.tools) || list.result.tools.length !== 19) {
+  throw new Error(`HTTP tools/list should return exactly 19 workspace tools, got ${list.result?.tools?.length}`);
+}
+const execSchema = list.result.tools.find(tool => tool.name === 'relai_exec');
+if (!execSchema?.inputSchema?.properties?.command || !execSchema?.inputSchema?.properties?.cwd) {
+  throw new Error('HTTP tools/list did not expose the relai_exec command contract.');
+}
+const searchSchema = list.result.tools.find(tool => tool.name === 'relai_search');
+if (!searchSchema?.inputSchema?.properties?.contextBefore || !searchSchema?.inputSchema?.properties?.maxBytes) {
+  throw new Error('HTTP tools/list did not expose contextual relai_search options.');
+}
+if (JSON.stringify(searchSchema.inputSchema.properties.mode?.enum) !== JSON.stringify(['auto', 'compact', 'context'])) {
+  throw new Error('HTTP tools/list did not expose adaptive relai_search mode as the default-capable contract.');
 }
 
 const resources = await fetch(`http://127.0.0.1:${port}/mcp`, {

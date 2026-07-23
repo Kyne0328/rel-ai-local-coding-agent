@@ -3,6 +3,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { safeReadJson } = require("./safety");
 const { discoverCommands, staleCommandKeys } = require("./commandDiscovery");
+const { readProjectInstructions, summarizeProjectInstructions } = require('./projectInstructions');
 
 const REMOVED_WORKSPACE_COMMAND_KEYS = new Set([
   'npm:test:oneclick',
@@ -334,6 +335,7 @@ function publicConfigSummary(config) {
     workspaces: Object.entries(config.workspaces || {}).map(([alias, entry]) => {
       const discovered = safeDiscoverCommands(entry.path);
       const validationCommands = safeDetectValidationChecks(entry.path);
+      const projectInstructions = summarizeProjectInstructions(readProjectInstructions({ alias, path: entry.path }));
       return {
         alias,
         path: entry.path,
@@ -346,6 +348,7 @@ function publicConfigSummary(config) {
         context: normalizeContextConfig(entry.context || entry.fastTask),
         discoveredCommands: discovered,
         validationCommands,
+        projectInstructions,
         discoveredTestCommandKeys: Object.keys(discovered).filter((key) => /test|analy[sz]e|lint|check|vet|build/.test(key + " " + discovered[key])).sort((a, b) => a.localeCompare(b)),
         staleCommandKeys: staleCommandKeys(entry.commands || {}, discovered).sort((a, b) => a.localeCompare(b)),
         staleTestCommandKeys: staleCommandKeys(entry.testCommands || {}, discovered).sort((a, b) => a.localeCompare(b))

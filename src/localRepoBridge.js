@@ -29,6 +29,7 @@ const { relaiBrowser } = require("./bridge/browser");
 const { relaiDiff, relaiReset } = require("./bridge/review");
 const { workspaceTidyPlan, workspaceTidyRun: relaiWorkspaceTidyRun } = require("./bridge/tidy");
 const { relaiApplyPatch, normalizeOpenAIPatchFormat } = require("./bridge/patch");
+const { readProjectInstructions } = require('./projectInstructions');
 
 const DEFAULT_MAX_READ_BYTES = 1024 * 1024;
 const DEFAULT_CONNECTOR_READ_BYTES = 128 * 1024;
@@ -50,6 +51,7 @@ async function repoSnapshot(workspace, config, args = {}) {
   const manifests = readManifests(workspace.path);
   const discoveredCommands = discoverCommands(workspace.path);
   const git = await snapshotGitSummary(workspace, config);
+  const projectInstructions = readProjectInstructions(workspace);
   return {
     ok: true,
     workspace: workspace.alias,
@@ -59,6 +61,7 @@ async function repoSnapshot(workspace, config, args = {}) {
     manifests: Object.keys(manifests),
     manifestContents: manifests,
     discoveredCommands,
+    projectInstructions,
     fileCount: tree.files.length,
     effectiveMaxEntries: maxEntries,
     budgetMultiplied: effectiveDefault !== configuredDefault,
@@ -67,7 +70,7 @@ async function repoSnapshot(workspace, config, args = {}) {
     truncated: tree.truncated,
     hints: projectHints(Object.keys(manifests)),
     ...(git ? { git } : {}),
-    recommendedFlow: ["Use the minimum tool calls needed", "relai_search when the code location is unknown", "relai_read relevant files or line ranges before editing", "relai_edit { runChecks: true, returnDiff: true } when practical", "relai_complete_task after final validation"],
+    recommendedFlow: ["Use the minimum tool calls needed", "relai_search when the code location is unknown; adaptive context is included by default", "relai_read only when a wider range or complete file is needed before editing", "relai_edit { runChecks: true, returnDiff: true } when practical", "relai_complete_task after final validation"],
     writeGuidance: workspaceWriteGuidance(config),
     operationJournal: summarizeOperations(config, workspace, args.journalLimit || 10)
   };

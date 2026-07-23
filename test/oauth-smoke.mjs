@@ -320,9 +320,13 @@ const mcpRes = await fetch(`${base}/mcp`, {
 });
 if (mcpRes.status !== 200) fail(`POST /mcp with OAuth token expected 200, got ${mcpRes.status}`);
 const mcpBody = await mcpRes.json();
-if (mcpBody.result?.tools?.length !== 18) {
-  fail(`OAuth-authenticated tools/list did not return 18 tools: ${mcpBody.result?.tools?.length}`);
+if (mcpBody.result?.tools?.length !== 19) {
+  fail(`OAuth-authenticated tools/list did not return 19 tools: ${mcpBody.result?.tools?.length}`);
 }
+const oauthExecSchema = mcpBody.result.tools.find(tool => tool.name === 'relai_exec');
+if (!oauthExecSchema?.inputSchema?.properties?.command) fail('OAuth tool surface stripped the relai_exec command field');
+const oauthSearchSchema = mcpBody.result.tools.find(tool => tool.name === 'relai_search');
+if (!oauthSearchSchema?.inputSchema?.properties?.contextAfter) fail('OAuth tool surface stripped contextual relai_search fields');
 
 // 10. An invalid bearer is still rejected with a challenge.
 const badBearer = await fetch(`${base}/mcp`, {

@@ -20,6 +20,7 @@ function git(args, options = {}) {
 fs.mkdirSync(path.join(workspace, 'src'), { recursive: true });
 fs.writeFileSync(path.join(workspace, 'README.md'), '# Smoke\n');
 fs.writeFileSync(path.join(workspace, 'src', 'index.js'), 'console.log("smoke")\n');
+fs.writeFileSync(path.join(workspace, 'exec-smoke.js'), "process.stdout.write('exec-smoke-ok');\n");
 fs.writeFileSync(path.join(workspace, 'package.json'), JSON.stringify({
   scripts: { check: 'node --check src/index.js' }
 }, null, 2));
@@ -62,6 +63,11 @@ try {
   client.call(4, 'relai_read', { workspace: 'smoke', paths: ['README.md', 'src/index.js'] });
   const read = structuredContentOf(await client.waitFor(4));
   if (!read.items[0].content.includes('# Smoke')) throw new Error('Read failed.');
+
+  client.call(17, 'relai_exec', { workspace: 'smoke', command: 'node exec-smoke.js' });
+  const executed = structuredContentOf(await client.waitFor(17));
+  if (!executed.ok || executed.exitCode !== 0 || executed.stdout !== 'exec-smoke-ok') throw new Error('One-shot command failed.');
+  if (executed.changedFiles.length) throw new Error('Read-only command reported workspace mutations.');
 
   client.call(5, 'relai_edit', {
     workspace: 'smoke',

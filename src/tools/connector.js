@@ -113,6 +113,29 @@ function compactForConnector(name, value, args = {}) {
         fullOutput: value.fullOutput
       });
     }
+    case "relai_exec":
+      return {
+        ok: value.ok,
+        workspace: value.workspace,
+        command: value.command,
+        cwd: value.cwd,
+        shell: value.shell,
+        exitCode: value.exitCode,
+        durationMs: value.durationMs,
+        stdout: value.stdout || '',
+        stderr: value.stderr || '',
+        stdoutBytes: value.stdoutBytes || 0,
+        stderrBytes: value.stderrBytes || 0,
+        stdoutTruncated: value.stdoutTruncated === true,
+        stderrTruncated: value.stderrTruncated === true,
+        timedOut: value.timedOut === true,
+        ...(value.signal ? { signal: value.signal } : {}),
+        ...(value.error ? { error: value.error } : {}),
+        ...(Array.isArray(value.environmentKeys) && value.environmentKeys.length ? { environmentKeys: value.environmentKeys } : {}),
+        changedFiles: Array.isArray(value.changedFiles) ? value.changedFiles : [],
+        changedFilesTruncated: value.changedFilesTruncated === true,
+        mutationTracking: value.mutationTracking
+      };
     case "relai_repo_snapshot": {
       // Drop config-forced constants, budget telemetry, the operation journal, the full text
       // of every manifest, and the skipped-entry list (kept as a count) — keep manifest
@@ -123,6 +146,7 @@ function compactForConnector(name, value, args = {}) {
         root: value.root,
         manifests: value.manifests,
         discoveredCommands: value.discoveredCommands,
+        projectInstructions: value.projectInstructions,
         fileCount: value.fileCount,
         files: value.files,
         skippedCount: Array.isArray(value.skipped) ? value.skipped.length : undefined,

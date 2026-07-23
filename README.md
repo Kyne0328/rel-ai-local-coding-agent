@@ -23,14 +23,25 @@ ChatGPT asks -> Rel.AI MCP inspects, changes, validates, and reviews locally -> 
 Tool use is intentionally small but flexible. ChatGPT should skip stages it does not need. A common workflow is:
 
 ```text
-relai_repo_snapshot (when useful) -> relai_search (when location is unknown) -> relai_read -> relai_edit (runChecks + returnDiff) -> relai_complete_task
+relai_repo_snapshot (when useful) -> relai_search (when location is unknown) -> relai_read (when more source is needed) -> relai_edit (runChecks + returnDiff) -> relai_complete_task
 ```
 
-No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. The MCP server exposes one 18-tool workspace surface across local and connector transports.
+No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. The MCP server exposes one 19-tool workspace surface across local and connector transports.
 
 When ChatGPT first edits a workspace, the server starts a session and records the pre-edit state, so later status/diff output can separate the files this session changed from files that were already modified. The session expires after a period of inactivity.
 
 Rel.AI MCP still lightly nods to the original Rel.AI idea, but this README stands on its own: this is now a local MCP bridge for ChatGPT.
+
+### Repository-specific instructions
+
+Rel.AI automatically includes project guidance in repository snapshots when either of these files exists:
+
+```text
+REL_AI.md
+.relai/instructions.md
+```
+
+`REL_AI.md` has higher precedence. When both files exist, their content is returned with named headings and explicit source order. The combined connector payload is capped at 64 KiB; when it is truncated, ChatGPT can read either source directly with `relai_read`. Binary-looking files, symbolic links, and paths that escape the workspace are rejected. The content is guidance only and is never executed automatically.
 
 ---
 
@@ -46,6 +57,8 @@ It can:
 - delete tracked files through structured patch operations
 - tidy session-owned untracked artifacts through an expiry-bound plan
 - run validation checks such as tests and analyzers
+- run one-shot development commands such as dependency installation, migrations, compilers, and repository utilities
+- load repository-specific guidance from `REL_AI.md` and `.relai/instructions.md`
 - inspect git diffs
 - run explicit git status, commit, push, and PR-draft flows
 - restore local changes
@@ -99,7 +112,7 @@ The activity page is there because I got tired of guessing what the MCP server w
   <img src="docs/images/dashboard-tools-section.png" alt="Rel.AI MCP bridge tools" width="900">
 </p>
 
-The dashboard shows the 18 workspace tools ChatGPT can use for inspection, editing, validation, explicit completion reporting, review, Git publishing, tidy, and restore workflows.
+The dashboard shows the 19 workspace tools ChatGPT can use for inspection, one-shot commands, editing, validation, explicit completion reporting, review, Git publishing, tidy, and restore workflows.
 
 ### Connector setup
 
@@ -247,13 +260,14 @@ npm test                     # full suite
 
 ## MCP tools
 
-Rel.AI exposes one 18-tool workspace surface. `relai_edit` is the primary write path: it routes to exact replacement, full-file write, structured patch application, or a batch of edits server-side, and can validate and return a diff in the same call. Tracked-file deletion is supported through structured `Delete File` patches. Untracked cleanup uses the two-step `relai_tidy_plan` / `relai_tidy_run` workflow, where the server selects bounded session-owned candidates and verifies them again before deletion. `relai_complete_task` is the final workflow signal and is accepted only after a passed validation with no later code changes.
+Rel.AI exposes one 19-tool workspace surface. `relai_exec` runs one-shot development commands. `relai_edit` remains the primary write path. `relai_complete_task` is accepted only after final validation passes with no later code changes.
 
 | Tool | Purpose |
 | --- | --- |
 | `relai_repo_snapshot` | Return a filtered project snapshot, manifests, discovered checks, context hints, and size-based write guidance. |
 | `relai_read` | Read focused files or directory summaries. Optional `startLine`/`endLine` returns only the needed line range; `guidanceMode` controls full, compact, or omitted write guidance. |
-| `relai_search` | Search workspace files for a pattern and return path/line matches. Extended regex by default; `fixed:true` for literal strings, `ignoreCase:true`, and `glob` to narrow scope. |
+| `relai_search` | Search workspace files for a pattern. Adaptive `auto` mode is the default: focused searches receive broader context and noisy searches receive smaller prioritized ranges. Explicit `compact` and `context` modes remain available. |
+| `relai_exec` | Run a one-shot development command in a workspace-relative directory. Returns exit status, separate bounded stdout/stderr, timing, timeout state, and detected Git-status changes. |
 | `relai_edit` | The primary edit tool. Pass `oldText`+`newText` for exact edits, `content` for full-file writes (large files chunk automatically), `updateText` for unified-diff changes, or `edits: [...]` for a batch — plus `runChecks` / `returnDiff` to validate and review in one call. |
 | `relai_write` | Fallback: replace one complete file with full-file content (direct or staged mode). |
 | `relai_replace` | Fallback: small exact text replacements inside an existing file. |
@@ -270,7 +284,7 @@ Rel.AI exposes one 18-tool workspace surface. `relai_edit` is the primary write 
 | `relai_git_create_pr` | Draft a pull-request title/body from a base/head diff. |
 | `relai_complete_task` | Explicitly report that ChatGPT finished the coding task after final validation. Rejects missing validation or code changes made after validation. |
 
-Removed workflows are not part of the MCP anymore: update application loops, generated update helpers, local-edit tools, task runners, isolated worktree orchestration, multi-agent schedulers, Docker runners, and PR/CI repair loops.
+Removed workflows are not part of the MCP anymore: update application loops, generated update helpers, local-edit tools, task runners, multi-agent schedulers, Docker runners, and PR/CI repair loops.
 
 ---
 
@@ -292,11 +306,23 @@ Use `.relaiignore` in a repo to add repo-specific AI-context exclusions.
 
 The snapshot is only a structural map. It does not restrict `relai_search` or direct `relai_read` calls: ChatGPT may continue locating and reading any relevant non-sensitive file inside the configured workspace. The default map contains up to 3,000 files while generated and cache directories remain excluded.
 
-The implementation plan for general workspace commands, persistent processes, project instructions, managed worktrees, task plans, and optional independent workers is in [docs/CHATGPT_CODING_RUNTIME_ROADMAP.md](docs/CHATGPT_CODING_RUNTIME_ROADMAP.md).
+The runtime roadmap is in [docs/CHATGPT_CODING_RUNTIME_ROADMAP.md](docs/CHATGPT_CODING_RUNTIME_ROADMAP.md). The current build includes repository context, one-shot commands, and project instructions; persistent processes, managed worktrees, task plans, and independent workers are deferred.
 
 ---
 
 ## Validation check behavior
+
+Use `relai_exec` for development setup and tooling:
+
+```json
+{ "workspace": "myapp", "command": "npm install", "cwd": ".", "timeoutMs": 600000 }
+```
+
+A nonzero command exit is returned normally with `ok:false`, preserving compiler or test output. Command calls invalidate the workspace read cache and report files whose Git status changed. Environment values are never copied into audit records; only environment key names are retained.
+
+`relai_exec` does not count as final validation, even when it runs a test command. Before reporting completion, use `relai_run_checks` after the last relevant mutation.
+
+Persistent process management, managed worktrees, and persistent task plans are deferred and are not exposed by this build.
 
 `relai_run_checks` can run explicit validation checks inside configured workspaces:
 
@@ -321,13 +347,14 @@ Use this guide together with the `writeGuidance` returned by `relai_repo_snapsho
 | Situation | Use |
 | --- | --- |
 | Need a repository overview | `relai_repo_snapshot` |
-| Locate code by content | `relai_search`; then `relai_read` with `startLine` / `endLine` |
+| Locate code by content | `relai_search`; default auto mode includes bounded prioritized source when useful. Use `mode:"compact"` for inventory-only output or `mode:"context"` for fixed caller-controlled context limits. |
 | Need focused file content | `relai_read`; add `startLine` / `endLine` for large files |
 | Small localized edit inside an existing file | `relai_edit` with `oldText`/`newText` |
 | Complete replacement of a file (any size) | `relai_edit` with `content` |
 | Multi-file patch-shaped change | `relai_edit` with `updateText` |
 | Several edits in one approval | `relai_edit` with `edits: [...]` |
 | Tidy session-created files | `relai_tidy_plan` then `relai_tidy_run` |
+| Install dependencies, run migrations, or invoke repository tooling | `relai_exec` |
 | Run validation | `relai_run_checks` |
 | Report the coding task finished | `relai_complete_task` after the final successful validation |
 | Browser or UI route check | `relai_browser` |
@@ -339,6 +366,10 @@ Common loop when every stage is useful:
 ```text
 inspect -> read -> change -> final validation -> relai_complete_task
 ```
+
+Adaptive search requires no mode field: `{ "workspace": "myapp", "pattern": "getDepartments" }`. Up to 20 matches use the focused tier, 21–100 use the moderate tier, and broader searches use smaller bounded context. Auto mode prioritizes files whose paths resemble the query and files with more retained matches. Results remain grouped by file, overlapping ranges are merged, and each contextual file includes a SHA-256 hash.
+
+Use `{ "mode": "compact" }` for the original path/line-only response. Use `{ "mode": "context", "contextBefore": 5, "contextAfter": 8, "maxBytes": 131072 }` when exact caller-controlled context is required. Supplying context options without a mode also retains explicit context behavior for compatibility. Use `groupByFile:false` for flat ranges or `mergeOverlaps:false` to retain one range per match.
 
 For large files, request only the relevant lines when possible, for example `{ "workspace": "myapp", "paths": ["src/server.js"], "startLine": 120, "endLine": 220 }`. Connector reads use compact guidance by default; pass `guidanceMode: "none"` when only content and metadata are needed.
 

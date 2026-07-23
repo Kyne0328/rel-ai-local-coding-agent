@@ -1,6 +1,5 @@
 // @ts-check
 'use strict';
-
 /** @typedef {import('../../types/boundaries').ToolArgs} ToolArgs */
 /** @typedef {import('../../types/boundaries').ToolResult} ToolResult */
 /** @typedef {(extra: Record<string, unknown>, value: ToolResult, args: ToolArgs) => void} AuditEnricher */
@@ -11,7 +10,6 @@ const { resolveWorkspace } = require("../config");
 const { resolveSafePath } = require("../safety");
 const { ensureSessionStarted } = require("../policyResolver");
 const { getToolDefinition } = require("./schema");
-
 function debugSwallow(context, error) {
   if (process.env.REL_AI_MCP_DEBUG) {
     console.error(`[rel-ai-mcp] best-effort '${context}' failed: ${error?.message || error}`);
@@ -21,13 +19,13 @@ function debugSwallow(context, error) {
 /** @type {Readonly<Record<string, AuditEnricher>>} */
 const AUDIT_ENRICHERS = Object.freeze({
   edit: enrichEditAudit,
+  exec: enrichExecAudit,
   checks: enrichChecksAudit,
   completion: enrichCompletionAudit,
   path: enrichPathAudit,
   read: enrichReadAudit,
   snapshot: enrichSnapshotAudit
 });
-
 /** @param {string} name @param {ToolResult} value @param {ToolArgs} args @returns {Record<string, unknown>} */
 function buildExtraAudit(name, value, args) {
   /** @type {Record<string, unknown>} */
@@ -55,6 +53,22 @@ function enrichEditAudit(extra, value, args) {
   assignTruthy(extra, "plannerPath", value?.plannerPath);
   assignTruthy(extra, "plannerReason", value?.plannerReason);
   addAuditPath(extra, args?.path);
+}
+
+function enrichExecAudit(extra, value) {
+  assignTruthy(extra, 'commandSummary', value?.commandSummary);
+  assignTruthy(extra, 'cwd', value?.cwd);
+  assignDefined(extra, 'exitCode', value?.exitCode);
+  assignDefined(extra, 'durationMs', value?.durationMs);
+  assignDefined(extra, 'stdoutBytes', value?.stdoutBytes);
+  assignDefined(extra, 'stderrBytes', value?.stderrBytes);
+  assignDefined(extra, 'stdoutTruncated', value?.stdoutTruncated === true);
+  assignDefined(extra, 'stderrTruncated', value?.stderrTruncated === true);
+  assignDefined(extra, 'timedOut', value?.timedOut === true);
+  assignTruthy(extra, 'mutationTracking', value?.mutationTracking);
+  if (Array.isArray(value?.environmentKeys) && value.environmentKeys.length) {
+    extra.environmentKeys = value.environmentKeys.slice(0, 100);
+  }
 }
 
 function enrichChecksAudit(extra, value) {
@@ -90,11 +104,9 @@ function enrichSnapshotAudit(extra, value) {
 function assignTruthy(target, key, value) {
   if (value) target[key] = value;
 }
-
 function assignDefined(target, key, value) {
   if (value != null) target[key] = value;
 }
-
 function addAuditPath(extra, filePath) {
   if (filePath) extra.filePath = filePath;
 }
@@ -120,6 +132,10 @@ function invalidateSessionCacheForCall(config, name, args) {
     const workspace = resolveWorkspace(config, alias);
     const wsRoot = workspace?.path;
     if (!wsRoot) return;
+    if (cacheMode === "workspace") {
+      sessionCache.invalidateAlias(alias);
+      return;
+    }
     if (cacheMode === "edit" && (args.updateText != null || args.stage != null)) {
       sessionCache.invalidateAlias(alias);
       return;

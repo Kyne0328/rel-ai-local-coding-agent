@@ -1,7 +1,7 @@
 export type ToolName = string;
 export type ToolGroup = 'git' | 'audit' | 'cleanup';
-export type AuditKind = '' | 'snapshot' | 'read' | 'path' | 'checks' | 'edit' | 'completion';
-export type CacheKind = '' | 'paths' | 'edit';
+export type AuditKind = '' | 'snapshot' | 'read' | 'path' | 'checks' | 'edit' | 'exec' | 'completion';
+export type CacheKind = '' | 'paths' | 'edit' | 'workspace';
 export type SummaryKind = '' | 'checks' | 'diff' | 'edit' | 'completion';
 
 export interface JsonSchema {
@@ -76,11 +76,25 @@ export interface ToolArgs extends Record<string, unknown> {
   startLine?: number;
   endLine?: number;
   guidanceMode?: string;
+  mode?: string;
+  contextBefore?: number;
+  contextAfter?: number;
+  groupByFile?: boolean;
+  mergeOverlaps?: boolean;
+  maxFiles?: number;
+  maxRangesPerFile?: number;
+  maxRangeLines?: number;
+  maxBytes?: number;
+  maxResults?: number;
   dryRun?: boolean;
   stage?: string;
   updateText?: string;
   edits?: Array<{ path?: string }>;
   timeoutMs?: number;
+  command?: string;
+  cwd?: string;
+  env?: Record<string, string>;
+  maxOutputBytes?: number;
 }
 
 export interface ToolResult extends Record<string, unknown> {
@@ -101,6 +115,29 @@ export interface ToolResult extends Record<string, unknown> {
   validationAt?: string;
   changedFiles?: string[];
   nextAction?: string;
+  commandSummary?: string;
+  cwd?: string;
+  exitCode?: number;
+  durationMs?: number;
+  stdoutBytes?: number;
+  stderrBytes?: number;
+  stdoutTruncated?: boolean;
+  stderrTruncated?: boolean;
+  timedOut?: boolean;
+  mutationTracking?: string;
+  environmentKeys?: string[];
+  matches?: Array<{ path: string; line: number; text: string }>;
+  files?: Array<Record<string, unknown>>;
+  contexts?: Array<Record<string, unknown>>;
+  matchCount?: number;
+  contextMatchCount?: number;
+  effectiveMode?: string;
+  autoTier?: string;
+  selectionStrategy?: string;
+  returnedFileCount?: number;
+  returnedRangeCount?: number;
+  returnedBytes?: number;
+  contextTruncated?: boolean;
 }
 
 export type AppConfig = Record<string, unknown> & {

@@ -27,7 +27,6 @@ function completeTask(config, args = {}) {
   if (!context?.taskId) {
     throw new Error('Task completion requires an active Rel.AI work session.');
   }
-
   const sessionPolicy = readSessionPolicy(config, workspace.alias);
   const preferredTaskIds = unique([
     context.taskId,
@@ -55,7 +54,7 @@ function completeTask(config, args = {}) {
   const changedAfterValidation = workspaceEvents.filter(entry =>
     eventTime(entry) > validationAtMs &&
     entry.ok !== false &&
-    CODE_MUTATING_TOOLS.has(String(entry.tool || ''))
+    eventMutatedCode(entry)
   );
   if (changedAfterValidation.length) {
     const tools = [...new Set(changedAfterValidation.map(entry => String(entry.tool || 'edit')))];
@@ -95,6 +94,14 @@ function completeTask(config, args = {}) {
   };
 }
 
+function eventMutatedCode(entry) {
+  const tool = String(entry?.tool || '');
+  if (tool === 'relai_exec') {
+    return eventChangedFiles(entry).length > 0 || entry?.mutationTracking !== 'git';
+  }
+  return CODE_MUTATING_TOOLS.has(tool);
+}
+
 function findLatestPassedValidation(events) {
   return [...events].reverse().find(entry =>
     entry.tool === 'relai_run_checks' &&
@@ -125,4 +132,4 @@ function unique(values) {
   return [...new Set(values)];
 }
 
-module.exports = { completeTask, CODE_MUTATING_TOOLS, COMPLETION_VALIDATION_MAX_AGE_MS };
+module.exports = { completeTask, CODE_MUTATING_TOOLS, COMPLETION_VALIDATION_MAX_AGE_MS, eventMutatedCode };

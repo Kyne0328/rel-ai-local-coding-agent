@@ -31,13 +31,25 @@ const TOOL_DEFINITION_VALUES = [
   {
     name: "relai_search",
     title: "Search Workspace Text",
-    description: "Read-only. Search workspace files (tracked and untracked) for a pattern and return path, line, and matching text. Extended regex by default; pass fixed:true for a literal string, ignoreCase:true for case-insensitive matching, and glob (e.g. 'src/*.js') to narrow scope. Prefer one search over reading several files when locating code.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"pattern":{"type":"string","minLength":1,"maxLength":1000},"glob":{"type":"string","maxLength":256},"fixed":{"type":"boolean"},"ignoreCase":{"type":"boolean"},"maxResults":{"type":"number","minimum":1,"maximum":1000}},"required":["workspace","pattern"],"additionalProperties":false},
+    description: "Read-only. Search tracked and untracked workspace files. Auto mode is the default: focused searches receive broader context, while noisy searches receive smaller prioritized ranges. Compact and context modes remain explicit deterministic overrides.",
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"pattern":{"type":"string","minLength":1,"maxLength":1000},"glob":{"type":"string","maxLength":256},"fixed":{"type":"boolean"},"ignoreCase":{"type":"boolean"},"maxResults":{"type":"number","minimum":1,"maximum":1000},"mode":{"type":"string","enum":["auto","compact","context"]},"contextBefore":{"type":"number","minimum":0,"maximum":100},"contextAfter":{"type":"number","minimum":0,"maximum":100},"groupByFile":{"type":"boolean"},"mergeOverlaps":{"type":"boolean"},"maxFiles":{"type":"number","minimum":1,"maximum":200},"maxRangesPerFile":{"type":"number","minimum":1,"maximum":100},"maxRangeLines":{"type":"number","minimum":1,"maximum":1000},"maxBytes":{"type":"number","minimum":1000,"maximum":393216}},"required":["workspace","pattern"],"additionalProperties":false},
     annotations: {"readOnlyHint":true,"destructiveHint":false,"idempotentHint":true,"openWorldHint":false},
     handler: "search",
     connectorStrip: [],
     groups: [],
     behavior: {"audit":"","cache":"","startsSession":false,"deferStagedSession":false,"sessionWrite":false,"summary":""},
+    dashboard: {"category":"Workspace tools","requiredProfile":"workspace","requiresApproval":false}
+  },
+  {
+    name: "relai_exec",
+    title: "Run Workspace Command",
+    description: "Run a one-shot development command inside a configured workspace and return exit status, bounded stdout and stderr, timing, and detected file changes. cwd is workspace-relative. A successful result does not replace final relai_run_checks validation.",
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"command":{"type":"string","minLength":1,"maxLength":20000},"cwd":{"type":"string"},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000},"env":{"type":"object","additionalProperties":{"type":"string"}},"maxOutputBytes":{"type":"number","minimum":1000,"maximum":16777216}},"required":["workspace","command"],"additionalProperties":false},
+    annotations: {"readOnlyHint":false,"destructiveHint":true,"idempotentHint":false,"openWorldHint":true},
+    handler: "exec",
+    connectorStrip: [],
+    groups: [],
+    behavior: {"audit":"exec","cache":"workspace","startsSession":false,"deferStagedSession":false,"sessionWrite":false,"summary":""},
     dashboard: {"category":"Workspace tools","requiredProfile":"workspace","requiresApproval":false}
   },
   {
@@ -226,9 +238,9 @@ const READ_ONLY_TOOLS = new Set([
   'relai_git_status', 'relai_git_create_pr'
 ]);
 const DESTRUCTIVE_TOOLS = new Set([
-  'relai_write', 'relai_replace', 'relai_tidy_run', 'relai_restore_changes', 'relai_edit'
+  'relai_exec', 'relai_write', 'relai_replace', 'relai_tidy_run', 'relai_restore_changes', 'relai_edit'
 ]);
-const OPEN_WORLD_TOOLS = new Set(['relai_git_push']);
+const OPEN_WORLD_TOOLS = new Set(['relai_exec', 'relai_git_push']);
 
 function annotationsFor(name) {
   const readOnly = READ_ONLY_TOOLS.has(name);

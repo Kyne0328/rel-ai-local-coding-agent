@@ -88,6 +88,7 @@ function workspaceCardView(workspace, health) {
     healthWarning: health?.ok === false ? health.error || 'Workspace unavailable' : '',
     operational,
     validationCommands: commands,
+    projectInstructions: listValue(workspace.projectInstructions?.sources),
     protectedBranches: listValue(workspace.protectedBranches),
     allowedRemotes: listValue(workspace.allowedRemotes),
     sessionActive: workspace.sessionPolicy?.sessionActive === true,
@@ -163,9 +164,11 @@ function workspaceValidationHtml(view) {
 function workspacePolicyHtml(view) {
   const branches = view.protectedBranches.length ? view.protectedBranches.join(', ') : 'none';
   const remotes = view.allowedRemotes.length ? view.allowedRemotes.join(', ') : 'none';
+  const instructions = view.projectInstructions.length ? view.projectInstructions.join(', ') : 'not configured';
   return `<div class="workspace-policy">
     <span><strong>Protected branches:</strong> ${esc(branches)}</span>
     <span><strong>Allowed remotes:</strong> ${esc(remotes)}</span>
+    <span><strong>Project instructions:</strong> ${esc(instructions)}</span>
   </div>`;
 }
 
