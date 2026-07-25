@@ -5,6 +5,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  buildReleaseEvidence,
+  readUsabilityManifest,
+  validateReleaseEvidence,
+  writeReleaseEvidence
+} from './release-evidence.mjs';
 
 if (process.platform !== 'win32') {
   console.log('Installed application smoke test is Windows-only; skipped on this platform.');
@@ -22,8 +28,14 @@ const appData = path.join(sandbox, 'AppData');
 const userProfile = path.join(sandbox, 'User');
 const installDir = path.join(sandbox, 'InstalledApp');
 const resultPath = path.join(sandbox, 'installed-smoke-result.json');
+const windowResultPath = path.join(sandbox, 'window-smoke-result.json');
 const configPath = path.join(sandbox, 'config.json');
 const userDataDir = path.join(sandbox, 'electron-user-data');
+const requestedInstaller = String(process.env.REL_AI_SMOKE_INSTALLER || '').trim();
+const requestedEvidenceDir = String(process.env.REL_AI_RELEASE_EVIDENCE_DIR || '').trim();
+const evidenceDir = requestedEvidenceDir ? path.resolve(requestedEvidenceDir) : path.join(sandbox, 'release-evidence');
+const screenshotsDir = path.join(evidenceDir, 'screenshots');
+const evidencePath = path.join(evidenceDir, 'release-readiness.json');
 const appEnv = {
   ...process.env,
   LOCALAPPDATA: localAppData,
@@ -31,7 +43,9 @@ const appEnv = {
   USERPROFILE: userProfile,
   REL_AI_MCP_STATE_DIR: path.join(sandbox, 'state'),
   REL_AI_MCP_CONFIG: configPath,
-  REL_AI_INSTALL_SMOKE_RESULT: resultPath
+  REL_AI_INSTALL_SMOKE_RESULT: resultPath,
+  REL_AI_WINDOW_SMOKE_RESULT: windowResultPath,
+  REL_AI_WINDOW_SMOKE_EVIDENCE_DIR: screenshotsDir
 };
 const installerEnv = {
   ...process.env,
@@ -42,19 +56,27 @@ fs.mkdirSync(distDir, { recursive: true });
 fs.mkdirSync(localAppData, { recursive: true });
 fs.mkdirSync(appData, { recursive: true });
 fs.mkdirSync(userProfile, { recursive: true });
+fs.mkdirSync(screenshotsDir, { recursive: true });
 
+let installer = null;
 let uninstaller = null;
 try {
-  const electronBuilder = require.resolve('electron-builder/out/cli/cli.js', {
-    paths: [path.join(root, 'electron')]
-  });
-  run(process.execPath, [electronBuilder, '--win', 'nsis', `--config.directories.output=${distDir}`], {
-    cwd: path.join(root, 'electron'),
-    env: process.env,
-    timeout: 15 * 60 * 1000
-  });
-  const installer = findFile(distDir, (file) => /setup.*\.exe$/i.test(path.basename(file)));
-  assert.ok(installer, `NSIS installer was not produced under ${distDir}`);
+  if (requestedInstaller) {
+    installer = path.resolve(requestedInstaller);
+    assert.ok(fs.existsSync(installer), `Requested release installer does not exist: ${installer}`);
+    assert.ok(fs.statSync(installer).isFile(), `Requested release installer is not a file: ${installer}`);
+  } else {
+    const electronBuilder = require.resolve('electron-builder/out/cli/cli.js', {
+      paths: [path.join(root, 'electron')]
+    });
+    run(process.execPath, [electronBuilder, '--win', 'nsis', `--config.directories.output=${distDir}`], {
+      cwd: path.join(root, 'electron'),
+      env: process.env,
+      timeout: 15 * 60 * 1000
+    });
+    installer = findFile(distDir, (file) => /setup.*\.exe$/i.test(path.basename(file)));
+    assert.ok(installer, `NSIS installer was not produced under ${distDir}`);
+  }
 
   run(installer, ['/S', `/D=${installDir}`], { cwd: root, env: installerEnv, timeout: 5 * 60 * 1000 });
   const installedExe = findFile(installDir, (file) => path.basename(file).toLowerCase() === 'rel.ai mcp.exe');
@@ -73,14 +95,32 @@ try {
   });
 
   assert.ok(fs.existsSync(resultPath), 'Installed application did not write its smoke result.');
+  assert.ok(fs.existsSync(windowResultPath), 'Installed application did not write its renderer usability result.');
   const result = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
+  const windowResult = JSON.parse(fs.readFileSync(windowResultPath, 'utf8'));
   assert.equal(result.ok, true, result.error || 'Installed application smoke failed.');
+  assert.equal(windowResult.ok, true, windowResult.error || 'Installed renderer usability smoke failed.');
   assert.equal(result.isPackaged, true);
   assert.equal(result.dashboardStatus, 200);
   assert.equal(result.publicToolCount, expectedPublicToolCount);
   assert.ok(Object.values(result.resourceChecks).every(Boolean), 'One or more packaged resources are missing.');
   assert.equal(result.health?.ok, true);
-  console.log(`Installed application smoke passed for v${result.version} with ${result.publicToolCount} tools and all renderer surfaces.`);
+
+  const manifest = readUsabilityManifest(root);
+  const evidence = buildReleaseEvidence({
+    version: result.version,
+    installerPath: installer,
+    installedResult: result,
+    windowResult,
+    manifest,
+    platform: process.platform,
+    architecture: process.arch
+  });
+  writeReleaseEvidence(evidencePath, evidence);
+  const evidenceErrors = validateReleaseEvidence(evidence, manifest, { evidencePath, installerPath: installer });
+  assert.deepEqual(evidenceErrors, [], `Release usability evidence is invalid:\n${evidenceErrors.join('\n')}`);
+  console.log(`Installed application smoke passed for v${result.version}: ${evidence.automated.scenarios.length} automated scenarios passed; ${evidence.manual.checks.length} external checks remain manual.`);
+  console.log(`Release usability evidence: ${evidencePath}`);
 } finally {
   if (uninstaller && fs.existsSync(uninstaller)) {
     spawnSync(uninstaller, ['/S'], { cwd: path.dirname(uninstaller), env: installerEnv, encoding: 'utf8', timeout: 3 * 60 * 1000 });

@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
 <title>Rel.AI MCP - Setup</title>
 <link rel="stylesheet" href="app.css">
 </head>
@@ -13,7 +14,7 @@
       <img class="brand-badge" src="relai-logo.png" alt="Rel.AI MCP">
       <div>
         <div class="brand-title" id="wizardBrandTitle">Rel.AI MCP Launcher</div>
-        <div class="brand-sub" id="wizardBrandSub">Cloud connector setup</div>
+        <div class="brand-sub" id="wizardBrandSub">Secure connection setup</div>
       </div>
     </div>
 
@@ -27,34 +28,34 @@
     </div>
 
     <div class="content">
-      <section class="step active" id="step1" aria-labelledby="step1Title">
+      <section class="step active" id="step1" aria-labelledby="step1Title" aria-hidden="false">
         <div class="eyebrow">Four-step setup</div>
-        <h1 id="step1Title">Connect ChatGPT to your local repositories.</h1>
+        <h1 id="step1Title" tabindex="-1">Connect ChatGPT to your local repositories.</h1>
         <p class="subtitle">Rel.AI runs locally, publishes one secure HTTPS MCP endpoint through your ngrok account, and keeps that ChatGPT app URL stable.</p>
         <div class="setup-benefits">
           <div><span class="setup-check">✓</span><span>Your repositories remain on this computer.</span></div>
           <div><span class="setup-check">✓</span><span>ChatGPT receives explicit workspace tools instead of unrestricted shell access.</span></div>
           <div><span class="setup-check">✓</span><span>The permanent tunnel URL can be reused after restarts.</span></div>
         </div>
-        <button class="primary setup-next" id="startWizardBtn">Start setup</button>
+        <button class="primary setup-next" id="startWizardBtn" type="button">Start setup</button>
       </section>
 
-      <section class="step" id="step2" aria-labelledby="step2Title">
+      <section class="step" id="step2" aria-labelledby="step2Title" aria-hidden="true" hidden>
         <div class="eyebrow">Step 2 of 4</div>
-        <h2 id="step2Title">Configure the local service.</h2>
+        <h2 id="step2Title" tabindex="-1">Configure the local service.</h2>
         <p class="subtitle">Choose the local port and keep the generated approval token private. The token protects the dashboard and approves ChatGPT OAuth access.</p>
 
         <label for="portInput">Local service port</label>
         <input type="number" id="portInput" value="3333" min="1024" max="65535" inputmode="numeric">
         <div class="field-message" id="portHint" aria-live="polite"></div>
 
-        <div class="field-label">Dashboard approval token</div>
-        <div class="token-box mono" id="tokenBox"></div>
+        <div class="field-label">Approval token</div>
+        <output class="token-box mono" id="tokenBox" aria-live="polite" aria-label="Generated approval token"></output>
         <div class="btn-row">
           <button class="secondary" id="copyTokenBtn" type="button">Copy token</button>
           <button class="secondary" id="regenTokenBtn" type="button">Generate a new token</button>
         </div>
-        <p class="hint">Stored in <code>~/.rel-ai-mcp/.env</code>. ChatGPT will ask for this value when you approve the app.</p>
+        <p class="hint" id="tokenHint">Stored in <code>~/.rel-ai-mcp/.env</code>. ChatGPT will ask for this value when you approve the app.</p>
 
         <div class="nav-row">
           <button class="secondary" data-go="1" type="button">Back</button>
@@ -62,9 +63,9 @@
         </div>
       </section>
 
-      <section class="step" id="step3" aria-labelledby="step3Title">
+      <section class="step" id="step3" aria-labelledby="step3Title" aria-hidden="true" hidden>
         <div class="eyebrow">Step 3 of 4</div>
-        <h2 id="step3Title">Configure the secure connection.</h2>
+        <h2 id="step3Title" tabindex="-1">Configure the secure connection.</h2>
         <p class="subtitle">Use your ngrok account key and static domain. Rel.AI stores the key only in its private local configuration.</p>
 
         <div class="link-grid setup-resource-grid">
@@ -91,13 +92,13 @@
         </div>
       </section>
 
-      <section class="step" id="step4" aria-labelledby="step4Title">
+      <section class="step" id="step4" aria-labelledby="step4Title" aria-hidden="true" hidden>
         <div class="eyebrow">Step 4 of 4</div>
-        <h2 id="step4Title">Review and launch.</h2>
+        <h2 id="step4Title" tabindex="-1">Review and launch.</h2>
         <p class="subtitle">Rel.AI will save the configuration, start the local MCP service, prepare the managed ngrok tunnel, and publish the ChatGPT endpoint.</p>
         <div class="summary-box" id="summaryBox"></div>
         <button class="primary btn-success" id="launchBtn" type="button">Launch Rel.AI MCP</button>
-        <p class="hint">After launch, copy the MCP endpoint into ChatGPT Apps, choose OAuth, and approve with your dashboard token.</p>
+        <p class="hint">After launch, copy the MCP endpoint into ChatGPT Apps, choose OAuth, and approve with your approval token.</p>
         <div class="error" id="launchError" role="alert"></div>
         <div class="nav-row launch-back-row">
           <button class="secondary" data-go="3" type="button">Back and edit</button>

@@ -82,6 +82,11 @@ if (!Array.isArray(dashboardData?.taskActivity?.tasks) || typeof dashboardData?.
   console.error('Dashboard wording smoke test FAILED — task activity must expose concurrent task records');
   process.exit(1);
 }
+if (!dashboardData?.connectionState?.localService || !dashboardData?.connectionState?.publicEndpoint || !dashboardData?.connectionState?.chatgptReadiness || !dashboardData?.connectionState?.dashboardUpdates) {
+  child.kill('SIGKILL');
+  console.error('Dashboard wording smoke test FAILED — normalized connection layers are missing');
+  process.exit(1);
+}
 if (dashboardJson.includes('prepared') || dashboardJson.includes('apply_bundle')) {
   child.kill('SIGKILL');
   console.error('Dashboard wording smoke test FAILED — obsolete prepared/bundle workflow wording remains');

@@ -1,0 +1,111 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
+
+const dashboardServer = read('src/http/dashboard.js');
+const dashboardJs = read('public/dashboard.js');
+const baseCss = read('src/ui/base.css');
+const shellCss = read('src/ui/dashboard-shell.css');
+const interactionsCss = read('src/ui/dashboard-interactions.css');
+const preferencesCss = read('src/ui/dashboard-preferences.css');
+const modal = read('src/ui/components/modal.js');
+const confirmDialog = read('src/ui/components/confirm-dialog.js');
+const interactionSafety = read('src/ui/interaction-safety.js');
+const drawer = read('src/ui/components/drawer.js');
+const overlayFocus = read('src/ui/components/overlay-focus.js');
+const commandPalette = read('src/ui/command-palette.js');
+const activity = read('src/ui/sections/activity.js');
+const router = read('src/ui/router.js');
+const wizardHtml = read('electron/renderer/wizard.html');
+const wizardJs = read('electron/renderer/wizard.js');
+const statusHtml = read('electron/renderer/status.html');
+const statusJs = read('electron/renderer/status.js');
+const electronCss = read('electron/renderer/app.css');
+
+assert.match(dashboardServer, /class="skip-link">Skip to content/);
+assert.match(dashboardServer, /id="routeAnnouncer"[^>]*role="status"[^>]*aria-live="polite"/);
+assert.match(dashboardServer, /<main id="main" class="main" tabindex="-1" aria-labelledby="pageTitle">/);
+assert.match(dashboardServer, /id="commandPaletteBtn"[^>]*aria-expanded="false"/);
+assert.match(dashboardServer, /id="connectionStatus"[^>]*aria-label="Open Connection settings/);
+assert.match(router, /routeAnnouncer/);
+assert.match(router, /page loaded/);
+assert.match(dashboardJs, /role="status" aria-live="polite" aria-busy="true"/);
+assert.match(dashboardJs, /role="alert"/);
+assert.match(dashboardJs, /Open Connection settings; current status/);
+
+assert.match(modal, /activateOverlay/);
+assert.match(modal, /_onClose/);
+assert.match(modal, /confirmOverlayDismiss/);
+assert.match(confirmDialog, /openModal/);
+assert.match(confirmDialog, /textContent/);
+assert.match(confirmDialog, /modal\.dismiss\(\)/);
+assert.match(interactionSafety, /beforeunload/);
+assert.match(interactionSafety, /data-unsaved-changes/);
+assert.match(drawer, /activateOverlay/);
+assert.match(overlayFocus, /element\.inert = true/);
+assert.match(overlayFocus, /aria-hidden/);
+assert.match(overlayFocus, /event\.key !== 'Tab'/);
+assert.match(overlayFocus, /event\.key === 'Escape'/);
+assert.match(overlayFocus, /restoreFocus/);
+assert.match(baseCss, /body\.overlay-open \{ overflow: hidden; \}/);
+assert.match(shellCss, /max-height: calc\(100dvh/);
+assert.match(shellCss, /overscroll-behavior: contain/);
+assert.match(shellCss, /\.drawer-panel[^}]*height: 100dvh/s);
+
+assert.match(commandPalette, /role="combobox"/);
+assert.match(commandPalette, /aria-autocomplete="list"/);
+assert.match(commandPalette, /aria-controls="commandPaletteList"/);
+assert.match(commandPalette, /aria-activedescendant/);
+assert.match(commandPalette, /role="option"/);
+assert.doesNotMatch(commandPalette, /<button class="command-option/);
+assert.match(commandPalette, /trigger\?\.setAttribute\('aria-expanded', 'true'\)/);
+assert.match(commandPalette, /aria-expanded', 'false'/);
+assert.match(commandPalette, /hasActiveOverlay/);
+
+assert.match(activity, /aria-pressed/);
+assert.match(activity, /summary\.setAttribute\('role', 'status'\)/);
+assert.match(activity, /summary\.setAttribute\('aria-live', 'polite'\)/);
+assert.match(activity, /<span class="sr-only">Actions<\/span>/);
+assert.doesNotMatch(activity, /row\.tabIndex/);
+assert.doesNotMatch(activity, /row\.onkeydown/);
+assert.match(activity, /activity-row-button/);
+
+assert.match(interactionsCss, /env\(safe-area-inset-bottom\)/);
+assert.match(interactionsCss, /env\(safe-area-inset-left\)/);
+assert.match(interactionsCss, /min-height: 44px/);
+assert.match(interactionsCss, /\.confirm-dialog/);
+assert.match(interactionsCss, /@media \(max-width: 520px\)/);
+assert.match(interactionsCss, /\.ws-form-row, \.field-row/);
+assert.match(shellCss, /\.settings-rail[^}]*overflow-x: auto/s);
+assert.match(shellCss, /scroll-snap-type: x proximity/);
+assert.match(shellCss, /@media \(forced-colors: active\)/);
+assert.match(preferencesCss, /prefers-reduced-motion/);
+
+assert.match(wizardHtml, /id="step2"[^>]*aria-hidden="true" hidden/);
+assert.match(wizardHtml, /id="step3"[^>]*aria-hidden="true" hidden/);
+assert.match(wizardHtml, /id="step4"[^>]*aria-hidden="true" hidden/);
+assert.match(wizardHtml, /<output class="token-box mono"/);
+assert.match(wizardJs, /previousSection\.hidden = true/);
+assert.match(wizardJs, /nextSection\.hidden = false/);
+assert.match(wizardJs, /removeAttribute\('aria-current'\)/);
+assert.match(wizardJs, /step4Title/);
+
+assert.match(statusHtml, /id="statusAnnouncer"[^>]*role="status"/);
+assert.match(statusHtml, /id="errorPanel" role="alert" aria-live="assertive"/);
+assert.match(statusHtml, /id="serviceLog" tabindex="0"/);
+assert.match(statusHtml, /role="switch"[^>]*aria-label="Desktop notifications on"/);
+assert.match(statusJs, /previousAnnouncementKey/);
+assert.match(statusJs, /announceStatus/);
+assert.match(statusJs, /Desktop notifications \$\{notificationsEnabled/);
+assert.match(electronCss, /min-height: 100dvh/);
+assert.match(electronCss, /env\(safe-area-inset-top\)/);
+assert.match(electronCss, /button, input \{ min-height: 44px; \}/);
+assert.match(electronCss, /@media \(max-width: 420px\)/);
+assert.match(electronCss, /@media \(forced-colors: active\)/);
+assert.match(electronCss, /@media \(prefers-reduced-motion: reduce\)/);
+
+console.log('Accessibility and responsive smoke test passed.');

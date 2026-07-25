@@ -20,7 +20,7 @@ jobs:
   release:
     name: Test, build, and publish Windows release
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Check out repository
@@ -151,6 +151,40 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
+      - name: Smoke exact release installer
+        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
+        shell: pwsh
+        env:
+          REL_AI_RELEASE_EVIDENCE_DIR: ${{ runner.temp }}\relai-release-evidence
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installers = @(Get-ChildItem -Path dist -Filter '*Setup*.exe' -File)
+          if ($installers.Count -ne 1) {
+            throw "Expected exactly one installed release executable in dist/, found $($installers.Count)."
+          }
+          $env:REL_AI_SMOKE_INSTALLER = $installers[0].FullName
+          npm run test:installed
+          if ($LASTEXITCODE -ne 0) {
+            throw 'The exact release installer failed installed-app usability validation.'
+          }
+          $evidence = Join-Path $env:REL_AI_RELEASE_EVIDENCE_DIR 'release-readiness.json'
+          node scripts/release-evidence-check.mjs $evidence --installer $installers[0].FullName
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Release usability evidence validation failed.'
+          }
+          $dist = Resolve-Path dist
+          Copy-Item $evidence (Join-Path $dist 'release-readiness.json') -Force
+          Compress-Archive -Path (Join-Path $env:REL_AI_RELEASE_EVIDENCE_DIR '*') -DestinationPath (Join-Path $dist 'release-usability-evidence.zip') -Force
+
+      - name: Upload release usability evidence
+        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-usability-evidence-${{ steps.version.outputs.version }}
+          path: ${{ runner.temp }}\relai-release-evidence
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Prepare release assets and notes
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         id: notes
@@ -160,11 +194,39 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
 
-          $assets = @(Get-ChildItem -Path dist -Filter '*.exe' -File)
-          if ($assets.Count -eq 0) {
-            throw 'electron:dist completed without producing any .exe files in dist/.'
+          $executables = @(Get-ChildItem -Path dist -Filter '*.exe' -File)
+          if ($executables.Count -lt 2) {
+            throw 'electron:dist must produce both installed and portable Windows executables in dist/.'
           }
-          $assets.FullName | Set-Content -Path release-assets.txt -Encoding utf8
+          $latestMetadata = Join-Path (Resolve-Path dist) 'latest.yml'
+          if (-not (Test-Path $latestMetadata -PathType Leaf)) {
+            throw 'electron:dist completed without producing dist/latest.yml for installed-app update discovery.'
+          }
+          $latestContent = Get-Content $latestMetadata -Raw
+          if ($latestContent -notmatch '(?m)^\s*sha512:\s*\S+') {
+            throw 'dist/latest.yml does not contain SHA-512 update metadata.'
+          }
+          $blockmaps = @(Get-ChildItem -Path dist -Filter '*.blockmap' -File)
+          if ($blockmaps.Count -eq 0) {
+            throw 'electron:dist completed without producing an installer blockmap.'
+          }
+          $usabilityEvidence = Join-Path (Resolve-Path dist) 'release-readiness.json'
+          $usabilityArchive = Join-Path (Resolve-Path dist) 'release-usability-evidence.zip'
+          if (-not (Test-Path $usabilityEvidence -PathType Leaf)) {
+            throw 'The exact-installer usability evidence JSON is missing.'
+          }
+          if (-not (Test-Path $usabilityArchive -PathType Leaf)) {
+            throw 'The release usability screenshot archive is missing.'
+          }
+          $hashInputs = @($executables) + @(Get-Item $latestMetadata) + $blockmaps + @(Get-Item $usabilityEvidence) + @(Get-Item $usabilityArchive)
+          $checksumManifest = Join-Path (Resolve-Path dist) 'SHA256SUMS.txt'
+          $hashLines = $hashInputs | Sort-Object Name | ForEach-Object {
+            $hash = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($_.Name)"
+          }
+          $hashLines | Set-Content -Path $checksumManifest -Encoding ascii
+          $assets = $hashInputs + @(Get-Item $checksumManifest)
+          $assets.FullName | Sort-Object -Unique | Set-Content -Path release-assets.txt -Encoding utf8
 
           $changelog = Get-Content CHANGELOG.md -Raw
           $escapedVersion = [regex]::Escape($env:VERSION)

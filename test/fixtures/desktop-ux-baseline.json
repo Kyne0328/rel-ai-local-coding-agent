@@ -1,0 +1,262 @@
+{
+  "version": 20,
+  "capturedAt": "2026-07-25",
+  "mainNavigation": [
+    "Overview",
+    "Sessions",
+    "Workspaces",
+    "Activity",
+    "Settings",
+    "Tools"
+  ],
+  "settingsNavigation": [
+    "General",
+    "Connection",
+    "Tools & validation",
+    "Diagnostics",
+    "Advanced"
+  ],
+  "settingsOwnership": {
+    "general": [
+      "Appearance",
+      "Desktop notifications",
+      "Startup and recovery",
+      "Application updates"
+    ],
+    "connection": [
+      "Connection status",
+      "Local service",
+      "Public endpoint",
+      "Approval token"
+    ],
+    "toolsValidation": [
+      "Tool surface",
+      "Workspace validation"
+    ],
+    "diagnostics": [
+      "Findings",
+      "Service logs",
+      "Diagnostic export",
+      "History maintenance"
+    ],
+    "advanced": [
+      "Dashboard updates",
+      "Patch safeguards",
+      "Resource limits"
+    ]
+  },
+  "connectionLayers": [
+    "Local service",
+    "Public endpoint",
+    "ChatGPT readiness",
+    "Dashboard updates"
+  ],
+  "approvalTokenReplacement": {
+    "confirmation": "REPLACE",
+    "revokesOAuthGrants": true,
+    "preservesMcpEndpoint": true,
+    "preservesClientRegistration": true,
+    "rollbackOnRevokeFailure": true,
+    "restartFailureReturnsNewToken": true
+  },
+  "onboardingPolicy": {
+    "desktopWizardOwnsPrerequisites": true,
+    "desktopDashboardModalSuppressed": true,
+    "desktopHandoffRoute": "#settings/connection",
+    "desktopHandoffPersistentUntilDismissed": true,
+    "browserOnboardingPreserved": true,
+    "recoveryDoesNotResetFirstRun": true
+  },
+  "workspaceExperience": {
+    "visibleReadiness": [
+      "ChatGPT access",
+      "Repository",
+      "Validation"
+    ],
+    "commonActions": [
+      "Workspace settings",
+      "Run validation",
+      "Open folder"
+    ],
+    "advancedDetailsCollapsed": true,
+    "advancedFormCollapsed": true,
+    "suggestNameFromFolder": true,
+    "removalInAdvancedDetails": true,
+    "renameSupported": true,
+    "duplicateAliasBlocked": true,
+    "duplicatePathBlocked": true,
+    "atomicRenameAndRepair": true,
+    "recentWorkspaceLimit": 5,
+    "dedicatedPathRepair": true,
+    "manageFromSelectors": true
+  },
+  "diagnosticsPolicy": {
+    "singleEndpoint": "/api/diagnostics",
+    "structuredErrors": true,
+    "sanitizedReports": true,
+    "copyReport": true,
+    "exportState": true,
+    "filterBySearchSeveritySource": true,
+    "liveTailIntervalMs": 2000,
+    "runtimeLogs": true,
+    "persistentServiceLog": true,
+    "openDiagnosticsFolder": true,
+    "historyResetOwnedByDiagnostics": true,
+    "fullResetConfirmation": "RESET",
+    "fallbackReceivesServiceLogs": true
+  },
+  "navigationQol": {
+    "commandPaletteShortcut": "Ctrl/Cmd+K",
+    "searchableTargets": [
+      "Pages",
+      "Settings",
+      "Actions",
+      "Workspaces"
+    ],
+    "workspaceQuickNav": true,
+    "connectionStatusLinksToSettings": true,
+    "workspaceFocusRoute": true,
+    "activityFiltersInRoute": true,
+    "historyControlsRoute": "#settings/diagnostics",
+    "canonicalRoutePolicy": true,
+    "sensitiveRouteParamsStripped": true,
+    "unsavedNavigationGuard": true,
+    "dirtyModalDismissGuard": true,
+    "commandPaletteRespectsOverlays": true,
+    "staleDrawersCloseOnRouteChange": true,
+    "applicationConfirmations": true
+  },
+  "accessibilityResponsive": {
+    "skipLink": true,
+    "routeAnnouncements": true,
+    "overlayBackgroundInert": true,
+    "modalFocusTrap": true,
+    "drawerFocusTrap": true,
+    "singleActivityRowTarget": true,
+    "commandPaletteCombobox": true,
+    "mobileSafeArea": true,
+    "minimumTouchTargetPx": 44,
+    "settingsRailScrollable": true,
+    "reducedMotion": true,
+    "electronStepVisibility": true
+  },
+  "visualHierarchy": {
+    "elevatedSurfaces": [
+      "Sidebar",
+      "Topbar",
+      "Dialogs",
+      "Electron setup",
+      "Electron recovery hero"
+    ],
+    "summaryMetricsGrouped": true,
+    "workspaceReadinessGrouped": true,
+    "connectionSetupCollapsedWhenReady": true,
+    "connectionLayerSingleStateMarker": true,
+    "routineStatusGlowDisabled": true,
+    "unpublishedSessionLabelSuppressed": true,
+    "settingsPanelsQuiet": true,
+    "electronSecondaryCardsFlat": true
+  },
+  "updatePolicy": {
+    "installedWindowsAutoCheck": true,
+    "automaticCheckIntervalHours": 24,
+    "automaticDownload": false,
+    "automaticInstall": false,
+    "portableManualOnly": true,
+    "downloadProgressVisible": true,
+    "installBlockedDuringActiveCalls": true,
+    "downloadIntegrity": "sha512_release_metadata",
+    "downloadVersionMustMatch": true,
+    "downgradeRejected": true,
+    "checksumManifest": "SHA256SUMS.txt",
+    "windowsCodeSigning": "not_configured",
+    "releaseMetadata": [
+      "latest.yml",
+      "blockmap"
+    ],
+    "surface": "#settings",
+    "trayActions": true
+  },
+  "desktopSecurityPolicy": {
+    "securedIpcSenders": true,
+    "localRendererSandbox": true,
+    "permissionsDenied": true,
+    "downloadsDenied": true,
+    "navigationLockedToLocalFile": true,
+    "contentSecurityPolicy": true,
+    "ngrokAccountKeyWriteOnly": true,
+    "clipboardLimitKiB": 64
+  },
+  "releaseValidationPolicy": {
+    "exactInstallerSmoke": true,
+    "machineReadableEvidence": "release-readiness.json",
+    "screenshotArchive": "release-usability-evidence.zip",
+    "automatedScenarioCount": 11,
+    "manualScenarioCount": 4,
+    "manualStatus": "required"
+  },
+  "lifecyclePolicy": {
+    "launchAtLoginInstalledWindows": true,
+    "launchAtLoginPortable": false,
+    "startupArgument": "--background",
+    "backgroundStartupOpensDashboard": false,
+    "versionTransitionRecorded": true,
+    "uncleanShutdownDetected": true,
+    "cleanShutdownRecorded": true,
+    "surface": "#settings",
+    "stateFile": "desktop-lifecycle.json"
+  },
+  "windowPolicy": {
+    "routineSurface": "dashboard",
+    "fallbackSurface": "recovery",
+    "settingsRendererRemoved": true,
+    "fallbackExposedByTray": false,
+    "fallbackExposedByDashboard": false,
+    "fallbackConnectionEditor": "wizard",
+    "fallbackCredentialsViaIpc": true,
+    "fallbackTokenRotation": false
+  },
+  "canonicalRoutes": {
+    "tools": "#tools",
+    "general": "#settings",
+    "connection": "#settings/connection",
+    "toolsValidation": "#settings/tools-validation",
+    "diagnostics": "#settings/diagnostics",
+    "advanced": "#settings/advanced"
+  },
+  "legacyRoutes": [
+    "#reference",
+    "#settings/connector",
+    "#settings/desktop",
+    "#settings/dashboard"
+  ],
+  "electronSurfaces": [
+    {
+      "id": "setup",
+      "renderer": "electron/renderer/wizard.html",
+      "routine": true,
+      "firstRunOnly": true
+    },
+    {
+      "id": "recovery",
+      "renderer": "electron/renderer/status.html",
+      "routine": false,
+      "fallbackOnly": true
+    },
+    {
+      "id": "dashboard",
+      "renderer": "http://127.0.0.1/dashboard",
+      "routine": true,
+      "primary": true
+    }
+  ],
+  "screenshots": [
+    "docs/images/dashboard-home.png",
+    "docs/images/dashboard-workspaces.png",
+    "docs/images/dashboard-activity.png",
+    "docs/images/dashboard-tools.png",
+    "docs/images/dashboard-connector.png",
+    "docs/images/dashboard-diagnostics.png",
+    "docs/images/dashboard-settings-general.png"
+  ]
+}

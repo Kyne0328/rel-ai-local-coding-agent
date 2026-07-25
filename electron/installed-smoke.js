@@ -71,7 +71,18 @@ async function runInstalledSmoke(app) {
     const dashboardResponse = await fetch(`${baseUrl}/dashboard?token=${encodeURIComponent(token)}`);
     if (!dashboardResponse.ok) throw new Error(`Packaged dashboard returned HTTP ${dashboardResponse.status}.`);
     const dashboardHtml = await dashboardResponse.text();
-    if (!dashboardHtml.includes('Rel.AI MCP Dashboard')) throw new Error('Packaged dashboard HTML is incomplete.');
+    const dashboardMarkers = [
+      '<title>Overview · Rel.AI MCP</title>',
+      'id="refreshBtn"',
+      'id="workspaceScope"',
+      'id="routeRoot"',
+      'id="initialDashboardData"',
+      'type="module" src="/public/dashboard.js"'
+    ];
+    const missingDashboardMarkers = dashboardMarkers.filter(marker => !dashboardHtml.includes(marker));
+    if (missingDashboardMarkers.length) {
+      throw new Error(`Packaged dashboard HTML is incomplete: ${missingDashboardMarkers.join(', ')}`);
+    }
 
     const toolsResponse = await fetch(`${baseUrl}/api/tools?token=${encodeURIComponent(token)}`);
     if (!toolsResponse.ok) throw new Error(`Packaged tools endpoint returned HTTP ${toolsResponse.status}.`);

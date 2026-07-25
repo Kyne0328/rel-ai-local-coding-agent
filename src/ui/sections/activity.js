@@ -4,7 +4,7 @@ import { pillHtml } from '../components/pill.js';
 import { toast } from '../components/toast.js';
 import { virtualizeTable } from '../components/table.js';
 import { esc, timeAgo } from '../utils.js';
-import { getRouteParams, getWorkspaceFilter, setWorkspaceFilter } from '../router.js';
+import { getRouteParams, getWorkspaceFilter, replaceRouteParams, setWorkspaceFilter } from '../router.js';
 import { activityEventId } from '../activity-event.js';
 import { copyText } from '../clipboard.js';
 
@@ -23,6 +23,7 @@ export function mountActivity(container) {
   _filterState.workspace = getWorkspaceFilter();
   _filterState.task = params.get('task') || '';
   _filterState.tool = params.get('tool') || '';
+  _filterState.status = ['ok', 'error'].includes(params.get('status')) ? params.get('status') : '';
   _filterState.search = params.get('search') || '';
   _requestedEventId = params.get('event') || '';
   const requestedEventRoute = _requestedEventId ? `${_filterState.task}|${_requestedEventId}` : '';
@@ -31,7 +32,7 @@ export function mountActivity(container) {
     _openedRequestedEvent = false;
   }
   const requestedRange = String(params.get('time') || '').toLowerCase();
-  if (['15m', '1h', '24h', '7d', 'all'].includes(requestedRange)) _filterState.timeRange = requestedRange;
+  _filterState.timeRange = ['15m', '1h', '24h', '7d', 'all'].includes(requestedRange) ? requestedRange : '1h';
   _virtualizer?.destroy();
   _virtualizer = null;
   container.innerHTML = '';
@@ -59,7 +60,7 @@ export function prependEntry(entry) {
 function buildActivity() {
   const root = document.createElement('div');
   root.className = 'section';
-  root.innerHTML = '<div class="section-head"><div><h2>Activity log</h2><p>Inspect individual Rel.AI tool events. Use Tasks for grouped ChatGPT work.</p></div></div>';
+  root.innerHTML = '<div class="section-head"><div><h2>Activity</h2><p>Inspect individual Rel.AI tool events. Use Sessions for grouped ChatGPT work.</p></div></div>';
 
   const toolbar = document.createElement('div');
   toolbar.className = 'activity-toolbar';
@@ -75,6 +76,7 @@ function buildActivity() {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => {
       _filterState.search = searchInput.value;
+      syncFilterRoute();
       renderFilteredTable();
     }, 160);
   });
@@ -85,12 +87,19 @@ function buildActivity() {
   for (const range of ['15m', '1h', '24h', '7d', 'All']) {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = `secondary segment-button${range.toLowerCase() === _filterState.timeRange ? ' active' : ''}`;
+    const selected = range.toLowerCase() === _filterState.timeRange;
+    button.className = `secondary segment-button${selected ? ' active' : ''}`;
     button.textContent = range;
+    button.setAttribute('aria-pressed', String(selected));
     button.onclick = () => {
-      timeRange.querySelectorAll('button').forEach(item => item.classList.remove('active'));
+      timeRange.querySelectorAll('button').forEach(item => {
+        item.classList.remove('active');
+        item.setAttribute('aria-pressed', 'false');
+      });
       button.classList.add('active');
+      button.setAttribute('aria-pressed', 'true');
       _filterState.timeRange = range.toLowerCase();
+      syncFilterRoute();
       renderFilteredTable();
     };
     timeRange.appendChild(button);
@@ -99,14 +108,15 @@ function buildActivity() {
   const workspaceFilter = createFilterSelect('activityWorkspaceFilter', 'All workspaces', value => {
     _filterState.workspace = value;
     setWorkspaceFilter(value);
-    renderFilteredTable();
   });
   const toolFilter = createFilterSelect('activityToolFilter', 'All tools', value => {
     _filterState.tool = value;
+    syncFilterRoute();
     renderFilteredTable();
   });
   const statusFilter = createFilterSelect('activityStatusFilter', 'All statuses', value => {
     _filterState.status = value;
+    syncFilterRoute();
     renderFilteredTable();
   });
   statusFilter.append(new Option('Successful', 'ok'), new Option('Failed', 'error'));
@@ -119,13 +129,22 @@ function buildActivity() {
   clearButton.textContent = 'Clear filters';
   clearButton.hidden = !hasActiveFilters();
   clearButton.onclick = () => {
+    const hadWorkspace = Boolean(_filterState.workspace);
     _filterState = { search: '', timeRange: '1h', workspace: '', tool: '', status: '', task: '' };
-    setWorkspaceFilter('');
+    if (hadWorkspace) {
+      navigate('activity');
+      return;
+    }
     searchInput.value = '';
     workspaceFilter.value = '';
     toolFilter.value = '';
     statusFilter.value = '';
-    timeRange.querySelectorAll('button').forEach(button => button.classList.toggle('active', button.textContent === '1h'));
+    timeRange.querySelectorAll('button').forEach(button => {
+      const active = button.textContent === '1h';
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
+    syncFilterRoute();
     renderFilteredTable();
   };
 
@@ -133,23 +152,28 @@ function buildActivity() {
   pauseButton.type = 'button';
   pauseButton.className = `secondary activity-freeze${_paused ? ' active' : ''}`;
   pauseButton.textContent = _paused ? 'Resume live list' : 'Freeze live list';
+  pauseButton.setAttribute('aria-pressed', String(_paused));
   pauseButton.title = 'Freeze the table so new events do not shift rows while you read.';
   pauseButton.onclick = () => {
     _paused = !_paused;
     pauseButton.textContent = _paused ? 'Resume live list' : 'Freeze live list';
     pauseButton.classList.toggle('active', _paused);
+    pauseButton.setAttribute('aria-pressed', String(_paused));
     toast(_paused ? 'Live activity is frozen.' : 'Live activity resumed.', { variant: _paused ? 'warn' : 'success', duration: 1800 });
   };
 
   const summary = document.createElement('div');
   summary.id = '__activity-filter-summary';
   summary.className = 'activity-filter-summary';
+  summary.setAttribute('role', 'status');
+  summary.setAttribute('aria-live', 'polite');
+  summary.setAttribute('aria-atomic', 'true');
   toolbar.append(searchInput, timeRange, workspaceFilter, toolFilter, statusFilter, clearButton, pauseButton, summary);
 
   const tableCard = document.createElement('div');
   tableCard.id = '__activity-table-wrap';
   tableCard.className = 'card';
-  tableCard.innerHTML = '<div class="card-head"><h3>Event log</h3><span class="section-action" id="__activity-count">Loading…</span></div><div class="card-body"><div class="table-wrap"><table class="data-table"><caption class="sr-only">Audit activity log</caption><thead><tr><th scope="col">Time</th><th scope="col">Tool</th><th scope="col">Workspace</th><th scope="col">Status</th><th scope="col">Message</th><th scope="col"></th></tr></thead><tbody id="__activity-tbody"></tbody></table></div></div>';
+  tableCard.innerHTML = '<div class="card-head"><h3>Event log</h3><span class="section-action" id="__activity-count">Loading…</span></div><div class="card-body"><div class="table-wrap"><table class="data-table"><caption class="sr-only">Audit activity log</caption><thead><tr><th scope="col">Time</th><th scope="col">Tool</th><th scope="col">Workspace</th><th scope="col">Status</th><th scope="col">Message</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody id="__activity-tbody"></tbody></table></div></div>';
   root.append(toolbar, tableCard);
   return root;
 }
@@ -212,6 +236,17 @@ function renderFilteredTable() {
     : `Showing ${filtered.length} events from the selected time range.`;
 }
 
+function syncFilterRoute() {
+  replaceRouteParams({
+    search: _filterState.search || null,
+    time: _filterState.timeRange === '1h' ? null : _filterState.timeRange,
+    tool: _filterState.tool || null,
+    status: _filterState.status || null,
+    task: _filterState.task || null,
+    event: null
+  });
+}
+
 function hasActiveFilters() {
   return Boolean(
     _filterState.search ||
@@ -267,22 +302,18 @@ function renderTable(entries) {
     const row = document.createElement('tr');
     row.className = 'clickable-row';
     if (_requestedEventId && activityEventId(entry) === _requestedEventId) row.classList.add('activity-requested-row');
-    row.tabIndex = 0;
-    row.setAttribute('aria-label', `Open ${entry.tool || entry.type || 'activity'} event details`);
     row.innerHTML = `
       <td class="nowrap small">${esc(timeAgo(entry.ts || entry.at || entry.createdAt))}</td>
       <td class="truncate mono">${esc(entry.tool || entry.type || 'activity')}</td>
       <td class="truncate">${esc(entry.workspace || '—')}</td>
       <td>${pillHtml(status)}</td>
       <td class="truncate">${esc(message)}</td>
-      <td><button class="secondary activity-row-button" type="button" aria-label="Open activity detail">›</button></td>`;
+      <td><button class="secondary activity-row-button" type="button" aria-label="Open ${esc(entry.tool || entry.type || 'activity')} event details">›</button></td>`;
     row.onclick = () => openDetail(entry);
-    row.onkeydown = event => {
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        openDetail(entry);
-      }
-    };
+    row.querySelector('.activity-row-button')?.addEventListener('click', event => {
+      event.stopPropagation();
+      openDetail(entry);
+    });
     return row;
   });
 }

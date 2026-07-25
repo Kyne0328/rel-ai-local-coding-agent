@@ -1,5 +1,6 @@
 const crypto = require("node:crypto");
 const zlib = require("node:zlib");
+const { ERROR_CODES, errorPayload } = require("../desktopUxContracts");
 
 function sendSse(res, event, data) {
   res.write(`event: ${event}\n`);
@@ -24,23 +25,32 @@ function timingSafeEqual(a, b) {
   return crypto.timingSafeEqual(left, right);
 }
 
-function unauthorized(res) {
-  sendJson(res, 401, {
-    ok: false,
-    error: "Unauthorized. Send Authorization: Bearer <REL_AI_MCP_TOKEN>."
-  });
+function unauthorized(res, options = {}) {
+  const code = options.rejected === true
+    ? ERROR_CODES.APPROVAL_TOKEN_REJECTED
+    : ERROR_CODES.APPROVAL_TOKEN_REQUIRED;
+  sendJson(res, 401, errorPayload(
+    code,
+    "Unauthorized. Send Authorization: Bearer <REL_AI_MCP_TOKEN>."
+  ));
+}
+
+function requestError(message, status = 400) {
+  const error = new Error(message);
+  error.status = status;
+  error.errorCode = ERROR_CODES.REQUEST_INVALID;
+  return error;
 }
 
 function readRawBody(req, maxBytes) {
   return new Promise((resolve, reject) => {
-    // Collect raw buffers and decode once at the end: decoding per-chunk corrupts
-    // multi-byte UTF-8 sequences that straddle a chunk boundary.
+    // Decode once at the end so split UTF-8 sequences remain intact.
     const chunks = [];
     let bytes = 0;
     req.on("data", (chunk) => {
       bytes += chunk.length;
       if (bytes > maxBytes) {
-        reject(new Error(`Request body exceeds ${maxBytes} bytes.`));
+        reject(requestError(`Request body exceeds ${maxBytes} bytes.`, 413));
         req.destroy();
         return;
       }
@@ -56,7 +66,7 @@ function readJsonBody(req, maxBytes) {
     try {
       return body.trim() ? JSON.parse(body) : {};
     } catch (error) {
-      throw new Error(`Invalid JSON body: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+      throw requestError(`Invalid JSON body: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
 }
@@ -74,7 +84,7 @@ async function readFormOrJsonBody(req, maxBytes) {
   if (contentType.includes("application/json")) {
     const parsed = tryParseJsonOrNull(raw);
     if (parsed !== null) return parsed;
-    throw new Error(`Invalid JSON body`);
+    throw requestError('Invalid JSON body.');
   }
   if (contentType.includes("application/x-www-form-urlencoded")) {
     const obj = {};

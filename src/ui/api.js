@@ -66,20 +66,31 @@ async function parseJsonResponse(res) {
     return JSON.parse(text);
   } catch (error) {
     if (window.localStorage?.getItem('relai_debug') === '1') console.error(error);
-    return { ok: false, error: text, status: res.status };
+    return structuredRequestError(text || `Dashboard returned HTTP ${res.status}.`, res.status);
   }
 }
 
 function normalizeResponseData(res, data) {
   data.status = res.status;
   if (!res.ok && data.ok !== true) data.ok = false;
-  if (res.status === 401) data.error = data.error || 'Unauthorized — check dashboard token.';
+  if (res.status === 401) data.error = data.error || 'Unauthorized — check the current approval token.';
   return data;
+}
+
+function structuredRequestError(message, status = 0) {
+  return {
+    ok: false,
+    status,
+    errorCode: 'dashboard_unavailable',
+    title: 'Dashboard request failed',
+    error: String(message || 'The local dashboard did not respond.'),
+    recovery: { message: 'Refresh the dashboard. Restart the local service if the problem continues.', actionLabel: 'Open Connection', href: '#settings/connection', retryable: true }
+  };
 }
 
 function requestError(err, timeoutMs) {
   const isAbort = err?.name === 'AbortError';
-  return { ok: false, error: isAbort ? `Request timed out after ${Math.round(timeoutMs / 1000)} seconds.` : String(err) };
+  return structuredRequestError(isAbort ? `Request timed out after ${Math.round(timeoutMs / 1000)} seconds.` : String(err));
 }
 
 export async function fetchJson(url, opts = {}) {

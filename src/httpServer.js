@@ -2,6 +2,7 @@ const http = require("node:http");
 const { URL } = require("node:url");
 const connection = require("./connectionProfile");
 const { setBaseHeaders, sendJson, unauthorized } = require("./http/io");
+const { ERROR_CODES, errorPayload } = require("./desktopUxContracts");
 const { isDashboardAuthorized } = require("./http/auth");
 const {
   handleFavicon,
@@ -29,6 +30,7 @@ const {
   handleWorkspaceChecks
 } = require("./http/dashboard");
 const { handleApiHistoryReset } = require("./http/dashboardHistory");
+const { handleApiDiagnostics, handleApiDiagnosticsReset } = require("./http/dashboardDiagnostics");
 const {
   handleOauthProtectedResource,
   handleOauthMetadata,
@@ -63,6 +65,8 @@ function startHttpServer(options = {}) {
   const getTaskActivity = typeof options.getTaskActivity === "function" ? options.getTaskActivity : null;
   const getDesktopStatus = typeof options.getDesktopStatus === "function" ? options.getDesktopStatus : null;
   const resetTaskActivity = typeof options.resetTaskActivity === "function" ? options.resetTaskActivity : null;
+  const getRuntimeLogs = typeof options.getRuntimeLogs === "function" ? options.getRuntimeLogs : null;
+  const clearRuntimeLogs = typeof options.clearRuntimeLogs === "function" ? options.clearRuntimeLogs : null;
 
   if (!token && !allowNoAuth) {
     throw new Error("REL_AI_MCP_TOKEN is required for the HTTP/SSE server. Set a strong token, or set REL_AI_MCP_ALLOW_NO_AUTH=1 for local-only testing.");
@@ -70,12 +74,11 @@ function startHttpServer(options = {}) {
 
   const server = http.createServer(async (req, res) => {
     try {
-      await routeRequest(req, res, { token, allowNoAuth, maxBodyBytes, host, port, publicUrl, pickFolder, openFolder, getTaskActivity, getDesktopStatus, resetTaskActivity });
+      await routeRequest(req, res, { token, allowNoAuth, maxBodyBytes, host, port, publicUrl, pickFolder, openFolder, getTaskActivity, getDesktopStatus, resetTaskActivity, getRuntimeLogs, clearRuntimeLogs });
     } catch (error) {
-      sendJson(res, 500, {
-        ok: false,
-        error: error instanceof Error ? error.message : String(error)
-      });
+      const status = Number(error?.status || 500);
+      const code = error?.errorCode || errorCodeForRequest(req);
+      sendJson(res, status, errorPayload(code, error instanceof Error ? error.message : String(error)));
     }
   });
 
@@ -97,11 +100,11 @@ function startHttpServer(options = {}) {
     const actualPort = address && typeof address === "object" ? address.port : port;
     console.error(`[rel-ai-mcp] HTTP/SSE server listening on http://${host}:${actualPort}`);
     connection.writeConnectionProfile({ host, port: actualPort, publicUrl, configPath: require("./config").getConfigPath() });
-    const summary = connection.buildConnectionSummary({ host, port: actualPort, publicUrl, token });
+    const summary = connection.buildConnectionSummary({ host, port: actualPort, publicUrl, token, includeTokenInUrls: false });
     console.error(`[rel-ai-mcp] Dashboard: ${summary.dashboardUrl}`);
     if (publicUrl) {
       console.error(`[rel-ai-mcp] ChatGPT MCP URL: ${summary.chatgptMcpUrl}`);
-      console.error("[rel-ai-mcp] ChatGPT Auth: OAuth (sign in with your dashboard token)");
+      console.error("[rel-ai-mcp] ChatGPT Auth: OAuth (sign in with your approval token)");
     } else {
       console.error("[rel-ai-mcp] No public URL configured. Open the Rel.AI MCP desktop app to set your ngrok domain and start the tunnel.");
       console.error(`[rel-ai-mcp] Local ChatGPT-style URL for diagnostics only: ${summary.chatgptMcpUrl}`);
@@ -116,7 +119,12 @@ function startHttpServer(options = {}) {
 
 function authDashboard(ctx) {
   if (isDashboardAuthorized(ctx.req, ctx.parsed, ctx.options, ctx.res)) return true;
-  unauthorized(ctx.res);
+  const suppliedCredential = Boolean(
+    ctx.req.headers.authorization
+    || ctx.parsed.searchParams.get("token")
+    || ctx.parsed.searchParams.get("bootstrap")
+  );
+  unauthorized(ctx.res, { rejected: suppliedCredential });
   return false;
 }
 function authNone() { return true; }
@@ -125,8 +133,8 @@ const NOT_FOUND_PAYLOAD = {
   ok: false, error: "Not found.",
   endpoints: {
     health: "GET /health", dashboard: "GET /dashboard", dashboardV10Api: "GET /api/dashboard/v10",
-    logsApi: "GET /api/logs", settingsApi: "GET /api/settings",
-    updateSettingsApi: "POST /api/settings", updateWorkspacesApi: "POST /api/workspaces",
+    logsApi: "GET /api/logs", diagnosticsApi: "GET /api/diagnostics", settingsApi: "GET /api/settings",
+    updateSettingsApi: "POST /api/settings", diagnosticsResetApi: "POST /api/diagnostics/reset", updateWorkspacesApi: "POST /api/workspaces",
     healthMonitorApi: "GET /api/health-monitor", readinessApi: "GET /api/readiness",
     workspacePreflightApi: "GET /api/workspace/preflight?workspace=...", events: "GET /events",
     streamableHttp: "POST /mcp (Authentication: OAuth, or Bearer token)",
@@ -193,6 +201,7 @@ const GET_ROUTES = {
   "/api/connection": { auth: authDashboard, handler: handleConnection },
   "/api/dashboard/v10": { auth: authDashboard, handler: handleDashboardV10 },
   "/api/logs": { auth: authDashboard, handler: handleApiLogs },
+  "/api/diagnostics": { auth: authDashboard, handler: handleApiDiagnostics },
   "/api/health-monitor": { auth: authDashboard, handler: handleHealthMonitor },
   "/api/alias-diagnostics": { auth: authDashboard, handler: handleAliasDiagnostics },
   "/api/release-notes": { auth: authDashboard, handler: handleReleaseNotes },
@@ -229,10 +238,20 @@ const POST_ROUTES = {
   "/api/settings": { auth: authDashboard, handler: handleApiSettingsPost },
   "/api/workspaces": { auth: authDashboard, handler: handleApiWorkspaces },
   "/api/history/reset": { auth: authDashboard, handler: handleApiHistoryReset },
+  "/api/diagnostics/reset": { auth: authDashboard, handler: handleApiDiagnosticsReset },
   "/api/pick-folder": { auth: authDashboard, handler: handlePickFolder },
   "/api/open-folder": { auth: authDashboard, handler: handleOpenFolder },
   "/api/workspace/checks": { auth: authDashboard, handler: handleWorkspaceChecks }
 };
+
+function errorCodeForRequest(req) {
+  const path = String(req?.url || '').split('?')[0];
+  if (path === '/api/settings') return ERROR_CODES.SETTINGS_SAVE_FAILED;
+  if (path === '/api/workspaces' || path.startsWith('/api/workspace/')) return ERROR_CODES.WORKSPACE_UNAVAILABLE;
+  if (path === '/api/diagnostics/reset' || path === '/api/history/reset') return ERROR_CODES.STATE_RESET_FAILED;
+  if (path === '/api/diagnostics') return ERROR_CODES.DIAGNOSTICS_UNAVAILABLE;
+  return ERROR_CODES.UNKNOWN;
+}
 
 module.exports = {
   startHttpServer,

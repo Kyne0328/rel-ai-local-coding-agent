@@ -1,6 +1,8 @@
 import { pillHtml } from '../components/pill.js';
-import { esc, metricHtml, statusClass, timeAgo } from '../utils.js';
-import { getWorkspaceFilter, routeHref } from '../router.js';
+import { esc, metricHtml, statusClass } from '../utils.js';
+import { getWorkspaceFilter } from '../router.js';
+import { workspaceDetailsHtml, branchSummary } from './workspace-card-details.js';
+import { recentWorkspaceAliases } from '../workspace-recents.js';
 
 function buildWorkspaces(data) {
   const config = data.config || {};
@@ -12,7 +14,9 @@ function buildWorkspaces(data) {
     : allWorkspaces;
   const healthByAlias = new Map((Array.isArray(health.workspaces) ? health.workspaces : []).map(item => [item.alias, item]));
   const findings = actionableFindings(health, workspaceFilter);
-  const validationReady = workspaces.filter(workspace => validationCommands(workspace).length > 0).length;
+  const views = workspaces.map(workspace => workspaceCardView(workspace, healthByAlias.get(workspace.alias)));
+  const availableCount = views.filter(view => view.available).length;
+  const validationReady = views.filter(view => view.validationCommands.length > 0).length;
   const showAutomaticValidation = config.productUx?.showAutomaticValidation !== false;
 
   const root = document.createElement('div');
@@ -21,24 +25,33 @@ function buildWorkspaces(data) {
     <div class="section-head">
       <div>
         <h2>Workspaces</h2>
-        <p>Repositories available to ChatGPT, with their current Git state and automatic validation plan.</p>
+        <p>Choose the local repositories ChatGPT can use. Common status and actions stay visible; Git and safety settings remain under details.</p>
       </div>
       <div class="section-head-actions">
-        <button type="button" data-add-workspace>Add workspace</button>
+        <button class="primary" type="button" data-add-workspace>Add workspace</button>
         <span class="section-action">${workspaceCountLabel(workspaces.length, allWorkspaces.length, Boolean(workspaceFilter))}</span>
       </div>
-    </div>
-    <div class="overview-grid overview-grid-compact${showAutomaticValidation ? '' : ' overview-grid-two'}">
-      ${metricHtml('Workspaces', workspaces.length, workspaceFilter ? 'shown by the current filter' : 'configured repositories', 'blue')}
-      ${showAutomaticValidation ? metricHtml('Validation ready', `${validationReady}/${workspaces.length}`, 'automatic standard checks detected', validationReady === workspaces.length && workspaces.length ? 'good' : 'warn') : ''}
-      ${metricHtml('Needs attention', findings.length, findings.length ? 'workspace or configuration findings' : 'no blocking findings', findings.length ? 'bad' : 'good')}
     </div>`;
+
+  const recent = recentWorkspaceAliases(allWorkspaces);
+  if (!workspaceFilter && recent.length) root.appendChild(recentWorkspaces(recent));
+
+  if (!workspaces.length) {
+    root.appendChild(emptyWorkspaceState(workspaceFilter));
+    return root;
+  }
+
+  const metrics = document.createElement('div');
+  metrics.className = `overview-grid overview-grid-compact summary-metrics${showAutomaticValidation ? '' : ' overview-grid-two'}`;
+  metrics.innerHTML = `
+    ${metricHtml('Available to ChatGPT', `${availableCount}/${workspaces.length}`, availableCount === workspaces.length ? 'all selected folders are available' : 'one or more paths need attention', availableCount === workspaces.length ? 'good' : 'warn')}
+    ${showAutomaticValidation ? metricHtml('Validation ready', `${validationReady}/${workspaces.length}`, validationReady ? 'automatic checks detected' : 'no automatic checks detected', validationReady === workspaces.length ? 'good' : 'warn') : ''}
+    ${metricHtml('Needs attention', findings.length, findings.length ? 'workspace or configuration findings' : 'no blocking findings', findings.length ? 'bad' : 'good')}`;
+  root.appendChild(metrics);
 
   const grid = document.createElement('div');
   grid.className = 'workspace-grid workspace-grid-detailed';
-  grid.innerHTML = workspaces.length
-    ? workspaces.map(workspace => workspaceCard(workspace, healthByAlias.get(workspace.alias), showAutomaticValidation)).join('')
-    : emptyWorkspaceMessage(workspaceFilter);
+  grid.innerHTML = views.map(view => workspaceCard(view, showAutomaticValidation)).join('');
   root.appendChild(grid);
 
   if (findings.length) root.appendChild(healthFindingsCard(findings));
@@ -50,15 +63,30 @@ function workspaceCountLabel(shown, total, filtered) {
   return `${shown} shown · ${total} configured`;
 }
 
-function emptyWorkspaceMessage(workspaceFilter) {
-  if (workspaceFilter) {
-    return '<div class="empty">The selected workspace no longer exists or is hidden by the current filter.</div>';
-  }
-  return '<div class="empty">No workspaces configured. Add a repository to make it available to ChatGPT.</div>';
+function recentWorkspaces(aliases) {
+  const section = document.createElement('section');
+  section.className = 'workspace-recents';
+  section.setAttribute('aria-label', 'Recent workspaces');
+  section.innerHTML = `<span>Recent workspaces</span><div>${aliases.map(alias => `<button class="secondary workspace-recent-chip" type="button" data-open-recent-workspace="${esc(alias)}">${esc(alias)}</button>`).join('')}</div>`;
+  return section;
 }
 
-function workspaceCard(workspace, health, showAutomaticValidation) {
-  const view = workspaceCardView(workspace, health);
+function emptyWorkspaceState(workspaceFilter) {
+  const empty = document.createElement('section');
+  empty.className = 'workspace-empty-state';
+  if (workspaceFilter) {
+    empty.innerHTML = '<strong>Workspace not found</strong><p>The selected workspace no longer exists or is hidden by the current filter.</p><a class="buttonlike secondary" href="#workspaces">Show all workspaces</a>';
+    return empty;
+  }
+  empty.innerHTML = `
+    <div class="workspace-empty-mark" aria-hidden="true">+</div>
+    <strong>Add your first workspace</strong>
+    <p>Select a project folder and give it a short name. Rel.AI will detect its repository and validation setup automatically.</p>
+    <button class="primary" type="button" data-add-workspace>Add workspace</button>`;
+  return empty;
+}
+
+function workspaceCard(view, showAutomaticValidation) {
   return `
     <article class="workspace-card workspace-card-detailed" data-workspace-card="${view.aliasAttr}">
       <header class="workspace-card-head">
@@ -66,31 +94,36 @@ function workspaceCard(workspace, health, showAutomaticValidation) {
           <strong>${esc(view.alias)}</strong>
           <div class="workspace-path" title="${esc(view.path)}">${esc(view.path)}</div>
         </div>
-        ${pillHtml(view.status)}
+        ${workspaceStatusPill(view)}
       </header>
       ${workspaceHealthHtml(view)}
-      ${workspaceOperationalHtml(view)}
-      ${showAutomaticValidation ? workspaceValidationHtml(view) : ''}
-      ${workspacePolicyHtml(view)}
+      ${workspaceReadinessHtml(view)}
       ${workspaceActivityNotice(view)}
-      <footer class="workspace-actions">${workspaceActionButtons(view)}</footer>
+      <footer class="workspace-actions workspace-primary-actions">${workspacePrimaryActions(view)}</footer>
+      ${workspaceDetailsHtml(view, showAutomaticValidation)}
     </article>`;
 }
 
 function workspaceCardView(workspace, health) {
   const operational = workspace.operational || {};
   const commands = validationCommands(workspace);
+  const healthWarning = health?.ok === false ? health.error || 'Workspace unavailable' : '';
+  const available = !healthWarning && operational.exists !== false;
+  const active = Boolean(operational.currentActivity || workspace.sessionPolicy?.sessionActive);
   return {
     alias: workspace.alias || 'workspace',
     aliasAttr: esc(workspace.alias || ''),
     path: workspace.path || '',
-    status: health?.ok === false ? 'error' : 'ready',
-    healthWarning: health?.ok === false ? health.error || 'Workspace unavailable' : '',
+    statusLabel: healthWarning ? 'Needs attention' : active ? 'Active' : 'Ready',
+    statusTone: healthWarning ? 'bad' : active ? 'warn' : 'ok',
+    healthWarning,
+    available,
     operational,
     validationCommands: commands,
     projectInstructions: listValue(workspace.projectInstructions?.sources),
     protectedBranches: listValue(workspace.protectedBranches),
     allowedRemotes: listValue(workspace.allowedRemotes),
+    defaultBaseBranch: workspace.defaultBaseBranch || 'main',
     sessionActive: workspace.sessionPolicy?.sessionActive === true,
     taskHint: workspace.sessionPolicy?.taskHint || '',
     cautionCount: Number.isFinite(workspace.caution?.count) ? workspace.caution.count : 0
@@ -105,71 +138,37 @@ function listValue(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function workspaceStatusPill(view) {
+  return `<span class="status-pill ${view.statusTone}">${esc(view.statusLabel)}<span class="sr-only"> (${view.statusTone})</span></span>`;
+}
+
 function workspaceHealthHtml(view) {
   if (!view.healthWarning) return '';
-  return `<div class="workspace-warning"><span>${esc(view.healthWarning)}</span><button class="secondary" type="button" data-fix-path="${view.aliasAttr}">Fix path</button></div>`;
+  return `<div class="workspace-warning"><span>${esc(view.healthWarning)}</span><button class="secondary" type="button" data-repair-workspace="${view.aliasAttr}">Repair path</button></div>`;
 }
 
-function workspaceOperationalHtml(view) {
-  const state = view.operational;
-  const branch = branchSummary(state);
-  const worktree = state.dirty
-    ? `${Number(state.changedFileCount || 0)} changed · ${Number(state.sessionChangedFileCount || 0)} from current session`
-    : 'Clean';
-  const validation = state.lastValidation
-    ? `${state.lastValidation.status} · ${timeAgo(state.lastValidation.completedAt)}`
-    : 'Not run yet';
-  const activity = state.lastTask
-    ? `${state.lastTask.status} · ${timeAgo(state.lastTask.completedAt || state.lastTask.startedAt)}`
-    : 'No task history';
-  return `<div class="workspace-operational">
-    ${operationalItem('Branch', branch)}
-    ${operationalItem('Worktree', worktree)}
-    ${operationalItem('Last validation', validation)}
-    ${operationalItem('Last activity', activity)}
+function workspaceReadinessHtml(view) {
+  const repository = repositorySummary(view.operational);
+  const validation = view.validationCommands.length
+    ? `${view.validationCommands.length} automatic check${view.validationCommands.length === 1 ? '' : 's'}`
+    : 'Not configured';
+  return `<div class="workspace-readiness" aria-label="Workspace readiness">
+    ${readinessItem('ChatGPT access', view.available ? 'Available' : 'Unavailable', view.available ? 'This folder can be used by Rel.AI tools.' : 'Fix the workspace path before using it.', view.available ? 'good' : 'bad')}
+    ${readinessItem('Repository', repository.label, repository.description, repository.tone)}
+    ${readinessItem('Validation', validation, view.validationCommands.length ? 'Checks can be run before reviewing changes.' : 'Rel.AI can still work, but no automatic check was detected.', view.validationCommands.length ? 'good' : 'warn')}
   </div>`;
 }
 
-function operationalItem(label, value) {
-  return `<div><span>${esc(label)}</span><strong title="${esc(value)}">${esc(value)}</strong></div>`;
+function readinessItem(label, value, description, tone) {
+  return `<div class="workspace-readiness-item ${tone}"><span>${esc(label)}</span><strong>${esc(value)}</strong><small>${esc(description)}</small></div>`;
 }
 
-function branchSummary(operational) {
-  if (!operational.branch) return 'Git unavailable';
-  if (!operational.ahead && !operational.behind) return operational.branch;
-  return `${operational.branch} · ↑${Number(operational.ahead || 0)} ↓${Number(operational.behind || 0)}`;
-}
-
-function workspaceValidationHtml(view) {
-  const commands = view.validationCommands;
-  const ready = commands.length > 0;
-  const commandHtml = ready
-    ? `<div class="validation-command-list">${commands.map(command => `<code class="validation-command">${esc(command)}</code>`).join('')}</div>`
-    : '<p class="workspace-validation-empty">Automatic validation is not configured for this repository. Rel.AI will report validation as not run until a check, test, lint, or build script is available.</p>';
-  const statusPill = ready
-    ? pillHtml('ready')
-    : '<span class="status-pill">not configured<span class="sr-only"> (not configured)</span></span>';
-  return `<section class="workspace-validation ${ready ? 'ready' : 'missing'}">
-    <div class="workspace-validation-head">
-      <div>
-        <span class="workspace-section-label">Automatic validation</span>
-        <strong>${ready ? `${commands.length} command${commands.length === 1 ? '' : 's'} will run` : 'Not configured'}</strong>
-      </div>
-      ${statusPill}
-    </div>
-    ${commandHtml}
-  </section>`;
-}
-
-function workspacePolicyHtml(view) {
-  const branches = view.protectedBranches.length ? view.protectedBranches.join(', ') : 'none';
-  const remotes = view.allowedRemotes.length ? view.allowedRemotes.join(', ') : 'none';
-  const instructions = view.projectInstructions.length ? view.projectInstructions.join(', ') : 'not configured';
-  return `<div class="workspace-policy">
-    <span><strong>Protected branches:</strong> ${esc(branches)}</span>
-    <span><strong>Allowed remotes:</strong> ${esc(remotes)}</span>
-    <span><strong>Project instructions:</strong> ${esc(instructions)}</span>
-  </div>`;
+function repositorySummary(operational) {
+  if (operational.exists === false) return { label: 'Path unavailable', description: 'The configured folder cannot be found.', tone: 'bad' };
+  if (!operational.isGit) return { label: 'Folder only', description: 'No Git repository was detected at this path.', tone: 'warn' };
+  const branch = branchSummary(operational);
+  const changes = operational.dirty ? `${Number(operational.changedFileCount || 0)} changed file${Number(operational.changedFileCount || 0) === 1 ? '' : 's'}` : 'Clean worktree';
+  return { label: branch, description: changes, tone: operational.dirty ? 'warn' : 'good' };
 }
 
 function workspaceActivityNotice(view) {
@@ -180,17 +179,14 @@ function workspaceActivityNotice(view) {
   return `<div class="workspace-notice">${items.map(item => `<span>${esc(item)}</span>`).join('')}</div>`;
 }
 
-function workspaceActionButtons(view) {
+function workspacePrimaryActions(view) {
   const openFolder = document.documentElement.dataset.surface === 'desktop'
     ? `<button class="secondary" type="button" data-open-folder="${view.aliasAttr}">Open folder</button>`
     : '';
   return `
-    <button type="button" data-edit-workspace="${view.aliasAttr}">Edit workspace</button>
+    <button type="button" data-edit-workspace="${view.aliasAttr}">Workspace settings</button>
     <button class="secondary" type="button" data-run-validation="${view.aliasAttr}" ${view.validationCommands.length ? '' : 'disabled'}>Run validation</button>
-    <a class="buttonlike secondary" href="${routeHref('tasks', { workspace: view.alias })}">Tasks</a>
-    <a class="buttonlike secondary" href="${routeHref('activity', { workspace: view.alias })}">Activity</a>
-    ${openFolder}
-    <button class="secondary danger workspace-remove" type="button" data-clear-workspace="${view.aliasAttr}">Remove workspace</button>`;
+    ${openFolder}`;
 }
 
 function healthFindingsCard(findings) {
@@ -209,7 +205,7 @@ function findingRow(finding) {
   const actionable = finding.code === 'workspace_unavailable' && alias;
   const inner = `<span class="dot ${statusClass(finding.severity)}"></span><div class="finding-main"><div class="item-title">${esc(finding.code || finding.severity || 'finding')}</div><div class="item-sub">${esc(finding.message || '')}</div></div>`;
   if (actionable) {
-    return `<div class="list-item finding-row">${inner}<div class="finding-actions"><button class="secondary" type="button" data-finding-edit="${esc(alias)}">Edit path</button><button class="secondary danger" type="button" data-finding-remove="${esc(alias)}">Remove</button></div></div>`;
+    return `<div class="list-item finding-row">${inner}<div class="finding-actions"><button class="secondary" type="button" data-finding-repair="${esc(alias)}">Repair path</button><button class="secondary danger" type="button" data-finding-remove="${esc(alias)}">Remove</button></div></div>`;
   }
   return `<a class="list-item finding-link" href="#settings/diagnostics">${inner}<div class="item-time">${pillHtml(finding.severity || 'info')}</div></a>`;
 }

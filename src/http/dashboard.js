@@ -7,6 +7,7 @@ const release = require("../release");
 const configEditor = require("../configEditor");
 const pkg = require("../../package.json");
 const connection = require("../connectionProfile");
+const { ERROR_CODES, deriveConnectionState, errorPayload } = require("../desktopUxContracts");
 const { getOnboardingStatus, writeOnboardingState } = require("../onboardingState");
 const { getVersion } = require("../version");
 const { resolveRequireHttpToken } = require("./auth");
@@ -35,12 +36,13 @@ const PRIMARY_NAV_ITEMS = [
   { id: "home", label: "Overview", icon: '<path d="M3 3h8v8H3zM13 3h8v5h-8zM13 10h8v11h-8zM3 13h8v8H3z" />' },
   { id: "tasks", label: "Sessions", icon: '<path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5" />' },
   { id: "workspaces", label: "Workspaces", icon: '<path d="M3 7.5V19a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7l-2-3H5a2 2 0 0 0-2 2v2.5Z" />' },
-  { id: "activity", label: "Activity log", icon: '<path d="M3 12h4l2.3-6 4.2 12 2.3-6H21" />' },
+  { id: "activity", label: "Activity", icon: '<path d="M3 12h4l2.3-6 4.2 12 2.3-6H21" />' },
   { id: "settings", label: "Settings", icon: '<circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21h-4v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H3v-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6V3h4v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.1v4H21a1.7 1.7 0 0 0-1.6 1Z" />' }
 ];
 const SECONDARY_NAV_ITEMS = [
-  { id: "reference", label: "Reference", icon: '<path d="m14.7 6.3 3-3a5 5 0 0 1-6.4 6.4l-6.8 6.8a2.1 2.1 0 0 0 3 3l6.8-6.8a5 5 0 0 1 6.4-6.4l-3 3-3-3Z" />' }
+  { id: "tools", label: "Tools", icon: '<path d="m14.7 6.3 3-3a5 5 0 0 1-6.4 6.4l-6.8 6.8a2.1 2.1 0 0 0 3 3l6.8-6.8a5 5 0 0 1 6.4-6.4l-3 3-3-3Z" />' }
 ];
+const MOBILE_NAV_ITEMS = [...PRIMARY_NAV_ITEMS, ...SECONDARY_NAV_ITEMS];
 
 function renderDashboardNav(items) {
   return items.map((item) => `<a href="#${item.id}" aria-label="${item.label}"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">${item.icon}</svg><span class="nav-label">${item.label}</span></a>`).join("");
@@ -52,6 +54,18 @@ function buildDashboardPayload(config, options = {}, requireHttpToken = false) {
     ? options.getTaskActivity()
     : { state: "idle", activeCalls: 0, activeTaskCount: 0, tasks: [], taskId: "", workspace: "", tool: "", startedAt: null, lastTask: null };
   const desktopStatus = typeof options.getDesktopStatus === "function" ? options.getDesktopStatus() : null;
+  const connectionSummary = connection.buildConnectionSummary({
+    host: profile.host || options.host || "127.0.0.1",
+    port: profile.port || options.port || 3333,
+    publicUrl: profile.publicUrl || options.publicUrl || "",
+    token: "",
+    tunnelProvider: profile.tunnelProvider || "none"
+  });
+  const connectionStateInput = desktopStatus || {
+    serverRunning: true,
+    tunnelStatus: connectionSummary.chatgptMcpUrl ? "running" : "stopped",
+    mcpUrl: connectionSummary.chatgptMcpUrl || ""
+  };
   const base = productUx.dashboardData(config, { limit: Math.max(Number(options.limit || 100), 200) });
   const tasks = buildTaskHistory(base.auditTail?.entries || [], taskActivity, { limit: 100 });
   const workspaceStates = buildWorkspaceStates(config, tasks, taskActivity);
@@ -61,13 +75,8 @@ function buildDashboardPayload(config, options = {}, requireHttpToken = false) {
   return {
     ...base,
     readiness: release.releaseReadiness(config, { requireHttpToken }),
-    connection: connection.buildConnectionSummary({
-      host: profile.host || options.host || "127.0.0.1",
-      port: profile.port || options.port || 3333,
-      publicUrl: profile.publicUrl || options.publicUrl || "",
-      token: "",
-      tunnelProvider: profile.tunnelProvider || "none"
-    }),
+    connection: connectionSummary,
+    connectionState: desktopStatus?.connectionState || deriveConnectionState(connectionStateInput),
     taskActivity,
     desktopStatus,
     tasks,
@@ -131,7 +140,7 @@ function handleApiSettingsGet(ctx) {
 
 function handleApiTools(ctx) {
   try { sendJson(ctx.res, 200, buildToolMetadata(), ctx.ae); }
-  catch (err) { sendJson(ctx.res, 500, { ok: false, error: err.message }, ctx.ae); }
+  catch (err) { sendJson(ctx.res, 500, errorPayload(ERROR_CODES.UNKNOWN, err.message), ctx.ae); }
 }
 
 function handleOnboardingStatus(ctx) {
@@ -146,7 +155,8 @@ function handleConnection(ctx) {
     publicUrl: latestProfile.publicUrl || ctx.options.publicUrl,
     token: ctx.options.token,
     tunnelProvider: latestProfile.tunnelProvider || "none",
-    showToken: ctx.parsed.searchParams.get("showToken") === "1"
+    showToken: false,
+    includeTokenInUrls: false
   }), ctx.ae);
 }
 
@@ -174,7 +184,11 @@ async function handleOnboardingComplete(ctx) {
   const payload = await readJsonBody(ctx.req, ctx.options.maxBodyBytes);
   ensureConfig();
   writeOnboardingState({
-    completed: Boolean(payload.completed), skipped: Boolean(payload.skipped), updatedAt: new Date().toISOString()
+    completed: Boolean(payload.completed),
+    skipped: Boolean(payload.skipped),
+    source: String(payload.source || ''),
+    handoffPending: payload.handoffPending === true,
+    updatedAt: new Date().toISOString()
   });
   sendJson(ctx.res, 200, { ok: true }, ctx.ae);
 }
@@ -244,7 +258,10 @@ function openDashboardEvents(res, req, options) {
       const config = readConfigCached();
       sendSse(res, "dashboard", buildDashboardPayload(config, { ...options, limit: 100 }, false));
     } catch (error) {
-      sendSse(res, "error", { ok: false, error: error instanceof Error ? error.message : String(error) });
+      sendSse(res, "error", errorPayload(
+        ERROR_CODES.UNKNOWN,
+        error instanceof Error ? error.message : String(error)
+      ));
     }
   };
   sendSse(res, "ready", { ok: true, generatedAt: new Date().toISOString() });
@@ -266,10 +283,10 @@ function safeInitialDashboardData(options = {}) {
     const config = readConfig();
     return buildDashboardPayload(config, { ...options, limit: 100 }, false);
   } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : String(error)
-    };
+    return errorPayload(
+      ERROR_CODES.CONFIGURATION_INVALID,
+      error instanceof Error ? error.message : String(error)
+    );
   }
 }
 
@@ -280,7 +297,7 @@ function renderDashboardHtml(options, nonce) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Rel.AI MCP Dashboard</title>
+<title>Overview · Rel.AI MCP</title>
 <link rel="icon" href="/public/assets/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" href="/public/assets/favicon.png">
 <link rel="apple-touch-icon" href="/public/assets/relai-logo-192.png">
@@ -298,28 +315,32 @@ try {
 <link rel="stylesheet" href="/public/dashboard.css">
 </head>
 <body>
-<a href="#main" class="skip-link">Skip to content</a>
+<a href="#main" class="skip-link">Skip to content</a><div class="sr-only" id="routeAnnouncer" role="status" aria-live="polite" aria-atomic="true"></div>
 <div class="app-shell">
   <aside class="sidebar">
     <div class="brand"><div class="logo"><img src="/public/assets/relai-logo.png" alt="Rel.AI logo"></div><div><strong>Rel.AI MCP</strong><span>workspace control</span></div></div>
     <nav class="nav" aria-label="Primary navigation">${renderDashboardNav(PRIMARY_NAV_ITEMS)}</nav>
-    <nav class="secondary-nav" aria-label="Reference navigation">${renderDashboardNav(SECONDARY_NAV_ITEMS)}</nav>
+    <nav class="secondary-nav" aria-label="Secondary navigation">${renderDashboardNav(SECONDARY_NAV_ITEMS)}</nav>
     <div class="sidebar-note">This dashboard mirrors live MCP state.</div>
   </aside>
-  <main id="main" class="main">
-    <nav class="mobile-nav" aria-label="Mobile navigation">${renderDashboardNav(PRIMARY_NAV_ITEMS)}</nav>
+  <main id="main" class="main" tabindex="-1" aria-labelledby="pageTitle">
+    <nav class="mobile-nav" aria-label="Mobile navigation">${renderDashboardNav(MOBILE_NAV_ITEMS)}</nav>
     <header class="topbar">
       <div class="title-wrap">
-        <h1 class="page-title" id="pageTitle">Rel.AI MCP</h1>
+        <h1 class="page-title" id="pageTitle">Overview</h1>
         <div class="page-subtitle" id="subtitle">Checking local workspace state…</div>
       </div>
       <div class="top-controls">
-        <label id="workspaceScopeControl" class="workspace-scope-control" aria-label="Workspace filter">
-          <svg class="workspace-scope-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5V19a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7l-2-3H5a2 2 0 0 0-2 2v2.5Z" /></svg>
+        <label id="workspaceScopeControl" class="workspace-scope-control" aria-label="Workspace filter"><svg class="workspace-scope-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5V19a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7l-2-3H5a2 2 0 0 0-2 2v2.5Z" /></svg>
           <select id="workspaceScope" class="workspace-scope" aria-label="Filter dashboard by workspace"><option value="">All workspaces</option></select>
           <svg class="workspace-scope-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
         </label>
-        <span class="status-pill warn" id="connectionStatus">Connecting…</span>
+        <label id="workspaceQuickNavControl" class="workspace-quick-control" aria-label="Jump to a workspace"><svg class="workspace-quick-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M14 7l5 5-5 5" /></svg>
+          <select id="workspaceQuickNav" class="workspace-quick-nav" aria-label="Jump to a workspace"><option value="">Jump to workspace…</option></select>
+          <svg class="workspace-quick-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
+        </label>
+        <button class="secondary command-trigger" id="commandPaletteBtn" type="button" aria-haspopup="dialog" aria-expanded="false" title="Open quick navigation"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg><span class="command-trigger-label">Quick navigation</span><kbd>Ctrl K</kbd></button>
+        <a class="status-pill warn connection-status-link" id="connectionStatus" href="#settings/connection" aria-label="Open Connection settings; current status Connecting">Connecting…</a>
         <button class="secondary topbar-refresh" id="refreshBtn" type="button" aria-busy="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" /></svg><span>Refresh now</span></button>
         <span class="section-action" id="lastUpdated"></span>
       </div>

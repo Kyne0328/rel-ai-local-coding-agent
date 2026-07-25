@@ -1,6 +1,6 @@
 {
   "name": "rel-ai-mcp-launcher",
-  "version": "0.20.7",
+  "version": "0.21.0",
   "private": true,
   "description": "Desktop launcher and dashboard host for Rel.AI MCP.",
   "author": "Kyne Anthony",
@@ -12,6 +12,15 @@
   "build": {
     "appId": "com.relai.mcp",
     "productName": "Rel.AI MCP",
+    "electronUpdaterCompatibility": ">=2.16",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Kyne0328",
+        "repo": "rel-ai-mcp",
+        "releaseType": "release"
+      }
+    ],
     "directories": {
       "output": "../dist"
     },
@@ -25,10 +34,24 @@
       "resource-path.js",
       "window-size.js",
       "window-smoke.js",
+      "smoke-evidence.js",
       "tool-sleep-blocker.js",
       "dashboard-window.js",
       "dashboard-preload.js",
       "desktop-tray.js",
+      "desktop-status.js",
+      "approval-token.js",
+      "recovery-window.js",
+      "window-security.js",
+      "runtime-log-buffer.js",
+      "diagnostic-files.js",
+      "app-updater.js",
+      "app-updater-events.js",
+      "app-updater-state.js",
+      "update-version.js",
+      "ipc-security.js",
+      "desktop-settings.js",
+      "desktop-lifecycle.js",
       "installed-smoke.js",
       "renderer/**",
       "build/**"
@@ -83,5 +106,8 @@
       "oneClick": true,
       "perMachine": false
     }
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   }
 }

@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "automated": [
+    {
+      "id": "packaged-resources",
+      "title": "Packaged resources are complete"
+    },
+    {
+      "id": "local-health",
+      "title": "Installed local service reaches health"
+    },
+    {
+      "id": "dashboard-http",
+      "title": "Installed dashboard loads"
+    },
+    {
+      "id": "public-tool-surface",
+      "title": "Installed public tool surface matches the registry"
+    },
+    {
+      "id": "setup-renderer",
+      "title": "First-run setup renderer loads",
+      "screenshot": true
+    },
+    {
+      "id": "recovery-renderer",
+      "title": "Failure-recovery renderer loads",
+      "screenshot": true
+    },
+    {
+      "id": "dashboard-overview",
+      "title": "Desktop dashboard overview becomes interactive",
+      "screenshot": true
+    },
+    {
+      "id": "dashboard-refresh-preserves-context",
+      "title": "Dashboard refresh preserves scroll and controls"
+    },
+    {
+      "id": "workspace-scope",
+      "title": "Workspace scope persists in the route"
+    },
+    {
+      "id": "legacy-route-normalization",
+      "title": "Legacy settings routes normalize"
+    },
+    {
+      "id": "session-to-activity-detail",
+      "title": "Session events open the exact Activity detail",
+      "screenshot": true
+    }
+  ],
+  "manual": [
+    {
+      "id": "clean-first-run-tunnel",
+      "title": "Clean first run publishes the permanent ngrok endpoint",
+      "reason": "Requires a real ngrok account, permanent domain, and external network reachability."
+    },
+    {
+      "id": "chatgpt-oauth-connection",
+      "title": "A real ChatGPT app completes OAuth and calls relai_status",
+      "reason": "Requires an authenticated ChatGPT account and live external callback flow."
+    },
+    {
+      "id": "approval-token-rotation-live",
+      "title": "Approval-token replacement revokes and reapproves the existing ChatGPT app",
+      "reason": "Requires live OAuth grants and a real ChatGPT application registration."
+    },
+    {
+      "id": "update-from-previous-release",
+      "title": "The previous installed release downloads and installs the candidate update",
+      "reason": "Requires two published versions and the production GitHub update feed."
+    }
+  ]
+}

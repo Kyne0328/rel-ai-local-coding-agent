@@ -1,9 +1,12 @@
 import { fetchJson } from '../../api.js';
 import { toast } from '../../components/toast.js';
 import { copyText } from '../../clipboard.js';
+import { get as getStore } from '../../store.js';
+import { connectionLayerViews, connectionStateFor, connectionSummary } from '../../connection-state.js';
+import { mountDesktopConnection } from './desktop-connection.js';
 
 export function mountConnector(container) {
-  container.innerHTML = '<div class="connection-loading">Loading connector details…</div>';
+  container.innerHTML = '<div class="connection-loading">Loading connection details…</div>';
   return loadConnector(container).catch(error => {
     container.innerHTML = `<div class="empty">${escapeHtml(error instanceof Error ? error.message : String(error))}</div>`;
   });
@@ -15,48 +18,46 @@ async function loadConnector(container) {
     <div class="section">
       <div class="section-head">
         <div>
-          <h2>Connector</h2>
-          <p>Manage the single MCP endpoint ChatGPT uses to reach this machine.</p>
+          <h2>Connection</h2>
+          <p>See each part of the path between this computer, the public endpoint, ChatGPT, and this dashboard.</p>
         </div>
       </div>
     </div>`;
   if (!payload || payload.ok === false) {
-    container.querySelector('.section').insertAdjacentHTML('beforeend', '<div class="empty">Failed to load connector details.</div>');
+    container.querySelector('.section').insertAdjacentHTML('beforeend', '<div class="empty">Failed to load connection details.</div>');
     return;
   }
 
+  const state = connectionStateFor(getStore());
   const section = container.querySelector('.section');
-  section.appendChild(summaryCard(payload));
-
-  if (window.relaiDesktop) {
-    const runtimeHost = document.createElement('div');
-    runtimeHost.className = 'connector-runtime-host';
-    section.appendChild(runtimeHost);
-    loadDesktopRuntime(runtimeHost);
-  }
-
-  section.append(setupCard(payload), technicalDetailsCard(payload));
+  section.append(
+    summaryCard(payload, state),
+    layerGrid(state),
+    actionCard(state),
+    setupCard(payload, state),
+    technicalDetailsCard(payload)
+  );
+  const controls = document.createElement('section');
+  controls.className = 'connection-controls-section';
+  container.appendChild(controls);
+  await mountDesktopConnection(controls);
 }
 
-function connectionStatus(payload) {
-  return payload.permanentUrlConfigured
-    ? { text: 'Ready', tone: 'ok', message: 'This is the endpoint to use when creating or updating the ChatGPT app.' }
-    : { text: 'Setup required', tone: 'warn', message: 'A stable public HTTPS endpoint is required before ChatGPT can connect.' };
-}
-
-function dashboardUrl(payload) {
-  return stripToken(payload.dashboardUrl || (payload.localBaseUrl ? payload.localBaseUrl + '/dashboard' : ''));
-}
-
-function summaryCard(payload) {
+function summaryCard(payload, state) {
   const card = document.createElement('section');
-  card.className = 'card connector-primary-card';
-  const status = connectionStatus(payload);
+  const summary = connectionSummary(state);
+  card.className = `card connection-summary-card ${summary.tone}`;
   card.innerHTML = `
-    <div class="card-head"><h3>ChatGPT MCP endpoint</h3><span class="status-pill ${status.tone}">${status.text}</span></div>
+    <div class="card-head"><h3>ChatGPT connection</h3><span class="status-pill ${summary.tone}">${escapeHtml(summary.label)}</span></div>
     <div class="card-body connection-stack">
-      <p class="connector-summary">${escapeHtml(status.message)}</p>
-      <code class="copy-box connector-endpoint">${escapeHtml(payload.chatgptMcpUrl || 'Waiting for HTTPS tunnel')}</code>
+      <div>
+        <h3 class="connection-summary-title">${escapeHtml(summary.title)}</h3>
+        <p class="connector-summary">${escapeHtml(summary.message)}</p>
+      </div>
+      <div class="connection-field">
+        <span class="field-caption">ChatGPT MCP endpoint</span>
+        <code class="copy-box connector-endpoint">${escapeHtml(payload.chatgptMcpUrl || 'Waiting for a permanent HTTPS endpoint')}</code>
+      </div>
       <div class="connection-actions">
         <button type="button" data-copy="mcp" ${payload.chatgptMcpUrl ? '' : 'disabled'}>Copy endpoint</button>
       </div>
@@ -65,62 +66,96 @@ function summaryCard(payload) {
   return card;
 }
 
-async function loadDesktopRuntime(host) {
-  try {
-    const status = await window.relaiDesktop.getStatus();
-    host.replaceChildren(desktopRuntimeCard(status));
-  } catch (error) {
-    host.innerHTML = `<div class="connection-notice bad">Desktop service status is unavailable: ${escapeHtml(error instanceof Error ? error.message : String(error))}</div>`;
-  }
+function layerGrid(state) {
+  const wrapper = document.createElement('section');
+  wrapper.className = 'connection-layer-section';
+  wrapper.innerHTML = '<div class="connection-layer-heading"><h3>Connection path</h3><p>These states are related, but they do not mean the same thing.</p></div>';
+  const grid = document.createElement('div');
+  grid.className = 'connection-layer-grid';
+  for (const layer of connectionLayerViews(state)) grid.appendChild(layerCard(layer));
+  wrapper.appendChild(grid);
+  return wrapper;
 }
 
-function desktopRuntimeCard(status = {}) {
-  const card = document.createElement('section');
-  const tunnel = status.tunnelStatus || 'stopped';
-  let tone = 'warn';
-  let tunnelLabel = 'Stopped';
-  if (tunnel === 'running') {
-    tone = 'ok';
-    tunnelLabel = 'Connected';
-  } else if (tunnel === 'connecting') {
-    tunnelLabel = 'Connecting';
-  } else if (tunnel === 'failed') {
-    tone = 'bad';
-    tunnelLabel = 'Failed';
-  }
-  card.className = 'card desktop-runtime-card';
+function layerCard(layer) {
+  const card = document.createElement('article');
+  card.className = `card connection-layer-card ${layer.tone}`;
+  card.dataset.connectionLayer = layer.key;
   card.innerHTML = `
-    <div class="card-head"><h3>Desktop connection</h3><span class="status-pill ${tone}">${escapeHtml(tunnelLabel)}</span></div>
-    <div class="card-body connection-stack">
-      <div class="connection-facts">
-        <div class="connection-fact"><span class="connection-fact-label">Local service</span><span>${status.serverRunning ? 'Running' : 'Stopped'}</span></div>
-        <div class="connection-fact"><span class="connection-fact-label">Public tunnel</span><span>${escapeHtml(tunnelLabel)}</span></div>
-      </div>
-      ${status.error ? `<div class="connection-notice bad">${escapeHtml(status.error)}</div>` : ''}
-      <div class="connection-actions">
-        <button type="button" data-desktop-settings>Desktop settings</button>
-        <button class="secondary" type="button" data-desktop-restart>Restart connection</button>
-        <button class="secondary" type="button" data-desktop-recovery>Recovery details</button>
-      </div>
-    </div>`;
-  card.querySelector('[data-desktop-settings]').onclick = () => window.relaiDesktop.openSettings();
-  card.querySelector('[data-desktop-restart]').onclick = () => window.relaiDesktop.restartService();
-  card.querySelector('[data-desktop-recovery]').onclick = () => window.relaiDesktop.openRecovery();
+    <div class="connection-layer-card-head">
+      <span class="connection-layer-dot" aria-hidden="true"></span>
+      <div><h4>${escapeHtml(layer.title)}</h4><span class="connection-layer-state ${layer.tone}">${escapeHtml(layer.label)}</span></div>
+    </div>
+    <p>${escapeHtml(layer.description)}</p>`;
   return card;
 }
 
-function setupCard(payload) {
+function actionCard(state) {
   const card = document.createElement('section');
-  card.className = 'card';
-  const extraSteps = Array.isArray(payload.nextSteps) ? payload.nextSteps : [];
+  card.className = 'card connection-actions-card';
+  const summary = connectionSummary(state);
   card.innerHTML = `
-    <div class="card-head"><h3>Connect ChatGPT</h3><span class="section-action">three steps</span></div>
-    <div class="card-body setup-steps">
+    <div class="card-head"><h3>Connection actions</h3><span class="section-action">${escapeHtml(summary.label)}</span></div>
+    <div class="card-body connection-stack">
+      ${authenticationRecoveryHtml(state)}
+      ${state.error ? `<div class="connection-notice bad"><strong>${escapeHtml(state.error.code)}</strong><br>${escapeHtml(state.error.message)}</div>` : ''}
+      <div class="connection-actions">
+        ${window.relaiDesktop ? '<button type="button" data-desktop-restart>Restart connection</button>' : ''}
+        <button class="secondary" type="button" data-refresh-connection>Refresh status</button>
+        <a class="buttonlike secondary" href="#settings/diagnostics">Open diagnostics</a>
+      </div>
+    </div>`;
+  card.querySelector('[data-desktop-restart]')?.addEventListener('click', () => {
+    window.relaiDesktop.restartService();
+    toast('Connection restart requested.', { variant: 'info' });
+  });
+  card.querySelector('[data-refresh-connection]')?.addEventListener('click', () => {
+    window.dispatchEvent(new CustomEvent('relai:dashboard-refresh'));
+    toast('Refreshing connection status…', { variant: 'info' });
+  });
+  return card;
+}
+
+function authenticationRecoveryHtml(state) {
+  if (state.chatgptReadiness?.status !== 'authentication_required') return '';
+  return `
+    <div class="connection-notice warn connection-auth-recovery">
+      <strong>Approve the existing ChatGPT app again.</strong>
+      <ol>
+        <li>Use the Approval token controls below and copy the current token.</li>
+        <li>Retry the existing Rel.AI app in ChatGPT.</li>
+        <li>Enter the token when the Rel.AI authorization page opens.</li>
+      </ol>
+      <p>The MCP endpoint is unchanged. Do not delete or recreate the ChatGPT app.</p>
+    </div>`;
+}
+
+function setupCard(payload, state) {
+  const ready = state.chatgptReadiness?.status === 'ready';
+  const extraSteps = Array.isArray(payload.nextSteps) ? payload.nextSteps : [];
+  const steps = `
+    <div class="setup-steps">
       <div class="step"><span class="step-num">1</span><div>Open <strong>Settings &gt; Apps &gt; Create</strong> in ChatGPT. Enable Developer Mode if custom app creation is hidden.</div></div>
-      <div class="step"><span class="step-num">2</span><div>Name the app <strong>Rel.AI MCP</strong>, paste the endpoint above, choose <strong>OAuth</strong>, then approve with the dashboard token.</div></div>
+      <div class="step"><span class="step-num">2</span><div>Name the app <strong>Rel.AI MCP</strong>, paste the endpoint above, choose <strong>OAuth</strong>, then approve with the Rel.AI approval token.</div></div>
       <div class="step"><span class="step-num">3</span><div>Select the app in chat and begin by asking it to inspect a workspace before making changes.</div></div>
       ${notesHtml(extraSteps)}
     </div>`;
+  if (ready) {
+    const details = document.createElement('details');
+    details.className = 'card connector-details connection-setup-details';
+    details.innerHTML = `
+      <summary class="connector-details-summary">
+        <span><strong>ChatGPT setup guide</strong><small>The app is ready; reopen these steps only when reconnecting or configuring another app.</small></span>
+        <span aria-hidden="true">›</span>
+      </summary>
+      <div class="card-body">${steps}</div>`;
+    return details;
+  }
+  const card = document.createElement('section');
+  card.className = 'card connection-setup-card';
+  card.innerHTML = `
+    <div class="card-head"><h3>Connect ChatGPT</h3><span class="section-action">three steps</span></div>
+    <div class="card-body">${steps}</div>`;
   return card;
 }
 
@@ -130,24 +165,26 @@ function technicalDetailsCard(payload) {
   const dashboardNoToken = dashboardUrl(payload);
   details.innerHTML = `
     <summary class="connector-details-summary">
-      <span><strong>Local and diagnostic URLs</strong><small>Health checks, dashboard access, and token URL</small></span>
+      <span><strong>Local and diagnostic URLs</strong><small>Health checks and local dashboard access</small></span>
       <span aria-hidden="true">›</span>
     </summary>
     <div class="card-body connection-stack">
       <div class="connection-facts">
         <div class="connection-fact"><span class="connection-fact-label">Authentication</span><span>${escapeHtml(payload.chatgptAuthMode || 'OAuth')}</span></div>
-        <div class="connection-fact"><span class="connection-fact-label">Health URL</span><code>${escapeHtml(payload.chatgptHealthUrl || 'Waiting for HTTPS tunnel')}</code></div>
+        <div class="connection-fact"><span class="connection-fact-label">Health URL</span><code>${escapeHtml(payload.chatgptHealthUrl || 'Waiting for a permanent HTTPS endpoint')}</code></div>
         <div class="connection-fact"><span class="connection-fact-label">Dashboard URL</span><code>${escapeHtml(dashboardNoToken || '—')}</code></div>
       </div>
       <div class="connection-actions">
-        <button class="secondary" type="button" data-copy="dashboard">Copy dashboard URL</button>
-        <button class="secondary" type="button" data-copy="dashboardToken">Copy URL with token</button>
+        <button class="secondary" type="button" data-copy="dashboard" ${dashboardNoToken ? '' : 'disabled'}>Copy dashboard URL</button>
       </div>
-      <div class="connection-notice warn">A dashboard URL containing the token grants access. Treat it like a password.</div>
+      <div class="connection-notice">Approval tokens are managed by the installed app through the secure controls below and are never included in these URLs.</div>
     </div>`;
   details.querySelector('[data-copy="dashboard"]').onclick = () => copyValue(dashboardNoToken, 'Dashboard URL copied.');
-  details.querySelector('[data-copy="dashboardToken"]').onclick = () => copyValue(payload.dashboardUrl, 'Dashboard URL with token copied. Treat it like a password.');
   return details;
+}
+
+function dashboardUrl(payload) {
+  return stripToken(payload.dashboardUrl || (payload.localBaseUrl ? payload.localBaseUrl + '/dashboard' : ''));
 }
 
 function notesHtml(extraSteps) {
@@ -187,6 +224,7 @@ function stripToken(url) {
   try {
     const parsed = new URL(url, location.origin);
     parsed.searchParams.delete('token');
+    parsed.searchParams.delete('bootstrap');
     return parsed.href;
   } catch (error) {
     debugError(error);

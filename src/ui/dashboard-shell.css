@@ -92,12 +92,30 @@
   }
   .compact-workspace-path { margin-top: 3px; color: var(--text-muted); font-size: var(--font-12); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  .overlay-backdrop { position: fixed; inset: 0; z-index: var(--z-modal); background: rgba(0,0,0,.65); }
+  .overlay-backdrop { position: fixed; inset: 0; z-index: var(--z-modal); overflow: auto; overscroll-behavior: contain; background: rgba(0,0,0,.65); }
   .modal-backdrop { display: grid; place-items: center; padding: var(--space-5); }
-  .modal-panel { width: min(520px, 100%); padding: var(--space-5); border: 1px solid var(--line-soft); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--elev-3); }
+  .modal-panel { width: min(520px, 100%); max-height: calc(100dvh - (var(--space-5) * 2)); padding: var(--space-5); overflow: auto; overscroll-behavior: contain; border: 1px solid var(--line-soft); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--elev-3); }
   .modal-title { margin: 0 0 var(--space-4); font-size: var(--font-16); }
+  .command-panel { width: min(680px, 100%); padding: 14px; }
+  .command-panel .modal-title { padding: 2px 4px 10px; margin: 0; }
+  .command-palette { display: grid; gap: var(--space-2); }
+  .command-search-wrap { min-height: 46px; display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center; gap: 9px; padding: 0 11px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--bg); }
+  .command-search-wrap:focus-within { border-color: color-mix(in srgb, var(--accent) 68%, var(--line)); box-shadow: 0 0 0 3px var(--accent-dim); }
+  .command-search-wrap svg { width: 19px; height: 19px; fill: none; stroke: var(--text-muted); stroke-width: 1.8; stroke-linecap: round; }
+  .command-search { width: 100%; min-height: 42px; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+  .command-search:focus { border: 0; box-shadow: none; }
+  .command-search-wrap kbd { color: var(--text-dim); font: var(--font-11)/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .command-help { padding: 0 4px; color: var(--text-dim); font-size: var(--font-11); }
+  .command-list { max-height: min(54vh, 520px); display: grid; gap: 4px; overflow: auto; padding: 3px; }
+  .command-option { width: 100%; min-height: 56px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); padding: 9px 11px; border: 1px solid transparent; border-radius: var(--radius-md); color: var(--text); text-align: left; background: transparent; cursor: pointer; }
+  .command-option.active, .command-option:hover { border-color: color-mix(in srgb, var(--accent) 30%, transparent); background: var(--accent-dim); }
+  .command-option-copy { min-width: 0; display: grid; gap: 3px; }
+  .command-option-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .command-option-copy small { overflow: hidden; color: var(--text-muted); font-size: var(--font-11); text-overflow: ellipsis; white-space: nowrap; }
+  .command-group { padding: 3px 7px; border: 1px solid var(--line-soft); border-radius: 999px; color: var(--text-muted); font-size: var(--font-10); }
+  .command-empty { padding: 28px 16px; color: var(--text-muted); text-align: center; }
   .drawer-backdrop { z-index: var(--z-overlay); background: rgba(0,0,0,.4); }
-  .drawer-panel { position: fixed; inset: 0 0 0 auto; width: min(480px, 95vw); display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-5); overflow: auto; border-left: 1px solid var(--line-soft); background: var(--surface); box-shadow: -8px 0 32px rgba(0,0,0,.4); }
+  .drawer-panel { position: fixed; inset: 0 0 0 auto; width: min(480px, 95vw); height: 100dvh; display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-5); overflow: auto; overscroll-behavior: contain; border-left: 1px solid var(--line-soft); background: var(--surface); box-shadow: -8px 0 32px rgba(0,0,0,.4); }
   .drawer-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
   .drawer-title { margin: 0; font-size: var(--font-16); }
   .compact-button { min-height: 30px; padding-inline: var(--space-3); font-size: var(--font-12); }
@@ -123,10 +141,11 @@
   .detail-field-label { min-width: 80px; color: var(--text-muted); }
   .detail-pre { padding: 10px; overflow: auto; border: 1px solid var(--line-soft); border-radius: var(--radius-md); background: var(--bg); font-size: var(--font-12); white-space: pre-wrap; }
 
-  .settings-shell { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: clamp(16px, 2.4vw, 28px); align-items: start; }
-  .settings-rail { position: sticky; top: 96px; display: grid; gap: 5px; align-content: start; padding: 8px; border: 1px solid var(--line-soft); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--elev-1); }
-  .settings-nav-button { min-height: 38px; justify-content: flex-start; padding: 9px 12px; border-color: transparent; text-align: left; }
-  .settings-nav-button.active { color: #fff; border-color: color-mix(in srgb, var(--accent) 42%, transparent); background: var(--accent-strong); }
+  .settings-shell { display: grid; grid-template-columns: 196px minmax(0, 1fr); gap: clamp(14px, 2vw, 24px); align-items: start; }
+  .settings-rail { position: sticky; top: 88px; display: grid; gap: 3px; align-content: start; padding: 6px; border: 1px solid var(--line-soft); border-radius: var(--radius-lg); background: var(--surface); box-shadow: none; }
+  .settings-content { min-width: 0; display: grid; gap: var(--space-3); }
+  .settings-nav-button { min-height: 38px; justify-content: flex-start; padding: 8px 11px; border-color: transparent; text-align: left; background: transparent; }
+  .settings-nav-button.active { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 24%, transparent); background: var(--accent-dim); }
 
   .connection-loading { padding: var(--space-2) 0; color: var(--text-muted); }
   .connection-stack { display: grid; gap: 14px; }
@@ -143,9 +162,34 @@
   .connection-fact-label { color: var(--text-muted); }
   .connection-fact code { overflow-wrap: anywhere; }
   .connection-notes { margin: 8px 0 0 18px; display: grid; gap: 6px; }
-  .connector-summary { margin: 0; color: var(--text-muted); }
+  .connector-summary { margin: 6px 0 0; color: var(--text-muted); }
   .connector-endpoint { min-height: auto; padding: 14px; }
-  .connector-runtime-host { display: contents; }
+  .connection-summary-card.ok { border-color: color-mix(in srgb, var(--green) 30%, transparent); }
+  .connection-summary-card.warn { border-color: color-mix(in srgb, var(--yellow) 30%, transparent); }
+  .connection-summary-card.bad { border-color: color-mix(in srgb, var(--red) 30%, transparent); }
+  .connection-summary-title { margin: 0; font-size: var(--font-20); }
+  .connection-layer-section { display: grid; gap: var(--space-3); }
+  .connection-layer-heading h3 { margin: 0; font-size: var(--font-16); }
+  .connection-layer-heading p { margin: 4px 0 0; color: var(--text-muted); font-size: var(--font-13); }
+  .connection-layer-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
+  .connection-layer-card { padding: 14px; background: color-mix(in srgb, var(--surface-2) 70%, var(--surface)); box-shadow: none; }
+  .connection-layer-card.ok { border-color: color-mix(in srgb, var(--green) 24%, transparent); }
+  .connection-layer-card.warn { border-color: color-mix(in srgb, var(--yellow) 24%, transparent); }
+  .connection-layer-card.bad { border-color: color-mix(in srgb, var(--red) 24%, transparent); }
+  .connection-layer-card-head { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; }
+  .connection-layer-card-head > div { display: grid; gap: 4px; justify-items: start; }
+  .connection-layer-card h4 { margin: 0; font-size: var(--font-14); }
+  .connection-layer-state { font-size: var(--font-12); font-weight: var(--weight-bold); color: var(--text-muted); }
+  .connection-layer-state.ok { color: var(--green); }
+  .connection-layer-state.warn { color: var(--yellow); }
+  .connection-layer-state.bad { color: var(--red); }
+  .connection-layer-card p { margin: var(--space-3) 0 0; color: var(--text-muted); font-size: var(--font-12); line-height: 1.55; }
+  .connection-layer-dot { width: 9px; height: 9px; margin-top: 5px; border-radius: 50%; background: var(--text-dim); }
+  .connection-layer-card.ok .connection-layer-dot { background: var(--green); }
+  .connection-layer-card.warn .connection-layer-dot { background: var(--yellow); }
+  .connection-layer-card.bad .connection-layer-dot { background: var(--red); }
+  .connection-actions-card { border-color: var(--line-soft); }
+  .connection-setup-details { background: color-mix(in srgb, var(--surface-2) 52%, var(--surface)); }
   .connector-details > summary,
   .settings-advanced > summary { list-style: none; }
   .connector-details > summary::-webkit-details-marker,
@@ -193,8 +237,22 @@
     .attention-item { grid-template-columns: auto minmax(0, 1fr); }
     .attention-item > :last-child { grid-column: 2; justify-self: start; }
     .settings-shell { grid-template-columns: minmax(0, 1fr); }
-    .settings-rail { position: static; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .settings-rail { position: static; display: flex; gap: 6px; overflow-x: auto; overscroll-behavior-inline: contain; scroll-snap-type: x proximity; scrollbar-gutter: stable; }
+    .settings-nav-button { flex: 0 0 auto; min-width: 118px; scroll-snap-align: start; }
+    .connection-layer-grid { grid-template-columns: minmax(0, 1fr); }
     .activity-freeze { margin-left: 0; }
     .connection-fact { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  }
+
+  @media (max-width: 520px) {
+    .modal-backdrop { place-items: start center; padding: 10px; }
+    .modal-panel, .command-panel { max-height: calc(100dvh - 20px); padding: 14px; }
+    .drawer-panel { width: 100vw; padding: 16px; }
+    .command-option { min-height: 60px; }
+    .command-group { display: none; }
+  }
+
+  @media (forced-colors: active) {
+    .command-option.active, .settings-nav-button.active { outline: 2px solid Highlight; outline-offset: -2px; }
   }
 }

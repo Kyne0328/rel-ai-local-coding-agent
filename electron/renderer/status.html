@@ -3,23 +3,30 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Rel.AI MCP</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
+<title>Rel.AI MCP Recovery</title>
 <link rel="stylesheet" href="app.css">
 </head>
 <body class="electron-page">
+<div class="sr-only" id="statusAnnouncer" role="status" aria-live="polite" aria-atomic="true"></div>
 <main class="status-shell">
   <header class="app-card status-topbar">
     <div class="brand-row">
       <img class="brand-badge" src="relai-logo.png" alt="Rel.AI MCP">
       <div>
         <div class="brand-title">Rel.AI MCP</div>
-        <div class="brand-sub">Local workspace bridge</div>
+        <div class="brand-sub">Dashboard recovery fallback</div>
       </div>
     </div>
     <output class="status-badge" id="statusBadge" aria-live="polite">Starting</output>
   </header>
 
-  <section class="app-card status-hero" id="statusHero">
+  <section class="app-card fallback-intro" aria-label="Recovery fallback information">
+    <strong>Dashboard fallback</strong>
+    <p>This window appears only when the main dashboard cannot start or load. Fix the connection here, then use Open dashboard to return to the normal application.</p>
+  </section>
+
+  <section class="app-card status-hero" id="statusHero" aria-labelledby="statusTitle" aria-describedby="statusDescription">
     <div class="status-copy">
       <div class="eyebrow" id="statusEyebrow">Connection status</div>
       <h1 class="status-title" id="statusTitle">Starting Rel.AI…</h1>
@@ -32,9 +39,9 @@
       </div>
 
       <div class="status-primary-row">
-        <button class="primary" id="dashboardBtn">Open dashboard</button>
-        <button class="secondary" id="copyBtn" disabled>Copy endpoint</button>
-        <button class="secondary" id="settingsBtn">Settings</button>
+        <button class="primary" id="dashboardBtn" type="button">Open dashboard</button>
+        <button class="secondary" id="copyBtn" type="button" disabled>Copy endpoint</button>
+        <button class="secondary" id="settingsBtn" type="button">Edit connection</button>
       </div>
     </div>
   </section>
@@ -62,15 +69,15 @@
     <time id="lastTaskTime"></time>
   </section>
 
-  <section class="status-alert" id="errorPanel" hidden>
+  <section class="status-alert" id="errorPanel" role="alert" aria-live="assertive" hidden>
     <div>
       <strong>Connection needs attention</strong>
       <p id="errorMessage"></p>
     </div>
     <div class="alert-actions">
-      <button class="primary" id="retryBtn">Retry</button>
-      <button class="secondary" id="errorSettingsBtn">Open settings</button>
-      <button class="secondary" id="copyDiagnosticsBtn">Copy details</button>
+      <button class="primary" id="retryBtn" type="button">Retry</button>
+      <button class="secondary" id="errorSettingsBtn" type="button">Edit connection</button>
+      <button class="secondary" id="copyDiagnosticsBtn" type="button">Copy details</button>
     </div>
   </section>
 
@@ -79,26 +86,34 @@
     <div class="detail-list">
       <div class="detail-row">
         <span class="detail-label">Service</span>
-        <button class="secondary compact-control" id="serverToggleBtn">Stop service</button>
+        <button class="secondary compact-control" id="serverToggleBtn" type="button">Stop service</button>
       </div>
       <div class="detail-row">
         <span class="detail-label">Desktop notifications<small>Connection status, failed workspace actions, and completed tasks</small></span>
-        <button class="notification-switch" id="notificationToggleBtn" type="button" role="switch" aria-checked="true">
+        <button class="notification-switch" id="notificationToggleBtn" type="button" role="switch" aria-checked="true" aria-label="Desktop notifications on">
           <span class="switch-track" aria-hidden="true"><span></span></span>
           <span id="notificationState">On</span>
         </button>
       </div>
-      <div class="detail-row"><span class="detail-label">Version</span><span class="detail-value mono" id="appVersion">v0.20.7</span></div>
+      <div class="detail-row"><span class="detail-label">Version</span><span class="detail-value mono" id="appVersion">v0.21.0</span></div>
+    </div>
+  </details>
+
+  <details class="app-card status-details" data-disclosure="logs">
+    <summary>Recent service logs <span aria-hidden="true">⌄</span></summary>
+    <div class="fallback-log-wrap">
+      <p>Sanitized local-service and tunnel messages from this desktop session.</p>
+      <pre id="serviceLog" tabindex="0" aria-live="polite" aria-label="Recent sanitized service logs">No service logs recorded yet.</pre>
     </div>
   </details>
 
   <details class="app-card status-details" data-disclosure="chatgpt-setup">
     <summary>Connect to ChatGPT <span aria-hidden="true">⌄</span></summary>
     <ol class="guide-list">
-      <li>Wait until the public endpoint is connected.</li>
+      <li>Wait until the public endpoint is available.</li>
       <li>Open <strong>Settings &gt; Apps &gt; Create</strong> in ChatGPT.</li>
       <li>Paste the endpoint and choose <strong>OAuth</strong>.</li>
-      <li>Approve using your Rel.AI dashboard token.</li>
+      <li>Approve using your Rel.AI approval token.</li>
     </ol>
   </details>
 </main>

@@ -5,20 +5,26 @@ const path = require('node:path');
 const { URL } = require('node:url');
 
 function createDashboardWindowManager(deps) {
-  const { BrowserWindow, shell, app, dialog, getConnection, isQuitting = () => false, onError = () => {} } = deps;
+  const {
+    BrowserWindow, shell, app, dialog, getConnection,
+    isQuitting = () => false,
+    onError = () => {},
+    onLoadError = onError
+  } = deps;
   const userDataPath = typeof app.getPath === 'function' ? app.getPath('userData') : process.cwd();
   const statePath = path.join(userDataPath, 'dashboard-window-state.json');
   let dashboardWindow = null;
   let dashboardOrigin = '';
   let persistTimer = null;
 
-  async function open() {
+  async function open(routeHash = '') {
     const connection = await getConnection();
     const target = validateConnection(connection);
+    if (routeHash) target.hash = normalizeRouteHash(routeHash);
     dashboardOrigin = target.origin;
     const win = getOrCreateWindow();
     const current = safeUrl(win.webContents.getURL());
-    if (!current || current.origin !== target.origin || current.pathname !== target.pathname) {
+    if (!current || current.origin !== target.origin || current.pathname !== target.pathname || current.hash !== target.hash) {
       await win.loadURL(target.href);
     }
     win.show();
@@ -82,7 +88,7 @@ function createDashboardWindowManager(deps) {
       return { action: 'deny' };
     });
     win.webContents.on('did-fail-load', (_event, code, description, url, isMainFrame) => {
-      if (isMainFrame && code !== -3) onError(new Error(`Dashboard failed to load ${url}: ${description}`));
+      if (isMainFrame && code !== -3) onLoadError(new Error(`Dashboard failed to load ${url}: ${description}`));
     });
     win.webContents.on('before-input-event', (event, input) => {
       const reload = input.key === 'F5' || ((input.control || input.meta) && input.key.toLowerCase() === 'r');
@@ -189,6 +195,14 @@ function validateConnection(connection) {
   return target;
 }
 
+function normalizeRouteHash(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  const hash = text.startsWith('#') ? text : `#${text}`;
+  if (!/^#[A-Za-z0-9/_-]+$/.test(hash)) throw new Error('Invalid dashboard route.');
+  return hash;
+}
+
 function safeUrl(value) {
   try { return new URL(value); } catch { return null; }
 }
@@ -197,4 +211,4 @@ function safeOrigin(value) {
   return safeUrl(value)?.origin || '';
 }
 
-module.exports = { createDashboardWindowManager, validateConnection };
+module.exports = { createDashboardWindowManager, validateConnection, normalizeRouteHash };

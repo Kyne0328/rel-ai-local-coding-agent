@@ -70,7 +70,7 @@ function readAudit(config, options = {}) {
   const text = fullScan ? readAuditGenerations(auditPath) : readAuditTail(auditPath);
   const lines = text.trim().split(/\r?\n/).filter(Boolean);
   const entries = lines.map((line) => {
-    try { return JSON.parse(line); } catch { return { malformed: line }; }
+    try { return JSON.parse(line); } catch { return { malformed: true, message: 'Unreadable audit entry omitted.' }; }
   }).filter(entry => (!taskId || entry.taskId === taskId) && (!workspace || entry.workspace === workspace)).slice(-limit);
   return { path: auditPath, entries };
 }

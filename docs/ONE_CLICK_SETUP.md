@@ -20,13 +20,13 @@ The static domain is the part that matters for a permanent setup. A random tempo
 1. Download the latest installer from the [Releases page](https://github.com/Kyne0328/rel-ai-mcp/releases) and run it. It installs per-user, no admin prompt.
 2. Launch **Rel.AI MCP**. The setup wizard appears on first run only.
 3. Paste your ngrok authtoken and static domain, and pick a local port (`3333` by default).
-4. Save. The app writes its config, generates a dashboard token, starts the local server, and brings up the tunnel.
+4. Save. The app writes its config, generates an approval token, starts the local server, and brings up the tunnel.
 
 The desktop app creates `config.json` automatically. Skipping the dashboard onboarding leaves an empty but valid workspace configuration, so the app remains usable and workspaces can be added later. The `npm run init-config` command is only for repository/CLI development and is not required by the installed application.
 
 On first launch the app copies its bundled ngrok agent into `~/.rel-ai-mcp/managed-ngrok/` and runs it from there, so it can update the agent later without touching the installed program files.
 
-Every launch after this goes straight to the dashboard. The app lives in the system tray — closing a window leaves it running, and you quit it from the tray menu.
+Every ordinary launch after this goes straight to the dashboard. The app lives in the system tray — closing a window leaves it running, and you quit it from the tray menu. The installed Windows app can also launch at sign-in in the background, starting the tray, local service, and public endpoint without opening the dashboard.
 
 ## What the app creates
 
@@ -35,21 +35,25 @@ All state lives under `~/.rel-ai-mcp/`:
 | File | Contents |
 | --- | --- |
 | `config.json` | Workspaces, validation commands, safety settings |
-| `.env` | Your dashboard bearer token (`REL_AI_MCP_TOKEN`) — keep private |
+| `.env` | Your approval token (`REL_AI_MCP_TOKEN`) — keep private |
 | `connection.json` | Host, port, and public URL of the current session |
 | `managed-ngrok/` | The managed ngrok agent, its config, and update state |
+
+The installed desktop app also stores `desktop-lifecycle.json` in Electron's per-user application-data directory. It contains only non-secret version, launch-count, running-marker, and clean-exit metadata.
 
 ## Connect ChatGPT
 
 1. Open the dashboard from the tray or the main window.
-2. Go to the **Connector** page. It shows your MCP URL — it will look like `https://your-domain.ngrok-free.app/mcp`.
+2. Go to the **Connection** page. It shows your MCP URL — it will look like `https://your-domain.ngrok-free.app/mcp`.
 3. In ChatGPT, go to **Settings > Apps > Create**.
 4. Paste the MCP URL.
 5. Set authentication to **OAuth**.
 
-ChatGPT then opens a sign-in page served by your own machine and asks for your Rel.AI **dashboard token** to approve the connection. The token is in `~/.rel-ai-mcp/.env`, and the dashboard Connector page can show it to you directly. No secret is ever embedded in the URL.
+ChatGPT then opens a sign-in page served by your own machine and asks for your Rel.AI **approval token** to approve the connection. The token is stored in `~/.rel-ai-mcp/.env`, and **Settings > Connection** can show and copy it through the secured Electron bridge. No secret is ever embedded in the URL.
 
 Because the domain is static, this survives restarts. You set it up once.
+
+After the desktop wizard launches Rel.AI, the dashboard opens directly on **Settings > Connection**. A compact setup handoff links to **Connect ChatGPT** and **Add workspace**; the separate browser onboarding wizard is not shown in the desktop app. The handoff remains available until you dismiss it.
 
 ### Use the same connector on another computer
 
@@ -58,21 +62,61 @@ The ChatGPT app is tied to the static MCP URL, not to one Windows installation. 
 1. Stop Rel.AI MCP on the previous computer so the static ngrok domain is free.
 2. Install Rel.AI MCP and configure the same ngrok account key and static domain.
 3. Open ChatGPT and use the existing Rel.AI MCP app. Do not delete or recreate it.
-4. When ChatGPT opens the authorization page, enter the dashboard token shown by the new computer.
+4. When ChatGPT opens the authorization page, enter the approval token shown by the new computer.
 
-Rel.AI recognizes the existing connector client ID and restores its registration after dashboard-token approval. Workspace configuration remains computer-specific, so add the folders available on that computer from the Workspaces page.
+Rel.AI recognizes the existing connector client ID and restores its registration after approval with the new computer's token. Workspace configuration remains computer-specific, so add the folders available on that computer from the Workspaces page.
 
 Only one computer can publish the same ngrok static domain at a time. Quit Rel.AI from the tray before handing the connector to another computer.
 
 ### Rotating the token
 
-Open **Settings** in the desktop app and regenerate the dashboard token. The next ChatGPT OAuth sign-in uses the new value; the MCP URL itself does not change.
+Open **Settings > Connection** and choose **Replace approval token**. Type `REPLACE` to confirm. Rel.AI generates the new token in the Electron main process, revokes all current OAuth access and refresh tokens, preserves the existing ChatGPT client registration, and restarts the connection. The MCP URL does not change.
+
+After replacement:
+
+1. Copy the new approval token.
+2. Open the existing Rel.AI app in ChatGPT and retry it.
+3. Enter the new token when the authorization page opens.
+
+Do not delete or recreate the ChatGPT app.
 
 ## Adding workspaces
 
-A workspace is a local folder ChatGPT is allowed to touch, under an alias. Add one from the dashboard's **Workspaces** page with **Add workspace**, which opens a folder picker and lets you set the alias, validation commands, protected branches, and allowed remotes.
+A workspace is a local folder ChatGPT is allowed to touch, identified by a workspace name. Add one from the dashboard's **Workspaces** page with **Add workspace**. Choose the project folder first; Rel.AI suggests a short workspace name and detects whether the folder is a Git repository and whether automatic validation is available.
+
+The default protected branches, base branch, and allowed remote work for most repositories. Open **Git and safety settings** only when those defaults need to change. On the workspace card, branch state, validation commands, history links, and removal remain under **Repository and safety details** so the normal page stays focused on readiness and common actions.
 
 Changes apply immediately. There is no restart needed after adding a workspace.
+
+## Faster dashboard navigation
+
+Use **Quick navigation** in the top bar, or press `Ctrl+K` on Windows/Linux and `Cmd+K` on macOS. It searches dashboard pages, Settings pages, common actions such as Refresh dashboard and Add workspace, and every configured workspace.
+
+The **Jump to workspace…** control opens the matching Workspaces card directly. The top connection status links to **Settings → Connection**. Activity filters are stored in the route, so a filtered Activity view can be refreshed, bookmarked, or shared without losing its search, time range, tool, status, task, or workspace scope.
+
+Keyboard focus stays inside open dialogs and drawers until they close, and Escape returns focus to the control that opened them. On narrow screens, controls stack, Settings tabs scroll horizontally, touch targets expand, and mobile navigation respects device safe areas. Reduced-motion and high-contrast preferences are preserved.
+
+Routine dashboard information is intentionally flatter and denser than warnings, dialogs, and active recovery states. Summary counts and readiness facts are grouped into shared panels, while repeated setup instructions collapse after the connection is ready.
+
+## Application updates
+
+The installed Windows app checks GitHub Releases once per day. Open **Settings → General → Application updates** or use the tray menu to check immediately.
+
+Rel.AI never downloads or installs an application update without an explicit action. When an update is available, choose **Download** and keep using the app while progress is shown. After the download finishes, choose **Restart and install**. Rel.AI refuses the restart while a tool call is active, so repository work is not interrupted.
+
+The portable executable cannot update itself. General settings identifies the build as manual-only and links to GitHub Releases. Update failures leave the current version running and appear separately from connection health.
+
+## Startup and recovery
+
+Open **Settings → General → Startup and recovery** to control **Launch Rel.AI at sign-in**. This setting is available only in the installed Windows app. When enabled, Windows launches Rel.AI with `--background`: the tray, local service, public endpoint, and updater start, but the dashboard does not open. Opening Rel.AI normally still opens the dashboard.
+
+Portable and development builds do not register startup entries. The same panel records the current version, launch count, and last clean exit. After an update, it confirms that the new version started successfully. If the previous desktop process ended without recording a clean shutdown, it reports a recovered interrupted exit without changing configuration or repository files. Repeated interrupted-exit notices should be reviewed in Diagnostics.
+
+## Diagnostics and local history
+
+Open **Settings → Diagnostics** to review stable error codes, impact, recommended actions, recent failed activity, and—when using the desktop app—recent local-service and tunnel logs. **Copy diagnostic report** creates a sanitized text summary suitable for troubleshooting; approval tokens, bearer credentials, OAuth values, passwords, API keys, and similar secrets are redacted.
+
+Diagnostics also owns the controls for clearing session and activity history or the desktop service-log buffer. History cannot be cleared while a Rel.AI tool call is active. Service logs are in-memory and desktop-only, so browser-hosted dashboards show that control as unavailable.
 
 ## Safer first prompt
 
@@ -92,11 +136,11 @@ Use Rel.AI MCP on workspace myapp. Show the workspace profile and the first 100 
 
 If ChatGPT cannot connect:
 
-1. Check the desktop app's status window. It reports server state, tunnel state, and the last error.
-2. Confirm the tunnel status reads **running**. If it failed, the status window shows the ngrok log.
+1. Open **Settings > Diagnostics** in the desktop dashboard. It reports connection state, blocking errors, and recommended actions.
+2. Confirm the Public endpoint layer reads **Available**. If the dashboard itself cannot start or load, Rel.AI opens a separate recovery fallback with the last service or tunnel error. Choose **Edit connection** there to repair the local port, ngrok account key, or static domain; the current approval token is preserved.
 3. Check `http://127.0.0.1:3333/health` in a browser (adjust the port if you changed it).
 4. Confirm the ChatGPT MCP URL is the plain `/mcp` URL, not `/dashboard`.
-5. Confirm the ChatGPT app authentication is set to **OAuth**, and that you completed the dashboard-token sign-in.
+5. Confirm the ChatGPT app authentication is set to **OAuth**, and that you completed the approval-token sign-in.
 6. Do not judge the connector by opening `/mcp` in a browser. MCP uses `POST`; an unauthenticated browser `GET` only returns a diagnostic.
 
 Common tunnel failures:
@@ -114,7 +158,7 @@ That usually means ChatGPT searched connector files instead of calling the MCP t
 Use this exact diagnostic prompt:
 
 ```text
-Use the Rel.AI MCP connector tools directly.
+Use the Rel.AI MCP tools directly.
 Call relai_repo_snapshot with workspace "myapp" and maxEntries 200.
 Do not use file search. Do not modify files.
 ```

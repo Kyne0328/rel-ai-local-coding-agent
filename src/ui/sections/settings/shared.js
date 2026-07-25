@@ -123,7 +123,7 @@ export function saveRow(onSave, onReload) {
   };
   const reloadButton = document.createElement('button');
   reloadButton.className = 'secondary';
-  reloadButton.textContent = 'Reload';
+  reloadButton.textContent = 'Discard changes';
   reloadButton.onclick = onReload;
   row.append(saveButton, reloadButton);
   return row;

@@ -1,4 +1,7 @@
+import { activateOverlay } from './overlay-focus.js';
+
 let _drawerOpener = null;
+let _drawerCleanup = null;
 
 export function openDrawer({ title, content, onClose } = {}) {
   closeDrawer();
@@ -22,8 +25,10 @@ export function openDrawer({ title, content, onClose } = {}) {
   titleElement.textContent = title || '';
   const closeButton = document.createElement('button');
   closeButton.className = 'secondary compact-button';
+  closeButton.type = 'button';
   closeButton.textContent = 'Close';
-  closeButton.onclick = () => finishClose(onClose);
+  const finish = () => finishClose(onClose);
+  closeButton.onclick = finish;
   head.append(titleElement, closeButton);
   panel.appendChild(head);
 
@@ -37,14 +42,11 @@ export function openDrawer({ title, content, onClose } = {}) {
 
   backdrop.appendChild(panel);
   document.body.appendChild(backdrop);
-  closeButton.focus();
   backdrop.addEventListener('click', event => {
-    if (event.target === backdrop) finishClose(onClose);
+    if (event.target === backdrop) finish();
   });
-  backdrop.addEventListener('keydown', event => {
-    if (event.key === 'Escape') finishClose(onClose);
-  });
-  return { panel, close: () => finishClose(onClose) };
+  _drawerCleanup = activateOverlay({ backdrop, panel, opener: _drawerOpener, onEscape: finish });
+  return { panel, close: finish };
 }
 
 function finishClose(onClose) {
@@ -54,6 +56,7 @@ function finishClose(onClose) {
 
 export function closeDrawer() {
   document.getElementById('__relai-drawer-backdrop')?.remove();
-  if (_drawerOpener && typeof _drawerOpener.focus === 'function') _drawerOpener.focus();
+  _drawerCleanup?.();
+  _drawerCleanup = null;
   _drawerOpener = null;
 }

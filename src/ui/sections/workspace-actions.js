@@ -1,12 +1,17 @@
 import { fetchJson, postJson, DASHBOARD_DATA_URL, requestDashboardRefresh } from '../api.js';
 import { toast } from '../components/toast.js';
 import { openWorkspaceForm } from './workspace-form.js';
+import { openWorkspaceRepair } from './workspace-repair.js';
 import { runButtonAction } from '../action-state.js';
-import { getWorkspaceFilter, setWorkspaceFilter } from '../router.js';
+import { getWorkspaceFilter, navigate, setWorkspaceFilter } from '../router.js';
+import { recordRecentWorkspace, removeRecentWorkspace } from '../workspace-recents.js';
+import { confirmAction } from '../components/confirm-dialog.js';
 
 const WORKSPACE_CLICK_ACTIONS = [
   { selector: '[data-add-workspace]', handler: () => openWorkspaceForm({ mode: 'add' }) },
-  { selector: '[data-edit-workspace],[data-fix-path],[data-finding-edit]', handler: editWorkspaceFromTrigger },
+  { selector: '[data-edit-workspace]', handler: editWorkspaceFromTrigger },
+  { selector: '[data-repair-workspace],[data-finding-repair]', handler: repairWorkspaceFromTrigger },
+  { selector: '[data-open-recent-workspace]', handler: openRecentWorkspace },
   { selector: '[data-finding-remove]', handler: trigger => removeWorkspaceFlow(trigger.dataset.findingRemove || '') },
   { selector: '[data-clear-workspace]', handler: trigger => removeWorkspaceFlow(trigger.dataset.clearWorkspace || '') },
   { selector: '[data-run-validation]', handler: runValidationFromTrigger },
@@ -30,13 +35,27 @@ async function handleWorkspaceClick(event) {
 }
 
 async function editWorkspaceFromTrigger(trigger) {
-  const alias = trigger.dataset.editWorkspace || trigger.dataset.fixPath || trigger.dataset.findingEdit || '';
+  const alias = trigger.dataset.editWorkspace || '';
   const workspace = await loadWorkspace(alias);
-  if (workspace) openWorkspaceForm({ mode: 'edit', workspace });
+  if (workspace) await openWorkspaceForm({ mode: 'edit', workspace });
+}
+
+async function repairWorkspaceFromTrigger(trigger) {
+  const alias = trigger.dataset.repairWorkspace || trigger.dataset.findingRepair || '';
+  const workspace = await loadWorkspace(alias);
+  if (workspace) await openWorkspaceRepair({ workspace });
+}
+
+function openRecentWorkspace(trigger) {
+  const alias = trigger.dataset.openRecentWorkspace || '';
+  if (!alias) return;
+  recordRecentWorkspace(alias);
+  navigate('workspaces', { workspace: alias, focus: '1' });
 }
 
 async function runValidationFromTrigger(trigger) {
   const alias = trigger.dataset.runValidation || '';
+  recordRecentWorkspace(alias);
   const result = await runButtonAction(trigger, {
     idleText: 'Run validation',
     loadingText: 'Validating…',
@@ -54,6 +73,7 @@ async function runValidationFromTrigger(trigger) {
 
 async function openFolderFromTrigger(trigger) {
   const alias = trigger.dataset.openFolder || '';
+  recordRecentWorkspace(alias);
   const result = await runButtonAction(trigger, {
     idleText: 'Open folder',
     loadingText: 'Opening…',
@@ -64,10 +84,17 @@ async function openFolderFromTrigger(trigger) {
 }
 
 async function removeWorkspaceFlow(alias) {
-  const confirmed = window.confirm(`Remove workspace '${alias}' from Rel.AI? The repository and its files will not be changed.`);
+  const confirmed = await confirmAction({
+    title: 'Remove workspace',
+    message: `Remove '${alias}' from Rel.AI?`,
+    detail: 'The repository and all files on disk will remain unchanged.',
+    confirmLabel: 'Remove workspace',
+    danger: true
+  });
   if (!confirmed) return;
   const result = await postJson('/api/workspaces', { action: 'clear', alias, confirmClear: true });
   if (result?.ok) {
+    removeRecentWorkspace(alias);
     toast(`Workspace removed: ${alias}`, { variant: 'success' });
     if (getWorkspaceFilter() === alias) setWorkspaceFilter('');
     else requestDashboardRefresh();
@@ -77,7 +104,7 @@ async function removeWorkspaceFlow(alias) {
 }
 
 async function loadWorkspace(alias) {
-  const dashboard = await fetchJson(DASHBOARD_DATA_URL);
+  const dashboard = await fetchJson(DASHBOARD_DATA_URL, { cache: 'no-store' });
   const workspace = Array.isArray(dashboard?.config?.workspaces)
     ? dashboard.config.workspaces.find(item => item.alias === alias)
     : null;

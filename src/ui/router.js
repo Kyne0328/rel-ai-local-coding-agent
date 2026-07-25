@@ -1,11 +1,33 @@
 // Hash-based section router with persistent workspace scope.
+import { confirmRouteChange, initInteractionSafety } from './interaction-safety.js';
+import { normalizeRouteKey } from './route-policy.js';
+
 let _sections = {};
 let _currentRouteKey = null;
 let _container = null;
 let _bound = false;
 let _mountGeneration = 0;
 
+const ROUTE_TITLES = {
+  home: 'Overview',
+  tasks: 'Sessions',
+  workspaces: 'Workspaces',
+  activity: 'Activity',
+  tools: 'Tools',
+  settings: 'Settings'
+};
+const SETTINGS_TITLES = {
+  dashboard: 'Advanced',
+  desktop: 'Connection',
+  connection: 'Connection',
+  connector: 'Connection',
+  'tools-validation': 'Tools & validation',
+  diagnostics: 'Diagnostics',
+  advanced: 'Advanced'
+};
+
 export function initRouter(container, sections) {
+  initInteractionSafety();
   _container = container;
   _sections = sections || {};
   if (!_bound) {
@@ -16,8 +38,7 @@ export function initRouter(container, sections) {
 }
 
 export function currentSection() {
-  const section = routeParts().path.split('/')[0] || 'home';
-  return section === 'tools' ? 'reference' : section;
+  return routeParts().path.split('/')[0] || 'home';
 }
 
 export function currentRoutePath() {
@@ -40,14 +61,26 @@ export function routeHref(sectionId, params = {}) {
     if (key === 'workspace' || value == null || value === '') continue;
     query.set(key, String(value));
   }
-  return `#${sectionId}${querySuffix(query)}`;
+  return `#${normalizeRouteKey(`${sectionId}${querySuffix(query)}`)}`;
 }
 
 export function setWorkspaceFilter(workspace) {
   const parts = routeParts();
   if (workspace) parts.params.set('workspace', workspace);
   else parts.params.delete('workspace');
-  location.hash = `#${parts.path}${querySuffix(parts.params)}`;
+  parts.params.delete('focus');
+  location.hash = `#${normalizeRouteKey(`${parts.path}${querySuffix(parts.params)}`)}`;
+}
+
+export function replaceRouteParams(patch = {}) {
+  const parts = routeParts();
+  for (const [key, value] of Object.entries(patch)) {
+    if (value == null || value === '') parts.params.delete(key);
+    else parts.params.set(key, String(value));
+  }
+  const routeKey = normalizeRouteKey(`${parts.path}${querySuffix(parts.params)}`);
+  replaceRouteState(routeKey);
+  return routeParts().params;
 }
 
 export function navigate(sectionId, params = {}) {
@@ -64,23 +97,39 @@ function querySuffix(params) {
 }
 
 function routeParts() {
-  const raw = (location.hash || '#home').slice(1) || 'home';
+  const raw = currentRouteKey();
   const separator = raw.indexOf('?');
   const path = separator >= 0 ? raw.slice(0, separator) : raw;
   const query = separator >= 0 ? raw.slice(separator + 1) : '';
   return { path: path || 'home', params: new URLSearchParams(query) };
 }
 
-function currentRouteKey() {
+function rawRouteKey() {
   return (location.hash || '#home').slice(1) || 'home';
 }
 
+function currentRouteKey() {
+  return normalizeRouteKey(rawRouteKey());
+}
+
+function replaceRouteState(routeKey) {
+  history.replaceState(null, '', `${location.pathname}${location.search}#${routeKey}`);
+  try { localStorage.setItem('relai_dashboard_route', routeKey); } catch {}
+}
+
 function _route() {
-  const id = currentSection();
-  const routeKey = currentRouteKey();
+  const rawKey = rawRouteKey();
+  const routeKey = normalizeRouteKey(rawKey);
+  if (routeKey !== rawKey) replaceRouteState(routeKey);
   if (routeKey === _currentRouteKey) return;
+  if (_currentRouteKey && !confirmRouteChange()) {
+    replaceRouteState(_currentRouteKey);
+    return;
+  }
+  const id = routeKey.split(/[/?]/)[0] || 'home';
   _currentRouteKey = routeKey;
   try { localStorage.setItem('relai_dashboard_route', routeKey); } catch {}
+  _updatePageIdentity(id);
   _updateNavActive(id);
   _mount(id);
   window.dispatchEvent(new CustomEvent('relai:route-change', { detail: { section: id, params: getRouteParams() } }));
@@ -90,9 +139,32 @@ function _updateNavActive(id) {
   document.querySelectorAll('.nav a, .mobile-nav a, .secondary-nav a').forEach(anchor => {
     const href = anchor.getAttribute('href') || '';
     const target = href.replace(/^#/, '').split(/[/?]/)[0];
-    const active = target === id || (['settings', 'connector', 'diagnostics'].includes(id) && target === 'settings');
+    const active = target === id || (['settings', 'connector', 'connection', 'diagnostics'].includes(id) && target === 'settings');
     anchor.classList.toggle('active', active);
+    if (active) anchor.setAttribute('aria-current', 'page');
+    else anchor.removeAttribute('aria-current');
   });
+}
+
+function _updatePageIdentity(id) {
+  const title = pageTitleFor(id);
+  const heading = document.getElementById('pageTitle');
+  if (heading) {
+    heading.textContent = title;
+    heading.tabIndex = -1;
+  }
+  const announcer = document.getElementById('routeAnnouncer');
+  if (announcer) announcer.textContent = `${title} page loaded.`;
+  document.title = `${title} · Rel.AI MCP`;
+}
+
+function pageTitleFor(id) {
+  if (id === 'connector' || id === 'connection') return 'Settings · Connection';
+  if (id === 'diagnostics') return 'Settings · Diagnostics';
+  if (id !== 'settings') return ROUTE_TITLES[id] || ROUTE_TITLES.home;
+  const subPage = currentRoutePath().split('/')[1] || 'general';
+  const subTitle = SETTINGS_TITLES[subPage];
+  return subTitle ? `Settings · ${subTitle}` : 'Settings';
 }
 
 function _mount(id, options = {}) {
@@ -126,6 +198,7 @@ function finishMount(generation, view) {
   if (generation !== _mountGeneration || !_container) return;
   if (!view) {
     _container.style.minHeight = '';
+    announceRouteMounted();
     return;
   }
   requestAnimationFrame(() => {
@@ -133,5 +206,12 @@ function finishMount(generation, view) {
     window.scrollTo(view.scrollX, view.scrollY);
     if (view.activeId) document.getElementById(view.activeId)?.focus({ preventScroll: true });
     _container.style.minHeight = '';
+    announceRouteMounted();
   });
+}
+
+function announceRouteMounted() {
+  window.dispatchEvent(new CustomEvent('relai:route-mounted', {
+    detail: { section: currentSection(), path: currentRoutePath(), params: getRouteParams() }
+  }));
 }

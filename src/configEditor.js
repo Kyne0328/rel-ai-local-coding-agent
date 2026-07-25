@@ -158,11 +158,25 @@ function _handlePruneCommands(alias, payload, next) {
 
 function _handleUpsertWorkspace(alias, payload, next) {
   const source = payload.workspaceConfig && typeof payload.workspaceConfig === "object" ? payload.workspaceConfig : payload;
-  const currentWorkspace = objectOrEmpty(next.workspaces[alias]);
+  const mode = String(source.mode || payload.mode || "").trim().toLowerCase();
+  const originalAlias = String(source.originalAlias || payload.originalAlias || alias).trim();
+  validateAlias(originalAlias);
+  if (mode === "create" && next.workspaces[alias]) throw new Error(`Workspace '${alias}' already exists.`);
+  if (mode === "update" && !next.workspaces[originalAlias]) throw new Error(`Workspace '${originalAlias}' is not configured.`);
+  if (originalAlias !== alias && next.workspaces[alias]) throw new Error(`Workspace '${alias}' already exists.`);
+
+  const currentWorkspace = objectOrEmpty(next.workspaces[originalAlias]);
   const workspacePath = source.path == null || source.path === "" ? currentWorkspace.path : String(source.path).trim();
   if (!workspacePath) throw new Error("Workspace path is required.");
   if (!path.isAbsolute(workspacePath)) throw new Error("Workspace path must be absolute.");
   assertSafeWorkspaceRoot(workspacePath);
+
+  if (source.enforceUniquePath === true || payload.enforceUniquePath === true || mode === "create" || mode === "update") {
+    const duplicateAlias = workspaceAliasForPath(next.workspaces, workspacePath, originalAlias);
+    if (duplicateAlias) throw new Error(`Project folder is already configured as workspace '${duplicateAlias}'.`);
+  }
+
+  if (originalAlias !== alias) delete next.workspaces[originalAlias];
   next.workspaces[alias] = {
     ...currentWorkspace,
     path: workspacePath,
@@ -177,11 +191,26 @@ function _handleUpsertWorkspace(alias, payload, next) {
   const normalized = writeConfig(next);
   return {
     ok: true,
-    changed: [`workspaces.${alias}`],
-    message: `Saved workspace '${alias}'.`,
+    changed: originalAlias === alias ? [`workspaces.${alias}`] : [`workspaces.${originalAlias}`, `workspaces.${alias}`],
+    renamedFrom: originalAlias === alias ? "" : originalAlias,
+    message: originalAlias === alias ? `Saved workspace '${alias}'.` : `Renamed workspace '${originalAlias}' to '${alias}'.`,
     configPath: getConfigPath(),
     config: publicConfigSummary(normalized)
   };
+}
+
+function workspaceAliasForPath(workspaces, workspacePath, excludedAlias = "") {
+  const target = normalizedWorkspacePath(workspacePath);
+  for (const [candidateAlias, candidate] of Object.entries(objectOrEmpty(workspaces))) {
+    if (candidateAlias === excludedAlias || !candidate?.path) continue;
+    if (normalizedWorkspacePath(candidate.path) === target) return candidateAlias;
+  }
+  return "";
+}
+
+function normalizedWorkspacePath(value) {
+  const resolved = path.resolve(String(value || "").trim()).replace(/[\\/]+$/, "");
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
 }
 
 const WORKSPACE_ACTION_HANDLERS = {
