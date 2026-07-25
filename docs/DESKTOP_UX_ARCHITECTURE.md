@@ -31,7 +31,7 @@ The dashboard owns Overview, Sessions, Workspaces, Activity, Settings, and Tools
 
 ### Desktop settings
 
-The separate Electron settings renderer has been removed. Connection credentials and approval-token replacement are owned by `#settings/connection`; appearance, notifications, application updates, and startup/recovery are owned by `#settings`; dashboard polling, patch safeguards, and resource limits are owned by `#settings/advanced`. All Electron-owned controls remain available only through the secured dashboard preload.
+The separate Electron settings renderer has been removed. Connection credentials and approval-token replacement are owned by `#settings/connection`; appearance, notifications, application updates, and startup/recovery are owned by `#settings`; patch safeguards and resource limits are owned by `#settings/advanced`. All Electron-owned controls remain available only through the secured dashboard preload.
 
 ### Electron recovery fallback
 
@@ -121,6 +121,9 @@ Raw exception text remains technical detail. It must not be used as the only sel
 
 ## Window policy for later phases
 
+- The dashboard opens as a clearly windowed, centered surface rather than an almost-fullscreen rectangle. Its first-run size uses 80% of the active display work area, capped at 1180 by 760 pixels.
+- Window persistence records the normal restore bounds rather than maximized geometry, so maximizing once cannot reopen as a non-maximized screen-sized window. Unversioned legacy bounds migrate once to the bounded default.
+- Closing the dashboard hides it to the system tray; quitting remains an explicit tray action.
 - Ordinary Settings, Connection, Diagnostics, logs, token replacement, and workspace management belong in the main dashboard window.
 - Use a modal for a focused confirmation or short sensitive action.
 - Use a drawer for item inspection only when keyboard focus is correctly contained.
@@ -157,7 +160,7 @@ Section-level captures are preserved beside them. `test/fixtures/desktop-ux-base
 - `#settings/connection` owns the four-layer status, local port, permanent ngrok domain, ngrok account key, and approval-token replacement.
 - `#settings/tools-validation` owns tool-surface discovery and workspace validation presentation.
 - `#settings/diagnostics` owns findings, sanitized reports, service logs, and local history maintenance.
-- `#settings/advanced` owns fallback refresh timing, live-event scan timing, patch safeguards, and retained-output limits.
+- `#settings/advanced` owns patch safeguards and retained-output limits. Dashboard updates are driven by the tool-activity event stream rather than user-configured polling intervals.
 - `#settings/desktop` and `#settings/dashboard` remain compatibility routes and normalize to Connection and Advanced respectively.
 - The Electron main process remains the durable owner of desktop credentials and lifecycle state. The dashboard renderer reads and saves these values only through sender-constrained preload IPC.
 - Desktop secrets are never added to dashboard HTTP payloads, URLs, local storage, or session storage.
@@ -170,7 +173,7 @@ Section-level captures are preserved beside them. `test/fixtures/desktop-ux-base
 - Overview and the top status consume the same presentation module as the Connection page instead of deriving meaning independently from `serverRunning` or `tunnelStatus`.
 - Dashboard-update status describes only the current dashboard event stream. An offline dashboard does not imply that the public MCP endpoint is unavailable.
 - The connection summary reports **Available** only when the local service is running, the public endpoint is available, and ChatGPT readiness is ready.
-- Connection actions remain contextual: desktop restart and secure connection controls appear only in Electron, while refresh and dashboard Diagnostics remain available in both hosts.
+- Connection actions remain contextual: desktop restart and secure connection controls appear only in Electron, while dashboard Diagnostics remains available in both hosts.
 - The authenticated `/api/connection` response reports whether an approval token is configured but does not return the token or place it in dashboard URLs. Startup logs follow the same rule.
 
 ## Phase 4 approval-token replacement contract
@@ -220,7 +223,7 @@ Section-level captures are preserved beside them. `test/fixtures/desktop-ux-base
 - Create, rename, and repair operations reject duplicate workspace names and duplicate normalized project paths before configuration is written.
 - Unavailable repositories use a dedicated **Repair path** workflow that changes only the project folder and keeps the workspace identity and safeguards.
 - The dashboard keeps at most five recent workspace names in local UI storage. Renames and removals update that list, and stale aliases are discarded against the current configuration.
-- Both workspace selectors include **Manage workspaces…**; the quick selector groups recent workspaces before the remaining configured workspaces.
+- Workspace filtering is page-owned: Sessions and Workspaces use accessible listbox menus, Activity uses its own filter row, and Quick navigation remains the cross-page route and action launcher.
 - Existing workspace configuration and backend safety enforcement remain authoritative; the redesign changes presentation, not security policy.
 
 ## Phase 8 diagnostics and recovery contract
@@ -246,7 +249,7 @@ Section-level captures are preserved beside them. `test/fixtures/desktop-ux-base
 - Keyboard users can move command results with Up and Down arrows, execute with Enter, and close with Escape through the existing modal focus trap. Quick navigation does not replace an already active modal or drawer.
 - One route policy owns current and legacy dashboard paths. Known aliases normalize to their canonical destinations, malformed or unknown paths fall back to a clean Overview route, and only canonical routes are written to local storage.
 - Route parameters use per-page allowlists. Workspace names, filter values, lengths, duplicates, and transient focus state are validated before persistence; credential-like parameter names are removed before a route reaches the address bar or saved state.
-- The workspace quick-jump control opens the Workspaces page scoped to the selected workspace, focuses the matching card after asynchronous route mounting, and removes the transient `focus` marker afterward.
+- Quick navigation can open the Workspaces page scoped to a selected workspace, focus the matching card after asynchronous route mounting, and remove the transient `focus` marker afterward.
 - The top connection status is a direct link to `#settings/connection`; it remains a status indicator and does not create a separate connection surface.
 - Activity search, time range, tool, status, task, event, and workspace filters are represented in the route so filtered views can be refreshed, restored, copied, and opened from Sessions or Diagnostics.
 - Filter-only route updates use `history.replaceState` to avoid remounting the Activity page on every keystroke.
@@ -255,7 +258,7 @@ Section-level captures are preserved beside them. `test/fixtures/desktop-ux-base
 - Workspace removal and partial diagnostic clearing use the shared focus-trapped application confirmation dialog. Higher-consequence full diagnostic reset retains typed `RESET` confirmation.
 - Session history controls route to `#settings/diagnostics`, which is the authoritative owner established in Phase 8.
 - Quick navigation uses the current in-memory dashboard state and never places credentials or desktop secrets in command data or route parameters.
-- Compact layouts keep the command launcher available as an icon while hiding the separate workspace jumper where horizontal space is limited.
+- Compact layouts keep the command launcher available as an icon while page-owned workspace menus expand to the available width.
 
 ## Phase 10 accessibility and responsive contract
 
@@ -281,6 +284,16 @@ Section-level captures are preserved beside them. `test/fixtures/desktop-ux-base
 - Diagnostics use grouped counts, slim severity rails, and row separators. Tool cards and routine status indicators do not lift, pulse, or glow on hover.
 - Electron recovery health cards share one grouped container; only the recovery hero and initial setup card retain elevated emphasis.
 - Phase 10 keyboard, focus, high-contrast, reduced-motion, and compact-layout behavior remains unchanged by the visual-density refinements.
+
+## Windows installer contract
+
+- The published NSIS executable uses an assisted setup wizard rather than a one-click installer.
+- The install-mode page offers current-user and all-users installation, with current-user installation selected by default.
+- Selecting all-users installation requests Windows administrator elevation when the installer is not already elevated; current-user installation remains available without elevation.
+- The destination directory is visible and may be changed before installation.
+- Setup creates Start menu and desktop shortcuts for Rel.AI MCP.
+- The Finish page includes a **Run Rel.AI MCP** checkbox, selected by default, which the user may clear before closing setup.
+- Release and installed-app automation may still use NSIS silent mode with an isolated destination so exact-installer validation remains unattended.
 
 ## Phase 12 application update contract
 
@@ -311,7 +324,7 @@ Section-level captures are preserved beside them. `test/fixtures/desktop-ux-base
 
 - `test/fixtures/desktop-usability-scenarios.json` is the authoritative acceptance manifest. It distinguishes eleven repeatable installed-app scenarios from four external checks that require real accounts or published infrastructure.
 - Windows installed-app smoke accepts either a newly built candidate or an exact prebuilt installer through `REL_AI_SMOKE_INSTALLER`. The release workflow must test the same NSIS file later added to the release asset list.
-- Packaged smoke covers resources, local health, dashboard HTTP, the public tool surface, setup, failure recovery, dashboard overview, refresh context, workspace route state, legacy route normalization, and Sessions-to-Activity detail navigation.
+- Packaged smoke covers resources, local health, dashboard HTTP, the public tool surface, setup, failure recovery, dashboard overview, event-driven update context, workspace route state, legacy route normalization, and Sessions-to-Activity detail navigation.
 - Setup, recovery, dashboard overview, and Activity detail produce PNG evidence. Screenshot paths are constrained, every screenshot has a SHA-256 value, and the validator requires each manifest-declared image.
 - `release-readiness.json` records the installer filename and SHA-256, automated scenario results, screenshot hashes and dimensions, limitations, and external checks with `not_recorded` status.
 - Automated success is named `automated_passed_manual_required`. The validator rejects any automated record that claims real ngrok publication, ChatGPT OAuth, live token rotation, or update from a previous release passed.

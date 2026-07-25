@@ -197,7 +197,7 @@ The important design choice: ChatGPT does the thinking, but the local bridge kee
 
 ## Install
 
-Rel.AI MCP is a self-contained Windows desktop app. Download the latest installer from the [Releases page](https://github.com/Kyne0328/rel-ai-mcp/releases) and run it.
+Rel.AI MCP is a self-contained Windows desktop app. Download the latest installer from the [Releases page](https://github.com/Kyne0328/rel-ai-mcp/releases) and run it. The standard setup wizard lets you install for the current user or for all users, review the destination folder, and click **Install**. Selecting **all users** requests Windows administrator approval when the installer is not already elevated. The Finish page includes an optional **Run Rel.AI MCP** checkbox, enabled by default.
 
 You do **not** need to install Node.js, npm, or ngrok. The app ships its own runtime and its own ngrok agent, and it keeps that agent updated on its own.
 

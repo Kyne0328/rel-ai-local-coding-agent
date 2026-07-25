@@ -21,8 +21,6 @@
     }
   },
   "productUx": {
-    "dashboardRefreshSeconds": 5,
-    "liveLogPollSeconds": 3,
     "staleHours": 24,
     "cleanupOlderThanHours": 168,
     "enableStateExport": true

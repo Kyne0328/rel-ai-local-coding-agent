@@ -1,26 +1,28 @@
-export function EmptyState({ icon = '□', title, body, cta, onCta } = {}) {
+export function EmptyState({ icon = '□', title, body, description, cta, onCta } = {}) {
   const el = document.createElement('div');
-  el.className = 'empty';
-  el.style.cssText = 'display:grid;gap:8px;text-align:center;padding:32px 16px;';
+  el.className = 'empty empty-state';
+
   const iconEl = document.createElement('div');
-  iconEl.style.cssText = 'font-size:24px;';
+  iconEl.className = 'empty-state-icon';
+  iconEl.setAttribute('aria-hidden', 'true');
   iconEl.textContent = icon;
+
   const titleEl = document.createElement('div');
-  titleEl.style.cssText = 'font-weight:700;font-size:14px;';
+  titleEl.className = 'empty-state-title';
   titleEl.textContent = title || '';
+
   const bodyEl = document.createElement('div');
-  bodyEl.style.cssText = 'color:var(--muted,var(--text-muted));font-size:13px;';
-  bodyEl.textContent = body || '';
-  el.appendChild(iconEl);
-  el.appendChild(titleEl);
-  el.appendChild(bodyEl);
+  bodyEl.className = 'empty-state-copy';
+  bodyEl.textContent = body || description || '';
+
+  el.append(iconEl, titleEl, bodyEl);
   if (cta && onCta) {
-    const btn = document.createElement('button');
-    btn.className = 'secondary';
-    btn.style.marginTop = '8px';
-    btn.textContent = cta;
-    btn.onclick = onCta;
-    el.appendChild(btn);
+    const button = document.createElement('button');
+    button.className = 'secondary empty-state-action';
+    button.type = 'button';
+    button.textContent = cta;
+    button.onclick = onCta;
+    el.appendChild(button);
   }
   return el;
 }

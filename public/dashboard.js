@@ -1,12 +1,11 @@
 import { setToken, getToken, fetchJson, postJson, invalidateCache, DASHBOARD_DATA_URL } from './ui/api.js';
 import { init as initStore, get as getStore } from './ui/store.js';
-import { initRouter, currentSection, currentRoutePath, getRouteParams, getWorkspaceFilter, setWorkspaceFilter, navigate, replaceRouteParams, rerender } from './ui/router.js';
-import { initEvents, startSSE, restartSSE } from './ui/events.js';
-import { mountHome } from './ui/sections/home.js';
+import { initRouter, currentSection, currentRoutePath, getRouteParams, replaceRouteParams, rerender } from './ui/router.js';
+import { initEvents, startSSE } from './ui/events.js';
+import { mountHome } from './ui/features/home/index.js';
 import { initUiPreferences } from './ui/preferences.js';
 import { connectionLayerViews, connectionSummary, withConnectionState } from './ui/connection-state.js';
 import { initCommandPalette } from './ui/command-palette.js';
-import { recentWorkspaceAliases, recordRecentWorkspace } from './ui/workspace-recents.js';
 import { normalizeRouteKey } from './ui/route-policy.js';
 import { closeDrawer } from './ui/components/drawer.js';
 
@@ -27,8 +26,9 @@ let _clockTimer = null;
 let _shellStatus = { label: 'Connecting', tone: 'warn' };
 let _liveState = 'connecting';
 let _refreshPromise = null;
-let _fallbackRefreshTimer = null;
-let _livePollSeconds = null;
+let _renderFingerprint = '';
+let _renderFrame = 0;
+let _renderWaiters = [];
 
 function cleanLaunchQuery() {
   const clean = new URLSearchParams(location.search);
@@ -79,23 +79,19 @@ async function boot() {
   initStore(initial?.ok !== false ? initial || {} : {});
   const routeRoot = ensureRouteRoot();
   if (!routeRoot) return;
-  wireTopControls();
-  initCommandPalette({ getData: getStore, refresh: () => doRefresh({ source: 'command', render: true }) });
+  initCommandPalette({ getData: getStore });
   initDesktopBridge();
   window.addEventListener('relai:route-change', () => {
     closeDrawer();
-    updateWorkspaceScope();
-    populateWorkspaceQuickNav();
+    _renderFingerprint = '';
   });
-  window.addEventListener('relai:route-mounted', focusWorkspaceCard);
-  window.addEventListener('relai:workspace-recents-change', () => {
-    updateWorkspaceScope();
-    populateWorkspaceQuickNav();
+  window.addEventListener('relai:route-mounted', event => {
+    _renderFingerprint = viewFingerprint(getStore());
+    focusWorkspaceCard(event);
   });
   if (initial && initial.ok !== false) {
     activateRouter(routeRoot);
     updateShell(initial);
-    configureLiveRefresh(initial);
   } else {
     renderDashboardState('loading', 'Loading workspace state…', 'Rel.AI is checking the local service, configuration, and workspace status.');
   }
@@ -119,50 +115,21 @@ let _sectionsCache = null;
 function getSections() {
   return _sectionsCache || (_sectionsCache = {
     home: element => mountHome(element, getStore()),
-    tasks: element => import('./ui/sections/tasks.js').then(module => module.mountTasks(element, getStore())).catch(debugError),
-    workspaces: element => import('./ui/sections/workspaces.js').then(module => module.mountWorkspaces(element, getStore())).catch(debugError),
-    activity: element => import('./ui/sections/activity.js').then(module => module.mountActivity(element)).catch(debugError),
-    tools: element => import('./ui/sections/tools.js').then(module => module.mountTools(element)).catch(debugError),
-    reference: element => import('./ui/sections/tools.js').then(module => module.mountTools(element)).catch(debugError),
-    settings: element => import('./ui/sections/settings/index.js').then(module => module.mountSettings(element, settingsSubPage())).catch(debugError),
-    connection: element => import('./ui/sections/settings/index.js').then(module => module.mountSettings(element, 'connection')).catch(debugError),
-    connector: element => import('./ui/sections/settings/index.js').then(module => module.mountSettings(element, 'connection')).catch(debugError),
-    diagnostics: element => import('./ui/sections/settings/index.js').then(module => module.mountSettings(element, 'diagnostics')).catch(debugError)
+    tasks: element => import('./ui/features/sessions/index.js').then(module => module.mountTasks(element, getStore())).catch(debugError),
+    workspaces: element => import('./ui/features/workspaces/index.js').then(module => module.mountWorkspaces(element, getStore())).catch(debugError),
+    activity: element => import('./ui/features/activity/index.js').then(module => module.mountActivity(element)).catch(debugError),
+    tools: element => import('./ui/features/tools/index.js').then(module => module.mountTools(element)).catch(debugError),
+    reference: element => import('./ui/features/tools/index.js').then(module => module.mountTools(element)).catch(debugError),
+    settings: element => import('./ui/features/settings/index.js').then(module => module.mountSettings(element, settingsSubPage())).catch(debugError),
+    connection: element => import('./ui/features/settings/index.js').then(module => module.mountSettings(element, 'connection')).catch(debugError),
+    connector: element => import('./ui/features/settings/index.js').then(module => module.mountSettings(element, 'connection')).catch(debugError),
+    diagnostics: element => import('./ui/features/settings/index.js').then(module => module.mountSettings(element, 'diagnostics')).catch(debugError)
   });
 }
 
 function settingsSubPage() {
   const parts = currentRoutePath().split('/');
   return parts[0] === 'settings' && parts[1] ? parts[1] : 'general';
-}
-
-function wireTopControls() {
-  document.getElementById('refreshBtn')?.addEventListener('click', event => {
-    event.preventDefault();
-    void doRefresh({ source: 'manual', render: true });
-  });
-  document.getElementById('workspaceScope')?.addEventListener('change', event => {
-    const value = String(event.target.value || '');
-    if (value === '__manage__') {
-      event.target.value = getWorkspaceFilter();
-      navigate('workspaces');
-      return;
-    }
-    if (value) recordRecentWorkspace(value);
-    setWorkspaceFilter(value);
-  });
-  document.getElementById('workspaceQuickNav')?.addEventListener('change', event => {
-    const alias = String(event.target.value || '');
-    event.target.value = '';
-    if (alias === '__manage__') {
-      navigate('workspaces');
-      return;
-    }
-    if (alias) {
-      recordRecentWorkspace(alias);
-      navigate('workspaces', { workspace: alias, focus: '1' });
-    }
-  });
 }
 
 function initDesktopBridge() {
@@ -177,7 +144,7 @@ function applyDesktopStatus(status) {
   const data = withConnectionState({ ...getStore(), desktopStatus: status }, _liveState);
   initStore(data);
   updateShell(data);
-  if (_routerReady && !hasBlockingInteraction()) void rerender({ preserveView: true });
+  if (_routerReady) void renderViewIfChanged(data);
 }
 
 async function doRefresh(options = {}) {
@@ -191,8 +158,6 @@ async function doRefresh(options = {}) {
 }
 
 async function performRefresh(options = {}) {
-  let refreshState = 'error';
-  setRefreshState('loading');
   invalidateCache(DASHBOARD_DATA_URL);
   try {
     const data = await fetchJson(DASHBOARD_DATA_URL, { cache: 'no-store' });
@@ -200,11 +165,9 @@ async function performRefresh(options = {}) {
       const hydrated = withConnectionState(data, _liveState);
       initStore(hydrated);
       updateShell(hydrated);
-      configureLiveRefresh(hydrated);
       if (!_routerReady) activateRouter(ensureRouteRoot());
-      else if (options.render !== false && !hasBlockingInteraction()) await rerender({ preserveView: true });
+      else if (options.render !== false) await renderViewIfChanged(hydrated);
       _lastEventAt = Date.now();
-      refreshState = 'idle';
       return hydrated;
     }
     return renderRefreshFailure(data);
@@ -213,8 +176,6 @@ async function performRefresh(options = {}) {
       ok: false,
       error: error instanceof Error ? error.message : String(error)
     });
-  } finally {
-    setRefreshState(refreshState);
   }
 }
 
@@ -226,18 +187,6 @@ function renderRefreshFailure(data) {
   if (updated) updated.textContent = message;
   if (!_routerReady) renderDashboardState('error', data?.status === 401 ? 'Dashboard authentication failed.' : 'Rel.AI is not responding.', message);
   return data;
-}
-
-function setRefreshState(state) {
-  const button = document.getElementById('refreshBtn');
-  if (!button) return;
-  const labels = { loading: 'Refreshing…', error: 'Retry now', idle: 'Refresh now' };
-  button.disabled = state === 'loading';
-  button.setAttribute('aria-busy', state === 'loading' ? 'true' : 'false');
-  button.dataset.state = state;
-  const label = button.querySelector('span');
-  if (label) label.textContent = labels[state] || labels.idle;
-  else button.textContent = labels[state] || labels.idle;
 }
 
 function renderDashboardState(kind, title, description) {
@@ -256,33 +205,12 @@ async function liveOnEvent(data) {
   const hydrated = withConnectionState(data, _liveState);
   initStore(hydrated);
   updateShell(hydrated);
-  configureLiveRefresh(hydrated);
   if (!_routerReady) activateRouter();
   if (currentSection() === 'activity') {
-    await import('./ui/sections/activity.js').then(module => module.mergeEntries(hydrated.auditTail?.entries || [])).catch(debugError);
-  } else if (!hasBlockingInteraction()) {
-    await rerender({ preserveView: true });
+    await import('./ui/features/activity/index.js').then(module => module.mergeEntries(hydrated.auditTail?.entries || [])).catch(debugError);
+  } else {
+    await renderViewIfChanged(hydrated);
   }
-}
-
-function configureLiveRefresh(data) {
-  const productUx = data?.config?.productUx || {};
-  const refreshSeconds = boundedSeconds(productUx.dashboardRefreshSeconds, 5, 1, 3600);
-  if (_fallbackRefreshTimer) clearInterval(_fallbackRefreshTimer);
-  _fallbackRefreshTimer = window.setInterval(() => {
-    if (_liveState !== 'live' && document.visibilityState !== 'hidden') {
-      void doRefresh({ source: 'fallback', render: true });
-    }
-  }, refreshSeconds * 1000);
-
-  const nextPollSeconds = boundedSeconds(productUx.liveLogPollSeconds, 3, 1, 300);
-  if (_livePollSeconds != null && nextPollSeconds !== _livePollSeconds) restartSSE(getToken);
-  _livePollSeconds = nextPollSeconds;
-}
-
-function boundedSeconds(value, fallback, min, max) {
-  const number = Number(value);
-  return Number.isFinite(number) ? Math.min(Math.max(Math.floor(number), min), max) : fallback;
 }
 
 function liveStateChange(detail) {
@@ -290,7 +218,7 @@ function liveStateChange(detail) {
   if (detail.lastEventAt) _lastEventAt = detail.lastEventAt;
   initStore(withConnectionState(getStore(), _liveState));
   renderConnectionStatus();
-  if (_routerReady && currentRoutePath() === 'settings/connection' && !hasBlockingInteraction()) void rerender({ preserveView: true });
+  if (_routerReady && currentRoutePath() === 'settings/connection') void renderViewIfChanged(getStore());
   ensureClock();
 }
 
@@ -299,12 +227,8 @@ function updateShell(data) {
   const workspaces = Array.isArray(config.workspaces) ? config.workspaces : [];
   const task = data?.taskActivity || {};
   const presentation = shellPresentation(data?.ok !== false, task, workspaces.length, data?.connectionState);
-  const subtitle = document.getElementById('subtitle');
-  if (subtitle) subtitle.textContent = presentation.subtitle;
   _shellStatus = presentation;
   renderConnectionStatus();
-  updateWorkspaceScope();
-  populateWorkspaceQuickNav();
   _lastEventAt ||= Date.parse(data.generatedAt || '') || Date.now();
   renderLastEventTime();
 }
@@ -340,42 +264,73 @@ function pluralLabel(count, singular) {
   return Number(count) === 1 ? singular : `${singular}s`;
 }
 
-function updateWorkspaceScope() {
-  const select = document.getElementById('workspaceScope');
-  if (!select) return;
-  const control = document.getElementById('workspaceScopeControl');
-  const supportsWorkspaceScope = ['home', 'tasks', 'workspaces', 'activity'].includes(currentSection());
-  if (control) control.hidden = !supportsWorkspaceScope;
-  else select.hidden = !supportsWorkspaceScope;
-  if (!supportsWorkspaceScope) return;
-  const workspaces = getStore()?.config?.workspaces || [];
-  const selected = getWorkspaceFilter();
-  select.innerHTML = '<option value="">All workspaces</option>'
-    + workspaces.map(workspace => `<option value="${escapeHtml(workspace.alias)}">${escapeHtml(workspace.alias)}</option>`).join('')
-    + '<option value="__manage__">Manage workspaces…</option>';
-  select.value = workspaces.some(workspace => workspace.alias === selected) ? selected : '';
+function renderViewIfChanged(data) {
+  if (!_routerReady || hasBlockingInteraction()) return Promise.resolve(false);
+  const nextFingerprint = viewFingerprint(data);
+  if (nextFingerprint === _renderFingerprint) return Promise.resolve(false);
+  _renderFingerprint = nextFingerprint;
+  return new Promise(resolve => {
+    _renderWaiters.push(resolve);
+    if (_renderFrame) return;
+    _renderFrame = window.requestAnimationFrame(async () => {
+      _renderFrame = 0;
+      let rendered = false;
+      try {
+        if (!hasBlockingInteraction()) {
+          await rerender({ preserveView: true });
+          rendered = true;
+        } else {
+          _renderFingerprint = '';
+        }
+      } catch (error) {
+        _renderFingerprint = '';
+        debugError(error);
+      }
+      const waiters = _renderWaiters.splice(0);
+      waiters.forEach(waiter => waiter(rendered));
+    });
+  });
 }
 
-function populateWorkspaceQuickNav() {
-  const select = document.getElementById('workspaceQuickNav');
-  const control = document.getElementById('workspaceQuickNavControl');
-  if (!select) return;
-  const workspaces = getStore()?.config?.workspaces || [];
-  if (control) control.hidden = false;
-  const recent = recentWorkspaceAliases(workspaces);
-  const recentSet = new Set(recent);
-  const recentOptions = recent.length
-    ? `<optgroup label="Recent">${recent.map(alias => `<option value="${escapeHtml(alias)}">${escapeHtml(alias)}</option>`).join('')}</optgroup>`
-    : '';
-  const remaining = workspaces.filter(workspace => !recentSet.has(workspace.alias));
-  const workspaceOptions = remaining.length
-    ? `<optgroup label="All workspaces">${remaining.map(workspace => `<option value="${escapeHtml(workspace.alias)}">${escapeHtml(workspace.alias)}</option>`).join('')}</optgroup>`
-    : '';
-  select.innerHTML = '<option value="">Jump to workspace…</option>'
-    + recentOptions
-    + workspaceOptions
-    + '<option value="__manage__">Manage workspaces…</option>';
-  select.value = '';
+function viewFingerprint(data = {}) {
+  const path = currentRoutePath();
+  const route = `${path}?${getRouteParams().toString()}`;
+  const config = data.config || {};
+  const desktop = data.desktopStatus || {};
+  const desktopState = {
+    serverRunning: desktop.serverRunning,
+    starting: desktop.starting,
+    tunnelStatus: desktop.tunnelStatus,
+    mcpUrl: desktop.mcpUrl,
+    authenticationRequired: desktop.authenticationRequired,
+    errorCode: desktop.errorCode,
+    error: desktop.error
+  };
+  let payload;
+  switch (currentSection()) {
+    case 'activity':
+      payload = route;
+      break;
+    case 'tasks':
+      payload = [route, data.tasks || [], data.taskActivity || {}];
+      break;
+    case 'workspaces':
+      payload = [route, config.workspaces || [], data.workspaceStates || {}, data.health || {}];
+      break;
+    case 'tools':
+    case 'reference':
+      payload = [route, data.tools || []];
+      break;
+    case 'settings':
+    case 'connection':
+    case 'connector':
+    case 'diagnostics':
+      payload = [route, config, data.connectionState || {}, desktopState];
+      break;
+    default:
+      payload = [route, config.workspaces || [], data.tasks || [], data.taskActivity || {}, data.health || {}, data.connectionState || {}, desktopState];
+  }
+  return JSON.stringify(payload);
 }
 
 function focusWorkspaceCard(event) {
@@ -447,7 +402,7 @@ function hasBlockingInteraction() {
 async function checkOnboarding() {
   try {
     const status = await fetchJson('/api/onboarding/status');
-    const onboarding = await import('./ui/sections/onboarding.js');
+    const onboarding = await import('./ui/features/onboarding/index.js');
     if (surface === 'desktop') {
       if (status?.needsOnboarding) {
         await postDesktopHandoffState();

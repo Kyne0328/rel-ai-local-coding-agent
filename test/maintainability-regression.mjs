@@ -10,7 +10,7 @@ const dashboardWindow = read('electron/dashboard-window.js');
 const status = read('electron/renderer/status.js');
 const sleepBlocker = read('electron/tool-sleep-blocker.js');
 const dashboard = read('public/dashboard.js');
-const home = read('src/ui/sections/home.js');
+const home = read('src/ui/features/home/index.js');
 const workspaceState = read('src/workspaceState.js');
 const gitExecutable = read('src/gitExecutable.js');
 

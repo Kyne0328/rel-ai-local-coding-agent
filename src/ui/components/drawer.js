@@ -3,7 +3,7 @@ import { activateOverlay } from './overlay-focus.js';
 let _drawerOpener = null;
 let _drawerCleanup = null;
 
-export function openDrawer({ title, content, onClose } = {}) {
+export function openDrawer({ title, content, onClose, panelClass = '' } = {}) {
   closeDrawer();
   _drawerOpener = document.activeElement;
 
@@ -12,7 +12,7 @@ export function openDrawer({ title, content, onClose } = {}) {
   backdrop.className = 'overlay-backdrop drawer-backdrop';
 
   const panel = document.createElement('div');
-  panel.className = 'drawer-panel';
+  panel.className = ['drawer-panel', panelClass].filter(Boolean).join(' ');
   panel.setAttribute('role', 'dialog');
   panel.setAttribute('aria-modal', 'true');
   panel.setAttribute('aria-labelledby', '__relai-drawer-title');
@@ -30,16 +30,13 @@ export function openDrawer({ title, content, onClose } = {}) {
   const finish = () => finishClose(onClose);
   closeButton.onclick = finish;
   head.append(titleElement, closeButton);
-  panel.appendChild(head);
 
-  if (typeof content === 'string') {
-    const wrapper = document.createElement('div');
-    wrapper.innerHTML = content;
-    panel.appendChild(wrapper);
-  } else if (content instanceof Node) {
-    panel.appendChild(content);
-  }
+  const body = document.createElement('div');
+  body.className = 'drawer-body';
+  if (typeof content === 'string') body.innerHTML = content;
+  else if (content instanceof Node) body.appendChild(content);
 
+  panel.append(head, body);
   backdrop.appendChild(panel);
   document.body.appendChild(backdrop);
   backdrop.addEventListener('click', event => {

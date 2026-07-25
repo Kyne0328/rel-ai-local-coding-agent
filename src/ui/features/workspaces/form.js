@@ -1,13 +1,13 @@
 // Shared add/edit workspace form. Rename and path changes are saved atomically.
 // Git and safety settings remain available under progressive disclosure.
-import { openModal, closeModal } from '../components/modal.js';
-import { fetchJson, postJson, invalidateCache, requestDashboardRefresh, DASHBOARD_DATA_URL } from '../api.js';
-import { toast } from '../components/toast.js';
-import { esc } from '../utils.js';
-import { runButtonAction } from '../action-state.js';
-import { getWorkspaceFilter, navigate, setWorkspaceFilter } from '../router.js';
-import { recordRecentWorkspace, renameRecentWorkspace } from '../workspace-recents.js';
-import { markUnsaved } from '../interaction-safety.js';
+import { openModal, closeModal } from '../../components/modal.js';
+import { fetchJson, postJson, invalidateCache, requestDashboardRefresh, DASHBOARD_DATA_URL } from '../../api.js';
+import { toast } from '../../components/toast.js';
+import { esc } from '../../utils.js';
+import { runButtonAction } from '../../action-state.js';
+import { getWorkspaceFilter, navigate, setWorkspaceFilter } from '../../router.js';
+import { recordRecentWorkspace, renameRecentWorkspace } from './recents.js';
+import { markUnsaved } from '../../interaction-safety.js';
 
 const ALIAS_PATTERN = /^[A-Za-z0-9._-]{1,80}$/;
 

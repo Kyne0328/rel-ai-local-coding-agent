@@ -88,6 +88,16 @@ assert.ok(electronPackage.build.files.includes('desktop-lifecycle.js'));
 assert.ok(electronPackage.build.files.includes('window-security.js'));
 assert.ok(electronPackage.build.files.includes('diagnostic-files.js'));
 assert.ok(electronPackage.build.files.includes('smoke-evidence.js'));
+assert.deepEqual(electronPackage.build.nsis, {
+  oneClick: false,
+  perMachine: false,
+  allowElevation: true,
+  allowToChangeInstallationDirectory: true,
+  createDesktopShortcut: true,
+  createStartMenuShortcut: true,
+  shortcutName: 'Rel.AI MCP',
+  runAfterFinish: true
+});
 
 const statusHtml = fs.readFileSync(path.join(tmp, 'electron/renderer/status.html'), 'utf8');
 assert.match(statusHtml, /id="appVersion">v0\.99\.0<\/span>/);

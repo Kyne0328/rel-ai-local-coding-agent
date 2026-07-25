@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage, powerSaveBlocker, Notification, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage, powerSaveBlocker, Notification, dialog, screen } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('node:path');
 const { resolveResourcePath } = require('./resource-path');
@@ -53,8 +53,7 @@ const recoveryWindowManager = createRecoveryWindowManager({
 const dashboardWindowManager = createDashboardWindowManager({
   BrowserWindow,
   shell,
-  app,
-  dialog,
+  app, dialog, screen,
   getConnection: buildDashboardConnection,
   isQuitting: () => isQuitting,
   onError: error => setStatus({ error: formatError(error), errorCode: ERROR_CODES.UNKNOWN }),

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
-const dashboardTokens = read('src/ui/tokens.css');
+const dashboardTokens = read('src/ui/styles/app.css');
 const electronCss = read('electron/renderer/app.css');
 const dashboardJs = read('public/dashboard.js');
 
@@ -52,8 +52,8 @@ const electronMain = read('electron/main.js');
 const appUpdater = read('electron/app-updater.js');
 const appUpdaterEvents = read('electron/app-updater-events.js');
 const desktopSettings = read('electron/desktop-settings.js');
-const desktopUpdates = read('src/ui/sections/settings/desktop-updates.js');
-const desktopStartup = read('src/ui/sections/settings/desktop-startup.js');
+const desktopUpdates = read('src/ui/features/settings/desktop-updates.js');
+const desktopStartup = read('src/ui/features/settings/desktop-startup.js');
 const desktopLifecycle = read('electron/desktop-lifecycle.js');
 assert.match(statusHtml, /id="serverToggleBtn"/);
 assert.match(statusHtml, /data-disclosure="service"/);

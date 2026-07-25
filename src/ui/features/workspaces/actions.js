@@ -1,11 +1,11 @@
-import { fetchJson, postJson, DASHBOARD_DATA_URL, requestDashboardRefresh } from '../api.js';
-import { toast } from '../components/toast.js';
-import { openWorkspaceForm } from './workspace-form.js';
-import { openWorkspaceRepair } from './workspace-repair.js';
-import { runButtonAction } from '../action-state.js';
-import { getWorkspaceFilter, navigate, setWorkspaceFilter } from '../router.js';
-import { recordRecentWorkspace, removeRecentWorkspace } from '../workspace-recents.js';
-import { confirmAction } from '../components/confirm-dialog.js';
+import { fetchJson, postJson, DASHBOARD_DATA_URL, requestDashboardRefresh } from '../../api.js';
+import { toast } from '../../components/toast.js';
+import { openWorkspaceForm } from './form.js';
+import { openWorkspaceRepair } from './repair.js';
+import { runButtonAction } from '../../action-state.js';
+import { getWorkspaceFilter, navigate, setWorkspaceFilter } from '../../router.js';
+import { recordRecentWorkspace, removeRecentWorkspace } from './recents.js';
+import { confirmAction } from '../../components/confirm-dialog.js';
 
 const WORKSPACE_CLICK_ACTIONS = [
   { selector: '[data-add-workspace]', handler: () => openWorkspaceForm({ mode: 'add' }) },

@@ -6,6 +6,11 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { createDashboardWindowManager, validateConnection, normalizeRouteHash } = require('../electron/dashboard-window.js');
+const {
+  DASHBOARD_WINDOW_STATE_VERSION,
+  defaultDashboardBounds,
+  restoreDashboardBounds
+} = require('../electron/dashboard-window-bounds.js');
 
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-dashboard-window-'));
 const folderToOpen = path.join(sandbox, 'repo');
@@ -18,6 +23,11 @@ let permissionCheck = null;
 let openHandler = null;
 let dashboardLoadError = null;
 const webContentsEvents = new Map();
+const workArea = { x: 0, y: 0, width: 1366, height: 728 };
+const fakeScreen = {
+  getPrimaryDisplay: () => ({ workArea }),
+  getDisplayMatching: () => ({ workArea })
+};
 
 const fakeSession = {
   setPermissionRequestHandler(listener) { permissionHandler = listener; },
@@ -29,7 +39,8 @@ class FakeWindow {
     this.options = options;
     this.destroyed = false;
     this.events = new Map();
-    this.bounds = { x: 18, y: 24, width: options.width, height: options.height };
+    this.bounds = { x: options.x, y: options.y, width: options.width, height: options.height };
+    this.normalBounds = { ...this.bounds };
     this.webContents = {
       session: fakeSession,
       url: '',
@@ -49,6 +60,7 @@ class FakeWindow {
   moveTop() { this.movedTop = true; }
   focus() { this.focused = true; }
   getBounds() { return this.bounds; }
+  getNormalBounds() { return this.normalBounds; }
   destroy() { this.destroyed = true; this.events.get('closed')?.(); }
   isDestroyed() { return this.destroyed; }
 }
@@ -64,6 +76,7 @@ const dependencies = {
     focus() {}
   },
   dialog: { async showOpenDialog() { return { canceled: false, filePaths: [folderToOpen] }; } },
+  screen: fakeScreen,
   isQuitting: () => false,
   onLoadError: error => { dashboardLoadError = error; },
   getConnection: async () => ({
@@ -75,6 +88,12 @@ try {
   const manager = createDashboardWindowManager(dependencies);
   const win = await manager.open();
   assert.equal(windows.length, 1);
+  assert.deepEqual(
+    { x: win.options.x, y: win.options.y, width: win.options.width, height: win.options.height },
+    defaultDashboardBounds(fakeScreen)
+  );
+  assert.ok(win.options.width < workArea.width * 0.9, 'default dashboard width must be visibly windowed');
+  assert.ok(win.options.height < workArea.height * 0.9, 'default dashboard height must be visibly windowed');
   assert.equal(win.options.webPreferences.nodeIntegration, false);
   assert.equal(win.options.webPreferences.contextIsolation, true);
   assert.ok(win.options.webPreferences.preload.endsWith('dashboard-preload.js'));
@@ -110,16 +129,32 @@ try {
   assert.equal(closePrevented, true);
   assert.equal(win.hidden, true, 'normal close must hide the dashboard to the tray');
 
+  win.bounds = { x: 0, y: 0, width: workArea.width, height: workArea.height };
+  win.normalBounds = { x: 90, y: 54, width: 1080, height: 640 };
   manager.close();
   assert.equal(manager.getWindow(), null);
   const saved = JSON.parse(fs.readFileSync(path.join(sandbox, 'dashboard-window-state.json'), 'utf8'));
-  assert.deepEqual(saved, { x: 18, y: 24, width: 1240, height: 820 });
+  assert.deepEqual(saved, {
+    version: DASHBOARD_WINDOW_STATE_VERSION,
+    x: 90,
+    y: 54,
+    width: 1080,
+    height: 640
+  });
 
   const reopened = await manager.open();
   assert.equal(windows.length, 2);
-  assert.equal(reopened.options.x, 18);
-  assert.equal(reopened.options.y, 24);
+  assert.equal(reopened.options.x, 90);
+  assert.equal(reopened.options.y, 54);
+  assert.equal(reopened.options.width, 1080);
+  assert.equal(reopened.options.height, 640);
   manager.close();
+
+  assert.deepEqual(
+    restoreDashboardBounds({ x: 0, y: 0, width: 1240, height: 820 }, fakeScreen),
+    defaultDashboardBounds(fakeScreen),
+    'legacy unversioned near-fullscreen bounds must migrate to the smaller default'
+  );
 
   assert.equal(validateConnection({ url: 'http://localhost:3333/dashboard' }).pathname, '/dashboard');
   assert.equal(normalizeRouteHash('settings/desktop'), '#settings/desktop');

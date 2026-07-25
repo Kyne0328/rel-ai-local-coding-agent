@@ -2,9 +2,26 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 
+const require = createRequire(import.meta.url);
+const dashboardSessions = require('../src/http/dashboardSessions.js');
+const { beginConnectorToolCall, resetToolActivity } = require('../src/toolActivity.js');
 const dashboardSource = fs.readFileSync(new URL('../src/http/dashboard.js', import.meta.url), 'utf8');
+const eventClientSource = fs.readFileSync(new URL('../src/ui/events.js', import.meta.url), 'utf8');
+const dashboardClientSource = fs.readFileSync(new URL('../public/dashboard.js', import.meta.url), 'utf8');
+const connectionStateSource = fs.readFileSync(new URL('../src/ui/connection-state.js', import.meta.url), 'utf8');
 assert.match(dashboardSource, /: keepalive/, 'dashboard SSE must include a heartbeat for quiet connections');
+assert.match(eventClientSource, /addEventListener\('ready'/, 'the dashboard client must treat the server ready event as a live connection');
+assert.match(eventClientSource, /stopSSE\(\{ emit: false \}\)/, 'normal SSE restarts must not flash an offline state');
+assert.match(eventClientSource, /emitState\('reconnecting'\)/, 'temporary transport failures must be represented as reconnecting');
+assert.match(eventClientSource, /750 \* \(2 \*\*/, 'reconnect attempts must use bounded exponential backoff');
+assert.match(eventClientSource, /visibilityState === 'hidden'/, 'hidden windows must pause transport work instead of repeatedly reconnecting');
+assert.match(eventClientSource, /new EventSource\(url, \{ withCredentials: true \}\)/, 'Electron EventSource requests must include the dashboard session cookie');
+assert.match(dashboardSource, /onToolActivity\(scheduleSnapshot\)/, 'tool activity must schedule dashboard snapshots');
+assert.doesNotMatch(dashboardSource, /setInterval\(\(\) => sendSnapshot/, 'dashboard updates must not depend on a polling timer');
+assert.doesNotMatch(dashboardClientSource, /configureLiveRefresh|dashboardRefreshSeconds|liveLogPollSeconds|_liveState = 'polling'/);
+assert.doesNotMatch(connectionStateSource, /polling:/);
 
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-dashboard-events-'));
 const configPath = path.join(sandbox, 'config.json');
@@ -27,8 +44,6 @@ fs.writeFileSync(configPath, JSON.stringify({
   maxOutputBytes: 2097152,
   workspaces: {},
   productUx: {
-    dashboardRefreshSeconds: 5,
-    liveLogPollSeconds: 1,
     staleHours: 24,
     cleanupOlderThanHours: 168,
     enableStateExport: true
@@ -51,7 +66,14 @@ try {
   const address = server.address();
   assert.ok(address && typeof address !== 'string');
 
-  const response = await fetch(`http://127.0.0.1:${address.port}/events?token=${encodeURIComponent(token)}`, {
+  const bootstrap = dashboardSessions.createDashboardBootstrap(token);
+  const dashboardResponse = await fetch(`http://127.0.0.1:${address.port}/dashboard?surface=desktop&bootstrap=${encodeURIComponent(bootstrap)}`);
+  assert.equal(dashboardResponse.status, 200);
+  const dashboardCookie = String(dashboardResponse.headers.get('set-cookie') || '').split(';')[0];
+  assert.match(dashboardCookie, /^relai_dashboard_session=/, 'desktop bootstrap must issue a dashboard session cookie');
+
+  const response = await fetch(`http://127.0.0.1:${address.port}/events`, {
+    headers: { cookie: dashboardCookie },
     signal: controller.signal
   });
   assert.equal(response.status, 200);
@@ -69,7 +91,14 @@ try {
     workspace: 'test',
     ok: true
   };
+  const finishRead = beginConnectorToolCall({
+    scopeId: 'dashboard-live-events-test',
+    tool: 'relai_read',
+    operation: 'Reading dashboard state',
+    workspace: 'test'
+  });
   fs.appendFileSync(auditPath, `${JSON.stringify(entry)}\n`, 'utf8');
+  finishRead({ ok: true });
 
   const updated = await stream.nextDashboardEvent();
   assert.equal(updated.desktopStatus?.tunnelStatus, 'connecting');
@@ -85,6 +114,13 @@ try {
     tunnelStatus: 'running',
     mcpUrl: 'https://example.ngrok-free.dev/mcp'
   };
+  const finishStatus = beginConnectorToolCall({
+    scopeId: 'dashboard-live-events-status-test',
+    tool: 'relai_status',
+    operation: 'Reading connection status',
+    workspace: 'test'
+  });
+  finishStatus({ ok: true });
   const desktopUpdated = await stream.nextDashboardEvent();
   assert.equal(desktopUpdated.desktopStatus?.tunnelStatus, 'running');
   assert.equal(desktopUpdated.desktopStatus?.mcpUrl, 'https://example.ngrok-free.dev/mcp');
@@ -92,6 +128,7 @@ try {
   assert.equal(desktopUpdated.connectionState?.chatgptReadiness?.status, 'ready');
 } finally {
   controller.abort();
+  resetToolActivity();
   await closeServer(server);
   fs.rmSync(sandbox, { recursive: true, force: true });
 }

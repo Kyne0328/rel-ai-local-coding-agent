@@ -30,6 +30,7 @@ assert.ok(CONNECTION_STATE_VALUES.localService.includes('failed'));
 assert.ok(CONNECTION_STATE_VALUES.publicEndpoint.includes('available'));
 assert.ok(CONNECTION_STATE_VALUES.chatgptReadiness.includes('authentication_required'));
 assert.ok(CONNECTION_STATE_VALUES.dashboardUpdates.includes('reconnecting'));
+assert.equal(CONNECTION_STATE_VALUES.dashboardUpdates.includes('polling'), false);
 
 const readyUiState = connectionUi.withConnectionState({
   connectionState: {
@@ -41,6 +42,16 @@ const readyUiState = connectionUi.withConnectionState({
   }
 }, 'live').connectionState;
 assert.equal(connectionUi.connectionSummary(readyUiState).label, 'Available');
+const rendererOwnedLiveState = connectionUi.connectionStateFor({
+  connectionState: readyUiState,
+  desktopStatus: {
+    connectionState: {
+      ...readyUiState,
+      dashboardUpdates: { status: 'offline' }
+    }
+  }
+});
+assert.equal(rendererOwnedLiveState.dashboardUpdates.status, 'live', 'the active renderer stream must override Electron\'s stale dashboard update snapshot');
 assert.deepEqual(connectionUi.connectionLayerViews(readyUiState).map(layer => layer.title), [
   'Local service',
   'Public endpoint',
@@ -144,28 +155,35 @@ const baseline = JSON.parse(fs.readFileSync(path.join(root, 'test', 'fixtures', 
 const dashboardServer = fs.readFileSync(path.join(root, 'src', 'http', 'dashboard.js'), 'utf8');
 const dashboardJs = fs.readFileSync(path.join(root, 'public', 'dashboard.js'), 'utf8');
 const router = fs.readFileSync(path.join(root, 'src', 'ui', 'router.js'), 'utf8');
-const settingsIndex = fs.readFileSync(path.join(root, 'src', 'ui', 'sections', 'settings', 'index.js'), 'utf8');
-const connectionPage = fs.readFileSync(path.join(root, 'src', 'ui', 'sections', 'settings', 'connector.js'), 'utf8');
+const settingsIndex = fs.readFileSync(path.join(root, 'src', 'ui', 'features', 'settings', 'index.js'), 'utf8');
+const connectionPage = fs.readFileSync(path.join(root, 'src', 'ui', 'features', 'settings', 'connector.js'), 'utf8');
 const electronMain = fs.readFileSync(path.join(root, 'electron', 'main.js'), 'utf8');
-const diagnosticsPage = fs.readFileSync(path.join(root, 'src', 'ui', 'sections', 'settings', 'diagnostics.js'), 'utf8');
+const diagnosticsPage = fs.readFileSync(path.join(root, 'src', 'ui', 'features', 'settings', 'diagnostics.js'), 'utf8');
 const httpServer = fs.readFileSync(path.join(root, 'src', 'httpServer.js'), 'utf8');
 const fallbackStatus = fs.readFileSync(path.join(root, 'electron', 'renderer', 'status.js'), 'utf8');
 const commandPalette = fs.readFileSync(path.join(root, 'src', 'ui', 'command-palette.js'), 'utf8');
-const activityPage = fs.readFileSync(path.join(root, 'src', 'ui', 'sections', 'activity.js'), 'utf8');
+const activityPage = fs.readFileSync(path.join(root, 'src', 'ui', 'features', 'activity', 'index.js'), 'utf8');
 const overlayFocus = fs.readFileSync(path.join(root, 'src', 'ui', 'components', 'overlay-focus.js'), 'utf8');
 const wizardHtml = fs.readFileSync(path.join(root, 'electron', 'renderer', 'wizard.html'), 'utf8');
-const responsiveCss = fs.readFileSync(path.join(root, 'src', 'ui', 'dashboard-interactions.css'), 'utf8');
+const dashboardSourceCss = fs.readFileSync(path.join(root, 'src', 'ui', 'styles', 'app.css'), 'utf8');
+const responsiveCss = dashboardSourceCss;
 const dashboardCss = fs.readFileSync(path.join(root, 'public', 'dashboard.css'), 'utf8');
-const componentsCss = fs.readFileSync(path.join(root, 'src', 'ui', 'components.css'), 'utf8');
+const workspaceCards = fs.readFileSync(path.join(root, 'src', 'ui', 'features', 'workspaces', 'cards.js'), 'utf8');
+const workspaceMenu = fs.readFileSync(path.join(root, 'src', 'ui', 'components', 'workspace-menu.js'), 'utf8');
+const workspaceCss = dashboardSourceCss;
+const finalShellCss = dashboardSourceCss;
+const activityCss = dashboardSourceCss;
+const settingsCss = dashboardSourceCss;
+const componentsCss = dashboardSourceCss;
 const electronCss = fs.readFileSync(path.join(root, 'electron', 'renderer', 'app.css'), 'utf8');
-const sessionsPage = fs.readFileSync(path.join(root, 'src', 'ui', 'sections', 'tasks.js'), 'utf8');
-const updatePage = fs.readFileSync(path.join(root, 'src', 'ui', 'sections', 'settings', 'desktop-updates.js'), 'utf8');
+const sessionsPage = fs.readFileSync(path.join(root, 'src', 'ui', 'features', 'sessions', 'index.js'), 'utf8');
+const updatePage = fs.readFileSync(path.join(root, 'src', 'ui', 'features', 'settings', 'desktop-updates.js'), 'utf8');
 const appUpdater = fs.readFileSync(path.join(root, 'electron', 'app-updater.js'), 'utf8');
 const dashboardPreload = fs.readFileSync(path.join(root, 'electron', 'dashboard-preload.js'), 'utf8');
 const ipcHandlers = fs.readFileSync(path.join(root, 'electron', 'ipc-handlers.js'), 'utf8');
 const electronPackage = JSON.parse(fs.readFileSync(path.join(root, 'electron', 'package.json'), 'utf8'));
 const releaseWorkflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'release.yml'), 'utf8');
-const lifecyclePage = fs.readFileSync(path.join(root, 'src', 'ui', 'sections', 'settings', 'desktop-startup.js'), 'utf8');
+const lifecyclePage = fs.readFileSync(path.join(root, 'src', 'ui', 'features', 'settings', 'desktop-startup.js'), 'utf8');
 const desktopLifecycle = fs.readFileSync(path.join(root, 'electron', 'desktop-lifecycle.js'), 'utf8');
 const diagnosticFiles = fs.readFileSync(path.join(root, 'electron', 'diagnostic-files.js'), 'utf8');
 const runtimeLogBuffer = fs.readFileSync(path.join(root, 'electron', 'runtime-log-buffer.js'), 'utf8');
@@ -173,12 +191,12 @@ const routePolicy = fs.readFileSync(path.join(root, 'src', 'ui', 'route-policy.j
 const interactionSafety = fs.readFileSync(path.join(root, 'src', 'ui', 'interaction-safety.js'), 'utf8');
 const modal = fs.readFileSync(path.join(root, 'src', 'ui', 'components', 'modal.js'), 'utf8');
 const confirmDialog = fs.readFileSync(path.join(root, 'src', 'ui', 'components', 'confirm-dialog.js'), 'utf8');
-const workspaceForm = fs.readFileSync(path.join(root, 'src', 'ui', 'sections', 'workspace-form.js'), 'utf8');
-const workspaceRepair = fs.readFileSync(path.join(root, 'src', 'ui', 'sections', 'workspace-repair.js'), 'utf8');
-const workspaceActions = fs.readFileSync(path.join(root, 'src', 'ui', 'sections', 'workspace-actions.js'), 'utf8');
-const settingsAdvanced = fs.readFileSync(path.join(root, 'src', 'ui', 'sections', 'settings', 'advanced.js'), 'utf8');
-const settingsToolsValidation = fs.readFileSync(path.join(root, 'src', 'ui', 'sections', 'settings', 'tools-validation.js'), 'utf8');
-const desktopConnection = fs.readFileSync(path.join(root, 'src', 'ui', 'sections', 'settings', 'desktop-connection.js'), 'utf8');
+const workspaceForm = fs.readFileSync(path.join(root, 'src', 'ui', 'features', 'workspaces', 'form.js'), 'utf8');
+const workspaceRepair = fs.readFileSync(path.join(root, 'src', 'ui', 'features', 'workspaces', 'repair.js'), 'utf8');
+const workspaceActions = fs.readFileSync(path.join(root, 'src', 'ui', 'features', 'workspaces', 'actions.js'), 'utf8');
+const settingsAdvanced = fs.readFileSync(path.join(root, 'src', 'ui', 'features', 'settings', 'advanced.js'), 'utf8');
+const settingsToolsValidation = fs.readFileSync(path.join(root, 'src', 'ui', 'features', 'settings', 'tools-validation.js'), 'utf8');
+const desktopConnection = fs.readFileSync(path.join(root, 'src', 'ui', 'features', 'settings', 'desktop-connection.js'), 'utf8');
 const desktopSettings = fs.readFileSync(path.join(root, 'electron', 'desktop-settings.js'), 'utf8');
 const approvalToken = fs.readFileSync(path.join(root, 'electron', 'approval-token.js'), 'utf8');
 const appUpdaterState = fs.readFileSync(path.join(root, 'electron', 'app-updater-state.js'), 'utf8');
@@ -189,7 +207,7 @@ const windowSecurity = fs.readFileSync(path.join(root, 'electron', 'window-secur
 const statusHtml = fs.readFileSync(path.join(root, 'electron', 'renderer', 'status.html'), 'utf8');
 const securityDoc = fs.readFileSync(path.join(root, 'docs', 'SECURITY.md'), 'utf8');
 
-assert.equal(baseline.version, 20);
+assert.equal(baseline.version, 27);
 assert.deepEqual(baseline.canonicalRoutes, {
   tools: '#tools',
   general: '#settings',
@@ -216,7 +234,9 @@ assert.deepEqual(baseline.onboardingPolicy, {
   recoveryDoesNotResetFirstRun: true
 });
 assert.deepEqual(baseline.workspaceExperience, {
-  visibleReadiness: ['ChatGPT access', 'Repository', 'Validation'],
+  visibleReadiness: ['Workspace access', 'Repository', 'Validation'],
+  readinessLayout: 'status_strip_with_facts',
+  checklistRows: false,
   commonActions: ['Workspace settings', 'Run validation', 'Open folder'],
   advancedDetailsCollapsed: true,
   advancedFormCollapsed: true,
@@ -248,7 +268,9 @@ assert.deepEqual(baseline.diagnosticsPolicy, {
 assert.deepEqual(baseline.navigationQol, {
   commandPaletteShortcut: 'Ctrl/Cmd+K',
   searchableTargets: ['Pages', 'Settings', 'Actions', 'Workspaces'],
-  workspaceQuickNav: true,
+  workspaceQuickNav: false,
+  pageOwnedWorkspaceFilters: true,
+  manualRefreshControl: false,
   connectionStatusLinksToSettings: true,
   workspaceFocusRoute: true,
   activityFiltersInRoute: true,
@@ -261,6 +283,12 @@ assert.deepEqual(baseline.navigationQol, {
   staleDrawersCloseOnRouteChange: true,
   applicationConfirmations: true
 });
+assert.deepEqual(baseline.liveUpdatePolicy, {
+  toolActivityDriven: true,
+  pollingSettingsRemoved: true,
+  scopedRouteRendering: true,
+  eventStreamHeartbeat: true
+});
 assert.deepEqual(baseline.accessibilityResponsive, {
   skipLink: true,
   routeAnnouncements: true,
@@ -269,6 +297,7 @@ assert.deepEqual(baseline.accessibilityResponsive, {
   drawerFocusTrap: true,
   singleActivityRowTarget: true,
   commandPaletteCombobox: true,
+  workspaceFilterListbox: true,
   mobileSafeArea: true,
   minimumTouchTargetPx: 44,
   settingsRailScrollable: true,
@@ -279,6 +308,13 @@ assert.deepEqual(baseline.visualHierarchy, {
   elevatedSurfaces: ['Sidebar', 'Topbar', 'Dialogs', 'Electron setup', 'Electron recovery hero'],
   summaryMetricsGrouped: true,
   workspaceReadinessGrouped: true,
+  workspaceChecklistRemoved: true,
+  workspaceDecorativeBlobDisabled: true,
+  fullWidthDesktopShell: true,
+  singlePageHeading: true,
+  connectionPathGrouped: true,
+  readableDataDensity: true,
+  setupPrincipleCards: true,
   connectionSetupCollapsedWhenReady: true,
   connectionLayerSingleStateMarker: true,
   routineStatusGlowDisabled: true,
@@ -302,6 +338,29 @@ assert.deepEqual(baseline.updatePolicy, {
   releaseMetadata: ['latest.yml', 'blockmap'],
   surface: '#settings',
   trayActions: true
+});
+assert.deepEqual(baseline.installerPolicy, {
+  mode: 'assisted',
+  installScopeChoice: true,
+  perUserDefault: true,
+  allUsersAvailable: true,
+  elevationWhenAllUsersSelected: true,
+  installationDirectorySelectable: true,
+  desktopShortcut: true,
+  startMenuShortcut: true,
+  runAfterFinishOption: true,
+  runAfterFinishDefault: true,
+  silentAutomationSupported: true
+});
+assert.deepEqual(electronPackage.build.nsis, {
+  oneClick: false,
+  perMachine: false,
+  allowElevation: true,
+  allowToChangeInstallationDirectory: true,
+  createDesktopShortcut: true,
+  createStartMenuShortcut: true,
+  shortcutName: 'Rel.AI MCP',
+  runAfterFinish: true
 });
 assert.deepEqual(baseline.desktopSecurityPolicy, {
   securedIpcSenders: true,
@@ -335,6 +394,12 @@ assert.deepEqual(baseline.lifecyclePolicy, {
 assert.deepEqual(baseline.windowPolicy, {
   routineSurface: 'dashboard',
   fallbackSurface: 'recovery',
+  defaultDashboardMode: 'centered_windowed',
+  defaultDashboardWorkAreaRatio: 0.8,
+  defaultDashboardMaximum: '1180x760',
+  normalBoundsPersisted: true,
+  legacyBoundsMigrated: true,
+  closeHidesToTray: true,
   settingsRendererRemoved: true,
   fallbackExposedByTray: false,
   fallbackExposedByDashboard: false,
@@ -348,7 +413,7 @@ assert.deepEqual(baseline.settingsOwnership.general, ['Appearance', 'Desktop not
 assert.deepEqual(baseline.settingsOwnership.connection, ['Connection status', 'Local service', 'Public endpoint', 'Approval token']);
 assert.deepEqual(baseline.settingsOwnership.toolsValidation, ['Tool surface', 'Workspace validation']);
 assert.deepEqual(baseline.settingsOwnership.diagnostics, ['Findings', 'Service logs', 'Diagnostic export', 'History maintenance']);
-assert.deepEqual(baseline.settingsOwnership.advanced, ['Dashboard updates', 'Patch safeguards', 'Resource limits']);
+assert.deepEqual(baseline.settingsOwnership.advanced, ['Patch safeguards', 'Resource limits']);
 for (const label of baseline.mainNavigation) assert.ok(dashboardServer.includes(`label: "${label}"`), `missing baseline navigation label: ${label}`);
 for (const label of baseline.settingsNavigation) assert.ok(settingsIndex.includes(`label: '${label}'`), `missing baseline settings label: ${label}`);
 for (const surface of baseline.electronSurfaces.filter(item => item.renderer.endsWith('.html'))) {
@@ -375,12 +440,23 @@ assert.match(overlayFocus, /restoreFocus/);
 assert.match(dashboardServer, /class="skip-link">Skip to content/);
 assert.match(dashboardServer, /id="routeAnnouncer"/);
 assert.match(responsiveCss, /env\(safe-area-inset-bottom\)/);
-assert.match(responsiveCss, /min-height: 44px/);
+assert.match(responsiveCss, /min-h-11/);
 assert.match(wizardHtml, /id="step2"[^>]*aria-hidden="true" hidden/);
+assert.match(wizardHtml, /class="setup-principles"/);
+assert.doesNotMatch(wizardHtml, /setup-check|setup-benefits/);
 assert.match(dashboardCss, /\.summary-metrics/);
-assert.match(dashboardCss, /\.workspace-readiness[^}]*gap: 0/s);
+assert.match(finalShellCss, /--sidebar-width: 252px/);
+assert.match(finalShellCss, /grid-template-columns: var\(--sidebar-width\) minmax\(0, 1fr\)/);
+assert.match(workspaceCards, /class="workspace-readiness \$\{view\.available \? 'good' : 'bad'\}"/);
+assert.match(workspaceCards, /<dl class="workspace-readiness-facts">/);
+assert.doesNotMatch(workspaceCards, /workspace-readiness-item|workspace-readiness-primary/);
+assert.match(workspaceCss, /\.workspace-readiness/);
+assert.match(workspaceCss, /\.workspace-toolbar button\[data-add-workspace\]/);
 assert.match(connectionPage, /connection-setup-details/);
 assert.match(connectionPage, /connection-layer-state/);
+assert.match(connectionPage, /className = 'connection-path'/);
+assert.match(settingsCss, /\.connection-path-step/);
+assert.match(activityCss, /\.data-table td[\s\S]*h-\[54px\]/);
 assert.doesNotMatch(componentsCss, /\.status-pill\.ok::before[^}]*animation/s);
 assert.doesNotMatch(sessionsPage, /Not published/);
 assert.match(electronCss, /\.app-card[^}]*box-shadow: none/s);
@@ -459,7 +535,7 @@ assert.match(runtimeLogBuffer, /service\.log|filePath/);
 assert.match(activityPage, /replaceRouteParams/);
 assert.match(activityPage, /params\.get\('status'\)/);
 assert.match(dashboardServer, /id="commandPaletteBtn"/);
-assert.match(dashboardServer, /id="workspaceQuickNav"/);
+assert.doesNotMatch(dashboardServer, /workspaceQuickNav|Jump to workspace/);
 assert.match(dashboardServer, /MOBILE_NAV_ITEMS/);
 assert.match(dashboardJs, /tools: element/);
 assert.match(dashboardJs, /reference: element/);
@@ -474,6 +550,14 @@ assert.match(interactionSafety, /beforeunload/);
 assert.match(interactionSafety, /data-unsaved-changes/);
 assert.match(modal, /confirmOverlayDismiss/);
 assert.match(commandPalette, /hasActiveOverlay/);
+assert.doesNotMatch(commandPalette, /Refresh dashboard|refreshDashboard/);
+assert.match(workspaceMenu, /aria-haspopup="listbox"/);
+assert.match(workspaceMenu, /role="listbox"/);
+assert.match(workspaceMenu, /role="option"/);
+assert.match(dashboardServer, /onToolActivity\(scheduleSnapshot\)/);
+assert.doesNotMatch(dashboardServer, /workspaceScope|refreshBtn|topbar-refresh|setInterval\(\(\) => sendSnapshot/);
+assert.doesNotMatch(dashboardJs, /configureLiveRefresh|dashboardRefreshSeconds|liveLogPollSeconds/);
+assert.doesNotMatch(settingsAdvanced, /Fallback refresh interval|Live event scan interval|Dashboard updates/);
 assert.match(dashboardJs, /closeDrawer\(\)/);
 assert.match(confirmDialog, /textContent = message/);
 assert.match(confirmDialog, /modal\.dismiss\(\)/);
@@ -495,8 +579,9 @@ assert.match(settingsIndex, /desktop: 'connection'/);
 assert.match(settingsIndex, /dashboard: 'advanced'/);
 assert.match(connectionPage, /connectionLayerViews/);
 assert.doesNotMatch(connectionPage, /Copy URL with token|dashboardToken/);
-assert.equal(fs.existsSync(path.join(root, 'src', 'ui', 'sections', 'settings', 'desktop.js')), false);
-assert.equal(fs.existsSync(path.join(root, 'src', 'ui', 'sections', 'settings', 'dashboard.js')), false);
+assert.equal(fs.existsSync(path.join(root, 'src', 'ui', 'sections')), false);
+assert.equal(fs.existsSync(path.join(root, 'src', 'ui', 'features', 'settings', 'desktop.js')), false);
+assert.equal(fs.existsSync(path.join(root, 'src', 'ui', 'features', 'settings', 'dashboard.js')), false);
 assert.equal(baseline.electronSurfaces.some(item => item.id === 'settings-compatibility'), false);
 assert.equal(baseline.electronSurfaces.find(item => item.id === 'recovery')?.fallbackOnly, true);
 assert.equal(fs.existsSync(path.join(root, 'electron', 'renderer', 'settings.html')), false);

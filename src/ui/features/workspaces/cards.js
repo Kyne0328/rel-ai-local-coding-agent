@@ -1,8 +1,9 @@
-import { pillHtml } from '../components/pill.js';
-import { esc, metricHtml, statusClass } from '../utils.js';
-import { getWorkspaceFilter } from '../router.js';
-import { workspaceDetailsHtml, branchSummary } from './workspace-card-details.js';
-import { recentWorkspaceAliases } from '../workspace-recents.js';
+import { pillHtml } from '../../components/pill.js';
+import { esc, metricHtml, statusClass } from '../../utils.js';
+import { getWorkspaceFilter } from '../../router.js';
+import { workspaceDetailsHtml, branchSummary } from './details.js';
+import { recentWorkspaceAliases } from './recents.js';
+import { workspaceMenuHtml } from '../../components/workspace-menu.js';
 
 function buildWorkspaces(data) {
   const config = data.config || {};
@@ -22,14 +23,12 @@ function buildWorkspaces(data) {
   const root = document.createElement('div');
   root.className = 'section';
   root.innerHTML = `
-    <div class="section-head">
-      <div>
-        <h2>Workspaces</h2>
-        <p>Choose the local repositories ChatGPT can use. Common status and actions stay visible; Git and safety settings remain under details.</p>
-      </div>
+    <div class="feature-toolbar workspace-toolbar">
+      <p>Common status and actions stay visible. Git, policy, and safety details remain available when needed.</p>
       <div class="section-head-actions">
+        ${workspaceMenuHtml(allWorkspaces, workspaceFilter, { id: 'workspacesWorkspaceMenu' })}
+        <span class="feature-count">${workspaceCountLabel(workspaces.length, allWorkspaces.length, Boolean(workspaceFilter))}</span>
         <button class="primary" type="button" data-add-workspace>Add workspace</button>
-        <span class="section-action">${workspaceCountLabel(workspaces.length, allWorkspaces.length, Boolean(workspaceFilter))}</span>
       </div>
     </div>`;
 
@@ -149,18 +148,35 @@ function workspaceHealthHtml(view) {
 
 function workspaceReadinessHtml(view) {
   const repository = repositorySummary(view.operational);
-  const validation = view.validationCommands.length
+  const validationReady = view.validationCommands.length > 0;
+  const validationValue = validationReady
     ? `${view.validationCommands.length} automatic check${view.validationCommands.length === 1 ? '' : 's'}`
-    : 'Not configured';
-  return `<div class="workspace-readiness" aria-label="Workspace readiness">
-    ${readinessItem('ChatGPT access', view.available ? 'Available' : 'Unavailable', view.available ? 'This folder can be used by Rel.AI tools.' : 'Fix the workspace path before using it.', view.available ? 'good' : 'bad')}
-    ${readinessItem('Repository', repository.label, repository.description, repository.tone)}
-    ${readinessItem('Validation', validation, view.validationCommands.length ? 'Checks can be run before reviewing changes.' : 'Rel.AI can still work, but no automatic check was detected.', view.validationCommands.length ? 'good' : 'warn')}
-  </div>`;
+    : 'Add when ready';
+  const accessTitle = view.available ? 'Ready for ChatGPT' : 'Project folder unavailable';
+  const accessDescription = view.available
+    ? 'Rel.AI can inspect and update this workspace when you approve a tool call.'
+    : 'Repair the configured folder before using this workspace.';
+  return `<section class="workspace-readiness ${view.available ? 'good' : 'bad'}" aria-label="Workspace readiness">
+    <div class="workspace-access-summary">
+      <span class="workspace-readiness-icon" aria-hidden="true">${view.available ? '✓' : '!'}</span>
+      <div class="workspace-readiness-copy">
+        <span class="workspace-readiness-kicker">Workspace access</span>
+        <strong>${esc(accessTitle)}</strong>
+        <p>${esc(accessDescription)}</p>
+      </div>
+    </div>
+    <dl class="workspace-readiness-facts">
+      ${readinessFact('Repository', repository.label, repository.description, repository.tone)}
+      ${readinessFact('Validation', validationValue, validationReady ? 'Run checks before reviewing changes.' : 'No automatic check is configured.', validationReady ? 'good' : 'warn')}
+    </dl>
+  </section>`;
 }
 
-function readinessItem(label, value, description, tone) {
-  return `<div class="workspace-readiness-item ${tone}"><span>${esc(label)}</span><strong>${esc(value)}</strong><small>${esc(description)}</small></div>`;
+function readinessFact(label, value, description, tone) {
+  return `<div class="workspace-readiness-fact ${tone}">
+    <dt><i aria-hidden="true"></i>${esc(label)}</dt>
+    <dd><strong>${esc(value)}</strong><small>${esc(description)}</small></dd>
+  </div>`;
 }
 
 function repositorySummary(operational) {

@@ -48,10 +48,18 @@ const report = buildDiagnosticReport({
   runtimeLogs: {
     available: true,
     persistent: true,
-    entries: [{ ts: '2026-07-25T00:00:00.000Z', level: 'error', source: 'ngrok', code: 'public_endpoint_failed', message: `{"token":"${secret}"}` }]
+    entries: [
+      { ts: '2026-07-25T00:03:00.000Z', level: 'info', source: 'desktop', message: 'third' },
+      { ts: '2026-07-25T00:01:00.000Z', level: 'error', source: 'ngrok', code: 'public_endpoint_failed', message: `{"token":"${secret}"}` },
+      { ts: '2026-07-25T00:02:00.000Z', level: 'warning', source: 'local-service', message: 'second' }
+    ]
   },
   auditLogs: {
-    entries: [{ ts: '2026-07-25T00:00:00.000Z', ok: false, tool: 'relai_run_checks', workspace: 'example', error: `client_secret=${secret}` }]
+    entries: [
+      { ts: '2026-07-25T00:04:00.000Z', ok: false, tool: 'relai_edit', workspace: 'example', error: 'fourth failure' },
+      { ts: '2026-07-25T00:02:00.000Z', ok: true, tool: 'relai_read', workspace: 'example' },
+      { ts: '2026-07-25T00:03:00.000Z', ok: false, tool: 'relai_run_checks', workspace: 'example', error: `client_secret=${secret}` }
+    ]
   },
   activeCalls: 2
 });
@@ -66,8 +74,24 @@ assert.equal(report.maintenance.all.available, true);
 assert.equal(report.maintenance.all.blocked, true);
 assert.equal(report.maintenance.all.confirmation, 'RESET');
 assert.equal(report.logs.runtime.persistent, true);
-assert.equal(report.logs.runtime.entries.length, 1);
-assert.equal(report.logs.failedActivity.length, 1);
+assert.equal(report.logs.runtime.entries.length, 3);
+assert.deepEqual(report.logs.runtime.entries.map(item => item.ts), [
+  '2026-07-25T00:01:00.000Z',
+  '2026-07-25T00:02:00.000Z',
+  '2026-07-25T00:03:00.000Z'
+]);
+assert.equal(report.logs.failedActivity.length, 2);
+assert.deepEqual(report.logs.failedActivity.map(item => item.ts), [
+  '2026-07-25T00:03:00.000Z',
+  '2026-07-25T00:04:00.000Z'
+]);
+assert.deepEqual(report.findings.map(item => item.severity), ['error', 'error', 'warning', 'info']);
+assert.deepEqual(report.findings.map(item => item.code), [
+  'local_port_in_use',
+  'workspace_unavailable',
+  'stale_validation_commands',
+  'protected_configuration_changes'
+]);
 assert.doesNotMatch(JSON.stringify(report), new RegExp(secret));
 assert.match(report.reportText, /Rel\.AI MCP diagnostic report/);
 assert.doesNotMatch(report.reportText, new RegExp(secret));

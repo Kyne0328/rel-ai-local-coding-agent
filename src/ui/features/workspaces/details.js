@@ -1,6 +1,6 @@
-import { pillHtml } from '../components/pill.js';
-import { esc, timeAgo } from '../utils.js';
-import { routeHref } from '../router.js';
+import { pillHtml } from '../../components/pill.js';
+import { esc, timeAgo } from '../../utils.js';
+import { routeHref } from '../../router.js';
 
 function workspaceDetailsHtml(view, showAutomaticValidation) {
   return `<details class="workspace-details">

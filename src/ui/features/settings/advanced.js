@@ -1,4 +1,3 @@
-import { requestDashboardRefresh } from '../../api.js';
 import { markUnsaved } from '../../interaction-safety.js';
 import {
   loadSettingsConfig,
@@ -33,28 +32,11 @@ function render(container) {
   container.innerHTML = '';
   container.appendChild(header(
     'Advanced',
-    'Tune dashboard polling, patch safeguards, and resource limits. Defaults are appropriate for most installations.'
+    'Tune patch safeguards and resource limits. Defaults are appropriate for most installations.'
   ));
-  container.appendChild(liveUpdatesPanel().el);
   container.appendChild(patchSafeguardsPanel().el);
   container.appendChild(resourceLimitsPanel().el);
   container.appendChild(buildSaveRow(container));
-}
-
-function liveUpdatesPanel() {
-  const productUx = draft.productUx || {};
-  const live = panel('Dashboard updates');
-  const grid = formGrid();
-  grid.append(
-    field('Fallback refresh interval (seconds)', numberControl(productUx.dashboardRefreshSeconds || 5, value => {
-      updateProductSetting('dashboardRefreshSeconds', bounded(value, 1, 3600, 5));
-    }, { min: 1, max: 3600 }), 'Used when the live event stream is disconnected. Manual refresh always remains available.'),
-    field('Live event scan interval (seconds)', numberControl(productUx.liveLogPollSeconds || 3, value => {
-      updateProductSetting('liveLogPollSeconds', bounded(value, 1, 300, 3));
-    }, { min: 1, max: 300 }), 'How often the local service checks for changed session, activity, connection, or configuration state.')
-  );
-  live.body.appendChild(grid);
-  return live;
 }
 
 function patchSafeguardsPanel() {
@@ -93,12 +75,6 @@ function megabyteControl(bytes, onChange, max) {
   }, { min: 1, max, step: 0.5 });
 }
 
-function updateProductSetting(key, value) {
-  draft.productUx ??= {};
-  draft.productUx[key] = value;
-  checkDirty();
-}
-
 function updatePatchSetting(key, value) {
   draft.patch ??= {};
   draft.patch[key] = value;
@@ -131,10 +107,7 @@ function checkDirty() {
 
 function changes() {
   if (!original || !draft) return [];
-  const productKeys = ['dashboardRefreshSeconds', 'liveLogPollSeconds'];
-  const productChanged = productKeys.some(key => draft.productUx?.[key] !== original.productUx?.[key]);
   return [
-    productChanged && 'productUx',
     JSON.stringify(draft.patch) !== JSON.stringify(original.patch) && 'patch',
     draft.maxOutputBytes !== original.maxOutputBytes && 'maxOutputBytes'
   ].filter(Boolean);
@@ -142,23 +115,12 @@ function changes() {
 
 async function save(container) {
   const response = await saveSettings({
-    productUx: {
-      dashboardRefreshSeconds: draft.productUx?.dashboardRefreshSeconds,
-      liveLogPollSeconds: draft.productUx?.liveLogPollSeconds
-    },
     patch: draft.patch,
     maxOutputBytes: draft.maxOutputBytes
   });
   if (!response?.ok) return response;
-  requestDashboardRefresh();
   await loadAndRender(container);
   return response;
-}
-
-function bounded(value, min, max, fallback) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return fallback;
-  return Math.min(Math.max(Math.floor(number), min), max);
 }
 
 function escapeHtml(value) {

@@ -15,7 +15,7 @@
   },
   "scripts": {
     "start": "node bin/rel-ai-mcp.js",
-    "start:http": "node bin/rel-ai-mcp-http.js",
+    "start:http": "npm run build:css && node bin/rel-ai-mcp-http.js",
     "check": "node test/check-js.mjs",
     "typecheck": "tsc -p tsconfig.boundaries.json",
     "init-config": "node bin/relai-mcp-config.js init",
@@ -36,9 +36,9 @@
     "test:public-workflow": "node test/workflow-smoke.mjs",
     "test:connector-wording": "node test/connector-wording-smoke.mjs",
     "test:regressions": "node test/regression-fixes-smoke.mjs",
-    "electron:dev": "cd electron && npx electron .",
-    "electron:build": "npm run verify:ngrok && cd electron && npx electron-builder --win --dir --config.directories.output=../dist/build-check",
-    "electron:dist": "npm run verify:ngrok && cd electron && npx electron-builder --win",
+    "electron:dev": "npm run build:css && cd electron && npx electron .",
+    "electron:build": "npm run build:css && npm run verify:ngrok && cd electron && npx electron-builder --win --dir --config.directories.output=../dist/build-check",
+    "electron:dist": "npm run build:css && npm run verify:ngrok && cd electron && npx electron-builder --win",
     "fetch:ngrok": "pwsh scripts/fetch-ngrok.ps1",
     "verify:ngrok": "node scripts/verify-ngrok-seed.mjs",
     "test:electron": "node test/electron-launcher-smoke.mjs",
@@ -53,7 +53,9 @@
     "test:checks": "node test/command-checks-smoke.mjs",
     "test:git-workflow": "node test/git-workflow-smoke.mjs",
     "test:staged-write": "node test/staged-write-fallback-unit.mjs",
-    "test:all": "npm run check && npm run typecheck && node scripts/release-check.mjs && node test/run-tests.mjs"
+    "test:all": "npm run build:css && npm run check && npm run typecheck && node scripts/release-check.mjs && node test/run-tests.mjs",
+    "build:css": "npx @tailwindcss/cli -i ./src/ui/styles/app.css -o ./public/dashboard.css",
+    "watch:css": "npx @tailwindcss/cli -i ./src/ui/styles/app.css -o ./public/dashboard.css --watch"
   },
   "keywords": [
     "mcp",
@@ -74,8 +76,10 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@tailwindcss/cli": "^4.3.3",
     "eslint": "^10.6.0",
     "globals": "^17.7.0",
+    "tailwindcss": "^4.3.3",
     "typescript": "7.0.2"
   }
 }

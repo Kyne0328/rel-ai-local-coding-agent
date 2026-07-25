@@ -1,4 +1,4 @@
-# One-click setup and permanent ChatGPT connector
+# Desktop setup and permanent ChatGPT connector
 
 This guide takes you from a downloaded installer to a working ChatGPT connector that survives restarts.
 
@@ -17,10 +17,12 @@ The static domain is the part that matters for a permanent setup. A random tempo
 
 ## Install and first run
 
-1. Download the latest installer from the [Releases page](https://github.com/Kyne0328/rel-ai-mcp/releases) and run it. It installs per-user, no admin prompt.
-2. Launch **Rel.AI MCP**. The setup wizard appears on first run only.
-3. Paste your ngrok authtoken and static domain, and pick a local port (`3333` by default).
-4. Save. The app writes its config, generates an approval token, starts the local server, and brings up the tunnel.
+1. Download the latest installer from the [Releases page](https://github.com/Kyne0328/rel-ai-mcp/releases) and run it.
+2. Choose whether to install **for the current user** or **for all users**. Current-user installation is the default and does not require administrator access. Choosing all users triggers a Windows administrator prompt when the installer is not already elevated.
+3. Review the installation folder, change it when needed, and click **Install**. The installer creates Start menu and desktop shortcuts.
+4. On the Finish page, leave **Run Rel.AI MCP** selected to open it immediately, or clear the checkbox and launch it later from the Start menu or desktop shortcut.
+5. The Rel.AI setup wizard appears on first run only. Paste your ngrok authtoken and static domain, and pick a local port (`3333` by default).
+6. Save. The app writes its config, generates an approval token, starts the local server, and brings up the tunnel.
 
 The desktop app creates `config.json` automatically. Skipping the dashboard onboarding leaves an empty but valid workspace configuration, so the app remains usable and workspaces can be added later. The `npm run init-config` command is only for repository/CLI development and is not required by the installed application.
 

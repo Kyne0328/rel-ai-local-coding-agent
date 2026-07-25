@@ -48,7 +48,7 @@ function read(rel) {
 // Connector next steps should not duplicate the hardcoded setup steps when payload.nextSteps
 // is absent; it should render only extra steps from the payload.
 {
-  const connector = read('src/ui/sections/settings/connector.js');
+  const connector = read('src/ui/features/settings/connector.js');
   assert.match(connector, /const extraSteps = Array\.isArray\(payload\.nextSteps\) \? payload\.nextSteps : \[\]/);
   assert.doesNotMatch(connector, /Open ChatGPT settings and add an MCP server[\s\S]*steps\.slice\(0, 3\)/);
 }
@@ -61,8 +61,8 @@ function read(rel) {
   assert.equal(dashboard.toolCount, dashboard.tools.length);
   assert.deepEqual(dashboard.config.localRepoBridge.visibleTools, dashboard.tools);
   assert.ok(publicConfigSummary(cfg).localRepoBridge.visibleTools.includes('relai_edit'));
-  assert.doesNotMatch(read('src/ui/sections/home.js'), /visibleToolCount/);
-  assert.doesNotMatch(read('src/ui/sections/workspace-cards.js'), /data\.toolCount|ChatGPT tools/);
+  assert.doesNotMatch(read('src/ui/features/home/index.js'), /visibleToolCount/);
+  assert.doesNotMatch(read('src/ui/features/workspaces/cards.js'), /data\.toolCount|ChatGPT tools/);
 }
 
 // Audit-fix smoke guards for docs, UI copy, and tunnel process safety.
@@ -87,22 +87,27 @@ function read(rel) {
   assert.match(events, /document\.addEventListener\('visibilitychange', _handleVisibilityChange\)/);
 }
 
-// Manual refresh must bypass the shared GET cache, collapse overlapping requests,
-// and always restore the control state. The workspace scope uses the styled,
-// accessible header control instead of an unadorned native select.
+// Targeted state reads bypass the shared GET cache and collapse overlapping requests.
+// Routine dashboard updates are driven by tool activity, while workspace filters are
+// page-owned Tailwind listboxes instead of native topbar controls.
 {
   const dashboard = read('public/dashboard.js');
   const dashboardHtml = read('src/http/dashboard.js');
   const dashboardCss = read('public/dashboard.css');
+  const workspaceMenu = read('src/ui/components/workspace-menu.js');
   assert.match(dashboard, /invalidateCache\(DASHBOARD_DATA_URL\)/);
   assert.match(dashboard, /fetchJson\(DASHBOARD_DATA_URL, \{ cache: 'no-store' \}\)/);
   assert.match(dashboard, /let _refreshPromise = null/);
-  assert.match(dashboard, /finally \{\s*setRefreshState\(refreshState\);\s*\}/);
-  assert.match(dashboardHtml, /id="workspaceScopeControl" class="workspace-scope-control"/);
-  assert.match(dashboardCss, /\.workspace-scope-control:focus-within/);
-  assert.match(dashboardCss, /appearance: none/);
-  assert.match(dashboardHtml, /class="secondary topbar-refresh"/);
-  assert.match(read('src/ui/router.js'), /window\.scrollTo\(view\.scrollX, view\.scrollY\)/);
+  assert.match(dashboard, /finally \{\s*_refreshPromise = null;\s*\}/);
+  assert.match(dashboardHtml, /onToolActivity\(scheduleSnapshot\)/);
+  assert.doesNotMatch(dashboardHtml, /workspaceScope|refreshBtn|topbar-refresh/);
+  assert.match(dashboardCss, /\.workspace-menu-popover/);
+  assert.doesNotMatch(dashboardCss, /workspace-scope-control/);
+  assert.match(workspaceMenu, /aria-haspopup="listbox"/);
+  const router = read('src/ui/router.js');
+  assert.match(router, /window\.scrollTo\(view\.scrollX, view\.scrollY\)/);
+  assert.match(router, /Keep the current route visible while a lazy feature module resolves/);
+  assert.doesNotMatch(router, /_container\.innerHTML = ''/);
 }
 
 // Stale-command diagnostics cover commands AND testCommands, matching relai_status.
