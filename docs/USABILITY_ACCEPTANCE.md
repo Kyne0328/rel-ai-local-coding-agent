@@ -4,7 +4,7 @@ Rel.AI MCP separates repeatable installed-app validation from checks that requir
 
 ## Automated exact-installer acceptance
 
-The Windows release workflow builds the candidate executables, selects the exact NSIS installer intended for publication, installs it into an isolated profile, and launches that installed executable through two smoke modes. The automation verifies:
+The Windows release workflow builds the candidate executables, selects the exact NSIS installer intended for publication, installs it silently into an isolated profile, and launches that installed executable through two smoke modes. Silent mode is used only for unattended validation; the published installer presents an assisted setup wizard, offers current-user or all-users installation, requests administrator elevation only when all-users installation needs it, allows destination-folder selection, and includes an optional **Run Rel.AI MCP** checkbox on Finish. The automation verifies:
 
 1. packaged resources, including the bundled ngrok seed;
 2. local service health and dashboard HTTP loading;

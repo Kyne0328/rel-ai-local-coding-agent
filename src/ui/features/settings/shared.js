@@ -75,7 +75,7 @@ export function toggleControl(checked, onChange, { enabled = 'Enabled', disabled
     label: checked ? enabled : disabled,
     onChange: value => {
       onChange(value);
-      const label = control.querySelector('span');
+      const label = control.querySelector('.toggle-label');
       if (label) label.textContent = value ? enabled : disabled;
     }
   });

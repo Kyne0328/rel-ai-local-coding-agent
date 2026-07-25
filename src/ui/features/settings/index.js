@@ -27,7 +27,7 @@ export function mountSettings(container, subPageId = 'general') {
   container.innerHTML = '';
 
   const shell = document.createElement('div');
-  shell.className = 'settings-shell';
+  shell.className = 'settings-layout settings-shell';
   const rail = document.createElement('nav');
   rail.className = 'settings-rail';
   rail.setAttribute('aria-label', 'Settings navigation');

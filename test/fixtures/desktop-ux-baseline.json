@@ -1,5 +1,5 @@
 {
-  "version": 20,
+  "version": 27,
   "capturedAt": "2026-07-25",
   "mainNavigation": [
     "Overview",
@@ -40,7 +40,6 @@
       "History maintenance"
     ],
     "advanced": [
-      "Dashboard updates",
       "Patch safeguards",
       "Resource limits"
     ]
@@ -69,10 +68,12 @@
   },
   "workspaceExperience": {
     "visibleReadiness": [
-      "ChatGPT access",
+      "Workspace access",
       "Repository",
       "Validation"
     ],
+    "readinessLayout": "status_strip_with_facts",
+    "checklistRows": false,
     "commonActions": [
       "Workspace settings",
       "Run validation",
@@ -113,7 +114,9 @@
       "Actions",
       "Workspaces"
     ],
-    "workspaceQuickNav": true,
+    "workspaceQuickNav": false,
+    "pageOwnedWorkspaceFilters": true,
+    "manualRefreshControl": false,
     "connectionStatusLinksToSettings": true,
     "workspaceFocusRoute": true,
     "activityFiltersInRoute": true,
@@ -126,6 +129,12 @@
     "staleDrawersCloseOnRouteChange": true,
     "applicationConfirmations": true
   },
+  "liveUpdatePolicy": {
+    "toolActivityDriven": true,
+    "pollingSettingsRemoved": true,
+    "scopedRouteRendering": true,
+    "eventStreamHeartbeat": true
+  },
   "accessibilityResponsive": {
     "skipLink": true,
     "routeAnnouncements": true,
@@ -134,6 +143,7 @@
     "drawerFocusTrap": true,
     "singleActivityRowTarget": true,
     "commandPaletteCombobox": true,
+    "workspaceFilterListbox": true,
     "mobileSafeArea": true,
     "minimumTouchTargetPx": 44,
     "settingsRailScrollable": true,
@@ -150,6 +160,13 @@
     ],
     "summaryMetricsGrouped": true,
     "workspaceReadinessGrouped": true,
+    "workspaceChecklistRemoved": true,
+    "workspaceDecorativeBlobDisabled": true,
+    "fullWidthDesktopShell": true,
+    "singlePageHeading": true,
+    "connectionPathGrouped": true,
+    "readableDataDensity": true,
+    "setupPrincipleCards": true,
     "connectionSetupCollapsedWhenReady": true,
     "connectionLayerSingleStateMarker": true,
     "routineStatusGlowDisabled": true,
@@ -176,6 +193,19 @@
     ],
     "surface": "#settings",
     "trayActions": true
+  },
+  "installerPolicy": {
+    "mode": "assisted",
+    "installScopeChoice": true,
+    "perUserDefault": true,
+    "allUsersAvailable": true,
+    "elevationWhenAllUsersSelected": true,
+    "installationDirectorySelectable": true,
+    "desktopShortcut": true,
+    "startMenuShortcut": true,
+    "runAfterFinishOption": true,
+    "runAfterFinishDefault": true,
+    "silentAutomationSupported": true
   },
   "desktopSecurityPolicy": {
     "securedIpcSenders": true,
@@ -209,6 +239,12 @@
   "windowPolicy": {
     "routineSurface": "dashboard",
     "fallbackSurface": "recovery",
+    "defaultDashboardMode": "centered_windowed",
+    "defaultDashboardWorkAreaRatio": 0.8,
+    "defaultDashboardMaximum": "1180x760",
+    "normalBoundsPersisted": true,
+    "legacyBoundsMigrated": true,
+    "closeHidesToTray": true,
     "settingsRendererRemoved": true,
     "fallbackExposedByTray": false,
     "fallbackExposedByDashboard": false,

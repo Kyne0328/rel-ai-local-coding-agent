@@ -3,10 +3,11 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { URL } = require('node:url');
+const { DASHBOARD_WINDOW_LIMITS, dashboardWindowState, restoreDashboardBounds } = require('./dashboard-window-bounds');
 
 function createDashboardWindowManager(deps) {
   const {
-    BrowserWindow, shell, app, dialog, getConnection,
+    BrowserWindow, shell, app, dialog, screen, getConnection,
     isQuitting = () => false,
     onError = () => {},
     onLoadError = onError
@@ -37,10 +38,8 @@ function createDashboardWindowManager(deps) {
     const bounds = readBounds();
     dashboardWindow = new BrowserWindow({
       ...bounds,
-      width: bounds.width || 1240,
-      height: bounds.height || 820,
-      minWidth: 900,
-      minHeight: 620,
+      minWidth: DASHBOARD_WINDOW_LIMITS.minWidth,
+      minHeight: DASHBOARD_WINDOW_LIMITS.minHeight,
       show: false,
       autoHideMenuBar: true,
       title: 'Rel.AI MCP Dashboard',
@@ -159,7 +158,7 @@ function createDashboardWindowManager(deps) {
     if (!win || typeof win.getBounds !== 'function') return;
     try {
       fs.mkdirSync(path.dirname(statePath), { recursive: true });
-      fs.writeFileSync(statePath, JSON.stringify(win.getBounds(), null, 2));
+      fs.writeFileSync(statePath, JSON.stringify(dashboardWindowState(win, screen), null, 2));
     } catch (error) {
       if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] dashboard bounds:', error);
     }
@@ -167,10 +166,10 @@ function createDashboardWindowManager(deps) {
 
   function readBounds() {
     try {
-      const value = JSON.parse(fs.readFileSync(statePath, 'utf8'));
-      if (Number(value.width) >= 900 && Number(value.height) >= 620) return value;
-    } catch { /* first launch or invalid state */ }
-    return {};
+      return restoreDashboardBounds(JSON.parse(fs.readFileSync(statePath, 'utf8')), screen);
+    } catch {
+      return restoreDashboardBounds(null, screen);
+    }
   }
 
   function close() {

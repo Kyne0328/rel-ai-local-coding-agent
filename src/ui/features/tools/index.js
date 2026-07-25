@@ -1,6 +1,6 @@
-import { fetchJson } from '../api.js';
-import { EmptyState } from '../components/empty-state.js';
-import { esc } from '../utils.js';
+import { fetchJson } from '../../api.js';
+import { EmptyState } from '../../components/empty-state.js';
+import { esc } from '../../utils.js';
 
 const CAPABILITIES = [
   { id: 'all', label: 'All' },
@@ -10,6 +10,7 @@ const CAPABILITIES = [
   { id: 'git', label: 'Git' },
   { id: 'recover', label: 'Recover' }
 ];
+const CAPABILITY_ORDER = new Map(CAPABILITIES.slice(1).map((item, index) => [item.id, index]));
 
 let _mounted = 0;
 let _tools = [];
@@ -69,7 +70,7 @@ function bindToolbar(container) {
 async function loadTools(container, mountId) {
   const result = await fetchJson('/api/tools');
   if (mountId !== _mounted) return;
-  _tools = toolsFromPayload(result);
+  _tools = orderToolsForCatalog(toolsFromPayload(result));
   renderTools(container);
 }
 
@@ -150,6 +151,22 @@ function parameterMarkup(parameters) {
 function toolsFromPayload(result) {
   if (Array.isArray(result)) return result;
   return Array.isArray(result?.tools) ? result.tools : [];
+}
+
+export function orderToolsForCatalog(tools = []) {
+  return [...(Array.isArray(tools) ? tools : [])].sort((left, right) => {
+    const capabilityDifference = capabilityRank(left) - capabilityRank(right);
+    if (capabilityDifference) return capabilityDifference;
+    return toolSortLabel(left).localeCompare(toolSortLabel(right), 'en-US', { numeric: true, sensitivity: 'base' });
+  });
+}
+
+function capabilityRank(tool) {
+  return CAPABILITY_ORDER.get(toolCapability(tool?.name)) ?? CAPABILITY_ORDER.size;
+}
+
+function toolSortLabel(tool) {
+  return String(tool?.title || tool?.displayName || tool?.name || '');
 }
 
 function toolCapability(name) {

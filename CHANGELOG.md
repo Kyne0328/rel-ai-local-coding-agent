@@ -2,7 +2,38 @@
 
 ## [0.21.0] - 2026-07-25
 
+### Feature-first dashboard and Tailwind migration
+- **Reorganize the dashboard around product features.** Overview, Sessions, Workspaces, Activity, Tools, onboarding, and Settings now own their UI modules under `src/ui/features`, while routing, API access, shared state, interaction safety, and reusable components remain centralized.
+- **Replace the legacy dashboard stylesheet tree with one Tailwind CSS v4 source.** The build now compiles `src/ui/styles/app.css` into `public/dashboard.css`, and fourteen obsolete dashboard CSS files were removed instead of remaining as competing override layers.
+- **Make Tailwind part of every supported workflow.** CSS compilation runs before HTTP startup, Electron development, Windows packaging, distribution builds, and the complete test suite.
+- **Keep Tailwind CSS editor diagnostics accurate.** The repository now recommends the official Tailwind CSS IntelliSense extension, opens the dashboard stylesheet in Tailwind language mode, and suppresses the built-in CSS validator's false-positive unknown-at-rule warnings for directives such as `@apply`.
+- **Document and enforce feature ownership.** A feature-structure guide and regression checks prevent the removed generic `sections` hierarchy and legacy stylesheet imports from returning.
+
+### Desktop dashboard redesign and layout repair
+- **Use the full Electron window instead of a narrow centered web-page column.** The application shell, typography, controls, cards, Settings rail, Activity table, Sessions list, Workspaces page, Connection path, and Overview hierarchy were resized for a desktop application surface.
+- **Remove duplicated page headings and excessive nested decoration.** The top bar is the single page identity, routine cards remain flat, and feature pages use clearer status, supporting-fact, and action groupings.
+- **Replace checklist-style readiness UI.** Workspace cards show one primary ChatGPT-access state with repository and validation facts, while Electron setup uses numbered principle cards instead of decorative checkmark rows.
+- **Keep controls visibly interactive.** Add workspace, Quick navigation, page-owned workspace filters, search, selects, inputs, and secondary buttons retain explicit borders and stable dimensions across loading and responsive states.
+- **Remove the redundant workspace jumper.** The top-bar Jump to workspace selector is gone; workspace management remains available through Workspaces and searchable Quick navigation.
+- **Fix the full-width shell regression.** The fixed sidebar now follows the shared sidebar-width variable, while the main dashboard is explicitly placed in the second grid column and stretches across all remaining space without duplicate margin offsets at any breakpoint.
+- **Open the desktop dashboard at an unmistakably windowed size.** First launch is centered at 80% of the active display work area and capped at 1180 by 760 pixels instead of using a fixed 1240 by 820 rectangle that nearly filled common laptop screens.
+- **Persist restore geometry instead of maximized geometry.** Maximizing Rel.AI no longer saves a screen-sized rectangle that reopens as a nearly-fullscreen normal window; existing unversioned bounds migrate once to the smaller default, while closing still hides the dashboard to the tray.
+
+### Durable sessions and smoother live updates
+- **Persist session history independently from the bounded Activity tail.** Session summaries are stored separately, survive beyond the latest 200 audit events, retain up to 500 sessions, and merge validation and completion fragments into the same recorded session.
+- **Make live connection state accurate.** The dashboard treats the server readiness event as a live connection, reports temporary transport failures as reconnecting instead of Offline, pauses connection work while hidden, and uses bounded exponential retry delays.
+- **Replace dashboard polling with tool-activity updates.** Tool-call start, progress, and completion events schedule coalesced dashboard snapshots; unchanged route data is fingerprinted and skipped, and changed views keep their existing DOM visible until the lazy feature mount is ready instead of flashing an empty route container.
+- **Use the Activity workspace effectively.** The event table now spans the available content width with explicit proportional columns instead of leaving the log compressed against the left edge.
+- **Keep dashboard connectivity truthful during stream recovery.** Electron EventSource requests include the dashboard session cookie explicitly, reconnects remain distinct from Offline, and the removed refresh interval settings can no longer imply that timer polling is the normal update path.
+- **Repair the Sessions inspector.** Session history renders in bounded 50-row batches, the detail drawer keeps its header visible, removes the full-window blur, and presents changed files and tool events in structured, collapsible groups instead of an unformatted narrow column.
+- **Make list ordering intentional and deterministic.** Sessions keep all ongoing work at the top and sort both the ongoing group and finished history by timestamp, newest first; completed, attention, and inactive sessions are not separated into artificial status groups. Activity remains newest-first, the Sessions drawer shows the latest tool events before an older-events disclosure, diagnostic logs remain chronological with the latest entry visible, findings prioritize severity, workspace selectors are alphabetical, changed files are deduplicated and sorted, and the Tools catalog groups capabilities before alphabetizing titles.
+- **Expand regression coverage.** Persistent session storage, Tailwind-only styling, responsive shell placement, live-event recovery, activity-table width, visual hierarchy, and Electron behavior are covered by the complete validation suite.
+
 ### Usability validation and delivery hardening
+- **Replace one-click installation with an explicit setup wizard.** The Windows installer now presents destination-folder selection and a deliberate Install step and creates Start menu and desktop shortcuts.
+- **Offer current-user and all-users installation correctly.** Current-user installation remains the default without elevation; selecting all users requests Windows administrator approval when the installer is not already elevated.
+- **Restore the optional post-install launch choice.** The Finish page includes a checked **Run Rel.AI MCP** option that users may clear before closing setup.
+- **Keep release automation unattended without changing user-facing behavior.** Exact-installer smoke continues to use NSIS silent mode in an isolated directory while regression tests lock the assisted installer contract.
 - **Test the exact installer intended for release.** The release workflow installs the generated NSIS executable, runs packaged service and renderer journeys against that same file, and refuses publication when the installed-app gate fails.
 - **Produce machine-readable acceptance evidence.** `release-readiness.json` records the installer SHA-256, eleven passed automated scenarios, screenshot metadata, limitations, and four external checks that remain explicitly required.
 - **Preserve rendered journey evidence.** Setup, failure recovery, dashboard overview, and Sessions-to-Activity navigation produce checksum-bound screenshots archived as `release-usability-evidence.zip`.
@@ -36,12 +67,12 @@
 - **Rename safely from Workspace settings.** Workspace name and project-folder changes are persisted in one atomic update while existing validation, context, and Git safeguards remain intact.
 - **Reject duplicate configuration.** The form reports conflicting names and folders immediately, and the configuration layer enforces the same normalized-path rules before writing.
 - **Use a dedicated path-repair flow.** Unavailable repositories open a focused repair dialog that changes only the folder and preserves workspace identity.
-- **Surface recent workspaces.** The dashboard keeps a bounded local list of five recent workspaces, updates it after rename or removal, and presents it on the Workspaces page and quick selector.
-- **Make workspace administration discoverable.** The scope and quick-jump selectors now include a permanent **Manage workspaces…** destination.
+- **Surface recent workspaces.** The dashboard keeps a bounded local list of five recent workspaces, updates it after rename or removal, and presents it on the Workspaces page.
+- **Keep workspace filtering where it is used.** Sessions and Workspaces own accessible Tailwind listbox menus, while Activity retains its page-specific filter controls; the top bar no longer carries a global native selector.
 
 ### Settings information architecture remediation
 - **Use five task-based Settings categories.** General, Connection, Tools & validation, Diagnostics, and Advanced replace the competing Dashboard and Desktop app categories.
-- **Keep related controls together.** General owns appearance, notifications, startup, and updates; Connection owns status, endpoint credentials, and approval-token security; Advanced owns polling, patch safeguards, and resource limits.
+- **Keep related controls together.** General owns appearance, notifications, startup, and updates; Connection owns status, endpoint credentials, and approval-token security; Advanced owns patch safeguards and resource limits.
 - **Preserve saved links.** Legacy `#settings/desktop` and `#settings/dashboard` routes normalize to Connection and Advanced without restoring duplicate settings surfaces.
 - **Constrain desktop settings IPC.** Credential reads, saves, approval-token replacement, notifications, lifecycle, and updater actions are accepted only from the secured dashboard window.
 - **Expose validation ownership explicitly.** Tools & validation summarizes the tool surface, workspace validation readiness, and the existing Workspaces and Tools destinations.
@@ -88,11 +119,11 @@
 
 ### Faster navigation and dashboard quality of life
 - **Add searchable quick navigation.** The top bar and `Ctrl+K` / `Cmd+K` open one keyboard-friendly launcher for pages, Settings sections, common actions, and configured workspaces.
-- **Jump directly to workspace cards.** A workspace selector opens the scoped Workspaces route, focuses the requested card after rendering, and removes the temporary focus marker from the saved route.
+- **Jump directly to workspace cards.** Quick navigation opens the scoped Workspaces route, focuses the requested card after rendering, and removes the temporary focus marker from the saved route.
 - **Make status actionable.** The top connection status now links directly to the canonical Connection page instead of acting as a dead indicator.
 - **Preserve Activity filters in the URL.** Search, time range, tool, status, task, and workspace scope survive refreshes and can be bookmarked or shared without remounting the page on every keystroke.
 - **Route history controls correctly.** Sessions now opens Diagnostics for history management, matching the ownership established by the diagnostics redesign.
-- **Keep compact layouts usable.** The command launcher becomes icon-only on narrow displays, while the separate workspace jumper hides when horizontal space is constrained.
+- **Keep compact layouts usable.** The command launcher becomes icon-only on narrow displays, and page-owned workspace menus expand to the available width.
 
 ### Structured diagnostics and recovery
 - **Return actionable errors.** HTTP and desktop failures now use stable error codes with a title, recovery guidance, direct action, and retryability state.

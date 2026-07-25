@@ -11,7 +11,8 @@ const { ERROR_CODES, deriveConnectionState, errorPayload } = require("../desktop
 const { getOnboardingStatus, writeOnboardingState } = require("../onboardingState");
 const { getVersion } = require("../version");
 const { resolveRequireHttpToken } = require("./auth");
-const { buildTaskHistory } = require("../taskHistory");
+const { readTaskHistory } = require("../taskHistoryStore");
+const { onToolActivity } = require("../toolActivity");
 const { buildWorkspaceStates } = require("../workspaceState");
 const {
   handleOpenFolder,
@@ -67,7 +68,7 @@ function buildDashboardPayload(config, options = {}, requireHttpToken = false) {
     mcpUrl: connectionSummary.chatgptMcpUrl || ""
   };
   const base = productUx.dashboardData(config, { limit: Math.max(Number(options.limit || 100), 200) });
-  const tasks = buildTaskHistory(base.auditTail?.entries || [], taskActivity, { limit: 100 });
+  const tasks = readTaskHistory(config, taskActivity, { limit: 500 });
   const workspaceStates = buildWorkspaceStates(config, tasks, taskActivity);
   if (Array.isArray(base.config?.workspaces)) {
     for (const workspace of base.config.workspaces) workspace.operational = workspaceStates[workspace.alias] || null;
@@ -265,15 +266,23 @@ function openDashboardEvents(res, req, options) {
     }
   };
   sendSse(res, "ready", { ok: true, generatedAt: new Date().toISOString() });
-  const intervalMs = Math.max(1000, Number(readConfig({ allowMissing: true }).productUx?.liveLogPollSeconds || 3) * 1000);
-  const timer = setInterval(() => sendSnapshot(false), intervalMs);
+  let pendingSnapshot = null;
+  const scheduleSnapshot = () => {
+    if (pendingSnapshot || res.destroyed) return;
+    pendingSnapshot = setTimeout(() => {
+      pendingSnapshot = null;
+      if (!res.destroyed) sendSnapshot(false);
+    }, 25);
+    pendingSnapshot.unref?.();
+  };
+  const unsubscribe = onToolActivity(scheduleSnapshot);
   const heartbeat = setInterval(() => {
     if (!res.destroyed) res.write(`: keepalive ${Date.now()}\n\n`);
   }, 15000);
-  timer.unref?.();
   heartbeat.unref?.();
   req.on("close", () => {
-    clearInterval(timer);
+    unsubscribe();
+    if (pendingSnapshot) clearTimeout(pendingSnapshot);
     clearInterval(heartbeat);
   });
 }
@@ -331,17 +340,8 @@ try {
         <div class="page-subtitle" id="subtitle">Checking local workspace state…</div>
       </div>
       <div class="top-controls">
-        <label id="workspaceScopeControl" class="workspace-scope-control" aria-label="Workspace filter"><svg class="workspace-scope-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5V19a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7l-2-3H5a2 2 0 0 0-2 2v2.5Z" /></svg>
-          <select id="workspaceScope" class="workspace-scope" aria-label="Filter dashboard by workspace"><option value="">All workspaces</option></select>
-          <svg class="workspace-scope-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
-        </label>
-        <label id="workspaceQuickNavControl" class="workspace-quick-control" aria-label="Jump to a workspace"><svg class="workspace-quick-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M14 7l5 5-5 5" /></svg>
-          <select id="workspaceQuickNav" class="workspace-quick-nav" aria-label="Jump to a workspace"><option value="">Jump to workspace…</option></select>
-          <svg class="workspace-quick-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
-        </label>
         <button class="secondary command-trigger" id="commandPaletteBtn" type="button" aria-haspopup="dialog" aria-expanded="false" title="Open quick navigation"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg><span class="command-trigger-label">Quick navigation</span><kbd>Ctrl K</kbd></button>
         <a class="status-pill warn connection-status-link" id="connectionStatus" href="#settings/connection" aria-label="Open Connection settings; current status Connecting">Connecting…</a>
-        <button class="secondary topbar-refresh" id="refreshBtn" type="button" aria-busy="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" /></svg><span>Refresh now</span></button>
         <span class="section-action" id="lastUpdated"></span>
       </div>
     </header>

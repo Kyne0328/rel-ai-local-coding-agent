@@ -39,7 +39,7 @@ function buildDiagnosticReport(input = {}) {
     ...connectionFindings(input.connection, input.connectionState),
     ...cautionFindings(input.cautionData, workspace)
   ];
-  const ordered = dedupeFindings(findings).sort((left, right) => severityRank(left.severity) - severityRank(right.severity));
+  const ordered = dedupeFindings(findings).sort(compareDiagnosticFindings);
   const runtime = normalizeRuntimeLogs(input.runtimeLogs);
   const failedActivity = normalizeFailedActivity(input.auditLogs);
   const activeCalls = Number(input.activeCalls || 0);
@@ -178,11 +178,12 @@ function diagnosticFinding(value) {
 
 function normalizeRuntimeLogs(value) {
   const entries = Array.isArray(value?.entries) ? value.entries : [];
+  const ordered = [...entries].sort(compareChronological).slice(-100);
   return {
     available: value?.available === true,
     persistent: value?.persistent === true,
     count: Number(value?.count ?? entries.length),
-    entries: entries.slice(-100).map(entry => ({
+    entries: ordered.map(entry => ({
       ts: entry.ts || null,
       level: ['error', 'warning', 'info'].includes(entry.level) ? entry.level : 'info',
       source: sanitizeText(entry.source || 'desktop', 80),
@@ -196,6 +197,7 @@ function normalizeFailedActivity(value) {
   const entries = Array.isArray(value?.entries) ? value.entries : Array.isArray(value) ? value : [];
   return entries
     .filter(entry => entry?.ok === false || entry?.error)
+    .sort(compareChronological)
     .slice(-20)
     .map(entry => sanitizeDiagnosticValue({
       ts: entry.ts || entry.at || entry.createdAt || null,
@@ -274,6 +276,28 @@ function severityRank(value) {
   if (value === 'error') return 0;
   if (value === 'warning') return 1;
   return 2;
+}
+
+function compareDiagnosticFindings(left, right) {
+  return severityRank(left?.severity) - severityRank(right?.severity)
+    || findingWorkspace(left).localeCompare(findingWorkspace(right), 'en-US', { numeric: true, sensitivity: 'base' })
+    || String(left?.code || '').localeCompare(String(right?.code || ''), 'en-US', { numeric: true, sensitivity: 'base' })
+    || String(left?.title || '').localeCompare(String(right?.title || ''), 'en-US', { numeric: true, sensitivity: 'base' });
+}
+
+function findingWorkspace(finding) {
+  return String(finding?.details?.workspace || finding?.details?.alias || '');
+}
+
+function compareChronological(left, right) {
+  const timestampDifference = diagnosticTimestamp(left) - diagnosticTimestamp(right);
+  if (timestampDifference) return timestampDifference;
+  return String(left?.source || left?.tool || left?.type || '').localeCompare(String(right?.source || right?.tool || right?.type || ''), 'en-US', { numeric: true, sensitivity: 'base' });
+}
+
+function diagnosticTimestamp(entry) {
+  const timestamp = Date.parse(entry?.ts || entry?.at || entry?.createdAt || '');
+  return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
 function humanize(value) {

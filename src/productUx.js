@@ -64,7 +64,8 @@ function healthMonitor(config, _args = {}) {
 
   const staleHours = Number(config.productUx?.staleHours || 24);
   checkStaleFile(findings, "audit", config.auditLogPath, staleHours);
-  const workspaces = Object.keys(config.workspaces || {}).map((alias) => {
+  const aliases = Object.keys(config.workspaces || {}).sort(compareText);
+  const workspaces = aliases.map((alias) => {
     try {
       const workspace = resolveWorkspace(config, alias);
       return { alias, ok: true, path: workspace.path, context: workspace.context || {} };
@@ -73,18 +74,19 @@ function healthMonitor(config, _args = {}) {
       return { alias, ok: false, error: error instanceof Error ? error.message : String(error) };
     }
   });
+  const orderedFindings = [...findings].sort(compareHealthFindings);
 
   return {
-    ok: !findings.some((item) => item.severity === "error"),
+    ok: !orderedFindings.some((item) => item.severity === "error"),
     generatedAt: new Date().toISOString(),
     staleHours,
     stateDir,
     workspaces,
     counts: {
       workspaces: workspaces.length,
-      findings: findings.length
+      findings: orderedFindings.length
     },
-    findings
+    findings: orderedFindings
   };
 }
 
@@ -422,6 +424,27 @@ function clampNumber(value, min, max) {
   return Math.min(Math.max(number, min), max);
 }
 
+function compareText(left, right) {
+  return String(left || '').localeCompare(String(right || ''), 'en-US', { numeric: true, sensitivity: 'base' });
+}
+
+function compareHealthFindings(left, right) {
+  return healthSeverityRank(left?.severity) - healthSeverityRank(right?.severity)
+    || compareText(left?.workspace, right?.workspace)
+    || compareText(left?.code, right?.code);
+}
+
+function healthSeverityRank(value) {
+  if (value === 'error') return 0;
+  if (value === 'warning') return 1;
+  return 2;
+}
+
+function auditTimestamp(entry) {
+  const timestamp = Date.parse(entry?.ts || entry?.at || entry?.createdAt || '');
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
 function cautionSummary(config, options = {}) {
   const windowHours = clampNumber(options.windowHours || 24, 1, 720);
   const limit = clampNumber(options.limit || 200, 1, 2000);
@@ -429,7 +452,7 @@ function cautionSummary(config, options = {}) {
   const sourceEntries = Array.isArray(options.entries)
     ? options.entries.slice(-limit)
     : readAudit(config, { limit }).entries;
-  const entries = [...(sourceEntries || [])].sort((left, right) => Date.parse(right.ts || 0) - Date.parse(left.ts || 0));
+  const entries = [...(sourceEntries || [])].sort((left, right) => auditTimestamp(right) - auditTimestamp(left));
   const byAlias = {};
   for (const e of entries || []) {
     if (e?.cautionLevel !== "caution") continue;
@@ -452,22 +475,23 @@ function cautionSummary(config, options = {}) {
     ok: true,
     generatedAt: new Date().toISOString(),
     windowHours,
-    workspaces: Object.values(byAlias)
+    workspaces: Object.values(byAlias).sort((left, right) => compareText(left.alias, right.alias))
   };
 }
 
 function aliasConsistencyCheck(config) {
   const results = [];
-  for (const [alias, ws] of Object.entries(config.workspaces || {})) {
+  const entries = Object.entries(config.workspaces || {}).sort(([left], [right]) => compareText(left, right));
+  for (const [alias, ws] of entries) {
     // Cover BOTH command maps, matching relai_status. Checking only testCommands made
     // the dashboard report "All consistent" while relai_status flagged a stale entry in
     // the plain commands map — two surfaces disagreeing about the same workspace.
     const allConfigured = { ...commandMapOrEmpty(ws.commands), ...commandMapOrEmpty(ws.testCommands) };
-    const configuredKeys = Object.keys(allConfigured);
+    const configuredKeys = Object.keys(allConfigured).sort(compareText);
     let discovered = {};
     try { discovered = discoverCommands(ws.path || ''); } catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] alias command discovery:', error); }
-    const discoveredKeys = Object.keys(discovered);
-    const staleKeys = staleCommandKeys(allConfigured, discovered);
+    const discoveredKeys = Object.keys(discovered).sort(compareText);
+    const staleKeys = staleCommandKeys(allConfigured, discovered).sort(compareText);
     results.push({ alias, configuredKeys, discoveredKeys, staleKeys, ok: staleKeys.length === 0 });
   }
   return { ok: results.every(r => r.ok), generatedAt: new Date().toISOString(), workspaces: results };

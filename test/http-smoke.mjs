@@ -87,7 +87,7 @@ if (removedSecretRoute.status !== 401 && removedSecretRoute.status !== 404) {
 
 const dashboardQueryAuth = await fetch(`http://127.0.0.1:${port}/api/dashboard/v10?token=${encodeURIComponent(token)}&requireHttpToken=0`).then((response) => response.json());
 if (!dashboardQueryAuth.ok) {
-  throw new Error('dashboard API did not accept token query auth used by browser dashboard');
+  throw new Error(`dashboard API did not accept token query auth used by browser dashboard: ${JSON.stringify(dashboardQueryAuth)}`);
 }
 
 const invalidAsyncPost = await fetch(`http://127.0.0.1:${port}/api/settings?token=${encodeURIComponent(token)}`, {
@@ -184,8 +184,11 @@ if (!dashboardCsp.includes("default-src 'self'") || !dashboardCsp.includes("fram
 if (!dashboardHtmlResponse.ok || dashboardHtml.includes('initialDashboardJson is not defined') || !dashboardHtml.includes('id="initialDashboardData"')) {
   throw new Error('dashboard HTML did not render embedded initial dashboard data');
 }
-if (!dashboardHtml.includes('id="refreshBtn"') || !dashboardHtml.includes('id="workspaceScope"') || !dashboardHtml.includes('id="connectionStatus"')) {
-  throw new Error('dashboard HTML did not expose refresh, workspace scope, and connection status controls');
+if (!dashboardHtml.includes('id="commandPaletteBtn"') || !dashboardHtml.includes('id="connectionStatus"')) {
+  throw new Error('dashboard HTML did not expose Quick navigation and connection status controls');
+}
+if (dashboardHtml.includes('id="refreshBtn"') || dashboardHtml.includes('id="workspaceScope"')) {
+  throw new Error('dashboard topbar should not expose manual refresh or a global workspace selector');
 }
 if (dashboardHtml.includes('id="liveStatus"') || dashboardHtml.includes('id="serverStatus"')) {
   throw new Error('dashboard HTML should expose one canonical connection status control');
@@ -201,11 +204,11 @@ if (dashboardHtml.includes('id="token"')) {
   throw new Error('dashboard topbar should no longer expose the token field');
 }
 
-const workspaceModule = await fetch(`http://127.0.0.1:${port}/ui/sections/workspaces.js`).then((response) => response.text());
+const workspaceModule = await fetch(`http://127.0.0.1:${port}/ui/features/workspaces/index.js`).then((response) => response.text());
 if (!workspaceModule.includes('mountWorkspaces') || workspaceModule.includes('Full workspace editor coming in Phase 2')) {
   throw new Error('workspace dashboard section is still incomplete or placeholder-only');
 }
-const tasksModule = await fetch(`http://127.0.0.1:${port}/ui/sections/tasks.js`).then((response) => response.text());
+const tasksModule = await fetch(`http://127.0.0.1:${port}/ui/features/sessions/index.js`).then((response) => response.text());
 if (!tasksModule.includes('mountTasks') || !tasksModule.includes('Session history') || !tasksModule.includes('completion was not reported')) {
   throw new Error('dashboard work-session section is missing or incomplete');
 }

@@ -1,7 +1,7 @@
-import { pillHtml } from '../components/pill.js';
-import { esc, timeAgo } from '../utils.js';
-import { getWorkspaceFilter, routeHref } from '../router.js';
-import { connectionSummary } from '../connection-state.js';
+import { pillHtml } from '../../components/pill.js';
+import { esc, timeAgo } from '../../utils.js';
+import { getWorkspaceFilter, routeHref } from '../../router.js';
+import { connectionSummary } from '../../connection-state.js';
 
 export function mountHome(container, data) {
   container.innerHTML = '';
@@ -13,9 +13,9 @@ function buildOverview(data) {
   const health = data.health || {};
   const connection = data.connection || {};
   const workspaceFilter = getWorkspaceFilter();
-  const allWorkspaces = Array.isArray(config.workspaces) ? config.workspaces : [];
+  const allWorkspaces = orderOverviewWorkspaces(Array.isArray(config.workspaces) ? config.workspaces : []);
   const workspaces = workspaceFilter ? allWorkspaces.filter(workspace => workspace.alias === workspaceFilter) : allWorkspaces;
-  const tasks = (Array.isArray(data.tasks) ? data.tasks : []).filter(task => !workspaceFilter || task.workspace === workspaceFilter);
+  const tasks = orderOverviewTasks((Array.isArray(data.tasks) ? data.tasks : []).filter(task => !workspaceFilter || task.workspace === workspaceFilter));
   const findings = actionableFindings(health);
   const endpoint = String(connection.chatgptMcpUrl || '');
   const connectionState = data.connectionState || {};
@@ -213,22 +213,25 @@ function formatDuration(milliseconds) {
   return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
 }
 
-function buildAttention(workspaces, findings, endpoint) {
+export function buildAttention(workspaces, findings, endpoint) {
   const items = [];
   if (!workspaces.length) {
-    items.push({ tone: 'warn', title: 'No workspaces configured', copy: 'Add the repository aliases ChatGPT should be allowed to use.', href: '#workspaces', cta: 'Add workspace' });
+    items.push({ priority: 1, tone: 'warn', title: 'No workspaces configured', copy: 'Add the repository aliases ChatGPT should be allowed to use.', href: '#workspaces', cta: 'Add workspace' });
   }
   const missingValidation = workspaces.filter(ws => !hasValidation(ws));
   if (missingValidation.length) {
-    items.push({ tone: 'warn', title: 'Validation is incomplete', copy: `${missingValidation.length} workspace${missingValidation.length === 1 ? '' : 's'} have no saved or detected check command.`, href: '#workspaces', cta: 'Review validation' });
+    items.push({ priority: 3, tone: 'warn', title: 'Validation is incomplete', copy: `${missingValidation.length} workspace${missingValidation.length === 1 ? '' : 's'} have no saved or detected check command.`, href: '#workspaces', cta: 'Review validation' });
   }
   if (!endpoint) {
-    items.push({ tone: 'warn', title: 'ChatGPT endpoint unavailable', copy: 'Configure the permanent HTTPS tunnel before creating the ChatGPT app.', href: '#settings/connection', cta: 'Open connection' });
+    items.push({ priority: 2, tone: 'warn', title: 'ChatGPT endpoint unavailable', copy: 'Configure the permanent HTTPS tunnel before creating the ChatGPT app.', href: '#settings/connection', cta: 'Open connection' });
   }
   if (findings.length) {
-    items.push({ tone: 'bad', title: 'Diagnostics need review', copy: `${findings.length} actionable finding${findings.length === 1 ? '' : 's'} may affect workspace access or reliability.`, href: '#settings/diagnostics', cta: 'Open diagnostics' });
+    items.push({ priority: 0, tone: 'bad', title: 'Diagnostics need review', copy: `${findings.length} actionable finding${findings.length === 1 ? '' : 's'} may affect workspace access or reliability.`, href: '#settings/diagnostics', cta: 'Open diagnostics' });
   }
-  return items.slice(0, 3);
+  return items
+    .sort((left, right) => left.priority - right.priority || left.title.localeCompare(right.title, 'en-US', { sensitivity: 'base' }))
+    .slice(0, 3)
+    .map(({ priority: _priority, ...item }) => item);
 }
 
 function attentionCard(items) {
@@ -295,5 +298,24 @@ function hasValidation(workspace) {
 
 function actionableFindings(health) {
   return Array.isArray(health.findings) ? health.findings.filter(item => item.severity !== 'info') : [];
+}
+
+export function orderOverviewTasks(tasks = []) {
+  return [...(Array.isArray(tasks) ? tasks : [])].sort((left, right) => {
+    const timestampDifference = overviewTimestamp(right) - overviewTimestamp(left);
+    if (timestampDifference) return timestampDifference;
+    return String(left?.id || '').localeCompare(String(right?.id || ''), 'en-US', { numeric: true, sensitivity: 'base' });
+  });
+}
+
+export function orderOverviewWorkspaces(workspaces = []) {
+  return [...(Array.isArray(workspaces) ? workspaces : [])].sort((left, right) =>
+    String(left?.alias || '').localeCompare(String(right?.alias || ''), 'en-US', { numeric: true, sensitivity: 'base' })
+  );
+}
+
+function overviewTimestamp(task) {
+  const timestamp = Date.parse(task?.endedAt || task?.completedAt || task?.lastActivityAt || task?.startedAt || '');
+  return Number.isFinite(timestamp) ? timestamp : 0;
 }
 

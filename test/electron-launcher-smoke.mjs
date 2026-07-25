@@ -72,6 +72,7 @@ assert.match(fs.readFileSync(path.join(root, 'electron', 'window-smoke.js'), 'ut
 assert.match(fs.readFileSync(path.join(root, 'electron', 'window-smoke.js'), 'utf8'), /writeWindowSmokeResult/, 'packaged dashboard smoke must emit machine-readable scenario results');
 assert.ok(electronPkg.build.files.includes('tool-sleep-blocker.js'), 'electron build must include tool-call sleep prevention');
 assert.ok(electronPkg.build.files.includes('dashboard-window.js'), 'electron build must include the secured dashboard host');
+assert.ok(electronPkg.build.files.includes('dashboard-window-bounds.js'), 'electron build must include bounded dashboard window-state handling');
 assert.ok(electronPkg.build.files.includes('dashboard-preload.js'), 'electron build must include the desktop dashboard bridge');
 assert.ok(electronPkg.build.files.includes('desktop-tray.js'), 'electron build must include the desktop tray controller');
 assert.ok(electronPkg.build.files.includes('desktop-status.js'), 'electron build must include the normalized desktop status model');

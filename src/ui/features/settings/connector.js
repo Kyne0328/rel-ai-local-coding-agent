@@ -14,15 +14,7 @@ export function mountConnector(container) {
 
 async function loadConnector(container) {
   const payload = await fetchJson('/api/connection');
-  container.innerHTML = `
-    <div class="section">
-      <div class="section-head">
-        <div>
-          <h2>Connection</h2>
-          <p>See each part of the path between this computer, the public endpoint, ChatGPT, and this dashboard.</p>
-        </div>
-      </div>
-    </div>`;
+  container.innerHTML = '<div class="section connection-page"></div>';
   if (!payload || payload.ok === false) {
     container.querySelector('.section').insertAdjacentHTML('beforeend', '<div class="empty">Failed to load connection details.</div>');
     return;
@@ -56,10 +48,10 @@ function summaryCard(payload, state) {
       </div>
       <div class="connection-field">
         <span class="field-caption">ChatGPT MCP endpoint</span>
-        <code class="copy-box connector-endpoint">${escapeHtml(payload.chatgptMcpUrl || 'Waiting for a permanent HTTPS endpoint')}</code>
-      </div>
-      <div class="connection-actions">
-        <button type="button" data-copy="mcp" ${payload.chatgptMcpUrl ? '' : 'disabled'}>Copy endpoint</button>
+        <div class="connection-endpoint-row">
+          <code class="connector-endpoint">${escapeHtml(payload.chatgptMcpUrl || 'Waiting for a permanent HTTPS endpoint')}</code>
+          <button class="secondary" type="button" data-copy="mcp" ${payload.chatgptMcpUrl ? '' : 'disabled'}>Copy endpoint</button>
+        </div>
       </div>
     </div>`;
   card.querySelector('[data-copy="mcp"]').onclick = () => copyValue(payload.chatgptMcpUrl, 'ChatGPT MCP endpoint copied.');
@@ -70,16 +62,16 @@ function layerGrid(state) {
   const wrapper = document.createElement('section');
   wrapper.className = 'connection-layer-section';
   wrapper.innerHTML = '<div class="connection-layer-heading"><h3>Connection path</h3><p>These states are related, but they do not mean the same thing.</p></div>';
-  const grid = document.createElement('div');
-  grid.className = 'connection-layer-grid';
-  for (const layer of connectionLayerViews(state)) grid.appendChild(layerCard(layer));
-  wrapper.appendChild(grid);
+  const path = document.createElement('div');
+  path.className = 'connection-path';
+  for (const layer of connectionLayerViews(state)) path.appendChild(layerCard(layer));
+  wrapper.appendChild(path);
   return wrapper;
 }
 
 function layerCard(layer) {
   const card = document.createElement('article');
-  card.className = `card connection-layer-card ${layer.tone}`;
+  card.className = `connection-path-step ${layer.tone}`;
   card.dataset.connectionLayer = layer.key;
   card.innerHTML = `
     <div class="connection-layer-card-head">
@@ -92,18 +84,21 @@ function layerCard(layer) {
 
 function actionCard(state) {
   const card = document.createElement('section');
-  card.className = 'card connection-actions-card';
+  card.className = 'connection-actions-bar';
   const summary = connectionSummary(state);
   card.innerHTML = `
-    <div class="card-head"><h3>Connection actions</h3><span class="section-action">${escapeHtml(summary.label)}</span></div>
-    <div class="card-body connection-stack">
+    <div class="connection-actions-copy">
+      <span class="field-caption">Connection actions</span>
+      <strong>${escapeHtml(summary.label)}</strong>
+    </div>
+    <div class="connection-action-notices">
       ${authenticationRecoveryHtml(state)}
       ${state.error ? `<div class="connection-notice bad"><strong>${escapeHtml(state.error.code)}</strong><br>${escapeHtml(state.error.message)}</div>` : ''}
-      <div class="connection-actions">
-        ${window.relaiDesktop ? '<button type="button" data-desktop-restart>Restart connection</button>' : ''}
-        <button class="secondary" type="button" data-refresh-connection>Refresh status</button>
-        <a class="buttonlike secondary" href="#settings/diagnostics">Open diagnostics</a>
-      </div>
+    </div>
+    <div class="connection-actions">
+      ${window.relaiDesktop ? '<button type="button" data-desktop-restart>Restart connection</button>' : ''}
+      <button class="secondary" type="button" data-refresh-connection>Refresh status</button>
+      <a class="buttonlike secondary" href="#settings/diagnostics">Open diagnostics</a>
     </div>`;
   card.querySelector('[data-desktop-restart]')?.addEventListener('click', () => {
     window.relaiDesktop.restartService();

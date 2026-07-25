@@ -37,6 +37,7 @@
       "smoke-evidence.js",
       "tool-sleep-blocker.js",
       "dashboard-window.js",
+      "dashboard-window-bounds.js",
       "dashboard-preload.js",
       "desktop-tray.js",
       "desktop-status.js",
@@ -103,8 +104,14 @@
       "icon": "build/icon.png"
     },
     "nsis": {
-      "oneClick": true,
-      "perMachine": false
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Rel.AI MCP",
+      "runAfterFinish": true
     }
   },
   "dependencies": {

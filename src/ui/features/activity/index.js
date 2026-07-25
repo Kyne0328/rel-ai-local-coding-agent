@@ -1,12 +1,12 @@
-import { fetchJson } from '../api.js';
-import { openDrawer } from '../components/drawer.js';
-import { pillHtml } from '../components/pill.js';
-import { toast } from '../components/toast.js';
-import { virtualizeTable } from '../components/table.js';
-import { esc, timeAgo } from '../utils.js';
-import { getRouteParams, getWorkspaceFilter, replaceRouteParams, setWorkspaceFilter } from '../router.js';
-import { activityEventId } from '../activity-event.js';
-import { copyText } from '../clipboard.js';
+import { fetchJson } from '../../api.js';
+import { openDrawer } from '../../components/drawer.js';
+import { pillHtml } from '../../components/pill.js';
+import { toast } from '../../components/toast.js';
+import { virtualizeTable } from '../../components/table.js';
+import { esc, timeAgo } from '../../utils.js';
+import { getRouteParams, getWorkspaceFilter, navigate, replaceRouteParams, setWorkspaceFilter } from '../../router.js';
+import { activityEventId } from '../../activity-event.js';
+import { copyText } from '../../clipboard.js';
 
 let _allEntries = [];
 let _paused = false;
@@ -59,8 +59,7 @@ export function prependEntry(entry) {
 
 function buildActivity() {
   const root = document.createElement('div');
-  root.className = 'section';
-  root.innerHTML = '<div class="section-head"><div><h2>Activity</h2><p>Inspect individual Rel.AI tool events. Use Sessions for grouped ChatGPT work.</p></div></div>';
+  root.className = 'section activity-page';
 
   const toolbar = document.createElement('div');
   toolbar.className = 'activity-toolbar';
@@ -172,8 +171,8 @@ function buildActivity() {
 
   const tableCard = document.createElement('div');
   tableCard.id = '__activity-table-wrap';
-  tableCard.className = 'card';
-  tableCard.innerHTML = '<div class="card-head"><h3>Event log</h3><span class="section-action" id="__activity-count">Loading…</span></div><div class="card-body"><div class="table-wrap"><table class="data-table"><caption class="sr-only">Audit activity log</caption><thead><tr><th scope="col">Time</th><th scope="col">Tool</th><th scope="col">Workspace</th><th scope="col">Status</th><th scope="col">Message</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody id="__activity-tbody"></tbody></table></div></div>';
+  tableCard.className = 'card activity-event-card';
+  tableCard.innerHTML = '<div class="card-head"><h3>Event log</h3><span class="section-action" id="__activity-count">Loading…</span></div><div class="card-body"><div class="table-wrap"><table class="data-table activity-table"><caption class="sr-only">Audit activity log</caption><colgroup><col class="activity-col-time"><col class="activity-col-tool"><col class="activity-col-workspace"><col class="activity-col-status"><col class="activity-col-message"><col class="activity-col-action"></colgroup><thead><tr><th scope="col">Time</th><th scope="col">Tool</th><th scope="col">Workspace</th><th scope="col">Status</th><th scope="col">Message</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody id="__activity-tbody"></tbody></table></div></div>';
   root.append(toolbar, tableCard);
   return root;
 }
@@ -399,8 +398,13 @@ function detailPre(text) {
   return pre;
 }
 
-function sortEntries(entries) {
-  return [...(Array.isArray(entries) ? entries : [])].sort((left, right) => Date.parse(right.ts || right.at || right.createdAt || 0) - Date.parse(left.ts || left.at || left.createdAt || 0));
+export function sortEntries(entries) {
+  return [...(Array.isArray(entries) ? entries : [])].sort((left, right) => activityTimestamp(right) - activityTimestamp(left));
+}
+
+function activityTimestamp(entry) {
+  const timestamp = Date.parse(entry?.ts || entry?.at || entry?.createdAt || '');
+  return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
 function entryKey(entry) {

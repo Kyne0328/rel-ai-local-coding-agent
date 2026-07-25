@@ -78,7 +78,7 @@ async function setLaunchAtLogin(container, toggle, enabled) {
 
 function syncToggle(toggle, enabled) {
   const input = toggle?.querySelector('input');
-  const label = toggle?.querySelector('span');
+  const label = toggle?.querySelector('.toggle-label');
   if (input) {
     input.checked = enabled;
     input.setAttribute('aria-checked', String(enabled));

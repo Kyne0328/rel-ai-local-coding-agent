@@ -4,12 +4,10 @@ import { hasActiveOverlay } from './interaction-safety.js';
 
 let initialized = false;
 let readData = () => ({});
-let refreshDashboard = () => Promise.resolve();
 let closePalette = () => closeModal();
 
 export function initCommandPalette(options = {}) {
   readData = typeof options.getData === 'function' ? options.getData : readData;
-  refreshDashboard = typeof options.refresh === 'function' ? options.refresh : refreshDashboard;
   if (initialized) return;
   initialized = true;
 
@@ -114,14 +112,10 @@ function buildCommands(data) {
     routeCommand('settings-connection', 'Settings · Connection', 'Connection status, endpoint credentials, and approval token.', '#settings/connection', 'Settings'),
     routeCommand('settings-tools-validation', 'Settings · Tools & validation', 'Tool availability and workspace validation presentation.', '#settings/tools-validation', 'Settings'),
     routeCommand('settings-diagnostics', 'Settings · Diagnostics', 'Errors, reports, service logs, and reset controls.', '#settings/diagnostics', 'Settings'),
-    routeCommand('settings-advanced', 'Settings · Advanced', 'Dashboard polling, patch safeguards, and resource limits.', '#settings/advanced', 'Settings'),
-    actionCommand('refresh', 'Refresh dashboard', 'Request current local service and workspace state.', 'Action', async () => {
-      closePalette();
-      await refreshDashboard();
-    }),
+    routeCommand('settings-advanced', 'Settings · Advanced', 'Patch safeguards and resource limits.', '#settings/advanced', 'Settings'),
     actionCommand('add-workspace', 'Add workspace', 'Choose another local project folder for ChatGPT.', 'Action', async () => {
       closePalette();
-      const module = await import('./sections/workspace-form.js');
+      const module = await import('./features/workspaces/form.js');
       module.openWorkspaceForm({ mode: 'add' });
     })
   ];

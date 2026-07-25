@@ -32,10 +32,19 @@
         <div class="eyebrow">Four-step setup</div>
         <h1 id="step1Title" tabindex="-1">Connect ChatGPT to your local repositories.</h1>
         <p class="subtitle">Rel.AI runs locally, publishes one secure HTTPS MCP endpoint through your ngrok account, and keeps that ChatGPT app URL stable.</p>
-        <div class="setup-benefits">
-          <div><span class="setup-check">✓</span><span>Your repositories remain on this computer.</span></div>
-          <div><span class="setup-check">✓</span><span>ChatGPT receives explicit workspace tools instead of unrestricted shell access.</span></div>
-          <div><span class="setup-check">✓</span><span>The permanent tunnel URL can be reused after restarts.</span></div>
+        <div class="setup-principles" aria-label="What this setup provides">
+          <article class="setup-principle">
+            <span class="setup-principle-number" aria-hidden="true">01</span>
+            <div><strong>Local by default</strong><span>Your repositories remain on this computer.</span></div>
+          </article>
+          <article class="setup-principle">
+            <span class="setup-principle-number" aria-hidden="true">02</span>
+            <div><strong>Scoped access</strong><span>ChatGPT receives explicit workspace tools instead of unrestricted shell access.</span></div>
+          </article>
+          <article class="setup-principle">
+            <span class="setup-principle-number" aria-hidden="true">03</span>
+            <div><strong>Stable connection</strong><span>The permanent tunnel URL can be reused after restarts.</span></div>
+          </article>
         </div>
         <button class="primary setup-next" id="startWizardBtn" type="button">Start setup</button>
       </section>

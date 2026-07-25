@@ -1,9 +1,9 @@
 // Onboarding wizard — 5-step modal carousel
-import { openModal, closeModal } from '../components/modal.js';
-import { fetchJson, postJson } from '../api.js';
-import { toast } from '../components/toast.js';
-import { copyText } from '../clipboard.js';
-import { runButtonAction } from '../action-state.js';
+import { openModal, closeModal } from '../../components/modal.js';
+import { fetchJson, postJson } from '../../api.js';
+import { toast } from '../../components/toast.js';
+import { copyText } from '../../clipboard.js';
+import { runButtonAction } from '../../action-state.js';
 
 let _step = 0;
 let _data = {};

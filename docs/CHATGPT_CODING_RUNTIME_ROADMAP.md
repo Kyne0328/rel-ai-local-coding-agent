@@ -36,7 +36,7 @@ Use these files as the authoritative integration points:
 | Git operations | `src/repo/gitOps.js` |
 | MCP HTTP transport and parallel JSON-RPC batches | `src/http/mcp.js` |
 | Electron application lifecycle | `electron/main.js` |
-| Dashboard sections and actions | `src/ui/sections/` |
+| Dashboard sections and actions | `src/ui/features/` |
 | Boundary types | `types/boundaries.d.ts` |
 | Test discovery | `test/run-tests.mjs` |
 

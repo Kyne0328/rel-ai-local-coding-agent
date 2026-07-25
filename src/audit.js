@@ -38,6 +38,11 @@ function logAudit(config, event) {
   fs.mkdirSync(path.dirname(auditPath), { recursive: true, mode: 0o700 });
   rotateIfNeeded(auditPath);
   fs.appendFileSync(auditPath, `${JSON.stringify(entry)}\n`, { mode: 0o600 });
+  try {
+    require('./taskHistoryStore').recordTaskHistoryEvent(config, entry);
+  } catch (error) {
+    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] session history write:', error);
+  }
   return entry;
 }
 
@@ -64,7 +69,7 @@ function readAudit(config, options = {}) {
   const auditPath = getAuditPath(config);
   const taskId = String(options.taskId || '').trim();
   const workspace = String(options.workspace || '').trim();
-  const fullScan = Boolean(taskId || workspace);
+  const fullScan = Boolean(options.fullScan || taskId || workspace);
   const limit = Math.min(Math.max(Number(options.limit || 100), 1), fullScan ? 10000 : 1000);
   if (!fs.existsSync(auditPath)) return { path: auditPath, entries: [] };
   const text = fullScan ? readAuditGenerations(auditPath) : readAuditTail(auditPath);
@@ -97,6 +102,7 @@ function clearAuditHistory(config) {
   }
   fs.mkdirSync(path.dirname(auditPath), { recursive: true, mode: 0o700 });
   fs.writeFileSync(auditPath, '', { mode: 0o600 });
+  try { require('./taskHistoryStore').clearTaskHistory(config); } catch {}
   return { auditPath, removedFiles, removedBytes };
 }
 

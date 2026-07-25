@@ -25,6 +25,21 @@ const SETTINGS_TITLES = {
   diagnostics: 'Diagnostics',
   advanced: 'Advanced'
 };
+const ROUTE_DESCRIPTIONS = {
+  home: 'Connection health, workspace readiness, and recent Rel.AI sessions.',
+  tasks: 'Review active, waiting, and completed work grouped into sessions.',
+  workspaces: 'Manage the repositories that ChatGPT is allowed to inspect and update.',
+  activity: 'Inspect individual Rel.AI tool calls, failures, and recorded output.',
+  tools: 'Browse the MCP tools available to ChatGPT and their parameters.',
+  settings: 'Configure the desktop app, connection, validation, and diagnostics.'
+};
+const SETTINGS_DESCRIPTIONS = {
+  general: 'Control dashboard behavior and product preferences.',
+  connection: 'Manage the local service, public endpoint, ChatGPT authorization, and live dashboard connection.',
+  'tools-validation': 'Choose tool behavior and configure validation commands.',
+  diagnostics: 'Review findings, runtime logs, and recovery controls.',
+  advanced: 'Manage advanced desktop and state settings.'
+};
 
 export function initRouter(container, sections) {
   initInteractionSafety();
@@ -153,6 +168,8 @@ function _updatePageIdentity(id) {
     heading.textContent = title;
     heading.tabIndex = -1;
   }
+  const subtitle = document.getElementById('subtitle');
+  if (subtitle) subtitle.textContent = pageDescriptionFor(id);
   const announcer = document.getElementById('routeAnnouncer');
   if (announcer) announcer.textContent = `${title} page loaded.`;
   document.title = `${title} · Rel.AI MCP`;
@@ -167,12 +184,22 @@ function pageTitleFor(id) {
   return subTitle ? `Settings · ${subTitle}` : 'Settings';
 }
 
+function pageDescriptionFor(id) {
+  if (id === 'connector' || id === 'connection') return SETTINGS_DESCRIPTIONS.connection;
+  if (id === 'diagnostics') return SETTINGS_DESCRIPTIONS.diagnostics;
+  if (id !== 'settings') return ROUTE_DESCRIPTIONS[id] || ROUTE_DESCRIPTIONS.home;
+  const subPage = currentRoutePath().split('/')[1] || 'general';
+  return SETTINGS_DESCRIPTIONS[subPage] || ROUTE_DESCRIPTIONS.settings;
+}
+
 function _mount(id, options = {}) {
   if (!_container) return;
   const generation = ++_mountGeneration;
   const view = options.preserveView ? captureViewState() : null;
   if (view) _container.style.minHeight = `${Math.ceil(_container.getBoundingClientRect().height)}px`;
-  _container.innerHTML = '';
+  _container.setAttribute('aria-busy', 'true');
+  // Keep the current route visible while a lazy feature module resolves. Each
+  // feature owns its synchronous DOM replacement once its mount function starts.
   const mount = _sections[id] || _sections.home;
   let result;
   try {
@@ -198,6 +225,7 @@ function finishMount(generation, view) {
   if (generation !== _mountGeneration || !_container) return;
   if (!view) {
     _container.style.minHeight = '';
+    _container.removeAttribute('aria-busy');
     announceRouteMounted();
     return;
   }
@@ -206,6 +234,7 @@ function finishMount(generation, view) {
     window.scrollTo(view.scrollX, view.scrollY);
     if (view.activeId) document.getElementById(view.activeId)?.focus({ preventScroll: true });
     _container.style.minHeight = '';
+    _container.removeAttribute('aria-busy');
     announceRouteMounted();
   });
 }

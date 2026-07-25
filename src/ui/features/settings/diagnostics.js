@@ -80,7 +80,7 @@ async function loadDiagnostics(container, options = {}) {
   updateSourceOptions(container, report);
   renderCurrentReport(container);
   setReportActionsEnabled(container, true);
-  if (liveTailEnabled) scrollLogTails(container);
+  scrollLogTails(container);
 }
 
 function renderCurrentReport(container) {

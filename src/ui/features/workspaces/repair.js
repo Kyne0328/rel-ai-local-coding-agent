@@ -1,11 +1,11 @@
-import { openModal, closeModal } from '../components/modal.js';
-import { fetchJson, postJson, invalidateCache, requestDashboardRefresh, DASHBOARD_DATA_URL } from '../api.js';
-import { toast } from '../components/toast.js';
-import { esc } from '../utils.js';
-import { runButtonAction } from '../action-state.js';
-import { navigate } from '../router.js';
-import { recordRecentWorkspace } from '../workspace-recents.js';
-import { markUnsaved } from '../interaction-safety.js';
+import { openModal, closeModal } from '../../components/modal.js';
+import { fetchJson, postJson, invalidateCache, requestDashboardRefresh, DASHBOARD_DATA_URL } from '../../api.js';
+import { toast } from '../../components/toast.js';
+import { esc } from '../../utils.js';
+import { runButtonAction } from '../../action-state.js';
+import { navigate } from '../../router.js';
+import { recordRecentWorkspace } from './recents.js';
+import { markUnsaved } from '../../interaction-safety.js';
 
 export async function openWorkspaceRepair({ workspace } = {}) {
   if (!workspace?.alias) return;

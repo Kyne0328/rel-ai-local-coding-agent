@@ -44,7 +44,7 @@ const LAYERS = Object.freeze([
       connecting: ['Connecting', 'warn', 'This dashboard is opening its live update stream.'],
       reconnecting: ['Reconnecting', 'warn', 'This dashboard is restoring its live update stream.'],
       paused: ['Paused', 'warn', 'Live dashboard updates are paused.'],
-      offline: ['Offline', 'bad', 'This dashboard is not receiving live updates. ChatGPT connectivity may still be available.']
+      offline: ['Offline', 'bad', 'This dashboard is not receiving updates. ChatGPT connectivity may still be available.']
     }
   }
 ]);
@@ -67,7 +67,9 @@ export function normalizeConnectionState(state = {}) {
 }
 
 export function connectionStateFor(data = {}, dashboardStatus = '') {
-  const source = data.desktopStatus?.connectionState || data.connectionState || DEFAULT_STATE;
+  // The renderer owns dashboardUpdates because only it can observe the active
+  // EventSource. Electron's desktop status may carry an older/offline snapshot.
+  const source = data.connectionState || data.desktopStatus?.connectionState || DEFAULT_STATE;
   const normalized = normalizeConnectionState(source);
   if (dashboardStatus) normalized.dashboardUpdates = { status: normalizeDashboardStatus(dashboardStatus) };
   return normalized;
@@ -105,7 +107,7 @@ export function connectionSummary(state = {}) {
 
   const updateNote = updates === 'live'
     ? 'This dashboard is also receiving live updates.'
-    : 'ChatGPT is ready, but this dashboard is not currently receiving live updates.';
+    : 'ChatGPT is ready, but this dashboard is not currently receiving updates.';
   return summary('Rel.AI is available to ChatGPT', 'Available', 'ok', `The secure MCP endpoint is published and approved. ${updateNote}`);
 }
 
