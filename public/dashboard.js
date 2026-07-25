@@ -1,9 +1,14 @@
-import { setToken, getToken, fetchJson, invalidateCache, DASHBOARD_DATA_URL } from './ui/api.js';
+import { setToken, getToken, fetchJson, postJson, invalidateCache, DASHBOARD_DATA_URL } from './ui/api.js';
 import { init as initStore, get as getStore } from './ui/store.js';
-import { initRouter, currentSection, currentRoutePath, getWorkspaceFilter, setWorkspaceFilter, rerender } from './ui/router.js';
+import { initRouter, currentSection, currentRoutePath, getRouteParams, getWorkspaceFilter, setWorkspaceFilter, navigate, replaceRouteParams, rerender } from './ui/router.js';
 import { initEvents, startSSE, restartSSE } from './ui/events.js';
 import { mountHome } from './ui/sections/home.js';
 import { initUiPreferences } from './ui/preferences.js';
+import { connectionLayerViews, connectionSummary, withConnectionState } from './ui/connection-state.js';
+import { initCommandPalette } from './ui/command-palette.js';
+import { recentWorkspaceAliases, recordRecentWorkspace } from './ui/workspace-recents.js';
+import { normalizeRouteKey } from './ui/route-policy.js';
+import { closeDrawer } from './ui/components/drawer.js';
 
 initUiPreferences();
 
@@ -32,7 +37,8 @@ function cleanLaunchQuery() {
   const query = clean.toString();
   let cleanUrl = location.pathname;
   if (query) cleanUrl += `?${query}`;
-  cleanUrl += location.hash || '';
+  const rawHash = (location.hash || '').slice(1);
+  if (rawHash) cleanUrl += `#${normalizeRouteKey(rawHash)}`;
   history.replaceState(null, '', cleanUrl);
   const note = document.querySelector('.sidebar-note');
   if (note && surface === 'desktop') note.textContent = 'Desktop dashboard · live MCP state';
@@ -42,7 +48,7 @@ function restoreRoute() {
   if (location.hash) return;
   try {
     const saved = localStorage.getItem('relai_dashboard_route');
-    if (saved) location.hash = `#${saved}`;
+    if (saved) location.hash = `#${normalizeRouteKey(saved)}`;
   } catch {}
 }
 
@@ -68,13 +74,24 @@ function ensureRouteRoot() {
 }
 
 async function boot() {
-  const initial = readInitialPayload();
+  const initialPayload = readInitialPayload();
+  const initial = initialPayload?.ok !== false ? withConnectionState(initialPayload || {}, _liveState) : initialPayload;
   initStore(initial?.ok !== false ? initial || {} : {});
   const routeRoot = ensureRouteRoot();
   if (!routeRoot) return;
   wireTopControls();
+  initCommandPalette({ getData: getStore, refresh: () => doRefresh({ source: 'command', render: true }) });
   initDesktopBridge();
-  window.addEventListener('relai:route-change', updateWorkspaceScope);
+  window.addEventListener('relai:route-change', () => {
+    closeDrawer();
+    updateWorkspaceScope();
+    populateWorkspaceQuickNav();
+  });
+  window.addEventListener('relai:route-mounted', focusWorkspaceCard);
+  window.addEventListener('relai:workspace-recents-change', () => {
+    updateWorkspaceScope();
+    populateWorkspaceQuickNav();
+  });
   if (initial && initial.ok !== false) {
     activateRouter(routeRoot);
     updateShell(initial);
@@ -105,10 +122,11 @@ function getSections() {
     tasks: element => import('./ui/sections/tasks.js').then(module => module.mountTasks(element, getStore())).catch(debugError),
     workspaces: element => import('./ui/sections/workspaces.js').then(module => module.mountWorkspaces(element, getStore())).catch(debugError),
     activity: element => import('./ui/sections/activity.js').then(module => module.mountActivity(element)).catch(debugError),
-    reference: element => import('./ui/sections/tools.js').then(module => module.mountTools(element)).catch(debugError),
     tools: element => import('./ui/sections/tools.js').then(module => module.mountTools(element)).catch(debugError),
+    reference: element => import('./ui/sections/tools.js').then(module => module.mountTools(element)).catch(debugError),
     settings: element => import('./ui/sections/settings/index.js').then(module => module.mountSettings(element, settingsSubPage())).catch(debugError),
-    connector: element => import('./ui/sections/settings/index.js').then(module => module.mountSettings(element, 'connector')).catch(debugError),
+    connection: element => import('./ui/sections/settings/index.js').then(module => module.mountSettings(element, 'connection')).catch(debugError),
+    connector: element => import('./ui/sections/settings/index.js').then(module => module.mountSettings(element, 'connection')).catch(debugError),
     diagnostics: element => import('./ui/sections/settings/index.js').then(module => module.mountSettings(element, 'diagnostics')).catch(debugError)
   });
 }
@@ -123,7 +141,28 @@ function wireTopControls() {
     event.preventDefault();
     void doRefresh({ source: 'manual', render: true });
   });
-  document.getElementById('workspaceScope')?.addEventListener('change', event => setWorkspaceFilter(event.target.value));
+  document.getElementById('workspaceScope')?.addEventListener('change', event => {
+    const value = String(event.target.value || '');
+    if (value === '__manage__') {
+      event.target.value = getWorkspaceFilter();
+      navigate('workspaces');
+      return;
+    }
+    if (value) recordRecentWorkspace(value);
+    setWorkspaceFilter(value);
+  });
+  document.getElementById('workspaceQuickNav')?.addEventListener('change', event => {
+    const alias = String(event.target.value || '');
+    event.target.value = '';
+    if (alias === '__manage__') {
+      navigate('workspaces');
+      return;
+    }
+    if (alias) {
+      recordRecentWorkspace(alias);
+      navigate('workspaces', { workspace: alias, focus: '1' });
+    }
+  });
 }
 
 function initDesktopBridge() {
@@ -135,7 +174,7 @@ function initDesktopBridge() {
 
 function applyDesktopStatus(status) {
   if (!status) return;
-  const data = { ...getStore(), desktopStatus: status };
+  const data = withConnectionState({ ...getStore(), desktopStatus: status }, _liveState);
   initStore(data);
   updateShell(data);
   if (_routerReady && !hasBlockingInteraction()) void rerender({ preserveView: true });
@@ -158,14 +197,15 @@ async function performRefresh(options = {}) {
   try {
     const data = await fetchJson(DASHBOARD_DATA_URL, { cache: 'no-store' });
     if (data && data.ok !== false) {
-      initStore(data);
-      updateShell(data);
-      configureLiveRefresh(data);
+      const hydrated = withConnectionState(data, _liveState);
+      initStore(hydrated);
+      updateShell(hydrated);
+      configureLiveRefresh(hydrated);
       if (!_routerReady) activateRouter(ensureRouteRoot());
       else if (options.render !== false && !hasBlockingInteraction()) await rerender({ preserveView: true });
       _lastEventAt = Date.now();
       refreshState = 'idle';
-      return data;
+      return hydrated;
     }
     return renderRefreshFailure(data);
   } catch (error) {
@@ -204,21 +244,22 @@ function renderDashboardState(kind, title, description) {
   const routeRoot = ensureRouteRoot();
   if (!routeRoot) return;
   if (kind === 'loading') {
-    routeRoot.innerHTML = `<div class="dashboard-state"><div class="dashboard-state-card"><div class="loading-mark" aria-hidden="true"></div><h2>${escapeHtml(title)}</h2><p>${escapeHtml(description)}</p><div class="skeleton-grid" aria-hidden="true"><div class="skeleton-block"></div><div class="skeleton-block"></div><div class="skeleton-block"></div></div></div></div>`;
+    routeRoot.innerHTML = `<div class="dashboard-state" role="status" aria-live="polite" aria-busy="true"><div class="dashboard-state-card"><div class="loading-mark" aria-hidden="true"></div><h2>${escapeHtml(title)}</h2><p>${escapeHtml(description)}</p><div class="skeleton-grid" aria-hidden="true"><div class="skeleton-block"></div><div class="skeleton-block"></div><div class="skeleton-block"></div></div></div></div>`;
     return;
   }
-  routeRoot.innerHTML = `<div class="dashboard-state"><div class="dashboard-state-card"><span class="status-pill bad">Connection error</span><h2>${escapeHtml(title)}</h2><p>${escapeHtml(description)}</p><div class="dashboard-state-actions"><button class="primary" type="button" data-dashboard-retry>Retry connection</button><a class="buttonlike secondary" href="#settings/diagnostics">Open diagnostics</a></div></div></div>`;
+  routeRoot.innerHTML = `<div class="dashboard-state" role="alert"><div class="dashboard-state-card"><span class="status-pill bad">Connection error</span><h2>${escapeHtml(title)}</h2><p>${escapeHtml(description)}</p><div class="dashboard-state-actions"><button class="primary" type="button" data-dashboard-retry>Retry connection</button><a class="buttonlike secondary" href="#settings/diagnostics">Open diagnostics</a></div></div></div>`;
   routeRoot.querySelector('[data-dashboard-retry]')?.addEventListener('click', () => doRefresh({ source: 'retry', render: true }));
 }
 
 async function liveOnEvent(data) {
   if (!data || data.ok === false) return;
-  initStore(data);
-  updateShell(data);
-  configureLiveRefresh(data);
+  const hydrated = withConnectionState(data, _liveState);
+  initStore(hydrated);
+  updateShell(hydrated);
+  configureLiveRefresh(hydrated);
   if (!_routerReady) activateRouter();
   if (currentSection() === 'activity') {
-    await import('./ui/sections/activity.js').then(module => module.mergeEntries(data.auditTail?.entries || [])).catch(debugError);
+    await import('./ui/sections/activity.js').then(module => module.mergeEntries(hydrated.auditTail?.entries || [])).catch(debugError);
   } else if (!hasBlockingInteraction()) {
     await rerender({ preserveView: true });
   }
@@ -247,7 +288,9 @@ function boundedSeconds(value, fallback, min, max) {
 function liveStateChange(detail) {
   _liveState = detail.state || 'connecting';
   if (detail.lastEventAt) _lastEventAt = detail.lastEventAt;
+  initStore(withConnectionState(getStore(), _liveState));
   renderConnectionStatus();
+  if (_routerReady && currentRoutePath() === 'settings/connection' && !hasBlockingInteraction()) void rerender({ preserveView: true });
   ensureClock();
 }
 
@@ -255,24 +298,21 @@ function updateShell(data) {
   const config = data?.config || {};
   const workspaces = Array.isArray(config.workspaces) ? config.workspaces : [];
   const task = data?.taskActivity || {};
-  const presentation = shellPresentation(data?.ok !== false, task, workspaces.length, data?.desktopStatus);
+  const presentation = shellPresentation(data?.ok !== false, task, workspaces.length, data?.connectionState);
   const subtitle = document.getElementById('subtitle');
   if (subtitle) subtitle.textContent = presentation.subtitle;
   _shellStatus = presentation;
   renderConnectionStatus();
   updateWorkspaceScope();
+  populateWorkspaceQuickNav();
   _lastEventAt ||= Date.parse(data.generatedAt || '') || Date.now();
   renderLastEventTime();
 }
 
-function shellPresentation(ok, task, workspaceCount, desktopStatus) {
+function shellPresentation(ok, task, workspaceCount, connectionState) {
   if (!ok) return { subtitle: 'The dashboard reported an error.', label: 'Error', tone: 'bad' };
-  if (desktopStatus?.tunnelStatus === 'connecting') {
-    return { subtitle: 'Local dashboard ready · publishing the ChatGPT endpoint', label: 'Connecting', tone: 'warn' };
-  }
-  if (desktopStatus?.error || desktopStatus?.tunnelStatus === 'failed') {
-    return { subtitle: desktopStatus.error || 'The public tunnel failed.', label: 'Needs attention', tone: 'bad' };
-  }
+  const connection = connectionSummary(connectionState);
+  if (connection.tone !== 'ok') return { subtitle: connection.message, label: connection.label, tone: connection.tone };
   const taskCount = Number(task.activeTaskCount || task.tasks?.length || 0) || 1;
   const callCount = Number(task.activeCalls || 0);
   if (task.state === 'working') {
@@ -291,7 +331,7 @@ function shellPresentation(ok, task, workspaceCount, desktopStatus) {
   }
   return {
     subtitle: `${workspaceCount} ${pluralLabel(workspaceCount, 'workspace')} available to ChatGPT`,
-    label: 'Ready',
+    label: 'Available',
     tone: 'ok'
   };
 }
@@ -310,8 +350,58 @@ function updateWorkspaceScope() {
   if (!supportsWorkspaceScope) return;
   const workspaces = getStore()?.config?.workspaces || [];
   const selected = getWorkspaceFilter();
-  select.innerHTML = '<option value="">All workspaces</option>' + workspaces.map(workspace => `<option value="${escapeHtml(workspace.alias)}">${escapeHtml(workspace.alias)}</option>`).join('');
+  select.innerHTML = '<option value="">All workspaces</option>'
+    + workspaces.map(workspace => `<option value="${escapeHtml(workspace.alias)}">${escapeHtml(workspace.alias)}</option>`).join('')
+    + '<option value="__manage__">Manage workspaces…</option>';
   select.value = workspaces.some(workspace => workspace.alias === selected) ? selected : '';
+}
+
+function populateWorkspaceQuickNav() {
+  const select = document.getElementById('workspaceQuickNav');
+  const control = document.getElementById('workspaceQuickNavControl');
+  if (!select) return;
+  const workspaces = getStore()?.config?.workspaces || [];
+  if (control) control.hidden = false;
+  const recent = recentWorkspaceAliases(workspaces);
+  const recentSet = new Set(recent);
+  const recentOptions = recent.length
+    ? `<optgroup label="Recent">${recent.map(alias => `<option value="${escapeHtml(alias)}">${escapeHtml(alias)}</option>`).join('')}</optgroup>`
+    : '';
+  const remaining = workspaces.filter(workspace => !recentSet.has(workspace.alias));
+  const workspaceOptions = remaining.length
+    ? `<optgroup label="All workspaces">${remaining.map(workspace => `<option value="${escapeHtml(workspace.alias)}">${escapeHtml(workspace.alias)}</option>`).join('')}</optgroup>`
+    : '';
+  select.innerHTML = '<option value="">Jump to workspace…</option>'
+    + recentOptions
+    + workspaceOptions
+    + '<option value="__manage__">Manage workspaces…</option>';
+  select.value = '';
+}
+
+function focusWorkspaceCard(event) {
+  if (event?.detail?.section !== 'workspaces') return;
+  const params = event.detail.params || getRouteParams();
+  const alias = params.get('workspace') || '';
+  if (!alias || params.get('focus') !== '1') return;
+  recordRecentWorkspace(alias);
+  const selector = `[data-workspace-card="${cssEscape(alias)}"]`;
+  const card = document.querySelector(selector);
+  if (!card) return;
+  card.tabIndex = -1;
+  card.classList.add('workspace-card-focused');
+  card.focus({ preventScroll: true });
+  card.scrollIntoView({ block: 'center', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+  replaceRouteParams({ focus: null });
+  window.setTimeout(() => card.classList.remove('workspace-card-focused'), 1800);
+}
+
+function cssEscape(value) {
+  if (window.CSS?.escape) return window.CSS.escape(value);
+  return String(value).replace(/[^a-zA-Z0-9_-]/g, character => `\\${character}`);
+}
+
+function prefersReducedMotion() {
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
 }
 
 function renderConnectionStatus() {
@@ -319,17 +409,12 @@ function renderConnectionStatus() {
   if (!status) return;
   let presentation = _shellStatus;
   if (presentation.tone === 'ok') {
-    const liveStates = {
-      connecting: { label: 'Connecting', tone: 'warn' },
-      live: { label: 'Connected', tone: 'ok' },
-      reconnecting: { label: 'Reconnecting', tone: 'warn' },
-      paused: { label: 'Updates paused', tone: 'warn' },
-      stopped: { label: 'Offline', tone: 'bad' }
-    };
-    presentation = liveStates[_liveState] || presentation;
+    const dashboardLayer = connectionLayerViews(getStore().connectionState).find(layer => layer.key === 'dashboardUpdates');
+    if (dashboardLayer) presentation = { label: dashboardLayer.label, tone: dashboardLayer.tone };
   }
   status.className = `status-pill ${presentation.tone}`;
   status.textContent = presentation.label;
+  status.setAttribute('aria-label', `Open Connection settings; current status ${presentation.label}`);
 }
 
 function ensureClock() {
@@ -362,11 +447,27 @@ function hasBlockingInteraction() {
 async function checkOnboarding() {
   try {
     const status = await fetchJson('/api/onboarding/status');
-    if (status?.needsOnboarding) {
-      const { openOnboarding } = await import('./ui/sections/onboarding.js');
-      openOnboarding();
+    const onboarding = await import('./ui/sections/onboarding.js');
+    if (surface === 'desktop') {
+      if (status?.needsOnboarding) {
+        await postDesktopHandoffState();
+        onboarding.showDesktopHandoff();
+      } else if (status?.handoffPending) {
+        onboarding.showDesktopHandoff();
+      }
+      return;
     }
+    if (status?.needsOnboarding) onboarding.openOnboarding();
   } catch (error) { debugError(error); }
+}
+
+async function postDesktopHandoffState() {
+  const response = await postJson('/api/onboarding/complete', {
+    skipped: true,
+    source: 'desktop-setup',
+    handoffPending: true
+  });
+  if (response?.ok !== true) throw new Error('Desktop setup handoff could not be saved.');
 }
 
 function debugError(error) {

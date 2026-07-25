@@ -8,8 +8,10 @@ let currentStatus = {
   taskActivity: { state: 'idle', activeCalls: 0, activeTaskCount: 0, tasks: [], workspace: '', tool: '', operation: '', completionKnown: false, startedAt: null, lastTask: null }
 };
 let previousConnectionKey = '';
+let previousAnnouncementKey = '';
 let notificationsEnabled = localStorage.getItem('relai_status_notifications') !== 'off';
 let clockTimer = null;
+const serviceLogs = [];
 
 function requestWindowFit() {
   window.requestAnimationFrame(() => {
@@ -25,7 +27,7 @@ function requestWindowFit() {
 function connectionView(status) {
   if (status.serverRunning && status.tunnelStatus === 'running' && status.mcpUrl) {
     return {
-      key: 'ready', badge: 'Connected', eyebrow: 'Connector online',
+      key: 'ready', badge: 'Ready', eyebrow: 'Connection ready',
       title: 'Rel.AI is available to ChatGPT.',
       description: 'The endpoint is authenticated and reachable. Rel.AI reports exact tool activity, but it cannot observe ChatGPT reasoning or infer when the overall chat request is finished.'
     };
@@ -41,7 +43,7 @@ function connectionView(status) {
     return {
       key: 'failed', badge: 'Needs attention', eyebrow: 'Connection failed',
       title: 'Rel.AI could not finish connecting.',
-      description: 'Review the error below, update Settings if needed, then retry.'
+      description: 'Review the error below, choose Edit connection if needed, then retry.'
     };
   }
   return {
@@ -125,6 +127,7 @@ function updateUI(status) {
   document.getElementById('statusEyebrow').textContent = view.eyebrow;
   document.getElementById('statusTitle').textContent = view.title;
   document.getElementById('statusDescription').textContent = view.description;
+  announceStatus(view);
 
   renderTaskMeta();
   renderEndpoint(view);
@@ -134,6 +137,14 @@ function updateUI(status) {
   renderControls();
   ensureClock();
   requestWindowFit();
+}
+
+function announceStatus(view) {
+  const key = `${view.key}|${view.title}|${view.description}`;
+  if (key === previousAnnouncementKey) return;
+  previousAnnouncementKey = key;
+  const announcer = document.getElementById('statusAnnouncer');
+  if (announcer) announcer.textContent = `${view.title} ${view.description}`;
 }
 
 function renderTaskMeta() {
@@ -192,7 +203,7 @@ function publicHealthState(tunnelStatus) {
 function tunnelDetail(publicState, mcpUrl) {
   if (mcpUrl) return 'HTTPS MCP ready';
   if (publicState === 'connecting') return 'Publishing tunnel';
-  return 'Not connected';
+  return 'Not available';
 }
 
 function setHealthCard(id, state) {
@@ -331,6 +342,7 @@ async function showDesktopNotification(title, body, tag) {
 function updateNotificationButton() {
   const button = document.getElementById('notificationToggleBtn');
   button.setAttribute('aria-checked', notificationsEnabled ? 'true' : 'false');
+  button.setAttribute('aria-label', `Desktop notifications ${notificationsEnabled ? 'on' : 'off'}`);
   button.classList.toggle('enabled', notificationsEnabled);
   document.getElementById('notificationState').textContent = notificationsEnabled ? 'On' : 'Off';
 }
@@ -362,8 +374,51 @@ function diagnosticSummary() {
     `MCP endpoint: ${currentStatus.mcpUrl || 'unavailable'}`,
     `Task activity: ${activity.state || 'idle'} · ${taskCount} open task(s) · ${activity.activeCalls || 0} active call(s)`
   ];
-  if (currentStatus.error) lines.push(`Error: ${currentStatus.error}`);
-  return lines.join('\n');
+  if (currentStatus.errorCode) lines.push(`Error code: ${currentStatus.errorCode}`);
+  if (currentStatus.error) lines.push(`Error: ${safeDiagnosticText(currentStatus.error)}`);
+  if (serviceLogs.length) lines.push('', 'Recent service logs:', ...serviceLogs.slice(-20).map(formatServiceLog));
+  return safeDiagnosticText(lines.join('\n'));
+}
+
+function receiveServerLog(value) {
+  const entry = normalizeServiceLog(value);
+  if (!entry.message) return;
+  serviceLogs.push(entry);
+  if (serviceLogs.length > 100) serviceLogs.splice(0, serviceLogs.length - 100);
+  renderServiceLogs();
+}
+
+function normalizeServiceLog(value) {
+  if (value && typeof value === 'object') {
+    return {
+      ts: value.ts || new Date().toISOString(),
+      level: value.level || 'info',
+      source: safeDiagnosticText(value.source || 'desktop'),
+      code: safeDiagnosticText(value.code || ''),
+      message: safeDiagnosticText(value.message || '')
+    };
+  }
+  return { ts: new Date().toISOString(), level: 'info', source: 'desktop', code: '', message: safeDiagnosticText(value) };
+}
+
+function renderServiceLogs() {
+  const element = document.getElementById('serviceLog');
+  if (!element) return;
+  element.textContent = serviceLogs.length ? serviceLogs.map(formatServiceLog).join('\n') : 'No service logs recorded yet.';
+  requestWindowFit();
+}
+
+function formatServiceLog(entry) {
+  const code = entry.code ? ` ${entry.code}` : '';
+  return `${entry.ts || ''} ${String(entry.level || 'info').toUpperCase()} ${entry.source || 'desktop'}${code}: ${entry.message}`.trim();
+}
+
+function safeDiagnosticText(value) {
+  return String(value == null ? '' : value)
+    .replace(/Bearer\s+[^\s,;]+/gi, 'Bearer [redacted]')
+    .replace(/([?&](?:token|bootstrap|code|client_secret)=)[^&#\s]+/gi, '$1[redacted]')
+    .replace(/(["']?(?:token|secret|password|authorization|api[_-]?key|authtoken|client[_-]?secret)["']?\s*:\s*)["'][^"']*["']/gi, '$1"[redacted]"')
+    .replace(/\b(token|secret|password|authorization|api[_-]?key|authtoken|client[_-]?secret)\s*[:=]\s*[^\s,;]+/gi, '$1=[redacted]');
 }
 
 async function copyWithFeedback(button, text, successText = 'Copied') {
@@ -390,7 +445,7 @@ function initDisclosures() {
 }
 
 function tunnelLabel(status) {
-  if (status === 'running') return 'Connected';
+  if (status === 'running') return 'Available';
   if (status === 'connecting') return 'Connecting';
   if (status === 'failed') return 'Failed';
   return 'Offline';
@@ -438,7 +493,7 @@ function bindEvents() {
     }));
   });
   for (const id of ['settingsBtn', 'errorSettingsBtn']) {
-    document.getElementById(id).addEventListener('click', () => window.electronAPI.openSettings());
+    document.getElementById(id).addEventListener('click', () => runAsync(window.electronAPI.openRecoverySetup()));
   }
 }
 
@@ -458,6 +513,7 @@ function escapeText(value) {
 }
 
 window.electronAPI.onServerStatus(updateUI);
+window.electronAPI.onServerLog(receiveServerLog);
 initDisclosures();
 bindEvents();
 updateUI(currentStatus);

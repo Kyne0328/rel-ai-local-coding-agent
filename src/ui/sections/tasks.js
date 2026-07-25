@@ -18,12 +18,12 @@ export function mountTasks(container, data = {}) {
   root.innerHTML = `
     <div class="section-head">
       <div>
-        <h2>Work sessions</h2>
+        <h2>Sessions</h2>
         <p>Rel.AI reports exact tool-call start, progress, success, and failure. A waiting session has no active Rel.AI call; ChatGPT may still be reasoning, waiting for approval, or already finished.</p>
       </div>
       <span class="section-action">${sessions.length} session${sessions.length === 1 ? '' : 's'}${workspace ? ` in ${esc(workspace)}` : ''}</span>
     </div>
-    <div class="overview-grid overview-grid-compact">
+    <div class="overview-grid overview-grid-compact summary-metrics">
       ${metricHtml('Running now', working, 'tool calls currently executing', working ? 'blue' : 'good')}
       ${metricHtml('Waiting', waiting, 'no active Rel.AI call', waiting ? 'warn' : 'good')}
       ${metricHtml('Completed', completed, 'explicitly completed after validation', completed ? 'good' : 'blue')}
@@ -31,7 +31,7 @@ export function mountTasks(container, data = {}) {
 
   const card = document.createElement('section');
   card.className = 'card';
-  card.innerHTML = '<div class="card-head"><h3>Session history</h3><div class="card-head-actions"><a class="section-action" href="#activity">Open tool events</a><a class="section-action" href="#settings/dashboard">History controls</a></div></div>';
+  card.innerHTML = '<div class="card-head"><h3>Session history</h3><div class="card-head-actions"><a class="section-action" href="#activity">Open tool events</a><a class="section-action" href="#settings/diagnostics">History controls</a></div></div>';
   const body = document.createElement('div');
   body.className = 'card-body task-list';
   body.innerHTML = sessions.length
@@ -60,6 +60,7 @@ function sessionRow(session) {
     : session.status === 'waiting'
       ? `No active call · ${session.calls || 0} total calls`
       : `${session.calls || 0} total calls`;
+  const publish = publishLabel(session);
 
   return `
     <button class="task-row" type="button" data-task-id="${esc(session.id)}">
@@ -68,7 +69,7 @@ function sessionRow(session) {
         <strong>${esc(operation)}</strong>
         <span>${esc(workspace)} · ${activity} · ${session.changedFileCount || 0} file${session.changedFileCount === 1 ? '' : 's'} changed · ${validation}</span>
       </span>
-      <span class="task-row-publish">${publishLabel(session)}</span>
+      ${publish ? `<span class="task-row-publish">${publish}</span>` : ''}
       <span class="task-row-time">${esc(timing || 'now')}</span>
       <span aria-hidden="true">›</span>
     </button>`;
@@ -99,7 +100,7 @@ function publishLabel(session) {
   if (session.pushed) return 'Pushed';
   if (session.committed) return 'Committed';
   if (session.prDrafted) return 'PR drafted';
-  return 'Not published';
+  return '';
 }
 
 function openSession(session) {
@@ -130,7 +131,7 @@ function openSession(session) {
     ${operations}
     <section><h3>Changed files</h3>${changed}</section>
     <section><h3>Tool events</h3><div class="task-event-list">${(session.events || []).map(event => eventRow(event, session)).join('') || '<div class="muted">No persisted events.</div>'}</div></section>
-    <a class="buttonlike secondary" href="${routeHref('activity', { workspace: session.workspace, task: session.id })}">Open in Activity log</a>`;
+    <a class="buttonlike secondary" href="${routeHref('activity', { workspace: session.workspace, task: session.id })}">Open in Activity</a>`;
   for (const link of content.querySelectorAll('[data-task-event-link]')) {
     link.addEventListener('click', closeDrawer);
   }
@@ -163,7 +164,7 @@ function eventRow(event, session) {
     event: activityEventId(event),
     time: 'all'
   });
-  return `<a class="task-event task-event-link" data-task-event-link href="${esc(href)}" aria-label="Open ${esc(operation)} event in Activity log"><span>${esc(timeAgo(event.ts))}</span><code title="${esc(event.tool || '')}">${esc(operation)}</code>${pillHtml(event.ok === false ? 'error' : 'ok')}</a>`;
+  return `<a class="task-event task-event-link" data-task-event-link href="${esc(href)}" aria-label="Open ${esc(operation)} event in Activity"><span>${esc(timeAgo(event.ts))}</span><code title="${esc(event.tool || '')}">${esc(operation)}</code>${pillHtml(event.ok === false ? 'error' : 'ok')}</a>`;
 }
 
 function operationForTool(tool) {

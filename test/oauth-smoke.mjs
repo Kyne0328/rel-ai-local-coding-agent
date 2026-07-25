@@ -7,12 +7,14 @@
 
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { createRequire } from 'node:module';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+const require = createRequire(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 const port = 39891;
@@ -23,6 +25,7 @@ const redirectUri = 'https://chatgpt.com/connector_platform_oauth_redirect';
 // Isolated state dir so we never read a real connection.json (which could carry a
 // public URL) and the oauth-store stays scoped to this test.
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-oauth-'));
+process.env.REL_AI_MCP_STATE_DIR = stateDir;
 
 const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.js'), '--host', '127.0.0.1', '--port', String(port)], {
   cwd: root,
@@ -97,7 +100,7 @@ async function getAuthCode(client, challenge, state) {
   const page = await fetch(`${base}/authorize?${query.toString()}`);
   if (page.status !== 200) fail(`GET /authorize expected 200, got ${page.status}`);
   const html = await page.text();
-  if (!/Authorize ChatGPT|dashboard token/i.test(html)) fail('login page did not render the consent form');
+  if (!/Authorize ChatGPT|approval token/i.test(html) || /Dashboard token/.test(html)) fail('login page did not render the canonical approval-token consent form');
 
   // Submit the dashboard token.
   const submit = await postForm('/authorize', {
@@ -354,6 +357,44 @@ const refreshedMcp = await fetch(`${base}/mcp`, {
   body: JSON.stringify({ jsonrpc: '2.0', id: 4, method: 'tools/list', params: {} })
 });
 if (refreshedMcp.status !== 200) fail(`refreshed access token did not authenticate POST /mcp, got ${refreshedMcp.status}`);
+
+// 12. Approval-token replacement revokes all current grants but preserves the
+// registered ChatGPT clients so the existing app can be approved again.
+const oauthProvider = require('../src/oauthProvider.js');
+const revoked = oauthProvider.revokeAuthorizations();
+if (revoked.accessTokens < 1 || revoked.refreshTokens < 1 || revoked.registeredClientsPreserved < 1) {
+  fail(`OAuth revocation did not report the expected grants and preserved clients: ${JSON.stringify(revoked)}`);
+}
+const authorizationAfterRevoke = oauthProvider.authorizationStatus();
+if (!authorizationAfterRevoke.required || authorizationAfterRevoke.activeAccessTokens !== 0 || authorizationAfterRevoke.activeRefreshTokens !== 0) {
+  fail(`OAuth authorization state did not require reapproval after revocation: ${JSON.stringify(authorizationAfterRevoke)}`);
+}
+
+const revokedMcp = await fetch(`${base}/mcp`, {
+  method: 'POST',
+  headers: { 'content-type': 'application/json', authorization: `Bearer ${refreshed.access_token}` },
+  body: JSON.stringify({ jsonrpc: '2.0', id: 5, method: 'tools/list', params: {} })
+});
+if (revokedMcp.status !== 401) fail(`revoked OAuth access token expected 401, got ${revokedMcp.status}`);
+
+const revokedRefresh = await postForm('/token', {
+  grant_type: 'refresh_token',
+  refresh_token: refreshed.refresh_token,
+  client_id: client.client_id
+});
+if (revokedRefresh.status !== 400) fail(`revoked refresh token expected 400, got ${revokedRefresh.status}`);
+
+const reapprovalPkce = pkcePair();
+const reapprovalCode = await getAuthCode(client, reapprovalPkce.challenge, 'state-reapproval');
+if (oauthProvider.authorizationStatus().required) fail('successful approval did not clear the reapproval requirement');
+const reapprovalToken = await postForm('/token', {
+  grant_type: 'authorization_code',
+  code: reapprovalCode,
+  redirect_uri: redirectUri,
+  client_id: client.client_id,
+  code_verifier: reapprovalPkce.verifier
+});
+if (reapprovalToken.status !== 200) fail(`existing ChatGPT client could not be approved again, got ${reapprovalToken.status}`);
 
 cleanup();
 await once(child, 'close');

@@ -1,6 +1,7 @@
 import { pillHtml } from '../components/pill.js';
 import { esc, timeAgo } from '../utils.js';
 import { getWorkspaceFilter, routeHref } from '../router.js';
+import { connectionSummary } from '../connection-state.js';
 
 export function mountHome(container, data) {
   container.innerHTML = '';
@@ -17,11 +18,9 @@ function buildOverview(data) {
   const tasks = (Array.isArray(data.tasks) ? data.tasks : []).filter(task => !workspaceFilter || task.workspace === workspaceFilter);
   const findings = actionableFindings(health);
   const endpoint = String(connection.chatgptMcpUrl || '');
-  const desktopStatus = data.desktopStatus || null;
-  const effectiveEndpoint = desktopStatus && desktopStatus.tunnelStatus !== 'running' ? '' : endpoint;
-  const bridgeState = resolveBridgeState({ endpoint: effectiveEndpoint, workspaces, findings, desktopStatus });
-
-  updateShell(data, workspaces.length);
+  const connectionState = data.connectionState || {};
+  const effectiveEndpoint = connectionState.publicEndpoint?.status === 'available' ? endpoint : '';
+  const bridgeState = resolveBridgeState({ endpoint: effectiveEndpoint, workspaces, findings, connectionState });
 
   const root = document.createElement('div');
   root.className = 'section';
@@ -29,7 +28,7 @@ function buildOverview(data) {
   if (taskCard) root.appendChild(taskCard);
   root.appendChild(connectionHero(bridgeState, effectiveEndpoint, workspaces));
 
-  const attention = buildAttention(workspaces, findings, endpoint);
+  const attention = buildAttention(workspaces, findings, effectiveEndpoint);
   if (attention.length) root.appendChild(attentionCard(attention));
 
   const grid = document.createElement('div');
@@ -40,29 +39,14 @@ function buildOverview(data) {
   return root;
 }
 
-function resolveBridgeState({ endpoint, workspaces, findings, desktopStatus }) {
-  if (desktopStatus?.tunnelStatus === 'connecting') {
+function resolveBridgeState({ endpoint, workspaces, findings, connectionState }) {
+  const connection = connectionSummary(connectionState);
+  if (connection.tone !== 'ok') {
     return {
-      tone: 'warn',
-      kicker: 'Secure connection',
-      title: 'Publishing the ChatGPT endpoint…',
-      description: 'The dashboard is ready locally while Rel.AI establishes the permanent HTTPS tunnel.'
-    };
-  }
-  if (desktopStatus?.error || desktopStatus?.tunnelStatus === 'failed') {
-    return {
-      tone: 'bad',
-      kicker: 'Connection needs attention',
-      title: 'The local dashboard is running, but the public endpoint failed.',
-      description: desktopStatus.error || 'Restart the desktop connection or review the recovery details.'
-    };
-  }
-  if (desktopStatus && !desktopStatus.serverRunning) {
-    return {
-      tone: 'warn',
-      kicker: 'Service stopped',
-      title: 'Rel.AI is not running.',
-      description: 'Restart the desktop service to restore the dashboard and ChatGPT connector.'
+      tone: connection.tone === 'bad' ? 'bad' : 'warn',
+      kicker: 'Connection status',
+      title: connection.title,
+      description: connection.message
     };
   }
   if (!workspaces.length) {
@@ -78,7 +62,7 @@ function resolveBridgeState({ endpoint, workspaces, findings, desktopStatus }) {
       tone: 'warn',
       kicker: 'Secure connection',
       title: 'Publish the ChatGPT endpoint.',
-      description: 'Your repositories are configured. Finish the connector setup so ChatGPT can reach this machine over HTTPS.'
+      description: 'Your repositories are configured. Finish connection setup so ChatGPT can reach this machine over HTTPS.'
     };
   }
   if (findings.length) {
@@ -91,7 +75,7 @@ function resolveBridgeState({ endpoint, workspaces, findings, desktopStatus }) {
   }
   return {
     tone: 'good',
-    kicker: 'Connector online',
+    kicker: 'Connection ready',
     title: 'Rel.AI is available to ChatGPT.',
     description: 'The secure MCP endpoint is authenticated and reachable. Rel.AI reports observed tool calls exactly; it does not infer ChatGPT\'s private reasoning or claim that the overall chat request is finished.'
   };
@@ -100,13 +84,13 @@ function resolveBridgeState({ endpoint, workspaces, findings, desktopStatus }) {
 function connectionHero(state, endpoint, workspaces) {
   const hero = document.createElement('section');
   const hasWorkspaces = workspaces.length > 0;
-  let primaryAction = '<a class="buttonlike primary" href="#settings/connector">Set up connector</a>';
+  let primaryAction = '<a class="buttonlike primary" href="#settings/connection">Set up connection</a>';
   let secondaryAction = '<a class="buttonlike secondary" href="#workspaces">Manage workspaces</a>';
   if (!hasWorkspaces) {
     primaryAction = '<a class="buttonlike primary" href="#workspaces">Add workspace</a>';
-    secondaryAction = '<a class="buttonlike secondary" href="#settings/connector">Connector settings</a>';
+    secondaryAction = '<a class="buttonlike secondary" href="#settings/connection">Connection settings</a>';
   } else if (endpoint) {
-    primaryAction = `<a class="buttonlike primary" href="${routeHref('tasks')}">Open work sessions</a>`;
+    primaryAction = `<a class="buttonlike primary" href="${routeHref('tasks')}">Open sessions</a>`;
   }
   hero.className = `overview-hero ${state.tone}`;
   hero.innerHTML = `
@@ -239,7 +223,7 @@ function buildAttention(workspaces, findings, endpoint) {
     items.push({ tone: 'warn', title: 'Validation is incomplete', copy: `${missingValidation.length} workspace${missingValidation.length === 1 ? '' : 's'} have no saved or detected check command.`, href: '#workspaces', cta: 'Review validation' });
   }
   if (!endpoint) {
-    items.push({ tone: 'warn', title: 'ChatGPT endpoint unavailable', copy: 'Configure the permanent HTTPS tunnel before creating the ChatGPT app.', href: '#settings/connector', cta: 'Open connector' });
+    items.push({ tone: 'warn', title: 'ChatGPT endpoint unavailable', copy: 'Configure the permanent HTTPS tunnel before creating the ChatGPT app.', href: '#settings/connection', cta: 'Open connection' });
   }
   if (findings.length) {
     items.push({ tone: 'bad', title: 'Diagnostics need review', copy: `${findings.length} actionable finding${findings.length === 1 ? '' : 's'} may affect workspace access or reliability.`, href: '#settings/diagnostics', cta: 'Open diagnostics' });
@@ -303,12 +287,6 @@ function recentTaskStatus(status) {
   if (status === 'working') return pillHtml('working');
   if (status === 'waiting' || status === 'settling') return '<span class="status-pill warn">waiting</span>';
   return '<span class="status-pill">inactive</span>';
-}
-
-function updateShell(data, workspaceCount) {
-  const subtitle = document.getElementById('subtitle');
-  const task = data.taskActivity || {};
-  if (subtitle && task.state === 'idle') subtitle.textContent = `${workspaceCount} workspace${workspaceCount === 1 ? '' : 's'} available to ChatGPT`;
 }
 
 function hasValidation(workspace) {

@@ -38,9 +38,9 @@ Launch the **Rel.AI MCP** desktop app. It starts the local server and the public
 
 ChatGPT requires a public HTTPS endpoint, which the bundled ngrok agent provides. Nothing has to be installed or started separately. See [ONE_CLICK_SETUP.md](ONE_CLICK_SETUP.md) for the full first-run walkthrough.
 
-The packaged desktop app opens the dashboard in a secured Electron window by default. The same local `/dashboard` route remains accessible in a normal browser when needed; both hosts use the same dashboard code and server APIs. Electron uses a single-use bootstrap exchange and an HttpOnly local session cookie instead of exposing the permanent dashboard token to the embedded renderer.
+The packaged desktop app opens the dashboard in a secured Electron window by default. The same local `/dashboard` route remains accessible in a normal browser when needed; both hosts use the same dashboard code and server APIs. Electron uses a single-use bootstrap exchange and an HttpOnly local session cookie instead of exposing the permanent approval token to the embedded renderer.
 
-Use **Sessions** for grouped ChatGPT work and **Activity log** for individual tool calls. Rel.AI keeps each session open for five minutes after its latest tool call, renewing the window when ChatGPT continues, so ordinary approval, reasoning, and connector-reconnect gaps stay grouped. Separate concurrent sessions remain distinct when Rel.AI has stable conversation identity. The workspace selector scopes Overview, Sessions, Workspaces, Activity, and Diagnostics to one configured repository.
+Use **Sessions** for grouped ChatGPT work and **Activity** for individual tool calls. Rel.AI keeps each session open for five minutes after its latest tool call, renewing the window when ChatGPT continues, so ordinary approval, reasoning, and connector-reconnect gaps stay grouped. Separate concurrent sessions remain distinct when Rel.AI has stable conversation identity. The workspace selector scopes Overview, Sessions, Workspaces, Activity, and Diagnostics to one configured repository.
 
 ## Adding the connector in ChatGPT
 
@@ -48,7 +48,7 @@ Use **Sessions** for grouped ChatGPT work and **Activity log** for individual to
 2. Copy the MCP URL ending in `/mcp`.
 3. In ChatGPT, open **Settings > Apps > Create**.
 4. Add the MCP URL and select **OAuth** authentication.
-5. When the Rel.AI authorization page opens, enter the dashboard token from `REL_AI_MCP_TOKEN`.
+5. When the Rel.AI authorization page opens, copy the current approval token from **Settings > Connection** and enter it.
 
 Example MCP URL:
 
@@ -57,6 +57,8 @@ https://your-domain.example/mcp
 ```
 
 ChatGPT discovers the OAuth endpoints through `/.well-known/oauth-protected-resource`. Opening `/mcp` in a browser displays only a diagnostic; the dashboard URL is not the MCP endpoint.
+
+When you replace the approval token, Rel.AI revokes current ChatGPT access and refresh tokens. The existing ChatGPT app and MCP URL remain valid. Retry the app and enter the new token when authorization opens; do not delete and recreate the app.
 
 ## Tunnel requirement
 

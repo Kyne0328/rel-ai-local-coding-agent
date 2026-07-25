@@ -1,6 +1,167 @@
 # Changelog
 
-## [0.20.7] — 2026-07-23
+## [0.21.0] - 2026-07-25
+
+### Usability validation and delivery hardening
+- **Test the exact installer intended for release.** The release workflow installs the generated NSIS executable, runs packaged service and renderer journeys against that same file, and refuses publication when the installed-app gate fails.
+- **Produce machine-readable acceptance evidence.** `release-readiness.json` records the installer SHA-256, eleven passed automated scenarios, screenshot metadata, limitations, and four external checks that remain explicitly required.
+- **Preserve rendered journey evidence.** Setup, failure recovery, dashboard overview, and Sessions-to-Activity navigation produce checksum-bound screenshots archived as `release-usability-evidence.zip`.
+- **Prevent automated overclaiming.** The evidence validator requires the status `automated_passed_manual_required` and rejects records that claim real ngrok, ChatGPT OAuth, live token rotation, or previous-release update checks ran automatically.
+- **Retain CI evidence and publish release evidence.** Windows CI uploads the installed-app evidence bundle, while GitHub releases include the JSON record and screenshot archive in both the asset list and `SHA256SUMS.txt`.
+- **Document release interpretation.** A dedicated acceptance guide explains what the exact-installer automation proves and what still requires external manual verification.
+
+### Security and updater completion
+- **Isolate local Electron renderers.** Setup and failure-recovery windows now run sandboxed with strict content security policies, denied permissions and downloads, blocked webviews and popups, and navigation locked to their configured local files.
+- **Bind every desktop IPC action to its owning window.** Setup, recovery, dashboard, clipboard, notification, service, and external-link channels reject unexpected renderers; clipboard payloads are bounded and setup links allow only the exact HTTPS ngrok dashboard host.
+- **Keep the ngrok account key write-only.** Connection settings report only whether a key exists. Leaving the replacement field blank preserves the stored key, and the renderer never receives the saved value after setup.
+- **Make approval-token rotation recoverable.** OAuth-revocation failures restore the original token when possible, while restart-only failures still return the newly persisted token and explicit restart guidance.
+- **Fail closed on update metadata.** The updater accepts only a newer stable version, requires the downloaded version to match the advertised version exactly, and enables installation only after electron-updater reports verified SHA-512 release metadata.
+- **Publish independent checksums without overstating trust.** Releases now include `SHA256SUMS.txt` and require SHA-512 updater metadata. Windows artifacts are currently unsigned, so checksums detect byte changes but do not establish publisher identity.
+
+### Navigation and interaction safety
+- **Canonicalize dashboard navigation.** One route policy now normalizes current and legacy paths, sends unknown routes to a clean Overview state, validates page-specific filter parameters, and stores only canonical destinations.
+- **Keep credentials out of route state.** Credential-like query keys are stripped before hashes reach the address bar or local storage, while workspace aliases, filter enums, duplicate keys, and transient focus markers are bounded and validated.
+- **Protect unsaved edits.** Advanced and Tools & validation settings plus workspace add, edit, and path-repair dialogs now mark dirty state; route changes, reloads, Escape, backdrop clicks, and Cancel warn before discarding user input.
+- **Respect overlay ownership.** Quick navigation no longer replaces an active modal or drawer, and accepted route changes close stale detail drawers before the new page becomes interactive.
+- **Use accessible application confirmations.** Workspace removal and partial diagnostic clearing now use the shared focus-trapped confirmation dialog, while successful saves clear dirty state before programmatic close and full diagnostic reset keeps typed `RESET` protection.
+
+### Diagnostics and recovery completion
+- **Filter one diagnostic view.** Search and severity filters cover structured findings and logs, while source filtering narrows service and failed-activity streams; filtered totals update in place.
+- **Follow service events intentionally.** An opt-in live tail refreshes the sanitized aggregate report every two seconds and stops automatically after navigation or refresh failure.
+- **Persist sanitized service logs.** The installed app keeps a bounded JSON-lines log in its private diagnostics directory, hydrates it after restart, and truncates the same file when logs are cleared.
+- **Export and inspect local state.** Desktop users can export a secondarily sanitized JSON diagnostic snapshot and open the constrained diagnostics folder; browser users receive an equivalent JSON download without filesystem access.
+- **Guard destructive maintenance.** Partial history and log clears remain available, while clearing all diagnostic data requires typing `RESET` and is blocked during active Rel.AI tool calls. Workspace and connection configuration remain untouched.
+
+### Workspace management completion
+- **Rename safely from Workspace settings.** Workspace name and project-folder changes are persisted in one atomic update while existing validation, context, and Git safeguards remain intact.
+- **Reject duplicate configuration.** The form reports conflicting names and folders immediately, and the configuration layer enforces the same normalized-path rules before writing.
+- **Use a dedicated path-repair flow.** Unavailable repositories open a focused repair dialog that changes only the folder and preserves workspace identity.
+- **Surface recent workspaces.** The dashboard keeps a bounded local list of five recent workspaces, updates it after rename or removal, and presents it on the Workspaces page and quick selector.
+- **Make workspace administration discoverable.** The scope and quick-jump selectors now include a permanent **Manage workspaces…** destination.
+
+### Settings information architecture remediation
+- **Use five task-based Settings categories.** General, Connection, Tools & validation, Diagnostics, and Advanced replace the competing Dashboard and Desktop app categories.
+- **Keep related controls together.** General owns appearance, notifications, startup, and updates; Connection owns status, endpoint credentials, and approval-token security; Advanced owns polling, patch safeguards, and resource limits.
+- **Preserve saved links.** Legacy `#settings/desktop` and `#settings/dashboard` routes normalize to Connection and Advanced without restoring duplicate settings surfaces.
+- **Constrain desktop settings IPC.** Credential reads, saves, approval-token replacement, notifications, lifecycle, and updater actions are accepted only from the secured dashboard window.
+- **Expose validation ownership explicitly.** Tools & validation summarizes the tool surface, workspace validation readiness, and the existing Workspaces and Tools destinations.
+
+### Installed-app lifecycle hardening
+- **Add launch at sign-in for the installed Windows app.** Desktop app settings control a native Windows login item; portable and development builds remain explicitly unsupported.
+- **Keep sign-in startup unobtrusive.** Windows starts the packaged executable with `--background`, bringing up the tray, local service, public endpoint, and updater without opening the dashboard.
+- **Record version transitions and clean exits.** A bounded non-secret lifecycle file tracks the current and previous version, launch count, timestamps, running marker, and last clean shutdown.
+- **Report post-update success and interrupted exits.** Desktop app settings distinguish a successful first launch after an update from recovery after the previous process ended without a clean marker.
+- **Constrain lifecycle authority.** Startup changes and lifecycle reads are accepted only from the secured dashboard preload; failures use stable codes and never alter Connection health.
+- **Preserve honest UI state.** The launch-at-sign-in switch re-syncs to the main-process result and rolls back visually when Windows rejects the change.
+- **Bound the implementation.** Lifecycle ownership lives in a dedicated Electron module with explicit source budgets, unit coverage, packaging assertions, and baseline version 14.
+
+### Installed application updates
+- **Add an explicit installed-app updater.** Packaged Windows installer builds check GitHub Releases at most once per day through `electron-updater`; development and portable builds show a manual-update path instead of pretending self-update support exists.
+- **Require user consent for disruptive steps.** Automatic checks do not download files, and downloaded updates do not install on an unrelated application exit. The user explicitly starts the download and explicitly chooses restart-to-install.
+- **Protect active repository work.** Restart-to-install is refused while any Rel.AI tool call is active, leaving the downloaded update ready until the user retries.
+- **Expose one normalized update state.** Desktop app settings and the tray share unsupported, idle, checking, up-to-date, available, downloading, downloaded, installing, and error states without contaminating Connection health.
+- **Show useful progress and recovery.** The Desktop app page displays the installed version, download percentage and byte progress, stable update error codes, Diagnostics recovery, and a GitHub Releases fallback.
+- **Constrain update authority.** Update actions are handled in Electron main and accepted only from the secured dashboard window through the sandboxed preload bridge.
+- **Publish real updater metadata.** Electron packaging declares the GitHub provider, bundles the updater runtime, and the release workflow now requires both Windows executables, `latest.yml`, and an installer blockmap before creating a release.
+- **Keep the architecture bounded.** Desktop settings ownership is extracted from `electron/main.js`, updater persistence and state normalization live in dedicated modules, and source budgets plus unit and smoke coverage lock the boundaries.
+
+### Visual hierarchy and interface-density refinement
+- **Reserve elevation for meaningful focus.** Sidebar, Topbar, dialogs, Electron setup, and the recovery hero retain depth; routine cards, tools, metrics, workspace panels, and secondary recovery cards are flat.
+- **Group summary information.** Workspace, Sessions, Diagnostics, recovery health, readiness, operational, and policy facts now share bordered containers with separators instead of rendering as card grids inside cards.
+- **Clarify primary actions.** Add workspace is explicitly primary, while secondary actions and advanced repository controls remain quieter.
+- **Reduce redundant status decoration.** Routine state dots no longer glow or pulse, Connection layers use one compact textual state instead of another pill, and diagnostics use slim severity rails rather than full colored borders.
+- **Hide completed setup instructions.** Once ChatGPT readiness is ready, the three-step connection guide collapses under a disclosure and remains available for reconnection.
+- **Remove meaningless metadata.** Sessions no longer display Not published when no commit, push, or draft pull request exists.
+- **Tighten Settings and Tools.** Settings introductions use restrained accent rules, active navigation uses a low-emphasis tint, and tool cards reduce padding, shadows, and chip decoration.
+- **Preserve responsive grouping.** Shared metric and health panels switch to row separators when stacked, retaining the Phase 10 touch, focus, safe-area, and high-contrast behavior.
+- **Add dedicated regression coverage.** Visual elevation, grouped facts, status restraint, connection disclosure, session metadata, and Electron hierarchy are locked by an automated smoke test.
+
+### Accessibility and responsive hardening
+- **Contain overlay interaction correctly.** Modals and drawers now share one focus trap, make background content inert, lock page scrolling, close with Escape where allowed, and restore focus to the initiating control.
+- **Announce state without noise.** Dashboard routes, loading failures, and meaningful recovery-window status changes use live regions, while clock-only updates no longer repeat announcements.
+- **Use correct control semantics.** Quick navigation follows combobox/listbox behavior, Activity filters expose pressed state and result counts, and each Activity row has one explicit keyboard target instead of duplicated focus stops.
+- **Make compact layouts operational.** Mobile navigation and Electron windows respect safe-area insets, common controls expand to 44-pixel targets, forms and actions stack, overlays use dynamic viewport height, and long values wrap rather than clip.
+- **Keep Settings readable.** The five-page Settings rail scrolls horizontally at narrow widths instead of compressing every label into an unusable column.
+- **Respect system accessibility modes.** Reduced-motion behavior remains intact, and forced-colors mode adds explicit active-state outlines.
+- **Expose only the active setup step.** Electron onboarding hides inactive steps from both layout and assistive technology, and recovery notifications announce meaningful state changes once.
+- **Add dedicated regression coverage.** Accessibility, focus containment, semantics, safe areas, touch sizing, high contrast, reduced motion, and Electron step visibility are now locked by an automated smoke test.
+
+### Faster navigation and dashboard quality of life
+- **Add searchable quick navigation.** The top bar and `Ctrl+K` / `Cmd+K` open one keyboard-friendly launcher for pages, Settings sections, common actions, and configured workspaces.
+- **Jump directly to workspace cards.** A workspace selector opens the scoped Workspaces route, focuses the requested card after rendering, and removes the temporary focus marker from the saved route.
+- **Make status actionable.** The top connection status now links directly to the canonical Connection page instead of acting as a dead indicator.
+- **Preserve Activity filters in the URL.** Search, time range, tool, status, task, and workspace scope survive refreshes and can be bookmarked or shared without remounting the page on every keystroke.
+- **Route history controls correctly.** Sessions now opens Diagnostics for history management, matching the ownership established by the diagnostics redesign.
+- **Keep compact layouts usable.** The command launcher becomes icon-only on narrow displays, while the separate workspace jumper hides when horizontal space is constrained.
+
+### Structured diagnostics and recovery
+- **Return actionable errors.** HTTP and desktop failures now use stable error codes with a title, recovery guidance, direct action, and retryability state.
+- **Consolidate Diagnostics.** One authenticated endpoint aggregates health, connection state, stale validation, protected configuration activity, failed tool activity, and desktop runtime logs.
+- **Sanitize before display or copy.** Diagnostic objects, service logs, failed activity, and copied reports redact bearer credentials, approval tokens, OAuth values, passwords, API keys, ngrok account keys, and similar secret fields.
+- **Expose bounded service logs.** The Electron main process keeps a small in-memory log buffer shared by dashboard Diagnostics and the failure-only recovery fallback.
+- **Move reset ownership to Diagnostics.** Session/activity history and service-log clearing live on one page, with active tool calls protected and desktop-only controls disabled in browser mode.
+- **Handle malformed requests correctly.** Invalid JSON and oversized request bodies return structured client errors instead of generic HTTP 500 responses.
+- **Preserve the single-window policy.** Routine troubleshooting remains in the dashboard; the recovery renderer only exposes logs when the dashboard itself cannot load.
+
+### Simplified workspace management
+- **Focus cards on readiness.** Each workspace now exposes ChatGPT access, repository state, and validation readiness without front-loading every Git field.
+- **Reduce routine actions.** Workspace settings, Run validation, and Open folder remain visible; Sessions, Activity, policy data, and removal move under Repository and safety details.
+- **Add a useful empty state.** The page explains the minimum workspace setup and provides a direct Add workspace action.
+- **Simplify the add flow.** Users choose the project folder first, and Rel.AI suggests a workspace name from the folder while checking Git and validation availability.
+- **Use progressive disclosure for safeguards.** Protected branches, default base branch, and allowed remotes retain safe defaults under Git and safety settings.
+- **Preserve backend policy.** Existing configuration normalization and safety enforcement remain unchanged.
+
+### Single first-run onboarding
+- **Remove the duplicated dashboard wizard on desktop.** Completing the Electron setup no longer triggers the generic five-step browser onboarding modal.
+- **Hand off directly to Connection.** First launch opens `#settings/connection` with a compact guide for the two remaining application tasks: connect ChatGPT and add a workspace.
+- **Persist the handoff explicitly.** Onboarding state records the desktop setup source and remains visible until dismissed; later restarts do not reopen a modal.
+- **Preserve browser onboarding.** Browser-hosted dashboards still receive the full onboarding sequence when no prior onboarding state exists.
+- **Keep recovery separate from first run.** Editing a failed connection through the recovery wizard does not reset or recreate onboarding.
+
+### Single-window desktop operation
+- **Make the secured dashboard the only routine configured-desktop window.** Settings, Connection, Diagnostics, and service actions stay in one application surface after first-run setup.
+- **Remove the compatibility settings renderer.** `electron/renderer/settings.html`, its script, obsolete CSS, launcher edit branches, and packaged renderer smoke path are gone.
+- **Limit the status renderer to genuine fallback use.** It opens only when the local service or dashboard cannot start or load, identifies itself as a dashboard fallback, and never hides a healthy dashboard.
+- **Keep failure recovery usable without restoring a settings window.** Edit connection reuses the setup wizard in fallback-only mode, loads existing credentials through sender-constrained IPC, preserves the approval token, and returns to the fallback when cancelled.
+- **Route normal troubleshooting through Diagnostics.** The tray now opens dashboard Diagnostics, and the Connection page no longer exposes Recovery details.
+- **Remove routine fallback IPC.** The dashboard preload and IPC registry no longer provide an Open recovery action.
+- **Separate dashboard-load failure handling.** A dedicated load-error callback opens the fallback without treating unrelated external-link failures as dashboard outages.
+
+### Approval-token replacement and authentication recovery
+- **Make token replacement a dedicated security operation.** Users must type `REPLACE`; the Electron main process generates the new token and ordinary connection-settings saves preserve the current token.
+- **Revoke active ChatGPT grants immediately.** Replacement clears pending authorization codes and all OAuth access and refresh tokens before saving the new approval token.
+- **Preserve the existing app and endpoint.** Registered ChatGPT clients and the permanent MCP URL remain unchanged, so users retry and reapprove the existing app instead of deleting and recreating it.
+- **Persist and surface reapproval state.** Desktop status reports ChatGPT readiness as Approval required until a successful OAuth authorization clears the marker.
+- **Add explicit recovery guidance.** Desktop app settings show the exact consequences, new-token copy flow, and reapproval steps; Connection shows the same existing-app recovery path.
+- **Close the legacy generation path.** Token replacement is available only through the secured dashboard workflow; the compatibility settings renderer has been removed.
+
+### Four-layer Connection status
+- **Replace the generic desktop-connection card with four explicit states.** The Connection page now separates Local service, Public endpoint, ChatGPT readiness, and Dashboard updates so an event-stream interruption is not presented as a ChatGPT outage.
+- **Use one connection presentation model throughout the dashboard.** Overview, the top status, and Connection consume the same normalized state instead of independently interpreting raw service and tunnel flags.
+- **Add contextual recovery controls.** Desktop restart, Desktop app settings, status refresh, and dashboard Diagnostics are shown where they apply.
+- **Remove token-bearing dashboard URLs from routine surfaces.** The authenticated connection API and startup logs report token configuration without returning or logging the token in a URL.
+- **Expand the responsive Settings layout.** The compact settings rail now accommodates all five settings pages, and the four connection layers collapse cleanly on narrow displays.
+
+### Dashboard-owned desktop settings
+- **Move routine desktop configuration into the main dashboard.** Settings now includes a Desktop app page for the local port, permanent ngrok domain, ngrok account key, approval-token replacement, and desktop notifications.
+- **Focus one settings surface.** Tray Settings and legacy Settings actions deep-link the existing secured dashboard to `#settings/desktop` instead of opening another routine window.
+- **Keep desktop secrets off the HTTP surface.** Credentials move only through the constrained Electron preload IPC bridge and are not stored in URLs or browser storage.
+- **Keep the initiating dashboard alive during restart.** Saving settings restarts the local service and public endpoint without destroying the window that submitted the change.
+
+### Desktop navigation and terminology
+- **Use one product vocabulary across the dashboard and desktop surfaces.** Activity, Tools, Connection, Approval token, Sessions, and Workspace name replace competing primary labels.
+- **Give every route a visible identity.** The top heading and document title now follow the active page, and active navigation exposes `aria-current="page"`.
+- **Keep Tools reachable at compact widths.** Mobile navigation now includes all six primary destinations.
+- **Adopt canonical routes without breaking saved links.** `#tools` and `#settings/connection` are primary, while `#reference` and `#settings/connector` continue to resolve.
+
+### Desktop UX architecture baseline
+- **Define one shared desktop connection-state contract.** Local service, public endpoint, ChatGPT readiness, and dashboard live updates now have separate normalized states for the upcoming Connection redesign.
+- **Add stable error codes for recovery workflows.** Authentication, service, endpoint, configuration, workspace, settings, diagnostics, reset, and update failures can be handled without parsing exception text.
+- **Record the current desktop surface baseline.** Architecture documentation, a machine-readable navigation/window fixture, existing dashboard screenshots, type boundaries, and regression tests establish the Phase 0 starting point.
+
+Bump root/electron/status UI/lockfiles to 0.21.0.
+
+## [0.20.7] - 2026-07-23
 
 ### Context-rich repository search
 - **Make adaptive search context the default without adding another tool.** `mode:"auto"` selects focused, moderate, or broad context budgets from the total match count, while explicit `compact` and `context` modes remain deterministic overrides.

@@ -43,4 +43,14 @@ jobs:
         env:
           NGROK_PLATFORMS: win32
         run: pwsh scripts/fetch-ngrok.ps1
-      - run: npm run test:installed
+      - name: Build, install, and capture usability evidence
+        run: npm run test:installed
+        env:
+          REL_AI_RELEASE_EVIDENCE_DIR: ${{ runner.temp }}\relai-usability-evidence
+      - name: Upload installed-app usability evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: installed-app-usability-evidence
+          path: ${{ runner.temp }}\relai-usability-evidence
+          if-no-files-found: error
+          retention-days: 14

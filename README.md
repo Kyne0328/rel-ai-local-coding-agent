@@ -114,13 +114,13 @@ The activity page is there because I got tired of guessing what the MCP server w
 
 The dashboard shows the 19 workspace tools ChatGPT can use for inspection, one-shot commands, editing, validation, explicit completion reporting, review, Git publishing, tidy, and restore workflows.
 
-### Connector setup
+### Connection setup
 
 <p align="center">
   <img src="docs/images/dashboard-connector-section.png" alt="Rel.AI MCP connector URL" width="900">
 </p>
 
-The connector page shows the MCP URL for ChatGPT. It supports local URLs and public URLs from one-click tunnel setup.
+The Connection page shows the MCP URL for ChatGPT. It supports local URLs and public URLs from one-click tunnel setup.
 
 ### Diagnostics
 
@@ -163,10 +163,10 @@ Diagnostics are intentionally plain: health, readiness, and recent activity. No 
   <img src="docs/images/dashboard-settings-general.png" alt="Rel.AI MCP full settings page" width="900">
 </p>
 
-### Full connector
+### Full connection
 
 <p align="center">
-  <img src="docs/images/dashboard-connector.png" alt="Rel.AI MCP full connector page" width="900">
+  <img src="docs/images/dashboard-connector.png" alt="Rel.AI MCP full connection page" width="900">
 </p>
 
 ### Full diagnostics
@@ -210,14 +210,20 @@ The setup wizard asks for both on first run, stores them locally, and starts the
 
 The app lives in the system tray. Closing a window leaves it running; quit it from the tray menu.
 
+Installed Windows builds check for application updates once per day. Downloads and restart-to-install are always explicit from **Settings > General** or the tray, and restart is blocked while a Rel.AI tool call is active. Portable builds update manually from the Releases page.
+
+The installed Windows app can also enable **Launch at sign-in** under **Settings > General**. Sign-in launches run in the background so the tray, local service, and public endpoint are ready without opening the dashboard; ordinary launches remain dashboard-first. Portable builds do not register Windows startup entries.
+
 ---
 
 ## Connecting to ChatGPT
 
 1. Launch Rel.AI MCP and let the wizard finish. The tray icon turns active once the tunnel is up.
-2. Open the dashboard and go to the **Connector** page. It shows your MCP URL.
+2. Open the dashboard and go to the **Connection** page. It shows your MCP URL.
 3. In ChatGPT, go to **Settings > Apps > Create** and paste that URL.
-4. Set authentication to **OAuth**. ChatGPT opens a sign-in page — enter your Rel.AI dashboard token to approve.
+4. Set authentication to **OAuth**. ChatGPT opens a sign-in page — enter your Rel.AI approval token to approve.
+
+The approval token is under **Settings > Connection**. Replacing it requires typing `REPLACE`; Rel.AI revokes current OAuth access and refresh tokens, preserves the MCP endpoint and existing ChatGPT app registration, then marks ChatGPT as requiring approval again.
 
 Because the domain is static, the connector keeps working across restarts. You configure it once.
 
@@ -227,9 +233,9 @@ See [docs/ONE_CLICK_SETUP.md](docs/ONE_CLICK_SETUP.md) for the full setup walkth
 
 ## The dashboard
 
-**Open dashboard** shows the full dashboard inside a secured Electron window. The same dashboard is also reachable in a normal browser at the local `/dashboard` route; Electron is the default host, not a separate implementation. The desktop host exchanges a single-use bootstrap code for an HttpOnly local session cookie, so the long-lived dashboard token is never stored in the embedded renderer or left in its URL.
+**Open dashboard** shows the full dashboard inside a secured Electron window. The same dashboard is also reachable in a normal browser at the local `/dashboard` route; Electron is the default host, not a separate implementation. The desktop host exchanges a single-use bootstrap code for an HttpOnly local session cookie, so the long-lived approval token is never stored in the embedded renderer or left in its URL.
 
-The dashboard includes grouped **Sessions**, a lower-level **Activity log**, workspace-scoped filtering, operational Git and validation state, actionable diagnostics, live/reconnecting status, and persistent desktop window and route state. Session grouping is scoped per MCP connection and supports concurrent ChatGPT work. A session is marked completed only when ChatGPT calls `relai_complete_task`; otherwise inactivity closes it as inactive without claiming the overall request finished.
+The dashboard includes grouped **Sessions**, lower-level **Activity**, workspace-scoped filtering, operational Git and validation state, actionable diagnostics, live/reconnecting status, and persistent desktop window and route state. Session grouping is scoped per MCP connection and supports concurrent ChatGPT work. A session is marked completed only when ChatGPT calls `relai_complete_task`; otherwise inactivity closes it as inactive without claiming the overall request finished.
 
 ---
 
@@ -257,6 +263,8 @@ npm test                     # full suite
 ```
 
 `electron:build` and `electron:dist` refuse to run when the ngrok seed is missing — packaging without it produces an installer whose tunnel cannot start.
+
+Windows CI and the release workflow also install the packaged application and run repeatable usability journeys. Release builds preserve `release-readiness.json` plus checksum-bound screenshots for setup, recovery, the dashboard overview, and Sessions-to-Activity navigation. These automated results deliberately leave real ngrok publication, ChatGPT OAuth, live approval-token rotation, and update-from-prior-release checks marked as manual. See [docs/USABILITY_ACCEPTANCE.md](docs/USABILITY_ACCEPTANCE.md).
 
 ## MCP tools
 

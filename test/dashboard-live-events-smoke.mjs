@@ -73,6 +73,8 @@ try {
 
   const updated = await stream.nextDashboardEvent();
   assert.equal(updated.desktopStatus?.tunnelStatus, 'connecting');
+  assert.equal(updated.connectionState?.localService?.status, 'running');
+  assert.equal(updated.connectionState?.publicEndpoint?.status, 'connecting');
   assert.ok(
     updated.auditTail?.entries?.some(item => item.tool === 'relai_read' && item.workspace === 'test'),
     'dashboard SSE must emit newly appended audit entries without a manual refresh'
@@ -86,6 +88,8 @@ try {
   const desktopUpdated = await stream.nextDashboardEvent();
   assert.equal(desktopUpdated.desktopStatus?.tunnelStatus, 'running');
   assert.equal(desktopUpdated.desktopStatus?.mcpUrl, 'https://example.ngrok-free.dev/mcp');
+  assert.equal(desktopUpdated.connectionState?.publicEndpoint?.status, 'available');
+  assert.equal(desktopUpdated.connectionState?.chatgptReadiness?.status, 'ready');
 } finally {
   controller.abort();
   await closeServer(server);

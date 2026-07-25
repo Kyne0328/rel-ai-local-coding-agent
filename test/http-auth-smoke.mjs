@@ -71,10 +71,24 @@ await check('GET /health — public, no token → 200', async () => {
   if (!body.ok) throw new Error('health body.ok was not true');
 });
 
-// GET /dashboard — no token → 401
+// GET /dashboard — no token → 401 with a stable recovery code
 await check('GET /dashboard — no token → 401', async () => {
   const res = await fetch(`${base}/dashboard`);
   if (res.status !== 401) throw new Error(`expected 401, got ${res.status}`);
+  const body = await res.json();
+  if (body.errorCode !== 'approval_token_required') {
+    throw new Error(`expected approval_token_required, got ${body.errorCode}`);
+  }
+});
+
+// GET /dashboard — rejected token → 401 with a distinct recovery code
+await check('GET /dashboard — rejected token → 401', async () => {
+  const res = await fetch(`${base}/dashboard?token=wrong-token`);
+  if (res.status !== 401) throw new Error(`expected 401, got ${res.status}`);
+  const body = await res.json();
+  if (body.errorCode !== 'approval_token_rejected') {
+    throw new Error(`expected approval_token_rejected, got ${body.errorCode}`);
+  }
 });
 
 // GET /dashboard — with bearer → 200
@@ -127,7 +141,7 @@ await check('GET /mcp diagnostic — OAuth, no secret leak', async () => {
   }
 });
 
-// POST /mcp — no bearer → 401
+// POST /mcp — no bearer → 401 with a stable recovery code
 await check('POST /mcp — no bearer → 401', async () => {
   const res = await fetch(`${base}/mcp`, {
     method: 'POST',
@@ -135,6 +149,24 @@ await check('POST /mcp — no bearer → 401', async () => {
     body: mcpToolsList
   });
   if (res.status !== 401) throw new Error(`expected 401, got ${res.status}`);
+  const body = await res.json();
+  if (body.errorCode !== 'approval_token_required') {
+    throw new Error(`expected approval_token_required, got ${body.errorCode}`);
+  }
+});
+
+// POST /mcp — rejected bearer → 401 with a distinct recovery code
+await check('POST /mcp — rejected bearer → 401', async () => {
+  const res = await fetch(`${base}/mcp`, {
+    method: 'POST',
+    headers: { ...jsonType, authorization: 'Bearer wrong-token' },
+    body: mcpToolsList
+  });
+  if (res.status !== 401) throw new Error(`expected 401, got ${res.status}`);
+  const body = await res.json();
+  if (body.errorCode !== 'approval_token_rejected') {
+    throw new Error(`expected approval_token_rejected, got ${body.errorCode}`);
+  }
 });
 
 // POST /mcp — with bearer → 200 (tools/list)

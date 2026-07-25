@@ -73,6 +73,21 @@ assert.equal(readJson('package.json').version, '0.99.0');
 assert.equal(readJson('package-lock.json').packages[''].version, '0.99.0');
 assert.equal(readJson('electron/package.json').version, '0.99.0');
 assert.equal(readJson('electron/package-lock.json').packages[''].version, '0.99.0');
+const electronPackage = readJson('electron/package.json');
+assert.match(electronPackage.dependencies['electron-updater'], /^\^6\./);
+assert.equal(electronPackage.build.electronUpdaterCompatibility, '>=2.16');
+assert.deepEqual(electronPackage.build.publish[0], {
+  provider: 'github',
+  owner: 'Kyne0328',
+  repo: 'rel-ai-mcp',
+  releaseType: 'release'
+});
+assert.ok(electronPackage.build.files.includes('app-updater.js'));
+assert.ok(electronPackage.build.files.includes('app-updater-state.js'));
+assert.ok(electronPackage.build.files.includes('desktop-lifecycle.js'));
+assert.ok(electronPackage.build.files.includes('window-security.js'));
+assert.ok(electronPackage.build.files.includes('diagnostic-files.js'));
+assert.ok(electronPackage.build.files.includes('smoke-evidence.js'));
 
 const statusHtml = fs.readFileSync(path.join(tmp, 'electron/renderer/status.html'), 'utf8');
 assert.match(statusHtml, /id="appVersion">v0\.99\.0<\/span>/);
@@ -101,6 +116,26 @@ assert.match(releaseWorkflow, /\$releaseStatus\s*=\s*\[int\]\$response\.StatusCo
 assert.match(releaseWorkflow, /if \(\$releaseStatus -eq 200\)/);
 assert.match(releaseWorkflow, /if \(\$releaseStatus -ne 404\)/);
 assert.doesNotMatch(releaseWorkflow, /gh release view/, 'Release existence checks must not depend on gh CLI exit-code conventions.');
+assert.match(releaseWorkflow, /dist\/latest\.yml|dist\\latest\.yml|Join-Path[^\n]*latest\.yml/);
+assert.match(releaseWorkflow, /\*\.blockmap/);
+assert.match(releaseWorkflow, /\$executables\.Count -lt 2/);
+assert.match(releaseWorkflow, /installed and portable Windows executables/);
+assert.match(releaseWorkflow, /release-assets\.txt/);
+assert.match(releaseWorkflow, /SHA256SUMS\.txt/);
+assert.match(releaseWorkflow, /Get-FileHash/);
+assert.match(releaseWorkflow, /-Algorithm SHA256/);
+assert.match(releaseWorkflow, /sha512:/);
+assert.match(releaseWorkflow, /does not contain SHA-512 update metadata/);
+assert.match(releaseWorkflow, /Smoke exact release installer/);
+assert.match(releaseWorkflow, /REL_AI_SMOKE_INSTALLER/);
+assert.match(releaseWorkflow, /REL_AI_RELEASE_EVIDENCE_DIR/);
+assert.match(releaseWorkflow, /release-evidence-check\.mjs/);
+assert.match(releaseWorkflow, /release-readiness\.json/);
+assert.match(releaseWorkflow, /release-usability-evidence\.zip/);
+assert.match(releaseWorkflow, /Upload release usability evidence/);
+assert.match(releaseWorkflow, /if-no-files-found: error/);
+assert.match(releaseWorkflow, /exact-installer usability evidence JSON is missing/);
+assert.match(releaseWorkflow, /release usability screenshot archive is missing/);
 
 fs.rmSync(seedPath, { force: true });
 const missingSeed = runWithEnv('release-check.mjs', { REL_AI_TARGET_PLATFORM: 'win32' });

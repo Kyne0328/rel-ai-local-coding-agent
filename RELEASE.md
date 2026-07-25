@@ -16,7 +16,7 @@ npm run test:all               # full suite (also what CI runs)
 
 CI runs `npm run test:all` on Node 22 and 24 (the package requires Node `>=22.13`). A release should be green on both.
 
-CI also builds and installs the packaged Windows app (`npm run test:installed`), which asserts that every bundled resource is present — including the ngrok seed binary.
+CI also builds and installs the packaged Windows app (`npm run test:installed`). It verifies bundled resources, local health, the dashboard, the public tool surface, setup and recovery renderers, dashboard refresh behavior, workspace route state, legacy route normalization, and the Sessions-to-Activity journey. CI retains `release-readiness.json` and checksum-bound screenshots as an artifact.
 
 ## 2. Inspect, validate, review (via the MCP tools)
 
@@ -60,7 +60,33 @@ Before tagging, confirm the public connector surface is still consistent:
 
 ## 5. Packaging
 
-Pushing a version bump to `main` triggers `.github/workflows/release.yml`, which fetches the ngrok seed binary, builds the Windows installers, and publishes a GitHub release with the matching `CHANGELOG.md` section.
+Pushing a version bump to `main` triggers `.github/workflows/release.yml`, which fetches the ngrok seed binary, builds the Windows installer and portable executable, and publishes a GitHub release with the matching `CHANGELOG.md` section.
+
+The release must contain all updater and verification assets:
+
+- the installed NSIS `.exe`
+- the portable `.exe`
+- `latest.yml`
+- the installed-app `.blockmap`
+- `release-readiness.json`
+- `release-usability-evidence.zip`
+- `SHA256SUMS.txt`
+
+The installed app uses `latest.yml` and the blockmap for update discovery and differential download support. The workflow requires a nonempty SHA-512 value in `latest.yml`; the app refuses same-version, downgrade, prerelease, malformed, or downloaded-version-mismatch updates and enables installation only after electron-updater reports verified release metadata. The portable executable is manual-update only.
+
+Before release assets are prepared, the workflow silently installs the exact NSIS executable from `dist/`, runs the packaged service and renderer journeys, validates `release-readiness.json` against the acceptance manifest, and archives the screenshots. The automated status remains `automated_passed_manual_required`; real ngrok publication, ChatGPT OAuth, live approval-token rotation, and update from a previous published release must still be checked manually. See [`docs/USABILITY_ACCEPTANCE.md`](docs/USABILITY_ACCEPTANCE.md).
+
+The workflow also generates `SHA256SUMS.txt` from the published executables, updater metadata, and usability evidence. To verify a downloaded executable in PowerShell:
+
+```powershell
+Get-FileHash .\Rel.AI*.exe -Algorithm SHA256
+```
+
+Compare the result with the matching line in `SHA256SUMS.txt`. A matching checksum confirms that the downloaded bytes match the release manifest, but it does not prove publisher identity.
+
+Windows artifacts are currently unsigned. Until a Windows code-signing certificate and protected signing workflow are configured, Windows may show an unidentified-publisher warning. The release workflow fails before publishing if either executable, updater metadata class, SHA-512 metadata, or checksum manifest is missing.
+
+No lifecycle migration is required during release packaging. On first launch of a new version, the installed app compares the packaged version with its non-secret `desktop-lifecycle.json` record and reports the transition after startup succeeds.
 
 To package locally, fetch the seed first — the binaries are gitignored, so a clean checkout has none:
 

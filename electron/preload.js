@@ -1,10 +1,10 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  saveConfig: (config) => ipcRenderer.invoke('wizard:save-config', config),
   wizardDone: (config) => ipcRenderer.invoke('wizard:done', config),
   closeWizard: () => ipcRenderer.invoke('wizard:cancel'),
-  openSettings: () => ipcRenderer.invoke('wizard:open-settings'),
+  getRecoveryConfig: () => ipcRenderer.invoke('recovery:get-config'),
+  openRecoverySetup: () => ipcRenderer.invoke('recovery:open-setup'),
   startServer: () => ipcRenderer.invoke('server:start'),
   stopServer: () => ipcRenderer.invoke('server:stop'),
   copyUrl: (url) => ipcRenderer.invoke('url:copy', url),
@@ -17,6 +17,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   removeServerStatusListener: () => {
     ipcRenderer.removeAllListeners('server:status');
+  },
+  onServerLog: (callback) => {
+    ipcRenderer.on('server:log', (_event, entry) => callback(entry));
+  },
+  removeServerLogListener: () => {
+    ipcRenderer.removeAllListeners('server:log');
   },
   copyText: (text) => ipcRenderer.invoke('url:copy', text),
   fitWindowToContent: (size) => ipcRenderer.send('window:fit-content', size)

@@ -1,8 +1,14 @@
+import { activateOverlay } from './overlay-focus.js';
+import { confirmOverlayDismiss } from '../interaction-safety.js';
+
 let _opener = null;
+let _cleanup = null;
+let _onClose = null;
 
 export function openModal({ title, content, onClose, escDisabled = false } = {}) {
   closeModal();
   _opener = document.activeElement;
+  _onClose = typeof onClose === 'function' ? onClose : null;
 
   const backdrop = document.createElement('div');
   backdrop.id = '__relai-modal-backdrop';
@@ -30,45 +36,34 @@ export function openModal({ title, content, onClose, escDisabled = false } = {})
 
   backdrop.appendChild(dialog);
   document.body.appendChild(backdrop);
+  const finish = () => finishClose();
+  const dismiss = () => {
+    if (!confirmOverlayDismiss(dialog)) return false;
+    finishClose();
+    return true;
+  };
   backdrop.addEventListener('click', event => {
-    if (event.target === backdrop && !escDisabled) finishClose(onClose);
+    if (event.target === backdrop && !escDisabled) dismiss();
   });
-
-  const focusable = dialog.querySelectorAll('button,input,select,textarea,[tabindex]:not([tabindex="-1"])');
-  focusable[0]?.focus();
-  backdrop.addEventListener('keydown', event => trapFocus(event, dialog, escDisabled, onClose));
-  return { backdrop, dialog, close: () => finishClose(onClose) };
+  _cleanup = activateOverlay({
+    backdrop,
+    panel: dialog,
+    opener: _opener,
+    onEscape: escDisabled ? null : dismiss
+  });
+  return { backdrop, dialog, close: finish, dismiss };
 }
 
-function trapFocus(event, dialog, escDisabled, onClose) {
-  if (!escDisabled && event.key === 'Escape') {
-    finishClose(onClose);
-    return;
-  }
-  if (event.key !== 'Tab') return;
-  const elements = Array.from(dialog.querySelectorAll('button,input,select,textarea,[tabindex]:not([tabindex="-1"])'));
-  if (!elements.length) {
-    event.preventDefault();
-    return;
-  }
-  const first = elements[0];
-  const last = elements.at(-1);
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus();
-  }
-}
-
-function finishClose(onClose) {
+function finishClose() {
   closeModal();
-  if (onClose) onClose();
 }
 
 export function closeModal() {
+  const onClose = _onClose;
+  _onClose = null;
   document.getElementById('__relai-modal-backdrop')?.remove();
-  if (_opener && typeof _opener.focus === 'function') _opener.focus();
+  _cleanup?.();
+  _cleanup = null;
   _opener = null;
+  onClose?.();
 }

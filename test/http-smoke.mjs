@@ -96,12 +96,73 @@ const invalidAsyncPost = await fetch(`http://127.0.0.1:${port}/api/settings?toke
   body: '{invalid json'
 });
 const invalidAsyncPayload = await invalidAsyncPost.json();
-if (invalidAsyncPost.status !== 500 || invalidAsyncPayload.ok !== false) {
-  throw new Error('async route rejection was not converted into a controlled HTTP 500 response');
+if (
+  invalidAsyncPost.status !== 400
+  || invalidAsyncPayload.ok !== false
+  || invalidAsyncPayload.errorCode !== 'request_invalid'
+  || !invalidAsyncPayload.recovery?.message
+) {
+  throw new Error(`invalid JSON was not converted into a structured HTTP 400 response: ${JSON.stringify(invalidAsyncPayload)}`);
 }
 if (dashboardQueryAuth.readiness == null) {
   throw new Error('dashboard API did not include readiness data');
 }
+if (
+  dashboardQueryAuth.connectionState?.localService?.status !== 'running'
+  || !['available', 'disabled'].includes(dashboardQueryAuth.connectionState?.publicEndpoint?.status)
+  || typeof dashboardQueryAuth.connectionState?.chatgptReadiness?.status !== 'string'
+  || dashboardQueryAuth.connectionState?.dashboardUpdates?.status !== 'offline'
+) {
+  throw new Error(`dashboard API did not include the normalized desktop connection contract: ${JSON.stringify(dashboardQueryAuth.connectionState)}`);
+}
+const connectionResponse = await fetch(`http://127.0.0.1:${port}/api/connection?token=${encodeURIComponent(token)}`).then((response) => response.json());
+const connectionText = JSON.stringify(connectionResponse);
+if (connectionResponse.token !== 'set' || connectionText.includes(token) || connectionResponse.dashboardUrl.includes('token=') || connectionResponse.dashboardDataUrl.includes('token=')) {
+  throw new Error(`connection API exposed a token-bearing value: ${connectionText}`);
+}
+if (!connectionResponse.chatgptAuthMode.includes('approval token')) {
+  throw new Error('connection API did not use the canonical approval-token wording');
+}
+
+const diagnosticsResponse = await fetch(`http://127.0.0.1:${port}/api/diagnostics?token=${encodeURIComponent(token)}`).then((response) => response.json());
+const diagnosticsText = JSON.stringify(diagnosticsResponse);
+if (!diagnosticsResponse.ok || !diagnosticsResponse.reportText || !Array.isArray(diagnosticsResponse.findings) || diagnosticsText.includes(token) || diagnosticsText.includes(chatgptSecret)) {
+  throw new Error(`diagnostics API was unavailable or leaked a secret: ${diagnosticsText}`);
+}
+if (diagnosticsResponse.logs?.runtime?.available !== false || diagnosticsResponse.maintenance?.runtimeLogs?.available !== false) {
+  throw new Error('standalone diagnostics should identify desktop service logs as unavailable');
+}
+
+const invalidDiagnosticReset = await fetch(`http://127.0.0.1:${port}/api/diagnostics/reset?token=${encodeURIComponent(token)}`, {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ target: 'invalid', confirm: true })
+});
+const invalidDiagnosticResetPayload = await invalidDiagnosticReset.json();
+if (invalidDiagnosticReset.status !== 400 || invalidDiagnosticResetPayload.errorCode !== 'request_invalid' || !invalidDiagnosticResetPayload.recovery?.message) {
+  throw new Error(`diagnostic reset validation was not structured: ${JSON.stringify(invalidDiagnosticResetPayload)}`);
+}
+
+const unconfirmedFullReset = await fetch(`http://127.0.0.1:${port}/api/diagnostics/reset?token=${encodeURIComponent(token)}`, {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ target: 'all', confirm: true })
+});
+const unconfirmedFullResetPayload = await unconfirmedFullReset.json();
+if (unconfirmedFullReset.status !== 400 || unconfirmedFullResetPayload.errorCode !== 'request_invalid') {
+  throw new Error(`full diagnostic reset should require RESET confirmation: ${JSON.stringify(unconfirmedFullResetPayload)}`);
+}
+
+const runtimeReset = await fetch(`http://127.0.0.1:${port}/api/diagnostics/reset?token=${encodeURIComponent(token)}`, {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ target: 'runtime_logs', confirm: true })
+});
+const runtimeResetPayload = await runtimeReset.json();
+if (runtimeReset.status !== 409 || runtimeResetPayload.errorCode !== 'state_reset_failed') {
+  throw new Error(`standalone runtime-log reset should be unavailable: ${JSON.stringify(runtimeResetPayload)}`);
+}
+
 if (dashboardQueryAuth.taskActivity?.state !== 'idle') {
   throw new Error('standalone dashboard API did not include the default idle task state');
 }
@@ -129,8 +190,11 @@ if (!dashboardHtml.includes('id="refreshBtn"') || !dashboardHtml.includes('id="w
 if (dashboardHtml.includes('id="liveStatus"') || dashboardHtml.includes('id="serverStatus"')) {
   throw new Error('dashboard HTML should expose one canonical connection status control');
 }
-if (!dashboardHtml.includes('href="#tasks"') || !dashboardHtml.includes('href="#reference"')) {
-  throw new Error('dashboard navigation did not include Sessions and Reference');
+if (!dashboardHtml.includes('href="#tasks"') || !dashboardHtml.includes('href="#tools"')) {
+  throw new Error('dashboard navigation did not include Sessions and Tools');
+}
+if (!dashboardHtml.includes('<title>Overview · Rel.AI MCP</title>')) {
+  throw new Error('dashboard HTML did not include the route-specific initial title');
 }
 // The token field was removed from the topbar (token loads from the URL/sessionStorage).
 if (dashboardHtml.includes('id="token"')) {

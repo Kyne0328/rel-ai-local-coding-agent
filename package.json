@@ -1,6 +1,6 @@
 {
   "name": "rel-ai-mcp",
-  "version": "0.20.7",
+  "version": "0.21.0",
   "description": "Local ChatGPT repo bridge: one reliable workflow for snapshot, read, write, verify, diff, and reset configured local workspaces.",
   "private": true,
   "license": "MIT",
@@ -43,6 +43,7 @@
     "verify:ngrok": "node scripts/verify-ngrok-seed.mjs",
     "test:electron": "node test/electron-launcher-smoke.mjs",
     "test:installed": "node scripts/installed-app-smoke.mjs",
+    "release:evidence:check": "node scripts/release-evidence-check.mjs",
     "test:http-auth": "node test/http-auth-smoke.mjs",
     "test:oauth": "node test/oauth-smoke.mjs",
     "test:safety-paths": "node test/safety-paths.mjs",

@@ -43,6 +43,8 @@ function getOnboardingStatus() {
     completed,
     skipped,
     migrated: state?.migrated === true,
+    source: String(state?.source || ''),
+    handoffPending: state?.handoffPending === true,
     needsOnboarding: !completed && !skipped
   };
 }

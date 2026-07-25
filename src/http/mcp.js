@@ -56,10 +56,14 @@ async function handleAuthorizePost(ctx) {
     if (!isLocal) { sendHtml(ctx.res, 403, oauthErrorPage("OAuth approval requires REL_AI_MCP_TOKEN when accessed over a public URL. Set a token and restart.")); return; }
   }
   if (!oauth.verifyLogin(body.dashboard_token, ctx.options.token)) {
-    sendHtml(ctx.res, 401, oauth.renderLoginPage(check.request, resolveBaseUrl(ctx.options), { error: "Incorrect dashboard token. Try again." }));
+    sendHtml(ctx.res, 401, oauth.renderLoginPage(check.request, resolveBaseUrl(ctx.options), { error: "Incorrect approval token. Copy the current token from Rel.AI Settings > Connection and try again." }));
     return;
   }
   const code = oauth.issueAuthorizationCode(check.request);
+  if (typeof ctx.options.onOAuthAuthorized === "function") {
+    try { ctx.options.onOAuthAuthorized(); }
+    catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] OAuth authorization callback:', error); }
+  }
   ctx.res.writeHead(302, { Location: oauth.buildRedirectUrl(check.request.redirectUri, { code, state: check.request.state }) });
   ctx.res.end();
 }
@@ -76,7 +80,7 @@ function handleMcpGetDiagnostic(ctx) {
 }
 
 async function handleMcpStreamable(ctx) {
-  if (!isMcpAuthorized(ctx.req, ctx.options)) { unauthorizedMcp(ctx.res, resolveBaseUrl(ctx.options)); return; }
+  if (!isMcpAuthorized(ctx.req, ctx.options)) { unauthorizedMcp(ctx.res, resolveBaseUrl(ctx.options), ctx.req); return; }
   const payload = await readJsonBody(ctx.req, ctx.options.maxBodyBytes);
   const sessionId = streamableSessionId(ctx.req, payload);
   if (sessionId) ctx.res.setHeader('Mcp-Session-Id', sessionId);
@@ -89,12 +93,12 @@ async function handleMcpStreamable(ctx) {
 }
 
 function handleMcpSse(ctx) {
-  if (!isMcpAuthorized(ctx.req, ctx.options)) { unauthorizedMcp(ctx.res, resolveBaseUrl(ctx.options)); return; }
+  if (!isMcpAuthorized(ctx.req, ctx.options)) { unauthorizedMcp(ctx.res, resolveBaseUrl(ctx.options), ctx.req); return; }
   openSseSession(ctx.res, ctx.req, ctx.mcpAccess.messagePath);
 }
 
 async function handleMcpMessages(ctx) {
-  if (!isMcpAuthorized(ctx.req, ctx.options)) { unauthorizedMcp(ctx.res, resolveBaseUrl(ctx.options)); return; }
+  if (!isMcpAuthorized(ctx.req, ctx.options)) { unauthorizedMcp(ctx.res, resolveBaseUrl(ctx.options), ctx.req); return; }
   const sessionId = ctx.parsed.searchParams.get("sessionId") || "";
   const session = sessions.get(sessionId);
   if (!session) { sendJson(ctx.res, 404, { ok: false, error: "Unknown or expired SSE session." }, ctx.ae); return; }

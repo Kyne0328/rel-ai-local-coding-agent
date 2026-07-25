@@ -129,9 +129,19 @@ function validateConnectionFields({ announce = true } = {}) {
 
 function goTo(stepNumber) {
   const nextStep = Math.min(STEP_COUNT, Math.max(1, stepNumber));
-  document.getElementById(`step${currentStep}`)?.classList.remove('active');
+  const previousSection = document.getElementById(`step${currentStep}`);
+  previousSection?.classList.remove('active');
+  if (previousSection) {
+    previousSection.hidden = true;
+    previousSection.setAttribute('aria-hidden', 'true');
+  }
   currentStep = nextStep;
-  document.getElementById(`step${currentStep}`)?.classList.add('active');
+  const nextSection = document.getElementById(`step${currentStep}`);
+  if (nextSection) {
+    nextSection.hidden = false;
+    nextSection.setAttribute('aria-hidden', 'false');
+    nextSection.classList.add('active');
+  }
   updateProgress();
 
   if (currentStep === 2) {
@@ -143,7 +153,10 @@ function goTo(stepNumber) {
     validateConnectionFields({ announce: false });
     window.setTimeout(() => document.getElementById('ngrokTokenInput')?.focus(), 0);
   }
-  if (currentStep === 4) renderSummary();
+  if (currentStep === 4) {
+    renderSummary();
+    window.setTimeout(() => document.getElementById('step4Title')?.focus(), 0);
+  }
   requestWindowFit();
 }
 
@@ -152,7 +165,8 @@ function updateProgress() {
     const step = document.getElementById(`p${index}`);
     step.classList.toggle('done', index < currentStep);
     step.classList.toggle('current', index === currentStep);
-    step.setAttribute('aria-current', index === currentStep ? 'step' : 'false');
+    if (index === currentStep) step.setAttribute('aria-current', 'step');
+    else step.removeAttribute('aria-current');
   }
 }
 
@@ -187,7 +201,7 @@ function renderSummary() {
   box.innerHTML = '';
   const rows = [
     ['Local service', `http://127.0.0.1:${state.port}`],
-    ['Dashboard token', 'Stored privately in ~/.rel-ai-mcp/.env'],
+    ['Approval token', 'Stored privately in ~/.rel-ai-mcp/.env'],
     ['ngrok account key', 'Stored privately in Rel.AI ngrok.yml'],
     ['ChatGPT endpoint', `https://${state.ngrokDomain}/mcp`]
   ];
@@ -226,7 +240,8 @@ async function launch() {
       port: state.port,
       token: state.token,
       ngrokAuthtoken: state.ngrokAuth,
-      ngrokDomain: state.ngrokDomain
+      ngrokDomain: state.ngrokDomain,
+      restart: state.editMode
     });
   } catch (error) {
     launchPending = false;
@@ -238,24 +253,32 @@ async function launch() {
   }
 }
 
-function loadEditParams() {
+async function loadRecoveryConfig() {
   const params = new URLSearchParams(window.location.search);
-  if (params.get('edit') !== '1') return;
+  if (params.get('recovery') !== '1') return false;
 
   state.editMode = true;
-  state.port = Number.parseInt(params.get('port') || '3333', 10) || 3333;
-  state.token = params.get('token') || '';
-  state.ngrokAuth = params.get('ngrokToken') || '';
-  state.ngrokDomain = normalizeDomain(params.get('domain') || '');
+  const config = await window.electronAPI.getRecoveryConfig();
+  state.port = Number.parseInt(config.port || '3333', 10) || 3333;
+  state.token = String(config.token || '');
+  state.ngrokAuth = String(config.ngrokAuthtoken || '');
+  state.ngrokDomain = normalizeDomain(config.ngrokDomain || '');
 
-  document.title = 'Rel.AI MCP - Settings';
-  document.getElementById('wizardBrandTitle').textContent = 'Rel.AI MCP Settings';
-  document.getElementById('wizardBrandSub').textContent = 'Connection configuration';
-  document.getElementById('launchBtn').textContent = 'Save and restart Rel.AI MCP';
+  document.title = 'Rel.AI MCP - Connection Recovery';
+  document.getElementById('wizardBrandTitle').textContent = 'Rel.AI MCP Recovery';
+  document.getElementById('wizardBrandSub').textContent = 'Fallback connection editor';
+  document.getElementById('step2Title').textContent = 'Repair the local service.';
+  document.getElementById('step3Title').textContent = 'Repair the secure connection.';
+  document.getElementById('step4Title').textContent = 'Review and retry.';
+  document.querySelector('#p4 strong').textContent = 'Retry';
+  document.getElementById('launchBtn').textContent = 'Save and retry connection';
   document.getElementById('portInput').value = state.port;
   document.getElementById('ngrokTokenInput').value = state.ngrokAuth;
   document.getElementById('domainInput').value = state.ngrokDomain;
-  if (state.token) document.getElementById('tokenBox').textContent = state.token;
+  document.getElementById('tokenBox').textContent = state.token;
+  document.getElementById('regenTokenBtn').hidden = true;
+  document.getElementById('tokenHint').textContent = 'The current approval token is preserved. Replace it later from Settings > Connection after the dashboard is restored.';
+  return true;
 }
 
 function toggleNgrokKeyVisibility() {
@@ -311,11 +334,22 @@ function bindEvents() {
   }
 }
 
-loadEditParams();
-if (!state.token) generateToken();
-bindEvents();
-updateProgress();
-validateLocalFields({ announce: false });
-validateConnectionFields({ announce: false });
-if (state.editMode) goTo(2);
-else requestWindowFit();
+async function initialize() {
+  try {
+    await loadRecoveryConfig();
+    if (!state.token) generateToken();
+    bindEvents();
+    updateProgress();
+    validateLocalFields({ announce: false });
+    validateConnectionFields({ announce: false });
+    if (state.editMode) goTo(2);
+    else requestWindowFit();
+  } catch (error) {
+    document.getElementById('launchError').textContent = error instanceof Error ? error.message : 'Recovery settings could not be loaded.';
+    bindEvents();
+    updateProgress();
+    goTo(2);
+  }
+}
+
+initialize().catch(() => {});

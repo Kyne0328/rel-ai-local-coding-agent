@@ -162,6 +162,97 @@ export interface LauncherConfig {
   token: string;
 }
 
+export type LocalServiceStatus = 'running' | 'starting' | 'stopped' | 'failed';
+export type PublicEndpointStatus = 'available' | 'connecting' | 'unavailable' | 'disabled';
+export type ChatgptReadinessStatus = 'ready' | 'authentication_required' | 'unavailable';
+export type DashboardUpdateStatus = 'live' | 'connecting' | 'reconnecting' | 'paused' | 'offline';
+export type DesktopErrorCode =
+  | 'unknown'
+  | 'request_invalid'
+  | 'configuration_invalid'
+  | 'local_service_start_failed'
+  | 'local_service_stop_failed'
+  | 'local_port_in_use'
+  | 'public_endpoint_failed'
+  | 'approval_token_required'
+  | 'approval_token_rejected'
+  | 'dashboard_unavailable'
+  | 'workspace_unavailable'
+  | 'settings_save_failed'
+  | 'diagnostics_unavailable'
+  | 'diagnostics_export_failed'
+  | 'state_reset_failed'
+  | 'update_failed';
+
+export interface StructuredRecoveryAction {
+  message: string;
+  actionLabel: string;
+  href: string;
+  retryable: boolean;
+}
+
+export interface StructuredErrorPayload {
+  ok: false;
+  errorCode: DesktopErrorCode;
+  error: string;
+  title: string;
+  recovery: StructuredRecoveryAction;
+  status?: number;
+}
+
+export interface DiagnosticFinding {
+  id: string;
+  severity: 'error' | 'warning' | 'info';
+  code: string;
+  title: string;
+  impact: string;
+  recommendation: string;
+  action: { label: string; href: string };
+  context: unknown[];
+  details: Record<string, unknown>;
+}
+
+export interface DiagnosticReport {
+  ok: true;
+  generatedAt: string;
+  scope: { workspace: string };
+  summary: { blocking: number; warnings: number; recommendations: number; total: number };
+  findings: DiagnosticFinding[];
+  reportText: string;
+}
+
+export interface DesktopConnectionState {
+  localService: { status: LocalServiceStatus };
+  publicEndpoint: { status: PublicEndpointStatus };
+  chatgptReadiness: { status: ChatgptReadinessStatus };
+  dashboardUpdates: { status: DashboardUpdateStatus };
+  error: null | { code: DesktopErrorCode; message: string };
+}
+
+export interface OAuthAuthorizationStatus {
+  required: boolean;
+  approvalRequiredAt: number | null;
+  lastApprovedAt: number | null;
+  activeAccessTokens: number;
+  activeRefreshTokens: number;
+  registeredClients: number;
+}
+
+export interface ApprovalTokenRevocationSummary {
+  authorizationCodes: number;
+  accessTokens: number;
+  refreshTokens: number;
+  registeredClientsPreserved: number;
+}
+
+export interface ApprovalTokenReplacementResult {
+  ok: true;
+  approvalToken: string;
+  revoked: ApprovalTokenRevocationSummary;
+  authorization: OAuthAuthorizationStatus;
+  status: Record<string, unknown>;
+}
+
 export interface InstalledSmokeResult {
   ok: true;
   isPackaged: true;

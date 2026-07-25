@@ -5,7 +5,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { createDashboardWindowManager, validateConnection } = require('../electron/dashboard-window.js');
+const { createDashboardWindowManager, validateConnection, normalizeRouteHash } = require('../electron/dashboard-window.js');
 
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-dashboard-window-'));
 const folderToOpen = path.join(sandbox, 'repo');
@@ -16,6 +16,7 @@ const windows = [];
 let permissionHandler = null;
 let permissionCheck = null;
 let openHandler = null;
+let dashboardLoadError = null;
 const webContentsEvents = new Map();
 
 const fakeSession = {
@@ -64,6 +65,7 @@ const dependencies = {
   },
   dialog: { async showOpenDialog() { return { canceled: false, filePaths: [folderToOpen] }; } },
   isQuitting: () => false,
+  onLoadError: error => { dashboardLoadError = error; },
   getConnection: async () => ({
     url: 'http://127.0.0.1:3333/dashboard?surface=desktop&bootstrap=one-time-code'
   })
@@ -93,13 +95,16 @@ try {
   assert.deepEqual(external, ['https://example.com/docs']);
   assert.deepEqual(openHandler({ url: 'https://example.com/help' }), { action: 'deny' });
   assert.deepEqual(external, ['https://example.com/docs', 'https://example.com/help']);
+  webContentsEvents.get('did-fail-load')({}, -105, 'Connection refused', 'http://127.0.0.1:3333/dashboard', true);
+  assert.match(dashboardLoadError?.message || '', /Dashboard failed to load/);
 
   assert.equal(await manager.pickFolder(), folderToOpen);
   assert.equal(await manager.openFolder(folderToOpen), path.resolve(folderToOpen));
   assert.deepEqual(openedPaths, [path.resolve(folderToOpen)]);
-  const reused = await manager.open();
+  const reused = await manager.open('#settings/desktop');
   assert.equal(reused, win);
   assert.equal(windows.length, 1);
+  assert.equal(win.webContents.url.endsWith('#settings/desktop'), true);
   let closePrevented = false;
   win.events.get('close')({ preventDefault() { closePrevented = true; } });
   assert.equal(closePrevented, true);
@@ -117,6 +122,8 @@ try {
   manager.close();
 
   assert.equal(validateConnection({ url: 'http://localhost:3333/dashboard' }).pathname, '/dashboard');
+  assert.equal(normalizeRouteHash('settings/desktop'), '#settings/desktop');
+  assert.throws(() => normalizeRouteHash('settings/desktop?token=secret'), /Invalid dashboard route/);
   assert.throws(() => validateConnection({ url: 'https://example.com/dashboard' }), /local loopback/);
   assert.throws(() => validateConnection({ url: 'http://127.0.0.1:3333/health' }), /local loopback/);
 } finally {

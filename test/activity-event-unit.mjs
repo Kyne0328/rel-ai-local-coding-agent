@@ -15,6 +15,9 @@ const event = {
 assert.equal(activityEventId(event), activityEventId({ ...event }), 'the same audit event must have a stable identity');
 assert.notEqual(activityEventId(event), activityEventId({ ...event, operationId: 'operation-2' }), 'different operations must not collide');
 assert.notEqual(activityEventId(event), activityEventId({ ...event, ok: false }), 'success and failure events must not collide');
-assert.equal(activityEventId({ id: 'persisted-id', tool: 'ignored' }), 'id:persisted-id', 'persisted event IDs must take precedence');
+const persisted = activityEventId({ id: 'persisted-id', tool: 'ignored' });
+assert.equal(persisted, activityEventId({ id: 'persisted-id', tool: 'different' }), 'persisted event IDs must take precedence');
+assert.match(persisted, /^event:[a-f0-9]{16}$/, 'event identities must be compact and URL-safe');
+assert.doesNotMatch(activityEventId(event), /[\u0000-\u001f\u007f]/, 'event identities must survive route sanitization');
 
 console.log('Activity event identity tests passed.');

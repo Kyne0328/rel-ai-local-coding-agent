@@ -1,6 +1,6 @@
 @layer reset {
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  html { height: 100%; }
+  html { height: 100%; scroll-padding-top: 96px; }
   body {
     min-height: 100%;
     font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
@@ -15,6 +15,7 @@
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
   }
+  body.overlay-open { overflow: hidden; }
   a { color: var(--accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
   button { cursor: pointer; border: none; background: none; font: inherit; }

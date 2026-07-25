@@ -3,6 +3,7 @@ const connection = require("../connectionProfile");
 const oauth = require("../oauthProvider");
 const { isAuthorized, timingSafeEqual, sendJson } = require("./io");
 const dashboardSessions = require("./dashboardSessions");
+const { ERROR_CODES, errorPayload } = require("../desktopUxContracts");
 
 // External origin ChatGPT reaches us on — used as the OAuth issuer and for building
 // absolute authorize/token/registration URLs in discovery metadata. Prefer the
@@ -37,13 +38,16 @@ function isMcpAuthorized(req, options) {
   return isAuthorized(req, options) || isOAuthAuthorized(req);
 }
 
-function unauthorizedMcp(res, baseUrl) {
+function unauthorizedMcp(res, baseUrl, req) {
   if (res.headersSent) return;
   res.setHeader("WWW-Authenticate", oauth.wwwAuthenticateHeader(baseUrl, "invalid_token"));
-  sendJson(res, 401, {
-    ok: false,
-    error: "Authorization required. Add this server in ChatGPT with Authentication: OAuth, or send a bearer token."
-  });
+  const code = bearerToken(req)
+    ? ERROR_CODES.APPROVAL_TOKEN_REJECTED
+    : ERROR_CODES.APPROVAL_TOKEN_REQUIRED;
+  sendJson(res, 401, errorPayload(
+    code,
+    "Authorization required. Add this server in ChatGPT with Authentication: OAuth, or send a bearer token."
+  ));
 }
 
 function hasDashboardQueryToken(parsed, options) {

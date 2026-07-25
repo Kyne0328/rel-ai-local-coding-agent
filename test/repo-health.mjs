@@ -76,6 +76,10 @@ const sourceLineBudgets = {
   'src/http/io.js': 220,
   'src/http/auth.js': 120,
   'electron/main.js': 500,
+  'electron/app-updater.js': 240,
+  'electron/app-updater-state.js': 140,
+  'electron/desktop-settings.js': 70,
+  'electron/desktop-lifecycle.js': 210,
   'electron/dashboard-window.js': 220,
   'electron/ipc-handlers.js': 100,
   'electron/launcher-config.js': 100,
@@ -84,7 +88,9 @@ const sourceLineBudgets = {
   'electron/installed-smoke.js': 180,
   'src/ui/sections/workspaces.js': 40,
   'src/ui/sections/workspace-cards.js': 240,
-  'src/ui/sections/workspace-actions.js': 280
+  'src/ui/sections/workspace-actions.js': 280,
+  'src/ui/sections/settings/desktop-updates.js': 200,
+  'src/ui/sections/settings/desktop-startup.js': 110
 };
 
 for (const [relativePath, maxLines] of Object.entries(sourceLineBudgets)) {

@@ -13,6 +13,7 @@ let _wrapper = null;
 const STEPS = ['Welcome', 'Add workspace', 'Workspace access', 'Connect ChatGPT', 'Done'];
 
 export function openOnboarding() {
+  removeDesktopHandoff();
   _step = 0;
   _data = {
     workspaceAlias: '',
@@ -279,7 +280,7 @@ function _renderStep(step, content, nextBtn, skipBtn, backBtn) {
     };
   } else if (step === 3) {
     nextBtn.textContent = 'Continue';
-    content.innerHTML = '<h3 style="margin:0;font-size:15px;">Connect ChatGPT</h3><p style="font-size:13px;color:var(--text-muted);line-height:1.5;">Create a ChatGPT app, paste the MCP endpoint below, choose OAuth, and approve with your dashboard token. After that, select the Rel.AI MCP app in any chat.</p>';
+    content.innerHTML = '<h3 style="margin:0;font-size:15px;">Connect ChatGPT</h3><p style="font-size:13px;color:var(--text-muted);line-height:1.5;">Create a ChatGPT app, paste the MCP endpoint below, choose OAuth, and approve with your approval token. After that, select the Rel.AI MCP app in any chat.</p>';
     _withConnection(content, true);
   } else if (step === 4) {
     nextBtn.textContent = 'Done';
@@ -329,7 +330,7 @@ async function _withConnection(content, showCopy = false) {
     appSteps.innerHTML = [
       'ChatGPT Settings > Apps > Create (or Workspace Settings > Apps > Create for admins).',
       'Paste this MCP endpoint and choose OAuth.',
-      'Approve with your Rel.AI dashboard token, then select the app in chat.'
+      'Approve with your Rel.AI approval token, then select the app in chat.'
     ].map((step, index) => `<div class="step"><span class="step-num">${index + 1}</span><div>${escapeHtml(step)}</div></div>`).join('');
     content.appendChild(appSteps);
   }
@@ -363,6 +364,46 @@ function _back() {
 async function _doSkip() {
   await postJson('/api/onboarding/complete', { completed: false, skipped: true });
   _showSkipBanner();
+}
+
+export function showDesktopHandoff() {
+  if (document.getElementById('__desktop-setup-handoff')) return;
+  const banner = document.createElement('section');
+  banner.id = '__desktop-setup-handoff';
+  banner.className = 'connection-notice info';
+  banner.style.cssText = 'display:grid;gap:10px;margin-bottom:14px;';
+  banner.innerHTML = '<div><strong>Desktop setup is complete.</strong><br><span class="muted">Finish the two application steps below. Rel.AI will not reopen the browser onboarding wizard.</span></div>';
+
+  const actions = document.createElement('div');
+  actions.className = 'connection-actions';
+  const connection = document.createElement('a');
+  connection.className = 'buttonlike primary';
+  connection.href = '#settings/connection';
+  connection.textContent = 'Connect ChatGPT';
+  const workspaces = document.createElement('a');
+  workspaces.className = 'buttonlike secondary';
+  workspaces.href = '#workspaces';
+  workspaces.textContent = 'Add workspace';
+  const dismiss = document.createElement('button');
+  dismiss.className = 'secondary';
+  dismiss.type = 'button';
+  dismiss.textContent = 'Dismiss guide';
+  dismiss.addEventListener('click', async () => {
+    await postJson('/api/onboarding/complete', {
+      skipped: true,
+      source: 'desktop-setup',
+      handoffPending: false
+    });
+    removeDesktopHandoff();
+    toast('Desktop setup guide dismissed.', { variant: 'info' });
+  });
+  actions.append(connection, workspaces, dismiss);
+  banner.appendChild(actions);
+  document.getElementById('main')?.prepend(banner);
+}
+
+function removeDesktopHandoff() {
+  document.getElementById('__desktop-setup-handoff')?.remove();
 }
 
 function _showSkipBanner() {

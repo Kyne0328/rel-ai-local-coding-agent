@@ -5,30 +5,38 @@ const os = require('node:os');
 const path = require('node:path');
 const { BrowserWindow } = require('electron');
 const { WINDOW_SIZE_LIMITS } = require('./window-size');
+const { localWindowWebPreferences, secureLocalWindow } = require('./window-security');
 const { resolveResourcePath } = require('./resource-path');
+const { captureWindow, passedScenario, writeWindowSmokeResult } = require('./smoke-evidence');
 
-async function runWindowSmoke() {
-  await loadRendererSmoke('wizard.html', 'wizard');
-  await loadRendererSmoke('settings.html', 'wizard');
-  await loadRendererSmoke('status.html', 'status');
-  await loadDashboardInteractionSmoke();
+async function runWindowSmoke(options = {}) {
+  const registerWindowRole = options.registerWindowRole || (() => {});
+  const setup = await loadRendererSmoke('wizard.html', 'wizard', registerWindowRole);
+  const recovery = await loadRendererSmoke('status.html', 'status', registerWindowRole);
+  const dashboard = await loadDashboardInteractionSmoke(registerWindowRole);
+  const result = {
+    ok: true,
+    scenarios: [setup.scenario, recovery.scenario, ...dashboard.scenarios],
+    screenshots: [setup.screenshot, recovery.screenshot, ...dashboard.screenshots].filter(Boolean)
+  };
+  writeWindowSmokeResult(result);
+  return result;
 }
 
-async function loadRendererSmoke(fileName, type) {
+async function loadRendererSmoke(fileName, type, registerWindowRole) {
   const limits = WINDOW_SIZE_LIMITS[type];
   const smokeWindow = new BrowserWindow({
     show: false,
     width: limits.minWidth,
     height: limits.minHeight,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false
-    }
+    webPreferences: localWindowWebPreferences(path.join(__dirname, 'preload.js'), `relai-smoke-${type}`)
   });
+  const rendererPath = path.join(__dirname, 'renderer', fileName);
+  secureLocalWindow(smokeWindow, { allowedFile: rendererPath });
+  registerWindowRole(smokeWindow, type === 'wizard' ? 'wizard' : 'fallback');
 
   try {
-    await smokeWindow.loadFile(path.join(__dirname, 'renderer', fileName));
+    await smokeWindow.loadFile(rendererPath);
     const result = await smokeWindow.webContents.executeJavaScript(`({
       hasApi: Boolean(window.electronAPI),
       hasBody: Boolean(document.body),
@@ -37,12 +45,16 @@ async function loadRendererSmoke(fileName, type) {
     if (!result?.hasApi || !result?.hasBody || !result?.hasPrimarySurface) {
       throw new Error(`${fileName} did not initialize its renderer surface.`);
     }
+    const scenarioId = type === 'wizard' ? 'setup-renderer' : 'recovery-renderer';
+    const title = type === 'wizard' ? 'First-run setup renderer loads' : 'Failure-recovery renderer loads';
+    const screenshot = await captureWindow(smokeWindow, { scenarioId, file: `${scenarioId}.png` });
+    return { scenario: passedScenario(scenarioId, title), screenshot };
   } finally {
     if (!smokeWindow.isDestroyed()) smokeWindow.destroy();
   }
 }
 
-async function loadDashboardInteractionSmoke() {
+async function loadDashboardInteractionSmoke(registerWindowRole) {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-dashboard-window-smoke-'));
   const workspacePath = path.join(temp, 'workspace');
   const stateDir = path.join(temp, 'state');
@@ -103,10 +115,25 @@ async function loadDashboardInteractionSmoke() {
       webPreferences: {
         preload: path.join(__dirname, 'dashboard-preload.js'),
         contextIsolation: true,
-        nodeIntegration: false
+        nodeIntegration: false,
+        sandbox: true,
+        webSecurity: true,
+        allowRunningInsecureContent: false,
+        spellcheck: false,
+        partition: 'relai-smoke-dashboard'
       }
     });
+    registerWindowRole(smokeWindow, 'dashboard');
     await smokeWindow.loadURL(`http://127.0.0.1:${address.port}/dashboard?token=${encodeURIComponent(token)}&surface=desktop`);
+    await smokeWindow.webContents.executeJavaScript(`(async () => {
+      const started = Date.now();
+      while (Date.now() - started < 7000) {
+        if (document.querySelector('#refreshBtn') && document.querySelector('#workspaceScope option[value="smoke"]')) return true;
+        await new Promise(resolve => setTimeout(resolve, 25));
+      }
+      throw new Error('Timed out waiting for dashboard overview');
+    })()`);
+    const overviewScreenshot = await captureWindow(smokeWindow, { scenarioId: 'dashboard-overview', file: 'dashboard-overview.png' });
     const result = await smokeWindow.webContents.executeJavaScript(`(async () => {
       const waitFor = async (predicate, label, timeoutMs = 7000) => {
         const started = Date.now();
@@ -134,9 +161,11 @@ async function loadDashboardInteractionSmoke() {
       scope.value = 'smoke';
       scope.dispatchEvent(new Event('change', { bubbles: true }));
       await waitFor(() => location.hash.includes('workspace=smoke'), 'workspace route update');
+      const scopedHash = location.hash;
       location.hash = '#settings/dashboard';
-      await waitFor(() => document.querySelector('[data-sub-page="dashboard"].active') && [...document.querySelectorAll('button')].some(button => button.textContent.includes('Clear session and activity history')), 'dashboard settings');
-      const settingsPresent = Boolean(document.querySelector('[data-sub-page="dashboard"].active'));
+      await waitFor(() => location.hash === '#settings/advanced' && document.querySelector('[data-sub-page="advanced"].active') && document.body.textContent.includes('Dashboard updates'), 'legacy settings redirect');
+      const normalizedSettingsHash = location.hash;
+      const settingsPresent = Boolean(document.querySelector('[data-sub-page="advanced"].active')); 
       location.hash = '#tasks?workspace=smoke';
       await waitFor(() => document.querySelector('[data-task-id="window-smoke-task"]'), 'session row');
       document.querySelector('[data-task-id="window-smoke-task"]').click();
@@ -150,15 +179,28 @@ async function loadDashboardInteractionSmoke() {
         scrollPreserved,
         refreshIconPreserved,
         settingsPresent,
+        normalizedSettingsHash,
+        scopedHash,
         workspace: scope.value,
         hash: location.hash,
         connectionText: document.querySelector('#connectionStatus')?.textContent || '',
         sessionEventOpened: document.querySelector('#__relai-drawer-title')?.textContent === 'relai_read'
       };
     })()`);
-    if (!result?.hasDesktopApi || !result.refreshEnabled || !result.scrollPreserved || !result.refreshIconPreserved || !result.settingsPresent || result.workspace !== 'smoke' || !result.hash.includes('workspace=smoke') || !result.sessionEventOpened) {
+    if (!result?.hasDesktopApi || !result.refreshEnabled || !result.scrollPreserved || !result.refreshIconPreserved || !result.settingsPresent || result.normalizedSettingsHash !== '#settings/advanced' || result.workspace !== 'smoke' || !result.scopedHash.includes('workspace=smoke') || !result.hash.includes('workspace=smoke') || !result.sessionEventOpened) {
       throw new Error(`Dashboard interaction smoke failed: ${JSON.stringify(result)}`);
     }
+    const detailScreenshot = await captureWindow(smokeWindow, { scenarioId: 'session-to-activity-detail', file: 'session-to-activity-detail.png' });
+    return {
+      scenarios: [
+        passedScenario('dashboard-overview', 'Desktop dashboard overview becomes interactive', { connectionText: result.connectionText }),
+        passedScenario('dashboard-refresh-preserves-context', 'Dashboard refresh preserves scroll and controls'),
+        passedScenario('workspace-scope', 'Workspace scope persists in the route', { route: result.scopedHash }),
+        passedScenario('legacy-route-normalization', 'Legacy settings routes normalize', { route: result.normalizedSettingsHash }),
+        passedScenario('session-to-activity-detail', 'Session events open the exact Activity detail', { route: result.hash })
+      ],
+      screenshots: [overviewScreenshot, detailScreenshot].filter(Boolean)
+    };
   } finally {
     if (smokeWindow && !smokeWindow.isDestroyed()) smokeWindow.destroy();
     if (server) await closeServer(server);

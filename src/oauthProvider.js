@@ -16,7 +16,7 @@
 //   6. POST /token (authorization_code + PKCE, or refresh_token) -> access token.
 //   7. POST /mcp with Authorization: Bearer <access token> -> allowed.
 //
-// Single-user local tool: the "login" is the dashboard token. State persists to a
+// Single-user local tool: the "login" is the approval token. State persists to a
 // 0600 file in the state dir so ChatGPT does not need to re-auth on every restart.
 
 const fs = require("node:fs");
@@ -42,7 +42,14 @@ function lockPath() {
 }
 
 function emptyStore() {
-  return { clients: {}, codes: {}, accessTokens: {}, refreshTokens: {} };
+  return {
+    clients: {},
+    codes: {},
+    accessTokens: {},
+    refreshTokens: {},
+    approvalRequiredAt: null,
+    lastApprovedAt: null
+  };
 }
 
 function readStore() {
@@ -139,6 +146,36 @@ function pruneStaleClients(store, now) {
   for (const [clientId, client] of Object.entries(store.clients || {})) {
     if (shouldPruneClient(clientId, client, referenced, now)) delete store.clients[clientId];
   }
+}
+
+function authorizationStatus() {
+  const store = pruneStore(readStore());
+  return {
+    required: Number(store.approvalRequiredAt || 0) > 0,
+    approvalRequiredAt: Number(store.approvalRequiredAt || 0) || null,
+    lastApprovedAt: Number(store.lastApprovedAt || 0) || null,
+    activeAccessTokens: Object.keys(store.accessTokens || {}).length,
+    activeRefreshTokens: Object.keys(store.refreshTokens || {}).length,
+    registeredClients: Object.keys(store.clients || {}).length
+  };
+}
+
+function revokeAuthorizations() {
+  return withStoreLock(() => {
+    const store = pruneStore(readStore());
+    const revoked = {
+      authorizationCodes: Object.keys(store.codes || {}).length,
+      accessTokens: Object.keys(store.accessTokens || {}).length,
+      refreshTokens: Object.keys(store.refreshTokens || {}).length,
+      registeredClientsPreserved: Object.keys(store.clients || {}).length
+    };
+    store.codes = {};
+    store.accessTokens = {};
+    store.refreshTokens = {};
+    store.approvalRequiredAt = Date.now();
+    writeStore(store);
+    return revoked;
+  });
 }
 
 function pruneStore(store) {
@@ -346,6 +383,8 @@ function issueAuthorizationCode(request) {
         recovered_at: Date.now()
       };
     }
+    store.approvalRequiredAt = null;
+    store.lastApprovedAt = Date.now();
     const code = randomId("relai_code_", 32);
     store.codes[code] = {
       clientId: request.clientId,
@@ -506,11 +545,11 @@ function renderLoginPage(request, baseUrl, options = {}) {
 <body>
   <form class="card" method="POST" action="/authorize">
     <h1>Authorize ChatGPT</h1>
-    <p>Connect ChatGPT to your local Rel.AI MCP workspace bridge. Enter your Rel.AI dashboard token to approve this connection.</p>
-    <p class="who" style="margin-top:0;">Find it in <code style="background:#0b0f1a;padding:1px 4px;border-radius:4px;">~/.rel-ai-mcp/.env</code> (REL_AI_MCP_TOKEN) or in the terminal output when the server started.</p>
+    <p>Connect ChatGPT to your local Rel.AI MCP workspaces. Enter the approval token from the Rel.AI desktop app.</p>
+    <p class="who" style="margin-top:0;">Open <strong>Settings &gt; Desktop app &gt; Approval token</strong>. Replacing the token revokes existing ChatGPT access, but the MCP endpoint and ChatGPT app stay the same.</p>
     ${errorHtml}
     ${recoveryHtml}
-    <label for="dashboard_token">Dashboard token</label>
+    <label for="dashboard_token">Approval token</label>
     <input id="dashboard_token" name="dashboard_token" type="password" autocomplete="off" autofocus required>
     ${hiddenInputs}
     <button type="submit">Approve connection</button>
@@ -543,5 +582,7 @@ module.exports = {
   validateAccessToken,
   renderLoginPage,
   verifyLogin,
+  authorizationStatus,
+  revokeAuthorizations,
   SCOPE
 };

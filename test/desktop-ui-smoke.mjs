@@ -20,9 +20,11 @@ for (const name of ['--bg', '--surface', '--surface-2', '--surface-3', '--text',
   assert.equal(tokenValue(electronCss, name), tokenValue(dashboardTokens, name), `${name} must match between Electron and dashboard themes`);
 }
 
-for (const file of ['electron/renderer/status.html', 'electron/renderer/wizard.html', 'electron/renderer/settings.html']) {
+for (const file of ['electron/renderer/status.html', 'electron/renderer/wizard.html']) {
   const html = read(file);
   assert.match(html, /<link rel="stylesheet" href="app\.css">/);
+  assert.match(html, /Content-Security-Policy/);
+  assert.match(html, /connect-src 'none'/);
   assert.doesNotMatch(html, /<style\b/i, `${file} must use the shared Electron stylesheet`);
 }
 
@@ -42,7 +44,17 @@ assert.match(wizardJs, /handleEnter/);
 const statusHtml = read('electron/renderer/status.html');
 const statusJs = read('electron/renderer/status.js');
 const preloadJs = read('electron/preload.js');
+const dashboardPreload = read('electron/dashboard-preload.js');
 const ipcHandlers = read('electron/ipc-handlers.js');
+const ipcSecurity = read('electron/ipc-security.js');
+const windowSecurity = read('electron/window-security.js');
+const electronMain = read('electron/main.js');
+const appUpdater = read('electron/app-updater.js');
+const appUpdaterEvents = read('electron/app-updater-events.js');
+const desktopSettings = read('electron/desktop-settings.js');
+const desktopUpdates = read('src/ui/sections/settings/desktop-updates.js');
+const desktopStartup = read('src/ui/sections/settings/desktop-startup.js');
+const desktopLifecycle = read('electron/desktop-lifecycle.js');
 assert.match(statusHtml, /id="serverToggleBtn"/);
 assert.match(statusHtml, /data-disclosure="service"/);
 assert.match(statusHtml, /id="notificationToggleBtn"/);
@@ -52,6 +64,8 @@ assert.match(statusHtml, /id="publicHealthCard"/);
 assert.match(statusHtml, /id="lastTaskCard"/);
 assert.match(statusHtml, /role="switch"/);
 assert.match(statusHtml, /id="copyDiagnosticsBtn"/);
+assert.match(statusHtml, /Recent service logs/);
+assert.match(statusHtml, /id="serviceLog"/);
 assert.match(statusJs, /showDesktopNotification/);
 assert.match(statusJs, /syncNotificationPreference/);
 assert.match(statusJs, /setNotificationsEnabled/);
@@ -60,6 +74,10 @@ assert.match(preloadJs, /notifications:set-enabled/);
 assert.match(ipcHandlers, /getNotificationsEnabled/);
 assert.match(ipcHandlers, /setNotificationsEnabled/);
 assert.match(statusJs, /diagnosticSummary/);
+assert.match(statusJs, /onServerLog/);
+assert.match(statusJs, /safeDiagnosticText/);
+assert.match(preloadJs, /onServerLog/);
+assert.match(preloadJs, /server:log/);
 assert.match(statusJs, /heroView/);
 assert.match(statusJs, /Rel\.AI is available to ChatGPT/);
 assert.match(statusJs, /cannot determine that from tool traffic alone/);
@@ -72,21 +90,95 @@ assert.match(electronCss, /status-details::details-content/);
 assert.match(electronCss, /button\[data-state="success"\]/);
 assert.match(electronCss, /status-health-grid/);
 assert.match(electronCss, /notification-switch/);
-assert.match(electronCss, /settings-shell/);
-
-const settingsHtml = read('electron/renderer/settings.html');
-const settingsJs = read('electron/renderer/settings.js');
-assert.match(settingsHtml, /Rel\.AI MCP Settings/);
-assert.match(settingsHtml, /Save and restart/);
-assert.match(settingsHtml, /Dashboard approval token/);
-assert.match(settingsJs, /restart: true/);
-assert.match(settingsJs, /getNotificationsEnabled/);
-assert.match(settingsJs, /closeWizard/);
-assert.doesNotMatch(settingsHtml, /Step \d of 4/);
+assert.match(electronCss, /fallback-intro/);
+assert.match(electronCss, /\.app-card[^}]*box-shadow: none/s);
+assert.match(electronCss, /\.setup-card,\s*\.status-hero \{ box-shadow: var\(--elev-2\); \}/s);
+assert.match(electronCss, /\.status-health-grid[^}]*gap: 0/s);
+assert.doesNotMatch(electronCss, /\.status-badge\.ready::before[^}]*box-shadow/s);
+assert.doesNotMatch(electronCss, /settings-shell|settings-page|settings-footer/);
+assert.equal(fs.existsSync(path.join(root, 'electron/renderer/settings.html')), false);
+assert.equal(fs.existsSync(path.join(root, 'electron/renderer/settings.js')), false);
+assert.match(statusHtml, /Dashboard recovery fallback/);
+assert.match(statusHtml, /This window appears only when the main dashboard cannot start or load/);
+assert.match(wizardHtml, /Approval token/);
+assert.match(statusJs, /badge: 'Ready'/);
+assert.match(statusJs, /eyebrow: 'Connection ready'/);
+assert.match(statusJs, /return 'Available'/);
+assert.doesNotMatch(statusJs, /badge: 'Connected'/);
+assert.match(electronMain, /openDashboardWindow\('#settings'\)/);
+assert.match(electronMain, /openDashboardWindow\('#settings\/diagnostics'\)/);
+assert.doesNotMatch(electronMain, /settings\.html|options\.edit/);
+assert.match(dashboardPreload, /desktop:settings:get/);
+assert.match(dashboardPreload, /desktop:settings:save/);
+assert.match(dashboardPreload, /desktop:approval-token:replace/);
+assert.match(ipcHandlers, /desktop:settings:get/);
+assert.match(ipcHandlers, /desktop:settings:save/);
+assert.match(ipcHandlers, /desktop:approval-token:replace/);
+for (const channel of ['desktop:update:get', 'desktop:update:check', 'desktop:update:download', 'desktop:update:install']) {
+  assert.match(ipcHandlers, new RegExp(channel.replace(':', '\\:')));
+  assert.match(dashboardPreload, new RegExp(channel.replace(':', '\\:')));
+}
+assert.match(ipcHandlers, /getDashboardWindow/);
+assert.match(dashboardPreload, /desktop:update-status/);
+assert.match(appUpdater, /autoDownload = false/);
+assert.match(appUpdater, /autoInstallOnAppQuit = false/);
+assert.match(appUpdater, /quitAndInstall\(false, true\)/);
+assert.match(appUpdater, /integrityVerified/);
+assert.match(appUpdaterEvents, /does not match expected version/);
+assert.match(desktopSettings, /ngrokAuthtokenConfigured/);
+assert.match(desktopSettings, /replacementAccountKey \|\| current\.ngrokAuthtoken/);
+assert.match(windowSecurity, /sandbox: true/);
+assert.match(windowSecurity, /setPermissionRequestHandler/);
+assert.match(windowSecurity, /will-download/);
+assert.match(desktopUpdates, /Application updates/);
+assert.match(desktopUpdates, /Restart and install/);
+assert.match(desktopUpdates, /<progress/);
+assert.match(desktopStartup, /Startup and recovery/);
+assert.match(desktopStartup, /Launch Rel\.AI at sign-in/);
+assert.match(desktopStartup, /Update completed/);
+assert.match(desktopStartup, /Recovered after an interrupted exit/);
+assert.match(desktopStartup, /desktop-lifecycle-facts/);
+assert.match(desktopStartup, /syncToggle/);
+assert.match(desktopStartup, /input\.disabled = true/);
+assert.match(desktopStartup, /aria-disabled/);
+assert.match(desktopLifecycle, /openAtLogin/);
+assert.match(desktopLifecycle, /--background/);
+assert.match(dashboardPreload, /desktop:lifecycle:get/);
+assert.match(dashboardPreload, /desktop:startup:set/);
+assert.match(dashboardPreload, /desktop:notifications:get/);
+assert.match(dashboardPreload, /desktop:notifications:set/);
+assert.match(dashboardPreload, /desktop:diagnostics:export/);
+assert.match(dashboardPreload, /desktop:diagnostics:open-folder/);
+assert.match(ipcHandlers, /desktop:lifecycle:get/);
+assert.match(ipcHandlers, /desktop:startup:set/);
+assert.match(ipcHandlers, /desktop:notifications:get/);
+assert.match(ipcHandlers, /desktop:notifications:set/);
+assert.match(ipcHandlers, /desktop:diagnostics:export/);
+assert.match(ipcHandlers, /desktop:diagnostics:open-folder/);
+assert.match(ipcHandlers, /desktop:settings:get'[\s\S]*dashboardOnly/);
+assert.match(ipcHandlers, /desktop:approval-token:replace'[\s\S]*dashboardOnly/);
+assert.doesNotMatch(dashboardPreload, /openRecovery|desktop:open-recovery/);
+assert.doesNotMatch(ipcHandlers, /desktop:open-recovery|showStatusWindow|wizard:open-settings/);
+assert.match(ipcHandlers, /recovery:get-config/);
+assert.match(ipcHandlers, /recovery:open-setup/);
+assert.match(ipcHandlers, /createWindowGuards/);
+assert.match(ipcHandlers, /windowOnly\(event, getWizardWindow/);
+assert.match(ipcHandlers, /windowOnly\(event, getFallbackWindow/);
+assert.match(ipcHandlers, /dashboardOnly/);
+assert.match(ipcSecurity, /BrowserWindow\.fromWebContents/);
+assert.match(ipcSecurity, /dashboard\.ngrok\.com/);
+assert.doesNotMatch(ipcHandlers, /wizard:save-config/);
+assert.match(preloadJs, /getRecoveryConfig/);
+assert.match(preloadJs, /openRecoverySetup/);
+assert.match(statusJs, /openRecoverySetup/);
+assert.match(wizardJs, /loadRecoveryConfig/);
+assert.match(wizardJs, /restart: state\.editMode/);
+assert.match(wizardJs, /regenTokenBtn'\)\.hidden = true/);
+assert.doesNotMatch(wizardJs, /params\.get\('token'\)|params\.get\('ngrokToken'\)|params\.get\('domain'\)/);
 
 assert.match(dashboardJs, /dataset\.surface = surface/);
 assert.match(dashboardJs, /history\.replaceState/);
-for (const file of ['electron/renderer/status.html', 'electron/renderer/settings.html', 'electron/renderer/wizard.html']) {
+for (const file of ['electron/renderer/status.html', 'electron/renderer/wizard.html']) {
   assert.doesNotMatch(read(file), /Open in browser/i, `${file} must not add an Open in browser control`);
 }
 
