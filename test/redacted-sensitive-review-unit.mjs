@@ -14,7 +14,7 @@ const workspace = { alias: 'repo', path: root };
 const config = { stateDir: path.join(root, '.state') };
 const removeRoot = () => {
   try { fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch (error) {
-    if (process.platform !== 'win32' || error?.code !== 'EPERM') throw error;
+    if (process.platform !== 'win32' || !['EBUSY', 'ENOTEMPTY', 'EPERM'].includes(error?.code)) throw error;
   }
 };
 try {
