@@ -50,9 +50,24 @@
   --elev-2: 0 18px 44px -28px rgba(0,0,0,.95), 0 1px 2px rgba(0,0,0,.42);
   --glow-accent: 0 0 0 1px rgba(90,166,255,.32), 0 0 24px -8px rgba(90,166,255,.55);
   --glow-green: 0 0 14px -3px rgba(79,224,154,.72);
+  --scrollbar-size: 10px;
+  --scrollbar-size-compact: 8px;
+  --scrollbar-track: rgba(7,11,19,.28);
+  --scrollbar-thumb: rgba(167,180,201,.42);
+  --scrollbar-thumb-hover: rgba(167,180,201,.62);
+  --scrollbar-thumb-active: rgba(167,180,201,.78);
+  --scrollbar-corner: var(--bg);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
+* { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track); }
+*::-webkit-scrollbar { width: var(--scrollbar-size); height: var(--scrollbar-size); }
+*::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+*::-webkit-scrollbar-thumb { min-width: 32px; min-height: 32px; border: 2px solid transparent; border-radius: 999px; background: var(--scrollbar-thumb); background-clip: padding-box; }
+*::-webkit-scrollbar-thumb:hover { background-color: var(--scrollbar-thumb-hover); }
+*::-webkit-scrollbar-thumb:active { background-color: var(--scrollbar-thumb-active); }
+*::-webkit-scrollbar-corner { background: var(--scrollbar-corner); }
+.fallback-log-wrap pre::-webkit-scrollbar { width: var(--scrollbar-size-compact); height: var(--scrollbar-size-compact); }
 html, body { margin: 0; min-height: 100%; }
 body.electron-page {
   min-height: 100dvh;
@@ -372,6 +387,11 @@ label, .field-label { display: block; margin: 14px 0 7px; color: var(--text-mute
     --elev-2: 0 18px 44px -30px rgba(29,43,68,.34), 0 1px 2px rgba(29,43,68,.10);
     --glow-accent: 0 0 0 1px rgba(37,99,235,.18), 0 0 22px -10px rgba(37,99,235,.25);
     --glow-green: 0 0 14px -5px rgba(21,128,61,.35);
+    --scrollbar-track: rgba(23,32,51,.06);
+    --scrollbar-thumb: rgba(82,96,120,.38);
+    --scrollbar-thumb-hover: rgba(82,96,120,.58);
+    --scrollbar-thumb-active: rgba(82,96,120,.72);
+    --scrollbar-corner: var(--bg);
   }
   input[type="text"], input[type="number"], input[type="password"], .endpoint-box, .hint code, .token-box { background: #f7f9fd; }
   button.primary { color: #fff; }
@@ -405,6 +425,9 @@ label, .field-label { display: block; margin: 14px 0 7px; color: var(--text-mute
 }
 
 @media (forced-colors: active) {
+  * { scrollbar-color: auto; }
+  *::-webkit-scrollbar-track, *::-webkit-scrollbar-corner { background: Canvas; }
+  *::-webkit-scrollbar-thumb { background: CanvasText; border-color: Canvas; forced-color-adjust: none; }
   button.primary, .progress-step.current span, .status-badge { border: 2px solid ButtonText; }
 }
 

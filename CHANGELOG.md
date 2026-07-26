@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.21.4] — 2026-07-26
+
+### Native desktop window chrome
+- **Use a platform-aware frameless Windows dashboard with accessible minimize, maximize, restore, and close controls.**
+- **Synchronize native window state through a constrained Electron IPC bridge while preserving tray-close behavior and security boundaries.**
+- **Give the custom desktop shell a single scroll owner with preserved route position.**
+- **Standardize theme-aware, compact, and forced-colors-safe scrollbars across dashboard and Electron surfaces.**
+
+Bump root/electron/status UI/lockfiles to 0.21.4.
+
 ## [0.21.3] — 2026-07-26
 
 ### Reliable live dashboard updates

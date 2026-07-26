@@ -8,6 +8,11 @@ const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const dashboardTokens = read('src/ui/styles/app.css');
 const electronCss = read('electron/renderer/app.css');
 const dashboardJs = read('public/dashboard.js');
+const dashboardServer = read('src/http/dashboard.js');
+const dashboardShellChrome = read('src/http/dashboardShellChrome.js');
+const dashboardMarkup = dashboardServer + dashboardShellChrome;
+const windowChromePolicy = read('electron/window-chrome.js');
+const windowChromeUi = read('src/ui/window-chrome.js');
 
 function tokenValue(source, name) {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
@@ -16,7 +21,7 @@ function tokenValue(source, name) {
   return match[1].trim().replace(/\s+/g, ' ');
 }
 
-for (const name of ['--bg', '--surface', '--surface-2', '--surface-3', '--text', '--text-muted', '--text-dim', '--blue', '--green', '--yellow', '--red']) {
+for (const name of ['--bg', '--surface', '--surface-2', '--surface-3', '--text', '--text-muted', '--text-dim', '--blue', '--green', '--yellow', '--red', '--scrollbar-size', '--scrollbar-size-compact', '--scrollbar-track', '--scrollbar-thumb', '--scrollbar-thumb-hover', '--scrollbar-thumb-active', '--scrollbar-corner']) {
   assert.equal(tokenValue(electronCss, name), tokenValue(dashboardTokens, name), `${name} must match between Electron and dashboard themes`);
 }
 
@@ -184,6 +189,33 @@ assert.match(wizardJs, /regenTokenBtn'\)\.hidden = true/);
 assert.doesNotMatch(wizardJs, /params\.get\('token'\)|params\.get\('ngrokToken'\)|params\.get\('domain'\)/);
 
 assert.match(dashboardJs, /dataset\.surface = surface/);
+assert.match(dashboardJs, /initWindowChrome/);
+assert.match(dashboardJs, /dataset\.windowChrome = requestedChrome/);
+assert.match(dashboardMarkup, /id="windowTitlebar"[^>]*aria-label="Application title bar"/);
+assert.match(dashboardMarkup, /id="windowMinimizeBtn"[^>]*aria-label="Minimize window"/);
+assert.match(dashboardMarkup, /id="windowMaximizeBtn"[^>]*aria-label="Maximize window"/);
+assert.match(dashboardMarkup, /id="windowCloseBtn"[^>]*aria-label="Close window"/);
+assert.match(windowChromePolicy, /platform === 'win32'/);
+assert.match(windowChromePolicy, /frame: false/);
+assert.match(windowChromePolicy, /thickFrame: true/);
+assert.match(windowChromePolicy, /titleBarStyle: 'hiddenInset'/);
+assert.match(windowChromePolicy, /customTitleBar: false/);
+assert.match(windowChromePolicy, /desktop:window-state/);
+assert.match(windowChromePolicy, /'maximize', 'unmaximize'/);
+assert.match(windowChromeUi, /Restore window/);
+assert.match(windowChromeUi, /data-window-icon="restore"/);
+for (const channel of ['desktop:window:get-state', 'desktop:window:minimize', 'desktop:window:toggle-maximize', 'desktop:window:close']) {
+  assert.match(dashboardPreload, new RegExp(channel.replaceAll(':', '\\:')));
+  assert.match(ipcHandlers, new RegExp(channel.replaceAll(':', '\\:')));
+}
+assert.match(dashboardTokens, /-webkit-app-region: drag/);
+assert.match(dashboardTokens, /-webkit-app-region: no-drag/);
+assert.match(dashboardTokens, /scrollbar-gutter: stable/);
+assert.match(dashboardTokens, /scrollbar-width: thin/);
+assert.match(dashboardTokens, /::-webkit-scrollbar-thumb:hover/);
+assert.match(dashboardTokens, /@media \(forced-colors: active\)[\s\S]*scrollbar-color: auto/);
+assert.match(electronCss, /scrollbar-width: thin/);
+assert.match(electronCss, /::-webkit-scrollbar-thumb:active/);
 assert.match(dashboardJs, /history\.replaceState/);
 for (const file of ['electron/renderer/status.html', 'electron/renderer/wizard.html']) {
   assert.doesNotMatch(read(file), /Open in browser/i, `${file} must not add an Open in browser control`);

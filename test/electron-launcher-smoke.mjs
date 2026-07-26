@@ -68,6 +68,7 @@ assert.equal(electronPkg.build.files.includes('smoke-evidence.js'), false, 'elec
 assert.ok(electronPkg.build.files.includes('tool-sleep-blocker.js'), 'electron build must include tool-call sleep prevention');
 assert.ok(electronPkg.build.files.includes('dashboard-window.js'), 'electron build must include the secured dashboard host');
 assert.ok(electronPkg.build.files.includes('dashboard-window-bounds.js'), 'electron build must include bounded dashboard window-state handling');
+assert.ok(electronPkg.build.files.includes('window-chrome.js'), 'electron build must include platform-specific dashboard window chrome policy');
 assert.ok(electronPkg.build.files.includes('dashboard-preload.js'), 'electron build must include the desktop dashboard bridge');
 assert.ok(electronPkg.build.files.includes('desktop-tray.js'), 'electron build must include the desktop tray controller');
 assert.ok(electronPkg.build.files.includes('desktop-status.js'), 'electron build must include the normalized desktop status model');
@@ -116,6 +117,10 @@ assert.match(electronMain, /toolActivityRuntime\.stop\(\)/, 'tool activity runti
 assert.match(electronMain, /setNotificationsEnabled: toolActivityRuntime\.setNotificationsEnabled/, 'the desktop notification toggle must control task alerts');
 assert.match(electronMain, /openDashboardWindow\('#settings'\)/, 'normal settings must deep-link the secured dashboard General settings route');
 assert.match(dashboardPreload, /desktop:settings:get/, 'desktop settings must be read through constrained Electron IPC');
+for (const channel of ['desktop:window:get-state', 'desktop:window:minimize', 'desktop:window:toggle-maximize', 'desktop:window:close']) {
+  assert.match(dashboardPreload, new RegExp(channel.replaceAll(':', '\\:')), `${channel} must be exposed only through the constrained dashboard preload`);
+  assert.match(ipcHandlers, new RegExp(channel.replaceAll(':', '\\:')), `${channel} must be registered through sender-scoped IPC`);
+}
 assert.match(dashboardPreload, /desktop:settings:save/, 'desktop settings must be saved through constrained Electron IPC');
 assert.match(dashboardPreload, /desktop:approval-token:replace/, 'approval-token replacement must use its own constrained IPC action');
 assert.match(electronMain, /onStatusChange: taskActivity => setStatus\(\{ taskActivity \}\)/, 'tool activity must be pushed into desktop surfaces');

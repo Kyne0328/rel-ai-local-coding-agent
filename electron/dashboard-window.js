@@ -4,10 +4,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { URL } = require('node:url');
 const { DASHBOARD_WINDOW_LIMITS, dashboardWindowState, restoreDashboardBounds } = require('./dashboard-window-bounds');
+const { createDashboardWindowChromeController, dashboardWindowChrome } = require('./window-chrome');
 
 function createDashboardWindowManager(deps) {
   const {
     BrowserWindow, shell, app, dialog, screen, getConnection,
+    platform = process.platform,
     isQuitting = () => false,
     onError = () => {},
     onLoadError = onError
@@ -17,6 +19,7 @@ function createDashboardWindowManager(deps) {
   let dashboardWindow = null;
   let dashboardOrigin = '';
   let persistTimer = null;
+  const windowChrome = createDashboardWindowChromeController({ getWindow, platform });
 
   async function open(routeHash = '') {
     const connection = await getConnection();
@@ -36,8 +39,10 @@ function createDashboardWindowManager(deps) {
   function getOrCreateWindow() {
     if (dashboardWindow && !dashboardWindow.isDestroyed()) return dashboardWindow;
     const bounds = readBounds();
+    const chrome = dashboardWindowChrome(platform);
     dashboardWindow = new BrowserWindow({
       ...bounds,
+      ...chrome.windowOptions,
       minWidth: DASHBOARD_WINDOW_LIMITS.minWidth,
       minHeight: DASHBOARD_WINDOW_LIMITS.minHeight,
       show: false,
@@ -51,15 +56,17 @@ function createDashboardWindowManager(deps) {
         sandbox: true,
         webSecurity: true,
         allowRunningInsecureContent: false,
+        backgroundThrottling: false,
         spellcheck: false,
         partition: 'relai-dashboard'
       }
     });
     secureSession(dashboardWindow.webContents.session);
     configureNavigation(dashboardWindow);
-    dashboardWindow.once('ready-to-show', () => dashboardWindow?.show());
+    dashboardWindow.once('ready-to-show', () => { dashboardWindow?.show(); windowChrome.sendState(); });
     dashboardWindow.on('resize', schedulePersist);
     dashboardWindow.on('move', schedulePersist);
+    windowChrome.bind(dashboardWindow);
     dashboardWindow.on('close', event => {
       persistBounds();
       if (isQuitting()) return;
@@ -101,9 +108,7 @@ function createDashboardWindowManager(deps) {
     try {
       const url = new URL(target);
       if (url.protocol === 'https:') Promise.resolve(shell.openExternal(url.href)).catch(onError);
-    } catch {
-      // Invalid and non-HTTPS targets stay blocked.
-    }
+    } catch { /* Invalid and non-HTTPS targets stay blocked. */ }
   }
 
   async function pickFolder() {
@@ -165,11 +170,8 @@ function createDashboardWindowManager(deps) {
   }
 
   function readBounds() {
-    try {
-      return restoreDashboardBounds(JSON.parse(fs.readFileSync(statePath, 'utf8')), screen);
-    } catch {
-      return restoreDashboardBounds(null, screen);
-    }
+    try { return restoreDashboardBounds(JSON.parse(fs.readFileSync(statePath, 'utf8')), screen); }
+    catch { return restoreDashboardBounds(null, screen); }
   }
 
   function close() {
@@ -182,7 +184,9 @@ function createDashboardWindowManager(deps) {
     return dashboardWindow && !dashboardWindow.isDestroyed() ? dashboardWindow : null;
   }
 
-  return { open, close, getWindow, pickFolder, openFolder };
+  return { open, close, getWindow, pickFolder, openFolder,
+    getState: windowChrome.getState, minimize: windowChrome.minimize,
+    toggleMaximize: windowChrome.toggleMaximize, requestClose: windowChrome.requestClose };
 }
 
 function validateConnection(connection) {

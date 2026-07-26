@@ -105,7 +105,7 @@ function read(rel) {
   assert.doesNotMatch(dashboardCss, /workspace-scope-control/);
   assert.match(workspaceMenu, /aria-haspopup="listbox"/);
   const router = read('src/ui/router.js');
-  assert.match(router, /window\.scrollTo\(view\.scrollX, view\.scrollY\)/);
+  assert.match(router, /pageScroller\(\)\.scrollTo\(view\.scrollX, view\.scrollY\)/);
   assert.match(router, /Keep the current route visible while a lazy feature module resolves/);
   assert.doesNotMatch(router, /_container\.innerHTML = ''/);
 }

@@ -38,6 +38,9 @@ class FakeWindow {
   constructor(options) {
     this.options = options;
     this.destroyed = false;
+    this.maximized = false;
+    this.minimized = false;
+    this.fullScreen = false;
     this.events = new Map();
     this.bounds = { x: options.x, y: options.y, width: options.width, height: options.height };
     this.normalBounds = { ...this.bounds };
@@ -46,8 +49,10 @@ class FakeWindow {
       url: '',
       on(name, listener) { webContentsEvents.set(name, listener); },
       setWindowOpenHandler(listener) { openHandler = listener; },
+      sent: [],
       getURL: () => this.webContents.url,
-      reload: () => { this.reloaded = true; }
+      reload: () => { this.reloaded = true; },
+      send: (channel, payload) => this.webContents.sent.push({ channel, payload })
     };
     windows.push(this);
   }
@@ -59,8 +64,20 @@ class FakeWindow {
   showInactive() { this.shownInactive = true; }
   moveTop() { this.movedTop = true; }
   focus() { this.focused = true; }
+  emit(name, ...args) { this.events.get(name)?.(...args); }
   getBounds() { return this.bounds; }
   getNormalBounds() { return this.normalBounds; }
+  isMaximized() { return this.maximized; }
+  isMinimized() { return this.minimized; }
+  isFullScreen() { return this.fullScreen; }
+  minimize() { this.minimized = true; this.emit('minimize'); }
+  maximize() { this.maximized = true; this.minimized = false; this.emit('maximize'); }
+  unmaximize() { this.maximized = false; this.emit('unmaximize'); }
+  close() {
+    let prevented = false;
+    this.emit('close', { preventDefault() { prevented = true; } });
+    if (!prevented) this.destroy();
+  }
   destroy() { this.destroyed = true; this.events.get('closed')?.(); }
   isDestroyed() { return this.destroyed; }
 }
@@ -77,6 +94,7 @@ const dependencies = {
   },
   dialog: { async showOpenDialog() { return { canceled: false, filePaths: [folderToOpen] }; } },
   screen: fakeScreen,
+  platform: 'win32',
   isQuitting: () => false,
   onLoadError: error => { dashboardLoadError = error; },
   getConnection: async () => ({
@@ -94,10 +112,14 @@ try {
   );
   assert.ok(win.options.width < workArea.width * 0.9, 'default dashboard width must be visibly windowed');
   assert.ok(win.options.height < workArea.height * 0.9, 'default dashboard height must be visibly windowed');
+  assert.equal(win.options.frame, false);
+  assert.equal(win.options.thickFrame, true);
+  assert.equal(win.options.titleBarStyle, 'hidden');
   assert.equal(win.options.webPreferences.nodeIntegration, false);
   assert.equal(win.options.webPreferences.contextIsolation, true);
   assert.ok(win.options.webPreferences.preload.endsWith('dashboard-preload.js'));
   assert.equal(win.options.webPreferences.sandbox, true);
+  assert.equal(win.options.webPreferences.backgroundThrottling, false);
   assert.equal(win.options.webPreferences.partition, 'relai-dashboard');
   assert.equal(win.webContents.url, 'http://127.0.0.1:3333/dashboard?surface=desktop&bootstrap=one-time-code');
   assert.equal(win.webContents.url.includes('secret-token'), false);
@@ -124,9 +146,21 @@ try {
   assert.equal(reused, win);
   assert.equal(windows.length, 1);
   assert.equal(win.webContents.url.endsWith('#settings/desktop'), true);
-  let closePrevented = false;
-  win.events.get('close')({ preventDefault() { closePrevented = true; } });
-  assert.equal(closePrevented, true);
+  assert.deepEqual(manager.getState(), {
+    platform: 'win32', customTitleBar: true, controls: 'custom',
+    maximized: false, minimized: false, fullScreen: false
+  });
+  assert.equal(manager.minimize().minimized, true);
+  assert.equal(manager.toggleMaximize().maximized, true);
+  assert.equal(manager.toggleMaximize().maximized, false);
+  win.maximized = true;
+  win.emit('maximize');
+  assert.equal(win.webContents.sent.at(-1).channel, 'desktop:window-state');
+  assert.equal(win.webContents.sent.at(-1).payload.maximized, true, 'native state changes must synchronize to the renderer');
+  win.maximized = false;
+  win.emit('unmaximize');
+  assert.equal(win.webContents.sent.at(-1).payload.maximized, false);
+  assert.deepEqual(manager.requestClose(), { ok: true });
   assert.equal(win.hidden, true, 'normal close must hide the dashboard to the tray');
 
   win.bounds = { x: 0, y: 0, width: workArea.width, height: workArea.height };

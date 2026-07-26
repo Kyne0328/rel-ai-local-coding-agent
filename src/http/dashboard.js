@@ -8,6 +8,7 @@ const configEditor = require("../configEditor");
 const pkg = require("../../package.json");
 const connection = require("../connectionProfile");
 const { ERROR_CODES, deriveConnectionState, errorPayload } = require("../desktopUxContracts");
+const { renderDashboardShellBootstrap, renderDashboardWindowTitlebar } = require("./dashboardShellChrome");
 const { getOnboardingStatus, writeOnboardingState } = require("../onboardingState");
 const { getVersion } = require("../version");
 const { resolveRequireHttpToken } = require("./auth");
@@ -311,20 +312,11 @@ function renderDashboardHtml(options, nonce) {
 <link rel="icon" href="/public/assets/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" href="/public/assets/favicon.png">
 <link rel="apple-touch-icon" href="/public/assets/relai-logo-192.png">
-<script nonce="${nonce}">
-try {
-  const themePreference = localStorage.getItem('relai_ui_theme') || 'system';
-  const resolvedTheme = themePreference === 'system'
-    ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
-    : themePreference;
-  document.documentElement.dataset.themePreference = themePreference;
-  document.documentElement.dataset.theme = resolvedTheme;
-  document.documentElement.dataset.density = localStorage.getItem('relai_ui_density') || 'comfortable';
-} catch {}
-</script>
+<script nonce="${nonce}">${renderDashboardShellBootstrap()}</script>
 <link rel="stylesheet" href="/public/dashboard.css">
 </head>
 <body>
+${renderDashboardWindowTitlebar()}
 <a href="#main" class="skip-link">Skip to content</a><div class="sr-only" id="routeAnnouncer" role="status" aria-live="polite" aria-atomic="true"></div>
 <div class="app-shell">
   <aside class="sidebar">

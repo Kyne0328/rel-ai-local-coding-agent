@@ -1,6 +1,6 @@
 {
-  "version": 27,
-  "capturedAt": "2026-07-25",
+  "version": 28,
+  "capturedAt": "2026-07-26",
   "mainNavigation": [
     "Overview",
     "Sessions",
@@ -147,6 +147,9 @@
     "mobileSafeArea": true,
     "minimumTouchTargetPx": 44,
     "settingsRailScrollable": true,
+    "nativeScrollbarSemantics": true,
+    "forcedColorScrollbarFallback": true,
+    "keyboardWindowControls": true,
     "reducedMotion": true,
     "electronStepVisibility": true
   },
@@ -214,6 +217,8 @@
     "downloadsDenied": true,
     "navigationLockedToLocalFile": true,
     "contentSecurityPolicy": true,
+    "windowControlsSenderScoped": true,
+    "genericIpcExposed": false,
     "ngrokAccountKeyWriteOnly": true,
     "clipboardLimitKiB": 64
   },
@@ -243,6 +248,14 @@
     "defaultDashboardMaximum": "1180x760",
     "normalBoundsPersisted": true,
     "legacyBoundsMigrated": true,
+    "windowsTitleBar": "custom_frameless_native_thick_frame",
+    "macosTitleBar": "hidden_inset_native_traffic_lights",
+    "linuxTitleBar": "native",
+    "maximizeStateSynchronized": true,
+    "dragRegionsFrameworkNative": true,
+    "windowControlsViaPreload": true,
+    "scrollbarSystem": "native_css_tokens",
+    "primaryScrollOwner": "main",
     "closeHidesToTray": true,
     "settingsRendererRemoved": true,
     "fallbackExposedByTray": false,

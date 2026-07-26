@@ -17,6 +17,7 @@ function registerIpcHandlers(deps) {
     getUpdateStatus, checkForUpdates, downloadUpdate, installUpdate,
     getLifecycleStatus, setLaunchAtLogin,
     getCurrentStatus, getNotificationsEnabled, setNotificationsEnabled,
+    getDashboardWindowState, minimizeDashboardWindow, toggleDashboardMaximize, requestDashboardClose,
     exportDiagnosticState, openDiagnosticsFolder, fitWindowToContent
   } = deps;
   const { isSenderWindow, windowOnly, allowedWindows } = createWindowGuards(BrowserWindow);
@@ -43,6 +44,8 @@ function registerIpcHandlers(deps) {
   }));
   ipcMain.handle('url:open-dashboard', event => windowOnly(event, getFallbackWindow, 'Dashboard opening', openDashboardWindow));
   ipcMain.handle('desktop:get-status', event => dashboardOnly(event, getCurrentStatus));
+  ipcMain.handle('desktop:window:get-state', event => dashboardOnly(event, getDashboardWindowState)); ipcMain.handle('desktop:window:minimize', event => dashboardOnly(event, minimizeDashboardWindow));
+  ipcMain.handle('desktop:window:toggle-maximize', event => dashboardOnly(event, toggleDashboardMaximize)); ipcMain.handle('desktop:window:close', event => dashboardOnly(event, requestDashboardClose));
   ipcMain.handle('desktop:open-settings', event => dashboardOnly(event, openSettingsWindow));
   ipcMain.handle('desktop:settings:get', event => dashboardOnly(event, getDesktopSettings));
   ipcMain.handle('desktop:settings:save', (event, settings) => dashboardOnly(event, () => saveDesktopSettings(settings)));
