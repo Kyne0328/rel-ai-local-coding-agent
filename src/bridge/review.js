@@ -2,6 +2,7 @@ const { runProcess } = require('../process');
 const fs = require('node:fs');
 const { resolveSafePath, looksBinary, isSecretPath } = require('../safety');
 const { classifyStatusOwnership } = require('../repo/gitOps');
+const { INTERNAL_STATUS_MAX_BYTES, gitStatusArgs, formatGitStatus } = require('../repo/gitStatus');
 const { clampNumber } = require('./limits');
 const { buildSensitiveReview } = require('./sensitiveReview');
 
@@ -10,9 +11,19 @@ const DEFAULT_MAX_DIFF_BYTES = 1024 * 1024;
 async function relaiDiff(workspace, config, args = {}) {
   const staged = Boolean(args.staged);
   const redactSensitive = args.redactSensitive === true;
-  const stat = await runProcess('git', ['status', '--short', '--branch'], { cwd: workspace.path, timeout: 30000 }, config);
-  const ownership = classifyStatusOwnership(workspace, config, stat.stdout || '');
   const filterPath = resolveReviewFilter(workspace, args.path, redactSensitive);
+  // Status must complete before any diff is read. Its canonical NUL-delimited paths
+  // define the ordinary allowlist and prevent a speculative unscoped diff from ever
+  // loading sensitive-file content into process memory.
+  const stat = await runProcess('git', gitStatusArgs(), {
+    cwd: workspace.path,
+    timeout: 30000,
+    maxOutputBytes: INTERNAL_STATUS_MAX_BYTES
+  }, config);
+  if (stat.exitCode !== 0 || stat.stdoutTruncated) {
+    throw new Error(`git status failed for ${workspace.alias}: ${stat.stderr || (stat.stdoutTruncated ? 'output exceeded internal limit' : stat.exitCode)}`);
+  }
+  const ownership = classifyStatusOwnership(workspace, config, stat.stdout || '');
   const changedPaths = filterPath ? [filterPath] : ownership.entries.map((entry) => entry.path);
   const sensitivePaths = [...new Set(changedPaths.filter((item) => isSecretPath(item)))];
   if (filterPath && sensitivePaths.length > 0 && !redactSensitive) {
@@ -22,7 +33,7 @@ async function relaiDiff(workspace, config, args = {}) {
   const ordinaryPaths = filterPath
     ? (sensitivePaths.length ? [] : [filterPath])
     : [...new Set(changedPaths.filter((item) => !isSecretPath(item)))];
-  const pathScoped = filterPath != null || (redactSensitive && sensitivePaths.length > 0);
+  const pathScoped = filterPath != null || sensitivePaths.length > 0;
   const diff = await runOrdinaryDiff(workspace, config, staged, ordinaryPaths, pathScoped);
   let diffText = diff.stdout || '';
   if (!staged) {
@@ -40,7 +51,7 @@ async function relaiDiff(workspace, config, args = {}) {
     staged,
     redactSensitive,
     ...(filterPath ? { path: filterPath } : {}),
-    status: stat.stdout || '',
+    status: formatGitStatus(ownership),
     branch: ownership.branch,
     aheadBehind: ownership.aheadBehind,
     statusEntries: ownership.entries,

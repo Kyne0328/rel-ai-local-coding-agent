@@ -33,9 +33,11 @@ try {
   write('src/service.js', "const { add } = require('./math');\nfunction total(values) {\n  return values.reduce((sum, value) => add(sum, value), 0);\n}\nmodule.exports = { total };\n");
   write('src/index.js', "const { total } = require('./service');\nconsole.log(total([1, 2]));\n");
   write('test/math.test.js', "const { add } = require('../src/math');\nif (add(1, 2) !== 3) process.exit(1);\n");
+  write('test/check.mjs', "import { add } from '../src/math.js';\nif (add(2, 3) !== 5) process.exit(1);\n");
   write('src/unrelated.js', 'export const label = \'unrelated\';\n');
 
   assert.equal(isTestPath('test/math.test.js'), true);
+  assert.equal(isTestPath('test/check.mjs'), true);
   assert.equal(isTestPath('src/math.js'), false);
 
   const symbol = await relaiCodeInspect(workspace, {}, { action: 'symbol', symbol: 'add' });
@@ -52,12 +54,14 @@ try {
   assert.equal(references.index.cacheHit, true);
   assert.ok(references.items.some(item => item.path === 'src/service.js' && item.classification === 'call'));
   assert.ok(references.items.some(item => item.path === 'test/math.test.js' && item.test === true));
+  assert.ok(references.items.some(item => item.path === 'test/check.mjs' && item.test === true));
 
   const impact = await relaiCodeInspect(workspace, {}, { action: 'impact', symbol: 'add', maxDepth: 3 });
   assert.deepEqual(impact.seeds, ['src/math.js']);
   assert.ok(impact.impactedPaths.some(item => item.path === 'src/service.js' && item.reason === 'imports:src/math.js'));
   assert.ok(impact.impactedPaths.some(item => item.path === 'src/index.js' && item.depth === 2));
   assert.ok(impact.affectedTests.includes('test/math.test.js'));
+  assert.ok(impact.affectedTests.includes('test/check.mjs'));
   assert.ok(impact.calls.some(item => item.path === 'src/service.js'));
 
   const pathImpact = await relaiCodeInspect(workspace, {}, { action: 'impact', paths: ['src/service.js'], maxDepth: 2 });

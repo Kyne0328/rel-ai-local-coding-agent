@@ -140,13 +140,15 @@ function read(rel) {
 // Access-Control-Allow-Origin echo.
 const port = await availablePort();
 const token = 'regression-token-secret';
-const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.js'), '--host', '127.0.0.1', '--port', String(port)], {
+const httpStateDir = path.join(tmpRoot, 'http-state');
+const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.js'), '--host', '127.0.0.1', '--port', String(port), '--no-profile-write'], {
   cwd: root,
   stdio: ['ignore', 'pipe', 'pipe'],
   env: {
     ...process.env,
     REL_AI_MCP_CONFIG: path.join(root, 'examples', 'config.example.json'),
-    REL_AI_MCP_TOKEN: token
+    REL_AI_MCP_TOKEN: token,
+    REL_AI_MCP_STATE_DIR: httpStateDir
   }
 });
 
@@ -184,6 +186,7 @@ try {
 } finally {
   child.kill('SIGKILL');
   await once(child, 'close');
+  fs.rmSync(tmpRoot, { recursive: true, force: true });
 }
 
 console.log('Regression fixes smoke test passed.');

@@ -4,6 +4,7 @@ const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const { classifyStatusOwnership } = require('./repo/gitOps');
+const { gitStatusArgs } = require('./repo/gitStatus');
 const { resolveGitExecutable } = require('./gitExecutable');
 
 const configuredWorkspaceStateTtlMs = Number(process.env.REL_AI_MCP_WORKSPACE_STATE_TTL_MS || 1000);
@@ -60,7 +61,7 @@ function workspaceGitState(alias, workspace, config) {
     remoteAvailable: false
   };
   if (isGit) {
-    const status = runGit(workspacePath, ['status', '--short', '--branch']);
+    const status = runGit(workspacePath, gitStatusArgs());
     if (status.ok) {
       const ownership = classifyStatusOwnership({ alias, path: workspacePath }, config, status.stdout);
       result.branch = ownership.branch;

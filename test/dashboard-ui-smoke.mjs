@@ -394,6 +394,10 @@ assert.doesNotMatch(home, /Last task completed|Completes after 60s|ChatGPT is wo
 assert.doesNotMatch(sessions, /<h2>Sessions<\/h2>/);
 assert.match(sessions, /feature-toolbar sessions-toolbar/);
 assert.match(sessions, /completion was not reported|completion not reported/);
+assert.match(sessions, /status-pill open/);
+assert.match(sessions, /status-pill incomplete/);
+assert.match(cssEntry, /\.status-pill\.open[\s\S]*var\(--blue\)/);
+assert.match(cssEntry, /\.status-pill\.incomplete[\s\S]*var\(--yellow\)/);
 assert.match(sessions, /orderSessionEvents\(events\)/);
 assert.match(sessions, /orderSessionsForDisplay/);
 assert.match(sessions, /isOngoingSession/);

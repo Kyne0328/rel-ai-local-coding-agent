@@ -361,8 +361,10 @@
   .status-pill::before { content: ""; @apply size-1.5 rounded-full; background: var(--text-dim); }
   .status-pill.ok, .status-pill.good, .status-pill.ready { color: var(--green); background: var(--green-dim); border-color: color-mix(in srgb, var(--green) 35%, transparent); }
   .status-pill.ok::before, .status-pill.good::before, .status-pill.ready::before { background: var(--green); }
-  .status-pill.warn, .status-pill.waiting, .status-pill.working { color: var(--yellow); background: var(--yellow-dim); border-color: color-mix(in srgb, var(--yellow) 35%, transparent); }
-  .status-pill.warn::before, .status-pill.waiting::before, .status-pill.working::before { background: var(--yellow); }
+  .status-pill.open { color: var(--blue); background: var(--blue-dim); border-color: color-mix(in srgb, var(--blue) 35%, transparent); }
+  .status-pill.open::before { background: var(--blue); }
+  .status-pill.warn, .status-pill.waiting, .status-pill.working, .status-pill.incomplete { color: var(--yellow); background: var(--yellow-dim); border-color: color-mix(in srgb, var(--yellow) 35%, transparent); }
+  .status-pill.warn::before, .status-pill.waiting::before, .status-pill.working::before, .status-pill.incomplete::before { background: var(--yellow); }
   .status-pill.bad, .status-pill.error, .status-pill.failed { color: var(--red); background: var(--red-dim); border-color: color-mix(in srgb, var(--red) 35%, transparent); }
   .status-pill.bad::before, .status-pill.error::before, .status-pill.failed::before { background: var(--red); }
   .connection-status-link:hover { filter: brightness(1.08); }

@@ -61,6 +61,29 @@ try {
     'a refused unified diff must not alter the sensitive-classified file'
   );
 
+  const timestampHeaderPatch = `--- /dev/null
++++ b/.env\t2024-01-01
+@@ -0,0 +1 @@
++API_KEY=demo
+`;
+  await assert.rejects(
+    () => relaiApplyPatch(workspace, config, { patch: timestampHeaderPatch, returnDiff: false }),
+    (error) => error?.code === 'SENSITIVE_PATCH_REQUIRES_CONTENT_VALIDATION' && error.path === '.env'
+  );
+  assert.equal(fs.existsSync(path.join(workspacePath, '.env')), false, 'Git-canonical .env path must be rejected before apply');
+
+  const sensitiveRenamePatch = `diff --git a/.npmrc b/public-config.txt
+similarity index 100%
+rename from .npmrc
+rename to public-config.txt
+`;
+  await assert.rejects(
+    () => relaiApplyPatch(workspace, config, { patch: sensitiveRenamePatch, returnDiff: false }),
+    (error) => error?.code === 'SENSITIVE_PATCH_REQUIRES_CONTENT_VALIDATION' && error.path === '.npmrc'
+  );
+  assert.equal(fs.existsSync(path.join(workspacePath, '.npmrc')), true, 'sensitive rename source must remain unchanged');
+  assert.equal(fs.existsSync(path.join(workspacePath, 'public-config.txt')), false, 'rejected rename must not create its destination');
+
   const credentialStructuredPatch = `*** Begin Patch
 *** Update File: .npmrc
 @@

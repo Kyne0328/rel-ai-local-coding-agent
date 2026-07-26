@@ -94,5 +94,15 @@ assert.ok(Array.isArray(SECRET_PATH_PATTERNS));
 assert.ok(SECRET_PATH_PATTERNS.length >= 12);
 console.log('15. SECRET_PATH_PATTERNS exposed: OK');
 
+// Windows resolves "<file>::$DATA" to the file's default data stream, so a stream
+// suffix used to slip past the leaf-name secret rules and read .env verbatim.
+for (const streamPath of ['.env::$DATA', '.env::$data', 'id_rsa::$DATA', 'cert.pem::$DATA', '.npmrc::$DATA', 'sub/.env::$DATA']) {
+  assert.ok(throws(() => validateRelativePath(streamPath)), `stream suffix rejected: ${streamPath}`);
+  assert.ok(throws(() => resolveSafePath(ROOT, streamPath)), `stream suffix rejected by resolveSafePath: ${streamPath}`);
+}
+assert.ok(throws(() => validateRelativePath('C:foo/bar.js')), 'drive-relative path rejected');
+assert.equal(resolveSafePath(ROOT, 'src/ok.js').relativePath, 'src/ok.js', 'ordinary paths unaffected');
+console.log('16. NTFS stream and drive separators rejected: OK');
+
 fs.rmSync(ROOT, { recursive: true, force: true });
 console.log('hard-boundary unit tests passed.');

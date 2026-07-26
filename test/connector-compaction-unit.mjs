@@ -9,7 +9,7 @@ const idleStatus = compactForConnector('relai_status', {
   version: '0.17.1',
   toolSurface: {
     schemaVersion: 1,
-    toolSurfaceVersion: 11,
+    toolSurfaceVersion: 12,
     toolCount: 20,
     tools: [{ name: 'relai_read', state: 'active' }],
     deprecations: [],
@@ -47,7 +47,7 @@ assert.deepEqual(idleStatus.workspace.repository.changedFiles, ['src/app.js', 'g
 assert.deepEqual(idleStatus.workspace.repository.untrackedFiles, ['generated.txt']);
 assert.equal(idleStatus.workspace.repository.statusEntries, undefined, 'nested repository status must drop raw entries');
 assert.equal(idleStatus.version, '0.17.1');
-assert.equal(idleStatus.toolSurface.toolSurfaceVersion, 11);
+assert.equal(idleStatus.toolSurface.toolSurfaceVersion, 12);
 assert.equal(idleStatus.toolSurface.toolCount, 20);
 assert.deepEqual(idleStatus.toolSurface.deprecations, []);
 assert.deepEqual(idleStatus.toolSurface.compatibilityAliases, {});

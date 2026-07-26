@@ -54,7 +54,7 @@ assert.match(configuredSchemas.find(tool => tool.name === 'relai_start_task').in
 assert.deepEqual(getToolMetadata().map(tool => tool.name), expected);
 const toolSurface = getToolSurfaceManifest();
 assert.equal(toolSurface.schemaVersion, 1);
-assert.equal(toolSurface.toolSurfaceVersion, 11);
+assert.equal(toolSurface.toolSurfaceVersion, 12);
 assert.equal(toolSurface.toolCount, expected.length);
 assert.deepEqual(toolSurface.tools.map(tool => tool.name), expected);
 assert.equal(toolSurface.tools.filter(tool => tool.state === 'active').length, 20);

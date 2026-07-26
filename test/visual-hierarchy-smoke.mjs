@@ -74,6 +74,10 @@ assert.match(css, /\.session-row, \.task-row[\s\S]*min-h-\[76px\]/);
 assert.doesNotMatch(sessions, /Not published/);
 assert.match(sessions, /publish \? `<span class="task-row-publish">/);
 assert.match(css, /\.status-pill\.ok::before/);
+assert.match(css, /\.status-pill\.open[\s\S]*var\(--blue\)/);
+assert.match(css, /\.status-pill\.incomplete[\s\S]*var\(--yellow\)/);
+assert.match(sessions, /status-pill open/);
+assert.match(sessions, /status-pill incomplete/);
 assert.doesNotMatch(css, /\.status-pill\.ok::before[^}]*animation/s);
 
 assert.match(css, /\.diagnostic-metrics[\s\S]*grid-template-columns: repeat\(3,minmax\(0,1fr\)\)/);

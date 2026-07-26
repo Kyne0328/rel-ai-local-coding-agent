@@ -16,10 +16,13 @@ function sortedKeys(obj) {
   return Object.keys(obj || {}).sort((a, b) => a.localeCompare(b));
 }
 
-async function relaiStatus(config, args = {}) {
-  const packageJson = safeReadPackageJson();
-  const scripts = packageJson.scripts || {};
-  const ci = ciScriptStatus(scripts);
+async function relaiStatus(config, args = {}, context = {}) {
+  // The server's own scripts and the CI cross-check are local diagnostics: the
+  // connector result strips both. Skipping them for connector calls avoids reading
+  // package.json plus every .github/workflows file on a path ChatGPT hits constantly.
+  const localDiagnostics = context?.connector !== true;
+  const scripts = localDiagnostics ? (safeReadPackageJson().scripts || {}) : {};
+  const ci = localDiagnostics ? ciScriptStatus(scripts) : null;
   const workspaceAliases = sortedKeys(config.workspaces);
   let selectedWorkspace = null;
   if (args.workspace) {
@@ -50,8 +53,7 @@ async function relaiStatus(config, args = {}) {
     tools: TOOL_NAMES,
     toolGroups: getToolGroups(),
     toolSurface: getToolSurfaceManifest(),
-    scripts: sortedKeys(scripts),
-    ci,
+    ...(localDiagnostics ? { scripts: sortedKeys(scripts), ci } : {}),
     workspace: selectedWorkspace,
     workspaceCount: workspaceAliases.length,
     workspaceAliases

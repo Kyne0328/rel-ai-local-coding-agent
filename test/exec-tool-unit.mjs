@@ -166,6 +166,15 @@ try {
   assert.equal(mutation.mutationTracking, 'git');
   fs.rmSync(path.join(workspace, 'generated.txt'));
 
+  const quotedMutationPath = 'generated café file.txt';
+  const quotedMutation = await callTool('relai_exec', {
+    workspace: 'app',
+    command: nodeCommand(path.join(workspace, 'scripts', 'mutate.js'), quotedMutationPath)
+  }, context);
+  assert.equal(quotedMutation.ok, true);
+  assert.deepEqual(quotedMutation.changedFiles, [quotedMutationPath], 'mutation tracking must preserve spaces and non-ASCII names');
+  fs.rmSync(path.join(workspace, quotedMutationPath));
+
   resetToolActivity();
   const noValidationContext = { publicHttpOnly: true, taskScopeId: 'exec-no-validation' };
   const noValidationTask = await callTool('relai_start_task', { workspace: 'app' }, noValidationContext);

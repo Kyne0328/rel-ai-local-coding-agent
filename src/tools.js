@@ -53,7 +53,7 @@ async function callTool(name, args = {}, context = {}) {
     const value = await runWithToolActivity(finishActivity, () => runWorkspaceOperation(effectiveArgs?.workspace, () => {
       sessionStart = maybeStartSession(config, name, effectiveArgs || {}, { taskId: finishActivity?.taskId });
       return dispatchTool(config, name, effectiveArgs || {}, { connector });
-    }));
+    }, { mode: workspaceLockMode(name) }));
     const valueOk = value?.ok !== false;
     activityResult = {
       ok: valueOk,
@@ -106,6 +106,13 @@ async function callTool(name, args = {}, context = {}) {
   } finally {
     finishActivity?.(activityResult);
   }
+}
+
+// Read-only tools share the workspace lock so a batch of reads/searches dispatched in
+// one JSON-RPC batch runs concurrently instead of one at a time. Everything else —
+// including any tool without an explicit read-only annotation — stays exclusive.
+function workspaceLockMode(name) {
+  return getToolDefinition(name)?.annotations?.readOnlyHint === true ? 'read' : 'write';
 }
 
 function resolveConfiguredWorkspaceArgument(config, input) {

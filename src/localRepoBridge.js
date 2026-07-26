@@ -22,6 +22,7 @@ const {
   classifyStatusOwnership
 } = require("./repo/gitOps");
 const { runProcess } = require("./process");
+const { INTERNAL_STATUS_MAX_BYTES, gitStatusArgs } = require("./repo/gitStatus");
 const { clampNumber } = require("./bridge/limits");
 const { relaiVerify } = require("./bridge/validation");
 const { relaiHttpProbe, relaiUiCheck } = require("./bridge/browser");
@@ -50,11 +51,14 @@ async function repoSnapshot(workspace, config, args = {}) {
   const effectiveDefault = resolveBudget(configuredDefault, policy, config || {});
   const maxEntries = clampNumber(args.maxEntries, 1, 20000, effectiveDefault);
   const includeFiles = args.includeFiles !== false;
+  // The git summary is a child process; start it before the synchronous tree walk and
+  // manifest reads so the spawn overlaps them instead of adding to them.
+  const gitSummary = snapshotGitSummary(workspace, config);
   const tree = collectTextFiles(workspace.path, collectOptionsFromWorkspace(workspace, { maxEntries }));
   const manifests = readManifests(workspace.path);
   const discoveredCommands = discoverCommands(workspace.path);
-  const git = await snapshotGitSummary(workspace, config);
   const projectInstructions = readProjectInstructions(workspace);
+  const git = await gitSummary;
   return {
     ok: true,
     workspace: workspace.alias,
@@ -83,8 +87,12 @@ async function repoSnapshot(workspace, config, args = {}) {
 // (non-git workspace, git missing) is silent: the snapshot stays useful without it.
 async function snapshotGitSummary(workspace, config) {
   try {
-    const stat = await runProcess("git", ["status", "--short", "--branch"], { cwd: workspace.path, timeout: 5000 }, config);
-    if (stat.exitCode !== 0) return null;
+    const stat = await runProcess("git", gitStatusArgs(), {
+      cwd: workspace.path,
+      timeout: 5000,
+      maxOutputBytes: INTERNAL_STATUS_MAX_BYTES
+    }, config);
+    if (stat.exitCode !== 0 || stat.stdoutTruncated) return null;
     const ownership = classifyStatusOwnership(workspace, config, stat.stdout || "");
     return {
       branch: ownership.branch,
@@ -106,15 +114,46 @@ function relaiRead(workspace, config, args = {}, context = {}) {
   const defaultMaxBytes = resolveBudget(baseReadBytes, policy, config || {});
   const maxBytes = clampNumber(args.maxBytes, 1000, 10 * 1024 * 1024, defaultMaxBytes);
   const lineRange = normalizeReadLineRange(args);
+  const rangesByPath = normalizeReadRanges(args.ranges);
   const guidanceMode = normalizeReadGuidanceMode(args.guidanceMode, context.connector ? "compact" : "full");
   const items = [];
   const skipped = [];
   for (const requested of paths) {
-    const result = readSingleItem(workspace, config, requested, sessionActive, maxBytes, args, { lineRange, guidanceMode });
+    const perPathRange = rangesByPath.get(readRangeKey(requested));
+    const result = readSingleItem(workspace, config, requested, sessionActive, maxBytes, args, {
+      lineRange: perPathRange || lineRange,
+      guidanceMode
+    });
     if (result.item) items.push(result.item);
     if (result.skipped) skipped.push(result.skipped);
   }
   return { ok: true, workspace: workspace.alias, items, skipped };
+}
+
+// startLine/endLine apply to the whole batch, which forced one call per file whenever
+// two files needed different windows. `ranges` overrides the batch window for the paths
+// it names, so a multi-file targeted read is a single round trip.
+function normalizeReadRanges(ranges) {
+  const byPath = new Map();
+  if (ranges == null) return byPath;
+  if (!Array.isArray(ranges)) throw new Error("relai_read ranges must be an array of { path, startLine, endLine } objects.");
+  for (const entry of ranges) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw new Error("relai_read ranges entries must be objects shaped { path, startLine, endLine }.");
+    }
+    const key = readRangeKey(entry.path);
+    if (!key) throw new Error("relai_read ranges entries require a non-empty path.");
+    const range = normalizeReadLineRange(entry);
+    if (!range) throw new Error(`relai_read ranges entry for ${entry.path} requires startLine or endLine.`);
+    byPath.set(key, range);
+  }
+  return byPath;
+}
+
+// Match on the caller's own spelling of the path so a range lines up with the entry in
+// `paths` without depending on how the path later resolves.
+function readRangeKey(value) {
+  return String(value ?? "").trim().replaceAll("\\", "/").replace(/^\.\//, "");
 }
 
 function readSingleItem(workspace, config, requested, sessionActive, maxBytes, args, options) {

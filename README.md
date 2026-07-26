@@ -274,7 +274,7 @@ Rel.AI exposes 20 callable workspace tools, all active. The six compatibility to
 | --- | --- |
 | `relai_start_task` | Create an independent logical task and return an opaque `task_id`; pass it on subsequent calls for that task. |
 | `relai_repo_snapshot` | Return a filtered project snapshot, manifests, discovered checks, context hints, and size-based write guidance. |
-| `relai_read` | Read focused files or directory summaries. Optional `startLine`/`endLine` returns only the needed line range; `guidanceMode` controls full, compact, or omitted write guidance. |
+| `relai_read` | Read focused files or directory summaries. Optional `startLine`/`endLine` returns one line range for the whole batch, `ranges` gives individual paths their own window in a single call, and `guidanceMode` controls full, compact, or omitted write guidance. |
 | `relai_search` | Search workspace files for a pattern. Adaptive `auto` mode is the default: focused searches receive broader context and noisy searches receive smaller prioritized ranges. Explicit `compact` and `context` modes remain available. |
 | `relai_code_inspect` | Build a fingerprint-invalidated live code index for symbol definitions, references and calls, structural related-file ranking, reverse-import impact, affected tests, and diagnostic-command readiness. |
 | `relai_exec` | Run a one-shot development command in a workspace-relative directory. Returns exit status, separate bounded stdout/stderr, timing, timeout state, and detected Git-status changes. |
@@ -365,7 +365,7 @@ Use this guide together with the `writeGuidance` returned by `relai_repo_snapsho
 | Need a repository overview | `relai_repo_snapshot` with the same `task_id` |
 | Locate code by content | `relai_search`; default auto mode includes bounded prioritized source when useful. Use `mode:"compact"` for inventory-only output or `mode:"context"` for fixed caller-controlled context limits. |
 | Trace a symbol, callers, importers, impact, or affected tests | `relai_code_inspect` |
-| Need focused file content | `relai_read`; add `startLine` / `endLine` for large files |
+| Need focused file content | `relai_read`; add `startLine` / `endLine` for large files, or `ranges` for several files at once |
 | Small localized edit inside an existing file | `relai_edit` with `oldText`/`newText` |
 | Complete replacement of a file (any size) | `relai_edit` with `content` |
 | Multi-file patch-shaped change | `relai_edit` with `updateText` |
@@ -399,7 +399,23 @@ Adaptive search requires no mode field: `{ "workspace": "myapp", "task_id": "<ta
 
 Use `{ "mode": "compact" }` for the original path/line-only response. Use `{ "mode": "context", "contextBefore": 5, "contextAfter": 8, "maxBytes": 131072 }` when exact caller-controlled context is required. Supplying context options without a mode also retains explicit context behavior for compatibility. Use `groupByFile:false` for flat ranges or `mergeOverlaps:false` to retain one range per match.
 
-For large files, request only the relevant lines when possible, for example `{ "workspace": "myapp", "task_id": "<task-id>", "paths": ["src/server.js"], "startLine": 120, "endLine": 220 }`. Connector reads use compact guidance by default; pass `guidanceMode: "none"` when only content and metadata are needed.
+For large files, request only the relevant lines when possible, for example `{ "workspace": "myapp", "task_id": "<task-id>", "paths": ["src/server.js"], "startLine": 120, "endLine": 220 }`.
+
+`startLine`/`endLine` apply to every path in the batch. When several files need different windows, pass `ranges` instead of making one call per file:
+
+```json
+{
+  "workspace": "myapp",
+  "task_id": "<task-id>",
+  "paths": ["src/server.js", "src/routes.js"],
+  "ranges": [
+    { "path": "src/server.js", "startLine": 120, "endLine": 220 },
+    { "path": "src/routes.js", "startLine": 1, "endLine": 40 }
+  ]
+}
+```
+
+A path with no `ranges` entry falls back to the batch-wide `startLine`/`endLine`, or to the whole file when neither is set. Connector reads use compact guidance by default; pass `guidanceMode: "none"` when only content and metadata are needed.
 
 For large or interpolation-heavy files, prefer `relai_edit` with `oldText`/`newText` for focused edits. Use `content` only when the entire file genuinely needs replacement. For multi-file patch-shaped changes or tracked-file deletion, use `relai_edit` with `updateText`.
 
