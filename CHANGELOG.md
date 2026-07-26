@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.21.6] — 2026-07-26
+
+### Windows test cleanup resilience
+- **Retry and tolerate transient Windows EBUSY, ENOTEMPTY, and EPERM errors when removing temporary Git test repositories.**
+- **Keep sensitive-file authorization and redacted-review coverage deterministic without weakening production cleanup behavior.**
+
+Bump root/electron/status UI/lockfiles to 0.21.6.
+
 ## [0.21.5] — 2026-07-26
 
 ### Developer attribution and About page
