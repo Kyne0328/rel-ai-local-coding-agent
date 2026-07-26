@@ -49,6 +49,14 @@
   --ring: var(--accent);
   --sidebar-width: 252px;
   --control-height: 38px;
+  --window-titlebar-height: 40px;
+  --scrollbar-size: 10px;
+  --scrollbar-size-compact: 8px;
+  --scrollbar-track: rgba(7,11,19,.28);
+  --scrollbar-thumb: rgba(167,180,201,.42);
+  --scrollbar-thumb-hover: rgba(167,180,201,.62);
+  --scrollbar-thumb-active: rgba(167,180,201,.78);
+  --scrollbar-corner: var(--bg);
   --shadow-window: 0 18px 54px rgba(0,0,0,.28);
   --shadow-popover: 0 20px 60px rgba(0,0,0,.42);
 }
@@ -72,6 +80,11 @@
   --yellow-dim: rgba(154,101,0,.11);
   --red: #bf3149;
   --red-dim: rgba(191,49,73,.11);
+  --scrollbar-track: rgba(23,32,51,.06);
+  --scrollbar-thumb: rgba(82,96,120,.38);
+  --scrollbar-thumb-hover: rgba(82,96,120,.58);
+  --scrollbar-thumb-active: rgba(82,96,120,.72);
+  --scrollbar-corner: var(--bg);
   --shadow-window: 0 18px 54px rgba(38,52,76,.14);
   --shadow-popover: 0 20px 60px rgba(38,52,76,.2);
 }
@@ -104,6 +117,24 @@
   ::selection { background: var(--blue-dim); color: var(--text); }
   :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
   [hidden] { display: none !important; }
+  * { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track); }
+  *::-webkit-scrollbar { width: var(--scrollbar-size); height: var(--scrollbar-size); }
+  *::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+  *::-webkit-scrollbar-thumb {
+    min-width: 32px;
+    min-height: 32px;
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: var(--scrollbar-thumb);
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-thumb:hover { background-color: var(--scrollbar-thumb-hover); }
+  *::-webkit-scrollbar-thumb:active { background-color: var(--scrollbar-thumb-active); }
+  *::-webkit-scrollbar-corner { background: var(--scrollbar-corner); }
+  :is(.workspace-menu-popover, .table-wrap, .drawer-body, .detail-pre, .command-list, .copy-box, .diagnostic-copy pre, .diagnostic-log-list)::-webkit-scrollbar {
+    width: var(--scrollbar-size-compact);
+    height: var(--scrollbar-size-compact);
+  }
 }
 
 @layer components {
@@ -121,6 +152,86 @@
   }
   .skip-link:focus { @apply translate-y-0; }
 
+  .window-titlebar {
+    display: none;
+    position: fixed;
+    inset: 0 0 auto 0;
+    z-index: 40;
+    height: var(--window-titlebar-height);
+    align-items: center;
+    color: var(--text-muted);
+    background: color-mix(in srgb, var(--surface) 96%, var(--bg));
+    border-bottom: 1px solid var(--line-soft);
+    box-shadow: 0 1px 12px rgba(0,0,0,.12);
+    user-select: none;
+    -webkit-app-region: drag;
+  }
+  :root[data-window-chrome="custom"] .window-titlebar { display: flex; }
+  .window-titlebar-identity {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+    padding-inline: 12px;
+    pointer-events: none;
+  }
+  :root[data-platform="darwin"] .window-titlebar-identity { padding-left: 82px; }
+  .window-titlebar-identity img { width: 20px; height: 20px; object-fit: contain; }
+  .window-titlebar-identity strong { flex: 0 0 auto; color: var(--text); font-size: 12px; letter-spacing: -.01em; }
+  .window-titlebar-identity span {
+    min-width: 0;
+    max-width: 320px;
+    overflow: hidden;
+    color: var(--text-dim);
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .window-titlebar-identity span::before { content: "·"; margin-right: 8px; color: var(--line-soft); }
+  .window-titlebar-drag { min-width: 24px; flex: 1; align-self: stretch; }
+  .window-titlebar-controls {
+    display: none;
+    height: 100%;
+    align-items: stretch;
+    -webkit-app-region: no-drag;
+  }
+  :root[data-window-chrome="custom"][data-platform="win32"] .window-titlebar-controls { display: flex; }
+  .window-titlebar .window-titlebar-button {
+    width: 46px;
+    min-height: var(--window-titlebar-height);
+    padding: 0;
+    border: 0;
+    border-left: 1px solid transparent;
+    border-radius: 0;
+    color: var(--text-muted);
+    background: transparent;
+    transform: none;
+    -webkit-app-region: no-drag;
+  }
+  .window-titlebar .window-titlebar-button:hover:not(:disabled) { color: var(--text); background: var(--surface-3); border-color: var(--line); }
+  .window-titlebar .window-titlebar-button:active:not(:disabled) { background: color-mix(in srgb, var(--surface-3) 78%, var(--text) 22%); transform: none; }
+  .window-titlebar .window-titlebar-button:focus-visible { position: relative; z-index: 1; outline-offset: -3px; }
+  .window-titlebar .window-titlebar-close:hover:not(:disabled),
+  .window-titlebar .window-titlebar-close:active:not(:disabled) { color: #fff; background: #c42b1c; border-color: #c42b1c; }
+  .window-titlebar-button svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.1; vector-effect: non-scaling-stroke; }
+
+  :root[data-window-chrome="custom"] body { overflow: hidden; }
+  :root[data-window-chrome="custom"] .skip-link { top: calc(var(--window-titlebar-height) + 12px); }
+  :root[data-window-chrome="custom"] .app-shell {
+    height: calc(100dvh - var(--window-titlebar-height));
+    min-height: 0;
+    margin-top: var(--window-titlebar-height);
+  }
+  :root[data-window-chrome="custom"] .sidebar { top: var(--window-titlebar-height); bottom: 0; }
+  :root[data-window-chrome="custom"] .main {
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scrollbar-gutter: stable;
+  }
+  :root[data-window-chrome="custom"] .toast-region { top: calc(var(--window-titlebar-height) + 16px); }
+
   .app-shell {
     @apply grid min-h-screen w-full;
     grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
@@ -129,6 +240,7 @@
   .sidebar {
     @apply fixed inset-y-0 left-0 z-30 flex flex-col overflow-y-auto p-4;
     width: var(--sidebar-width);
+    scrollbar-gutter: stable;
     background: var(--surface);
     border-right: 1px solid var(--line-soft);
     box-shadow: 10px 0 40px rgba(0,0,0,.08);
@@ -1019,7 +1131,10 @@
 }
 
 @media (forced-colors: active) {
-  button, .buttonlike, input, select, textarea, .card, .metric, .workspace-card, .tool-card, .topbar, .sidebar { border: 1px solid CanvasText; }
+  * { scrollbar-color: auto; }
+  *::-webkit-scrollbar-track, *::-webkit-scrollbar-corner { background: Canvas; }
+  *::-webkit-scrollbar-thumb { background: CanvasText; border-color: Canvas; forced-color-adjust: none; }
+  button, .buttonlike, input, select, textarea, .card, .metric, .workspace-card, .tool-card, .topbar, .sidebar, .window-titlebar { border: 1px solid CanvasText; }
   .status-pill::before, .connection-layer-dot, .workspace-readiness-fact dt i { forced-color-adjust: none; }
   .task-overview-spinner { border-color: Canvas; border-top-color: CanvasText; forced-color-adjust: none; }
 }

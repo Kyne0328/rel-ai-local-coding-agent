@@ -8,13 +8,18 @@ import { connectionLayerViews, connectionSummary, withConnectionState } from './
 import { initCommandPalette } from './ui/command-palette.js';
 import { normalizeRouteKey } from './ui/route-policy.js';
 import { closeDrawer } from './ui/components/drawer.js';
+import { initWindowChrome } from './ui/window-chrome.js';
 
 initUiPreferences();
 
 const launchParams = new URLSearchParams(location.search);
 const urlToken = launchParams.get('token') || '';
 const surface = launchParams.get('surface') === 'desktop' ? 'desktop' : 'browser';
+const requestedChrome = surface === 'desktop' && launchParams.get('chrome') === 'custom' ? 'custom' : 'native';
+const requestedPlatform = ['win32', 'darwin', 'linux', 'other'].includes(launchParams.get('platform')) ? launchParams.get('platform') : 'other';
 document.documentElement.dataset.surface = surface;
+document.documentElement.dataset.windowChrome = requestedChrome;
+document.documentElement.dataset.platform = requestedPlatform;
 const token = urlToken || sessionStorage.getItem('relai_dashboard_token') || '';
 if (token) setToken(token);
 cleanLaunchQuery();
@@ -145,7 +150,11 @@ function settingsSubPage() {
 
 function initDesktopBridge() {
   const desktop = window.relaiDesktop;
-  if (!desktop) return;
+  if (!desktop) {
+    document.documentElement.dataset.windowChrome = 'native';
+    return;
+  }
+  void initWindowChrome(desktop).catch(debugError);
   desktop.onStatus(applyDesktopStatus);
   desktop.getStatus().then(applyDesktopStatus).catch(debugError);
 }

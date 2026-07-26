@@ -153,6 +153,7 @@ assert.equal(failedDesktopStatus.connectionState.publicEndpoint.status, 'unavail
 
 const baseline = JSON.parse(fs.readFileSync(path.join(root, 'test', 'fixtures', 'desktop-ux-baseline.json'), 'utf8'));
 const dashboardServer = fs.readFileSync(path.join(root, 'src', 'http', 'dashboard.js'), 'utf8');
+const dashboardShellChrome = fs.readFileSync(path.join(root, 'src', 'http', 'dashboardShellChrome.js'), 'utf8');
 const dashboardJs = fs.readFileSync(path.join(root, 'public', 'dashboard.js'), 'utf8');
 const router = fs.readFileSync(path.join(root, 'src', 'ui', 'router.js'), 'utf8');
 const settingsIndex = fs.readFileSync(path.join(root, 'src', 'ui', 'features', 'settings', 'index.js'), 'utf8');
@@ -207,7 +208,7 @@ const windowSecurity = fs.readFileSync(path.join(root, 'electron', 'window-secur
 const statusHtml = fs.readFileSync(path.join(root, 'electron', 'renderer', 'status.html'), 'utf8');
 const securityDoc = fs.readFileSync(path.join(root, 'docs', 'SECURITY.md'), 'utf8');
 
-assert.equal(baseline.version, 27);
+assert.equal(baseline.version, 28);
 assert.deepEqual(baseline.canonicalRoutes, {
   tools: '#tools',
   general: '#settings',
@@ -301,6 +302,9 @@ assert.deepEqual(baseline.accessibilityResponsive, {
   mobileSafeArea: true,
   minimumTouchTargetPx: 44,
   settingsRailScrollable: true,
+  nativeScrollbarSemantics: true,
+  forcedColorScrollbarFallback: true,
+  keyboardWindowControls: true,
   reducedMotion: true,
   electronStepVisibility: true
 });
@@ -369,6 +373,8 @@ assert.deepEqual(baseline.desktopSecurityPolicy, {
   downloadsDenied: true,
   navigationLockedToLocalFile: true,
   contentSecurityPolicy: true,
+  windowControlsSenderScoped: true,
+  genericIpcExposed: false,
   ngrokAccountKeyWriteOnly: true,
   clipboardLimitKiB: 64
 });
@@ -398,6 +404,14 @@ assert.deepEqual(baseline.windowPolicy, {
   defaultDashboardMaximum: '1180x760',
   normalBoundsPersisted: true,
   legacyBoundsMigrated: true,
+  windowsTitleBar: 'custom_frameless_native_thick_frame',
+  macosTitleBar: 'hidden_inset_native_traffic_lights',
+  linuxTitleBar: 'native',
+  maximizeStateSynchronized: true,
+  dragRegionsFrameworkNative: true,
+  windowControlsViaPreload: true,
+  scrollbarSystem: 'native_css_tokens',
+  primaryScrollOwner: 'main',
   closeHidesToTray: true,
   settingsRendererRemoved: true,
   fallbackExposedByTray: false,
@@ -437,6 +451,8 @@ assert.match(overlayFocus, /element\.inert = true/);
 assert.match(overlayFocus, /event\.key !== 'Tab'/);
 assert.match(overlayFocus, /restoreFocus/);
 assert.match(dashboardServer, /class="skip-link">Skip to content/);
+assert.match(dashboardShellChrome, /id="windowTitlebar"[^>]*aria-label="Application title bar"/);
+assert.match(dashboardShellChrome, /id="windowMaximizeBtn"[^>]*aria-label="Maximize window"/);
 assert.match(dashboardServer, /id="routeAnnouncer"/);
 assert.match(responsiveCss, /env\(safe-area-inset-bottom\)/);
 assert.match(responsiveCss, /min-h-11/);

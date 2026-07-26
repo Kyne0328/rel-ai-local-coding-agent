@@ -7,6 +7,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 
 const dashboardServer = read('src/http/dashboard.js');
+const dashboardMarkup = dashboardServer + read('src/http/dashboardShellChrome.js');
 const dashboardJs = read('public/dashboard.js');
 const css = read('src/ui/styles/app.css');
 const baseCss = css;
@@ -31,12 +32,19 @@ const statusJs = read('electron/renderer/status.js');
 const electronCss = read('electron/renderer/app.css');
 
 assert.match(dashboardServer, /class="skip-link">Skip to content/);
+assert.match(dashboardMarkup, /id="windowTitlebar"[^>]*aria-label="Application title bar"/);
+assert.match(dashboardMarkup, /id="windowTitlebarControls"[^>]*role="group"[^>]*aria-label="Window controls"/);
+assert.match(dashboardMarkup, /id="windowMinimizeBtn"[^>]*aria-label="Minimize window"/);
+assert.match(dashboardMarkup, /id="windowMaximizeBtn"[^>]*aria-label="Maximize window"/);
+assert.match(dashboardMarkup, /id="windowCloseBtn"[^>]*aria-label="Close window"/);
 assert.match(dashboardServer, /id="routeAnnouncer"[^>]*role="status"[^>]*aria-live="polite"/);
 assert.match(dashboardServer, /<main id="main" class="main" tabindex="-1" aria-labelledby="pageTitle">/);
 assert.match(dashboardServer, /id="commandPaletteBtn"[^>]*aria-expanded="false"/);
 assert.match(dashboardServer, /id="connectionStatus"[^>]*aria-label="Open Connection settings/);
 assert.match(router, /routeAnnouncer/);
 assert.match(router, /page loaded/);
+assert.match(router, /function pageScroller\(\)/);
+assert.match(router, /dataset\.windowChrome === 'custom'/);
 assert.match(dashboardJs, /role="status" aria-live="polite" aria-busy="true"/);
 assert.match(dashboardJs, /role="alert"/);
 assert.match(dashboardJs, /Open Connection settings; current status/);
@@ -113,6 +121,13 @@ assert.match(shellCss, /\.diagnostic-page[\s\S]*container-type: inline-size[\s\S
 assert.match(shellCss, /@container diagnostic-page \(max-width: 760px\)[\s\S]*\.diagnostic-search-control[\s\S]*grid-column: 1 \/ -1/);
 assert.match(shellCss, /@container diagnostic-page \(max-width: 480px\)[\s\S]*\.diagnostic-live-tail[\s\S]*w-full/);
 assert.match(shellCss, /@media \(forced-colors: active\)/);
+assert.match(shellCss, /\.window-titlebar[\s\S]*-webkit-app-region: drag/);
+assert.match(shellCss, /\.window-titlebar-controls[\s\S]*-webkit-app-region: no-drag/);
+assert.match(shellCss, /\.window-titlebar-button:focus-visible/);
+assert.match(shellCss, /scrollbar-width: thin/);
+assert.match(shellCss, /::-webkit-scrollbar-thumb[\s\S]*min-height: 32px/);
+assert.match(shellCss, /scrollbar-gutter: stable/);
+assert.match(shellCss, /@media \(forced-colors: active\)[\s\S]*scrollbar-color: auto/);
 assert.match(preferencesCss, /prefers-reduced-motion/);
 
 assert.match(wizardHtml, /id="step2"[^>]*aria-hidden="true" hidden/);

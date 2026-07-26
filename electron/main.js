@@ -377,7 +377,9 @@ function buildDashboardConnection() {
   const port = (httpServer?.listening && httpServer.address()?.port) || readGuiConfig().port || 3333;
   const token = connection.readLaunchEnv().REL_AI_MCP_TOKEN || readGuiConfig().token || '';
   const bootstrap = dashboardSessions.createDashboardBootstrap(token);
-  return { url: `http://127.0.0.1:${port}/dashboard?surface=desktop&bootstrap=${encodeURIComponent(bootstrap)}` };
+  const chrome = dashboardWindowManager.getState();
+  const chromeMode = chrome.customTitleBar ? 'custom' : 'native';
+  return { url: `http://127.0.0.1:${port}/dashboard?surface=desktop&chrome=${chromeMode}&platform=${encodeURIComponent(chrome.platform)}&bootstrap=${encodeURIComponent(bootstrap)}` };
 }
 
 async function showDashboardWindow(routeHash = '') {
@@ -448,6 +450,10 @@ registerIpcHandlers({
   closeWizard,
   getFallbackWindow: recoveryWindowManager.getWindow,
   getDashboardWindow: dashboardWindowManager.getWindow,
+  getDashboardWindowState: dashboardWindowManager.getState,
+  minimizeDashboardWindow: dashboardWindowManager.minimize,
+  toggleDashboardMaximize: dashboardWindowManager.toggleMaximize,
+  requestDashboardClose: dashboardWindowManager.requestClose,
   getRecoveryConfig,
   openRecoverySetup,
   startServer,

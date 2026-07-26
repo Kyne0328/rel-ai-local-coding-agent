@@ -1,6 +1,6 @@
 {
   "name": "rel-ai-mcp-launcher",
-  "version": "0.21.3",
+  "version": "0.21.4",
   "private": true,
   "description": "Desktop launcher and dashboard host for Rel.AI MCP.",
   "author": "Kyne Anthony",
@@ -39,6 +39,7 @@
       "tool-sleep-blocker.js",
       "dashboard-window.js",
       "dashboard-window-bounds.js",
+      "window-chrome.js",
       "dashboard-preload.js",
       "desktop-tray.js",
       "desktop-status.js",

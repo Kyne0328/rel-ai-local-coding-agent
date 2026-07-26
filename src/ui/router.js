@@ -170,6 +170,8 @@ function _updatePageIdentity(id) {
   }
   const subtitle = document.getElementById('subtitle');
   if (subtitle) subtitle.textContent = pageDescriptionFor(id);
+  const windowContext = document.getElementById('windowContext');
+  if (windowContext) windowContext.textContent = title;
   const announcer = document.getElementById('routeAnnouncer');
   if (announcer) announcer.textContent = `${title} page loaded.`;
   document.title = `${title} · Rel.AI MCP`;
@@ -213,12 +215,18 @@ function _mount(id, options = {}) {
 
 function captureViewState() {
   const active = document.activeElement;
+  const scroller = pageScroller();
   return {
     routeKey: currentRouteKey(),
-    scrollX: window.scrollX,
-    scrollY: window.scrollY,
+    scrollX: scroller === window ? window.scrollX : scroller.scrollLeft,
+    scrollY: scroller === window ? window.scrollY : scroller.scrollTop,
     activeId: active instanceof HTMLElement ? active.id : ''
   };
+}
+
+function pageScroller() {
+  const main = document.getElementById('main');
+  return document.documentElement.dataset.windowChrome === 'custom' && main ? main : window;
 }
 
 function finishMount(generation, view) {
@@ -231,7 +239,7 @@ function finishMount(generation, view) {
   }
   requestAnimationFrame(() => {
     if (generation !== _mountGeneration || currentRouteKey() !== view.routeKey) return;
-    window.scrollTo(view.scrollX, view.scrollY);
+    pageScroller().scrollTo(view.scrollX, view.scrollY);
     if (view.activeId) document.getElementById(view.activeId)?.focus({ preventScroll: true });
     _container.style.minHeight = '';
     _container.removeAttribute('aria-busy');

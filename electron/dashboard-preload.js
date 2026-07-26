@@ -4,6 +4,10 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('relaiDesktop', {
   getStatus: () => ipcRenderer.invoke('desktop:get-status'),
+  getWindowState: () => ipcRenderer.invoke('desktop:window:get-state'),
+  minimizeWindow: () => ipcRenderer.invoke('desktop:window:minimize'),
+  toggleMaximizeWindow: () => ipcRenderer.invoke('desktop:window:toggle-maximize'),
+  closeWindow: () => ipcRenderer.invoke('desktop:window:close'),
   copyText: text => ipcRenderer.invoke('url:copy', text),
   openSettings: () => ipcRenderer.invoke('desktop:open-settings'),
   getSettings: () => ipcRenderer.invoke('desktop:settings:get'),
@@ -23,6 +27,12 @@ contextBridge.exposeInMainWorld('relaiDesktop', {
   stopService: () => ipcRenderer.send('desktop:stop-service'),
   onStatus: callback => ipcRenderer.on('server:status', (_event, status) => callback(status)),
   removeStatusListener: () => ipcRenderer.removeAllListeners('server:status'),
+  onWindowState: callback => {
+    if (typeof callback !== 'function') throw new TypeError('Window-state listener must be a function.');
+    const listener = (_event, state) => callback(state);
+    ipcRenderer.on('desktop:window-state', listener);
+    return () => ipcRenderer.removeListener('desktop:window-state', listener);
+  },
   onUpdateStatus: callback => {
     const listener = (_event, status) => callback(status);
     ipcRenderer.on('desktop:update-status', listener);
