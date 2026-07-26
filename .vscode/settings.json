@@ -1,6 +1,7 @@
 {
   "files.associations": {
-    "src/ui/styles/app.css": "tailwindcss"
+    "**/src/ui/styles/app.css": "tailwindcss"
   },
-  "css.lint.unknownAtRules": "ignore"
+  "css.lint.unknownAtRules": "ignore",
+  "css.lint.propertyIgnoredDueToDisplay": "ignore"
 }

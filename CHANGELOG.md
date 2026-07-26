@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.21.7] — 2026-07-26
+
+### Tailwind editor diagnostics
+- **Suppress VS Code's propertyIgnoredDueToDisplay false positive for Tailwind's intentional generated preflight rule.**
+- **Apply the Tailwind language association to the source stylesheet across workspace paths while leaving runtime CSS unchanged.**
+
+Bump root/electron/status UI/lockfiles to 0.21.7.
+
 ## [0.21.6] — 2026-07-26
 
 ### Windows test cleanup resilience
