@@ -250,7 +250,7 @@ if (!initialized.result?.capabilities?.tools) {
 if (!initialized.result?.capabilities?.resources) {
   throw new Error('HTTP initialize did not advertise resources');
 }
-if (initialized.result?.serverInfo?.toolSurfaceVersion !== 10 || initialized.result?.capabilities?.experimental?.relai?.manifestResource !== 'relai://server/tool-surface') {
+if (initialized.result?.serverInfo?.toolSurfaceVersion !== 11 || initialized.result?.capabilities?.experimental?.relai?.manifestResource !== 'relai://server/tool-surface') {
   throw new Error('HTTP initialize did not advertise the versioned Rel.AI tool-surface manifest');
 }
 if (!String(initialized.result?.instructions || '').includes('relai_complete_task') || !String(initialized.result?.instructions || '').includes('complete:true')) {
@@ -340,7 +340,7 @@ const toolSurfaceResource = await fetch(`http://127.0.0.1:${port}/mcp`, {
   body: JSON.stringify({ jsonrpc: '2.0', id: 41, method: 'resources/read', params: { uri: 'relai://server/tool-surface' } })
 }).then((response) => response.json());
 const toolSurfaceManifest = JSON.parse(toolSurfaceResource.result?.contents?.[0]?.text || '{}');
-if (toolSurfaceManifest.toolSurfaceVersion !== 10 || toolSurfaceManifest.toolCount !== 20 || !Array.isArray(toolSurfaceManifest.deprecations) || toolSurfaceManifest.deprecations.length !== 0) {
+if (toolSurfaceManifest.toolSurfaceVersion !== 11 || toolSurfaceManifest.toolCount !== 20 || !Array.isArray(toolSurfaceManifest.deprecations) || toolSurfaceManifest.deprecations.length !== 0) {
   throw new Error(`tool-surface resource returned an invalid manifest: ${JSON.stringify(toolSurfaceManifest)}`);
 }
 

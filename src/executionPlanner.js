@@ -19,6 +19,13 @@ const {
 const { makeOperationId, appendOperation } = require('./journal');
 const { resolveSafePath } = require('./safety');
 const { runEnvOperation } = require('./envOperations');
+const {
+  MAX_BATCH_EDITS,
+  MAX_BATCH_REPLACEMENTS,
+  MAX_BATCH_INPUT_BYTES,
+  MAX_BATCH_SNAPSHOT_BYTES,
+  BATCH_RESULT_COMPACT_THRESHOLD
+} = require('./editLimits');
 
 const STAGED_CHUNK_BYTES = 12000;
 
@@ -85,6 +92,69 @@ async function applyOneEdit(workspace, config, edit, dryRun, options = {}) {
   }
   const result = workspaceWrite(workspace, config, { path, content: edit.content, expectedSha256: edit.expectedSha256, dryRun, suppressJournal: options.suppressJournal === true });
   return { ...result, path, plannerPath: 'write' };
+}
+
+function validateBatchEdits(workspace, edits) {
+  if (!Array.isArray(edits) || edits.length === 0) {
+    throw new TypeError('relai_edit edits must contain at least one structured edit.');
+  }
+  if (edits.length > MAX_BATCH_EDITS) {
+    throw new Error(`relai_edit accepts at most ${MAX_BATCH_EDITS} structured batch edits. Use updateText or a staged patch for larger changes.`);
+  }
+
+  let serialized;
+  try {
+    serialized = JSON.stringify(edits);
+  } catch (error) {
+    throw new TypeError(
+      `relai_edit could not serialize the structured batch: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error }
+    );
+  }
+  const inputBytes = Buffer.byteLength(serialized, 'utf8');
+  if (inputBytes > MAX_BATCH_INPUT_BYTES) {
+    throw new Error(`relai_edit structured batch input is ${inputBytes} bytes; max is ${MAX_BATCH_INPUT_BYTES}. Use updateText or a staged patch for larger payloads.`);
+  }
+
+  let replacementCount = 0;
+  for (const edit of edits) {
+    if (Array.isArray(edit?.replacements)) replacementCount += edit.replacements.length;
+    else if (edit && (Object.hasOwn(edit, 'oldText') || Object.hasOwn(edit, 'newText'))) replacementCount += 1;
+    if (replacementCount > MAX_BATCH_REPLACEMENTS) {
+      throw new Error(`relai_edit structured batches accept at most ${MAX_BATCH_REPLACEMENTS} total replacement operations.`);
+    }
+  }
+
+  const snapshotBytes = estimateBatchSnapshotBytes(workspace, edits);
+  return { inputBytes, replacementCount, snapshotBytes };
+}
+
+function estimateBatchSnapshotBytes(workspace, edits) {
+  const seen = new Set();
+  let bytes = 0;
+  for (const edit of edits) {
+    if (!edit || typeof edit !== 'object' || !edit.path) continue;
+    let safe;
+    try {
+      safe = resolveSafePath(workspace.path, edit.path);
+    } catch {
+      continue;
+    }
+    if (seen.has(safe.relativePath)) continue;
+    seen.add(safe.relativePath);
+    let stat;
+    try {
+      stat = fs.statSync(safe.absolutePath);
+    } catch {
+      continue;
+    }
+    if (!stat.isFile()) continue;
+    bytes += stat.size;
+    if (bytes > MAX_BATCH_SNAPSHOT_BYTES) {
+      throw new Error(`relai_edit rollback snapshots would require ${bytes} bytes; max is ${MAX_BATCH_SNAPSHOT_BYTES}. Split the batch or use updateText.`);
+    }
+  }
+  return bytes;
 }
 
 async function preflightBatchEdits(workspace, config, edits, dryRun) {
@@ -207,6 +277,8 @@ async function handleStagedEdit(workspace, config, args) {
 }
 
 async function _handleBatchEdits(workspace, config, args) {
+  const metrics = validateBatchEdits(workspace, args.edits);
+  const compactResults = args.edits.length > BATCH_RESULT_COMPACT_THRESHOLD;
   const preflight = await preflightBatchEdits(workspace, config, args.edits, Boolean(args.dryRun));
   if (!preflight.ok || args.dryRun) {
     const out = {
@@ -218,12 +290,17 @@ async function _handleBatchEdits(workspace, config, args) {
       appliedCount: 0,
       preflightAtomic: true,
       rollbackAtomic: true,
-      results: preflight.results
+      batchInputBytes: metrics.inputBytes,
+      replacementCount: metrics.replacementCount,
+      snapshotBytes: metrics.snapshotBytes,
+      ...(compactResults ? { resultDetailsCompacted: true } : {}),
+      results: formatBatchResults(preflight.results, compactResults)
     };
     return attachPost(out, await runPostActions(workspace, config, args));
   }
 
-  const snapshots = captureEditSnapshots(workspace, args.edits);
+  const snapshotCapture = captureEditSnapshots(workspace, args.edits);
+  const snapshots = snapshotCapture.snapshots;
   const results = [];
   let allOk = true;
   for (const edit of args.edits) {
@@ -259,29 +336,43 @@ async function _handleBatchEdits(workspace, config, args) {
     appliedCount: allOk ? results.filter((item) => item.ok !== false).length : 0,
     preflightAtomic: true,
     rollbackAtomic: rollback ? rollback.ok : true,
+    batchInputBytes: metrics.inputBytes,
+    replacementCount: metrics.replacementCount,
+    snapshotBytes: snapshotCapture.bytes,
     changedFiles,
+    ...(compactResults ? { resultDetailsCompacted: true } : {}),
     ...(rollback ? { rollback } : {}),
-    preflight: preflight.results,
-    results
+    preflight: formatBatchResults(preflight.results, compactResults),
+    results: formatBatchResults(results, compactResults)
   };
   return attachPost(out, await runPostActions(workspace, config, args));
 }
 
 function captureEditSnapshots(workspace, edits) {
   const snapshots = new Map();
+  let bytes = 0;
   for (const edit of edits) {
     const safe = resolveSafePath(workspace.path, edit.path);
     if (snapshots.has(safe.relativePath)) continue;
     const exists = fs.existsSync(safe.absolutePath);
+    const stat = exists ? fs.statSync(safe.absolutePath) : null;
+    if (stat?.isFile() && bytes + stat.size > MAX_BATCH_SNAPSHOT_BYTES) {
+      throw new Error(`relai_edit rollback snapshots would exceed ${MAX_BATCH_SNAPSHOT_BYTES} bytes. Split the batch or use updateText.`);
+    }
+    const content = exists ? fs.readFileSync(safe.absolutePath) : null;
+    bytes += content?.length || 0;
+    if (bytes > MAX_BATCH_SNAPSHOT_BYTES) {
+      throw new Error(`relai_edit rollback snapshots exceeded ${MAX_BATCH_SNAPSHOT_BYTES} bytes while files were changing. Retry with a smaller batch.`);
+    }
     snapshots.set(safe.relativePath, {
       path: safe.relativePath,
       absolutePath: safe.absolutePath,
       exists,
-      content: exists ? fs.readFileSync(safe.absolutePath) : null,
-      mode: exists ? fs.statSync(safe.absolutePath).mode : null
+      content,
+      mode: stat?.mode ?? null
     });
   }
-  return [...snapshots.values()];
+  return { snapshots: [...snapshots.values()], bytes };
 }
 
 function restoreEditSnapshots(snapshots) {
@@ -300,6 +391,23 @@ function restoreEditSnapshots(snapshots) {
     }
   }
   return { ok: errors.length === 0, restored: snapshots.map(item => item.path), errors };
+}
+
+function formatBatchResults(results, compact) {
+  if (!compact) return results;
+  return results.map((item) => {
+    const summary = {
+      ok: item?.ok !== false,
+      path: item?.path,
+      operation: item?.operation,
+      plannerPath: item?.plannerPath,
+      changed: item?.changed,
+      changedFiles: item?.changedFiles,
+      error: item?.error,
+      preflight: item?.preflight === true ? true : undefined
+    };
+    return Object.fromEntries(Object.entries(summary).filter(([, value]) => value !== undefined));
+  });
 }
 
 function preflightPlannerReason(preflight) {

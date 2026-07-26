@@ -15,6 +15,7 @@ const {
   TOOL_NAMES
 } = require('../src/tools/schema.js');
 const { HANDLERS } = require('../src/tools/handlers.js');
+const { MAX_BATCH_EDITS } = require('../src/editLimits.js');
 
 const definitions = getToolDefinitions();
 const names = definitions.map(definition => definition.name);
@@ -46,10 +47,14 @@ assert.deepEqual(names, expected);
 assert.deepEqual(TOOL_NAMES, expected);
 assert.equal(new Set(names).size, names.length, 'tool names must be unique');
 assert.deepEqual(getToolSchemas().map(schema => schema.name), expected);
+const configuredSchemas = getToolSchemas({ workspaces: { zebra: {}, app: {} } });
+assert.equal(configuredSchemas.find(tool => tool.name === 'relai_start_task').inputSchema.properties.workspace.enum, undefined);
+assert.match(configuredSchemas.find(tool => tool.name === 'relai_start_task').inputSchema.properties.workspace.description, /exact absolute path/);
+assert.match(configuredSchemas.find(tool => tool.name === 'relai_start_task').inputSchema.properties.workspace.description, /Relative paths such as '\.'/);
 assert.deepEqual(getToolMetadata().map(tool => tool.name), expected);
 const toolSurface = getToolSurfaceManifest();
 assert.equal(toolSurface.schemaVersion, 1);
-assert.equal(toolSurface.toolSurfaceVersion, 10);
+assert.equal(toolSurface.toolSurfaceVersion, 11);
 assert.equal(toolSurface.toolCount, expected.length);
 assert.deepEqual(toolSurface.tools.map(tool => tool.name), expected);
 assert.equal(toolSurface.tools.filter(tool => tool.state === 'active').length, 20);
@@ -153,6 +158,9 @@ assert.ok(editTool.inputSchema.properties.occurrence, 'edit schema must expose o
 assert.ok(editTool.inputSchema.properties.replacements, 'edit schema must expose replacement arrays');
 assert.ok(editTool.inputSchema.properties.edits.items.properties.occurrence, 'batch edit items must expose occurrence targeting');
 assert.ok(editTool.inputSchema.properties.edits.items.properties.replacements, 'batch edit items must expose replacement arrays');
+assert.equal(MAX_BATCH_EDITS, 100, 'structured batch limit must support 100 edits');
+assert.equal(editTool.inputSchema.properties.edits.maxItems, MAX_BATCH_EDITS, 'schema batch limit must match runtime limit');
+assert.match(editTool.description, /up to 100 files/);
 assert.deepEqual(editTool.inputSchema.properties.stage.enum, ['start', 'append', 'commit', 'abort']);
 assert.match(editTool.description, /Large content stages automatically/);
 
