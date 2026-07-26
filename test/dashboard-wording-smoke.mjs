@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { activeToolCount } from './helpers/tool-surface.mjs';
@@ -8,14 +10,16 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 const port = 39881;
 const token = process.env.TEST_TOKEN ?? 'dashboard-wording-smoke-token';
+const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-dashboard-wording-'));
 
-const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.js'), '--host', '127.0.0.1', '--port', String(port)], {
+const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.js'), '--host', '127.0.0.1', '--port', String(port), '--no-profile-write'], {
   cwd: root,
   stdio: ['ignore', 'pipe', 'pipe'],
   env: {
     ...process.env,
     REL_AI_MCP_CONFIG: path.join(root, 'examples', 'config.example.json'),
     REL_AI_MCP_TOKEN: token,
+    REL_AI_MCP_STATE_DIR: stateDir,
   }
 });
 
@@ -95,4 +99,5 @@ if (dashboardJson.includes('prepared') || dashboardJson.includes('apply_bundle')
 
 child.kill('SIGKILL');
 await once(child, 'close');
+fs.rmSync(stateDir, { recursive: true, force: true });
 console.log('Dashboard wording smoke test passed.');

@@ -3,6 +3,12 @@ const path = require("node:path");
 const { runProcess, summarizeCommand } = require("../process");
 const { resolveSafePath, isSecretPath } = require("../safety");
 const { getStateDir } = require("../audit");
+const {
+  INTERNAL_STATUS_MAX_BYTES,
+  gitStatusArgs,
+  parseGitStatus,
+  formatGitStatus
+} = require("./gitStatus");
 
 const DEFAULT_MAX_GIT_OUTPUT_BYTES = 1024 * 1024;
 const DEFAULT_AGGRESSIVE_MAX_PATCH_BYTES = 2 * 1024 * 1024;
@@ -77,32 +83,9 @@ function statusGroups() {
   };
 }
 
-function statusFileFromLine(line) {
-  const rawPath = line.slice(3).trim();
-  const arrow = rawPath.indexOf(" -> ");
-  return arrow >= 0 ? rawPath.slice(arrow + 4).trim() : rawPath;
-}
-
 function statusOwnerForFile(file, hasSession, baselineSet) {
   if (!hasSession) return "unknown";
   return baselineSet.has(file) ? "baseline" : "session";
-}
-
-function statusEntryFromLine(line, hasSession, baselineSet) {
-  if (line.length < 3) return null;
-  const indexStatus = line[0];
-  const worktreeStatus = line[1];
-  const file = statusFileFromLine(line);
-  if (!file) return null;
-  const owner = statusOwnerForFile(file, hasSession, baselineSet);
-  return {
-    path: file,
-    indexStatus,
-    worktreeStatus,
-    owner,
-    untracked: indexStatus === "?" && worktreeStatus === "?",
-    raw: line
-  };
 }
 
 function recordStatusEntry(groups, entry) {
@@ -118,34 +101,22 @@ function classifyStatusOwnership(workspace, config, statusOutput) {
   const hasSession = baselineSource !== null;
   const baselineSet = new Set(baselineDirty);
   const groups = statusGroups();
-  let branch = null;
-  let aheadBehind = null;
+  const parsed = parseGitStatus(statusOutput);
 
-  for (const line of String(statusOutput || "").split(/\r?\n/).filter(Boolean)) {
-    if (line.startsWith("## ")) {
-      const branchInfo = parseStatusBranchLine(line);
-      branch = branchInfo.branch;
-      aheadBehind = branchInfo.aheadBehind;
-      continue;
-    }
-    const entry = statusEntryFromLine(line, hasSession, baselineSet);
-    if (entry) recordStatusEntry(groups, entry);
+  for (const parsedEntry of parsed.entries) {
+    recordStatusEntry(groups, {
+      ...parsedEntry,
+      owner: statusOwnerForFile(parsedEntry.path, hasSession, baselineSet)
+    });
   }
 
-  return { branch, aheadBehind, hasSession, baselineSource, ...groups };
-}
-
-function parseStatusBranchLine(line) {
-  const text = String(line || "").replace(/^##\s+/, "").trim();
-  const aheadMatch = /ahead (\d+)/.exec(text);
-  const behindMatch = /behind (\d+)/.exec(text);
-  const branchPart = text.split("...")[0].trim();
   return {
-    branch: branchPart || null,
-    aheadBehind: aheadMatch || behindMatch ? {
-      ahead: aheadMatch ? Number(aheadMatch[1]) : 0,
-      behind: behindMatch ? Number(behindMatch[1]) : 0
-    } : null
+    branchRaw: parsed.branchRaw,
+    branch: parsed.branch,
+    aheadBehind: parsed.aheadBehind,
+    hasSession,
+    baselineSource,
+    ...groups
   };
 }
 
@@ -157,8 +128,14 @@ async function ensureGitRepo(workspace, config) {
 }
 
 async function gitStatusShort(workspace, config) {
-  const result = await runProcess("git", ["status", "--short"], { cwd: workspace.path, timeout: 30000 }, config);
-  if (result.exitCode !== 0) throw new Error(`git status failed for ${workspace.alias}: ${result.stderr || result.stdout || result.exitCode}`);
+  const result = await runProcess("git", gitStatusArgs({ branch: false }), {
+    cwd: workspace.path,
+    timeout: 30000,
+    maxOutputBytes: INTERNAL_STATUS_MAX_BYTES
+  }, config);
+  if (result.exitCode !== 0 || result.stdoutTruncated) {
+    throw new Error(`git status failed for ${workspace.alias}: ${result.stderr || result.stdout || (result.stdoutTruncated ? "output exceeded internal limit" : result.exitCode)}`);
+  }
   return String(result.stdout || "");
 }
 
@@ -202,35 +179,106 @@ function tempStatePath(config, workspace, operationId, ext) {
   return path.join(dir, `payload${ext}`);
 }
 
-function validatePatchPaths(workspace, patch) {
-  const paths = [];
+async function inspectPatchPaths(workspace, config, patch, timeoutMs = 120000) {
+  const check = await runProcess("git", ["apply", "--check", "--numstat", "-z", "--summary", "--recount", "-"], {
+    cwd: workspace.path,
+    input: patch,
+    timeout: timeoutMs,
+    maxOutputBytes: INTERNAL_STATUS_MAX_BYTES
+  }, config);
+  if (check.exitCode !== 0) return { check, touchedPaths: [] };
+  if (check.stdoutTruncated) {
+    throw new Error("git apply path inspection exceeded the internal output limit.");
+  }
+
+  const candidates = [
+    ...parseApplyInspectionPaths(check.stdout || ""),
+    ...extractPatchMetadataPaths(patch)
+  ];
+  const touchedPaths = [];
   const seen = new Set();
-  for (const line of String(patch || "").split(/\r?\n/)) {
-    let value = null;
-    if (line.startsWith("+++ b/")) value = line.slice(6);
-    else if (line.startsWith("--- a/")) value = line.slice(6);
-    else if (line.startsWith("rename from ")) value = line.slice("rename from ".length);
-    else if (line.startsWith("rename to ")) value = line.slice("rename to ".length);
-    if (!value || value === "/dev/null") continue;
-    const safe = resolveSafePath(workspace.path, value);
-    if (isSecretPath(safe.relativePath)) {
-      const error = new Error(
-        `Unified diff edits cannot target sensitive-classified path '${safe.relativePath}' because the proposed final content cannot be inspected safely. Use a structured OpenAI patch or exact relai_edit replacement so final content is validated.`
-      );
-      error.code = "SENSITIVE_PATCH_REQUIRES_CONTENT_VALIDATION";
-      error.source = "rel-ai-mcp-policy";
-      error.path = safe.relativePath;
-      error.operation = "write";
-      error.retryable = false;
-      throw error;
-    }
+  for (const candidate of candidates) {
+    if (!candidate || candidate === "/dev/null") continue;
+    // Resolve containment first, then apply the unified-diff-specific sensitive-path
+    // policy below. The temporary commit allowance prevents the generic path guard
+    // from obscuring the canonical patch error and does not authorize any mutation.
+    const safe = resolveSafePath(workspace.path, candidate, { operation: "commit", allowSensitive: true });
+    if (isSecretPath(safe.relativePath)) throw sensitiveUnifiedDiffError(safe.relativePath);
     if (!seen.has(safe.relativePath)) {
       seen.add(safe.relativePath);
-      paths.push(safe.relativePath);
+      touchedPaths.push(safe.relativePath);
     }
   }
-  if (paths.length === 0) throw new Error("Patch did not contain any valid workspace file paths. Expected unified diff format with headers like '--- a/path/to/file' and '+++ b/path/to/file'. Example: use 'git diff' output or generate a patch with 'git format-patch'.");
+  if (touchedPaths.length === 0) {
+    throw new Error("Git accepted the patch but did not report any workspace file paths.");
+  }
+  return { check, touchedPaths };
+}
+
+function parseApplyInspectionPaths(output) {
+  const text = String(output || "");
+  const lastNul = text.lastIndexOf("\0");
+  const numstat = lastNul >= 0 ? text.slice(0, lastNul + 1) : "";
+  const summary = lastNul >= 0 ? text.slice(lastNul + 1) : text;
+  const paths = [];
+  for (const record of numstat.split("\0")) {
+    if (!record) continue;
+    const match = /^(?:\d+|-)\t(?:\d+|-)\t([\s\S]+)$/.exec(record);
+    if (match?.[1]) paths.push(match[1]);
+  }
+  for (const line of summary.split(/\r?\n/)) {
+    const match = /^\s*(?:create|delete) mode \d+ (.+)$/.exec(line)
+      || /^\s*mode change \d+ => \d+ (.+)$/.exec(line);
+    if (match?.[1]) paths.push(decodeGitQuotedPath(match[1]));
+  }
   return paths;
+}
+
+function extractPatchMetadataPaths(patch) {
+  const paths = [];
+  for (const line of String(patch || "").split(/\r?\n/)) {
+    for (const prefix of ["rename from ", "rename to ", "copy from ", "copy to "]) {
+      if (line.startsWith(prefix)) paths.push(decodeGitQuotedPath(line.slice(prefix.length)));
+    }
+  }
+  return paths;
+}
+
+function decodeGitQuotedPath(value) {
+  const text = String(value || "").trim();
+  if (!text.startsWith('"')) return text;
+  const bytes = [];
+  for (let index = 1; index < text.length; index += 1) {
+    const character = text[index];
+    if (character === '"') break;
+    if (character !== "\\") {
+      bytes.push(...Buffer.from(character, "utf8"));
+      continue;
+    }
+    const escaped = text[++index];
+    if (escaped == null) break;
+    if (/[0-7]/.test(escaped)) {
+      let octal = escaped;
+      while (octal.length < 3 && /[0-7]/.test(text[index + 1] || "")) octal += text[++index];
+      bytes.push(Number.parseInt(octal, 8));
+      continue;
+    }
+    const escapes = { a: 7, b: 8, t: 9, n: 10, v: 11, f: 12, r: 13, '"': 34, "\\": 92 };
+    bytes.push(Object.hasOwn(escapes, escaped) ? escapes[escaped] : escaped.charCodeAt(0));
+  }
+  return Buffer.from(bytes).toString("utf8");
+}
+
+function sensitiveUnifiedDiffError(relativePath) {
+  const error = new Error(
+    `Unified diff edits cannot target sensitive-classified path '${relativePath}' because the proposed final content cannot be inspected safely. Use a structured OpenAI patch or exact relai_edit replacement so final content is validated.`
+  );
+  error.code = "SENSITIVE_PATCH_REQUIRES_CONTENT_VALIDATION";
+  error.source = "rel-ai-mcp-policy";
+  error.path = relativePath;
+  error.operation = "write";
+  error.retryable = false;
+  return error;
 }
 
 // Enforce the workspace's allowedRemotes allowlist. Beyond honoring a configured
@@ -279,14 +327,18 @@ function buildPrBodyFromDiff(diffText) {
 
 async function workspaceGitStatus(workspace, config, args = {}) {
   const maxBytes = clampNumber(args.maxBytes, 1000, 5 * 1024 * 1024, DEFAULT_MAX_GIT_OUTPUT_BYTES);
-  const status = await runProcess("git", ["status", "--short", "--branch"], { cwd: workspace.path, timeout: 30000 }, config);
+  const status = await runProcess("git", gitStatusArgs(), {
+    cwd: workspace.path,
+    timeout: 30000,
+    maxOutputBytes: INTERNAL_STATUS_MAX_BYTES
+  }, config);
   const ownership = classifyStatusOwnership(workspace, config, status.stdout || "");
   return {
-    ok: status.exitCode === 0,
+    ok: status.exitCode === 0 && !status.stdoutTruncated,
     workspace: workspace.alias,
     branch: ownership.branch,
     aheadBehind: ownership.aheadBehind,
-    status: truncateUtf8(status.stdout || "", maxBytes, "git status"),
+    status: truncateUtf8(formatGitStatus(ownership), maxBytes, "git status"),
     statusEntries: ownership.entries,
     changedFiles: ownership.entries.map((entry) => entry.path),
     untrackedFiles: ownership.entries.filter((entry) => entry.untracked).map((entry) => entry.path),
@@ -300,7 +352,12 @@ async function workspaceGitStatus(workspace, config, args = {}) {
 }
 
 async function relaiGitCommit(workspace, config, args = {}) {
-  await ensureGitRepo(workspace, config);
+  // The work-tree probe and the status read are independent child processes, so start
+  // the probe here and let it overlap argument validation and the status spawn instead
+  // of paying for both spawns back to back. The no-op catch only marks the rejection as
+  // handled in case validation below throws first; awaiting it still surfaces the error.
+  const repoProbe = ensureGitRepo(workspace, config);
+  repoProbe.catch(() => {});
   const message = String(args.message || "").trim();
   if (!message) throw new Error("relai_git_commit requires a non-empty commit message.");
   const dryRun = Boolean(args.dryRun);
@@ -312,7 +369,10 @@ async function relaiGitCommit(workspace, config, args = {}) {
       }).relativePath)
     : [];
   const addAll = paths.length === 0 && args.addAll !== false;
-  const statusBefore = await workspaceGitStatus(workspace, config, { maxBytes: args.maxBytes });
+  const statusRead = workspaceGitStatus(workspace, config, { maxBytes: args.maxBytes });
+  statusRead.catch(() => {});
+  await repoProbe;
+  const statusBefore = await statusRead;
   if (dryRun) {
     return {
       ok: true,
@@ -427,11 +487,28 @@ function normalizeGitPath(value) {
   return String(value || "").replaceAll("\\", "/").trim().replace(/^\.\//, "");
 }
 
+// A branch name, not a refspec. Rejects deletes (":main"), force pushes
+// ("+HEAD:main"), option-looking values, and git's own invalid-ref forms.
+function assertPlainBranchName(branch) {
+  if (branch.includes(":")) {
+    throw new Error(`relai_git_push expects a branch name, not a refspec: ${branch}`);
+  }
+  if (branch.startsWith("+") || branch.startsWith("-")) {
+    throw new Error(`relai_git_push branch must not start with '+' or '-': ${branch}`);
+  }
+  if (/[\s~^?*[\\]/.test(branch) || branch.includes("..") || branch.includes("@{") || branch.endsWith(".lock") || branch.endsWith("/")) {
+    throw new Error(`relai_git_push branch name is not a valid ref: ${branch}`);
+  }
+}
+
 async function relaiGitPush(workspace, config, args = {}) {
   await ensureGitRepo(workspace, config);
   const remote = assertRemoteAllowed(workspace, String(args.remote || "origin").trim());
   const branch = String(args.branch || await currentGitBranch(workspace, config)).trim();
   if (!branch) throw new Error("relai_git_push could not determine the branch to push.");
+  // git push treats this argument as a refspec: ":main" deletes the remote branch and
+  // "+HEAD:main" force-pushes over it. Accept a plain branch name only.
+  assertPlainBranchName(branch);
   const dryRun = Boolean(args.dryRun);
   const setUpstream = Boolean(args.setUpstream);
   const pushArgs = ["push", ...(dryRun ? ["--dry-run"] : []), ...(setUpstream ? ["--set-upstream"] : []), remote, branch];
@@ -482,7 +559,7 @@ module.exports = {
   makePatchBackup,
   tempStateDir,
   tempStatePath,
-  validatePatchPaths,
+  inspectPatchPaths,
   clampNumber,
   truncateUtf8,
   DEFAULT_AGGRESSIVE_MAX_PATCH_BYTES

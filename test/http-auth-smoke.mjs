@@ -13,8 +13,9 @@ const token = process.env.TEST_TOKEN ?? 'auth-smoke-token';
 const chatgptSecret = 'auth-smoke-secret';
 // Use a small body limit so the 2.5 MB body test actually triggers the rejection
 const maxBodyBytes = 1 * 1024 * 1024; // 1 MB
+const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-http-auth-smoke-'));
 
-const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.js'), '--host', '127.0.0.1', '--port', String(port)], {
+const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.js'), '--host', '127.0.0.1', '--port', String(port), '--no-profile-write'], {
   cwd: root,
   stdio: ['ignore', 'pipe', 'pipe'],
   env: {
@@ -24,7 +25,7 @@ const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.j
     REL_AI_MCP_MAX_BODY_BYTES: String(maxBodyBytes),
     // The /register test below writes the OAuth client store — keep it out of the
     // user's real ~/.rel-ai-mcp state.
-    REL_AI_MCP_STATE_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'relai-http-auth-smoke-'))
+    REL_AI_MCP_STATE_DIR: stateDir
   }
 });
 
@@ -257,4 +258,5 @@ await check('body limit — POST /mcp with 2.5 MB+ body → 4xx or 5xx or connec
 
 child.kill('SIGKILL');
 await once(child, 'close');
+fs.rmSync(stateDir, { recursive: true, force: true });
 console.log('HTTP auth smoke tests passed.');

@@ -50,16 +50,56 @@ function _discoverPython(discovered, root) {
   discovered["python:lint"] = "python -m flake8";
 }
 
-function discoverCommands(workspacePath) {
-  const discovered = {};
+// Command discovery re-reads and re-parses every project manifest, and it runs on the
+// snapshot, validation, diagnostics, status, and dashboard paths — several times per
+// tool call. Caching against a stat signature of the manifests keeps discovery honest
+// (any manifest edit changes the signature) while collapsing repeats to seven stats.
+const DISCOVERY_MANIFESTS = [
+  "package.json", "Makefile", "pubspec.yaml", "go.mod", "Cargo.toml",
+  "pyproject.toml", "requirements.txt"
+];
+const DISCOVERY_CACHE_LIMIT = 32;
+const discoveryCache = new Map();
+
+function discoveryManifestSignature(workspacePath) {
   const root = String(workspacePath || "");
+  return DISCOVERY_MANIFESTS.map((name) => {
+    try {
+      const stat = fs.statSync(path.join(root, name));
+      return `${name}:${stat.mtimeMs}:${stat.size}`;
+    } catch {
+      return `${name}:0:0`;
+    }
+  }).join("|");
+}
+
+function cacheDiscovery(root, signature, value) {
+  if (discoveryCache.size >= DISCOVERY_CACHE_LIMIT && !discoveryCache.has(root)) {
+    discoveryCache.delete(discoveryCache.keys().next().value);
+  }
+  discoveryCache.set(root, { signature, value });
+}
+
+function discoverCommands(workspacePath) {
+  const root = String(workspacePath || "");
+  const signature = discoveryManifestSignature(root);
+  const cached = discoveryCache.get(root);
+  // Hand back a copy: several callers place the result straight into a tool response.
+  if (cached?.signature === signature) return { ...cached.value };
+
+  const discovered = {};
   try { _discoverNpmScripts(discovered, root); } catch {}
   try { _discoverMakefile(discovered, root); } catch {}
   try { _discoverFlutter(discovered, root); } catch {}
   try { _discoverGo(discovered, root); } catch {}
   try { _discoverCargo(discovered, root); } catch {}
   try { _discoverPython(discovered, root); } catch {}
-  return discovered;
+  cacheDiscovery(root, signature, discovered);
+  return { ...discovered };
+}
+
+function clearCommandDiscoveryCache() {
+  discoveryCache.clear();
 }
 
 // A configured command key is "stale" when its saved command string is no longer
@@ -73,4 +113,9 @@ function staleCommandKeys(configured = {}, discovered = {}) {
   });
 }
 
-module.exports = { discoverCommands, staleCommandKeys };
+module.exports = {
+  discoverCommands,
+  discoveryManifestSignature,
+  clearCommandDiscoveryCache,
+  staleCommandKeys
+};

@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.21.9] — 2026-07-26
+
+### Tool-call latency overhaul
+- **Read-only tools now share a per-workspace reader/writer lock instead of serializing behind the mutation queue, so a batch of relai_read, relai_search, relai_status, or relai_diff calls dispatched together runs concurrently while edits stay exclusive.**
+- **Session-history writes use a prune fast-path and parsed-session cache, while history listings revalidate high-resolution file metadata so updates from the desktop app, connector server, or another process cannot remain stale.**
+- **The workspace tree walk dropped one realpath syscall per file, taking relai_repo_snapshot and relai_code_inspect collection from ~70-94 ms to ~7 ms on a 350-file repository.**
+- **relai_code_inspect gained per-file identifier and token sets so symbol, references, and related queries skip files that cannot match: warm queries went from ~102-124 ms to ~13-19 ms.**
+- **config.json is parsed once per change instead of once per tool call, workspace root realpaths are memoized, and command discovery plus validation-check detection now share a manifest-signature cache.**
+- **relai_repo_snapshot overlaps its git summary with the tree walk, and relai_git_commit overlaps its work-tree probe with the status read. relai_diff deliberately waits for canonical status classification before reading any diff so sensitive paths are never loaded speculatively.**
+- **relai_read accepts ranges:[{path,startLine,endLine}] so several files with different line windows resolve in one call instead of one call per file (tool surface version 12).**
+- **relai_status skips the package.json read and .github/workflows CI scan for connector calls, which strip both from the result anyway.**
+- **Git status consumers now share NUL-delimited porcelain parsing, preserving filenames with spaces and non-ASCII characters across review, status, baseline ownership, tidy, and command mutation tracking. Unified-diff authorization now uses Git's own apply inspection rather than scraping `+++ b/` headers.**
+- **The Sessions tab now uses blue for open logical tasks, amber for incomplete sessions where completion was not reported, green for completed sessions, and red only for actual errors.**
+
+Bump root/electron/status UI/lockfiles to 0.21.9.
+
+## [0.21.8] — 2026-07-26
+
+### Security fixes and validation performance
+- **Security: reject OAuth store lookups that resolve through Object.prototype. A bearer token of `constructor`, `__proto__`, `toString` or any other inherited key authenticated as a valid access token and returned the full tool surface, including `relai_exec`. The refresh grant could also mint real tokens from such a key, and an inherited `client_id` returned an unauthenticated 500 instead of `invalid_client`.**
+- **Security: reject repository paths containing a drive or NTFS stream separator. `.env::$DATA` classified as an ordinary file and disclosed `.env` verbatim through `relai_read`; the same bypass applied to `id_rsa`, `*.pem` and `.npmrc`.**
+- **Security: `relai_restore_paths` now rejects git pathspec patterns and passes `:(literal)` paths. `paths: ["*"]` previously discarded every uncommitted change without the RESET confirmation that `relai_reset_workspace` requires.**
+- **Security: `relai_git_push` now requires a plain branch name. A refspec such as `:main` (delete remote branch) or `+HEAD:main` (force push) was passed straight to git.**
+- **Performance: `npm run check` parses all 278 JavaScript files in one process instead of spawning `node --check` per file. Measured 11,983ms to 215ms on Windows, with identical pass/fail verdicts.**
+- **Performance: `relai_code_inspect` no longer re-validates each indexed file through `resolveSafePath` on the cache-hit path, which `collectTextFiles` had already validated. Warm call measured 330ms to 138ms.**
+- **Performance: `getVersion()` caches the CHANGELOG parse behind an mtime and size check instead of re-reading 112 KB on every call.**
+- **Fix: the HTTP server no longer silently repoints the saved connector profile. It warns when the port changes and accepts `--no-profile-write` so tests and secondary instances leave `connection.json` alone.**
+
+Bump root/electron/status UI/lockfiles to 0.21.8.
+
 ## [0.21.7] — 2026-07-26
 
 ### Tailwind editor diagnostics

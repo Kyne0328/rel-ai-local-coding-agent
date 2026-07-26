@@ -3,6 +3,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { spawnSync } = require('node:child_process');
 const { resolveGitExecutable } = require('./gitExecutable');
+const { gitStatusArgs, parseGitStatus } = require('./repo/gitStatus');
 
 const SESSION_IDLE_TTL_MS = 8 * 60 * 60 * 1000;
 
@@ -94,19 +95,16 @@ function captureBaselineState(workspaceRoot) {
   try {
     const git = resolveGitExecutable();
     if (!git) return { ok: false, files: [], error: 'Git executable was not found' };
-    const result = spawnSync(git, ['status', '--short'], { cwd: workspaceRoot, encoding: 'utf8', timeout: 15000 });
+    const result = spawnSync(git, gitStatusArgs({ branch: false }), {
+      cwd: workspaceRoot,
+      encoding: 'utf8',
+      timeout: 15000,
+      maxBuffer: 8 * 1024 * 1024
+    });
     if (result.status !== 0) {
       return { ok: false, files: [], error: String(result.stderr || result.stdout || `git status exited ${result.status}`).trim() };
     }
-    const files = String(result.stdout || '')
-      .split(/\r?\n/)
-      .filter((line) => line && line.length > 3)
-      .map((line) => {
-        const part = line.slice(3).trim();
-        const arrow = part.indexOf(' -> ');
-        return arrow >= 0 ? part.slice(arrow + 4).trim() : part;
-      })
-      .filter(Boolean);
+    const files = parseGitStatus(result.stdout || '').entries.map((entry) => entry.path);
     return { ok: true, files, error: '' };
   } catch (error) {
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] baseline dirty capture:', error);

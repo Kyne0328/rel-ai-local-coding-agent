@@ -27,7 +27,7 @@ const redirectUri = 'https://chatgpt.com/connector_platform_oauth_redirect';
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-oauth-'));
 process.env.REL_AI_MCP_STATE_DIR = stateDir;
 
-const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.js'), '--host', '127.0.0.1', '--port', String(port)], {
+const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.js'), '--host', '127.0.0.1', '--port', String(port), '--no-profile-write'], {
   cwd: root,
   stdio: ['ignore', 'pipe', 'pipe'],
   env: {

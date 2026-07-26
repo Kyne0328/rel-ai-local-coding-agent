@@ -5,6 +5,7 @@ const { resolveSafePath, fileSha256 } = require("../safety");
 const { getStateDir } = require("../audit");
 const { appendOperation, makeOperationId } = require("../journal");
 const { classifyStatusOwnership } = require("../repo/gitOps");
+const { INTERNAL_STATUS_MAX_BYTES, gitStatusArgs } = require("../repo/gitStatus");
 const { clampNumber } = require("./limits");
 
 const TIDY_PLAN_TTL_MS = 15 * 60 * 1000;
@@ -79,12 +80,22 @@ function scanUntrackedSessionFiles(workspace, ownership, maxCandidates) {
   return { candidates, skipped };
 }
 
+async function readTidyOwnership(workspace, config) {
+  const status = await runProcess("git", gitStatusArgs(), {
+    cwd: workspace.path,
+    timeout: 30000,
+    maxOutputBytes: INTERNAL_STATUS_MAX_BYTES
+  }, config);
+  if (status.exitCode !== 0 || status.stdoutTruncated) {
+    throw new Error(`git status failed for ${workspace.alias}: ${status.stderr || (status.stdoutTruncated ? "output exceeded internal limit" : status.exitCode)}`);
+  }
+  return classifyStatusOwnership(workspace, config, status.stdout || "");
+}
+
 async function workspaceTidyPlan(workspace, config, args = {}) {
   const mode = normalizeTidyMode(args.mode);
   const maxCandidates = clampNumber(args.maxCandidates, 1, 100, 50);
-  const status = await runProcess("git", ["status", "--short", "--branch"], { cwd: workspace.path, timeout: 30000 }, config);
-  if (status.exitCode !== 0) throw new Error(`git status failed for ${workspace.alias}: ${status.stderr || status.stdout || status.exitCode}`);
-  const ownership = classifyStatusOwnership(workspace, config, status.stdout || "");
+  const ownership = await readTidyOwnership(workspace, config);
   // Without a captured session baseline we cannot distinguish this agent's
   // untracked artifacts from pre-existing user files. Refuse rather than risk
   // planning a delete of files the user created before any session started.
@@ -154,9 +165,7 @@ function readTidyPlan(config, workspace, planId) {
 async function relaiWorkspaceTidyRun(workspace, config, args = {}) {
   const planId = validateTidyPlanId(args.planId);
   const { file, plan } = readTidyPlan(config, workspace, planId);
-  const status = await runProcess("git", ["status", "--short", "--branch"], { cwd: workspace.path, timeout: 30000 }, config);
-  if (status.exitCode !== 0) throw new Error(`git status failed for ${workspace.alias}: ${status.stderr || status.stdout || status.exitCode}`);
-  const ownership = classifyStatusOwnership(workspace, config, status.stdout || "");
+  const ownership = await readTidyOwnership(workspace, config);
   const currentUntracked = new Set(ownership.untrackedSession || []);
   const candidates = Array.isArray(plan.candidates) ? plan.candidates : [];
   const { preflight, refused } = preflightTidyCandidates(candidates, workspace, currentUntracked);

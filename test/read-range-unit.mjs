@@ -60,6 +60,59 @@ try {
   assert.equal(truncated.items[0].truncated, true);
   assert.ok(truncated.items[0].returnedBytes <= 1001);
   assert.doesNotMatch(truncated.items[0].content, /�/u, 'UTF-8 truncation must not return a partial code point');
+
+  // Per-path ranges: two files with different windows must resolve in one call.
+  const second = path.join(root, 'second.txt');
+  fs.writeFileSync(second, 'one\ntwo\nthree\nfour\nfive\n', 'utf8');
+  const perPath = relaiRead(workspace, config, {
+    paths: ['sample.txt', 'second.txt'],
+    ranges: [
+      { path: 'sample.txt', startLine: 1, endLine: 1 },
+      { path: 'second.txt', startLine: 3, endLine: 4 }
+    ],
+    guidanceMode: 'none'
+  }, { connector: true });
+  assert.equal(perPath.items.length, 2);
+  assert.equal(perPath.items[0].content, 'alpha\r\n');
+  assert.deepEqual(perPath.items[0].lineRange, { startLine: 1, endLine: 1, totalLines: 4 });
+  assert.equal(perPath.items[1].content, 'three\nfour\n');
+  assert.deepEqual(perPath.items[1].lineRange, { startLine: 3, endLine: 4, totalLines: 6 });
+
+  // A path without its own entry falls back to the batch-wide window.
+  const mixed = relaiRead(workspace, config, {
+    paths: ['sample.txt', 'second.txt'],
+    startLine: 2,
+    endLine: 2,
+    ranges: [{ path: 'second.txt', startLine: 5 }],
+    guidanceMode: 'none'
+  }, { connector: true });
+  assert.equal(mixed.items[0].content, 'beta\r\n', 'unlisted paths keep the batch range');
+  assert.equal(mixed.items[1].content, 'five\n', 'a listed path uses its own range to end of file');
+
+  // Path spelling is normalized so './x' and 'x' name the same entry.
+  const normalized = relaiRead(workspace, config, {
+    paths: ['./second.txt'],
+    ranges: [{ path: 'second.txt', startLine: 2, endLine: 2 }],
+    guidanceMode: 'none'
+  }, { connector: true });
+  assert.equal(normalized.items[0].content, 'two\n');
+
+  assert.throws(() => relaiRead(workspace, config, {
+    paths: ['sample.txt'],
+    ranges: [{ path: 'sample.txt' }]
+  }), /requires startLine or endLine/);
+  assert.throws(() => relaiRead(workspace, config, {
+    paths: ['sample.txt'],
+    ranges: [{ path: 'sample.txt', startLine: 4, endLine: 2 }]
+  }), /endLine must be greater than or equal to startLine/);
+  assert.throws(() => relaiRead(workspace, config, {
+    paths: ['sample.txt'],
+    ranges: [{ startLine: 1 }]
+  }), /require a non-empty path/);
+  assert.throws(() => relaiRead(workspace, config, {
+    paths: ['sample.txt'],
+    ranges: 'sample.txt'
+  }), /ranges must be an array/);
 } finally {
   fs.readFileSync = originalReadFileSync;
   fs.rmSync(root, { recursive: true, force: true });

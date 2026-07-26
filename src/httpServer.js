@@ -56,6 +56,10 @@ function startHttpServer(options = {}) {
   const token = options.token || process.env.REL_AI_MCP_TOKEN || launchEnv.REL_AI_MCP_TOKEN || "";
   const publicUrl = connection.normalizePublicUrl(options.publicUrl || process.env.REL_AI_MCP_PUBLIC_URL || launchEnv.REL_AI_MCP_PUBLIC_URL || savedProfile.publicUrl || "");
   const allowNoAuth = Boolean(options.allowNoAuth || process.env.REL_AI_MCP_ALLOW_NO_AUTH === "1");
+  // connection.json is global state the desktop app and the ChatGPT connector read to
+  // find the live server. A second instance (a test, a benchmark, a manual
+  // `npm run start:http` on another port) would otherwise silently repoint it.
+  const writeProfile = options.writeProfile !== false && process.env.REL_AI_MCP_NO_PROFILE_WRITE !== "1";
   const maxBodyBytes = Number(options.maxBodyBytes || process.env.REL_AI_MCP_MAX_BODY_BYTES || DEFAULT_MAX_BODY_BYTES);
   // Native folder picker, injected by the Electron launcher (the HTTP server runs
   // in the same process). Absent when the server runs standalone — the endpoint then
@@ -99,7 +103,13 @@ function startHttpServer(options = {}) {
     const address = server.address();
     const actualPort = address && typeof address === "object" ? address.port : port;
     console.error(`[rel-ai-mcp] HTTP/SSE server listening on http://${host}:${actualPort}`);
-    connection.writeConnectionProfile({ host, port: actualPort, publicUrl, configPath: require("./config").getConfigPath() });
+    if (writeProfile) {
+      const previousPort = Number(savedProfile.port || 0);
+      if (previousPort && previousPort !== actualPort) {
+        console.error(`[rel-ai-mcp] Notice: repointing the saved connector profile from port ${previousPort} to ${actualPort}. Start with --no-profile-write to leave it untouched.`);
+      }
+      connection.writeConnectionProfile({ host, port: actualPort, publicUrl, configPath: require("./config").getConfigPath() });
+    }
     const summary = connection.buildConnectionSummary({ host, port: actualPort, publicUrl, token, includeTokenInUrls: false });
     console.error(`[rel-ai-mcp] Dashboard: ${summary.dashboardUrl}`);
     if (publicUrl) {

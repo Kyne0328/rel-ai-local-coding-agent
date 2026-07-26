@@ -1,16 +1,30 @@
 const { runProcess, summarizeCommand } = require("../process");
 const { resolveSafePath } = require("../safety");
 
+// resolveSafePath validates these as filesystem paths, but git reads them as
+// pathspecs: "*" or "." after `--` matches the whole worktree, so a single-file
+// restore request could discard every uncommitted change without the RESET
+// confirmation that relai_reset_workspace demands.
+const PATHSPEC_MAGIC = /[*?[\]]/;
+
 function normalizePaths(workspace, paths) {
   if (!Array.isArray(paths) || paths.length === 0) {
     throw new Error("relai_restore_paths requires at least one path.");
   }
-  return paths.map((item) => resolveSafePath(workspace.path, item, { operation: "restore" }).relativePath);
+  return paths.map((item) => {
+    const relativePath = resolveSafePath(workspace.path, item, { operation: "restore" }).relativePath;
+    if (PATHSPEC_MAGIC.test(relativePath) || relativePath === ".") {
+      throw new Error(`relai_restore_paths requires literal file paths, not patterns: ${relativePath}. Use relai_reset_workspace with confirmation RESET to discard everything.`);
+    }
+    return relativePath;
+  });
 }
 
 async function relaiRestorePaths(workspace, config, args = {}) {
   const paths = normalizePaths(workspace, args.paths);
-  const restore = await runProcess("git", ["restore", "--", ...paths], {
+  // ":(literal)" stops git re-interpreting a legitimate filename that happens to
+  // contain pathspec syntax.
+  const restore = await runProcess("git", ["restore", "--", ...paths.map((item) => `:(literal)${item}`)], {
     cwd: workspace.path,
     timeout: 60000
   }, config);

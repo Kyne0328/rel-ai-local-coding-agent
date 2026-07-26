@@ -3,26 +3,15 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const { collectTextFiles, collectOptionsFromWorkspace, resolveSafePath, looksBinary } = require('../safety');
+const { collectTextFiles, collectOptionsFromWorkspace, resolveSafePath, isPathInside, realRootOf } = require('../safety');
 const { discoverCommands } = require('../commandDiscovery');
 const { detectVerifyChecks } = require('./validation');
 const { clampNumber } = require('./limits');
+const { EXTENSION_LANGUAGE, MAX_LINE_CHARS, buildIndex, escapeRegExp, isTestPath } = require('./codeIndex');
 
 const CACHE = new Map();
 const DEFAULT_MAX_RESULTS = 200;
 const DEFAULT_MAX_FILES = 5000;
-const MAX_FILE_BYTES = 1024 * 1024;
-const MAX_TOTAL_BYTES = 32 * 1024 * 1024;
-const MAX_LINE_CHARS = 400;
-const EXTENSION_LANGUAGE = new Map([
-  ['.js', 'javascript'], ['.jsx', 'javascript'], ['.mjs', 'javascript'], ['.cjs', 'javascript'],
-  ['.ts', 'typescript'], ['.tsx', 'typescript'], ['.py', 'python'], ['.go', 'go'], ['.rs', 'rust'],
-  ['.dart', 'dart'], ['.java', 'java'], ['.kt', 'kotlin'], ['.swift', 'swift'], ['.cs', 'csharp'],
-  ['.c', 'c'], ['.h', 'c'], ['.cpp', 'cpp'], ['.cc', 'cpp'], ['.hpp', 'cpp'], ['.rb', 'ruby'],
-  ['.php', 'php'], ['.vue', 'vue'], ['.svelte', 'svelte']
-]);
-const RESOLVE_EXTENSIONS = [...EXTENSION_LANGUAGE.keys(), '.json'];
-const JS_CONTROL_WORDS = new Set(['if', 'for', 'while', 'switch', 'catch', 'function', 'return', 'constructor']);
 
 async function relaiCodeInspect(workspace, _config, args = {}) {
   const action = String(args.action || '').trim().toLowerCase();
@@ -78,21 +67,32 @@ function emptyReferences() {
 
 function loadIndex(workspace, args) {
   const maxFiles = Math.floor(clampNumber(args.maxFiles, 1, 20000, DEFAULT_MAX_FILES));
+  // collectTextFiles already resolves each entry through realpath, rejects anything
+  // outside the root, and drops sensitive paths. Re-running resolveSafePath per file
+  // here repeated that work ~277 times per call (212ms of a 330ms cache hit), so this
+  // loop keeps the boundary assertion but reuses the root realpath instead.
+  const realRoot = realRootOf(workspace.path);
   const tree = collectTextFiles(workspace.path, collectOptionsFromWorkspace(workspace, { maxEntries: maxFiles }));
   const candidates = [];
   let newestMtimeMs = 0;
+  // Hash incrementally instead of materializing one joined string for every indexed
+  // file — on a large repository that allocation was larger than the digest itself.
+  const fingerprintHash = crypto.createHash('sha256');
   for (const relativePath of tree.files) {
     if (!EXTENSION_LANGUAGE.has(path.extname(relativePath).toLowerCase())) continue;
     try {
-      const safe = resolveSafePath(workspace.path, relativePath, { operation: 'read' });
-      const stat = fs.statSync(safe.absolutePath);
+      const absolutePath = path.resolve(realRoot, relativePath);
+      if (!isPathInside(absolutePath, realRoot)) continue;
+      const stat = fs.statSync(absolutePath);
       if (!stat.isFile()) continue;
       newestMtimeMs = Math.max(newestMtimeMs, stat.mtimeMs);
-      candidates.push({ path: safe.relativePath.replaceAll('\\', '/'), absolutePath: safe.absolutePath, size: stat.size, mtimeMs: stat.mtimeMs });
+      const normalizedPath = relativePath.replaceAll('\\', '/');
+      fingerprintHash.update(`${normalizedPath}:${stat.size}:${stat.mtimeMs}\n`);
+      candidates.push({ path: normalizedPath, absolutePath, size: stat.size, mtimeMs: stat.mtimeMs });
     } catch {}
   }
-  const fingerprint = crypto.createHash('sha256').update(candidates.map(item => `${item.path}:${item.size}:${item.mtimeMs}`).join('\n')).digest('hex');
-  const key = fs.realpathSync(workspace.path);
+  const fingerprint = fingerprintHash.digest('hex');
+  const key = realRoot;
   const cached = CACHE.get(key);
   if (cached?.fingerprint === fingerprint) {
     return { index: cached.index, fingerprint, cacheHit: true, checkedAt: new Date().toISOString(), treeTruncated: tree.truncated, newestMtimeMs };
@@ -102,118 +102,11 @@ function loadIndex(workspace, args) {
   return { index, fingerprint, cacheHit: false, checkedAt: new Date().toISOString(), treeTruncated: tree.truncated, newestMtimeMs };
 }
 
-function buildIndex(candidates, tree) {
-  const files = [];
-  const fileByPath = new Map();
-  const definitionsByName = new Map();
-  const imports = new Map();
-  const reverseImports = new Map();
-  const languages = {};
-  let indexedBytes = 0;
-  let skippedLargeFiles = 0;
-  let contentTruncated = false;
-
-  for (const candidate of candidates) {
-    if (candidate.size > MAX_FILE_BYTES || indexedBytes + candidate.size > MAX_TOTAL_BYTES) {
-      skippedLargeFiles += 1;
-      contentTruncated = true;
-      continue;
-    }
-    try {
-      const data = fs.readFileSync(candidate.absolutePath);
-      if (looksBinary(data)) continue;
-      const text = data.toString('utf8');
-      const language = EXTENSION_LANGUAGE.get(path.extname(candidate.path).toLowerCase()) || 'text';
-      const lines = text.split(/\r\n|\n|\r/);
-      const definitions = extractDefinitions(lines, language, candidate.path);
-      const file = { path: candidate.path, language, test: isTestPath(candidate.path), text, lines, definitions, imports: [] };
-      files.push(file);
-      fileByPath.set(file.path, file);
-      languages[language] = (languages[language] || 0) + 1;
-      indexedBytes += data.length;
-      for (const definition of definitions) {
-        if (!definitionsByName.has(definition.name)) definitionsByName.set(definition.name, []);
-        definitionsByName.get(definition.name).push(definition);
-      }
-    } catch {}
+function fileMayContainTerm(file, term) {
+  for (const token of file.lowerTokens) {
+    if (token.includes(term)) return true;
   }
-
-  const knownPaths = new Set(files.map(file => file.path));
-  for (const file of files) {
-    file.imports = extractImports(file.text).map(specifier => resolveImport(file.path, specifier, knownPaths)).filter(Boolean);
-    imports.set(file.path, new Set(file.imports));
-    for (const target of file.imports) {
-      if (!reverseImports.has(target)) reverseImports.set(target, new Set());
-      reverseImports.get(target).add(file.path);
-    }
-  }
-
-  return {
-    files, fileByPath, definitionsByName, imports, reverseImports, languages,
-    indexedBytes, skippedLargeFiles, contentTruncated,
-    sourceFileCount: files.length,
-    discoveredFileCount: tree.files.length,
-    collectionSkippedCount: tree.skipped.length,
-    builtAt: new Date().toISOString()
-  };
-}
-
-function extractDefinitions(lines, language, relativePath) {
-  const definitions = [];
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
-    const found = definitionsFromLine(line, language);
-    for (const item of found) definitions.push({ ...item, path: relativePath, line: index + 1, language, text: line.trim().slice(0, MAX_LINE_CHARS) });
-  }
-  return definitions;
-}
-
-function definitionsFromLine(line, language) {
-  const patterns = [];
-  if (['javascript', 'typescript', 'vue', 'svelte'].includes(language)) {
-    patterns.push(['function', /\b(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/]);
-    patterns.push(['class', /\b(?:export\s+)?(?:default\s+)?class\s+([A-Za-z_$][\w$]*)/]);
-    patterns.push(['variable', /\b(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)/]);
-    const method = /^\s*(?:async\s+)?([A-Za-z_$][\w$]*)\s*\([^;{}]*\)\s*\{/i.exec(line);
-    if (method && !JS_CONTROL_WORDS.has(method[1])) patterns.push(['method', new RegExp(`^\\s*(?:async\\s+)?(${escapeRegExp(method[1])})\\s*\\(`)]);
-  } else if (language === 'python') {
-    patterns.push(['function', /^\s*(?:async\s+)?def\s+([A-Za-z_]\w*)/], ['class', /^\s*class\s+([A-Za-z_]\w*)/]);
-  } else if (language === 'go') {
-    patterns.push(['function', /^\s*func\s+(?:\([^)]*\)\s*)?([A-Za-z_]\w*)/], ['type', /^\s*type\s+([A-Za-z_]\w*)/]);
-  } else if (language === 'rust') {
-    patterns.push(['function', /^\s*(?:pub\s+)?(?:async\s+)?fn\s+([A-Za-z_]\w*)/], ['type', /^\s*(?:pub\s+)?(?:struct|enum|trait)\s+([A-Za-z_]\w*)/]);
-  } else {
-    patterns.push(['type', /\b(?:class|interface|enum|record|struct|trait)\s+([A-Za-z_]\w*)/]);
-    patterns.push(['function', /\b(?:fun|func|def|function)\s+([A-Za-z_]\w*)/]);
-  }
-  const found = [];
-  const seen = new Set();
-  for (const [kind, regex] of patterns) {
-    const match = regex.exec(line);
-    if (match?.[1] && !seen.has(match[1])) {
-      seen.add(match[1]);
-      found.push({ name: match[1], kind });
-    }
-  }
-  return found;
-}
-
-function extractImports(text) {
-  const specifiers = [];
-  const patterns = [
-    /\b(?:import|export)\s+(?:[^'"\n]*?\s+from\s+)?['"]([^'"]+)['"]/g,
-    /\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
-    /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g
-  ];
-  for (const regex of patterns) for (const match of text.matchAll(regex)) if (match[1]) specifiers.push(match[1]);
-  return [...new Set(specifiers)];
-}
-
-function resolveImport(fromPath, specifier, knownPaths) {
-  if (!specifier.startsWith('.')) return null;
-  const base = path.posix.normalize(path.posix.join(path.posix.dirname(fromPath), specifier));
-  const candidates = [base, ...RESOLVE_EXTENSIONS.map(ext => base + ext), ...RESOLVE_EXTENSIONS.map(ext => path.posix.join(base, `index${ext}`))];
-  return candidates.find(candidate => knownPaths.has(candidate)) || null;
+  return false;
 }
 
 function findDefinitions(index, symbol, maxResults) {
@@ -234,6 +127,8 @@ function findReferences(index, symbol, maxResults) {
   let referenceCount = 0;
   let callCount = 0;
   for (const file of index.files) {
+    // A file without the exact word token cannot satisfy the word-boundary matcher.
+    if (!file.identifiers.has(simple)) continue;
     for (let lineIndex = 0; lineIndex < file.lines.length; lineIndex += 1) {
       const line = file.lines[lineIndex];
       if (!matcher.test(line)) continue;
@@ -269,8 +164,11 @@ function relatedFiles(index, query, maxResults) {
       if (pathText.includes(term)) { score += 8; reasons.push(`path:${term}`); }
       const named = file.definitions.filter(item => item.name.toLowerCase().includes(term));
       if (named.length) { score += Math.min(15, named.length * 5); reasons.push(`symbol:${term}`); }
-      for (let indexLine = 0; indexLine < file.lines.length && snippets.length < 3; indexLine += 1) {
-        if (file.lines[indexLine].toLowerCase().includes(term)) snippets.push({ line: indexLine + 1, text: file.lines[indexLine].trim().slice(0, MAX_LINE_CHARS) });
+      // Skip the per-line scan entirely when no token in the file can contain the term.
+      if (snippets.length < 3 && fileMayContainTerm(file, term)) {
+        for (let indexLine = 0; indexLine < file.lines.length && snippets.length < 3; indexLine += 1) {
+          if (file.lines[indexLine].toLowerCase().includes(term)) snippets.push({ line: indexLine + 1, text: file.lines[indexLine].trim().slice(0, MAX_LINE_CHARS) });
+        }
       }
       if (snippets.some(item => item.text.toLowerCase().includes(term))) score += 2;
     }
@@ -375,13 +273,6 @@ function indexMetadata(loaded, workspace) {
   };
 }
 
-function isTestPath(relativePath) {
-  const normalized = relativePath.replaceAll('\\', '/').toLowerCase();
-  const leaf = path.posix.basename(normalized);
-  return normalized.includes('/test/') || normalized.includes('/tests/') || normalized.includes('/__tests__/')
-    || /(?:^|[._-])(?:test|spec)(?:[._-]|$)/.test(leaf) || /_test\.(?:go|py)$/.test(leaf) || /^test_.*\.py$/.test(leaf);
-}
-
 function queryTerms(query) {
   const expanded = String(query).replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[^A-Za-z0-9_$]+/g, ' ').toLowerCase();
   return [...new Set(expanded.split(/\s+/).filter(term => term.length >= 2))].slice(0, 20);
@@ -389,10 +280,6 @@ function queryTerms(query) {
 
 function simpleSymbol(symbol) {
   return String(symbol).split(/[.:#-]/).filter(Boolean).at(-1) || String(symbol);
-}
-
-function escapeRegExp(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 module.exports = { relaiCodeInspect, isTestPath };

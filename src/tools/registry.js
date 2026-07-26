@@ -5,8 +5,12 @@
 
 const { MAX_BATCH_EDITS } = require('../editLimits');
 
-const TOOL_SURFACE_VERSION = 11;
+const TOOL_SURFACE_VERSION = 12;
 
+// The per-tool `annotations` below are placeholders: every one is replaced by
+// annotationsFor(name) when TOOL_DEFINITIONS is built, which derives the hints from
+// the READ_ONLY_TOOLS / DESTRUCTIVE_TOOLS / OPEN_WORLD_TOOLS sets. Edit those sets,
+// not the literals.
 /** @type {ToolDefinition[]} */
 const TOOL_DEFINITION_VALUES = [
   {
@@ -36,8 +40,8 @@ const TOOL_DEFINITION_VALUES = [
   {
     name: "relai_read",
     title: "Read Local Repo Paths",
-    description: "Read-only. Batch-read files or directory summaries. Ordinary hidden and Git-ignored files can be read when explicitly targeted; snapshot exclusions are not direct-access restrictions. Secret-bearing paths remain blocked. Use startLine/endLine for a bounded line range. guidanceMode accepts full, compact, or none.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"paths":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":100},"maxBytes":{"type":"number","minimum":1000,"maximum":10485760},"maxEntries":{"type":"number","minimum":1,"maximum":20000},"startLine":{"type":"number","minimum":1,"maximum":10000000},"endLine":{"type":"number","minimum":1,"maximum":10000000},"guidanceMode":{"type":"string","enum":["full","compact","none"]}},"required":["workspace","paths"],"additionalProperties":false},
+    description: "Read-only. Batch-read files or directory summaries. Ordinary hidden and Git-ignored files can be read when explicitly targeted; snapshot exclusions are not direct-access restrictions. Secret-bearing paths remain blocked. Use startLine/endLine for one bounded line range across the whole batch, or ranges:[{path,startLine,endLine}] to give individual paths their own window in a single call. guidanceMode accepts full, compact, or none.",
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"paths":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":100},"maxBytes":{"type":"number","minimum":1000,"maximum":10485760},"maxEntries":{"type":"number","minimum":1,"maximum":20000},"startLine":{"type":"number","minimum":1,"maximum":10000000},"endLine":{"type":"number","minimum":1,"maximum":10000000},"ranges":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"startLine":{"type":"number","minimum":1,"maximum":10000000},"endLine":{"type":"number","minimum":1,"maximum":10000000}},"required":["path"],"additionalProperties":false},"minItems":1,"maxItems":100},"guidanceMode":{"type":"string","enum":["full","compact","none"]}},"required":["workspace","paths"],"additionalProperties":false},
     annotations: {"readOnlyHint":true,"destructiveHint":false,"idempotentHint":true,"openWorldHint":false},
     handler: "read",
     connectorStrip: [],

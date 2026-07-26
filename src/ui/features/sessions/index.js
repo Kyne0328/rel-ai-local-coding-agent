@@ -113,9 +113,9 @@ function statusLabel(status) {
 }
 
 function statusPill(status) {
-  if (status === 'open') return '<span class="status-pill">open<span class="sr-only"> (no active call)</span></span>';
+  if (status === 'open') return '<span class="status-pill open">open<span class="sr-only"> (open, no active call)</span></span>';
   if (status === 'completed') return pillHtml('completed');
-  if (status === 'inactive') return '<span class="status-pill">inactive<span class="sr-only"> (inactive)</span></span>';
+  if (status === 'inactive') return '<span class="status-pill incomplete">incomplete<span class="sr-only"> (completion not reported)</span></span>';
   return pillHtml(status);
 }
 

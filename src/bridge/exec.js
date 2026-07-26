@@ -6,6 +6,7 @@ const path = require('node:path');
 const childProcess = require('node:child_process');
 const { runProcess } = require('../process');
 const { isPathInside } = require('../safety');
+const { INTERNAL_STATUS_MAX_BYTES, gitStatusArgs, statusMapFromOutput } = require('../repo/gitStatus');
 
 const WHERE_EXE = String.raw`C:\Windows\System32\where.exe`;
 const MAX_CHANGED_FILES = 200;
@@ -105,27 +106,13 @@ function redactCommandForAudit(value) {
   return text.length > maxChars ? `${text.slice(0, maxChars - 1)}…` : text;
 }
 
-function statusPathFromLine(line) {
-  const raw = String(line || '').slice(3).trim();
-  const arrow = raw.indexOf(' -> ');
-  return arrow >= 0 ? raw.slice(arrow + 4).trim() : raw;
-}
-
-function statusMapFromOutput(output) {
-  const map = new Map();
-  for (const line of String(output || '').split(/\r?\n/)) {
-    if (!line || line.length < 3 || line.startsWith('[rel-ai-mcp truncated output]')) continue;
-    const file = statusPathFromLine(line);
-    if (file) map.set(file, line.slice(0, 2));
-  }
-  return map;
-}
-
 async function readGitStatusMap(workspace, config) {
-  const result = await runProcess('git', ['status', '--short', '--untracked-files=all'], {
+  // Keep the branch record first so runProcess's outer whitespace normalization can
+  // never strip the leading status column from a tracked-worktree record such as " M".
+  const result = await runProcess('git', gitStatusArgs(), {
     cwd: workspace.path,
     timeout: 30000,
-    maxOutputBytes: 8 * 1024 * 1024
+    maxOutputBytes: INTERNAL_STATUS_MAX_BYTES
   }, config);
   if (result.exitCode !== 0 || result.stdoutTruncated) return null;
   return statusMapFromOutput(result.stdout);

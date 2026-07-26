@@ -42,7 +42,7 @@ const KNOWN_TEXT_EXTENSIONS = new Set([
   '.java', '.kt', '.swift', '.cs', '.cpp', '.c', '.h', '.hpp', '.rb', '.php',
   '.css', '.scss', '.html', '.xml', '.yaml', '.yml', '.json', '.md', '.txt',
   '.sql', '.sh', '.bat', '.ps1', '.toml', '.ini', '.cfg', '.conf', '.lock',
-  '.svg', '.csv', '.tsv', '.properties', '.gradle', '.vue', '.svelte', '.env.example'
+  '.svg', '.csv', '.tsv', '.properties', '.gradle', '.vue', '.svelte'
 ]);
 
 const DEFAULT_EXCLUDED_PATHS = [
@@ -105,9 +105,16 @@ function validateRelativePath(relativePath, label = "Path", options = {}) {
   if (value.startsWith("/") || hasWindowsDrivePrefix(value)) {
     throw new Error(`${label} must be relative: ${value}`);
   }
-  const parts = new Set(value.split("/"));
+  const segments = value.split("/");
+  const parts = new Set(segments);
   if (parts.has("..") || parts.has("")) {
     throw new Error(`${label} must not contain traversal or empty segments: ${value}`);
+  }
+  // On Windows "<file>::$DATA" resolves to the file's default data stream, so a
+  // stream suffix let ".env::$DATA" read .env while classifying as an ordinary file.
+  // No legitimate repository path contains a colon in a segment.
+  if (segments.some((segment) => segment.includes(":"))) {
+    throw new Error(`${label} must not contain a drive or stream separator: ${value}`);
   }
   if (value.length > 512) throw new Error(`${label} is too long: ${value}`);
   if (options.skipSensitivePolicy !== true) {
@@ -116,9 +123,47 @@ function validateRelativePath(relativePath, label = "Path", options = {}) {
   return value;
 }
 
+// Workspace roots are resolved once per tool call at minimum, and once per path for
+// batch reads and batch edits. The root itself is a stable directory for the life of
+// the process, so its realpath is memoized; the *candidate* path is still resolved
+// every time, which is what actually detects a symlink escaping the workspace.
+const REAL_ROOT_CACHE_LIMIT = 64;
+const realRootCache = new Map();
+
+function realRootOf(root) {
+  const key = String(root);
+  // A symlink or Windows junction can be retargeted while the server is running.
+  // Never cache those roots: retaining the old realpath would make later operations
+  // continue against a repository the configured path no longer points to.
+  const cacheable = rootCanBeCached(key);
+  if (cacheable) {
+    const cached = realRootCache.get(key);
+    if (cached !== undefined) return cached;
+  }
+  const resolved = fs.realpathSync(key);
+  if (!cacheable) return resolved;
+  if (realRootCache.size >= REAL_ROOT_CACHE_LIMIT) {
+    realRootCache.delete(realRootCache.keys().next().value);
+  }
+  realRootCache.set(key, resolved);
+  return resolved;
+}
+
+function rootCanBeCached(root) {
+  try {
+    return !fs.lstatSync(root).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+function clearRealRootCache() {
+  realRootCache.clear();
+}
+
 function resolveSafePath(root, relativePath, options = {}) {
   const clean = validateRelativePath(relativePath, options.label || "Path", { ...options, skipSensitivePolicy: true });
-  const realRoot = fs.realpathSync(root);
+  const realRoot = realRootOf(root);
   const absolute = path.resolve(realRoot, clean);
   const realCandidate = resolveRealCandidate(absolute);
   if (!isPathInside(realCandidate, realRoot)) {
@@ -133,7 +178,13 @@ function resolveSafePath(root, relativePath, options = {}) {
 }
 
 function resolveRealCandidate(absolutePath) {
-  if (fs.existsSync(absolutePath)) return fs.realpathSync(absolutePath);
+  // realpathSync already fails for a missing path, so attempting it directly saves an
+  // existsSync probe on the common case where the target exists.
+  try {
+    return fs.realpathSync(absolutePath);
+  } catch (error) {
+    if (error?.code !== "ENOENT" && error?.code !== "ENOTDIR") throw error;
+  }
   const missingSegments = [];
   let ancestor = absolutePath;
   while (!fs.existsSync(ancestor)) {
@@ -265,7 +316,7 @@ function collectTextFiles(root, options = {}) {
     maxEntries: options.maxEntries || Infinity,
     files: [],
     skipped: [],
-    realRoot: fs.realpathSync(root),
+    realRoot: realRootOf(root),
     policy: null
   };
   context.policy = buildCollectionPolicy(context.realRoot, options);
@@ -313,10 +364,14 @@ function processTextEntry(context, dir, prefix, entry) {
   if (entry.isFile()) inspectTextFile(context, abs, rel);
 }
 
+// The walk starts at the workspace realpath and processTextEntry refuses every
+// symbolic link (junctions and reparse points included) before recursing, so an entry
+// reached here cannot resolve outside the root. Asserting containment with a string
+// compare instead of a realpathSync per file removes one syscall per repository file —
+// it dominated the snapshot and code-index walks on Windows.
 function inspectTextFile(context, abs, rel) {
   try {
-    const real = fs.realpathSync(abs);
-    if (!isPathInside(real, context.realRoot)) {
+    if (!isPathInside(abs, context.realRoot)) {
       context.skipped.push({ path: rel, reason: "escapes workspace" });
       return;
     }
@@ -498,6 +553,8 @@ function safeReadJson(file, fallback = null) {
 module.exports = {
   SECRET_PATH_PATTERNS,
   DEFAULT_EXCLUDED_NAMES,
+  clearRealRootCache,
+  realRootOf,
   validateRelativePath,
   resolveSafePath,
   assertPathOperationAllowed,

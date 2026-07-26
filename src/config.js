@@ -1,7 +1,7 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { safeReadJson } = require("./safety");
+const { safeReadJson, realRootOf, clearRealRootCache } = require("./safety");
 const { discoverCommands, staleCommandKeys } = require("./commandDiscovery");
 const { readProjectInstructions, summarizeProjectInstructions } = require('./projectInstructions');
 
@@ -60,15 +60,42 @@ function makeDefaultConfig() {
   };
 }
 
+// Every tool call reads, parses, and normalizes config.json. The file changes rarely,
+// so the normalized result is cached against the file's identity — a statSync (~0.02 ms)
+// replaces the read+parse+normalize. Reusing one object also lets downstream callers
+// memoize per-config work by object identity.
+let configCache = null;
+
 function readConfig(options = {}) {
   const configPath = getConfigPath();
-  if (!fs.existsSync(configPath)) {
+  let stat;
+  try {
+    // Nanosecond mtime, so two writes inside the same millisecond still invalidate.
+    stat = fs.statSync(configPath, { bigint: true });
+  } catch {
+    configCache = null;
     if (options.allowMissing) return makeDefaultConfig();
     throw new Error(`Rel.AI MCP config not found: ${configPath}. Run: npm run init-config`);
   }
+  if (configCache
+    && configCache.path === configPath
+    && configCache.mtimeNs === stat.mtimeNs
+    && configCache.size === stat.size) {
+    return configCache.config;
+  }
   const parsed = safeReadJson(configPath);
   if (!parsed) throw new Error(`Config file is corrupted or empty: ${configPath}. Fix or re-run: npm run init-config`);
-  return normalizeConfig(parsed);
+  const config = normalizeConfig(parsed);
+  configCache = { path: configPath, mtimeNs: stat.mtimeNs, size: stat.size, config };
+  return config;
+}
+
+// Drop every cached view of the config file. Callers that rewrite config.json through
+// something other than writeConfig (tests, the dashboard editor) must call this so the
+// next readConfig re-parses even if the filesystem timestamp did not move.
+function invalidateConfigCache() {
+  configCache = null;
+  clearRealRootCache();
 }
 
 function writeConfig(config, options = {}) {
@@ -79,6 +106,7 @@ function writeConfig(config, options = {}) {
   fs.mkdirSync(path.dirname(configPath), { recursive: true, mode: 0o700 });
   const normalized = normalizeConfig(config);
   fs.writeFileSync(configPath, `${JSON.stringify(normalized, null, 2)}\n`, { mode: 0o600 });
+  invalidateConfigCache();
   return normalized;
 }
 
@@ -410,7 +438,7 @@ function resolveWorkspace(config, alias) {
   }
   assertSafeWorkspaceRoot(entry.path, `Workspace '${resolvedAlias}' path`);
   if (!fs.existsSync(entry.path)) throw new Error(`Workspace '${resolvedAlias}' path does not exist: ${entry.path}`);
-  const realRoot = fs.realpathSync(entry.path);
+  const realRoot = realRootOf(entry.path);
   assertSafeWorkspaceRoot(realRoot, `Workspace '${resolvedAlias}' resolved path`);
   return {
     alias: resolvedAlias,
@@ -481,35 +509,14 @@ function publicConfigSummary(config) {
   };
 }
 
-// publicConfigSummary runs on every dashboard poll and calls this per workspace.
-// Cache against every manifest that command discovery understands, not only
-// package.json, so Go, Rust, Python, Flutter, and Makefile changes refresh too.
-const _discoverCache = new Map();
-const DISCOVERY_MANIFESTS = [
-  'package.json', 'Makefile', 'pubspec.yaml', 'go.mod', 'Cargo.toml',
-  'pyproject.toml', 'requirements.txt'
-];
-
-function discoverySignature(workspacePath) {
-  return DISCOVERY_MANIFESTS.map(name => {
-    try {
-      const stat = fs.statSync(path.join(workspacePath, name));
-      return `${name}:${stat.mtimeMs}:${stat.size}`;
-    } catch {
-      return `${name}:0:0`;
-    }
-  }).join('|');
-}
-
+// publicConfigSummary runs on every dashboard poll and calls these per workspace.
+// Both discoverCommands and detectVerifyChecks now cache against a stat signature of
+// every manifest they understand, so these wrappers only add the missing-path guard
+// and keep a discovery failure from breaking the whole summary.
 function safeDiscoverCommands(workspacePath) {
   try {
     if (!workspacePath || !fs.existsSync(workspacePath)) return {};
-    const signature = discoverySignature(workspacePath);
-    const cached = _discoverCache.get(workspacePath);
-    if (cached?.signature === signature) return cached.value;
-    const value = discoverCommands(workspacePath);
-    _discoverCache.set(workspacePath, { signature, value, validationCommands: null });
-    return value;
+    return discoverCommands(workspacePath);
   } catch (error) {
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] discover commands:', error);
     return {};
@@ -519,18 +526,7 @@ function safeDiscoverCommands(workspacePath) {
 function safeDetectValidationChecks(workspacePath) {
   try {
     if (!workspacePath || !fs.existsSync(workspacePath)) return [];
-    const signature = discoverySignature(workspacePath);
-    const cached = _discoverCache.get(workspacePath);
-    if (cached?.signature === signature && Array.isArray(cached.validationCommands)) {
-      return cached.validationCommands;
-    }
-    const validationCommands = require('./bridge/validation').detectVerifyChecks(workspacePath, 'standard');
-    _discoverCache.set(workspacePath, {
-      signature,
-      value: cached?.signature === signature ? cached.value : discoverCommands(workspacePath),
-      validationCommands
-    });
-    return validationCommands;
+    return require('./bridge/validation').detectVerifyChecks(workspacePath, 'standard');
   } catch (error) {
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] detect validation checks:', error);
     return [];
@@ -556,6 +552,7 @@ module.exports = {
   makeDefaultPatchConfig,
   normalizePatchConfig,
   readConfig,
+  invalidateConfigCache,
   ensureConfig,
   writeConfig,
   normalizeConfig,

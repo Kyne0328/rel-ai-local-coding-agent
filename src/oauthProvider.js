@@ -43,24 +43,47 @@ function lockPath() {
 
 function emptyStore() {
   return {
-    clients: {},
-    codes: {},
-    accessTokens: {},
-    refreshTokens: {},
+    clients: Object.create(null),
+    codes: Object.create(null),
+    accessTokens: Object.create(null),
+    refreshTokens: Object.create(null),
     approvalRequiredAt: null,
     lastApprovedAt: null
   };
+}
+
+// Every lookup below indexes these maps with a caller-supplied string (a bearer
+// token, a refresh token, a client_id). JSON.parse produces ordinary objects, so
+// keys like "constructor" or "__proto__" resolve through Object.prototype to truthy
+// values with an undefined expiresAt — which made `expiresAt <= Date.now()` false and
+// authorized the request. Re-key them onto a null prototype so only real entries
+// can ever be found. JSON.stringify still serializes null-prototype objects, so
+// writeStore is unaffected.
+const STORE_MAPS = ["clients", "codes", "accessTokens", "refreshTokens"];
+
+function nullProtoMap(value) {
+  return Object.assign(Object.create(null), objectOrEmpty(value));
 }
 
 function readStore() {
   try {
     const raw = fs.readFileSync(storePath(), "utf8");
     const parsed = JSON.parse(raw);
-    return { ...emptyStore(), ...objectOrEmpty(parsed) };
+    const store = { ...emptyStore(), ...objectOrEmpty(parsed) };
+    for (const key of STORE_MAPS) store[key] = nullProtoMap(store[key]);
+    return store;
   } catch (error) {
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] oauth store read:', error);
     return emptyStore();
   }
+}
+
+// A stored grant is only usable if it is a real record with a numeric expiry.
+function liveEntry(entry) {
+  if (!entry || typeof entry !== "object") return null;
+  if (typeof entry.expiresAt !== "number" || !Number.isFinite(entry.expiresAt)) return null;
+  if (entry.expiresAt <= Date.now()) return null;
+  return entry;
 }
 
 function objectOrEmpty(value) {
@@ -299,8 +322,8 @@ function isRecoverableClientId(clientId) {
 
 function authorizationClient(query, store, options = {}) {
   const clientId = String(query.client_id || "");
-  const client = store.clients[clientId];
-  if (client) return { clientId, client, recoverClient: false };
+  const client = clientId ? store.clients[clientId] : null;
+  if (client && typeof client === "object") return { clientId, client, recoverClient: false };
   if (options.allowClientRecovery && isRecoverableClientId(clientId)) {
     return { clientId, client: null, recoverClient: true };
   }
@@ -312,7 +335,7 @@ function authorizationRedirect(query, client, options = {}) {
   if (!redirectUri) {
     return { error: oauthError("invalid_request", "redirect_uri is required.") };
   }
-  if (client && !client.redirect_uris.includes(redirectUri)) {
+  if (client && (!Array.isArray(client.redirect_uris) || !client.redirect_uris.includes(redirectUri))) {
     return { error: oauthError("invalid_request", "redirect_uri does not match a registered value.") };
   }
   if (!client && options.recoverClient) {
@@ -438,10 +461,11 @@ function issueTokens(store, { clientId, scope, resource }) {
 
 function _exchangeAuthCode(store, body) {
   const code = String(body.code || "");
-  const entry = store.codes[code];
-  if (!entry) return { status: 400, body: { error: "invalid_grant", error_description: "Authorization code is invalid or expired." } };
+  const entry = code && Object.hasOwn(store.codes, code) ? store.codes[code] : null;
+  if (!entry || typeof entry !== "object") return { status: 400, body: { error: "invalid_grant", error_description: "Authorization code is invalid or expired." } };
+  // Consume before validating so a replayed code cannot be retried.
   delete store.codes[code];
-  if (entry.expiresAt <= Date.now()) {
+  if (!liveEntry(entry)) {
     writeStore(store);
     return { status: 400, body: { error: "invalid_grant", error_description: "Authorization code expired." } };
   }
@@ -465,11 +489,11 @@ function _exchangeAuthCode(store, body) {
 
 function _exchangeRefreshToken(store, body) {
   const refreshToken = String(body.refresh_token || "");
-  const entry = store.refreshTokens[refreshToken];
-  if (!entry || entry.expiresAt <= Date.now()) {
+  const entry = refreshToken ? liveEntry(store.refreshTokens[refreshToken]) : null;
+  if (!entry) {
     return { status: 400, body: { error: "invalid_grant", error_description: "Refresh token is invalid or expired." } };
   }
-  if (body.client_id && String(body.client_id) !== entry.clientId) {
+  if (String(body.client_id || "") !== String(entry.clientId || "")) {
     return { status: 400, body: { error: "invalid_grant", error_description: "client_id does not match the refresh token." } };
   }
   delete store.refreshTokens[refreshToken];
@@ -495,10 +519,7 @@ function exchangeToken(body = {}) {
 function validateAccessToken(token) {
   if (!token) return null;
   const store = readStore();
-  const entry = store.accessTokens[token];
-  if (!entry) return null;
-  if (entry.expiresAt <= Date.now()) return null;
-  return entry;
+  return liveEntry(store.accessTokens[token]);
 }
 
 // ---- Login page ------------------------------------------------------------

@@ -5,7 +5,7 @@ const { resolveSafePath, writeTextFileSafe, fileSha256 } = require("../safety");
 const { appendOperation, makeOperationId } = require("../journal");
 const {
   assertPatchUpdateSafe, ensureGitRepo, requireCleanGitIfConfigured,
-  shouldMakePatchBackup, makePatchBackup, validatePatchPaths
+  shouldMakePatchBackup, makePatchBackup, inspectPatchPaths
 } = require("../repo/gitOps");
 const { clampNumber } = require("./limits");
 const { relaiVerify, hasRequestedChecks } = require("./validation");
@@ -22,10 +22,12 @@ async function relaiApplyPatch(workspace, config, args = {}) {
   const patch = normalizeUnifiedDiffText(rawPatch);
   const patchBytes = Buffer.byteLength(patch, "utf8");
   await ensureGitRepo(workspace, config);
-  const touchedPaths = validatePatchPaths(workspace, patch);
+  const timeoutMs = clampNumber(args.timeoutMs, 1000, 86400000, 120000);
+  const inspection = await inspectPatchPaths(workspace, config, patch, timeoutMs);
+  const touchedPaths = inspection.touchedPaths;
+  const check = inspection.check;
   await requireCleanGitIfConfigured(workspace, config, args);
   const operationId = makeOperationId();
-  const check = await runProcess("git", ["apply", "--check", "--verbose", "--recount", "-"], { cwd: workspace.path, input: patch, timeout: clampNumber(args.timeoutMs, 1000, 86400000, 120000) }, config);
   if (check.exitCode !== 0) {
     return {
       ok: false,
@@ -58,7 +60,7 @@ async function relaiApplyPatch(workspace, config, args = {}) {
   // must report changedFiles:[].
   const hashOf = (rel) => (fs.existsSync(path.join(workspace.path, rel)) ? fileSha256(workspace.path, rel) : null);
   const beforeHashes = new Map(touchedPaths.map((rel) => [rel, hashOf(rel)]));
-  const apply = await runProcess("git", ["apply", "-"], { cwd: workspace.path, input: patch, timeout: clampNumber(args.timeoutMs, 1000, 86400000, 120000) }, config);
+  const apply = await runProcess("git", ["apply", "-"], { cwd: workspace.path, input: patch, timeout: timeoutMs }, config);
   const changedFiles = apply.exitCode === 0
     ? touchedPaths.filter((rel) => hashOf(rel) !== beforeHashes.get(rel))
     : [];
