@@ -29,7 +29,7 @@ async function loadAndRender(container) {
   const appearance = panel('Appearance');
   renderAppearanceSettings(appearance.body);
   container.appendChild(appearance.el);
-  container.appendChild(desktopNotificationsPanel(notifications?.enabled));
+  container.appendChild(desktopNotificationsPanel(notifications?.enabled).el);
   container.appendChild(desktopStartupPanel(lifecycle).el);
   container.appendChild(applicationUpdatesPanel().el);
 }

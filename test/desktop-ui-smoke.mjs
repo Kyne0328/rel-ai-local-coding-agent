@@ -54,6 +54,7 @@ const appUpdaterEvents = read('electron/app-updater-events.js');
 const desktopSettings = read('electron/desktop-settings.js');
 const desktopUpdates = read('src/ui/features/settings/desktop-updates.js');
 const desktopStartup = read('src/ui/features/settings/desktop-startup.js');
+const generalSettings = read('src/ui/features/settings/general.js');
 const desktopLifecycle = read('electron/desktop-lifecycle.js');
 assert.match(statusHtml, /id="serverToggleBtn"/);
 assert.match(statusHtml, /data-disclosure="service"/);
@@ -133,6 +134,9 @@ assert.match(desktopSettings, /replacementAccountKey \|\| current\.ngrokAuthtoke
 assert.match(windowSecurity, /sandbox: true/);
 assert.match(windowSecurity, /setPermissionRequestHandler/);
 assert.match(windowSecurity, /will-download/);
+assert.match(generalSettings, /desktopNotificationsPanel\(notifications\?\.enabled\)\.el/);
+assert.match(generalSettings, /desktopStartupPanel\(lifecycle\)\.el/);
+assert.match(generalSettings, /applicationUpdatesPanel\(\)\.el/);
 assert.match(desktopUpdates, /Application updates/);
 assert.match(desktopUpdates, /Restart and install/);
 assert.match(desktopUpdates, /<progress/);

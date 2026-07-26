@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.21.3] — 2026-07-26
+
+### Reliable live dashboard updates
+- **Send an immediate dashboard snapshot whenever a live event stream connects.**
+- **Keep live updates active in background windows and force a catch-up refresh when the dashboard becomes visible.**
+- **Defer rerenders while selects, dropdowns, overlays, or unsaved settings are active, then flush the latest state safely.**
+- **Fix General settings panel mounting and improve narrow settings and activity layouts.**
+
+Bump root/electron/status UI/lockfiles to 0.21.3.
+
 ## [0.21.2] — 2026-07-26
 
 ### Scalable structured edits

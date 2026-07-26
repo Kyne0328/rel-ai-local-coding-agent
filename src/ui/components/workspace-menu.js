@@ -58,6 +58,7 @@ function bindWorkspaceMenu(menu) {
     menu.classList.remove('open');
     if (closeActiveMenu === close) closeActiveMenu = null;
     if (restoreFocus) trigger.focus();
+    window.dispatchEvent(new CustomEvent('relai:dropdown-closed'));
   };
   const open = () => {
     closeActiveMenu?.();

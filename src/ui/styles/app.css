@@ -369,8 +369,8 @@
   .activity-col-tool { width: 21%; }
   .activity-col-workspace { width: 17%; }
   .activity-col-status { width: 10%; }
-  .activity-col-message { width: 39%; }
-  .activity-col-action { width: 4%; }
+  .activity-col-message { width: auto; }
+  .activity-col-action { width: 64px; }
   .activity-row-button { @apply size-8 min-h-8 px-0 text-base; }
   .activity-requested-row td { background: var(--blue-dim); }
   .clickable-row { @apply cursor-pointer; }
@@ -908,8 +908,11 @@
   .connection-path-step:nth-child(-n+2) { border-bottom: 1px solid var(--line-soft); }
   .connection-path-step::after { display: none; }
   .settings-layout, .settings-shell { grid-template-columns: 1fr; }
-  .settings-rail { @apply static flex-row overflow-x-auto; scroll-snap-type: x proximity; }
-  .settings-nav-button { @apply shrink-0; scroll-snap-align: start; }
+  .settings-rail {
+    @apply static grid overflow-visible;
+    grid-template-columns: repeat(auto-fit,minmax(140px,1fr));
+  }
+  .settings-nav-button { @apply min-w-0 w-full; }
 }
 
 @media (max-width: 760px) {
