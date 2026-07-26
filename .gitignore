@@ -4,7 +4,6 @@
 .superpowers
 /electron/node_modules
 /dist
-/.vscode   
 .agents
 # Local MCP runtime state — journals, staged payloads, oauth store. Test artifacts
 # used to land here and dirty the tree.
