@@ -8,7 +8,8 @@ const CANONICAL_PATHS = new Set([
   'settings/connection',
   'settings/tools-validation',
   'settings/diagnostics',
-  'settings/advanced'
+  'settings/advanced',
+  'settings/about'
 ]);
 
 const PATH_ALIASES = new Map([

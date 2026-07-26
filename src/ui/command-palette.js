@@ -113,6 +113,7 @@ function buildCommands(data) {
     routeCommand('settings-tools-validation', 'Settings · Tools & validation', 'Tool availability and workspace validation presentation.', '#settings/tools-validation', 'Settings'),
     routeCommand('settings-diagnostics', 'Settings · Diagnostics', 'Errors, reports, service logs, and reset controls.', '#settings/diagnostics', 'Settings'),
     routeCommand('settings-advanced', 'Settings · Advanced', 'Patch safeguards and resource limits.', '#settings/advanced', 'Settings'),
+    routeCommand('settings-about', 'Settings · About', 'Application version, developer, repository, and license.', '#settings/about', 'Settings'),
     actionCommand('add-workspace', 'Add workspace', 'Choose another local project folder for ChatGPT.', 'Action', async () => {
       closePalette();
       const module = await import('./features/workspaces/form.js');

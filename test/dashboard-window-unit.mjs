@@ -135,7 +135,8 @@ try {
   assert.equal(prevented, true);
   assert.deepEqual(external, ['https://example.com/docs']);
   assert.deepEqual(openHandler({ url: 'https://example.com/help' }), { action: 'deny' });
-  assert.deepEqual(external, ['https://example.com/docs', 'https://example.com/help']);
+  assert.deepEqual(openHandler({ url: 'https://github.com/Kyne0328' }), { action: 'deny' });
+  assert.deepEqual(external, ['https://example.com/docs', 'https://example.com/help', 'https://github.com/Kyne0328']);
   webContentsEvents.get('did-fail-load')({}, -105, 'Connection refused', 'http://127.0.0.1:3333/dashboard', true);
   assert.match(dashboardLoadError?.message || '', /Dashboard failed to load/);
 

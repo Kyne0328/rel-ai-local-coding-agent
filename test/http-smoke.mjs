@@ -89,6 +89,15 @@ const dashboardQueryAuth = await fetch(`http://127.0.0.1:${port}/api/dashboard/v
 if (!dashboardQueryAuth.ok) {
   throw new Error(`dashboard API did not accept token query auth used by browser dashboard: ${JSON.stringify(dashboardQueryAuth)}`);
 }
+if (
+  dashboardQueryAuth.application?.name !== 'Rel.AI MCP'
+  || dashboardQueryAuth.application?.developer?.name !== 'Kyne'
+  || dashboardQueryAuth.application?.developer?.username !== 'Kyne0328'
+  || dashboardQueryAuth.application?.developer?.profileUrl !== 'https://github.com/Kyne0328'
+  || dashboardQueryAuth.application?.repositoryUrl !== 'https://github.com/Kyne0328/rel-ai-mcp'
+) {
+  throw new Error(`dashboard API did not include canonical application attribution: ${JSON.stringify(dashboardQueryAuth.application)}`);
+}
 
 const invalidAsyncPost = await fetch(`http://127.0.0.1:${port}/api/settings?token=${encodeURIComponent(token)}`, {
   method: 'POST',

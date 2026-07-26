@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.21.5] — 2026-07-26
+
+### Developer attribution and About page
+- **Add a discoverable Settings About page with product version, developer, repository, and license details.**
+- **Centralize application metadata so the dashboard, package manifests, and tests share one canonical attribution source.**
+- **Open validated GitHub links in the system browser with native keyboard and focus behavior.**
+- **Document Kyne as the developer without exposing a legal name.**
+
+Bump root/electron/status UI/lockfiles to 0.21.5.
+
 ## [0.21.4] — 2026-07-26
 
 ### Native desktop window chrome

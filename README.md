@@ -481,6 +481,6 @@ Rel.AI MCP is intentionally opinionated now.
 
 ---
 
-## Attribution
+## Developer
 
-Built and maintained by [@Kyne0328](https://github.com/Kyne0328).
+Rel.AI MCP is developed by [Kyne](https://github.com/Kyne0328).
