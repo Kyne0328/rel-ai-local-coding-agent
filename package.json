@@ -1,6 +1,7 @@
 {
   "name": "rel-ai-mcp",
-  "version": "0.21.4",
+  "productName": "Rel.AI MCP",
+  "version": "0.21.5",
   "description": "Local ChatGPT repo bridge: one reliable workflow for snapshot, read, write, verify, diff, and reset configured local workspaces.",
   "private": true,
   "license": "MIT",
@@ -67,7 +68,7 @@
     "pull-request"
   ],
   "author": {
-    "name": "Kyne0328",
+    "name": "Kyne",
     "url": "https://github.com/Kyne0328"
   },
   "homepage": "https://github.com/Kyne0328/rel-ai-mcp",

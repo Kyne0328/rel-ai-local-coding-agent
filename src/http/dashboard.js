@@ -11,6 +11,7 @@ const { ERROR_CODES, deriveConnectionState, errorPayload } = require("../desktop
 const { renderDashboardShellBootstrap, renderDashboardWindowTitlebar } = require("./dashboardShellChrome");
 const { getOnboardingStatus, writeOnboardingState } = require("../onboardingState");
 const { getVersion } = require("../version");
+const { getApplicationMetadata } = require("../appMetadata");
 const { resolveRequireHttpToken } = require("./auth");
 const { readTaskHistory } = require("../taskHistoryStore");
 const { onToolActivity } = require("../toolActivity");
@@ -76,6 +77,7 @@ function buildDashboardPayload(config, options = {}, requireHttpToken = false) {
   }
   return {
     ...base,
+    application: getApplicationMetadata(),
     readiness: release.releaseReadiness(config, { requireHttpToken }),
     connection: connectionSummary,
     connectionState: desktopStatus?.connectionState || deriveConnectionState(connectionStateInput),

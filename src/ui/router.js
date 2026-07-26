@@ -23,7 +23,8 @@ const SETTINGS_TITLES = {
   connector: 'Connection',
   'tools-validation': 'Tools & validation',
   diagnostics: 'Diagnostics',
-  advanced: 'Advanced'
+  advanced: 'Advanced',
+  about: 'About'
 };
 const ROUTE_DESCRIPTIONS = {
   home: 'Connection health, workspace readiness, and recent Rel.AI sessions.',
@@ -38,7 +39,8 @@ const SETTINGS_DESCRIPTIONS = {
   connection: 'Manage the local service, public endpoint, ChatGPT authorization, and live dashboard connection.',
   'tools-validation': 'Choose tool behavior and configure validation commands.',
   diagnostics: 'Review findings, runtime logs, and recovery controls.',
-  advanced: 'Manage advanced desktop and state settings.'
+  advanced: 'Manage advanced desktop and state settings.',
+  about: 'View Rel.AI MCP version, developer, repository, and license information.'
 };
 
 export function initRouter(container, sections) {

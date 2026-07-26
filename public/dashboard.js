@@ -351,7 +351,7 @@ function viewFingerprint(data = {}) {
     case 'connection':
     case 'connector':
     case 'diagnostics':
-      payload = [route, config, data.connectionState || {}, desktopState];
+      payload = [route, data.application || {}, config, data.connectionState || {}, desktopState];
       break;
     default:
       payload = [route, config.workspaces || [], data.tasks || [], data.taskActivity || {}, data.health || {}, data.connectionState || {}, desktopState];

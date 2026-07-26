@@ -3,6 +3,7 @@ import { mountConnector } from './connector.js';
 import { mountToolsValidation } from './tools-validation.js';
 import { mountDiagnostics } from './diagnostics.js';
 import { mountAdvanced } from './advanced.js';
+import { mountAbout } from './about.js';
 import { navigate, routeHref } from '../../router.js';
 import { normalizeRouteKey } from '../../route-policy.js';
 
@@ -11,7 +12,8 @@ const SUB_PAGES = [
   { id: 'connection', label: 'Connection', mount: mountConnector },
   { id: 'tools-validation', label: 'Tools & validation', mount: mountToolsValidation },
   { id: 'diagnostics', label: 'Diagnostics', mount: mountDiagnostics },
-  { id: 'advanced', label: 'Advanced', mount: mountAdvanced }
+  { id: 'advanced', label: 'Advanced', mount: mountAdvanced },
+  { id: 'about', label: 'About', mount: mountAbout }
 ];
 const LEGACY_REDIRECTS = {
   connector: 'connection',
