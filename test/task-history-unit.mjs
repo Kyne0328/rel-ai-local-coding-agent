@@ -36,6 +36,21 @@ assert.equal(completed.completionKnown, true);
 assert.equal(completed.endReason, 'explicit_completion');
 assert.equal(completed.summary, 'Implemented and validated the requested change.');
 
+const modernNoise = buildTaskHistory([
+  { taskId: 'implicit-status', taskIdentityVersion: 2, taskIdExplicit: false, taskHistoryEligible: false, ts: '2026-07-11T08:10:00.000Z', tool: 'relai_status', ok: true },
+  { taskId: 'rejected-start', taskIdentityVersion: 2, taskIdExplicit: false, taskHistoryEligible: false, eventType: 'task.start.rejected', ts: '2026-07-11T08:11:00.000Z', tool: 'relai_start_task', workspace: '.', ok: false }
+], { state: 'idle' });
+assert.equal(modernNoise.length, 0, 'modern taskless and rejected events must remain activity-only');
+
+const readOnlyCompleted = buildTaskHistory([
+  { taskId: 'read-only-task', taskIdentityVersion: 2, taskIdExplicit: true, taskHistoryEligible: true, ts: '2026-07-11T08:20:00.000Z', tool: 'relai_start_task', workspace: 'repo', ok: true },
+  { taskId: 'read-only-task', taskIdentityVersion: 2, taskIdExplicit: true, taskHistoryEligible: true, ts: '2026-07-11T08:20:01.000Z', tool: 'relai_read', workspace: 'repo', ok: true },
+  { taskId: 'read-only-task', taskIdentityVersion: 2, taskIdExplicit: true, taskHistoryEligible: true, ts: '2026-07-11T08:20:02.000Z', tool: 'relai_complete_task', workspace: 'repo', ok: true, completionKnown: true, validationStatus: 'not_required', taskSummary: 'Read-only review completed.' }
+], { state: 'idle' });
+assert.equal(readOnlyCompleted.length, 1);
+assert.equal(readOnlyCompleted[0].status, 'completed');
+assert.equal(readOnlyCompleted[0].validation, 'not_required');
+
 const reconnected = buildTaskHistory([
   { taskId: 'validation-task', ts: '2026-07-11T09:00:00.000Z', tool: 'relai_run_checks', workspace: 'repo', ok: true, validationStatus: 'passed' },
   { taskId: 'completion-task', ts: '2026-07-11T09:00:03.000Z', tool: 'relai_complete_task', workspace: 'repo', ok: true, completionKnown: true, validationTaskId: 'validation-task', relatedTaskIds: ['validation-task', 'completion-task'], taskSummary: 'Completed after reconnect.' }

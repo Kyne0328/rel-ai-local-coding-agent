@@ -174,14 +174,13 @@ try {
     task_id: noValidationTask.task_id,
     command: nodeCommand(path.join(workspace, 'scripts', 'emit.js'))
   }, noValidationContext);
-  await assert.rejects(
-    () => callTool('relai_complete_task', {
-      workspace: 'app',
-      task_id: noValidationTask.task_id,
-      summary: 'Command output alone must not complete a task.'
-    }, noValidationContext),
-    /no successful final validation/i
-  );
+  const readOnlyExecCompletion = await callTool('relai_complete_task', {
+    workspace: 'app',
+    task_id: noValidationTask.task_id,
+    summary: 'Read-only command task completed without validation.'
+  }, noValidationContext);
+  assert.equal(readOnlyExecCompletion.ok, true);
+  assert.equal(readOnlyExecCompletion.validationStatus, 'not_required');
 
   resetToolActivity();
   const validatedContext = { publicHttpOnly: true, taskScopeId: 'exec-after-validation-readonly' };

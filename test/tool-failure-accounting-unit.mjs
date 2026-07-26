@@ -26,7 +26,9 @@ try {
   const { readAudit } = require('../src/audit.js');
   const { readConfig } = require('../src/config.js');
   resetToolActivity();
-  const result = await callTool('relai_run_checks', { workspace: 'app' }, { publicHttpOnly: true, taskScopeId: 'failure-accounting' });
+  const context = { publicHttpOnly: true, taskScopeId: 'failure-accounting' };
+  const task = await callTool('relai_start_task', { workspace: 'app' }, context);
+  const result = await callTool('relai_run_checks', { workspace: 'app', task_id: task.task_id }, context);
   assert.equal(result.ok, false);
   assert.equal(getToolActivity().failures, 1, 'returned ok:false must increment task failures');
   const event = readAudit(readConfig(), { limit: 20 }).entries.find(entry => entry.tool === 'relai_run_checks');

@@ -109,6 +109,8 @@ function normalizeActiveState(state) {
 }
 
 function validationSummary(events) {
+  const explicit = [...events].reverse().find(entry => entry.validationStatus === 'not_required');
+  if (explicit) return 'not_required';
   const checks = events.filter(entry => entry.tool === 'relai_run_checks');
   if (!checks.length) return 'not_run';
   const latest = checks.at(-1);
@@ -130,7 +132,7 @@ function groupTaskEntries(entries, legacyGapMs = DEFAULT_TASK_IDLE_MS) {
   const legacyByProcess = new Map();
   const gapMs = clamp(legacyGapMs, 15_000, 10 * 60_000);
   const ordered = (Array.isArray(entries) ? entries : [])
-    .filter(entry => entry && typeof entry === 'object')
+    .filter(entry => entry && typeof entry === 'object' && isSessionHistoryEvent(entry))
     .sort((left, right) => eventTimestamp(left) - eventTimestamp(right));
   const taskAliases = completionTaskAliases(ordered);
 
@@ -233,6 +235,12 @@ function completionTaskAliases(entries) {
     }
   }
   return aliases;
+}
+
+function isSessionHistoryEvent(entry) {
+  if (entry?.taskHistoryEligible === false || entry?.eventType === 'task.start.rejected') return false;
+  if (Number(entry?.taskIdentityVersion || 0) < 2) return true;
+  return Boolean(String(entry?.taskId || '').trim() && entry?.taskIdExplicit === true);
 }
 
 function eventTimestamp(entry) {

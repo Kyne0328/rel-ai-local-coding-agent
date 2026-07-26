@@ -18,7 +18,7 @@ const STORE_VERSION = 1;
 const MAX_SESSION_EVENTS = 100;
 
 function recordTaskHistoryEvent(config, event) {
-  if (!event || typeof event !== 'object') return null;
+  if (!event || typeof event !== 'object' || !isPersistableTaskEvent(event)) return null;
   const directory = getTaskHistoryDir(config);
   const canonicalId = resolveCanonicalTaskId(directory, event);
   const relatedIds = relatedTaskIds(event, canonicalId);
@@ -38,7 +38,7 @@ function readTaskHistorySession(config, taskId) {
   try {
     ensureMigrated(config);
     const session = readSession(getTaskHistoryDir(config), id);
-    return session ? publicSession(session) : null;
+    return session && isStoredLogicalSession(session) ? publicSession(session) : null;
   } catch (error) {
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] task history session read:', error);
     return null;
@@ -58,6 +58,12 @@ function readTaskHistory(config, activity = {}, options = {}) {
     return buildTaskHistory(audit.entries, activity, { limit });
   }
   const active = buildTaskHistory([], activity, { limit: MAX_SESSIONS });
+  const activeIds = new Set(active.map(session => session.id).filter(Boolean));
+  persisted = persisted.filter(session => {
+    if (!isStoredSessionNoise(session, activeIds)) return true;
+    removeSession(getTaskHistoryDir(config), session.id);
+    return false;
+  });
   const byId = new Map(persisted.map(session => [session.id, session]));
   for (const task of active) {
     const existing = byId.get(task.id);
@@ -116,7 +122,11 @@ function applyEvent(session, event) {
     ...(event.filePath ? [event.filePath] : [])
   ].map(String).filter(Boolean));
   const failures = Number(session.failures || 0) + (event.ok === false ? 1 : 0);
-  const validation = event.tool === 'relai_run_checks' ? validationState(event) : session.validation || 'not_run';
+  const validation = event.validationStatus === 'not_required'
+    ? 'not_required'
+    : event.tool === 'relai_run_checks'
+      ? validationState(event)
+      : session.validation || 'not_run';
   const startedAt = session.startedAt && Date.parse(session.startedAt) <= timestamp
     ? session.startedAt
     : new Date(timestamp).toISOString();
@@ -204,7 +214,7 @@ function compactEvent(event) {
   const keep = [
     'id', 'ts', 'pid', 'taskId', 'scopeId', 'operationId', 'requestId', 'serverInstanceId',
     'transportType', 'transportSessionId', 'clientName', 'clientVersion', 'initializationRequestId',
-    'taskIdentityVersion', 'taskIdExplicit', 'duplicateRequest', 'eventType',
+    'taskIdentityVersion', 'taskIdExplicit', 'taskHistoryEligible', 'duplicateRequest', 'eventType',
     'tool', 'operation', 'workspace', 'ok', 'ms', 'changedFiles', 'sessionChangedFiles', 'filePath', 'validationStatus',
     'completionKnown', 'endReason', 'completionSource', 'taskSummary', 'validationTaskId', 'relatedTaskIds',
     'message', 'error', 'path'
@@ -253,6 +263,7 @@ function emptySession(id) {
 
 function validationState(event) {
   if (event.ok === false || event.validationStatus === 'failed') return 'failed';
+  if (event.validationStatus === 'not_required') return 'not_required';
   return event.validationStatus === 'passed' ? 'passed' : 'not_run';
 }
 
@@ -264,6 +275,34 @@ function isFragmentedScope(value) {
 function strongConversationScope(value) {
   const match = String(value || '').match(/^mcp:conversation:[^\s]+/);
   return match ? match[0] : '';
+}
+
+function isPersistableTaskEvent(event) {
+  if (!cleanId(event?.taskId) || event?.taskHistoryEligible === false || event?.eventType === 'task.start.rejected') return false;
+  if (Number(event?.taskIdentityVersion || 0) >= 2 && event?.taskIdExplicit !== true) return false;
+  return true;
+}
+
+function isStoredLogicalSession(session) {
+  const events = Array.isArray(session?.events) ? session.events : [];
+  if (!events.length) return true;
+  return events.some(event => {
+    if (event?.taskHistoryEligible === false || event?.eventType === 'task.start.rejected') return false;
+    if (Number(event?.taskIdentityVersion || 0) < 2) return true;
+    return Boolean(cleanId(event?.taskId) && event?.taskIdExplicit === true);
+  });
+}
+
+function isStoredSessionNoise(session, activeIds) {
+  if (!session?.id || activeIds.has(session.id)) return false;
+  if (!isStoredLogicalSession(session)) return true;
+  const events = Array.isArray(session.events) ? session.events : [];
+  if (events.length !== 1 || session.completionKnown || Number(session.changedFileCount || 0) > 0) return false;
+  const event = events[0] || {};
+  if (event.eventType === 'task.start.rejected' || event.tool === 'relai_status') return true;
+  if (event.tool !== 'relai_start_task') return false;
+  const endedAt = eventTime(session);
+  return Boolean(endedAt && Date.now() - endedAt > DEFAULT_TASK_IDLE_MS);
 }
 
 function cleanId(value) {

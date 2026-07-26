@@ -302,6 +302,15 @@
 
   .task-overview { @apply grid items-center gap-4 p-4; grid-template-columns: 42px minmax(0,1fr) auto; }
   .task-overview-mark { @apply grid size-10 place-items-center rounded-xl text-lg font-bold; background: var(--blue-dim); color: var(--blue); border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent); }
+  .task-overview-spinner {
+    display: block;
+    width: 18px;
+    height: 18px;
+    border: 2px solid color-mix(in srgb, var(--blue) 28%, transparent);
+    border-top-color: currentColor;
+    border-radius: 999px;
+    animation: spin .8s linear infinite;
+  }
   .task-overview.attention .task-overview-mark { background: var(--red-dim); color: var(--red); border-color: color-mix(in srgb, var(--red) 30%, transparent); }
   .task-overview-copy h3 { @apply text-[15px]; }
   .task-overview-copy p { @apply mt-1 text-[12px]; color: var(--text-muted); }
@@ -1009,6 +1018,7 @@
 @media (forced-colors: active) {
   button, .buttonlike, input, select, textarea, .card, .metric, .workspace-card, .tool-card, .topbar, .sidebar { border: 1px solid CanvasText; }
   .status-pill::before, .connection-layer-dot, .workspace-readiness-fact dt i { forced-color-adjust: none; }
+  .task-overview-spinner { border-color: Canvas; border-top-color: CanvasText; forced-color-adjust: none; }
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }

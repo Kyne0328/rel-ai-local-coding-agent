@@ -15,7 +15,7 @@ export function mountTasks(container, data = {}) {
   const sessions = orderSessionsForDisplay((Array.isArray(data.tasks) ? data.tasks : [])
     .filter(session => !workspace || session.workspace === workspace));
   const working = sessions.filter(session => session.status === 'working').length;
-  const waiting = sessions.filter(session => session.status === 'waiting').length;
+  const open = sessions.filter(session => session.status === 'waiting').length;
   const completed = sessions.filter(session => session.status === 'completed').length;
   const scopeKey = workspace || '__all__';
 
@@ -24,7 +24,7 @@ export function mountTasks(container, data = {}) {
   root.className = 'section sessions-page';
   root.innerHTML = `
     <div class="feature-toolbar sessions-toolbar">
-      <p>A waiting session has no active Rel.AI call. ChatGPT may still be reasoning, waiting for approval, or already finished.</p>
+      <p>An open session is an explicit logical task with no Rel.AI tool call executing at this moment.</p>
       <div class="section-head-actions">
         ${workspaceMenuHtml(data.config?.workspaces || [], workspace, { id: 'sessionsWorkspaceMenu' })}
         <span class="feature-count">${sessions.length} session${sessions.length === 1 ? '' : 's'}${workspace ? ` in ${esc(workspace)}` : ''}</span>
@@ -32,8 +32,8 @@ export function mountTasks(container, data = {}) {
     </div>
     <div class="overview-grid overview-grid-compact summary-metrics">
       ${metricHtml('Running now', working, 'tool calls currently executing', working ? 'blue' : 'good')}
-      ${metricHtml('Waiting', waiting, 'no active Rel.AI call', waiting ? 'warn' : 'good')}
-      ${metricHtml('Completed', completed, 'explicitly completed after validation', completed ? 'good' : 'blue')}
+      ${metricHtml('Open', open, 'no tool call currently executing', open ? 'blue' : 'good')}
+      ${metricHtml('Completed', completed, 'explicit completion reported', completed ? 'good' : 'blue')}
     </div>`;
 
   const card = document.createElement('section');
@@ -61,7 +61,7 @@ export function mountTasks(container, data = {}) {
 
 function renderSessionRows(body, sessions, scopeKey) {
   if (!sessions.length) {
-    body.innerHTML = '<div class="empty">Sessions appear when ChatGPT or the local dashboard calls a Rel.AI tool.</div>';
+    body.innerHTML = '<div class="empty">Sessions appear when ChatGPT starts an explicit Rel.AI logical task.</div>';
     return;
   }
   const visible = sessions.slice(0, visibleCountFor(scopeKey));
@@ -106,14 +106,14 @@ function sessionRow(session) {
 
 function statusLabel(status) {
   if (status === 'working') return 'working';
-  if (status === 'waiting' || status === 'settling') return 'waiting';
+  if (status === 'waiting' || status === 'settling') return 'open';
   if (status === 'attention') return 'error';
   if (status === 'completed') return 'completed';
   return 'inactive';
 }
 
 function statusPill(status) {
-  if (status === 'waiting') return '<span class="status-pill warn">waiting<span class="sr-only"> (warning)</span></span>';
+  if (status === 'open') return '<span class="status-pill">open<span class="sr-only"> (no active call)</span></span>';
   if (status === 'completed') return pillHtml('completed');
   if (status === 'inactive') return '<span class="status-pill">inactive<span class="sr-only"> (inactive)</span></span>';
   return pillHtml(status);
@@ -122,6 +122,7 @@ function statusPill(status) {
 function validationLabel(validation) {
   if (validation === 'passed') return 'validation passed';
   if (validation === 'failed') return 'validation failed';
+  if (validation === 'not_required') return 'validation not required';
   return 'validation not run';
 }
 
@@ -228,8 +229,8 @@ function eventTimestamp(event) {
 
 function sessionMeaning(status) {
   if (status === 'working') return 'A Rel.AI tool call is executing now.';
-  if (status === 'waiting') return 'No Rel.AI tool call is active. This is not a claim that ChatGPT has finished the overall request.';
-  if (status === 'completed') return 'ChatGPT explicitly reported completion after a successful final validation and no later code changes.';
+  if (status === 'waiting') return 'This explicit logical task remains open, but no Rel.AI tool call is executing now.';
+  if (status === 'completed') return 'ChatGPT explicitly reported completion. Mutating tasks require final validation; read-only tasks do not.';
   return 'This session became inactive after the grouping window elapsed. Overall ChatGPT task completion was not reported to Rel.AI.';
 }
 

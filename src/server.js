@@ -1,6 +1,7 @@
 const crypto = require('node:crypto');
 const readline = require('node:readline');
 const { getToolSchemas, getToolSurfaceManifest, callTool } = require('./tools');
+const { readConfig } = require('./config');
 const { serializeToolError } = require('./tools/errors');
 const { listResources, readResource } = require('./resources');
 const pkg = require('../package.json');
@@ -74,13 +75,13 @@ async function dispatchMessage(message, options) {
           }
         },
         serverInfo: { name: pkg.name, version: pkg.version, toolSurfaceVersion: toolSurface.toolSurfaceVersion },
-        instructions: 'For each independent user task, call relai_start_task exactly once and retain its opaque task_id. Pass that task_id to every subsequent Rel.AI tool call for the task, including validation and completion; never treat an MCP transport session, repository, or ChatGPT conversation as the task identity. Use the minimum number of workspace-tool calls needed. Call relai_repo_snapshot when an overview is useful and follow any projectInstructions it returns; earlier sources override later sources. Use relai_search when location is unknown and relai_read only when wider source is needed. Prefer relai_edit with runChecks:true and returnDiff:true. Completion is explicit: on the final standard or release relai_run_checks pass complete:true with summary, or call relai_complete_task with the same task_id after a final read-only review.'
+        instructions: connectorInstructions()
       });
     }
     case 'ping':
       return result(message.id, {});
     case 'tools/list':
-      return result(message.id, { tools: getToolSchemas() });
+      return result(message.id, { tools: getToolSchemas(readConfig()) });
     case 'resources/list':
       return result(message.id, listResources());
     case 'resources/read':
@@ -90,6 +91,15 @@ async function dispatchMessage(message, options) {
     default:
       return jsonRpcError(message.id, -32601, `Method not found: ${message.method}`);
   }
+}
+
+function connectorInstructions() {
+  let workspaceInstruction = 'Use a configured workspace alias or the exact absolute path of a configured workspace. Never use a relative path such as ".".';
+  try {
+    const aliases = Object.keys(readConfig().workspaces || {}).sort((left, right) => left.localeCompare(right));
+    if (aliases.length > 0) workspaceInstruction = `Use a configured workspace alias (${aliases.join(', ')}) or the exact absolute path registered for one of those workspaces. Never use a relative path such as ".".`;
+  } catch {}
+  return `For each independent user task, call relai_start_task exactly once and retain its opaque task_id. ${workspaceInstruction} Pass that task_id to every subsequent Rel.AI tool call for the task, including validation and completion; never treat an MCP transport session, repository, or ChatGPT conversation as the task identity. Use the minimum number of workspace-tool calls needed. Call relai_repo_snapshot when an overview is useful and follow any projectInstructions it returns; earlier sources override later sources. Use relai_search when location is unknown and relai_read only when wider source is needed. Prefer relai_edit with runChecks:true and returnDiff:true. Completion is explicit: on the final standard or release relai_run_checks pass complete:true with summary, or call relai_complete_task with the same task_id after a final read-only review.`;
 }
 
 function clientContextKey(options = {}) {
