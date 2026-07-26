@@ -18,6 +18,9 @@ assert.notEqual(activityEventId(event), activityEventId({ ...event, ok: false })
 const persisted = activityEventId({ id: 'persisted-id', tool: 'ignored' });
 assert.equal(persisted, activityEventId({ id: 'persisted-id', tool: 'different' }), 'persisted event IDs must take precedence');
 assert.match(persisted, /^event:[a-f0-9]{16}$/, 'event identities must be compact and URL-safe');
-assert.doesNotMatch(activityEventId(event), /[\u0000-\u001f\u007f]/, 'event identities must survive route sanitization');
+assert.equal(Array.from(activityEventId(event)).every(character => {
+  const code = character.codePointAt(0);
+  return code > 31 && code !== 127;
+}), true, 'event identities must survive route sanitization');
 
 console.log('Activity event identity tests passed.');

@@ -6,7 +6,6 @@ const { isPortAvailable, normalizeWizardConfig, saveLauncherConfig } = require('
 const { fitWindowToContent, WINDOW_SIZE_LIMITS } = require('./window-size');
 const { localWindowWebPreferences, secureLocalWindow } = require('./window-security');
 const { registerIpcHandlers } = require('./ipc-handlers');
-const { runInstalledSmoke, writeInstalledSmokeFailure } = require('./installed-smoke'); const { runWindowSmoke } = require('./window-smoke'); const { writeWindowSmokeFailure } = require('./smoke-evidence');
 const { createTaskActivityRuntime } = require('./tool-sleep-blocker');
 const { createDashboardWindowManager } = require('./dashboard-window');
 const { createDesktopTray } = require('./desktop-tray');
@@ -29,7 +28,6 @@ const managedNgrok = require('./managed-ngrok');
 const {
   hasExistingConfig,
   readGuiConfig,
-  buildTunnelCommand,
   buildMcpUrl,
   normalizeNgrokDomain,
   normalizeNgrokAuthtoken,
@@ -37,7 +35,7 @@ const {
 } = require('./launcher-utils');
 let wizardWindow = null, wizardRecoveryMode = false, wizardReturnToFallback = false;
 let httpServer = null, tunnelProcess = null, startPromise = null;
-let lifecycleToken = 0, isQuitting = false, appUpdater = null; const smokeWindowRoles = new WeakMap();
+let lifecycleToken = 0, isQuitting = false, appUpdater = null;
 const desktopStatusModel = createDesktopStatusModel({ version: app.getVersion(), deriveConnectionState, formatError });
 const diagnosticFiles = createDiagnosticFiles({ app, shell, sanitizeDiagnosticValue: diagnosticsModule.sanitizeDiagnosticValue }); let currentStatus = desktopStatusModel.initial(); const runtimeLogs = createRuntimeLogBuffer({ filePath: () => diagnosticFiles.serviceLogPath() });
 const approvalTokenManager = createApprovalTokenManager({ readGuiConfig, saveLauncherConfig, generateToken: connection.generateToken, oauthProvider, restartDesktop: () => launchConfiguredDesktop({ restart: true }) });
@@ -115,28 +113,6 @@ if (!gotLock) {
   });
 
   app.whenReady().then(async () => {
-    if (process.argv.includes('--window-smoke')) {
-      try {
-        await runWindowSmoke({ registerWindowRole: (window, role) => smokeWindowRoles.set(window, role) });
-        app.exit(0);
-      } catch (error) {
-        writeWindowSmokeFailure(error);
-        console.error(`[rel-ai-mcp] window smoke failed: ${formatError(error)}`);
-        app.exit(1);
-      }
-      return;
-    }
-    if (process.argv.includes('--installed-smoke')) {
-      try {
-        await runInstalledSmoke(app);
-        app.exit(0);
-      } catch (error) {
-        writeInstalledSmokeFailure(error);
-        console.error(`[rel-ai-mcp] installed smoke failed: ${formatError(error)}`);
-        app.exit(1);
-      }
-      return;
-    }
     const lifecycleStatus = desktopLifecycle.start();
     desktopTray.setup();
     appUpdater.start();
@@ -492,7 +468,7 @@ registerIpcHandlers({
   getNotificationsEnabled: toolActivityRuntime.getNotificationsEnabled,
   setNotificationsEnabled: toolActivityRuntime.setNotificationsEnabled,
   exportDiagnosticState: diagnosticFiles.exportReport, openDiagnosticsFolder: diagnosticFiles.openFolder,
-  getSmokeWindowRole: window => process.argv.includes('--window-smoke') ? smokeWindowRoles.get(window) || '' : '', fitWindowToContent
+  fitWindowToContent
 });
 
 module.exports = { isPortAvailable, normalizeWizardConfig, saveLauncherConfig };

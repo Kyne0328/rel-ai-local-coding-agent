@@ -5,7 +5,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { isSecretPath, validateRelativePath, resolveSafePath, collectTextFiles, writeTextFileSafe } = require("../src/safety.js");
+const { isSecretPath, validateRelativePath, resolveSafePath, assertPathOperationAllowed, isPathInside, collectTextFiles, writeTextFileSafe } = require("../src/safety.js");
 
 // ---------------------------------------------------------------------------
 // isSecretPath — paths that MUST be blocked
@@ -17,7 +17,6 @@ const secretPaths = [
   ".ssh/id_rsa",
   "id_rsa",
   "id_ed25519",
-  "known_hosts",
   "server.pem",
   "server.key",
   "bundle.p12",
@@ -49,7 +48,14 @@ const safePaths = [
   "src/index.js",
   "README.md",
   "package.json",
-  "lib/util.ts"
+  "lib/util.ts",
+  ".gitignore",
+  ".editorconfig",
+  ".env.example",
+  ".env.template",
+  ".env.sample",
+  ".env.defaults",
+  "known_hosts"
 ];
 
 console.log("Testing isSecretPath — safe paths...");
@@ -82,6 +88,21 @@ for (const p of traversalPaths) {
 // ---------------------------------------------------------------------------
 // validateRelativePath — safe paths must not throw
 // ---------------------------------------------------------------------------
+assert.throws(
+  () => assertPathOperationAllowed('.env', 'read'),
+  (error) => error?.code === 'SENSITIVE_PATH_RESTRICTED' && error?.operation === 'read',
+  'sensitive policy errors must retain operation context'
+);
+assert.doesNotThrow(
+  () => assertPathOperationAllowed('.env', 'commit', { allowSensitive: true }),
+  'explicit sensitive-path commit authorization must be narrowly supported'
+);
+assert.throws(
+  () => assertPathOperationAllowed('.env', 'write', { allowSensitive: true }),
+  /blocked sensitive path/,
+  'generic allowSensitive must not authorize write operations'
+);
+
 console.log("Testing validateRelativePath — safe paths that must not throw...");
 for (const p of safePaths) {
   const result = validateRelativePath(p);
@@ -124,6 +145,35 @@ try {
   );
   console.log("  resolveSafePath /absolute/path: threw as expected");
 
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), "safety-paths-outside-"));
+  try {
+    const externalLink = path.join(tmp, 'external-link');
+    const internalTarget = path.join(tmp, 'internal-target');
+    const internalLink = path.join(tmp, 'internal-link');
+    fs.mkdirSync(internalTarget, { recursive: true });
+    fs.symlinkSync(outside, externalLink, process.platform === 'win32' ? 'junction' : 'dir');
+    fs.symlinkSync(internalTarget, internalLink, process.platform === 'win32' ? 'junction' : 'dir');
+
+    assert.throws(
+      () => resolveSafePath(tmp, 'external-link/new/file.txt'),
+      /Path escapes workspace/,
+      'new files below an outward symlink parent must be blocked'
+    );
+    assert.throws(
+      () => writeTextFileSafe(tmp, 'external-link/new/file.txt', 'blocked'),
+      /Path escapes workspace/,
+      'writes below an outward symlink parent must be blocked'
+    );
+
+    const internalResolved = resolveSafePath(tmp, 'internal-link/new/file.txt');
+    assert.ok(isPathInside(internalResolved.realPath, fs.realpathSync(tmp)), 'in-workspace symlink parents must remain usable');
+    writeTextFileSafe(tmp, 'internal-link/new/file.txt', 'allowed');
+    assert.equal(fs.readFileSync(path.join(internalTarget, 'new', 'file.txt'), 'utf8'), 'allowed');
+    console.log("  resolveSafePath symlink-parent containment: OK");
+  } finally {
+    fs.rmSync(outside, { recursive: true, force: true });
+  }
+
   fs.mkdirSync(path.join(tmp, '.rel-ai-mcp-state'), { recursive: true });
   fs.writeFileSync(path.join(tmp, '.rel-ai-mcp-state', 'payload.patch'), 'private runtime state');
   const collected = collectTextFiles(tmp);
@@ -139,6 +189,21 @@ try {
 
   writeTextFileSafe(tmp, 'literal.json', '{"value":"line\\ntext"}');
   assert.equal(fs.readFileSync(path.join(tmp, 'literal.json'), 'utf8'), '{"value":"line\\ntext"}', 'literal escaped newlines must remain literal');
+
+  for (const templateName of ['.env.example', '.env.template', '.env.sample', '.env.defaults']) {
+    writeTextFileSafe(tmp, templateName, 'DATABASE_URL=replace-me\n');
+    assert.equal(
+      fs.readFileSync(path.join(tmp, templateName), 'utf8'),
+      'DATABASE_URL=replace-me\n',
+      `${templateName} must be writable as a public environment template`
+    );
+  }
+
+  assert.throws(
+    () => writeTextFileSafe(tmp, '.env', 'DATABASE_URL=secret\n'),
+    /blocked sensitive path/,
+    '.env must remain blocked by the current secret-bearing path policy'
+  );
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
 }

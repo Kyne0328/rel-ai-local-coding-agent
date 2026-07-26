@@ -107,7 +107,7 @@ function groupMatchesByFile(matches) {
 
 function readContextFile(workspace, group, options, byteBudget) {
   try {
-    const safe = resolveSafePath(workspace.path, group.path);
+    const safe = resolveSafePath(workspace.path, group.path, { operation: "read" });
     const stat = fs.statSync(safe.absolutePath);
     if (!stat.isFile()) return { skipped: { path: group.path, reason: "not a file" } };
     const data = fs.readFileSync(safe.absolutePath);

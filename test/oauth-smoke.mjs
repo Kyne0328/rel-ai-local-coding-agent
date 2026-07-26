@@ -101,6 +101,8 @@ async function getAuthCode(client, challenge, state) {
   if (page.status !== 200) fail(`GET /authorize expected 200, got ${page.status}`);
   const html = await page.text();
   if (!/Authorize ChatGPT|approval token/i.test(html) || /Dashboard token/.test(html)) fail('login page did not render the canonical approval-token consent form');
+  if (!/width:min\(100%,340px\)/.test(html) || !/body \{[^}]*padding:20px/.test(html)) fail('login page is missing responsive narrow-window sizing');
+  if (!/:focus-visible/.test(html) || /class="who" style=/.test(html)) fail('login page is missing keyboard focus styling or still uses inline layout styles');
 
   // Submit the dashboard token.
   const submit = await postForm('/authorize', {
@@ -323,13 +325,26 @@ const mcpRes = await fetch(`${base}/mcp`, {
 });
 if (mcpRes.status !== 200) fail(`POST /mcp with OAuth token expected 200, got ${mcpRes.status}`);
 const mcpBody = await mcpRes.json();
-if (mcpBody.result?.tools?.length !== 19) {
-  fail(`OAuth-authenticated tools/list did not return 19 tools: ${mcpBody.result?.tools?.length}`);
+if (mcpBody.result?.tools?.length !== 20) {
+  fail(`OAuth-authenticated tools/list did not return 20 tools: ${mcpBody.result?.tools?.length}`);
 }
+for (const name of ['relai_write', 'relai_replace', 'relai_browser', 'relai_restore_changes', 'relai_git_status', 'relai_git_create_pr']) {
+  if (mcpBody.result.tools.some(tool => tool.name === name)) fail(`${name} must be absent from the OAuth tool surface`);
+}
+const oauthStartTaskSchema = mcpBody.result.tools.find(tool => tool.name === 'relai_start_task');
+if (!oauthStartTaskSchema || oauthStartTaskSchema.inputSchema?.properties?.task_id) fail('OAuth tool surface did not expose the task bootstrap contract correctly');
 const oauthExecSchema = mcpBody.result.tools.find(tool => tool.name === 'relai_exec');
 if (!oauthExecSchema?.inputSchema?.properties?.command) fail('OAuth tool surface stripped the relai_exec command field');
 const oauthSearchSchema = mcpBody.result.tools.find(tool => tool.name === 'relai_search');
 if (!oauthSearchSchema?.inputSchema?.properties?.contextAfter) fail('OAuth tool surface stripped contextual relai_search fields');
+const oauthCodeInspectSchema = mcpBody.result.tools.find(tool => tool.name === 'relai_code_inspect');
+if (!oauthCodeInspectSchema?.inputSchema?.properties?.action || !oauthCodeInspectSchema?.inputSchema?.properties?.maxDepth) fail('OAuth tool surface stripped code-intelligence fields');
+const oauthRunChecksSchema = mcpBody.result.tools.find(tool => tool.name === 'relai_run_checks');
+if (!oauthRunChecksSchema?.inputSchema?.properties?.complete || !oauthRunChecksSchema?.inputSchema?.properties?.summary) fail('OAuth tool surface stripped atomic completion fields');
+const oauthEditSchema = mcpBody.result.tools.find(tool => tool.name === 'relai_edit');
+if (!oauthEditSchema?.inputSchema?.properties?.replacements || !oauthEditSchema?.inputSchema?.properties?.occurrence) fail('OAuth tool surface stripped unified edit parity fields');
+const oauthDraftPrSchema = mcpBody.result.tools.find(tool => tool.name === 'relai_git_draft_pr');
+if (!oauthDraftPrSchema || oauthDraftPrSchema.annotations?.openWorldHint !== false) fail('OAuth tool surface did not expose the local-only PR draft tool');
 
 // 10. An invalid bearer is still rejected with a challenge.
 const badBearer = await fetch(`${base}/mcp`, {

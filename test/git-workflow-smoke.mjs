@@ -7,14 +7,14 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const {
-  relaiGitStatus,
   relaiGitCommit,
   relaiGitPush,
-  relaiGitCreatePr,
+  relaiGitDraftPr,
   relaiApplyPatch,
-  relaiWrite,
-  relaiReset
+  workspaceWrite,
+  relaiRestorePaths
 } = require('../src/localRepoBridge.js');
+const { workspaceGitStatus } = require('../src/repo/gitOps.js');
 const { writeSessionPolicy } = require('../src/policyResolver.js');
 
 const GIT_EXECUTABLE = process.platform === 'win32'
@@ -69,7 +69,7 @@ const config = { stateDir: path.join(root, 'state'), patch: { requireCleanGit: f
 // so files created afterward are correctly attributed as session-owned.
 writeSessionPolicy(config, workspace.alias, { workspaceRoot: workspacePath });
 fs.writeFileSync(path.join(workspacePath, 'notes.txt'), 'dirty session note\n');
-const status = await relaiGitStatus(workspace, config, {});
+const status = await workspaceGitStatus(workspace, config, {});
 assert.equal(status.ok, true);
 assert.equal(status.branch, 'main');
 assert.ok(Array.isArray(status.untrackedSessionFiles) && status.untrackedSessionFiles.includes('notes.txt'));
@@ -110,48 +110,56 @@ await assert.rejects(
 );
 
 // addAll commits must refuse secret-looking staged files (e.g. .env picked up by
-// `git add -A`) unless the caller passes allowSecretPaths: true.
+// `git add -A`) unless every sensitive path has commit-scoped authorization.
 fs.writeFileSync(path.join(workspace.path, '.env'), 'API_KEY=super-secret\n');
 const secretCommit = await relaiGitCommit(workspace, config, { message: 'oops secrets' });
 assert.equal(secretCommit.ok, false, 'commit with staged .env should be refused');
 assert.ok(Array.isArray(secretCommit.secretStagedFiles) && secretCommit.secretStagedFiles.includes('.env'));
 assert.equal(secretCommit.indexRestored, true, 'secret refusal must restore the pre-operation index');
-assert.match(secretCommit.error, /allowSecretPaths/);
+assert.match(secretCommit.error, /matching commit authorization/);
 assert.equal(git(['diff', '--cached', '--name-only'], { cwd: workspace.path }).toString('utf8').trim(), '', 'secret file must not remain staged');
 
-const secretCommitAllowed = await relaiGitCommit(workspace, config, { message: 'intentional env commit', allowSecretPaths: true });
-assert.equal(secretCommitAllowed.ok, true, 'allowSecretPaths: true should permit the commit');
+const secretCommitAllowed = await relaiGitCommit(workspace, config, {
+  message: 'intentional env commit',
+  sensitiveAuthorization: {
+    operation: 'commit',
+    paths: ['.env'],
+    reason: 'The test explicitly approves this environment file.'
+  }
+});
+assert.equal(secretCommitAllowed.ok, true, 'scoped sensitive authorization should permit the commit');
 git(['rm', '--cached', '.env'], { cwd: workspace.path, stdio: 'ignore' });
 git(['commit', '-m', 'remove env'], { cwd: workspace.path, stdio: 'ignore' });
 fs.rmSync(path.join(workspace.path, '.env'), { force: true });
 
-const emptyPr = await relaiGitCreatePr(workspace, config, { base: 'main', head: 'main' });
+const draftPr = await relaiGitDraftPr(workspace, config, { base: 'main', head: 'feature/ui-cleanup' });
+assert.equal(draftPr.ok, true);
+assert.equal(draftPr.draftOnly, true);
+assert.equal(draftPr.remoteChanged, false);
+assert.equal(draftPr.deprecated, undefined);
+assert.ok(draftPr.changedFiles.includes('ui.txt'));
+assert.match(draftPr.title, /feature\/ui-cleanup/);
+assert.match(draftPr.body, /ui\.txt/);
+
+const emptyPr = await relaiGitDraftPr(workspace, config, { base: 'main', head: 'main' });
 assert.equal(emptyPr.ok, false);
 assert.equal(emptyPr.emptyDiff, true);
+assert.equal(emptyPr.remoteChanged, false);
 assert.match(emptyPr.warning, /No diff/);
 
-// relai_restore_changes paths-mode: clean:true must remove an UNTRACKED disposable
-// file (git restore alone cannot — it only knows tracked paths). Regression guard for
-// the recurring audit finding that cleanup-by-path failed on untracked files.
+// Path-scoped restore is tracked-only and rejects untracked paths.
 fs.mkdirSync(path.join(workspace.path, 'tmp'), { recursive: true });
 const untrackedRel = 'tmp/restore-untracked.txt';
 fs.writeFileSync(path.join(workspace.path, untrackedRel), 'disposable\n');
-const restoreUntracked = await relaiReset(workspace, config, { paths: [untrackedRel], clean: true });
-assert.equal(restoreUntracked.ok, true, 'clean:true should remove untracked file by path');
-assert.equal(fs.existsSync(path.join(workspace.path, untrackedRel)), false, 'untracked file should be gone');
-
-// Without clean:true, an untracked path is still a no-match failure (git restore is
-// tracked-only) — unchanged behavior.
-fs.writeFileSync(path.join(workspace.path, untrackedRel), 'disposable again\n');
-const restoreNoClean = await relaiReset(workspace, config, { paths: [untrackedRel] });
-assert.equal(restoreNoClean.ok, false, 'untracked restore without clean still fails');
+const restoreNoClean = await relaiRestorePaths(workspace, config, { paths: [untrackedRel] });
+assert.equal(restoreNoClean.ok, false, 'tracked path restore must reject an untracked path');
 fs.rmSync(path.join(workspace.path, untrackedRel), { force: true });
 
-assert.throws(() => relaiWrite(workspace, config, { path: 'collapsed.js', content: 'const value = 1;'.repeat(400) }), /collapsed source-looking content/);
+assert.throws(() => workspaceWrite(workspace, config, { path: 'collapsed.js', content: 'const value = 1;'.repeat(400) }), /collapsed source-looking content/);
 
 // Tracked-modified file: restore reverts it (regression: paths-mode still works).
 fs.writeFileSync(path.join(workspace.path, 'README.md'), '# Git smoke\nlocal edit\n');
-const restoreTracked = await relaiReset(workspace, config, { paths: ['README.md'] });
+const restoreTracked = await relaiRestorePaths(workspace, config, { paths: ['README.md'] });
 assert.equal(restoreTracked.ok, true, 'tracked file restore should succeed');
 const revertedReadme = fs.readFileSync(path.join(workspace.path, 'README.md'), 'utf8').replaceAll('\r\n', '\n');
 assert.equal(revertedReadme, '# Git smoke\n', 'README reverted');

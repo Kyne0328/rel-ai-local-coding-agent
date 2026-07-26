@@ -57,7 +57,7 @@ if (compressedToolsResponse.headers.get('content-encoding') !== 'gzip') {
   throw new Error('large JSON responses should use gzip when the client accepts it');
 }
 const compressedTools = await compressedToolsResponse.json();
-if (!Array.isArray(compressedTools) || compressedTools.length !== 19) {
+if (!Array.isArray(compressedTools) || compressedTools.length !== 20) {
   throw new Error('compressed tools API response was not decoded correctly');
 }
 
@@ -250,8 +250,11 @@ if (!initialized.result?.capabilities?.tools) {
 if (!initialized.result?.capabilities?.resources) {
   throw new Error('HTTP initialize did not advertise resources');
 }
-if (!String(initialized.result?.instructions || '').includes('relai_complete_task')) {
-  throw new Error('HTTP initialize did not advertise the explicit final-completion contract');
+if (initialized.result?.serverInfo?.toolSurfaceVersion !== 10 || initialized.result?.capabilities?.experimental?.relai?.manifestResource !== 'relai://server/tool-surface') {
+  throw new Error('HTTP initialize did not advertise the versioned Rel.AI tool-surface manifest');
+}
+if (!String(initialized.result?.instructions || '').includes('relai_complete_task') || !String(initialized.result?.instructions || '').includes('complete:true')) {
+  throw new Error('HTTP initialize did not advertise both explicit final-completion paths');
 }
 
 const list = await fetch(`http://127.0.0.1:${port}/mcp`, {
@@ -259,12 +262,27 @@ const list = await fetch(`http://127.0.0.1:${port}/mcp`, {
   headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, 'mcp-session-id': mcpSessionId },
   body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/list', params: {} })
 }).then((response) => response.json());
-if (!Array.isArray(list.result?.tools) || list.result.tools.length !== 19) {
-  throw new Error(`HTTP tools/list should return exactly 19 workspace tools, got ${list.result?.tools?.length}`);
+if (!Array.isArray(list.result?.tools) || list.result.tools.length !== 20) {
+  throw new Error(`HTTP tools/list should return exactly 20 workspace tools, got ${list.result?.tools?.length}`);
+}
+const removedCompatibilityTools = ['relai_write', 'relai_replace', 'relai_browser', 'relai_restore_changes', 'relai_git_status', 'relai_git_create_pr'];
+for (const name of removedCompatibilityTools) {
+  if (list.result.tools.some(tool => tool.name === name)) throw new Error(`${name} must be absent from HTTP tools/list`);
+}
+const startTaskSchema = list.result.tools.find(tool => tool.name === 'relai_start_task');
+if (!startTaskSchema || startTaskSchema.inputSchema?.properties?.task_id) {
+  throw new Error('HTTP tools/list did not expose the task bootstrap contract correctly.');
 }
 const execSchema = list.result.tools.find(tool => tool.name === 'relai_exec');
 if (!execSchema?.inputSchema?.properties?.command || !execSchema?.inputSchema?.properties?.cwd) {
   throw new Error('HTTP tools/list did not expose the relai_exec command contract.');
+}
+const editSchema = list.result.tools.find(tool => tool.name === 'relai_edit');
+if (!editSchema?.inputSchema?.properties?.occurrence || !editSchema?.inputSchema?.properties?.replacements || !editSchema?.inputSchema?.properties?.edits?.items?.properties?.replacements) {
+  throw new Error('HTTP tools/list did not expose full exact-replacement parity through relai_edit.');
+}
+if (JSON.stringify(editSchema.inputSchema.properties.stage?.enum) !== JSON.stringify(['start', 'append', 'commit', 'abort'])) {
+  throw new Error('HTTP tools/list did not expose bounded staged edit operations.');
 }
 const searchSchema = list.result.tools.find(tool => tool.name === 'relai_search');
 if (!searchSchema?.inputSchema?.properties?.contextBefore || !searchSchema?.inputSchema?.properties?.maxBytes) {
@@ -273,7 +291,38 @@ if (!searchSchema?.inputSchema?.properties?.contextBefore || !searchSchema?.inpu
 if (JSON.stringify(searchSchema.inputSchema.properties.mode?.enum) !== JSON.stringify(['auto', 'compact', 'context'])) {
   throw new Error('HTTP tools/list did not expose adaptive relai_search mode as the default-capable contract.');
 }
-
+const codeInspectSchema = list.result.tools.find(tool => tool.name === 'relai_code_inspect');
+if (JSON.stringify(codeInspectSchema?.inputSchema?.properties?.action?.enum) !== JSON.stringify(['symbol', 'references', 'related', 'impact', 'diagnostics']) || codeInspectSchema?.annotations?.readOnlyHint !== true) {
+  throw new Error('HTTP tools/list did not expose the bounded read-only code-intelligence contract.');
+}
+const runChecksSchema = list.result.tools.find(tool => tool.name === 'relai_run_checks');
+if (!runChecksSchema?.inputSchema?.properties?.complete || runChecksSchema?.inputSchema?.properties?.summary?.maxLength !== 2000) {
+  throw new Error('HTTP tools/list did not expose atomic validation completion fields.');
+}
+const httpProbeSchema = list.result.tools.find(tool => tool.name === 'relai_http_probe');
+if (!httpProbeSchema?.inputSchema?.properties?.route || httpProbeSchema.inputSchema.properties.url) {
+  throw new Error('HTTP tools/list did not expose the route-only relai_http_probe contract.');
+}
+const uiCheckSchema = list.result.tools.find(tool => tool.name === 'relai_ui_check');
+if (!uiCheckSchema?.inputSchema?.properties?.check || uiCheckSchema.inputSchema.properties.command) {
+  throw new Error('HTTP tools/list did not expose the named-script relai_ui_check contract.');
+}
+const restorePathsSchema = list.result.tools.find(tool => tool.name === 'relai_restore_paths');
+if (!restorePathsSchema?.inputSchema?.properties?.paths || restorePathsSchema.inputSchema.properties.clean) {
+  throw new Error('HTTP tools/list did not expose the tracked-path-only relai_restore_paths contract.');
+}
+const resetWorkspaceSchema = list.result.tools.find(tool => tool.name === 'relai_reset_workspace');
+if (JSON.stringify(resetWorkspaceSchema?.inputSchema?.properties?.confirmation?.enum) !== JSON.stringify(['RESET', 'RESET_AND_CLEAN'])) {
+  throw new Error('HTTP tools/list did not expose explicit workspace-reset confirmations.');
+}
+const statusSchema = list.result.tools.find(tool => tool.name === 'relai_status');
+if (!statusSchema?.inputSchema?.properties?.maxBytes || !/workspace\.repository/.test(statusSchema?.description || '')) {
+  throw new Error('HTTP tools/list did not expose repository state through relai_status.');
+}
+const draftPrSchema = list.result.tools.find(tool => tool.name === 'relai_git_draft_pr');
+if (!/does not call a hosting provider/.test(draftPrSchema?.description || '') || draftPrSchema?.annotations?.openWorldHint !== false) {
+  throw new Error('HTTP tools/list did not expose the local-only relai_git_draft_pr contract.');
+}
 const resources = await fetch(`http://127.0.0.1:${port}/mcp`, {
   method: 'POST',
   headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, 'mcp-session-id': mcpSessionId },
@@ -281,6 +330,18 @@ const resources = await fetch(`http://127.0.0.1:${port}/mcp`, {
 }).then((response) => response.json());
 if (!Array.isArray(resources.result?.resources) || !resources.result.resources.some((item) => item.uri === 'relai://server/workspaces')) {
   throw new Error('HTTP resources/list did not expose workspace resource');
+}
+if (!resources.result.resources.some((item) => item.uri === 'relai://server/tool-surface')) {
+  throw new Error('HTTP resources/list did not expose the tool-surface manifest resource');
+}
+const toolSurfaceResource = await fetch(`http://127.0.0.1:${port}/mcp`, {
+  method: 'POST',
+  headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, 'mcp-session-id': mcpSessionId },
+  body: JSON.stringify({ jsonrpc: '2.0', id: 41, method: 'resources/read', params: { uri: 'relai://server/tool-surface' } })
+}).then((response) => response.json());
+const toolSurfaceManifest = JSON.parse(toolSurfaceResource.result?.contents?.[0]?.text || '{}');
+if (toolSurfaceManifest.toolSurfaceVersion !== 10 || toolSurfaceManifest.toolCount !== 20 || !Array.isArray(toolSurfaceManifest.deprecations) || toolSurfaceManifest.deprecations.length !== 0) {
+  throw new Error(`tool-surface resource returned an invalid manifest: ${JSON.stringify(toolSurfaceManifest)}`);
 }
 
 const removedConfigTool = await fetch(`http://127.0.0.1:${port}/mcp`, {

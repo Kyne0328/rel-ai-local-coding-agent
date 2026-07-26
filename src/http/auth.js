@@ -1,4 +1,3 @@
-const { URL } = require("node:url");
 const connection = require("../connectionProfile");
 const oauth = require("../oauthProvider");
 const { isAuthorized, timingSafeEqual, sendJson } = require("./io");
@@ -67,9 +66,9 @@ function isDashboardAuthorized(req, parsed, options, res) {
   return true;
 }
 
-// Honor an explicit requireHttpToken query param (the dashboard sends "0" because it
-// uses the secret /mcp URL, not bearer auth); when the param is absent, fall back to
-// the configured release.requireHttpToken default instead of silently assuming true.
+// Honor an explicit readiness override. The authenticated dashboard sends "0"
+// because its secured session already proves access; when the parameter is absent,
+// use the configured release.requireHttpToken default.
 function resolveRequireHttpToken(parsed, config) {
   const raw = parsed.searchParams.get("requireHttpToken");
   if (raw != null) return raw !== "0";

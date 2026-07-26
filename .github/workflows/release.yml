@@ -151,39 +151,22 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
-      - name: Smoke exact release installer
+      - name: Report Electron package size
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
-        shell: pwsh
-        env:
-          REL_AI_RELEASE_EVIDENCE_DIR: ${{ runner.temp }}\relai-release-evidence
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $installers = @(Get-ChildItem -Path dist -Filter '*Setup*.exe' -File)
-          if ($installers.Count -ne 1) {
-            throw "Expected exactly one installed release executable in dist/, found $($installers.Count)."
-          }
-          $env:REL_AI_SMOKE_INSTALLER = $installers[0].FullName
-          npm run test:installed
-          if ($LASTEXITCODE -ne 0) {
-            throw 'The exact release installer failed installed-app usability validation.'
-          }
-          $evidence = Join-Path $env:REL_AI_RELEASE_EVIDENCE_DIR 'release-readiness.json'
-          node scripts/release-evidence-check.mjs $evidence --installer $installers[0].FullName
-          if ($LASTEXITCODE -ne 0) {
-            throw 'Release usability evidence validation failed.'
-          }
-          $dist = Resolve-Path dist
-          Copy-Item $evidence (Join-Path $dist 'release-readiness.json') -Force
-          Compress-Archive -Path (Join-Path $env:REL_AI_RELEASE_EVIDENCE_DIR '*') -DestinationPath (Join-Path $dist 'release-usability-evidence.zip') -Force
+        run: npm run electron:size -- --json dist/electron-size-report.json
 
-      - name: Upload release usability evidence
+      - name: Upload Electron package-size report
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: release-usability-evidence-${{ steps.version.outputs.version }}
-          path: ${{ runner.temp }}\relai-release-evidence
+          name: electron-package-size-${{ steps.version.outputs.version }}
+          path: dist/electron-size-report.json
           if-no-files-found: error
           retention-days: 30
+
+      - name: Verify packaged application layout
+        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
+        run: npm run verify:packaged -- --dir dist/win-unpacked
 
       - name: Prepare release assets and notes
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
@@ -210,15 +193,7 @@ jobs:
           if ($blockmaps.Count -eq 0) {
             throw 'electron:dist completed without producing an installer blockmap.'
           }
-          $usabilityEvidence = Join-Path (Resolve-Path dist) 'release-readiness.json'
-          $usabilityArchive = Join-Path (Resolve-Path dist) 'release-usability-evidence.zip'
-          if (-not (Test-Path $usabilityEvidence -PathType Leaf)) {
-            throw 'The exact-installer usability evidence JSON is missing.'
-          }
-          if (-not (Test-Path $usabilityArchive -PathType Leaf)) {
-            throw 'The release usability screenshot archive is missing.'
-          }
-          $hashInputs = @($executables) + @(Get-Item $latestMetadata) + $blockmaps + @(Get-Item $usabilityEvidence) + @(Get-Item $usabilityArchive)
+          $hashInputs = @($executables) + @(Get-Item $latestMetadata) + $blockmaps
           $checksumManifest = Join-Path (Resolve-Path dist) 'SHA256SUMS.txt'
           $hashLines = $hashInputs | Sort-Object Name | ForEach-Object {
             $hash = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()

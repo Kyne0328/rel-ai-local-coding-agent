@@ -1,14 +1,8 @@
 const { readConfig } = require('./config');
 const { logAudit } = require('./audit');
 const {
-  toolSchemas,
-  getToolSchemas,
-  getToolMetadata,
-  getToolDefinition,
-  getToolDefinitions,
-  getToolGroups,
-  isToolCallable,
-  TOOL_NAMES
+  toolSchemas, getToolSchemas, getToolMetadata, getToolDefinition, getToolDefinitions,
+  getToolGroups, getToolSurfaceManifest, isToolCallable, TOOL_NAMES
 } = require('./tools/schema');
 const { compactForConnector, policySentence } = require('./tools/connector');
 const { enhanceToolError } = require('./tools/errors');
@@ -19,21 +13,18 @@ const {
   maybeStartSession
 } = require('./tools/session');
 const { dispatchTool } = require('./tools/dispatch');
-const { beginConnectorToolCall, runWithToolActivity } = require('./toolActivity');
+const { beginConnectorToolCall, runWithToolActivity, normalizeTaskId } = require('./toolActivity');
+const { assertKnownTask, taskAuditContext, withTaskIdentity } = require('./tools/task');
 const { runWorkspaceOperation } = require('./workspaceOperationQueue');
 const { clearSessionPolicy } = require('./policyResolver');
 const { redactCommandForAudit } = require('./bridge/exec');
-const {
-  workspaceList,
-  workspaceInspect,
-  workspaceTree,
-  workspaceProfile
-} = require('./tools/status');
+const { workspaceList, workspaceInspect, workspaceTree, workspaceProfile } = require('./tools/status');
 
 async function callTool(name, args = {}, context = {}) {
   const config = readConfig();
   const started = Date.now();
   const connector = Boolean(context?.publicHttpOnly);
+  let requestedTaskId = '';
   let finishActivity = null;
   let activityResult = { ok: true };
   let sessionStart = { started: false, alias: '' };
@@ -41,10 +32,16 @@ async function callTool(name, args = {}, context = {}) {
     if (!isToolCallable(name)) {
       throw new Error(`Unknown tool '${name}'. Available tools: ${TOOL_NAMES.join(', ')}. Restart/reconnect ChatGPT if the tool list looks stale.`);
     }
+    requestedTaskId = normalizeTaskId(args?.task_id || args?.taskId);
+    if (requestedTaskId && name !== 'relai_start_task') {
+      assertKnownTask(config, requestedTaskId, args?.workspace, name);
+    }
     finishActivity = beginConnectorToolCall({
       tool: name,
       workspace: args?.workspace,
       scopeId: context?.taskScopeId || (connector ? '' : 'local:default'),
+      taskId: requestedTaskId,
+      createTask: name === 'relai_start_task',
       connector,
       operation: describeToolOperation(name, args || {})
     });
@@ -57,16 +54,36 @@ async function callTool(name, args = {}, context = {}) {
       ok: valueOk,
       ...(valueOk ? {} : { error: String(value?.error || value?.message || `${name} returned ok:false`) })
     };
-    if (sessionStart.started && !hasWorkspaceChanges(value)) clearSessionPolicy(config, sessionStart.alias);
+    if (sessionStart.started && !hasWorkspaceChanges(value)) clearSessionPolicy(config, sessionStart.alias, finishActivity?.taskId);
     const extraAudit = buildExtraAudit(name, value, args || {});
     applyCautionAudit(extraAudit, name, args || {}, value, config);
     invalidateSessionCacheForCall(config, name, args || {});
-    safeLogAudit(config, { taskId: finishActivity?.taskId, scopeId: finishActivity?.scopeId, tool: name, operation: finishActivity?.operation, ok: valueOk, workspace: args?.workspace, ms: Date.now() - started, ...extraAudit, ...(valueOk ? {} : { error: activityResult.error }) });
-    return ok(connector ? compactForConnector(name, value, args || {}) : value);
+    safeLogAudit(config, {
+      ...taskAuditContext(context, finishActivity, requestedTaskId, name, valueOk, value),
+      tool: name,
+      operation: finishActivity?.operation,
+      ok: valueOk,
+      workspace: args?.workspace,
+      ms: Date.now() - started,
+      ...extraAudit,
+      ...(valueOk ? {} : { error: activityResult.error })
+    });
+    const responseValue = connector ? compactForConnector(name, value, args || {}) : value;
+    return ok(withTaskIdentity(responseValue, finishActivity?.taskId));
   } catch (error) {
     const enhanced = enhanceToolError(name, error);
     activityResult = { ok: false, error: enhanced.message };
-    safeLogAudit(config, { taskId: finishActivity?.taskId, scopeId: finishActivity?.scopeId, tool: name, operation: finishActivity?.operation, ok: false, workspace: args?.workspace, ms: Date.now() - started, error: enhanced.message });
+    if (finishActivity?.taskId || requestedTaskId) enhanced.taskId = finishActivity?.taskId || requestedTaskId;
+    safeLogAudit(config, {
+      ...taskAuditContext(context, finishActivity, requestedTaskId, name, false),
+      tool: name,
+      operation: finishActivity?.operation,
+      ok: false,
+      workspace: args?.workspace,
+      ms: Date.now() - started,
+      error: enhanced.message,
+      errorCode: enhanced.code || undefined
+    });
     throw enhanced;
   } finally {
     finishActivity?.(activityResult);
@@ -94,6 +111,7 @@ function describeToolOperation(name, args = {}) {
   const path = String(args.path || '').trim();
   const suffix = workspace ? ` in ${workspace}` : '';
   switch (name) {
+    case 'relai_start_task': return `Starting an independent logical task${suffix}`;
     case 'relai_repo_snapshot': return `Scanning the repository${suffix}`;
     case 'relai_read': {
       const paths = Array.isArray(args.paths) ? args.paths.filter(Boolean) : [];
@@ -101,9 +119,8 @@ function describeToolOperation(name, args = {}) {
       return `Reading ${paths.length || 'workspace'} paths${suffix}`;
     }
     case 'relai_search': return `Searching for ${String(args.pattern || '').slice(0, 60) || 'a pattern'}${suffix}`;
+    case 'relai_code_inspect': return `Inspecting code relationships${suffix}`;
     case 'relai_exec': return `Running ${redactCommandForAudit(args.command) || 'a workspace command'}${suffix}`;
-    case 'relai_write': return path ? `Writing ${path}${suffix}` : `Writing a workspace file${suffix}`;
-    case 'relai_replace': return path ? `Editing ${path}${suffix}` : `Applying an exact edit${suffix}`;
     case 'relai_edit': {
       if (path) return `Editing ${path}${suffix}`;
       if (Array.isArray(args.edits)) return `Applying ${args.edits.length} file edits${suffix}`;
@@ -113,14 +130,15 @@ function describeToolOperation(name, args = {}) {
     case 'relai_tidy_plan': return `Reviewing generated artifacts${suffix}`;
     case 'relai_tidy_run': return `Removing approved generated artifacts${suffix}`;
     case 'relai_run_checks': return `Running ${String(args.level || 'standard')} validation${suffix}`;
-    case 'relai_browser': return args.check ? `Running UI check ${args.check}${suffix}` : `Checking route ${args.route || '/'}${suffix}`;
+    case 'relai_http_probe': return `Probing local route ${args.route || '/'}${suffix}`;
+    case 'relai_ui_check': return `Running UI check ${args.check || '(unnamed)'}${suffix}`;
     case 'relai_diff': return `Reviewing repository changes${suffix}`;
-    case 'relai_restore_changes': return `Restoring workspace changes${suffix}`;
-    case 'relai_git_status': return `Reading Git status${suffix}`;
+    case 'relai_restore_paths': return `Restoring ${Array.isArray(args.paths) ? args.paths.length : 0} tracked paths${suffix}`;
+    case 'relai_reset_workspace': return args.removeUntracked ? `Resetting and cleaning the workspace${suffix}` : `Resetting tracked workspace changes${suffix}`;
     case 'relai_git_commit': return `Creating a Git commit${suffix}`;
     case 'relai_git_push': return `Publishing the current branch${suffix}`;
-    case 'relai_git_create_pr': return `Drafting a pull request${suffix}`;
-    case 'relai_status': return workspace ? `Reading Rel.AI status for ${workspace}` : 'Reading Rel.AI status';
+    case 'relai_git_draft_pr': return `Preparing local pull request text${suffix}`;
+    case 'relai_status': return workspace ? `Reading workspace and repository status for ${workspace}` : 'Reading Rel.AI status';
     case 'relai_complete_task': return `Reporting task completion${suffix}`;
     default: return `Running ${String(name || 'Rel.AI tool').replace(/^relai_/, '').replaceAll('_', ' ')}`;
   }
@@ -139,6 +157,7 @@ module.exports = {
   getToolDefinition,
   getToolDefinitions,
   getToolGroups,
+  getToolSurfaceManifest,
   TOOL_NAMES,
   callTool,
   workspaceList,

@@ -48,6 +48,18 @@ assert.equal(Object.hasOwn(migrated.patch, 'maxBundleBytes'), false);
 assert.equal(Object.hasOwn(migrated.patch, 'clearMissingDefault'), false);
 assert.equal(migrated.productUx.showAutomaticValidation, true);
 assert.equal(normalizeConfig({ productUx: { showAutomaticValidation: false }, workspaces: {} }).productUx.showAutomaticValidation, false);
+const normalizedCommands = normalizeConfig({
+  workspaces: {
+    repo: {
+      path: process.cwd(),
+      testCommands: {
+        'npm:test': 'npm test',
+        'npm:test:fast-task': 'npm run test:fast-task'
+      }
+    }
+  }
+});
+assert.deepEqual(normalizedCommands.workspaces.repo.testCommands, { 'npm:test': 'npm test' });
 
 {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-cfg-'));

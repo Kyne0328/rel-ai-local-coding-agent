@@ -22,36 +22,38 @@ export function mountDiagnostics(container) {
   filters.severity = 'all';
   filters.source = 'all';
   container.innerHTML = `
-    <div class="section-head diagnostic-page-head">
-      <div><h2>Diagnostics</h2><p>Filter current findings, follow sanitized service logs, export state, and manage local diagnostic data.</p></div>
-      <div class="section-head-actions diagnostic-page-actions">
-        <button class="secondary" type="button" data-copy-report disabled>Copy report</button>
-        <button class="secondary" type="button" data-export-report disabled>Export state</button>
-        <button class="secondary" type="button" data-open-diagnostics-folder>Open diagnostics folder</button>
+    <div class="diagnostic-page">
+      <div class="section-head diagnostic-page-head">
+        <div><h2>Diagnostics</h2><p>Filter current findings, follow sanitized service logs, export state, and manage local diagnostic data.</p></div>
+        <div class="section-head-actions diagnostic-page-actions">
+          <button class="secondary" type="button" data-copy-report disabled>Copy report</button>
+          <button class="secondary" type="button" data-export-report disabled>Export state</button>
+          <button class="secondary" type="button" data-open-diagnostics-folder>Open diagnostics folder</button>
+        </div>
       </div>
-    </div>
-    <div class="diagnostic-toolbar" aria-label="Diagnostic filters">
-      <label class="diagnostic-search-control">
-        <span>Search diagnostics</span>
-        <input type="search" data-diagnostic-search placeholder="Error code, source, message, or workspace" autocomplete="off">
-      </label>
-      <label>
-        <span>Severity</span>
-        <select data-diagnostic-severity>
-          <option value="all">All severities</option>
-          <option value="error">Blocking</option>
-          <option value="warning">Warnings</option>
-          <option value="info">Recommendations</option>
-        </select>
-      </label>
-      <label>
-        <span>Source</span>
-        <select data-diagnostic-source><option value="all">All sources</option></select>
-      </label>
-      <button class="secondary diagnostic-live-tail" type="button" data-live-tail aria-pressed="false">Live tail off</button>
-      <span class="diagnostic-filter-summary" data-diagnostic-filter-summary aria-live="polite"></span>
-    </div>
-    <div id="diagnosticSummary" class="diagnostic-summary"><div class="empty">Loading diagnostics…</div></div>`;
+      <div class="diagnostic-toolbar" aria-label="Diagnostic filters">
+        <label class="diagnostic-search-control">
+          <span>Search diagnostics</span>
+          <input type="search" data-diagnostic-search placeholder="Error code, source, message, or workspace" autocomplete="off">
+        </label>
+        <label class="diagnostic-filter-control">
+          <span>Severity</span>
+          <select data-diagnostic-severity>
+            <option value="all">All severities</option>
+            <option value="error">Blocking</option>
+            <option value="warning">Warnings</option>
+            <option value="info">Recommendations</option>
+          </select>
+        </label>
+        <label class="diagnostic-filter-control">
+          <span>Source</span>
+          <select data-diagnostic-source><option value="all">All sources</option></select>
+        </label>
+        <button class="secondary diagnostic-live-tail" type="button" data-live-tail aria-pressed="false">Live tail off</button>
+        <span class="diagnostic-filter-summary" data-diagnostic-filter-summary aria-live="polite"></span>
+      </div>
+      <div id="diagnosticSummary" class="diagnostic-summary"><div class="empty">Loading diagnostics…</div></div>
+    </div>`;
   bindHeaderActions(container);
   bindFilters(container);
   bindLiveTail(container);

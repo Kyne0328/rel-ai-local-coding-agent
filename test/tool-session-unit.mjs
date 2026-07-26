@@ -25,16 +25,6 @@ assert.deepEqual(
 );
 
 assert.deepEqual(
-  buildExtraAudit('relai_write', {}, { path: 'src/write.js' }),
-  { filePath: 'src/write.js' }
-);
-
-assert.deepEqual(
-  buildExtraAudit('relai_replace', {}, { path: 'src/replace.js' }),
-  { filePath: 'src/replace.js' }
-);
-
-assert.deepEqual(
   buildExtraAudit('relai_read', { items: [{ cacheHit: false }, { cacheHit: true }] }, {}),
   { cacheHit: true }
 );

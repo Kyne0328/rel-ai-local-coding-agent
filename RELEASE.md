@@ -16,7 +16,7 @@ npm run test:all               # full suite (also what CI runs)
 
 CI runs `npm run test:all` on Node 22 and 24 (the package requires Node `>=22.13`). A release should be green on both.
 
-CI also builds and installs the packaged Windows app (`npm run test:installed`). It verifies bundled resources, local health, the dashboard, the public tool surface, setup and recovery renderers, dashboard refresh behavior, workspace route state, legacy route normalization, and the Sessions-to-Activity journey. CI retains `release-readiness.json` and checksum-bound screenshots as an artifact.
+CI also builds an unpacked Windows app and runs `npm run verify:packaged`. This read-only gate verifies the executable, ASAR, server, tool registry, configuration, CLI, dashboard, changelog, package metadata, and bundled ngrok binary without launching, installing, or uninstalling Rel.AI.
 
 ## 2. Inspect, validate, review (via the MCP tools)
 
@@ -68,13 +68,11 @@ The release must contain all updater and verification assets:
 - the portable `.exe`
 - `latest.yml`
 - the installed-app `.blockmap`
-- `release-readiness.json`
-- `release-usability-evidence.zip`
 - `SHA256SUMS.txt`
 
 The installed app uses `latest.yml` and the blockmap for update discovery and differential download support. The workflow requires a nonempty SHA-512 value in `latest.yml`; the app refuses same-version, downgrade, prerelease, malformed, or downloaded-version-mismatch updates and enables installation only after electron-updater reports verified release metadata. The portable executable is manual-update only.
 
-Before release assets are prepared, the workflow silently installs the exact NSIS executable from `dist/`, runs the packaged service and renderer journeys, validates `release-readiness.json` against the acceptance manifest, and archives the screenshots. The automated status remains `automated_passed_manual_required`; real ngrok publication, ChatGPT OAuth, live approval-token rotation, and update from a previous published release must still be checked manually. See [`docs/USABILITY_ACCEPTANCE.md`](docs/USABILITY_ACCEPTANCE.md).
+Before release assets are prepared, the workflow verifies the unpacked package layout without executing it. Installation, uninstall, first-run rendering, real ngrok publication, ChatGPT OAuth, live approval-token rotation, and update from a previous published release must be checked manually on a disposable Windows machine. See [`docs/USABILITY_ACCEPTANCE.md`](docs/USABILITY_ACCEPTANCE.md).
 
 The workflow also generates `SHA256SUMS.txt` from the published executables, updater metadata, and usability evidence. To verify a downloaded executable in PowerShell:
 

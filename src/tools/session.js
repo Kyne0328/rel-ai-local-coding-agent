@@ -46,7 +46,7 @@ function enrichCommonAudit(extra, name, value) {
   assignTruthy(extra, "validationStatus", value?.validationStatus);
   if (name === "relai_git_commit" && value?.ok !== false) extra.commitCreated = true;
   if (name === "relai_git_push" && value?.ok !== false) extra.pushPublished = true;
-  if (name === "relai_git_create_pr" && value?.ok !== false) extra.prDrafted = true;
+  if (name === "relai_git_draft_pr" && value?.ok !== false) extra.prDrafted = true;
 }
 
 function enrichEditAudit(extra, value, args) {
@@ -76,6 +76,7 @@ function enrichChecksAudit(extra, value) {
   assignTruthy(extra, "validationLevelReason", value?.validationLevelReason);
   assignDefined(extra, "aliasNormalizations", value?.aliasNormalizations);
   if (value?.policy) extra.policySessionActive = value.policy.sessionActive;
+  if (value?.completionKnown === true) enrichCompletionAudit(extra, value);
 }
 
 function enrichCompletionAudit(extra, value) {
@@ -84,8 +85,10 @@ function enrichCompletionAudit(extra, value) {
   assignTruthy(extra, "taskSummary", value?.summary);
   assignTruthy(extra, "validationAt", value?.validationAt);
   assignTruthy(extra, "validationTaskId", value?.validationTaskId);
+  assignTruthy(extra, "completionSource", value?.completionSource);
   if (Array.isArray(value?.relatedTaskIds) && value.relatedTaskIds.length) extra.relatedTaskIds = value.relatedTaskIds.slice(0, 20);
   assignDefined(extra, "recoveredValidationSession", value?.recoveredValidationSession === true);
+  assignDefined(extra, "duplicateRequest", value?.duplicate === true);
 }
 
 function enrichPathAudit(extra, _value, args) {
@@ -111,7 +114,7 @@ function addAuditPath(extra, filePath) {
   if (filePath) extra.filePath = filePath;
 }
 
-function applyCautionAudit(extra, name, args, value, config) {
+function applyCautionAudit(extra, name, args) {
   try {
     const caution = classifyCaution(name, args);
     if (caution?.level === "caution") {

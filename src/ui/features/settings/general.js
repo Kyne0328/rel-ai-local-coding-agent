@@ -41,7 +41,7 @@ function renderAppearanceSettings(body) {
     { value: 'system', label: 'Follow system appearance' },
     { value: 'dark', label: 'Dark' },
     { value: 'light', label: 'Light' }
-  ], uiPreferences.theme, value => setThemePreference(value)), 'Stored locally in this dashboard. System mode follows the operating system appearance.'));
+  ], uiPreferences.theme, value => setThemePreference(value)), 'Applies only to this dashboard. System mode follows the operating system; setup and recovery windows always follow the operating system appearance.'));
   body.appendChild(field('Interface density', selectControl([
     { value: 'comfortable', label: 'Comfortable' },
     { value: 'compact', label: 'Compact' }

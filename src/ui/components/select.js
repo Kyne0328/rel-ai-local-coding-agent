@@ -1,6 +1,6 @@
 export function Select({ options = [], value, onChange, id } = {}) {
   const wrap = document.createElement('div');
-  wrap.style.cssText = 'position:relative;display:inline-flex;';
+  wrap.className = 'select-control';
   const el = document.createElement('select');
   if (id) el.id = id;
   for (const opt of options) {

@@ -7,7 +7,9 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 
 const css = read('src/ui/styles/app.css');
+const compiledCss = read('public/dashboard.css');
 const settings = read('src/ui/features/settings/index.js');
+const select = read('src/ui/components/select.js');
 const toggle = read('src/ui/components/toggle.js');
 const emptyState = read('src/ui/components/empty-state.js');
 const sessions = read('src/ui/features/sessions/index.js');
@@ -20,14 +22,19 @@ const workspaces = read('src/ui/features/workspaces/cards.js');
 const dashboardServer = read('src/http/dashboard.js');
 const dashboardClient = read('public/dashboard.js');
 const advancedSettings = read('src/ui/features/settings/advanced.js');
+const desktopConnection = read('src/ui/features/settings/desktop-connection.js');
 const vscodeSettings = JSON.parse(read('.vscode/settings.json'));
 const vscodeExtensions = JSON.parse(read('.vscode/extensions.json'));
 
-assert.match(css, /@import "tailwindcss"/);
+assert.match(css, /@import "tailwindcss" source\(none\)/);
+assert.match(css, /@source "\.\.\/\*\*\/\*\.js"/);
+assert.match(css, /@source "\.\.\/\.\.\/http\/dashboard\.js"/);
+assert.match(css, /@source "\.\.\/\.\.\/\.\.\/public\/dashboard\.js"/);
 assert.equal(vscodeSettings['files.associations']?.['src/ui/styles/app.css'], 'tailwindcss');
 assert.equal(vscodeSettings['css.lint.unknownAtRules'], 'ignore');
 assert.ok(vscodeExtensions.recommendations?.includes('bradlc.vscode-tailwindcss'));
-assert.doesNotMatch(css, /@source\b/);
+assert.doesNotMatch(compiledCss, /rel-ai-mcp\\:ngrok|\.\\\[rel-ai-mcp/);
+assert.doesNotMatch(compiledCss, /\.collapse\s*\{|\.contents\s*\{|\.grow\s*\{|\.resize\s*\{/);
 assert.match(settings, /shell\.className = 'settings-layout settings-shell'/);
 for (const className of [
   'settings-shell',
@@ -43,12 +50,22 @@ for (const className of [
   assert.match(css, new RegExp(`\\.${className}\\b`), `missing Tailwind contract for ${className}`);
 }
 
+assert.match(select, /wrap\.className = 'select-control'/);
+assert.doesNotMatch(select, /style\.cssText|style="|\.style\./);
+assert.match(css, /\.select-control\b/);
+assert.match(css, /\.select-control select[\s\S]*min-w-0/);
+
 assert.match(toggle, /wrap\.className = 'toggle-control'/);
 assert.match(toggle, /input\.className = 'toggle-input'/);
 assert.match(toggle, /span\.className = 'toggle-label'/);
 assert.doesNotMatch(toggle, /style\.cssText|style="/);
 assert.match(css, /input\[type="checkbox"\]:not\(\.toggle-input\)/);
 assert.match(css, /\.toggle-input:checked::after/);
+assert.match(desktopConnection, /wrapper\.className = 'password-field'/);
+assert.match(desktopConnection, /classList\.add\('compact-button', 'password-toggle'\)/);
+assert.match(css, /\.password-field[\s\S]*grid-template-columns: minmax\(0,1fr\) auto/);
+assert.match(css, /@media \(max-width: 520px\)[\s\S]*\.password-field[\s\S]*grid-template-columns: minmax\(0,1fr\)/);
+assert.match(css, /\.password-toggle\b/);
 
 assert.match(sessions, /class="task-row"/);
 assert.match(css, /\.session-row, \.task-row[\s\S]*w-full[\s\S]*grid-template-columns: auto minmax\(0,1fr\) minmax\(0,auto\) auto 18px/);
@@ -114,6 +131,9 @@ assert.match(toast, /`toast toast-\$\{variant\}`/);
 assert.match(css, /\.toast-region\b/);
 assert.match(css, /\.toast-info\b/);
 assert.match(css, /\.toast-error\b/);
+assert.doesNotMatch(css, /\.toast-stack\b|\.toast\.(?:success|warn|error)\b/);
+assert.doesNotMatch(css, /\.settings-layout\s*\{[^}]*210px/s);
+assert.match(css, /\.settings-shell, \.settings-layout[\s\S]*grid-template-columns: 220px minmax\(0,1fr\)/);
 
 assert.match(drawer, /body\.className = 'drawer-body'/);
 assert.match(drawer, /panelClass = ''/);

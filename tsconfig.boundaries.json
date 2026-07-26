@@ -23,7 +23,6 @@
     "src/tools/handlers.js",
     "src/tools/session.js",
     "electron/launcher-config.js",
-    "electron/resource-path.js",
-    "electron/installed-smoke.js"
+    "electron/resource-path.js"
   ]
 }

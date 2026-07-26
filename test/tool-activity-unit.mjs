@@ -78,11 +78,12 @@ fragmentedNow = 4000;
 fragmentedB();
 assert.equal(fragmentedTracker.getToolActivity().activeTaskCount, 2);
 fragmentedNow = 5000;
-const repaired = fragmentedTracker.beginConnectorToolCall({ tool: 'relai_read', workspace: 'repo', scopeId: 'mcp:transport:c' });
-assert.equal(repaired.taskId, fragmentedB.taskId, 'the newest weak transport task must absorb fragmented waiting siblings');
-assert.equal(fragmentedTracker.getToolActivity().activeTaskCount, 1, 'fragmented weak sessions must not permanently poison future grouping');
-assert.equal(fragmentedTracker.getToolActivity().tasks[0].calls, 3);
-repaired();
+assert.throws(
+  () => fragmentedTracker.beginConnectorToolCall({ tool: 'relai_read', workspace: 'repo', scopeId: 'mcp:transport:c' }),
+  error => error?.code === 'TASK_ID_REQUIRED',
+  'ambiguous weak transport fragments must fail explicitly instead of being merged by workspace'
+);
+assert.equal(fragmentedTracker.getToolActivity().activeTaskCount, 2, 'independent weak-scope tasks must remain isolated');
 fragmentedTracker.reset();
 
 const strongTracker = createToolActivityTracker({ idleMs: 60_000 });

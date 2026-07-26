@@ -1,10 +1,16 @@
+const crypto = require('node:crypto');
 const readline = require('node:readline');
-const { getToolSchemas, callTool } = require('./tools');
+const { getToolSchemas, getToolSurfaceManifest, callTool } = require('./tools');
+const { serializeToolError } = require('./tools/errors');
 const { listResources, readResource } = require('./resources');
 const pkg = require('../package.json');
 
+const SERVER_INSTANCE_ID = crypto.randomUUID();
 const DEFAULT_MAX_TOOL_RESULT_BYTES = 512 * 1024;
 const MAX_TOOL_RESULT_BYTES = Number(process.env.REL_AI_MCP_MAX_TOOL_RESULT_BYTES || process.env.REL_AI_MCP_MAX_TOOL_RESULT_CHARS || DEFAULT_MAX_TOOL_RESULT_BYTES);
+const CLIENT_CONTEXT_TTL_MS = 24 * 60 * 60 * 1000;
+const MAX_CLIENT_CONTEXTS = 256;
+const clientContexts = new Map();
 
 function main() {
   const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
@@ -51,13 +57,26 @@ function messageId(message) {
 
 async function dispatchMessage(message, options) {
   switch (message.method) {
-    case 'initialize':
+    case 'initialize': {
+      rememberClientContext(message, options);
+      const toolSurface = getToolSurfaceManifest();
       return result(message.id, {
         protocolVersion: message.params?.protocolVersion || '2025-06-18',
-        capabilities: { tools: { listChanged: true }, resources: { subscribe: false, listChanged: true } },
-        serverInfo: { name: pkg.name, version: pkg.version },
-        instructions: 'Use the minimum number of workspace-tool calls needed. Call relai_repo_snapshot when an overview is useful and follow any projectInstructions it returns; earlier sources override later sources. Use relai_search when location is unknown; adaptive bounded context is included by default. Use mode:"compact" for path/line-only output or mode:"context" for fixed limits, and call relai_read only when a wider range or complete file is needed. Use relai_exec for one-shot development commands. Prefer relai_edit with runChecks:true and returnDiff:true. Run final standard or release checks, then call relai_complete_task exactly once.'
+        capabilities: {
+          tools: { listChanged: true },
+          resources: { subscribe: false, listChanged: true },
+          experimental: {
+            relai: {
+              toolSurfaceVersion: toolSurface.toolSurfaceVersion,
+              taskIdentityVersion: 2,
+              manifestResource: 'relai://server/tool-surface'
+            }
+          }
+        },
+        serverInfo: { name: pkg.name, version: pkg.version, toolSurfaceVersion: toolSurface.toolSurfaceVersion },
+        instructions: 'For each independent user task, call relai_start_task exactly once and retain its opaque task_id. Pass that task_id to every subsequent Rel.AI tool call for the task, including validation and completion; never treat an MCP transport session, repository, or ChatGPT conversation as the task identity. Use the minimum number of workspace-tool calls needed. Call relai_repo_snapshot when an overview is useful and follow any projectInstructions it returns; earlier sources override later sources. Use relai_search when location is unknown and relai_read only when wider source is needed. Prefer relai_edit with runChecks:true and returnDiff:true. Completion is explicit: on the final standard or release relai_run_checks pass complete:true with summary, or call relai_complete_task with the same task_id after a final read-only review.'
       });
+    }
     case 'ping':
       return result(message.id, {});
     case 'tools/list':
@@ -73,6 +92,35 @@ async function dispatchMessage(message, options) {
   }
 }
 
+function clientContextKey(options = {}) {
+  const transportType = String(options.transportType || (options.publicHttpOnly ? 'http' : 'stdio'));
+  const identity = String(options.transportSessionId || options.taskScopeId || (transportType === 'stdio' ? 'default' : 'anonymous'));
+  return `${transportType}:${identity}`;
+}
+
+function rememberClientContext(message, options = {}) {
+  const now = Date.now();
+  for (const [key, value] of clientContexts) {
+    if (now - Number(value.initializedAt || 0) > CLIENT_CONTEXT_TTL_MS) clientContexts.delete(key);
+  }
+  while (clientContexts.size >= MAX_CLIENT_CONTEXTS) clientContexts.delete(clientContexts.keys().next().value);
+  const clientInfo = message.params?.clientInfo || {};
+  clientContexts.set(clientContextKey(options), {
+    clientName: String(clientInfo.name || ''),
+    clientVersion: String(clientInfo.version || ''),
+    initializationRequestId: message.id,
+    initializedAt: now
+  });
+}
+
+function readClientContext(options = {}) {
+  return clientContexts.get(clientContextKey(options)) || {
+    clientName: '',
+    clientVersion: '',
+    initializationRequestId: ''
+  };
+}
+
 function handleResourceRead(message) {
   const uri = message.params?.uri;
   if (!uri) return jsonRpcError(message.id, -32602, 'Missing resource uri.');
@@ -81,19 +129,24 @@ function handleResourceRead(message) {
 
 async function handleToolCall(message, options) {
   const params = message.params || {};
+  const clientContext = readClientContext(options);
   const name = params.name;
   if (!name) return jsonRpcError(message.id, -32602, 'Missing tool name.');
   try {
     const output = await callTool(name, params.arguments || {}, {
       publicHttpOnly: Boolean(options.publicHttpOnly),
-      taskScopeId: String(options.taskScopeId || '')
+      taskScopeId: String(options.taskScopeId || ''),
+      requestId: message.id,
+      serverInstanceId: SERVER_INSTANCE_ID,
+      transportType: String(options.transportType || (options.publicHttpOnly ? 'http' : 'stdio')),
+      transportSessionId: String(options.transportSessionId || ''),
+      clientName: clientContext.clientName,
+      clientVersion: clientContext.clientVersion,
+      initializationRequestId: clientContext.initializationRequestId
     });
-    return result(message.id, toolResult(output, false));
+    return result(message.id, toolResult(output, output?.ok === false));
   } catch (error) {
-    return result(message.id, toolResult({
-      ok: false,
-      error: error instanceof Error ? error.message : String(error)
-    }, true));
+    return result(message.id, toolResult(serializeToolError(name, error), true));
   }
 }
 
@@ -125,17 +178,63 @@ function truncateUtf8Head(text, maxBytes) {
   return buffer.subarray(0, maxBytes).toString('utf8').replace(/\uFFFD+$/u, '');
 }
 
-function compactToolResult(payload, originalChars) {
-  if (!payload || typeof payload !== 'object') return { ok: false, truncated: true, originalChars };
-  return {
+function compactToolResult(payload, originalBytes) {
+  if (!payload || typeof payload !== 'object') return { ok: false, truncated: true, originalBytes };
+  const fallbackMessage = 'Result was truncated. Re-call with a narrower path, maxBytes, maxEntries, limit, or diff path.';
+  const compact = {
     ok: payload.ok !== false,
     truncated: true,
-    originalChars,
-    message: 'Result was truncated. Re-call with a narrower path, maxBytes, maxEntries, limit, or diff path.',
+    originalBytes,
+    message: boundedText(payload.message, 2000) || fallbackMessage,
     workspace: payload.workspace || null,
+    task_id: payload.task_id || payload.taskId || null,
     sessionId: payload.sessionId || null,
+    error: boundedText(payload.error, 4000),
+    errorCode: payload.errorCode,
+    errorDetails: compactErrorDetails(payload.errorDetails),
+    level: payload.level,
+    validationStatus: payload.validationStatus,
+    completionKnown: payload.completionKnown,
+    endReason: payload.endReason,
+    completionSource: payload.completionSource,
+    summary: boundedText(payload.summary, 2000),
+    validationAt: payload.validationAt,
+    nextAction: boundedText(payload.nextAction, 2000),
+    results: compactDiagnosticResults(payload.results),
     keys: Object.keys(payload).slice(0, 50)
   };
+  return Object.fromEntries(Object.entries(compact).filter(([, value]) => value != null));
+}
+
+function compactDiagnosticResults(results) {
+  if (!Array.isArray(results) || results.length === 0) return undefined;
+  return results.slice(0, 5).map((item) => ({
+    command: boundedText(item?.command, 1000),
+    ok: item?.ok !== false,
+    exitCode: item?.exitCode,
+    timedOut: item?.timedOut === true,
+    signal: item?.signal,
+    stdout: tailText(item?.stdout, 2000),
+    stderr: tailText(item?.stderr, 4000)
+  })).map((item) => Object.fromEntries(Object.entries(item).filter(([, value]) => value != null)));
+}
+
+function compactErrorDetails(details) {
+  if (!details || typeof details !== 'object') return undefined;
+  const text = boundedText(JSON.stringify(details), 4000);
+  if (!text) return undefined;
+  try { return JSON.parse(text); }
+  catch { return { summary: text }; }
+}
+
+function boundedText(value, maxChars) {
+  if (typeof value !== 'string' || !value) return undefined;
+  return value.length <= maxChars ? value : `${value.slice(0, maxChars)}\n[truncated]`;
+}
+
+function tailText(value, maxChars) {
+  if (typeof value !== 'string' || !value) return undefined;
+  return value.length <= maxChars ? value : `[kept last ${maxChars} chars]\n${value.slice(-maxChars)}`;
 }
 
 function result(id, value) {
@@ -150,4 +249,4 @@ function write(value) {
   process.stdout.write(`${JSON.stringify(value)}\n`);
 }
 
-module.exports = { main, handleMessage };
+module.exports = { main, handleMessage, SERVER_INSTANCE_ID };

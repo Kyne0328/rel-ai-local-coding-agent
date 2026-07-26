@@ -7,44 +7,46 @@ const { resolveWorkspace } = require('../config');
 const {
   repoSnapshot,
   relaiRead,
-  relaiWrite,
-  relaiReplace,
   workspaceTidyPlan,
   workspaceTidyRun,
   relaiVerify,
-  relaiBrowser,
+  relaiHttpProbe,
+  relaiUiCheck,
   relaiDiff,
-  relaiReset,
-  relaiGitStatus,
+  relaiRestorePaths,
+  relaiResetWorkspace,
   relaiGitCommit,
   relaiGitPush,
-  relaiGitCreatePr
+  relaiGitDraftPr
 } = require('../localRepoBridge');
 const { planEdit } = require('../executionPlanner');
 const { relaiStatus } = require('./status');
 const { completeTask } = require('./completion');
 const { relaiSearch } = require('../bridge/search');
+const { relaiCodeInspect } = require('../bridge/codeIntelligence');
 const { relaiExec } = require('../bridge/exec');
+const { startTask } = require('./task');
 
 /** @type {Readonly<Record<string, ToolHandler>>} */
 const HANDLERS = Object.freeze({
+  startTask: inWorkspace((workspace) => startTask(workspace)),
   repoSnapshot: inWorkspace((workspace, config, args) => repoSnapshot(workspace, config, args)),
   read: inWorkspace((workspace, config, args, context) => relaiRead(workspace, config, args, context)),
   search: inWorkspace((workspace, config, args) => relaiSearch(workspace, config, args)),
+  codeInspect: inWorkspace((workspace, config, args) => relaiCodeInspect(workspace, config, args)),
   exec: inWorkspace((workspace, config, args) => relaiExec(workspace, config, args)),
-  write: inWorkspace((workspace, config, args) => relaiWrite(workspace, config, args)),
-  replace: inWorkspace((workspace, config, args) => relaiReplace(workspace, config, args)),
   tidyPlan: inWorkspace((workspace, config, args) => workspaceTidyPlan(workspace, config, args)),
   tidyRun: inWorkspace((workspace, config, args) => workspaceTidyRun(workspace, config, args)),
   runChecks: inWorkspace((workspace, config, args) => relaiVerify(workspace, config, mapCheckArgs(args))),
-  browser: inWorkspace((workspace, config, args) => relaiBrowser(workspace, config, { ...args, command: /** @type {{ command?: string, check?: string }} */ (args).command || /** @type {{ command?: string, check?: string }} */ (args).check })),
+  httpProbe: inWorkspace((workspace, config, args) => relaiHttpProbe(workspace, config, args)),
+  uiCheck: inWorkspace((workspace, config, args) => relaiUiCheck(workspace, config, args)),
   diff: inWorkspace((workspace, config, args) => relaiDiff(workspace, config, args)),
-  restore: inWorkspace((workspace, config, args) => relaiReset(workspace, config, args)),
+  restorePaths: inWorkspace((workspace, config, args) => relaiRestorePaths(workspace, config, args)),
+  resetWorkspace: inWorkspace((workspace, config, args) => relaiResetWorkspace(workspace, config, args)),
   status: (config, args) => relaiStatus(config, args),
-  gitStatus: inWorkspace((workspace, config, args) => relaiGitStatus(workspace, config, args)),
   gitCommit: inWorkspace((workspace, config, args) => relaiGitCommit(workspace, config, args)),
   gitPush: inWorkspace((workspace, config, args) => relaiGitPush(workspace, config, args)),
-  gitCreatePr: inWorkspace((workspace, config, args) => relaiGitCreatePr(workspace, config, args)),
+  gitDraftPr: inWorkspace((workspace, config, args) => relaiGitDraftPr(workspace, config, args)),
   edit: inWorkspace((workspace, config, args) => planEdit(workspace, config, args)),
   completeTask: (config, args) => completeTask(config, args)
 });

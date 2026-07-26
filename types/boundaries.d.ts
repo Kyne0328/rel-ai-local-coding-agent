@@ -48,6 +48,15 @@ export interface ToolDashboardMetadata {
   requiresApproval: boolean;
 }
 
+export interface ToolLifecycleMetadata {
+  state: 'active' | 'deprecated';
+  replacement?: ToolName;
+  replacements?: ToolName[];
+  deprecatedSince?: number;
+  removalTarget?: number;
+  note?: string;
+}
+
 export interface ToolDefinition {
   name: ToolName;
   title: string;
@@ -59,6 +68,7 @@ export interface ToolDefinition {
   groups: ToolGroup[];
   behavior: ToolBehavior;
   dashboard: ToolDashboardMetadata;
+  lifecycle?: ToolLifecycleMetadata;
 }
 
 export interface ToolSchema {
@@ -71,6 +81,7 @@ export interface ToolSchema {
 
 export interface ToolArgs extends Record<string, unknown> {
   workspace?: string;
+  task_id?: string;
   path?: string;
   paths?: string[];
   startLine?: number;
@@ -95,6 +106,8 @@ export interface ToolArgs extends Record<string, unknown> {
   cwd?: string;
   env?: Record<string, string>;
   maxOutputBytes?: number;
+  complete?: boolean;
+  summary?: string;
 }
 
 export interface ToolResult extends Record<string, unknown> {
@@ -111,8 +124,11 @@ export interface ToolResult extends Record<string, unknown> {
   budgetMultiplied?: boolean;
   completionKnown?: boolean;
   endReason?: string;
+  completionSource?: string;
   summary?: string;
   validationAt?: string;
+  validationTaskId?: string;
+  relatedTaskIds?: string[];
   changedFiles?: string[];
   nextAction?: string;
   commandSummary?: string;
@@ -251,14 +267,4 @@ export interface ApprovalTokenReplacementResult {
   revoked: ApprovalTokenRevocationSummary;
   authorization: OAuthAuthorizationStatus;
   status: Record<string, unknown>;
-}
-
-export interface InstalledSmokeResult {
-  ok: true;
-  isPackaged: true;
-  version: string;
-  resourceChecks: Record<string, boolean>;
-  health: { ok: boolean; name?: string; version?: string };
-  dashboardStatus: number;
-  publicToolCount: number;
 }

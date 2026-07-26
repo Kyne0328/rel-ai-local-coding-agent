@@ -6,13 +6,16 @@
   "author": "Kyne Anthony",
   "main": "main.js",
   "devDependencies": {
-    "electron": "^31.0.0",
-    "electron-builder": "^24.13.3"
+    "electron": "^43.2.0",
+    "electron-builder": "26.15.3"
   },
   "build": {
     "appId": "com.relai.mcp",
     "productName": "Rel.AI MCP",
     "electronUpdaterCompatibility": ">=2.16",
+    "electronLanguages": [
+      "en-US"
+    ],
     "publish": [
       {
         "provider": "github",
@@ -33,8 +36,6 @@
       "launcher-config.js",
       "resource-path.js",
       "window-size.js",
-      "window-smoke.js",
-      "smoke-evidence.js",
       "tool-sleep-blocker.js",
       "dashboard-window.js",
       "dashboard-window-bounds.js",
@@ -53,9 +54,9 @@
       "ipc-security.js",
       "desktop-settings.js",
       "desktop-lifecycle.js",
-      "installed-smoke.js",
       "renderer/**",
-      "build/**"
+      "build/**",
+      "!**/*.map"
     ],
     "extraResources": [
       {

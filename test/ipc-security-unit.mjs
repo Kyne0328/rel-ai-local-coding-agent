@@ -59,10 +59,9 @@ const eventFor = window => ({ sender: { window } });
 assert.equal(handles.has('wizard:save-config'), false);
 assert.equal(MAX_CLIPBOARD_TEXT_BYTES, 65536);
 assert.equal(isAllowedNgrokUrl('https://dashboard.ngrok.com/get-started/setup/windows'), true);
-const smokeDashboard = { id: 'smoke-dashboard' };
-const smokeGuards = createWindowGuards(deps.BrowserWindow, window => window === smokeDashboard ? 'dashboard' : '');
-assert.equal(smokeGuards.windowOnly(eventFor(smokeDashboard), () => null, 'Smoke dashboard', () => 'allowed', 'dashboard'), 'allowed');
-assert.throws(() => smokeGuards.windowOnly(eventFor(smokeDashboard), () => null, 'Smoke wizard', () => 'wrong role', 'wizard'), /not available/);
+const guards = createWindowGuards(deps.BrowserWindow);
+assert.equal(guards.windowOnly(eventFor(dashboard), () => dashboard, 'Dashboard', () => 'allowed'), 'allowed');
+assert.throws(() => guards.windowOnly(eventFor(other), () => dashboard, 'Dashboard', () => 'denied'), /not available/);
 for (const value of [
   'http://dashboard.ngrok.com/get-started',
   'https://dashboard.ngrok.com.evil.example/',

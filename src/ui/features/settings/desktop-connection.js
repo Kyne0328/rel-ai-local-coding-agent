@@ -283,7 +283,7 @@ function secretControl(value, onChange, options = {}) {
     toggle.setAttribute('aria-pressed', visible ? 'false' : 'true');
     input.focus();
   });
-  toggle.classList.add('compact-button');
+  toggle.classList.add('compact-button', 'password-toggle');
   toggle.setAttribute('aria-pressed', 'false');
   wrapper.append(input, toggle);
   return wrapper;

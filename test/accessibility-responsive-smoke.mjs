@@ -21,6 +21,7 @@ const overlayFocus = read('src/ui/components/overlay-focus.js');
 const commandPalette = read('src/ui/command-palette.js');
 const workspaceMenu = read('src/ui/components/workspace-menu.js');
 const activity = read('src/ui/features/activity/index.js');
+const diagnostics = read('src/ui/features/settings/diagnostics.js');
 const router = read('src/ui/router.js');
 const wizardHtml = read('electron/renderer/wizard.html');
 const wizardJs = read('electron/renderer/wizard.js');
@@ -87,6 +88,9 @@ assert.match(activity, /<span class="sr-only">Actions<\/span>/);
 assert.doesNotMatch(activity, /row\.tabIndex/);
 assert.doesNotMatch(activity, /row\.onkeydown/);
 assert.match(activity, /activity-row-button/);
+assert.match(diagnostics, /class="diagnostic-page"/);
+assert.match(diagnostics, /class="diagnostic-search-control"/);
+assert.match(diagnostics, /class="diagnostic-filter-control"/);
 
 assert.match(interactionsCss, /env\(safe-area-inset-bottom\)/);
 assert.match(interactionsCss, /\.main[\s\S]*grid-column: 2 \/ -1/);
@@ -100,6 +104,9 @@ assert.match(shellCss, /\.settings-rail[\s\S]*overflow-x-auto/);
 assert.match(shellCss, /scroll-snap-type: x proximity/);
 assert.match(shellCss, /\.workspace-menu-popover[\s\S]*max-h-72[\s\S]*overflow-y-auto/);
 assert.match(shellCss, /@media \(max-width: 520px\)[\s\S]*\.workspace-menu[\s\S]*w-full/);
+assert.match(shellCss, /\.diagnostic-page[\s\S]*container-type: inline-size[\s\S]*container-name: diagnostic-page/);
+assert.match(shellCss, /@container diagnostic-page \(max-width: 760px\)[\s\S]*\.diagnostic-search-control[\s\S]*grid-column: 1 \/ -1/);
+assert.match(shellCss, /@container diagnostic-page \(max-width: 480px\)[\s\S]*\.diagnostic-live-tail[\s\S]*w-full/);
 assert.match(shellCss, /@media \(forced-colors: active\)/);
 assert.match(preferencesCss, /prefers-reduced-motion/);
 

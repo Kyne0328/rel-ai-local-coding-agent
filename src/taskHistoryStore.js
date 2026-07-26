@@ -32,6 +32,19 @@ function recordTaskHistoryEvent(config, event) {
   return publicSession(session);
 }
 
+function readTaskHistorySession(config, taskId) {
+  const id = cleanId(taskId);
+  if (!id) return null;
+  try {
+    ensureMigrated(config);
+    const session = readSession(getTaskHistoryDir(config), id);
+    return session ? publicSession(session) : null;
+  } catch (error) {
+    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] task history session read:', error);
+    return null;
+  }
+}
+
 function readTaskHistory(config, activity = {}, options = {}) {
   const limit = clamp(options.limit || 100, 1, MAX_SESSIONS);
   let persisted;
@@ -57,9 +70,10 @@ function readTaskHistory(config, activity = {}, options = {}) {
 }
 
 function resolveCanonicalTaskId(directory, event) {
+  const explicit = cleanId(event.taskId);
+  if (explicit && Number(event.taskIdentityVersion || 0) >= 2) return explicit;
   const validationTaskId = cleanId(event.validationTaskId);
   if (validationTaskId) return validationTaskId;
-  const explicit = cleanId(event.taskId);
   if (explicit && !isFragmentedScope(event.scopeId)) return explicit;
   const candidate = findRecentCompatibleSession(directory, event);
   if (candidate) return candidate.id;
@@ -84,6 +98,7 @@ function findRecentCompatibleSession(directory, event) {
 }
 
 function relatedTaskIds(event, canonicalId) {
+  if (Number(event.taskIdentityVersion || 0) >= 2) return [canonicalId];
   const values = [event.taskId, ...(Array.isArray(event.relatedTaskIds) ? event.relatedTaskIds : [])]
     .map(cleanId)
     .filter(Boolean);
@@ -110,6 +125,7 @@ function applyEvent(session, event) {
   return {
     ...session,
     version: STORE_VERSION,
+    _taskIdentityVersion: Math.max(Number(session._taskIdentityVersion || 0), Number(event.taskIdentityVersion || 0)),
     calls: Number(session.calls || 0) + 1,
     failures,
     changedFiles,
@@ -117,7 +133,8 @@ function applyEvent(session, event) {
     validation,
     committed: Boolean(session.committed || (event.tool === 'relai_git_commit' && event.ok !== false)),
     pushed: Boolean(session.pushed || (event.tool === 'relai_git_push' && event.ok !== false)),
-    prDrafted: Boolean(session.prDrafted || (event.tool === 'relai_git_create_pr' && event.ok !== false)),
+    // Historical events may use the removed pre-v10 PR-draft tool name.
+    prDrafted: Boolean(session.prDrafted || (['relai_git_draft_pr', 'relai_git_create_pr'].includes(event.tool) && event.ok !== false)),
     completionKnown: Boolean(session.completionKnown || completion),
     endReason: completion || session.completionKnown ? 'explicit_completion' : 'inactivity_window',
     status: completion || session.completionKnown ? 'completed' : failures ? 'attention' : 'inactive',
@@ -161,7 +178,8 @@ function mergeSessions(id, sessions) {
       .sort((left, right) => eventTime(left) - eventTime(right))
       .slice(-MAX_SESSION_EVENTS),
     _scopeIds: unique(ordered.flatMap(session => session._scopeIds || [])),
-    _pids: unique(ordered.flatMap(session => session._pids || []))
+    _pids: unique(ordered.flatMap(session => session._pids || [])),
+    _taskIdentityVersion: Math.max(...ordered.map(session => Number(session._taskIdentityVersion || 0)))
   };
 }
 
@@ -184,9 +202,11 @@ function overlayActiveSession(persisted, active) {
 
 function compactEvent(event) {
   const keep = [
-    'id', 'ts', 'pid', 'taskId', 'scopeId', 'operationId', 'tool', 'operation', 'workspace',
-    'ok', 'ms', 'changedFiles', 'sessionChangedFiles', 'filePath', 'validationStatus',
-    'completionKnown', 'endReason', 'taskSummary', 'validationTaskId', 'relatedTaskIds',
+    'id', 'ts', 'pid', 'taskId', 'scopeId', 'operationId', 'requestId', 'serverInstanceId',
+    'transportType', 'transportSessionId', 'clientName', 'clientVersion', 'initializationRequestId',
+    'taskIdentityVersion', 'taskIdExplicit', 'duplicateRequest', 'eventType',
+    'tool', 'operation', 'workspace', 'ok', 'ms', 'changedFiles', 'sessionChangedFiles', 'filePath', 'validationStatus',
+    'completionKnown', 'endReason', 'completionSource', 'taskSummary', 'validationTaskId', 'relatedTaskIds',
     'message', 'error', 'path'
   ];
   return Object.fromEntries(keep.filter(key => event[key] !== undefined).map(key => [key, event[key]]));
@@ -194,7 +214,7 @@ function compactEvent(event) {
 
 function publicSession(session) {
   if (!session || typeof session !== 'object') return session;
-  const { version, _scopeIds, _pids, ...value } = session;
+  const { version, _scopeIds, _pids, _taskIdentityVersion, ...value } = session;
   return value;
 }
 
@@ -226,7 +246,8 @@ function emptySession(id) {
     currentOperations: [],
     events: [],
     _scopeIds: [],
-    _pids: []
+    _pids: [],
+    _taskIdentityVersion: 0
   };
 }
 
@@ -273,5 +294,6 @@ module.exports = {
   clearTaskHistory,
   getTaskHistoryDir,
   readTaskHistory,
+  readTaskHistorySession,
   recordTaskHistoryEvent
 };

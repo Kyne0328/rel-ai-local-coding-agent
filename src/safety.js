@@ -3,7 +3,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 
 const SECRET_PATH_GROUPS = Object.freeze({
-  fileNames: ["id_rsa", "id_ed25519", "known_hosts", ".npmrc", ".pypirc", ".netrc", "kubeconfig"],
+  fileNames: ["id_rsa", "id_ed25519", ".npmrc", ".pypirc", ".netrc", "kubeconfig"],
   extensions: [".pem", ".key", ".p12", ".pfx"],
   directories: [".ssh", ".aws", ".azure", ".kube"]
 });
@@ -13,9 +13,14 @@ const SECRET_PATH_PATTERNS = Object.freeze([
   ...SECRET_PATH_GROUPS.directories
 ]);
 
-const SECRET_FILE_NAMES = new Set(SECRET_PATH_GROUPS.fileNames);
 const SECRET_EXTENSIONS = new Set(SECRET_PATH_GROUPS.extensions);
 const SECRET_DIRECTORIES = new Set(SECRET_PATH_GROUPS.directories);
+const PUBLIC_ENV_TEMPLATE_NAMES = new Set([
+  ".env.example",
+  ".env.template",
+  ".env.sample",
+  ".env.defaults"
+]);
 const WINDOWS_SEPARATOR = path.win32.sep;
 const DEFAULT_EXCLUDED_NAMES = new Set([
   ".git", "node_modules", "dist", "build", "coverage", ".next", ".nuxt", ".svelte-kit",
@@ -60,7 +65,41 @@ function hasWindowsDrivePrefix(value) {
     && /[A-Za-z]/.test(value[0]);
 }
 
-function validateRelativePath(relativePath, label = "Path") {
+function sensitivePathError(value, label, operation = "legacy") {
+  const classification = classifySensitivePath(value);
+  const error = new Error(`${label} touches a blocked sensitive path: ${value}`);
+  error.code = "SENSITIVE_PATH_RESTRICTED";
+  error.source = "rel-ai-mcp-policy";
+  error.path = value;
+  error.fileClass = classification.classification;
+  error.policyReason = classification.reason;
+  error.operation = operation;
+  error.retryable = false;
+  error.requiresUserConfirmation = false;
+  error.allowedAlternatives = [
+    "Use a public environment template such as .env.example when appropriate.",
+    "Use an ordinary non-sensitive repository path.",
+    "Use a narrowly scoped operation that explicitly supports sensitive paths."
+  ];
+  return error;
+}
+
+function assertPathOperationAllowed(relativePath, operation = "legacy", options = {}) {
+  if (!isSecretPath(relativePath)) return;
+  if (operation === "commit" && options.allowSensitive === true) return;
+  if (["env-list", "env-set", "env-remove", "env-compare", "review-redacted"].includes(operation) && isDotEnvPath(relativePath)) return;
+  const contentDecision = evaluateSensitiveContent(relativePath, options.absolutePath, options.proposedContent);
+  if (contentDecision.allowed) return;
+  throw sensitivePathError(relativePath, options.label || "Path", operation);
+}
+
+function isDotEnvPath(relativePath) {
+  const normalized = String(relativePath || "").replaceAll(WINDOWS_SEPARATOR, "/").toLowerCase();
+  const leaf = normalized.split("/").filter(Boolean).at(-1) || "";
+  return leaf === ".env" || leaf.startsWith(".env.") || leaf.startsWith(".env-");
+}
+
+function validateRelativePath(relativePath, label = "Path", options = {}) {
   const value = String(relativePath || "").replaceAll(WINDOWS_SEPARATOR, "/").trim();
   if (!value) throw new Error(`${label} cannot be empty.`);
   if (value.startsWith("/") || hasWindowsDrivePrefix(value)) {
@@ -71,19 +110,40 @@ function validateRelativePath(relativePath, label = "Path") {
     throw new Error(`${label} must not contain traversal or empty segments: ${value}`);
   }
   if (value.length > 512) throw new Error(`${label} is too long: ${value}`);
-  if (isSecretPath(value)) throw new Error(`${label} touches a blocked sensitive path: ${value}`);
+  if (options.skipSensitivePolicy !== true) {
+    assertPathOperationAllowed(value, options.operation || "legacy", { ...options, label });
+  }
   return value;
 }
 
-function resolveSafePath(root, relativePath) {
-  const clean = validateRelativePath(relativePath);
+function resolveSafePath(root, relativePath, options = {}) {
+  const clean = validateRelativePath(relativePath, options.label || "Path", { ...options, skipSensitivePolicy: true });
   const realRoot = fs.realpathSync(root);
   const absolute = path.resolve(realRoot, clean);
-  const realCandidate = fs.existsSync(absolute) ? fs.realpathSync(absolute) : absolute;
+  const realCandidate = resolveRealCandidate(absolute);
   if (!isPathInside(realCandidate, realRoot)) {
     throw new Error(`Path escapes workspace: ${clean}`);
   }
+  assertPathOperationAllowed(clean, options.operation || "legacy", {
+    ...options,
+    absolutePath: absolute,
+    label: options.label || "Path"
+  });
   return { relativePath: clean, absolutePath: absolute, realPath: realCandidate };
+}
+
+function resolveRealCandidate(absolutePath) {
+  if (fs.existsSync(absolutePath)) return fs.realpathSync(absolutePath);
+  const missingSegments = [];
+  let ancestor = absolutePath;
+  while (!fs.existsSync(ancestor)) {
+    const parent = path.dirname(ancestor);
+    if (parent === ancestor) break;
+    missingSegments.unshift(path.basename(ancestor));
+    ancestor = parent;
+  }
+  const realAncestor = fs.realpathSync(ancestor);
+  return path.resolve(realAncestor, ...missingSegments);
 }
 
 function isPathInside(candidate, root) {
@@ -92,6 +152,7 @@ function isPathInside(candidate, root) {
 }
 
 function isDotEnvName(leaf) {
+  if (PUBLIC_ENV_TEMPLATE_NAMES.has(leaf)) return false;
   return leaf === ".env" || leaf.startsWith(".env.") || leaf.startsWith(".env-");
 }
 
@@ -110,15 +171,84 @@ function isSensitiveJsonLeaf(leaf) {
   return (leaf.startsWith("firebase-adminsdk") || leaf.startsWith("service-account")) && leaf.endsWith(".json");
 }
 
-function isSecretPath(relativePath) {
+function classifySensitivePath(relativePath) {
   const normalized = String(relativePath || "").replaceAll(WINDOWS_SEPARATOR, "/").toLowerCase();
   const segments = normalized.split("/").filter(Boolean);
   const leaf = segments.at(-1) || "";
-  if (isDotEnvName(leaf) || SECRET_FILE_NAMES.has(leaf) || isSensitiveJsonLeaf(leaf)) return true;
-  if (SECRET_EXTENSIONS.has(path.extname(leaf))) return true;
-  if (segments.some((segment) => SECRET_DIRECTORIES.has(segment) || isSecretNamedSegment(segment))) return true;
-  if (isSecretNamedFile(leaf)) return true;
-  return normalized.includes("gcloud/credentials");
+  if (isDotEnvName(leaf)) return { sensitive: true, classification: "environment_secret", reason: "runtime environment file" };
+  if (["id_rsa", "id_ed25519"].includes(leaf)) return { sensitive: true, classification: "private_key", reason: "private SSH key filename" };
+  if ([".npmrc", ".pypirc", ".netrc"].includes(leaf)) return { sensitive: true, classification: "authentication_config", reason: "configuration file commonly stores credentials" };
+  if (leaf === "kubeconfig") return { sensitive: true, classification: "cluster_credentials", reason: "Kubernetes client configuration" };
+  if (isSensitiveJsonLeaf(leaf)) return { sensitive: true, classification: "service_account_credentials", reason: "service-account credential filename" };
+  if (SECRET_EXTENSIONS.has(path.extname(leaf))) return { sensitive: true, classification: "key_or_certificate_bundle", reason: "private-key or credential-container extension" };
+  if (segments.some((segment) => SECRET_DIRECTORIES.has(segment))) return { sensitive: true, classification: "credential_store", reason: "platform credential directory" };
+  if (segments.some((segment) => isSecretNamedSegment(segment))) return { sensitive: true, classification: "secret_named_location", reason: "secret or credential named directory" };
+  if (isSecretNamedFile(leaf)) return { sensitive: true, classification: "secret_named_file", reason: "secret or credential named file" };
+  if (normalized.includes("gcloud/credentials")) return { sensitive: true, classification: "cloud_credentials", reason: "Google Cloud credential path" };
+  return { sensitive: false, classification: "ordinary_repository_file", reason: "no sensitive path rule matched" };
+}
+
+function isSecretPath(relativePath) {
+  return classifySensitivePath(relativePath).sensitive;
+}
+
+function evaluateSensitiveContent(relativePath, absolutePath, proposedContent) {
+  const classification = classifySensitivePath(relativePath);
+  if (!classification.sensitive) return { allowed: true, reason: "ordinary path" };
+  if (!["authentication_config", "key_or_certificate_bundle", "secret_named_location", "secret_named_file"].includes(classification.classification)) {
+    return { allowed: false, reason: classification.reason };
+  }
+  const source = proposedContent !== undefined
+    ? String(proposedContent)
+    : readCandidateText(absolutePath);
+  if (source == null) return { allowed: false, reason: "content unavailable or binary" };
+  const leaf = String(relativePath || "").replaceAll(WINDOWS_SEPARATOR, "/").toLowerCase().split("/").at(-1) || "";
+  if (leaf.endsWith(".pem")) return evaluatePemContent(source);
+  if (leaf === ".npmrc" || leaf === ".pypirc") return evaluateAuthConfigContent(source);
+  if (leaf === ".netrc") return { allowed: false, reason: ".netrc is inherently credential-oriented" };
+  return containsCredentialMaterial(source)
+    ? { allowed: false, reason: "credential-like content detected" }
+    : { allowed: true, reason: "no credential material detected" };
+}
+
+function readCandidateText(absolutePath) {
+  try {
+    if (!absolutePath || !fs.existsSync(absolutePath)) return null;
+    const data = fs.readFileSync(absolutePath);
+    if (data.length > 1024 * 1024 || looksBinary(data)) return null;
+    return data.toString("utf8");
+  } catch {
+    return null;
+  }
+}
+
+function evaluatePemContent(source) {
+  if (/-----BEGIN [^-]*PRIVATE KEY-----/i.test(source)) {
+    return { allowed: false, reason: "private key block detected" };
+  }
+  const blocks = [...source.matchAll(/-----BEGIN ([^-]+)-----/g)].map((match) => match[1].trim().toUpperCase());
+  if (blocks.length === 0) return { allowed: false, reason: "unrecognized PEM content" };
+  const publicBlocks = new Set(["CERTIFICATE", "PUBLIC KEY", "RSA PUBLIC KEY", "CERTIFICATE REQUEST"]);
+  return blocks.every((block) => publicBlocks.has(block))
+    ? { allowed: true, reason: "public certificate or public-key PEM" }
+    : { allowed: false, reason: "non-public PEM block detected" };
+}
+
+function evaluateAuthConfigContent(source) {
+  const activeLines = String(source).split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !line.startsWith("#") && !line.startsWith(";"));
+  return activeLines.some((line) => containsCredentialMaterial(line))
+    ? { allowed: false, reason: "credential assignment detected" }
+    : { allowed: true, reason: "public configuration without credential assignments" };
+}
+
+function containsCredentialMaterial(source) {
+  const text = String(source);
+  if (/-----BEGIN [^-]*PRIVATE KEY-----/i.test(text)) return true;
+  if (/(?:^|[\s/:])_authToken\s*=\s*[^\s#;]+/im.test(text)) return true;
+  if (/\b(?:password|passwd|token|auth[_-]?token|api[_-]?key|client[_-]?secret|access[_-]?key|secret[_-]?key|_auth|username)\s*[:=]\s*[^\s#;]+/i.test(text)) return true;
+  if (/\/\/[A-Za-z0-9._%+-]+:[^@\s/]+@/i.test(text)) return true;
+  if (/\b(?:ghp|github_pat|glpat|sk_live|sk_test)_[A-Za-z0-9_-]{8,}\b/.test(text)) return true;
+  return false;
 }
 
 function looksBinary(buffer) {
@@ -296,7 +426,7 @@ function matchesIgnorePattern(rel, pattern) {
 }
 
 function fileSha256(root, relativePath) {
-  const resolved = resolveSafePath(root, relativePath);
+  const resolved = resolveSafePath(root, relativePath, { operation: "read" });
   if (!fs.existsSync(resolved.absolutePath)) return null;
   const stat = fs.statSync(resolved.absolutePath);
   if (!stat.isFile()) throw new Error(`Not a file: ${resolved.relativePath}`);
@@ -304,7 +434,7 @@ function fileSha256(root, relativePath) {
 }
 
 function writeTextFileSafe(root, relativePath, content, options = {}) {
-  const resolved = resolveSafePath(root, relativePath);
+  const resolved = resolveSafePath(root, relativePath, { operation: "write", proposedContent: String(content ?? "") });
   const text = String(content ?? "");
   if (looksBinary(Buffer.from(text, "utf8"))) throw new Error("Refusing to write binary-looking content.");
   guardAgainstCollapsedFullFileWrite(resolved.absolutePath, resolved.relativePath, text);
@@ -370,8 +500,11 @@ module.exports = {
   DEFAULT_EXCLUDED_NAMES,
   validateRelativePath,
   resolveSafePath,
+  assertPathOperationAllowed,
   isPathInside,
   isSecretPath,
+  classifySensitivePath,
+  evaluateSensitiveContent,
   looksBinary,
   collectTextFiles,
   collectOptionsFromWorkspace,
@@ -394,6 +527,6 @@ function guardAgainstCollapsedFullFileWrite(absolutePath, relativePath, newText)
   const ext = path.extname(relativePath).toLowerCase();
   const sourceLike = new Set(['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs', '.dart', '.py', '.go', '.rs', '.java', '.kt', '.swift', '.cs', '.cpp', '.c', '.h', '.hpp', '.rb', '.php', '.css', '.scss', '.html', '.xml', '.yaml', '.yml', '.json', '.md']);
   if (sourceLike.has(ext) && oldLines >= 8 && newLines <= 2 && newText.length > 500) {
-    throw new Error('Refusing likely collapsed full-file write for ' + relativePath + ': existing file has ' + oldLines + ' lines but new content has ' + newLines + '. Use relai_read and pass the complete multiline file content to relai_write.');
+    throw new Error('Refusing likely collapsed full-file edit for ' + relativePath + ': existing file has ' + oldLines + ' lines but new content has ' + newLines + '. Use relai_read and pass complete multiline content to relai_edit.');
   }
 }

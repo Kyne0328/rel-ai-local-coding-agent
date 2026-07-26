@@ -42,7 +42,7 @@ console.log('4. .env flagged: OK');
 assert.ok(isSecretPath('.ssh/id_rsa'), 'ssh id_rsa');
 assert.ok(isSecretPath('id_rsa'), 'id_rsa at root');
 assert.ok(isSecretPath('id_ed25519'), 'ed25519 at root');
-assert.ok(isSecretPath('known_hosts'), 'known_hosts at root');
+assert.equal(isSecretPath('known_hosts'), false, 'known_hosts contains public host keys and must remain accessible');
 assert.ok(throws(() => resolveSafePath(ROOT, '.ssh/id_rsa')), 'resolveSafePath throws on ssh key');
 console.log('5. ssh keys flagged: OK');
 

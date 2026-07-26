@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-26",
+  "platform": "win32",
+  "architecture": "x64",
+  "electronVersion": "31.7.7",
+  "warningThresholdPercent": 3,
+  "metrics": {
+    "installerBytes": 80604737,
+    "portableBytes": 80342087,
+    "unpackedBytes": 266665259,
+    "resourcesBytes": 35896695,
+    "appAsarBytes": 1692241,
+    "packagedDependencyBytes": 1091187,
+    "localesBytes": 464976,
+    "ngrokBytes": 32774984,
+    "dashboardCssBytes": 111236
+  }
+}

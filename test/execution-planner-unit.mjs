@@ -76,6 +76,7 @@ function makeTempRepo(filename = 'hello.js', content = 'module.exports = {};') {
     const patch = `--- a/foo.js\n+++ b/foo.js\n@@ -1 +1 @@\n-const a = 1;\n+const a = 2;\n`;
     const result = await planEdit(workspace, config, { updateText: patch });
     assert.equal(result.plannerPath, 'apply-update', 'apply-update path: plannerPath must be apply-update');
+    assert.equal(result.diff, undefined, 'apply-update path: diff must only be returned when explicitly requested');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -207,7 +208,21 @@ function makeTempRepo(filename = 'hello.js', content = 'module.exports = {};') {
   }
 }
 
-// 12. staged patch (T4): start/append/commit applies the joined diff
+// 12. patch returnDiff is owned by the planner, not the patch primitive
+{
+  const dir = makeTempRepo('foo.js', 'const a = 1;\n');
+  const workspace = { alias: 'test', path: dir };
+  try {
+    const patch = `--- a/foo.js\n+++ b/foo.js\n@@ -1 +1 @@\n-const a = 1;\n+const a = 2;\n`;
+    const result = await planEdit(workspace, {}, { updateText: patch, returnDiff: true });
+    assert.ok(result.diff, 'patch post-actions: returnDiff attaches one review result');
+    assert.match(String(result.diff.diff || ''), /const a = 2/, 'patch post-actions: diff reflects the edit');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// 13. staged patch (T4): start/append/commit applies the joined diff
 {
   const dir = makeTempRepo('foo.js', 'const a = 1;\n');
   const workspace = { alias: 'test', path: dir };
@@ -226,7 +241,7 @@ function makeTempRepo(filename = 'hello.js', content = 'module.exports = {};') {
   }
 }
 
-// 13. large batch dry-run must not create files, journals, or staged payloads.
+// 14. large batch dry-run must not create files, journals, or staged payloads.
 {
   const dir = makeTempRepo();
   const stateDir = path.join(dir, '.state');

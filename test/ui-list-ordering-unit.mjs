@@ -11,24 +11,28 @@ const require = createRequire(import.meta.url);
 const { aliasConsistencyCheck, cautionSummary } = require('../src/productUx.js');
 
 const orderedTools = orderToolsForCatalog([
-  { name: 'relai_restore_changes', title: 'Revert To Saved State' },
-  { name: 'relai_write', title: 'Write Local Repo File' },
+  { name: 'relai_restore_paths', title: 'Restore Tracked Paths' },
+  { name: 'relai_reset_workspace', title: 'Reset Workspace State' },
   { name: 'relai_status', title: 'Rel.AI Status' },
   { name: 'relai_read', title: 'Read Local Repo Paths' },
+  { name: 'relai_code_inspect', title: 'Code Intelligence' },
   { name: 'relai_git_push', title: 'Publish Branch' },
-  { name: 'relai_browser', title: 'UI Route Check' },
+  { name: 'relai_http_probe', title: 'HTTP Route Probe' },
+  { name: 'relai_ui_check', title: 'Named UI Check' },
   { name: 'relai_edit', title: 'Unified Workspace Edit' },
   { name: 'relai_run_checks', title: 'Workspace Checks' }
 ]);
 assert.deepEqual(orderedTools.map(tool => tool.name), [
+  'relai_code_inspect',
   'relai_read',
   'relai_status',
   'relai_edit',
-  'relai_write',
-  'relai_browser',
+  'relai_http_probe',
+  'relai_ui_check',
   'relai_run_checks',
   'relai_git_push',
-  'relai_restore_changes'
+  'relai_reset_workspace',
+  'relai_restore_paths'
 ]);
 
 const sessions = [

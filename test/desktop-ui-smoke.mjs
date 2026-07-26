@@ -85,6 +85,9 @@ assert.doesNotMatch(statusJs, /Rel\.AI task completed|ChatGPT finished|60 second
 assert.match(statusJs, /renderLastTask/);
 assert.match(statusJs, /activity-pulse/);
 assert.match(statusJs, /initDisclosures/);
+assert.match(statusJs, /key: 'waiting'/);
+assert.match(electronCss, /\.status-badge\.waiting::before/);
+assert.match(electronCss, /data-state="waiting"/);
 assert.match(electronCss, /prefers-color-scheme: light/);
 assert.match(electronCss, /status-details::details-content/);
 assert.match(electronCss, /button\[data-state="success"\]/);

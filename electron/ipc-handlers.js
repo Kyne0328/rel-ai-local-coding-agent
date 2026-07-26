@@ -17,32 +17,31 @@ function registerIpcHandlers(deps) {
     getUpdateStatus, checkForUpdates, downloadUpdate, installUpdate,
     getLifecycleStatus, setLaunchAtLogin,
     getCurrentStatus, getNotificationsEnabled, setNotificationsEnabled,
-    exportDiagnosticState, openDiagnosticsFolder, fitWindowToContent,
-    getSmokeWindowRole = () => ''
+    exportDiagnosticState, openDiagnosticsFolder, fitWindowToContent
   } = deps;
-  const { isSenderWindow, windowOnly, allowedWindows } = createWindowGuards(BrowserWindow, getSmokeWindowRole);
+  const { isSenderWindow, windowOnly, allowedWindows } = createWindowGuards(BrowserWindow);
 
   ipcMain.handle('wizard:done', (event, config) => windowOnly(event, getWizardWindow, 'Setup completion', async () => {
     deps.saveLauncherConfig(config);
     closeWizard({ returnToFallback: false });
     await launchConfiguredDesktop({ restart: config?.restart === true, firstRun: config?.restart !== true });
     return { ok: true };
-  }, 'wizard'));
+  }));
   ipcMain.handle('wizard:cancel', event => windowOnly(event, getWizardWindow, 'Setup cancellation', () => {
     closeWizard({ returnToFallback: true });
     return { ok: true };
-  }, 'wizard'));
-  ipcMain.handle('recovery:get-config', event => windowOnly(event, getWizardWindow, 'Recovery configuration', getRecoveryConfig, 'wizard'));
-  ipcMain.handle('recovery:open-setup', event => windowOnly(event, getFallbackWindow, 'Connection recovery', openRecoverySetup, 'fallback'));
-  ipcMain.handle('server:start', event => windowOnly(event, getFallbackWindow, 'Service startup', startServer, 'fallback'));
-  ipcMain.handle('server:stop', event => windowOnly(event, getFallbackWindow, 'Service shutdown', stopServer, 'fallback'));
+  }));
+  ipcMain.handle('recovery:get-config', event => windowOnly(event, getWizardWindow, 'Recovery configuration', getRecoveryConfig));
+  ipcMain.handle('recovery:open-setup', event => windowOnly(event, getFallbackWindow, 'Connection recovery', openRecoverySetup));
+  ipcMain.handle('server:start', event => windowOnly(event, getFallbackWindow, 'Service startup', startServer));
+  ipcMain.handle('server:stop', event => windowOnly(event, getFallbackWindow, 'Service shutdown', stopServer));
   ipcMain.handle('url:copy', (event, value) => allowedWindows(event, [getWizardWindow, getFallbackWindow, getDashboardWindow], 'Clipboard access', () => {
-    const text = String(value || '').replace(/\u0000/g, '');
+    const text = String(value || '').split('\u0000').join('');
     if (Buffer.byteLength(text, 'utf8') > MAX_CLIPBOARD_TEXT_BYTES) throw new Error('Clipboard text exceeds the 64 KiB safety limit.');
     clipboard.writeText(text);
     return { ok: true };
-  }, ['wizard', 'fallback', 'dashboard']));
-  ipcMain.handle('url:open-dashboard', event => windowOnly(event, getFallbackWindow, 'Dashboard opening', openDashboardWindow, 'fallback'));
+  }));
+  ipcMain.handle('url:open-dashboard', event => windowOnly(event, getFallbackWindow, 'Dashboard opening', openDashboardWindow));
   ipcMain.handle('desktop:get-status', event => dashboardOnly(event, getCurrentStatus));
   ipcMain.handle('desktop:open-settings', event => dashboardOnly(event, openSettingsWindow));
   ipcMain.handle('desktop:settings:get', event => dashboardOnly(event, getDesktopSettings));
@@ -59,28 +58,28 @@ function registerIpcHandlers(deps) {
   ipcMain.handle('desktop:diagnostics:export', (event, report) => dashboardOnly(event, () => exportDiagnosticState(report)));
   ipcMain.handle('desktop:diagnostics:open-folder', event => dashboardOnly(event, openDiagnosticsFolder));
   ipcMain.on('desktop:restart-service', event => {
-    if (!isSenderWindow(event, getDashboardWindow, 'dashboard')) return;
+    if (!isSenderWindow(event, getDashboardWindow)) return;
     Promise.resolve(launchConfiguredDesktop({ restart: true })).catch(logIpcFailure);
   });
   ipcMain.on('desktop:stop-service', event => {
-    if (!isSenderWindow(event, getDashboardWindow, 'dashboard')) return;
+    if (!isSenderWindow(event, getDashboardWindow)) return;
     setImmediate(() => {
       try { stopServer(); } catch (error) { logIpcFailure(error); }
     });
   });
-  ipcMain.handle('notifications:get-enabled', event => windowOnly(event, getFallbackWindow, 'Notification preferences', () => ({ ok: true, enabled: getNotificationsEnabled() }), 'fallback'));
-  ipcMain.handle('notifications:set-enabled', (event, enabled) => windowOnly(event, getFallbackWindow, 'Notification preferences', () => ({ ok: true, enabled: setNotificationsEnabled(enabled) }), 'fallback'));
+  ipcMain.handle('notifications:get-enabled', event => windowOnly(event, getFallbackWindow, 'Notification preferences', () => ({ ok: true, enabled: getNotificationsEnabled() })));
+  ipcMain.handle('notifications:set-enabled', (event, enabled) => windowOnly(event, getFallbackWindow, 'Notification preferences', () => ({ ok: true, enabled: setNotificationsEnabled(enabled) })));
   ipcMain.handle('url:open-link', (event, value) => windowOnly(event, getWizardWindow, 'External setup links', async () => {
     const target = String(value || '').trim();
     if (!isAllowedNgrokUrl(target)) throw new Error('Only approved ngrok setup links can be opened from the setup wizard.');
     await shell.openExternal(target);
     return { ok: true };
-  }, 'wizard'));
+  }));
   ipcMain.on('window:fit-content', (event, payload = {}) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) return;
-    const isWizard = isSenderWindow(event, getWizardWindow, 'wizard');
-    const isFallback = isSenderWindow(event, getFallbackWindow, 'fallback');
+    const isWizard = isSenderWindow(event, getWizardWindow);
+    const isFallback = isSenderWindow(event, getFallbackWindow);
     if (!isWizard && !isFallback) return;
     fitWindowToContent(win, {
       type: isWizard ? 'wizard' : 'status',
@@ -90,9 +89,8 @@ function registerIpcHandlers(deps) {
   });
 
   function dashboardOnly(event, action) {
-    return windowOnly(event, getDashboardWindow, 'Secured dashboard controls', action, 'dashboard');
+    return windowOnly(event, getDashboardWindow, 'Secured dashboard controls', action);
   }
-
 }
 
 module.exports = { MAX_CLIPBOARD_TEXT_BYTES, isAllowedNgrokUrl, registerIpcHandlers };

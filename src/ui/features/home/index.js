@@ -200,8 +200,9 @@ function taskAction(tool) {
   const value = String(tool || '');
   if (/run_checks|browser/.test(value)) return 'Validating changes';
   if (/diff|git_status/.test(value)) return 'Reviewing changes';
-  if (/git_commit|git_push|git_create_pr/.test(value)) return 'Publishing changes';
-  if (/edit|write|replace|tidy_run|restore/.test(value)) return 'Applying changes';
+  if (/git_draft_pr|git_create_pr/.test(value)) return 'Preparing pull request text';
+  if (/git_commit|git_push/.test(value)) return 'Publishing changes';
+  if (/edit|write|replace|tidy_run|restore|reset_workspace/.test(value)) return 'Applying changes';
   return 'Inspecting the workspace';
 }
 

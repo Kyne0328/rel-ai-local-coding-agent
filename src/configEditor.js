@@ -28,7 +28,6 @@ function settingsPayload(config) {
     configPath: getConfigPath(),
     editable: true,
     design: "single_local_repo_bridge",
-    removedLegacyWorkflows: ["generated helper scripts", "standalone shell fallback loops", "task-runner", "multi-agent", "approval-gates", "docker", "pr-ci-repair"],
     config: publicConfigSummary(config)
   };
 }

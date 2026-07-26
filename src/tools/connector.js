@@ -27,9 +27,27 @@ function pruneEmpty(obj) {
   return out;
 }
 
-// Compact a tool result for the ChatGPT connector surface. Keeps everything the
-// model needs to decide what to do next; strips internal telemetry, always-default
-// policy objects, duplicated arrays, and verbose raw-status blobs.
+// Compact connector results while stripping internal telemetry, default policy
+// objects, duplicated arrays, and verbose raw-status blobs.
+function compactRepositoryState(value, { includeWorkspace = true } = {}) {
+  if (!value || typeof value !== "object") return value;
+  const hasSplit = Array.isArray(value.baselineChangedFiles) && value.baselineChangedFiles.length > 0;
+  return pruneEmpty({
+    ok: value.ok,
+    workspace: includeWorkspace ? value.workspace : undefined,
+    branch: value.branch,
+    aheadBehind: value.aheadBehind,
+    status: value.status,
+    changedFiles: value.changedFiles, untrackedFiles: value.untrackedFiles,
+    sessionChangedFiles: hasSplit ? value.sessionChangedFiles : undefined,
+    baselineChangedFiles: hasSplit ? value.baselineChangedFiles : undefined,
+    stderr: value.stderr,
+    deprecated: value.deprecated,
+    deprecatedTool: value.deprecatedTool,
+    replacementTool: value.replacementTool,
+    migration: value.migration
+  });
+}
 function compactForConnector(name, value, args = {}) {
   if (!value || typeof value !== "object") return value;
   switch (name) {
@@ -57,11 +75,11 @@ function compactForConnector(name, value, args = {}) {
       const ws = value.workspace && typeof value.workspace === "object"
         ? pruneEmpty({
             alias: value.workspace.alias,
-            root: value.workspace.root,
             commandKeys: value.workspace.commandKeys,
             testCommandKeys: value.workspace.testCommandKeys,
             staleCommandKeys: value.workspace.staleCommandKeys,
             staleTestCommandKeys: value.workspace.staleTestCommandKeys,
+            repository: compactRepositoryState(value.workspace.repository, { includeWorkspace: false }),
             error: value.workspace.error
           })
         : value.workspace;
@@ -71,45 +89,41 @@ function compactForConnector(name, value, args = {}) {
       return pruneEmpty({
         ok: value.ok,
         version: value.version,
+        toolSurface: value.toolSurface ? {
+          schemaVersion: value.toolSurface.schemaVersion,
+          toolSurfaceVersion: value.toolSurface.toolSurfaceVersion,
+          toolCount: value.toolSurface.toolCount,
+          deprecations: value.toolSurface.deprecations,
+          compatibilityAliases: value.toolSurface.compatibilityAliases
+        } : undefined,
         workspace: ws,
         state,
         workspaceCount: value.workspaceCount,
         workspaceAliases: value.workspaceAliases
       });
     }
-    case "relai_diff":
-    case "relai_git_status": {
-      // Ownership arrays and per-entry raw status lines are only meaningful when a
-      // real session baseline exists; otherwise they are noise (or, pre-fix, lies).
-      const hasSplit = Array.isArray(value.baselineChangedFiles) && value.baselineChangedFiles.length > 0;
+    case "relai_diff": {
+      const compact = compactRepositoryState(value);
       return pruneEmpty({
-        ok: value.ok,
-        workspace: value.workspace,
-        branch: value.branch,
-        aheadBehind: value.aheadBehind,
+        ...compact,
         staged: value.staged,
         path: value.path,
-        status: value.status,
-        diff: value.diff,
-        // Keep the split only when a baseline actually separates the sets.
-        sessionChangedFiles: hasSplit ? value.sessionChangedFiles : undefined,
-        baselineChangedFiles: hasSplit ? value.baselineChangedFiles : undefined,
-        stderr: value.stderr
+        diff: value.diff
       });
     }
     case "relai_run_checks": {
       // `commands` duplicated `checks`; validationLevel/reason/changedFiles are
       // internal telemetry (see WORKFLOW_RELIABILITY); policy was default noise.
       return pruneEmpty({
-        ok: value.ok,
-        workspace: value.workspace,
-        level: value.level,
-        checks: value.checks,
-        results: value.results,
-        validated: value.validated,
-        validationStatus: value.validationStatus,
-        message: value.message,
-        nextAction: value.nextAction,
+        ok: value.ok, workspace: value.workspace, level: value.level,
+                checks: value.checks, results: value.results,
+        validated: value.validated, validationStatus: value.validationStatus,
+        completionKnown: value.completionKnown, endReason: value.endReason,
+        completionSource: value.completionSource, summary: value.summary,
+        validationAt: value.validationAt, validationTaskId: value.validationTaskId,
+        relatedTaskIds: value.relatedTaskIds,
+        changedFiles: value.completionKnown === true ? value.changedFiles : undefined,
+        message: value.message, nextAction: value.nextAction,
         fullOutput: value.fullOutput
       });
     }
@@ -143,7 +157,6 @@ function compactForConnector(name, value, args = {}) {
       return pruneEmpty({
         ok: value.ok,
         workspace: value.workspace,
-        root: value.root,
         manifests: value.manifests,
         discoveredCommands: value.discoveredCommands,
         projectInstructions: value.projectInstructions,

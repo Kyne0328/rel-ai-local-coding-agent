@@ -6,6 +6,7 @@ const { discoverCommands, staleCommandKeys } = require("./commandDiscovery");
 const { readProjectInstructions, summarizeProjectInstructions } = require('./projectInstructions');
 
 const REMOVED_WORKSPACE_COMMAND_KEYS = new Set([
+  'npm:test:fast-task',
   'npm:test:oneclick',
   'npm:test:tunnel'
 ]);
@@ -325,7 +326,6 @@ function publicConfigSummary(config) {
       verificationAccess: true,
       restoreAccess: true
     },
-    removedLegacyWorkflows: ["generated helper scripts", "standalone shell fallback loops", "task-runner", "multi-agent", "approval-gates", "docker", "pr-ci-repair"],
     productUx: config.productUx,
     release: config.release,
     workspaces: Object.entries(config.workspaces || {}).map(([alias, entry]) => {
