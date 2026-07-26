@@ -134,18 +134,18 @@ function renderObservedSessionCard(card, activity, activeTasks, task) {
   const waiting = activeCalls === 0;
   const location = activeTaskLocation(activeTasks);
   const operation = task.operation || taskAction(task.lastTool || task.tool);
-  let title = waiting ? 'No Rel.AI tool call is active.' : operation;
+  let title = waiting ? 'Logical task open.' : operation;
   if (!waiting && sessionCount > 1) title = `${activeCalls} Rel.AI tool calls are running.`;
   let description = waiting
-    ? 'ChatGPT may still be reasoning, waiting for approval, or already finished. Rel.AI cannot determine that from tool traffic alone.'
+    ? 'No Rel.AI tool call is executing now. This explicit task remains open until completion is reported or it expires.'
     : `${esc(operation)} in <strong>${esc(task.workspace || location)}</strong>.`;
   if (!waiting && sessionCount > 1) description = `${activeCalls} ${pluralLabel(activeCalls, 'active tool call')} across ${location}.`;
   const activityLabel = waiting
-    ? 'Waiting for another observed call'
+    ? 'Open · no active call'
     : `${activeCalls} ${pluralLabel(activeCalls, 'active call')}`;
   card.className = `card task-overview ${waiting ? 'waiting' : 'active'}`;
   card.innerHTML = `
-    <div class="task-overview-mark" aria-hidden="true">${waiting ? '…' : ''}</div>
+    <div class="task-overview-mark" aria-hidden="true">${waiting ? '…' : '<span class="task-overview-spinner"></span>'}</div>
     <div class="task-overview-copy">
       <div class="overview-kicker">Observed Rel.AI activity</div>
       <h3>${esc(title)}</h3>
@@ -289,7 +289,7 @@ function recentTaskStatus(status) {
   if (status === 'attention') return pillHtml('failed');
   if (status === 'completed') return pillHtml('completed');
   if (status === 'working') return pillHtml('working');
-  if (status === 'waiting' || status === 'settling') return '<span class="status-pill warn">waiting</span>';
+  if (status === 'waiting' || status === 'settling') return '<span class="status-pill">open</span>';
   return '<span class="status-pill">inactive</span>';
 }
 

@@ -64,6 +64,11 @@ function serializeToolError(toolName, error) {
       ...(error.fileClass ? { fileClass: String(error.fileClass) } : {}),
       ...(error.taskId ? { taskId: String(error.taskId) } : {}),
       ...(Number.isFinite(error.candidateCount) ? { candidateCount: Number(error.candidateCount) } : {}),
+      ...(error.workspaceInput != null ? { workspaceInput: String(error.workspaceInput) } : {}),
+      ...(error.workspaceInputSource ? { workspaceInputSource: String(error.workspaceInputSource) } : {}),
+      ...(error.workspaceMatchStatus ? { workspaceMatchStatus: String(error.workspaceMatchStatus) } : {}),
+      ...(error.workspaceResolutionFailure ? { workspaceResolutionFailure: String(error.workspaceResolutionFailure) } : {}),
+      ...(Array.isArray(error.configuredWorkspaceAliases) ? { configuredWorkspaceAliases: error.configuredWorkspaceAliases.map(String).slice(0, 100) } : {}),
       retryable: error.retryable === true,
       requiresUserConfirmation: error.requiresUserConfirmation === true,
       allowedAlternatives: Array.isArray(error.allowedAlternatives)

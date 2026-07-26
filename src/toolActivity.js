@@ -19,6 +19,7 @@ function createToolActivityTracker(options = {}) {
   let lastTask = null;
 
   function beginConnectorToolCall(details = {}) {
+    if (details.trackTask === false) return beginObservedToolCall(details);
     let finished = false;
     const startedAt = now();
     const scopeId = resolveScopeId(details);
@@ -162,6 +163,79 @@ function createToolActivityTracker(options = {}) {
     finish.operation = operation.label;
     finish.update = update;
     finish.requestCompletion = requestCompletion;
+    return finish;
+  }
+
+  function beginObservedToolCall(details = {}) {
+    let finished = false;
+    const startedAt = now();
+    const connectorCall = details.connector !== false;
+    const scopeId = resolveScopeId(details);
+    const operationId = crypto.randomUUID();
+    const operation = {
+      id: operationId,
+      tool: String(details.tool || ''),
+      label: String(details.operation || defaultOperation(details.tool)),
+      detail: String(details.detail || ''),
+      workspace: String(details.workspace || ''),
+      startedAt
+    };
+
+    activeToolCalls += 1;
+    if (connectorCall) activeConnectorCalls += 1;
+    notifyObserved('started', {
+      scopeId,
+      tool: operation.tool,
+      workspace: operation.workspace,
+      operation: operation.label,
+      operationId
+    });
+
+    let finish;
+    const update = (patch = {}) => {
+      if (finished) return;
+      if (patch.operation != null) operation.label = String(patch.operation);
+      if (patch.detail != null) operation.detail = String(patch.detail);
+      if (patch.workspace != null) operation.workspace = String(patch.workspace);
+      if (patch.tool != null) operation.tool = String(patch.tool);
+      finish.operation = operation.label;
+      notifyObserved('progress', {
+        scopeId,
+        tool: operation.tool,
+        workspace: operation.workspace,
+        operation: operation.label,
+        detail: operation.detail,
+        operationId
+      });
+    };
+
+    finish = (result = {}) => {
+      if (finished) return;
+      finished = true;
+      const finishedAt = now();
+      activeToolCalls = Math.max(0, activeToolCalls - 1);
+      if (connectorCall) activeConnectorCalls = Math.max(0, activeConnectorCalls - 1);
+      finish.operation = operation.label;
+      notifyObserved('finished', {
+        scopeId,
+        tool: operation.tool,
+        workspace: operation.workspace,
+        operation: operation.label,
+        operationId,
+        ok: result.ok !== false,
+        error: String(result.error || ''),
+        durationMs: Math.max(0, finishedAt - startedAt)
+      });
+    };
+
+    finish.taskId = '';
+    finish.scopeId = scopeId;
+    finish.operationId = operationId;
+    finish.operation = operation.label;
+    finish.update = update;
+    finish.requestCompletion = () => {
+      throw taskError('TASK_ID_REQUIRED', 'Task completion requires an explicit task_id returned by relai_start_task.');
+    };
     return finish;
   }
 
@@ -349,7 +423,7 @@ function createToolActivityTracker(options = {}) {
       .sort((left, right) => left.startedAt - right.startedAt);
     const primary = tasks.find(task => task.activeCalls > 0) || tasks[0] || null;
     return {
-      state: tasks.length ? (activeToolCalls > 0 ? 'working' : 'waiting') : 'idle',
+      state: activeToolCalls > 0 ? 'working' : tasks.length ? 'waiting' : 'idle',
       completionKnown: false,
       activeConnectorCalls,
       activeCalls: activeToolCalls,
@@ -393,18 +467,35 @@ function createToolActivityTracker(options = {}) {
   }
 
   function notify(phase, task, extras = {}) {
-    const status = getToolActivity();
-    const snapshot = Object.freeze({
+    emitActivity({
       phase,
-      activeConnectorCalls,
-      activeCalls: status.activeCalls,
-      activeTaskCount: status.activeTaskCount,
-      tasks: status.tasks,
       taskId: task.id,
       scopeId: task.scopeId,
       taskActiveCalls: task.activeCalls,
       taskCalls: task.calls,
       taskFailures: task.failures,
+      ...extras
+    });
+  }
+
+  function notifyObserved(phase, extras = {}) {
+    emitActivity({
+      phase,
+      taskId: '',
+      taskActiveCalls: 0,
+      taskCalls: 0,
+      taskFailures: 0,
+      ...extras
+    });
+  }
+
+  function emitActivity(extras = {}) {
+    const status = getToolActivity();
+    const snapshot = Object.freeze({
+      activeConnectorCalls,
+      activeCalls: status.activeCalls,
+      activeTaskCount: status.activeTaskCount,
+      tasks: status.tasks,
       ...extras
     });
     for (const listener of listeners) {

@@ -51,14 +51,42 @@ try {
 
   resetToolActivity();
   const unvalidatedTask = await startTask('completion-without-validation');
+  const readOnlyCompletion = await callTool('relai_complete_task', {
+    workspace: 'app',
+    task_id: unvalidatedTask,
+    summary: 'Read-only task completed without validation.'
+  }, { publicHttpOnly: true, taskScopeId: 'completion-without-validation' });
+  assert.equal(readOnlyCompletion.ok, true);
+  assert.equal(readOnlyCompletion.task_id, unvalidatedTask);
+  assert.equal(readOnlyCompletion.validationStatus, 'not_required');
+  assert.equal(readOnlyCompletion.completionKnown, true);
+
+  resetToolActivity();
+  const unvalidatedMutationTask = await startTask('mutation-without-validation');
+  await callTool('relai_edit', {
+    workspace: 'app',
+    task_id: unvalidatedMutationTask,
+    path: 'src/unvalidated.js',
+    content: 'console.log("unvalidated mutation");\n'
+  }, { publicHttpOnly: true, taskScopeId: 'mutation-without-validation' });
   await assert.rejects(
     () => callTool('relai_complete_task', {
       workspace: 'app',
-      task_id: unvalidatedTask,
-      summary: 'No validation was run.'
-    }, { publicHttpOnly: true, taskScopeId: 'completion-without-validation' }),
+      task_id: unvalidatedMutationTask,
+      summary: 'Mutating task must still require validation.'
+    }, { publicHttpOnly: true, taskScopeId: 'mutation-without-validation' }),
     error => error?.code === 'INVALID_TASK_STATE' && /exact task_id/i.test(error.message)
   );
+  await callTool('relai_run_checks', {
+    workspace: 'app',
+    task_id: unvalidatedMutationTask,
+    level: 'standard'
+  }, { publicHttpOnly: true, taskScopeId: 'mutation-without-validation' });
+  await callTool('relai_complete_task', {
+    workspace: 'app',
+    task_id: unvalidatedMutationTask,
+    summary: 'Mutating task completed after its own validation.'
+  }, { publicHttpOnly: true, taskScopeId: 'mutation-without-validation' });
 
   resetToolActivity();
   const missingSummaryTask = await startTask('atomic-completion-without-summary');
@@ -211,6 +239,12 @@ try {
   const taskA = await startTask('one-shared-client-connection');
   const taskB = await startTask('one-shared-client-connection');
   assert.notEqual(taskA, taskB);
+  await callTool('relai_edit', {
+    workspace: 'app',
+    task_id: taskB,
+    path: 'src/task-b.js',
+    content: 'console.log("task b mutation");\n'
+  }, sharedScope);
   await callTool('relai_run_checks', { workspace: 'app', task_id: taskA, level: 'standard' }, sharedScope);
   await assert.rejects(
     () => callTool('relai_complete_task', {

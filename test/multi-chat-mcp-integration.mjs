@@ -84,7 +84,24 @@ try {
   }, sharedConnection);
   assert.equal(initialization.result.capabilities.experimental.relai.taskIdentityVersion, 2);
   assert.match(initialization.result.instructions, /relai_start_task exactly once/);
+  assert.match(initialization.result.instructions, /configured workspace alias \(appA, appB\) or the exact absolute path/);
+  assert.match(initialization.result.instructions, /Never use a relative path such as "\."/);
   assert.match(initialization.result.instructions, /never treat an MCP transport session.*as the task identity/);
+
+  const listedTools = await handleMessage({ jsonrpc: '2.0', id: 'tools-list', method: 'tools/list', params: {} }, sharedConnection);
+  const listedStartTask = listedTools.result.tools.find(tool => tool.name === 'relai_start_task');
+  assert.equal(listedStartTask.inputSchema.properties.workspace.enum, undefined);
+  assert.match(listedStartTask.inputSchema.properties.workspace.description, /Aliases: appA, appB/);
+
+  const startByPath = await rpc('relai_start_task', { workspace: workspaceA });
+  assert.equal(startByPath.isError, false);
+  assert.equal(startByPath.payload.workspace, 'appA');
+  const pathTask = startByPath.payload.task_id;
+  const pathSnapshot = await rpc('relai_repo_snapshot', { workspace: 'appA', task_id: pathTask, maxEntries: 20 });
+  assert.equal(pathSnapshot.isError, false, 'a task started by path must accept its canonical alias on later calls');
+  await rpc('relai_run_checks', { workspace: workspaceA, task_id: pathTask, level: 'standard' });
+  const pathCompletion = await rpc('relai_complete_task', { workspace: 'appA', task_id: pathTask, summary: 'Path-normalized task completed.' });
+  assert.equal(pathCompletion.isError, false);
 
   const startA = await rpc('relai_start_task', { workspace: 'appA' });
   const startB = await rpc('relai_start_task', { workspace: 'appB' });
@@ -166,6 +183,13 @@ try {
   const taskC = startC.payload.task_id;
   const taskD = startD.payload.task_id;
   assert.notEqual(taskC, taskD, 'same-repository objectives must remain separate');
+  const taskDMutation = await rpc('relai_edit', {
+    workspace: 'appA',
+    task_id: taskD,
+    path: 'src/task-d.js',
+    content: 'console.log("task d mutation");\n'
+  });
+  assert.equal(taskDMutation.isError, false);
   await rpc('relai_run_checks', { workspace: 'appA', task_id: taskC, level: 'standard' });
   const invalidD = await rpc('relai_complete_task', {
     workspace: 'appA',

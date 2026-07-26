@@ -42,8 +42,9 @@ function completeTask(config, args = {}) {
   }).entries
     .filter(entry => entry && String(entry.taskId || '') === requestedTaskId)
     .sort((left, right) => eventTime(left) - eventTime(right));
+  const mutationEvents = taskEvents.filter(entry => entry.ok !== false && eventMutatedCode(entry));
   const validation = findLatestPassedValidation(taskEvents);
-  if (!validation) {
+  if (mutationEvents.length && !validation) {
     throw taskError(
       'INVALID_TASK_STATE',
       'Cannot complete this task: no successful final validation is recorded for this exact task_id. Run relai_run_checks with the same task_id, then retry completion.',
@@ -51,49 +52,48 @@ function completeTask(config, args = {}) {
     );
   }
 
-  const validationAtMs = eventTime(validation);
-  const workspaceEvents = readAudit(config, {
-    limit: 10000,
-    workspace: workspace.alias
-  }).entries
-    .filter(entry => entry && (!entry.workspace || entry.workspace === workspace.alias))
-    .sort((left, right) => eventTime(left) - eventTime(right));
-  const changedAfterValidation = taskEvents.filter(entry =>
-    eventTime(entry) > validationAtMs &&
-    entry.ok !== false &&
-    eventMutatedCode(entry)
-  );
-  if (changedAfterValidation.length) {
-    const tools = [...new Set(changedAfterValidation.map(entry => String(entry.tool || 'edit')))];
-    throw taskError(
-      'INVALID_TASK_STATE',
-      `Cannot complete this task: its code changed after the last passed validation (${tools.join(', ')}). Run final validation again with the same task_id.`,
-      { retryable: true }
-    );
-  }
+  if (validation) {
+    const validationAtMs = eventTime(validation);
+    const workspaceEvents = readAudit(config, {
+      limit: 10000,
+      workspace: workspace.alias
+    }).entries
+      .filter(entry => entry && (!entry.workspace || entry.workspace === workspace.alias))
+      .sort((left, right) => eventTime(left) - eventTime(right));
+    const changedAfterValidation = mutationEvents.filter(entry => eventTime(entry) > validationAtMs);
+    if (changedAfterValidation.length) {
+      const tools = [...new Set(changedAfterValidation.map(entry => String(entry.tool || 'edit')))];
+      throw taskError(
+        'INVALID_TASK_STATE',
+        `Cannot complete this task: its code changed after the last passed validation (${tools.join(', ')}). Run final validation again with the same task_id.`,
+        { retryable: true }
+      );
+    }
 
-  const conflictingWorkspaceChanges = workspaceEvents.filter(entry =>
-    eventTime(entry) > validationAtMs &&
-    entry.ok !== false &&
-    String(entry.taskId || '') !== requestedTaskId &&
-    eventMutatedCode(entry)
-  );
-  if (conflictingWorkspaceChanges.length) {
-    const conflictingTaskIds = unique(conflictingWorkspaceChanges.map(entry => String(entry.taskId || '')).filter(Boolean));
-    const error = taskError(
-      'TASK_PERSISTENCE_CONFLICT',
-      'Cannot complete this task: another logical task changed the shared workspace after this task was validated. Re-run validation for this task_id against the current workspace state.',
-      { retryable: true }
+    const conflictingWorkspaceChanges = workspaceEvents.filter(entry =>
+      eventTime(entry) > validationAtMs &&
+      entry.ok !== false &&
+      String(entry.taskId || '') !== requestedTaskId &&
+      eventMutatedCode(entry)
     );
-    error.conflictingTaskCount = conflictingTaskIds.length;
-    throw error;
+    if (conflictingWorkspaceChanges.length) {
+      const conflictingTaskIds = unique(conflictingWorkspaceChanges.map(entry => String(entry.taskId || '')).filter(Boolean));
+      const error = taskError(
+        'TASK_PERSISTENCE_CONFLICT',
+        'Cannot complete this task: another logical task changed the shared workspace after this task was validated. Re-run validation for this task_id against the current workspace state.',
+        { retryable: true }
+      );
+      error.conflictingTaskCount = conflictingTaskIds.length;
+      throw error;
+    }
   }
 
   const changedFiles = unique(taskEvents.flatMap(eventChangedFiles));
   return finalizeValidatedTask(config, workspace, {
     summary,
-    validationLevel: validation.validationLevel || '',
-    validationAt: validation.ts || '',
+    validationStatus: validation ? 'passed' : 'not_required',
+    validationLevel: validation?.validationLevel || '',
+    validationAt: validation?.ts || '',
     validationTaskId: requestedTaskId,
     relatedTaskIds: [requestedTaskId],
     recoveredValidationSession: false,
@@ -116,9 +116,10 @@ function finalizeValidatedTask(config, workspace, options = {}) {
     ? unique(options.changedFiles.map(String).filter(Boolean))
     : changedFilesForTask(config, workspace.alias, taskId);
   const completionSource = String(options.completionSource || 'relai_complete_task');
+  const validationStatus = String(options.validationStatus || 'passed');
   const completion = requestCurrentTaskCompletion({
     summary,
-    validationStatus: 'passed',
+    validationStatus,
     validationLevel: String(options.validationLevel || ''),
     validationAt: String(options.validationAt || ''),
     changedFiles
@@ -134,7 +135,7 @@ function finalizeValidatedTask(config, workspace, options = {}) {
     endReason: 'explicit_completion',
     completionSource,
     summary,
-    validationStatus: 'passed',
+    validationStatus,
     validationLevel: String(options.validationLevel || ''),
     validationAt: String(options.validationAt || ''),
     validationTaskId: taskId,
@@ -148,6 +149,7 @@ function finalizeValidatedTask(config, workspace, options = {}) {
 function finalizeValidationResult(config, workspace, validationResult, summary) {
   const completion = finalizeValidatedTask(config, workspace, {
     summary,
+    validationStatus: 'passed',
     validationLevel: validationResult.validationLevel,
     validationAt: new Date().toISOString(),
     completionSource: 'relai_run_checks'

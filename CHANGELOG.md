@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.21.1] — 2026-07-26
+
+### Workspace and task identity
+- **Accept configured workspace aliases or exact configured absolute paths while rejecting ambiguous relative paths with structured diagnostics.**
+- **Track only explicit logical tasks so rejected and taskless calls no longer create misleading sessions.**
+- **Allow read-only tasks to complete without validation while retaining mandatory final validation after mutations.**
+- **Clarify running and open task states throughout the dashboard.**
+
+Bump root/electron/status UI/lockfiles to 0.21.1.
+
 ## [0.21.0] - 2026-07-25
 
 ### Logical task isolation and completion

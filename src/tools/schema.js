@@ -45,8 +45,25 @@ function schemaFromDefinition(definition) {
 /** @type {ToolSchema[]} */
 const toolSchemas = TOOL_DEFINITIONS.map(schemaFromDefinition);
 
-function getToolSchemas() {
-  return toolSchemas;
+function getToolSchemas(config) {
+  const aliases = Object.keys(config?.workspaces || {}).sort((left, right) => left.localeCompare(right));
+  if (aliases.length === 0) return toolSchemas;
+  return toolSchemas.map((schema) => {
+    if (!schema.inputSchema?.properties?.workspace) return schema;
+    return {
+      ...schema,
+      inputSchema: {
+        ...schema.inputSchema,
+        properties: {
+          ...schema.inputSchema.properties,
+          workspace: {
+            ...schema.inputSchema.properties.workspace,
+            description: `Configured workspace alias or the exact absolute path of a configured workspace. Aliases: ${aliases.join(', ')}. Relative paths such as '.' are not accepted.`
+          }
+        }
+      }
+    };
+  });
 }
 
 function getToolMetadata() {

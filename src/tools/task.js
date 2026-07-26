@@ -36,8 +36,10 @@ function assertKnownTask(config, taskId, workspace, toolName) {
 
 function taskAuditContext(context, activity, requestedTaskId, toolName, ok, value = null) {
   const duplicateCompletion = toolName === 'relai_complete_task' && value?.duplicate === true;
+  const taskId = activity?.taskId || requestedTaskId || '';
+  const taskHistoryEligible = Boolean(taskId && (requestedTaskId || toolName === 'relai_start_task'));
   return {
-    taskId: activity?.taskId || requestedTaskId || '',
+    taskId,
     scopeId: activity?.scopeId || String(context?.taskScopeId || ''),
     operationId: activity?.operationId || '',
     requestId: context?.requestId == null ? '' : String(context.requestId),
@@ -47,8 +49,9 @@ function taskAuditContext(context, activity, requestedTaskId, toolName, ok, valu
     clientName: String(context?.clientName || ''),
     clientVersion: String(context?.clientVersion || ''),
     initializationRequestId: context?.initializationRequestId == null ? '' : String(context.initializationRequestId),
-    taskIdentityVersion: 2,
-    taskIdExplicit: Boolean(requestedTaskId || toolName === 'relai_start_task'),
+    taskIdentityVersion: taskHistoryEligible ? 2 : 0,
+    taskIdExplicit: taskHistoryEligible,
+    taskHistoryEligible,
     duplicateRequest: duplicateCompletion,
     eventType: toolName === 'relai_start_task'
       ? (ok ? 'task.started' : 'task.start.rejected')

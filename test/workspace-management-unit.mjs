@@ -6,6 +6,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { updateWorkspace } = require('../src/configEditor.js');
+const { resolveWorkspace, resolveWorkspaceInput, normalizeWorkspacePathForComparison } = require('../src/config.js');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-workspace-management-'));
 const configPath = path.join(tmp, 'config.json');
@@ -70,6 +71,28 @@ try {
 
   const unchanged = JSON.parse(fs.readFileSync(configPath, 'utf8'));
   assert.deepEqual(unchanged, saved, 'failed duplicate operations must not partially rename or rewrite configuration');
+
+  const resolvedByAlias = resolveWorkspace(saved, 'beta');
+  const resolvedByPath = resolveWorkspace(saved, second + path.sep);
+  assert.equal(resolvedByPath.alias, 'beta');
+  assert.equal(resolvedByPath.path, resolvedByAlias.path);
+  assert.equal(resolveWorkspaceInput(saved, second).source, 'configured_path');
+  assert.equal(normalizeWorkspacePathForComparison('C:\\Dev\\Repo\\', 'win32'), 'c:\\dev\\repo');
+  assert.equal(normalizeWorkspacePathForComparison('C:/DEV/Repo/', 'win32'), 'c:\\dev\\repo');
+  assert.equal(normalizeWorkspacePathForComparison('\\\\Server\\Share\\Repo\\', 'win32'), '\\\\server\\share\\repo');
+  assert.throws(() => resolveWorkspace(saved, first), error => error?.code === 'WORKSPACE_PATH_NOT_CONFIGURED');
+  assert.throws(() => resolveWorkspace(saved, path.join(second, 'nested')), error => error?.code === 'WORKSPACE_PATH_UNAVAILABLE');
+  fs.mkdirSync(path.join(second, 'nested'));
+  assert.throws(() => resolveWorkspace(saved, path.join(second, 'nested')), error => error?.code === 'WORKSPACE_PATH_NOT_CONFIGURED');
+  assert.throws(() => resolveWorkspace({ workspaces: { one: { path: second }, two: { path: second } } }, second), error => error?.code === 'WORKSPACE_PATH_AMBIGUOUS');
+
+  const linked = path.join(tmp, 'linked-second');
+  try {
+    fs.symlinkSync(second, linked, process.platform === 'win32' ? 'junction' : 'dir');
+    assert.equal(resolveWorkspace(saved, linked).alias, 'beta', 'realpath-equivalent configured paths must match');
+  } catch (error) {
+    if (!['EPERM', 'EACCES', 'UNKNOWN'].includes(error?.code)) throw error;
+  }
 } finally {
   if (previousConfig == null) delete process.env.REL_AI_MCP_CONFIG;
   else process.env.REL_AI_MCP_CONFIG = previousConfig;

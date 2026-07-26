@@ -42,6 +42,49 @@ try {
   assert.match(readPayload.skipped[0].reason, /blocked sensitive path/);
   assert.doesNotMatch(JSON.stringify(readPayload), /not-returned/);
 
+  const dotWorkspaceResponse = await handleMessage({
+    jsonrpc: '2.0',
+    id: 'dot-workspace',
+    method: 'tools/call',
+    params: { name: 'relai_start_task', arguments: { workspace: '.' } }
+  }, { publicHttpOnly: true, taskScopeId: 'mcp:fallback:test', transportType: 'streamable-http' });
+  assert.equal(dotWorkspaceResponse.result.isError, true);
+  const dotWorkspace = dotWorkspaceResponse.result.structuredContent;
+  assert.equal(dotWorkspace.errorCode, 'WORKSPACE_AMBIGUOUS_RELATIVE_INPUT');
+  assert.equal(dotWorkspace.errorDetails.workspaceInput, '.');
+  assert.equal(dotWorkspace.errorDetails.workspaceMatchStatus, 'rejected_ambiguous_input');
+  assert.equal(dotWorkspace.errorDetails.workspaceResolutionFailure, 'explicit_dot_has_no_authoritative_client_base');
+  assert.deepEqual(dotWorkspace.errorDetails.configuredWorkspaceAliases, ['repo']);
+  assert.match(dotWorkspace.error, /configured workspace alias/);
+
+  const directPathResponse = await handleMessage({
+    jsonrpc: '2.0',
+    id: 'direct-path',
+    method: 'tools/call',
+    params: { name: 'relai_start_task', arguments: { workspace: workspaceRoot } }
+  }, { publicHttpOnly: true, taskScopeId: 'mcp:fallback:path', transportType: 'streamable-http' });
+  assert.equal(directPathResponse.result.isError, false);
+  assert.equal(directPathResponse.result.structuredContent.workspace, 'repo');
+
+  const unknownPath = path.join(tmp, 'unknown-repo');
+  fs.mkdirSync(unknownPath);
+  const unknownPathResponse = await handleMessage({
+    jsonrpc: '2.0',
+    id: 'unknown-path',
+    method: 'tools/call',
+    params: { name: 'relai_start_task', arguments: { workspace: unknownPath } }
+  }, { publicHttpOnly: true, taskScopeId: 'mcp:fallback:path', transportType: 'streamable-http' });
+  assert.equal(unknownPathResponse.result.isError, true);
+  assert.equal(unknownPathResponse.result.structuredContent.errorCode, 'WORKSPACE_PATH_NOT_CONFIGURED');
+
+  const omittedWorkspaceResponse = await handleMessage({
+    jsonrpc: '2.0',
+    id: 'omitted-workspace',
+    method: 'tools/call',
+    params: { name: 'relai_start_task', arguments: {} }
+  }, { publicHttpOnly: true, taskScopeId: 'mcp:fallback:test', transportType: 'streamable-http' });
+  assert.equal(omittedWorkspaceResponse.result.structuredContent.errorCode, 'WORKSPACE_INPUT_OMITTED');
+
   const writeResponse = await handleMessage({
     jsonrpc: '2.0',
     id: 2,

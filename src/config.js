@@ -274,18 +274,146 @@ function assertSafeWorkspaceRoot(rawPath, label = "Workspace path") {
   return resolved;
 }
 
-function resolveWorkspace(config, alias) {
-  const key = String(alias || "").trim();
-  if (!key) throw new Error("workspace alias is required.");
-  if (!isSafeWorkspaceAlias(key)) throw new Error(`Invalid workspace alias: ${key}`);
-  const entry = config.workspaces?.[key];
-  if (!entry) throw new Error(`Workspace '${key}' is not configured.`);
-  assertSafeWorkspaceRoot(entry.path, `Workspace '${key}' path`);
-  if (!fs.existsSync(entry.path)) throw new Error(`Workspace '${key}' path does not exist: ${entry.path}`);
-  const realRoot = fs.realpathSync(entry.path);
-  assertSafeWorkspaceRoot(realRoot, `Workspace '${key}' resolved path`);
+function workspaceResolutionError(code, message, details = {}) {
+  const error = new Error(message);
+  error.code = code;
+  error.source = 'rel-ai-mcp-workspace';
+  error.operation = 'workspace_resolution';
+  error.retryable = false;
+  error.requiresUserConfirmation = false;
+  error.workspaceInput = details.workspaceInput == null ? '' : String(details.workspaceInput);
+  error.workspaceInputSource = String(details.workspaceInputSource || 'tool_argument');
+  error.workspaceMatchStatus = String(details.workspaceMatchStatus || 'unmatched');
+  error.workspaceResolutionFailure = String(details.workspaceResolutionFailure || code.toLowerCase());
+  error.configuredWorkspaceAliases = Array.isArray(details.configuredWorkspaceAliases)
+    ? details.configuredWorkspaceAliases.map(String).slice(0, 100)
+    : [];
+  error.allowedAlternatives = error.configuredWorkspaceAliases.length
+    ? [`Use one configured workspace alias: ${error.configuredWorkspaceAliases.join(', ')}.`]
+    : ['Configure a workspace before starting a task.'];
+  return error;
+}
+
+function resolveWorkspaceInput(config, input) {
+  const aliases = Object.keys(config.workspaces || {}).sort((left, right) => left.localeCompare(right));
+  const omitted = input == null || String(input).trim() === '';
+  const key = String(input || '').trim();
+  if (omitted) return { input: '', alias: '', source: 'omitted', aliases };
+  if (Object.hasOwn(config.workspaces || {}, key)) return { input: key, alias: key, source: 'alias', aliases };
+  if (!isAbsoluteWorkspaceInput(key)) return { input: key, alias: '', source: 'unmatched_alias', aliases };
+
+  const inputCanonical = canonicalWorkspacePath(key);
+  if (!inputCanonical) return { input: key, alias: '', source: 'path_unavailable', aliases };
+  const matches = [];
+  for (const alias of aliases) {
+    const configuredCanonical = canonicalWorkspacePath(config.workspaces?.[alias]?.path);
+    if (configuredCanonical && configuredCanonical === inputCanonical) matches.push(alias);
+  }
+  if (matches.length > 1) {
+    throw workspaceResolutionError('WORKSPACE_PATH_AMBIGUOUS', 'The supplied workspace path matches more than one configured workspace.', {
+      workspaceInput: key,
+      workspaceInputSource: 'configured_path',
+      workspaceMatchStatus: 'ambiguous_configured_path_match',
+      workspaceResolutionFailure: 'multiple_configured_workspaces_share_canonical_path',
+      configuredWorkspaceAliases: matches
+    });
+  }
   return {
-    alias: key,
+    input: key,
+    alias: matches[0] || '',
+    source: matches.length === 1 ? 'configured_path' : 'unmatched_path',
+    aliases,
+    canonicalPath: inputCanonical
+  };
+}
+
+function isAbsoluteWorkspaceInput(value) {
+  const text = String(value || '').trim();
+  return path.isAbsolute(text) || path.win32.isAbsolute(text);
+}
+
+function canonicalWorkspacePath(value) {
+  const text = String(value || '').trim();
+  if (!text || !isAbsoluteWorkspaceInput(text)) return '';
+  try {
+    const resolved = fs.realpathSync.native ? fs.realpathSync.native(text) : fs.realpathSync(text);
+    return normalizeWorkspacePathForComparison(resolved);
+  } catch {
+    return '';
+  }
+}
+
+function normalizeWorkspacePathForComparison(value, platform = process.platform) {
+  const pathApi = platform === 'win32' ? path.win32 : path;
+  let normalized = pathApi.normalize(String(value || ''));
+  const rootLength = pathApi.parse(normalized).root.length;
+  while (normalized.length > rootLength && /[\\/]$/.test(normalized)) normalized = normalized.slice(0, -1);
+  return platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
+function resolveWorkspace(config, alias) {
+  const resolution = resolveWorkspaceInput(config, alias);
+  const aliases = resolution.aliases;
+  const omitted = resolution.source === 'omitted';
+  const key = resolution.input;
+  if (omitted) {
+    throw workspaceResolutionError('WORKSPACE_INPUT_OMITTED', 'A configured workspace alias is required; the workspace argument was omitted.', {
+      workspaceInput: '',
+      workspaceMatchStatus: 'not_attempted',
+      workspaceResolutionFailure: 'workspace_argument_omitted',
+      configuredWorkspaceAliases: aliases
+    });
+  }
+  if (key === '.') {
+    throw workspaceResolutionError('WORKSPACE_AMBIGUOUS_RELATIVE_INPUT', "Workspace '.' is ambiguous and is not resolved against the server process directory. Pass a configured workspace alias.", {
+      workspaceInput: key,
+      workspaceMatchStatus: 'rejected_ambiguous_input',
+      workspaceResolutionFailure: 'explicit_dot_has_no_authoritative_client_base',
+      configuredWorkspaceAliases: aliases
+    });
+  }
+  if (resolution.source === 'path_unavailable') {
+    throw workspaceResolutionError('WORKSPACE_PATH_UNAVAILABLE', 'The supplied absolute workspace path does not exist or cannot be resolved.', {
+      workspaceInput: key,
+      workspaceInputSource: 'configured_path',
+      workspaceMatchStatus: 'path_unavailable',
+      workspaceResolutionFailure: 'workspace_path_missing_or_unreadable',
+      configuredWorkspaceAliases: aliases
+    });
+  }
+  if (resolution.source === 'unmatched_path') {
+    throw workspaceResolutionError('WORKSPACE_PATH_NOT_CONFIGURED', 'The supplied path does not exactly match any configured workspace.', {
+      workspaceInput: key,
+      workspaceInputSource: 'configured_path',
+      workspaceMatchStatus: 'no_configured_path_match',
+      workspaceResolutionFailure: 'canonical_path_not_configured',
+      configuredWorkspaceAliases: aliases
+    });
+  }
+  if (resolution.source === 'unmatched_alias' && !isSafeWorkspaceAlias(key)) {
+    throw workspaceResolutionError('WORKSPACE_ALIAS_INVALID', `Invalid workspace alias: ${key}`, {
+      workspaceInput: key,
+      workspaceMatchStatus: 'invalid_alias',
+      workspaceResolutionFailure: 'workspace_alias_syntax_invalid',
+      configuredWorkspaceAliases: aliases
+    });
+  }
+  const resolvedAlias = resolution.alias || key;
+  const entry = config.workspaces?.[resolvedAlias];
+  if (!entry) {
+    throw workspaceResolutionError('WORKSPACE_NOT_CONFIGURED', `Workspace '${key}' is not configured.`, {
+      workspaceInput: key,
+      workspaceMatchStatus: 'no_configured_alias_match',
+      workspaceResolutionFailure: 'workspace_alias_not_configured',
+      configuredWorkspaceAliases: aliases
+    });
+  }
+  assertSafeWorkspaceRoot(entry.path, `Workspace '${resolvedAlias}' path`);
+  if (!fs.existsSync(entry.path)) throw new Error(`Workspace '${resolvedAlias}' path does not exist: ${entry.path}`);
+  const realRoot = fs.realpathSync(entry.path);
+  assertSafeWorkspaceRoot(realRoot, `Workspace '${resolvedAlias}' resolved path`);
+  return {
+    alias: resolvedAlias,
     path: realRoot,
     testCommands: entry.testCommands || {},
     commands: entry.commands || {},
@@ -433,6 +561,8 @@ module.exports = {
   normalizeConfig,
   expandHome,
   assertSafeWorkspaceRoot,
+  resolveWorkspaceInput,
+  normalizeWorkspacePathForComparison,
   resolveWorkspace,
   publicConfigSummary
 };

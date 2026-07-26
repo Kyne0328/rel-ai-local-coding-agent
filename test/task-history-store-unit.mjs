@@ -86,8 +86,48 @@ try {
     ok: true
   });
 
-  const merged = readTaskHistory(config, { state: 'idle' }, { limit: 500 })
-    .find(session => session.id === 'validation-fragment');
+  recordTaskHistoryEvent(config, {
+    taskId: 'implicit-status',
+    taskIdentityVersion: 2,
+    taskIdExplicit: false,
+    taskHistoryEligible: false,
+    ts: new Date(base + 304000).toISOString(),
+    tool: 'relai_status',
+    operation: 'Reading Rel.AI status',
+    workspace: '',
+    ok: true
+  });
+  recordTaskHistoryEvent(config, {
+    taskId: 'rejected-start',
+    taskIdentityVersion: 2,
+    taskIdExplicit: false,
+    taskHistoryEligible: false,
+    eventType: 'task.start.rejected',
+    ts: new Date(base + 305000).toISOString(),
+    tool: 'relai_start_task',
+    operation: 'Starting an independent logical task',
+    workspace: '.',
+    ok: false
+  });
+  recordTaskHistoryEvent(config, {
+    taskId: 'abandoned-start',
+    taskIdentityVersion: 2,
+    taskIdExplicit: true,
+    taskHistoryEligible: true,
+    eventType: 'task.started',
+    ts: '2020-01-01T00:00:00.000Z',
+    tool: 'relai_start_task',
+    operation: 'Starting an independent logical task',
+    workspace: 'repo',
+    ok: true
+  });
+
+  const currentSessions = readTaskHistory(config, { state: 'idle' }, { limit: 500 });
+  assert.equal(currentSessions.some(session => session.id === 'implicit-status'), false, 'taskless status events must remain out of session history');
+  assert.equal(currentSessions.some(session => session.id === 'rejected-start'), false, 'rejected task starts must remain out of session history');
+  assert.equal(currentSessions.some(session => session.id === 'abandoned-start'), false, 'expired start-only tasks must be removed from session history');
+
+  const merged = currentSessions.find(session => session.id === 'validation-fragment');
   assert.ok(merged, 'completion must merge into the validation session');
   assert.equal(merged.calls, 2);
   assert.equal(merged.status, 'completed');

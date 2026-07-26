@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const {
   createToolActivityTracker,
+  getToolActivity,
   onToolActivity,
   resetToolActivity
 } = require('../src/toolActivity.js');
@@ -176,7 +177,9 @@ try {
     ['started', 'relai_status', 1],
     ['finished', 'relai_status', 0]
   ]);
-  assert.equal(callEvents[0].taskId, callEvents[1].taskId);
+  assert.equal(callEvents[0].taskId, '');
+  assert.equal(callEvents[1].taskId, '');
+  assert.equal(getToolActivity().activeTaskCount, 0, 'taskless status calls must not create logical sessions');
 
   callEvents.length = 0;
   await callTool('relai_status', {}, { publicHttpOnly: false });
@@ -184,7 +187,9 @@ try {
     ['started', 'relai_status', 0],
     ['finished', 'relai_status', 0]
   ], 'stdio/local calls must be grouped without activating the connector sleep blocker');
-  assert.equal(callEvents[0].taskId, callEvents[1].taskId);
+  assert.equal(callEvents[0].taskId, '');
+  assert.equal(callEvents[1].taskId, '');
+  assert.equal(getToolActivity().activeTaskCount, 0, 'local status calls must remain activity-only');
 
   callEvents.length = 0;
   await assert.rejects(
@@ -195,6 +200,8 @@ try {
     ['started', 'relai_read', 1],
     ['finished', 'relai_read', 0]
   ], 'failed connector calls must always release the activity count');
+  assert.equal(callEvents.every(event => event.taskId === ''), true, 'rejected taskless calls must not acquire task identity');
+  assert.equal(getToolActivity().activeTaskCount, 0, 'rejected taskless calls must not leave waiting sessions');
   stopListening();
   resetToolActivity();
 } finally {
