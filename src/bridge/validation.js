@@ -7,11 +7,11 @@ const { selectValidationLevel } = require("../validationStrategy");
 const { resolvePolicy } = require("../policyResolver");
 const { clampNumber } = require("./limits");
 const { updateCurrentToolActivity } = require("../toolActivity");
-
-const CHECK_OUTPUT_TAIL_DEFAULT = 4000;
-const CHECK_OUTPUT_TAIL_FULL = 40000;
+const { finalizeValidationResult, normalizeCompletionSummary } = require("../tools/completion");
+const CHECK_OUTPUT_TAIL_DEFAULT = 4000, CHECK_OUTPUT_TAIL_FULL = 40000;
 async function relaiVerify(workspace, config, args = {}) {
   const level = String(args.level || "standard").toLowerCase();
+  const complete = args.complete === true, completionSummary = complete ? normalizeCompletionSummary(args.summary) : '';
   const { checks, aliasNormalizations } = normalizeVerifyChecks(args, workspace.path, level);
   const { level: validationLevel, reason: validationLevelReason, changedFiles } = selectValidationLevel(workspace.path, workspace, args.validationLevel);
   const policy = resolvePolicy(workspace, config);
@@ -34,8 +34,7 @@ async function relaiVerify(workspace, config, args = {}) {
     message: "Validation status: NOT RUN. No validation checks were detected or executed. This is not a passed validation. Define a check/test/build script or pass an explicit check."
     };
   }
-  const stopOnFailure = args.stopOnFailure !== false;
-  const fullOutput = Boolean(args.fullOutput);
+  const stopOnFailure = args.stopOnFailure !== false, fullOutput = Boolean(args.fullOutput);
   const runConfig = fullOutput
     ? { ...config, maxOutputBytes: Math.max(Number(config.maxOutputBytes) || 0, 16 * 1024 * 1024) }
     : config;
@@ -59,9 +58,9 @@ async function relaiVerify(workspace, config, args = {}) {
   }
   const ok = results.length === checks.length && results.every((item) => item.ok);
   const nextAction = ok
-    ? "If this is the final validation and no more code changes are planned, call relai_complete_task exactly once with a concise summary."
+    ? "Completion is not automatic. If the task is finished, call relai_complete_task once; on future final validations, pass complete:true with summary to validate and close the session atomically."
     : "Fix the failing validation before reporting task completion.";
-  return {
+  const validationResult = {
     ok,
     workspace: workspace.alias,
     level,
@@ -78,8 +77,9 @@ async function relaiVerify(workspace, config, args = {}) {
     nextAction,
     ...(fullOutput ? { fullOutput: true } : {})
   };
+  if (!ok || !complete) return validationResult;
+  return finalizeValidationResult(config, workspace, validationResult, completionSummary);
 }
-
 // Keep the last maxChars of a command stream so the failing tail survives the
 // server-level result cap. Prepends a marker noting how much was dropped.
 function tailString(text, maxChars) {

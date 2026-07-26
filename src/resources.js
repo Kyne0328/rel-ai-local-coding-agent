@@ -1,5 +1,5 @@
 const { readConfig, publicConfigSummary } = require("./config");
-const { workspaceProfile, workspaceTree, workspaceInspect, workspaceList } = require("./tools");
+const { workspaceProfile, workspaceTree, workspaceInspect, workspaceList, getToolSurfaceManifest } = require("./tools");
 const pkg = require("../package.json");
 
 const MIME_JSON = "application/json";
@@ -10,6 +10,7 @@ function listResources() {
   const resources = [
     resource("relai://server/help", "Rel.AI MCP Help", "How ChatGPT should use this Rel.AI MCP server.", MIME_MARKDOWN),
     resource("relai://server/config", "Rel.AI MCP Config Summary", "Safe connector configuration summary without secrets.", MIME_JSON),
+    resource("relai://server/tool-surface", "Rel.AI MCP Tool Surface", "Machine-readable tool-surface version, lifecycle states, deprecations, and compatibility aliases.", MIME_JSON),
     resource("relai://server/workspaces", "Rel.AI MCP Workspaces", "Configured workspace aliases and safe metadata.", MIME_JSON)
   ];
   for (const item of workspaceList(config).workspaces) {
@@ -30,6 +31,9 @@ function readResource(uri) {
   }
   if (parsed.kind === "server" && parsed.name === "config") {
     return contents(uri, MIME_JSON, publicConfigSummary(config));
+  }
+  if (parsed.kind === "server" && parsed.name === "tool-surface") {
+    return contents(uri, MIME_JSON, getToolSurfaceManifest());
   }
   if (parsed.kind === "server" && parsed.name === "workspaces") {
     return contents(uri, MIME_JSON, workspaceList(config));
@@ -83,7 +87,7 @@ Use \`relai_exec\` when a task needs a one-shot project command such as dependen
 
 When \`relai_repo_snapshot\` or the workspace inspect resource returns \`projectInstructions\`, follow those repository-specific instructions before making changes. Sources are ordered by precedence; earlier files override later files. Read the named source directly with \`relai_read\` when the combined payload is truncated.
 
-Use quick validation while iterating. Before completion, run one final standard or release \`relai_run_checks\`; review with \`relai_diff\` when the edit did not already return a diff, then call \`relai_complete_task\` exactly once. If an edit payload is too large, re-read the target and use smaller exact replacements. If ChatGPT still shows removed tools, restart or reconnect the MCP server instead of falling back.
+Use quick validation while iterating. Completion is explicit, never inferred. Prefer one final standard or release \`relai_run_checks\` with \`complete: true\` and a concise \`summary\` to validate and close atomically. When a read-only \`relai_diff\` or status review must follow validation, omit \`complete\` on the checks and call \`relai_complete_task\` exactly once after that review. If an edit payload is too large, re-read the target and use smaller exact replacements. If ChatGPT still shows removed tools, restart or reconnect the MCP server instead of falling back.
 
 ## Configured workspaces
 
@@ -93,6 +97,8 @@ ${workspaces}
 
 - name: ${pkg.name}
 - version: ${pkg.version}
+- tool surface version: ${getToolSurfaceManifest().toolSurfaceVersion}
+- tool surface manifest: relai://server/tool-surface
 `;
 }
 

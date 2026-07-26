@@ -7,13 +7,27 @@ const { compactForConnector, policySentence } = require('../src/tools.js');
 const idleStatus = compactForConnector('relai_status', {
   ok: true,
   version: '0.17.1',
+  toolSurface: {
+    schemaVersion: 1,
+    toolSurfaceVersion: 10,
+    toolCount: 20,
+    tools: [{ name: 'relai_read', state: 'active' }],
+    deprecations: [],
+    compatibilityAliases: {}
+  },
   tools: ['relai_read', 'relai_edit'],
   toolGroups: { workspace: [], git: [], audit: [], cleanup: [], internal: ['relai_set_policy'] },
   scripts: ['start', 'test', 'build', 'lint'],
   ci: { ok: true, files: 2, missing: [] },
   workspace: {
     alias: 'app', root: '/repo', commandKeys: [], testCommandKeys: ['test'],
-    policy: { trusted: true, sessionActive: false, baselineDirty: [], source: 'default' }
+    policy: { trusted: true, sessionActive: false, baselineDirty: [], source: 'default' },
+    repository: {
+      ok: true, workspace: 'app', branch: 'main', status: ' M src/app.js\n?? generated.txt\n',
+      statusEntries: [{ path: 'src/app.js', owner: 'unknown', raw: ' M src/app.js' }],
+      changedFiles: ['src/app.js', 'generated.txt'], untrackedFiles: ['generated.txt'],
+      sessionChangedFiles: [], baselineChangedFiles: []
+    }
   },
   workspaceCount: 2,
   workspaceAliases: ['app', 'worker']
@@ -23,10 +37,21 @@ assert.equal(idleStatus.scripts, undefined, 'server scripts must be dropped');
 assert.equal(idleStatus.ci, undefined, 'server CI scan must be dropped');
 assert.equal(idleStatus.tools, undefined, 'tools list must be dropped');
 assert.equal(idleStatus.workspace.policy, undefined, 'raw policy object must be dropped');
+assert.equal(idleStatus.workspace.root, undefined, 'connector status must not expose the absolute workspace root');
 assert.equal(idleStatus.state, undefined, 'idle workspace must have no state line');
 assert.equal(idleStatus.workspace.commandKeys, undefined, 'empty arrays pruned');
 assert.deepEqual(idleStatus.workspace.testCommandKeys, ['test']);
+assert.equal(idleStatus.workspace.repository.branch, 'main');
+assert.equal(idleStatus.workspace.repository.status, ' M src/app.js\n?? generated.txt\n');
+assert.deepEqual(idleStatus.workspace.repository.changedFiles, ['src/app.js', 'generated.txt']);
+assert.deepEqual(idleStatus.workspace.repository.untrackedFiles, ['generated.txt']);
+assert.equal(idleStatus.workspace.repository.statusEntries, undefined, 'nested repository status must drop raw entries');
 assert.equal(idleStatus.version, '0.17.1');
+assert.equal(idleStatus.toolSurface.toolSurfaceVersion, 10);
+assert.equal(idleStatus.toolSurface.toolCount, 20);
+assert.deepEqual(idleStatus.toolSurface.deprecations, []);
+assert.deepEqual(idleStatus.toolSurface.compatibilityAliases, {});
+assert.equal(idleStatus.toolSurface.tools, undefined, 'compact status must not duplicate the full per-tool manifest');
 assert.equal(idleStatus.workspaceCount, 2);
 assert.deepEqual(idleStatus.workspaceAliases, ['app', 'worker'], 'compact status must retain configured aliases');
 console.log('1. idle relai_status compacted: OK');
@@ -60,6 +85,18 @@ assert.equal(checksCompact.validationLevel, undefined, 'internal telemetry dropp
 assert.equal(checksCompact.changedFiles, undefined, 'changedFiles telemetry dropped');
 assert.equal(checksCompact.policy, undefined, 'default policy dropped');
 assert.deepEqual(checksCompact.checks, ['npm run check']);
+const completedChecksCompact = compactForConnector('relai_run_checks', {
+  ok: true, workspace: 'app', level: 'standard', checks: ['npm test'], results: [{ command: 'npm test', ok: true }],
+  validated: true, validationStatus: 'passed', completionKnown: true, endReason: 'explicit_completion',
+  completionSource: 'relai_run_checks', summary: 'Validated and completed.', validationAt: '2026-07-26T08:00:00.000Z',
+  validationTaskId: 'task-1', relatedTaskIds: ['task-1'], changedFiles: ['src/app.js'],
+  message: 'Validation passed and task completion was accepted.', nextAction: 'No more calls.'
+}, {});
+assert.equal(completedChecksCompact.completionKnown, true);
+assert.equal(completedChecksCompact.completionSource, 'relai_run_checks');
+assert.equal(completedChecksCompact.summary, 'Validated and completed.');
+assert.deepEqual(completedChecksCompact.changedFiles, ['src/app.js']);
+assert.deepEqual(completedChecksCompact.relatedTaskIds, ['task-1']);
 console.log('4. relai_run_checks compacted: OK');
 
 const execCompact = compactForConnector('relai_exec', {
@@ -90,30 +127,6 @@ assert.deepEqual(execCompact.changedFiles, ['package-lock.json']);
 assert.deepEqual(execCompact.environmentKeys, ['CI']);
 console.log('5. relai_exec compacted: OK');
 
-const statusNoBaseline = compactForConnector('relai_git_status', {
-  ok: true, workspace: 'app', branch: 'main', aheadBehind: null,
-  status: ' M a.txt\n?? b.txt\n',
-  statusEntries: [{ path: 'a.txt', owner: 'unknown', raw: ' M a.txt' }],
-  sessionChangedFiles: [], baselineChangedFiles: [],
-  untrackedSessionFiles: [], untrackedBaselineFiles: []
-}, {});
-assert.equal(statusNoBaseline.statusEntries, undefined, 'raw status entries dropped');
-assert.equal(statusNoBaseline.sessionChangedFiles, undefined, 'empty ownership split dropped');
-assert.equal(statusNoBaseline.baselineChangedFiles, undefined);
-assert.equal(statusNoBaseline.branch, 'main');
-assert.equal(statusNoBaseline.status, ' M a.txt\n?? b.txt\n');
-console.log('6. git status without baseline compacted: OK');
-
-const statusWithBaseline = compactForConnector('relai_git_status', {
-  ok: true, workspace: 'app', branch: 'main',
-  status: ' M a.txt\n M b.txt\n',
-  statusEntries: [],
-  sessionChangedFiles: ['a.txt'], baselineChangedFiles: ['b.txt']
-}, {});
-assert.deepEqual(statusWithBaseline.sessionChangedFiles, ['a.txt']);
-assert.deepEqual(statusWithBaseline.baselineChangedFiles, ['b.txt']);
-console.log('7. git status with baseline compacted: OK');
-
 const snapshotCompact = compactForConnector('relai_repo_snapshot', {
   ok: true, workspace: 'app', root: '/repo',
   toolMode: 'chatgpt_local_repo', trustedLocalAgent: true,
@@ -131,6 +144,7 @@ const snapshotCompact = compactForConnector('relai_repo_snapshot', {
   git: { branch: 'main', aheadBehind: { ahead: 0, behind: 0 }, dirtyFiles: 1, changedFiles: ['src/app.js'] },
 }, {});
 assert.equal(snapshotCompact.manifestContents, undefined, 'manifest full text dropped');
+assert.equal(snapshotCompact.root, undefined, 'connector snapshot must not expose the absolute workspace root');
 assert.equal(snapshotCompact.toolMode, undefined, 'config constant dropped');
 assert.equal(snapshotCompact.trustedLocalAgent, undefined, 'config constant dropped');
 assert.equal(snapshotCompact.flow, undefined, 'prepared-workflow internals dropped');
@@ -142,7 +156,7 @@ assert.deepEqual(snapshotCompact.projectInstructions, { sources: ['REL_AI.md'], 
 assert.equal(snapshotCompact.skipped, undefined, 'skipped entry list dropped on connector');
 assert.equal(snapshotCompact.skippedCount, 1, 'skipped list replaced by a count');
 assert.deepEqual(snapshotCompact.git, { branch: 'main', aheadBehind: { ahead: 0, behind: 0 }, dirtyFiles: 1, changedFiles: ['src/app.js'] }, 'git summary passes through compaction');
-console.log('8. repo snapshot compacted: OK');
+console.log('6. repo snapshot compacted: OK');
 
 const readCompact = compactForConnector('relai_read', {
   ok: true, workspace: 'app',
@@ -167,6 +181,6 @@ const fullRead = compactForConnector('relai_read', {
 }, { guidanceMode: 'full' });
 assert.equal(fullRead.items[0].cacheHit, undefined, 'cache metadata stays hidden in full guidance mode');
 assert.deepEqual(fullRead.items[0].writeGuidance, { recommendedMode: 'exact-replace' });
-console.log('9. relai_read compacted: OK');
+console.log('7. relai_read compacted: OK');
 
 console.log('connector compaction unit tests passed.');

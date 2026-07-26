@@ -8,18 +8,27 @@ const {
   TOOL_DEFINITIONS,
   getToolDefinition,
   getToolDefinitions,
-  getToolGroups
+  getToolGroups,
+  getToolSurfaceManifest
 } = require('./registry');
 
 const TOOL_NAMES = TOOL_DEFINITIONS.map((definition) => definition.name);
 const TOOL_NAME_SET = new Set(TOOL_NAMES);
+const TASK_ID_SCHEMA = Object.freeze({
+  type: 'string',
+  minLength: 1,
+  maxLength: 200,
+  description: 'Opaque logical task ID returned by relai_start_task.'
+});
 
 /** @param {ToolDefinition} definition @returns {ToolSchema} */
 function schemaFromDefinition(definition) {
   const properties = { ...(definition.inputSchema?.properties || {}) };
+  if (definition.name !== 'relai_start_task') properties.task_id = TASK_ID_SCHEMA;
   const stripped = definition.connectorStrip || [];
   for (const key of stripped) delete properties[key];
   const required = (definition.inputSchema?.required || []).filter((key) => !stripped.includes(key));
+  if (definition.name === 'relai_complete_task' && !required.includes('task_id')) required.push('task_id');
   return {
     name: definition.name,
     title: definition.title,
@@ -49,6 +58,8 @@ function getToolMetadata() {
     category: definition.dashboard?.category || 'Workspace tools',
     requiredProfile: definition.dashboard?.requiredProfile || 'workspace',
     requiresApproval: definition.dashboard?.requiresApproval === true,
+    state: definition.lifecycle?.state || 'active',
+    replacements: definition.lifecycle?.replacements || (definition.lifecycle?.replacement ? [definition.lifecycle.replacement] : []),
     parameters: Object.keys(schemaFromDefinition(definition).inputSchema.properties || {})
   }));
 }
@@ -65,6 +76,7 @@ module.exports = {
   getToolDefinition,
   getToolDefinitions,
   getToolGroups,
+  getToolSurfaceManifest,
   isToolCallable,
   TOOL_NAMES
 };

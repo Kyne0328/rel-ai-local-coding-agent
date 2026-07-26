@@ -34,6 +34,7 @@ Use these files as the authoritative integration points:
 | Workspace serialization and editing | `src/configEditor.js` |
 | Session ownership and baseline tracking | `src/policyResolver.js` |
 | Git operations | `src/repo/gitOps.js` |
+| Live symbol, reference, import-impact, affected-test, and diagnostic-readiness analysis | `src/bridge/codeIntelligence.js` |
 | MCP HTTP transport and parallel JSON-RPC batches | `src/http/mcp.js` |
 | Electron application lifecycle | `electron/main.js` |
 | Dashboard sections and actions | `src/ui/features/` |
@@ -59,6 +60,8 @@ Implemented.
 - Kept generated/cache exclusions and `.relaiignore` handling.
 - Confirmed that snapshot limits and `includeRoots` do not restrict direct reads or text search.
 - Made repository overview and search optional when the relevant path is already known.
+- Added `relai_code_inspect` with a fingerprint-invalidated live index for symbol definitions, references and calls, structurally related files, reverse-import impact, affected tests, and diagnostic-command readiness.
+- Kept the index bounded and non-persistent so path, size, or modification-time changes invalidate cached analysis instead of leaving stale background state.
 - Preserved final structured validation and explicit completion requirements.
 - Added backward-compatible migration from:
   - top-level `maxIndexFiles`;
@@ -86,7 +89,7 @@ Implemented.
 
 ### Runtime rule
 
-The snapshot is an initial map, not an access boundary. ChatGPT may call `relai_search` and `relai_read` for any relevant non-sensitive path inside the configured workspace, whether or not the path appeared in the snapshot.
+The snapshot is an initial map, not an access boundary. ChatGPT may call `relai_search`, `relai_code_inspect`, and `relai_read` for any relevant non-sensitive path inside the configured workspace, whether or not the path appeared in the snapshot. Code intelligence is best-effort lexical and import-graph analysis; it does not claim compiler-accurate language-server semantics or embedding-based semantic retrieval.
 
 ---
 
@@ -241,13 +244,13 @@ Add a cache behavior such as `workspace` or handle `relai_exec` explicitly in `i
 
 ## Validation separation
 
-`relai_exec` must never satisfy the final validation requirement used by `relai_complete_task`.
+`relai_exec` must never satisfy the structured final-validation requirement used by either atomic `relai_run_checks` completion or standalone `relai_complete_task`.
 
 Examples:
 
 - `relai_exec { command: "npm test" }` is command output only.
 - `relai_run_checks { level: "standard" }` records structured validation.
-- Completion remains valid only after `relai_run_checks` or the existing `relai_edit` post-validation path.
+- Completion remains valid only after structured `relai_run_checks`; the final checks may close atomically with `complete:true` and `summary`, or standalone `relai_complete_task` may close after read-only review.
 
 This separation preserves reliable completion semantics without restricting command execution.
 
@@ -281,7 +284,7 @@ Add focused tests:
 - connector schema contains `command`;
 - handler registry and tool counts remain consistent;
 - `describeToolOperation` produces a concise label;
-- a successful `relai_exec` does not enable `relai_complete_task` without structured validation;
+- a successful `relai_exec` cannot complete a task or enable standalone completion without structured validation;
 - HTTP/OAuth connector invocation succeeds.
 
 ## Acceptance criteria
@@ -798,7 +801,7 @@ skipped
 - associate a plan with the current task scope when available;
 - show progress in Sessions and the workspace dashboard;
 - include the active plan in status summaries;
-- do not let plan completion substitute for `relai_complete_task`;
+- do not let plan completion substitute for an explicit validated completion signal (`relai_run_checks` with `complete:true` or standalone `relai_complete_task`);
 - do not require a plan before edits or commands.
 
 ### Tests
@@ -922,7 +925,7 @@ Recommended tool sets:
 relai_repo_snapshot
 relai_search
 relai_read
-relai_git_status
+relai_status with workspace
 relai_diff
 relai_exec, when command-side inspection is required
 ```
@@ -1075,7 +1078,7 @@ Do not create hidden public tools or a second registry.
 
 ## Validation and completion
 
-`relai_complete_task` must continue to require structured final validation.
+Every explicit completion path must continue to require structured final validation. Atomic completion belongs on `relai_run_checks`; standalone `relai_complete_task` remains for post-validation read-only review.
 
 These actions do not independently satisfy completion:
 

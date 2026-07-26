@@ -2,96 +2,227 @@
 
 const { readAudit } = require('../audit');
 const { resolveWorkspace } = require('../config');
-const { clearSessionPolicy, readSessionPolicy } = require('../policyResolver');
+const { clearSessionPolicy, resolvePolicy } = require('../policyResolver');
+const { readTaskHistorySession } = require('../taskHistoryStore');
 const {
   getCurrentToolActivityContext,
-  requestCurrentTaskCompletion
+  requestCurrentTaskCompletion,
+  taskError,
+  normalizeTaskId
 } = require('../toolActivity');
 
+// Keep removed pre-v10 names here only to interpret persisted audit events safely.
+// They are not registered, callable, or routed by the current tool surface.
 const CODE_MUTATING_TOOLS = new Set([
   'relai_write',
   'relai_replace',
   'relai_edit',
   'relai_tidy_run',
+  'relai_restore_paths',
+  'relai_reset_workspace',
   'relai_restore_changes'
 ]);
-const COMPLETION_VALIDATION_MAX_AGE_MS = 2 * 60 * 60 * 1000;
-
 function completeTask(config, args = {}) {
   const workspace = resolveWorkspace(config, args.workspace);
-  const summary = String(args.summary || '').trim();
-  if (!summary) throw new Error('summary is required to report task completion.');
-  if (summary.length > 2000) throw new Error('summary must be 2000 characters or fewer.');
-
-  const context = getCurrentToolActivityContext();
-  if (!context?.taskId) {
-    throw new Error('Task completion requires an active Rel.AI work session.');
+  const requestedTaskId = normalizeTaskId(args.task_id || args.taskId);
+  if (!requestedTaskId) {
+    throw taskError('TASK_ID_REQUIRED', 'relai_complete_task requires the task_id returned by relai_start_task.');
   }
-  const sessionPolicy = readSessionPolicy(config, workspace.alias);
-  const preferredTaskIds = unique([
-    context.taskId,
-    String(sessionPolicy?.taskId || '').trim()
-  ].filter(Boolean));
-  const workspaceEvents = readAudit(config, { limit: 10000, workspace: workspace.alias }).entries
-    .filter(entry => entry && (!entry.workspace || entry.workspace === workspace.alias))
+  const context = requireMatchingTaskContext(requestedTaskId);
+  const previous = readTaskHistorySession(config, requestedTaskId);
+  if (previous?.completionKnown === true || previous?.status === 'completed') {
+    return finalizeDuplicateCompletion(config, workspace, context, previous);
+  }
+
+  const summary = normalizeCompletionSummary(args.summary);
+  const taskEvents = readAudit(config, {
+    limit: 10000,
+    workspace: workspace.alias,
+    taskId: requestedTaskId
+  }).entries
+    .filter(entry => entry && String(entry.taskId || '') === requestedTaskId)
     .sort((left, right) => eventTime(left) - eventTime(right));
-  const preferredEvents = workspaceEvents.filter(entry => preferredTaskIds.includes(String(entry.taskId || '')));
-
-  let validation = findLatestPassedValidation(preferredEvents);
-  let recoveredValidationSession = false;
+  const validation = findLatestPassedValidation(taskEvents);
   if (!validation) {
-    const latestWorkspaceValidation = findLatestPassedValidation(workspaceEvents);
-    if (latestWorkspaceValidation && isRecentValidation(latestWorkspaceValidation)) {
-      validation = latestWorkspaceValidation;
-      recoveredValidationSession = true;
-    }
-  }
-  if (!validation) {
-    throw new Error('Cannot report completion: no successful final validation could be linked to this workspace session. Run relai_run_checks now, then call relai_complete_task again.');
+    throw taskError(
+      'INVALID_TASK_STATE',
+      'Cannot complete this task: no successful final validation is recorded for this exact task_id. Run relai_run_checks with the same task_id, then retry completion.',
+      { retryable: true }
+    );
   }
 
   const validationAtMs = eventTime(validation);
-  const changedAfterValidation = workspaceEvents.filter(entry =>
+  const workspaceEvents = readAudit(config, {
+    limit: 10000,
+    workspace: workspace.alias
+  }).entries
+    .filter(entry => entry && (!entry.workspace || entry.workspace === workspace.alias))
+    .sort((left, right) => eventTime(left) - eventTime(right));
+  const changedAfterValidation = taskEvents.filter(entry =>
     eventTime(entry) > validationAtMs &&
     entry.ok !== false &&
     eventMutatedCode(entry)
   );
   if (changedAfterValidation.length) {
     const tools = [...new Set(changedAfterValidation.map(entry => String(entry.tool || 'edit')))];
-    throw new Error(`Cannot report completion: code changed after the last passed validation (${tools.join(', ')}). Run final validation again first.`);
+    throw taskError(
+      'INVALID_TASK_STATE',
+      `Cannot complete this task: its code changed after the last passed validation (${tools.join(', ')}). Run final validation again with the same task_id.`,
+      { retryable: true }
+    );
   }
 
-  const validationTaskId = String(validation.taskId || '').trim();
-  const relatedTaskIds = unique([...preferredTaskIds, validationTaskId].filter(Boolean));
-  const relatedEvents = workspaceEvents.filter(entry => relatedTaskIds.includes(String(entry.taskId || '')));
-  const changedFiles = unique(relatedEvents.flatMap(eventChangedFiles));
+  const conflictingWorkspaceChanges = workspaceEvents.filter(entry =>
+    eventTime(entry) > validationAtMs &&
+    entry.ok !== false &&
+    String(entry.taskId || '') !== requestedTaskId &&
+    eventMutatedCode(entry)
+  );
+  if (conflictingWorkspaceChanges.length) {
+    const conflictingTaskIds = unique(conflictingWorkspaceChanges.map(entry => String(entry.taskId || '')).filter(Boolean));
+    const error = taskError(
+      'TASK_PERSISTENCE_CONFLICT',
+      'Cannot complete this task: another logical task changed the shared workspace after this task was validated. Re-run validation for this task_id against the current workspace state.',
+      { retryable: true }
+    );
+    error.conflictingTaskCount = conflictingTaskIds.length;
+    throw error;
+  }
+
+  const changedFiles = unique(taskEvents.flatMap(eventChangedFiles));
+  return finalizeValidatedTask(config, workspace, {
+    summary,
+    validationLevel: validation.validationLevel || '',
+    validationAt: validation.ts || '',
+    validationTaskId: requestedTaskId,
+    relatedTaskIds: [requestedTaskId],
+    recoveredValidationSession: false,
+    changedFiles,
+    completionSource: 'relai_complete_task'
+  });
+}
+
+function finalizeValidatedTask(config, workspace, options = {}) {
+  const summary = normalizeCompletionSummary(options.summary);
+  const context = getCurrentToolActivityContext();
+  if (!context?.taskId) {
+    throw taskError('CONNECTION_CONTEXT_UNAVAILABLE', 'Task completion requires an active Rel.AI tool invocation.');
+  }
+  const taskId = normalizeTaskId(options.validationTaskId || context.taskId);
+  if (!taskId || taskId !== context.taskId) {
+    throw taskError('TASK_OWNERSHIP_MISMATCH', 'The validation task does not match the active logical task.');
+  }
+  const changedFiles = Array.isArray(options.changedFiles)
+    ? unique(options.changedFiles.map(String).filter(Boolean))
+    : changedFilesForTask(config, workspace.alias, taskId);
+  const completionSource = String(options.completionSource || 'relai_complete_task');
   const completion = requestCurrentTaskCompletion({
     summary,
     validationStatus: 'passed',
-    validationLevel: validation.validationLevel || '',
-    validationAt: validation.ts || '',
+    validationLevel: String(options.validationLevel || ''),
+    validationAt: String(options.validationAt || ''),
     changedFiles
   });
-  clearSessionPolicy(config, workspace.alias);
-
+  clearSessionPolicy(config, workspace.alias, taskId);
   return {
     ok: true,
     workspace: workspace.alias,
     taskId: completion.taskId,
+    task_id: completion.taskId,
+    duplicate: completion.duplicate === true,
     completionKnown: true,
     endReason: 'explicit_completion',
+    completionSource,
     summary,
     validationStatus: 'passed',
-    validationLevel: validation.validationLevel || '',
-    validationAt: validation.ts || '',
-    validationTaskId,
-    relatedTaskIds,
-    recoveredValidationSession: recoveredValidationSession || Boolean(validationTaskId && validationTaskId !== context.taskId),
+    validationLevel: String(options.validationLevel || ''),
+    validationAt: String(options.validationAt || ''),
+    validationTaskId: taskId,
+    relatedTaskIds: [taskId],
+    recoveredValidationSession: false,
     changedFiles,
-    message: recoveredValidationSession
-      ? 'Task completion accepted using the latest safe passed validation for this workspace. Rel.AI will close this work session when this final tool call returns.'
-      : 'Task completion accepted. Rel.AI will close this work session when this final tool call returns.'
+    message: completionMessage(completionSource, completion.duplicate === true)
   };
+}
+
+function finalizeValidationResult(config, workspace, validationResult, summary) {
+  const completion = finalizeValidatedTask(config, workspace, {
+    summary,
+    validationLevel: validationResult.validationLevel,
+    validationAt: new Date().toISOString(),
+    completionSource: 'relai_run_checks'
+  });
+  return {
+    ...validationResult,
+    ...completion,
+    policy: resolvePolicy(workspace, config),
+    nextAction: 'Validation passed and explicit task completion was accepted. Do not call another Rel.AI tool for this completed task.'
+  };
+}
+
+function finalizeDuplicateCompletion(config, workspace, context, previous) {
+  const summary = String(previous.summary || '').trim() || 'Task already completed.';
+  const completion = requestCurrentTaskCompletion({
+    summary,
+    validationStatus: previous.validation || 'passed',
+    validationLevel: previous.validationLevel || '',
+    validationAt: previous.validationAt || previous.completedAt || '',
+    changedFiles: Array.isArray(previous.changedFiles) ? previous.changedFiles : []
+  });
+  clearSessionPolicy(config, workspace.alias, context.taskId);
+  return {
+    ok: true,
+    workspace: workspace.alias,
+    taskId: context.taskId,
+    task_id: context.taskId,
+    duplicate: true,
+    completionKnown: true,
+    endReason: 'explicit_completion',
+    completionSource: 'relai_complete_task',
+    summary,
+    validationStatus: previous.validation || 'passed',
+    validationLevel: previous.validationLevel || '',
+    validationAt: previous.validationAt || previous.completedAt || '',
+    validationTaskId: context.taskId,
+    relatedTaskIds: [context.taskId],
+    recoveredValidationSession: false,
+    changedFiles: Array.isArray(previous.changedFiles) ? previous.changedFiles : [],
+    message: completion.duplicate === true
+      ? 'Duplicate task completion request accepted; the task was already completing.'
+      : 'Task was already completed. The original completion result is returned idempotently.'
+  };
+}
+
+function requireMatchingTaskContext(taskId) {
+  const context = getCurrentToolActivityContext();
+  if (!context?.taskId) {
+    throw taskError('CONNECTION_CONTEXT_UNAVAILABLE', 'Task completion requires an active Rel.AI tool invocation.');
+  }
+  if (context.taskId !== taskId) {
+    throw taskError('TASK_OWNERSHIP_MISMATCH', 'The supplied task_id does not match the logical task bound to this invocation.');
+  }
+  return context;
+}
+
+function completionMessage(source, duplicate) {
+  if (duplicate) return 'Duplicate task completion request accepted idempotently.';
+  if (source === 'relai_run_checks') {
+    return 'Validation passed and this logical task was completed in the same Rel.AI call. Other tasks remain unchanged.';
+  }
+  return 'Task completion accepted for this task_id. Other logical tasks remain active and unchanged.';
+}
+
+function normalizeCompletionSummary(value) {
+  const summary = String(value || '').trim();
+  if (!summary) throw new Error('summary is required to report task completion.');
+  if (summary.length > 2000) throw new Error('summary must be 2000 characters or fewer.');
+  return summary;
+}
+
+function changedFilesForTask(config, workspaceAlias, taskId) {
+  const events = readAudit(config, { limit: 10000, workspace: workspaceAlias, taskId }).entries
+    .filter(entry => String(entry?.taskId || '') === taskId);
+  return unique(events.flatMap(eventChangedFiles));
 }
 
 function eventMutatedCode(entry) {
@@ -108,11 +239,6 @@ function findLatestPassedValidation(events) {
     entry.ok !== false &&
     entry.validationStatus === 'passed'
   ) || null;
-}
-
-function isRecentValidation(entry) {
-  const timestamp = eventTime(entry);
-  return timestamp > 0 && Date.now() - timestamp <= COMPLETION_VALIDATION_MAX_AGE_MS;
 }
 
 function eventChangedFiles(entry) {
@@ -132,4 +258,11 @@ function unique(values) {
   return [...new Set(values)];
 }
 
-module.exports = { completeTask, CODE_MUTATING_TOOLS, COMPLETION_VALIDATION_MAX_AGE_MS, eventMutatedCode };
+module.exports = {
+  completeTask,
+  finalizeValidatedTask,
+  finalizeValidationResult,
+  normalizeCompletionSummary,
+  CODE_MUTATING_TOOLS,
+  eventMutatedCode
+};

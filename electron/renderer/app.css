@@ -158,7 +158,7 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--blue-dim)
 .status-badge.ready::before { background: var(--green); }
 .status-badge.connecting::before { background: var(--yellow); }
 .status-badge.working::before { background: var(--blue); animation: activityPulse 1.35s ease-in-out infinite; }
-.status-badge.settling::before { background: var(--yellow); }
+.status-badge.waiting::before, .status-badge.settling::before { background: var(--yellow); }
 .status-badge.failed::before { background: var(--red); }
 .status-hero { padding: 20px; overflow: hidden; position: relative; }
 .status-hero::after {
@@ -221,7 +221,7 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--blue-dim)
 .fallback-log-wrap p { margin: var(--space-3) 0 0; color: var(--text-muted); font-size: var(--font-12); }
 .fallback-log-wrap pre { max-height: 220px; margin: 0; padding: var(--space-3); overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-md); color: var(--text-muted); background: rgba(6,9,18,.72); font: var(--font-11)/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 
-.status-hero[data-state="working"], .status-hero[data-state="settling"] { border-color: rgba(90,166,255,.28); }
+.status-hero[data-state="working"], .status-hero[data-state="waiting"], .status-hero[data-state="settling"] { border-color: rgba(90,166,255,.28); }
 .status-hero[data-state="working"]::after { background: radial-gradient(circle, rgba(90,166,255,.24), transparent 68%); }
 .task-meta {
   margin-top: var(--space-3);

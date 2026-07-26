@@ -86,7 +86,9 @@ async function handleMcpStreamable(ctx) {
   if (sessionId) ctx.res.setHeader('Mcp-Session-Id', sessionId);
   const response = await handleJsonRpcPayload(payload, {
     publicHttpOnly: true,
-    taskScopeId: resolveTaskScopeId(ctx.req, payload, sessionId)
+    taskScopeId: resolveTaskScopeId(ctx.req, payload, sessionId),
+    transportType: 'streamable-http',
+    transportSessionId: sessionId
   });
   if (response === null) { sendJson(ctx.res, 202, { ok: true, accepted: true }, ctx.ae); return; }
   sendJson(ctx.res, 200, response, ctx.ae);
@@ -105,7 +107,9 @@ async function handleMcpMessages(ctx) {
   const payload = await readJsonBody(ctx.req, ctx.options.maxBodyBytes);
   const response = await handleJsonRpcPayload(payload, {
     publicHttpOnly: true,
-    taskScopeId: resolveTaskScopeId(ctx.req, payload, sessionId)
+    taskScopeId: resolveTaskScopeId(ctx.req, payload, sessionId),
+    transportType: 'sse',
+    transportSessionId: sessionId
   });
   if (response !== null) sendSse(session.res, "message", response);
   sendJson(ctx.res, 202, { ok: true, accepted: true }, ctx.ae);

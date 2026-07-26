@@ -410,10 +410,6 @@ function walkState(root, current, files, maxFiles, maxFileBytes) {
   }
 }
 
-function objectOrEmpty(value) {
-  return Object(value) === value && !Array.isArray(value) ? value : {};
-}
-
 function commandMapOrEmpty(value) {
   return Object(value) === value ? value : {};
 }

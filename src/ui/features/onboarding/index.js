@@ -26,7 +26,7 @@ export function openOnboarding() {
   };
 
   _wrapper = document.createElement('div');
-  _wrapper.style.cssText = 'display:grid;gap:20px;';
+  _wrapper.className = 'onboarding-shell';
 
   _modal = openModal({
     title: 'Set up Rel.AI MCP',
@@ -55,31 +55,29 @@ function _showStep() {
   _wrapper.innerHTML = '';
 
   const stepLabel = document.createElement('div');
-  stepLabel.style.cssText = 'font-size:12px;color:var(--text-muted);text-align:right;margin-top:-8px;';
+  stepLabel.className = 'onboarding-step-label';
   stepLabel.textContent = `Step ${_step + 1} of ${STEPS.length}`;
 
   const content = document.createElement('div');
-  content.style.cssText = 'display:grid;gap:14px;';
+  content.className = 'onboarding-content';
 
   const footer = document.createElement('div');
-  footer.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;';
+  footer.className = 'onboarding-footer';
 
   const navLeft = document.createElement('div');
-  navLeft.style.cssText = 'display:flex;gap:8px;align-items:center;';
+  navLeft.className = 'onboarding-footer-actions';
 
   const backBtn = document.createElement('button');
-  backBtn.className = 'secondary';
-  backBtn.style.cssText = 'font-size:12px;min-height:28px;';
+  backBtn.className = 'secondary onboarding-compact-action';
   backBtn.textContent = 'Back';
   backBtn.onclick = _back;
-  backBtn.style.display = _step > 0 && _step < STEPS.length - 1 ? '' : 'none';
+  backBtn.hidden = !(_step > 0 && _step < STEPS.length - 1);
 
   const skipBtn = document.createElement('button');
-  skipBtn.className = 'secondary';
-  skipBtn.style.cssText = 'font-size:12px;min-height:28px;color:var(--text-muted);';
+  skipBtn.className = 'secondary onboarding-compact-action onboarding-skip-action';
   skipBtn.textContent = 'Skip for now';
   skipBtn.onclick = () => { if (_modal) _modal.close(); };
-  skipBtn.style.display = _step === STEPS.length - 1 ? 'none' : '';
+  skipBtn.hidden = _step === STEPS.length - 1;
 
   navLeft.appendChild(backBtn);
   navLeft.appendChild(skipBtn);
@@ -103,23 +101,23 @@ function _showStep() {
 
 function _renderStep(step, content, nextBtn, skipBtn, backBtn) {
   if (step === 0) {
-    content.innerHTML = '<p style="font-size:14px;line-height:1.55;">Rel.AI MCP gives ChatGPT explicit tools for configured local workspaces: inspect the repo, read exact files, make focused edits, run checks, and review the diff.</p><p style="font-size:14px;line-height:1.55;">This setup gets one workspace and the ChatGPT app connection ready so your first request can be a safe read-only check.</p>';
+    content.innerHTML = '<p class="onboarding-copy">Rel.AI MCP gives ChatGPT explicit tools for configured local workspaces: inspect the repo, read exact files, make focused edits, run checks, and review the diff.</p><p class="onboarding-copy">This setup gets one workspace and the ChatGPT app connection ready so your first request can be a safe read-only check.</p>';
     _withConnection(content);
     nextBtn.textContent = 'Start setup';
   } else if (step === 1) {
     nextBtn.textContent = _data.workspaceCreated ? 'Continue' : 'Add workspace';
-    content.innerHTML = '<h3 style="margin:0;font-size:15px;">Add your first workspace</h3><p style="font-size:13px;color:var(--text-muted);line-height:1.5;">A workspace is a local folder that Rel.AI can inspect, edit, validate, and review for ChatGPT.</p>';
+    content.innerHTML = '<h3 class="onboarding-heading">Add your first workspace</h3><p class="onboarding-description">A workspace is a local folder that Rel.AI can inspect, edit, validate, and review for ChatGPT.</p>';
 
     const aliasInput = document.createElement('input');
     aliasInput.type = 'text';
     aliasInput.placeholder = 'Alias (short name, for example acme-web)';
-    aliasInput.style.cssText = 'width:100%;';
+    aliasInput.className = 'onboarding-input';
     aliasInput.value = _data.workspaceAlias || '';
 
     const pathInput = document.createElement('input');
     pathInput.type = 'text';
     pathInput.placeholder = 'Absolute folder path';
-    pathInput.style.cssText = 'width:100%;';
+    pathInput.className = 'onboarding-input';
     pathInput.value = _data.workspacePath || '';
 
     const pathRow = document.createElement('div');
@@ -133,20 +131,19 @@ function _renderStep(step, content, nextBtn, skipBtn, backBtn) {
     pathRow.appendChild(browseBtn);
 
     const hint = document.createElement('div');
-    hint.style.cssText = 'font-size:12px;color:var(--text-muted);line-height:1.45;';
+    hint.className = 'onboarding-hint';
     hint.textContent = 'Tip: the alias can be short. The folder path must be absolute.';
 
     const validation = document.createElement('div');
-    validation.style.cssText = 'font-size:12px;color:var(--text-muted);min-height:18px;';
+    validation.className = 'onboarding-validation';
     validation.setAttribute('aria-live', 'polite');
     validation.setAttribute('aria-atomic', 'true');
     renderValidation(validation, _data.workspaceCheck);
 
     const createdNote = document.createElement('div');
-    createdNote.className = 'empty';
-    createdNote.style.cssText = 'display:none;text-align:left;padding:12px;line-height:1.5;border-color:rgba(71,221,138,.22);background:rgba(71,221,138,.07);';
+    createdNote.className = 'empty onboarding-created-note';
+    createdNote.hidden = !_data.workspaceCreated;
     if (_data.workspaceCreated) {
-      createdNote.style.display = 'block';
       createdNote.textContent = `Workspace '${_data.createdWorkspaceAlias}' is already saved for this setup run.`;
     }
 
@@ -164,7 +161,7 @@ function _renderStep(step, content, nextBtn, skipBtn, backBtn) {
       validTimer = setTimeout(async () => {
         const p = pathInput.value.trim();
         if (!p) return;
-        validation.style.color = 'var(--text-muted)';
+        validation.className = 'onboarding-validation';
         validation.textContent = 'Checking path…';
         _data.workspaceCheck = await validateWorkspacePath(p);
         renderValidation(validation, _data.workspaceCheck);
@@ -273,23 +270,23 @@ function _renderStep(step, content, nextBtn, skipBtn, backBtn) {
     nextBtn.onclick = submitWorkspace;
   } else if (step === 2) {
     nextBtn.textContent = 'Continue';
-    content.innerHTML = '<h3 style="margin:0;font-size:15px;">How to ask for work</h3><p style="font-size:13px;color:var(--text-muted);line-height:1.5;">Tell ChatGPT which workspace alias to use, then ask for the smallest useful first step. For new repos, start with status and snapshot before requesting edits.</p><div class="empty" style="text-align:left;padding:12px;line-height:1.5;"><strong style="color:var(--text);">Good first prompt</strong><br><code>Use Rel.AI MCP on workspace "myapp". Call relai_git_status and relai_repo_snapshot. Do not modify files yet.</code></div>';
+    content.innerHTML = '<h3 class="onboarding-heading">How to ask for work</h3><p class="onboarding-description">Tell ChatGPT which workspace alias to use, then ask for the smallest useful first step. For new repos, start with status and snapshot before requesting edits.</p><div class="empty onboarding-example"><strong class="onboarding-example-title">Good first prompt</strong><br><code>Use Rel.AI MCP on workspace "myapp". Call relai_status with this workspace and relai_repo_snapshot. Do not modify files yet.</code></div>';
     nextBtn.onclick = async () => {
       _step++;
       _showStep();
     };
   } else if (step === 3) {
     nextBtn.textContent = 'Continue';
-    content.innerHTML = '<h3 style="margin:0;font-size:15px;">Connect ChatGPT</h3><p style="font-size:13px;color:var(--text-muted);line-height:1.5;">Create a ChatGPT app, paste the MCP endpoint below, choose OAuth, and approve with your approval token. After that, select the Rel.AI MCP app in any chat.</p>';
+    content.innerHTML = '<h3 class="onboarding-heading">Connect ChatGPT</h3><p class="onboarding-description">Create a ChatGPT app, paste the MCP endpoint below, choose OAuth, and approve with your approval token. After that, select the Rel.AI MCP app in any chat.</p>';
     _withConnection(content, true);
   } else if (step === 4) {
     nextBtn.textContent = 'Done';
-    skipBtn.style.display = 'none';
-    backBtn.style.display = 'none';
+    skipBtn.hidden = true;
+    backBtn.hidden = true;
     const workspaceLine = _data.workspaceCreated
       ? `Workspace <strong>${escapeHtml(_data.createdWorkspaceAlias)}</strong> is saved and ready.`
       : 'You can add a workspace later from the Workspaces page.';
-    content.innerHTML = `<div style="text-align:center;padding:16px 0;display:grid;gap:12px;"><div style="font-size:32px;">✓</div><div style="font-size:16px;font-weight:700;">Setup complete</div><div style="color:var(--text-muted);font-size:13px;line-height:1.5;">${workspaceLine}<br>Select the Rel.AI MCP app in ChatGPT and ask for a read-only status check first.</div></div>`;
+    content.innerHTML = `<div class="onboarding-complete"><div class="onboarding-complete-mark" aria-hidden="true">✓</div><div class="onboarding-complete-title">Setup complete</div><div class="onboarding-complete-copy">${workspaceLine}<br>Select the Rel.AI MCP app in ChatGPT and ask for a read-only status check first.</div></div>`;
     nextBtn.onclick = async () => {
       await postJson('/api/onboarding/complete', { completed: true });
       closeModal();
@@ -305,13 +302,12 @@ async function _withConnection(content, showCopy = false) {
   if (!conn) return;
   if (showCopy && conn.chatgptMcpUrl) {
     const urlBox = document.createElement('div');
-    urlBox.style.cssText = 'display:flex;gap:8px;align-items:center;';
+    urlBox.className = 'onboarding-endpoint-row';
     const code = document.createElement('code');
-    code.style.cssText = 'flex:1;font-size:11px;word-break:break-all;padding:8px;background:var(--bg);border:1px solid var(--line-soft);border-radius:8px;';
+    code.className = 'onboarding-endpoint';
     code.textContent = conn.chatgptMcpUrl;
     const copyBtn = document.createElement('button');
-    copyBtn.className = 'secondary';
-    copyBtn.style.cssText = 'min-height:28px;padding:0 10px;font-size:12px;flex-shrink:0;';
+    copyBtn.className = 'secondary onboarding-copy-action';
     copyBtn.textContent = 'Copy';
     copyBtn.onclick = async () => {
       try {
@@ -336,7 +332,7 @@ async function _withConnection(content, showCopy = false) {
   }
 
   const status = document.createElement('div');
-  status.style.cssText = 'font-size:12px;color:' + (conn.permanentUrlConfigured ? 'var(--green)' : 'var(--yellow)') + ';line-height:1.45;';
+  status.className = `onboarding-connection-status ${conn.permanentUrlConfigured ? 'good' : 'warn'}`;
   status.textContent = conn.permanentUrlConfigured
     ? 'Permanent URL configured. This is the best setup for a stable ChatGPT connector.'
     : 'No permanent public URL is configured yet. Local testing still works, but the ChatGPT connection may change unless you add a stable HTTPS URL.';
@@ -370,8 +366,7 @@ export function showDesktopHandoff() {
   if (document.getElementById('__desktop-setup-handoff')) return;
   const banner = document.createElement('section');
   banner.id = '__desktop-setup-handoff';
-  banner.className = 'connection-notice info';
-  banner.style.cssText = 'display:grid;gap:10px;margin-bottom:14px;';
+  banner.className = 'connection-notice info desktop-setup-handoff';
   banner.innerHTML = '<div><strong>Desktop setup is complete.</strong><br><span class="muted">Finish the two application steps below. Rel.AI will not reopen the browser onboarding wizard.</span></div>';
 
   const actions = document.createElement('div');
@@ -411,11 +406,10 @@ function _showSkipBanner() {
   if (existing) return;
   const banner = document.createElement('div');
   banner.id = '__onb-banner';
-  banner.style.cssText = 'background:rgba(255,194,75,.08);border:1px solid rgba(255,194,75,.25);border-radius:10px;padding:10px 14px;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;';
-  banner.innerHTML = '<span style="color:#ffe2a1;">Setup not complete</span>';
+  banner.className = 'onboarding-resume-banner';
+  banner.innerHTML = '<span class="onboarding-resume-label">Setup not complete</span>';
   const resumeBtn = document.createElement('button');
-  resumeBtn.className = 'secondary';
-  resumeBtn.style.cssText = 'min-height:26px;padding:0 10px;font-size:12px;';
+  resumeBtn.className = 'secondary onboarding-compact-action';
   resumeBtn.textContent = 'Resume setup';
   resumeBtn.onclick = openOnboarding;
   banner.appendChild(resumeBtn);
@@ -430,16 +424,17 @@ async function validateWorkspacePath(workspacePath) {
 
 function renderValidation(el, result) {
   if (!el) return;
+  el.className = 'onboarding-validation';
   if (!result) {
-    el.style.color = 'var(--text-muted)';
     el.textContent = '';
     return;
   }
-  el.style.color = result.exists && result.isDirectory ? 'var(--green)' : 'var(--red)';
   if (result.exists && result.isDirectory) {
+    el.classList.add('success');
     el.textContent = result.isGit ? 'Path looks good. Git repository found.' : 'Path exists and can be added as a workspace.';
     return;
   }
+  el.classList.add('error');
   const finding = Array.isArray(result.findings) && result.findings.length ? result.findings[0].message : 'Folder not found.';
   el.textContent = finding;
 }

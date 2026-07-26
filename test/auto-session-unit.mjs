@@ -63,9 +63,12 @@ const sessionFile = (stateDir, alias) => path.join(stateDir, 'sessions', `${alia
   fs.writeFileSync(path.join(workspacePath, 'between-tasks.txt'), 'new baseline\n');
   const restarted = ensureSessionStarted(config, 'ws', workspacePath, { taskId: 'task-b' });
   assert.equal(restarted, true);
-  const session = readSessionPolicy(config, 'ws');
-  assert.equal(session.taskId, 'task-b');
-  assert.ok(session.baselineDirty.includes('between-tasks.txt'));
+  const sessionA = readSessionPolicy(config, 'ws', 'task-a');
+  const sessionB = readSessionPolicy(config, 'ws', 'task-b');
+  assert.equal(sessionA.taskId, 'task-a');
+  assert.equal(sessionB.taskId, 'task-b');
+  assert.ok(sessionB.baselineDirty.includes('between-tasks.txt'));
+  assert.equal(readSessionPolicy(config, 'ws'), null, 'implicit policy lookup must reject multiple active tasks');
   fs.rmSync(root, { recursive: true, force: true });
 }
 

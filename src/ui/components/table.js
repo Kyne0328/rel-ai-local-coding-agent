@@ -60,7 +60,10 @@ export function Table({ columns, rows, emptyMessage = 'No data.' } = {}) {
 
 function makeSentinel(observer) {
   const sentinel = document.createElement('tr');
-  sentinel.innerHTML = '<td colspan="99" style="padding:4px;height:1px;"></td>';
+  const cell = document.createElement('td');
+  cell.colSpan = 99;
+  cell.className = 'table-virtual-sentinel-cell';
+  sentinel.appendChild(cell);
   observer.observe(sentinel);
   return sentinel;
 }

@@ -7,101 +7,62 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { resolvePolicy, writeSessionPolicy, clearSessionPolicy, readSessionPolicy } = require('../src/policyResolver.js');
 
-function makeTempStateDir() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'relai-pr-'));
+const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-policy-'));
+const config = { stateDir };
+const alias = 'myapp';
+const sessionsDir = path.join(stateDir, 'sessions');
+const sessionPath = path.join(sessionsDir, `${alias}-policy.json`);
+
+function resetSession() {
+  fs.rmSync(sessionPath, { force: true });
 }
 
-// 1. No session file → sessionActive: false, trusted: true, source: "default"
-{
-  const stateDir = makeTempStateDir();
-  const config = { stateDir };
-  const workspace = { alias: 'myapp', path: stateDir };
-  const policy = resolvePolicy(workspace, config);
-  assert.equal(policy.trusted, true, 'trusted must be true');
-  assert.equal(policy.sessionActive, false, 'no session: sessionActive must be false');
-  assert.equal(policy.sessionCreatedAt, null, 'no session: sessionCreatedAt must be null');
-  assert.equal(policy.taskHint, null, 'no session: taskHint must be null');
-  assert.equal(policy.source, 'default', 'no session: source must be default');
+try {
+  for (const workspace of [{ alias, path: stateDir }, alias, null, {}]) {
+    resetSession();
+    const policy = resolvePolicy(workspace, config);
+    assert.equal(policy.sessionActive, false);
+    assert.equal(policy.source, 'default');
+    assert.equal(policy.trusted, true);
+  }
+
+  writeSessionPolicy(config, alias, { taskHint: 'fix auth bug' });
+  const session = readSessionPolicy(config, alias);
+  assert.equal(session.workspace, alias);
+  assert.equal(session.taskHint, 'fix auth bug');
+  assert.match(session.createdAt, /^\d{4}-\d{2}-\d{2}T/);
+
+  const active = resolvePolicy({ alias, path: stateDir }, config);
+  assert.equal(active.trusted, false);
+  assert.equal(active.sessionActive, true);
+  assert.equal(active.baselineCaptured, false);
+  assert.equal(active.taskHint, 'fix auth bug');
+  assert.equal(active.source, 'legacy_session_file');
+  assert.match(active.sessionCreatedAt, /^\d{4}-\d{2}-\d{2}T/);
+
+  resetSession();
+  writeSessionPolicy(config, alias, { workspaceRoot: path.join(stateDir, 'missing-workspace') });
+  const failedBaseline = resolvePolicy({ alias }, config);
+  assert.equal(failedBaseline.sessionActive, true);
+  assert.equal(failedBaseline.baselineCaptured, false);
+  assert.equal(failedBaseline.trusted, false);
+  assert.ok(failedBaseline.baselineCaptureError);
+
+  assert.equal(clearSessionPolicy(config, alias).cleared, true);
+  assert.equal(resolvePolicy({ alias }, config).sessionActive, false);
+  assert.equal(clearSessionPolicy(config, alias).cleared, false);
+
+  const invalidPayloads = ['NOT JSON', '[1,2,3]', '{}', '42', '"sneaky"', 'null'];
+  fs.mkdirSync(sessionsDir, { recursive: true });
+  for (const payload of invalidPayloads) {
+    fs.writeFileSync(sessionPath, payload, 'utf8');
+    assert.equal(readSessionPolicy(config, alias), null, `invalid session payload must be rejected: ${payload}`);
+    const policy = resolvePolicy({ alias }, config);
+    assert.equal(policy.sessionActive, false);
+    assert.equal(policy.trusted, true);
+  }
+} finally {
   fs.rmSync(stateDir, { recursive: true, force: true });
 }
 
-// 2. writeSessionPolicy + readSessionPolicy round-trip
-{
-  const stateDir = makeTempStateDir();
-  const config = { stateDir };
-  writeSessionPolicy(config, 'myapp', { taskHint: 'fix auth bug' });
-  const session = readSessionPolicy(config, 'myapp');
-  assert.ok(session, 'session must be non-null after write');
-  assert.equal(session.workspace, 'myapp', 'workspace must match');
-  assert.equal(session.taskHint, 'fix auth bug', 'taskHint must match');
-  assert.ok(typeof session.createdAt === 'string', 'createdAt must be a string');
-  assert.ok(/^\d{4}-\d{2}-\d{2}T/.test(session.createdAt), 'createdAt must be ISO date string');
-  fs.rmSync(stateDir, { recursive: true, force: true });
-}
-
-// 3. resolvePolicy with session file → sessionActive: true, source: "session_file"
-{
-  const stateDir = makeTempStateDir();
-  const config = { stateDir };
-  const workspace = { alias: 'myapp', path: stateDir };
-  writeSessionPolicy(config, 'myapp', { taskHint: 'implement feature X' });
-  const policy = resolvePolicy(workspace, config);
-  assert.equal(policy.trusted, false);
-  assert.equal(policy.sessionActive, true, 'with session: sessionActive must be true');
-  assert.equal(policy.baselineCaptured, false);
-  assert.equal(policy.taskHint, 'implement feature X', 'taskHint must be populated');
-  assert.equal(policy.source, 'session_file', 'source must be session_file');
-  assert.ok(typeof policy.sessionCreatedAt === 'string', 'sessionCreatedAt must be a string');
-  assert.ok(/^\d{4}-\d{2}-\d{2}T/.test(policy.sessionCreatedAt), 'sessionCreatedAt must be ISO date string');
-  fs.rmSync(stateDir, { recursive: true, force: true });
-}
-
-// Failed baseline capture remains active for diagnostics but is never trusted.
-{
-  const stateDir = makeTempStateDir();
-  const config = { stateDir };
-  writeSessionPolicy(config, 'myapp', { workspaceRoot: path.join(stateDir, 'missing-workspace') });
-  const policy = resolvePolicy({ alias: 'myapp' }, config);
-  assert.equal(policy.sessionActive, true);
-  assert.equal(policy.baselineCaptured, false);
-  assert.equal(policy.trusted, false);
-  assert.ok(policy.baselineCaptureError);
-  fs.rmSync(stateDir, { recursive: true, force: true });
-}
-
-// 4. clearSessionPolicy removes file → resolvePolicy returns sessionActive: false
-{
-  const stateDir = makeTempStateDir();
-  const config = { stateDir };
-  const workspace = { alias: 'myapp', path: stateDir };
-  writeSessionPolicy(config, 'myapp', {});
-  const { cleared } = clearSessionPolicy(config, 'myapp');
-  assert.equal(cleared, true, 'cleared must be true');
-  const policy = resolvePolicy(workspace, config);
-  assert.equal(policy.sessionActive, false, 'after clear: sessionActive must be false');
-  fs.rmSync(stateDir, { recursive: true, force: true });
-}
-
-// 5. clearSessionPolicy when file missing → no error, cleared: false
-{
-  const stateDir = makeTempStateDir();
-  const config = { stateDir };
-  const { cleared } = clearSessionPolicy(config, 'nofile');
-  assert.equal(cleared, false, 'missing file: cleared must be false');
-  fs.rmSync(stateDir, { recursive: true, force: true });
-}
-
-// 6. Corrupt session file → resolvePolicy returns sessionActive: false, no throw
-{
-  const stateDir = makeTempStateDir();
-  const config = { stateDir };
-  const workspace = { alias: 'myapp', path: stateDir };
-  fs.mkdirSync(path.join(stateDir, 'sessions'), { recursive: true });
-  fs.writeFileSync(path.join(stateDir, 'sessions', 'myapp-policy.json'), 'NOT JSON', 'utf8');
-  const policy = resolvePolicy(workspace, config);
-  assert.equal(policy.sessionActive, false, 'corrupt file: sessionActive must be false');
-  assert.equal(policy.trusted, true, 'corrupt file: trusted must still be true');
-  fs.rmSync(stateDir, { recursive: true, force: true });
-}
-
-console.log('policyResolver unit tests passed.');
+console.log('Policy resolver tests passed, including malformed persisted-session cases.');

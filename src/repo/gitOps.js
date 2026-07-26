@@ -213,6 +213,17 @@ function validatePatchPaths(workspace, patch) {
     else if (line.startsWith("rename to ")) value = line.slice("rename to ".length);
     if (!value || value === "/dev/null") continue;
     const safe = resolveSafePath(workspace.path, value);
+    if (isSecretPath(safe.relativePath)) {
+      const error = new Error(
+        `Unified diff edits cannot target sensitive-classified path '${safe.relativePath}' because the proposed final content cannot be inspected safely. Use a structured OpenAI patch or exact relai_edit replacement so final content is validated.`
+      );
+      error.code = "SENSITIVE_PATCH_REQUIRES_CONTENT_VALIDATION";
+      error.source = "rel-ai-mcp-policy";
+      error.path = safe.relativePath;
+      error.operation = "write";
+      error.retryable = false;
+      throw error;
+    }
     if (!seen.has(safe.relativePath)) {
       seen.add(safe.relativePath);
       paths.push(safe.relativePath);
@@ -266,7 +277,7 @@ function buildPrBodyFromDiff(diffText) {
 
 // ---- Git operations ----------------------------------------------------------
 
-async function relaiGitStatus(workspace, config, args = {}) {
+async function workspaceGitStatus(workspace, config, args = {}) {
   const maxBytes = clampNumber(args.maxBytes, 1000, 5 * 1024 * 1024, DEFAULT_MAX_GIT_OUTPUT_BYTES);
   const status = await runProcess("git", ["status", "--short", "--branch"], { cwd: workspace.path, timeout: 30000 }, config);
   const ownership = classifyStatusOwnership(workspace, config, status.stdout || "");
@@ -277,6 +288,8 @@ async function relaiGitStatus(workspace, config, args = {}) {
     aheadBehind: ownership.aheadBehind,
     status: truncateUtf8(status.stdout || "", maxBytes, "git status"),
     statusEntries: ownership.entries,
+    changedFiles: ownership.entries.map((entry) => entry.path),
+    untrackedFiles: ownership.entries.filter((entry) => entry.untracked).map((entry) => entry.path),
     sessionChangedFiles: ownership.sessionChanged,
     baselineChangedFiles: ownership.baselineChanged,
     untrackedSessionFiles: ownership.untrackedSession,
@@ -291,9 +304,15 @@ async function relaiGitCommit(workspace, config, args = {}) {
   const message = String(args.message || "").trim();
   if (!message) throw new Error("relai_git_commit requires a non-empty commit message.");
   const dryRun = Boolean(args.dryRun);
-  const paths = Array.isArray(args.paths) ? args.paths.map((item) => resolveSafePath(workspace.path, item).relativePath) : [];
+  const authorization = normalizeSensitiveAuthorization(workspace, args);
+  const paths = Array.isArray(args.paths)
+    ? args.paths.map((item) => resolveSafePath(workspace.path, item, {
+        operation: "commit",
+        allowSensitive: authorization.authorizedPaths.has(normalizeGitPath(item))
+      }).relativePath)
+    : [];
   const addAll = paths.length === 0 && args.addAll !== false;
-  const statusBefore = await relaiGitStatus(workspace, config, { maxBytes: args.maxBytes });
+  const statusBefore = await workspaceGitStatus(workspace, config, { maxBytes: args.maxBytes });
   if (dryRun) {
     return {
       ok: true,
@@ -302,6 +321,7 @@ async function relaiGitCommit(workspace, config, args = {}) {
       message,
       addAll,
       paths,
+      ...(authorization.metadata ? { sensitiveAuthorization: authorization.metadata } : {}),
       status: statusBefore
     };
   }
@@ -320,28 +340,91 @@ async function relaiGitCommit(workspace, config, args = {}) {
     if (add.exitCode !== 0) return { ok: false, workspace: workspace.alias, message, addAll, add: summarizeCommand(add) };
   }
   // `git add -A` stages anything not gitignored, including files the read/write
-  // tools refuse to touch (.env, keys, credentials). Refuse to commit those unless
-  // the caller explicitly opts in after review.
-  if (args.allowSecretPaths !== true) {
-    const staged = await runProcess("git", ["diff", "--cached", "--name-only"], { cwd: workspace.path, timeout: 60000 }, config);
-    const secretStaged = String(staged.stdout || "").split(/\r?\n/).map((line) => line.trim()).filter((file) => file && isSecretPath(file));
-    if (secretStaged.length > 0) {
-      const indexRestore = await restoreIndex();
-      return {
-        ok: false,
-        workspace: workspace.alias,
-        message,
-        addAll,
-        paths,
-        secretStagedFiles: secretStaged,
-        indexRestored: indexRestore?.exitCode === 0,
-        error: `Refusing to commit staged files that look like secrets: ${secretStaged.join(", ")}. The pre-operation index was restored. Pass allowSecretPaths: true only after reviewing those files.`
-      };
-    }
+  // tools refuse to touch (.env, keys, credentials). Every staged sensitive path
+  // must be named in a commit-scoped authorization object.
+  const staged = await runProcess("git", ["diff", "--cached", "--name-only"], { cwd: workspace.path, timeout: 60000 }, config);
+  const secretStaged = String(staged.stdout || "").split(/\r?\n/).map((line) => normalizeGitPath(line)).filter((file) => file && isSecretPath(file));
+  const unauthorizedSecretPaths = secretStaged.filter((file) => !authorization.authorizedPaths.has(file));
+  if (unauthorizedSecretPaths.length > 0) {
+    const indexRestore = await restoreIndex();
+    return {
+      ok: false,
+      workspace: workspace.alias,
+      message,
+      addAll,
+      paths,
+      secretStagedFiles: secretStaged,
+      unauthorizedSecretPaths,
+      ...(authorization.metadata ? { sensitiveAuthorization: authorization.metadata } : {}),
+      indexRestored: indexRestore?.exitCode === 0,
+      error: `Refusing to commit sensitive paths without matching commit authorization: ${unauthorizedSecretPaths.join(", ")}. The pre-operation index was restored.`
+    };
   }
   const commit = await runProcess("git", ["commit", "-m", message], { cwd: workspace.path, timeout: clampNumber(args.timeoutMs, 1000, 86400000, 120000) }, config);
-  const statusAfter = await relaiGitStatus(workspace, config, { maxBytes: args.maxBytes });
-  return { ok: commit.exitCode === 0, workspace: workspace.alias, message, addAll, paths, commit: summarizeCommand(commit), statusBefore, statusAfter };
+  const statusAfter = await workspaceGitStatus(workspace, config, { maxBytes: args.maxBytes });
+  return {
+    ok: commit.exitCode === 0,
+    workspace: workspace.alias,
+    message,
+    addAll,
+    paths,
+    ...(authorization.metadata ? { sensitiveAuthorization: authorization.metadata } : {}),
+    commit: summarizeCommand(commit),
+    statusBefore,
+    statusAfter
+  };
+}
+
+function normalizeSensitiveAuthorization(workspace, args = {}) {
+  const raw = args.sensitiveAuthorization;
+  const explicitPaths = Array.isArray(args.paths) ? args.paths.map(normalizeGitPath).filter(Boolean) : [];
+  if (raw == null) {
+    if (args.allowSecretPaths === true && explicitPaths.length > 0) {
+      const sensitivePaths = explicitPaths.filter((item) => isSecretPath(item));
+      return {
+        authorizedPaths: new Set(sensitivePaths),
+        metadata: sensitivePaths.length > 0 ? {
+          operation: "commit",
+          paths: sensitivePaths,
+          reasonProvided: false,
+          source: "legacy-explicit-path-compatibility"
+        } : null
+      };
+    }
+    return { authorizedPaths: new Set(), metadata: null };
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error("sensitiveAuthorization must be an object with operation, paths, and reason.");
+  }
+  if (String(raw.operation || "").trim() !== "commit") {
+    throw new Error("sensitiveAuthorization.operation must be 'commit'.");
+  }
+  const reason = String(raw.reason || "").trim();
+  if (!reason || reason.length > 500) {
+    throw new Error("sensitiveAuthorization.reason must contain 1 to 500 characters.");
+  }
+  if (!Array.isArray(raw.paths) || raw.paths.length === 0 || raw.paths.length > 200) {
+    throw new Error("sensitiveAuthorization.paths must contain 1 to 200 paths.");
+  }
+  const paths = [...new Set(raw.paths.map((item) => normalizeGitPath(item)).filter(Boolean))];
+  for (const item of paths) {
+    resolveSafePath(workspace.path, item, { operation: "commit", allowSensitive: true });
+    if (!isSecretPath(item)) throw new Error(`sensitiveAuthorization path is not classified as sensitive: ${item}`);
+  }
+  return {
+    authorizedPaths: new Set(paths),
+    metadata: {
+      operation: "commit",
+      paths,
+      reason,
+      reasonProvided: true,
+      source: "explicit"
+    }
+  };
+}
+
+function normalizeGitPath(value) {
+  return String(value || "").replaceAll("\\", "/").trim().replace(/^\.\//, "");
 }
 
 async function relaiGitPush(workspace, config, args = {}) {
@@ -356,7 +439,7 @@ async function relaiGitPush(workspace, config, args = {}) {
   return { ok: push.exitCode === 0, workspace: workspace.alias, remote, branch, dryRun, setUpstream, push: summarizeCommand(push) };
 }
 
-async function relaiGitCreatePr(workspace, config, args = {}) {
+async function relaiGitDraftPr(workspace, config, args = {}) {
   await ensureGitRepo(workspace, config);
   const head = String(args.head || await currentGitBranch(workspace, config)).trim();
   const base = String(args.base || workspace.defaultBaseBranch || "main").trim();
@@ -376,16 +459,18 @@ async function relaiGitCreatePr(workspace, config, args = {}) {
     changedFiles,
     changedFileCount: changedFiles.length,
     emptyDiff,
+    draftOnly: true,
+    remoteChanged: false,
     ...(emptyDiff ? { warning: `No diff between ${base} and ${head}; refusing to draft an empty pull request.` } : {}),
     diff: summarizeCommand(diff)
   };
 }
 
 module.exports = {
-  relaiGitStatus,
+  workspaceGitStatus,
   relaiGitCommit,
   relaiGitPush,
-  relaiGitCreatePr,
+  relaiGitDraftPr,
   classifyStatusOwnership,
   getPatchConfig,
   patchNumber,

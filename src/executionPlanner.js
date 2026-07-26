@@ -4,8 +4,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const {
-  relaiReplace,
-  relaiWrite,
+  workspaceReplace,
+  workspaceWrite,
   relaiApplyPatch,
   relaiVerify,
   relaiDiff,
@@ -18,22 +18,23 @@ const {
 } = require('./localRepoBridge');
 const { makeOperationId, appendOperation } = require('./journal');
 const { resolveSafePath } = require('./safety');
+const { runEnvOperation } = require('./envOperations');
 
 const STAGED_CHUNK_BYTES = 12000;
 
-async function runStagedWrite(workspace, config, path, content, dryRun, suppressJournal = false) {
+async function runStagedWrite(workspace, config, path, content, dryRun, suppressJournal = false, expectedSha256 = '') {
   const chunks = [];
   let offset = 0;
   while (offset < content.length) {
     chunks.push(content.slice(offset, offset + STAGED_CHUNK_BYTES));
     offset += STAGED_CHUNK_BYTES;
   }
-  const startResult = relaiWrite(workspace, config, { stage: 'start', path, content: chunks[0], dryRun, suppressJournal });
+  const startResult = workspaceWrite(workspace, config, { stage: 'start', path, content: chunks[0], dryRun, suppressJournal, expectedSha256 });
   const { writeId } = startResult;
   for (let i = 1; i < chunks.length; i++) {
-    relaiWrite(workspace, config, { stage: 'append', writeId, content: chunks[i], suppressJournal });
+    workspaceWrite(workspace, config, { stage: 'append', writeId, content: chunks[i], suppressJournal });
   }
-  return relaiWrite(workspace, config, { stage: 'commit', writeId, dryRun, suppressJournal });
+  return workspaceWrite(workspace, config, { stage: 'commit', writeId, dryRun, suppressJournal });
 }
 
 // Apply one logical edit: exact replacement when oldText is given, otherwise a
@@ -41,20 +42,34 @@ async function runStagedWrite(workspace, config, path, content, dryRun, suppress
 async function applyOneEdit(workspace, config, edit, dryRun, options = {}) {
   const path = edit.path;
   const hasOldText = typeof edit.oldText === 'string' && edit.oldText.length > 0;
+  const hasReplacements = Array.isArray(edit.replacements) && edit.replacements.length > 0;
+  const hasReplacement = hasOldText || hasReplacements;
   const hasContent = typeof edit.content === 'string';
 
-  if (hasOldText && hasContent) {
-    throw new TypeError(`edit for ${path}: provide oldText+newText OR content, not both`);
+  if (hasOldText && hasReplacements) {
+    throw new TypeError(`edit for ${path}: provide oldText+newText OR replacements:[...], not both`);
   }
-  if (!hasOldText && !hasContent) {
-    throw new TypeError(`edit for ${path}: must provide oldText+newText (exact replace) or content (full-file write)`);
+  if (hasReplacement && hasContent) {
+    throw new TypeError(`edit for ${path}: provide exact replacement input OR content, not both`);
+  }
+  if (!hasReplacement && !hasContent) {
+    throw new TypeError(`edit for ${path}: must provide oldText+newText, replacements:[...], or content`);
   }
 
-  if (hasOldText) {
-    if (typeof edit.newText !== 'string') {
+  if (hasReplacement) {
+    if (hasOldText && typeof edit.newText !== 'string') {
       throw new TypeError(`edit for ${path}: newText is required (and must be a string) alongside oldText`);
     }
-    const result = relaiReplace(workspace, config, { path, oldText: edit.oldText, newText: edit.newText, dryRun, suppressJournal: options.suppressJournal === true });
+    const result = workspaceReplace(workspace, config, {
+      path,
+      oldText: edit.oldText,
+      newText: edit.newText,
+      occurrence: edit.occurrence,
+      replacements: edit.replacements,
+      expectedSha256: edit.expectedSha256,
+      dryRun,
+      suppressJournal: options.suppressJournal === true
+    });
     return { ...result, path, plannerPath: 'replace' };
   }
 
@@ -62,13 +77,13 @@ async function applyOneEdit(workspace, config, edit, dryRun, options = {}) {
   const lineCount = edit.content.split(/\r?\n/).length;
   if (contentBytes > STAGED_WRITE_BYTE_THRESHOLD || lineCount > STAGED_WRITE_LINE_THRESHOLD) {
     if (dryRun) {
-      const result = relaiWrite(workspace, config, { path, content: edit.content, dryRun: true, suppressJournal: true });
+      const result = workspaceWrite(workspace, config, { path, content: edit.content, expectedSha256: edit.expectedSha256, dryRun: true, suppressJournal: true });
       return { ...result, path, plannerPath: 'write:staged' };
     }
-    const result = await runStagedWrite(workspace, config, path, edit.content, false, options.suppressJournal === true);
+    const result = await runStagedWrite(workspace, config, path, edit.content, false, options.suppressJournal === true, edit.expectedSha256);
     return { ...result, path, plannerPath: 'write:staged' };
   }
-  const result = relaiWrite(workspace, config, { path, content: edit.content, dryRun, suppressJournal: options.suppressJournal === true });
+  const result = workspaceWrite(workspace, config, { path, content: edit.content, expectedSha256: edit.expectedSha256, dryRun, suppressJournal: options.suppressJournal === true });
   return { ...result, path, plannerPath: 'write' };
 }
 
@@ -125,14 +140,23 @@ function attachPost(result, post) {
   return result;
 }
 
-// ---- Staged updateText (T4) -------------------------------------------------
-// Lets a large diff be streamed across several calls instead of one oversized,
-// classifier-flagged message. Reuses the staged-write payload store with a patch marker.
+// ---- Staged edit payloads ----------------------------------------------------
+// Stream either a large patch (updateText) or a full-file replacement (content)
+// through the same bounded payload store without exposing separate write tools.
 
-async function handleStagedPatch(workspace, config, args) {
+async function handleStagedEdit(workspace, config, args) {
   const stage = String(args.stage || '').trim().toLowerCase();
+  const hasPatchChunk = typeof args.updateText === 'string';
+  const hasContentChunk = typeof args.content === 'string';
+
   if (stage === 'start') {
-    if (typeof args.updateText !== 'string') throw new Error("relai_edit stage='start' requires an updateText chunk string.");
+    if (hasPatchChunk === hasContentChunk) {
+      throw new Error("relai_edit stage='start' requires exactly one of updateText or content.");
+    }
+    if (hasContentChunk) {
+      const result = workspaceWrite(workspace, config, args);
+      return { ...result, plannerPath: 'write:staged', plannerReason: 'content chunk provided — starting a staged full-file write' };
+    }
     const writeId = makeOperationId();
     writeStagedPayload(config, workspace, writeId, {
       id: writeId, kind: 'patch', workspace: workspace.alias, root: workspace.path,
@@ -141,31 +165,44 @@ async function handleStagedPatch(workspace, config, args) {
     return { ok: true, workspace: workspace.alias, operation: 'stagedPatch:start', writeId, chunks: 1,
       next: "Call relai_edit { stage:'append', writeId, updateText } for more chunks, then { stage:'commit', writeId }." };
   }
+
   if (stage === 'append') {
-    if (typeof args.updateText !== 'string') throw new Error("relai_edit stage='append' requires writeId and an updateText chunk string.");
-    const writeId = resolveStagedWriteId(config, workspace, args.writeId);
+    if (hasPatchChunk === hasContentChunk) {
+      throw new Error("relai_edit stage='append' requires exactly one of updateText or content.");
+    }
+    const writeId = resolveStagedWriteId(config, workspace, args.writeId, args.path);
     const payload = readStagedPayload(config, workspace, writeId);
-    if (payload.kind !== 'patch') throw new Error('Staged payload is a file write, not a patch. Use relai_write to commit it.');
+    if (hasContentChunk) {
+      if (payload.kind === 'patch') throw new Error('Staged payload is a patch, not a full-file write. Append updateText instead.');
+      const result = workspaceWrite(workspace, config, { ...args, writeId });
+      return { ...result, plannerPath: 'write:staged', plannerReason: 'content chunk provided — appending to a staged full-file write' };
+    }
+    if (payload.kind !== 'patch') throw new Error('Staged payload is a full-file write, not a patch. Append content instead.');
     payload.chunks.push(args.updateText);
     payload.updatedAt = new Date().toISOString();
     writeStagedPayload(config, workspace, writeId, payload);
     return { ok: true, workspace: workspace.alias, operation: 'stagedPatch:append', writeId, chunks: payload.chunks.length };
   }
-  if (stage === 'commit') {
-    const writeId = resolveStagedWriteId(config, workspace, args.writeId);
+
+  if (stage === 'commit' || stage === 'abort') {
+    const writeId = resolveStagedWriteId(config, workspace, args.writeId, args.path);
     const payload = readStagedPayload(config, workspace, writeId);
-    if (payload.kind !== 'patch') throw new Error('Staged payload is a file write, not a patch. Use relai_write to commit it.');
+    if (payload.kind !== 'patch') {
+      const result = workspaceWrite(workspace, config, { ...args, writeId });
+      const out = { ...result, plannerPath: 'write:staged', plannerReason: `staged full-file write ${stage}` };
+      return stage === 'commit' ? attachPost(out, await runPostActions(workspace, config, args)) : out;
+    }
+    if (stage === 'abort') {
+      const existed = clearStagedPayload(config, workspace, writeId);
+      return { ok: true, workspace: workspace.alias, operation: 'stagedPatch:abort', writeId, cleared: existed };
+    }
     const patch = payload.chunks.join('');
-    const result = await relaiApplyPatch(workspace, config, { ...args, patch });
+    const result = await relaiApplyPatch(workspace, config, { ...args, patch, returnDiff: false });
     if (!args.dryRun) clearStagedPayload(config, workspace, writeId);
     const out = { ...result, operation: 'stagedPatch:commit', writeId, plannerPath: 'apply-update:staged' };
     return attachPost(out, await runPostActions(workspace, config, args));
   }
-  if (stage === 'abort') {
-    const writeId = resolveStagedWriteId(config, workspace, args.writeId);
-    const existed = clearStagedPayload(config, workspace, writeId);
-    return { ok: true, workspace: workspace.alias, operation: 'stagedPatch:abort', writeId, cleared: existed };
-  }
+
   throw new Error("relai_edit stage must be one of: start, append, commit, abort.");
 }
 
@@ -270,34 +307,51 @@ function preflightPlannerReason(preflight) {
   return `preflight failed; applied 0 of ${preflight.results.length} edit(s)`;
 }
 
-function singlePlannerReason(hasOldText, plannerPath) {
-  if (hasOldText) return 'oldText provided without content — routing to exact text replacement';
+function singlePlannerReason(hasReplacement, plannerPath) {
+  if (hasReplacement) return 'exact replacement input provided without content — routing to deterministic text replacement';
   if (plannerPath === 'write:staged') return 'content provided — routing to staged chunked write';
   return 'content provided — routing to direct full-file write';
 }
 
 async function _handleUpdateTextEdit(workspace, config, args) {
-  const result = await relaiApplyPatch(workspace, config, { ...args, patch: args.updateText });
+  const result = await relaiApplyPatch(workspace, config, { ...args, patch: args.updateText, returnDiff: false });
   const out = { ...result, plannerPath: 'apply-update', plannerReason: 'updateText provided — routing to patch-shaped apply-update' };
   return attachPost(out, await runPostActions(workspace, config, args));
 }
 
 async function _handleSingleEdit(workspace, config, args) {
   const hasOldText = typeof args.oldText === 'string' && args.oldText.length > 0;
+  const hasReplacements = Array.isArray(args.replacements) && args.replacements.length > 0;
+  const hasReplacement = hasOldText || hasReplacements;
   const hasContent = typeof args.content === 'string';
-  if (hasOldText && hasContent) {
-    throw new Error('relai_edit: ambiguous — provide oldText+newText for exact replacement OR content for full-file write, not both');
+  if (hasOldText && hasReplacements) {
+    throw new Error('relai_edit: ambiguous — provide oldText+newText OR replacements:[...], not both');
   }
-  if (!hasOldText && !hasContent) {
-    throw new Error('relai_edit: must provide one of: (1) oldText+newText for exact replacement, (2) content for full-file write, (3) updateText for patch-shaped update, (4) edits:[...] for a batch');
+  if (hasReplacement && hasContent) {
+    throw new Error('relai_edit: ambiguous — provide exact replacement input OR content for full-file write, not both');
   }
-  const single = await applyOneEdit(workspace, config, { path: args.path, oldText: args.oldText, newText: args.newText, content: args.content }, args.dryRun);
-  single.plannerReason = singlePlannerReason(hasOldText, single.plannerPath);
+  if (!hasReplacement && !hasContent) {
+    throw new Error('relai_edit: must provide one of: (1) oldText+newText or replacements:[...] for exact replacement, (2) content for full-file write, (3) updateText for patch-shaped update, (4) edits:[...] for a batch');
+  }
+  const single = await applyOneEdit(workspace, config, {
+    path: args.path,
+    oldText: args.oldText,
+    newText: args.newText,
+    occurrence: args.occurrence,
+    replacements: args.replacements,
+    content: args.content,
+    expectedSha256: args.expectedSha256
+  }, args.dryRun);
+  single.plannerReason = singlePlannerReason(hasReplacement, single.plannerPath);
   return attachPost(single, await runPostActions(workspace, config, args));
 }
 
 async function planEdit(workspace, config, args) {
-  if (typeof args.stage === 'string' && args.stage.trim()) return handleStagedPatch(workspace, config, args);
+  if (typeof args.envAction === 'string' && args.envAction.trim()) {
+    const result = runEnvOperation(workspace, config, args);
+    return attachPost(result, await runPostActions(workspace, config, { ...args, returnDiff: false }));
+  }
+  if (typeof args.stage === 'string' && args.stage.trim()) return handleStagedEdit(workspace, config, args);
   if (Array.isArray(args.edits) && args.edits.length > 0) return _handleBatchEdits(workspace, config, args);
   if (typeof args.updateText === 'string' && args.updateText.length > 0) return _handleUpdateTextEdit(workspace, config, args);
   return _handleSingleEdit(workspace, config, args);

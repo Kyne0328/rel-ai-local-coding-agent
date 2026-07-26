@@ -2,18 +2,17 @@
 
 const MAX_CLIPBOARD_TEXT_BYTES = 64 * 1024;
 
-function createWindowGuards(BrowserWindow, getSmokeWindowRole = () => '') {
-  const isSenderWindow = (event, getWindow, smokeRole = '') => {
+function createWindowGuards(BrowserWindow) {
+  const isSenderWindow = (event, getWindow) => {
     const senderWindow = BrowserWindow.fromWebContents(event?.sender);
-    if (senderWindow === getWindow()) return true;
-    return Boolean(smokeRole && getSmokeWindowRole(senderWindow) === smokeRole);
+    return senderWindow === getWindow();
   };
-  const windowOnly = (event, getWindow, label, action, smokeRole = '') => {
-    if (!isSenderWindow(event, getWindow, smokeRole)) throw new Error(`${label} is not available to this renderer.`);
+  const windowOnly = (event, getWindow, label, action) => {
+    if (!isSenderWindow(event, getWindow)) throw new Error(`${label} is not available to this renderer.`);
     return action();
   };
-  const allowedWindows = (event, getters, label, action, smokeRoles = []) => {
-    if (!getters.some((getWindow, index) => isSenderWindow(event, getWindow, smokeRoles[index]))) {
+  const allowedWindows = (event, getters, label, action) => {
+    if (!getters.some(getWindow => isSenderWindow(event, getWindow))) {
       throw new Error(`${label} is not available to this renderer.`);
     }
     return action();

@@ -31,7 +31,7 @@ function isoMinusHours(hours) {
 // 2. Non-caution entries ignored
 {
   writeEntries([
-    { ts: isoMinusHours(1), tool: 'relai_write', workspace: 'a', ok: true },
+    { ts: isoMinusHours(1), tool: 'relai_edit', workspace: 'a', ok: true },
     { ts: isoMinusHours(2), tool: 'relai_read', workspace: 'a', ok: true }
   ]);
   const r = cautionSummary(config, { windowHours: 24 });

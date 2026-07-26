@@ -15,7 +15,7 @@ function clearTidyFiles(workspace, config, paths) {
   const operationId = makeOperationId();
   const cleared = [];
   for (const rawPath of paths) {
-    const safe = resolveSafePath(workspace.path, rawPath);
+    const safe = resolveSafePath(workspace.path, rawPath, { operation: "delete" });
     if (!fs.existsSync(safe.absolutePath)) throw new Error(`Tidy target does not exist: ${safe.relativePath}`);
     if (!fs.statSync(safe.absolutePath).isFile()) throw new Error(`Tidy refuses non-file path: ${safe.relativePath}`);
     fs.rmSync(safe.absolutePath, { force: true });

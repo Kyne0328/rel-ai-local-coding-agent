@@ -62,12 +62,48 @@ try {
     taskSummary: 'Completed after reconnect.'
   });
 
+  recordTaskHistoryEvent(config, {
+    taskId: 'atomic-completion',
+    ts: new Date(base + 302000).toISOString(),
+    tool: 'relai_run_checks',
+    operation: 'Running final validation',
+    workspace: 'repo',
+    ok: true,
+    validationStatus: 'passed',
+    completionKnown: true,
+    endReason: 'explicit_completion',
+    completionSource: 'relai_run_checks',
+    taskSummary: 'Validated and completed atomically.',
+    changedFiles: ['src/atomic.js']
+  });
+
+  recordTaskHistoryEvent(config, {
+    taskId: 'draft-fragment',
+    ts: new Date(base + 303000).toISOString(),
+    tool: 'relai_git_draft_pr',
+    operation: 'Preparing local pull request text',
+    workspace: 'repo',
+    ok: true
+  });
+
   const merged = readTaskHistory(config, { state: 'idle' }, { limit: 500 })
     .find(session => session.id === 'validation-fragment');
   assert.ok(merged, 'completion must merge into the validation session');
   assert.equal(merged.calls, 2);
   assert.equal(merged.status, 'completed');
   assert.equal(merged.summary, 'Completed after reconnect.');
+  const atomic = readTaskHistory(config, { state: 'idle' }, { limit: 500 })
+    .find(session => session.id === 'atomic-completion');
+  assert.ok(atomic, 'atomic validation completion must persist as a session');
+  assert.equal(atomic.status, 'completed');
+  assert.equal(atomic.completionKnown, true);
+  assert.equal(atomic.validation, 'passed');
+  assert.equal(atomic.summary, 'Validated and completed atomically.');
+  assert.deepEqual(atomic.changedFiles, ['src/atomic.js']);
+  assert.equal(atomic.events[0].completionSource, 'relai_run_checks');
+  const drafted = readTaskHistory(config, { state: 'idle' }, { limit: 500 })
+    .find(session => session.id === 'draft-fragment');
+  assert.equal(drafted.prDrafted, true, 'persistent history must recognize the new PR draft tool');
 
   assert.equal(fs.existsSync(getTaskHistoryDir(config)), true);
   clearTaskHistory(config);

@@ -15,7 +15,7 @@ function classifyCaution(toolName, args) {
       return { level: 'caution', reason: 'workspace command contains a destructive operation' };
     }
   }
-  if (toolName === 'relai_write' || toolName === 'relai_replace' || toolName === 'relai_edit') {
+  if (toolName === 'relai_edit') {
     if (typeof args?.path === 'string' && isWorkspaceConfigPath(args.path)) {
       return { level: 'caution', reason: 'workspace config path modified' };
     }

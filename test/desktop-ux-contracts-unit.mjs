@@ -373,11 +373,10 @@ assert.deepEqual(baseline.desktopSecurityPolicy, {
   clipboardLimitKiB: 64
 });
 assert.deepEqual(baseline.releaseValidationPolicy, {
-  exactInstallerSmoke: true,
-  machineReadableEvidence: 'release-readiness.json',
-  screenshotArchive: 'release-usability-evidence.zip',
-  automatedScenarioCount: 11,
-  manualScenarioCount: 4,
+  automatedPackageVerification: 'read_only',
+  exactInstallerSmoke: false,
+  installerLifecycle: 'manual_disposable_machine',
+  manualScenarioCount: 5,
   manualStatus: 'required'
 });
 assert.deepEqual(baseline.lifecyclePolicy, {

@@ -36,8 +36,15 @@ try {
   const payload = JSON.parse(status.result.content[0].text);
   assert.equal(payload.tools.length, activeToolCount);
   assert.equal(Object.hasOwn(payload.toolGroups || {}, 'internal'), false);
+  requestId += 1;
 
-  console.log('Removed MCP tools fail closed and status exposes only the active surface.');
+  client.call(requestId, 'relai_run_checks', { workspace: 'repo', check: 'node -e "process.exit(1)"' });
+  const failedCheck = await client.waitFor(requestId);
+  assert.equal(failedCheck.result.isError, true, 'returned ok:false tool results must set MCP isError');
+  assert.equal(failedCheck.result.structuredContent.ok, false, 'structured failure payload must be preserved');
+  assert.equal(failedCheck.result.structuredContent.results[0].exitCode, 1, 'structured diagnostics must remain available');
+
+  console.log('Removed tools fail closed, active schemas remain visible, and returned failures use MCP isError.');
 } finally {
   await client.close();
   fs.rmSync(temp, { recursive: true, force: true });

@@ -25,7 +25,8 @@ git(['init'], { cwd: workspacePath, stdio: 'ignore' });
 git(['config', 'user.email', 'relai@example.test'], { cwd: workspacePath });
 git(['config', 'user.name', 'RelAI Patch Smoke'], { cwd: workspacePath });
 fs.writeFileSync(path.join(workspacePath, 'hello.txt'), 'Hello, world!\n');
-git(['add', 'hello.txt'], { cwd: workspacePath });
+fs.writeFileSync(path.join(workspacePath, '.npmrc'), 'registry=https://registry.npmjs.org/\nengine-strict=true\n');
+git(['add', 'hello.txt', '.npmrc'], { cwd: workspacePath });
 git(['commit', '-m', 'init'], { cwd: workspacePath, stdio: 'ignore' });
 
 const config = {
@@ -42,6 +43,52 @@ try {
   assert.equal(applied.ok, true);
   assert.match(fs.readFileSync(path.join(workspacePath, 'hello.txt'), 'utf8'), /updated world/);
   git(['checkout', '--', 'hello.txt'], { cwd: workspacePath });
+
+  const credentialUnifiedDiff = `--- a/.npmrc
++++ b/.npmrc
+@@ -1,2 +1 @@
+-registry=https://registry.npmjs.org/
+-engine-strict=true
++//registry.npmjs.org/:_authToken=top-secret
+`;
+  await assert.rejects(
+    () => relaiApplyPatch(workspace, config, { patch: credentialUnifiedDiff, returnDiff: false }),
+    (error) => error?.code === 'SENSITIVE_PATCH_REQUIRES_CONTENT_VALIDATION' && /proposed final content/.test(error.message)
+  );
+  assert.equal(
+    fs.readFileSync(path.join(workspacePath, '.npmrc'), 'utf8'),
+    'registry=https://registry.npmjs.org/\nengine-strict=true\n',
+    'a refused unified diff must not alter the sensitive-classified file'
+  );
+
+  const credentialStructuredPatch = `*** Begin Patch
+*** Update File: .npmrc
+@@
+-registry=https://registry.npmjs.org/
+-engine-strict=true
++//registry.npmjs.org/:_authToken=top-secret
+*** End Patch
+`;
+  const blockedStructured = await relaiApplyPatch(workspace, config, { patch: credentialStructuredPatch, returnDiff: false });
+  assert.equal(blockedStructured.ok, false);
+  assert.match(blockedStructured.error, /blocked sensitive path/);
+  assert.equal(
+    fs.readFileSync(path.join(workspacePath, '.npmrc'), 'utf8'),
+    'registry=https://registry.npmjs.org/\nengine-strict=true\n',
+    'a rejected structured patch must roll back the original public content'
+  );
+
+  const safeStructuredPatch = `*** Begin Patch
+*** Update File: .npmrc
+@@
+ registry=https://registry.npmjs.org/
+-engine-strict=true
++fund=false
+*** End Patch
+`;
+  const safeStructured = await relaiApplyPatch(workspace, config, { patch: safeStructuredPatch, returnDiff: false });
+  assert.equal(safeStructured.ok, true);
+  assert.equal(fs.readFileSync(path.join(workspacePath, '.npmrc'), 'utf8'), 'registry=https://registry.npmjs.org/\nfund=false\n');
 
   await assert.rejects(
     () => relaiApplyPatch(workspace, config, { patch: '   ' }),

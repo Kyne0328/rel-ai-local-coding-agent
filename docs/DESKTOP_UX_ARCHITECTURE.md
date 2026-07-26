@@ -322,14 +322,12 @@ Section-level captures are preserved beside them. `test/fixtures/desktop-ux-base
 
 ## Usability validation and delivery hardening contract
 
-- `test/fixtures/desktop-usability-scenarios.json` is the authoritative acceptance manifest. It distinguishes eleven repeatable installed-app scenarios from four external checks that require real accounts or published infrastructure.
-- Windows installed-app smoke accepts either a newly built candidate or an exact prebuilt installer through `REL_AI_SMOKE_INSTALLER`. The release workflow must test the same NSIS file later added to the release asset list.
-- Packaged smoke covers resources, local health, dashboard HTTP, the public tool surface, setup, failure recovery, dashboard overview, event-driven update context, workspace route state, legacy route normalization, and Sessions-to-Activity detail navigation.
-- Setup, recovery, dashboard overview, and Activity detail produce PNG evidence. Screenshot paths are constrained, every screenshot has a SHA-256 value, and the validator requires each manifest-declared image.
-- `release-readiness.json` records the installer filename and SHA-256, automated scenario results, screenshot hashes and dimensions, limitations, and external checks with `not_recorded` status.
-- Automated success is named `automated_passed_manual_required`. The validator rejects any automated record that claims real ngrok publication, ChatGPT OAuth, live token rotation, or update from a previous release passed.
-- CI retains the installed-app evidence as a workflow artifact. Releases publish `release-readiness.json` and `release-usability-evidence.zip`, include both in `SHA256SUMS.txt`, and fail closed when either artifact is absent.
-- The evidence proves only the recorded local installed-app behavior of the hashed installer. External endpoint reachability, current ChatGPT service behavior, live OAuth revocation, and production update delivery remain separate release approvals.
+- Automated package verification is read-only: it builds the unpacked Windows application and verifies required files without starting the executable or invoking installer lifecycle actions.
+- Production Electron code must not expose `--installed-smoke`, `--window-smoke`, smoke-only IPC identities, or screenshot-evidence entry points.
+- Ordinary package scripts, CI, and release workflows must not install, repair, upgrade, launch, or uninstall Rel.AI MCP.
+- The release workflow verifies updater metadata, blockmaps, executable presence, package layout, and checksums before publishing.
+- Installer, uninstall, first-run rendering, external endpoint reachability, current ChatGPT OAuth behavior, live OAuth revocation, and production update delivery remain manual approvals on a disposable Windows machine.
+- Any future automated installer harness requires an explicit isolation opt-in, a test-specific application identity, ownership markers, constrained cleanup, and refusal when a production installation or active Rel.AI controller is present.
 
 ## Phase 13 installed-app lifecycle contract
 

@@ -33,7 +33,8 @@ const forbidden = [
   'getWorkflowConfig',
   'isPreparedWorkflow',
   'maxBundleBytes',
-  'clearMissingDefault'
+  'clearMissingDefault',
+  'removedLegacyWorkflows'
 ];
 
 function collectFiles(directory) {
@@ -61,7 +62,21 @@ for (const file of files) {
 
 assert.deepEqual(findings, [], `Obsolete surface residue found:\n${findings.join('\n')}`);
 assert.equal(fs.existsSync(path.join(root, 'src', 'bridge', 'archive.js')), false);
+assert.equal(fs.existsSync(path.join(root, 'src', 'bridge', 'editCompatibility.js')), false);
+assert.equal(fs.existsSync(path.join(root, 'src', 'doctor.js')), false);
 assert.equal(fs.existsSync(path.join(root, 'src', 'repo', 'archiveUtils.js')), false);
 assert.equal(fs.existsSync(path.join(root, 'src', 'repo', 'audit.js')), false);
+assert.equal(fs.existsSync(path.join(root, 'src', 'ui', 'components', 'badge.js')), false);
+
+const removedCompatibilityNames = [
+  'relai_write', 'relai_replace', 'relai_browser',
+  'relai_restore_changes', 'relai_git_status', 'relai_git_create_pr'
+];
+for (const relativePath of ['src/tools/registry.js', 'src/tools/handlers.js', 'src/localRepoBridge.js']) {
+  const text = fs.readFileSync(path.join(root, relativePath), 'utf8');
+  for (const name of removedCompatibilityNames) {
+    assert.equal(text.includes(name), false, `${relativePath} still routes removed tool ${name}`);
+  }
+}
 
 console.log('Obsolete surface residue scan passed.');

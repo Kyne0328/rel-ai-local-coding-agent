@@ -62,7 +62,8 @@ function summarizeTask(taskId, events, activeTask) {
     validation,
     committed: ordered.some(entry => entry.tool === 'relai_git_commit' && entry.ok !== false),
     pushed: ordered.some(entry => entry.tool === 'relai_git_push' && entry.ok !== false),
-    prDrafted: ordered.some(entry => entry.tool === 'relai_git_create_pr' && entry.ok !== false),
+    // Preserve display of pull-request drafts recorded before the v10 tool removal.
+    prDrafted: ordered.some(entry => ['relai_git_draft_pr', 'relai_git_create_pr'].includes(entry.tool) && entry.ok !== false),
     lastTool: activeTask?.lastTool || activeTask?.tool || last.tool || '',
     operation: activeTask?.operation || activeTask?.lastOperation || completionEvent?.operation || last.operation || operationForTool(last.tool),
     lastOutcome: activeTask?.lastOutcome || (last.ok === false ? 'failed' : 'succeeded'),
@@ -187,12 +188,14 @@ function taskGroupRecord(id, events) {
     firstAt,
     lastAt,
     completed: ordered.some(entry => entry.ok !== false && (entry.completionKnown === true || entry.tool === 'relai_complete_task')),
+    taskIdentityVersion: Math.max(...ordered.map(entry => Number(entry.taskIdentityVersion || 0))),
     scopeIds: new Set(ordered.map(entry => String(entry.scopeId || '')).filter(Boolean)),
     pids: new Set(ordered.map(entry => String(entry.pid || '')).filter(Boolean))
   };
 }
 
 function canStitchTaskGroups(previous, next, gapMs) {
+  if (previous.taskIdentityVersion >= 2 || next.taskIdentityVersion >= 2) return false;
   if (previous.completed || next.firstAt < previous.lastAt || next.firstAt - previous.lastAt > gapMs) return false;
   const previousStrong = strongConversationScopes(previous.scopeIds);
   const nextStrong = strongConversationScopes(next.scopeIds);
@@ -220,7 +223,7 @@ function setsIntersect(left, right) {
 function completionTaskAliases(entries) {
   const aliases = new Map();
   for (const entry of entries) {
-    if (entry?.tool !== 'relai_complete_task' || entry.ok === false) continue;
+    if (entry?.tool !== 'relai_complete_task' || entry.ok === false || Number(entry.taskIdentityVersion || 0) >= 2) continue;
     const canonical = String(entry.validationTaskId || entry.taskId || '').trim();
     if (!canonical) continue;
     const related = Array.isArray(entry.relatedTaskIds) ? entry.relatedTaskIds : [];

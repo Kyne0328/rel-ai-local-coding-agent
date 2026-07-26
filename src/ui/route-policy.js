@@ -82,7 +82,7 @@ function sanitizeParams(path, input) {
 }
 
 function sanitizeValue(key, value) {
-  const text = String(value || '').replace(/[\u0000-\u001f\u007f]/g, '').trim();
+  const text = stripControlCharacters(value).trim();
   if (!text) return '';
   if (key === 'workspace') return WORKSPACE_PATTERN.test(text) ? text : '';
   if (key === 'focus') return text === '1' ? '1' : '';
@@ -90,4 +90,13 @@ function sanitizeValue(key, value) {
   if (key === 'status') return STATUSES.has(text.toLowerCase()) ? text.toLowerCase() : '';
   const limit = key === 'search' ? 200 : 160;
   return text.slice(0, limit);
+}
+
+function stripControlCharacters(value) {
+  return Array.from(String(value || ''))
+    .filter(character => {
+      const code = character.codePointAt(0);
+      return code > 31 && code !== 127;
+    })
+    .join('');
 }

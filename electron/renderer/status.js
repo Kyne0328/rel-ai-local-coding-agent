@@ -107,10 +107,11 @@ function pluralize(count, singular) {
 
 function toolLabel(tool) {
   if (tool === 'relai_exec') return 'Running a workspace command';
-  if (tool === 'relai_run_checks' || tool === 'relai_browser') return 'Validating changes';
-  if (tool === 'relai_diff' || tool === 'relai_git_status') return 'Reviewing changes';
-  if (tool === 'relai_git_commit' || tool === 'relai_git_push' || tool === 'relai_git_create_pr') return 'Publishing changes';
-  if (tool === 'relai_edit' || tool === 'relai_write' || tool === 'relai_replace' || tool === 'relai_tidy_run' || tool === 'relai_restore_changes') return 'Applying changes';
+  if (tool === 'relai_run_checks' || tool === 'relai_http_probe' || tool === 'relai_ui_check') return 'Validating changes';
+  if (tool === 'relai_diff') return 'Reviewing changes';
+  if (tool === 'relai_git_draft_pr') return 'Preparing pull request text';
+  if (tool === 'relai_git_commit' || tool === 'relai_git_push') return 'Publishing changes';
+  if (tool === 'relai_edit' || tool === 'relai_tidy_run' || tool === 'relai_restore_paths' || tool === 'relai_reset_workspace') return 'Applying changes';
   return 'Inspecting the workspace';
 }
 

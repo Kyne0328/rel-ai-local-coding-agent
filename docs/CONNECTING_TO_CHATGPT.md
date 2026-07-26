@@ -1,30 +1,41 @@
 # Connecting to ChatGPT
 
-Rel.AI MCP exposes one 19-tool workspace surface across local MCP and the ChatGPT connector.
+Rel.AI MCP exposes 20 callable workspace tools across local MCP and the ChatGPT connector. All are active; the six compatibility tools were removed in tool-surface version 10.
 
+- `relai_start_task`
 - `relai_repo_snapshot`
 - `relai_search`
+- `relai_code_inspect`
 - `relai_exec`
 - `relai_read`
-- `relai_write`
-- `relai_replace`
 - `relai_tidy_plan`
 - `relai_tidy_run`
 - `relai_run_checks`
-- `relai_browser`
+- `relai_http_probe`
+- `relai_ui_check`
 - `relai_diff`
-- `relai_restore_changes`
+- `relai_restore_paths`
+- `relai_reset_workspace`
 - `relai_status`
-- `relai_git_status`
 - `relai_git_commit`
 - `relai_git_push`
-- `relai_git_create_pr`
+- `relai_git_draft_pr`
 - `relai_edit`
 - `relai_complete_task`
 
-Use `relai_repo_snapshot` for repository context, `relai_search` for locating code, `relai_read` for source beyond the returned ranges, and `relai_edit` as the primary change tool. Search defaults to adaptive `mode:"auto"`: focused searches receive broader context, while noisy searches receive smaller prioritized ranges. Use explicit `mode:"compact"` for path/line-only results or `mode:"context"` for fixed caller-controlled limits. Context results are grouped by file, merge overlapping ranges, and include file hashes. `relai_write` and `relai_replace` remain direct fallback tools.
+Use `relai_start_task` once for each independent logical task and pass its `task_id` on subsequent calls for that task. Use `relai_repo_snapshot` for repository context, `relai_search` for raw text and contextual location, `relai_code_inspect` for symbol/reference/impact relationships and affected-test discovery, `relai_read` for source beyond the returned ranges, and `relai_edit` for all file changes. Search defaults to adaptive `mode:"auto"`: focused searches receive broader context, while noisy searches receive smaller prioritized ranges. Use explicit `mode:"compact"` for path/line-only results or `mode:"context"` for fixed caller-controlled limits. `relai_edit` supports exact replacement arrays, occurrence targeting, complete content, staged content or patches, and atomic batches.
 
-Use `relai_exec` for one-shot project commands such as dependency installation, migrations, compilers, and repository utilities. It returns the exit status, bounded output, timeout state, and detected file changes. It does not replace the final `relai_run_checks` call required before `relai_complete_task`.
+Use `relai_exec` for one-shot project commands such as dependency installation, migrations, compilers, and repository utilities. It returns the exit status, bounded output, timeout state, and detected file changes. It does not replace structured final validation.
+
+Completion is explicit, never inferred from a passing test run. Prefer `relai_run_checks` with `complete:true` and `summary` on the final standard or release validation; this closes the session atomically only when all selected checks pass. When a read-only diff or status review follows validation, omit `complete` and call `relai_complete_task` once after the review.
+
+Use `relai_http_probe` for local routes such as `/health` or `/dashboard`; it rejects absolute and protocol-relative URLs. Use `relai_ui_check` for an exact `package.json` script name intended for UI or browser validation.
+
+Use `relai_restore_paths` to restore specific tracked paths without touching untracked or unrelated files. Use `relai_reset_workspace` only for repository-wide recovery: `confirmation:"RESET"` resets tracked changes, while untracked cleanup additionally requires `removeUntracked:true` and `confirmation:"RESET_AND_CLEAN"`.
+
+Use `relai_status` with a workspace alias for command configuration, session policy, branch, ahead/behind counts, ownership-split changes, and untracked-file state. Repository details are nested under `workspace.repository`.
+
+Use `relai_git_draft_pr` to prepare local pull-request title/body text from a base/head diff. It does not call GitHub, GitLab, or another hosting provider; it does not create a pull request, push a branch, or modify the repository.
 
 Repository snapshots automatically include guidance from `REL_AI.md` and `.relai/instructions.md` when present. `REL_AI.md` has higher precedence. The combined connector payload is capped at 64 KiB and reports its sources and truncation state; use `relai_read` on the named file when the complete text is needed. Instruction text is never executed automatically.
 

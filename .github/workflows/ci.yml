@@ -25,10 +25,10 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run test:all
 
-  installed-app:
+  packaged-app:
     runs-on: windows-latest
     timeout-minutes: 30
-    name: installed Windows application
+    name: packaged Windows application
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -43,14 +43,7 @@ jobs:
         env:
           NGROK_PLATFORMS: win32
         run: pwsh scripts/fetch-ngrok.ps1
-      - name: Build, install, and capture usability evidence
-        run: npm run test:installed
-        env:
-          REL_AI_RELEASE_EVIDENCE_DIR: ${{ runner.temp }}\relai-usability-evidence
-      - name: Upload installed-app usability evidence
-        uses: actions/upload-artifact@v4
-        with:
-          name: installed-app-usability-evidence
-          path: ${{ runner.temp }}\relai-usability-evidence
-          if-no-files-found: error
-          retention-days: 14
+      - name: Build unpacked Windows application
+        run: npm run electron:build
+      - name: Verify packaged application layout
+        run: npm run verify:packaged

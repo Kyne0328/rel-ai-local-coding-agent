@@ -16,30 +16,33 @@ const { resolvePolicy } = require("./policyResolver");
 const { resolveBudget } = require("./budgetResolver");
 const sessionCache = require("./sessionCache");
 const {
-  relaiGitStatus,
   relaiGitCommit,
   relaiGitPush,
-  relaiGitCreatePr,
+  relaiGitDraftPr,
   classifyStatusOwnership
 } = require("./repo/gitOps");
 const { runProcess } = require("./process");
 const { clampNumber } = require("./bridge/limits");
 const { relaiVerify } = require("./bridge/validation");
-const { relaiBrowser } = require("./bridge/browser");
-const { relaiDiff, relaiReset } = require("./bridge/review");
+const { relaiHttpProbe, relaiUiCheck } = require("./bridge/browser");
+const { relaiDiff } = require("./bridge/review");
+const { relaiResetWorkspace, relaiRestorePaths } = require("./bridge/restore");
 const { workspaceTidyPlan, workspaceTidyRun: relaiWorkspaceTidyRun } = require("./bridge/tidy");
 const { relaiApplyPatch, normalizeOpenAIPatchFormat } = require("./bridge/patch");
 const { readProjectInstructions } = require('./projectInstructions');
+const {
+  STAGED_WRITE_BYTE_THRESHOLD,
+  STAGED_WRITE_LINE_THRESHOLD,
+  workspaceWriteGuidance,
+  analyzeFileShape,
+  fileWriteGuidance
+} = require('./bridge/writeGuidance');
 
 const DEFAULT_MAX_READ_BYTES = 1024 * 1024;
 const DEFAULT_CONNECTOR_READ_BYTES = 128 * 1024;
 const DEFAULT_MAX_SNAPSHOT_FILES = 3000;
-const DEFAULT_STAGED_CHUNK_BYTES = 12000;
-const STAGED_WRITE_BYTE_THRESHOLD = 8000;
-const STAGED_WRITE_LINE_THRESHOLD = 180;
 const EXACT_REPLACE_TEXT_BYTE_LIMIT = 50000;
 const EXACT_REPLACE_MAX_OPERATIONS = 50;
-const SOURCE_LIKE_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs', '.dart', '.py', '.go', '.rs', '.java', '.kt', '.swift', '.cs', '.cpp', '.c', '.h', '.hpp', '.rb', '.php', '.css', '.scss', '.html', '.xml', '.yaml', '.yml', '.json', '.md']);
 
 async function repoSnapshot(workspace, config, args = {}) {
   const policy = resolvePolicy(workspace, config || {});
@@ -70,8 +73,8 @@ async function repoSnapshot(workspace, config, args = {}) {
     truncated: tree.truncated,
     hints: projectHints(Object.keys(manifests)),
     ...(git ? { git } : {}),
-    recommendedFlow: ["Use the minimum tool calls needed", "relai_search when the code location is unknown; adaptive context is included by default", "relai_read only when a wider range or complete file is needed before editing", "relai_edit { runChecks: true, returnDiff: true } when practical", "relai_complete_task after final validation"],
-    writeGuidance: workspaceWriteGuidance(config),
+    recommendedFlow: ["Use the minimum tool calls needed", "relai_search when the code location is unknown; adaptive context is included by default", "relai_read only when a wider range or complete file is needed before editing", "relai_edit { runChecks: true, returnDiff: true } when practical", "On final validation use relai_run_checks { complete: true, summary }; use relai_complete_task only after post-validation read-only review"],
+    writeGuidance: workspaceWriteGuidance(),
     operationJournal: summarizeOperations(config, workspace, args.journalLimit || 10)
   };
 }
@@ -116,7 +119,7 @@ function relaiRead(workspace, config, args = {}, context = {}) {
 
 function readSingleItem(workspace, config, requested, sessionActive, maxBytes, args, options) {
   try {
-    const safe = resolveSafePath(workspace.path, requested);
+    const safe = resolveSafePath(workspace.path, requested, { operation: "read" });
     const stat = fs.statSync(safe.absolutePath);
     if (!stat.isFile()) {
       return stat.isDirectory()
@@ -258,31 +261,36 @@ const WRITE_STAGE_HANDLERS = {
   abort: handleWriteAbort
 };
 
-function relaiWrite(workspace, config, args = {}) {
+function workspaceWrite(workspace, config, args = {}) {
   const stage = String(args.stage || "direct").trim().toLowerCase();
   const handler = WRITE_STAGE_HANDLERS[stage];
-  if (!handler) throw new Error("relai_write stage must be one of: direct, start, append, commit, abort.");
+  if (!handler) throw new Error("relai_edit staged write must use one of: direct, start, append, commit, abort.");
   return handler(workspace, config, args);
 }
 
 function handleWriteDirect(workspace, config, args) {
   const relativePath = String(args.path || "").trim();
-  if (!relativePath) throw new Error("relai_write requires path and content. Expected: { workspace, path, content }.");
-  if (typeof args.content !== "string") throw new Error("relai_write requires content as a string containing the entire target file. Expected: { workspace, path, content }.");
+  if (!relativePath) throw new Error("Full-file edit requires path and content. Expected: { workspace, path, content }.");
+  if (typeof args.content !== "string") throw new Error("Full-file edit requires content as a string containing the entire target file.");
   assertDirectWriteAllowed(relativePath, args.content);
-  return performFullFileWrite(workspace, config, relativePath, args.content, { dryRun: Boolean(args.dryRun), suppressJournal: args.suppressJournal === true });
+  return performFullFileWrite(workspace, config, relativePath, args.content, {
+    dryRun: Boolean(args.dryRun),
+    suppressJournal: args.suppressJournal === true,
+    expectedSha256: String(args.expectedSha256 || "").trim()
+  });
 }
 
 function handleWriteStart(workspace, config, args) {
-  if (args.dryRun === true) throw new Error("relai_write staged start does not persist dry-run payloads. Use a direct dryRun write to preview the full file.");
+  if (args.dryRun === true) throw new Error("Staged content start does not persist dry-run payloads. Use a direct dryRun edit to preview the full file.");
   const relativePath = String(args.path || "").trim();
-  if (!relativePath) throw new Error("relai_write stage='start' requires path and content.");
-  if (typeof args.content !== "string") throw new Error("relai_write stage='start' requires a content chunk string.");
-  const safe = resolveSafePath(workspace.path, relativePath);
+  if (!relativePath) throw new Error("Staged content start requires path and content.");
+  if (typeof args.content !== "string") throw new Error("Staged content start requires a content chunk string.");
+  const safe = resolveSafePath(workspace.path, relativePath, { operation: "write" });
   const writeId = makeOperationId();
   writeStagedPayload(config, workspace, writeId, {
     id: writeId, workspace: workspace.alias, root: workspace.path,
     path: safe.relativePath, chunks: [args.content],
+    expectedSha256: String(args.expectedSha256 || "").trim(),
     bytes: Buffer.byteLength(args.content, "utf8"),
     createdAt: new Date().toISOString()
   });
@@ -290,13 +298,13 @@ function handleWriteStart(workspace, config, args) {
     ok: true, workspace: workspace.alias, path: safe.relativePath,
     operation: "stagedFullFileWrite:start", writeId, chunks: 1,
     bytes: Buffer.byteLength(args.content, "utf8"),
-    next: "Call relai_write with { workspace, stage: 'append', writeId, content } for more chunks, then { workspace, stage: 'commit', writeId } to write the complete file."
+    next: "Call relai_edit with { workspace, stage: 'append', writeId, content } for more chunks, then { workspace, stage: 'commit', writeId } to write the complete file."
   };
 }
 
 function handleWriteAppend(workspace, config, args) {
-  if (args.dryRun === true) throw new Error("relai_write staged append does not persist dry-run payloads.");
-  if (typeof args.content !== "string") throw new Error("relai_write stage='append' requires writeId and a content chunk string.");
+  if (args.dryRun === true) throw new Error("Staged content append does not persist dry-run payloads.");
+  if (typeof args.content !== "string") throw new Error("Staged content append requires writeId and a content chunk string.");
   const writeId = resolveStagedWriteId(config, workspace, args.writeId, args.path);
   const payload = readStagedPayload(config, workspace, writeId);
   payload.chunks.push(args.content);
@@ -307,7 +315,7 @@ function handleWriteAppend(workspace, config, args) {
     ok: true, workspace: workspace.alias, path: payload.path,
     operation: "stagedFullFileWrite:append", writeId,
     chunks: payload.chunks.length, bytes: payload.bytes,
-    next: "Append more chunks or call relai_write with { workspace, stage: 'commit', writeId }."
+    next: "Append more chunks or call relai_edit with { workspace, stage: 'commit', writeId }."
   };
 }
 
@@ -315,7 +323,13 @@ function handleWriteCommit(workspace, config, args) {
   const writeId = resolveStagedWriteId(config, workspace, args.writeId, args.path);
   const payload = readStagedPayload(config, workspace, writeId);
   const content = payload.chunks.join("");
-  const result = performFullFileWrite(workspace, config, payload.path, content, { dryRun: Boolean(args.dryRun), staged: true, writeId, suppressJournal: args.suppressJournal === true });
+  const result = performFullFileWrite(workspace, config, payload.path, content, {
+    dryRun: Boolean(args.dryRun),
+    staged: true,
+    writeId,
+    suppressJournal: args.suppressJournal === true,
+    expectedSha256: payload.expectedSha256 || ""
+  });
   if (!args.dryRun) clearStagedPayload(config, workspace, writeId);
   return { ...result, operation: "stagedFullFileWrite:commit", writeId, staged: true, chunks: payload.chunks.length, bytes: Buffer.byteLength(content, "utf8") };
 }
@@ -334,15 +348,15 @@ function applyReplacements(replacements, oldContent, relativePath) {
     const before = nextContent;
     const totalMatches = countStringOccurrences(before, item.oldText);
     if (totalMatches === 0) {
-      throw new Error(`relai_replace operation ${index + 1} found 0 matches in ${relativePath}. Re-read the file and use exact current text.`);
+      throw new Error(`Exact replacement operation ${index + 1} found 0 matches in ${relativePath}. Re-read the file and use exact current text.`);
     }
     const hasExplicitOccurrence = item.occurrence != null;
     if (!hasExplicitOccurrence && totalMatches !== 1) {
-      throw new Error(`relai_replace operation ${index + 1} found ${totalMatches} matches in ${relativePath}. Pass occurrence to replace exactly one match, or use a larger unique oldText block.`);
+      throw new Error(`Exact replacement operation ${index + 1} found ${totalMatches} matches in ${relativePath}. Pass occurrence to replace exactly one match, or use a larger unique oldText block.`);
     }
     const occurrence = hasExplicitOccurrence ? item.occurrence : 1;
     if (occurrence > totalMatches) {
-      throw new Error(`relai_replace operation ${index + 1} requested occurrence ${occurrence}, but only ${totalMatches} matches exist in ${relativePath}.`);
+      throw new Error(`Exact replacement operation ${index + 1} requested occurrence ${occurrence}, but only ${totalMatches} matches exist in ${relativePath}.`);
     }
     nextContent = replaceNth(before, item.oldText, item.newText, occurrence);
     results.push({ index: index + 1, matchesBefore: totalMatches, occurrence, oldBytes: Buffer.byteLength(item.oldText, "utf8"), newBytes: Buffer.byteLength(item.newText, "utf8"), changed: nextContent !== before });
@@ -350,20 +364,20 @@ function applyReplacements(replacements, oldContent, relativePath) {
   return { nextContent, results };
 }
 
-function relaiReplace(workspace, config, args = {}) {
-  const safe = resolveSafePath(workspace.path, String(args.path || "").trim());
-  if (!safe.relativePath) throw new Error("relai_replace requires path.");
+function workspaceReplace(workspace, config, args = {}) {
+  const safe = resolveSafePath(workspace.path, String(args.path || "").trim(), { operation: "replace" });
+  if (!safe.relativePath) throw new Error("Exact replacement requires path.");
   const dryRun = Boolean(args.dryRun);
-  if (!fs.existsSync(safe.absolutePath)) throw new Error(`relai_replace target does not exist: ${safe.relativePath}`);
+  if (!fs.existsSync(safe.absolutePath)) throw new Error(`Exact replacement target does not exist: ${safe.relativePath}`);
   const stat = fs.statSync(safe.absolutePath);
-  if (!stat.isFile()) throw new Error(`relai_replace target is not a file: ${safe.relativePath}`);
+  if (!stat.isFile()) throw new Error(`Exact replacement target is not a file: ${safe.relativePath}`);
   const data = fs.readFileSync(safe.absolutePath);
-  if (looksBinary(data)) throw new Error(`relai_replace refuses binary-looking files: ${safe.relativePath}`);
+  if (looksBinary(data)) throw new Error(`Exact replacement refuses binary-looking files: ${safe.relativePath}`);
 
   const oldSha256 = fileSha256(workspace.path, safe.relativePath);
   const expectedSha256 = String(args.expectedSha256 || "").trim();
   if (expectedSha256 && oldSha256 !== expectedSha256) {
-    throw new Error(`relai_replace refused stale expectedSha256 for ${safe.relativePath}. Expected ${expectedSha256}, current ${oldSha256 || "missing"}. Re-read the file and retry with current content.`);
+    throw new Error(`Exact replacement refused stale expectedSha256 for ${safe.relativePath}. Expected ${expectedSha256}, current ${oldSha256 || "missing"}. Re-read the file and retry with current content.`);
   }
   const shaMismatch = false;
 
@@ -424,17 +438,21 @@ function assertDirectWriteAllowed(relativePath, content) {
   const newlines = countMatches(text, /\n/g);
   const averageLineBytes = bytes / Math.max(1, newlines + 1);
   if (newlines <= 2 && averageLineBytes > 2000) {
-    throw new Error(`relai_write refuses collapsed source-looking content for ${relativePath}. Use relai_edit with oldText/newText, relai_edit with updateText, or staged relai_write with the original line breaks intact.`);
+    throw new Error(`Full-file edit refused collapsed source-looking content for ${relativePath}. Use relai_edit with oldText/newText, updateText, or staged content with the original line breaks intact.`);
   }
 }
 
 function performFullFileWrite(workspace, config, relativePath, content, options = {}) {
   const dryRun = Boolean(options.dryRun);
   const operationId = options.writeId || makeOperationId();
-  const safe = resolveSafePath(workspace.path, relativePath);
+  const safe = resolveSafePath(workspace.path, relativePath, { operation: "write", proposedContent: content });
   const exists = fs.existsSync(safe.absolutePath);
   const oldContent = exists ? fs.readFileSync(safe.absolutePath, "utf8") : "";
   const oldSha256 = exists ? fileSha256(workspace.path, safe.relativePath) : null;
+  const expectedSha256 = String(options.expectedSha256 || "").trim();
+  if (expectedSha256 && oldSha256 !== expectedSha256) {
+    throw new Error(`Full-file edit refused stale expectedSha256 for ${safe.relativePath}. Expected ${expectedSha256}, current ${oldSha256 || "missing"}. Re-read the file and retry with current content.`);
+  }
   const newContent = content;
   const changed = newContent !== oldContent;
   const newSha256 = sha256Text(newContent);
@@ -500,7 +518,7 @@ function stagedPath(config, workspace, writeId) {
 
 function validateWriteId(writeId) {
   const text = String(writeId || "").trim();
-  if (!/^op_[a-z0-9]+_[a-f0-9]{12}$/.test(text)) throw new Error("Invalid or missing relai_write writeId.");
+  if (!/^op_[a-z0-9]+_[a-f0-9]{12}$/.test(text)) throw new Error("Invalid or missing staged edit writeId.");
   return text;
 }
 
@@ -554,10 +572,10 @@ function stagedRelativePath(workspace, targetPath) {
 function stagedAmbiguityError(candidates, suppliedId) {
   if (!candidates.length) {
     const idSuffix = suppliedId ? ` for writeId ${suppliedId}` : "";
-    return new Error(`No staged relai_write payload found${idSuffix}. Start a staged write with stage='start' first, or use a direct write { stage: 'direct', path, content } (direct write has no size cap).`);
+    return new Error(`No staged edit payload found${idSuffix}. Start relai_edit with stage='start' and content/updateText first, or use a direct relai_edit call.`);
   }
   const list = candidates.map((item) => `${item.id} → ${item.path || "(unknown path)"}`).join("; ");
-  return new Error(`Multiple staged relai_write payloads are pending; refusing to guess which to use. Pass the exact writeId, or the target path, for the one you mean. Pending: ${list}.`);
+  return new Error(`Multiple staged edit payloads are pending; refusing to guess which to use. Pass the exact writeId, or the target path, for the one you mean. Pending: ${list}.`);
 }
 
 function listStagedPayloads(config, workspace) {
@@ -579,7 +597,7 @@ function readStagedFile(dir, name, now) {
   const id = name.slice(0, -5);
   if (!/^op_[a-z0-9]+_[a-f0-9]{12}$/.test(id)) return null;
   const file = path.join(dir, name);
-  let mtime = 0;
+  let mtime;
   try { mtime = fs.statSync(file).mtimeMs; } catch { return null; }
   if (mtime && (now - mtime) > STAGED_PRUNE_TTL_MS) {
     try { fs.rmSync(file, { force: true }); } catch {}
@@ -598,9 +616,9 @@ function writeStagedPayload(config, workspace, writeId, payload) {
 
 function readStagedPayload(config, workspace, writeId) {
   const file = stagedPath(config, workspace, writeId);
-  if (!fs.existsSync(file)) throw new Error(`No staged relai_write payload found for writeId ${writeId}. Start again with stage='start'.`);
+  if (!fs.existsSync(file)) throw new Error(`No staged edit payload found for writeId ${writeId}. Start again with relai_edit stage='start'.`);
   const payload = JSON.parse(fs.readFileSync(file, "utf8"));
-  if (payload.workspace !== workspace.alias || payload.root !== workspace.path) throw new Error("Staged relai_write payload belongs to a different workspace.");
+  if (payload.workspace !== workspace.alias || payload.root !== workspace.path) throw new Error("Staged edit payload belongs to a different workspace.");
   return payload;
 }
 
@@ -649,134 +667,6 @@ function projectHints(manifests) {
   return hints;
 }
 
-function workspaceWriteGuidance(config) {
-  return {
-    defaultMode: "size-based",
-    recommendedChunkBytes: DEFAULT_STAGED_CHUNK_BYTES,
-    modes: {
-      "exact-replace": {
-        tool: "relai_replace",
-        when: [
-          "localized edits inside existing files",
-          "large source files",
-          "template-heavy or interpolation-heavy files",
-          "duplicate import cleanup, lint-only text edits, and focused behavior changes"
-        ]
-      },
-      "direct-write": {
-        tool: "relai_write",
-        when: [
-          "complete replacement of a small or normal-sized file",
-          `whole-file content under about ${STAGED_WRITE_BYTE_THRESHOLD} bytes and ${STAGED_WRITE_LINE_THRESHOLD} lines`
-        ]
-      },
-      "staged-write": {
-        tool: "relai_write",
-        when: [
-          "complete replacement of a large file",
-          `whole-file content above about ${STAGED_WRITE_BYTE_THRESHOLD} bytes or ${STAGED_WRITE_LINE_THRESHOLD} lines`
-        ],
-        chunkBytes: DEFAULT_STAGED_CHUNK_BYTES
-      },
-      "apply-update": {
-        tool: "relai_edit",
-        when: [
-          "a multi-file change is already represented as a unified patch (pass updateText)",
-          "several related files need coordinated text edits (pass edits: [...])"
-        ]
-      },
-      "workspace-tidy": {
-        tools: ["relai_tidy_plan", "relai_tidy_run"],
-        when: ["generated session artifacts should be tidied through a bounded plan"]
-      }
-    },
-    selectionOrder: [
-      "Use exact-replace for small edits inside existing files.",
-      "Use direct-write for complete replacement of small or normal-sized files.",
-      "Use staged-write for complete replacement of large files.",
-      "Use apply-update when the change is naturally patch-shaped across files.",
-      "Use workspace-tidy plan/run for generated session artifacts."
-    ],
-    examples: {
-      exactReplace: "relai_replace { workspace, path, expectedSha256, oldText, newText }",
-      directWrite: "relai_write { workspace, path, content }",
-      stagedWriteStart: "relai_write { workspace, stage: 'start', path, content }",
-      stagedWriteAppend: "relai_write { workspace, stage: 'append', writeId, content }",
-      stagedWriteCommit: "relai_write { workspace, stage: 'commit', writeId }",
-      applyUpdate: "relai_edit { workspace, updateText, runChecks: true, returnDiff: true }",
-      workspaceTidyPlan: "relai_tidy_plan { workspace, mode: 'session_untracked' }",
-      workspaceTidyRun: "relai_tidy_run { workspace, planId }"
-    },
-    next: "Choose the edit tool by task shape and file size, then run relai_run_checks and relai_diff."
-  };
-}
-
-function analyzeFileShape(relativePath, text) {
-  const bytes = Buffer.byteLength(text, "utf8");
-  const lineCount = countLines(text);
-  const ext = path.extname(relativePath).toLowerCase();
-  const isSourceLike = SOURCE_LIKE_EXTENSIONS.has(ext);
-  const interpolationMarkers = countMatches(text, /\$\{|\{\{/g);
-  const reasons = [];
-  if (bytes >= STAGED_WRITE_BYTE_THRESHOLD) reasons.push(`file is ${bytes} bytes`);
-  if (lineCount >= STAGED_WRITE_LINE_THRESHOLD) reasons.push(`file has ${lineCount} lines`);
-  if (isSourceLike && (interpolationMarkers >= 4 || (interpolationMarkers >= 1 && bytes >= 4000))) {
-    reasons.push(`source contains dense template/interpolation syntax (${interpolationMarkers} markers)`);
-  }
-  return { bytes, lineCount, ext, interpolationMarkers, reasons };
-}
-
-function fileWriteGuidance(relativePath, text) {
-  const { bytes, lineCount, ext, interpolationMarkers, reasons } = analyzeFileShape(relativePath, text);
-
-  if (reasons.length) {
-    return {
-      recommendedMode: "exact-replace",
-      tool: "relai_replace",
-      fallbackMode: "staged-write",
-      fallbackTool: "relai_write",
-      alternatives: ["staged-write", "apply-update"],
-      recommendedChunkBytes: DEFAULT_STAGED_CHUNK_BYTES,
-      fileShape: { bytes, lineCount, extension: ext || "", interpolationMarkers },
-      reasons,
-      useWhen: "Use for localized edits inside this existing file.",
-      wholeFileReplacement: {
-        recommendedMode: "staged-write",
-        tool: "relai_write",
-        reason: "Use staged writes only when the complete file genuinely needs replacement."
-      },
-      multiFileChange: {
-        recommendedMode: "apply-update",
-        tool: "relai_edit",
-        reason: "Use relai_edit with updateText (or edits: [...]) when the change spans multiple files."
-      },
-      next: "Prefer relai_replace with exact current text. Use staged relai_write for unavoidable whole-file replacement. Use relai_tidy_plan and relai_tidy_run for session-owned untracked artifacts."
-    };
-  }
-
-  return {
-    recommendedMode: "direct-write",
-    tool: "relai_write",
-    fallbackMode: "exact-replace",
-    fallbackTool: "relai_replace",
-    alternatives: ["exact-replace", "apply-update"],
-    fileShape: { bytes, lineCount, extension: ext || "", interpolationMarkers },
-    reasons: ["normal-sized file"],
-    useWhen: "Use for complete replacement of this small or normal-sized file.",
-    localizedEdit: {
-      recommendedMode: "exact-replace",
-      tool: "relai_replace",
-      reason: "Use exact replacement when only a small block changes."
-    },
-    multiFileChange: {
-      recommendedMode: "apply-update",
-      tool: "relai_edit",
-      reason: "Use relai_edit with updateText (or edits: [...]) when the change spans multiple files."
-    },
-    next: "Use direct relai_write for full-file replacement, or relai_replace for localized edits."
-  };
-}
-
 function normalizeExactReplacements(args) {
   let replacements;
   if (Array.isArray(args.replacements)) {
@@ -784,19 +674,19 @@ function normalizeExactReplacements(args) {
   } else if (Object.hasOwn(args, "oldText") || Object.hasOwn(args, "newText")) {
     replacements = [{ oldText: args.oldText, newText: args.newText, occurrence: args.occurrence }];
   } else {
-    throw new Error("relai_replace requires either { oldText, newText } or replacements: [{ oldText, newText, occurrence? }].");
+    throw new Error("Exact replacement requires either { oldText, newText } or replacements: [{ oldText, newText, occurrence? }].");
   }
-  if (!Array.isArray(replacements) || replacements.length === 0) throw new Error("relai_replace replacements must contain at least one operation.");
-  if (replacements.length > EXACT_REPLACE_MAX_OPERATIONS) throw new Error(`relai_replace accepts at most ${EXACT_REPLACE_MAX_OPERATIONS} replacement operations.`);
+  if (!Array.isArray(replacements) || replacements.length === 0) throw new Error("replacements must contain at least one exact replacement operation.");
+  if (replacements.length > EXACT_REPLACE_MAX_OPERATIONS) throw new Error(`Exact replacement accepts at most ${EXACT_REPLACE_MAX_OPERATIONS} operations.`);
   return replacements.map((item, index) => {
     const oldText = typeof item.oldText === "string" ? item.oldText : null;
     const newText = typeof item.newText === "string" ? item.newText : null;
-    if (!oldText) throw new Error(`relai_replace operation ${index + 1} requires non-empty oldText.`);
-    if (newText == null) throw new Error(`relai_replace operation ${index + 1} requires newText as a string. Use an empty string to clear text.`);
-    if (Buffer.byteLength(oldText, "utf8") > EXACT_REPLACE_TEXT_BYTE_LIMIT) throw new Error(`relai_replace operation ${index + 1} oldText exceeds ${EXACT_REPLACE_TEXT_BYTE_LIMIT} bytes. Use a smaller exact block.`);
-    if (Buffer.byteLength(newText, "utf8") > EXACT_REPLACE_TEXT_BYTE_LIMIT) throw new Error(`relai_replace operation ${index + 1} newText exceeds ${EXACT_REPLACE_TEXT_BYTE_LIMIT} bytes. Use smaller replacements or staged relai_write for unavoidable whole-file replacement.`);
+    if (!oldText) throw new Error(`Exact replacement operation ${index + 1} requires non-empty oldText.`);
+    if (newText == null) throw new Error(`Exact replacement operation ${index + 1} requires newText as a string. Use an empty string to clear text.`);
+    if (Buffer.byteLength(oldText, "utf8") > EXACT_REPLACE_TEXT_BYTE_LIMIT) throw new Error(`Exact replacement operation ${index + 1} oldText exceeds ${EXACT_REPLACE_TEXT_BYTE_LIMIT} bytes. Use a smaller exact block.`);
+    if (Buffer.byteLength(newText, "utf8") > EXACT_REPLACE_TEXT_BYTE_LIMIT) throw new Error(`Exact replacement operation ${index + 1} newText exceeds ${EXACT_REPLACE_TEXT_BYTE_LIMIT} bytes. Use smaller replacements or relai_edit content for unavoidable whole-file replacement.`);
     const occurrence = item.occurrence == null ? null : Number(item.occurrence);
-    if (occurrence != null && (!Number.isInteger(occurrence) || occurrence < 1)) throw new Error(`relai_replace operation ${index + 1} occurrence must be a positive integer.`);
+    if (occurrence != null && (!Number.isInteger(occurrence) || occurrence < 1)) throw new Error(`Exact replacement operation ${index + 1} occurrence must be a positive integer.`);
     return { oldText, newText, occurrence };
   });
 }
@@ -847,17 +737,18 @@ function sha256Text(text) {
 module.exports = {
   repoSnapshot,
   relaiRead,
-  relaiWrite,
-  relaiReplace,
+  workspaceWrite,
+  workspaceReplace,
   relaiApplyPatch,
   relaiVerify,
-  relaiBrowser,
+  relaiHttpProbe,
+  relaiUiCheck,
   relaiDiff,
-  relaiReset,
-  relaiGitStatus,
+  relaiRestorePaths,
+  relaiResetWorkspace,
   relaiGitCommit,
   relaiGitPush,
-  relaiGitCreatePr,
+  relaiGitDraftPr,
   normalizeOpenAIPatchFormat,
   classifyStatusOwnership,
   STAGED_WRITE_BYTE_THRESHOLD,

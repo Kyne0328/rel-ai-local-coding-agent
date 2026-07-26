@@ -45,6 +45,13 @@ assert.equal(reconnected[0].id, 'validation-task');
 assert.equal(reconnected[0].status, 'completed');
 assert.equal(reconnected[0].calls, 2);
 
+const drafted = buildTaskHistory([
+  { taskId: 'draft-task', ts: '2026-07-11T09:30:00.000Z', tool: 'relai_git_draft_pr', workspace: 'repo', ok: true },
+  { taskId: 'legacy-draft-task', ts: '2026-07-11T09:31:00.000Z', tool: 'relai_git_create_pr', workspace: 'other', ok: true }
+], { state: 'idle' });
+assert.equal(drafted.find(session => session.id === 'draft-task').prDrafted, true, 'new PR draft tool must set task publication metadata');
+assert.equal(drafted.find(session => session.id === 'legacy-draft-task').prDrafted, true, 'legacy PR draft tool must preserve task metadata');
+
 const recoveredValidation = buildTaskHistory([
   { taskId: 'retry-task', ts: '2026-07-11T10:00:00.000Z', tool: 'relai_run_checks', workspace: 'repo', ok: false, validationStatus: 'failed' },
   { taskId: 'retry-task', ts: '2026-07-11T10:02:00.000Z', tool: 'relai_run_checks', workspace: 'repo', ok: true, validationStatus: 'passed' }

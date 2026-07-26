@@ -124,10 +124,11 @@ function toolCard(tool) {
   const card = document.createElement('article');
   const capability = toolCapability(tool.name);
   const parameters = Array.isArray(tool.parameters) ? tool.parameters : [];
-  card.className = `tool-card capability-${capability}`;
+  const compatibility = tool?.state === 'deprecated' || tool?.category === 'Compatibility';
+  card.className = `tool-card capability-${capability}${compatibility ? ' compatibility' : ''}`;
   card.innerHTML = `
     <div class="tool-card-head">
-      <span class="tool-capability">${esc(capabilityLabel(capability))}</span>
+      <span class="tool-capability">${esc(compatibility ? 'Compatibility' : capabilityLabel(capability))}</span>
       <span class="tool-parameter-count">${parameters.length} parameter${parameters.length === 1 ? '' : 's'}</span>
     </div>
     <div class="tool-card-title">
@@ -157,8 +158,14 @@ export function orderToolsForCatalog(tools = []) {
   return [...(Array.isArray(tools) ? tools : [])].sort((left, right) => {
     const capabilityDifference = capabilityRank(left) - capabilityRank(right);
     if (capabilityDifference) return capabilityDifference;
+    const lifecycleDifference = lifecycleRank(left) - lifecycleRank(right);
+    if (lifecycleDifference) return lifecycleDifference;
     return toolSortLabel(left).localeCompare(toolSortLabel(right), 'en-US', { numeric: true, sensitivity: 'base' });
   });
+}
+
+function lifecycleRank(tool) {
+  return tool?.state === 'deprecated' || tool?.category === 'Compatibility' ? 1 : 0;
 }
 
 function capabilityRank(tool) {
@@ -172,8 +179,8 @@ function toolSortLabel(tool) {
 function toolCapability(name) {
   const value = String(name || '');
   if (value.startsWith('relai_git_')) return 'git';
-  if (/restore|tidy/.test(value)) return 'recover';
-  if (/run_checks|browser|diff/.test(value)) return 'validate';
+  if (/restore|reset|tidy/.test(value)) return 'recover';
+  if (/run_checks|http_probe|ui_check|browser|diff/.test(value)) return 'validate';
   if (/edit|write|replace/.test(value)) return 'edit';
   return 'inspect';
 }

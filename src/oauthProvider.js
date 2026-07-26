@@ -102,7 +102,7 @@ function withStoreLock(callback) {
           continue;
         }
       } catch {}
-      if (Date.now() - started >= LOCK_TIMEOUT_MS) throw new Error('OAuth state is busy. Retry the request.');
+      if (Date.now() - started >= LOCK_TIMEOUT_MS) throw new Error('OAuth state is busy. Retry the request.', { cause: error });
       Atomics.wait(lockSleeper, 0, 0, LOCK_WAIT_MS);
     }
   }
@@ -530,23 +530,29 @@ function renderLoginPage(request, baseUrl, options = {}) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Authorize Rel.AI MCP</title>
 <style>
-  body { font-family: system-ui, sans-serif; background:#0b0f1a; color:#e6eaf2; display:flex; min-height:100vh; align-items:center; justify-content:center; margin:0; }
-  .card { background:#121828; border:1px solid #243049; border-radius:14px; padding:28px; width:340px; box-shadow:0 12px 40px rgba(0,0,0,.45); }
+  *, *::before, *::after { box-sizing:border-box; }
+  body { font-family:system-ui,sans-serif; background:#0b0f1a; color:#e6eaf2; display:flex; min-height:100vh; align-items:center; justify-content:center; margin:0; padding:20px; }
+  .card { background:#121828; border:1px solid #243049; border-radius:14px; padding:28px; width:min(100%,340px); box-shadow:0 12px 40px rgba(0,0,0,.45); }
   h1 { font-size:18px; margin:0 0 6px; }
   p { font-size:13px; color:#9aa6bd; line-height:1.5; margin:0 0 18px; }
   label { display:block; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:#9aa6bd; margin-bottom:6px; }
-  input[type=password] { width:100%; box-sizing:border-box; background:#0b0f1a; border:1px solid #243049; border-radius:8px; color:#e6eaf2; padding:10px; font-size:14px; }
+  input[type=password] { width:100%; background:#0b0f1a; border:1px solid #243049; border-radius:8px; color:#e6eaf2; padding:10px; font-size:14px; }
+  input[type=password]:focus-visible, button:focus-visible { outline:2px solid #8fb4ff; outline-offset:2px; }
   button { width:100%; margin-top:16px; background:#3b6cf0; color:#fff; border:0; border-radius:8px; padding:11px; font-size:14px; font-weight:600; cursor:pointer; }
-  .err { background:rgba(255,99,120,.12); border:1px solid rgba(255,99,120,.4); color:#ff9aa8; font-size:12px; padding:9px 11px; border-radius:8px; margin-bottom:14px; }
-  .notice { background:rgba(82,145,255,.12); border:1px solid rgba(82,145,255,.45); color:#bfd2ff; font-size:12px; line-height:1.45; padding:10px 12px; border-radius:8px; margin-bottom:14px; }
-  .who { font-size:12px; color:#9aa6bd; margin-top:14px; }
+  button:hover:not(:disabled) { filter:brightness(1.08); }
+  button:active:not(:disabled) { transform:translateY(1px); }
+  button:disabled { cursor:not-allowed; opacity:.55; }
+  .err { background:rgba(255,99,120,.12); border:1px solid rgba(255,99,120,.4); color:#ff9aa8; font-size:12px; padding:9px 11px; border-radius:8px; margin-bottom:14px; overflow-wrap:anywhere; }
+  .notice { background:rgba(82,145,255,.12); border:1px solid rgba(82,145,255,.45); color:#bfd2ff; font-size:12px; line-height:1.45; padding:10px 12px; border-radius:8px; margin-bottom:14px; overflow-wrap:anywhere; }
+  .who { font-size:12px; color:#9aa6bd; margin-top:14px; overflow-wrap:anywhere; }
+  .who.instructions { margin-top:0; }
 </style>
 </head>
 <body>
   <form class="card" method="POST" action="/authorize">
     <h1>Authorize ChatGPT</h1>
     <p>Connect ChatGPT to your local Rel.AI MCP workspaces. Enter the approval token from the Rel.AI desktop app.</p>
-    <p class="who" style="margin-top:0;">Open <strong>Settings &gt; Desktop app &gt; Approval token</strong>. Replacing the token revokes existing ChatGPT access, but the MCP endpoint and ChatGPT app stay the same.</p>
+    <p class="who instructions">Open <strong>Settings &gt; Desktop app &gt; Approval token</strong>. Replacing the token revokes existing ChatGPT access, but the MCP endpoint and ChatGPT app stay the same.</p>
     ${errorHtml}
     ${recoveryHtml}
     <label for="dashboard_token">Approval token</label>

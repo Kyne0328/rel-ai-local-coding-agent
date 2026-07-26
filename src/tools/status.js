@@ -7,15 +7,16 @@ const { summarizeOperations } = require("../journal");
 const { resolvePolicy } = require("../policyResolver");
 const { getVersion } = require("../version");
 const { debugSwallow } = require("./session");
-const { TOOL_NAMES, getToolGroups } = require("./schema");
+const { TOOL_NAMES, getToolGroups, getToolSurfaceManifest } = require("./schema");
 const { readProjectInstructions, summarizeProjectInstructions } = require('../projectInstructions');
+const { workspaceGitStatus } = require('../repo/gitOps');
 
 // Locale-aware sort of an object's keys so ordering remains explicit and stable.
 function sortedKeys(obj) {
   return Object.keys(obj || {}).sort((a, b) => a.localeCompare(b));
 }
 
-function relaiStatus(config, args = {}) {
+async function relaiStatus(config, args = {}) {
   const packageJson = safeReadPackageJson();
   const scripts = packageJson.scripts || {};
   const ci = ciScriptStatus(scripts);
@@ -36,7 +37,8 @@ function relaiStatus(config, args = {}) {
         testCommandKeys,
         ...(staleCommandKeys.length > 0 ? { staleCommandKeys } : {}),
         ...(staleTestCommandKeys.length > 0 ? { staleTestCommandKeys } : {}),
-        policy: resolvePolicy(workspace, config)
+        policy: resolvePolicy(workspace, config),
+        repository: await workspaceGitStatus(workspace, config, { maxBytes: args.maxBytes })
       };
     } catch (error) {
       selectedWorkspace = { alias: String(args.workspace), error: error instanceof Error ? error.message : String(error) };
@@ -47,6 +49,7 @@ function relaiStatus(config, args = {}) {
     version: getVersion(),
     tools: TOOL_NAMES,
     toolGroups: getToolGroups(),
+    toolSurface: getToolSurfaceManifest(),
     scripts: sortedKeys(scripts),
     ci,
     workspace: selectedWorkspace,
@@ -56,21 +59,20 @@ function relaiStatus(config, args = {}) {
 }
 
 function ciScriptStatus(scripts) {
-  const nodePath = require("node:path");
   // Resolve workflows relative to THIS server's package root (__dirname/..), not
   // process.cwd(). When launched from the packaged launcher, cwd is the launcher
   // directory, so a cwd-based scan found no workflows and silently reported ok:true.
   // This keeps the CI scan on the same basis as safeReadPackageJson (the scripts it
   // is checked against).
-  const projectRoot = nodePath.join(__dirname, "..");
-  const workflowDir = nodePath.join(projectRoot, ".github", "workflows");
+  const projectRoot = path.join(__dirname, "..");
+  const workflowDir = path.join(projectRoot, ".github", "workflows");
   const missing = [];
   const files = [];
   if (fs.existsSync(workflowDir)) collectWorkflowFiles(workflowDir, files);
   for (const file of files) {
     const text = fs.readFileSync(file, "utf8");
     for (const match of text.matchAll(/npm\s+run\s+([A-Za-z0-9:_-]+)/g)) {
-      if (!scripts[match[1]]) missing.push({ file: file.replace(projectRoot + nodePath.sep, ""), script: match[1] });
+      if (!scripts[match[1]]) missing.push({ file: file.replace(projectRoot + path.sep, ""), script: match[1] });
     }
   }
   return { ok: missing.length === 0, files: files.length, missing };
@@ -78,7 +80,7 @@ function ciScriptStatus(scripts) {
 
 function collectWorkflowFiles(dir, out) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = require("node:path").join(dir, entry.name);
+    const full = path.join(dir, entry.name);
     if (entry.isDirectory()) collectWorkflowFiles(full, out);
     else if (/\.ya?ml$/i.test(entry.name)) out.push(full);
   }

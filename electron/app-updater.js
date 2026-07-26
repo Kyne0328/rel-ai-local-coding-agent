@@ -7,7 +7,6 @@ const {
   createLogger,
   createUpdateStateStore,
   detectUpdateSupport,
-  isoNow,
   normalizeStatus,
   progressPayload
 } = require('./app-updater-state');

@@ -60,16 +60,11 @@ const electronPkg = JSON.parse(fs.readFileSync(path.join(root, 'electron', 'pack
 const srcResource = electronPkg.build.extraResources.find((item) => item.from === '../src');
 assert.ok(srcResource, 'electron build must bundle src resources');
 assert.ok(srcResource.filter.includes('**/*.js'), 'electron build must bundle src JavaScript');
-assert.ok(srcResource.filter.includes('**/*.css'), 'electron build must bundle src UI CSS imported by public/dashboard.css');
+assert.ok(srcResource.filter.includes('**/*.css'), 'electron build must retain the source UI stylesheet required by the current packaging contract');
 assert.ok(electronPkg.build.files.includes('managed-ngrok.js'), 'electron build must include managed ngrok launcher code');
-assert.ok(electronPkg.build.files.includes('window-smoke.js'), 'electron build must include packaged renderer smoke coverage');
-assert.ok(electronPkg.build.files.includes('smoke-evidence.js'), 'electron build must include screenshot and acceptance evidence support');
-assert.match(fs.readFileSync(path.join(root, 'electron', 'window-smoke.js'), 'utf8'), /data-task-event-link/, 'packaged dashboard smoke must click a session tool event');
-assert.match(fs.readFileSync(path.join(root, 'electron', 'window-smoke.js'), 'utf8'), /exact activity event detail/, 'packaged dashboard smoke must verify the matching Activity detail opens');
-assert.match(fs.readFileSync(path.join(root, 'electron', 'window-smoke.js'), 'utf8'), /scrollPreserved/, 'packaged dashboard smoke must verify refresh preserves scroll position');
-assert.match(fs.readFileSync(path.join(root, 'electron', 'window-smoke.js'), 'utf8'), /settingsPresent/, 'packaged dashboard smoke must verify Dashboard settings load');
-assert.match(fs.readFileSync(path.join(root, 'electron', 'window-smoke.js'), 'utf8'), /captureWindow/, 'packaged dashboard smoke must capture rendered evidence');
-assert.match(fs.readFileSync(path.join(root, 'electron', 'window-smoke.js'), 'utf8'), /writeWindowSmokeResult/, 'packaged dashboard smoke must emit machine-readable scenario results');
+assert.equal(electronPkg.build.files.includes('installed-smoke.js'), false, 'electron build must not ship installed-app test hooks');
+assert.equal(electronPkg.build.files.includes('window-smoke.js'), false, 'electron build must not ship renderer smoke entry points');
+assert.equal(electronPkg.build.files.includes('smoke-evidence.js'), false, 'electron build must not ship release-evidence test support');
 assert.ok(electronPkg.build.files.includes('tool-sleep-blocker.js'), 'electron build must include tool-call sleep prevention');
 assert.ok(electronPkg.build.files.includes('dashboard-window.js'), 'electron build must include the secured dashboard host');
 assert.ok(electronPkg.build.files.includes('dashboard-window-bounds.js'), 'electron build must include bounded dashboard window-state handling');
@@ -93,6 +88,7 @@ assert.equal(electronPkg.build.publish[0].repo, 'rel-ai-mcp');
 assert.ok(electronPkg.build.extraResources.some((item) => item.from === '../vendor/ngrok'), 'electron build must bundle ngrok seed binaries');
 
 const electronMain = fs.readFileSync(path.join(root, 'electron', 'main.js'), 'utf8');
+assert.doesNotMatch(electronMain, /--installed-smoke|--window-smoke|runInstalledSmoke|runWindowSmoke|smokeWindowRoles|getSmokeWindowRole/, 'production Electron main must not expose destructive smoke entry points');
 const desktopTray = fs.readFileSync(path.join(root, 'electron', 'desktop-tray.js'), 'utf8');
 const dashboardPreload = fs.readFileSync(path.join(root, 'electron', 'dashboard-preload.js'), 'utf8');
 const desktopSettings = fs.readFileSync(path.join(root, 'electron', 'desktop-settings.js'), 'utf8');

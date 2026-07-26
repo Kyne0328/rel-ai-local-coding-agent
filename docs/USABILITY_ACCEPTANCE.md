@@ -1,63 +1,46 @@
-# Usability acceptance and release evidence
+# Desktop usability acceptance
 
-Rel.AI MCP separates repeatable installed-app validation from checks that require real external accounts and published infrastructure. A release is not described as fully accepted merely because local automation passed.
+Rel.AI MCP separates non-destructive automated package verification from checks that require installing, launching, updating, or removing the real desktop application.
 
-## Automated exact-installer acceptance
+## Automated non-destructive verification
 
-The Windows release workflow builds the candidate executables, selects the exact NSIS installer intended for publication, installs it silently into an isolated profile, and launches that installed executable through two smoke modes. Silent mode is used only for unattended validation; the published installer presents an assisted setup wizard, offers current-user or all-users installation, requests administrator elevation only when all-users installation needs it, allows destination-folder selection, and includes an optional **Run Rel.AI MCP** checkbox on Finish. The automation verifies:
+The automated Windows gate does not run an installer or executable. It performs these steps:
 
-1. packaged resources, including the bundled ngrok seed;
-2. local service health and dashboard HTTP loading;
-3. the packaged public MCP tool count;
-4. first-run setup and failure-recovery renderers;
-5. the interactive dashboard overview;
-6. refresh behavior without losing scroll position or control state;
-7. workspace scope in the route;
-8. legacy Settings route normalization; and
-9. the Sessions-to-Activity detail journey.
+1. runs the complete source test, lint, type, and release-consistency suite;
+2. builds an unpacked Windows application with publishing disabled;
+3. verifies the packaged executable and ASAR are present;
+4. verifies packaged server, tool-registry, configuration, CLI, dashboard, changelog, and package metadata files;
+5. verifies the bundled Windows ngrok seed exists and is nonempty; and
+6. confirms the packaged version matches the repository version.
 
-Rendered evidence is captured for setup, recovery, the dashboard overview, and the exact Activity detail destination. Each image and the installer are recorded with SHA-256 hashes.
+Run the same checks locally:
 
-The primary output is `release-readiness.json`. Its successful automated state is deliberately named:
-
-```text
-automated_passed_manual_required
+```powershell
+npm run test:all
+npm run electron:build
+npm run verify:packaged
 ```
 
-The release also publishes `release-usability-evidence.zip`, containing the JSON record and rendered screenshots. Both files are included in `SHA256SUMS.txt`.
+To inspect another unpacked build directory:
 
-## Manual external acceptance
+```powershell
+npm run verify:packaged -- --dir C:\path\to\win-unpacked
+```
 
-Automated acceptance does not replace the external checks below:
+`verify:packaged` only reads files. It does not spawn the application, install software, invoke an uninstaller, modify the user profile, or interact with the running Rel.AI instance.
 
+## Manual installed-application acceptance
+
+Before publishing a release, test installation on a disposable Windows VM or another machine that is not hosting active Rel.AI work. Record these checks manually:
+
+- **Installer and uninstall:** install the exact NSIS candidate, complete first-run setup, close it normally, uninstall it, and confirm only expected application files are removed.
 - **Real ngrok publication:** clean first run must publish the configured permanent domain from a real ngrok account and remain externally reachable.
 - **ChatGPT OAuth:** a real ChatGPT app must discover the OAuth endpoints, complete approval, and successfully call `relai_status`.
 - **Live approval-token rotation:** the existing ChatGPT app must lose its current grants, request approval again, and reconnect with the replacement token without changing the MCP URL.
 - **Update from a previous published release:** the previous installed release must discover, download, verify, and install the candidate through the production GitHub Releases feed.
 
-These checks remain `not_recorded` in automated evidence. The evidence validator rejects any automated record that claims they passed.
-
-## Run locally
-
-Build, install, and validate a new candidate while keeping the evidence:
-
-```powershell
-$env:REL_AI_RELEASE_EVIDENCE_DIR = "$PWD\dist\release-evidence"
-npm run test:installed
-npm run release:evidence:check -- ".\dist\release-evidence\release-readiness.json"
-```
-
-Validate a specific prebuilt installer instead of building another one:
-
-```powershell
-$env:REL_AI_SMOKE_INSTALLER = "C:\path\to\Rel.AI MCP Setup 0.20.7.exe"
-$env:REL_AI_RELEASE_EVIDENCE_DIR = "$PWD\dist\release-evidence"
-npm run test:installed
-npm run release:evidence:check -- ".\dist\release-evidence\release-readiness.json" --installer $env:REL_AI_SMOKE_INSTALLER
-```
-
-The smoke harness installs and removes the application under an isolated Windows profile. The retained evidence directory is not deleted with that sandbox.
+Do not automate installer or uninstaller execution on a developer machine running Rel.AI MCP. The packaged executable uses the same application identity and single-instance behavior as the live app, so an automated installed-app harness can terminate or interfere with the active bridge.
 
 ## Interpretation
 
-A valid automated record proves that the tested installer bytes produced the recorded local installed-app journeys and screenshots. It does not prove external ngrok reachability, successful interaction with the current ChatGPT service, revocation of live OAuth grants, or an upgrade from a previous published version. Those four checks must be recorded separately before release approval.
+A successful automated gate proves the repository tests pass and the unpacked package contains the required application resources. It does not prove installer behavior, rendered desktop journeys, external connectivity, OAuth behavior, token revocation, uninstall behavior, or production updates. Those checks remain manual release evidence.

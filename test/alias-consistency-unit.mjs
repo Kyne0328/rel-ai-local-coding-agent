@@ -4,30 +4,22 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { aliasConsistencyCheck } = require('../src/productUx.js');
 
-// 1. No workspaces → ok: true, empty workspaces array
-{
-  const result = aliasConsistencyCheck({ workspaces: {} });
+for (const config of [{}, { workspaces: {} }, { workspaces: null }]) {
+  const result = aliasConsistencyCheck(config);
   assert.equal(result.ok, true);
   assert.deepEqual(result.workspaces, []);
-  assert.ok(typeof result.generatedAt === 'string', 'generatedAt must be string');
-  console.log('1. no workspaces: OK');
+  assert.match(result.generatedAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
 }
 
-// 2. Workspace with no testCommands → configuredKeys empty, staleKeys empty, ok: true
-{
+for (const testCommands of [undefined, null, {}]) {
   const result = aliasConsistencyCheck({
-    workspaces: { myapp: { path: '/nonexistent-relai-test-path', testCommands: {} } }
+    workspaces: { myapp: { path: '/nonexistent-relai-test-path', testCommands } }
   });
   assert.equal(result.ok, true);
-  const ws = result.workspaces[0];
-  assert.equal(ws.alias, 'myapp');
-  assert.deepEqual(ws.configuredKeys, []);
-  assert.deepEqual(ws.staleKeys, []);
-  assert.equal(ws.ok, true);
-  console.log('2. no testCommands: OK');
+  assert.deepEqual(result.workspaces[0].configuredKeys, []);
+  assert.deepEqual(result.workspaces[0].staleKeys, []);
 }
 
-// 3. Missing workspace path → discoverCommands returns {}, all configured keys become stale
 {
   const result = aliasConsistencyCheck({
     workspaces: {
@@ -38,14 +30,34 @@ const { aliasConsistencyCheck } = require('../src/productUx.js');
     }
   });
   assert.equal(result.ok, false);
-  const ws = result.workspaces[0];
-  assert.equal(ws.ok, false);
-  assert.deepEqual([...ws.configuredKeys].sort((a, b) => a.localeCompare(b)), ['lint', 'test'].sort((a, b) => a.localeCompare(b)));
-  assert.deepEqual([...ws.staleKeys].sort((a, b) => a.localeCompare(b)), ['lint', 'test'].sort((a, b) => a.localeCompare(b)), 'all keys stale when path nonexistent');
-  console.log('3. nonexistent path - all keys stale: OK');
+  assert.deepEqual(result.workspaces[0].configuredKeys, ['lint', 'test']);
+  assert.deepEqual(result.workspaces[0].staleKeys, ['lint', 'test']);
 }
 
-// 4. Multiple workspaces — one clean, one stale
+for (const workspace of [
+  { path: '', testCommands: { test: 'npm test' } },
+  { testCommands: { test: 'npm test' } }
+]) {
+  const result = aliasConsistencyCheck({ workspaces: { myapp: workspace } });
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.workspaces[0].staleKeys, ['test']);
+}
+
+{
+  const malformed = aliasConsistencyCheck({
+    workspaces: { myapp: { path: '/nope', testCommands: ['npm test'] } }
+  });
+  assert.equal(malformed.ok, false);
+  assert.deepEqual(malformed.workspaces[0].configuredKeys, ['0']);
+  assert.deepEqual(malformed.workspaces[0].staleKeys, ['0']);
+
+  const falsy = aliasConsistencyCheck({
+    workspaces: { myapp: { path: '/nope', testCommands: { ignored: 0 } } }
+  });
+  assert.equal(falsy.ok, true);
+  assert.deepEqual(falsy.workspaces[0].staleKeys, []);
+}
+
 {
   const result = aliasConsistencyCheck({
     workspaces: {
@@ -53,13 +65,9 @@ const { aliasConsistencyCheck } = require('../src/productUx.js');
       stale: { path: '/nonexistent-relai-test-path-xyz789', testCommands: { test: 'npm test' } }
     }
   });
-  assert.equal(result.ok, false, 'overall ok is false when any workspace has stale keys');
-  const clean = result.workspaces.find(w => w.alias === 'clean');
-  const stale = result.workspaces.find(w => w.alias === 'stale');
-  assert.equal(clean.ok, true);
-  assert.equal(stale.ok, false);
-  assert.deepEqual(stale.staleKeys, ['test']);
-  console.log('4. multiple workspaces mixed: OK');
+  assert.equal(result.ok, false);
+  assert.equal(result.workspaces.find(workspace => workspace.alias === 'clean').ok, true);
+  assert.equal(result.workspaces.find(workspace => workspace.alias === 'stale').ok, false);
 }
 
-console.log('alias-consistency unit tests passed.');
+console.log('Alias consistency tests passed, including malformed and missing configuration cases.');

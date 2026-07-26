@@ -45,12 +45,13 @@ Set `REL_AI_MCP_ALLOW_NO_AUTH=1` only for local testing on a trusted machine.
 - Workspace roots must be absolute project directories. System roots and common operating-system directories are rejected.
 - File operations are resolved against the configured workspace root.
 - Traversal, absolute-path injection, and symlink escape are blocked.
-- Sensitive paths such as `.env`, `.ssh`, private keys, credential stores, and cloud configuration are blocked.
+- Sensitive paths are classified by reason separately from structural path validation. `known_hosts` is public trust metadata. Existing `.npmrc` and `.pypirc` files are accessible only when content inspection finds no credential assignments; certificate-only or public-key PEM files are accessible, while private-key PEM remains blocked. Files in ambiguously named `secret` or `credentials` locations may be accessed only when bounded text inspection finds no credential material. Raw reads, full writes, replacements, review, and deletion remain denied by default. `relai_edit` supports narrow `.env` operations for listing key names, setting one key, removing one key, and comparing key names with a public template; these operations never return values or raw secret-bearing lines. A narrowly scoped Git commit may include sensitive paths only through `sensitiveAuthorization:{ operation:'commit', paths:[...], reason:'...' }`; every staged sensitive path must match the authorization. The legacy `allowSecretPaths:true` form is accepted only with explicit `paths` during migration. Public environment templates remain ordinary repository files.
 - Binary-looking files are rejected by text read and write paths.
 - Read, snapshot, diff, process output, and HTTP request bodies are bounded.
 - Exact replacement can use the SHA-256 returned by `relai_read`; stale hashes fail closed.
 - Git push is restricted to workspace `allowedRemotes`.
-- Git commit refuses secret-looking staged files unless the caller explicitly overrides that safeguard.
+- Git commit requires exact path-scoped authorization for sensitive staged files.
+- `relai_diff` with `redactSensitive:true` omits raw sensitive hunks. Environment-file summaries disclose only added, removed, changed key names, malformed line numbers, and status metadata; other sensitive files disclose path and status only.
 - Automatic session baselines distinguish current-session changes from a worktree that was already dirty.
 - Untracked cleanup requires a short-lived tidy plan and revalidates file ownership, file type, and hash before deletion.
 - Patch-shaped edits can require a clean worktree and can create a tracked-change backup before application.
@@ -97,11 +98,12 @@ Rel.AI MCP is a trusted local coding bridge, not a sandbox.
 
 ```text
 inspect:  relai_repo_snapshot -> relai_read
-change:   relai_edit / relai_write / relai_replace
+change:   relai_edit
 validate: relai_run_checks
-review:   relai_diff / relai_git_status
-cleanup:  relai_restore_changes / relai_tidy_plan + relai_tidy_run
-publish:  relai_git_commit -> relai_git_push -> relai_git_create_pr
+review:   relai_diff / relai_status with workspace
+recover:  relai_restore_paths / relai_reset_workspace / relai_tidy_plan + relai_tidy_run
+publish:  relai_git_commit -> relai_git_push
+review text: relai_git_draft_pr
 ```
 
 Keep workspace aliases pointed only at repositories you trust ChatGPT to inspect, execute, and modify.

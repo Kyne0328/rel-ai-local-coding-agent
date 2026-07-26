@@ -20,6 +20,7 @@ function git(args, options = {}) {
 fs.mkdirSync(path.join(workspace, 'src'), { recursive: true });
 fs.writeFileSync(path.join(workspace, 'README.md'), '# Smoke\n');
 fs.writeFileSync(path.join(workspace, 'src', 'index.js'), 'console.log("smoke")\n');
+fs.writeFileSync(path.join(workspace, 'src', 'helper.js'), 'function smokeValue() { return 1; }\nmodule.exports = { smokeValue };\n');
 fs.writeFileSync(path.join(workspace, 'exec-smoke.js'), "process.stdout.write('exec-smoke-ok');\n");
 fs.writeFileSync(path.join(workspace, 'package.json'), JSON.stringify({
   scripts: { check: 'node --check src/index.js' }
@@ -47,12 +48,24 @@ fs.writeFileSync(configPath, JSON.stringify({
 }, null, 2));
 
 const client = startMcpClient({ root, configPath, timeoutMs: 15000 });
+let taskId = '';
+function taskCall(id, name, args) {
+  client.call(id, name, {
+    ...args,
+    ...(taskId && name !== 'relai_start_task' ? { task_id: taskId } : {})
+  });
+}
 
 try {
   client.send(1, 'initialize', { protocolVersion: '2025-06-18' });
   await client.waitFor(1);
 
-  client.call(3, 'relai_repo_snapshot', { workspace: 'smoke', maxEntries: 100 });
+  taskCall(2, 'relai_start_task', { workspace: 'smoke' });
+  const startedTask = structuredContentOf(await client.waitFor(2));
+  taskId = startedTask.task_id;
+  if (!taskId || startedTask.identity !== 'logical_task') throw new Error('Logical task bootstrap failed.');
+
+  taskCall(3, 'relai_repo_snapshot', { workspace: 'smoke', maxEntries: 100 });
   const snapshot = structuredContentOf(await client.waitFor(3));
   if (!snapshot.files.includes('README.md')) throw new Error('Snapshot missing README.md.');
   for (const mode of ['exact-replace', 'direct-write', 'staged-write', 'apply-update', 'workspace-tidy']) {
@@ -60,16 +73,22 @@ try {
   }
   if (snapshot.writeGuidance?.modes?.['apply-bundle']) throw new Error('Obsolete bundle guidance remains.');
 
-  client.call(4, 'relai_read', { workspace: 'smoke', paths: ['README.md', 'src/index.js'] });
+  taskCall(4, 'relai_read', { workspace: 'smoke', paths: ['README.md', 'src/index.js'] });
   const read = structuredContentOf(await client.waitFor(4));
   if (!read.items[0].content.includes('# Smoke')) throw new Error('Read failed.');
 
-  client.call(17, 'relai_exec', { workspace: 'smoke', command: 'node exec-smoke.js' });
+  taskCall(30, 'relai_code_inspect', { workspace: 'smoke', action: 'symbol', symbol: 'smokeValue' });
+  const codeInspect = structuredContentOf(await client.waitFor(30));
+  if (!codeInspect.ok || codeInspect.index?.freshness !== 'current' || !codeInspect.definitions?.some(item => item.path === 'src/helper.js')) {
+    throw new Error(`Code intelligence dispatch failed: ${JSON.stringify(codeInspect)}`);
+  }
+
+  taskCall(17, 'relai_exec', { workspace: 'smoke', command: 'node exec-smoke.js' });
   const executed = structuredContentOf(await client.waitFor(17));
   if (!executed.ok || executed.exitCode !== 0 || executed.stdout !== 'exec-smoke-ok') throw new Error('One-shot command failed.');
   if (executed.changedFiles.length) throw new Error('Read-only command reported workspace mutations.');
 
-  client.call(5, 'relai_edit', {
+  taskCall(5, 'relai_edit', {
     workspace: 'smoke',
     path: 'README.md',
     oldText: '# Smoke\n',
@@ -78,20 +97,19 @@ try {
   const exactEdit = structuredContentOf(await client.waitFor(5));
   if (!exactEdit.changedFiles.includes('README.md')) throw new Error('Exact edit failed.');
 
-  client.call(6, 'relai_write', {
+  taskCall(6, 'relai_edit', {
     workspace: 'smoke',
     path: 'README.md',
-    content: '# Smoke\n\nWritten through relai_write.\n',
+    content: '# Smoke\n\nWritten through relai_edit content mode.\n',
     dryRun: true
   });
   const dryWrite = structuredContentOf(await client.waitFor(6));
-  if (!dryWrite.dryRun || !dryWrite.changedFiles.includes('README.md')) throw new Error('Dry write failed.');
+  if (!dryWrite.dryRun || !dryWrite.changedFiles.includes('README.md')) throw new Error('Dry content edit failed.');
 
-  client.call(7, 'relai_replace', {
+  taskCall(7, 'relai_edit', {
     workspace: 'smoke',
     path: 'README.md',
-    oldText: 'Edited through relai_edit.',
-    newText: 'Updated by exact replacement.'
+    replacements: [{ oldText: 'Edited through relai_edit.', newText: 'Updated by exact replacement.' }]
   });
   const replaced = structuredContentOf(await client.waitFor(7));
   if (!replaced.changedFiles.includes('README.md')) throw new Error('Replacement failed.');
@@ -103,7 +121,7 @@ try {
 +console.log("smoke updated")
 *** End Patch
 `;
-  client.call(8, 'relai_edit', { workspace: 'smoke', updateText: patch, returnDiff: true });
+  taskCall(8, 'relai_edit', { workspace: 'smoke', updateText: patch, returnDiff: true });
   const patched = structuredContentOf(await client.waitFor(8));
   if (!patched.changedFiles.includes('src/index.js')) throw new Error('Patch edit failed.');
 
@@ -114,40 +132,52 @@ try {
 *** Delete File: obsolete.md
 *** End Patch
 `;
-  client.call(9, 'relai_edit', { workspace: 'smoke', updateText: deletePatch });
+  taskCall(9, 'relai_edit', { workspace: 'smoke', updateText: deletePatch });
   const deleted = structuredContentOf(await client.waitFor(9));
   if (!deleted.changedFiles.includes('obsolete.md') || fs.existsSync(path.join(workspace, 'obsolete.md'))) {
     throw new Error('Structured delete failed.');
   }
 
   fs.writeFileSync(path.join(workspace, 'session-artifact.txt'), 'temporary\n');
-  client.call(10, 'relai_git_status', { workspace: 'smoke' });
+  taskCall(10, 'relai_status', { workspace: 'smoke' });
   const status = structuredContentOf(await client.waitFor(10));
-  if (!status.untrackedSessionFiles.includes('session-artifact.txt')) throw new Error('Session ownership missing untracked artifact.');
+  if (!status.workspace?.repository?.sessionChangedFiles?.includes('session-artifact.txt')) throw new Error('Session ownership missing untracked artifact.');
 
-  client.call(11, 'relai_tidy_plan', { workspace: 'smoke' });
+  taskCall(11, 'relai_tidy_plan', { workspace: 'smoke' });
   const plan = structuredContentOf(await client.waitFor(11));
   if (!plan.candidates.some(item => item.path === 'session-artifact.txt')) throw new Error('Tidy plan missed session artifact.');
-  client.call(12, 'relai_tidy_run', { workspace: 'smoke', planId: plan.planId });
+  taskCall(12, 'relai_tidy_run', { workspace: 'smoke', planId: plan.planId });
   const tidied = structuredContentOf(await client.waitFor(12));
   if (!tidied.changedFiles.includes('session-artifact.txt')) throw new Error('Tidy run failed.');
 
-  client.call(13, 'relai_run_checks', { workspace: 'smoke', level: 'standard' });
+  taskCall(13, 'relai_run_checks', { workspace: 'smoke', level: 'standard' });
   const checks = structuredContentOf(await client.waitFor(13));
   if (!checks.ok || !checks.checks.includes('npm run check')) throw new Error('Validation failed.');
 
-  client.call(14, 'relai_diff', { workspace: 'smoke' });
+  taskCall(14, 'relai_diff', { workspace: 'smoke' });
   const diff = structuredContentOf(await client.waitFor(14));
   if (!diff.diff.includes('Updated by exact replacement')) throw new Error('Diff missing README change.');
   if (!diff.diff.includes('smoke updated')) throw new Error('Diff missing source change.');
 
-  client.call(15, 'relai_restore_changes', { workspace: 'smoke', paths: ['README.md', 'src/index.js', 'obsolete.md'] });
+  taskCall(15, 'relai_restore_paths', { workspace: 'smoke', paths: ['README.md', 'src/index.js', 'obsolete.md'] });
   const restored = structuredContentOf(await client.waitFor(15));
   if (!restored.ok) throw new Error('Restore failed.');
 
-  client.call(16, 'relai_diff', { workspace: 'smoke' });
+  taskCall(16, 'relai_diff', { workspace: 'smoke' });
   const clean = structuredContentOf(await client.waitFor(16));
   if (clean.diff.trim()) throw new Error('Workspace diff should be clean after restore.');
+
+  taskCall(31, 'relai_run_checks', {
+    workspace: 'smoke',
+    level: 'standard',
+    complete: true,
+    summary: 'Completed and validated the public workflow smoke task.'
+  });
+  const completed = structuredContentOf(await client.waitFor(31));
+  if (!completed.ok || completed.completionKnown !== true || completed.completionSource !== 'relai_run_checks') {
+    throw new Error(`Atomic workflow completion failed: ${JSON.stringify(completed)}`);
+  }
+  if (completed.summary !== 'Completed and validated the public workflow smoke task.') throw new Error('Atomic workflow completion lost its summary.');
 
   console.log('Public tool workflow smoke test passed.');
 } finally {

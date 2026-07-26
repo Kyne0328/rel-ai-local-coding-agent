@@ -30,7 +30,7 @@ function createApprovalTokenManager({
     try {
       saveLauncherConfig(replacement);
     } catch (error) {
-      throw new Error(`Approval-token replacement was not started. The current token and OAuth grants are unchanged. ${messageOf(error)}`);
+      throw new Error(`Approval-token replacement was not started. The current token and OAuth grants are unchanged. ${messageOf(error)}`, { cause: error });
     }
 
     let revoked;
@@ -40,9 +40,9 @@ function createApprovalTokenManager({
       try {
         saveLauncherConfig(connectionConfig(current, current.token));
       } catch (rollbackError) {
-        throw new Error(`OAuth revocation failed and the original approval token could not be restored. Open Diagnostics immediately. Revocation error: ${messageOf(error)} Rollback error: ${messageOf(rollbackError)}`);
+        throw new Error(`OAuth revocation failed and the original approval token could not be restored. Open Diagnostics immediately. Revocation error: ${messageOf(error)} Rollback error: ${messageOf(rollbackError)}`, { cause: rollbackError });
       }
-      throw new Error(`Approval-token replacement was rolled back because OAuth revocation failed. The original token was restored, although some OAuth grants may already be revoked. ${messageOf(error)}`);
+      throw new Error(`Approval-token replacement was rolled back because OAuth revocation failed. The original token was restored, although some OAuth grants may already be revoked. ${messageOf(error)}`, { cause: error });
     }
 
     let desktopStatus;

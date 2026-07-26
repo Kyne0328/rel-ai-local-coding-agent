@@ -1,4 +1,7 @@
-@import "tailwindcss";
+@import "tailwindcss" source(none);
+@source "../**/*.js";
+@source "../../http/dashboard.js";
+@source "../../../public/dashboard.js";
 
 :root {
   color-scheme: dark;
@@ -261,6 +264,8 @@
   input:focus, select:focus, textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-dim); }
   input::placeholder, textarea::placeholder { color: var(--text-dim); }
   textarea { @apply min-h-24 resize-y py-2.5; }
+  .select-control { @apply relative flex w-full min-w-0; }
+  .select-control select { @apply min-w-0; }
   label { @apply text-[12px] font-semibold; }
   .field, .field-stack { @apply flex min-w-0 flex-col gap-1.5; }
   .field-row, .ws-form-row { @apply grid gap-3; grid-template-columns: repeat(2, minmax(0,1fr)); }
@@ -339,12 +344,17 @@
   .activity-filter-summary { @apply col-span-full px-0.5 pt-1 text-[11px]; color: var(--text-muted); }
   .activity-event-card { @apply min-w-0; }
   .activity-event-card .card-body { @apply p-0; }
-  .table-wrap { @apply w-full min-w-0 overflow-auto; overscroll-behavior: contain; }
+  .table-wrap {
+    @apply w-full min-w-0 overflow-auto;
+    overscroll-behavior-x: contain;
+    overscroll-behavior-y: auto;
+  }
   .data-table { @apply w-full border-collapse text-left; table-layout: fixed; }
   .data-table th { @apply sticky top-0 z-10 h-10 border-b px-4 text-[10px] font-bold uppercase tracking-[.08em]; color: var(--text-dim); background: var(--surface-2); border-color: var(--line-soft); }
   .data-table td { @apply h-[54px] border-b px-4 text-[12px] align-middle; border-color: var(--line); }
   .data-table tbody tr:last-child td { border-bottom: 0; }
   .data-table tbody tr:hover td { background: color-mix(in srgb, var(--surface-2) 62%, transparent); }
+  .table-virtual-sentinel-cell { height: 1px; padding: 4px; }
   .activity-table { min-width: 100%; }
   .activity-col-time { width: 9%; }
   .activity-col-tool { width: 21%; }
@@ -408,7 +418,6 @@
   .workspace-empty-mark { @apply grid size-12 place-items-center rounded-2xl text-2xl; background: var(--blue-dim); color: var(--blue); }
   .workspace-card-focused { outline: 2px solid var(--blue); outline-offset: 3px; }
 
-  .settings-layout { @apply grid min-w-0 gap-3; grid-template-columns: 210px minmax(0,1fr); }
   .settings-rail { @apply flex flex-col gap-1 rounded-xl p-2; background: var(--surface); border: 1px solid var(--line-soft); }
   .settings-nav-button { @apply min-w-[118px] justify-start border-transparent bg-transparent; color: var(--text-muted); }
   .settings-nav-button.active { background: var(--blue-dim); border-color: color-mix(in srgb, var(--blue) 36%, transparent); color: var(--text); }
@@ -470,6 +479,37 @@
   .setup-steps { @apply flex flex-col gap-3; }
   .step { @apply flex gap-3 rounded-lg p-3 text-[12px] leading-5; background: var(--surface-2); border: 1px solid var(--line); }
   .step-num { @apply grid size-6 shrink-0 place-items-center rounded-full text-[11px] font-bold; background: var(--blue-dim); color: var(--blue); }
+  .onboarding-shell { @apply grid gap-5; }
+  .onboarding-step-label { @apply -mt-2 text-right text-[12px]; color: var(--text-muted); }
+  .onboarding-content { @apply grid gap-3.5; }
+  .onboarding-footer { @apply flex items-center justify-between gap-3; }
+  .onboarding-footer-actions { @apply flex items-center gap-2; }
+  .onboarding-compact-action { @apply min-h-7 px-2.5 text-[12px]; }
+  .onboarding-skip-action { color: var(--text-muted); }
+  .onboarding-copy { @apply text-[14px] leading-[1.55]; }
+  .onboarding-heading { @apply text-[15px] font-bold; }
+  .onboarding-description, .onboarding-hint { @apply text-[13px] leading-[1.5]; color: var(--text-muted); }
+  .onboarding-hint { @apply text-[12px]; }
+  .onboarding-input { @apply w-full; }
+  .onboarding-validation { @apply min-h-[18px] text-[12px] leading-[1.45]; color: var(--text-muted); }
+  .onboarding-validation.success { color: var(--green); }
+  .onboarding-validation.error { color: var(--red); }
+  .onboarding-created-note { @apply p-3 text-left leading-[1.5]; background: var(--green-dim); border: 1px solid color-mix(in srgb, var(--green) 28%, transparent); }
+  .onboarding-example { @apply p-3 text-left leading-[1.5]; }
+  .onboarding-example-title { color: var(--text); }
+  .onboarding-complete { @apply grid gap-3 py-4 text-center; }
+  .onboarding-complete-mark { @apply text-[32px]; color: var(--green); }
+  .onboarding-complete-title { @apply text-[16px] font-bold; }
+  .onboarding-complete-copy { @apply text-[13px] leading-[1.5]; color: var(--text-muted); }
+  .onboarding-endpoint-row { @apply flex items-center gap-2; }
+  .onboarding-endpoint { @apply min-w-0 flex-1 break-all rounded-lg p-2 text-[11px]; background: var(--bg); border: 1px solid var(--line-soft); }
+  .onboarding-copy-action { @apply min-h-7 shrink-0 px-2.5 text-[12px]; }
+  .onboarding-connection-status { @apply text-[12px] leading-[1.45]; }
+  .onboarding-connection-status.good { color: var(--green); }
+  .onboarding-connection-status.warn { color: var(--yellow); }
+  .desktop-setup-handoff { @apply mb-3.5 grid gap-2.5; }
+  .onboarding-resume-banner { @apply mb-3 flex items-center justify-between gap-3 rounded-lg px-3.5 py-2.5 text-[13px]; background: var(--yellow-dim); border: 1px solid color-mix(in srgb, var(--yellow) 28%, transparent); }
+  .onboarding-resume-label { color: var(--yellow); }
   .connection-facts { @apply grid gap-0 overflow-hidden rounded-lg; border: 1px solid var(--line-soft); }
   .connection-fact { @apply grid min-h-11 items-center gap-3 border-b px-3 last:border-b-0; grid-template-columns: 150px minmax(0,1fr); border-color: var(--line); }
   .connection-fact-label { @apply text-[10px] font-bold uppercase tracking-[.08em]; color: var(--text-dim); }
@@ -539,11 +579,7 @@
   .command-group { @apply shrink-0 text-[10px] font-semibold; color: var(--text-dim); }
   .command-empty { @apply p-6 text-center text-[12px]; color: var(--text-muted); }
 
-  .toast-stack { @apply fixed bottom-4 right-4 z-[80] flex w-[min(380px,calc(100vw-32px))] flex-col gap-2; }
   .toast { @apply rounded-xl px-4 py-3 text-[12px]; background: var(--surface); border: 1px solid var(--line-soft); box-shadow: var(--shadow-popover); }
-  .toast.success { border-color: color-mix(in srgb, var(--green) 40%, transparent); }
-  .toast.warn { border-color: color-mix(in srgb, var(--yellow) 40%, transparent); }
-  .toast.error { border-color: color-mix(in srgb, var(--red) 40%, transparent); }
 
   .ws-form, .settings-form { @apply flex flex-col gap-4; }
   .ws-form-section { @apply flex flex-col gap-3 rounded-xl p-4; background: var(--surface-2); border: 1px solid var(--line); }
@@ -637,6 +673,9 @@
   .settings-help { @apply m-0 text-[11px] leading-5; color: var(--text-muted); }
   .settings-number-control { @apply max-w-[180px]; }
   .settings-textarea-control { @apply min-h-24 w-full; }
+  .password-field { @apply grid min-w-0 gap-2; grid-template-columns: minmax(0,1fr) auto; }
+  .password-field > input { @apply min-w-0; }
+  .password-toggle { @apply min-w-16; }
   .settings-save-row { @apply justify-end; }
   .settings-summary { @apply p-4 text-left text-[12px] leading-6; }
   .settings-warning { background: var(--blue-dim); border-color: color-mix(in srgb, var(--blue) 34%, transparent); }
@@ -719,12 +758,15 @@
   .capability-git .tool-capability { color: var(--text); }
   .capability-recover .tool-capability { color: var(--red); }
 
-  .diagnostic-page-head { @apply items-start; }
-  .diagnostic-page-actions { @apply justify-end; }
-  .diagnostic-toolbar { @apply grid items-end gap-3 rounded-xl p-3; grid-template-columns: minmax(280px,1fr) minmax(160px,.35fr) minmax(160px,.35fr) auto; background: var(--surface); border: 1px solid var(--line-soft); }
-  .diagnostic-toolbar label { @apply flex min-w-0 flex-col gap-1.5; }
+  .diagnostic-page { @apply flex min-w-0 flex-col gap-3; container-type: inline-size; container-name: diagnostic-page; }
+  .diagnostic-page-head { @apply min-w-0 items-start; }
+  .diagnostic-page-actions { @apply min-w-0 flex-wrap justify-end; }
+  .diagnostic-page-actions button { @apply min-w-0; }
+  .diagnostic-toolbar { @apply grid min-w-0 items-end gap-3 rounded-xl p-3; grid-template-columns: minmax(260px,1fr) minmax(140px,.38fr) minmax(140px,.38fr) auto; background: var(--surface); border: 1px solid var(--line-soft); }
+  .diagnostic-toolbar label { @apply flex min-w-0 w-full flex-col gap-1.5; }
+  .diagnostic-toolbar input, .diagnostic-toolbar select { @apply min-w-0 w-full; }
   .diagnostic-toolbar label > span { @apply text-[10px] font-bold uppercase tracking-[.08em]; color: var(--text-dim); }
-  .diagnostic-live-tail { @apply whitespace-nowrap; }
+  .diagnostic-live-tail { @apply min-w-0 whitespace-nowrap; }
   .diagnostic-live-tail.active { background: var(--blue-dim); color: var(--blue); }
   .diagnostic-filter-summary { @apply col-span-full text-[11px]; color: var(--text-muted); }
   .diagnostic-summary, .diagnostic-list { @apply flex min-w-0 flex-col gap-3; }
@@ -898,6 +940,10 @@
   .connection-path-step:last-child { border-bottom: 0; }
   .connection-actions-bar { grid-template-columns: 1fr; }
   .connection-actions { @apply justify-start; }
+  .onboarding-footer { @apply flex-col items-stretch; }
+  .onboarding-footer-actions { @apply flex-wrap; }
+  .onboarding-footer > button, .onboarding-copy-action { @apply w-full; }
+  .onboarding-endpoint-row { @apply flex-col items-stretch; }
   .field-row, .ws-form-row { grid-template-columns: 1fr; }
   .tools-grid { grid-template-columns: 1fr; }
   .diagnostic-toolbar { grid-template-columns: 1fr; }
@@ -916,6 +962,8 @@
   .main { padding-inline: max(10px, env(safe-area-inset-left)); }
   .top-controls { grid-template-columns: minmax(0,1fr) auto; }
   .feature-toolbar { @apply flex-col; }
+  .onboarding-resume-banner { @apply flex-col items-stretch; }
+  .onboarding-resume-banner button { @apply w-full; }
   .workspace-menu { @apply w-full min-w-0; }
   .workspace-menu-popover { @apply left-0 right-auto w-full min-w-0; }
   .section-head-actions { @apply w-full justify-between; }
@@ -928,11 +976,30 @@
   .settings-save-row { @apply flex-col items-stretch; }
   .settings-save-actions { @apply justify-end; }
   .connection-endpoint-row { @apply flex-col; }
+  .password-field { grid-template-columns: minmax(0,1fr); }
+  .password-toggle { @apply w-full; }
   .modal-shell, .modal-panel { @apply max-h-[calc(100dvh-16px)] w-[calc(100vw-16px)]; }
   .drawer-panel { @apply bottom-2 left-2 right-2 top-2 w-auto; }
   .drawer-body { @apply p-3; }
   .session-list-footer { @apply flex-col items-stretch; }
   .session-list-footer button { @apply w-full; }
+}
+
+@container diagnostic-page (max-width: 760px) {
+  .diagnostic-page-head { @apply flex-col items-stretch; }
+  .diagnostic-page-actions { @apply justify-start; }
+  .diagnostic-toolbar { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .diagnostic-search-control { grid-column: 1 / -1; }
+  .diagnostic-live-tail { @apply justify-self-start; }
+  .diagnostic-filter-summary { grid-column: 1 / -1; }
+}
+
+@container diagnostic-page (max-width: 480px) {
+  .diagnostic-page-actions { @apply grid w-full; grid-template-columns: minmax(0,1fr); }
+  .diagnostic-page-actions button { @apply w-full; }
+  .diagnostic-toolbar { grid-template-columns: minmax(0,1fr); }
+  .diagnostic-search-control, .diagnostic-filter-summary { grid-column: 1; }
+  .diagnostic-live-tail { @apply w-full justify-self-stretch; }
 }
 
 @media (prefers-reduced-motion: reduce) {
