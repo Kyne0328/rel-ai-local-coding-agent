@@ -266,6 +266,7 @@ function openDashboardEvents(res, req, options) {
     }
   };
   sendSse(res, "ready", { ok: true, generatedAt: new Date().toISOString() });
+  sendSnapshot(true);
   let pendingSnapshot = null;
   const scheduleSnapshot = () => {
     if (pendingSnapshot || res.destroyed) return;

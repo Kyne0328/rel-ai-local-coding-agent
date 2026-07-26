@@ -4,7 +4,7 @@ let _onEvent = null;
 let _onState = null;
 let _tokenFn = null;
 let _reconnectTimer = null;
-let _paused = false;
+let _stopped = true;
 let _visibilityWired = false;
 let _generation = 0;
 let _retryCount = 0;
@@ -19,12 +19,13 @@ export function initEvents(onEvent, onState) {
 
 export function startSSE(tokenFn) {
   _tokenFn = tokenFn || _tokenFn;
-  if (_es || document.visibilityState === 'hidden') return;
-  _paused = false;
+  _stopped = false;
+  if (_es) return;
   _connect();
 }
 
 export function stopSSE(options = {}) {
+  _stopped = true;
   _generation += 1;
   closeSource();
   clearReconnect();
@@ -34,9 +35,9 @@ export function stopSSE(options = {}) {
 export function restartSSE(tokenFn) {
   _tokenFn = tokenFn || _tokenFn;
   stopSSE({ emit: false });
-  _paused = false;
+  _stopped = false;
   _retryCount = 0;
-  if (document.visibilityState !== 'hidden') _connect();
+  _connect();
 }
 
 export function isLive() {
@@ -44,21 +45,13 @@ export function isLive() {
 }
 
 function _handleVisibilityChange() {
-  if (document.visibilityState === 'hidden') {
-    _paused = true;
-    _generation += 1;
-    closeSource();
-    clearReconnect();
-    emitState('paused');
-    return;
-  }
-  _paused = false;
+  if (document.visibilityState !== 'visible' || _stopped || _es) return;
   _retryCount = 0;
-  startSSE(_tokenFn);
+  _connect();
 }
 
 function _connect() {
-  if (_paused || document.visibilityState === 'hidden' || _es) return;
+  if (_stopped || _es) return;
   const generation = ++_generation;
   const token = _tokenFn ? _tokenFn() : '';
   const url = token ? `/events?token=${encodeURIComponent(token)}` : '/events';
@@ -78,7 +71,7 @@ function _connect() {
     }
   });
   source.addEventListener('dashboard', event => {
-    if (!isCurrent(source, generation) || _paused) return;
+    if (!isCurrent(source, generation)) return;
     try {
       const data = JSON.parse(event.data);
       markLive(source, generation, Date.now());
@@ -90,7 +83,7 @@ function _connect() {
   source.addEventListener('error', () => {
     if (!isCurrent(source, generation)) return;
     closeSource();
-    if (_paused || document.visibilityState === 'hidden') return;
+    if (_stopped) return;
     _retryCount += 1;
     emitState('reconnecting');
     const delay = Math.min(15000, 750 * (2 ** Math.min(_retryCount - 1, 4)));

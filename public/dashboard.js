@@ -29,6 +29,7 @@ let _refreshPromise = null;
 let _renderFingerprint = '';
 let _renderFrame = 0;
 let _renderWaiters = [];
+let _deferredViewRender = false;
 
 function cleanLaunchQuery() {
   const clean = new URLSearchParams(location.search);
@@ -100,8 +101,18 @@ async function boot() {
     if (refreshed?.ok !== false && !_routerReady) activateRouter(routeRoot);
   }
   window.addEventListener('relai:dashboard-refresh', () => doRefresh({ source: 'local-change', render: true }));
+  document.addEventListener('focusout', event => {
+    if (event.target instanceof HTMLSelectElement) flushDeferredViewRender();
+  }, true);
+  document.addEventListener('change', event => {
+    if (event.target instanceof HTMLSelectElement) flushDeferredViewRender({ ignoreFocusedSelect: true });
+  }, true);
+  window.addEventListener('relai:dropdown-closed', flushDeferredViewRender);
   initEvents(liveOnEvent, liveStateChange);
   startSSE(getToken);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void doRefresh({ source: 'visibility-resume', render: true });
+  });
   checkOnboarding();
 }
 
@@ -265,7 +276,12 @@ function pluralLabel(count, singular) {
 }
 
 function renderViewIfChanged(data) {
-  if (!_routerReady || hasBlockingInteraction()) return Promise.resolve(false);
+  if (!_routerReady) return Promise.resolve(false);
+  if (hasBlockingInteraction()) {
+    _deferredViewRender = true;
+    return Promise.resolve(false);
+  }
+  _deferredViewRender = false;
   const nextFingerprint = viewFingerprint(data);
   if (nextFingerprint === _renderFingerprint) return Promise.resolve(false);
   _renderFingerprint = nextFingerprint;
@@ -281,6 +297,7 @@ function renderViewIfChanged(data) {
           rendered = true;
         } else {
           _renderFingerprint = '';
+          _deferredViewRender = true;
         }
       } catch (error) {
         _renderFingerprint = '';
@@ -392,11 +409,23 @@ function renderLastEventTime() {
   updated.textContent = `Updated ${Math.floor(seconds / 60)}m ago`;
 }
 
-function hasBlockingInteraction() {
+function hasBlockingInteraction(options = {}) {
   if (document.getElementById('__relai-modal-backdrop')) return true;
   if (document.getElementById('__relai-drawer-backdrop')) return true;
+  if (document.querySelector('[aria-haspopup][aria-expanded="true"]')) return true;
+  if (!options.ignoreFocusedSelect && document.activeElement instanceof HTMLSelectElement) return true;
   const saveRow = document.getElementById('__settings-save-row');
   return Boolean(saveRow && !saveRow.hidden);
+}
+
+function flushDeferredViewRender(options = {}) {
+  if (!_deferredViewRender) return;
+  window.requestAnimationFrame(() => {
+    if (!_deferredViewRender || hasBlockingInteraction(options)) return;
+    _deferredViewRender = false;
+    _renderFingerprint = '';
+    void renderViewIfChanged(getStore());
+  });
 }
 
 async function checkOnboarding() {

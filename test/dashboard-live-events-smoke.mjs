@@ -16,8 +16,12 @@ assert.match(eventClientSource, /addEventListener\('ready'/, 'the dashboard clie
 assert.match(eventClientSource, /stopSSE\(\{ emit: false \}\)/, 'normal SSE restarts must not flash an offline state');
 assert.match(eventClientSource, /emitState\('reconnecting'\)/, 'temporary transport failures must be represented as reconnecting');
 assert.match(eventClientSource, /750 \* \(2 \*\*/, 'reconnect attempts must use bounded exponential backoff');
-assert.match(eventClientSource, /visibilityState === 'hidden'/, 'hidden windows must pause transport work instead of repeatedly reconnecting');
+assert.doesNotMatch(eventClientSource, /emitState\('paused'\)/, 'background windows must keep the live transport active');
+assert.doesNotMatch(eventClientSource, /visibilityState === 'hidden'/, 'background windows must not disconnect the live transport');
+assert.match(eventClientSource, /visibilityState !== 'visible'/, 'visibility recovery must reconnect only when the window becomes visible and the stream is absent');
 assert.match(eventClientSource, /new EventSource\(url, \{ withCredentials: true \}\)/, 'Electron EventSource requests must include the dashboard session cookie');
+assert.match(dashboardSource, /sendSnapshot\(true\)/, 'every new SSE connection must receive an immediate catch-up snapshot');
+assert.match(dashboardClientSource, /source: 'visibility-resume'/, 'returning to the dashboard must force a catch-up refresh');
 assert.match(dashboardSource, /onToolActivity\(scheduleSnapshot\)/, 'tool activity must schedule dashboard snapshots');
 assert.doesNotMatch(dashboardSource, /setInterval\(\(\) => sendSnapshot/, 'dashboard updates must not depend on a polling timer');
 assert.doesNotMatch(dashboardClientSource, /configureLiveRefresh|dashboardRefreshSeconds|liveLogPollSeconds|_liveState = 'polling'/);
@@ -83,6 +87,9 @@ try {
   const ready = await stream.nextEvent();
   assert.equal(ready.event, 'ready');
   assert.equal(JSON.parse(ready.data).ok, true);
+  const initialSnapshot = await stream.nextDashboardEvent();
+  assert.equal(initialSnapshot.desktopStatus?.tunnelStatus, 'connecting');
+  assert.equal(initialSnapshot.connectionState?.localService?.status, 'running');
 
   const entry = {
     ts: new Date().toISOString(),
