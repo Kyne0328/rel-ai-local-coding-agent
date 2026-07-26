@@ -7,6 +7,17 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { planEdit } = require('../src/executionPlanner.js');
+const {
+  MAX_BATCH_EDITS,
+  MAX_BATCH_REPLACEMENTS,
+  MAX_BATCH_INPUT_BYTES,
+  MAX_BATCH_SNAPSHOT_BYTES
+} = require('../src/editLimits.js');
+
+assert.equal(MAX_BATCH_EDITS, 100);
+assert.equal(MAX_BATCH_REPLACEMENTS, 500);
+assert.equal(MAX_BATCH_INPUT_BYTES, 8 * 1024 * 1024);
+assert.equal(MAX_BATCH_SNAPSHOT_BYTES, 64 * 1024 * 1024);
 
 function gitShell(command, options = {}) {
   return execSync(command, options);
@@ -257,6 +268,103 @@ function makeTempRepo(filename = 'hello.js', content = 'module.exports = {};') {
     assert.equal(fs.existsSync(path.join(dir, 'large.txt')), false);
     assert.equal(fs.existsSync(path.join(stateDir, 'write-staging')), false);
     assert.equal(fs.existsSync(path.join(stateDir, 'operation-journal')), false);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// 15. structured batches accept 100 edits and compact their response details.
+{
+  const dir = makeTempRepo();
+  const workspace = { alias: 'test', path: dir };
+  try {
+    const edits = Array.from({ length: MAX_BATCH_EDITS }, (_, index) => ({
+      path: `batch/file-${index}.txt`,
+      content: `value-${index}\n`
+    }));
+    const result = await planEdit(workspace, {}, { edits });
+    assert.equal(result.ok, true);
+    assert.equal(result.editCount, MAX_BATCH_EDITS);
+    assert.equal(result.appliedCount, MAX_BATCH_EDITS);
+    assert.equal(result.resultDetailsCompacted, true);
+    assert.equal(result.results.length, MAX_BATCH_EDITS);
+    assert.equal(fs.readFileSync(path.join(dir, 'batch', 'file-0.txt'), 'utf8'), 'value-0\n');
+    assert.equal(fs.readFileSync(path.join(dir, 'batch', 'file-99.txt'), 'utf8'), 'value-99\n');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// 16. runtime enforcement rejects more than 100 structured edits before mutation.
+{
+  const dir = makeTempRepo();
+  const workspace = { alias: 'test', path: dir };
+  try {
+    const edits = Array.from({ length: MAX_BATCH_EDITS + 1 }, (_, index) => ({
+      path: `too-many-${index}.txt`,
+      content: 'x'
+    }));
+    await assert.rejects(
+      () => planEdit(workspace, {}, { edits }),
+      new RegExp(`at most ${MAX_BATCH_EDITS} structured batch edits`)
+    );
+    assert.equal(fs.existsSync(path.join(dir, 'too-many-0.txt')), false);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// 17. aggregate replacement operations are bounded across the whole batch.
+{
+  const dir = makeTempRepo();
+  const workspace = { alias: 'test', path: dir };
+  try {
+    const edits = Array.from({ length: 11 }, (_, editIndex) => ({
+      path: `replace-${editIndex}.txt`,
+      replacements: Array.from(
+        { length: editIndex === 10 ? 1 : 50 },
+        (_, replacementIndex) => ({ oldText: `old-${replacementIndex}`, newText: `new-${replacementIndex}` })
+      )
+    }));
+    await assert.rejects(
+      () => planEdit(workspace, {}, { edits }),
+      new RegExp(`at most ${MAX_BATCH_REPLACEMENTS} total replacement operations`)
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// 18. aggregate structured batch payloads are capped below the HTTP body limit.
+{
+  const dir = makeTempRepo();
+  const workspace = { alias: 'test', path: dir };
+  try {
+    await assert.rejects(
+      () => planEdit(workspace, {}, {
+        edits: [{ path: 'oversized.txt', content: 'x'.repeat(MAX_BATCH_INPUT_BYTES) }]
+      }),
+      new RegExp(`max is ${MAX_BATCH_INPUT_BYTES}`)
+    );
+    assert.equal(fs.existsSync(path.join(dir, 'oversized.txt')), false);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// 19. rollback snapshot size is checked before preflight reads a large target.
+{
+  const dir = makeTempRepo();
+  const workspace = { alias: 'test', path: dir };
+  const target = path.join(dir, 'large-existing.txt');
+  try {
+    fs.writeFileSync(target, '');
+    fs.truncateSync(target, MAX_BATCH_SNAPSHOT_BYTES + 1);
+    await assert.rejects(
+      () => planEdit(workspace, {}, { edits: [{ path: 'large-existing.txt', content: 'replacement\n' }] }),
+      new RegExp(`max is ${MAX_BATCH_SNAPSHOT_BYTES}`)
+    );
+    assert.equal(fs.statSync(target).size, MAX_BATCH_SNAPSHOT_BYTES + 1);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

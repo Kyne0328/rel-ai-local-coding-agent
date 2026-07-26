@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.21.2] — 2026-07-26
+
+### Scalable structured edits
+- **Raise structured batch editing to 100 files with explicit payload, replacement, rollback, and aggregate byte limits.**
+- **Compact large successful batch results while preserving actionable per-file failures and rollback diagnostics.**
+- **Advertise tool surface version 11 with the expanded edit schema and limits.**
+
+Bump root/electron/status UI/lockfiles to 0.21.2.
+
 ## [0.21.1] — 2026-07-26
 
 ### Workspace and task identity
