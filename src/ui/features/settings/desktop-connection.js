@@ -2,6 +2,7 @@ import { toast } from '../../components/toast.js';
 import { requestDashboardRefresh } from '../../api.js';
 import { markUnsaved } from '../../interaction-safety.js';
 import { header, panel, field, formGrid, numberControl } from './shared.js';
+import { esc as escapeHtml } from '../../utils.js';
 
 let state = null;
 let savedConnectionState = null;
@@ -372,6 +373,3 @@ function messageOf(error) {
   return error instanceof Error ? error.message : String(error || 'Connection settings failed.');
 }
 
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
-}

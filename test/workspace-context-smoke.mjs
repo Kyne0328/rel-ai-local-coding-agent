@@ -58,15 +58,13 @@ assert.match(directRead.items[0].content, /outside-context-marker/, 'direct read
 const search = await relaiSearch(workspace, config, { pattern: 'outside-context-marker', fixed: true });
 assert.equal(search.matches[0].path, 'docs/extra.txt', 'search must cover files outside the initial snapshot include roots');
 
-const migrated = normalizeConfig({
+const currentOnly = normalizeConfig({
   maxIndexFiles: 2500,
   workspaces: {
-    legacy: {
+    legacyInput: {
       path: repo,
       fastTask: {
         enabled: false,
-        skipIndexForSmallTasks: false,
-        preferChangedFiles: false,
         maxIndexFiles: 2,
         includeRoots: ['src']
       }
@@ -74,11 +72,10 @@ const migrated = normalizeConfig({
     fallback: { path: repo }
   }
 });
-assert.equal(migrated.workspaces.legacy.context.snapshotMaxFiles, 2);
-assert.deepEqual(migrated.workspaces.legacy.context.includeRoots, ['src']);
-assert.equal(Object.hasOwn(migrated.workspaces.legacy, 'fastTask'), false);
-assert.equal(Object.hasOwn(migrated.workspaces.legacy.context, 'enabled'), false);
-assert.equal(migrated.workspaces.fallback.context.snapshotMaxFiles, 2500, 'legacy global limit must migrate into workspaces without an explicit context limit');
+assert.equal(currentOnly.workspaces.legacyInput.context.snapshotMaxFiles, 3000, 'legacy fastTask limits must be ignored');
+assert.deepEqual(currentOnly.workspaces.legacyInput.context.includeRoots, [], 'legacy fastTask roots must be ignored');
+assert.equal(Object.hasOwn(currentOnly.workspaces.legacyInput, 'fastTask'), false);
+assert.equal(currentOnly.workspaces.fallback.context.snapshotMaxFiles, 3000, 'legacy global limits must be ignored');
 
 fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 let updated = updateWorkspace(config, {

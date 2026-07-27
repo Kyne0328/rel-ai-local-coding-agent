@@ -40,10 +40,7 @@ const {
   handleToken,
   handleMcpGetDiagnostic,
   handleMcpStreamable,
-  handleMcpSse,
-  handleMcpMessages,
-  getMcpAccess,
-  handleJsonRpcPayload
+  getMcpAccess
 } = require("./http/mcp");
 
 const DEFAULT_MAX_BODY_BYTES = 10 * 1024 * 1024;
@@ -73,7 +70,7 @@ function startHttpServer(options = {}) {
   const clearRuntimeLogs = typeof options.clearRuntimeLogs === "function" ? options.clearRuntimeLogs : null;
 
   if (!token && !allowNoAuth) {
-    throw new Error("REL_AI_MCP_TOKEN is required for the HTTP/SSE server. Set a strong token, or set REL_AI_MCP_ALLOW_NO_AUTH=1 for local-only testing.");
+    throw new Error("REL_AI_MCP_TOKEN is required for the HTTP server. Set a strong token, or set REL_AI_MCP_ALLOW_NO_AUTH=1 for local-only testing.");
   }
 
   const server = http.createServer(async (req, res) => {
@@ -102,7 +99,7 @@ function startHttpServer(options = {}) {
   server.listen(port, host, () => {
     const address = server.address();
     const actualPort = address && typeof address === "object" ? address.port : port;
-    console.error(`[rel-ai-mcp] HTTP/SSE server listening on http://${host}:${actualPort}`);
+    console.error(`[rel-ai-mcp] HTTP server listening on http://${host}:${actualPort}`);
     if (writeProfile) {
       const previousPort = Number(savedProfile.port || 0);
       if (previousPort && previousPort !== actualPort) {
@@ -120,7 +117,7 @@ function startHttpServer(options = {}) {
       console.error(`[rel-ai-mcp] Local ChatGPT-style URL for diagnostics only: ${summary.chatgptMcpUrl}`);
     }
     if (!token) {
-      console.error("[rel-ai-mcp] Notice: HTTP/SSE auth is disabled. Use only on a trusted local network.");
+      console.error("[rel-ai-mcp] Notice: HTTP auth is disabled. Use only on a trusted local network.");
     }
   });
 
@@ -148,7 +145,6 @@ const NOT_FOUND_PAYLOAD = {
     healthMonitorApi: "GET /api/health-monitor", readinessApi: "GET /api/readiness",
     workspacePreflightApi: "GET /api/workspace/preflight?workspace=...", events: "GET /events",
     streamableHttp: "POST /mcp (Authentication: OAuth, or Bearer token)",
-    sse: "GET /sse (Authentication: OAuth, or Bearer token) then POST /messages...?sessionId=...",
     oauthDiscovery: "GET /.well-known/oauth-protected-resource"
   }
 };
@@ -196,8 +192,7 @@ async function tryOAuthOrMcpGet(ctx) {
   if (ctx.p === "/.well-known/oauth-protected-resource") { await handleOauthProtectedResource(ctx); return true; }
   if (ctx.p === "/.well-known/oauth-authorization-server" || ctx.p === "/.well-known/openid-configuration") { await handleOauthMetadata(ctx); return true; }
   if (ctx.p === "/authorize") { await handleAuthorizeGet(ctx); return true; }
-  if (ctx.p === "/mcp" || ctx.mcpAccess.kind === "streamable-http") { await handleMcpGetDiagnostic(ctx); return true; }
-  if (ctx.mcpAccess.kind === "sse") { await handleMcpSse(ctx); return true; }
+  if (ctx.mcpAccess.kind === "streamable-http") { await handleMcpGetDiagnostic(ctx); return true; }
   return false;
 }
 
@@ -239,7 +234,6 @@ async function tryOAuthOrMcpPost(ctx) {
   if (ctx.p === "/authorize") { await handleAuthorizePost(ctx); return true; }
   if (ctx.p === "/token") { await handleToken(ctx); return true; }
   if (ctx.mcpAccess.kind === "streamable-http") { await handleMcpStreamable(ctx); return true; }
-  if (ctx.mcpAccess.kind === "messages") { await handleMcpMessages(ctx); return true; }
   return false;
 }
 
@@ -263,7 +257,4 @@ function errorCodeForRequest(req) {
   return ERROR_CODES.UNKNOWN;
 }
 
-module.exports = {
-  startHttpServer,
-  handleJsonRpcPayload
-};
+module.exports = { startHttpServer };

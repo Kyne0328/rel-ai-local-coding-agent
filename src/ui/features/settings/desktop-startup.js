@@ -1,5 +1,6 @@
 import { toast } from '../../components/toast.js';
 import { panel, field, toggleControl } from './shared.js';
+import { esc as escapeHtml } from '../../utils.js';
 
 export function desktopStartupPanel(lifecycle) {
   const startup = panel('Startup and recovery');
@@ -104,6 +105,3 @@ function messageOf(error) {
   return error instanceof Error ? error.message : String(error || 'Desktop startup setting failed.');
 }
 
-function escapeHtml(value) {
-  return String(value == null ? '' : value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
-}

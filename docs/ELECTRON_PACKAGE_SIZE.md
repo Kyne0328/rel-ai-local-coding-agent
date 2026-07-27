@@ -2,7 +2,22 @@
 
 ## Executive summary
 
-This audit measured the final Windows x64 Electron artifacts, identified the dominant size contributors, implemented low-risk packaging changes, rebuilt both an unoptimized control and an optimized distribution from the same source state, and added release-time size reporting.
+This audit measured the Windows x64 Electron artifacts, identified the dominant size contributors, implemented low-risk packaging changes, rebuilt both an unoptimized control and an optimized distribution from the same source state, and added release-time size reporting. The original comparison remains below as historical evidence; the active release baseline is now the 0.22.0 Electron 43 + MCP SDK candidate.
+
+### Current 0.22.0 release baseline
+
+| Metric | Bytes | Display size |
+| --- | ---: | ---: |
+| NSIS installer | 102,612,369 B | 97.86 MiB |
+| Portable executable | 102,295,585 B | 97.56 MiB |
+| Unpacked application | 361,270,067 B | 344.53 MiB |
+| `resources/` | 45,386,010 B | 43.28 MiB |
+| `resources/app.asar` | 1,658,656 B | 1.58 MiB |
+| Electron packaged dependencies | 1,107,187 B | 1.06 MiB |
+| `locales/en-US.pak` | 566,095 B | 552.83 KiB |
+| Compiled dashboard CSS | 117,524 B | 114.77 KiB |
+
+The baseline was captured from the final 0.22.0 installer and portable artifacts on 2026-07-27. It includes Electron 43.2.0, the explicitly packaged MCP SDK v2 backend runtime, and the unchanged 31.26 MiB Windows ngrok seed. The committed 3% warning threshold now compares future releases against these exact measurements.
 
 | Artifact | Before | After | Reduction | Reduction |
 | --- | ---: | ---: | ---: | ---: |
@@ -23,8 +38,8 @@ The repository uses npm with separate root and Electron lockfiles:
 
 - Root application: `package.json`, `package-lock.json`
 - Electron launcher: `electron/package.json`, `electron/package-lock.json`
-- Electron runtime: 31.7.7
-- Packaging: electron-builder 24.13.3
+- Electron runtime: 43.2.0
+- Packaging: electron-builder 26.15.3
 - Root runtime and local service code: `src/**/*.js`
 - CLI launchers: `bin/**/*.js`
 - Dashboard assets: `public/**`
@@ -75,9 +90,9 @@ Largest files in `win-unpacked`:
 | `resources/public/dashboard.css` | Compiled UI CSS | 111,236 B | Yes | Minified |
 | `resources/CHANGELOG.md` | In-app release information | 104,440 B | Yes | Retain |
 
-Optimized `resources/` totals 35,896,695 B (34.23 MiB). It contains no `.map` files, TypeScript sources, tests, fixtures, examples, or `.git` metadata.
+The current 0.22.0 `resources/` directory totals 45,386,010 B (43.28 MiB). It includes the allowlisted MCP SDK runtime and contains no `.map` files, TypeScript sources, tests, fixtures, examples, or `.git` metadata.
 
-The source stylesheet `resources/src/ui/styles/app.css` remains packaged under the repository's current packaging contract. It is approximately 69 KiB raw and has a negligible compressed impact relative to the major reductions. Removing it remains a P3 cleanup opportunity after the runtime contract is deliberately changed and revalidated.
+The source stylesheet `src/ui/styles/app.css` is no longer packaged. The desktop distribution includes only the compiled `resources/public/dashboard.css`, saving approximately 69 KiB raw and keeping build-only Tailwind source out of runtime resources.
 
 ## Findings
 
@@ -89,12 +104,12 @@ The source stylesheet `resources/src/ui/styles/app.css` remains packaged under t
 | Maximum electron-builder compression did not help | Retain | Confirmed | Isolated packaging experiment | Approximately 0.7 KiB larger per executable | Keep default compression | None |
 | Electron runtime is the majority of installed size | Retain despite size | Confirmed | Final file inventory | 172.53 MiB main executable plus support files | Retain | Removing Chromium resources is unsafe without platform testing |
 | Bundled ngrok is the largest application-controlled component | Deferred/P2 | Confirmed | `resources/bin/ngrok/win32/ngrok.exe` | 31.26 MiB raw | Keep for offline reliability; evaluate optional delivery only as a separate product decision | High operational and recovery risk |
-| Production dependencies are small and not duplicated by version | Retain | Confirmed | `npm ls --omit=dev --all --prefix electron`; ASAR inventory | 1,091,187 B | Retain | Low |
+| Production dependencies are explicitly allowlisted | Retain | Confirmed | Electron ASAR inventory plus root SDK resources | Small relative to Electron/ngrok | Retain the updater and MCP SDK dependency sets | Low |
 | Installed-app smoke shared the production application identity | Removed safety defect | Confirmed | Installer execution terminated the active Rel.AI host | Small package reduction | Replaced with read-only packaged-layout verification | High if restored on a developer machine |
 
 ## Dependency analysis
 
-The Electron production dependency tree has no package name with multiple production versions. `electron-updater` is the only direct production dependency.
+The Electron ASAR keeps `electron-updater` as its direct production dependency. The backend resources also include the explicitly allowlisted MCP SDK v2 packages and their required transitive modules from the root dependency tree.
 
 Largest dependency payloads inside the optimized ASAR:
 
@@ -134,7 +149,7 @@ The existing packaging configuration already uses explicit top-level allowlists 
 - `electronLanguages: ["en-US"]`
 - `!**/*.map` in the ASAR file list
 
-The current `extraResources` entries remain explicit for backend JavaScript/CSS, CLI files, public assets, package metadata, changelog, and Windows ngrok.
+The current `extraResources` entries remain explicit for backend JavaScript, MCP SDK runtime modules, CLI files, compiled public assets, package metadata, changelog, and Windows ngrok. Source CSS is excluded.
 
 ASAR unpack rules are not required because there are no native Node modules. The ngrok executable is correctly copied outside ASAR. NSIS and portable targets remain because both are part of the documented release contract.
 
@@ -142,7 +157,7 @@ ASAR unpack rules are not required because there are no native Node modules. The
 
 | File | Change | Purpose |
 | --- | --- | --- |
-| `electron/package.json` | Filter Electron locales to `en-US`; exclude source maps | Remove unnecessary production payload |
+| `electron/package.json` | Filter Electron locales to `en-US`; exclude source maps and source CSS; explicitly package MCP SDK runtime modules | Remove unnecessary payload while preserving the new protocol runtime |
 | `package.json` | Minify Tailwind output; add `electron:size` | Reduce CSS and expose reproducible reporting |
 | `scripts/electron-package-size.mjs` | Add final-artifact inventory, comparison, and warnings | Detect package growth and packaging leaks |
 | `scripts/electron-size-baseline.json` | Record optimized Windows x64 baseline and 3% warning threshold | Establish regression reference |
@@ -194,7 +209,7 @@ The differences are within normal launch variance. No material startup or memory
 
 The former exact NSIS install/uninstall smoke was removed after it interfered with the active Rel.AI MCP installation hosting the repository connector. The production-identity installer, hidden packaged smoke modes, and teardown uninstaller were not sufficiently isolated for ordinary developer, CI, or release execution.
 
-Package validation now builds the unpacked Windows application and runs the read-only `verify:packaged` gate. Installer, uninstall, first-run renderer, and upgrade behavior remain manual checks on a disposable Windows machine. The package-size measurements remain valid because this change removes test-only payload and does not alter the retained Electron runtime or bundled ngrok components.
+Package validation builds the unpacked Windows application, runs the read-only `verify:packaged` gate, and launches the isolated packaged Node backend for OAuth/MCP connector acceptance. The acceptance test does not launch or install Electron. Installer, uninstall, first-run renderer, real ngrok publication, logged-in ChatGPT app selection, and upgrade behavior remain manual checks on a disposable Windows machine.
 
 ## Regression protection
 
@@ -220,8 +235,7 @@ The committed baseline uses a 3% warning threshold. The release workflow runs th
 - **Electron/Chromium runtime:** establishes the practical minimum. Removing graphics, ICU, media, accessibility, or software-rendering files without a hardware/platform matrix is unsafe.
 - **Windows ngrok seed:** retained because the application promises offline first-use availability and managed tunnel recovery. On-demand delivery could save 31.26 MiB raw, but it introduces network, integrity, rollback, version-compatibility, and first-run failure modes.
 - **Chromium license notices:** legally required.
-- **Both NSIS and portable artifacts:** each is individually about 76.6–76.9 MiB. Publishing both doubles release storage, not an individual user's download. Removing one is a distribution-policy decision.
-- **Source Tailwind stylesheet:** retained under the current repository packaging contract. Its absolute cost is small relative to the runtime and ngrok payload.
+- **Both NSIS and portable artifacts:** the 0.22.0 candidates are approximately 97.6–97.9 MiB each. Publishing both doubles release storage, not an individual user's download. Removing one is a distribution-policy decision.
 
 ## Deferred opportunities
 
@@ -254,4 +268,4 @@ The committed baseline uses a 3% warning threshold. The release workflow runs th
 
 ## Final recommendation
 
-The Windows x64 distribution is now appropriately optimized for the current architecture. The package is 8.16% smaller as a compressed installer and 13.09% smaller when unpacked, without measurable startup or memory degradation. Further large reductions require a product-level decision about the bundled ngrok binary or replacing Electron itself; neither is justified as a routine packaging cleanup.
+The Windows x64 distribution is appropriately bounded for the current Electron 43 and MCP SDK architecture. The historical locale/source-map/minification work remains effective, while the 0.22.0 release establishes a new measured baseline after the intentional runtime upgrade and SDK packaging. Further large reductions require a product-level decision about the bundled ngrok binary or replacing Electron itself; neither is justified as routine cleanup.

@@ -137,19 +137,23 @@ function normalizeConfig(config) {
   normalizeCorePaths(next, base, input);
   normalizeTrustedMode(next, input);
   normalizeProductSettings(next, base, input);
-  stripLegacyApprovalKeys(next);
-  next.patch = normalizePatchConfig(input.patch, input.workflow, input.flow);
-  delete next.workflow;
-  delete next.flow;
-  delete next.cautionZone;
-  const legacySnapshotMaxFiles = positiveNumber(input.maxIndexFiles, makeDefaultContextConfig().snapshotMaxFiles);
-  delete next.maxIndexFiles;
-  normalizeWorkspaces(next, legacySnapshotMaxFiles);
+  next.patch = normalizePatchConfig(input.patch);
+  normalizeWorkspaces(next);
   return next;
 }
 
 function mergeConfigBase(base, input) {
-  return { ...base, ...input, workspaces: { ...objectOrEmpty(input.workspaces) } };
+  return {
+    ...base,
+    stateDir: input.stateDir ?? base.stateDir,
+    auditLogPath: input.auditLogPath ?? base.auditLogPath,
+    maxOutputBytes: input.maxOutputBytes ?? base.maxOutputBytes,
+    trustedBudgetMultiplier: input.trustedBudgetMultiplier ?? base.trustedBudgetMultiplier,
+    productUx: { ...base.productUx, ...objectOrEmpty(input.productUx) },
+    release: { ...base.release, ...objectOrEmpty(input.release) },
+    patch: { ...objectOrEmpty(input.patch) },
+    workspaces: { ...objectOrEmpty(input.workspaces) }
+  };
 }
 
 function normalizeCorePaths(next, base, input) {
@@ -194,19 +198,13 @@ function normalizeBoolean(value, fallback) {
   return fallback;
 }
 
-function stripLegacyApprovalKeys(config) {
-  for (const staleKey of ["auto" + "Approve", "auto" + "ApproveAppRequests", "chatgpt" + "RequestHelper"]) {
-    delete config[staleKey];
-  }
-}
-
-function normalizeWorkspaces(config, defaultSnapshotMaxFiles) {
+function normalizeWorkspaces(config) {
   for (const [alias, workspace] of Object.entries(config.workspaces)) {
-    config.workspaces[alias] = normalizeWorkspace(workspace || {}, defaultSnapshotMaxFiles);
+    config.workspaces[alias] = normalizeWorkspace(workspace || {});
   }
 }
 
-function normalizeWorkspace(workspace, defaultSnapshotMaxFiles) {
+function normalizeWorkspace(workspace) {
   return {
     path: workspace.path,
     testCommands: normalizeWorkspaceCommandMap(workspace.testCommands),
@@ -215,7 +213,7 @@ function normalizeWorkspace(workspace, defaultSnapshotMaxFiles) {
     defaultBaseBranch: workspace.defaultBaseBranch || "main",
     allowedRemotes: Array.isArray(workspace.allowedRemotes) ? workspace.allowedRemotes : ["origin"],
     repoSlug: workspace.repoSlug || "",
-    context: normalizeContextConfig(workspace.context || workspace.fastTask, defaultSnapshotMaxFiles),
+    context: normalizeContextConfig(workspace.context),
     validationRules: workspace.validationRules && typeof workspace.validationRules === "object" ? workspace.validationRules : {}
   };
 }
@@ -225,17 +223,13 @@ function normalizeWorkspaceCommandMap(value) {
   return Object.fromEntries(Object.entries(source).filter(([key]) => !REMOVED_WORKSPACE_COMMAND_KEYS.has(key)));
 }
 
-function normalizeContextConfig(value, defaultSnapshotMaxFiles) {
-  const base = {
-    ...makeDefaultContextConfig(),
-    ...(defaultSnapshotMaxFiles ? { snapshotMaxFiles: defaultSnapshotMaxFiles } : {})
-  };
+function normalizeContextConfig(value) {
+  const base = makeDefaultContextConfig();
   const raw = value && typeof value === "object" ? value : {};
-  const snapshotMaxFiles = raw.snapshotMaxFiles == null ? raw.maxIndexFiles : raw.snapshotMaxFiles;
   return {
     ...base,
-    snapshotMaxFiles: clampNumber(snapshotMaxFiles, 1, 100000, base.snapshotMaxFiles),
-    includeRoots: normalizeStringList(raw.includeRoots || raw.includePaths || base.includeRoots),
+    snapshotMaxFiles: clampNumber(raw.snapshotMaxFiles, 1, 100000, base.snapshotMaxFiles),
+    includeRoots: normalizeStringList(raw.includeRoots || base.includeRoots),
     excludePaths: normalizeStringList(raw.excludePaths || base.excludePaths)
   };
 }
@@ -244,30 +238,13 @@ function objectOrEmpty(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
-function normalizePatchConfig(value, legacyWorkflow, legacyFlow) {
+function normalizePatchConfig(value) {
   const base = makeDefaultPatchConfig();
   const current = objectOrEmpty(value);
-  const workflow = objectOrEmpty(legacyWorkflow);
-  const flow = objectOrEmpty(legacyFlow);
-  const legacyPrepared = objectOrEmpty(workflow.prepared);
-  const legacyAggressive = objectOrEmpty(workflow.aggressive);
-  const legacyFast = objectOrEmpty(flow.fast);
-  const merged = {
-    ...base,
-    ...legacyFast,
-    ...legacyAggressive,
-    ...legacyPrepared,
-    ...current
-  };
-  const maxUpdateBytes = current.maxUpdateBytes ?? current.maxPatchBytes
-    ?? legacyPrepared.maxUpdateBytes ?? legacyPrepared.maxPatchBytes
-    ?? legacyAggressive.maxUpdateBytes ?? legacyAggressive.maxPatchBytes
-    ?? legacyFast.maxUpdateBytes ?? legacyFast.maxPatchBytes
-    ?? base.maxUpdateBytes;
   return {
-    backup: merged.backup == null ? base.backup : Boolean(merged.backup),
-    requireCleanGit: merged.requireCleanGit == null ? base.requireCleanGit : Boolean(merged.requireCleanGit),
-    maxUpdateBytes: clampNumber(maxUpdateBytes, 1024, 50 * 1024 * 1024, base.maxUpdateBytes)
+    backup: current.backup == null ? base.backup : Boolean(current.backup),
+    requireCleanGit: current.requireCleanGit == null ? base.requireCleanGit : Boolean(current.requireCleanGit),
+    maxUpdateBytes: clampNumber(current.maxUpdateBytes, 1024, 50 * 1024 * 1024, base.maxUpdateBytes)
   };
 }
 
@@ -449,7 +426,7 @@ function resolveWorkspace(config, alias) {
     defaultBaseBranch: entry.defaultBaseBranch || "main",
     allowedRemotes: entry.allowedRemotes || ["origin"],
     repoSlug: entry.repoSlug || "",
-    context: normalizeContextConfig(entry.context || entry.fastTask),
+    context: normalizeContextConfig(entry.context),
     validationRules: entry.validationRules && typeof entry.validationRules === "object" ? entry.validationRules : {}
   };
 }
@@ -497,7 +474,7 @@ function publicConfigSummary(config) {
         defaultBaseBranch: entry.defaultBaseBranch || "main",
         allowedRemotes: entry.allowedRemotes || ["origin"],
         repoSlug: entry.repoSlug || "",
-        context: normalizeContextConfig(entry.context || entry.fastTask),
+        context: normalizeContextConfig(entry.context),
         discoveredCommands: discovered,
         validationCommands,
         projectInstructions,

@@ -168,6 +168,10 @@ jobs:
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         run: npm run verify:packaged -- --dir dist/win-unpacked
 
+      - name: Verify packaged OAuth and MCP connector flow
+        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
+        run: npm run test:connector-acceptance -- --dir dist/win-unpacked
+
       - name: Prepare release assets and notes
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         id: notes

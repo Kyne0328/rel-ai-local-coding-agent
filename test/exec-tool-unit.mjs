@@ -82,7 +82,7 @@ try {
   assert.ok(schema.inputSchema.properties.cwd, 'connector schema must expose cwd');
 
   const secret = 'exec-secret-value';
-  const context = { publicHttpOnly: true, taskScopeId: 'exec-main' };
+  const context = { publicHttpOnly: true };
   const success = await callTool('relai_exec', {
     workspace: 'app',
     command: `${nodeCommand(path.join(workspace, 'scripts', 'emit.js'))} --token ${secret}`,
@@ -176,7 +176,7 @@ try {
   fs.rmSync(path.join(workspace, quotedMutationPath));
 
   resetToolActivity();
-  const noValidationContext = { publicHttpOnly: true, taskScopeId: 'exec-no-validation' };
+  const noValidationContext = { publicHttpOnly: true };
   const noValidationTask = await callTool('relai_start_task', { workspace: 'app' }, noValidationContext);
   await callTool('relai_exec', {
     workspace: 'app',
@@ -192,7 +192,7 @@ try {
   assert.equal(readOnlyExecCompletion.validationStatus, 'not_required');
 
   resetToolActivity();
-  const validatedContext = { publicHttpOnly: true, taskScopeId: 'exec-after-validation-readonly' };
+  const validatedContext = { publicHttpOnly: true };
   const validatedTask = await callTool('relai_start_task', { workspace: 'app' }, validatedContext);
   await callTool('relai_run_checks', { workspace: 'app', task_id: validatedTask.task_id, level: 'standard' }, validatedContext);
   await callTool('relai_exec', {
@@ -208,7 +208,7 @@ try {
   assert.equal(completion.ok, true);
 
   resetToolActivity();
-  const mutationContext = { publicHttpOnly: true, taskScopeId: 'exec-after-validation-mutation' };
+  const mutationContext = { publicHttpOnly: true };
   const mutationTask = await callTool('relai_start_task', { workspace: 'app' }, mutationContext);
   await callTool('relai_run_checks', { workspace: 'app', task_id: mutationTask.task_id, level: 'standard' }, mutationContext);
   await callTool('relai_exec', {

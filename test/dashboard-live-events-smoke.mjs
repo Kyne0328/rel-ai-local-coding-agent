@@ -64,6 +64,7 @@ const server = startHttpServer({
   getDesktopStatus: () => desktopStatus
 });
 const controller = new AbortController();
+let responseReader;
 
 try {
   await waitForListening(server);
@@ -83,7 +84,8 @@ try {
   assert.equal(response.status, 200);
   assert.ok(response.body, 'dashboard event stream must expose a response body');
 
-  const stream = createEventReader(response.body.getReader());
+  responseReader = response.body.getReader();
+  const stream = createEventReader(responseReader);
   const ready = await stream.nextEvent();
   assert.equal(ready.event, 'ready');
   assert.equal(JSON.parse(ready.data).ok, true);
@@ -98,14 +100,16 @@ try {
     workspace: 'test',
     ok: true
   };
-  const finishRead = beginConnectorToolCall({
-    scopeId: 'dashboard-live-events-test',
-    tool: 'relai_read',
-    operation: 'Reading dashboard state',
-    workspace: 'test'
-  });
   fs.appendFileSync(auditPath, `${JSON.stringify(entry)}\n`, 'utf8');
-  finishRead({ ok: true });
+  const finishStart = beginConnectorToolCall({
+    scopeId: 'dashboard-live-events-test',
+    tool: 'relai_start_task',
+    operation: 'Starting dashboard test task',
+    workspace: 'test',
+    createTask: true
+  });
+  const taskId = finishStart.taskId;
+  finishStart({ ok: true });
 
   const updated = await stream.nextDashboardEvent();
   assert.equal(updated.desktopStatus?.tunnelStatus, 'connecting');
@@ -123,6 +127,7 @@ try {
   };
   const finishStatus = beginConnectorToolCall({
     scopeId: 'dashboard-live-events-status-test',
+    taskId,
     tool: 'relai_status',
     operation: 'Reading connection status',
     workspace: 'test'
@@ -135,7 +140,9 @@ try {
   assert.equal(desktopUpdated.connectionState?.chatgptReadiness?.status, 'ready');
 } finally {
   controller.abort();
+  await responseReader?.cancel().catch(() => {});
   resetToolActivity();
+  server.closeAllConnections?.();
   await closeServer(server);
   fs.rmSync(sandbox, { recursive: true, force: true });
 }

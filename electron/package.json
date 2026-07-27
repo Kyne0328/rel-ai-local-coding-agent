@@ -1,6 +1,6 @@
 {
   "name": "rel-ai-mcp-launcher",
-  "version": "0.21.9",
+  "version": "0.22.0",
   "private": true,
   "description": "Desktop launcher and dashboard host for Rel.AI MCP.",
   "author": {
@@ -34,6 +34,7 @@
       "main.js",
       "preload.js",
       "launcher-utils.js",
+      "ngrok-token.js",
       "managed-ngrok.js",
       "ipc-handlers.js",
       "launcher-config.js",
@@ -67,8 +68,7 @@
         "from": "../src",
         "to": "src",
         "filter": [
-          "**/*.js",
-          "**/*.css"
+          "**/*.js"
         ]
       },
       {
@@ -83,6 +83,19 @@
         "to": "public",
         "filter": [
           "**/*"
+        ]
+      },
+      {
+        "from": "../node_modules",
+        "to": "node_modules",
+        "filter": [
+          "@modelcontextprotocol/core/**",
+          "@modelcontextprotocol/node/**",
+          "@modelcontextprotocol/server/**",
+          "@hono/node-server/**",
+          "hono/**",
+          "zod/**",
+          "!**/*.map"
         ]
       },
       {

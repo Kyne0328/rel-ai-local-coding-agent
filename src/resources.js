@@ -1,5 +1,6 @@
 const { readConfig, publicConfigSummary } = require("./config");
-const { workspaceProfile, workspaceTree, workspaceInspect, workspaceList, getToolSurfaceManifest } = require("./tools");
+const { getToolSurfaceManifest } = require("./tools");
+const { workspaceProfile, workspaceTree, workspaceInspect, workspaceList } = require("./tools/status");
 const pkg = require("../package.json");
 
 const MIME_JSON = "application/json";

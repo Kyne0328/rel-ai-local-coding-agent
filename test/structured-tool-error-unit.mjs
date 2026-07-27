@@ -22,34 +22,34 @@ fs.writeFileSync(configPath, JSON.stringify({
 process.env.REL_AI_MCP_CONFIG = configPath;
 process.env.REL_AI_MCP_MAX_TOOL_RESULT_BYTES = '1200';
 
-const { handleMessage } = require(path.join(root, 'src', 'server.js'));
+const { callTool } = require(path.join(root, 'src', 'tools.js'));
+const { serializeToolError } = require(path.join(root, 'src', 'tools', 'errors.js'));
+const { toolResult } = require(path.join(root, 'src', 'mcpServer.js'));
+
+let requestId = 0;
+async function invoke(name, args, context = {}) {
+  requestId += 1;
+  try {
+    const output = await callTool(name, args, { requestId, transportType: 'test', ...context });
+    return toolResult(output, output?.ok === false);
+  } catch (error) {
+    return toolResult(serializeToolError(name, error), true);
+  }
+}
 
 try {
-  const response = await handleMessage({
-    jsonrpc: '2.0',
-    id: 1,
-    method: 'tools/call',
-    params: {
-      name: 'relai_read',
-      arguments: { workspace: 'repo', paths: ['.env'], guidanceMode: 'none' }
-    }
-  });
+  const response = await invoke('relai_read', { workspace: 'repo', paths: ['.env'], guidanceMode: 'none' });
 
-  assert.equal(response.result.isError, false, 'relai_read returns per-path skips rather than throwing');
-  const readPayload = response.result.structuredContent;
+  assert.equal(response.isError, false, 'relai_read returns per-path skips rather than throwing');
+  const readPayload = response.structuredContent;
   assert.equal(readPayload.ok, true);
   assert.equal(readPayload.items.length, 0);
   assert.match(readPayload.skipped[0].reason, /blocked sensitive path/);
   assert.doesNotMatch(JSON.stringify(readPayload), /not-returned/);
 
-  const dotWorkspaceResponse = await handleMessage({
-    jsonrpc: '2.0',
-    id: 'dot-workspace',
-    method: 'tools/call',
-    params: { name: 'relai_start_task', arguments: { workspace: '.' } }
-  }, { publicHttpOnly: true, taskScopeId: 'mcp:fallback:test', transportType: 'streamable-http' });
-  assert.equal(dotWorkspaceResponse.result.isError, true);
-  const dotWorkspace = dotWorkspaceResponse.result.structuredContent;
+  const dotWorkspaceResponse = await invoke('relai_start_task', { workspace: '.' }, { publicHttpOnly: true });
+  assert.equal(dotWorkspaceResponse.isError, true);
+  const dotWorkspace = dotWorkspaceResponse.structuredContent;
   assert.equal(dotWorkspace.errorCode, 'WORKSPACE_AMBIGUOUS_RELATIVE_INPUT');
   assert.equal(dotWorkspace.errorDetails.workspaceInput, '.');
   assert.equal(dotWorkspace.errorDetails.workspaceMatchStatus, 'rejected_ambiguous_input');
@@ -57,46 +57,24 @@ try {
   assert.deepEqual(dotWorkspace.errorDetails.configuredWorkspaceAliases, ['repo']);
   assert.match(dotWorkspace.error, /configured workspace alias/);
 
-  const directPathResponse = await handleMessage({
-    jsonrpc: '2.0',
-    id: 'direct-path',
-    method: 'tools/call',
-    params: { name: 'relai_start_task', arguments: { workspace: workspaceRoot } }
-  }, { publicHttpOnly: true, taskScopeId: 'mcp:fallback:path', transportType: 'streamable-http' });
-  assert.equal(directPathResponse.result.isError, false);
-  assert.equal(directPathResponse.result.structuredContent.workspace, 'repo');
+  const directPathResponse = await invoke('relai_start_task', { workspace: workspaceRoot }, { publicHttpOnly: true });
+  assert.equal(directPathResponse.isError, false);
+  assert.equal(directPathResponse.structuredContent.workspace, 'repo');
+  const taskId = directPathResponse.structuredContent.task_id;
 
   const unknownPath = path.join(tmp, 'unknown-repo');
   fs.mkdirSync(unknownPath);
-  const unknownPathResponse = await handleMessage({
-    jsonrpc: '2.0',
-    id: 'unknown-path',
-    method: 'tools/call',
-    params: { name: 'relai_start_task', arguments: { workspace: unknownPath } }
-  }, { publicHttpOnly: true, taskScopeId: 'mcp:fallback:path', transportType: 'streamable-http' });
-  assert.equal(unknownPathResponse.result.isError, true);
-  assert.equal(unknownPathResponse.result.structuredContent.errorCode, 'WORKSPACE_PATH_NOT_CONFIGURED');
+  const unknownPathResponse = await invoke('relai_start_task', { workspace: unknownPath }, { publicHttpOnly: true });
+  assert.equal(unknownPathResponse.isError, true);
+  assert.equal(unknownPathResponse.structuredContent.errorCode, 'WORKSPACE_PATH_NOT_CONFIGURED');
 
-  const omittedWorkspaceResponse = await handleMessage({
-    jsonrpc: '2.0',
-    id: 'omitted-workspace',
-    method: 'tools/call',
-    params: { name: 'relai_start_task', arguments: {} }
-  }, { publicHttpOnly: true, taskScopeId: 'mcp:fallback:test', transportType: 'streamable-http' });
-  assert.equal(omittedWorkspaceResponse.result.structuredContent.errorCode, 'WORKSPACE_INPUT_OMITTED');
+  const omittedWorkspaceResponse = await invoke('relai_start_task', {}, { publicHttpOnly: true });
+  assert.equal(omittedWorkspaceResponse.structuredContent.errorCode, 'WORKSPACE_INPUT_OMITTED');
 
-  const writeResponse = await handleMessage({
-    jsonrpc: '2.0',
-    id: 2,
-    method: 'tools/call',
-    params: {
-      name: 'relai_edit',
-      arguments: { workspace: 'repo', path: '.env', content: 'API_KEY=replacement\n' }
-    }
-  });
+  const writeResponse = await invoke('relai_edit', { workspace: 'repo', task_id: taskId, path: '.env', content: 'API_KEY=replacement\n' });
 
-  assert.equal(writeResponse.result.isError, true);
-  const payload = writeResponse.result.structuredContent;
+  assert.equal(writeResponse.isError, true);
+  const payload = writeResponse.structuredContent;
   assert.equal(payload.ok, false);
   assert.equal(payload.errorCode, 'SENSITIVE_PATH_RESTRICTED');
   assert.equal(payload.errorDetails.source, 'rel-ai-mcp-policy');
@@ -108,21 +86,14 @@ try {
   assert.ok(payload.errorDetails.allowedAlternatives.some((item) => item.includes('.env.example')));
   assert.doesNotMatch(JSON.stringify(payload), /replacement|not-returned/);
 
-  const largeFailureResponse = await handleMessage({
-    jsonrpc: '2.0',
-    id: 3,
-    method: 'tools/call',
-    params: {
-      name: 'relai_run_checks',
-      arguments: {
-        workspace: 'repo',
-        check: `node -e "process.stderr.write('failure-detail-'.repeat(800));process.exit(1)"`
-      }
-    }
-  }, { publicHttpOnly: true, taskScopeId: 'test:large-structured-error' });
+  const largeFailureResponse = await invoke('relai_run_checks', {
+    workspace: 'repo',
+    task_id: taskId,
+    check: `node -e "process.stderr.write('failure-detail-'.repeat(800));process.exit(1)"`
+  }, { publicHttpOnly: true });
 
-  assert.equal(largeFailureResponse.result.isError, true);
-  const largeFailure = largeFailureResponse.result.structuredContent;
+  assert.equal(largeFailureResponse.isError, true);
+  const largeFailure = largeFailureResponse.structuredContent;
   assert.equal(largeFailure.ok, false);
   assert.equal(largeFailure.truncated, true);
   assert.ok(largeFailure.originalBytes > 1200);

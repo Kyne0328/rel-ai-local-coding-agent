@@ -8,8 +8,7 @@ import { runButtonAction } from '../../action-state.js';
 import { getWorkspaceFilter, navigate, setWorkspaceFilter } from '../../router.js';
 import { recordRecentWorkspace, renameRecentWorkspace } from './recents.js';
 import { markUnsaved } from '../../interaction-safety.js';
-
-const ALIAS_PATTERN = /^[A-Za-z0-9._-]{1,80}$/;
+import { deriveWorkspaceAlias, isValidWorkspaceAlias, normalizeWorkspacePath } from '../../workspace-input.js';
 
 function debounce(fn, ms) {
   let timer = 0;
@@ -110,7 +109,7 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
 
   const suggestAlias = () => {
     if (aliasEdited) return;
-    aliasInput.value = deriveAlias(pathInput.value);
+    aliasInput.value = deriveWorkspaceAlias(pathInput.value);
   };
   const syncConflicts = () => {
     const message = workspaceConflict(configured, {
@@ -174,7 +173,7 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
     const wsPath = pathInput.value.trim();
     if (!wsPath) { toast('Choose a project folder.', { variant: 'error' }); pathInput.focus(); return; }
     if (!alias) { toast('Enter a workspace name.', { variant: 'error' }); aliasInput.focus(); return; }
-    if (!ALIAS_PATTERN.test(alias)) { toast('Workspace names may use only letters, numbers, dots, underscores, and dashes.', { variant: 'error' }); aliasInput.focus(); return; }
+    if (!isValidWorkspaceAlias(alias)) { toast('Workspace names may use only 1–80 letters, numbers, dots, underscores, and dashes.', { variant: 'error' }); aliasInput.focus(); return; }
     if (syncConflicts()) { conflictEl.focus?.(); return; }
 
     const result = await runButtonAction(submitBtn, {
@@ -231,30 +230,14 @@ async function loadConfiguredWorkspaces() {
 
 function workspaceConflict(workspaces, values) {
   const alias = String(values.alias || '').trim();
-  const workspacePath = normalizePath(values.path);
+  const workspacePath = normalizeWorkspacePath(values.path);
   const originalAlias = String(values.originalAlias || '').trim();
-  if (alias && !ALIAS_PATTERN.test(alias)) return 'Workspace names may use only letters, numbers, dots, underscores, and dashes.';
+  if (alias && !isValidWorkspaceAlias(alias)) return 'Workspace names may use only 1–80 letters, numbers, dots, underscores, and dashes.';
   const aliasConflict = workspaces.find(item => item.alias === alias && item.alias !== originalAlias);
   if (aliasConflict) return `Workspace name '${alias}' is already in use.`;
   const pathConflict = workspacePath
-    ? workspaces.find(item => item.alias !== originalAlias && normalizePath(item.path) === workspacePath)
+    ? workspaces.find(item => item.alias !== originalAlias && normalizeWorkspacePath(item.path) === workspacePath)
     : null;
   return pathConflict ? `This project folder is already configured as '${pathConflict.alias}'.` : '';
 }
 
-function normalizePath(value) {
-  const normalized = String(value || '').trim().replace(/[\\/]+$/, '').replace(/\\/g, '/');
-  return /^[a-z]:\//i.test(normalized) || normalized.startsWith('//') ? normalized.toLowerCase() : normalized;
-}
-
-function deriveAlias(workspacePath) {
-  let value = String(workspacePath || '').trim();
-  while (value.endsWith('/') || value.endsWith('\\')) value = value.slice(0, -1);
-  const leaf = value.split(/[\\/]/).filter(Boolean).at(-1) || '';
-  return leaf
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 80);
-}

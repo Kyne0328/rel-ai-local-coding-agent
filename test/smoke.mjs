@@ -11,8 +11,13 @@ const client = startMcpClient({
 });
 
 try {
-  client.send(1, 'initialize', { protocolVersion: '2025-06-18' });
+  client.send(1, 'initialize', {
+    protocolVersion: '2025-06-18',
+    capabilities: {},
+    clientInfo: { name: 'relai-smoke', version: '1.0.0' }
+  });
   const init = await client.waitFor(1);
+  client.notify('notifications/initialized');
   if (!init.result?.capabilities?.tools) throw new Error('initialize did not advertise tools capability');
   if (!init.result?.capabilities?.resources) throw new Error('initialize did not advertise resources capability');
   if (!String(init.result?.instructions || '').includes('relai_complete_task')) {

@@ -26,7 +26,7 @@ try {
   const { readAudit } = require('../src/audit.js');
   const { readConfig } = require('../src/config.js');
   resetToolActivity();
-  const context = { publicHttpOnly: true, taskScopeId: 'failure-accounting' };
+  const context = { publicHttpOnly: true };
   const task = await callTool('relai_start_task', { workspace: 'app' }, context);
   const result = await callTool('relai_run_checks', { workspace: 'app', task_id: task.task_id }, context);
   assert.equal(result.ok, false);

@@ -7,7 +7,9 @@ const { summarizeOperations } = require("../journal");
 const { resolvePolicy } = require("../policyResolver");
 const { getVersion } = require("../version");
 const { debugSwallow } = require("./session");
-const { TOOL_NAMES, getToolGroups, getToolSurfaceManifest } = require("./schema");
+function toolSchema() {
+  return require('./schema');
+}
 const { readProjectInstructions, summarizeProjectInstructions } = require('../projectInstructions');
 const { workspaceGitStatus } = require('../repo/gitOps');
 
@@ -47,6 +49,7 @@ async function relaiStatus(config, args = {}, context = {}) {
       selectedWorkspace = { alias: String(args.workspace), error: error instanceof Error ? error.message : String(error) };
     }
   }
+  const { TOOL_NAMES, getToolGroups, getToolSurfaceManifest } = toolSchema();
   return {
     ok: true,
     version: getVersion(),
@@ -138,7 +141,7 @@ function workspaceInspect(config, args = {}) {
         skipped: tree.skipped,
         truncated: tree.truncated
       },
-      requiredFlow: TOOL_NAMES,
+      requiredFlow: toolSchema().TOOL_NAMES,
       operationJournal: summarizeOperations(config, { alias: profile.workspace, path: profile.root }, args.journalLimit || 10)
     };
   } catch (error) {

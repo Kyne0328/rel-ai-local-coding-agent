@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.22.0] — 2026-07-27
+
+### MCP SDK v2 hard cutover
+- **Replace the custom JSON-RPC and transport implementation with MCP SDK v2.** Stdio framing, initialization, capability negotiation, tool and resource registration, schema validation, protocol errors, and Streamable HTTP now use `@modelcontextprotocol/server` and `@modelcontextprotocol/node`.
+- **Remove the legacy MCP SSE transport.** `GET /sse`, `POST /messages`, custom session IDs, conversation-header hashing, and transport-derived task scopes are deleted; HTTP clients use the OAuth-protected `POST /mcp` endpoint.
+- **Require exact logical task identity.** Each independent objective calls `relai_start_task` once and every later task-scoped call supplies the returned `task_id`. Rel.AI no longer selects or merges tasks by transport, ChatGPT conversation metadata, workspace, process, timestamp, or validation aliases.
+- **Make task history current-version-only.** The first 0.22.0 history access deletes the previous sessions directory, writes `.task-history-v2`, and stores only explicit identity-v2 events. Existing audit logs remain activity records but are not reconstructed into task history.
+- **Remove configuration compatibility.** Legacy `workflow`, `flow`, `cautionZone`, top-level `maxIndexFiles`, workspace `fastTask`, context `includePaths`, and patch `maxPatchBytes` values are ignored instead of migrated or written back.
+- **Keep OAuth and managed ngrok as active product features.** OAuth discovery, dynamic client registration, authorization code plus PKCE, access/refresh tokens, revocation, connector recovery, static-domain delivery, and bundled ngrok remain supported.
+
+### Release and packaging changes
+- **Package the MCP SDK runtime explicitly in the Electron application.** The package allowlists the SDK, Hono adapter, Hono, and Zod dependencies, excludes source maps and the source Tailwind stylesheet, and verifies the packaged backend can initialize MCP from `resources/`.
+- **Patch the SDK's Node adapter dependency.** `@hono/node-server` is overridden to 2.0.12, leaving the production dependency audit at zero known vulnerabilities.
+- **Add packaged connector acceptance.** CI and release workflows launch the isolated packaged Node backend and verify OAuth/PKCE, tools and resources, explicit task calls, completion, reconnect rejection, and removal of the old MCP routes without installing or launching Electron.
+- **Document the incompatible upgrade explicitly.** Release notes and architecture documentation identify discarded history, ignored configuration, removed routes, standard initialization requirements, exact task IDs, and new runtime dependencies.
+
+### Codebase reduction
+- **Bind tool definitions directly to executable handlers and delete the dispatch lookup module.** Registry annotations, behavior, dashboard metadata, and empty arrays now use centralized defaults.
+- **Consolidate repeated UI behavior.** HTML escaping, duration formatting, hidden settings save rows, workspace alias/path handling, task-history event utilities, and ngrok authtoken validation each have one implementation.
+- **Remove public legacy workspace helper exports while preserving MCP resource behavior through the internal status module.**
+
+### Breaking upgrade behavior
+- Back up any removed configuration values or old session-history files before upgrading if they are still needed.
+- Clients must use stdio or `POST /mcp`, send standards-compliant initialization fields, call `relai_start_task`, and preserve the returned `task_id`.
+- Old task-history sessions are intentionally discarded and are not converted.
+
+- **Synchronize every release surface at 0.22.0.** Root and Electron manifests, both lockfiles, the desktop status badge, changelog, and release metadata now agree.
+
+Bump all release surfaces to 0.22.0.
+
 ## [0.21.9] — 2026-07-26
 
 ### Tool-call latency overhaul

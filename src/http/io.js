@@ -2,15 +2,6 @@ const crypto = require("node:crypto");
 const zlib = require("node:zlib");
 const { ERROR_CODES, errorPayload } = require("../desktopUxContracts");
 
-function sendSse(res, event, data) {
-  res.write(`event: ${event}\n`);
-  const text = typeof data === "string" ? data : JSON.stringify(data);
-  for (const line of text.split(/\r?\n/)) {
-    res.write(`data: ${line}\n`);
-  }
-  res.write("\n");
-}
-
 function isAuthorized(req, options) {
   if (!options.token && options.allowNoAuth) return true;
   const header = req.headers.authorization || "";
@@ -179,6 +170,13 @@ function sendJson(res, status, payload, ae = "") {
   });
 }
 
+function sendSse(res, event, data) {
+  res.write(`event: ${event}\n`);
+  const text = typeof data === "string" ? data : JSON.stringify(data);
+  for (const line of text.split(/\r?\n/)) res.write(`data: ${line}\n`);
+  res.write("\n");
+}
+
 function sendHtml(res, status, html, headers = {}) {
   if (res.headersSent) return;
   res.writeHead(status, { "Content-Type": "text/html; charset=utf-8", ...headers });
@@ -203,7 +201,6 @@ function jsonForHtmlScript(value) {
 }
 
 module.exports = {
-  sendSse,
   isAuthorized,
   timingSafeEqual,
   unauthorized,
@@ -211,6 +208,7 @@ module.exports = {
   readFormOrJsonBody,
   setBaseHeaders,
   sendJson,
+  sendSse,
   sendHtml,
   contentTypeForStaticAsset,
   jsonForHtmlScript

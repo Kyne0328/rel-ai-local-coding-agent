@@ -9,7 +9,9 @@ const { classifyCaution } = require("../cautionZone");
 const { resolveWorkspace } = require("../config");
 const { resolveSafePath } = require("../safety");
 const { ensureSessionStarted } = require("../policyResolver");
-const { getToolDefinition } = require("./schema");
+function getToolDefinition(name) {
+  return require('./schema').getToolDefinition(name);
+}
 function debugSwallow(context, error) {
   if (process.env.REL_AI_MCP_DEBUG) {
     console.error(`[rel-ai-mcp] best-effort '${context}' failed: ${error?.message || error}`);
@@ -84,10 +86,7 @@ function enrichCompletionAudit(extra, value) {
   assignTruthy(extra, "endReason", value?.endReason);
   assignTruthy(extra, "taskSummary", value?.summary);
   assignTruthy(extra, "validationAt", value?.validationAt);
-  assignTruthy(extra, "validationTaskId", value?.validationTaskId);
   assignTruthy(extra, "completionSource", value?.completionSource);
-  if (Array.isArray(value?.relatedTaskIds) && value.relatedTaskIds.length) extra.relatedTaskIds = value.relatedTaskIds.slice(0, 20);
-  assignDefined(extra, "recoveredValidationSession", value?.recoveredValidationSession === true);
   assignDefined(extra, "duplicateRequest", value?.duplicate === true);
 }
 

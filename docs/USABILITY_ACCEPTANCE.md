@@ -19,6 +19,7 @@ Run the same checks locally:
 npm run test:all
 npm run electron:build
 npm run verify:packaged
+npm run test:connector-acceptance
 ```
 
 To inspect another unpacked build directory:
@@ -27,7 +28,7 @@ To inspect another unpacked build directory:
 npm run verify:packaged -- --dir C:\path\to\win-unpacked
 ```
 
-`verify:packaged` only reads files. It does not spawn the application, install software, invoke an uninstaller, modify the user profile, or interact with the running Rel.AI instance.
+`verify:packaged` only reads files. `test:connector-acceptance` launches the isolated packaged Node backend to exercise OAuth and MCP, but it does not launch Electron, install software, invoke an uninstaller, modify the user's Rel.AI profile, or interact with the running Rel.AI instance.
 
 ## Manual installed-application acceptance
 

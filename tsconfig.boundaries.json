@@ -19,7 +19,6 @@
     "types/boundaries.d.ts",
     "src/tools/registry.js",
     "src/tools/schema.js",
-    "src/tools/dispatch.js",
     "src/tools/handlers.js",
     "src/tools/session.js",
     "electron/launcher-config.js",

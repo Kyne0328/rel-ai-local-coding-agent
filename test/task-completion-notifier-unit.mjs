@@ -55,17 +55,34 @@ const runtime = createTaskActivityRuntime({
   onStatusChange: status => statuses.push(structuredClone(status))
 });
 
+function startTask(workspace, scopeId) {
+  const finish = tracker.beginConnectorToolCall({
+    tool: 'relai_start_task',
+    operation: 'Starting task',
+    workspace,
+    scopeId,
+    createTask: true
+  });
+  const taskId = finish.taskId;
+  finish({ ok: true });
+  return taskId;
+}
+
+const taskA = startTask('repo', 'conversation-a');
+const taskB = startTask('other', 'conversation-b');
 const finishRead = tracker.beginConnectorToolCall({
   tool: 'relai_read',
   operation: 'Reading src/app.js',
   workspace: 'repo',
-  scopeId: 'conversation-a'
+  scopeId: 'conversation-a',
+  taskId: taskA
 });
 const finishOther = tracker.beginConnectorToolCall({
   tool: 'relai_read',
   operation: 'Reading README.md',
   workspace: 'other',
-  scopeId: 'conversation-b'
+  scopeId: 'conversation-b',
+  taskId: taskB
 });
 assert.equal(runtime.getStatus().state, 'working');
 assert.equal(runtime.getStatus().activeTaskCount, 2);
@@ -90,11 +107,13 @@ assert.equal(inactive.lastTask.status, 'inactive');
 assert.equal(inactive.lastTask.endReason, 'inactivity_window');
 assert.equal(notifications.length, 0, 'inactivity must not generate a false task-completed notification');
 
+const failedTask = startTask('repo', 'conversation-c');
 const finishFailed = tracker.beginConnectorToolCall({
   tool: 'relai_run_checks',
   operation: 'Running validation 1/2: npm run check',
   workspace: 'repo',
-  scopeId: 'conversation-c'
+  scopeId: 'conversation-c',
+  taskId: failedTask
 });
 finishFailed({ ok: false, error: 'check failed' });
 assert.equal(notifications.length, 1);
@@ -113,11 +132,13 @@ for (const [id, timer] of [...timers]) {
 assert.equal(runtime.getStatus().lastTask.status, 'attention');
 assert.equal(runtime.getStatus().lastTask.failures, 1);
 
+const completedTask = startTask('repo', 'conversation-completed');
 const finishCompleted = tracker.beginConnectorToolCall({
   tool: 'relai_complete_task',
   operation: 'Reporting task completion',
   workspace: 'repo',
-  scopeId: 'conversation-completed'
+  scopeId: 'conversation-completed',
+  taskId: completedTask
 });
 finishCompleted.requestCompletion({
   summary: 'Implemented and validated the requested changes.',
@@ -140,11 +161,13 @@ assert.doesNotMatch(notifications[1].options.body, /completion reported|ChatGPT 
 assert.equal(notifications[1].options.icon, 'C:\\RelAI\\icon.png');
 
 runtime.setNotificationsEnabled(false);
+const mutedTask = startTask('repo', 'conversation-d');
 const finishMuted = tracker.beginConnectorToolCall({
   tool: 'relai_diff',
   operation: 'Reviewing repository changes',
   workspace: 'repo',
-  scopeId: 'conversation-d'
+  scopeId: 'conversation-d',
+  taskId: mutedTask
 });
 finishMuted({ ok: false, error: 'diff failed' });
 assert.equal(notifications.length, 2, 'muted failed calls must not notify');

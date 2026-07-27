@@ -18,15 +18,20 @@ fs.writeFileSync(configPath, JSON.stringify({
 
 const client = startMcpClient({ root, configPath });
 try {
-  client.send(1, 'initialize', { protocolVersion: '2025-06-18' });
+  client.send(1, 'initialize', {
+    protocolVersion: '2025-06-18',
+    capabilities: {},
+    clientInfo: { name: 'relai-sdk-smoke', version: '1.0.0' }
+  });
   await client.waitFor(1);
+  client.notify('notifications/initialized');
 
   let requestId = 10;
   for (const removed of ['relai_apply_bundle', 'relai_package_snapshot', 'relai_apply_update', 'relai_clear_files', 'relai_feature_probe', 'relai_git_fetch', 'relai_session_summary']) {
     client.call(requestId, removed, { workspace: 'repo' });
     const response = await client.waitFor(requestId);
-    assert.equal(response.result.isError, true);
-    assert.match(response.result.content[0].text, /Unknown tool/);
+    assert.equal(response.error?.code, -32602);
+    assert.match(response.error?.message || '', /not found/i);
     requestId += 1;
   }
 
@@ -44,7 +49,7 @@ try {
   assert.equal(failedCheck.result.structuredContent.ok, false, 'structured failure payload must be preserved');
   assert.equal(failedCheck.result.structuredContent.results[0].exitCode, 1, 'structured diagnostics must remain available');
 
-  console.log('Removed tools fail closed, active schemas remain visible, and returned failures use MCP isError.');
+  console.log('SDK v2 rejects removed tools, exposes the active surface, and preserves tool-level isError results.');
 } finally {
   await client.close();
   fs.rmSync(temp, { recursive: true, force: true });

@@ -31,6 +31,20 @@ const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.j
 let stderr = '';
 child.stderr.on('data', (chunk) => { stderr += chunk.toString('utf8'); });
 
+async function readMcpResponse(response) {
+  const text = await response.text();
+  if ((response.headers.get('content-type') || '').includes('text/event-stream')) {
+    const frames = text.split(/\n\n+/).map(frame => frame.trim()).filter(Boolean);
+    const data = frames.flatMap(frame => frame.split(/\r?\n/))
+      .filter(line => line.startsWith('data:'))
+      .map(line => line.slice(5).trim())
+      .filter(Boolean);
+    if (!data.length) throw new Error(`MCP SSE response contained no data frame: ${text}`);
+    return JSON.parse(data.at(-1));
+  }
+  return JSON.parse(text);
+}
+
 async function waitForHealth() {
   const url = `http://127.0.0.1:${port}/health`;
   const started = Date.now();
@@ -252,14 +266,15 @@ if (oauthChallenge.status !== 401 || !/Bearer/i.test(challengeHeader) || !challe
 
 const initializeResponse = await fetch(`http://127.0.0.1:${port}/mcp`, {
   method: 'POST',
-  headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-  body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'initialize', params: { protocolVersion: '2025-06-18' } })
+  headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: `Bearer ${token}` },
+  body: JSON.stringify({
+    jsonrpc: '2.0',
+    id: 2,
+    method: 'initialize',
+    params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'relai-http-smoke', version: '1.0.0' } }
+  })
 });
-const mcpSessionId = initializeResponse.headers.get('mcp-session-id') || '';
-const initialized = await initializeResponse.json();
-if (!mcpSessionId) {
-  throw new Error('HTTP initialize did not issue an Mcp-Session-Id for stable task grouping');
-}
+const initialized = await readMcpResponse(initializeResponse);
 if (!initialized.result?.capabilities?.tools) {
   throw new Error('HTTP initialize did not advertise tools');
 }
@@ -275,9 +290,9 @@ if (!String(initialized.result?.instructions || '').includes('relai_complete_tas
 
 const list = await fetch(`http://127.0.0.1:${port}/mcp`, {
   method: 'POST',
-  headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, 'mcp-session-id': mcpSessionId },
+  headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: `Bearer ${token}` },
   body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/list', params: {} })
-}).then((response) => response.json());
+}).then(readMcpResponse);
 if (!Array.isArray(list.result?.tools) || list.result.tools.length !== 20) {
   throw new Error(`HTTP tools/list should return exactly 20 workspace tools, got ${list.result?.tools?.length}`);
 }
@@ -341,9 +356,9 @@ if (!/does not call a hosting provider/.test(draftPrSchema?.description || '') |
 }
 const resources = await fetch(`http://127.0.0.1:${port}/mcp`, {
   method: 'POST',
-  headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, 'mcp-session-id': mcpSessionId },
+  headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: `Bearer ${token}` },
   body: JSON.stringify({ jsonrpc: '2.0', id: 4, method: 'resources/list', params: {} })
-}).then((response) => response.json());
+}).then(readMcpResponse);
 if (!Array.isArray(resources.result?.resources) || !resources.result.resources.some((item) => item.uri === 'relai://server/workspaces')) {
   throw new Error('HTTP resources/list did not expose workspace resource');
 }
@@ -352,9 +367,9 @@ if (!resources.result.resources.some((item) => item.uri === 'relai://server/tool
 }
 const toolSurfaceResource = await fetch(`http://127.0.0.1:${port}/mcp`, {
   method: 'POST',
-  headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, 'mcp-session-id': mcpSessionId },
+  headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: `Bearer ${token}` },
   body: JSON.stringify({ jsonrpc: '2.0', id: 41, method: 'resources/read', params: { uri: 'relai://server/tool-surface' } })
-}).then((response) => response.json());
+}).then(readMcpResponse);
 const toolSurfaceManifest = JSON.parse(toolSurfaceResource.result?.contents?.[0]?.text || '{}');
 if (toolSurfaceManifest.toolSurfaceVersion !== 12 || toolSurfaceManifest.toolCount !== 20 || !Array.isArray(toolSurfaceManifest.deprecations) || toolSurfaceManifest.deprecations.length !== 0) {
   throw new Error(`tool-surface resource returned an invalid manifest: ${JSON.stringify(toolSurfaceManifest)}`);
@@ -362,11 +377,11 @@ if (toolSurfaceManifest.toolSurfaceVersion !== 12 || toolSurfaceManifest.toolCou
 
 const removedConfigTool = await fetch(`http://127.0.0.1:${port}/mcp`, {
   method: 'POST',
-  headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, 'mcp-session-id': mcpSessionId },
+  headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: `Bearer ${token}` },
   body: JSON.stringify({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'relai_config', arguments: {} } })
-}).then((response) => response.json());
-if (!removedConfigTool.result?.isError) {
-  throw new Error('HTTP relai_config should be rejected because only bridge tools are MCP tools');
+}).then(readMcpResponse);
+if (removedConfigTool.error?.code !== -32602) {
+  throw new Error(`HTTP relai_config should be rejected by the SDK tool registry: ${JSON.stringify(removedConfigTool)}`);
 }
 
 child.kill('SIGKILL');

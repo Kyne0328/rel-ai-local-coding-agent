@@ -270,7 +270,7 @@ assert.match(workspaceForm, /Project folder/);
 assert.match(workspaceForm, /Workspace name/);
 assert.match(workspaceForm, /Git and safety settings/);
 assert.match(workspaceForm, /Defaults work for most repositories/);
-assert.match(workspaceForm, /deriveAlias/);
+assert.match(workspaceForm, /deriveWorkspaceAlias/);
 assert.ok(workspaceForm.indexOf('Project folder') < workspaceForm.indexOf('Workspace name'));
 assert.doesNotMatch(settingsShared, /style\.cssText|style="/);
 assert.match(dashboardCss, /workspace-grid/);

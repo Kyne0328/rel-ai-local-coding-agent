@@ -1,6 +1,7 @@
 import { closeModal, openModal } from './components/modal.js';
 import { routeHref } from './router.js';
 import { hasActiveOverlay } from './interaction-safety.js';
+import { esc as escapeHtml } from './utils.js';
 
 let initialized = false;
 let readData = () => ({});
@@ -191,6 +192,3 @@ function normalize(value) {
   return String(value || '').trim().toLowerCase();
 }
 
-function escapeHtml(value) {
-  return String(value == null ? '' : value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
-}

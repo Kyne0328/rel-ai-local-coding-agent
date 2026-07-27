@@ -183,7 +183,7 @@ function _handleUpsertWorkspace(alias, payload, next) {
     defaultBaseBranch: String(source.defaultBaseBranch || currentWorkspace.defaultBaseBranch || "main"),
     allowedRemotes: parseList(source.allowedRemotes, currentWorkspace.allowedRemotes || ["origin"]),
     repoSlug: String(source.repoSlug || currentWorkspace.repoSlug || ""),
-    context: parseContext(source.context || source.fastTask, currentWorkspace.context || currentWorkspace.fastTask),
+    context: parseContext(source.context, currentWorkspace.context),
     testCommands: parseCommandMap(source.testCommands, currentWorkspace.testCommands || {}),
     commands: parseCommandMap(source.commands, currentWorkspace.commands || {})
   };
@@ -251,10 +251,9 @@ function parseList(value, fallback = []) {
 function parseContext(value, fallback = {}) {
   const source = objectOrEmpty(value);
   const current = { ...DEFAULT_CONTEXT, ...objectOrEmpty(fallback) };
-  const rawSnapshotMaxFiles = source.snapshotMaxFiles == null ? source.maxIndexFiles : source.snapshotMaxFiles;
-  const snapshotMaxFiles = rawSnapshotMaxFiles == null
+  const snapshotMaxFiles = source.snapshotMaxFiles == null
     ? current.snapshotMaxFiles
-    : finiteNumber(rawSnapshotMaxFiles, "context.snapshotMaxFiles");
+    : finiteNumber(source.snapshotMaxFiles, "context.snapshotMaxFiles");
   return {
     ...current,
     snapshotMaxFiles: snapshotMaxFiles || DEFAULT_CONTEXT.snapshotMaxFiles,

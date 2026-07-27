@@ -40,7 +40,7 @@ function taskAuditContext(context, activity, requestedTaskId, toolName, ok, valu
   const taskHistoryEligible = Boolean(taskId && (requestedTaskId || toolName === 'relai_start_task'));
   return {
     taskId,
-    scopeId: activity?.scopeId || String(context?.taskScopeId || ''),
+    scopeId: activity?.scopeId || '',
     operationId: activity?.operationId || '',
     requestId: context?.requestId == null ? '' : String(context.requestId),
     serverInstanceId: String(context?.serverInstanceId || ''),

@@ -26,7 +26,7 @@ Tool use is intentionally small but flexible. ChatGPT should skip stages it does
 relai_start_task -> relai_repo_snapshot (when useful) -> relai_search / relai_code_inspect -> relai_read -> relai_edit -> relai_run_checks (complete:true + summary)
 ```
 
-No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. The MCP server exposes 20 callable workspace tools across local and connector transports, all active. `relai_code_inspect` adds live symbol, reference, impact, affected-test, and diagnostics-readiness analysis without a stale background index.
+No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. MCP SDK v2 exposes the same 20 callable workspace tools over stdio and OAuth-protected Streamable HTTP, all active. `relai_code_inspect` adds live symbol, reference, impact, affected-test, and diagnostics-readiness analysis without a stale background index.
 
 When ChatGPT first edits a workspace, the server starts a session and records the pre-edit state, so later status/diff output can separate the files this session changed from files that were already modified. The session expires after a period of inactivity.
 
@@ -112,7 +112,7 @@ The activity page is there because I got tired of guessing what the MCP server w
   <img src="docs/images/dashboard-tools-section.png" alt="Rel.AI MCP bridge tools" width="900">
 </p>
 
-The dashboard shows the current workspace tool surface for inspection, one-shot commands, editing, validation, explicit completion reporting, review, Git publishing, tidy, restore, and compatibility workflows.
+The dashboard shows the current workspace tool surface for inspection, one-shot commands, editing, validation, explicit completion reporting, review, Git publishing, tidy, and restore.
 
 ### Connection setup
 
@@ -264,11 +264,11 @@ npm test                     # full suite
 
 `electron:build` and `electron:dist` refuse to run when the ngrok seed is missing — packaging without it produces an installer whose tunnel cannot start.
 
-Windows CI and the release workflow build the unpacked application and run `npm run verify:packaged`, a read-only package-layout check. Installer, uninstall, first-run UI, real ngrok publication, ChatGPT OAuth, live approval-token rotation, and update-from-prior-release behavior are verified manually on a disposable Windows machine. See [docs/USABILITY_ACCEPTANCE.md](docs/USABILITY_ACCEPTANCE.md) and [docs/INSTALLER_TEST_SAFETY.md](docs/INSTALLER_TEST_SAFETY.md).
+Windows CI and the release workflow build the unpacked application and run `npm run verify:packaged`, a read-only package-layout check. `npm run test:connector-acceptance` then exercises OAuth/PKCE and the MCP task lifecycle through the packaged Node backend. Installer, uninstall, first-run UI, real ngrok publication, logged-in ChatGPT app selection, live approval-token rotation, and update-from-prior-release behavior remain manual checks on a disposable Windows machine. See [docs/USABILITY_ACCEPTANCE.md](docs/USABILITY_ACCEPTANCE.md) and [docs/INSTALLER_TEST_SAFETY.md](docs/INSTALLER_TEST_SAFETY.md).
 
 ## MCP tools
 
-Rel.AI exposes 20 callable workspace tools, all active. The six compatibility tools were removed in tool-surface version 10. `relai_edit` is the single file-change tool. Start each independent objective with `relai_start_task`, retain the returned opaque `task_id`, and pass it on every later call for that task. Task completion is explicit: final validation can close the logical task atomically with `complete:true` and `summary`, while `relai_complete_task` remains available after post-validation read-only review.
+Rel.AI exposes 20 callable workspace tools, all active, through MCP SDK v2. The six compatibility tools were removed in tool-surface version 10. HTTP clients use only `POST /mcp`; legacy MCP `/sse` and `/messages` routes are removed. `relai_edit` is the single file-change tool. Start each independent objective with `relai_start_task`, retain the returned opaque `task_id`, and pass it on every later call for that task. Task completion is explicit: final validation can close the logical task atomically with `complete:true` and `summary`, while `relai_complete_task` remains available after post-validation read-only review.
 
 | Tool | Purpose |
 | --- | --- |

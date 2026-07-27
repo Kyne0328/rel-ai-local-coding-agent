@@ -1,5 +1,6 @@
 import { toast } from '../../components/toast.js';
 import { panel } from './shared.js';
+import { esc as escapeHtml } from '../../utils.js';
 
 const RELEASES_URL = 'https://github.com/Kyne0328/rel-ai-mcp/releases';
 let removeUpdateListener = null;
@@ -177,6 +178,3 @@ function messageOf(error) {
   return error instanceof Error ? error.message : String(error || 'Application update failed.');
 }
 
-function escapeHtml(value) {
-  return String(value == null ? '' : value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
-}

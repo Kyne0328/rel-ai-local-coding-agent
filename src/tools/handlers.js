@@ -27,7 +27,12 @@ const { relaiCodeInspect } = require('../bridge/codeIntelligence');
 const { relaiExec } = require('../bridge/exec');
 const { startTask } = require('./task');
 
-/** @type {Readonly<Record<string, ToolHandler>>} */
+/** @type {ToolHandler} */
+const statusHandler = (config, args, context) => relaiStatus(config, args, context);
+
+/** @type {ToolHandler} */
+const completeTaskHandler = (config, args) => completeTask(config, args);
+
 const HANDLERS = Object.freeze({
   startTask: inWorkspace((workspace) => startTask(workspace)),
   repoSnapshot: inWorkspace((workspace, config, args) => repoSnapshot(workspace, config, args)),
@@ -43,12 +48,12 @@ const HANDLERS = Object.freeze({
   diff: inWorkspace((workspace, config, args) => relaiDiff(workspace, config, args)),
   restorePaths: inWorkspace((workspace, config, args) => relaiRestorePaths(workspace, config, args)),
   resetWorkspace: inWorkspace((workspace, config, args) => relaiResetWorkspace(workspace, config, args)),
-  status: (config, args, context) => relaiStatus(config, args, context),
+  status: statusHandler,
   gitCommit: inWorkspace((workspace, config, args) => relaiGitCommit(workspace, config, args)),
   gitPush: inWorkspace((workspace, config, args) => relaiGitPush(workspace, config, args)),
   gitDraftPr: inWorkspace((workspace, config, args) => relaiGitDraftPr(workspace, config, args)),
   edit: inWorkspace((workspace, config, args) => planEdit(workspace, config, args)),
-  completeTask: (config, args) => completeTask(config, args)
+  completeTask: completeTaskHandler
 });
 
 /**
@@ -81,8 +86,4 @@ function mapCheckArgs(args = {}) {
 /**
  * @param {string} handlerName
  */
-function getHandler(handlerName) {
-  return HANDLERS[handlerName] || null;
-}
-
-module.exports = { HANDLERS, getHandler };
+module.exports = { HANDLERS };

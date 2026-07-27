@@ -40,6 +40,14 @@ export function timeAgo(v) {
   return h < 24 ? h + 'h ago' : Math.floor(h / 24) + 'd ago';
 }
 
+export function formatDuration(milliseconds) {
+  const seconds = Math.max(0, Math.round(Number(milliseconds || 0) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
+}
+
 export function titleize(v) {
   return String(v || '').replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }

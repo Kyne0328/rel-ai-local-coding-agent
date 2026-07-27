@@ -120,8 +120,7 @@ function compactForConnector(name, value, args = {}) {
         validated: value.validated, validationStatus: value.validationStatus,
         completionKnown: value.completionKnown, endReason: value.endReason,
         completionSource: value.completionSource, summary: value.summary,
-        validationAt: value.validationAt, validationTaskId: value.validationTaskId,
-        relatedTaskIds: value.relatedTaskIds,
+        validationAt: value.validationAt,
         changedFiles: value.completionKnown === true ? value.changedFiles : undefined,
         message: value.message, nextAction: value.nextAction,
         fullOutput: value.fullOutput

@@ -59,8 +59,14 @@ assert.equal(
 const electronPkg = JSON.parse(fs.readFileSync(path.join(root, 'electron', 'package.json'), 'utf8'));
 const srcResource = electronPkg.build.extraResources.find((item) => item.from === '../src');
 assert.ok(srcResource, 'electron build must bundle src resources');
-assert.ok(srcResource.filter.includes('**/*.js'), 'electron build must bundle src JavaScript');
-assert.ok(srcResource.filter.includes('**/*.css'), 'electron build must retain the source UI stylesheet required by the current packaging contract');
+assert.deepEqual(srcResource.filter, ['**/*.js'], 'electron build must package backend JavaScript without the source Tailwind stylesheet');
+const rootModulesResource = electronPkg.build.extraResources.find((item) => item.from === '../node_modules');
+assert.ok(rootModulesResource, 'electron build must package root MCP SDK runtime dependencies');
+for (const packagePath of ['@modelcontextprotocol/core/**', '@modelcontextprotocol/node/**', '@modelcontextprotocol/server/**', '@hono/node-server/**', 'hono/**', 'zod/**']) {
+  assert.ok(rootModulesResource.filter.includes(packagePath), `electron build must package ${packagePath}`);
+}
+assert.ok(rootModulesResource.filter.includes('!**/*.map'), 'packaged MCP SDK dependencies must exclude source maps');
+assert.ok(electronPkg.build.files.includes('ngrok-token.js'), 'electron build must include ngrok authtoken normalization used by launcher code');
 assert.ok(electronPkg.build.files.includes('managed-ngrok.js'), 'electron build must include managed ngrok launcher code');
 assert.equal(electronPkg.build.files.includes('installed-smoke.js'), false, 'electron build must not ship installed-app test hooks');
 assert.equal(electronPkg.build.files.includes('window-smoke.js'), false, 'electron build must not ship renderer smoke entry points');

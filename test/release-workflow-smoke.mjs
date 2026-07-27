@@ -82,6 +82,7 @@ assert.match(electronPackage.dependencies['electron-updater'], /^\^6\./);
 assert.match(rootPackage.scripts['electron:build'], /--publish never/);
 assert.match(rootPackage.scripts['electron:dist'], /--publish never/);
 assert.equal(rootPackage.scripts['verify:packaged'], 'node scripts/verify-packaged-app.mjs');
+assert.equal(rootPackage.scripts['test:connector-acceptance'], 'node scripts/packaged-connector-acceptance.mjs');
 assert.equal(rootPackage.scripts['test:installed'], undefined);
 assert.match(rootPackage.scripts['build:css'], /--minify/);
 assert.equal(
@@ -106,7 +107,17 @@ assert.equal(electronPackage.build.files.includes('window-smoke.js'), false);
 assert.equal(electronPackage.build.files.includes('smoke-evidence.js'), false);
 assert.ok(electronPackage.build.files.includes('!**/*.map'));
 const sourceResource = electronPackage.build.extraResources.find(resource => resource.to === 'src');
-assert.deepEqual(sourceResource?.filter, ['**/*.js', '**/*.css']);
+assert.deepEqual(sourceResource?.filter, ['**/*.js']);
+const rootModulesResource = electronPackage.build.extraResources.find(resource => resource.to === 'node_modules');
+assert.deepEqual(rootModulesResource?.filter, [
+  '@modelcontextprotocol/core/**',
+  '@modelcontextprotocol/node/**',
+  '@modelcontextprotocol/server/**',
+  '@hono/node-server/**',
+  'hono/**',
+  'zod/**',
+  '!**/*.map'
+]);
 assert.deepEqual(electronPackage.build.nsis, {
   oneClick: false,
   perMachine: false,
@@ -157,6 +168,7 @@ assert.match(releaseWorkflow, /sha512:/);
 assert.match(releaseWorkflow, /does not contain SHA-512 update metadata/);
 assert.match(releaseWorkflow, /Verify packaged application layout/);
 assert.match(releaseWorkflow, /npm run verify:packaged -- --dir dist\/win-unpacked/);
+assert.match(releaseWorkflow, /npm run test:connector-acceptance -- --dir dist\/win-unpacked/);
 assert.doesNotMatch(releaseWorkflow, /test:installed|REL_AI_SMOKE_INSTALLER|REL_AI_RELEASE_EVIDENCE_DIR|release-evidence-check\.mjs|release-readiness\.json|release-usability-evidence\.zip/);
 assert.match(releaseWorkflow, /Report Electron package size/);
 assert.match(releaseWorkflow, /npm run electron:size -- --json dist\/electron-size-report\.json/);

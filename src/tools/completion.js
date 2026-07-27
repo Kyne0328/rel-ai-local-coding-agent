@@ -11,16 +11,11 @@ const {
   normalizeTaskId
 } = require('../toolActivity');
 
-// Keep removed pre-v10 names here only to interpret persisted audit events safely.
-// They are not registered, callable, or routed by the current tool surface.
 const CODE_MUTATING_TOOLS = new Set([
-  'relai_write',
-  'relai_replace',
   'relai_edit',
   'relai_tidy_run',
   'relai_restore_paths',
-  'relai_reset_workspace',
-  'relai_restore_changes'
+  'relai_reset_workspace'
 ]);
 function completeTask(config, args = {}) {
   const workspace = resolveWorkspace(config, args.workspace);
@@ -94,9 +89,6 @@ function completeTask(config, args = {}) {
     validationStatus: validation ? 'passed' : 'not_required',
     validationLevel: validation?.validationLevel || '',
     validationAt: validation?.ts || '',
-    validationTaskId: requestedTaskId,
-    relatedTaskIds: [requestedTaskId],
-    recoveredValidationSession: false,
     changedFiles,
     completionSource: 'relai_complete_task'
   });
@@ -108,9 +100,9 @@ function finalizeValidatedTask(config, workspace, options = {}) {
   if (!context?.taskId) {
     throw taskError('CONNECTION_CONTEXT_UNAVAILABLE', 'Task completion requires an active Rel.AI tool invocation.');
   }
-  const taskId = normalizeTaskId(options.validationTaskId || context.taskId);
-  if (!taskId || taskId !== context.taskId) {
-    throw taskError('TASK_OWNERSHIP_MISMATCH', 'The validation task does not match the active logical task.');
+  const taskId = normalizeTaskId(context.taskId);
+  if (!taskId) {
+    throw taskError('TASK_OWNERSHIP_MISMATCH', 'The active invocation has no valid logical task identity.');
   }
   const changedFiles = Array.isArray(options.changedFiles)
     ? unique(options.changedFiles.map(String).filter(Boolean))
@@ -138,9 +130,6 @@ function finalizeValidatedTask(config, workspace, options = {}) {
     validationStatus,
     validationLevel: String(options.validationLevel || ''),
     validationAt: String(options.validationAt || ''),
-    validationTaskId: taskId,
-    relatedTaskIds: [taskId],
-    recoveredValidationSession: false,
     changedFiles,
     message: completionMessage(completionSource, completion.duplicate === true)
   };
@@ -185,9 +174,6 @@ function finalizeDuplicateCompletion(config, workspace, context, previous) {
     validationStatus: previous.validation || 'passed',
     validationLevel: previous.validationLevel || '',
     validationAt: previous.validationAt || previous.completedAt || '',
-    validationTaskId: context.taskId,
-    relatedTaskIds: [context.taskId],
-    recoveredValidationSession: false,
     changedFiles: Array.isArray(previous.changedFiles) ? previous.changedFiles : [],
     message: completion.duplicate === true
       ? 'Duplicate task completion request accepted; the task was already completing.'
