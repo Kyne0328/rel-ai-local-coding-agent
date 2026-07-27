@@ -71,6 +71,24 @@ function form(obj) {
   return params.toString();
 }
 
+function mcpHeaders(accessToken = '') {
+  return {
+    'content-type': 'application/json',
+    accept: 'application/json, text/event-stream',
+    ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {})
+  };
+}
+
+async function readMcpResponse(response) {
+  const text = await response.text();
+  if ((response.headers.get('content-type') || '').includes('text/event-stream')) {
+    const lines = text.split(/\r?\n/).filter(line => line.startsWith('data:')).map(line => line.slice(5).trim()).filter(Boolean);
+    if (!lines.length) fail(`MCP SSE response contained no data: ${text}`);
+    return JSON.parse(lines.at(-1));
+  }
+  return JSON.parse(text);
+}
+
 async function postForm(pathname, obj, { manual = false } = {}) {
   return fetch(`${base}${pathname}`, {
     method: 'POST',
@@ -130,7 +148,7 @@ await waitForHealth();
 // 1. Unauthenticated POST /mcp -> 401 + WWW-Authenticate challenge.
 const challenge401 = await fetch(`${base}/mcp`, {
   method: 'POST',
-  headers: { 'content-type': 'application/json' },
+  headers: mcpHeaders(),
   body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} })
 });
 if (challenge401.status !== 401) fail(`unauthenticated POST /mcp expected 401, got ${challenge401.status}`);
@@ -320,11 +338,11 @@ if (!tokens.access_token || tokens.token_type !== 'Bearer' || !tokens.refresh_to
 // 9. The OAuth access token authenticates POST /mcp.
 const mcpRes = await fetch(`${base}/mcp`, {
   method: 'POST',
-  headers: { 'content-type': 'application/json', authorization: `Bearer ${tokens.access_token}` },
+  headers: mcpHeaders(tokens.access_token),
   body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} })
 });
 if (mcpRes.status !== 200) fail(`POST /mcp with OAuth token expected 200, got ${mcpRes.status}`);
-const mcpBody = await mcpRes.json();
+const mcpBody = await readMcpResponse(mcpRes);
 if (mcpBody.result?.tools?.length !== 20) {
   fail(`OAuth-authenticated tools/list did not return 20 tools: ${mcpBody.result?.tools?.length}`);
 }
@@ -349,7 +367,7 @@ if (!oauthDraftPrSchema || oauthDraftPrSchema.annotations?.openWorldHint !== fal
 // 10. An invalid bearer is still rejected with a challenge.
 const badBearer = await fetch(`${base}/mcp`, {
   method: 'POST',
-  headers: { 'content-type': 'application/json', authorization: 'Bearer not-a-real-token' },
+  headers: mcpHeaders('not-a-real-token'),
   body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/list', params: {} })
 });
 if (badBearer.status !== 401) fail(`POST /mcp with a bogus bearer expected 401, got ${badBearer.status}`);
@@ -368,7 +386,7 @@ if (!refreshed.access_token || refreshed.access_token === tokens.access_token) {
 
 const refreshedMcp = await fetch(`${base}/mcp`, {
   method: 'POST',
-  headers: { 'content-type': 'application/json', authorization: `Bearer ${refreshed.access_token}` },
+  headers: mcpHeaders(refreshed.access_token),
   body: JSON.stringify({ jsonrpc: '2.0', id: 4, method: 'tools/list', params: {} })
 });
 if (refreshedMcp.status !== 200) fail(`refreshed access token did not authenticate POST /mcp, got ${refreshedMcp.status}`);
@@ -387,7 +405,7 @@ if (!authorizationAfterRevoke.required || authorizationAfterRevoke.activeAccessT
 
 const revokedMcp = await fetch(`${base}/mcp`, {
   method: 'POST',
-  headers: { 'content-type': 'application/json', authorization: `Bearer ${refreshed.access_token}` },
+  headers: mcpHeaders(refreshed.access_token),
   body: JSON.stringify({ jsonrpc: '2.0', id: 5, method: 'tools/list', params: {} })
 });
 if (revokedMcp.status !== 401) fail(`revoked OAuth access token expected 401, got ${revokedMcp.status}`);

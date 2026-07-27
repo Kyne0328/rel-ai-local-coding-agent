@@ -1,5 +1,5 @@
 import { pillHtml } from '../../components/pill.js';
-import { esc, timeAgo } from '../../utils.js';
+import { esc, formatDuration, timeAgo } from '../../utils.js';
 import { getWorkspaceFilter, routeHref } from '../../router.js';
 import { connectionSummary } from '../../connection-state.js';
 
@@ -204,14 +204,6 @@ function taskAction(tool) {
   if (/git_commit|git_push/.test(value)) return 'Publishing changes';
   if (/edit|write|replace|tidy_run|restore|reset_workspace/.test(value)) return 'Applying changes';
   return 'Inspecting the workspace';
-}
-
-function formatDuration(milliseconds) {
-  const seconds = Math.max(0, Math.round(Number(milliseconds || 0) / 1000));
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainder = seconds % 60;
-  return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
 }
 
 export function buildAttention(workspaces, findings, endpoint) {

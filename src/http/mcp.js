@@ -1,8 +1,7 @@
-const crypto = require("node:crypto");
 const { URL } = require("node:url");
-const { handleMessage } = require("../server");
-const pkg = require("../../package.json");
-const { getVersion } = require("../version");
+const { createMcpHandler } = require('@modelcontextprotocol/server');
+const { toNodeHandler } = require('@modelcontextprotocol/node');
+const { createRelaiMcpServer } = require('../mcpServer');
 const oauth = require("../oauthProvider");
 const {
   resolveBaseUrl,
@@ -11,9 +10,22 @@ const {
   oauthErrorPage,
   isOAuthAuthorized
 } = require("./auth");
-const { readJsonBody, readFormOrJsonBody, sendJson, sendHtml, sendSse, isAuthorized } = require("./io");
+const { readJsonBody, readFormOrJsonBody, sendJson, sendHtml, isAuthorized } = require("./io");
 
-const sessions = new Map();
+const sdkHttpHandler = createMcpHandler(
+  () => createRelaiMcpServer({ publicHttpOnly: true, transportType: 'streamable-http' }),
+  {
+    legacy: 'stateless',
+    onerror: reportSdkError
+  }
+);
+const nodeMcpHandler = toNodeHandler(sdkHttpHandler, { onerror: reportSdkError });
+
+function reportSdkError(error) {
+  if (process.env.REL_AI_MCP_DEBUG) {
+    console.error('[rel-ai-mcp] MCP SDK HTTP error:', error instanceof Error ? error.message : String(error));
+  }
+}
 
 function handleOauthProtectedResource(ctx) {
   sendJson(ctx.res, 200, oauth.protectedResourceMetadata(resolveBaseUrl(ctx.options)), ctx.ae);
@@ -76,65 +88,30 @@ async function handleToken(ctx) {
 }
 
 function handleMcpGetDiagnostic(ctx) {
-  sendJson(ctx.res, 200, mcpGetDiagnostic(ctx.parsed.pathname, ctx.options, ctx.mcpAccess, ctx.req), ctx.ae);
+  sendJson(ctx.res, 200, mcpGetDiagnostic(ctx.parsed.pathname, ctx.options, ctx.req), ctx.ae);
 }
 
 async function handleMcpStreamable(ctx) {
-  if (!isMcpAuthorized(ctx.req, ctx.options)) { unauthorizedMcp(ctx.res, resolveBaseUrl(ctx.options), ctx.req); return; }
+  if (!isMcpAuthorized(ctx.req, ctx.options)) {
+    unauthorizedMcp(ctx.res, resolveBaseUrl(ctx.options), ctx.req);
+    return;
+  }
   const payload = await readJsonBody(ctx.req, ctx.options.maxBodyBytes);
-  const sessionId = streamableSessionId(ctx.req, payload);
-  if (sessionId) ctx.res.setHeader('Mcp-Session-Id', sessionId);
-  const response = await handleJsonRpcPayload(payload, {
-    publicHttpOnly: true,
-    taskScopeId: resolveTaskScopeId(ctx.req, payload, sessionId),
-    transportType: 'streamable-http',
-    transportSessionId: sessionId
-  });
-  if (response === null) { sendJson(ctx.res, 202, { ok: true, accepted: true }, ctx.ae); return; }
-  sendJson(ctx.res, 200, response, ctx.ae);
+  await nodeMcpHandler(ctx.req, ctx.res, payload);
 }
 
-function handleMcpSse(ctx) {
-  if (!isMcpAuthorized(ctx.req, ctx.options)) { unauthorizedMcp(ctx.res, resolveBaseUrl(ctx.options), ctx.req); return; }
-  openSseSession(ctx.res, ctx.req, ctx.mcpAccess.messagePath);
-}
-
-async function handleMcpMessages(ctx) {
-  if (!isMcpAuthorized(ctx.req, ctx.options)) { unauthorizedMcp(ctx.res, resolveBaseUrl(ctx.options), ctx.req); return; }
-  const sessionId = ctx.parsed.searchParams.get("sessionId") || "";
-  const session = sessions.get(sessionId);
-  if (!session) { sendJson(ctx.res, 404, { ok: false, error: "Unknown or expired SSE session." }, ctx.ae); return; }
-  const payload = await readJsonBody(ctx.req, ctx.options.maxBodyBytes);
-  const response = await handleJsonRpcPayload(payload, {
-    publicHttpOnly: true,
-    taskScopeId: resolveTaskScopeId(ctx.req, payload, sessionId),
-    transportType: 'sse',
-    transportSessionId: sessionId
-  });
-  if (response !== null) sendSse(session.res, "message", response);
-  sendJson(ctx.res, 202, { ok: true, accepted: true }, ctx.ae);
-}
-
-// The MCP transport endpoints. The legacy secret-in-URL no-auth path
-// (/mcp/<secret>) has been removed — access is granted only by OAuth or the local
-// bearer token, enforced in isMcpAuthorized.
 function getMcpAccess(pathname) {
-  if (pathname === "/mcp") return { kind: "streamable-http" };
-  if (pathname === "/sse") return { kind: "sse", messagePath: "/messages" };
-  if (pathname === "/messages") return { kind: "messages" };
-  return { kind: "none" };
+  return pathname === "/mcp" ? { kind: "streamable-http" } : { kind: "none" };
 }
 
-function mcpGetDiagnostic(pathname, options, mcpAccess, req) {
+function mcpGetDiagnostic(pathname, options, req) {
   const cleanBase = resolveBaseUrl(options);
   const usableWithPost = Boolean(isAuthorized(req, options) || isOAuthAuthorized(req) || options.allowNoAuth);
   return {
     ok: true,
     endpoint: pathname,
     reachable: true,
-    note: "This is a GET browser diagnostic. MCP clients must send JSON-RPC with POST.",
-    // The ChatGPT connector uses real OAuth: add this plain /mcp URL with
-    // Authentication: OAuth. ChatGPT discovers the auth endpoints automatically.
+    note: "This is a GET browser diagnostic. MCP clients must send protocol requests with POST.",
     correctChatGPTUrl: `${cleanBase}/mcp`,
     chatgptAuth: "OAuth",
     oauthProtectedResource: `${cleanBase}/.well-known/oauth-protected-resource`,
@@ -142,6 +119,7 @@ function mcpGetDiagnostic(pathname, options, mcpAccess, req) {
     plainMcpUrl: "/mcp is the OAuth-protected MCP endpoint. ChatGPT uses Authentication: OAuth; local/API clients may use a Bearer token instead.",
     postRequired: true,
     usableWithPost,
+    protocolImplementation: "@modelcontextprotocol/server v2",
     examples: {
       health: "/health",
       dashboard: "/dashboard",
@@ -150,89 +128,6 @@ function mcpGetDiagnostic(pathname, options, mcpAccess, req) {
       localBearerMcp: "/mcp"
     }
   };
-}
-
-async function handleJsonRpcPayload(payload, options = {}) {
-  if (Array.isArray(payload)) {
-    const responses = await Promise.all(payload.map(item => handleMessage(item, options)));
-    const visible = responses.filter(Boolean);
-    return visible.length > 0 ? visible : null;
-  }
-  return handleMessage(payload, options);
-}
-
-function streamableSessionId(req, payload) {
-  const existing = req?.headers?.['mcp-session-id'];
-  if (existing) return String(Array.isArray(existing) ? existing[0] : existing);
-  const messages = Array.isArray(payload) ? payload : [payload];
-  return messages.some(message => message?.method === 'initialize') ? crypto.randomUUID() : '';
-}
-
-function resolveTaskScopeId(req, payload, explicitSessionId = '') {
-  const headers = req?.headers || {};
-  const first = values => values.map(value => Array.isArray(value) ? value[0] : value).find(Boolean);
-  const conversationHeader = first([
-    headers['x-openai-conversation-id'],
-    headers['x-chatgpt-conversation-id'],
-    headers['openai-conversation-id']
-  ]);
-  const transportHeader = first([
-    headers['x-openai-session-id'],
-    headers['mcp-session-id']
-  ]);
-  const message = Array.isArray(payload) ? payload[0] : payload;
-  const meta = message?.params?._meta || message?._meta || {};
-  const metadataConversation = first([
-    meta['openai/conversationId'],
-    meta.conversationId
-  ]);
-  const metadataSession = first([
-    meta['openai/sessionId'],
-    meta.sessionId
-  ]);
-  const remoteAddress = String(req?.socket?.remoteAddress || 'connector');
-  const messages = Array.isArray(payload) ? payload : [payload];
-  const workspace = first(messages.map(item => item?.params?.arguments?.workspace));
-  const fallback = `${remoteAddress}:${workspace || 'unscoped'}`;
-  // Conversation identity must outlive a transport reconnect. Using Mcp-Session-Id
-  // first split validation and relai_complete_task into separate work sessions when
-  // ChatGPT rotated the HTTP transport between tool calls.
-  if (conversationHeader) return hashedTaskScope('conversation', conversationHeader);
-  if (metadataConversation) return hashedTaskScope('conversation', metadataConversation);
-  if (metadataSession) return hashedTaskScope('session', metadataSession);
-  if (transportHeader) return hashedTaskScope('transport', transportHeader);
-  if (explicitSessionId) return hashedTaskScope('transport', explicitSessionId);
-  return hashedTaskScope('fallback', fallback);
-}
-
-function hashedTaskScope(kind, value) {
-  const hash = crypto.createHash('sha256').update(String(value)).digest('hex').slice(0, 24);
-  return `mcp:${kind}:${hash}`;
-}
-
-function openSseSession(res, req, messagePath = "/messages") {
-  const sessionId = crypto.randomUUID();
-  res.writeHead(200, {
-    "Content-Type": "text/event-stream; charset=utf-8",
-    "Cache-Control": "no-cache, no-transform",
-    "Connection": "keep-alive",
-    "X-Accel-Buffering": "no"
-  });
-  const session = { id: sessionId, res, createdAt: new Date().toISOString() };
-  sessions.set(sessionId, session);
-
-  sendSse(res, "endpoint", `${messagePath}?sessionId=${encodeURIComponent(sessionId)}`);
-  sendSse(res, "ready", { ok: true, sessionId, name: pkg.name, version: getVersion() });
-
-  const keepAlive = setInterval(() => {
-    if (!sessions.has(sessionId)) return clearInterval(keepAlive);
-    res.write(`: keepalive ${Date.now()}\n\n`);
-  }, 15000);
-
-  req.on("close", () => {
-    clearInterval(keepAlive);
-    sessions.delete(sessionId);
-  });
 }
 
 module.exports = {
@@ -244,10 +139,5 @@ module.exports = {
   handleToken,
   handleMcpGetDiagnostic,
   handleMcpStreamable,
-  handleMcpSse,
-  handleMcpMessages,
-  getMcpAccess,
-  handleJsonRpcPayload,
-  resolveTaskScopeId,
-  streamableSessionId
+  getMcpAccess
 };

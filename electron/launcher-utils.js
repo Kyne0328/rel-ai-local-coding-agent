@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { normalizeNgrokAuthtoken } = require('./ngrok-token');
 
 function resolveSrcPath() {
   const packagedSrc = process.resourcesPath ? path.join(process.resourcesPath, 'src') : '';
@@ -57,14 +58,6 @@ function normalizeNgrokDomain(value) {
     }
   }
   return domain;
-}
-
-function normalizeNgrokAuthtoken(value) {
-  const token = String(value || '').trim();
-  if (!token) throw new Error('ngrok authtoken is required.');
-  if (/\s/.test(token)) throw new Error('ngrok authtoken cannot contain spaces.');
-  if (token.length < 8) throw new Error('ngrok authtoken is too short.');
-  return token;
 }
 
 function buildTunnelCommand(domain, port) {

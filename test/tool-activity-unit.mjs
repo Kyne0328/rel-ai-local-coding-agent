@@ -29,12 +29,12 @@ const tracker = createToolActivityTracker({
 });
 tracker.onToolActivity(event => trackerEvents.push(event));
 
-const finishRead = tracker.beginConnectorToolCall({ tool: 'relai_read', workspace: 'repo', scopeId: 'conversation-a', operation: 'Reading src/app.js' });
+const finishRead = tracker.beginConnectorToolCall({ tool: 'relai_start_task', workspace: 'repo', scopeId: 'request-a', createTask: true, operation: 'Reading src/app.js' });
 assert.equal(tracker.getToolActivity().tasks.find(task => task.id === finishRead.taskId)?.operation, 'Reading src/app.js');
 finishRead.update({ operation: 'Reading src/config.js' });
 assert.equal(tracker.getToolActivity().tasks.find(task => task.id === finishRead.taskId)?.operation, 'Reading src/config.js');
-const finishChecks = tracker.beginConnectorToolCall({ tool: 'relai_run_checks', workspace: 'other', scopeId: 'conversation-b' });
-assert.notEqual(finishRead.taskId, finishChecks.taskId, 'separate conversation scopes must create separate tasks');
+const finishChecks = tracker.beginConnectorToolCall({ tool: 'relai_start_task', workspace: 'other', scopeId: 'request-b', createTask: true });
+assert.notEqual(finishRead.taskId, finishChecks.taskId, 'each explicit task start must create a separate task');
 assert.equal(tracker.getToolActivity().activeConnectorCalls, 2);
 assert.equal(tracker.getToolActivity().activeTaskCount, 2);
 finishRead();
@@ -43,8 +43,8 @@ assert.equal(tracker.getToolActivity().state, 'waiting');
 assert.equal(timers.size, 2);
 
 nowValue = 30_000;
-const finishEdit = tracker.beginConnectorToolCall({ tool: 'relai_edit', workspace: 'repo', scopeId: 'conversation-a' });
-assert.equal(finishEdit.taskId, finishRead.taskId, 'follow-up calls before idle completion must stay in the same task');
+const finishEdit = tracker.beginConnectorToolCall({ tool: 'relai_edit', workspace: 'repo', scopeId: 'request-c', taskId: finishRead.taskId });
+assert.equal(finishEdit.taskId, finishRead.taskId, 'follow-up calls must use the supplied exact task ID');
 assert.equal(tracker.getToolActivity().tasks.find(task => task.id === finishRead.taskId)?.calls, 2);
 finishEdit();
 assert.equal([...timers.values()].every(timer => timer.delay === 60_000), true);
@@ -60,40 +60,20 @@ assert.equal(inactive.find(task => task.taskId === finishChecks.taskId)?.calls, 
 assert.equal(inactive.every(task => task.status === 'inactive' && task.endReason === 'inactivity_window'), true);
 
 const reconnectTracker = createToolActivityTracker({ idleMs: 60_000 });
-const firstTransport = reconnectTracker.beginConnectorToolCall({ tool: 'relai_run_checks', workspace: 'repo', scopeId: 'mcp:transport:a' });
-firstTransport();
-const rotatedTransport = reconnectTracker.beginConnectorToolCall({ tool: 'relai_complete_task', workspace: 'repo', scopeId: 'mcp:transport:b' });
-assert.equal(rotatedTransport.taskId, firstTransport.taskId, 'a single waiting workspace task must survive connector transport rotation');
+const startedTask = reconnectTracker.beginConnectorToolCall({ tool: 'relai_start_task', workspace: 'repo', scopeId: 'transport-a', createTask: true });
+startedTask();
+const rotatedTransport = reconnectTracker.beginConnectorToolCall({ tool: 'relai_complete_task', workspace: 'repo', scopeId: 'transport-b', taskId: startedTask.taskId });
+assert.equal(rotatedTransport.taskId, startedTask.taskId, 'an exact task ID must survive transport rotation');
 rotatedTransport();
-reconnectTracker.reset();
-
-let fragmentedNow = 1000;
-const fragmentedTracker = createToolActivityTracker({ idleMs: 60_000, now: () => fragmentedNow });
-const fragmentedA = fragmentedTracker.beginConnectorToolCall({ tool: 'relai_read', workspace: 'repo', scopeId: 'mcp:transport:a' });
-fragmentedNow = 2000;
-const fragmentedB = fragmentedTracker.beginConnectorToolCall({ tool: 'relai_search', workspace: 'repo', scopeId: 'mcp:transport:b' });
-assert.notEqual(fragmentedA.taskId, fragmentedB.taskId, 'overlapping connector calls may begin as separate weak transport tasks');
-fragmentedNow = 3000;
-fragmentedA();
-fragmentedNow = 4000;
-fragmentedB();
-assert.equal(fragmentedTracker.getToolActivity().activeTaskCount, 2);
-fragmentedNow = 5000;
 assert.throws(
-  () => fragmentedTracker.beginConnectorToolCall({ tool: 'relai_read', workspace: 'repo', scopeId: 'mcp:transport:c' }),
+  () => reconnectTracker.beginConnectorToolCall({ tool: 'relai_read', workspace: 'repo', scopeId: 'transport-c' }),
   error => error?.code === 'TASK_ID_REQUIRED',
-  'ambiguous weak transport fragments must fail explicitly instead of being merged by workspace'
+  'tracked calls without an explicit task ID must fail rather than infer by scope or workspace'
 );
-assert.equal(fragmentedTracker.getToolActivity().activeTaskCount, 2, 'independent weak-scope tasks must remain isolated');
-fragmentedTracker.reset();
-
-const strongTracker = createToolActivityTracker({ idleMs: 60_000 });
-const strongA = strongTracker.beginConnectorToolCall({ tool: 'relai_read', workspace: 'repo', scopeId: 'mcp:conversation:a' });
-strongA();
-const strongB = strongTracker.beginConnectorToolCall({ tool: 'relai_read', workspace: 'repo', scopeId: 'mcp:conversation:b' });
-assert.notEqual(strongA.taskId, strongB.taskId, 'different stable conversation scopes must remain separate');
-strongB();
-strongTracker.reset();
+const secondTask = reconnectTracker.beginConnectorToolCall({ tool: 'relai_start_task', workspace: 'repo', scopeId: 'transport-b', createTask: true });
+assert.notEqual(secondTask.taskId, startedTask.taskId, 'separate explicit starts remain isolated even on one transport');
+secondTask();
+reconnectTracker.reset();
 
 let nextId = 40;
 const started = new Set();
@@ -172,7 +152,7 @@ try {
   const callEvents = [];
   const stopListening = onToolActivity(event => callEvents.push(event));
 
-  await callTool('relai_status', {}, { publicHttpOnly: true, taskScopeId: 'http-session-a' });
+  await callTool('relai_status', {}, { publicHttpOnly: true });
   assert.deepEqual(callEvents.slice(0, 2).map(event => [event.phase, event.tool, event.activeConnectorCalls]), [
     ['started', 'relai_status', 1],
     ['finished', 'relai_status', 0]
@@ -193,7 +173,7 @@ try {
 
   callEvents.length = 0;
   await assert.rejects(
-    () => callTool('relai_read', {}, { publicHttpOnly: true, taskScopeId: 'http-session-a' }),
+    () => callTool('relai_read', {}, { publicHttpOnly: true }),
     /Workspace alias is required|Unknown workspace|workspace/i
   );
   assert.deepEqual(callEvents.map(event => [event.phase, event.tool, event.activeConnectorCalls]), [

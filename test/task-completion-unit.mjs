@@ -40,7 +40,6 @@ try {
   async function startTask(scopeId) {
     const result = await callTool('relai_start_task', { workspace: 'app' }, {
       publicHttpOnly: true,
-      taskScopeId: scopeId,
       requestId: `${scopeId}:start`,
       transportType: 'test',
       transportSessionId: 'shared-test-transport'
@@ -55,7 +54,7 @@ try {
     workspace: 'app',
     task_id: unvalidatedTask,
     summary: 'Read-only task completed without validation.'
-  }, { publicHttpOnly: true, taskScopeId: 'completion-without-validation' });
+  }, { publicHttpOnly: true });
   assert.equal(readOnlyCompletion.ok, true);
   assert.equal(readOnlyCompletion.task_id, unvalidatedTask);
   assert.equal(readOnlyCompletion.validationStatus, 'not_required');
@@ -68,25 +67,25 @@ try {
     task_id: unvalidatedMutationTask,
     path: 'src/unvalidated.js',
     content: 'console.log("unvalidated mutation");\n'
-  }, { publicHttpOnly: true, taskScopeId: 'mutation-without-validation' });
+  }, { publicHttpOnly: true });
   await assert.rejects(
     () => callTool('relai_complete_task', {
       workspace: 'app',
       task_id: unvalidatedMutationTask,
       summary: 'Mutating task must still require validation.'
-    }, { publicHttpOnly: true, taskScopeId: 'mutation-without-validation' }),
+    }, { publicHttpOnly: true }),
     error => error?.code === 'INVALID_TASK_STATE' && /exact task_id/i.test(error.message)
   );
   await callTool('relai_run_checks', {
     workspace: 'app',
     task_id: unvalidatedMutationTask,
     level: 'standard'
-  }, { publicHttpOnly: true, taskScopeId: 'mutation-without-validation' });
+  }, { publicHttpOnly: true });
   await callTool('relai_complete_task', {
     workspace: 'app',
     task_id: unvalidatedMutationTask,
     summary: 'Mutating task completed after its own validation.'
-  }, { publicHttpOnly: true, taskScopeId: 'mutation-without-validation' });
+  }, { publicHttpOnly: true });
 
   resetToolActivity();
   const missingSummaryTask = await startTask('atomic-completion-without-summary');
@@ -96,7 +95,7 @@ try {
       task_id: missingSummaryTask,
       level: 'standard',
       complete: true
-    }, { publicHttpOnly: true, taskScopeId: 'atomic-completion-without-summary' }),
+    }, { publicHttpOnly: true }),
     /summary is required/i
   );
 
@@ -108,13 +107,13 @@ try {
     check: 'node -e "process.exit(1)"',
     complete: true,
     summary: 'This failed validation must not close the task.'
-  }, { publicHttpOnly: true, taskScopeId: 'failed-atomic-completion' });
+  }, { publicHttpOnly: true });
   assert.equal(failedAtomic.ok, false);
   assert.equal(failedAtomic.validationStatus, 'failed');
   assert.notEqual(failedAtomic.completionKnown, true);
   resetToolActivity();
 
-  const atomicContext = { publicHttpOnly: true, taskScopeId: 'shared-atomic-transport' };
+  const atomicContext = { publicHttpOnly: true };
   const atomicTaskId = await startTask('shared-atomic-transport');
   const atomicCompletion = await callTool('relai_run_checks', {
     workspace: 'app',
@@ -144,7 +143,7 @@ try {
   assert.equal(atomicEvent.taskSummary, 'Validated and completed atomically.');
 
   resetToolActivity();
-  const context = { publicHttpOnly: true, taskScopeId: 'shared-standalone-transport' };
+  const context = { publicHttpOnly: true };
   const taskId = await startTask('shared-standalone-transport');
   const validation = await callTool('relai_run_checks', {
     workspace: 'app',
@@ -166,7 +165,6 @@ try {
   assert.equal(completion.completionKnown, true);
   assert.equal(completion.endReason, 'explicit_completion');
   assert.equal(completion.validationStatus, 'passed');
-  assert.deepEqual(completion.relatedTaskIds, [taskId]);
   assert.equal(resolvePolicy({ alias: 'app', path: workspace }, readConfig()).sessionActive, false, 'explicit completion must clear only this task ownership state');
 
   const status = getToolActivity();
@@ -195,7 +193,7 @@ try {
   assert.equal(duplicateCompletion.summary, 'Implemented and validated the requested code changes.');
 
   resetToolActivity();
-  const rotatedValidationContext = { publicHttpOnly: true, taskScopeId: 'validation-before-restart' };
+  const rotatedValidationContext = { publicHttpOnly: true };
   const restartTaskId = await startTask('validation-before-restart');
   await callTool('relai_run_checks', {
     workspace: 'app',
@@ -207,15 +205,12 @@ try {
     workspace: 'app',
     task_id: restartTaskId,
     summary: 'Recovered the same explicit task after the in-memory tracker restarted.'
-  }, { publicHttpOnly: true, taskScopeId: 'completion-after-restart' });
+  }, { publicHttpOnly: true });
   assert.equal(recoveredCompletion.ok, true);
   assert.equal(recoveredCompletion.task_id, restartTaskId);
-  assert.equal(recoveredCompletion.recoveredValidationSession, false);
-  assert.equal(recoveredCompletion.validationTaskId, restartTaskId);
-  assert.deepEqual(recoveredCompletion.relatedTaskIds, [restartTaskId]);
 
   resetToolActivity();
-  const changedContext = { publicHttpOnly: true, taskScopeId: 'changed-after-validation' };
+  const changedContext = { publicHttpOnly: true };
   const changedTaskId = await startTask('changed-after-validation');
   await callTool('relai_run_checks', { workspace: 'app', task_id: changedTaskId, level: 'standard' }, changedContext);
   await callTool('relai_edit', {
@@ -235,7 +230,7 @@ try {
   );
 
   resetToolActivity();
-  const sharedScope = { publicHttpOnly: true, taskScopeId: 'one-shared-client-connection' };
+  const sharedScope = { publicHttpOnly: true };
   const taskA = await startTask('one-shared-client-connection');
   const taskB = await startTask('one-shared-client-connection');
   assert.notEqual(taskA, taskB);
@@ -269,7 +264,7 @@ try {
   assert.equal(completedB.task_id, taskB);
 
   resetToolActivity();
-  const sharedWorkspaceScope = { publicHttpOnly: true, taskScopeId: 'shared-workspace-conflict' };
+  const sharedWorkspaceScope = { publicHttpOnly: true };
   const taskE = await startTask('shared-workspace-conflict');
   const taskF = await startTask('shared-workspace-conflict');
   await callTool('relai_run_checks', { workspace: 'app', task_id: taskE, level: 'standard' }, sharedWorkspaceScope);

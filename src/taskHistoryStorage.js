@@ -5,12 +5,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const MAX_SESSIONS = 500;
-const MIGRATION_MARKER = '.audit-history-migrated-v1';
+const HISTORY_FORMAT_MARKER = '.task-history-v2';
 const MAX_PARSED_CACHE_ENTRIES = 2 * MAX_SESSIONS;
-
-// Parsed JSON is cached only while the file's high-resolution modification time and
-// size remain identical. File metadata is re-read for every listing so a desktop app,
-// connector server, or secondary process cannot leave task history stale indefinitely.
 const parsedCache = new Map();
 
 function getTaskHistoryDir(config = {}) {
@@ -18,20 +14,13 @@ function getTaskHistoryDir(config = {}) {
   return path.join(getStateDir(config), 'sessions');
 }
 
-function ensureMigrated(config) {
+function ensureCurrentHistory(config) {
   const directory = getTaskHistoryDir(config);
-  const marker = path.join(directory, MIGRATION_MARKER);
+  const marker = path.join(path.dirname(directory), HISTORY_FORMAT_MARKER);
   if (fs.existsSync(marker)) return;
-  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-  try {
-    const { readAudit } = require('./audit');
-    const { buildTaskHistory } = require('./taskHistory');
-    const audit = readAudit(config, { limit: 10000, fullScan: true });
-    const sessions = buildTaskHistory(audit.entries, {}, { limit: MAX_SESSIONS });
-    for (const session of sessions) writeSession(directory, session);
-  } catch (error) {
-    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] session history migration:', error);
-  }
+  fs.mkdirSync(path.dirname(directory), { recursive: true, mode: 0o700 });
+  fs.rmSync(directory, { recursive: true, force: true });
+  clearCachedDirectory(directory);
   fs.writeFileSync(marker, `${new Date().toISOString()}\n`, { mode: 0o600 });
 }
 
@@ -80,8 +69,6 @@ function writeSession(directory, session) {
   const temporary = `${target}.${process.pid}.tmp`;
   fs.writeFileSync(temporary, JSON.stringify(session), { mode: 0o600 });
   fs.renameSync(temporary, target);
-  // The caller still owns `session`, so do not cache a reference that could be
-  // mutated behind the cache's back.
   parsedCache.delete(target);
 }
 
@@ -103,6 +90,10 @@ function pruneSessions(directory, limit = MAX_SESSIONS) {
 function clearTaskHistory(config) {
   const directory = getTaskHistoryDir(config);
   fs.rmSync(directory, { recursive: true, force: true });
+  clearCachedDirectory(directory);
+}
+
+function clearCachedDirectory(directory) {
   for (const file of parsedCache.keys()) {
     if (file.startsWith(directory + path.sep)) parsedCache.delete(file);
   }
@@ -159,8 +150,6 @@ function safeReadJson(file) {
   }
 }
 
-// Test-only: drop every in-memory cache so a suite can rewrite the store on disk and
-// observe the new state without restarting the process.
 function resetTaskHistoryCaches() {
   parsedCache.clear();
 }
@@ -168,7 +157,7 @@ function resetTaskHistoryCaches() {
 module.exports = {
   MAX_SESSIONS,
   clearTaskHistory,
-  ensureMigrated,
+  ensureCurrentHistory,
   getTaskHistoryDir,
   listSessions,
   pruneSessions,

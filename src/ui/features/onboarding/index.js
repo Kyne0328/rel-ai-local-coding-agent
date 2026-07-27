@@ -4,6 +4,8 @@ import { fetchJson, postJson } from '../../api.js';
 import { toast } from '../../components/toast.js';
 import { copyText } from '../../clipboard.js';
 import { runButtonAction } from '../../action-state.js';
+import { esc as escapeHtml } from '../../utils.js';
+import { deriveWorkspaceAlias, isValidWorkspaceAlias } from '../../workspace-input.js';
 
 let _step = 0;
 let _data = {};
@@ -150,7 +152,7 @@ function _renderStep(step, content, nextBtn, skipBtn, backBtn) {
     let validTimer;
     pathInput.addEventListener('input', () => {
       _data.workspacePath = pathInput.value.trim();
-      const suggested = deriveAliasFromPath(_data.workspacePath);
+      const suggested = deriveWorkspaceAlias(_data.workspacePath);
       if (!_data.aliasEdited) {
         aliasInput.value = suggested;
         _data.workspaceAlias = suggested;
@@ -191,7 +193,7 @@ function _renderStep(step, content, nextBtn, skipBtn, backBtn) {
         pathInput.value = res.path;
         _data.workspacePath = res.path;
         if (!_data.aliasEdited) {
-          const suggested = deriveAliasFromPath(res.path);
+          const suggested = deriveWorkspaceAlias(res.path);
           aliasInput.value = suggested;
           _data.workspaceAlias = suggested;
         }
@@ -212,7 +214,7 @@ function _renderStep(step, content, nextBtn, skipBtn, backBtn) {
         toast('Enter both alias and folder path.', { variant: 'warn' });
         return;
       }
-      if (!isValidAlias(alias)) {
+      if (!isValidWorkspaceAlias(alias)) {
         toast('Use letters, numbers, dots, dashes, or underscores for the alias.', { variant: 'warn' });
         return;
       }
@@ -439,57 +441,9 @@ function renderValidation(el, result) {
   el.textContent = finding;
 }
 
-function trimTrailingPathSeparators(value) {
-  let clean = String(value || '').trim();
-  while (clean.endsWith('/') || clean.endsWith('\\')) clean = clean.slice(0, -1);
-  return clean;
-}
-
-function pathLeaf(value) {
-  return trimTrailingPathSeparators(value).split(/[\\/]/).findLast(Boolean) || '';
-}
-
-function aliasChar(ch) {
-  const code = ch.codePointAt(0);
-  const isLower = code >= 97 && code <= 122;
-  const isDigit = code >= 48 && code <= 57;
-  return isLower || isDigit || ch === '.' || ch === '_' || ch === '-' ? ch : '-';
-}
-
-function trimDashes(value) {
-  let text = value;
-  while (text.startsWith('-')) text = text.slice(1);
-  while (text.endsWith('-')) text = text.slice(0, -1);
-  return text;
-}
-
-function collapseDashes(value) {
-  let out = '';
-  for (const ch of value) {
-    if (ch === '-' && out.endsWith('-')) continue;
-    out += ch;
-  }
-  return out;
-}
-
-function deriveAliasFromPath(workspacePath) {
-  return trimDashes(collapseDashes([...pathLeaf(workspacePath).toLowerCase()].map(aliasChar).join(''))).slice(0, 32);
-}
-
-function isValidAlias(alias) {
-  const value = String(alias || '');
-  if (!value) return false;
-  const first = value.codePointAt(0);
-  const firstValid = (first >= 65 && first <= 90) || (first >= 97 && first <= 122) || (first >= 48 && first <= 57);
-  return firstValid && [...value].every((ch) => aliasChar(ch.toLowerCase()) === ch.toLowerCase());
-}
-
 function setBusy(button, busy, label) {
   if (!button) return;
   button.disabled = busy;
   button.textContent = label;
 }
 
-function escapeHtml(value) {
-  return String(value == null ? '' : value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-}

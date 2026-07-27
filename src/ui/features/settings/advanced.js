@@ -1,4 +1,5 @@
 import { markUnsaved } from '../../interaction-safety.js';
+import { esc as escapeHtml } from '../../utils.js';
 import {
   loadSettingsConfig,
   saveSettings,
@@ -7,7 +8,7 @@ import {
   field,
   toggleControl,
   numberControl,
-  saveRow
+  hiddenSaveRow
 } from './shared.js';
 
 const MIB = 1024 * 1024;
@@ -35,7 +36,7 @@ function render(container) {
   ));
   container.appendChild(patchSafeguardsPanel().el);
   container.appendChild(resourceLimitsPanel().el);
-  container.appendChild(buildSaveRow(container));
+  container.appendChild(hiddenSaveRow(() => save(container), () => loadAndRender(container)));
 }
 
 function patchSafeguardsPanel() {
@@ -87,14 +88,6 @@ function settingsIntro(title, text) {
   return intro;
 }
 
-function buildSaveRow(container) {
-  const row = saveRow(() => save(container), () => loadAndRender(container));
-  row.id = '__settings-save-row';
-  row.hidden = true;
-  markUnsaved(row, false);
-  return row;
-}
-
 function checkDirty() {
   const row = document.getElementById('__settings-save-row');
   const dirty = changes().length > 0;
@@ -122,8 +115,3 @@ async function save(container) {
   return response;
 }
 
-function escapeHtml(value) {
-  return String(value == null ? '' : value).replace(/[&<>"']/g, character => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  })[character]);
-}

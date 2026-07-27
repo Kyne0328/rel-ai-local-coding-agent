@@ -1,5 +1,6 @@
 import { fetchJson, postJson, invalidateCache, DASHBOARD_DATA_URL } from '../../api.js';
 import { runButtonAction } from '../../action-state.js';
+import { markUnsaved } from '../../interaction-safety.js';
 import { toast } from '../../components/toast.js';
 import { Toggle } from '../../components/toggle.js';
 import { Select } from '../../components/select.js';
@@ -126,6 +127,14 @@ export function saveRow(onSave, onReload) {
   reloadButton.textContent = 'Discard changes';
   reloadButton.onclick = onReload;
   row.append(saveButton, reloadButton);
+  return row;
+}
+
+export function hiddenSaveRow(onSave, onReload) {
+  const row = saveRow(onSave, onReload);
+  row.id = '__settings-save-row';
+  row.hidden = true;
+  markUnsaved(row, false);
   return row;
 }
 

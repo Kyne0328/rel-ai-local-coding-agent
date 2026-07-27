@@ -18,6 +18,13 @@ const requiredFiles = [
   'resources/src/httpServer.js',
   'resources/src/tools/registry.js',
   'resources/src/config.js',
+  'resources/src/mcpServer.js',
+  'resources/node_modules/@modelcontextprotocol/server/package.json',
+  'resources/node_modules/@modelcontextprotocol/node/package.json',
+  'resources/node_modules/@modelcontextprotocol/core/package.json',
+  'resources/node_modules/@hono/node-server/package.json',
+  'resources/node_modules/hono/package.json',
+  'resources/node_modules/zod/package.json',
   'resources/bin/rel-ai-mcp-http.js',
   'resources/public/dashboard.js',
   'resources/package.json',
@@ -36,5 +43,6 @@ const rootPackage = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 
 const packagedPackage = JSON.parse(fs.readFileSync(path.join(packageDirectory, 'resources', 'package.json'), 'utf8'));
 assert.equal(packagedPackage.name, rootPackage.name, 'Packaged package metadata has the wrong product name.');
 assert.equal(packagedPackage.version, rootPackage.version, 'Packaged package metadata has the wrong version.');
+assert.equal(fs.existsSync(path.join(packageDirectory, 'resources', 'src', 'ui', 'styles', 'app.css')), false, 'Compiled dashboard CSS must be packaged without the source Tailwind stylesheet.');
 
 console.log(`Packaged application layout verified for v${packagedPackage.version}: ${requiredFiles.length} required files are present.`);

@@ -14,7 +14,6 @@ const {
   getToolSurfaceManifest,
   TOOL_NAMES
 } = require('../src/tools/schema.js');
-const { HANDLERS } = require('../src/tools/handlers.js');
 const { MAX_BATCH_EDITS } = require('../src/editLimits.js');
 
 const definitions = getToolDefinitions();
@@ -61,11 +60,10 @@ assert.equal(toolSurface.tools.filter(tool => tool.state === 'active').length, 2
 assert.equal(toolSurface.deprecations.length, 0);
 const removedTools = ['relai_write', 'relai_replace', 'relai_browser', 'relai_restore_changes', 'relai_git_status', 'relai_git_create_pr'];
 for (const name of removedTools) assert.equal(names.includes(name), false, `${name} must be removed from the callable surface`);
-for (const handler of ['write', 'replace', 'browser', 'restore', 'gitStatus', 'gitCreatePr']) assert.equal(Object.hasOwn(HANDLERS, handler), false, `${handler} compatibility handler must be removed`);
 assert.deepEqual(toolSurface.compatibilityAliases, {});
 
 for (const definition of definitions) {
-  assert.equal(typeof HANDLERS[definition.handler], 'function', `${definition.name} references missing handler ${definition.handler}`);
+  assert.equal(typeof definition.handler, 'function', `${definition.name} must bind directly to an executable handler`);
   assert.equal(definition.inputSchema?.type, 'object', `${definition.name} must define an object schema`);
   for (const stripped of definition.connectorStrip || []) {
     assert.ok(Object.hasOwn(definition.inputSchema.properties || {}, stripped), `${definition.name} strips unknown connector property ${stripped}`);

@@ -47,6 +47,11 @@ export function startMcpClient({ root, configPath, env = {}, timeoutMs = 5000 })
     child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
   }
 
+  function notify(method, params = {}) {
+    if (closed) throw new Error(`Cannot send ${method}; MCP process is closed.`);
+    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method, params })}\n`);
+  }
+
   function call(id, name, args = {}) {
     send(id, 'tools/call', { name, arguments: args });
   }
@@ -75,7 +80,7 @@ export function startMcpClient({ root, configPath, env = {}, timeoutMs = 5000 })
     }
   }
 
-  return { send, call, waitFor, close };
+  return { send, notify, call, waitFor, close };
 }
 
 export function structuredContentOf(response) {

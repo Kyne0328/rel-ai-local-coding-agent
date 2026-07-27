@@ -26,27 +26,28 @@ assert.deepEqual(normalizePatchConfig({ backup: false, requireCleanGit: true, ma
 assert.equal(normalizePatchConfig({ maxUpdateBytes: 1 }).maxUpdateBytes, 1024);
 assert.equal(normalizePatchConfig({ maxUpdateBytes: 100 * 1024 * 1024 }).maxUpdateBytes, 50 * 1024 * 1024);
 
-const migrated = normalizeConfig({
+const strict = normalizeConfig({
   stateDir: path.join(os.tmpdir(), 'relai-state'),
-  workflow: {
-    mode: 'prepared',
-    prepared: {
-      backup: false,
-      requireCleanGit: true,
-      maxPatchBytes: 8192,
-      maxBundleBytes: 123456,
-      clearMissingDefault: true
+  workflow: { prepared: { backup: false, requireCleanGit: true, maxPatchBytes: 8192 } },
+  flow: { fast: { maxPatchBytes: 4096 } },
+  cautionZone: true,
+  maxIndexFiles: 99,
+  patch: { backup: true, requireCleanGit: false, maxUpdateBytes: 16384, maxPatchBytes: 8192 },
+  workspaces: {
+    repo: {
+      path: process.cwd(),
+      fastTask: { maxIndexFiles: 22, includePaths: ['legacy'] },
+      context: { snapshotMaxFiles: 44, includeRoots: ['src'] }
     }
-  },
-  workspaces: {}
+  }
 });
-assert.deepEqual(migrated.patch, { backup: false, requireCleanGit: true, maxUpdateBytes: 8192 });
-assert.equal(Object.hasOwn(migrated, 'workflow'), false);
-assert.equal(Object.hasOwn(migrated, 'flow'), false);
-assert.equal(Object.hasOwn(migrated, 'cautionZone'), false);
-assert.equal(Object.hasOwn(migrated.patch, 'maxBundleBytes'), false);
-assert.equal(Object.hasOwn(migrated.patch, 'clearMissingDefault'), false);
-assert.equal(migrated.productUx.showAutomaticValidation, true);
+assert.deepEqual(strict.patch, { backup: true, requireCleanGit: false, maxUpdateBytes: 16384 });
+for (const key of ['workflow', 'flow', 'cautionZone', 'maxIndexFiles']) assert.equal(Object.hasOwn(strict, key), false);
+assert.equal(Object.hasOwn(strict.patch, 'maxPatchBytes'), false);
+assert.equal(Object.hasOwn(strict.workspaces.repo, 'fastTask'), false);
+assert.equal(strict.workspaces.repo.context.snapshotMaxFiles, 44);
+assert.deepEqual(strict.workspaces.repo.context.includeRoots, ['src']);
+assert.equal(strict.productUx.showAutomaticValidation, true);
 assert.equal(normalizeConfig({ productUx: { showAutomaticValidation: false }, workspaces: {} }).productUx.showAutomaticValidation, false);
 const normalizedCommands = normalizeConfig({
   workspaces: {
@@ -92,4 +93,4 @@ assert.deepEqual(normalizedCommands.workspaces.repo.testCommands, { 'npm:test': 
   assert.deepEqual(staleCommandKeys({ test: 'npm run gone', build: 'npm run build' }, { build: 'npm run build' }), ['test']);
 }
 
-console.log('Patch configuration normalization tests passed.');
+console.log('Current-only configuration normalization tests passed.');

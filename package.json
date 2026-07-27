@@ -1,7 +1,7 @@
 {
   "name": "rel-ai-mcp",
   "productName": "Rel.AI MCP",
-  "version": "0.21.9",
+  "version": "0.22.0",
   "description": "Local ChatGPT repo bridge: one reliable workflow for snapshot, read, write, verify, diff, and reset configured local workspaces.",
   "private": true,
   "license": "MIT",
@@ -46,6 +46,7 @@
     "verify:ngrok": "node scripts/verify-ngrok-seed.mjs",
     "test:electron": "node test/electron-launcher-smoke.mjs",
     "verify:packaged": "node scripts/verify-packaged-app.mjs",
+    "test:connector-acceptance": "node scripts/packaged-connector-acceptance.mjs",
     "test:http-auth": "node test/http-auth-smoke.mjs",
     "test:oauth": "node test/oauth-smoke.mjs",
     "test:safety-paths": "node test/safety-paths.mjs",
@@ -83,5 +84,12 @@
     "globals": "^17.7.0",
     "tailwindcss": "^4.3.3",
     "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/node": "2.0.0-beta.5",
+    "@modelcontextprotocol/server": "2.0.0-beta.5"
+  },
+  "overrides": {
+    "@hono/node-server": "2.0.12"
   }
 }

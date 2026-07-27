@@ -45,6 +45,16 @@ async function waitForHealth() {
   throw new Error(`HTTP server did not become healthy. stderr:\n${stderr}`);
 }
 
+async function readMcpResponse(response) {
+  const text = await response.text();
+  if ((response.headers.get('content-type') || '').includes('text/event-stream')) {
+    const lines = text.split(/\r?\n/).filter(line => line.startsWith('data:')).map(line => line.slice(5).trim()).filter(Boolean);
+    if (!lines.length) throw new Error(`MCP SSE response contained no data: ${text}`);
+    return JSON.parse(lines.at(-1));
+  }
+  return JSON.parse(text);
+}
+
 async function check(label, fn) {
   try {
     await fn();
@@ -62,6 +72,7 @@ await waitForHealth();
 const base = `http://127.0.0.1:${port}`;
 const bearer = { authorization: `Bearer ${token}` };
 const jsonType = { 'content-type': 'application/json' };
+const mcpType = { ...jsonType, accept: 'application/json, text/event-stream' };
 const mcpToolsList = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
 
 // GET /health — public, no token → 200
@@ -174,11 +185,11 @@ await check('POST /mcp — rejected bearer → 401', async () => {
 await check('POST /mcp — with bearer → 200 (tools/list)', async () => {
   const res = await fetch(`${base}/mcp`, {
     method: 'POST',
-    headers: { ...jsonType, ...bearer },
+    headers: { ...mcpType, ...bearer },
     body: mcpToolsList
   });
   if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-  const body = await res.json();
+  const body = await readMcpResponse(res);
   if (!Array.isArray(body.result?.tools)) throw new Error('expected tools array in response');
 });
 

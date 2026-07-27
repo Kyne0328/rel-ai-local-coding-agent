@@ -12,7 +12,6 @@ function createToolActivityTracker(options = {}) {
   const clearTimer = options.clearTimer || clearTimeout;
   const idleMs = resolveIdleMs(options.idleMs);
   const tasksById = new Map();
-  const taskIdsByScope = new Map();
   const listeners = new Set();
   let activeToolCalls = 0;
   let activeConnectorCalls = 0;
@@ -28,17 +27,18 @@ function createToolActivityTracker(options = {}) {
 
     if (details.createTask === true) {
       task = createTask(scopeId, details, startedAt);
-      addTask(task);
-    } else if (requestedTaskId) {
+      tasksById.set(task.id, task);
+    } else {
+      if (!requestedTaskId) {
+        throw taskError('TASK_ID_REQUIRED', 'Task-scoped tool calls require the exact task_id returned by relai_start_task.');
+      }
       task = tasksById.get(requestedTaskId);
       if (!task) {
         task = createTask(scopeId, details, startedAt, requestedTaskId);
-        addTask(task);
-      } else if (task.scopeId !== scopeId) {
-        rebindTaskScope(task, scopeId);
+        tasksById.set(task.id, task);
+      } else if (scopeId) {
+        task.scopeId = scopeId;
       }
-    } else {
-      task = resolveImplicitTask(scopeId, details, startedAt);
     }
     cancelCompletion(task);
 
@@ -239,44 +239,6 @@ function createToolActivityTracker(options = {}) {
     return finish;
   }
 
-  function resolveImplicitTask(scopeId, details, timestamp) {
-    const scoped = tasksForScope(scopeId);
-    if (scoped.length === 1) return scoped[0];
-    if (scoped.length > 1) {
-      throw taskError(
-        'TASK_ID_REQUIRED',
-        'Multiple logical tasks share this MCP client scope. Pass the task_id returned by relai_start_task.',
-        { candidateCount: scoped.length }
-      );
-    }
-
-    const workspace = String(details.workspace || '').trim();
-    if (workspace) {
-      const candidates = [...tasksById.values()].filter(task =>
-        task.activeCalls === 0 &&
-        task.workspace === workspace &&
-        timestamp >= task.lastActivityAt &&
-        timestamp - task.lastActivityAt <= idleMs &&
-        (isWeakTaskScope(scopeId) || isWeakTaskScope(task.scopeId))
-      ).sort((left, right) => right.lastActivityAt - left.lastActivityAt);
-      if (candidates.length === 1) {
-        rebindTaskScope(candidates[0], scopeId);
-        return candidates[0];
-      }
-      if (candidates.length > 1) {
-        throw taskError(
-          'TASK_ID_REQUIRED',
-          'More than one active task matches this workspace. Pass task_id explicitly instead of relying on workspace inference.',
-          { candidateCount: candidates.length }
-        );
-      }
-    }
-
-    const task = createTask(scopeId, details, timestamp);
-    addTask(task);
-    return task;
-  }
-
   function createTask(scopeId, details, timestamp, requestedTaskId = '') {
     const id = requestedTaskId || crypto.randomUUID();
     return {
@@ -297,41 +259,8 @@ function createToolActivityTracker(options = {}) {
     };
   }
 
-  function addTask(task) {
-    tasksById.set(task.id, task);
-    let ids = taskIdsByScope.get(task.scopeId);
-    if (!ids) {
-      ids = new Set();
-      taskIdsByScope.set(task.scopeId, ids);
-    }
-    ids.add(task.id);
-  }
-
   function removeTask(task) {
     tasksById.delete(task.id);
-    const ids = taskIdsByScope.get(task.scopeId);
-    ids?.delete(task.id);
-    if (ids?.size === 0) taskIdsByScope.delete(task.scopeId);
-  }
-
-  function rebindTaskScope(task, nextScopeId) {
-    if (!nextScopeId || task.scopeId === nextScopeId) return;
-    const previousIds = taskIdsByScope.get(task.scopeId);
-    previousIds?.delete(task.id);
-    if (previousIds?.size === 0) taskIdsByScope.delete(task.scopeId);
-    task.scopeId = nextScopeId;
-    let nextIds = taskIdsByScope.get(nextScopeId);
-    if (!nextIds) {
-      nextIds = new Set();
-      taskIdsByScope.set(nextScopeId, nextIds);
-    }
-    nextIds.add(task.id);
-  }
-
-  function tasksForScope(scopeId) {
-    const ids = taskIdsByScope.get(scopeId);
-    if (!ids) return [];
-    return [...ids].map(id => tasksById.get(id)).filter(Boolean);
   }
 
   function resolveScopeId(details) {
@@ -510,7 +439,6 @@ function createToolActivityTracker(options = {}) {
   function reset() {
     for (const task of tasksById.values()) cancelCompletion(task);
     tasksById.clear();
-    taskIdsByScope.clear();
     activeToolCalls = 0;
     activeConnectorCalls = 0;
     lastTask = null;
@@ -591,11 +519,6 @@ function resolveIdleMs(value) {
   const configured = Number(value ?? process.env.REL_AI_MCP_TASK_IDLE_MS ?? DEFAULT_TASK_IDLE_MS);
   if (!Number.isFinite(configured)) return DEFAULT_TASK_IDLE_MS;
   return Math.min(Math.max(configured, 15_000), 10 * 60_000);
-}
-
-function isWeakTaskScope(scopeId) {
-  const value = String(scopeId || '');
-  return /^mcp:(?:session|transport|fallback):/.test(value) || /^mcp:[a-f0-9]{24}$/i.test(value);
 }
 
 const defaultTracker = createToolActivityTracker();

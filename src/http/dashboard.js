@@ -99,7 +99,7 @@ async function handleFavicon(ctx) {
 function handleHealth(ctx) {
   sendJson(ctx.res, 200, {
     ok: true, name: pkg.name, version: getVersion(),
-    transports: ["streamable-http", "sse"],
+    transports: ["streamable-http"],
     auth: ctx.options.token ? "bearer" : "disabled"
   }, ctx.ae);
 }

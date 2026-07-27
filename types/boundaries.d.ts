@@ -63,7 +63,7 @@ export interface ToolDefinition {
   description: string;
   inputSchema: ObjectJsonSchema;
   annotations: ToolAnnotations;
-  handler: string;
+  handler: ToolHandler;
   connectorStrip: string[];
   groups: ToolGroup[];
   behavior: ToolBehavior;
@@ -127,8 +127,6 @@ export interface ToolResult extends Record<string, unknown> {
   completionSource?: string;
   summary?: string;
   validationAt?: string;
-  validationTaskId?: string;
-  relatedTaskIds?: string[];
   changedFiles?: string[];
   nextAction?: string;
   commandSummary?: string;

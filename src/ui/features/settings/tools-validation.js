@@ -1,6 +1,7 @@
 import { get as getStore } from '../../store.js';
 import { markUnsaved } from '../../interaction-safety.js';
 import { requestDashboardRefresh } from '../../api.js';
+import { esc as escapeHtml } from '../../utils.js';
 import {
   loadSettingsConfig,
   saveSettings,
@@ -8,7 +9,7 @@ import {
   panel,
   field,
   toggleControl,
-  saveRow
+  hiddenSaveRow
 } from './shared.js';
 
 let original = null;
@@ -73,7 +74,7 @@ function render(container) {
   validation.body.appendChild(workspaceList);
   validation.body.insertAdjacentHTML('beforeend', '<div class="connection-actions"><a class="buttonlike secondary" href="#workspaces">Manage workspaces</a></div>');
   container.appendChild(validation.el);
-  container.appendChild(buildSaveRow(container));
+  container.appendChild(hiddenSaveRow(() => save(container), () => loadAndRender(container)));
 }
 
 function workspaceRow(workspace) {
@@ -91,14 +92,6 @@ function validationCommands(workspace) {
 
 function fact(label, value, description) {
   return `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(description)}</small></div>`;
-}
-
-function buildSaveRow(container) {
-  const row = saveRow(() => save(container), () => loadAndRender(container));
-  row.id = '__settings-save-row';
-  row.hidden = true;
-  markUnsaved(row, false);
-  return row;
 }
 
 function checkDirty() {
@@ -120,8 +113,3 @@ async function save(container) {
   return response;
 }
 
-function escapeHtml(value) {
-  return String(value == null ? '' : value).replace(/[&<>"']/g, character => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  })[character]);
-}

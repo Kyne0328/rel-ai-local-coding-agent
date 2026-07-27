@@ -14,6 +14,7 @@ The following commands do not install or uninstall Rel.AI MCP:
 | `npm run test:all` | Build CSS, static checks, lint, typecheck, release consistency, and source tests | Safe for normal development |
 | `npm run electron:build` | Build an unpacked application directory | Does not register or install the app |
 | `npm run verify:packaged` | Verify files in the unpacked application directory | Read-only |
+| `npm run test:connector-acceptance` | Launch the isolated packaged Node backend and exercise OAuth/MCP | Does not launch or install Electron and uses temporary state |
 | `npm run electron:dist` | Produce installer and portable artifacts | Builds artifacts but does not execute them |
 
 No package script currently installs, upgrades, repairs, or uninstalls a Windows application. The removed `test:installed` command must not be restored to `test`, `test:all`, `check`, `verify`, CI, or release verification.

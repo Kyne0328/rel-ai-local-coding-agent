@@ -1,6 +1,6 @@
 # Connecting to ChatGPT
 
-Rel.AI MCP exposes 20 callable workspace tools across local MCP and the ChatGPT connector. All are active; the six compatibility tools were removed in tool-surface version 10.
+Rel.AI MCP exposes the same 20 callable workspace tools through MCP SDK v2 over stdio and the OAuth-protected Streamable HTTP endpoint at `POST /mcp`. All are active; the six compatibility tools were removed in tool-surface version 10.
 
 - `relai_start_task`
 - `relai_repo_snapshot`
@@ -51,7 +51,7 @@ ChatGPT requires a public HTTPS endpoint, which the bundled ngrok agent provides
 
 The packaged desktop app opens the dashboard in a secured Electron window by default. The same local `/dashboard` route remains accessible in a normal browser when needed; both hosts use the same dashboard code and server APIs. Electron uses a single-use bootstrap exchange and an HttpOnly local session cookie instead of exposing the permanent approval token to the embedded renderer.
 
-Use **Sessions** for grouped ChatGPT work and **Activity** for individual tool calls. Rel.AI keeps each session open for five minutes after its latest tool call, renewing the window when ChatGPT continues, so ordinary approval, reasoning, and connector-reconnect gaps stay grouped. Separate concurrent sessions remain distinct when Rel.AI has stable conversation identity. The workspace selector scopes Overview, Sessions, Workspaces, Activity, and Diagnostics to one configured repository.
+Use **Sessions** for logical tasks and **Activity** for individual tool calls. Each independent objective begins with `relai_start_task`, and only its explicit `task_id` can select that task afterward. Connection changes, reasoning gaps, workspace names, and ChatGPT conversation metadata are never used to merge or recover tasks.
 
 ## Adding the connector in ChatGPT
 
@@ -67,7 +67,7 @@ Example MCP URL:
 https://your-domain.example/mcp
 ```
 
-ChatGPT discovers the OAuth endpoints through `/.well-known/oauth-protected-resource`. Opening `/mcp` in a browser displays only a diagnostic; the dashboard URL is not the MCP endpoint.
+ChatGPT discovers the OAuth endpoints through `/.well-known/oauth-protected-resource`. Opening `/mcp` in a browser displays only a diagnostic; MCP clients use `POST /mcp`. The former `/sse` and `/messages` MCP routes are not supported.
 
 When you replace the approval token, Rel.AI revokes current ChatGPT access and refresh tokens. The existing ChatGPT app and MCP URL remain valid. Retry the app and enter the new token when authorization opens; do not delete and recreate the app.
 

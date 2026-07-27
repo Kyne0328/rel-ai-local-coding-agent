@@ -4,6 +4,7 @@ import { copyText } from '../../clipboard.js';
 import { get as getStore } from '../../store.js';
 import { connectionLayerViews, connectionStateFor, connectionSummary } from '../../connection-state.js';
 import { mountDesktopConnection } from './desktop-connection.js';
+import { esc as escapeHtml } from '../../utils.js';
 
 export function mountConnector(container) {
   container.innerHTML = '<div class="connection-loading">Loading connection details…</div>';
@@ -231,8 +232,3 @@ function debugError(error) {
   if (window.localStorage?.getItem('relai_debug') === '1') console.error(error);
 }
 
-function escapeHtml(value) {
-  return String(value == null ? '' : value).replace(/[&<>"']/g, character => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  })[character]);
-}

@@ -89,14 +89,13 @@ const completedChecksCompact = compactForConnector('relai_run_checks', {
   ok: true, workspace: 'app', level: 'standard', checks: ['npm test'], results: [{ command: 'npm test', ok: true }],
   validated: true, validationStatus: 'passed', completionKnown: true, endReason: 'explicit_completion',
   completionSource: 'relai_run_checks', summary: 'Validated and completed.', validationAt: '2026-07-26T08:00:00.000Z',
-  validationTaskId: 'task-1', relatedTaskIds: ['task-1'], changedFiles: ['src/app.js'],
+  changedFiles: ['src/app.js'],
   message: 'Validation passed and task completion was accepted.', nextAction: 'No more calls.'
 }, {});
 assert.equal(completedChecksCompact.completionKnown, true);
 assert.equal(completedChecksCompact.completionSource, 'relai_run_checks');
 assert.equal(completedChecksCompact.summary, 'Validated and completed.');
 assert.deepEqual(completedChecksCompact.changedFiles, ['src/app.js']);
-assert.deepEqual(completedChecksCompact.relatedTaskIds, ['task-1']);
 console.log('4. relai_run_checks compacted: OK');
 
 const execCompact = compactForConnector('relai_exec', {

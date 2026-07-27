@@ -90,10 +90,8 @@ function buildPackageSizeReport(options) {
   if (content.localeCount !== 1 || content.locales[0] !== 'en-US.pak') {
     warnings.push(`Expected only en-US.pak, found: ${content.locales.join(', ') || 'none'}.`);
   }
-  const allowedSourceCssFiles = new Set(['src/ui/styles/app.css']);
-  const unexpectedSourceCssFiles = content.sourceCssFiles.filter(file => !allowedSourceCssFiles.has(file));
-  if (unexpectedSourceCssFiles.length > 0) {
-    warnings.push(`Unexpected source CSS is packaged: ${unexpectedSourceCssFiles.join(', ')}.`);
+  if (content.sourceCssFiles.length > 0) {
+    warnings.push(`Source CSS is packaged: ${content.sourceCssFiles.join(', ')}.`);
   }
   if (content.asarSourceMapCount > 0) warnings.push(`app.asar contains ${content.asarSourceMapCount} source map files.`);
   for (const item of comparison) {

@@ -1,6 +1,6 @@
 import { closeDrawer, openDrawer } from '../../components/drawer.js';
 import { pillHtml } from '../../components/pill.js';
-import { esc, metricHtml, timeAgo } from '../../utils.js';
+import { esc, formatDuration, metricHtml, timeAgo } from '../../utils.js';
 import { getWorkspaceFilter, routeHref } from '../../router.js';
 import { activityEventId } from '../../activity-event.js';
 import { bindWorkspaceMenus, workspaceMenuHtml } from '../../components/workspace-menu.js';
@@ -261,10 +261,3 @@ function operationForTool(tool) {
   return value ? value.charAt(0).toUpperCase() + value.slice(1) : 'Rel.AI activity';
 }
 
-function formatDuration(milliseconds) {
-  const seconds = Math.max(0, Math.round(Number(milliseconds || 0) / 1000));
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainder = seconds % 60;
-  return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
-}

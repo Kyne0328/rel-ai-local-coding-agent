@@ -12,13 +12,11 @@ const {
   invalidateSessionCacheForCall,
   maybeStartSession
 } = require('./tools/session');
-const { dispatchTool } = require('./tools/dispatch');
 const { beginConnectorToolCall, runWithToolActivity, normalizeTaskId } = require('./toolActivity');
 const { assertKnownTask, taskAuditContext, withTaskIdentity } = require('./tools/task');
 const { runWorkspaceOperation } = require('./workspaceOperationQueue');
 const { clearSessionPolicy } = require('./policyResolver');
 const { describeToolOperation } = require('./tools/operation');
-const { workspaceList, workspaceInspect, workspaceTree, workspaceProfile } = require('./tools/status');
 
 async function callTool(name, args = {}, context = {}) {
   const config = readConfig();
@@ -43,7 +41,7 @@ async function callTool(name, args = {}, context = {}) {
     finishActivity = beginConnectorToolCall({
       tool: name,
       workspace: effectiveArgs?.workspace,
-      scopeId: context?.taskScopeId || (connector ? '' : 'local:default'),
+      scopeId: requestedTaskId ? `task:${requestedTaskId}` : (connector ? 'mcp:request' : 'local:default'),
       taskId: requestedTaskId,
       createTask: name === 'relai_start_task',
       trackTask: name === 'relai_start_task' || Boolean(requestedTaskId),
@@ -52,7 +50,9 @@ async function callTool(name, args = {}, context = {}) {
     });
     const value = await runWithToolActivity(finishActivity, () => runWorkspaceOperation(effectiveArgs?.workspace, () => {
       sessionStart = maybeStartSession(config, name, effectiveArgs || {}, { taskId: finishActivity?.taskId });
-      return dispatchTool(config, name, effectiveArgs || {}, { connector });
+      const definition = getToolDefinition(name);
+      if (typeof definition?.handler !== 'function') throw new Error(`Tool '${name}' has no executable handler.`);
+      return definition.handler(config, effectiveArgs || {}, { connector });
     }, { mode: workspaceLockMode(name) }));
     const valueOk = value?.ok !== false;
     activityResult = {
@@ -158,10 +158,6 @@ module.exports = {
   getToolSurfaceManifest,
   TOOL_NAMES,
   callTool,
-  workspaceList,
-  workspaceInspect,
-  workspaceTree,
-  workspaceProfile,
   enhanceToolError,
   compactForConnector,
   policySentence

@@ -3,6 +3,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { killProcess } = require('../src/processKill');
+const { normalizeNgrokAuthtoken } = require('./ngrok-token');
 
 const UPDATE_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 const URL_RE = /https:\/\/[^\s"'<>]+/i;
@@ -75,14 +76,6 @@ function ensureManagedNgrok() {
   fs.copyFileSync(source, target);
   ensureExecutable(target);
   return { ok: true, path: target, copied: true, source };
-}
-
-function normalizeNgrokAuthtoken(value) {
-  const token = String(value || '').trim();
-  if (!token) throw new Error('ngrok authtoken is required.');
-  if (/\s/.test(token)) throw new Error('ngrok authtoken cannot contain spaces.');
-  if (token.length < 8) throw new Error('ngrok authtoken is too short.');
-  return token;
 }
 
 function writeNgrokConfig(authtoken) {
