@@ -1,6 +1,6 @@
-'use strict';
 
-const crypto = require('node:crypto');
+
+import * as crypto from "node:crypto";
 
 const TASK_MODEL_VERSION = 3;
 const MAX_TITLE_LENGTH = 100;
@@ -430,18 +430,4 @@ function isoTime(value) {
   return new Date(Number.isFinite(timestamp) ? timestamp : Date.now()).toISOString();
 }
 
-module.exports = {
-  TASK_MODEL_VERSION,
-  TERMINAL_STATUSES,
-  buildToolActivityDetails,
-  cleanText,
-  completeProgress,
-  createActivityEvent,
-  deriveTaskTitle,
-  determinateProgress,
-  normalizeActivityError,
-  normalizeTaskProgress,
-  sanitizeActivityMetadata,
-  sanitizeDisplayText,
-  titleForTool
-};
+export { TASK_MODEL_VERSION, TERMINAL_STATUSES, buildToolActivityDetails, cleanText, completeProgress, createActivityEvent, deriveTaskTitle, determinateProgress, normalizeActivityError, normalizeTaskProgress, sanitizeActivityMetadata, sanitizeDisplayText, titleForTool };

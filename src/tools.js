@@ -1,23 +1,17 @@
-const { readConfig, resolveWorkspace, resolveWorkspaceInput } = require('./config');
-const { logAudit } = require('./audit');
-const {
-  toolSchemas, getToolSchemas, getToolMetadata, getToolDefinition, getToolDefinitions,
-  getToolGroups, getToolSurfaceManifest, isToolCallable, TOOL_NAMES
-} = require('./tools/schema');
-const { compactForConnector, policySentence } = require('./tools/connector');
-const { enhanceToolError } = require('./tools/errors');
-const {
-  buildExtraAudit,
-  applyCautionAudit,
-  invalidateSessionCacheForCall
-} = require('./tools/session');
-const { beginConnectorToolCall, normalizeTaskId, onToolActivity } = require('./toolActivity');
-const { buildToolActivityDetails } = require('./taskObservability');
-const { bindTaskHistoryActivityPersistence } = require('./taskHistoryStore');
-const { assertKnownTask, taskAuditContext, withTaskIdentity } = require('./tools/task');
-const { clearSessionPolicy } = require('./policyResolver');
-const { describeToolOperation } = require('./tools/operation');
-const { executeToolCall } = require('./tools/execution');
+import { readConfig, resolveWorkspace, resolveWorkspaceInput } from "./config.js";
+import { logAudit } from "./audit.js";
+import { toolSchemas, getToolSchemas, getToolMetadata, getToolGroups, getToolSurfaceManifest, isToolCallable, TOOL_NAMES } from './tools/schema.js';
+import { getExecutableToolDefinition, getExecutableToolDefinitions } from './tools/runtimeRegistry.js';
+import { compactForConnector, policySentence } from "./tools/connector.js";
+import { enhanceToolError } from "./tools/errors.js";
+import { buildExtraAudit, applyCautionAudit, invalidateSessionCacheForCall } from "./tools/session.js";
+import { beginConnectorToolCall, normalizeTaskId, onToolActivity } from "./toolActivity.js";
+import { buildToolActivityDetails } from "./taskObservability.js";
+import { bindTaskHistoryActivityPersistence } from "./taskHistoryStore.js";
+import { assertKnownTask, taskAuditContext, withTaskIdentity } from "./tools/task.js";
+import { clearSessionPolicy } from "./policyResolver.js";
+import { describeToolOperation } from "./tools/operation.js";
+import { executeToolCall } from "./tools/execution.js";
 
 bindTaskHistoryActivityPersistence(onToolActivity, readConfig);
 
@@ -56,7 +50,7 @@ async function callTool(name, args = {}, context = {}) {
         workspaceId: effectiveArgs?.workspace, conversationId: context?.conversationId },
       input: effectiveArgs || {}
     });
-    const definition = getToolDefinition(name);
+    const definition = getExecutableToolDefinition(name);
     const execution = await executeToolCall({ config, name, effectiveArgs, context, finishActivity, definition, started });
     const value = execution.value;
     sessionStart = execution.sessionStart;
@@ -161,17 +155,7 @@ function ok(value) {
     : { ok: true, ...value };
 }
 
-module.exports = {
-  toolSchemas,
-  getToolSchemas,
-  getToolMetadata,
-  getToolDefinition,
-  getToolDefinitions,
-  getToolGroups,
-  getToolSurfaceManifest,
-  TOOL_NAMES,
-  callTool,
-  enhanceToolError,
-  compactForConnector,
-  policySentence
-};
+const getToolDefinition = getExecutableToolDefinition;
+const getToolDefinitions = getExecutableToolDefinitions;
+
+export { toolSchemas, getToolSchemas, getToolMetadata, getToolDefinition, getToolDefinitions, getToolGroups, getToolSurfaceManifest, TOOL_NAMES, callTool, enhanceToolError, compactForConnector, policySentence };

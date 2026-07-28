@@ -1,43 +1,25 @@
-const fs = require("node:fs");
-const path = require("node:path");
-const crypto = require("node:crypto");
-const {
-  collectTextFiles,
-  collectOptionsFromWorkspace,
-  writeTextFileSafe,
-  resolveSafePath,
-  fileSha256,
-  looksBinary
-} = require("./safety");
-const { discoverCommands } = require("./commandDiscovery");
-const { getStateDir } = require("./audit");
-const { appendOperation, makeOperationId, summarizeOperations } = require("./journal");
-const { resolvePolicy } = require("./policyResolver");
-const { resolveBudget } = require("./budgetResolver");
-const sessionCache = require("./sessionCache");
-const {
-  relaiGitCommit,
-  relaiGitPush,
-  relaiGitDraftPr,
-  classifyStatusOwnership
-} = require("./repo/gitOps");
-const { runProcess } = require("./process");
-const { INTERNAL_STATUS_MAX_BYTES, gitStatusArgs } = require("./repo/gitStatus");
-const { clampNumber } = require("./bridge/limits");
-const { relaiVerify } = require("./bridge/validation");
-const { relaiHttpProbe, relaiUiCheck } = require("./bridge/browser");
-const { relaiDiff } = require("./bridge/review");
-const { relaiResetWorkspace, relaiRestorePaths } = require("./bridge/restore");
-const { workspaceTidyPlan, workspaceTidyRun: relaiWorkspaceTidyRun } = require("./bridge/tidy");
-const { relaiApplyPatch, normalizeOpenAIPatchFormat } = require("./bridge/patch");
-const { readProjectInstructions } = require('./projectInstructions');
-const {
-  STAGED_WRITE_BYTE_THRESHOLD,
-  STAGED_WRITE_LINE_THRESHOLD,
-  workspaceWriteGuidance,
-  analyzeFileShape,
-  fileWriteGuidance
-} = require('./bridge/writeGuidance');
+import fs from 'node:fs';
+import * as path from "node:path";
+import * as crypto from "node:crypto";
+import { collectTextFiles, collectOptionsFromWorkspace, writeTextFileSafe, resolveSafePath, fileSha256, looksBinary } from "./safety.js";
+import { discoverCommands } from "./commandDiscovery.js";
+import { getStateDir } from './statePaths.js';
+import { appendOperation, makeOperationId, summarizeOperations } from "./journal.js";
+import { resolvePolicy } from "./policyResolver.js";
+import { resolveBudget } from "./budgetResolver.js";
+import * as sessionCache from "./sessionCache.js";
+import { relaiGitCommit, relaiGitPush, relaiGitDraftPr, classifyStatusOwnership } from "./repo/gitOps.js";
+import { runProcess } from "./process.js";
+import { INTERNAL_STATUS_MAX_BYTES, gitStatusArgs } from "./repo/gitStatus.js";
+import { clampNumber } from "./bridge/limits.js";
+import { relaiVerify } from "./bridge/validation.js";
+import { relaiHttpProbe, relaiUiCheck } from "./bridge/browser.js";
+import { relaiDiff } from "./bridge/review.js";
+import { relaiResetWorkspace, relaiRestorePaths } from "./bridge/restore.js";
+import { workspaceTidyPlan, workspaceTidyRun as relaiWorkspaceTidyRun } from "./bridge/tidy.js";
+import { relaiApplyPatch, normalizeOpenAIPatchFormat } from "./bridge/patch.js";
+import { readProjectInstructions } from "./projectInstructions.js";
+import { STAGED_WRITE_BYTE_THRESHOLD, STAGED_WRITE_LINE_THRESHOLD, workspaceWriteGuidance, analyzeFileShape, fileWriteGuidance } from "./bridge/writeGuidance.js";
 
 const DEFAULT_MAX_READ_BYTES = 1024 * 1024;
 const DEFAULT_CONNECTOR_READ_BYTES = 128 * 1024;
@@ -773,29 +755,4 @@ function sha256Text(text) {
   return crypto.createHash("sha256").update(String(text), "utf8").digest("hex");
 }
 
-module.exports = {
-  repoSnapshot,
-  relaiRead,
-  workspaceWrite,
-  workspaceReplace,
-  relaiApplyPatch,
-  relaiVerify,
-  relaiHttpProbe,
-  relaiUiCheck,
-  relaiDiff,
-  relaiRestorePaths,
-  relaiResetWorkspace,
-  relaiGitCommit,
-  relaiGitPush,
-  relaiGitDraftPr,
-  normalizeOpenAIPatchFormat,
-  classifyStatusOwnership,
-  STAGED_WRITE_BYTE_THRESHOLD,
-  STAGED_WRITE_LINE_THRESHOLD,
-  writeStagedPayload,
-  readStagedPayload,
-  clearStagedPayload,
-  resolveStagedWriteId,
-  workspaceTidyPlan,
-  workspaceTidyRun: relaiWorkspaceTidyRun
-};
+export { repoSnapshot, relaiRead, workspaceWrite, workspaceReplace, relaiApplyPatch, relaiVerify, relaiHttpProbe, relaiUiCheck, relaiDiff, relaiRestorePaths, relaiResetWorkspace, relaiGitCommit, relaiGitPush, relaiGitDraftPr, normalizeOpenAIPatchFormat, classifyStatusOwnership, STAGED_WRITE_BYTE_THRESHOLD, STAGED_WRITE_LINE_THRESHOLD, writeStagedPayload, readStagedPayload, clearStagedPayload, resolveStagedWriteId, workspaceTidyPlan, relaiWorkspaceTidyRun as workspaceTidyRun };

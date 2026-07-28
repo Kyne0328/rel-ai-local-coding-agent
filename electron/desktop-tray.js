@@ -1,4 +1,4 @@
-'use strict';
+
 
 function createDesktopTray(deps) {
   const {
@@ -71,4 +71,4 @@ function createDesktopTray(deps) {
   return { setup, update };
 }
 
-module.exports = { createDesktopTray };
+export { createDesktopTray };

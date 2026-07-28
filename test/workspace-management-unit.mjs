@@ -2,11 +2,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { updateWorkspace } = require('../src/configEditor.js');
-const { resolveWorkspace, resolveWorkspaceInput, normalizeWorkspacePathForComparison } = require('../src/config.js');
+import { updateWorkspace } from "../src/configEditor.js";
+import { resolveWorkspace, resolveWorkspaceInput, normalizeWorkspacePathForComparison } from "../src/config.js";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-workspace-management-'));
 const configPath = path.join(tmp, 'config.json');

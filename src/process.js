@@ -1,5 +1,5 @@
-const { spawn, spawnSync } = require("node:child_process");
-const { resolveGitExecutable } = require("./gitExecutable");
+import { spawn, spawnSync } from "node:child_process";
+import { resolveGitExecutable } from "./gitExecutable.js";
 const TASKKILL_EXE = String.raw`C:\Windows\System32\taskkill.exe`;
 
 // Kill the whole process tree. A plain child.kill() on Windows only terminates the
@@ -182,9 +182,4 @@ function summarizeCommand(result) {
   };
 }
 
-module.exports = {
-  runProcess,
-  summarizeCommand,
-  appendLimited,
-  killProcessTree
-};
+export { runProcess, summarizeCommand, appendLimited, killProcessTree };

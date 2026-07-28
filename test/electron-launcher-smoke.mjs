@@ -82,7 +82,7 @@ assert.ok(electronPkg.build.files.includes('tool-sleep-blocker.js'), 'electron b
 assert.ok(electronPkg.build.files.includes('dashboard-window.js'), 'electron build must include the secured dashboard host');
 assert.ok(electronPkg.build.files.includes('dashboard-window-bounds.js'), 'electron build must include bounded dashboard window-state handling');
 assert.ok(electronPkg.build.files.includes('window-chrome.js'), 'electron build must include platform-specific dashboard window chrome policy');
-assert.ok(electronPkg.build.files.includes('dashboard-preload.js'), 'electron build must include the desktop dashboard bridge');
+assert.ok(electronPkg.build.files.includes('preload.cjs'), 'electron build must include the desktop dashboard bridge');
 assert.ok(electronPkg.build.files.includes('desktop-tray.js'), 'electron build must include the desktop tray controller');
 assert.ok(electronPkg.build.files.includes('desktop-status.js'), 'electron build must include the normalized desktop status model');
 assert.ok(electronPkg.build.files.includes('approval-token.js'), 'electron build must include the secured approval-token manager');
@@ -104,7 +104,8 @@ assert.ok(electronPkg.build.extraResources.some((item) => item.from === '../vend
 const electronMain = fs.readFileSync(path.join(root, 'electron', 'main.js'), 'utf8');
 assert.doesNotMatch(electronMain, /--installed-smoke|--window-smoke|runInstalledSmoke|runWindowSmoke|smokeWindowRoles|getSmokeWindowRole/, 'production Electron main must not expose destructive smoke entry points');
 const desktopTray = fs.readFileSync(path.join(root, 'electron', 'desktop-tray.js'), 'utf8');
-const dashboardPreload = fs.readFileSync(path.join(root, 'electron', 'dashboard-preload.js'), 'utf8');
+const dashboardPreload = fs.readFileSync(path.join(root, 'electron', 'preload.cjs'), 'utf8');
+const dashboardPreloadSurface = dashboardPreload.split('} else {', 1)[0];
 const desktopSettings = fs.readFileSync(path.join(root, 'electron', 'desktop-settings.js'), 'utf8');
 const appUpdater = fs.readFileSync(path.join(root, 'electron', 'app-updater.js'), 'utf8');
 const ipcHandlers = fs.readFileSync(path.join(root, 'electron', 'ipc-handlers.js'), 'utf8');
@@ -119,7 +120,7 @@ assert.ok(dashboardManagerInit >= 0 && dashboardManagerInit < taskActivityRuntim
 assert.ok(desktopTrayInit >= 0 && desktopTrayInit < taskActivityRuntimeInit, 'desktop tray must exist before the eager task-status callback runs');
 assert.match(
   electronMain,
-  /const \{ fitWindowToContent, WINDOW_SIZE_LIMITS \} = require\('\.\/window-size'\);/,
+  /import \{ fitWindowToContent, WINDOW_SIZE_LIMITS \} from '\.\/window-size\.js';/,
   'Electron main must import the window limits used by normal wizard and status startup'
 );
 assert.match(electronMain, /app\.setName\('Rel\.AI MCP'\)/, 'Electron must expose the product name instead of the generic Electron app name');
@@ -191,7 +192,7 @@ assert.match(electronMain, /recoveryWindowManager\.show\(\)/, 'the fallback must
 assert.doesNotMatch(desktopTray, /Connection Recovery|showRecovery/, 'the tray must not expose the fallback as a routine destination');
 assert.match(desktopTray, /Diagnostics/, 'the tray must route routine troubleshooting into dashboard Diagnostics');
 assert.match(electronMain, /openDashboardWindow\('#settings\/diagnostics'\)/, 'tray Diagnostics must deep-link the dashboard');
-assert.doesNotMatch(dashboardPreload, /openRecovery|desktop:open-recovery/, 'the routine dashboard bridge must not expose the fallback window');
+assert.doesNotMatch(dashboardPreloadSurface, /openRecovery|desktop:open-recovery/, 'the routine dashboard bridge must not expose the fallback window');
 assert.equal(fs.existsSync(path.join(root, 'electron', 'renderer', 'settings.html')), false);
 assert.equal(fs.existsSync(path.join(root, 'electron', 'renderer', 'settings.js')), false);
 assert.match(dashboardPreload, /exposeInMainWorld\('relaiDesktop'/, 'the dashboard preload must expose constrained desktop controls');

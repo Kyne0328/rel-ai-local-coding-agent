@@ -4,4 +4,4 @@ function clampNumber(value, min, max, fallback) {
   return Math.min(Math.max(n, min), max);
 }
 
-module.exports = { clampNumber };
+export { clampNumber };

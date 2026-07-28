@@ -1,9 +1,9 @@
-'use strict';
 
-const { runWithToolActivity, updateCurrentToolActivity } = require('../toolActivity');
-const { runWorkspaceOperation } = require('../workspaceOperationQueue');
-const { maybeStartSession } = require('./session');
-const { runSpan, addSpanEvent, setSpanAttributes } = require('../telemetry');
+
+import { runWithToolActivity, updateCurrentToolActivity } from "../toolActivity.js";
+import { runWorkspaceOperation } from "../workspaceOperationQueue.js";
+import { maybeStartSession } from "./session.js";
+import { runSpan, addSpanEvent, setSpanAttributes } from "../telemetry.js";
 
 async function executeToolCall({ config, name, effectiveArgs, context, finishActivity, definition, started }) {
   let sessionStart = { started: false, alias: '' };
@@ -61,4 +61,4 @@ function formatWait(waitMs) {
   return waitMs < 1000 ? `${Math.max(0, Math.round(waitMs))} ms` : `${(waitMs / 1000).toFixed(1)} seconds`;
 }
 
-module.exports = { executeToolCall };
+export { executeToolCall };

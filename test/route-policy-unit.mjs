@@ -1,16 +1,18 @@
 import assert from 'node:assert/strict';
 import { canonicalPathFor, normalizeRouteKey, routeAllowsParam } from '../src/ui/route-policy.js';
 
-assert.equal(canonicalPathFor('reference'), 'tools');
-assert.equal(canonicalPathFor('settings/desktop'), 'settings/connection');
-assert.equal(canonicalPathFor('settings/dashboard'), 'settings/advanced');
+assert.equal(canonicalPathFor('tools'), 'tools');
+assert.equal(canonicalPathFor('settings/connection'), 'settings/connection');
+assert.equal(canonicalPathFor('settings/advanced'), 'settings/advanced');
 assert.equal(canonicalPathFor('settings/about'), 'settings/about');
 assert.equal(canonicalPathFor('processes'), 'processes');
+assert.equal(canonicalPathFor('reference'), 'home');
+assert.equal(canonicalPathFor('settings/desktop'), 'home');
 assert.equal(canonicalPathFor('unknown/page'), 'home');
 
 assert.equal(normalizeRouteKey(''), 'home');
-assert.equal(normalizeRouteKey('#REFERENCE'), 'tools');
-assert.equal(normalizeRouteKey('connection'), 'settings/connection');
+assert.equal(normalizeRouteKey('#TOOLS'), 'tools');
+assert.equal(normalizeRouteKey('connection'), 'home');
 assert.equal(normalizeRouteKey('settings/unknown?workspace=demo'), 'home');
 assert.equal(normalizeRouteKey('workspaces?workspace=demo&focus=1'), 'workspaces?workspace=demo&focus=1');
 assert.equal(normalizeRouteKey('processes?workspace=demo'), 'processes?workspace=demo');
@@ -27,4 +29,4 @@ assert.equal(routeAllowsParam('activity', 'event'), true);
 assert.equal(routeAllowsParam('processes', 'workspace'), true);
 assert.equal(routeAllowsParam('settings', 'workspace'), false);
 
-console.log('Route policy unit tests passed.');
+console.log('Canonical-only route policy unit tests passed.');

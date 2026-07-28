@@ -44,7 +44,7 @@ The repository uses npm with separate root and Electron lockfiles:
 - CLI launchers: `bin/**/*.js`
 - Dashboard assets: `public/**`
 - Electron main entry: `electron/main.js`
-- Electron preload entries: `electron/preload.js`, `electron/dashboard-preload.js`
+- Electron preload boundary: `electron/preload.cjs` (sandbox-required, surface-gated)
 - Electron renderer assets: `electron/renderer/**`
 - Offline tunnel binary: `vendor/ngrok/win32/ngrok.exe`
 - Windows targets: NSIS and portable

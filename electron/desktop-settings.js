@@ -1,4 +1,4 @@
-'use strict';
+
 
 function createDesktopSettingsManager(options = {}) {
   const {
@@ -53,4 +53,4 @@ function createDesktopSettingsManager(options = {}) {
   return { get, save };
 }
 
-module.exports = { createDesktopSettingsManager };
+export { createDesktopSettingsManager };

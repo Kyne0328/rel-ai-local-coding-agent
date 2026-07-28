@@ -2,11 +2,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { createDiagnosticFiles, fileTimestamp } = require('../electron/diagnostic-files.js');
-const { sanitizeDiagnosticValue } = require('../src/diagnostics.js');
+import { createDiagnosticFiles, fileTimestamp } from "../electron/diagnostic-files.js";
+import { sanitizeDiagnosticValue } from "../src/diagnostics.js";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-diagnostic-files-'));
 let opened = '';

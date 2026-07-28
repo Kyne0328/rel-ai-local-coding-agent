@@ -1,16 +1,10 @@
 // @ts-check
-'use strict';
 
-/** @typedef {import('../../types/boundaries').ToolDefinition} ToolDefinition */
-/** @typedef {import('../../types/boundaries').ToolSchema} ToolSchema */
 
-const {
-  TOOL_DEFINITIONS,
-  getToolDefinition,
-  getToolDefinitions,
-  getToolGroups,
-  getToolSurfaceManifest
-} = require('./registry');
+/** @typedef {import('../../types/boundaries.d.ts').ToolDefinitionMetadata} ToolDefinitionMetadata */
+/** @typedef {import('../../types/boundaries.d.ts').ToolSchema} ToolSchema */
+
+import { TOOL_DEFINITIONS, getToolDefinition, getToolDefinitions, getToolGroups, getToolSurfaceManifest } from "./registry.js";
 
 const TOOL_NAMES = TOOL_DEFINITIONS.map((definition) => definition.name);
 const TOOL_NAME_SET = new Set(TOOL_NAMES);
@@ -21,7 +15,7 @@ const TASK_ID_SCHEMA = Object.freeze({
   description: 'Opaque logical task ID returned by relai_start_task.'
 });
 
-/** @param {ToolDefinition} definition @returns {ToolSchema} */
+/** @param {ToolDefinitionMetadata} definition @returns {ToolSchema} */
 function schemaFromDefinition(definition) {
   const properties = { ...(definition.inputSchema?.properties || {}) };
   if (definition.name !== 'relai_start_task') properties.task_id = TASK_ID_SCHEMA;
@@ -89,14 +83,4 @@ function isToolCallable(name) {
   return TOOL_NAME_SET.has(name);
 }
 
-module.exports = {
-  toolSchemas,
-  getToolSchemas,
-  getToolMetadata,
-  getToolDefinition,
-  getToolDefinitions,
-  getToolGroups,
-  getToolSurfaceManifest,
-  isToolCallable,
-  TOOL_NAMES
-};
+export { toolSchemas, getToolSchemas, getToolMetadata, getToolDefinition, getToolDefinitions, getToolGroups, getToolSurfaceManifest, isToolCallable, TOOL_NAMES };

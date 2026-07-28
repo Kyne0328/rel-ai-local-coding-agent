@@ -1,11 +1,12 @@
-'use strict';
 
-const path = require('node:path');
-const { fileURLToPath } = require('node:url');
 
-function localWindowWebPreferences(preload, partition) {
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
+
+function localWindowWebPreferences(preload, partition, surface = 'application') {
   return {
     preload,
+    additionalArguments: [`--relai-preload-surface=${surface}`],
     nodeIntegration: false,
     contextIsolation: true,
     sandbox: true,
@@ -58,4 +59,4 @@ function normalizeFilePath(value) {
   return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
 }
 
-module.exports = { localWindowWebPreferences, secureLocalWindow, isAllowedLocalTarget };
+export { localWindowWebPreferences, secureLocalWindow, isAllowedLocalTarget };

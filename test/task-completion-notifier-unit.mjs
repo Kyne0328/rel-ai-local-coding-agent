@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { createToolActivityTracker } = require('../src/toolActivity.js');
-const { createTaskActivityRuntime } = require('../electron/tool-sleep-blocker.js');
+import { createToolActivityTracker } from "../src/toolActivity.js";
+import { createTaskActivityRuntime } from "../electron/tool-sleep-blocker.js";
 
 let nowValue = 1000;
 let timerId = 0;

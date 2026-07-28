@@ -1,7 +1,8 @@
-const fs = require("node:fs");
-const path = require("node:path");
-const { getConfigPath, publicConfigSummary, writeConfig, normalizePatchConfig, assertSafeWorkspaceRoot } = require("./config");
-const { discoverCommands, staleCommandKeys } = require("./commandDiscovery");
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { getConfigPath, publicConfigSummary, writeConfig, normalizePatchConfig } from './config.js';
+import { assertSafeWorkspaceRoot } from './workspaceSafety.js';
+import { discoverCommands, staleCommandKeys } from "./commandDiscovery.js";
 
 const NUMBER_KEYS = ["maxOutputBytes"];
 
@@ -313,4 +314,4 @@ function setNestedIfChanged(target, section, key, value, changed) {
   }
 }
 
-module.exports = { settingsPayload, updateSettings, updateWorkspace };
+export { settingsPayload, updateSettings, updateWorkspace };

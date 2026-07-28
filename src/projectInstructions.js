@@ -1,8 +1,8 @@
-'use strict';
 
-const fs = require('node:fs');
-const path = require('node:path');
-const { looksBinary } = require('./safety');
+
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { looksBinary } from "./safety.js";
 
 const MAX_PROJECT_INSTRUCTION_BYTES = 64 * 1024;
 const PROJECT_INSTRUCTION_PATHS = Object.freeze(['REL_AI.md', '.relai/instructions.md']);
@@ -145,10 +145,4 @@ function resetProjectInstructionCacheForTests() {
   instructionCache.clear();
 }
 
-module.exports = {
-  MAX_PROJECT_INSTRUCTION_BYTES,
-  PROJECT_INSTRUCTION_PATHS,
-  readProjectInstructions,
-  summarizeProjectInstructions,
-  resetProjectInstructionCacheForTests
-};
+export { MAX_PROJECT_INSTRUCTION_BYTES, PROJECT_INSTRUCTION_PATHS, readProjectInstructions, summarizeProjectInstructions, resetProjectInstructionCacheForTests };

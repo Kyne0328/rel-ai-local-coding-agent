@@ -1,6 +1,6 @@
-'use strict';
 
-const { clamp, isCurrentTaskEvent, operationForTool, unique } = require('./taskEvents');
+
+import { clamp, isCurrentTaskEvent, operationForTool, unique } from "./taskEvents.js";
 
 function buildTaskHistory(entries = [], activity = {}, options = {}) {
   const limit = clamp(options.limit || 100, 1, 500);
@@ -177,4 +177,4 @@ function groupTaskEntries(entries) {
   return groups;
 }
 
-module.exports = { buildTaskHistory };
+export { buildTaskHistory };

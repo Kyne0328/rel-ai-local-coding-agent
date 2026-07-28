@@ -3,10 +3,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { classifyFiles, selectValidationLevel } = require('../src/validationStrategy.js');
+import { classifyFiles, selectValidationLevel } from "../src/validationStrategy.js";
 const GIT_EXECUTABLE = process.platform === 'win32'
   ? String.raw`C:\Program Files\Git\cmd\git.exe`
   : '/usr/bin/git';

@@ -2,10 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { readAudit } = require('../src/audit.js');
+import { readAudit } from "../src/audit.js";
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-audit-task-'));
 const auditLogPath = path.join(dir, 'audit.jsonl');
 const taskId = 'long-task';

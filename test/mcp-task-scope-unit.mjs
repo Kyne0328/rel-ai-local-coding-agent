@@ -1,11 +1,9 @@
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { getMcpAccess } = require('../src/http/mcp.js');
-const serverExports = require('../src/server.js');
-const toolExports = require('../src/tools.js');
-const { connectorInstructions } = require('../src/mcpServer.js');
+import { getMcpAccess } from "../src/http/mcp.js";
+import * as serverExports from "../src/server.js";
+import * as toolExports from "../src/tools.js";
+import { connectorInstructions } from "../src/mcpServer.js";
 
 assert.deepEqual(getMcpAccess('/mcp'), { kind: 'streamable-http' });
 assert.deepEqual(getMcpAccess('/sse'), { kind: 'none' });

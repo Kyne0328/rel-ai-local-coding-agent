@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-const { main } = require("../src/server");
+import { main } from "../src/server.js";
 
 try {
   const maybePromise = main();

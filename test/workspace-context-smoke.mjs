@@ -4,14 +4,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { normalizeConfig, makeDefaultContextConfig } = require('../src/config.js');
-const { updateWorkspace } = require('../src/configEditor.js');
-const { collectTextFiles } = require('../src/safety.js');
-const { repoSnapshot, relaiRead } = require('../src/localRepoBridge.js');
-const { relaiSearch } = require('../src/bridge/search.js');
+import { normalizeConfig, makeDefaultContextConfig } from "../src/config.js";
+import { updateWorkspace } from "../src/configEditor.js";
+import { collectTextFiles } from "../src/safety.js";
+import { repoSnapshot, relaiRead } from "../src/localRepoBridge.js";
+import { relaiSearch } from "../src/bridge/search.js";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-context-'));
 const configPath = path.join(tmp, 'config.json');

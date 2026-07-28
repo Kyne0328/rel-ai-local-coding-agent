@@ -147,8 +147,8 @@ Section-level captures are preserved beside them. `test/fixtures/desktop-ux-base
 
 ## Phase 1 navigation contract
 
-- `#tools` is the canonical Tools route; `#reference` remains a compatibility alias.
-- `#settings/connection` is the canonical Connection route; `#settings/connector` remains a compatibility alias.
+- `#tools` is the only Tools route.
+- `#settings/connection` is the only Connection route. Removed route aliases fall back to Overview rather than silently redirecting.
 - Tools is present in both desktop and compact/mobile navigation.
 - The visible page heading and document title reflect the active route.
 - Active navigation links and settings pages expose `aria-current="page"`.
@@ -161,7 +161,6 @@ Section-level captures are preserved beside them. `test/fixtures/desktop-ux-base
 - `#settings/tools-validation` owns tool-surface discovery and workspace validation presentation.
 - `#settings/diagnostics` owns findings, sanitized reports, service logs, and local history maintenance.
 - `#settings/advanced` owns patch safeguards and retained-output limits. Dashboard updates are driven by the tool-activity event stream rather than user-configured polling intervals.
-- `#settings/desktop` and `#settings/dashboard` remain compatibility routes and normalize to Connection and Advanced respectively.
 - The Electron main process remains the durable owner of desktop credentials and lifecycle state. The dashboard renderer reads and saves these values only through sender-constrained preload IPC.
 - Desktop secrets are never added to dashboard HTTP payloads, URLs, local storage, or session storage.
 - Tray Settings focuses the existing dashboard at General instead of creating another routine window.
@@ -247,7 +246,7 @@ Section-level captures are preserved beside them. `test/fixtures/desktop-ux-base
 
 - **Quick navigation** opens from the top bar or `Ctrl+K` / `Cmd+K` and searches primary pages, Settings pages, common actions, and configured workspaces.
 - Keyboard users can move command results with Up and Down arrows, execute with Enter, and close with Escape through the existing modal focus trap. Quick navigation does not replace an already active modal or drawer.
-- One route policy owns current and legacy dashboard paths. Known aliases normalize to their canonical destinations, malformed or unknown paths fall back to a clean Overview route, and only canonical routes are written to local storage.
+- One route policy owns canonical dashboard paths. Removed aliases, malformed paths, and unknown paths fall back to a clean Overview route, and only canonical routes are written to local storage.
 - Route parameters use per-page allowlists. Workspace names, filter values, lengths, duplicates, and transient focus state are validated before persistence; credential-like parameter names are removed before a route reaches the address bar or saved state.
 - Quick navigation can open the Workspaces page scoped to a selected workspace, focus the matching card after asynchronous route mounting, and remove the transient `focus` marker afterward.
 - The top connection status is a direct link to `#settings/connection`; it remains a status indicator and does not create a separate connection surface.
@@ -344,7 +343,7 @@ Section-level captures are preserved beside them. `test/fixtures/desktop-ux-base
 
 - `electron/window-chrome.js` is the single platform-policy owner. Windows uses a frameless dashboard with Electron's native thick frame, shadow, rounded corners, resize borders, and operating-system snapping. macOS uses `hiddenInset` with native traffic-light controls. Linux and unknown platforms retain their native frame because window-manager behavior is not consistent enough to replace safely.
 - The dashboard title bar is rendered once by `src/http/dashboard.js` and styled by `src/ui/styles/app.css`. Its unused surface uses Electron's `-webkit-app-region: drag`; every interactive control uses `no-drag`. The title bar is part of the application shell, not page navigation, and route changes update only its compact context label.
-- Window commands follow `renderer -> electron/dashboard-preload.js -> sender-constrained electron/ipc-handlers.js -> electron/dashboard-window.js -> originating BrowserWindow`. The bridge exposes only state retrieval, minimize, maximize/restore toggle, and close. It does not expose generic `send`, `invoke`, native window objects, or Node.js APIs.
+- Window commands follow `renderer -> electron/preload.cjs (dashboard-gated surface) -> sender-constrained electron/ipc-handlers.js -> electron/dashboard-window.js -> originating BrowserWindow`. The bridge exposes only state retrieval, minimize, maximize/restore toggle, and close. It does not expose generic `send`, `invoke`, native window objects, or Node.js APIs.
 - `electron/dashboard-window.js` broadcasts normalized state after native show, minimize, restore, maximize, unmaximize, and fullscreen transitions. `src/ui/window-chrome.js` updates the maximize-versus-restore icon and accessible name, so keyboard shortcuts, snapping, taskbar actions, and external window managers do not leave stale renderer state.
 - The close control intentionally uses the existing dashboard close lifecycle. It closes the visible window to the tray during normal operation and destroys it only during application shutdown.
 - The custom title bar owns forty CSS pixels. In custom-chrome mode the application shell owns the remaining dynamic viewport height, the sidebar is offset below the title bar, and `main` is the canonical page scroller. Route rerenders preserve that scroller's position instead of relying on page-level scrolling.

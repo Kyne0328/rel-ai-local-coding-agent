@@ -3,11 +3,9 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { workspaceWrite } = require('../src/localRepoBridge.js');
-const { planEdit } = require('../src/executionPlanner.js');
+import { workspaceWrite } from "../src/localRepoBridge.js";
+import { planEdit } from "../src/executionPlanner.js";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-full-write-concurrency-'));
 const workspace = {

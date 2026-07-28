@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const sessions = require('../src/http/dashboardSessions.js');
-const { isDashboardAuthorized } = require('../src/http/auth.js');
+import * as sessions from "../src/http/dashboardSessions.js";
+import { isDashboardAuthorized } from "../src/http/auth.js";
 
 sessions.clearDashboardSessions();
 const bootstrap = sessions.createDashboardBootstrap('static-secret');

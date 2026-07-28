@@ -344,7 +344,7 @@ Before the harness removal, the rebuilt dependency-checkpoint package passed six
 2. Recovery renderer loads with styles, valid dimensions, and the current flex-based status badge layout.
 3. Desktop dashboard overview becomes interactive and renders the expected secured layout.
 4. The current workspace menu applies `smoke` scope and persists it in `#tasks?workspace=smoke`.
-5. The legacy `#settings/dashboard` route normalizes to `#settings/advanced` and loads the current Advanced settings content.
+5. The canonical `#settings/advanced` route loads the current Advanced settings content; removed aliases fall back to Overview.
 6. A session tool event opens the exact Activity detail route and drawer.
 
 Four screenshots were captured and checked for dimensions, sampled visual color content, and SHA-256 identity.

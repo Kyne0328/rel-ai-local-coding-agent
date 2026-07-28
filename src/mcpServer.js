@@ -1,20 +1,15 @@
-'use strict';
 
-const { McpServer, fromJsonSchema, createRequestStateCodec } = require('@modelcontextprotocol/server');
-const { getToolSchemas, getToolSurfaceManifest, callTool, getToolDefinition } = require('./tools');
-const { readConfig, allWorkspaceAliases } = require('./config');
-const { serializeToolError } = require('./tools/errors');
-const { listResources, readResource, resourceCacheHint } = require('./resources');
-const { requireApprovalIfNeeded, approvalRequirement, approvalDigest } = require('./mcp/approval');
-const { toolContext, clientName, requestStateKey, SERVER_INSTANCE_ID } = require('./mcp/context');
-const { toolResult } = require('./mcp/results');
-const {
-  createOperationTask,
-  completeOperationTask,
-  failOperationTask,
-  getOperationTask
-} = require('./operationTasks');
-const pkg = require('../package.json');
+
+import { McpServer, fromJsonSchema, createRequestStateCodec } from "@modelcontextprotocol/server";
+import { getToolSchemas, getToolSurfaceManifest, callTool, getToolDefinition } from "./tools.js";
+import { readConfig, allWorkspaceAliases } from "./config.js";
+import { serializeToolError } from "./tools/errors.js";
+import { listResources, readResource, resourceCacheHint } from "./resources.js";
+import { requireApprovalIfNeeded, approvalRequirement, approvalDigest } from "./mcp/approval.js";
+import { toolContext, clientName, requestStateKey, SERVER_INSTANCE_ID } from "./mcp/context.js";
+import { toolResult } from "./mcp/results.js";
+import { createOperationTask, completeOperationTask, failOperationTask, getOperationTask } from "./operationTasks.js";
+import { packageMetadata as pkg } from './packageMetadata.js';
 
 function createRelaiMcpServer(options = {}) {
   const config = readConfig();
@@ -123,11 +118,4 @@ function connectorInstructions(config = readConfig()) {
   return `This server targets MCP 2026-07-28 only and has no protocol session. For each independent user objective, call relai_start_task exactly once and retain its opaque task_id; never treat an MCP transport session, repository, or ChatGPT conversation as the task identity. ${workspaceInstruction} Pass that task_id to every subsequent Rel.AI tool call. Use relai_process_* for development servers and interactive commands, relai_worktree_* for isolated branches, relai_semantic_search when terminology is unknown, relai_code_inspect action trace for relationship maps, relai_diagnostics_run for normalized diagnostics, and relai_validation_plan before expensive final validation. Long-running commands and validation can use defer:true and return a durable Rel.AI operationTask handle; poll or cancel it with relai_operation_task_get and relai_operation_task_cancel. Destructive operations may return input_required and must be retried with the approved response and echoed requestState. Completion remains explicit through final relai_run_checks complete:true with summary, or relai_complete_task after read-only review.`;
 }
 
-module.exports = {
-  createRelaiMcpServer,
-  connectorInstructions,
-  toolResult,
-  approvalRequirement,
-  approvalDigest,
-  SERVER_INSTANCE_ID
-};
+export { createRelaiMcpServer, connectorInstructions, toolResult, approvalRequirement, approvalDigest, SERVER_INSTANCE_ID };

@@ -1,21 +1,11 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const require = createRequire(import.meta.url);
-const {
-  TERMINOLOGY,
-  ERROR_CODES,
-  ERROR_GUIDANCE,
-  CONNECTION_STATE_VALUES,
-  deriveConnectionState,
-  errorGuidance,
-  errorPayload
-} = require('../src/desktopUxContracts.js');
-const { createDesktopStatusModel } = require('../electron/desktop-status.js');
+import { TERMINOLOGY, ERROR_CODES, ERROR_GUIDANCE, CONNECTION_STATE_VALUES, deriveConnectionState, errorGuidance, errorPayload } from "../src/desktopUxContracts.js";
+import { createDesktopStatusModel } from "../electron/desktop-status.js";
 const connectionUi = await import('../src/ui/connection-state.js');
 
 assert.deepEqual(TERMINOLOGY, {
@@ -180,7 +170,7 @@ const electronCss = fs.readFileSync(path.join(root, 'electron', 'renderer', 'app
 const sessionsPage = fs.readFileSync(path.join(root, 'src', 'ui', 'features', 'sessions', 'index.js'), 'utf8');
 const updatePage = fs.readFileSync(path.join(root, 'src', 'ui', 'features', 'settings', 'desktop-updates.js'), 'utf8');
 const appUpdater = fs.readFileSync(path.join(root, 'electron', 'app-updater.js'), 'utf8');
-const dashboardPreload = fs.readFileSync(path.join(root, 'electron', 'dashboard-preload.js'), 'utf8');
+const dashboardPreload = fs.readFileSync(path.join(root, 'electron', 'preload.cjs'), 'utf8');
 const ipcHandlers = fs.readFileSync(path.join(root, 'electron', 'ipc-handlers.js'), 'utf8');
 const electronPackage = JSON.parse(fs.readFileSync(path.join(root, 'electron', 'package.json'), 'utf8'));
 const releaseWorkflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'release.yml'), 'utf8');
@@ -208,7 +198,7 @@ const windowSecurity = fs.readFileSync(path.join(root, 'electron', 'window-secur
 const statusHtml = fs.readFileSync(path.join(root, 'electron', 'renderer', 'status.html'), 'utf8');
 const securityDoc = fs.readFileSync(path.join(root, 'docs', 'SECURITY.md'), 'utf8');
 
-assert.equal(baseline.version, 28);
+assert.equal(baseline.version, 29);
 assert.deepEqual(baseline.canonicalRoutes, {
   tools: '#tools',
   general: '#settings',
@@ -420,7 +410,8 @@ assert.deepEqual(baseline.windowPolicy, {
   fallbackCredentialsViaIpc: true,
   fallbackTokenRotation: false
 });
-assert.deepEqual(baseline.legacyRoutes, ['#reference', '#settings/connector', '#settings/desktop', '#settings/dashboard']);
+assert.deepEqual(baseline.legacyRoutes, []);
+assert.doesNotMatch(routePolicy, /PATH_ALIASES|settings\/desktop|settings\/dashboard|settings\/connector|reference/);
 assert.deepEqual(baseline.settingsNavigation, ['General', 'Connection', 'Tools & validation', 'Diagnostics', 'Advanced']);
 assert.deepEqual(baseline.settingsOwnership.general, ['Appearance', 'Desktop notifications', 'Startup and recovery', 'Application updates']);
 assert.deepEqual(baseline.settingsOwnership.connection, ['Connection status', 'Local service', 'Public endpoint', 'Approval token']);

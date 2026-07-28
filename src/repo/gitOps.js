@@ -1,14 +1,10 @@
-const fs = require("node:fs");
-const path = require("node:path");
-const { runProcess, summarizeCommand } = require("../process");
-const { resolveSafePath, isSecretPath } = require("../safety");
-const { getStateDir } = require("../audit");
-const {
-  INTERNAL_STATUS_MAX_BYTES,
-  gitStatusArgs,
-  parseGitStatus,
-  formatGitStatus
-} = require("./gitStatus");
+import { readSessionPolicy } from "../policyResolver.js";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { runProcess, summarizeCommand } from "../process.js";
+import { resolveSafePath, isSecretPath } from "../safety.js";
+import { getStateDir } from '../statePaths.js';
+import { INTERNAL_STATUS_MAX_BYTES, gitStatusArgs, parseGitStatus, formatGitStatus } from "./gitStatus.js";
 
 const DEFAULT_MAX_GIT_OUTPUT_BYTES = 1024 * 1024;
 const DEFAULT_AGGRESSIVE_MAX_PATCH_BYTES = 2 * 1024 * 1024;
@@ -54,7 +50,7 @@ function assertPatchUpdateSafe(workspace, config, _args, patch) {
 
 function readBaselineOwnership(workspace, config) {
   try {
-    const { readSessionPolicy } = require("../policyResolver");
+    
     const session = readSessionPolicy(config, workspace.alias);
     // Presence of a (non-expired) session file — not presence of a baselineDirty
     // key — is what marks ownership as knowable. A session that started against a
@@ -528,24 +524,4 @@ async function relaiGitDraftPr(workspace, config, args = {}) {
   };
 }
 
-module.exports = {
-  workspaceGitStatus,
-  relaiGitCommit,
-  relaiGitPush,
-  relaiGitDraftPr,
-  classifyStatusOwnership,
-  getPatchConfig,
-  patchNumber,
-  patchFlag,
-  assertPatchUpdateSafe,
-  ensureGitRepo,
-  requireCleanGitIfConfigured,
-  shouldMakePatchBackup,
-  makePatchBackup,
-  tempStateDir,
-  tempStatePath,
-  inspectPatchPaths,
-  clampNumber,
-  truncateUtf8,
-  DEFAULT_AGGRESSIVE_MAX_PATCH_BYTES
-};
+export { workspaceGitStatus, relaiGitCommit, relaiGitPush, relaiGitDraftPr, classifyStatusOwnership, getPatchConfig, patchNumber, patchFlag, assertPatchUpdateSafe, ensureGitRepo, requireCleanGitIfConfigured, shouldMakePatchBackup, makePatchBackup, tempStateDir, tempStatePath, inspectPatchPaths, clampNumber, truncateUtf8, DEFAULT_AGGRESSIVE_MAX_PATCH_BYTES };

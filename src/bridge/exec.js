@@ -1,14 +1,14 @@
 // @ts-check
-'use strict';
 
-const fs = require('node:fs');
-const path = require('node:path');
-const childProcess = require('node:child_process');
-const { runProcess } = require('../process');
-const { operationTaskSignal } = require('../operationTasks');
-const { runSpan } = require('../telemetry');
-const { isPathInside } = require('../safety');
-const { INTERNAL_STATUS_MAX_BYTES, gitStatusArgs, statusMapFromOutput } = require('../repo/gitStatus');
+
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as childProcess from "node:child_process";
+import { runProcess } from "../process.js";
+import { operationTaskSignal } from "../operationTasks.js";
+import { runSpan } from "../telemetry.js";
+import { isPathInside } from "../safety.js";
+import { INTERNAL_STATUS_MAX_BYTES, gitStatusArgs, statusMapFromOutput } from "../repo/gitStatus.js";
 
 const WHERE_EXE = String.raw`C:\Windows\System32\where.exe`;
 const MAX_CHANGED_FILES = 200;
@@ -179,13 +179,4 @@ async function relaiExec(workspace, config, args = {}) {
   };
 }
 
-module.exports = {
-  relaiExec,
-  resolveCommandCwd,
-  normalizeCommandEnv,
-  resolveShell,
-  powershellCommand,
-  redactCommandForAudit,
-  statusMapFromOutput,
-  changedStatusFiles
-};
+export { relaiExec, resolveCommandCwd, normalizeCommandEnv, resolveShell, powershellCommand, redactCommandForAudit, statusMapFromOutput, changedStatusFiles };

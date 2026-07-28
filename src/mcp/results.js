@@ -1,4 +1,4 @@
-'use strict';
+
 
 const DEFAULT_MAX_TOOL_RESULT_BYTES = 512 * 1024;
 const MAX_TOOL_RESULT_BYTES = Number(process.env.REL_AI_MCP_MAX_TOOL_RESULT_BYTES || process.env.REL_AI_MCP_MAX_TOOL_RESULT_CHARS || DEFAULT_MAX_TOOL_RESULT_BYTES);
@@ -65,4 +65,4 @@ function tailText(value, maxChars) {
   return value.length <= maxChars ? value : `[kept last ${maxChars} chars]\n${value.slice(-maxChars)}`;
 }
 
-module.exports = { toolResult };
+export { toolResult };

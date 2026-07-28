@@ -1,15 +1,14 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { localWindowWebPreferences, secureLocalWindow, isAllowedLocalTarget } = require('../electron/window-security.js');
+import { localWindowWebPreferences, secureLocalWindow, isAllowedLocalTarget } from "../electron/window-security.js";
 
 const allowedFile = path.resolve('electron/renderer/wizard.html');
-const preferences = localWindowWebPreferences('preload.js', 'relai-test');
+const preferences = localWindowWebPreferences('preload.cjs', 'relai-test', 'dashboard');
 assert.deepEqual(preferences, {
-  preload: 'preload.js',
+  preload: 'preload.cjs',
+  additionalArguments: ['--relai-preload-surface=dashboard'],
   nodeIntegration: false,
   contextIsolation: true,
   sandbox: true,

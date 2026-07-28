@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 // Terminating a spawned child process across platforms.
 //
 // On Windows the ngrok agent can outlive a plain child.kill(), so the whole
@@ -16,7 +17,7 @@ function killChildFallback(child) {
 
 function killWindowsProcessTree(child) {
   try {
-    const { spawnSync } = require("node:child_process");
+    
     spawnSync(String.raw`C:\Windows\System32\taskkill.exe`, ["/f", "/t", "/pid", String(child.pid)], { stdio: "ignore", windowsHide: true });
   } catch (error) {
     logKillDebug('[rel-ai-mcp] taskkill:', error);
@@ -41,4 +42,4 @@ function killProcess(child) {
   terminateChild(child);
 }
 
-module.exports = { killProcess };
+export { killProcess };

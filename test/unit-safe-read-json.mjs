@@ -2,10 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { safeReadJson } = require('../src/safety.js');
+import { safeReadJson } from "../src/safety.js";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'safe-read-json-'));
 const orig = console.warn;

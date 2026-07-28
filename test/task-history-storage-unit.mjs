@@ -3,15 +3,8 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const {
-  listSessions,
-  readSession,
-  resetTaskHistoryCaches,
-  writeSession
-} = require('../src/taskHistoryStorage.js');
+import { listSessions, readSession, resetTaskHistoryCaches, writeSession } from "../src/taskHistoryStorage.js";
 
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-history-storage-'));
 const id = 'shared-task';

@@ -1,11 +1,12 @@
-const fs = require("node:fs");
-const path = require("node:path");
-const { publicConfigSummary, resolveWorkspace } = require("./config");
-const { runProcess, summarizeCommand } = require("./process");
-const { discoverCommands } = require("./commandDiscovery");
-const pkg = require("../package.json");
-const { getVersion } = require("./version");
-const { resolveGitExecutable } = require('./gitExecutable');
+import { spawnSync } from 'node:child_process';
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { publicConfigSummary, resolveWorkspace } from "./config.js";
+import { runProcess, summarizeCommand } from "./process.js";
+import { discoverCommands } from "./commandDiscovery.js";
+import { packageMetadata as pkg, packageRoot } from './packageMetadata.js';
+import { getVersion } from "./version.js";
+import { resolveGitExecutable } from "./gitExecutable.js";
 
 function releaseReadiness(config, args = {}) {
   const findings = [];
@@ -104,7 +105,7 @@ async function workspacePreflight(config, args = {}) {
 }
 
 function projectRoot() {
-  return path.resolve(__dirname, "..");
+  return packageRoot;
 }
 
 function checkDir(findings, label, dir, severity) {
@@ -165,7 +166,7 @@ function commandExists(command) {
   const lookup = isWindows ? "where" : "which";
   let result;
   try {
-    const child = require("node:child_process").spawnSync(lookup, [command], { shell: false, encoding: "utf8" });
+    const child = spawnSync(lookup, [command], { shell: false, encoding: "utf8" });
     result = { command, ok: child.status === 0, path: (child.stdout || "").trim().split(/\r?\n/)[0] || "" };
   } catch (error) {
     result = { command, ok: false, error: error.message };
@@ -224,7 +225,4 @@ function finding(severity, code, message, extra = {}) {
   return { severity, code, message, ...extra };
 }
 
-module.exports = {
-  releaseReadiness,
-  workspacePreflight
-};
+export { releaseReadiness, workspacePreflight };

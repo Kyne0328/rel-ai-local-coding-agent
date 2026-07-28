@@ -1,4 +1,4 @@
-'use strict';
+
 
 function createDesktopStatusModel({ version = '', deriveConnectionState, formatError } = {}) {
   if (typeof deriveConnectionState !== 'function') throw new TypeError('deriveConnectionState is required.');
@@ -28,4 +28,4 @@ function createDesktopStatusModel({ version = '', deriveConnectionState, formatE
   };
 }
 
-module.exports = { createDesktopStatusModel };
+export { createDesktopStatusModel };

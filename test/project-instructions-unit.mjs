@@ -2,18 +2,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const {
-  MAX_PROJECT_INSTRUCTION_BYTES,
-  readProjectInstructions,
-  resetProjectInstructionCacheForTests
-} = require('../src/projectInstructions.js');
-const { repoSnapshot, relaiRead } = require('../src/localRepoBridge.js');
-const { workspaceInspect } = require('../src/tools/status.js');
-const { compactForConnector } = require('../src/tools/connector.js');
-const { publicConfigSummary } = require('../src/config.js');
+import { MAX_PROJECT_INSTRUCTION_BYTES, readProjectInstructions, resetProjectInstructionCacheForTests } from "../src/projectInstructions.js";
+import { repoSnapshot, relaiRead } from "../src/localRepoBridge.js";
+import { workspaceInspect } from "../src/tools/status.js";
+import { compactForConnector } from "../src/tools/connector.js";
+import { publicConfigSummary } from "../src/config.js";
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-project-instructions-'));
 const repo = path.join(temp, 'repo');

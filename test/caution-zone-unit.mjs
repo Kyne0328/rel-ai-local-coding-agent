@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { classifyCaution } = require('../src/cautionZone.js');
+import { classifyCaution } from "../src/cautionZone.js";
 
 for (const toolName of ['relai_edit']) {
   const configFile = classifyCaution(toolName, { path: 'package.json' });

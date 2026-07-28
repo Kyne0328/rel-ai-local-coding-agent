@@ -1,12 +1,12 @@
-'use strict';
 
-const crypto = require('node:crypto');
-const fs = require('node:fs');
-const path = require('node:path');
-const { getStateDir } = require('../audit');
-const { workspaceGitStatus } = require('../repo/gitOps');
-const { relaiCodeInspect } = require('./codeIntelligence');
-const { detectVerifyChecks } = require('./checkDetection');
+
+import * as crypto from "node:crypto";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { getStateDir } from '../statePaths.js';
+import { workspaceGitStatus } from "../repo/gitOps.js";
+import { relaiCodeInspect } from "./codeIntelligence.js";
+import { detectVerifyChecks } from "./checkDetection.js";
 
 const PLAN_TTL_MS = 30 * 60 * 1000;
 
@@ -107,4 +107,4 @@ function stableJson(value) {
   return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
 }
 
-module.exports = { createValidationPlan, readValidationPlan, signPlan };
+export { createValidationPlan, readValidationPlan, signPlan };

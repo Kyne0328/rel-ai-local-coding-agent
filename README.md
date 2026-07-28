@@ -26,7 +26,7 @@ Tool use is intentionally small but flexible. ChatGPT should skip stages it does
 relai_start_task -> relai_repo_snapshot (when useful) -> relai_search / relai_code_inspect -> relai_read -> relai_edit -> relai_run_checks (complete:true + summary)
 ```
 
-No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. Rel.AI targets MCP `2026-07-28` through the stable MCP SDK v2 and exposes 33 active tools over stdio and OAuth-protected stateless HTTP. The core protocol has no initialize handshake or protocol session; every request carries its protocol version, client identity, capabilities, trace context, method, and named target explicitly.
+No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. First-party application code is ESM-only except for one sandbox-required Electron preload boundary. Rel.AI targets MCP `2026-07-28` through the stable MCP SDK v2 and exposes 33 active tools over stdio and OAuth-protected stateless HTTP. The core protocol has no initialize handshake or protocol session; every request carries its protocol version, client identity, capabilities, trace context, method, and named target explicitly.
 
 Logical coding work is isolated by opaque `task_id`, persistent commands by `processId`, deferred operations by durable `operationTaskId`, worktrees by dynamic workspace alias, and resumable approvals by signed `requestState`. These visible handles replace hidden transport-session state.
 
@@ -233,7 +233,7 @@ The approval token is under **Settings > Connection**. Replacing it requires typ
 
 Because the domain is static, the connector keeps working across restarts. You configure it once.
 
-See [docs/ONE_CLICK_SETUP.md](docs/ONE_CLICK_SETUP.md) for the full setup walkthrough, and [docs/CONNECTING_TO_CHATGPT.md](docs/CONNECTING_TO_CHATGPT.md) for connector troubleshooting.
+See [docs/ONE_CLICK_SETUP.md](docs/ONE_CLICK_SETUP.md) for the full setup walkthrough, [docs/CONNECTING_TO_CHATGPT.md](docs/CONNECTING_TO_CHATGPT.md) for connector troubleshooting, and [docs/ESM_ARCHITECTURE.md](docs/ESM_ARCHITECTURE.md) for module ownership and release constraints.
 
 ---
 
@@ -247,7 +247,7 @@ The dashboard includes grouped **Sessions**, managed **Processes** with recent o
 
 ## Building from source
 
-Only needed if you want to develop or package the app yourself. Requires Node.js 22.13 or newer; CI tests the Node.js 22 and 24 LTS lines.
+Only needed if you want to develop or package the app yourself. Requires Node.js 22.13 or newer; CI tests the Node.js 22 and 24 LTS lines. The root and Electron packages are ESM. Relative first-party imports use explicit extensions, and `electron/preload.cjs` is the only documented CommonJS boundary.
 
 ```bash
 npm install

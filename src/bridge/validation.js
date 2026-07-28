@@ -1,16 +1,16 @@
-const { runProcess, summarizeCommand } = require("../process");
-const { discoverCommands } = require("../commandDiscovery");
-const { detectVerifyChecks } = require("./checkDetection");
-const { normalizeCommandAlias } = require("../commandNormalizer");
-const { selectValidationLevel } = require("../validationStrategy");
-const { resolvePolicy } = require("../policyResolver");
-const { clampNumber } = require("./limits");
-const { updateCurrentToolActivity } = require("../toolActivity");
-const { finalizeValidationResult, normalizeCompletionSummary } = require("../tools/completion");
-const { readValidationPlan } = require('./validationPlan');
-const { workspaceGitStatus } = require('../repo/gitOps');
-const { runSpan } = require('../telemetry');
-const { operationTaskSignal } = require('../operationTasks');
+import { runProcess, summarizeCommand } from "../process.js";
+import { discoverCommands } from "../commandDiscovery.js";
+import { detectVerifyChecks } from "./checkDetection.js";
+import { normalizeCommandAlias } from "../commandNormalizer.js";
+import { selectValidationLevel } from "../validationStrategy.js";
+import { resolvePolicy } from "../policyResolver.js";
+import { clampNumber } from "./limits.js";
+import { updateCurrentToolActivity } from "../toolActivity.js";
+import { finalizeValidationResult, normalizeCompletionSummary } from "../tools/completion.js";
+import { readValidationPlan } from "./validationPlan.js";
+import { workspaceGitStatus } from "../repo/gitOps.js";
+import { runSpan } from "../telemetry.js";
+import { operationTaskSignal } from "../operationTasks.js";
 const CHECK_OUTPUT_TAIL_DEFAULT = 4000, CHECK_OUTPUT_TAIL_FULL = 40000;
 async function relaiVerify(workspace, config, args = {}) {
   let effectiveArgs = args;
@@ -179,4 +179,4 @@ function pushResolvedCommandText(target, commandsText, resolveAndTrack) {
 
 // detectVerifyChecks moved to checkDetection.js; re-exported here so config summaries,
 // code-intelligence diagnostics, and tests keep a single import site.
-module.exports = { relaiVerify, hasRequestedChecks, detectVerifyChecks };
+export { relaiVerify, hasRequestedChecks, detectVerifyChecks };

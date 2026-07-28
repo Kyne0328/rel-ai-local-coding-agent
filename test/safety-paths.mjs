@@ -2,10 +2,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createRequire } from "node:module";
 
-const require = createRequire(import.meta.url);
-const { isSecretPath, validateRelativePath, resolveSafePath, assertPathOperationAllowed, isPathInside, collectTextFiles, writeTextFileSafe } = require("../src/safety.js");
+import { isSecretPath, validateRelativePath, resolveSafePath, assertPathOperationAllowed, isPathInside, collectTextFiles, writeTextFileSafe } from "../src/safety.js";
 
 // ---------------------------------------------------------------------------
 // isSecretPath — paths that MUST be blocked

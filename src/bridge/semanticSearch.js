@@ -1,8 +1,8 @@
-'use strict';
 
-const crypto = require('node:crypto');
-const { loadIndex } = require('./codeIntelligence');
-const { clampNumber } = require('./limits');
+
+import * as crypto from "node:crypto";
+import { loadIndex } from "./codeIntelligence.js";
+import { clampNumber } from "./limits.js";
 
 const CACHE = new Map();
 const VECTOR_DIMENSIONS = 384;
@@ -140,4 +140,4 @@ function scoreReasons(queryTokens, document, semanticScore, lexicalScore) {
   return reasons;
 }
 
-module.exports = { relaiSemanticSearch, tokenize, vectorize, cosine };
+export { relaiSemanticSearch, tokenize, vectorize, cosine };

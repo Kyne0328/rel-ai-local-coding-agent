@@ -13,18 +13,6 @@ const CANONICAL_PATHS = new Set([
   'settings/about'
 ]);
 
-const PATH_ALIASES = new Map([
-  ['', 'home'],
-  ['reference', 'tools'],
-  ['connection', 'settings/connection'],
-  ['connector', 'settings/connection'],
-  ['diagnostics', 'settings/diagnostics'],
-  ['settings/general', 'settings'],
-  ['settings/connector', 'settings/connection'],
-  ['settings/desktop', 'settings/connection'],
-  ['settings/dashboard', 'settings/advanced']
-]);
-
 const ALLOWED_PARAMS = {
   home: new Set(['workspace']),
   tasks: new Set(['workspace']),
@@ -42,7 +30,7 @@ const STATUSES = new Set(['ok', 'error']);
 export function normalizeRouteKey(value) {
   const raw = String(value || '').replace(/^#/, '');
   const separator = raw.indexOf('?');
-  const requestedPath = normalizePath(separator >= 0 ? raw.slice(0, separator) : raw);
+  const requestedPath = normalizePath(separator >= 0 ? raw.slice(0, separator) : raw) || 'home';
   const resolved = resolvePath(requestedPath);
   const input = new URLSearchParams(resolved.recognized && separator >= 0 ? raw.slice(separator + 1) : '');
   const output = sanitizeParams(resolved.path, input);
@@ -59,9 +47,8 @@ export function routeAllowsParam(path, key) {
 }
 
 function resolvePath(path) {
-  const aliased = PATH_ALIASES.get(path) || path;
-  const recognized = CANONICAL_PATHS.has(aliased);
-  return { path: recognized ? aliased : 'home', recognized };
+  const recognized = CANONICAL_PATHS.has(path);
+  return { path: recognized ? path : 'home', recognized };
 }
 
 function normalizePath(value) {

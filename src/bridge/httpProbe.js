@@ -1,5 +1,6 @@
-const { runProcess, summarizeCommand } = require("../process");
-const { clampNumber } = require("./limits");
+import { readConnectionProfile } from "../connectionProfile.js";
+import { runProcess, summarizeCommand } from "../process.js";
+import { clampNumber } from "./limits.js";
 
 function parseHttpProbe(stdout) {
   const text = String(stdout || "").trim();
@@ -18,7 +19,7 @@ function localConnectionBaseUrl() {
   let host = "127.0.0.1";
   let port = Number(process.env.REL_AI_MCP_PORT || 3333);
   try {
-    const { readConnectionProfile } = require("../connectionProfile");
+    
     const profile = readConnectionProfile();
     host = profile.host || host;
     port = Number(profile.port || port || 3333);
@@ -77,4 +78,4 @@ async function relaiHttpProbe(workspace, config, args = {}) {
   return probeHttpTarget(workspace, config, resolveLocalRouteTarget(route), args, { route });
 }
 
-module.exports = { probeHttpTarget, relaiHttpProbe, resolveLocalRouteTarget };
+export { probeHttpTarget, relaiHttpProbe, resolveLocalRouteTarget };

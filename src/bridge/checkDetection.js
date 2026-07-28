@@ -1,4 +1,4 @@
-'use strict';
+
 
 // Validation-command detection: given a workspace root and a level, work out which
 // commands constitute "quick", "standard", or "release" validation for that project.
@@ -7,9 +7,9 @@
 // detection side is also called from relai_code_inspect diagnostics (three levels in
 // one call) and from the dashboard summary on every poll, which is why it caches.
 
-const fs = require("node:fs");
-const path = require("node:path");
-const { discoveryManifestSignature } = require("../commandDiscovery");
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { discoveryManifestSignature } from "../commandDiscovery.js";
 
 // Each detection re-reads and re-parses package.json. Cache per (root, level) against
 // the same manifest stat signature command discovery uses, so any manifest edit is
@@ -119,4 +119,4 @@ function shouldRunPackageBuild(root, pkg, scripts, level, currentCommands) {
   return false;
 }
 
-module.exports = { detectVerifyChecks, clearCheckDetectionCache };
+export { detectVerifyChecks, clearCheckDetectionCache };

@@ -1,7 +1,7 @@
-'use strict';
 
-const fs = require('node:fs');
-const path = require('node:path');
+
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 const AUTO_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const AUTO_CHECK_DELAY_MS = 15 * 1000;
@@ -119,15 +119,4 @@ function createLogger(onLog) {
   };
 }
 
-module.exports = {
-  AUTO_CHECK_DELAY_MS,
-  AUTO_CHECK_INTERVAL_MS,
-  cleanText,
-  cleanVersion,
-  createLogger,
-  createUpdateStateStore,
-  detectUpdateSupport,
-  isoNow,
-  normalizeStatus,
-  progressPayload
-};
+export { AUTO_CHECK_DELAY_MS, AUTO_CHECK_INTERVAL_MS, cleanText, cleanVersion, createLogger, createUpdateStateStore, detectUpdateSupport, isoNow, normalizeStatus, progressPayload };

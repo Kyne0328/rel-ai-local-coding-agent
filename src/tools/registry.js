@@ -1,12 +1,11 @@
 // @ts-check
-'use strict';
 
-/** @typedef {import('../../types/boundaries').ToolDefinition} ToolDefinition */
-/** @typedef {Omit<ToolDefinition, 'annotations' | 'connectorStrip' | 'groups' | 'behavior' | 'dashboard' | 'outputSchema'> & { annotations?: Partial<ToolDefinition['annotations']>, connectorStrip?: string[], groups?: import('../../types/boundaries').ToolGroup[], behavior?: Partial<ToolDefinition['behavior']>, dashboard?: Partial<ToolDefinition['dashboard']>, outputSchema?: import('../../types/boundaries').JsonSchema }} ToolDefinitionInput */
 
-const { MAX_BATCH_EDITS } = require('../editLimits');
-const { HANDLERS } = require('./handlers');
-const { outputSchemaFor } = require('./outputSchemas');
+/** @typedef {import('../../types/boundaries.d.ts').ToolDefinitionMetadata} ToolDefinitionMetadata */
+/** @typedef {Omit<ToolDefinitionMetadata, 'annotations' | 'connectorStrip' | 'groups' | 'behavior' | 'dashboard' | 'outputSchema'> & { annotations?: Partial<ToolDefinitionMetadata['annotations']>, connectorStrip?: string[], groups?: import('../../types/boundaries.d.ts').ToolGroup[], behavior?: Partial<ToolDefinitionMetadata['behavior']>, dashboard?: Partial<ToolDefinitionMetadata['dashboard']>, outputSchema?: import('../../types/boundaries.d.ts').JsonSchema }} ToolDefinitionInput */
+
+import { MAX_BATCH_EDITS } from "../editLimits.js";
+import { outputSchemaFor } from "./outputSchemas.js";
 
 const TOOL_SURFACE_VERSION = 22;
 
@@ -17,7 +16,7 @@ const TOOL_DEFINITION_VALUES = [
     title: "Start Logical Task",
     description: "Create an independent logical Rel.AI task and return an opaque task_id. Call this once for each unrelated ChatGPT task, then pass the returned task_id to every subsequent task-scoped tool call. The identity does not depend on ChatGPT conversation metadata or transport sessions.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"title":{"type":"string","minLength":1,"maxLength":100},"objective":{"type":"string","minLength":1,"maxLength":500}},"required":["workspace"],"additionalProperties":false},
-    handler: HANDLERS.startTask,
+    handlerName: 'startTask',
 
     dashboard: {"category":"Workflow"}
   },
@@ -26,7 +25,7 @@ const TOOL_DEFINITION_VALUES = [
     title: "Repository Overview",
     description: "Read-only. Compact repository overview: file tree, manifests, detected checks, and project hints.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"maxEntries":{"type":"number","minimum":1,"maximum":20000},"includeFiles":{"type":"boolean"}},"required":["workspace"],"additionalProperties":false},
-    handler: HANDLERS.repoSnapshot,
+    handlerName: 'repoSnapshot',
     behavior: {"audit":"snapshot"},
   },
   {
@@ -34,7 +33,7 @@ const TOOL_DEFINITION_VALUES = [
     title: "Read Local Repo Paths",
     description: "Read-only. Batch-read files or directory summaries. Ordinary hidden and Git-ignored files can be read when explicitly targeted; snapshot exclusions are not direct-access restrictions. Secret-bearing paths remain blocked. Use startLine/endLine for one bounded line range across the whole batch, or ranges:[{path,startLine,endLine}] to give individual paths their own window in a single call. guidanceMode accepts full, compact, or none.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"paths":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":100},"maxBytes":{"type":"number","minimum":1000,"maximum":10485760},"maxEntries":{"type":"number","minimum":1,"maximum":20000},"startLine":{"type":"number","minimum":1,"maximum":10000000},"endLine":{"type":"number","minimum":1,"maximum":10000000},"ranges":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"startLine":{"type":"number","minimum":1,"maximum":10000000},"endLine":{"type":"number","minimum":1,"maximum":10000000}},"required":["path"],"additionalProperties":false},"minItems":1,"maxItems":100},"guidanceMode":{"type":"string","enum":["full","compact","none"]}},"required":["workspace","paths"],"additionalProperties":false},
-    handler: HANDLERS.read,
+    handlerName: 'read',
     behavior: {"audit":"read"},
   },
   {
@@ -42,14 +41,14 @@ const TOOL_DEFINITION_VALUES = [
     title: "Search Workspace Text",
     description: "Read-only. Search tracked and untracked workspace files. Auto mode is the default: focused searches receive broader context, while noisy searches receive smaller prioritized ranges. Compact and context modes remain explicit deterministic overrides.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"pattern":{"type":"string","minLength":1,"maxLength":1000},"glob":{"type":"string","maxLength":256},"fixed":{"type":"boolean"},"ignoreCase":{"type":"boolean"},"maxResults":{"type":"number","minimum":1,"maximum":1000},"mode":{"type":"string","enum":["auto","compact","context"]},"contextBefore":{"type":"number","minimum":0,"maximum":100},"contextAfter":{"type":"number","minimum":0,"maximum":100},"groupByFile":{"type":"boolean"},"mergeOverlaps":{"type":"boolean"},"maxFiles":{"type":"number","minimum":1,"maximum":200},"maxRangesPerFile":{"type":"number","minimum":1,"maximum":100},"maxRangeLines":{"type":"number","minimum":1,"maximum":1000},"maxBytes":{"type":"number","minimum":1000,"maximum":393216}},"required":["workspace","pattern"],"additionalProperties":false},
-    handler: HANDLERS.search,
+    handlerName: 'search',
   },
   {
     name: "relai_code_inspect",
     title: "Code Intelligence",
     description: "Read-only. Build a fingerprint-invalidated live code index and inspect recognized symbols, references and calls, structurally related files, reverse-import impact, affected tests, and available language-diagnostic commands. This is bounded lexical and import-graph analysis, not an embedding service or compiler language server.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"action":{"type":"string","enum":["symbol","references","related","impact","trace","diagnostics"]},"symbol":{"type":"string","minLength":1,"maxLength":256},"query":{"type":"string","minLength":1,"maxLength":1000},"paths":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":100},"maxResults":{"type":"number","minimum":1,"maximum":1000},"maxDepth":{"type":"number","minimum":1,"maximum":8},"maxFiles":{"type":"number","minimum":1,"maximum":20000}},"required":["workspace","action"],"additionalProperties":false},
-    handler: HANDLERS.codeInspect,
+    handlerName: 'codeInspect',
     groups: ["audit"],
   },
   {
@@ -57,7 +56,7 @@ const TOOL_DEFINITION_VALUES = [
     title: "Run Workspace Command",
     description: "Run a one-shot development command inside a configured workspace and return exit status, bounded stdout and stderr, timing, and detected file changes. cwd is workspace-relative. A successful result does not replace final relai_run_checks validation.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"command":{"type":"string","minLength":1,"maxLength":20000},"cwd":{"type":"string"},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000},"env":{"type":"object","additionalProperties":{"type":"string"}},"maxOutputBytes":{"type":"number","minimum":1000,"maximum":16777216},"defer":{"type":"boolean"}},"required":["workspace","command"],"additionalProperties":false},
-    handler: HANDLERS.exec,
+    handlerName: 'exec',
     behavior: {"audit":"exec","cache":"workspace","longRunning":true},
   },
   {
@@ -65,7 +64,7 @@ const TOOL_DEFINITION_VALUES = [
     title: "Start Managed Process",
     description: "Start a persistent development process with stable identity, bounded persistent logs, interactive stdin, and workspace/task attribution.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"command":{"type":"string","minLength":1,"maxLength":20000},"cwd":{"type":"string"},"env":{"type":"object","additionalProperties":{"type":"string"}},"label":{"type":"string","maxLength":120},"startupWaitMs":{"type":"number","minimum":0,"maximum":30000},"maxLogBytes":{"type":"number","minimum":65536,"maximum":268435456}},"required":["workspace","command"],"additionalProperties":false},
-    handler: HANDLERS.processStart,
+    handlerName: 'processStart',
     behavior: {"audit":"exec","cache":"workspace"},
   },
   {
@@ -73,14 +72,14 @@ const TOOL_DEFINITION_VALUES = [
     title: "Read Managed Process",
     description: "Read process state and new stdout/stderr ranges using independent byte cursors.",
     inputSchema: {"type":"object","properties":{"processId":{"type":"string","minLength":1,"maxLength":200},"stdoutOffset":{"type":"number","minimum":0},"stderrOffset":{"type":"number","minimum":0},"maxBytes":{"type":"number","minimum":1000,"maximum":1048576}},"required":["processId"],"additionalProperties":false},
-    handler: HANDLERS.processRead,
+    handlerName: 'processRead',
   },
   {
     name: "relai_process_write",
     title: "Write Managed Process Input",
     description: "Write bounded UTF-8 input to a running managed process stdin.",
     inputSchema: {"type":"object","properties":{"processId":{"type":"string","minLength":1,"maxLength":200},"input":{"type":"string","maxLength":1048576}},"required":["processId","input"],"additionalProperties":false},
-    handler: HANDLERS.processWrite,
+    handlerName: 'processWrite',
     behavior: {"audit":"exec"},
   },
   {
@@ -88,7 +87,7 @@ const TOOL_DEFINITION_VALUES = [
     title: "Stop Managed Process",
     description: "Stop a managed process and its process tree, then return final state and recent output.",
     inputSchema: {"type":"object","properties":{"processId":{"type":"string","minLength":1,"maxLength":200},"graceMs":{"type":"number","minimum":0,"maximum":30000}},"required":["processId"],"additionalProperties":false},
-    handler: HANDLERS.processStop,
+    handlerName: 'processStop',
     behavior: {"audit":"exec"},
   },
   {
@@ -96,14 +95,14 @@ const TOOL_DEFINITION_VALUES = [
     title: "List Managed Processes",
     description: "List active and recently exited managed processes, optionally filtered by workspace or status.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"status":{"type":"string","enum":["starting","running","stopping","exited","failed","stopped","orphaned"]},"limit":{"type":"number","minimum":1,"maximum":500}},"required":[],"additionalProperties":false},
-    handler: HANDLERS.processList,
+    handlerName: 'processList',
   },
   {
     name: "relai_worktree_create",
     title: "Create Managed Worktree",
     description: "Create a Git worktree and branch under Rel.AI-managed storage and register its dynamic workspace alias.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"name":{"type":"string","minLength":1,"maxLength":80},"base":{"type":"string","maxLength":200},"branch":{"type":"string","maxLength":200}},"required":["workspace","name"],"additionalProperties":false},
-    handler: HANDLERS.worktreeCreate,
+    handlerName: 'worktreeCreate',
     groups: ["git"],
     behavior: {"audit":"exec","cache":"workspace"},
   },
@@ -112,7 +111,7 @@ const TOOL_DEFINITION_VALUES = [
     title: "List Managed Worktrees",
     description: "List managed worktrees with branch, availability, and dirty-state information.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"}},"required":[],"additionalProperties":false},
-    handler: HANDLERS.worktreeList,
+    handlerName: 'worktreeList',
     groups: ["git","audit"],
   },
   {
@@ -120,7 +119,7 @@ const TOOL_DEFINITION_VALUES = [
     title: "Remove Managed Worktree",
     description: "Remove one managed worktree. Dirty worktrees and active managed processes are refused unless separately resolved; the branch is preserved.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"alias":{"type":"string","minLength":1,"maxLength":180},"force":{"type":"boolean"}},"required":["workspace","alias"],"additionalProperties":false},
-    handler: HANDLERS.worktreeRemove,
+    handlerName: 'worktreeRemove',
     groups: ["git","cleanup"],
     behavior: {"audit":"exec","cache":"workspace"},
     dashboard: {"requiresApproval":true}
@@ -130,14 +129,14 @@ const TOOL_DEFINITION_VALUES = [
     title: "Hybrid Semantic Search",
     description: "Read-only. Rank local source files with private hashed-vector, lexical, path, and symbol signals. No source text leaves the machine.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"query":{"type":"string","minLength":1,"maxLength":2000},"maxResults":{"type":"number","minimum":1,"maximum":100},"maxFiles":{"type":"number","minimum":1,"maximum":20000},"pathPrefix":{"type":"string","maxLength":500},"language":{"type":"string","maxLength":80}},"required":["workspace","query"],"additionalProperties":false},
-    handler: HANDLERS.semanticSearch,
+    handlerName: 'semanticSearch',
   },
   {
     name: "relai_diagnostics_run",
     title: "Run Structured Diagnostics",
     description: "Run detected or explicit language diagnostics and normalize file, line, column, severity, code, message, and source.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"command":{"type":"string","maxLength":20000},"commands":{"type":"array","items":{"type":"string"},"maxItems":50},"level":{"type":"string","enum":["quick","standard","release"]},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000},"maxResults":{"type":"number","minimum":1,"maximum":5000},"stopOnFailure":{"type":"boolean"},"defer":{"type":"boolean"}},"required":["workspace"],"additionalProperties":false},
-    handler: HANDLERS.diagnosticsRun,
+    handlerName: 'diagnosticsRun',
     behavior: {"audit":"checks","summary":"checks","longRunning":true},
   },
   {
@@ -145,7 +144,7 @@ const TOOL_DEFINITION_VALUES = [
     title: "Plan Change-Aware Validation",
     description: "Read-only. Build a short-lived hash-bound validation plan from current changes, import impact, affected tests, and repository checks.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"release":{"type":"boolean"}},"required":["workspace"],"additionalProperties":false},
-    handler: HANDLERS.validationPlan,
+    handlerName: 'validationPlan',
     groups: ["audit"],
   },
   {
@@ -153,7 +152,7 @@ const TOOL_DEFINITION_VALUES = [
     title: "Get Deferred Operation",
     description: "Read-only. Return the current status, progress, result, or error for one durable Rel.AI deferred operation owned by the same logical task.",
     inputSchema: {"type":"object","properties":{"operationTaskId":{"type":"string","minLength":1,"maxLength":200}},"required":["operationTaskId"],"additionalProperties":false},
-    handler: HANDLERS.operationTaskGet,
+    handlerName: 'operationTaskGet',
     dashboard: {"category":"Workflow"}
   },
   {
@@ -161,7 +160,7 @@ const TOOL_DEFINITION_VALUES = [
     title: "Cancel Deferred Operation",
     description: "Cancel one active durable Rel.AI deferred operation owned by the same logical task. Cooperative commands receive an abort signal and terminate their process tree.",
     inputSchema: {"type":"object","properties":{"operationTaskId":{"type":"string","minLength":1,"maxLength":200}},"required":["operationTaskId"],"additionalProperties":false},
-    handler: HANDLERS.operationTaskCancel,
+    handlerName: 'operationTaskCancel',
     behavior: {"audit":"exec"},
     dashboard: {"category":"Workflow"}
   },
@@ -170,7 +169,7 @@ const TOOL_DEFINITION_VALUES = [
     title: "Workspace Tidy Plan",
     description: "Read-only. Prepare a bounded workspace tidy plan for session-owned untracked artifacts. The server selects candidates; callers do not provide file paths.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"mode":{"type":"string"},"maxCandidates":{"type":"number","minimum":1,"maximum":100}},"required":["workspace"],"additionalProperties":false},
-    handler: HANDLERS.tidyPlan,
+    handlerName: 'tidyPlan',
     groups: ["cleanup"],
   },
   {
@@ -178,7 +177,7 @@ const TOOL_DEFINITION_VALUES = [
     title: "Run Workspace Tidy Plan",
     description: "Apply a previously prepared workspace tidy plan by planId. The plan is expiry-bound and hash-checked before any workspace change.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"planId":{"type":"string"}},"required":["workspace","planId"],"additionalProperties":false},
-    handler: HANDLERS.tidyRun,
+    handlerName: 'tidyRun',
     groups: ["cleanup"],
   },
   {
@@ -186,7 +185,7 @@ const TOOL_DEFINITION_VALUES = [
     title: "Workspace Checks",
     description: "Run workspace validation checks (tests, linters, analyzers, build). Use level quick, standard, or release. Output is bounded to each step's tail where failures appear; pass fullOutput:true for a larger tail. On the final validation, pass complete:true with summary to explicitly validate and close the task atomically. Otherwise use relai_complete_task after any final read-only review.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"level":{"type":"string","enum":["quick","standard","release"]},"check":{"type":"string"},"checks":{"type":"array","items":{"type":"string"},"minItems":0},"checksText":{"type":"string"},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000},"stopOnFailure":{"type":"boolean"},"fullOutput":{"type":"boolean"},"planId":{"type":"string","minLength":1,"maxLength":100},"planLevel":{"type":"string","enum":["focused","quick","standard","release"]},"defer":{"type":"boolean"},"complete":{"type":"boolean"},"summary":{"type":"string","minLength":1,"maxLength":2000}},"required":["workspace"],"additionalProperties":false},
-    handler: HANDLERS.runChecks,
+    handlerName: 'runChecks',
     behavior: {"audit":"checks","summary":"checks","longRunning":true},
   },
   {
@@ -194,14 +193,14 @@ const TOOL_DEFINITION_VALUES = [
     title: "HTTP Route Probe",
     description: "Read-only. Check one configured local Rel.AI route such as /health or /dashboard and return reachability, HTTP status, final URL, response byte count, title, and bounded diagnostics. The route must be a local path.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"route":{"type":"string","minLength":1},"timeoutMs":{"type":"number","minimum":1000,"maximum":600000}},"required":["workspace","route"],"additionalProperties":false},
-    handler: HANDLERS.httpProbe,
+    handlerName: 'httpProbe',
   },
   {
     name: "relai_ui_check",
     title: "Named UI Check",
     description: "Run one declared package.json script intended for interface validation. The check name must exactly match an existing script.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"check":{"type":"string","minLength":1},"timeoutMs":{"type":"number","minimum":1000,"maximum":1800000}},"required":["workspace","check"],"additionalProperties":false},
-    handler: HANDLERS.uiCheck,
+    handlerName: 'uiCheck',
     behavior: {"audit":"checks","summary":"checks"},
   },
   {
@@ -209,7 +208,7 @@ const TOOL_DEFINITION_VALUES = [
     title: "Review Local Repo Diff",
     description: "Read-only. Return repository status and current diff as a review artifact. Set redactSensitive:true to omit raw sensitive-file hunks and return metadata-only summaries; .env summaries identify added, removed, and changed key names without values. Pass path to filter to one file.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"staged":{"type":"boolean"},"path":{"type":"string"},"redactSensitive":{"type":"boolean"},"maxBytes":{"type":"number","minimum":1000,"maximum":5242880}},"required":["workspace"],"additionalProperties":false},
-    handler: HANDLERS.diff,
+    handlerName: 'diff',
     groups: ["audit"],
     behavior: {"summary":"diff"},
   },
@@ -218,7 +217,7 @@ const TOOL_DEFINITION_VALUES = [
     title: "Restore Tracked Paths",
     description: "Restore only the listed tracked paths from HEAD. This does not remove untracked files and does not affect unrelated paths.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"paths":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":100}},"required":["workspace","paths"],"additionalProperties":false},
-    handler: HANDLERS.restorePaths,
+    handlerName: 'restorePaths',
     groups: ["cleanup"],
     behavior: {"cache":"paths"},
   },
@@ -227,7 +226,7 @@ const TOOL_DEFINITION_VALUES = [
     title: "Reset Workspace State",
     description: "Discard all tracked working-tree and index changes by resetting to HEAD. Pass confirmation RESET. Set removeUntracked:true and confirmation RESET_AND_CLEAN to also remove untracked files and directories.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"confirmation":{"type":"string","enum":["RESET","RESET_AND_CLEAN"]},"removeUntracked":{"type":"boolean"}},"required":["workspace","confirmation"],"additionalProperties":false},
-    handler: HANDLERS.resetWorkspace,
+    handlerName: 'resetWorkspace',
     groups: ["cleanup"],
     behavior: {"cache":"workspace"},
     dashboard: {"requiresApproval":true}
@@ -237,14 +236,14 @@ const TOOL_DEFINITION_VALUES = [
     title: "Workspace and Repository Status",
     description: "Read-only. Return configured workspace aliases and tool-surface status. When workspace is provided, also return command configuration, session policy, branch, ahead/behind counts, ownership-split changes, and untracked-file state under workspace.repository.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"maxBytes":{"type":"number","minimum":1000,"maximum":5242880}},"required":[],"additionalProperties":false},
-    handler: HANDLERS.status,
+    handlerName: 'status',
   },
   {
     name: "relai_git_commit",
     title: "Record Commit",
     description: "Record a commit with an explicit message and optional path scoping. Sensitive paths require sensitiveAuthorization:{ operation:'commit', paths:[...], reason:'...' }; every staged sensitive path must be listed.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"message":{"type":"string"},"dryRun":{"type":"boolean"},"addAll":{"type":"boolean"},"sensitiveAuthorization":{"type":"object","properties":{"operation":{"type":"string","enum":["commit"]},"paths":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":200},"reason":{"type":"string","minLength":1,"maxLength":500}},"required":["operation","paths","reason"],"additionalProperties":false},"paths":{"type":"array","items":{"type":"string"},"minItems":0,"maxItems":200},"maxBytes":{"type":"number","minimum":1000,"maximum":5242880},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000}},"required":["workspace","message"],"additionalProperties":false},
-    handler: HANDLERS.gitCommit,
+    handlerName: 'gitCommit',
     groups: ["git"],
   },
   {
@@ -252,7 +251,7 @@ const TOOL_DEFINITION_VALUES = [
     title: "Publish Branch",
     description: "Publish a branch to a remote, with optional dry-run and set-upstream behavior.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"remote":{"type":"string"},"branch":{"type":"string"},"dryRun":{"type":"boolean"},"setUpstream":{"type":"boolean"},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000}},"required":["workspace"],"additionalProperties":false},
-    handler: HANDLERS.gitPush,
+    handlerName: 'gitPush',
     groups: ["git"],
   },
   {
@@ -260,7 +259,7 @@ const TOOL_DEFINITION_VALUES = [
     title: "Draft Pull Request Text",
     description: "Read-only. Prepare a local pull-request title and body from a base/head Git diff. This does not call a hosting provider, create a remote pull request, push a branch, or modify the repository.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"base":{"type":"string"},"head":{"type":"string"},"title":{"type":"string"},"body":{"type":"string"}},"required":["workspace"],"additionalProperties":false},
-    handler: HANDLERS.gitDraftPr,
+    handlerName: 'gitDraftPr',
     groups: ["git","audit"],
   },
   {
@@ -268,7 +267,7 @@ const TOOL_DEFINITION_VALUES = [
     title: "Unified Workspace Edit",
     description: `The one tool for changing files. Use oldText/newText with optional occurrence, replacements:[...] for several exact edits in one file, content for full-file replacement, updateText for patch-shaped changes, or edits:[...] for an atomic batch of up to ${MAX_BATCH_EDITS} files. Use updateText or staged updateText for larger repository-wide changes. Large content stages automatically; explicit stage start/append/commit accepts either content chunks or updateText chunks. expectedSha256 is supported for direct, staged, and batch file edits.`,
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"path":{"type":"string"},"oldText":{"type":"string"},"newText":{"type":"string"},"occurrence":{"type":"number","minimum":1,"maximum":1000000},"replacements":{"type":"array","items":{"type":"object","properties":{"oldText":{"type":"string"},"newText":{"type":"string"},"occurrence":{"type":"number","minimum":1,"maximum":1000000}},"required":["oldText","newText"],"additionalProperties":false},"minItems":1,"maxItems":50},"content":{"type":"string"},"expectedSha256":{"type":"string"},"updateText":{"type":"string"},"envAction":{"type":"string","enum":["list","set","remove","compare"]},"key":{"type":"string","minLength":1,"maxLength":256},"value":{"type":"string","maxLength":65536},"templatePath":{"type":"string"},"edits":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"oldText":{"type":"string"},"newText":{"type":"string"},"occurrence":{"type":"number","minimum":1,"maximum":1000000},"replacements":{"type":"array","items":{"type":"object","properties":{"oldText":{"type":"string"},"newText":{"type":"string"},"occurrence":{"type":"number","minimum":1,"maximum":1000000}},"required":["oldText","newText"],"additionalProperties":false},"minItems":1,"maxItems":50},"content":{"type":"string"},"expectedSha256":{"type":"string"}},"required":["path"],"additionalProperties":false},"minItems":1,"maxItems":MAX_BATCH_EDITS},"runChecks":{"type":"boolean"},"level":{"type":"string","enum":["quick","standard","release"]},"returnDiff":{"type":"boolean"},"dryRun":{"type":"boolean"},"stage":{"type":"string","enum":["start","append","commit","abort"]},"writeId":{"type":"string"}},"required":["workspace"],"additionalProperties":false},
-    handler: HANDLERS.edit,
+    handlerName: 'edit',
     behavior: {"audit":"edit","cache":"edit","startsSession":true,"deferStagedSession":true,"sessionWrite":true,"summary":"edit"},
   },
   {
@@ -276,7 +275,7 @@ const TOOL_DEFINITION_VALUES = [
     title: "Report Task Completion",
     description: "Explicitly close the task identified by task_id after its final read-only review. Use this when the final relai_run_checks call did not pass complete:true with summary. Validation and mutation checks are restricted to that exact logical task; Rel.AI never falls back to another task in the workspace.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"summary":{"type":"string","minLength":1,"maxLength":2000}},"required":["workspace","summary"],"additionalProperties":false},
-    handler: HANDLERS.completeTask,
+    handlerName: 'completeTask',
     behavior: {"audit":"completion","summary":"completion"},
     dashboard: {"category":"Workflow"}
   },
@@ -310,7 +309,7 @@ const DEFAULT_DASHBOARD = Object.freeze({
   category: 'Workspace tools', requiredProfile: 'workspace', requiresApproval: false
 });
 
-/** @param {ToolDefinitionInput} definition @returns {ToolDefinition} */
+/** @param {ToolDefinitionInput} definition @returns {ToolDefinitionMetadata} */
 function defineTool(definition) {
   return Object.freeze({
     ...definition,
@@ -323,16 +322,16 @@ function defineTool(definition) {
   });
 }
 
-/** @type {readonly ToolDefinition[]} */
+/** @type {readonly ToolDefinitionMetadata[]} */
 const TOOL_DEFINITIONS = Object.freeze(TOOL_DEFINITION_VALUES.map(defineTool));
 const TOOL_DEFINITION_BY_NAME = new Map(TOOL_DEFINITIONS.map((definition) => [definition.name, definition]));
 
-/** @param {string} name @returns {ToolDefinition | null} */
+/** @param {string} name @returns {ToolDefinitionMetadata | null} */
 function getToolDefinition(name) {
   return TOOL_DEFINITION_BY_NAME.get(String(name || '')) || null;
 }
 
-/** @returns {readonly ToolDefinition[]} */
+/** @returns {readonly ToolDefinitionMetadata[]} */
 function getToolDefinitions() {
   return TOOL_DEFINITIONS;
 }
@@ -379,11 +378,4 @@ function getToolGroups() {
   return groups;
 }
 
-module.exports = {
-  TOOL_SURFACE_VERSION,
-  TOOL_DEFINITIONS,
-  getToolDefinition,
-  getToolDefinitions,
-  getToolGroups,
-  getToolSurfaceManifest
-};
+export { TOOL_SURFACE_VERSION, TOOL_DEFINITIONS, getToolDefinition, getToolDefinitions, getToolGroups, getToolSurfaceManifest };

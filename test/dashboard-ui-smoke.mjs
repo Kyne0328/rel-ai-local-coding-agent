@@ -425,7 +425,7 @@ assert.doesNotMatch(workspaceActions, /api\/worktree\/remove|confirmationToken/)
 
 const activity = read('src/ui/features/activity/index.js');
 const clipboard = read('src/ui/clipboard.js');
-const dashboardPreload = read('electron/dashboard-preload.js');
+const dashboardPreload = read('electron/preload.cjs');
 assert.match(activity, /activityWorkspaceFilter/);
 assert.match(activity, /activityToolFilter/);
 assert.match(activity, /activityStatusFilter/);
