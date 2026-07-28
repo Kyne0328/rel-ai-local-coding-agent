@@ -103,6 +103,7 @@ try {
   assert.equal(metadata.issuer, base);
   assert.ok(metadata.application_types_supported.includes('web'));
   assert.ok(metadata.grant_types_supported.includes('refresh_token'));
+  assert.equal(metadata.authorization_response_iss_parameter_supported, true);
 
   const missingApplicationType = await fetch(`${base}/register`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ redirect_uris: [redirectUri] })
@@ -146,6 +147,14 @@ try {
   });
   assert.equal(reused.status, 400);
 
+  const storedOAuth = JSON.parse(fs.readFileSync(path.join(stateDir, 'oauth-store.json'), 'utf8'));
+  assert.equal(storedOAuth.version, 4);
+  const storedText = JSON.stringify(storedOAuth);
+  assert.equal(storedText.includes(stepUp.body.access_token), false);
+  assert.equal(storedText.includes(stepUp.body.refresh_token), false);
+  assert.ok(Object.keys(storedOAuth.accessTokens).every(key => /^sha256:[a-f0-9]{64}$/.test(key)));
+  assert.ok(Object.keys(storedOAuth.refreshTokens).every(key => /^sha256:[a-f0-9]{64}$/.test(key)));
+
   const wrongIssuerProvider = (await import('../src/oauthProvider.js')).default;
   const wrongIssuer = wrongIssuerProvider.validateAuthorizationRequest({
     response_type: 'code', client_id: client.client_id, redirect_uri: redirectUri,
@@ -161,6 +170,8 @@ try {
     code_challenge: 'abc', code_challenge_method: 'S256'
   })}`);
   assert.equal(oldClient.status, 400);
+  assert.throws(() => wrongIssuerProvider.canonicalIssuer('http://public.example.test'), /must use HTTPS/);
+  assert.equal(wrongIssuerProvider.canonicalIssuer('http://127.0.0.1:3333/'), 'http://127.0.0.1:3333');
 } finally {
   child.kill('SIGKILL');
   await once(child, 'close').catch(() => {});

@@ -14,9 +14,19 @@
 - **Expand code intelligence and validation.** Private local hybrid semantic search, symbol/import/caller/test tracing, normalized diagnostics, signed change-aware validation plans, reverse-impact analysis, and affected-test selection are available through the public tool surface.
 
 ### Security, telemetry, and caching
-- **Harden OAuth as an issuer-bound OAuth 2.1 flow.** Dynamic registrations, authorization codes, access tokens, and refresh tokens are bound to the active issuer and exact resource; redirects are exact, PKCE S256 is mandatory, scopes accumulate safely, refresh tokens rotate, reuse is rejected, and approval-token replacement revokes registrations and grants.
-- **Add OpenTelemetry tracing with W3C propagation.** MCP requests, logical tasks, tools, workspace queues, managed processes, validation, and OAuth operations emit redacted spans without file contents, credentials, environment values, or approval material.
+- **Harden OAuth as an issuer-bound OAuth 2.1 flow.** Dynamic registrations, authorization codes, access tokens, and refresh tokens are bound to the active issuer and exact resource; redirects are exact, PKCE S256 is mandatory, scopes accumulate safely, refresh tokens rotate, reuse is rejected, public issuers require HTTPS, and approval-token replacement revokes registrations and grants. Authorization codes and bearer tokens are persisted under SHA-256 identifiers rather than plaintext map keys.
+- **Add OpenTelemetry tracing with W3C propagation.** MCP requests, logical tasks, tools, workspace queues, managed processes, validation, and OAuth operations emit sampled, redacted spans without file contents, credentials, environment values, approval material, or full command lines. Active W3C trace context propagates into managed child processes.
+- **Stop forwarding the service environment into repository commands.** A shared process-environment policy passes required platform variables, rejects `NODE_OPTIONS` and Electron Node mode, and requires explicit configuration for additional inherited values.
 - **Add revision-aware private resource caching.** Discovery, tool, and resource responses use bounded TTLs and invalidate when configuration, workspace state, or the tool surface changes.
+
+### Runtime and release modernization
+- **Require Node.js 24 LTS and npm 11.** Root and Electron manifests declare the runtime policy, npm is pinned through `packageManager`, and CI uses immutable action commit SHAs.
+- **Update and exact-pin the release-critical stack.** Electron remains at 43.2.0, electron-builder moves to 26.15.7, electron-updater is pinned to 6.8.9, MCP SDK packages are pinned to 2.0.0, and `globals` moves to 17.8.0.
+- **Harden Electron packages before publication.** Setup and recovery pages use the restricted `relai-app://renderer` protocol; packaged binaries disable RunAsNode, `NODE_OPTIONS`, CLI inspection, and extra file-protocol privileges while requiring integrity-validated ASAR loading.
+- **Make Windows releases signed and attributable.** Publication requires protected Authenticode credentials and valid signatures, generates a CycloneDX SBOM, and creates GitHub build-provenance and SBOM attestations.
+- **Make generated assets and module direction enforceable.** CI regenerates and diffs color assets, browser UI source has an explicit ESM package scope, and a module-system audit prevents CommonJS growth or mixed modules before the coordinated backend and Electron hard cutover.
+- **Add an opt-in native MCP Tasks interoperability canary.** `REL_AI_NATIVE_TASKS_PROBE=1` advertises the Tasks extension and exposes a diagnostic tool that verifies task creation, polling, cancellation, capability negotiation, routing headers, and authenticated task ownership without replacing the supported `operationTaskId` workflow.
+- **Reduce the published npm package to an explicit runtime allowlist.** The package now ships only the CLI, service source, dashboard assets, examples, type boundaries, README, and license, reducing the dry-run artifact from 418 entries and about 4.09 MB to 175 entries and about 0.53 MB.
 
 ### Color-system ESM hard cutover
 - **Replace the temporary CommonJS color module with one build-time ESM manifest.** The generator imports `src/ui/colorTokens.mjs` directly; runtime CommonJS code consumes generated assets rather than an interop bridge.
@@ -28,10 +38,14 @@
 - **Do not migrate old clients, sessions, aliases, registrations, removed protocol routes, or color-token aliases.** Existing users that need the previous handshake or connector behavior must remain on the previous release and create a new 0.23.0 connector when upgrading.
 
 ### Validation
-- `npm run test:all` — 125/125 test files passed
+- `npm run test:all` - 128/128 test files passed
+- `npm run audit:production` - zero production advisories
 - `npm run release:check`
 - `npm run electron:build`
-- `npm run verify:packaged`
+- `npm run verify:packaged -- --dir dist/build-check/win-unpacked`
+- Electron fuse verification passed against the packaged executable
+- Packaged OAuth/MCP connector acceptance passed
+- `npm pack --dry-run` - 175 entries, 532,746 bytes compressed, 1,561,415 bytes unpacked
 
 Bump root/electron/status UI/lockfiles to 0.23.0.
 

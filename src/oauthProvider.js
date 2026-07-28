@@ -36,7 +36,7 @@ function lockPath() {
 
 function emptyStore() {
   return {
-    version: 3,
+    version: 4,
     clients: Object.create(null),
     codes: Object.create(null),
     accessTokens: Object.create(null),
@@ -57,12 +57,25 @@ function nullProtoMap(value) {
 function readStore() {
   try {
     const parsed = JSON.parse(fs.readFileSync(storePath(), 'utf8'));
-    const store = { ...emptyStore(), ...objectOrEmpty(parsed), version: 3 };
+    const store = { ...emptyStore(), ...objectOrEmpty(parsed), version: 4 };
     for (const key of STORE_MAPS) store[key] = nullProtoMap(store[key]);
+    for (const key of ['codes', 'accessTokens', 'refreshTokens']) store[key] = migrateSecretMap(store[key]);
     return store;
   } catch {
     return emptyStore();
   }
+}
+
+function secretKey(value) {
+  return `sha256:${crypto.createHash('sha256').update(String(value || '')).digest('hex')}`;
+}
+
+function migrateSecretMap(value) {
+  const migrated = Object.create(null);
+  for (const [key, entry] of Object.entries(value || {})) {
+    migrated[/^sha256:[a-f0-9]{64}$/.test(key) ? key : secretKey(key)] = entry;
+  }
+  return migrated;
 }
 
 function writeStore(store) {
@@ -110,6 +123,9 @@ function withStoreLock(callback) {
 function canonicalIssuer(value) {
   const url = new URL(String(value || ''));
   if (!['https:', 'http:'].includes(url.protocol)) throw new Error('OAuth issuer must use HTTP or HTTPS.');
+  if (url.protocol === 'http:' && !isLoopbackHost(url.hostname)) {
+    throw new Error('OAuth issuer must use HTTPS except for loopback development addresses.');
+  }
   url.hash = '';
   url.search = '';
   while (url.pathname.length > 1 && url.pathname.endsWith('/')) url.pathname = url.pathname.slice(0, -1);
@@ -210,7 +226,8 @@ function authorizationServerMetadata(baseUrl) {
     code_challenge_methods_supported: ['S256'],
     token_endpoint_auth_methods_supported: ['none'],
     scopes_supported: SUPPORTED_SCOPES,
-    application_types_supported: ['native', 'web']
+    application_types_supported: ['native', 'web'],
+    authorization_response_iss_parameter_supported: true
   };
 }
 
@@ -339,7 +356,7 @@ function issueAuthorizationCode(request, baseUrl) {
     store.approvalRequiredAt = null;
     store.lastApprovedAt = Date.now();
     const code = randomId('relai_code_', 32);
-    store.codes[code] = {
+    store.codes[secretKey(code)] = {
       issuer,
       clientId: request.clientId,
       redirectUri: request.redirectUri,
@@ -364,7 +381,7 @@ function buildRedirectUrl(redirectUri, params) {
 function issueTokens(store, { issuer, clientId, scope, resource, issueRefresh = true }) {
   const now = Date.now();
   const accessToken = randomId('relai_at_', 32);
-  store.accessTokens[accessToken] = {
+  store.accessTokens[secretKey(accessToken)] = {
     issuer,
     clientId,
     scope,
@@ -381,7 +398,7 @@ function issueTokens(store, { issuer, clientId, scope, resource, issueRefresh = 
   };
   if (issueRefresh && scopeSet(scope).has(OFFLINE_SCOPE)) {
     const refreshToken = randomId('relai_rt_', 32);
-    store.refreshTokens[refreshToken] = {
+    store.refreshTokens[secretKey(refreshToken)] = {
       issuer,
       clientId,
       scope,
@@ -396,9 +413,10 @@ function issueTokens(store, { issuer, clientId, scope, resource, issueRefresh = 
 
 function exchangeAuthorizationCode(store, body, issuer) {
   const code = String(body.code || '');
-  const entry = code && Object.hasOwn(store.codes, code) ? store.codes[code] : null;
+  const codeKey = secretKey(code);
+  const entry = code && Object.hasOwn(store.codes, codeKey) ? store.codes[codeKey] : null;
   if (!entry || typeof entry !== 'object') return tokenError('invalid_grant', 'Authorization code is invalid or expired.');
-  delete store.codes[code];
+  delete store.codes[codeKey];
   if (!liveEntry(entry) || entry.issuer !== issuer) {
     writeStore(store);
     return tokenError('invalid_grant', 'Authorization code is invalid for this issuer or expired.');
@@ -430,7 +448,8 @@ function exchangeAuthorizationCode(store, body, issuer) {
 
 function exchangeRefreshToken(store, body, issuer) {
   const refreshToken = String(body.refresh_token || '');
-  const entry = refreshToken ? liveEntry(store.refreshTokens[refreshToken]) : null;
+  const refreshTokenKey = secretKey(refreshToken);
+  const entry = refreshToken ? liveEntry(store.refreshTokens[refreshTokenKey]) : null;
   if (!entry || entry.issuer !== issuer) return tokenError('invalid_grant', 'Refresh token is invalid for this issuer or expired.');
   const client = store.clients[entry.clientId];
   if (!client || client.issuer !== issuer || String(body.client_id || '') !== entry.clientId) {
@@ -445,7 +464,7 @@ function exchangeRefreshToken(store, body, issuer) {
     if ([...scopeSet(requested)].some(item => !granted.has(item))) return tokenError('invalid_scope', 'Refresh requests cannot expand the original grant. Start a new authorization request for step-up scopes.');
     scope = requested;
   }
-  delete store.refreshTokens[refreshToken];
+  delete store.refreshTokens[refreshTokenKey];
   const tokens = issueTokens(store, {
     issuer,
     clientId: entry.clientId,
@@ -477,7 +496,7 @@ function tokenError(error, errorDescription) {
 function validateAccessToken(token, baseUrl) {
   if (!token || !baseUrl) return null;
   const issuer = canonicalIssuer(baseUrl);
-  const entry = liveEntry(readStore().accessTokens[token]);
+  const entry = liveEntry(readStore().accessTokens[secretKey(token)]);
   if (!entry || entry.issuer !== issuer || entry.resource !== resourceForIssuer(issuer)) return null;
   return entry;
 }
@@ -564,5 +583,6 @@ module.exports = {
   normalizeScope,
   SCOPE,
   OFFLINE_SCOPE,
-  SUPPORTED_SCOPES
+  SUPPORTED_SCOPES,
+  secretKey
 };

@@ -201,12 +201,13 @@ Do not escape the command by concatenating a manually quoted command line when a
 
 ### Environment
 
-- Start from the inherited process environment.
-- Add `REL_AI_MCP=1` as today.
-- Merge string values from `args.env`.
+- Start from a minimal cross-platform environment allowlist rather than the complete service environment.
+- Add `REL_AI_MCP=1` and propagated W3C trace context when available.
+- Add only configured `processEnvironment.allow` keys and explicit string values from `args.env`.
+- Reject `NODE_OPTIONS` and `ELECTRON_RUN_AS_NODE`; do not permit command input to weaken the Electron or Node runtime boundary.
 - Permit deleting an inherited variable later through an explicit `null` contract only if the JSON schema is expanded accordingly.
-- Redact secret-looking environment keys from audit and dashboard records.
-- Never echo the full inherited environment.
+- Redact secret-looking environment keys from audit, dashboard, and telemetry records.
+- Never echo inherited environment values.
 
 ### Timeouts and output
 

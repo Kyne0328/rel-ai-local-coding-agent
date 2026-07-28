@@ -73,7 +73,7 @@ Completion is never inferred from validation alone. Passing `complete:true` with
 
 `relai_git_draft_pr` only prepares local title/body text from a Git diff. It never calls a hosting provider or changes a remote pull request.
 
-Persistent process management, managed worktrees, and persistent task plans are deferred. They are not part of the current tool surface or completion workflow.
+Persistent process management, managed worktrees, durable deferred operations, and explicit task completion are part of the current tool surface. Long-running one-shot operations return an `operationTaskId`; managed processes and worktrees retain separate stable identities and ownership checks.
 
 ## Edit safeguards
 

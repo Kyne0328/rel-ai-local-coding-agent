@@ -59,7 +59,7 @@ Set `REL_AI_MCP_ALLOW_NO_AUTH=1` only for local testing on a trusted machine.
 ## Electron renderer and IPC boundary
 
 - The dashboard, setup wizard, and failure-recovery renderer use context isolation with Node integration disabled. The local setup and recovery windows additionally run in Chromium's sandbox with web security enabled.
-- Setup and recovery pages have a strict Content Security Policy. Renderer permissions, downloads, attached webviews, popups, redirects, and navigation to any file or URL other than the configured local page are denied.
+- Setup and recovery pages have a strict Content Security Policy and load through the restricted `relai-app://renderer` protocol rather than privileged `file://` URLs. Renderer permissions, downloads, attached webviews, popups, redirects, and navigation outside the configured renderer page are denied.
 - Every desktop IPC channel checks the sending `BrowserWindow`. Setup actions are accepted only from setup, failure-recovery actions only from the fallback window, and routine settings, lifecycle, updater, diagnostics, restart, and stop actions only from the secured dashboard.
 - Clipboard IPC accepts only known Rel.AI windows, removes NUL characters, and rejects payloads larger than 64 KiB. Setup external links require HTTPS and the exact `dashboard.ngrok.com` hostname.
 - The ngrok account key is write-only after initial entry. The renderer receives only `ngrokAuthtokenConfigured`; a blank save preserves the existing key and a nonblank save replaces it.
@@ -75,8 +75,9 @@ Set `REL_AI_MCP_ALLOW_NO_AUTH=1` only for local testing on a trusted machine.
 - Downloads and installation are never automatic. The user explicitly starts the download and explicitly chooses restart-to-install.
 - Restart-to-install is blocked while a Rel.AI tool call is active.
 - Updater logs use the same bounded sanitized runtime-log path as other desktop diagnostics and do not include approval tokens, ngrok account keys, or dashboard credentials.
-- GitHub releases include `SHA256SUMS.txt` for the installer, portable executable, `latest.yml`, and blockmap. These checksums detect byte changes but do not prove publisher identity.
-- Windows release artifacts are currently unsigned. Users may see an unidentified-publisher warning until a Windows code-signing certificate and protected signing workflow are configured.
+- GitHub releases include `SHA256SUMS.txt`, a CycloneDX SBOM, and GitHub provenance/SBOM attestations for the installer, portable executable, updater metadata, and blockmap.
+- Release publication requires protected Windows signing credentials and verifies Authenticode signatures for both executables. Local development builds remain unsigned and must not be published.
+- Electron fuses disable RunAsNode, `NODE_OPTIONS`, CLI inspection, and extra file-protocol privileges while requiring packaged code to load from the integrity-validated ASAR.
 
 ## Desktop lifecycle boundary
 
@@ -90,7 +91,7 @@ Set `REL_AI_MCP_ALLOW_NO_AUTH=1` only for local testing on a trusted machine.
 Rel.AI MCP is a trusted local coding bridge, not a sandbox.
 
 - Anyone who obtains `REL_AI_MCP_TOKEN` can authorize or call the server. Use **Settings > Connection > Replace approval token** if it leaks; the operation revokes existing OAuth grants and restarts the connection.
-- Validation commands execute code configured by the workspace. A malicious repository can cause system or data impact when tests, builds, or analyzers run.
+- Validation commands execute code configured by the workspace. A malicious repository can cause system or data impact when tests, builds, or analyzers run. Child processes receive a minimal platform environment plus explicit configuration rather than the complete service environment.
 - ChatGPT can modify any non-sensitive file inside a configured workspace through the active tools.
 - Git push publishes to allowlisted remotes; review the diff before committing or pushing.
 

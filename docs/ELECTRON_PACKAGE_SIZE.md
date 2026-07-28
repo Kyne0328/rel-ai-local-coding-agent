@@ -39,7 +39,7 @@ The repository uses npm with separate root and Electron lockfiles:
 - Root application: `package.json`, `package-lock.json`
 - Electron launcher: `electron/package.json`, `electron/package-lock.json`
 - Electron runtime: 43.2.0
-- Packaging: electron-builder 26.15.3
+- Packaging: electron-builder 26.15.7
 - Root runtime and local service code: `src/**/*.js`
 - CLI launchers: `bin/**/*.js`
 - Dashboard assets: `public/**`

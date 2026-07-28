@@ -49,6 +49,18 @@ assert.equal(strict.workspaces.repo.context.snapshotMaxFiles, 44);
 assert.deepEqual(strict.workspaces.repo.context.includeRoots, ['src']);
 assert.equal(strict.productUx.showAutomaticValidation, true);
 assert.equal(normalizeConfig({ productUx: { showAutomaticValidation: false }, workspaces: {} }).productUx.showAutomaticValidation, false);
+const runtimePolicy = normalizeConfig({
+  telemetry: { enabled: true, endpoint: ' http://127.0.0.1:4318/v1/traces ', sampleRatio: 0.25 },
+  processEnvironment: { allow: ['CUSTOM_SAFE', 'GITHUB_TOKEN', 'CUSTOM_SAFE', ''] }
+});
+assert.deepEqual(runtimePolicy.telemetry, {
+  enabled: true,
+  endpoint: 'http://127.0.0.1:4318/v1/traces',
+  sampleRatio: 0.25
+});
+assert.deepEqual(runtimePolicy.processEnvironment, { allow: ['CUSTOM_SAFE', 'GITHUB_TOKEN'] });
+assert.equal(normalizeConfig({ telemetry: { sampleRatio: 2 } }).telemetry.sampleRatio, 1);
+assert.equal(normalizeConfig({ telemetry: { sampleRatio: -1 } }).telemetry.sampleRatio, 0);
 const normalizedCommands = normalizeConfig({
   workspaces: {
     repo: {

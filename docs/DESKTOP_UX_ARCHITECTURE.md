@@ -310,7 +310,7 @@ Section-level captures are preserved beside them. `test/fixtures/desktop-ux-base
 
 ## Security and updater completion contract
 
-- Setup and failure-recovery windows use sandboxed, context-isolated renderers with Node integration disabled, strict Content Security Policy, denied permissions and downloads, blocked webviews and popups, and navigation locked to the configured local renderer file.
+- Setup and failure-recovery windows use sandboxed, context-isolated renderers with Node integration disabled, strict Content Security Policy, denied permissions and downloads, blocked webviews and popups, and navigation locked to the restricted `relai-app://renderer` page.
 - Every Electron IPC action is sender-scoped to its owning window. Setup cannot invoke dashboard controls, dashboard cannot invoke setup or failure-only recovery controls, and unknown renderers cannot use clipboard, service, settings, lifecycle, updater, or diagnostic actions.
 - Clipboard payloads are restricted to known Rel.AI windows and 64 KiB. Setup external links allow only HTTPS URLs on the exact `dashboard.ngrok.com` host.
 - The ngrok account key is write-only after setup. The dashboard receives only whether a key is configured; blank saves preserve it and nonblank saves replace it.
@@ -318,14 +318,14 @@ Section-level captures are preserved beside them. `test/fixtures/desktop-ux-base
 - Update candidates must be newer stable versions. Prefixed, prerelease, same-version, downgrade, and downloaded-version mismatch cases fail closed.
 - Restart-to-install is enabled only after electron-updater completes SHA-512 release-metadata verification and no Rel.AI tool call is active.
 - The release workflow rejects missing SHA-512 updater metadata and publishes `SHA256SUMS.txt` for independent byte-integrity checks.
-- Windows artifacts remain unsigned until a code-signing certificate and protected signing workflow are configured. Checksums do not establish publisher identity.
+- Production publication requires protected Windows code-signing credentials and valid Authenticode signatures for both executables. Local development artifacts remain unsigned and are not publishable. Checksums and attestations complement, rather than replace, publisher identity.
 
 ## Usability validation and delivery hardening contract
 
 - Automated package verification is read-only: it builds the unpacked Windows application and verifies required files without starting the executable or invoking installer lifecycle actions.
 - Production Electron code must not expose `--installed-smoke`, `--window-smoke`, smoke-only IPC identities, or screenshot-evidence entry points.
 - Ordinary package scripts, CI, and release workflows must not install, repair, upgrade, launch, or uninstall Rel.AI MCP.
-- The release workflow verifies updater metadata, blockmaps, executable presence, package layout, and checksums before publishing.
+- The release workflow verifies signing credentials, Authenticode signatures, Electron fuses, updater metadata, blockmaps, executable presence, package layout, packaged connector behavior, SBOM, attestations, and checksums before publishing.
 - Installer, uninstall, first-run rendering, external endpoint reachability, current ChatGPT OAuth behavior, live OAuth revocation, and production update delivery remain manual approvals on a disposable Windows machine.
 - Any future automated installer harness requires an explicit isolation opt-in, a test-specific application identity, ownership markers, constrained cleanup, and refusal when a production installation or active Rel.AI controller is present.
 

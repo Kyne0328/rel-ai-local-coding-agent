@@ -8,18 +8,24 @@ const scripts = packageJson.scripts || {};
 const ciDir = path.join(root, '.github', 'workflows');
 const failures = [];
 
-if (packageJson.engines?.node !== '>=22.13.0') {
-  failures.push(`package.json must declare the supported Node.js minimum as >=22.13.0; got ${packageJson.engines?.node || 'none'}`);
+if (packageJson.engines?.node !== '>=24.0.0 <25') {
+  failures.push(`package.json must require the Node.js 24 LTS line; got ${packageJson.engines?.node || 'none'}`);
+}
+if (packageJson.engines?.npm !== '>=11.0.0 <12') {
+  failures.push(`package.json must require npm 11; got ${packageJson.engines?.npm || 'none'}`);
+}
+if (packageJson.packageManager !== 'npm@11.9.0') {
+  failures.push(`package.json must pin npm@11.9.0; got ${packageJson.packageManager || 'none'}`);
 }
 
 const ciWorkflowPath = path.join(ciDir, 'ci.yml');
 if (fs.existsSync(ciWorkflowPath)) {
   const ciWorkflow = fs.readFileSync(ciWorkflowPath, 'utf8');
-  if (!/node-version:\s*\[22,\s*24\]/.test(ciWorkflow)) {
-    failures.push('CI must test the supported Node.js 22 and 24 LTS lines.');
+  if (!/node-version:\s*24/.test(ciWorkflow)) {
+    failures.push('CI must test the required Node.js 24 LTS line.');
   }
-  if (/node-version:\s*\[[^\]]*\b(?:18|20)\b/.test(ciWorkflow)) {
-    failures.push('CI must not block updates on end-of-life Node.js 18 or 20 jobs.');
+  if (/node-version:\s*(?:\[[^\]]*\b(?:18|20|22)\b|(?:18|20|22)\b)/.test(ciWorkflow)) {
+    failures.push('Required CI jobs must not use Node.js versions older than the Node 24 runtime policy.');
   }
 }
 
@@ -36,11 +42,10 @@ function walk(dir) {
 
 for (const file of walk(ciDir)) {
   const text = fs.readFileSync(file, 'utf8');
-  for (const match of text.matchAll(/uses:\s*actions\/(checkout|setup-node)@v(\d+)/g)) {
-    const [, action, majorText] = match;
-    const major = Number(majorText);
-    if (major < 5) {
-      failures.push(`${path.relative(root, file)} uses actions/${action}@v${major}, which still targets deprecated Node.js 20.`);
+  for (const match of text.matchAll(/uses:\s*actions\/(checkout|setup-node|upload-artifact|attest-build-provenance|attest-sbom)@([^\s#]+)/g)) {
+    const [, action, reference] = match;
+    if (!/^[a-f0-9]{40}$/.test(reference)) {
+      failures.push(`${path.relative(root, file)} must pin actions/${action} to an immutable commit SHA.`);
     }
   }
   for (const match of text.matchAll(/npm\s+run\s+([A-Za-z0-9:_-]+)/g)) {

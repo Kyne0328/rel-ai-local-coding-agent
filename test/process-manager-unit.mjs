@@ -30,16 +30,15 @@ let processId = '';
 try {
   const started = await startManagedProcess(workspace, config, {
     command: 'node managed-child.cjs',
-    startupWaitMs: 250,
+    startupWaitMs: 0,
     label: 'managed-test'
   }, { taskId: 'task-process-test' });
   processId = started.processId;
   assert.match(processId, /^proc_/);
   assert.equal(started.workspace, 'app');
   assert.ok(['starting', 'running'].includes(started.status));
-  assert.match(started.stdoutTail, /READY/);
 
-  const first = readManagedProcess(config, { processId, stdoutOffset: 0, stderrOffset: 0 });
+  const first = await waitForStdout(processId, /READY/);
   assert.match(first.stdout.text, /READY/);
   const nextOffset = first.stdout.nextOffset;
 
@@ -62,3 +61,14 @@ try {
 }
 
 console.log('Managed process lifecycle and cursor tests passed.');
+
+async function waitForStdout(id, pattern, timeoutMs = 3000) {
+  const deadline = Date.now() + timeoutMs;
+  let snapshot = null;
+  while (Date.now() < deadline) {
+    snapshot = readManagedProcess(config, { processId: id, stdoutOffset: 0, stderrOffset: 0 });
+    if (pattern.test(snapshot.stdout.text)) return snapshot;
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  return snapshot;
+}

@@ -1,10 +1,11 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage, powerSaveBlocker, Notification, dialog, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage, powerSaveBlocker, Notification, dialog, screen, protocol } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('node:path');
 const { resolveResourcePath } = require('./resource-path');
 const { isPortAvailable, normalizeWizardConfig, saveLauncherConfig } = require('./launcher-config');
 const { fitWindowToContent, WINDOW_SIZE_LIMITS } = require('./window-size');
 const { localWindowWebPreferences, secureLocalWindow } = require('./window-security');
+const { installLocalProtocol, localRendererUrl, registerLocalScheme } = require('./local-protocol');
 const { registerIpcHandlers } = require('./ipc-handlers');
 const { createTaskActivityRuntime } = require('./tool-sleep-blocker');
 const { createDashboardWindowManager } = require('./dashboard-window');
@@ -15,6 +16,8 @@ const { createRecoveryWindowManager } = require('./recovery-window');
 const { createRuntimeLogBuffer } = require('./runtime-log-buffer'); const { createDiagnosticFiles } = require('./diagnostic-files');
 const { createDesktopSettingsManager } = require('./desktop-settings'); const { createAppUpdater } = require('./app-updater'); const { createDesktopLifecycleManager } = require('./desktop-lifecycle');
 const APP_ICON_PATH = path.join(__dirname, 'build', 'icon.png');
+const RENDERER_ROOT = path.join(__dirname, 'renderer');
+registerLocalScheme(protocol);
 app.setName('Rel.AI MCP'); if (process.platform === 'win32') app.setAppUserModelId('com.relai.mcp');
 const srcPath = resolveResourcePath('src');
 const connection = require(path.join(srcPath, 'connectionProfile'));
@@ -44,7 +47,7 @@ const approvalTokenManager = createApprovalTokenManager({ readGuiConfig, saveLau
 const recoveryWindowManager = createRecoveryWindowManager({
   BrowserWindow,
   preloadPath: path.join(__dirname, 'preload.js'),
-  rendererPath: path.join(__dirname, 'renderer', 'status.html'),
+  rendererUrl: localRendererUrl('status.html'),
   limits: WINDOW_SIZE_LIMITS.status,
   isQuitting: () => isQuitting,
   onReady: pushStatus,
@@ -115,6 +118,7 @@ if (!gotLock) {
   });
 
   app.whenReady().then(async () => {
+    installLocalProtocol(protocol, RENDERER_ROOT);
     const lifecycleStatus = desktopLifecycle.start();
     desktopTray.setup();
     appUpdater.start();
@@ -149,7 +153,7 @@ function createWizardWindow(options = {}) {
 
   wizardRecoveryMode = options.recovery === true;
   wizardReturnToFallback = wizardRecoveryMode;
-  const wizardRenderer = path.join(__dirname, 'renderer', 'wizard.html');
+  const wizardRendererUrl = localRendererUrl('wizard.html', wizardRecoveryMode ? { recovery: '1' } : {});
   wizardWindow = new BrowserWindow({
     width: WINDOW_SIZE_LIMITS.wizard.minWidth,
     height: 620,
@@ -161,10 +165,8 @@ function createWizardWindow(options = {}) {
     title: wizardRecoveryMode ? 'Rel.AI MCP - Connection Recovery' : 'Rel.AI MCP - Setup',
     autoHideMenuBar: true
   });
-  secureLocalWindow(wizardWindow, { allowedFile: wizardRenderer, onError: error => runtimeLogs.append(error.message, { level: 'warning', source: 'electron-security' }) });
-
-  const loadOptions = wizardRecoveryMode ? { query: { recovery: '1' } } : undefined;
-  wizardWindow.loadFile(wizardRenderer, loadOptions);
+  secureLocalWindow(wizardWindow, { allowedUrl: wizardRendererUrl, onError: error => runtimeLogs.append(error.message, { level: 'warning', source: 'electron-security' }) });
+  wizardWindow.loadURL(wizardRendererUrl);
   wizardWindow.webContents.on('did-finish-load', () => {
     fitWindowToContent(wizardWindow, { type: 'wizard' });
   });

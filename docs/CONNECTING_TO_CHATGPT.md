@@ -39,7 +39,7 @@ Use `relai_git_draft_pr` to prepare local pull-request title/body text from a ba
 
 Repository snapshots automatically include guidance from `REL_AI.md` and `.relai/instructions.md` when present. `REL_AI.md` has higher precedence. The combined connector payload is capped at 64 KiB and reports its sources and truncation state; use `relai_read` on the named file when the complete text is needed. Instruction text is never executed automatically.
 
-Persistent process management, managed worktrees, and persistent task plans are currently deferred and are not exposed by this build.
+Persistent process management, managed worktrees, durable deferred operations, and task history are available through the current tool surface. Managed worktrees use isolated aliases and preserve branches by default; removal refuses dirty worktrees, active processes, and active operations unless the required explicit approval is supplied.
 
 Tracked-file deletion is handled through a structured `Delete File` patch sent to `relai_edit`. Session-owned untracked artifacts are removed only through `relai_tidy_plan` followed by `relai_tidy_run`.
 

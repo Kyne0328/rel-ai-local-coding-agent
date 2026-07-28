@@ -7,7 +7,8 @@ const { spawn } = require('node:child_process');
 const { getStateDir } = require('./audit');
 const { resolveCommandCwd, normalizeCommandEnv, resolveShell, redactCommandForAudit } = require('./bridge/exec');
 const { killProcessTree } = require('./process');
-const { runSpan, addSpanEvent } = require('./telemetry');
+const { makeProcessEnvironment } = require('./processEnvironment');
+const { runSpan, addSpanEvent, traceContextEnvironment } = require('./telemetry');
 
 const processes = new Map();
 const RECENT_RETENTION_MS = 24 * 60 * 60 * 1000;
@@ -70,9 +71,11 @@ async function startManagedProcess(workspace, config, args = {}, context = {}) {
     'relai.process.command': record.commandSummary,
     'relai.task.id': record.logicalTaskId
   }, async () => {
+    const childEnvironment = makeProcessEnvironment(env, { allow: config.processEnvironment?.allow });
+    Object.assign(childEnvironment, traceContextEnvironment());
     const child = spawn(shell.executable, shell.args(command), {
       cwd: cwd.absolutePath,
-      env: { ...process.env, REL_AI_MCP: '1', ...env },
+      env: childEnvironment,
       detached: process.platform !== 'win32',
       windowsHide: true,
       stdio: ['pipe', 'pipe', 'pipe']

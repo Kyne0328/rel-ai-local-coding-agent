@@ -10,32 +10,37 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        node-version: [22, 24]
-    name: test (node ${{ matrix.node-version }})
+    timeout-minutes: 12
+    name: test (node 24)
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 24
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            electron/package-lock.json
       - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts
+        working-directory: electron
+      - run: npm run audit:production
       - run: npm run test:all
 
   packaged-app:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     name: packaged Windows application
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
-      - run: npm ci
+          cache-dependency-path: |
+            package-lock.json
+            electron/package-lock.json
+      - run: npm ci --ignore-scripts
       - run: npm ci
         working-directory: electron
       - name: Fetch bundled ngrok seed binary
@@ -46,6 +51,8 @@ jobs:
       - name: Build unpacked Windows application
         run: npm run electron:build
       - name: Verify packaged application layout
-        run: npm run verify:packaged
+        run: npm run verify:packaged -- --dir dist/build-check/win-unpacked
+      - name: Verify hardened Electron fuses
+        run: cd electron && node scripts/verify-fuses.js "../dist/build-check/win-unpacked/Rel.AI MCP.exe"
       - name: Verify packaged OAuth and MCP connector flow
-        run: npm run test:connector-acceptance
+        run: npm run test:connector-acceptance -- --dir dist/build-check/win-unpacked

@@ -11,6 +11,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 concurrency:
   group: publish-github-release
@@ -24,14 +26,14 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           cache-dependency-path: |
             package-lock.json
@@ -145,11 +147,51 @@ jobs:
         run: npm ci
         working-directory: electron
 
+      - name: Require Windows signing credentials
+        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
+        shell: pwsh
+        env:
+          WINDOWS_CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          WINDOWS_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CSC_LINK)) {
+            throw 'WINDOWS_CSC_LINK is required for release publication.'
+          }
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CSC_KEY_PASSWORD)) {
+            throw 'WINDOWS_CSC_KEY_PASSWORD is required for release publication.'
+          }
+
       - name: Build Windows executables
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         run: npm run electron:dist
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+
+      - name: Verify hardened Electron fuses
+        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
+        run: cd electron && node scripts/verify-fuses.js "../dist/win-unpacked/Rel.AI MCP.exe"
+
+      - name: Verify Windows signatures
+        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $executables = @(Get-ChildItem -Path dist -Filter '*.exe' -File)
+          if ($executables.Count -lt 2) {
+            throw 'Signing verification requires both installed and portable Windows executables.'
+          }
+          foreach ($executable in $executables) {
+            $signature = Get-AuthenticodeSignature -FilePath $executable.FullName
+            if ($signature.Status -ne 'Valid') {
+              throw "$($executable.Name) does not have a valid Authenticode signature: $($signature.Status)."
+            }
+          }
+
+      - name: Generate CycloneDX SBOM
+        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
+        run: npm run generate:sbom
 
       - name: Report Electron package size
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
@@ -157,7 +199,7 @@ jobs:
 
       - name: Upload Electron package-size report
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: electron-package-size-${{ steps.version.outputs.version }}
           path: dist/electron-size-report.json
@@ -197,7 +239,11 @@ jobs:
           if ($blockmaps.Count -eq 0) {
             throw 'electron:dist completed without producing an installer blockmap.'
           }
-          $hashInputs = @($executables) + @(Get-Item $latestMetadata) + $blockmaps
+          $sbom = Join-Path (Resolve-Path dist) 'sbom.cdx.json'
+          if (-not (Test-Path $sbom -PathType Leaf)) {
+            throw 'CycloneDX SBOM is missing from dist/sbom.cdx.json.'
+          }
+          $hashInputs = @($executables) + @(Get-Item $latestMetadata) + $blockmaps + @(Get-Item $sbom)
           $checksumManifest = Join-Path (Resolve-Path dist) 'SHA256SUMS.txt'
           $hashLines = $hashInputs | Sort-Object Name | ForEach-Object {
             $hash = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -220,6 +266,23 @@ jobs:
             "found=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
             Write-Host "No matching changelog section found. GitHub will generate the release notes."
           }
+
+      - name: Attest release artifact provenance
+        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        with:
+          subject-path: |
+            dist/*.exe
+            dist/*.blockmap
+            dist/latest.yml
+            dist/SHA256SUMS.txt
+
+      - name: Attest release SBOM
+        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
+        uses: actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34 # v3.0.0
+        with:
+          subject-path: dist/*.exe
+          sbom-path: dist/sbom.cdx.json
 
       - name: Publish GitHub release
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'

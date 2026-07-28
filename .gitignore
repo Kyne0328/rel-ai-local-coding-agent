@@ -8,6 +8,8 @@
 # Local MCP runtime state — journals, staged payloads, oauth store. Test artifacts
 # used to land here and dirty the tree.
 /.rel-ai-mcp-state
+# Registered local Git worktrees are runtime-owned and must not dirty the source worktree.
+/.relai-worktrees
 /node_modules
 # ngrok seed binaries — fetched at build time via scripts/fetch-ngrok.*, never committed.
 /vendor/ngrok/win32/ngrok.exe

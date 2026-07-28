@@ -5,7 +5,7 @@ const { localWindowWebPreferences, secureLocalWindow } = require('./window-secur
 function createRecoveryWindowManager({
   BrowserWindow,
   preloadPath,
-  rendererPath,
+  rendererUrl,
   limits,
   isQuitting = () => false,
   onReady = () => {},
@@ -25,8 +25,8 @@ function createRecoveryWindowManager({
       title: 'Rel.AI MCP Recovery',
       autoHideMenuBar: true
     });
-    secureLocalWindow(window, { allowedFile: rendererPath, onError: onSecurityError });
-    window.loadFile(rendererPath);
+    secureLocalWindow(window, { allowedUrl: rendererUrl, onError: onSecurityError });
+    window.loadURL(rendererUrl);
     window.webContents.on('did-finish-load', onReady);
     window.on('close', event => {
       if (isQuitting()) return;

@@ -4,6 +4,7 @@ const path = require("node:path");
 const { safeReadJson, realRootOf, clearRealRootCache } = require("./safety");
 const { discoverCommands, staleCommandKeys } = require("./commandDiscovery");
 const { readProjectInstructions, summarizeProjectInstructions } = require('./projectInstructions');
+const { normalizeAllowedKeys } = require('./processEnvironment');
 
 const REMOVED_WORKSPACE_COMMAND_KEYS = new Set([
   'npm:test:fast-task',
@@ -56,7 +57,11 @@ function makeDefaultConfig() {
     },
     telemetry: {
       enabled: false,
-      endpoint: ""
+      endpoint: "",
+      sampleRatio: 1
+    },
+    processEnvironment: {
+      allow: []
     },
     patch: makeDefaultPatchConfig(),
     workspaces: {}
@@ -155,6 +160,7 @@ function mergeConfigBase(base, input) {
     productUx: { ...base.productUx, ...objectOrEmpty(input.productUx) },
     release: { ...base.release, ...objectOrEmpty(input.release) },
     telemetry: { ...base.telemetry, ...objectOrEmpty(input.telemetry) },
+    processEnvironment: { ...base.processEnvironment, ...objectOrEmpty(input.processEnvironment) },
     patch: { ...objectOrEmpty(input.patch) },
     workspaces: { ...objectOrEmpty(input.workspaces) }
   };
@@ -195,7 +201,12 @@ function normalizeProductSettings(next, base, input) {
   const telemetry = { ...base.telemetry, ...objectOrEmpty(input.telemetry) };
   next.telemetry = {
     enabled: normalizeBoolean(telemetry.enabled, base.telemetry.enabled),
-    endpoint: String(telemetry.endpoint || '').trim()
+    endpoint: String(telemetry.endpoint || '').trim(),
+    sampleRatio: clampRatio(telemetry.sampleRatio, base.telemetry.sampleRatio)
+  };
+  const processEnvironment = { ...base.processEnvironment, ...objectOrEmpty(input.processEnvironment) };
+  next.processEnvironment = {
+    allow: normalizeAllowedKeys(processEnvironment.allow)
   };
 }
 
@@ -551,6 +562,12 @@ function safeDetectValidationChecks(workspacePath) {
 function positiveNumber(value, fallback) {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function clampRatio(value, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(1, Math.max(0, number));
 }
 
 function clampNumber(value, min, max, fallback) {

@@ -247,10 +247,10 @@ The dashboard includes grouped **Sessions**, managed **Processes** with recent o
 
 ## Building from source
 
-Only needed if you want to develop or package the app yourself. Requires Node.js 22.13 or newer; CI tests the Node.js 22 and 24 LTS lines.
+Only needed if you want to develop or package the app yourself. Requires the Node.js 24 LTS line and npm 11; CI and packaged-runtime validation use Node.js 24.
 
 ```bash
-npm install
+npm ci --ignore-scripts
 npm ci --prefix electron
 ```
 
@@ -265,6 +265,8 @@ Then:
 ```bash
 npm run electron:dev         # run the desktop app from source
 npm run electron:dist        # build the Windows installer into dist/
+npm run audit:production     # production dependency security gate
+npm run verify:module-system # reject module-system regression
 npm test                     # full suite
 npm run knip                 # full unused files, dependencies, and exports audit
 npm run knip:production      # production-only dead-code audit
@@ -274,7 +276,7 @@ The normal test gate includes `npm run knip:dependencies` so dependency drift an
 
 `electron:build` and `electron:dist` refuse to run when the ngrok seed is missing — packaging without it produces an installer whose tunnel cannot start.
 
-Windows CI and the release workflow build the unpacked application and run `npm run verify:packaged`, a read-only package-layout check. `npm run test:connector-acceptance` then exercises OAuth/PKCE and the MCP task lifecycle through the packaged Node backend. Installer, uninstall, first-run UI, real ngrok publication, logged-in ChatGPT app selection, live approval-token rotation, and update-from-prior-release behavior remain manual checks on a disposable Windows machine. See [docs/USABILITY_ACCEPTANCE.md](docs/USABILITY_ACCEPTANCE.md) and [docs/INSTALLER_TEST_SAFETY.md](docs/INSTALLER_TEST_SAFETY.md).
+Windows CI and the release workflow build from a clean output directory, verify the packaged layout and hardened Electron fuses, then exercise OAuth/PKCE and the MCP task lifecycle through the packaged Node backend. Production publication requires protected Windows signing credentials and valid Authenticode signatures, then generates a CycloneDX SBOM and GitHub provenance attestations. Windows x64 is the only packaged target validated and published by the current automation. Installer, uninstall, first-run UI, real ngrok publication, logged-in ChatGPT app selection, live approval-token rotation, and update-from-prior-release behavior remain manual checks on a disposable Windows machine. See [docs/USABILITY_ACCEPTANCE.md](docs/USABILITY_ACCEPTANCE.md), [docs/INSTALLER_TEST_SAFETY.md](docs/INSTALLER_TEST_SAFETY.md), and [docs/PACKAGING_SECURITY.md](docs/PACKAGING_SECURITY.md).
 
 ## MCP tools
 
@@ -520,6 +522,8 @@ Rel.AI MCP is intentionally opinionated now.
 - Verification should be visible and repeatable.
 - Public tunnel setup should be easy, but local-only should stay the default.
 - The dashboard should explain what is happening instead of hiding everything in logs.
+- Browser UI source is ESM-only; backend and Electron CommonJS may only decrease until the coordinated hard cutover described in [docs/ESM_MIGRATION.md](docs/ESM_MIGRATION.md).
+- Node.js 24, npm 11, exact Electron/MCP pins, and the two-lockfile install flow are defined in [docs/PACKAGE_MANAGEMENT.md](docs/PACKAGE_MANAGEMENT.md).
 
 ---
 
