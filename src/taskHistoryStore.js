@@ -2,6 +2,8 @@
 
 const { buildTaskHistory } = require('./taskHistory');
 const { DEFAULT_TASK_IDLE_MS } = require('./toolActivity');
+const { sanitizeActivityEventRecord, sanitizeDisplayText, sanitizeTaskRecord } = require('./taskObservability');
+const { isTerminalTaskStatus } = require('./taskState');
 const { clamp, cleanTaskId, eventTime, isCurrentTaskEvent, operationForTool, unique } = require('./taskEvents');
 const {
   MAX_SESSIONS,
@@ -53,11 +55,11 @@ function recordTaskActivityEvent(config, activity = {}) {
   const events = upsertActivityEvent(existing.events || [], event);
   const startedAt = task?.startedAtIso || task?.createdAt || toIso(task?.startedAt) || existing.startedAt || null;
   const updatedAt = task?.updatedAt || toIso(task?.lastActivityAt) || event?.timestamp || new Date().toISOString();
-  const existingTerminal = ['completed', 'completed_with_warnings', 'failed', 'cancelled'].includes(existing?.status);
+  const existingTerminal = isTerminalTaskStatus(existing?.status);
   const existingUpdatedAt = Date.parse(existing?.updatedAt || existing?.completedAt || existing?.endedAt || '') || 0;
   const incomingUpdatedAt = Date.parse(updatedAt || '') || 0;
   if (existingTerminal && existingUpdatedAt > incomingUpdatedAt) return publicSession(existing);
-  const terminal = ['completed', 'completed_with_warnings', 'failed', 'cancelled'].includes(task?.status);
+  const terminal = isTerminalTaskStatus(task?.status);
   const session = {
     ...existing,
     ...task,
@@ -203,7 +205,7 @@ function applyEvent(session, event) {
 }
 
 function overlayActiveSession(persisted, active) {
-  const persistedTerminal = ['completed', 'completed_with_warnings', 'failed', 'cancelled'].includes(persisted?.status);
+  const persistedTerminal = isTerminalTaskStatus(persisted?.status);
   const persistedTime = Date.parse(persisted?.updatedAt || persisted?.completedAt || persisted?.endedAt || '') || 0;
   const activeTime = Date.parse(active?.updatedAt || active?.lastActivityAt || active?.startedAt || '') || 0;
   if (persistedTerminal && persistedTime >= activeTime) return persisted;
@@ -227,8 +229,9 @@ function upsertActivityEvent(events, event) {
   if (!event?.eventId) return [...events].slice(-MAX_SESSION_EVENTS);
   const next = [...events];
   const index = next.findIndex(item => item?.eventId === event.eventId);
-  if (index >= 0) next[index] = { ...next[index], ...event };
-  else next.push(event);
+  const sanitized = sanitizeActivityEventRecord(event);
+  if (index >= 0) next[index] = { ...next[index], ...sanitized };
+  else next.push(sanitized);
   return next.sort((left, right) => Number(left?.sequence || 0) - Number(right?.sequence || 0) || eventTime(left) - eventTime(right)).slice(-MAX_SESSION_EVENTS);
 }
 
@@ -260,13 +263,16 @@ function compactEvent(event) {
     'completionKnown', 'endReason', 'completionSource', 'taskSummary', 'message', 'error', 'path'
   ];
   const compact = Object.fromEntries(keep.filter(key => event[key] !== undefined).map(key => [key, event[key]]));
+  for (const key of ['taskSummary', 'message', 'error']) {
+    if (compact[key] != null) compact[key] = sanitizeDisplayText(compact[key], 500);
+  }
   if (!compact.eventId && compact.operationId) compact.eventId = compact.operationId;
-  return compact;
+  return sanitizeActivityEventRecord(compact);
 }
 
 function publicSession(session) {
   if (!session || typeof session !== 'object') return session;
-  const { version, ...value } = session;
+  const { version, ...value } = sanitizeTaskRecord(session);
   return {
     ...value,
     taskId: value.taskId || value.id,

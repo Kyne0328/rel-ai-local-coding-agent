@@ -22,6 +22,7 @@ const {
 const { planEdit } = require('../executionPlanner');
 const { relaiStatus } = require('./status');
 const { completeTask } = require('./completion');
+const { cancelTask } = require('./cancellation');
 const { relaiSearch } = require('../bridge/search');
 const { relaiCodeInspect } = require('../bridge/codeIntelligence');
 const { relaiExec } = require('../bridge/exec');
@@ -82,6 +83,7 @@ const HANDLERS = Object.freeze({
   gitPush: inWorkspace((workspace, config, args) => relaiGitPush(workspace, config, args)),
   gitDraftPr: inWorkspace((workspace, config, args) => relaiGitDraftPr(workspace, config, args)),
   edit: inWorkspace((workspace, config, args) => planEdit(workspace, config, args)),
+  cancelTask: (config, args) => cancelTask(config, args),
   completeTask: completeTaskHandler
 });
 

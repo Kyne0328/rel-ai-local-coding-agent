@@ -2,6 +2,7 @@
 
 const { getCurrentToolActivityContext, taskError } = require('../toolActivity');
 const { readTaskHistorySession } = require('../taskHistoryStore');
+const { isTerminalTaskStatus } = require('../taskState');
 
 function startTask(workspace, args = {}) {
   const context = getCurrentToolActivityContext();
@@ -12,7 +13,7 @@ function startTask(workspace, args = {}) {
     ok: true,
     workspace: workspace.alias,
     task_id: context.taskId,
-    status: 'active',
+    status: 'planning',
     identity: 'logical_task',
     title: String(args.title || context.title || '').trim() || undefined,
     objective: String(args.objective || context.objective || '').trim() || undefined,
@@ -25,8 +26,10 @@ function assertKnownTask(config, taskId, workspace, toolName) {
   if (!session) {
     throw taskError('TASK_NOT_FOUND', 'The supplied task_id is unknown or expired. Start a new logical task with relai_start_task.');
   }
-  if ((session.completionKnown === true || ['completed', 'completed_with_warnings'].includes(session.status)) && toolName !== 'relai_complete_task') {
-    throw taskError('INVALID_TASK_STATE', 'This logical task is already completed. Start a new task instead of reusing its task_id.');
+  if (session.status === 'cancelled' && toolName === 'relai_cancel_task') return session;
+  if (['completed', 'completed_with_warnings'].includes(session.status) && toolName === 'relai_complete_task') return session;
+  if (isTerminalTaskStatus(session.status)) {
+    throw taskError('INVALID_TASK_STATE', `This logical task is already ${session.status}. Start a new task instead of reusing its task_id.`);
   }
   const requestedWorkspace = String(workspace || '').trim();
   const ownedWorkspace = String(session.workspace || '').trim();
@@ -38,6 +41,7 @@ function assertKnownTask(config, taskId, workspace, toolName) {
 
 function taskAuditContext(context, activity, requestedTaskId, toolName, ok, value = null) {
   const duplicateCompletion = toolName === 'relai_complete_task' && value?.duplicate === true;
+  const duplicateCancellation = toolName === 'relai_cancel_task' && value?.duplicate === true;
   const taskId = activity?.taskId || requestedTaskId || '';
   const taskHistoryEligible = Boolean(taskId && (requestedTaskId || toolName === 'relai_start_task'));
   return {
@@ -54,12 +58,14 @@ function taskAuditContext(context, activity, requestedTaskId, toolName, ok, valu
     taskIdentityVersion: taskHistoryEligible ? 2 : 0,
     taskIdExplicit: taskHistoryEligible,
     taskHistoryEligible,
-    duplicateRequest: duplicateCompletion,
+    duplicateRequest: duplicateCompletion || duplicateCancellation,
     eventType: toolName === 'relai_start_task'
       ? (ok ? 'task.started' : 'task.start.rejected')
       : toolName === 'relai_complete_task'
         ? (ok ? (duplicateCompletion ? 'task.completion.duplicate' : 'task.completion.committed') : 'task.completion.rejected')
-        : 'tool.call.completed'
+        : toolName === 'relai_cancel_task'
+          ? (ok ? (duplicateCancellation ? 'task.cancellation.duplicate' : 'task.cancellation.committed') : 'task.cancellation.rejected')
+          : 'tool.call.completed'
   };
 }
 

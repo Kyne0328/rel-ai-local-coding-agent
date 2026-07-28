@@ -8,9 +8,13 @@ const {
   createActivityEvent,
   deriveTaskTitle,
   normalizeTaskProgress,
+  sanitizeActivityEventRecord,
   sanitizeActivityMetadata,
-  sanitizeDisplayText
+  sanitizeCompletionSummary,
+  sanitizeDisplayText,
+  sanitizeTaskRecord
 } = require('./taskObservability');
+const { isTerminalTaskStatus, normalizeHistoricalTaskStatus } = require('./taskState');
 
 const DEFAULT_TASK_IDLE_MS = 5 * 60_000;
 const activityContext = new AsyncLocalStorage();
@@ -96,10 +100,13 @@ function createToolActivityTracker(options = {}) {
     task.calls += 1;
     task.lastActivityAt = startedAt;
     task.updatedAt = startedAt;
-    task.status = initialActivity.category === 'validation' ? 'validating' : 'running';
-    task.currentStage = initialActivity.currentStage || operation.label;
-    task.currentActivity = initialActivity.currentActivity || operation.detail;
-    task.progress = normalizeTaskProgress(initialActivity.progress, task.status);
+    const controlCall = operation.tool === 'relai_cancel_task';
+    if (!controlCall) {
+      task.status = initialActivity.category === 'validation' ? 'validating' : 'running';
+      task.currentStage = initialActivity.currentStage || operation.label;
+      task.currentActivity = initialActivity.currentActivity || operation.detail;
+      task.progress = normalizeTaskProgress(initialActivity.progress, task.status);
+    }
     task.currentOperations.set(operationId, operation);
     task.events.push(operation.activity);
     if (task.events.length > 200) task.events.splice(0, task.events.length - 200);
@@ -117,6 +124,7 @@ function createToolActivityTracker(options = {}) {
     let finish;
     const requestCompletion = (completion = {}) => {
       if (finished) throw taskError('INVALID_TASK_STATE', 'Cannot complete a task after the tool call has finished.');
+      if (isTerminalTaskStatus(task.status)) throw taskError('INVALID_TASK_STATE', 'Cannot complete a terminal task.');
       if (task.completionRequest) {
         return { taskId: task.id, scopeId: task.scopeId, duplicate: true };
       }
@@ -131,7 +139,7 @@ function createToolActivityTracker(options = {}) {
         );
       }
       task.completionRequest = {
-        summary: String(completion.summary || '').trim(),
+        summary: sanitizeCompletionSummary(completion.summary, 2000),
         validationStatus: String(completion.validationStatus || 'passed'),
         validationLevel: String(completion.validationLevel || ''),
         validationAt: String(completion.validationAt || ''),
@@ -148,22 +156,25 @@ function createToolActivityTracker(options = {}) {
     const update = (patch = {}) => {
       if (finished) return;
       const current = task.currentOperations.get(operationId);
-      if (!current) return;
-      if (patch.operation != null) current.label = String(patch.operation);
-      if (patch.detail != null) current.detail = String(patch.detail);
-      if (patch.summary != null) current.detail = String(patch.summary);
-      if (patch.workspace != null) current.workspace = String(patch.workspace);
-      if (patch.tool != null) current.tool = String(patch.tool);
+      if (!current || isTerminalTaskStatus(task.status)) return;
+      if (patch.operation != null) current.label = sanitizeDisplayText(patch.operation, 200);
+      if (patch.detail != null) current.detail = sanitizeDisplayText(patch.detail, 500);
+      if (patch.summary != null) current.detail = sanitizeDisplayText(patch.summary, 500);
+      if (patch.workspace != null) current.workspace = sanitizeDisplayText(patch.workspace, 200);
+      if (patch.tool != null) current.tool = sanitizeDisplayText(patch.tool, 200);
       applyActivityPatch(current.activity, patch.activity && typeof patch.activity === 'object' ? patch.activity : patch);
       task.workspace = current.workspace || task.workspace;
       task.lastTool = current.tool || task.lastTool;
       task.lastOperation = current.label || task.lastOperation;
       task.lastActivityAt = now();
       task.updatedAt = task.lastActivityAt;
-      task.currentStage = String(patch.currentStage || current.activity?.title || task.currentStage || 'Running tool');
-      task.currentActivity = String(patch.currentActivity || current.activity?.summary || current.detail || task.currentActivity || '');
+      task.currentStage = sanitizeDisplayText(patch.currentStage || current.activity?.title || task.currentStage || 'Running tool', 500);
+      task.currentActivity = sanitizeDisplayText(patch.currentActivity || current.activity?.summary || current.detail || task.currentActivity || '', 500);
+      if (patch.status) {
+        const nextStatus = patch.status === 'blocked' ? 'waiting_for_approval' : normalizeHistoricalTaskStatus(patch.status, task);
+        if (!isTerminalTaskStatus(task.status)) task.status = nextStatus;
+      }
       if (patch.progress) task.progress = normalizeTaskProgress(patch.progress, task.status);
-      if (patch.status === 'blocked') task.status = 'waiting_for_approval';
       finish.operation = task.lastOperation;
       notify('progress', task, {
         tool: current.tool,
@@ -180,13 +191,14 @@ function createToolActivityTracker(options = {}) {
       finished = true;
       const finishedAt = now();
       const current = task.currentOperations.get(operationId) || operation;
+      const terminalBeforeFinish = isTerminalTaskStatus(task.status);
       task.currentOperations.delete(operationId);
       task.activeCalls = Math.max(0, task.activeCalls - 1);
-      task.failures += result.ok === false ? 1 : 0;
+      if (!terminalBeforeFinish && result.ok === false) task.failures += 1;
       task.lastTool = current.tool || task.lastTool;
       task.workspace = current.workspace || task.workspace;
       task.lastOperation = current.label || task.lastOperation;
-      task.lastOutcome = result.ok === false ? 'failed' : 'succeeded';
+      if (!terminalBeforeFinish) task.lastOutcome = result.ok === false ? 'failed' : 'succeeded';
       task.lastActivityAt = finishedAt;
       task.updatedAt = finishedAt;
       const completionActivity = result.activity && typeof result.activity === 'object'
@@ -196,32 +208,42 @@ function createToolActivityTracker(options = {}) {
             phase: 'complete'
           });
       applyActivityPatch(current.activity, completionActivity);
-      current.activity.status = result.ok === false ? (completionActivity.status || 'failed') : (completionActivity.status === 'blocked' ? 'blocked' : 'succeeded');
+      current.activity.status = terminalBeforeFinish && task.status === 'cancelled' && current.tool !== 'relai_cancel_task'
+        ? 'cancelled'
+        : result.ok === false
+          ? (completionActivity.status || 'failed')
+          : (completionActivity.status === 'blocked' ? 'blocked' : 'succeeded');
       current.activity.completedAt = new Date(finishedAt).toISOString();
       current.activity.durationMs = Math.max(0, finishedAt - startedAt);
       const queueWaitMs = Number(current.activity?.metadata?.waitMs || 0);
       if (queueWaitMs > 0 && !/waited\s/i.test(current.activity.summary || '')) {
         current.activity.summary = `${current.activity.summary || 'Operation completed.'} Waited ${formatWait(queueWaitMs)} for the workspace execution queue.`;
       }
-      task.currentStage = completionActivity.currentStage || task.currentStage;
-      task.currentActivity = completionActivity.currentActivity || current.activity.summary || task.currentActivity;
-      task.progress = normalizeTaskProgress(completionActivity.progress || task.progress, task.status);
-      task.successes += result.ok === false ? 0 : 1;
-      task.errorSummary = result.ok === false ? sanitizeDisplayText(result.error || current.activity.error?.message || '', 500) : task.errorSummary;
-      if (task.activeCalls === 0 && !task.completionRequest) {
+      if (!terminalBeforeFinish) {
+        task.currentStage = completionActivity.currentStage || task.currentStage;
+        task.currentActivity = completionActivity.currentActivity || current.activity.summary || task.currentActivity;
+        task.progress = normalizeTaskProgress(completionActivity.progress || task.progress, task.status);
+        task.successes += result.ok === false ? 0 : 1;
+        task.errorSummary = result.ok === false ? sanitizeDisplayText(result.error || current.activity.error?.message || '', 500) : task.errorSummary;
+      }
+      if (!terminalBeforeFinish && task.activeCalls === 0 && !task.completionRequest) {
         if (current.activity.status === 'blocked') {
           task.status = 'waiting_for_approval';
           task.currentStage = 'Waiting for approval';
           task.progress = { mode: 'indeterminate', label: 'Approval required' };
         } else {
           task.status = 'planning';
-          task.currentStage = 'Planning next step';
-          task.progress = { mode: 'indeterminate', label: 'Waiting for the next task step' };
+          const preserveWorkflowProgress = task.progress?.mode === 'determinate';
+          if (!preserveWorkflowProgress) {
+            task.currentStage = 'Planning next step';
+            task.progress = { mode: 'indeterminate', label: 'Waiting for the next task step' };
+          }
         }
       }
       activeToolCalls = Math.max(0, activeToolCalls - 1);
       if (connectorCall) activeConnectorCalls = Math.max(0, activeConnectorCalls - 1);
       finish.operation = task.lastOperation;
+      if (terminalBeforeFinish) lastTask = buildTerminalTaskSnapshot(task);
 
       notify('finished', task, {
         tool: task.lastTool,
@@ -235,7 +257,10 @@ function createToolActivityTracker(options = {}) {
       });
       if (result.ok === false && current.tool === 'relai_complete_task') task.completionRequest = null;
       if (task.activeCalls === 0) {
-        if (task.completionRequest) completeTask(task.id);
+        if (isTerminalTaskStatus(task.status)) {
+          lastTask = buildTerminalTaskSnapshot(task);
+          removeTask(task);
+        } else if (task.completionRequest) completeTask(task.id);
         else scheduleInactivity(task);
       }
     };
@@ -246,6 +271,7 @@ function createToolActivityTracker(options = {}) {
     finish.operation = operation.label;
     finish.update = update;
     finish.requestCompletion = requestCompletion;
+    finish.signal = task.abortController.signal;
     return finish;
   }
 
@@ -355,6 +381,12 @@ function createToolActivityTracker(options = {}) {
       lastOperation: String(details.operation || defaultOperation(details.tool)),
       lastOutcome: '',
       completionRequest: null,
+      abortController: new AbortController(),
+      endReason: '',
+      terminalReason: '',
+      endedAt: null,
+      cancelledAt: null,
+      cancellationInitiator: '',
       createdAt: timestamp,
       startedAt: timestamp,
       updatedAt: timestamp,
@@ -366,6 +398,83 @@ function createToolActivityTracker(options = {}) {
 
   function removeTask(task) {
     tasksById.delete(task.id);
+  }
+
+  function cancelTask(taskId, details = {}) {
+    const id = normalizeTaskId(taskId);
+    const task = tasksById.get(id);
+    if (!task) {
+      if (lastTask?.taskId === id && lastTask.status === 'cancelled') {
+        return cancellationResult(lastTask, true);
+      }
+      throw taskError('TASK_NOT_FOUND', 'The supplied task_id is not an active cancellable task.');
+    }
+    if (task.status === 'cancelled') return cancellationResult(buildTerminalTaskSnapshot(task), true);
+    if (isTerminalTaskStatus(task.status)) throw taskError('INVALID_TASK_STATE', `Task ${id} is already ${task.status}.`);
+
+    cancelCompletion(task);
+    const endedAt = now();
+    const reason = sanitizeDisplayText(details.reason || 'Task cancelled by request.', 500) || 'Task cancelled by request.';
+    task.status = 'cancelled';
+    task.endReason = 'explicit_cancellation';
+    task.terminalReason = reason;
+    task.endedAt = endedAt;
+    task.cancelledAt = endedAt;
+    task.cancellationInitiator = sanitizeDisplayText(details.initiator || 'client', 80) || 'client';
+    task.currentStage = 'Cancelled';
+    task.currentActivity = reason;
+    task.lastOutcome = 'cancelled';
+    task.lastActivityAt = endedAt;
+    task.updatedAt = endedAt;
+    task.completionRequest = null;
+    for (const operation of task.currentOperations.values()) {
+      if (operation.tool === 'relai_cancel_task') continue;
+      operation.activity.status = 'cancelled';
+      operation.activity.summary = sanitizeDisplayText(`${operation.activity.summary || operation.label || 'Operation'} Cancelled: ${reason}`, 500);
+      operation.activity.completedAt = new Date(endedAt).toISOString();
+      operation.activity.durationMs = Math.max(0, endedAt - operation.startedAt);
+    }
+    if (!task.abortController.signal.aborted) task.abortController.abort(new Error(reason));
+    lastTask = buildTerminalTaskSnapshot(task);
+    notify('cancelled', task, {
+      task: lastTask,
+      endReason: task.endReason,
+      terminalReason: reason,
+      initiator: task.cancellationInitiator
+    });
+    if (task.activeCalls === 0) removeTask(task);
+    return cancellationResult(lastTask, false);
+  }
+
+  function cancellationResult(task, duplicate) {
+    return {
+      taskId: task.taskId || task.id,
+      status: 'cancelled',
+      duplicate,
+      endReason: task.endReason || 'explicit_cancellation',
+      terminalReason: task.terminalReason || task.currentActivity || 'Task cancelled.',
+      endedAt: task.endedAt || null,
+      cancelledAt: task.cancelledAt || task.endedAt || null,
+      progress: normalizeTaskProgress(task.progress, 'cancelled')
+    };
+  }
+
+  function buildTerminalTaskSnapshot(task) {
+    const endedAt = Number(task.endedAt || now());
+    return sanitizeTaskRecord({
+      ...taskSnapshot(task),
+      state: 'ended',
+      status: task.status,
+      completionKnown: task.status === 'completed' || task.status === 'completed_with_warnings',
+      endReason: task.endReason || (task.status === 'cancelled' ? 'explicit_cancellation' : 'terminal'),
+      terminalReason: task.terminalReason || task.currentActivity,
+      cancellationInitiator: task.cancellationInitiator || undefined,
+      endedAt,
+      cancelledAt: task.cancelledAt || undefined,
+      completedAt: task.status === 'completed' || task.status === 'completed_with_warnings' ? endedAt : undefined,
+      updatedAt: new Date(task.updatedAt || endedAt).toISOString(),
+      durationMs: Math.max(0, endedAt - task.startedAt)
+    });
   }
 
   function resolveScopeId(details) {
@@ -388,8 +497,8 @@ function createToolActivityTracker(options = {}) {
     task.completionTimer = null;
     removeTask(task);
     const endedAt = now();
-    const status = task.failures > 0 ? 'attention' : 'inactive';
-    lastTask = {
+    const status = task.failures > 0 ? 'failed' : 'cancelled';
+    lastTask = sanitizeTaskRecord({
       taskId: task.id,
       sessionId: task.id,
       id: task.id,
@@ -397,7 +506,7 @@ function createToolActivityTracker(options = {}) {
       objective: task.objective,
       status,
       progress: normalizeTaskProgress(task.progress, status),
-      currentStage: task.failures > 0 ? 'Needs attention' : 'Inactive',
+      currentStage: task.failures > 0 ? 'Failed after inactivity' : 'Cancelled after inactivity',
       currentActivity: task.currentActivity,
       endReason: 'inactivity_window',
       calls: task.calls,
@@ -419,9 +528,10 @@ function createToolActivityTracker(options = {}) {
       completedAt: endedAt,
       completedAtIso: new Date(endedAt).toISOString(),
       durationMs: Math.max(0, endedAt - task.startedAt),
+      terminalReason: task.failures > 0 ? 'Task became inactive after an unrecovered failure.' : 'Task was cancelled after the inactivity window elapsed.',
       events: task.events.map(cloneActivityEvent)
-    };
-    notify('inactive', task, { task: lastTask, endReason: lastTask.endReason });
+    });
+    notify(status, task, { task: lastTask, endReason: lastTask.endReason });
   }
 
   function completeTask(taskId) {
@@ -432,7 +542,7 @@ function createToolActivityTracker(options = {}) {
     const completedAt = now();
     const completion = task.completionRequest;
     const status = task.failures > 0 ? 'completed_with_warnings' : 'completed';
-    lastTask = {
+    lastTask = sanitizeTaskRecord({
       taskId: task.id,
       sessionId: task.id,
       id: task.id,
@@ -469,8 +579,9 @@ function createToolActivityTracker(options = {}) {
       completedAt,
       completedAtIso: new Date(completedAt).toISOString(),
       durationMs: Math.max(0, completedAt - task.startedAt),
+      terminalReason: 'Task completion was accepted explicitly.',
       events: task.events.map(cloneActivityEvent)
-    };
+    });
     notify('completed', task, { task: lastTask, endReason: lastTask.endReason });
   }
 
@@ -514,7 +625,7 @@ function createToolActivityTracker(options = {}) {
       .map(item => ({ ...item }))
       .sort((left, right) => left.startedAt - right.startedAt);
     const current = currentOperations[0] || null;
-    return {
+    return sanitizeTaskRecord({
       id: task.id,
       taskId: task.id,
       sessionId: task.id,
@@ -547,8 +658,13 @@ function createToolActivityTracker(options = {}) {
       startedAt: task.startedAt,
       startedAtIso: new Date(task.startedAt).toISOString(),
       updatedAt: new Date(task.updatedAt).toISOString(),
-      lastActivityAt: task.lastActivityAt
-    };
+      lastActivityAt: task.lastActivityAt,
+      endReason: task.endReason || undefined,
+      terminalReason: task.terminalReason || undefined,
+      endedAt: task.endedAt || undefined,
+      cancelledAt: task.cancelledAt || undefined,
+      cancellationInitiator: task.cancellationInitiator || undefined
+    });
   }
 
   function notify(phase, task, extras = {}) {
@@ -594,7 +710,10 @@ function createToolActivityTracker(options = {}) {
   }
 
   function reset() {
-    for (const task of tasksById.values()) cancelCompletion(task);
+    for (const task of tasksById.values()) {
+      cancelCompletion(task);
+      if (!task.abortController.signal.aborted) task.abortController.abort(new Error('Task tracker reset.'));
+    }
     tasksById.clear();
     activeToolCalls = 0;
     activeConnectorCalls = 0;
@@ -603,6 +722,7 @@ function createToolActivityTracker(options = {}) {
 
   return {
     beginConnectorToolCall,
+    cancelTask,
     onToolActivity,
     getToolActivity,
     reset,
@@ -623,6 +743,7 @@ function applyActivityPatch(activity, patch = {}) {
   }
   if (patch.tool && typeof patch.tool === 'object') activity.tool = { ...(activity.tool || {}), ...patch.tool };
   activity.timestamp = new Date().toISOString();
+  Object.assign(activity, sanitizeActivityEventRecord(activity));
   return activity;
 }
 
@@ -645,7 +766,7 @@ function formatWait(waitMs) {
 
 function cloneActivityEvent(activity) {
   if (!activity) return null;
-  return JSON.parse(JSON.stringify(activity));
+  return JSON.parse(JSON.stringify(sanitizeActivityEventRecord(activity)));
 }
 
 function runWithToolActivity(activity, callback) {
@@ -656,6 +777,18 @@ function runWithToolActivity(activity, callback) {
 function updateCurrentToolActivity(details = {}) {
   const activity = activityContext.getStore();
   activity?.update?.(details);
+}
+
+function requestCurrentTaskCancellation(details = {}) {
+  const activity = activityContext.getStore();
+  if (!activity?.taskId) {
+    throw taskError('CONNECTION_CONTEXT_UNAVAILABLE', 'Task cancellation is only available inside an active task-scoped Rel.AI tool call.');
+  }
+  return defaultTracker.cancelTask(activity.taskId, details);
+}
+
+function getCurrentTaskAbortSignal() {
+  return activityContext.getStore()?.signal;
 }
 
 function requestCurrentTaskCompletion(details = {}) {
@@ -722,12 +855,15 @@ module.exports = {
   DEFAULT_TASK_IDLE_MS,
   createToolActivityTracker,
   beginConnectorToolCall: defaultTracker.beginConnectorToolCall,
+  cancelTask: defaultTracker.cancelTask,
   onToolActivity: defaultTracker.onToolActivity,
   getToolActivity: defaultTracker.getToolActivity,
   resetToolActivity: defaultTracker.reset,
   runWithToolActivity,
   updateCurrentToolActivity,
+  requestCurrentTaskCancellation,
   requestCurrentTaskCompletion,
+  getCurrentTaskAbortSignal,
   getCurrentToolActivityContext,
   taskError,
   normalizeTaskId

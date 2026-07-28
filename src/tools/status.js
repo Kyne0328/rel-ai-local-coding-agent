@@ -12,6 +12,8 @@ function toolSchema() {
 }
 const { readProjectInstructions, summarizeProjectInstructions } = require('../projectInstructions');
 const { workspaceGitStatus } = require('../repo/gitOps');
+const { runtimeCompatibility } = require('../runtimeCompatibility');
+const { getToolActivity } = require('../toolActivity');
 
 // Locale-aware sort of an object's keys so ordering remains explicit and stable.
 function sortedKeys(obj) {
@@ -50,9 +52,17 @@ async function relaiStatus(config, args = {}, context = {}) {
     }
   }
   const { TOOL_NAMES, getToolGroups, getToolSurfaceManifest } = toolSchema();
+  const taskActivity = typeof context.getTaskActivity === 'function' ? context.getTaskActivity() : getToolActivity();
+  const compatibility = runtimeCompatibility(config, {
+    workspace: args.workspace,
+    activeTaskCount: taskActivity.activeTaskCount
+  });
   return {
     ok: true,
     version: getVersion(),
+    runtime: compatibility.runtime,
+    repositoryRuntime: compatibility.repository,
+    runtimeCompatibility: compatibility.compatibility,
     tools: TOOL_NAMES,
     toolGroups: getToolGroups(),
     toolSurface: getToolSurfaceManifest(),

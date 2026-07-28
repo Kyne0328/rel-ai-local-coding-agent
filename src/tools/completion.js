@@ -4,6 +4,7 @@ const { readAudit } = require('../audit');
 const { resolveWorkspace } = require('../config');
 const { clearSessionPolicy, resolvePolicy } = require('../policyResolver');
 const { readTaskHistorySession } = require('../taskHistoryStore');
+const { sanitizeCompletionSummary } = require('../taskObservability');
 const {
   getCurrentToolActivityContext,
   requestCurrentTaskCompletion,
@@ -201,10 +202,7 @@ function completionMessage(source, duplicate) {
 }
 
 function normalizeCompletionSummary(value) {
-  const summary = String(value || '').trim();
-  if (!summary) throw new Error('summary is required to report task completion.');
-  if (summary.length > 2000) throw new Error('summary must be 2000 characters or fewer.');
-  return summary;
+  return sanitizeCompletionSummary(value, 2000);
 }
 
 function changedFilesForTask(config, workspaceAlias, taskId) {

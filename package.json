@@ -49,6 +49,8 @@
     "fetch:ngrok": "pwsh scripts/fetch-ngrok.ps1",
     "verify:ngrok": "node scripts/verify-ngrok-seed.mjs",
     "test:electron": "node test/electron-launcher-smoke.mjs",
+    "test:observability-browser": "node test/dashboard-browser-acceptance.mjs",
+    "benchmark:observability": "node --expose-gc scripts/observability-benchmark.mjs",
     "verify:packaged": "node scripts/verify-packaged-app.mjs",
     "test:connector-acceptance": "node scripts/packaged-connector-acceptance.mjs",
     "test:http-auth": "node test/http-auth-smoke.mjs",
