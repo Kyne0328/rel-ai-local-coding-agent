@@ -6,6 +6,8 @@ const path = require('node:path');
 const childProcess = require('node:child_process');
 const { runProcess } = require('../process');
 const { operationTaskSignal } = require('../operationTasks');
+const { getCurrentTaskAbortSignal } = require('../toolActivity');
+const { combineAbortSignals } = require('../abortSignals');
 const { runSpan } = require('../telemetry');
 const { isPathInside } = require('../safety');
 const { INTERNAL_STATUS_MAX_BYTES, gitStatusArgs, statusMapFromOutput } = require('../repo/gitStatus');
@@ -139,7 +141,10 @@ async function relaiExec(workspace, config, args = {}) {
   const maxOutputBytes = clampNumber(args.maxOutputBytes, 1000, 16 * 1024 * 1024, config.maxOutputBytes || 2 * 1024 * 1024);
   const shell = resolveShell();
   const statusBefore = await readGitStatusMap(workspace, config);
-  const signal = args._operationTaskId ? operationTaskSignal(config, args._operationTaskId) : undefined;
+  const signal = combineAbortSignals(
+    getCurrentTaskAbortSignal(),
+    args._operationTaskId ? operationTaskSignal(config, args._operationTaskId) : undefined
+  );
   const result = await runSpan(config, 'relai.process.exec', {
     'relai.workspace': workspace.alias,
     'relai.process.command': redactCommandForAudit(command),
@@ -170,6 +175,7 @@ async function relaiExec(workspace, config, args = {}) {
     stdoutTruncated: result.stdoutTruncated === true,
     stderrTruncated: result.stderrTruncated === true,
     timedOut: result.timedOut === true,
+    cancelled: result.cancelled === true,
     ...(result.signal ? { signal: result.signal } : {}),
     ...(result.error ? { error: result.error } : {}),
     ...(Object.keys(env).length ? { environmentKeys: Object.keys(env).sort((left, right) => left.localeCompare(right)) } : {}),

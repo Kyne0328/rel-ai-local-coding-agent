@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const { sanitizeTaskRecord } = require('./taskObservability');
 
 const MAX_SESSIONS = 500;
 const HISTORY_FORMAT_MARKER = '.task-history-v3';
@@ -63,10 +64,11 @@ function readSession(directory, id) {
 
 function writeSession(directory, session) {
   if (!session?.id) return;
+  const sanitized = sanitizeTaskRecord(session);
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const target = sessionPath(directory, session.id);
+  const target = sessionPath(directory, sanitized.id);
   const temporary = `${target}.${process.pid}.tmp`;
-  fs.writeFileSync(temporary, JSON.stringify(session), { mode: 0o600 });
+  fs.writeFileSync(temporary, JSON.stringify(sanitized), { mode: 0o600 });
   fs.renameSync(temporary, target);
   parsedCache.delete(target);
 }
@@ -101,7 +103,8 @@ function clearCachedDirectory(directory) {
 function readCachedSession(file, identity) {
   const cached = parsedCache.get(file);
   if (cached?.identity === identity) return cached.session;
-  const session = safeReadJson(file);
+  const parsed = safeReadJson(file);
+  const session = parsed ? sanitizeTaskRecord(parsed) : null;
   if (session) {
     parsedCache.set(file, { identity, session });
     trimParsedCache();

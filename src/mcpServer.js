@@ -19,10 +19,12 @@ const {
   registerNativeTasksProbeTool
 } = require('./nativeTasksProbe');
 const pkg = require('../package.json');
+const { PROTOCOL_VERSION, runtimeMetadata } = require('./runtimeCompatibility');
 
 function createRelaiMcpServer(options = {}) {
   const config = readConfig();
   const toolSurface = getToolSurfaceManifest();
+  const runtime = runtimeMetadata();
   const requestStateCodec = createRequestStateCodec({
     key: requestStateKey(config),
     ttlSeconds: 10 * 60,
@@ -39,7 +41,10 @@ function createRelaiMcpServer(options = {}) {
       resources: { subscribe: false, listChanged: true },
       experimental: {
         relai: {
+          protocolVersion: PROTOCOL_VERSION,
           toolSurfaceVersion: toolSurface.toolSurfaceVersion,
+          toolCount: toolSurface.toolCount,
+          manifestHash: runtime.manifestHash,
           taskIdentityVersion: 2,
           statelessCore: true,
           manifestResource: 'relai://server/tool-surface'

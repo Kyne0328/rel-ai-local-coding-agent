@@ -1121,7 +1121,7 @@ Recommended releases:
 | Phase 4C | Optional generic task ledger | Deferred |
 | Phase 5 preview | Disabled-by-default independent workers | Deferred |
 
-The 0.23.0 hard cutover combines several mature runtime boundaries behind one explicit 33-tool surface. Future lifecycle additions should still receive focused regression coverage and independent ownership boundaries.
+The 0.23.0 hard cutover combines several mature runtime boundaries behind one explicit 34-tool surface. Future lifecycle additions should still receive focused regression coverage and independent ownership boundaries.
 
 ---
 

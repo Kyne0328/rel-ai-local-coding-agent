@@ -241,7 +241,7 @@ See [docs/ONE_CLICK_SETUP.md](docs/ONE_CLICK_SETUP.md) for the full setup walkth
 
 **Open dashboard** shows the full dashboard inside a secured Electron window. The same dashboard is also reachable in a normal browser at the local `/dashboard` route; Electron is the default host, not a separate implementation. The desktop host exchanges a single-use bootstrap code for an HttpOnly local session cookie, so the long-lived approval token is never stored in the embedded renderer or left in its URL.
 
-The dashboard includes grouped **Sessions**, managed **Processes** with recent output and stop controls, lower-level **Activity**, workspace-scoped filtering, operational Git and validation state, actionable diagnostics, live/reconnecting status, and persistent desktop window and route state. Work is grouped by explicit logical `task_id`, not by MCP connection, repository, or assumed ChatGPT conversation identity. Multiple tasks may share one client connection while retaining independent activity and completion state. A task is marked completed only after an explicit completion signal: either `relai_run_checks` with `complete:true` and `summary`, or `relai_complete_task` after a post-validation read-only review. Otherwise inactivity closes it as inactive without claiming the overall request finished.
+The dashboard includes grouped **Sessions**, managed **Processes** with recent output and stop controls, lower-level **Activity**, workspace-scoped filtering, operational Git and validation state, actionable diagnostics, live/reconnecting status, and persistent desktop window and route state. Work is grouped by explicit logical `task_id`, not by MCP connection, repository, or assumed ChatGPT conversation identity. Multiple tasks may share one client connection while retaining independent activity and completion state. A task is marked completed only after an explicit completion signal: either `relai_run_checks` with `complete:true` and `summary`, or `relai_complete_task` after a post-validation read-only review. Otherwise inactivity closes it as cancelled without claiming the overall request finished.
 
 ---
 
@@ -280,7 +280,7 @@ Windows CI and the release workflow build from a clean output directory, verify 
 
 ## MCP tools
 
-Rel.AI exposes 33 active tools through MCP SDK v2 and MCP `2026-07-28`. HTTP clients use stateless `POST /mcp` requests with `MCP-Protocol-Version`, `Mcp-Method`, and `Mcp-Name` where applicable. The removed initialize handshake, `Mcp-Session-Id`, `/sse`, `/messages`, compatibility aliases, and legacy client recovery are not accepted. Older clients must remain on an earlier Rel.AI release.
+Rel.AI exposes 34 active tools through MCP SDK v2 and MCP `2026-07-28`. HTTP clients use stateless `POST /mcp` requests with `MCP-Protocol-Version`, `Mcp-Method`, and `Mcp-Name` where applicable. The removed initialize handshake, `Mcp-Session-Id`, `/sse`, `/messages`, compatibility aliases, and legacy client recovery are not accepted. Older clients must remain on an earlier Rel.AI release.
 
 Each tool publishes an input and output JSON Schema. Expensive one-shot commands, diagnostics, and validation can run with `defer:true`; Rel.AI returns a durable operation handle that is polled or cancelled through normal MCP tools under the same logical `task_id`. The stable TypeScript SDK does not yet ship the Tasks extension adapter, so this release does not advertise nonfunctional native `tasks/*` methods. Destructive actions can return `input_required`; the client resumes them with the accepted input and the signed opaque `requestState`.
 
@@ -318,6 +318,7 @@ Each tool publishes an input and output JSON Schema. Expensive one-shot commands
 | `relai_git_push` | Publish an allowlisted branch and remote after explicit approval. |
 | `relai_git_draft_pr` | Generate local pull-request title and body text from a Git diff. |
 | `relai_edit` | Apply all file mutations: exact replacements, full files, structured patches, batches, environment operations, and staged writes. |
+| `relai_cancel_task` | Cancel the exact logical task, preserve partial progress and terminal timestamps, and cooperatively abort supported active operations. |
 | `relai_complete_task` | Explicitly complete the exact validated logical task after final read-only review. |
 
 The hard cutover deliberately removes compatibility aliases, protocol-session inference, automatic client recovery, generated update helpers, local-edit fallbacks, and hidden task selection.

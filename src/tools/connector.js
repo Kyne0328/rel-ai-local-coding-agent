@@ -89,6 +89,9 @@ function compactForConnector(name, value, args = {}) {
       return pruneEmpty({
         ok: value.ok,
         version: value.version,
+        runtime: value.runtime,
+        repositoryRuntime: value.repositoryRuntime,
+        runtimeCompatibility: value.runtimeCompatibility,
         toolSurface: value.toolSurface ? {
           schemaVersion: value.toolSurface.schemaVersion,
           toolSurfaceVersion: value.toolSurface.toolSurfaceVersion,
@@ -116,11 +119,14 @@ function compactForConnector(name, value, args = {}) {
       // internal telemetry (see WORKFLOW_RELIABILITY); policy was default noise.
       return pruneEmpty({
         ok: value.ok, workspace: value.workspace, level: value.level,
-                checks: value.checks, results: value.results,
+        checks: value.checks, results: value.results, skippedChecks: value.skippedChecks,
+        completedUnits: value.completedUnits, totalUnits: value.totalUnits,
+        failedCheck: value.failedCheck, cancelled: value.cancelled,
         validated: value.validated, validationStatus: value.validationStatus,
         completionKnown: value.completionKnown, endReason: value.endReason,
         completionSource: value.completionSource, summary: value.summary,
         validationAt: value.validationAt,
+        planId: value.planId, planSelection: value.planSelection, planCreatedAt: value.planCreatedAt,
         changedFiles: value.completionKnown === true ? value.changedFiles : undefined,
         message: value.message, nextAction: value.nextAction,
         fullOutput: value.fullOutput

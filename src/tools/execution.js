@@ -10,7 +10,7 @@ async function executeToolCall({ config, name, effectiveArgs, context, finishAct
   const value = await runWithToolActivity(finishActivity, () => runSpan(config,
     name === 'relai_start_task' ? 'relai.logical_task.start' : 'relai.tool.call',
     spanAttributes(name, effectiveArgs, context, finishActivity),
-    () => runWorkspaceOperation(effectiveArgs?.workspace, async () => {
+    () => runWorkspaceOperation(name === 'relai_cancel_task' ? '' : effectiveArgs?.workspace, async () => {
       sessionStart = maybeStartSession(config, name, effectiveArgs || {}, { taskId: finishActivity?.taskId });
       if (typeof definition?.handler !== 'function') throw new Error(`Tool '${name}' has no executable handler.`);
       const result = await definition.handler(config, effectiveArgs || {}, {

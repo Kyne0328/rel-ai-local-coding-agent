@@ -175,6 +175,7 @@ function summarizeCommand(result) {
     ...(result.stdoutTruncated ? { stdoutTruncated: true } : {}),
     ...(result.stderrTruncated ? { stderrTruncated: true } : {}),
     ...(result.timedOut ? { timedOut: true } : {}),
+    ...(result.cancelled ? { cancelled: true } : {}),
     ...(result.stdout ? { stdout: result.stdout } : {}),
     ...(result.stderr ? { stderr: result.stderr } : {})
   };

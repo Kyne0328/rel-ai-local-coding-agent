@@ -420,6 +420,7 @@ function entryFailed(entry) {
 }
 
 function safeEventProjection(entry) {
+  if (entry?.safeCopy && typeof entry.safeCopy === 'object') return entry.safeCopy;
   return {
     eventId: entry.eventId || entry.id,
     taskId: entry.taskId,

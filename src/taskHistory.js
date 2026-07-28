@@ -1,6 +1,7 @@
 'use strict';
 
 const { clamp, isCurrentTaskEvent, operationForTool, unique } = require('./taskEvents');
+const { sanitizeTaskRecord } = require('./taskObservability');
 
 function buildTaskHistory(entries = [], activity = {}, options = {}) {
   const limit = clamp(options.limit || 100, 1, 500);
@@ -18,7 +19,8 @@ function buildTaskHistory(entries = [], activity = {}, options = {}) {
   }
   return tasks
     .sort((left, right) => Date.parse(right.endedAt || right.completedAt || right.startedAt || 0) - Date.parse(left.endedAt || left.completedAt || left.startedAt || 0))
-    .slice(0, limit);
+    .slice(0, limit)
+    .map(sanitizeTaskRecord);
 }
 
 function activityTasks(activity) {

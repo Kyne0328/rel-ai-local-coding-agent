@@ -6,6 +6,9 @@ const { detectVerifyChecks } = require('./checkDetection');
 const { clampNumber } = require('./limits');
 const { runSpan } = require('../telemetry');
 const { operationTaskSignal } = require('../operationTasks');
+const { combineAbortSignals } = require('../abortSignals');
+const { getCurrentTaskAbortSignal, updateCurrentToolActivity } = require('../toolActivity');
+const { sanitizeDisplayText } = require('../taskObservability');
 
 async function relaiDiagnosticsRun(workspace, config, args = {}) {
   const commands = selectDiagnosticCommands(workspace, args);
@@ -15,8 +18,15 @@ async function relaiDiagnosticsRun(workspace, config, args = {}) {
   const timeout = clampNumber(args.timeoutMs, 1000, 24 * 60 * 60 * 1000, 180000);
   const results = [];
   const diagnostics = [];
-  const signal = args._operationTaskId ? operationTaskSignal(config, args._operationTaskId) : undefined;
-  for (const command of commands) {
+  const signal = combineAbortSignals(
+    getCurrentTaskAbortSignal(),
+    args._operationTaskId ? operationTaskSignal(config, args._operationTaskId) : undefined
+  );
+  publishDiagnosticsProgress(commands, results, '', 0, 'pending');
+  for (let index = 0; index < commands.length; index += 1) {
+    if (signal?.aborted) break;
+    const command = commands[index];
+    publishDiagnosticsProgress(commands, results, command, index + 1, 'running');
     const result = await runSpan(config, 'relai.validation.diagnostics', {
       'relai.workspace': workspace.alias,
       'relai.diagnostics.command': command.slice(0, 300)
@@ -25,18 +35,71 @@ async function relaiDiagnosticsRun(workspace, config, args = {}) {
     const parsed = parseDiagnostics(`${result.stdout || ''}\n${result.stderr || ''}`, command, workspace.path);
     results.push({ command, ...summary, diagnostics: parsed.length });
     diagnostics.push(...parsed);
+    publishDiagnosticsProgress(commands, results, command, index + 1, result.cancelled ? 'cancelled' : result.ok ? 'passed' : result.timedOut ? 'timed_out' : 'failed');
+    if (result.cancelled) break;
     if (args.stopOnFailure !== false && result.exitCode !== 0) break;
   }
   const unique = deduplicateDiagnostics(diagnostics).slice(0, clampNumber(args.maxResults, 1, 5000, 500));
+  const cancelled = signal?.aborted === true || results.some(item => item.cancelled === true);
+  const ok = !cancelled && results.length === commands.length && results.every(item => item.ok);
+  publishDiagnosticsProgress(commands, results, results.at(-1)?.command || '', Math.min(results.length, commands.length), cancelled ? 'cancelled' : ok ? 'passed' : 'failed', true);
   return {
-    ok: results.every(item => item.ok),
+    ok,
     workspace: workspace.alias,
     commands,
     results,
     diagnostics: unique,
     diagnosticCount: diagnostics.length,
+    completedUnits: results.filter(item => item.cancelled !== true).length,
+    totalUnits: commands.length,
+    cancelled,
     truncated: diagnostics.length > unique.length
   };
+}
+
+function publishDiagnosticsProgress(commands, results, currentCommand, currentIndex, resultStatus, final = false) {
+  const total = commands.length;
+  const completed = results.filter(item => item.cancelled !== true).length;
+  const current = sanitizeDisplayText(currentCommand, 300);
+  const failed = results.filter(item => !item.ok && !item.cancelled).length;
+  const stage = resultStatus === 'cancelled'
+    ? 'Diagnostics cancelled'
+    : resultStatus === 'failed' || resultStatus === 'timed_out'
+      ? 'Diagnostics failed'
+      : final && resultStatus === 'passed'
+        ? 'Diagnostics completed'
+        : currentIndex > 0
+          ? `Running diagnostic ${currentIndex} of ${total}`
+          : 'Preparing diagnostics';
+  updateCurrentToolActivity({
+    status: 'validating',
+    operation: currentIndex > 0 ? `Running diagnostic ${currentIndex}/${total}: ${current || 'check'}` : `Preparing ${total} diagnostic commands`,
+    currentStage: stage,
+    currentActivity: current || `${completed} of ${total} diagnostics completed`,
+    progress: {
+      mode: 'determinate',
+      completedUnits: completed,
+      totalUnits: total,
+      percentage: final && resultStatus !== 'passed' && completed === total ? 99 : Math.round((completed / total) * 100),
+      source: 'diagnostics',
+      label: `${completed} of ${total} diagnostics`
+    },
+    activity: {
+      category: 'validation',
+      status: 'running',
+      title: 'Run normalized diagnostics',
+      summary: current || `${completed} of ${total} diagnostics completed`,
+      metadata: {
+        checkCount: total,
+        passedCount: results.filter(item => item.ok).length,
+        failedCount: failed,
+        currentCheck: current,
+        currentIndex,
+        resultStatus,
+        cancelled: resultStatus === 'cancelled'
+      }
+    }
+  });
 }
 
 function selectDiagnosticCommands(workspace, args) {
@@ -114,4 +177,4 @@ function deduplicateDiagnostics(items) {
   });
 }
 
-module.exports = { relaiDiagnosticsRun, parseDiagnostics, parseDiagnosticLine };
+module.exports = { relaiDiagnosticsRun, parseDiagnostics, parseDiagnosticLine, publishDiagnosticsProgress };

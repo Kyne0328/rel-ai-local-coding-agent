@@ -2,46 +2,51 @@
 
 ## Scope
 
-Rel.AI MCP exposes one canonical logical-task snapshot and one canonical activity-event shape to the dashboard. The implementation extends the existing tool tracker, snapshot-based Server-Sent Events transport, JSON session store, and dashboard modules. It does not add a second task orchestrator, event bus, polling loop, or realtime protocol.
+Rel.AI MCP uses one logical-task tracker, one canonical task-state vocabulary, one activity-event normalization path, one JSON session store, one snapshot-based Server-Sent Events transport, and one shared frontend clock. The observability implementation repairs those existing owners rather than introducing a second task model, event bus, persistence layer, polling loop, or realtime protocol.
+
+The system reports what Rel.AI can observe: tool acquisition, queueing, approval waits, tool execution, validation work, progress, terminal outcomes, and persisted history. It does not infer ChatGPT's private reasoning or claim that an overall chat request is complete without an accepted completion call.
 
 ## End-to-end flow
 
 ```text
 MCP tools/call
-→ src/tools.js resolves workspace and explicit task_id
+→ src/tools.js validates explicit task_id and runtime compatibility
 → src/toolActivity.js creates or acquires the logical task
 → src/tools/execution.js enters the workspace queue and tool handler
 → process, repository, validation, Git, or approval layer executes
-→ src/taskObservability.js derives a safe structured outcome
+→ src/taskObservability.js derives a sanitized structured outcome
 → the lifecycle event is updated by stable operation/event ID
-→ src/taskHistoryStore.js upserts the canonical task snapshot and event
-→ src/http/dashboard.js reconciles persisted activity with the audit tail
-→ an ordered dashboard snapshot is sent over the existing SSE stream
-→ public/dashboard.js rejects duplicate or stale snapshots
-→ task, session, activity, and elapsed-time views render canonical state
+→ src/taskHistoryStore.js normalizes and upserts the canonical task snapshot
+→ src/taskHistoryStorage.js sanitizes before disk write and after disk read
+→ src/http/dashboardData.js builds the canonical dashboard projection
+→ src/http/dashboard.js publishes an ordered snapshot over the existing SSE stream
+→ src/ui/snapshot-order.js rejects duplicate or stale snapshots
+→ Sessions, Activity, progress, and elapsed-time views render canonical state
 ```
 
 ## Ownership
 
 | Concern | Canonical owner |
 | --- | --- |
-| Task identity | `src/toolActivity.js`; explicit `task_id` remains the protocol identity |
-| Task title and objective | `src/taskObservability.js` derivation plus optional `relai_start_task` input |
-| Task status, current stage, call counters, and terminal outcome | `src/toolActivity.js` |
-| Activity event shape, safe summaries, targets, results, errors, and progress | `src/taskObservability.js` |
-| Queue-wait activity | `src/tools/execution.js` through the current tool activity context |
-| Audit enrichment | Existing audit pipeline; merged by operation ID without adding a second call count |
-| Persistence | `src/taskHistoryStore.js` and `src/taskHistoryStorage.js` |
-| Snapshot ordering | `src/http/dashboard.js` stream ID and sequence |
+| Task identity and active lifecycle | `src/toolActivity.js` |
+| State vocabulary, terminal predicate, transitions, historical aliases | `src/taskState.js` |
+| Safe titles, summaries, errors, metadata, progress, and copy projection | `src/taskObservability.js` |
+| Explicit completion | `src/tools/completion.js` |
+| Explicit cancellation | `src/tools/cancellation.js` and `src/toolActivity.js` |
+| Validation and diagnostic work-unit progress | `src/bridge/validation.js` and `src/bridge/diagnosticsRunner.js` |
+| Cooperative process cancellation | `src/abortSignals.js`, `src/process.js`, and process-backed bridges |
+| Queue-wait activity | `src/tools/execution.js` through the current activity context |
+| Persistence and historical read normalization | `src/taskHistoryStore.js` and `src/taskHistoryStorage.js` |
+| Dashboard projection and copy-safe activity | `src/http/dashboardData.js` |
+| Snapshot stream ID and sequence | `src/http/dashboard.js` |
 | Duplicate/stale snapshot rejection | `src/ui/snapshot-order.js` |
 | Presentation-only current time | `src/ui/clock.js` |
 | Task progress rendering | `src/ui/components/task-progress.js` |
+| Repository/runtime compatibility | `src/runtimeCompatibility.js` and `release-manifest.json` |
 
-## Canonical task semantics
+## Canonical task state machine
 
-A task snapshot includes a meaningful sanitized title, optional objective, canonical status, current stage, latest meaningful activity, tool-call counters, progress, timestamps, summary/error fields, correlation-compatible task/session IDs, current operations, and ordered activity events.
-
-Canonical statuses are:
+New writes use only these machine-readable states:
 
 - `queued`
 - `planning`
@@ -54,110 +59,190 @@ Canonical statuses are:
 - `failed`
 - `cancelled`
 
-Historical `working`, `waiting`, `settling`, `attention`, and `inactive` values remain display-compatible where encountered, but new tracker and persistence writes use the canonical statuses.
+Terminal states are `completed`, `completed_with_warnings`, `failed`, and `cancelled`. The shared terminal predicate is used by the tracker and persistence layer so terminal timestamps and progress are not discarded by a different local status list.
 
-## Task titles
+### Allowed transitions
 
-Title resolution is deterministic and local:
+| From | Allowed next states |
+| --- | --- |
+| `queued` | `planning`, `running`, `cancelled` |
+| `planning` | `running`, `waiting_for_approval`, `blocked`, `validating`, `completed`, `failed`, `cancelled` |
+| `running` | `planning`, `waiting_for_approval`, `blocked`, `validating`, `completed`, `completed_with_warnings`, `failed`, `cancelled` |
+| `waiting_for_approval` | `running`, `blocked`, `failed`, `cancelled` |
+| `blocked` | `running`, `waiting_for_approval`, `failed`, `cancelled` |
+| `validating` | `running`, `completed`, `completed_with_warnings`, `failed`, `cancelled` |
+| Any terminal state | no nonterminal transition |
 
-1. explicit `relai_start_task.title`;
-2. structured objective;
-3. current operation;
-4. tool-specific safe title;
-5. workspace-based fallback.
+Repeating the same state is idempotent. A stale running or progress update cannot reopen or overwrite a terminal task.
 
-Raw prompts, unrestricted command output, file contents, and credentials are never used as titles. Generic labels such as `Task`, `Request`, and `Tool call` are rejected as final titles.
+### Terminal data
+
+A terminal snapshot preserves, when available:
+
+- `endedAt`;
+- `completedAt` for successful completion states;
+- `cancelledAt` for explicit cancellation;
+- duration and last activity time;
+- the final defensible progress snapshot;
+- call, success, failure, and warning counters;
+- sanitized error or result summary;
+- `endReason` and `terminalReason`;
+- a bounded cancellation initiator category.
+
+## Inactivity and historical compatibility
+
+Inactivity is a deterministic closure condition, not a separate task state.
+
+- An inactive task with an unrecovered failure becomes `failed`.
+- An inactive task without recorded failure becomes `cancelled` with `endReason: inactivity_window`.
+- A completed, failed, or cancelled task remains terminal and is not later rewritten by inactivity.
+
+Historical `working`, `active`, `waiting`, `settling`, `open`, `approval`, `awaiting_approval`, `attention`, `inactive`, and `expired` values remain readable only through normalization. The normalizer uses completion, failure, timestamp, and outcome evidence to map them to the canonical vocabulary. Those aliases are never emitted as new task states.
+
+Historical records are sanitized before entering the parsed-session cache. Unsafe historical strings therefore cannot remain in memory as an alternate raw representation that can later leak into another projection.
+
+## Explicit cancellation
+
+`relai_cancel_task` targets the exact supplied `task_id`.
+
+Cancellation:
+
+- rejects an unrelated or unknown task;
+- is idempotent for an already-cancelled task;
+- refuses to overwrite another terminal outcome;
+- bypasses the workspace operation lock so a control call can reach an active validation;
+- records a bounded reason and initiator category;
+- preserves partial progress and terminal timestamps;
+- emits one terminal lifecycle transition;
+- signals the task's shared `AbortSignal` to process-backed operations;
+- prevents a late operation result from reopening or completing the cancelled task.
+
+Cancellation is cooperative. Rel.AI terminates supported subprocess-backed operations through their existing process boundary. It does not claim that every external API, operating-system action, or third-party operation can be forcefully interrupted after the side effect has already occurred.
+
+## Progress semantics
+
+Progress is based on explicit work units. It is never inferred from elapsed time, log volume, or optimistic percentages.
+
+### Determinate workflows
+
+Validation and diagnostics resolve, normalize, and deduplicate their command list before execution when possible. A stable workload starts at `0/N`, advances after each completed check, and preserves the current check, index, result status, duration, warning/failure count, and skipped-check metadata.
+
+For a two-check success path, observable progress is:
+
+```text
+0/2 → 1/2 → 2/2
+```
+
+A successful determinate task ends with completed units equal to total units and presents 100%.
+
+### Failure and cancellation
+
+- Stop-on-first-failure preserves the number of finished checks and the stable total.
+- Continue-after-failure may finish all units, but a failed workflow is capped below a successful 100% presentation.
+- A timed-out or launch-failed check is a failed unit.
+- A cancelled in-flight check is not counted as completed.
+- A failed or cancelled task retains its last defensible partial progress in history.
+- The final event identifies the failing or cancelled check where known.
+
+### Indeterminate workflows
+
+Exploration, planning, approval waits, and operations without a stable denominator remain indeterminate. The UI does not fabricate `aria-valuenow`, a numeric percentage, or a synthetic total for those states.
 
 ## Activity lifecycle
 
-Each tool invocation owns one stable `operationId`, which is also the activity `eventId` and tool invocation ID. The event is created in `running` state and updated in place to `succeeded`, `failed`, `blocked`, or `cancelled`. Persistence upserts by `eventId`, so lifecycle updates do not create repetitive rows.
+Each tool invocation owns one stable `operationId`, which is also the activity `eventId` and invocation ID. The event is created in a running state and updated in place to `succeeded`, `failed`, `blocked`, or `cancelled`. Persistence upserts by event ID, so lifecycle updates do not create duplicate rows.
 
-Audit events with the same `operationId` enrich the canonical lifecycle record but do not increment the task's tool-call count a second time.
+Audit events with the same operation ID enrich the canonical lifecycle record but do not increment task call counts a second time.
 
-Each event can expose:
+Permitted event data includes bounded category, action, state, title, summary, timing, tool name, workspace-relative target, sanitized resource URI, result status, affected-item count, warning count, normalized error, and allow-listed metadata. Raw arguments, unrestricted command output, file contents, environment values, and raw headers are not part of the dashboard activity projection.
 
-- category and action;
-- state;
-- title and structured summary;
-- start, completion, and duration;
-- tool name and operation;
-- workspace-relative target or sanitized resource URI;
-- outcome, affected-item count, and warning count;
-- normalized safe error;
-- allow-listed metadata.
+## Completion-summary privacy
 
-## Progress policy
+Completion input accepts only a string. It normalizes whitespace, applies the canonical display-text sanitizer, enforces the final length limit after sanitization, and rejects an empty sanitized result.
 
-Progress is never inferred from elapsed time or log volume.
+The sanitizer covers bounded forms of:
 
-- **Determinate:** used when the tool has a known path batch, check set, workflow total, plan total, or native total.
-- **Indeterminate:** used while exploring, planning, waiting for the next step, or executing an operation without a stable denominator.
-- **Complete:** used only for successful terminal task completion and always resolves to 100%.
+- Authorization headers and bearer/basic credentials;
+- API keys and generic/access/refresh/session/auth tokens;
+- client secrets, passwords, cookies, and set-cookie values;
+- common environment assignments containing secret-bearing key names;
+- credential-bearing URLs and sensitive URL query or fragment values;
+- private-key blocks;
+- approval and authorization codes.
 
-Failed and cancelled tasks preserve any defensible completed-unit information but never convert it into a successful 100% state. Parent/child progress is not aggregated unless a future workflow provides non-overlapping measurable units.
+It deliberately preserves ordinary technical prose such as package names, safe normalized paths, HTTP status names, test names, tool names, version numbers, `tokenizer`, and `authorization flow`.
 
-## Realtime consistency
+The same rules are reused defensively when completion-related strings enter:
 
-The existing snapshot-based SSE transport remains authoritative.
+- the task tracker;
+- activity events;
+- persisted history;
+- historical record normalization;
+- dashboard snapshots and SSE payloads;
+- the Activity copy/export projection.
 
-Every snapshot includes:
+This is defense in depth, not a claim that arbitrary human text can be classified perfectly. Production-path tests use synthetic credential-like values and verify that the original values do not appear in the tracker, raw history JSON, dashboard payload, SSE-compatible snapshot, activity details, or copied safe JSON. Real credentials must never be used as test fixtures.
 
-```json
-{
-  "streamId": "process-scoped UUID",
-  "sequence": 1,
-  "generatedAt": "ISO timestamp",
-  "modelVersion": 3
-}
-```
+## Realtime and reconnect correctness
 
-Rules:
+The existing canonical-snapshot SSE design remains authoritative.
 
-- sequence is monotonic within one server process;
-- each SSE snapshot carries an event ID derived from stream and sequence;
-- a new connection receives an immediate canonical catch-up snapshot;
-- duplicate or lower sequence numbers in the same stream are ignored;
-- a new stream ID establishes a new ordering domain after server restart;
-- persisted terminal state rejects older running updates;
-- canonical events are idempotent by stable event ID.
+Every snapshot includes a process-scoped stream ID, a strictly increasing sequence, a generation timestamp, and the task model version. A new connection receives the current canonical snapshot. The frontend rejects duplicate or lower sequences within the same stream, accepts a new ordering domain after restart, and restores persisted task state and progress after reconnect.
 
-## Persistence and compatibility
+Stable event IDs make event upserts idempotent. Persisted terminal state rejects older nonterminal updates. No separate event-replay infrastructure is added because the canonical snapshot already supplies reconnect recovery.
 
-The session-store schema marker is v3. Creating the marker no longer deletes the session directory. Older records remain readable and receive safe fallbacks for title, progress, counters, current stage, and current activity. Missing information is marked unavailable rather than fabricated.
+## Runtime and repository compatibility
 
-Malformed files remain isolated by the existing storage reader. The explicit history-clear operation remains destructive by design; normal schema initialization is not.
+`release-manifest.json` records the authoritative application version, protocol version, tool-surface version, tool count, manifest hash, and schema version for a repository build. The running service exposes the same metadata from its actual package and tool registry.
 
-## Security and privacy
+When repository metadata is available, Rel.AI compares:
 
-Activity metadata is allow-listed. Sensitive key patterns are excluded, including tokens, secrets, passwords, authorization data, cookies, credentials, private keys, approval data, environment values, raw headers, prompt/content fields, stdout, stderr, and unrestricted output.
+- application and package version;
+- protocol version;
+- tool-surface version;
+- tool count;
+- tool manifest hash;
+- release-manifest schema version.
 
-Displayed file targets are normalized to workspace-relative paths. URLs lose username, password, query, and fragment data. The Activity details drawer and Copy JSON action use a safe projection and do not expose raw tool arguments or raw output.
+A repository-ahead mismatch reports `restart_required`. A runtime-ahead or other incompatible mismatch reports the precise direction and differences. The dashboard shows both versions and tool surfaces, preserves task history, and explains whether active tasks prevent a safe restart.
 
-OpenTelemetry and dashboard activity remain independent consumers of the same logical identifiers. Dashboard operation does not require telemetry to be enabled.
+Known incompatibility blocks new schema-sensitive operations. Status, exact task completion/cancellation, operation-task inspection/cancellation, and managed-process inspection/stop remain available so users can protect or finish active work before reconnecting. Repository metadata being unavailable is reported explicitly and does not fabricate a match.
 
-## Frontend clock
+## Frontend clock and accessibility
 
-`src/ui/clock.js` owns one shared one-second timer for presentation-only time values.
+`src/ui/clock.js` owns one shared one-second timer for presentation-only time values. It updates opted-in clock nodes directly, does not trigger full-dashboard rerenders, pauses while the document is hidden, recomputes from source timestamps when visible, and anchors completed durations to terminal timestamps.
 
-- Time-sensitive nodes opt in with `data-clock-elapsed-start`, optional `data-clock-elapsed-end`, or `data-clock-relative`.
-- The timer updates only those nodes; it does not re-render the dashboard or depend on backend events.
-- The timer pauses while the document is hidden, recomputes from source timestamps when visible again, and is cleaned up on page exit.
-- Completed durations remain anchored to completion timestamps.
-- Wall-clock timestamps and elapsed durations are kept separate.
+Determinate progress uses native `progress[value]` with a valid accessible label. Indeterminate progress exposes status text without a fabricated numeric value. State text accompanies color. Focus remains visible, timeline rows are keyboard operable, error text wraps, and indeterminate animation is disabled under reduced-motion preferences.
 
-## Accessibility
+## Performance baseline and budgets
 
-Determinate progress uses native `progress[value]` with a valid accessible label. Indeterminate progress omits a fabricated numeric value. Compact list progress is not an aggressive live region; the selected task state can expose a restrained status announcement. Status text accompanies color. Timeline links remain keyboard accessible, and indeterminate animation is disabled under reduced-motion preferences.
+`npm run benchmark:observability` produces machine-readable JSON. The current Windows x64 / Node.js 24 release baseline, measured on 2026-07-28, has no preimplementation comparison and therefore establishes regression budgets rather than claiming an improvement.
 
-## Performance characteristics
+| Metric | Workload | Result | Budget |
+| --- | --- | ---: | ---: |
+| Activity events | 100 serial calls with one progress update | 300 | ≤305 |
+| Atomic history writes | same workload | 300 | ≤305 |
+| Coalesced snapshot publications | same burst | 1 | ≤5 |
+| Queue-wait events | uncontended workload | 0 | 0 |
+| History growth | 100 calls | 67,000 bytes | ≤2 MiB |
+| Heap after 1,000 additional calls | bounded 200-event task timeline | 7,242,432 bytes | ≤256 MiB |
+| Heap delta after GC | 1,000 additional calls | 543,888 bytes | ≤32 MiB |
+| Snapshot size | canonical current task | 133,348 bytes | ≤512 KiB |
+| Snapshot serialization | current task | 0.205 ms | ≤25 ms |
+| Sanitization | 10,000 credential-like summaries | 39.632 ms | ≤250 ms |
+| Reconnect snapshot | warm median of five | 7.362 ms | ≤150 ms |
+| Shared clock node updates | quiet 60 seconds | 60 | ≤60 |
 
-- One shared clock interval replaces per-row intervals and does not trigger full-dashboard renders.
-- One lifecycle event is stored per tool invocation and updated in place.
-- Session events are capped at 200 records.
-- Dashboard snapshots merge by stable event ID.
-- High-frequency backend activity continues through the existing coalesced snapshot scheduler.
-- No event-processing framework, database watcher, or secondary realtime transport was introduced.
+Renderer render counts, 200-event timeline time, session-switch memory, hidden-tab timing, and renderer reconnect latency require a launch-capable Electron Chromium host. The benchmark marks those metrics blocked rather than inventing results when the renderer cannot start.
+
+## Known limitations
+
+- Cancellation is cooperative and cannot reverse a side effect already committed outside a supported process boundary.
+- Sanitization is bounded and pattern-based; callers must not intentionally place secrets in descriptive text.
+- Runtime compatibility cannot be compared when repository release metadata is unavailable.
+- Renderer acceptance and performance measurements require a Windows host on which the exact Electron candidate can start and execute JavaScript.
+- Windows artifacts are currently unsigned; checksums detect byte changes but do not establish publisher identity.
 
 ## Verification
 
-Coverage includes deterministic titles, sanitization, progress calculation, terminal behavior, lifecycle event upserts, audit deduplication, historical fallback, non-destructive migration, stale terminal protection, tool correlation, SSE sequence ordering, duplicate snapshot rejection, clock fake timers, visibility resume, cleanup, dashboard rendering, generated CSS, and live HTTP/SSE delivery.
+Required coverage includes completion-summary sanitization, historical reads, canonical transitions, terminal timestamps, explicit cancellation, live validation and diagnostics progress, partial failure, reconnect restoration, runtime-version mismatch, snapshot ordering, shared-clock behavior, real Chromium dashboard interaction, packaged Electron rendering, accessibility, performance budgets, packaged connector acceptance, and release-artifact launch checks. A blocked or failed mandatory renderer or artifact-launch check keeps the release decision at **Not ready**.

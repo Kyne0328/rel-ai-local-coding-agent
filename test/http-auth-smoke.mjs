@@ -53,7 +53,7 @@ try {
 
   const listed = await postMcp(base, { id: 2, method: 'tools/list', token });
   assert.equal(listed.response.status, 200, `${JSON.stringify(listed.body)}\n${stderr}`);
-  assert.equal(listed.body.result?.tools?.length, 33);
+  assert.equal(listed.body.result?.tools?.length, 34);
 
   const missingVersion = await fetch(`${base}/mcp`, {
     method: 'POST',

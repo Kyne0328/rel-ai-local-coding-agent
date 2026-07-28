@@ -11,7 +11,8 @@ const {
   applyCautionAudit,
   invalidateSessionCacheForCall
 } = require('./tools/session');
-const { beginConnectorToolCall, normalizeTaskId, onToolActivity } = require('./toolActivity');
+const { beginConnectorToolCall, getToolActivity, normalizeTaskId, onToolActivity } = require('./toolActivity');
+const { assertRuntimeCompatibility } = require('./runtimeCompatibility');
 const { buildToolActivityDetails } = require('./taskObservability');
 const { bindTaskHistoryActivityPersistence } = require('./taskHistoryStore');
 const { assertKnownTask, taskAuditContext, withTaskIdentity } = require('./tools/task');
@@ -28,6 +29,7 @@ async function callTool(name, args = {}, context = {}) {
   let requestedTaskId = '';
   let effectiveArgs = args || {};
   let workspaceResolution;
+  let knownTask = null;
   let finishActivity = null;
   let activityResult = { ok: true };
   let sessionStart;
@@ -39,15 +41,19 @@ async function callTool(name, args = {}, context = {}) {
     if (workspaceResolution?.alias) effectiveArgs = { ...args, workspace: workspaceResolution.alias };
     requestedTaskId = normalizeTaskId(effectiveArgs?.task_id || effectiveArgs?.taskId);
     if (requestedTaskId && name !== 'relai_start_task') {
-      assertKnownTask(config, requestedTaskId, effectiveArgs?.workspace, name);
+      knownTask = assertKnownTask(config, requestedTaskId, effectiveArgs?.workspace, name);
     }
+    assertRuntimeCompatibility(config, name, effectiveArgs, {
+      activeTaskCount: getToolActivity().activeTaskCount
+    });
+    const duplicateTerminalCancellation = name === 'relai_cancel_task' && knownTask?.status === 'cancelled';
     finishActivity = beginConnectorToolCall({
       tool: name,
       workspace: effectiveArgs?.workspace,
       scopeId: requestedTaskId ? `task:${requestedTaskId}` : (connector ? 'mcp:request' : 'local:default'),
       taskId: requestedTaskId,
       createTask: name === 'relai_start_task',
-      trackTask: name === 'relai_start_task' || Boolean(requestedTaskId),
+      trackTask: !duplicateTerminalCancellation && (name === 'relai_start_task' || Boolean(requestedTaskId)),
       connector,
       operation: describeToolOperation(name, effectiveArgs || {}),
       title: effectiveArgs?.title,
@@ -91,7 +97,7 @@ async function callTool(name, args = {}, context = {}) {
       ...(valueOk ? {} : { error: activityResult.error })
     });
     const responseValue = connector ? compactForConnector(name, value, effectiveArgs || {}) : value;
-    return ok(withTaskIdentity(responseValue, finishActivity?.taskId));
+    return ok(withTaskIdentity(responseValue, finishActivity?.taskId || requestedTaskId));
   } catch (error) {
     const enhanced = enhanceToolError(name, error);
     activityResult = {
