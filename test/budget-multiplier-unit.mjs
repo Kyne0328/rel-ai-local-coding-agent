@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { resolveBudget } = require('../src/budgetResolver.js');
-const { normalizeConfig } = require('../src/config.js');
+import { resolveBudget } from "../src/budgetResolver.js";
+import { normalizeConfig } from "../src/config.js";
 
 assert.equal(resolveBudget(100, null, { trustedBudgetMultiplier: 5 }), 100);
 console.log('1. null policy: OK');

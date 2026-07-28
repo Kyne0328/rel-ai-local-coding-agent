@@ -1,11 +1,14 @@
+import { callTool, getToolSchemas } from "../src/tools.js";
+import { readConfig } from "../src/config.js";
+import { readAudit } from "../src/audit.js";
+import * as sessionCache from "../src/sessionCache.js";
+import { resetToolActivity } from "../src/toolActivity.js";
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-exec-tool-'));
 const workspace = path.join(temp, 'workspace');
 const nested = path.join(workspace, 'nested');
@@ -70,11 +73,11 @@ fs.writeFileSync(configPath, JSON.stringify({
 process.env.REL_AI_MCP_CONFIG = configPath;
 
 try {
-  const { callTool, getToolSchemas } = require('../src/tools.js');
-  const { readConfig } = require('../src/config.js');
-  const { readAudit } = require('../src/audit.js');
-  const sessionCache = require('../src/sessionCache.js');
-  const { resetToolActivity } = require('../src/toolActivity.js');
+
+
+
+
+
 
   const schema = getToolSchemas().find(tool => tool.name === 'relai_exec');
   assert.ok(schema, 'relai_exec must be connector-visible');

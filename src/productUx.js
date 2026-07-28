@@ -1,13 +1,15 @@
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
-const crypto = require("node:crypto");
-const { publicConfigSummary, resolveWorkspace, writeConfig, readConfig, getConfigPath, makeDefaultConfig } = require("./config");
-const { discoverCommands, staleCommandKeys } = require("./commandDiscovery");
-const { resolvePolicy } = require("./policyResolver");
-const { readAudit, getStateDir } = require("./audit");
-const { runProcess, summarizeCommand } = require("./process");
-const { safeReadJson, validateRelativePath } = require("./safety");
+import { getToolSchemas } from './tools.js';
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import * as crypto from "node:crypto";
+import { publicConfigSummary, resolveWorkspace, writeConfig, readConfig, getConfigPath, makeDefaultConfig } from "./config.js";
+import { discoverCommands, staleCommandKeys } from "./commandDiscovery.js";
+import { resolvePolicy } from "./policyResolver.js";
+import { readAudit } from './audit.js';
+import { getStateDir } from './statePaths.js';
+import { runProcess, summarizeCommand } from "./process.js";
+import { safeReadJson, validateRelativePath } from "./safety.js";
 
 function dashboardData(config, args = {}) {
   const limit = clampNumber(args.limit || 100, 1, 500);
@@ -27,7 +29,7 @@ function dashboardData(config, args = {}) {
   }
   // Read the active connector registry so the dashboard never hardcodes tool names.
   let tools = Array.isArray(configSummary.localRepoBridge?.visibleTools) ? configSummary.localRepoBridge.visibleTools : [];
-  try { tools = require("./tools").getToolSchemas().map((tool) => tool.name); } catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] tool schema discovery:', error); }
+  try { tools = getToolSchemas().map((tool) => tool.name); } catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] tool schema discovery:', error); }
   const toolCount = tools.length;
   return {
     ok: true,
@@ -493,17 +495,4 @@ function aliasConsistencyCheck(config) {
   return { ok: results.every(r => r.ok), generatedAt: new Date().toISOString(), workspaces: results };
 }
 
-module.exports = {
-  dashboardData,
-  liveLogTail,
-  healthMonitor,
-  aliasConsistencyCheck,
-  cautionSummary,
-  cleanupPreview,
-  cleanupRun,
-  doctorFix,
-  setupWizard,
-  importOriginalRelAiConfig,
-  stateExport,
-  stateImport
-};
+export { dashboardData, liveLogTail, healthMonitor, aliasConsistencyCheck, cautionSummary, cleanupPreview, cleanupRun, doctorFix, setupWizard, importOriginalRelAiConfig, stateExport, stateImport };

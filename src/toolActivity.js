@@ -1,8 +1,7 @@
-'use strict';
 
-const crypto = require('node:crypto');
-const { AsyncLocalStorage } = require('node:async_hooks');
-const {
+import * as crypto from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import {
   buildToolActivityDetails,
   completeProgress,
   createActivityEvent,
@@ -13,9 +12,8 @@ const {
   sanitizeCompletionSummary,
   sanitizeDisplayText,
   sanitizeTaskRecord
-} = require('./taskObservability');
-const { isTerminalTaskStatus, normalizeHistoricalTaskStatus } = require('./taskState');
-
+} from './taskObservability.js';
+import { isTerminalTaskStatus, normalizeHistoricalTaskStatus } from './taskState.js';
 const DEFAULT_TASK_IDLE_MS = 5 * 60_000;
 const activityContext = new AsyncLocalStorage();
 
@@ -850,16 +848,20 @@ function resolveIdleMs(value) {
 }
 
 const defaultTracker = createToolActivityTracker();
+const beginConnectorToolCall = defaultTracker.beginConnectorToolCall;
+const cancelTask = defaultTracker.cancelTask;
+const onToolActivity = defaultTracker.onToolActivity;
+const getToolActivity = defaultTracker.getToolActivity;
+const resetToolActivity = defaultTracker.reset;
 
-module.exports = {
+export {
   DEFAULT_TASK_IDLE_MS,
   createToolActivityTracker,
-  beginConnectorToolCall: defaultTracker.beginConnectorToolCall,
-  cancelTask: defaultTracker.cancelTask,
-  onToolActivity: defaultTracker.onToolActivity,
-  getToolActivity: defaultTracker.getToolActivity,
-  resetToolActivity: defaultTracker.reset,
-  runWithToolActivity,
+  beginConnectorToolCall,
+  cancelTask,
+  onToolActivity,
+  getToolActivity,
+  resetToolActivity,  runWithToolActivity,
   updateCurrentToolActivity,
   requestCurrentTaskCancellation,
   requestCurrentTaskCompletion,

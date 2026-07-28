@@ -23,4 +23,4 @@ function classifyCaution(toolName, args) {
   return { level: null, reason: null };
 }
 
-module.exports = { classifyCaution };
+export { classifyCaution };

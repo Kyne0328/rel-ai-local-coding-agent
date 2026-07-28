@@ -115,7 +115,4 @@ function matchGroupScore(group, tokens, combinedToken) {
   return exactPathBoost + tokenHits * 100 + matchDensity - pathDepth;
 }
 
-module.exports = {
-  rankMatchGroups,
-  resolveSearchPlan
-};
+export { rankMatchGroups, resolveSearchPlan };

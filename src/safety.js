@@ -1,6 +1,6 @@
-const fs = require("node:fs");
-const path = require("node:path");
-const crypto = require("node:crypto");
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as crypto from "node:crypto";
 
 const SECRET_PATH_GROUPS = Object.freeze({
   fileNames: ["id_rsa", "id_ed25519", ".npmrc", ".pypirc", ".netrc", "kubeconfig"],
@@ -550,25 +550,7 @@ function safeReadJson(file, fallback = null) {
   }
 }
 
-module.exports = {
-  SECRET_PATH_PATTERNS,
-  DEFAULT_EXCLUDED_NAMES,
-  clearRealRootCache,
-  realRootOf,
-  validateRelativePath,
-  resolveSafePath,
-  assertPathOperationAllowed,
-  isPathInside,
-  isSecretPath,
-  classifySensitivePath,
-  evaluateSensitiveContent,
-  looksBinary,
-  collectTextFiles,
-  collectOptionsFromWorkspace,
-  writeTextFileSafe,
-  fileSha256,
-  safeReadJson
-};
+export { SECRET_PATH_PATTERNS, DEFAULT_EXCLUDED_NAMES, clearRealRootCache, realRootOf, validateRelativePath, resolveSafePath, assertPathOperationAllowed, isPathInside, isSecretPath, classifySensitivePath, evaluateSensitiveContent, looksBinary, collectTextFiles, collectOptionsFromWorkspace, writeTextFileSafe, fileSha256, safeReadJson };
 
 function guardAgainstCollapsedFullFileWrite(absolutePath, relativePath, newText) {
   if (!fs.existsSync(absolutePath)) return;

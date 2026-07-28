@@ -1,8 +1,8 @@
 'use strict';
 
-const { requestCurrentTaskCancellation, taskError } = require('../toolActivity');
-const { readTaskHistorySession } = require('../taskHistoryStore');
-const { sanitizeDisplayText } = require('../taskObservability');
+import { requestCurrentTaskCancellation, taskError } from '../toolActivity.js';
+import { readTaskHistorySession } from '../taskHistoryStore.js';
+import { sanitizeDisplayText } from '../taskObservability.js';
 
 function cancelTask(config, args = {}) {
   const taskId = String(args.task_id || args.taskId || '').trim();
@@ -42,4 +42,4 @@ function cancelTask(config, args = {}) {
   };
 }
 
-module.exports = { cancelTask };
+export { cancelTask };

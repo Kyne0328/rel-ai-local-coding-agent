@@ -1,9 +1,10 @@
-const fs = require('node:fs');
-const path = require('node:path');
-const os = require('node:os');
-const { spawnSync } = require('node:child_process');
-const { resolveGitExecutable } = require('./gitExecutable');
-const { gitStatusArgs, parseGitStatus } = require('./repo/gitStatus');
+import { getCurrentToolActivityContext } from './toolActivity.js';
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as os from "node:os";
+import { spawnSync } from "node:child_process";
+import { resolveGitExecutable } from "./gitExecutable.js";
+import { gitStatusArgs, parseGitStatus } from "./repo/gitStatus.js";
 
 const SESSION_IDLE_TTL_MS = 8 * 60 * 60 * 1000;
 
@@ -22,7 +23,7 @@ function taskSessionFilePath(config, alias, taskId) {
 
 function currentTaskId() {
   try {
-    return String(require('./toolActivity').getCurrentToolActivityContext()?.taskId || '').trim();
+    return String(getCurrentToolActivityContext()?.taskId || '').trim();
   } catch {
     return '';
   }
@@ -225,15 +226,4 @@ function resolvePolicy(workspace, config) {
   };
 }
 
-module.exports = {
-  resolvePolicy,
-  writeSessionPolicy,
-  touchSessionPolicy,
-  ensureSessionStarted,
-  clearSessionPolicy,
-  readSessionPolicy,
-  readSessionPolicies,
-  captureBaselineDirty,
-  captureBaselineState,
-  SESSION_IDLE_TTL_MS
-};
+export { resolvePolicy, writeSessionPolicy, touchSessionPolicy, ensureSessionStarted, clearSessionPolicy, readSessionPolicy, readSessionPolicies, captureBaselineDirty, captureBaselineState, SESSION_IDLE_TTL_MS };

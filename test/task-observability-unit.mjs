@@ -1,15 +1,6 @@
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const {
-  buildToolActivityDetails,
-  createActivityEvent,
-  deriveTaskTitle,
-  determinateProgress,
-  normalizeTaskProgress,
-  sanitizeActivityMetadata
-} = require('../src/taskObservability.js');
+import { buildToolActivityDetails, createActivityEvent, deriveTaskTitle, determinateProgress, normalizeTaskProgress, sanitizeActivityMetadata } from "../src/taskObservability.js";
 
 assert.equal(deriveTaskTitle({ title: 'Audit dashboard activity model' }), 'Audit dashboard activity model');
 assert.equal(deriveTaskTitle({ title: 'Inspect token=super-secret dashboard' }), 'Inspect token=[redacted] dashboard');

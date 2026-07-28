@@ -1,6 +1,6 @@
-'use strict';
 
-const { redactCommandForAudit } = require('../bridge/exec');
+
+import { redactCommandForAudit } from "../bridge/exec.js";
 
 function describeToolOperation(name, args = {}) {
   const workspace = String(args.workspace || '').trim();
@@ -53,4 +53,4 @@ function describeToolOperation(name, args = {}) {
   }
 }
 
-module.exports = { describeToolOperation };
+export { describeToolOperation };

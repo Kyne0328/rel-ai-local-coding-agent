@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 
 import { orderToolsForCatalog } from '../src/ui/features/tools/index.js';
 import { orderChangedFiles, orderSessionsForDisplay } from '../src/ui/features/sessions/index.js';
@@ -7,8 +6,7 @@ import { orderWorkspacesAlphabetically } from '../src/ui/components/workspace-me
 import { buildAttention, orderOverviewTasks, orderOverviewWorkspaces } from '../src/ui/features/home/index.js';
 import { sortEntries as orderActivityEntries } from '../src/ui/features/activity/index.js';
 
-const require = createRequire(import.meta.url);
-const { aliasConsistencyCheck, cautionSummary } = require('../src/productUx.js');
+import { aliasConsistencyCheck, cautionSummary } from "../src/productUx.js";
 
 const orderedTools = orderToolsForCatalog([
   { name: 'relai_restore_paths', title: 'Restore Tracked Paths' },

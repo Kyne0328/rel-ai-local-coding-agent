@@ -1,10 +1,12 @@
 'use strict';
 
-const crypto = require('node:crypto');
-const fs = require('node:fs');
-const path = require('node:path');
-const pkg = require('../package.json');
-const { getVersion } = require('./version');
+import * as crypto from 'node:crypto';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { packageMetadata as pkg } from './packageMetadata.js';
+import { getVersion } from './version.js';
+import { getToolSurfaceManifest } from './tools/schema.js';
+import { allWorkspaceAliases, resolveWorkspace } from './config.js';
 
 const PROTOCOL_VERSION = '2026-07-28';
 const SAFE_DURING_RUNTIME_MISMATCH = new Set([
@@ -19,7 +21,7 @@ const SAFE_DURING_RUNTIME_MISMATCH = new Set([
 ]);
 
 function runtimeMetadata() {
-  const surface = require('./tools/schema').getToolSurfaceManifest();
+  const surface = getToolSurfaceManifest();
   return normalizeMetadata({
     source: 'runtime',
     applicationVersion: getVersion(),
@@ -42,7 +44,6 @@ function repositoryMetadata(config, preferredWorkspace = '') {
 }
 
 function repositoryCandidates(config, preferredWorkspace) {
-  const { allWorkspaceAliases, resolveWorkspace } = require('./config');
   const aliases = [];
   if (preferredWorkspace) aliases.push(String(preferredWorkspace));
   aliases.push(...allWorkspaceAliases(config));
@@ -233,14 +234,4 @@ function stableJson(value) {
   return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
 }
 
-module.exports = {
-  PROTOCOL_VERSION,
-  SAFE_DURING_RUNTIME_MISMATCH,
-  assessRuntimeCompatibility,
-  assertRuntimeCompatibility,
-  readRepositoryMetadata,
-  repositoryMetadata,
-  runtimeCompatibility,
-  runtimeMetadata,
-  toolManifestHash
-};
+export { PROTOCOL_VERSION, SAFE_DURING_RUNTIME_MISMATCH, assessRuntimeCompatibility, assertRuntimeCompatibility, readRepositoryMetadata, repositoryMetadata, runtimeCompatibility, runtimeMetadata, toolManifestHash };

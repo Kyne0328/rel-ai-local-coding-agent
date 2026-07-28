@@ -1,9 +1,9 @@
 'use strict';
 
-const path = require('node:path');
-const { flipFuses, FuseVersion, FuseV1Options } = require('@electron/fuses');
+import * as path from 'node:path';
+import { flipFuses, FuseVersion, FuseV1Options } from '@electron/fuses';
 
-module.exports = async function hardenElectronBinary(context) {
+export default async function hardenElectronBinary(context) {
   const executable = resolveExecutable(context);
   await flipFuses(executable, {
     version: FuseVersion.V1,

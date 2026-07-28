@@ -1,8 +1,8 @@
-const connection = require("../connectionProfile");
-const oauth = require("../oauthProvider");
-const { isAuthorized, timingSafeEqual, sendJson } = require("./io");
-const dashboardSessions = require("./dashboardSessions");
-const { ERROR_CODES, errorPayload } = require("../desktopUxContracts");
+import * as connection from "../connectionProfile.js";
+import * as oauth from "../oauthProvider.js";
+import { isAuthorized, timingSafeEqual, sendJson } from "./io.js";
+import * as dashboardSessions from "./dashboardSessions.js";
+import { ERROR_CODES, errorPayload } from "../desktopUxContracts.js";
 
 // External origin ChatGPT reaches us on — used as the OAuth issuer and for building
 // absolute authorize/token/registration URLs in discovery metadata. Prefer the
@@ -86,14 +86,4 @@ function oauthErrorPage(message) {
   return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Cannot authorize</title><link rel="stylesheet" href="/public/oauth.css"></head><body class="oauth-page oauth-error-page"><main class="oauth-card oauth-error-card"><h2>Cannot authorize this connection</h2><p>' + safe + '</p></main></body></html>';
 }
 
-module.exports = {
-  resolveBaseUrl,
-  isOAuthAuthorized,
-  oauthAuthorization,
-  bearerToken,
-  isMcpAuthorized,
-  unauthorizedMcp,
-  oauthErrorPage,
-  isDashboardAuthorized,
-  resolveRequireHttpToken
-};
+export { resolveBaseUrl, isOAuthAuthorized, oauthAuthorization, bearerToken, isMcpAuthorized, unauthorizedMcp, oauthErrorPage, isDashboardAuthorized, resolveRequireHttpToken };

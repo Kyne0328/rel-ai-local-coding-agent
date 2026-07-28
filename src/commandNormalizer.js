@@ -42,4 +42,4 @@ function normalizeCommandAlias(commandKey, commandValue, discoveredCommands) {
   };
 }
 
-module.exports = { normalizeCommandAlias };
+export { normalizeCommandAlias };

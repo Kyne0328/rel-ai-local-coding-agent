@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { makeProcessEnvironment, normalizeAllowedKeys } = require('../src/processEnvironment.js');
+import { makeProcessEnvironment, normalizeAllowedKeys } from '../src/processEnvironment.js';
 
 const source = {
   PATH: '/usr/bin',

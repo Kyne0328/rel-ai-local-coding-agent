@@ -1,17 +1,15 @@
+import { getToolDefinition } from './schema.js';
 // @ts-check
-'use strict';
-/** @typedef {import('../../types/boundaries').ToolArgs} ToolArgs */
-/** @typedef {import('../../types/boundaries').ToolResult} ToolResult */
+
+/** @typedef {import('../../types/boundaries.d.ts').ToolArgs} ToolArgs */
+/** @typedef {import('../../types/boundaries.d.ts').ToolResult} ToolResult */
 /** @typedef {(extra: Record<string, unknown>, value: ToolResult, args: ToolArgs) => void} AuditEnricher */
 
-const sessionCache = require("../sessionCache");
-const { classifyCaution } = require("../cautionZone");
-const { resolveWorkspace } = require("../config");
-const { resolveSafePath } = require("../safety");
-const { ensureSessionStarted } = require("../policyResolver");
-function getToolDefinition(name) {
-  return require('./schema').getToolDefinition(name);
-}
+import * as sessionCache from "../sessionCache.js";
+import { classifyCaution } from "../cautionZone.js";
+import { resolveWorkspace } from "../config.js";
+import { resolveSafePath } from "../safety.js";
+import { ensureSessionStarted } from "../policyResolver.js";
 function debugSwallow(context, error) {
   if (process.env.REL_AI_MCP_DEBUG) {
     console.error(`[rel-ai-mcp] best-effort '${context}' failed: ${error?.message || error}`);
@@ -192,10 +190,4 @@ function maybeStartSession(config, toolName, args, details = {}) {
   }
 }
 
-module.exports = {
-  debugSwallow,
-  buildExtraAudit,
-  applyCautionAudit,
-  invalidateSessionCacheForCall,
-  maybeStartSession
-};
+export { debugSwallow, buildExtraAudit, applyCautionAudit, invalidateSessionCacheForCall, maybeStartSession };

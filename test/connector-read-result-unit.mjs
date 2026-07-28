@@ -2,11 +2,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
-
-const require = createRequire(import.meta.url);
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-connector-result-'));
 const wsRoot = path.join(tmp, 'repo');
 const stateDir = path.join(tmp, 'state');
@@ -28,8 +23,8 @@ fs.writeFileSync(configPath, JSON.stringify({
 }, null, 2));
 process.env.REL_AI_MCP_CONFIG = configPath;
 
-const { callTool } = require(path.join(root, 'src', 'tools.js'));
-const { toolResult } = require(path.join(root, 'src', 'mcpServer.js'));
+const { callTool } = await import('../src/tools.js');
+const { toolResult } = await import('../src/mcpServer.js');
 
 try {
   const output = await callTool('relai_read', {

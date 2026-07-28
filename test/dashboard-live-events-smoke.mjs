@@ -2,11 +2,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const dashboardSessions = require('../src/http/dashboardSessions.js');
-const { beginConnectorToolCall, resetToolActivity } = require('../src/toolActivity.js');
+import * as dashboardSessions from "../src/http/dashboardSessions.js";
+import { beginConnectorToolCall, resetToolActivity } from "../src/toolActivity.js";
 const dashboardSource = fs.readFileSync(new URL('../src/http/dashboard.js', import.meta.url), 'utf8');
 const eventClientSource = fs.readFileSync(new URL('../src/ui/events.js', import.meta.url), 'utf8');
 const dashboardClientSource = fs.readFileSync(new URL('../public/dashboard.js', import.meta.url), 'utf8');

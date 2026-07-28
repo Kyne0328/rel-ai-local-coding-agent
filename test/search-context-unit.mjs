@@ -4,12 +4,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
-
-const require = createRequire(import.meta.url);
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const { relaiSearch } = require(path.join(root, 'src', 'bridge', 'search.js'));
+import { relaiSearch } from '../src/bridge/search.js';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-search-context-'));
 const wsRoot = path.join(tmp, 'repo');

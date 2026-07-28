@@ -1,17 +1,10 @@
-'use strict';
 
-const crypto = require('node:crypto');
-const fs = require('node:fs');
-const path = require('node:path');
-const {
-  PROTOCOL_VERSION_META_KEY,
-  CLIENT_INFO_META_KEY,
-  CLIENT_CAPABILITIES_META_KEY,
-  TRACEPARENT_META_KEY,
-  TRACESTATE_META_KEY,
-  BAGGAGE_META_KEY
-} = require('@modelcontextprotocol/server');
-const { getStateDir } = require('../audit');
+
+import * as crypto from "node:crypto";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { PROTOCOL_VERSION_META_KEY, CLIENT_INFO_META_KEY, CLIENT_CAPABILITIES_META_KEY, TRACEPARENT_META_KEY, TRACESTATE_META_KEY, BAGGAGE_META_KEY } from "@modelcontextprotocol/server";
+import { getStateDir } from '../statePaths.js';
 
 const SERVER_INSTANCE_ID = crypto.randomUUID();
 
@@ -63,4 +56,4 @@ function requestStateKey(config) {
   return generated;
 }
 
-module.exports = { toolContext, clientName, requestStateKey, SERVER_INSTANCE_ID };
+export { toolContext, clientName, requestStateKey, SERVER_INSTANCE_ID };

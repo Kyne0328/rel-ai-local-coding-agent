@@ -1,4 +1,4 @@
-'use strict';
+
 
 function renderDashboardShellBootstrap() {
   return `try {
@@ -29,4 +29,4 @@ function renderDashboardWindowTitlebar() {
 </header>`;
 }
 
-module.exports = { renderDashboardShellBootstrap, renderDashboardWindowTitlebar };
+export { renderDashboardShellBootstrap, renderDashboardWindowTitlebar };

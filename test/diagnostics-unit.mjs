@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { sanitizeText, sanitizeDiagnosticValue, buildDiagnosticReport } = require('../src/diagnostics.js');
+import { sanitizeText, sanitizeDiagnosticValue, buildDiagnosticReport } from "../src/diagnostics.js";
 
 const secret = 'super-secret-value';
 const sanitized = sanitizeText([

@@ -1,0 +1,6 @@
+{
+  "name": "relai-electron-dashboard-probe",
+  "private": true,
+  "type": "module",
+  "main": "index.js"
+}

@@ -1,54 +1,19 @@
-const http = require("node:http");
-const { URL } = require("node:url");
-const connection = require("./connectionProfile");
-const { setBaseHeaders, sendJson, unauthorized } = require("./http/io");
-const { ERROR_CODES, errorPayload } = require("./desktopUxContracts");
-const { isDashboardAuthorized } = require("./http/auth");
-const {
-  handleFavicon,
-  handleHealth,
-  handleStaticAsset,
-  handleDashboard,
-  handleApiSettingsGet,
-  handleApiTools,
-  handleOnboardingStatus,
-  handleConnection,
-  handleDashboardV10,
-  handleApiLogs,
-  handleHealthMonitor,
-  handleAliasDiagnostics,
-  handleReleaseNotes,
-  handleCautionSummary,
-  handleReadiness,
-  handleWorkspacePreflight,
-  handleEvents,
-  handleOnboardingComplete,
-  handleApiSettingsPost,
-  handleApiWorkspaces,
-  handlePickFolder,
-  handleOpenFolder,
-  handleWorkspaceChecks
-} = require("./http/dashboard");
-const { handleApiHistoryReset } = require("./http/dashboardHistory");
-const { handleApiDiagnostics, handleApiDiagnosticsReset } = require("./http/dashboardDiagnostics");
-const { handleApiProcessStop } = require('./http/dashboardProcesses');
-const {
-  handleOauthProtectedResource,
-  handleOauthMetadata,
-  handleRegister,
-  handleAuthorizeGet,
-  handleAuthorizePost,
-  handleToken,
-  handleMcpGetDiagnostic,
-  handleMcpStreamable,
-  getMcpAccess,
-  oauthWellKnownPaths
-} = require('./http/mcp');
-const { resolveBaseUrl } = require('./http/auth');
-const { initializeTelemetry, shutdownTelemetry } = require('./telemetry');
-const { stopAllManagedProcesses, pruneManagedProcesses } = require('./processManager');
-const { pruneOperationTasks } = require('./operationTasks');
-const { readConfig } = require('./config');
+import * as http from "node:http";
+import { URL } from "node:url";
+import * as connection from "./connectionProfile.js";
+import { setBaseHeaders, sendJson, unauthorized } from "./http/io.js";
+import { ERROR_CODES, errorPayload } from "./desktopUxContracts.js";
+import { isDashboardAuthorized } from "./http/auth.js";
+import { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handleApiSettingsGet, handleApiTools, handleOnboardingStatus, handleConnection, handleDashboardV10, handleApiLogs, handleHealthMonitor, handleAliasDiagnostics, handleReleaseNotes, handleCautionSummary, handleReadiness, handleWorkspacePreflight, handleEvents, handleOnboardingComplete, handleApiSettingsPost, handleApiWorkspaces, handlePickFolder, handleOpenFolder, handleWorkspaceChecks } from "./http/dashboard.js";
+import { handleApiHistoryReset } from "./http/dashboardHistory.js";
+import { handleApiDiagnostics, handleApiDiagnosticsReset } from "./http/dashboardDiagnostics.js";
+import { handleApiProcessStop } from "./http/dashboardProcesses.js";
+import { handleOauthProtectedResource, handleOauthMetadata, handleRegister, handleAuthorizeGet, handleAuthorizePost, handleToken, handleMcpGetDiagnostic, handleMcpStreamable, getMcpAccess, oauthWellKnownPaths } from "./http/mcp.js";
+import { resolveBaseUrl } from "./http/auth.js";
+import { initializeTelemetry, shutdownTelemetry } from "./telemetry.js";
+import { stopAllManagedProcesses, pruneManagedProcesses } from "./processManager.js";
+import { pruneOperationTasks } from "./operationTasks.js";
+import { ensureConfig, getConfigPath, readConfig } from './config.js';
 
 const DEFAULT_MAX_BODY_BYTES = 10 * 1024 * 1024;
 
@@ -76,7 +41,7 @@ function startHttpServer(options = {}) {
   const getRuntimeLogs = typeof options.getRuntimeLogs === "function" ? options.getRuntimeLogs : null;
   const clearRuntimeLogs = typeof options.clearRuntimeLogs === "function" ? options.clearRuntimeLogs : null;
 
-  require('./config').ensureConfig();
+  ensureConfig();
   const runtimeConfig = readConfig();
   initializeTelemetry(runtimeConfig);
   pruneManagedProcesses(runtimeConfig);
@@ -123,7 +88,7 @@ function startHttpServer(options = {}) {
       if (previousPort && previousPort !== actualPort) {
         console.error(`[rel-ai-mcp] Notice: repointing the saved connector profile from port ${previousPort} to ${actualPort}. Start with --no-profile-write to leave it untouched.`);
       }
-      connection.writeConnectionProfile({ host, port: actualPort, publicUrl, configPath: require("./config").getConfigPath() });
+      connection.writeConnectionProfile({ host, port: actualPort, publicUrl, configPath: getConfigPath() });
     }
     const summary = connection.buildConnectionSummary({ host, port: actualPort, publicUrl, token, includeTokenInUrls: false });
     console.error(`[rel-ai-mcp] Dashboard: ${summary.dashboardUrl}`);
@@ -277,4 +242,4 @@ function errorCodeForRequest(req) {
   return ERROR_CODES.UNKNOWN;
 }
 
-module.exports = { startHttpServer };
+export { startHttpServer };

@@ -1,44 +1,48 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage, powerSaveBlocker, Notification, dialog, screen, protocol } = require('electron');
-const { autoUpdater } = require('electron-updater');
-const path = require('node:path');
-const { resolveResourcePath } = require('./resource-path');
-const { isPortAvailable, normalizeWizardConfig, saveLauncherConfig } = require('./launcher-config');
-const { fitWindowToContent, WINDOW_SIZE_LIMITS } = require('./window-size');
-const { localWindowWebPreferences, secureLocalWindow } = require('./window-security');
-const { installLocalProtocol, localRendererUrl, registerLocalScheme } = require('./local-protocol');
-const { registerIpcHandlers } = require('./ipc-handlers');
-const { createTaskActivityRuntime } = require('./tool-sleep-blocker');
-const { createDashboardWindowManager } = require('./dashboard-window');
-const { createDesktopTray } = require('./desktop-tray');
-const { createDesktopStatusModel } = require('./desktop-status');
-const { createApprovalTokenManager } = require('./approval-token');
-const { createRecoveryWindowManager } = require('./recovery-window');
-const { createRuntimeLogBuffer } = require('./runtime-log-buffer'); const { createDiagnosticFiles } = require('./diagnostic-files');
-const { createDesktopSettingsManager } = require('./desktop-settings'); const { createAppUpdater } = require('./app-updater'); const { createDesktopLifecycleManager } = require('./desktop-lifecycle');
-const APP_ICON_PATH = path.join(__dirname, 'build', 'icon.png');
-const RENDERER_ROOT = path.join(__dirname, 'renderer');
+import { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage, powerSaveBlocker, Notification, dialog, screen, protocol } from 'electron';
+import { autoUpdater } from 'electron-updater';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { importResourceModule } from './resource-path.js';
+import { isPortAvailable, normalizeWizardConfig, saveLauncherConfig } from './launcher-config.js';
+import { fitWindowToContent, WINDOW_SIZE_LIMITS } from './window-size.js';
+import { localWindowWebPreferences, secureLocalWindow } from './window-security.js';
+import { installLocalProtocol, localRendererUrl, registerLocalScheme } from './local-protocol.js';
+import { registerIpcHandlers } from './ipc-handlers.js';
+import { createTaskActivityRuntime } from './tool-sleep-blocker.js';
+import { createDashboardWindowManager } from './dashboard-window.js';
+import { createDesktopTray } from './desktop-tray.js';
+import { createDesktopStatusModel } from './desktop-status.js';
+import { createApprovalTokenManager } from './approval-token.js';
+import { createRecoveryWindowManager } from './recovery-window.js';
+import { createRuntimeLogBuffer } from './runtime-log-buffer.js';
+import { createDiagnosticFiles } from './diagnostic-files.js';
+import { createDesktopSettingsManager } from './desktop-settings.js';
+import { createAppUpdater } from './app-updater.js';
+import { createDesktopLifecycleManager } from './desktop-lifecycle.js';
+import { STARTUP_BACKGROUND_COLOR } from './startup-background.js';
+import * as managedNgrok from './managed-ngrok.js';
+import { hasExistingConfig, readGuiConfig, buildMcpUrl, normalizeNgrokDomain, normalizeNgrokAuthtoken, normalizePort } from './launcher-utils.js';
+
+const electronRoot = path.dirname(fileURLToPath(import.meta.url));
+const preloadPath = path.join(electronRoot, 'preload.cjs');
+const APP_ICON_PATH = path.join(electronRoot, 'build', 'icon.png');
+const RENDERER_ROOT = path.join(electronRoot, 'renderer');
+
 registerLocalScheme(protocol);
-app.setName('Rel.AI MCP'); if (process.platform === 'win32') app.setAppUserModelId('com.relai.mcp');
-const srcPath = resolveResourcePath('src');
-const connection = require(path.join(srcPath, 'connectionProfile'));
-const toolActivity = require(path.join(srcPath, 'toolActivity'));
-const dashboardSessions = require(path.join(srcPath, 'http', 'dashboardSessions'));
-const configModule = require(path.join(srcPath, 'config')); const diagnosticsModule = require(path.join(srcPath, 'diagnostics'));
-const { ERROR_CODES, deriveConnectionState } = require(path.join(srcPath, 'desktopUxContracts'));
-const oauthProvider = require(path.join(srcPath, 'oauthProvider')); const { startHttpServer } = require(path.join(srcPath, 'httpServer'));
-const { killProcess } = require(path.join(srcPath, 'processKill'));
-const { stopAllManagedProcesses } = require(path.join(srcPath, 'processManager'));
-const { shutdownTelemetry } = require(path.join(srcPath, 'telemetry'));
-const managedNgrok = require('./managed-ngrok');
-const {
-  hasExistingConfig,
-  readGuiConfig,
-  buildMcpUrl,
-  normalizeNgrokDomain,
-  normalizeNgrokAuthtoken,
-  normalizePort
-} = require('./launcher-utils');
-let wizardWindow = null, wizardRecoveryMode = false, wizardReturnToFallback = false;
+app.setName('Rel.AI MCP');
+if (process.platform === 'win32') app.setAppUserModelId('com.relai.mcp');
+
+const connection = await importResourceModule('src/connectionProfile.js');
+const toolActivity = await importResourceModule('src/toolActivity.js');
+const dashboardSessions = await importResourceModule('src/http/dashboardSessions.js');
+const configModule = await importResourceModule('src/config.js');
+const diagnosticsModule = await importResourceModule('src/diagnostics.js');
+const { ERROR_CODES, deriveConnectionState } = await importResourceModule('src/desktopUxContracts.js');
+const oauthProvider = await importResourceModule('src/oauthProvider.js');
+const { startHttpServer } = await importResourceModule('src/httpServer.js');
+const { killProcess } = await importResourceModule('src/processKill.js');
+const { stopAllManagedProcesses } = await importResourceModule('src/processManager.js');
+const { shutdownTelemetry } = await importResourceModule('src/telemetry.js');let wizardWindow = null, wizardRecoveryMode = false, wizardReturnToFallback = false;
 let httpServer = null, tunnelProcess = null, startPromise = null;
 let lifecycleToken = 0, isQuitting = false, appUpdater = null;
 const desktopStatusModel = createDesktopStatusModel({ version: app.getVersion(), deriveConnectionState, formatError });
@@ -46,9 +50,8 @@ const diagnosticFiles = createDiagnosticFiles({ app, shell, sanitizeDiagnosticVa
 const approvalTokenManager = createApprovalTokenManager({ readGuiConfig, saveLauncherConfig, generateToken: connection.generateToken, oauthProvider, restartDesktop: () => launchConfiguredDesktop({ restart: true }) });
 const recoveryWindowManager = createRecoveryWindowManager({
   BrowserWindow,
-  preloadPath: path.join(__dirname, 'preload.js'),
-  rendererUrl: localRendererUrl('status.html'),
-  limits: WINDOW_SIZE_LIMITS.status,
+  preloadPath,
+  rendererUrl: localRendererUrl('status.html'),  limits: WINDOW_SIZE_LIMITS.status,
   isQuitting: () => isQuitting,
   onReady: pushStatus,
   onSecurityError: error => runtimeLogs.append(error.message, { level: 'warning', source: 'electron-security' })
@@ -153,15 +156,15 @@ function createWizardWindow(options = {}) {
 
   wizardRecoveryMode = options.recovery === true;
   wizardReturnToFallback = wizardRecoveryMode;
-  const wizardRendererUrl = localRendererUrl('wizard.html', wizardRecoveryMode ? { recovery: '1' } : {});
-  wizardWindow = new BrowserWindow({
+  const wizardRendererUrl = localRendererUrl('wizard.html', wizardRecoveryMode ? { recovery: '1' } : {});  wizardWindow = new BrowserWindow({
     width: WINDOW_SIZE_LIMITS.wizard.minWidth,
     height: 620,
     minWidth: WINDOW_SIZE_LIMITS.wizard.minWidth,
     minHeight: WINDOW_SIZE_LIMITS.wizard.minHeight,
     resizable: false,
     useContentSize: true,
-    webPreferences: localWindowWebPreferences(path.join(__dirname, 'preload.js'), 'relai-setup'),
+    webPreferences: localWindowWebPreferences(preloadPath, 'relai-setup', 'application'),
+    backgroundColor: STARTUP_BACKGROUND_COLOR,
     title: wizardRecoveryMode ? 'Rel.AI MCP - Connection Recovery' : 'Rel.AI MCP - Setup',
     autoHideMenuBar: true
   });
@@ -485,4 +488,4 @@ registerIpcHandlers({
   fitWindowToContent
 });
 
-module.exports = { isPortAvailable, normalizeWizardConfig, saveLauncherConfig };
+export { isPortAvailable, normalizeWizardConfig, saveLauncherConfig };

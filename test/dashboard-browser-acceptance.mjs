@@ -5,11 +5,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const { getTaskHistoryDir, writeSession } = require('../src/taskHistoryStorage.js');
+import { getTaskHistoryDir, writeSession } from '../src/taskHistoryStorage.js';
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-browser-acceptance-'));
 const stateDir = path.join(temp, 'state');
 const workspace = path.join(temp, 'workspace');
@@ -37,35 +34,39 @@ const server = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.
 });
 let serverError = '';
 server.stderr.on('data', chunk => { serverError += chunk.toString('utf8'); });
+let child = null;
+let closePromise = Promise.resolve([]);
 
 try {
   await waitForHealth(`http://127.0.0.1:${port}/health`);
   const electronBinary = process.env.RELAI_ELECTRON_BINARY || path.resolve(root, 'electron', 'node_modules', 'electron', 'dist', process.platform === 'win32' ? 'electron.exe' : 'electron');
   assert.equal(fs.existsSync(electronBinary), true, `Electron binary not found at ${electronBinary}`);
-  const probe = path.join(root, 'test', 'fixtures', 'electron-dashboard-probe.cjs');
-  const target = `http://127.0.0.1:${port}/?token=${encodeURIComponent(token)}#tasks`;
-  const child = spawn(electronBinary, [
+  const probe = path.join(root, 'test', 'fixtures', 'electron-dashboard-probe');
+  const target = `http://127.0.0.1:${port}/dashboard?token=${encodeURIComponent(token)}#tasks`;
+  child = spawn(electronBinary, [
     '--no-sandbox',
     '--disable-gpu',
     '--disable-software-rasterizer',
     `--user-data-dir=${path.join(temp, 'electron-profile')}`,
-    probe,
-    target,
-    outputPath,
-    screenshotPath
+    probe
   ], {
     cwd: root,
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: 'true' }
+    env: electronEnvironment({
+      RELAI_PROBE_TARGET_URL: target,
+      RELAI_PROBE_OUTPUT_PATH: outputPath,
+      RELAI_PROBE_SCREENSHOT_PATH: screenshotPath
+    })
   });
+  let stdout = '';
   let stderr = '';
+  child.stdout.on('data', chunk => { stdout += chunk.toString('utf8'); });
   child.stderr.on('data', chunk => { stderr += chunk.toString('utf8'); });
-  const closePromise = once(child, 'close').catch(() => []);
-  await waitForFile(outputPath, 30_000).catch(async error => {
+  closePromise = once(child, 'close').catch(() => []);
+  const result = await waitForProbeResult(outputPath, 30_000).catch(async error => {
     const [code] = await closePromise;
-    throw new Error(`Electron probe did not produce output (launcher code ${code ?? 'unknown'}): ${stderr}\n${error.message}`);
+    throw new Error(`Electron probe did not complete (launcher code ${code ?? 'unknown'}). stdout=${stdout} stderr=${stderr}\n${error.message}`);
   });
-  const result = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
   assert.equal(result.error, undefined, result.error);
   assert.ok(result.initial.rowCount >= 10);
   for (const label of ['queued', 'planning', 'running', 'waiting for approval', 'blocked', 'validating', 'completed', 'failed', 'cancelled']) {
@@ -76,21 +77,33 @@ try {
   assert.equal(result.initial.unknownStatusCount, 0);
   assert.equal(result.initial.longTitleAccessible, true);
   assert.equal(result.initial.reducedMotion, true);
+  assert.equal(result.taskInteraction.dialog, true);
   assert.ok(result.taskInteraction.detailText.length > 100);
-  assert.ok(result.taskInteraction.activityButtons > 0);
+  assert.ok(result.taskInteraction.eventLinks > 0);
   assert.notEqual(result.keyboard.afterFocus.tag, 'BODY');
+  assert.equal(result.activityInteraction.expanded, true);
   assert.equal(result.activityInteraction.copyButton, true);
+  assert.equal(result.activityInteraction.errorWrapped, true);
   assert.equal(result.responsive.viewport <= 640, true);
   assert.equal(result.responsive.horizontalOverflow, false);
   assert.equal(result.failures.length, 0, JSON.stringify(result.failures));
   assert.equal(fs.existsSync(screenshotPath), true);
+  await closePromise;
   console.log(`Real Electron Chromium dashboard acceptance passed. Evidence: ${path.relative(root, screenshotPath)}`);
 } finally {
+  if (child && child.exitCode == null) child.kill('SIGKILL');
+  await closePromise.catch(() => {});
   server.kill('SIGKILL');
   await once(server, 'close').catch(() => {});
-  fs.rmSync(temp, { recursive: true, force: true });
+  fs.rmSync(temp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 }
 
+function electronEnvironment(extra = {}) {
+  const env = { ...process.env, ...extra, ELECTRON_DISABLE_SECURITY_WARNINGS: 'true' };
+  delete env.ELECTRON_RUN_AS_NODE;
+  delete env.NODE_OPTIONS;
+  return env;
+}
 function seedSessions(directory) {
   const now = Date.now();
   const states = [
@@ -157,11 +170,16 @@ async function waitForHealth(url) {
   throw new Error(`HTTP server did not become healthy. ${serverError}`);
 }
 
-async function waitForFile(file, timeoutMs) {
+async function waitForProbeResult(file, timeoutMs) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
-    if (fs.existsSync(file) && fs.statSync(file).size > 0) return;
+    if (fs.existsSync(file) && fs.statSync(file).size > 0) {
+      try {
+        const result = JSON.parse(fs.readFileSync(file, 'utf8'));
+        if (result?.initial || result?.error) return result;
+      } catch {}
+    }
     await new Promise(resolve => setTimeout(resolve, 100));
   }
-  throw new Error(`Timed out waiting for ${file}`);
+  throw new Error(`Timed out waiting for completed probe result at ${file}`);
 }

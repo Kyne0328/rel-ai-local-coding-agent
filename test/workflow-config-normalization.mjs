@@ -1,15 +1,12 @@
+import { updateWorkspace } from "../src/configEditor.js";
+import { getReleaseNotes } from "../src/releaseNotes.js";
+import { staleCommandKeys } from "../src/commandDiscovery.js";
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const {
-  normalizePatchConfig,
-  makeDefaultPatchConfig,
-  normalizeConfig
-} = require('../src/config.js');
+import { normalizePatchConfig, makeDefaultPatchConfig, normalizeConfig } from "../src/config.js";
 
 assert.deepEqual(makeDefaultPatchConfig(), {
   backup: true,
@@ -81,7 +78,7 @@ assert.deepEqual(normalizedCommands.workspaces.repo.testCommands, { 'npm:test': 
   process.env.REL_AI_MCP_CONFIG = tmpConfig;
   try {
     fs.writeFileSync(tmpConfig, JSON.stringify({ trustedLocalAgent: true, workspaces: { broken: { path: path.join(tmpDir, 'missing') } } }));
-    const { updateWorkspace } = require('../src/configEditor.js');
+
     const current = JSON.parse(fs.readFileSync(tmpConfig, 'utf8'));
     const result = updateWorkspace(current, { action: 'clear', alias: 'broken', confirmClear: true });
     assert.equal(result.ok, true);
@@ -94,14 +91,14 @@ assert.deepEqual(normalizedCommands.workspaces.repo.testCommands, { 'npm:test': 
 }
 
 {
-  const { getReleaseNotes } = require('../src/releaseNotes.js');
+
   const notes = getReleaseNotes();
   assert.ok(notes.version);
   assert.ok(Array.isArray(notes.bullets));
 }
 
 {
-  const { staleCommandKeys } = require('../src/commandDiscovery.js');
+
   assert.deepEqual(staleCommandKeys({ test: 'npm run gone', build: 'npm run build' }, { build: 'npm run build' }), ['test']);
 }
 

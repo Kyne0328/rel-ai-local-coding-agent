@@ -1,7 +1,6 @@
-import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(process.env.REL_AI_RELEASE_ROOT || path.join(__dirname, '..'));
@@ -95,8 +94,7 @@ if (entry) {
 
 const versionModulePath = rel('src', 'version.js');
 if (fs.existsSync(versionModulePath)) {
-  const rootRequire = createRequire(rel('package.json'));
-  const { getVersion } = rootRequire(versionModulePath);
+  const { getVersion } = await import(pathToFileURL(versionModulePath).href);
   expectEqual(getVersion(), version, 'src/version.js getVersion()');
 }
 

@@ -2,10 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { relaiStatus } = require('../src/tools/status.js');
+import { relaiStatus } from "../src/tools/status.js";
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-status-aliases-'));
 const previousStateDir = process.env.REL_AI_MCP_STATE_DIR;
 process.env.REL_AI_MCP_STATE_DIR = stateDir;

@@ -3,12 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
-
-const require = createRequire(import.meta.url);
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const { repoSnapshot } = require(path.join(root, 'src', 'localRepoBridge.js'));
+import { repoSnapshot } from '../src/localRepoBridge.js';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-snap-git-'));
 const wsRoot = path.join(tmp, 'repo');

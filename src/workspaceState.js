@@ -1,11 +1,11 @@
-'use strict';
 
-const { spawnSync } = require('node:child_process');
-const fs = require('node:fs');
-const path = require('node:path');
-const { classifyStatusOwnership } = require('./repo/gitOps');
-const { gitStatusArgs } = require('./repo/gitStatus');
-const { resolveGitExecutable } = require('./gitExecutable');
+
+import { spawnSync } from "node:child_process";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { classifyStatusOwnership } from "./repo/gitOps.js";
+import { gitStatusArgs } from "./repo/gitStatus.js";
+import { resolveGitExecutable } from "./gitExecutable.js";
 
 const configuredWorkspaceStateTtlMs = Number(process.env.REL_AI_MCP_WORKSPACE_STATE_TTL_MS || 1000);
 const WORKSPACE_GIT_STATE_TTL_MS = Number.isFinite(configuredWorkspaceStateTtlMs) ? Math.max(0, configuredWorkspaceStateTtlMs) : 1000;
@@ -104,4 +104,4 @@ function runGit(cwd, args) {
   };
 }
 
-module.exports = { buildWorkspaceStates, resolveGitExecutable };
+export { buildWorkspaceStates, resolveGitExecutable };

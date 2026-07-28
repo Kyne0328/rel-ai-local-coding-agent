@@ -1,7 +1,7 @@
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
-const crypto = require("node:crypto");
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import * as crypto from "node:crypto";
 
 const MAX_RECENT = 50;
 
@@ -64,9 +64,4 @@ function summarizeOperations(config, workspace, limit = 10) {
   };
 }
 
-module.exports = {
-  appendOperation,
-  makeOperationId,
-  readRecentOperations,
-  summarizeOperations
-};
+export { appendOperation, makeOperationId, readRecentOperations, summarizeOperations };

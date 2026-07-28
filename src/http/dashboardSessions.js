@@ -1,6 +1,6 @@
-'use strict';
 
-const crypto = require('node:crypto');
+
+import * as crypto from "node:crypto";
 
 const BOOTSTRAP_TTL_MS = 60 * 1000;
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
@@ -76,11 +76,4 @@ function prune() {
   for (const [key, value] of sessions) if (value.expiresAt < now) sessions.delete(key);
 }
 
-module.exports = {
-  COOKIE_NAME,
-  createDashboardBootstrap,
-  consumeDashboardBootstrap,
-  validateDashboardSession,
-  setDashboardSessionCookie,
-  clearDashboardSessions
-};
+export { COOKIE_NAME, createDashboardBootstrap, consumeDashboardBootstrap, validateDashboardSession, setDashboardSessionCookie, clearDashboardSessions };

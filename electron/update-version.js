@@ -1,4 +1,4 @@
-'use strict';
+
 
 function parseStableVersion(value) {
   const version = String(value || '').trim();
@@ -21,4 +21,4 @@ function compareVersions(left, right) {
   return 0;
 }
 
-module.exports = { compareVersions, isStableVersion, parseStableVersion };
+export { compareVersions, isStableVersion, parseStableVersion };

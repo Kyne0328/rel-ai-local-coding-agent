@@ -146,7 +146,12 @@ assert.doesNotMatch(oauthProvider, /oauthPageCss|ui\/colorTokens/);
 assert.match(auth, /href="\/public\/oauth\.css"/);
 assert.match(auth, /oauth-error-page/);
 assert.doesNotMatch(auth, /oauthErrorPageCss|ui\/colorTokens/);
-assert.doesNotMatch(read('electron/dashboard-window.js'), /colorTokens|getTheme\('dark'\)|backgroundColor/);
+const dashboardWindow = read('electron/dashboard-window.js');
+const startupBackground = read('electron/startup-background.js');
+assert.doesNotMatch(dashboardWindow, /colorTokens|getTheme\('dark'\)/);
+assert.match(dashboardWindow, /backgroundColor:\s*STARTUP_BACKGROUND_COLOR/);
+assert.match(startupBackground, /STARTUP_BACKGROUND_COLOR\s*=\s*'#[0-9a-f]{6}'/i);
+assert.doesNotMatch(startupBackground, /colorTokens|getTheme|require\s*\(/);
 
 assert.match(read('src/ui/components/toast.js'), /toast-marker/);
 assert.match(read('src/ui/components/pill.js'), /information: \['run'[\s\S]*'wait'/);

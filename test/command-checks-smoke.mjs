@@ -2,10 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { relaiVerify } = require('../src/localRepoBridge.js');
+import { relaiVerify } from "../src/localRepoBridge.js";
 const { mapCheckArgs } = (() => {
   // mapCheckArgs is not exported from localRepoBridge; replicate it here as the internal bridge does
   return {

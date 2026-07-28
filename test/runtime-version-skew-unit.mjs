@@ -2,15 +2,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
 const {
   assessRuntimeCompatibility,
   assertRuntimeCompatibility,
   readRepositoryMetadata,
   runtimeMetadata
-} = require('../src/runtimeCompatibility.js');
+} = await import('../src/runtimeCompatibility.js');
 
 const current = runtimeMetadata();
 assert.equal(current.applicationVersion, '0.23.0');

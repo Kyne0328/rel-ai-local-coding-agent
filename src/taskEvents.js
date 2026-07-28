@@ -1,4 +1,4 @@
-'use strict';
+
 
 function cleanTaskId(value) {
   return String(value || '').trim();
@@ -36,11 +36,4 @@ function eventTime(value) {
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
-module.exports = {
-  clamp,
-  cleanTaskId,
-  eventTime,
-  isCurrentTaskEvent,
-  operationForTool,
-  unique
-};
+export { clamp, cleanTaskId, eventTime, isCurrentTaskEvent, operationForTool, unique };

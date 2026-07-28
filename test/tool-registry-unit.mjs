@@ -1,19 +1,11 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
-const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const {
-  getToolDefinitions,
-  getToolSchemas,
-  getToolMetadata,
-  getToolGroups,
-  getToolSurfaceManifest,
-  TOOL_NAMES
-} = require('../src/tools/schema.js');
+import { getToolDefinitions } from '../src/tools.js';
+import { getToolSchemas, getToolMetadata, getToolGroups, getToolSurfaceManifest, TOOL_NAMES } from '../src/tools/schema.js';
 
 const expected = [
   'relai_start_task', 'relai_repo_snapshot', 'relai_read', 'relai_search', 'relai_code_inspect', 'relai_exec',
@@ -46,6 +38,7 @@ assert.deepEqual(manifest.compatibilityAliases, {});
 
 for (const definition of definitions) {
   assert.equal(typeof definition.handler, 'function', `${definition.name} handler`);
+  assert.equal(typeof definition.handlerName, 'string', `${definition.name} handlerName`);
   assert.equal(definition.inputSchema?.type, 'object', `${definition.name} input schema`);
   assert.equal(definition.outputSchema?.type, 'object', `${definition.name} output schema`);
   assert.equal(schemaByName.get(definition.name)?.outputSchema?.type, 'object', `${definition.name} connector output schema`);

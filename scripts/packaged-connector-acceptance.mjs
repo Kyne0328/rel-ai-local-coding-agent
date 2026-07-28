@@ -4,11 +4,13 @@ import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const releaseManifest = JSON.parse(fs.readFileSync(path.join(root, 'release-manifest.json'), 'utf8'));
+const { applicationVersion, protocolVersion: mcpProtocolVersion, toolSurfaceVersion, toolCount } = releaseManifest;
 const directoryArgument = process.argv.indexOf('--dir');
 const packageDirectory = path.resolve(root, directoryArgument >= 0 ? String(process.argv[directoryArgument + 1] || '') : 'dist/build-check/win-unpacked');
 const resources = path.join(packageDirectory, 'resources');
@@ -21,7 +23,6 @@ const stateDir = path.join(sandbox, 'state');
 const configPath = path.join(sandbox, 'config.json');
 const approvalToken = 'packaged-connector-approval-token';
 const redirectUri = 'https://chatgpt.com/connector_platform_oauth_redirect';
-const mcpProtocolVersion = '2026-07-28';
 const port = await availablePort();
 const base = `http://127.0.0.1:${port}`;
 let child;
@@ -29,6 +30,18 @@ let stderr = '';
 
 fs.mkdirSync(workspace, { recursive: true });
 fs.writeFileSync(path.join(workspace, 'acceptance.txt'), 'packaged connector acceptance\n');
+fs.writeFileSync(path.join(workspace, 'acceptance.mjs'), "import assert from 'node:assert/strict';\nimport fs from 'node:fs';\nassert.equal(fs.readFileSync(new URL('./acceptance.txt', import.meta.url), 'utf8'), 'packaged connector acceptance verified\\n');\n");
+fs.writeFileSync(path.join(workspace, 'package.json'), `${JSON.stringify({
+  name: 'relai-packaged-acceptance',
+  private: true,
+  type: 'module',
+  scripts: { check: 'node acceptance.mjs' }
+}, null, 2)}\n`);
+runGit('init');
+runGit('config', 'user.name', 'Rel.AI Acceptance');
+runGit('config', 'user.email', 'relai-acceptance@example.invalid');
+runGit('add', '.');
+runGit('commit', '-m', 'Initialize packaged acceptance workspace');
 fs.writeFileSync(configPath, JSON.stringify({
   version: 2,
   stateDir,
@@ -56,6 +69,18 @@ try {
   });
   child.stderr.on('data', chunk => { stderr += String(chunk || ''); });
   await waitForHealth();
+
+  const expectedOauthCss = fs.readFileSync(path.join(resources, 'public', 'oauth.css'), 'utf8');
+  const oauthCss = await fetch(`${base}/public/oauth.css`);
+  assert.equal(oauthCss.status, 200);
+  assert.match(oauthCss.headers.get('content-type') || '', /^text\/css(?:;\s*charset=utf-8)?$/i);
+  const servedOauthCss = await oauthCss.text();
+  assert.equal(servedOauthCss, expectedOauthCss);
+  assert.doesNotMatch(servedOauthCss, /[A-Za-z]:\\|file:\/\/|\/home\/|\/Users\//);
+  assert.equal((await fetch(`${base}/public/oauth-missing.css`)).status, 404);
+  const invalidAuthorize = await fetch(`${base}/authorize`);
+  assert.equal(invalidAuthorize.status, 400);
+  assert.match(await invalidAuthorize.text(), /href="\/public\/oauth\.css"/);
 
   const challenge = await fetch(`${base}/mcp`, {
     method: 'POST',
@@ -94,9 +119,10 @@ try {
   const discovered = await mcp(10, 'server/discover', {}, tokens.access_token);
   assert.ok(discovered.result?.capabilities?.tools);
   assert.ok(discovered.result?.capabilities?.resources);
+  assert.equal(discovered.result?.capabilities?.experimental?.relai?.toolSurfaceVersion, toolSurfaceVersion);
 
   const tools = await mcp(11, 'tools/list', {}, tokens.access_token);
-  assert.equal(tools.result?.tools?.length, 33);
+  assert.equal(tools.result?.tools?.length, toolCount);
   const toolNames = new Set(tools.result.tools.map(tool => tool.name));
   for (const requiredTool of ['relai_start_task', 'relai_read', 'relai_complete_task']) {
     assert.equal(toolNames.has(requiredTool), true, `Packaged tool surface is missing ${requiredTool}.`);
@@ -104,25 +130,82 @@ try {
   const resourcesList = await mcp(12, 'resources/list', {}, tokens.access_token);
   assert.ok(resourcesList.result?.resources?.some(item => item.uri === 'relai://server/tool-surface'));
   assert.ok(resourcesList.result?.resources?.some(item => item.uri === 'relai://server/workspaces'));
+  const surface = await readResource(13, 'relai://server/tool-surface', tokens.access_token);
+  assert.equal(surface.toolSurfaceVersion, toolSurfaceVersion);
+  assert.equal(surface.toolCount, toolCount);
+  assert.deepEqual(surface.compatibilityAliases, {});
+  const help = await readResourceText(14, 'relai://server/help', tokens.access_token);
+  assert.ok(help.includes(`version: ${applicationVersion}`));
 
-  const started = await callTool(13, 'relai_start_task', { workspace: 'acceptance' }, tokens.access_token);
+  const started = await callTool(15, 'relai_start_task', {
+    workspace: 'acceptance',
+    title: 'Packaged connector acceptance',
+    objective: 'Verify packaged ESM runtime, guarded mutation, validation, observability, completion, and reconnect behavior.'
+  }, tokens.access_token);
   const taskId = started.task_id;
   assert.ok(taskId);
-  await callTool(14, 'relai_repo_snapshot', { workspace: 'acceptance', task_id: taskId, maxEntries: 50 }, tokens.access_token);
-  const read = await callTool(15, 'relai_read', {
+  await callTool(16, 'relai_repo_snapshot', { workspace: 'acceptance', task_id: taskId, maxEntries: 50 }, tokens.access_token);
+  const read = await callTool(17, 'relai_read', {
     workspace: 'acceptance', task_id: taskId, paths: ['acceptance.txt'], guidanceMode: 'none'
   }, tokens.access_token);
-  assert.match(read.items?.[0]?.content || '', /packaged connector acceptance/);
-  await callTool(16, 'relai_status', { workspace: 'acceptance', task_id: taskId }, tokens.access_token);
-  const completed = await callTool(17, 'relai_complete_task', {
-    workspace: 'acceptance', task_id: taskId, summary: 'Packaged OAuth and MCP connector acceptance completed.'
-  }, tokens.access_token);
-  assert.equal(completed.completionKnown, true);
+  assert.equal(read.items?.[0]?.content, 'packaged connector acceptance\n');
 
-  const reconnected = await mcp(20, 'server/discover', {}, tokens.access_token, { clientVersion: '2.0.0' });
+  const edited = await callTool(18, 'relai_edit', {
+    workspace: 'acceptance',
+    task_id: taskId,
+    path: 'acceptance.txt',
+    oldText: 'packaged connector acceptance\n',
+    newText: 'packaged connector acceptance verified\n',
+    returnDiff: true
+  }, tokens.access_token);
+  assert.equal(edited.changed, true);
+  assert.ok(edited.changedFiles?.includes('acceptance.txt'));
+  assert.equal(fs.readFileSync(path.join(workspace, 'acceptance.txt'), 'utf8'), 'packaged connector acceptance verified\n');
+
+  const status = await callTool(19, 'relai_status', { workspace: 'acceptance', task_id: taskId }, tokens.access_token);
+  assert.equal(status.version, applicationVersion);
+  assert.equal(status.toolSurface?.toolCount, toolCount);
+  assert.equal(status.toolSurface?.toolSurfaceVersion, toolSurfaceVersion);
+  assert.deepEqual(status.toolSurface?.compatibilityAliases, {});
+  assert.ok(status.workspace?.repository?.changedFiles?.includes('acceptance.txt'));
+
+  const activeDashboard = await dashboard();
+  assert.equal(activeDashboard.application?.version, applicationVersion);
+  const activeTask = activeDashboard.tasks?.find(item => item.id === taskId || item.taskId === taskId);
+  assert.ok(activeTask, 'dashboard task history must contain the active packaged acceptance task');
+  assert.ok(activeDashboard.auditTail?.entries?.some(item => item.taskId === taskId && item.tool === 'relai_edit' && item.ok !== false));
+
+  const completed = await callTool(20, 'relai_run_checks', {
+    workspace: 'acceptance',
+    task_id: taskId,
+    check: 'npm run check',
+    complete: true,
+    summary: 'Packaged ESM connector accepted after guarded write, validation, activity inspection, and reconnect verification.'
+  }, tokens.access_token);
+  assert.equal(completed.validationStatus, 'passed');
+  assert.equal(completed.completionKnown, true);
+  assert.equal(completed.completionSource, 'relai_run_checks');
+  assert.ok(completed.changedFiles?.includes('acceptance.txt'));
+
+  const completedDashboard = await dashboard();
+  const persistedTask = completedDashboard.tasks?.find(item => item.id === taskId || item.taskId === taskId);
+  assert.ok(persistedTask, 'dashboard history must persist the completed packaged acceptance task');
+  assert.equal(persistedTask.completionKnown, true);
+  assert.equal(persistedTask.status, 'completed');
+  assert.ok(persistedTask.changedFiles?.includes('acceptance.txt'));
+  for (const expectedTool of ['relai_repo_snapshot', 'relai_read', 'relai_edit', 'relai_status', 'relai_run_checks']) {
+    assert.ok(completedDashboard.auditTail?.entries?.some(item => item.taskId === taskId && item.tool === expectedTool), `dashboard activity is missing ${expectedTool}`);
+  }
+
+  const reconnected = await mcp(30, 'server/discover', {}, tokens.access_token, { clientVersion: '2.0.0' });
   assert.ok(reconnected.result?.capabilities?.tools);
   assert.ok(reconnected.result?.capabilities?.resources);
-  const rejected = await mcp(21, 'tools/call', {
+  const reconnectedDashboard = await dashboard();
+  const reconnectedTask = reconnectedDashboard.tasks?.find(item => item.id === taskId || item.taskId === taskId);
+  assert.equal(reconnectedTask?.completionKnown, true);
+  assert.equal(reconnectedTask?.status, 'completed');
+
+  const rejected = await mcp(31, 'tools/call', {
     name: 'relai_read',
     arguments: { workspace: 'acceptance', task_id: taskId, paths: ['acceptance.txt'], guidanceMode: 'none' }
   }, tokens.access_token);
@@ -134,11 +217,37 @@ try {
     assert.equal(response.status, 404, `${removedPath} must remain removed`);
   }
 
-  console.log('Packaged connector acceptance passed: OAuth, tools/resources, explicit task flow, completion, reconnect rejection, and removed legacy routes verified.');
+  console.log('Packaged connector acceptance passed: packaged OAuth CSS, release/tool versions, guarded write attribution, validation, dashboard activity/history, atomic completion, reconnect persistence/rejection, and removed legacy routes verified.');
 } finally {
   if (child && !child.killed) child.kill('SIGKILL');
   if (child) await Promise.race([once(child, 'close'), new Promise(resolve => setTimeout(resolve, 2000))]).catch(() => {});
   fs.rmSync(sandbox, { recursive: true, force: true });
+}
+
+function runGit(...args) {
+  const result = spawnSync('git', args, { cwd: workspace, encoding: 'utf8' });
+  assert.equal(result.status, 0, `git ${args.join(' ')} failed: ${result.stderr || result.stdout}`);
+}
+
+async function dashboard() {
+  const response = await fetch(`${base}/api/dashboard/v10`, {
+    headers: { authorization: `Bearer ${approvalToken}` }
+  });
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.ok, true);
+  return payload;
+}
+
+async function readResource(id, uri, accessToken) {
+  return JSON.parse(await readResourceText(id, uri, accessToken));
+}
+
+async function readResourceText(id, uri, accessToken) {
+  const response = await mcp(id, 'resources/read', { uri }, accessToken);
+  const text = response.result?.contents?.[0]?.text;
+  assert.equal(typeof text, 'string', `resource ${uri} did not return text`);
+  return text;
 }
 
 async function availablePort() {
@@ -224,7 +333,11 @@ function mcpHeaders(method, accessToken, name = '') {
 }
 
 async function mcp(id, method, params, accessToken, options = {}) {
-  const name = method === 'tools/call' ? String(params?.name || '') : '';
+  const name = method === 'tools/call'
+    ? String(params?.name || '')
+    : method === 'resources/read'
+      ? String(params?.uri || '')
+      : '';
   const requestParams = {
     ...(params || {}),
     _meta: {
@@ -241,7 +354,10 @@ async function mcp(id, method, params, accessToken, options = {}) {
     headers: mcpHeaders(method, accessToken, name),
     body: JSON.stringify({ jsonrpc: '2.0', id, method, params: requestParams })
   });
-  assert.equal(response.status, 200, `${method} returned HTTP ${response.status}`);
+  if (response.status !== 200) {
+    const body = await response.text();
+    assert.equal(response.status, 200, `${method} returned HTTP ${response.status}: ${body}`);
+  }
   return readMcpResponse(response);
 }
 

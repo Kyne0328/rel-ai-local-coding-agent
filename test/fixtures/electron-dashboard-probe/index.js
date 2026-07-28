@@ -1,9 +1,18 @@
-'use strict';
-
-const fs = require('node:fs');
-const [targetUrl, outputPath, screenshotPath] = process.argv.slice(2);
-if (outputPath) fs.writeFileSync(outputPath, JSON.stringify({ stage: 'script_started', argv: process.argv }, null, 2));
-const { app, BrowserWindow } = require('electron');
+import fs from 'node:fs';
+import path from 'node:path';
+const targetUrl = process.env.RELAI_PROBE_TARGET_URL;
+const outputPath = process.env.RELAI_PROBE_OUTPUT_PATH;
+const screenshotPath = process.env.RELAI_PROBE_SCREENSHOT_PATH;
+if (!targetUrl || !outputPath || !screenshotPath) throw new Error('Electron dashboard probe environment is incomplete.');
+fs.writeFileSync(outputPath, JSON.stringify({ stage: 'script_started', argv: process.argv }, null, 2));
+let app;
+let BrowserWindow;
+try {
+  ({ app, BrowserWindow } = await import('electron'));
+} catch (error) {
+  if (outputPath) fs.writeFileSync(outputPath, JSON.stringify({ stage: 'electron_import_failed', error: error?.stack || String(error) }, null, 2));
+  throw error;
+}
 app.commandLine.appendSwitch('force-prefers-reduced-motion', 'reduce');
 app.commandLine.appendSwitch('force-high-contrast');
 app.commandLine.appendSwitch('disable-gpu');
@@ -41,7 +50,7 @@ app.whenReady().then(async () => {
       determinateCount: progress.length,
       determinateValid: progress.every(item => item.max === 100 && item.hasAttribute('value') && item.getAttribute('aria-label')),
       indeterminateCount: indeterminate.length,
-      indeterminateValid: indeterminate.every(item => item.getAttribute('role') === 'status' && !item.hasAttribute('aria-valuenow')),
+      indeterminateValid: indeterminate.every(item => Boolean(item.getAttribute('aria-label')) && !item.hasAttribute('aria-valuenow') && item.querySelector('.task-progress-track')?.getAttribute('aria-hidden') === 'true'),
       unknownStatusCount: rows.filter(row => /unknown/i.test(row.textContent)).length,
       longTitleAccessible: rows.some(row => row.textContent.includes('Extremely long task title') && (row.getAttribute('aria-label') || row.getAttribute('title') || row.textContent.length > 80)),
       reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
@@ -51,12 +60,18 @@ app.whenReady().then(async () => {
   })()`);
 
   await win.webContents.executeJavaScript(`document.querySelector('.task-row')?.click()`);
-  await waitFor(win, `document.querySelector('.session-timeline, .task-session-detail, [data-session-detail]') || document.querySelectorAll('.activity-row-button').length > 0`);
-  const taskInteraction = await win.webContents.executeJavaScript(`(() => ({
-    selected: Boolean(document.querySelector('.task-row.active, .task-row[aria-current="true"], .task-row.selected')),
-    detailText: document.querySelector('#routeRoot')?.textContent || '',
-    activityButtons: document.querySelectorAll('.activity-row-button').length
-  }))()`);
+  await waitFor(win, `document.querySelector('.session-detail-drawer .session-detail')`);
+  const taskInteraction = await win.webContents.executeJavaScript(`(() => {
+    const dialog = document.querySelector('.session-detail-drawer');
+    const detail = dialog?.querySelector('.session-detail');
+    return {
+      dialog: dialog?.getAttribute('role') === 'dialog',
+      detailText: detail?.textContent || '',
+      eventLinks: detail?.querySelectorAll('.task-event-link').length || 0
+    };
+  })()`);
+  await win.webContents.executeJavaScript(`document.querySelector('.session-detail-drawer .drawer-head button')?.click()`);
+  await waitFor(win, `!document.querySelector('.session-detail-drawer')`);
 
   await win.webContents.executeJavaScript(`location.hash = '#activity'`);
   await waitFor(win, `document.querySelectorAll('.activity-row-button').length > 0`);
@@ -66,13 +81,18 @@ app.whenReady().then(async () => {
   await delay(50);
   const afterFocus = await win.webContents.executeJavaScript(`({tag: document.activeElement?.tagName || '', className: document.activeElement?.className || ''})`);
   await win.webContents.executeJavaScript(`document.querySelector('.activity-row-button')?.click()`);
-  await delay(100);
-  const activityInteraction = await win.webContents.executeJavaScript(`(() => ({
-    expanded: Boolean(document.querySelector('.activity-detail, .activity-details, [data-activity-detail]')),
-    copyButton: Boolean([...document.querySelectorAll('button')].find(button => /copy/i.test(button.textContent))),
-    errorWrapped: getComputedStyle(document.querySelector('.activity-table, .activity-detail, #routeRoot')).overflowWrap !== 'normal'
-  }))()`);
-
+  await waitFor(win, `document.querySelector('.drawer-panel .activity-detail-head')`);
+  const activityInteraction = await win.webContents.executeJavaScript(`(() => {
+    const detail = document.querySelector('.drawer-panel .activity-detail-head');
+    const pre = document.querySelector('.drawer-panel .detail-pre');
+    return {
+      expanded: Boolean(detail),
+      copyButton: Boolean([...document.querySelectorAll('.drawer-panel button')].find(button => /copy event json/i.test(button.textContent))),
+      errorWrapped: pre ? getComputedStyle(pre).overflowWrap !== 'normal' : false
+    };
+  })()`);
+  await win.webContents.executeJavaScript(`document.querySelector('.drawer-panel .drawer-head button')?.click()`);
+  await waitFor(win, `!document.querySelector('#__relai-drawer-backdrop')`);
   await win.webContents.executeJavaScript(`location.hash = '#tasks'`);
   await waitFor(win, `document.querySelectorAll('.task-row').length >= 10`);
   const clockBefore = await win.webContents.executeJavaScript(`document.querySelector('[data-clock-relative], [data-clock-elapsed-start]')?.textContent || ''`);
@@ -89,7 +109,7 @@ app.whenReady().then(async () => {
   }))()`);
 
   const image = await win.webContents.capturePage();
-  fs.mkdirSync(require('node:path').dirname(screenshotPath), { recursive: true });
+  fs.mkdirSync(path.dirname(screenshotPath), { recursive: true });
   fs.writeFileSync(screenshotPath, image.toPNG());
   const result = {
     initial,

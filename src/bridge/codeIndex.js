@@ -1,4 +1,4 @@
-'use strict';
+
 
 // Construction of the in-memory code index: read each candidate file once and derive
 // the definitions, imports, and lookup tokens the query side needs.
@@ -7,9 +7,9 @@
 // references, related, impact, diagnostics). Nothing here touches the workspace beyond
 // reading files the caller already validated and stat-ed.
 
-const fs = require('node:fs');
-const path = require('node:path');
-const { looksBinary } = require('../safety');
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { looksBinary } from "../safety.js";
 
 const MAX_FILE_BYTES = 1024 * 1024;
 const MAX_TOTAL_BYTES = 32 * 1024 * 1024;
@@ -180,10 +180,4 @@ function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-module.exports = {
-  EXTENSION_LANGUAGE,
-  MAX_LINE_CHARS,
-  buildIndex,
-  escapeRegExp,
-  isTestPath
-};
+export { EXTENSION_LANGUAGE, MAX_LINE_CHARS, buildIndex, escapeRegExp, isTestPath };

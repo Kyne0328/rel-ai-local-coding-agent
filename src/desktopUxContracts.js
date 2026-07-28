@@ -1,4 +1,4 @@
-'use strict';
+
 
 const TERMINOLOGY = Object.freeze({
   connection: 'Connection',
@@ -146,14 +146,4 @@ function errorPayload(code, message, extra = {}) {
   };
 }
 
-module.exports = {
-  TERMINOLOGY,
-  ERROR_CODES,
-  ERROR_GUIDANCE,
-  CONNECTION_STATE_VALUES,
-  normalizeErrorCode,
-  errorGuidance,
-  normalizeDashboardUpdateStatus,
-  deriveConnectionState,
-  errorPayload
-};
+export { TERMINOLOGY, ERROR_CODES, ERROR_GUIDANCE, CONNECTION_STATE_VALUES, normalizeErrorCode, errorGuidance, normalizeDashboardUpdateStatus, deriveConnectionState, errorPayload };

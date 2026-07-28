@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { createRequire } from 'node:module';
 
 const GIT_EXECUTABLE = process.platform === 'win32'
   ? String.raw`C:\Program Files\Git\cmd\git.exe`
@@ -13,16 +12,8 @@ function git(args, options = {}) {
   return execFileSync(GIT_EXECUTABLE, args, options);
 }
 
-const require = createRequire(import.meta.url);
-const {
-  ensureSessionStarted,
-  touchSessionPolicy,
-  readSessionPolicy,
-  resolvePolicy,
-  writeSessionPolicy,
-  SESSION_IDLE_TTL_MS
-} = require('../src/policyResolver.js');
-const { relaiRead, workspaceTidyPlan } = require('../src/localRepoBridge.js');
+import { ensureSessionStarted, touchSessionPolicy, readSessionPolicy, resolvePolicy, writeSessionPolicy, SESSION_IDLE_TTL_MS } from "../src/policyResolver.js";
+import { relaiRead, workspaceTidyPlan } from "../src/localRepoBridge.js";
 
 function makeRepo() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-auto-session-'));

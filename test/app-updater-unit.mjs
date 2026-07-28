@@ -3,20 +3,8 @@ import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const {
-  AUTO_CHECK_DELAY_MS,
-  AUTO_CHECK_INTERVAL_MS,
-  compareVersions,
-  createAppUpdater,
-  detectUpdateSupport,
-  isStableVersion,
-  normalizeStatus,
-  parseStableVersion,
-  progressPayload
-} = require('../electron/app-updater.js');
+import { AUTO_CHECK_DELAY_MS, AUTO_CHECK_INTERVAL_MS, compareVersions, createAppUpdater, detectUpdateSupport, isStableVersion, normalizeStatus, parseStableVersion, progressPayload } from "../electron/app-updater.js";
 
 class FakeUpdater extends EventEmitter {
   constructor() {

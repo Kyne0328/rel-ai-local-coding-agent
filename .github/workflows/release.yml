@@ -138,6 +138,10 @@ jobs:
           NGROK_PLATFORMS: win32
         run: pwsh scripts/fetch-ngrok.ps1
 
+      - name: Verify generated color assets
+        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
+        run: npm run verify:color-tokens
+
       - name: Run tests
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         run: npm test
@@ -146,6 +150,10 @@ jobs:
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         run: npm ci
         working-directory: electron
+
+      - name: Reverify generated color assets before packaging
+        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
+        run: npm run verify:color-tokens
 
       - name: Require Windows signing credentials
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
@@ -161,7 +169,6 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CSC_KEY_PASSWORD)) {
             throw 'WINDOWS_CSC_KEY_PASSWORD is required for release publication.'
           }
-
       - name: Build Windows executables
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         run: npm run electron:dist

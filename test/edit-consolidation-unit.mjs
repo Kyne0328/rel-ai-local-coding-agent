@@ -3,10 +3,8 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { planEdit } = require('../src/executionPlanner.js');
+import { planEdit } from "../src/executionPlanner.js";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-edit-consolidation-'));
 const workspace = { alias: 'repo', path: root };

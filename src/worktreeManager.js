@@ -1,12 +1,12 @@
-'use strict';
 
-const crypto = require('node:crypto');
-const fs = require('node:fs');
-const path = require('node:path');
-const { getStateDir } = require('./audit');
-const { runProcess, summarizeCommand } = require('./process');
-const { activeProcessesForWorkspace } = require('./processManager');
-const { assertSafeWorkspaceRoot } = require('./config');
+
+import * as crypto from "node:crypto";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { getStateDir } from './statePaths.js';
+import { runProcess, summarizeCommand } from "./process.js";
+import { activeProcessesForWorkspace } from "./processManager.js";
+import { assertSafeWorkspaceRoot } from './workspaceSafety.js';
 
 function registryPath(config) {
   return path.join(getStateDir(config), 'worktrees', 'index.json');
@@ -142,11 +142,4 @@ function managedWorktreeAliases(config) {
   return Object.keys(readRegistry(config).worktrees || {}).sort((left, right) => left.localeCompare(right));
 }
 
-module.exports = {
-  createManagedWorktree,
-  listManagedWorktrees,
-  removeManagedWorktree,
-  resolveManagedWorktree,
-  managedWorktreeAliases,
-  readRegistry
-};
+export { createManagedWorktree, listManagedWorktrees, removeManagedWorktree, resolveManagedWorktree, managedWorktreeAliases, readRegistry };

@@ -1,9 +1,6 @@
-'use strict';
 
-const {
-  cancelOperationTask,
-  assertOperationTaskLogicalOwner
-} = require('../operationTasks');
+
+import { cancelOperationTask, assertOperationTaskLogicalOwner } from "../operationTasks.js";
 
 function getDeferredOperation(config, args = {}, context = {}) {
   const operationTaskId = String(args.operationTaskId || '').trim();
@@ -18,4 +15,4 @@ function cancelDeferredOperation(config, args = {}, context = {}) {
   return { ok: true, operationTask: task };
 }
 
-module.exports = { getDeferredOperation, cancelDeferredOperation };
+export { getDeferredOperation, cancelDeferredOperation };

@@ -1,5 +1,5 @@
 {
-  "version": 28,
+  "version": 29,
   "capturedAt": "2026-07-26",
   "mainNavigation": [
     "Overview",
@@ -272,12 +272,7 @@
     "diagnostics": "#settings/diagnostics",
     "advanced": "#settings/advanced"
   },
-  "legacyRoutes": [
-    "#reference",
-    "#settings/connector",
-    "#settings/desktop",
-    "#settings/dashboard"
-  ],
+  "legacyRoutes": [],
   "electronSurfaces": [
     {
       "id": "setup",

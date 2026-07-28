@@ -1,6 +1,7 @@
-'use strict';
 
-const { localWindowWebPreferences, secureLocalWindow } = require('./window-security');
+
+import { STARTUP_BACKGROUND_COLOR } from './startup-background.js';
+import { localWindowWebPreferences, secureLocalWindow } from './window-security.js';
 
 function createRecoveryWindowManager({
   BrowserWindow,
@@ -21,7 +22,8 @@ function createRecoveryWindowManager({
       minWidth: limits.minWidth,
       minHeight: limits.minHeight,
       useContentSize: true,
-      webPreferences: localWindowWebPreferences(preloadPath, 'relai-recovery'),
+      webPreferences: localWindowWebPreferences(preloadPath, 'relai-recovery', 'application'),
+      backgroundColor: STARTUP_BACKGROUND_COLOR,
       title: 'Rel.AI MCP Recovery',
       autoHideMenuBar: true
     });
@@ -68,4 +70,4 @@ function createRecoveryWindowManager({
   };
 }
 
-module.exports = { createRecoveryWindowManager };
+export { createRecoveryWindowManager };

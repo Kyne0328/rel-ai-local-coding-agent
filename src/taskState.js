@@ -80,13 +80,4 @@ function hasFailureEvidence(record = {}) {
     record.ok === false;
 }
 
-module.exports = {
-  CANONICAL_TASK_STATUSES,
-  TERMINAL_TASK_STATUSES,
-  TASK_TRANSITIONS,
-  assertTaskStatusTransition,
-  canTransitionTaskStatus,
-  isCanonicalTaskStatus,
-  isTerminalTaskStatus,
-  normalizeHistoricalTaskStatus
-};
+export { CANONICAL_TASK_STATUSES, TERMINAL_TASK_STATUSES, TASK_TRANSITIONS, assertTaskStatusTransition, canTransitionTaskStatus, isCanonicalTaskStatus, isTerminalTaskStatus, normalizeHistoricalTaskStatus };

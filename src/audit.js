@@ -1,14 +1,7 @@
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
-
-function defaultStateDir() {
-  return path.join(os.homedir(), ".rel-ai-mcp");
-}
-
-function getStateDir(config = {}) {
-  return process.env.REL_AI_MCP_STATE_DIR || config.stateDir || defaultStateDir();
-}
+import { clearTaskHistory, recordTaskHistoryEvent } from './taskHistoryStore.js';
+import * as fs from "node:fs";
+import * as path from 'node:path';
+import { getStateDir } from './statePaths.js';
 
 function getAuditPath(config = {}) {
   return config.auditLogPath || path.join(getStateDir(config), "audit.jsonl");
@@ -39,7 +32,7 @@ function logAudit(config, event) {
   rotateIfNeeded(auditPath);
   fs.appendFileSync(auditPath, `${JSON.stringify(entry)}\n`, { mode: 0o600 });
   try {
-    require('./taskHistoryStore').recordTaskHistoryEvent(config, entry);
+    recordTaskHistoryEvent(config, entry);
   } catch (error) {
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] session history write:', error);
   }
@@ -102,7 +95,7 @@ function clearAuditHistory(config) {
   }
   fs.mkdirSync(path.dirname(auditPath), { recursive: true, mode: 0o700 });
   fs.writeFileSync(auditPath, '', { mode: 0o600 });
-  try { require('./taskHistoryStore').clearTaskHistory(config); } catch {}
+  try { clearTaskHistory(config); } catch {}
   return { auditPath, removedFiles, removedBytes };
 }
 
@@ -122,10 +115,4 @@ function redactEvent(value) {
   return out;
 }
 
-module.exports = {
-  getStateDir,
-  getAuditPath,
-  logAudit,
-  readAudit,
-  clearAuditHistory
-};
+export { getAuditPath, logAudit, readAudit, clearAuditHistory };

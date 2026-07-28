@@ -1,7 +1,7 @@
-'use strict';
 
-const { cleanText, isoNow, progressPayload } = require('./app-updater-state');
-const { compareVersions, isStableVersion } = require('./update-version');
+
+import { cleanText, isoNow, progressPayload } from "./app-updater-state.js";
+import { compareVersions, isStableVersion } from "./update-version.js";
 
 function bindUpdaterEvents({ autoUpdater, handlers, status, emit, handleError, store, now, log }) {
   const bind = (eventName, handler) => {
@@ -60,4 +60,4 @@ function bindUpdaterEvents({ autoUpdater, handlers, status, emit, handleError, s
   bind('error', handleError);
 }
 
-module.exports = { bindUpdaterEvents };
+export { bindUpdaterEvents };

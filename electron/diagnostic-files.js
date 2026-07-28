@@ -1,7 +1,7 @@
-'use strict';
 
-const fs = require('node:fs');
-const path = require('node:path');
+
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 function createDiagnosticFiles({ app, shell, sanitizeDiagnosticValue, now = () => new Date() } = {}) {
   if (!app || typeof app.getPath !== 'function') throw new Error('Electron app path access is required.');
@@ -53,4 +53,4 @@ function fileTimestamp(value) {
   return value.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z').replace('T', '-');
 }
 
-module.exports = { createDiagnosticFiles, fileTimestamp };
+export { createDiagnosticFiles, fileTimestamp };

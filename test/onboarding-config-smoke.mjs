@@ -3,7 +3,6 @@ import { once } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-onboarding-config-'));
 const configPath = path.join(stateDir, 'config.json');
 const token = 'onboarding-config-token';
@@ -11,8 +10,7 @@ process.env.REL_AI_MCP_CONFIG = configPath;
 process.env.REL_AI_MCP_STATE_DIR = stateDir;
 process.env.REL_AI_MCP_TOKEN = token;
 
-const require = createRequire(import.meta.url);
-const { startHttpServer } = require('../src/httpServer.js');
+import { startHttpServer } from "../src/httpServer.js";
 const server = startHttpServer({ host: '127.0.0.1', port: 0, token, exitOnError: false });
 await once(server, 'listening');
 const address = server.address();

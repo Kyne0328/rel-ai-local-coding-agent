@@ -1,11 +1,6 @@
-'use strict';
 
-const {
-  MAX_CLIPBOARD_TEXT_BYTES,
-  createWindowGuards,
-  isAllowedNgrokUrl,
-  logIpcFailure
-} = require('./ipc-security');
+
+import { MAX_CLIPBOARD_TEXT_BYTES, createWindowGuards, isAllowedNgrokUrl, logIpcFailure } from "./ipc-security.js";
 
 function registerIpcHandlers(deps) {
   const {
@@ -96,4 +91,4 @@ function registerIpcHandlers(deps) {
   }
 }
 
-module.exports = { MAX_CLIPBOARD_TEXT_BYTES, isAllowedNgrokUrl, registerIpcHandlers };
+export { MAX_CLIPBOARD_TEXT_BYTES, isAllowedNgrokUrl, registerIpcHandlers };

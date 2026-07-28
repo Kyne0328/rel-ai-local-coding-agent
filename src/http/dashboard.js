@@ -1,37 +1,26 @@
-const crypto = require("node:crypto");
-const fs = require("node:fs");
-const path = require("node:path");
-const { readConfig, ensureConfig } = require("../config");
-const productUx = require("../productUx");
-const release = require("../release");
-const configEditor = require("../configEditor");
-const pkg = require("../../package.json");
-const connection = require("../connectionProfile");
-const { ERROR_CODES, errorPayload } = require("../desktopUxContracts");
-const { renderDashboardShellBootstrap, renderDashboardWindowTitlebar } = require("./dashboardShellChrome");
-const { getOnboardingStatus, writeOnboardingState } = require("../onboardingState");
-const { getVersion } = require("../version");
-const { resolveRequireHttpToken } = require("./auth");
-const { readTaskHistory } = require("../taskHistoryStore");
-const { onToolActivity } = require("../toolActivity");
-const { buildDashboardPayload, mergeDashboardActivity } = require('./dashboardData');
-const {
-  handleOpenFolder,
-  handleWorkspaceChecks,
-  handlePickFolder,
-  workspacePathPreflight
-} = require("./dashboardActions");
-const {
-  sendJson,
-  sendHtml,
-  sendSse,
-  readJsonBody,
-  contentTypeForStaticAsset,
-  jsonForHtmlScript
-} = require("./io");
+import { getToolMetadata } from '../tools.js';
+import { getReleaseNotes } from '../releaseNotes.js';
+import * as crypto from "node:crypto";
+import * as fs from "node:fs";
+import { ensureConfig, getConfigPath, readConfig } from '../config.js';
+import * as productUx from "../productUx.js";
+import * as release from "../release.js";
+import * as configEditor from "../configEditor.js";
+import { packageMetadata as pkg, resolvePackagePath } from '../packageMetadata.js';
+import * as connection from "../connectionProfile.js";
+import { ERROR_CODES, errorPayload } from "../desktopUxContracts.js";
+import { renderDashboardShellBootstrap, renderDashboardWindowTitlebar } from "./dashboardShellChrome.js";
+import { getOnboardingStatus, writeOnboardingState } from "../onboardingState.js";
+import { getVersion } from "../version.js";
+import { resolveRequireHttpToken } from "./auth.js";
+import { readTaskHistory } from "../taskHistoryStore.js";
+import { onToolActivity } from "../toolActivity.js";
+import { buildDashboardPayload, mergeDashboardActivity } from "./dashboardData.js";
+import { handleOpenFolder, handleWorkspaceChecks, handlePickFolder, workspacePathPreflight } from "./dashboardActions.js";
+import { sendJson, sendHtml, sendSse, readJsonBody, contentTypeForStaticAsset, jsonForHtmlScript } from "./io.js";
 
 function buildToolMetadata() {
-  return require("../tools").getToolMetadata();
+  return getToolMetadata();
 }
 
 const PRIMARY_NAV_ITEMS = [
@@ -53,7 +42,7 @@ function renderDashboardNav(items) {
 
 async function handleFavicon(ctx) {
   try {
-    const content = fs.readFileSync(path.join(__dirname, "..", "..", "public", "assets", "favicon.ico"));
+    const content = fs.readFileSync(resolvePackagePath('public', 'assets', 'favicon.ico'));
     ctx.res.writeHead(200, { "Content-Type": "image/x-icon", "Cache-Control": "no-cache" });
     ctx.res.end(content);
   } catch { ctx.res.writeHead(404); ctx.res.end("Not found"); }
@@ -72,11 +61,11 @@ function handleStaticAsset(ctx) {
   if (safePath.includes("..")) { ctx.res.writeHead(400); ctx.res.end("Bad path"); return; }
   let filePath;
   if (safePath.startsWith("/ui/")) {
-    filePath = path.join(__dirname, "..", "ui", safePath.slice(4));
+    filePath = resolvePackagePath('src', 'ui', safePath.slice(4));
   } else if (safePath.startsWith("/public/ui/")) {
-    filePath = path.join(__dirname, "..", "ui", safePath.slice(11));
+    filePath = resolvePackagePath('src', 'ui', safePath.slice(11));
   } else {
-    filePath = path.join(__dirname, "..", "..", "public", safePath.slice(8));
+    filePath = resolvePackagePath('public', safePath.slice(8));
   }
   try {
     const content = fs.readFileSync(filePath);
@@ -173,7 +162,7 @@ async function handleApiWorkspaces(ctx) {
 }
 
 function readConfigCached() {
-  const configPath = require("../config").getConfigPath();
+  const configPath = getConfigPath();
   let mtimeMs = null;
   try { mtimeMs = fs.statSync(configPath).mtimeMs; } catch { /* config file may not exist yet */ }
   if (mtimeMs != null && configCache.value && configCache.path === configPath && configCache.mtimeMs === mtimeMs) {
@@ -210,7 +199,7 @@ function openDashboardEvents(res, req, options) {
     const taskActivity = typeof options.getTaskActivity === "function" ? options.getTaskActivity() : null;
     const desktopStatus = typeof options.getDesktopStatus === "function" ? options.getDesktopStatus() : null;
     return [
-      statSignature(require("../config").getConfigPath()),
+      statSignature(getConfigPath()),
       statSignature(config?.auditLogPath),
       JSON.stringify(taskActivity),
       JSON.stringify(desktopStatus)
@@ -331,34 +320,10 @@ const handleApiLogs = (ctx) => {
 };
 const handleHealthMonitor = (ctx) => sendJson(ctx.res, 200, productUx.healthMonitor(readConfig(), { limit: Number(ctx.parsed.searchParams.get("limit") || 100) }), ctx.ae);
 const handleAliasDiagnostics = (ctx) => sendJson(ctx.res, 200, productUx.aliasConsistencyCheck(readConfig()), ctx.ae);
-const handleReleaseNotes = (ctx) => sendJson(ctx.res, 200, require("../releaseNotes").getReleaseNotes(), ctx.ae);
+const handleReleaseNotes = (ctx) => sendJson(ctx.res, 200, getReleaseNotes(), ctx.ae);
 const handleCautionSummary = (ctx) => sendJson(ctx.res, 200, productUx.cautionSummary(readConfig(), { windowHours: Number(ctx.parsed.searchParams.get("windowHours") || 24) }), ctx.ae);
 const handleReadiness = (ctx) => sendJson(ctx.res, 200, release.releaseReadiness(readConfig(), { requireHttpToken: resolveRequireHttpToken(ctx.parsed, readConfig()) }), ctx.ae);
 
 const configCache = { path: "", mtimeMs: -1, value: null };
 
-module.exports = {
-  handleFavicon,
-  handleHealth,
-  handleStaticAsset,
-  handleDashboard,
-  handleApiSettingsGet,
-  handleApiTools,
-  handleOnboardingStatus,
-  handleConnection,
-  handleDashboardV10,
-  handleApiLogs,
-  handleHealthMonitor,
-  handleAliasDiagnostics,
-  handleReleaseNotes,
-  handleCautionSummary,
-  handleReadiness,
-  handleWorkspacePreflight,
-  handleEvents,
-  handleOnboardingComplete,
-  handleApiSettingsPost,
-  handleApiWorkspaces,
-  handlePickFolder,
-  handleOpenFolder,
-  handleWorkspaceChecks
-};
+export { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handleApiSettingsGet, handleApiTools, handleOnboardingStatus, handleConnection, handleDashboardV10, handleApiLogs, handleHealthMonitor, handleAliasDiagnostics, handleReleaseNotes, handleCautionSummary, handleReadiness, handleWorkspacePreflight, handleEvents, handleOnboardingComplete, handleApiSettingsPost, handleApiWorkspaces, handlePickFolder, handleOpenFolder, handleWorkspaceChecks };

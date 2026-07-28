@@ -3,10 +3,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { relaiDiff } = require('../src/bridge/review.js');
+import { relaiDiff } from "../src/bridge/review.js";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-redacted-review-'));
 const git = (args) => execFileSync('git', args, { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });

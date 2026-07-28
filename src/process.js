@@ -1,8 +1,7 @@
-const { spawn, spawnSync } = require("node:child_process");
-const { resolveGitExecutable } = require("./gitExecutable");
-const { makeProcessEnvironment } = require("./processEnvironment");
-const { traceContextEnvironment } = require("./telemetry");
-const TASKKILL_EXE = String.raw`C:\Windows\System32\taskkill.exe`;
+import { spawn, spawnSync } from 'node:child_process';
+import { resolveGitExecutable } from './gitExecutable.js';
+import { makeProcessEnvironment } from './processEnvironment.js';
+import { traceContextEnvironment } from './telemetry.js';const TASKKILL_EXE = String.raw`C:\Windows\System32\taskkill.exe`;
 
 // Kill the whole process tree. A plain child.kill() on Windows only terminates the
 // direct child — with shell:true that is cmd.exe, leaving npm/node grandchildren
@@ -181,9 +180,4 @@ function summarizeCommand(result) {
   };
 }
 
-module.exports = {
-  runProcess,
-  summarizeCommand,
-  appendLimited,
-  killProcessTree
-};
+export { runProcess, summarizeCommand, appendLimited, killProcessTree };

@@ -95,12 +95,26 @@ function insertChangelog(nextVersion, releaseDate) {
   const changelogPath = 'CHANGELOG.md';
   const content = read(changelogPath);
   if (changelogHasVersion(content, nextVersion)) return;
-  const marker = '# Changelog\n';
-  if (!content.startsWith(marker)) die('CHANGELOG.md must start with # Changelog');
+  const markerMatch = content.match(/^# Changelog(\r?\n)/);
+  if (!markerMatch) die('CHANGELOG.md must start with # Changelog');
+  const newline = markerMatch[1];
+  const marker = `# Changelog${newline}`;
   const bullets = notes.length
-    ? notes.map((note) => `- **${note.replace(/\.$/, '')}.**`).join('\n')
-    : '- **TODO: summarize the user-visible change.** Replace this placeholder with the complete release note before finalizing the release.\n- **TODO: list validation coverage.** Mention the tests or checks that prove the release is safe.';
-  const entry = `\n## [${nextVersion}] — ${releaseDate}\n\n### ${headline}\n${bullets}\n\nBump root/electron/status UI/lockfiles to ${nextVersion}.\n`;
+    ? notes.map((note) => `- **${note.replace(/\.$/, '')}.**`).join(newline)
+    : [
+      '- **TODO: summarize the user-visible change.** Replace this placeholder with the complete release note before finalizing the release.',
+      '- **TODO: list validation coverage.** Mention the tests or checks that prove the release is safe.'
+    ].join(newline);
+  const entry = [
+    '',
+    `## [${nextVersion}] — ${releaseDate}`,
+    '',
+    `### ${headline}`,
+    bullets,
+    '',
+    `Bump root/electron/status UI/lockfiles to ${nextVersion}.`,
+    ''
+  ].join(newline);
   write(changelogPath, `${marker}${entry}${content.slice(marker.length)}`);
 }
 

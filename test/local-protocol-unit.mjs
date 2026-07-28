@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { localRendererUrl, resolveLocalRendererPath } = require('../electron/local-protocol.js');
+import { localRendererUrl, resolveLocalRendererPath } from '../electron/local-protocol.js';
 const root = path.resolve('electron/renderer');
 
 assert.equal(localRendererUrl('status.html'), 'relai-app://renderer/status.html');

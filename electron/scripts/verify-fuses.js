@@ -1,8 +1,8 @@
 'use strict';
 
-const fs = require('node:fs');
-const path = require('node:path');
-const { getCurrentFuseWire, FuseV1Options } = require('@electron/fuses');
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { getCurrentFuseWire, FuseV1Options } from '@electron/fuses';
 
 const binary = path.resolve(process.argv[2] || '');
 if (!binary || !fs.existsSync(binary)) throw new Error(`Electron binary not found: ${binary || '(missing path)'}`);

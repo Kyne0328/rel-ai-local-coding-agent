@@ -1,8 +1,7 @@
-'use strict';
 
-function localWindowWebPreferences(preload, partition) {
-  return {
+function localWindowWebPreferences(preload, partition, surface = 'application') {  return {
     preload,
+    additionalArguments: [`--relai-preload-surface=${surface}`],
     nodeIntegration: false,
     contextIsolation: true,
     sandbox: true,
@@ -54,4 +53,4 @@ function normalizeLocalTarget(value) {
   }
 }
 
-module.exports = { localWindowWebPreferences, secureLocalWindow, isAllowedLocalTarget };
+export { localWindowWebPreferences, secureLocalWindow, isAllowedLocalTarget };

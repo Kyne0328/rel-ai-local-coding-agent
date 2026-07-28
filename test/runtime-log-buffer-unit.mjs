@@ -2,10 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { createRuntimeLogBuffer } = require('../electron/runtime-log-buffer.js');
+import { createRuntimeLogBuffer } from "../electron/runtime-log-buffer.js";
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-runtime-logs-'));
 const logPath = path.join(temp, 'diagnostics', 'service.log');
