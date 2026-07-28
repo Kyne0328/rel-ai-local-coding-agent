@@ -12,7 +12,7 @@ export function taskProgressHtml(progress = {}, status = '', options = {}) {
   }
   const label = progress?.label || 'Workload size is not yet known';
   const statusAttributes = compact ? `aria-label="${esc(label)}"` : `role="status" aria-label="${esc(label)}"`;
-  return `<div class="task-progress indeterminate ${compact ? 'compact' : ''}" ${statusAttributes}><div class="task-progress-label"><span>${esc(label)}</span></div><progress class="task-progress-track" aria-hidden="true"></progress></div>`;
+  return `<div class="task-progress indeterminate ${compact ? 'compact' : ''}" ${statusAttributes}><div class="task-progress-label"><span>${esc(label)}</span></div><div class="task-progress-track" aria-hidden="true"></div></div>`;
 }
 
 function clampPercentage(value) {

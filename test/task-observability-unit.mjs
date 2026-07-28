@@ -12,6 +12,7 @@ const {
 } = require('../src/taskObservability.js');
 
 assert.equal(deriveTaskTitle({ title: 'Audit dashboard activity model' }), 'Audit dashboard activity model');
+assert.equal(deriveTaskTitle({ title: 'Inspect token=super-secret dashboard' }), 'Inspect token=[redacted] dashboard');
 assert.equal(deriveTaskTitle({ title: 'Task', tool: 'relai_read', paths: ['src/taskHistory.js'] }), 'Read src/taskHistory.js');
 assert.equal(deriveTaskTitle({ objective: 'inspect session persistence. Then report findings.' }), 'Inspect session persistence');
 assert.equal(deriveTaskTitle({ tool: 'relai_run_checks' }), 'Run repository validation');
@@ -47,6 +48,10 @@ const failed = buildToolActivityDetails('relai_exec', { command: 'npm test' }, n
 assert.equal(failed.status, 'failed');
 assert.equal(failed.error.retryable, true);
 assert.match(failed.summary, /Workspace path was unavailable/);
+const blocked = buildToolActivityDetails('relai_edit', {}, null, { code: 'APPROVAL_REQUIRED', message: 'Authorization: Bearer abc.def is required.' }, { phase: 'complete' });
+assert.equal(blocked.status, 'blocked');
+assert.equal(blocked.currentStage, 'Waiting for approval');
+assert.doesNotMatch(blocked.error.message, /abc\.def/);
 
 assert.deepEqual(determinateProgress(4, 7, 'plan', '4 of 7 planned steps'), {
   mode: 'determinate',

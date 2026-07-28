@@ -52,6 +52,8 @@ async function callTool(name, args = {}, context = {}) {
       operation: describeToolOperation(name, effectiveArgs || {}),
       title: effectiveArgs?.title,
       objective: effectiveArgs?.objective,
+      correlation: { requestId: context?.requestId, traceId: context?.traceId,
+        workspaceId: effectiveArgs?.workspace, conversationId: context?.conversationId },
       input: effectiveArgs || {}
     });
     const definition = getToolDefinition(name);
