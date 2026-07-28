@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const { TERMINAL_TASK_STATUSES, normalizeHistoricalTaskStatus } = require('./taskState');
 
 const TASK_MODEL_VERSION = 3;
 const MAX_TITLE_LENGTH = 100;
@@ -8,13 +9,14 @@ const MAX_OBJECTIVE_LENGTH = 500;
 const MAX_SUMMARY_LENGTH = 500;
 const MAX_METADATA_STRING = 500;
 const MAX_METADATA_ITEMS = 100;
-const TERMINAL_STATUSES = new Set(['completed', 'completed_with_warnings', 'failed', 'cancelled']);
+const TERMINAL_STATUSES = TERMINAL_TASK_STATUSES;
 const ALLOWED_METADATA_KEYS = new Set([
   'waitMs', 'queueMode', 'queued', 'pathCount', 'matchCount', 'returnedFileCount', 'returnedRangeCount',
   'returnedBytes', 'changedFileCount', 'changedFiles', 'validationStatus', 'validationLevel', 'validationLevelReason',
   'checkCount', 'passedCount', 'failedCount', 'skippedCount', 'exitCode', 'durationMs', 'stdoutBytes', 'stderrBytes',
   'stdoutTruncated', 'stderrTruncated', 'timedOut', 'commit', 'branch', 'remote', 'processId', 'pid', 'status',
-  'affectedItemCount', 'warningCount', 'retryable', 'errorCode', 'cacheHit', 'operationTaskId', 'progress'
+  'affectedItemCount', 'warningCount', 'retryable', 'errorCode', 'cacheHit', 'operationTaskId', 'progress',
+  'currentCheck', 'currentIndex', 'resultStatus', 'failedCheck', 'cancelled'
 ]);
 
 function deriveTaskTitle(details = {}) {
@@ -56,6 +58,7 @@ function titleForTool(tool, details = {}) {
     relai_git_draft_pr: 'Draft pull request',
     relai_diff: 'Review repository changes',
     relai_status: 'Inspect repository status',
+    relai_cancel_task: 'Cancel logical task',
     relai_complete_task: 'Complete logical task'
   };
   return titles[String(tool || '')] || '';
@@ -119,12 +122,17 @@ function progressForTool(name, args = {}, value = null, ok = true, phase = 'comp
     const completed = phase === 'running' ? 0 : ok ? totalPaths : Math.min(totalPaths, resultItemCount(value));
     return determinateProgress(completed, totalPaths, 'batch', `${completed} of ${totalPaths} paths`);
   }
-  const checks = Array.isArray(value?.checks) ? value.checks : Array.isArray(value?.results) ? value.results : [];
+  const checks = Array.isArray(value?.checks) ? value.checks : [];
+  const results = Array.isArray(value?.results) ? value.results : [];
   const requestedChecks = Array.isArray(args?.checks) ? args.checks.length : 0;
-  const totalChecks = Math.max(requestedChecks, checks.length);
+  const totalChecks = Math.max(Number(value?.totalUnits || 0), requestedChecks, checks.length, results.length);
   if (/checks|diagnostics/.test(String(name || '')) && totalChecks > 0) {
-    const completed = phase === 'running' ? 0 : checks.length || (ok ? totalChecks : 0);
-    return determinateProgress(completed, totalChecks, 'workflow', `${completed} of ${totalChecks} checks`);
+    const completed = phase === 'running'
+      ? 0
+      : Math.min(totalChecks, Number.isFinite(Number(value?.completedUnits)) ? Number(value.completedUnits) : results.length || (ok ? totalChecks : 0));
+    const progress = determinateProgress(completed, totalChecks, 'workflow', `${completed} of ${totalChecks} checks`);
+    if (!ok && progress.percentage >= 100) progress.percentage = 99;
+    return progress;
   }
   if (phase === 'complete' && ok && name === 'relai_complete_task') return completeProgress('Task completed');
   return { mode: 'indeterminate', label: stageForTool(name, phase === 'running' ? 'running' : ok ? 'succeeded' : 'failed') };
@@ -149,7 +157,14 @@ function completeProgress(label = 'Complete') {
 
 function normalizeTaskProgress(progress, status) {
   if ((status === 'completed' || status === 'completed_with_warnings')) return completeProgress(progress?.label || 'Complete');
-  if (progress?.mode === 'determinate') return determinateProgress(progress.completedUnits, progress.totalUnits, progress.source, progress.label);
+  if (progress?.mode === 'determinate') {
+    const normalized = determinateProgress(progress.completedUnits, progress.totalUnits, progress.source, progress.label);
+    if (Number.isFinite(Number(progress.percentage))) {
+      normalized.percentage = Math.min(normalized.percentage, Math.max(0, Math.round(Number(progress.percentage))));
+    }
+    if (['failed', 'cancelled'].includes(status) && normalized.percentage >= 100) normalized.percentage = 99;
+    return normalized;
+  }
   if (progress?.mode === 'complete' && !TERMINAL_STATUSES.has(status)) return completeProgress(progress.label);
   return { mode: 'indeterminate', ...(progress?.label ? { label: cleanText(progress.label, 120) } : {}) };
 }
@@ -189,10 +204,14 @@ function sanitizeMetadataString(value) {
 function sanitizeUrl(value) {
   try {
     const url = new URL(value);
-    url.username = '';
-    url.password = '';
-    url.search = '';
-    url.hash = '';
+    if (url.username || url.password) {
+      url.username = '';
+      url.password = '';
+    }
+    for (const key of [...url.searchParams.keys()]) {
+      if (isSensitiveKey(key)) url.searchParams.set(key, '[redacted]');
+    }
+    if (url.hash && /token|secret|password|credential|code/i.test(url.hash)) url.hash = '#[redacted]';
     return url.toString();
   } catch {
     return '[redacted-url]';
@@ -245,7 +264,7 @@ function categoryForTool(name, options = {}) {
   if (/run_checks|diagnostics|validation/.test(name)) return 'validation';
   if (/git_/.test(name)) return 'git';
   if (/process_/.test(name)) return 'process';
-  if (/complete_task|start_task|operation_task/.test(name)) return 'task';
+  if (/complete_task|cancel_task|start_task|operation_task/.test(name)) return 'task';
   if (/resource/.test(name)) return 'resource';
   return 'tool';
 }
@@ -262,6 +281,7 @@ function stageForTool(name, status) {
   if (/edit|restore|reset|tidy_run/.test(name)) return 'Updating repository';
   if (/read|search|snapshot|inspect|status|diff/.test(name)) return 'Inspecting repository';
   if (/process/.test(name)) return 'Managing process';
+  if (/cancel_task/.test(name)) return 'Cancelling task';
   if (/complete_task/.test(name)) return 'Finalizing task';
   return status === 'running' ? 'Running tool' : 'Reviewing result';
 }
@@ -319,7 +339,8 @@ function summaryForTool(name, args, value, error, operation, result) {
   }
   if (name === 'relai_git_commit') return value?.commit ? `Created Git commit ${cleanText(value.commit, 20)}.` : 'Created a Git commit.';
   if (name === 'relai_git_push') return 'Published the Git branch.';
-  if (name === 'relai_complete_task') return cleanText(value?.summary || args?.summary, MAX_SUMMARY_LENGTH) || 'Task completion was reported.';
+  if (name === 'relai_cancel_task') return sanitizeDisplayText(value?.terminalReason || args?.reason, MAX_SUMMARY_LENGTH) || 'Task cancellation was reported.';
+  if (name === 'relai_complete_task') return sanitizeDisplayText(value?.summary || args?.summary, MAX_SUMMARY_LENGTH) || 'Task completion was reported.';
   return cleanText(result?.outcome, MAX_SUMMARY_LENGTH) || `${operation || titleForTool(name, args) || 'Tool operation'} completed.`;
 }
 
@@ -384,12 +405,104 @@ function normalizeRelativePath(value) {
 }
 
 function sanitizeDisplayText(value, maxLength = 200) {
-  let text = String(value == null ? '' : value);
-  text = text
-    .replace(/\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer [redacted]')
-    .replace(/\b(token|secret|password|api[_-]?key|authorization|cookie)\s*[:=]\s*([^\s,;]+)/gi, '$1=[redacted]')
+  const bounded = String(value == null ? '' : value).slice(0, 100000);
+  const text = bounded
+    .replace(/-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----[\s\S]{0,50000}?-----END (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/gi, '[redacted-private-key]')
+    .replace(/\b(Authorization)\s*:\s*(Bearer|Basic)\s+[^\s,;]+/gi, '$1: $2 [redacted]')
+    .replace(/\b(Set-Cookie|Cookie)\s*:\s*[^\r\n]+/gi, '$1: [redacted]')
+    .replace(/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=:-]{6,}/gi, '$1 [redacted]')
+    .replace(/\b(api[_-]?key|token|access[_-]?token|refresh[_-]?token|session[_-]?token|auth[_-]?token|client[_-]?secret|password|passwd|authorization[_-]?code|approval[_-]?code|cookie|set-cookie|secret)\b\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi, '$1=[redacted]')
+    .replace(/\b([A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY|AUTH_CODE|CLIENT_SECRET)[A-Z0-9_]*)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s,;]+)/g, '$1=[redacted]')
     .replace(/https?:\/\/[^\s<>"')\]]+/gi, match => sanitizeUrl(match));
   return cleanText(text, maxLength);
+}
+
+function sanitizeCompletionSummary(value, maxLength = 2000) {
+  if (value == null || value === '') throw new Error('summary is required to report task completion.');
+  if (typeof value !== 'string') throw new TypeError('summary must be a string.');
+  const summary = sanitizeDisplayText(value, maxLength);
+  if (!summary) throw new Error('summary is required to report task completion.');
+  return summary;
+}
+
+function sanitizeActivityEventRecord(event) {
+  if (!event || typeof event !== 'object') return event;
+  const value = { ...event };
+  for (const key of ['title', 'summary', 'message', 'currentStage', 'currentActivity']) {
+    if (value[key] != null) value[key] = sanitizeDisplayText(value[key], key === 'title' ? 160 : MAX_SUMMARY_LENGTH);
+  }
+  if (value.error != null) value.error = typeof value.error === 'object'
+    ? normalizeActivityError(value.error)
+    : sanitizeDisplayText(value.error, MAX_SUMMARY_LENGTH);
+  if (value.target && typeof value.target === 'object') value.target = sanitizeStructuredValue(value.target, 0);
+  if (value.result && typeof value.result === 'object') value.result = sanitizeStructuredValue(value.result, 0);
+  value.metadata = sanitizeActivityMetadata(value.metadata || {}) || {};
+  delete value.args;
+  delete value.output;
+  return value;
+}
+
+function buildSafeActivityProjection(record) {
+  const event = sanitizeActivityEventRecord(record);
+  if (!event || typeof event !== 'object') return {};
+  return {
+    eventId: event.eventId || event.id,
+    taskId: event.taskId,
+    sessionId: event.sessionId,
+    sequence: event.sequence,
+    timestamp: event.timestamp || event.ts,
+    category: event.category,
+    action: event.action,
+    status: event.status,
+    title: event.title || event.operation,
+    summary: event.summary || event.message,
+    durationMs: event.durationMs || event.ms,
+    tool: event.tool,
+    workspace: event.workspace,
+    target: event.target || (event.path ? { workspaceRelativePath: sanitizeDisplayText(event.path, MAX_METADATA_STRING) } : undefined),
+    result: event.result,
+    error: event.error,
+    metadata: event.metadata
+  };
+}
+
+function sanitizeTaskRecord(record) {
+  if (!record || typeof record !== 'object') return record;
+  const value = { ...record };
+  value.status = normalizeHistoricalTaskStatus(value.status, value);
+  for (const [key, limit] of Object.entries({
+    title: MAX_TITLE_LENGTH,
+    objective: MAX_OBJECTIVE_LENGTH,
+    currentStage: MAX_SUMMARY_LENGTH,
+    currentActivity: MAX_SUMMARY_LENGTH,
+    summary: 2000,
+    resultSummary: 2000,
+    errorSummary: MAX_SUMMARY_LENGTH,
+    terminalReason: MAX_SUMMARY_LENGTH,
+    cancellationInitiator: 80,
+    endReason: 120
+  })) {
+    if (value[key] != null) value[key] = sanitizeDisplayText(value[key], limit);
+  }
+  if (Array.isArray(value.events)) value.events = value.events.map(sanitizeActivityEventRecord).filter(Boolean);
+  if (Array.isArray(value.currentOperations)) value.currentOperations = value.currentOperations.map(item => sanitizeStructuredValue(item, 0)).filter(Boolean);
+  if (value.correlation && typeof value.correlation === 'object') value.correlation = sanitizeStructuredValue(value.correlation, 0);
+  return value;
+}
+
+function sanitizeStructuredValue(value, depth = 0) {
+  if (depth > 5 || value == null) return undefined;
+  if (typeof value === 'string') return sanitizeDisplayText(value, MAX_METADATA_STRING);
+  if (typeof value === 'boolean' || typeof value === 'number') return value;
+  if (Array.isArray(value)) return value.slice(0, MAX_METADATA_ITEMS).map(item => sanitizeStructuredValue(item, depth + 1)).filter(item => item !== undefined);
+  if (typeof value !== 'object') return undefined;
+  const output = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (isSensitiveKey(key)) continue;
+    const sanitized = sanitizeStructuredValue(item, depth + 1);
+    if (sanitized !== undefined) output[key] = sanitized;
+  }
+  return output;
 }
 
 function cleanText(value, maxLength = 200) {
@@ -433,6 +546,7 @@ function isoTime(value) {
 module.exports = {
   TASK_MODEL_VERSION,
   TERMINAL_STATUSES,
+  buildSafeActivityProjection,
   buildToolActivityDetails,
   cleanText,
   completeProgress,
@@ -442,6 +556,10 @@ module.exports = {
   normalizeActivityError,
   normalizeTaskProgress,
   sanitizeActivityMetadata,
+  sanitizeActivityEventRecord,
+  sanitizeCompletionSummary,
   sanitizeDisplayText,
+  sanitizeTaskRecord,
+  sanitizeUrl,
   titleForTool
 };

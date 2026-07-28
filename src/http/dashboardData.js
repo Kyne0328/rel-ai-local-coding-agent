@@ -7,7 +7,9 @@ const release = require('../release');
 const { deriveConnectionState } = require('../desktopUxContracts');
 const { getApplicationMetadata } = require('../appMetadata');
 const { readTaskHistory } = require('../taskHistoryStore');
+const { buildSafeActivityProjection, sanitizeActivityEventRecord, sanitizeTaskRecord } = require('../taskObservability');
 const { buildWorkspaceStates } = require('../workspaceState');
+const { runtimeCompatibility } = require('../runtimeCompatibility');
 
 const DASHBOARD_STREAM_ID = crypto.randomUUID();
 let dashboardSnapshotSequence = 0;
@@ -35,16 +37,20 @@ function buildDashboardPayload(config, options = {}, requireHttpToken = false) {
   const tasks = readTaskHistory(config, taskActivity, { limit: 500 });
   const auditTail = mergeDashboardActivity(base.auditTail || { entries: [] }, tasks, limit);
   const workspaceStates = buildWorkspaceStates(config, tasks, taskActivity);
+  const runtimeState = runtimeCompatibility(config, { activeTaskCount: taskActivity.activeTaskCount });
   if (Array.isArray(base.config?.workspaces)) {
     for (const workspace of base.config.workspaces) workspace.operational = workspaceStates[workspace.alias] || null;
   }
   return {
     ...base,
     application: getApplicationMetadata(),
+    runtime: runtimeState.runtime,
+    repositoryRuntime: runtimeState.repository,
+    runtimeCompatibility: runtimeState.compatibility,
     readiness: release.releaseReadiness(config, { requireHttpToken }),
     connection: connectionSummary,
     connectionState: desktopStatus?.connectionState || deriveConnectionState(connectionStateInput),
-    taskActivity,
+    taskActivity: sanitizeTaskActivity(taskActivity),
     desktopStatus,
     snapshot: {
       streamId: DASHBOARD_STREAM_ID,
@@ -86,7 +92,9 @@ function mergeDashboardActivity(auditTail, tasks, limit) {
 }
 
 function normalizeDashboardActivity(entry) {
+  entry = sanitizeActivityEventRecord(entry);
   const status = entry.status || (entry.ok === false ? 'failed' : 'succeeded');
+  const safeCopy = buildSafeActivityProjection({ ...entry, status });
   const toolName = typeof entry.tool === 'object' ? entry.tool.name : entry.tool;
   return {
     ...entry,
@@ -101,8 +109,17 @@ function normalizeDashboardActivity(entry) {
     resourceUri: entry.target?.resourceUri,
     status,
     ok: ['succeeded', 'completed'].includes(status) ? true : ['failed', 'blocked', 'cancelled'].includes(status) ? false : entry.ok,
+    safeCopy,
     args: undefined,
     output: undefined
+  };
+}
+
+function sanitizeTaskActivity(activity = {}) {
+  return {
+    ...activity,
+    tasks: Array.isArray(activity.tasks) ? activity.tasks.map(sanitizeTaskRecord) : [],
+    lastTask: activity.lastTask ? sanitizeTaskRecord(activity.lastTask) : null
   };
 }
 

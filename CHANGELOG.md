@@ -5,7 +5,16 @@
 ### MCP 2026-07-28 hard cutover
 - **Move the connector to the MCP `2026-07-28` request model through the stable v2 SDK.** Discovery uses `server/discover`; there is no `initialize` handshake, transport session, legacy SSE/messages route, JSON-RPC batch path, or compatibility alias layer.
 - **Require explicit request identity and metadata.** Every request carries the protocol version, method, client identity, capabilities, tracing context, and named target; `Mcp-Session-Id` is rejected instead of being treated as task state.
-- **Publish one 33-tool surface at tool-surface version 22.** Tools now include stable output schemas, private cache hints, signed approval state, and exact task ownership.
+- **Publish one 34-tool surface at tool-surface version 23.** Tools now include stable output schemas, private cache hints, signed approval state, exact task ownership, and explicit logical-task cancellation.
+
+### Task observability, privacy, and runtime integrity
+- **Sanitize completion summaries before they enter task state.** One bounded sanitizer now covers credential-bearing headers, token/password assignments, cookies, secret URL fields, private-key blocks, and approval or authorization codes at completion input, tracker, activity, persistence, historical-read, dashboard, SSE, and copy/export boundaries.
+- **Use one canonical task state machine.** New writes no longer emit `inactive` or `attention`; historical aliases normalize on read, terminal states share one predicate, stale updates cannot reopen terminal work, and terminal timestamps, reasons, counters, and partial progress are preserved.
+- **Add explicit cooperative cancellation.** `relai_cancel_task` targets the exact task ID, is idempotent, preserves partial progress, bypasses the workspace lock, records a bounded reason, and signals supported process-backed operations without claiming every external side effect can be reversed.
+- **Report real validation and diagnostics progress.** Known workflows establish a deduplicated denominator before execution, advance after every check, identify failures and timeouts, persist midpoint progress, and never present failed or cancelled work as successful 100% completion.
+- **Detect repository/runtime skew.** Status, MCP discovery, dashboard data, and packaged metadata compare application, protocol, tool-surface, tool-count, schema, and manifest-hash values; incompatible schema-sensitive calls pause until the runtime is restarted or reconnected while safe control calls remain available.
+- **Add production-path regression and acceptance infrastructure.** Security tests inspect raw persisted history and every dashboard projection, real Electron Chromium acceptance covers task states and accessibility, and the machine-readable observability benchmark establishes backend release budgets plus explicit blocked renderer metrics when Electron cannot launch.
+- **Normalize historical state without destructive migration.** Existing `inactive`, `attention`, and related aliases remain readable through evidence-based mapping; sanitized canonical records are used in memory and on subsequent persistence.
 
 ### Durable local coding runtime
 - **Add managed persistent processes.** ChatGPT can start, read, write to, stop, and list long-running commands through stable process IDs, cursor-based logs, process-tree termination, ownership checks, crash-safe metadata, and a dedicated dashboard Processes page.

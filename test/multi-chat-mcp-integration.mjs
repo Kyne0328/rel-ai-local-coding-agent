@@ -73,7 +73,7 @@ try {
 
   client.send(++requestId, 'tools/list', {});
   const listedTools = await client.waitFor(requestId);
-  assert.equal(listedTools.result.tools.length, 33);
+  assert.equal(listedTools.result.tools.length, 34);
   const listedStartTask = listedTools.result.tools.find(tool => tool.name === 'relai_start_task');
   assert.match(listedStartTask.inputSchema.properties.workspace.description, /Aliases: appA, appB/);
 

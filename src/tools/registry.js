@@ -8,7 +8,7 @@ const { MAX_BATCH_EDITS } = require('../editLimits');
 const { HANDLERS } = require('./handlers');
 const { outputSchemaFor } = require('./outputSchemas');
 
-const TOOL_SURFACE_VERSION = 22;
+const TOOL_SURFACE_VERSION = 23;
 
 /** @type {ToolDefinitionInput[]} */
 const TOOL_DEFINITION_VALUES = [
@@ -272,6 +272,15 @@ const TOOL_DEFINITION_VALUES = [
     behavior: {"audit":"edit","cache":"edit","startsSession":true,"deferStagedSession":true,"sessionWrite":true,"summary":"edit"},
   },
   {
+    name: "relai_cancel_task",
+    title: "Cancel Logical Task",
+    description: "Cancel the exact logical task identified by task_id. Cancellation is idempotent, preserves partial progress and terminal timestamps, records a bounded reason, and cooperatively aborts active subprocess-backed operations when supported.",
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"reason":{"type":"string","maxLength":500}},"required":[],"additionalProperties":false},
+    handler: HANDLERS.cancelTask,
+    behavior: {"audit":"exec"},
+    dashboard: {"category":"Workflow"}
+  },
+  {
     name: "relai_complete_task",
     title: "Report Task Completion",
     description: "Explicitly close the task identified by task_id after its final read-only review. Use this when the final relai_run_checks call did not pass complete:true with summary. Validation and mutation checks are restricted to that exact logical task; Rel.AI never falls back to another task in the workspace.",
@@ -289,7 +298,7 @@ const READ_ONLY_TOOLS = new Set([
 const DESTRUCTIVE_TOOLS = new Set([
   'relai_exec', 'relai_process_start', 'relai_process_write', 'relai_process_stop',
   'relai_worktree_create', 'relai_worktree_remove', 'relai_diagnostics_run', 'relai_operation_task_cancel',
-  'relai_tidy_run', 'relai_restore_paths', 'relai_reset_workspace', 'relai_edit'
+  'relai_tidy_run', 'relai_restore_paths', 'relai_reset_workspace', 'relai_edit', 'relai_cancel_task'
 ]);
 const OPEN_WORLD_TOOLS = new Set(['relai_exec', 'relai_process_start', 'relai_diagnostics_run', 'relai_git_push']);
 
