@@ -128,7 +128,8 @@ for (const className of [
 }
 
 assert.match(toast, /className = 'toast-region'/);
-assert.match(toast, /`toast toast-\$\{variant\}`/);
+assert.match(toast, /const tone = Object\.hasOwn\(TOAST_VARIANTS,\s*variant\)/s);
+assert.match(toast, /`toast toast-\$\{tone\}`/);
 assert.match(css, /\.toast-region\b/);
 assert.match(css, /\.toast-info\b/);
 assert.match(css, /\.toast-error\b/);
@@ -138,7 +139,7 @@ assert.match(css, /\.settings-shell, \.settings-layout[\s\S]*grid-template-colum
 
 assert.match(drawer, /body\.className = 'drawer-body'/);
 assert.match(drawer, /panelClass = ''/);
-assert.match(css, /\.drawer-backdrop[\s\S]*rgb\(3 7 14 \/ 32%\)/);
+assert.match(css, /\.drawer-backdrop[\s\S]*var\(--ui-overlay-drawer\)/);
 assert.doesNotMatch(css, /\.drawer-backdrop[^}]*backdrop-blur/s);
 assert.match(css, /\.session-detail-drawer[\s\S]*820px/);
 

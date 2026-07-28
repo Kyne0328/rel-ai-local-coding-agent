@@ -7,15 +7,14 @@ const release = require("../release");
 const configEditor = require("../configEditor");
 const pkg = require("../../package.json");
 const connection = require("../connectionProfile");
-const { ERROR_CODES, deriveConnectionState, errorPayload } = require("../desktopUxContracts");
+const { ERROR_CODES, errorPayload } = require("../desktopUxContracts");
 const { renderDashboardShellBootstrap, renderDashboardWindowTitlebar } = require("./dashboardShellChrome");
 const { getOnboardingStatus, writeOnboardingState } = require("../onboardingState");
 const { getVersion } = require("../version");
-const { getApplicationMetadata } = require("../appMetadata");
 const { resolveRequireHttpToken } = require("./auth");
 const { readTaskHistory } = require("../taskHistoryStore");
 const { onToolActivity } = require("../toolActivity");
-const { buildWorkspaceStates } = require("../workspaceState");
+const { buildDashboardPayload, mergeDashboardActivity } = require('./dashboardData');
 const {
   handleOpenFolder,
   handleWorkspaceChecks,
@@ -39,6 +38,7 @@ const PRIMARY_NAV_ITEMS = [
   { id: "home", label: "Overview", icon: '<path d="M3 3h8v8H3zM13 3h8v5h-8zM13 10h8v11h-8zM3 13h8v8H3z" />' },
   { id: "tasks", label: "Sessions", icon: '<path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5" />' },
   { id: "workspaces", label: "Workspaces", icon: '<path d="M3 7.5V19a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7l-2-3H5a2 2 0 0 0-2 2v2.5Z" />' },
+  { id: "processes", label: "Processes", icon: '<rect x="3" y="4" width="18" height="16" rx="2" /><path d="m7 9 3 3-3 3M13 15h4" />' },
   { id: "activity", label: "Activity", icon: '<path d="M3 12h4l2.3-6 4.2 12 2.3-6H21" />' },
   { id: "settings", label: "Settings", icon: '<circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21h-4v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H3v-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6V3h4v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.1v4H21a1.7 1.7 0 0 0-1.6 1Z" />' }
 ];
@@ -49,43 +49,6 @@ const MOBILE_NAV_ITEMS = [...PRIMARY_NAV_ITEMS, ...SECONDARY_NAV_ITEMS];
 
 function renderDashboardNav(items) {
   return items.map((item) => `<a href="#${item.id}" aria-label="${item.label}"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">${item.icon}</svg><span class="nav-label">${item.label}</span></a>`).join("");
-}
-
-function buildDashboardPayload(config, options = {}, requireHttpToken = false) {
-  const profile = connection.readConnectionProfile();
-  const taskActivity = typeof options.getTaskActivity === "function"
-    ? options.getTaskActivity()
-    : { state: "idle", activeCalls: 0, activeTaskCount: 0, tasks: [], taskId: "", workspace: "", tool: "", startedAt: null, lastTask: null };
-  const desktopStatus = typeof options.getDesktopStatus === "function" ? options.getDesktopStatus() : null;
-  const connectionSummary = connection.buildConnectionSummary({
-    host: profile.host || options.host || "127.0.0.1",
-    port: profile.port || options.port || 3333,
-    publicUrl: profile.publicUrl || options.publicUrl || "",
-    token: "",
-    tunnelProvider: profile.tunnelProvider || "none"
-  });
-  const connectionStateInput = desktopStatus || {
-    serverRunning: true,
-    tunnelStatus: connectionSummary.chatgptMcpUrl ? "running" : "stopped",
-    mcpUrl: connectionSummary.chatgptMcpUrl || ""
-  };
-  const base = productUx.dashboardData(config, { limit: Math.max(Number(options.limit || 100), 200) });
-  const tasks = readTaskHistory(config, taskActivity, { limit: 500 });
-  const workspaceStates = buildWorkspaceStates(config, tasks, taskActivity);
-  if (Array.isArray(base.config?.workspaces)) {
-    for (const workspace of base.config.workspaces) workspace.operational = workspaceStates[workspace.alias] || null;
-  }
-  return {
-    ...base,
-    application: getApplicationMetadata(),
-    readiness: release.releaseReadiness(config, { requireHttpToken }),
-    connection: connectionSummary,
-    connectionState: desktopStatus?.connectionState || deriveConnectionState(connectionStateInput),
-    taskActivity,
-    desktopStatus,
-    tasks,
-    workspaceStates
-  };
 }
 
 async function handleFavicon(ctx) {
@@ -260,7 +223,8 @@ function openDashboardEvents(res, req, options) {
       if (!force && signature === lastSignature) return;
       lastSignature = signature;
       const config = readConfigCached();
-      sendSse(res, "dashboard", buildDashboardPayload(config, { ...options, limit: 100 }, false));
+      const payload = buildDashboardPayload(config, { ...options, limit: 100 }, false);
+      sendSse(res, "dashboard", payload, { id: `${payload.snapshot.streamId}:${payload.snapshot.sequence}` });
     } catch (error) {
       sendSse(res, "error", errorPayload(
         ERROR_CODES.UNKNOWN,
@@ -358,7 +322,13 @@ ${renderDashboardWindowTitlebar()}
 </html>`;
 }
 
-const handleApiLogs = (ctx) => sendJson(ctx.res, 200, productUx.liveLogTail(readConfig(), { limit: Number(ctx.parsed.searchParams.get("limit") || 100) }), ctx.ae);
+const handleApiLogs = (ctx) => {
+  const config = readConfig();
+  const limit = Number(ctx.parsed.searchParams.get("limit") || 100);
+  const taskActivity = typeof ctx.options.getTaskActivity === 'function' ? ctx.options.getTaskActivity() : {};
+  const tasks = readTaskHistory(config, taskActivity, { limit: 500 });
+  sendJson(ctx.res, 200, mergeDashboardActivity(productUx.liveLogTail(config, { limit }), tasks, limit), ctx.ae);
+};
 const handleHealthMonitor = (ctx) => sendJson(ctx.res, 200, productUx.healthMonitor(readConfig(), { limit: Number(ctx.parsed.searchParams.get("limit") || 100) }), ctx.ae);
 const handleAliasDiagnostics = (ctx) => sendJson(ctx.res, 200, productUx.aliasConsistencyCheck(readConfig()), ctx.ae);
 const handleReleaseNotes = (ctx) => sendJson(ctx.res, 200, require("../releaseNotes").getReleaseNotes(), ctx.ae);

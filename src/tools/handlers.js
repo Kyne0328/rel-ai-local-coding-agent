@@ -26,6 +26,22 @@ const { relaiSearch } = require('../bridge/search');
 const { relaiCodeInspect } = require('../bridge/codeIntelligence');
 const { relaiExec } = require('../bridge/exec');
 const { startTask } = require('./task');
+const {
+  startManagedProcess,
+  readManagedProcess,
+  writeManagedProcess,
+  stopManagedProcess,
+  listManagedProcesses
+} = require('../processManager');
+const {
+  createManagedWorktree,
+  listManagedWorktrees,
+  removeManagedWorktree
+} = require('../worktreeManager');
+const { relaiSemanticSearch } = require('../bridge/semanticSearch');
+const { relaiDiagnosticsRun } = require('../bridge/diagnosticsRunner');
+const { createValidationPlan } = require('../bridge/validationPlan');
+const { getDeferredOperation, cancelDeferredOperation } = require('./operationTaskHandlers');
 
 /** @type {ToolHandler} */
 const statusHandler = (config, args, context) => relaiStatus(config, args, context);
@@ -34,12 +50,25 @@ const statusHandler = (config, args, context) => relaiStatus(config, args, conte
 const completeTaskHandler = (config, args) => completeTask(config, args);
 
 const HANDLERS = Object.freeze({
-  startTask: inWorkspace((workspace) => startTask(workspace)),
+  startTask: inWorkspace((workspace, _config, args) => startTask(workspace, args)),
   repoSnapshot: inWorkspace((workspace, config, args) => repoSnapshot(workspace, config, args)),
   read: inWorkspace((workspace, config, args, context) => relaiRead(workspace, config, args, context)),
   search: inWorkspace((workspace, config, args) => relaiSearch(workspace, config, args)),
   codeInspect: inWorkspace((workspace, config, args) => relaiCodeInspect(workspace, config, args)),
   exec: inWorkspace((workspace, config, args) => relaiExec(workspace, config, args)),
+  processStart: inWorkspace((workspace, config, args, context) => startManagedProcess(workspace, config, args, context)),
+  processRead: (config, args) => readManagedProcess(config, args),
+  processWrite: (config, args) => writeManagedProcess(config, args),
+  processStop: (config, args) => stopManagedProcess(config, args),
+  processList: (config, args) => listManagedProcesses(config, args),
+  worktreeCreate: inWorkspace((workspace, config, args, context) => createManagedWorktree(workspace, config, args, context)),
+  worktreeList: (config, args) => listManagedWorktrees(config, args),
+  worktreeRemove: inWorkspace((workspace, config, args) => removeManagedWorktree(workspace, config, args)),
+  semanticSearch: inWorkspace((workspace, config, args) => relaiSemanticSearch(workspace, config, args)),
+  diagnosticsRun: inWorkspace((workspace, config, args) => relaiDiagnosticsRun(workspace, config, args)),
+  validationPlan: inWorkspace((workspace, config, args) => createValidationPlan(workspace, config, args)),
+  operationTaskGet: (config, args, context) => getDeferredOperation(config, args, context),
+  operationTaskCancel: (config, args, context) => cancelDeferredOperation(config, args, context),
   tidyPlan: inWorkspace((workspace, config, args) => workspaceTidyPlan(workspace, config, args)),
   tidyRun: inWorkspace((workspace, config, args) => workspaceTidyRun(workspace, config, args)),
   runChecks: inWorkspace((workspace, config, args) => relaiVerify(workspace, config, mapCheckArgs(args))),
@@ -57,13 +86,13 @@ const HANDLERS = Object.freeze({
 });
 
 /**
- * @param {(workspace: any, config: unknown, args: Record<string, any>, context: { connector?: boolean }) => any} handler
+ * @param {(workspace: any, config: unknown, args: Record<string, any>, context: { connector?: boolean, taskId?: string, requestHeaders?: Record<string, string> }) => any} handler
  */
 function inWorkspace(handler) {
   /**
    * @param {unknown} config
    * @param {Record<string, any>} [args]
-   * @param {{ connector?: boolean }} [context]
+   * @param {{ connector?: boolean, taskId?: string, requestHeaders?: Record<string, string> }} [context]
    */
   return (config, args = {}, context = {}) => {
     const workspace = resolveWorkspace(config, args.workspace);

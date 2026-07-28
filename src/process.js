@@ -53,6 +53,25 @@ function runProcess(command, args, options = {}, config = {}) {
     const child = options.shell
       ? spawn(options.commandString || executable, { ...spawnOptions, shell: true })
       : spawn(executable, args || [], { ...spawnOptions, shell: false });
+    const abortSignal = options.signal;
+    const onAbort = () => {
+      if (settled) return;
+      const marker = '\n[rel-ai-mcp operation cancelled]\n';
+      stderrTruncated = stderrTruncated || Buffer.byteLength(stderr + marker, 'utf8') > maxOutputBytes;
+      stderr = appendLimited(stderr, marker, maxOutputBytes);
+      killProcessTree(child);
+      finish({
+        exitCode: -1,
+        signal: 'SIGTERM',
+        stdout: stdout.trim(),
+        stderr: stderr.trim(),
+        error: 'Operation cancelled.',
+        cancelled: true,
+        timedOut: false
+      });
+    };
+    if (abortSignal?.aborted) onAbort();
+    else abortSignal?.addEventListener?.('abort', onAbort, { once: true });
 
     if (child.stdin) {
       if (options.input != null) child.stdin.end(String(options.input));
@@ -64,6 +83,7 @@ function runProcess(command, args, options = {}, config = {}) {
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
+      abortSignal?.removeEventListener?.('abort', onAbort);
       resolve({
         ...payload,
         durationMs: Date.now() - startedAt,

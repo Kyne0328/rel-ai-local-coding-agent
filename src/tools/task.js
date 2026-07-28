@@ -3,7 +3,7 @@
 const { getCurrentToolActivityContext, taskError } = require('../toolActivity');
 const { readTaskHistorySession } = require('../taskHistoryStore');
 
-function startTask(workspace) {
+function startTask(workspace, args = {}) {
   const context = getCurrentToolActivityContext();
   if (!context?.taskId) {
     throw taskError('CONNECTION_CONTEXT_UNAVAILABLE', 'Rel.AI could not create a logical task for this request.');
@@ -14,6 +14,8 @@ function startTask(workspace) {
     task_id: context.taskId,
     status: 'active',
     identity: 'logical_task',
+    title: String(args.title || context.title || '').trim() || undefined,
+    objective: String(args.objective || context.objective || '').trim() || undefined,
     nextAction: 'Pass this task_id on every subsequent Rel.AI tool call for this task, including relai_complete_task.'
   };
 }
@@ -23,7 +25,7 @@ function assertKnownTask(config, taskId, workspace, toolName) {
   if (!session) {
     throw taskError('TASK_NOT_FOUND', 'The supplied task_id is unknown or expired. Start a new logical task with relai_start_task.');
   }
-  if ((session.completionKnown === true || session.status === 'completed') && toolName !== 'relai_complete_task') {
+  if ((session.completionKnown === true || ['completed', 'completed_with_warnings'].includes(session.status)) && toolName !== 'relai_complete_task') {
     throw taskError('INVALID_TASK_STATE', 'This logical task is already completed. Start a new task instead of reusing its task_id.');
   }
   const requestedWorkspace = String(workspace || '').trim();

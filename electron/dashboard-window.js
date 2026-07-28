@@ -48,7 +48,6 @@ function createDashboardWindowManager(deps) {
       show: false,
       autoHideMenuBar: true,
       title: 'Rel.AI MCP Dashboard',
-      backgroundColor: '#060912',
       webPreferences: {
         preload: path.join(__dirname, 'dashboard-preload.js'),
         nodeIntegration: false,

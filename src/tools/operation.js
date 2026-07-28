@@ -17,6 +17,19 @@ function describeToolOperation(name, args = {}) {
     case 'relai_search': return `Searching for ${String(args.pattern || '').slice(0, 60) || 'a pattern'}${suffix}`;
     case 'relai_code_inspect': return `Inspecting code relationships${suffix}`;
     case 'relai_exec': return `Running ${redactCommandForAudit(args.command) || 'a workspace command'}${suffix}`;
+    case 'relai_process_start': return `Starting managed process ${redactCommandForAudit(args.command) || '(unnamed)'}${suffix}`;
+    case 'relai_process_read': return `Reading managed process ${args.processId || ''}`.trim();
+    case 'relai_process_write': return `Sending input to managed process ${args.processId || ''}`.trim();
+    case 'relai_process_stop': return `Stopping managed process ${args.processId || ''}`.trim();
+    case 'relai_process_list': return workspace ? `Listing managed processes in ${workspace}` : 'Listing managed processes';
+    case 'relai_worktree_create': return `Creating managed worktree ${args.name || ''}${suffix}`.trim();
+    case 'relai_worktree_list': return workspace ? `Listing managed worktrees for ${workspace}` : 'Listing managed worktrees';
+    case 'relai_worktree_remove': return `Removing managed worktree ${args.alias || ''}${suffix}`.trim();
+    case 'relai_semantic_search': return `Semantically searching for ${String(args.query || '').slice(0, 60) || 'a concept'}${suffix}`;
+    case 'relai_diagnostics_run': return `Running structured diagnostics${suffix}`;
+    case 'relai_validation_plan': return `Planning change-aware validation${suffix}`;
+    case 'relai_operation_task_get': return `Reading deferred operation ${args.operationTaskId || ''}`.trim();
+    case 'relai_operation_task_cancel': return `Cancelling deferred operation ${args.operationTaskId || ''}`.trim();
     case 'relai_edit': {
       if (path) return `Editing ${path}${suffix}`;
       if (Array.isArray(args.edits)) return `Applying ${args.edits.length} file edits${suffix}`;

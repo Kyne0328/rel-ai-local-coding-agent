@@ -6,16 +6,18 @@ Rel.AI MCP separates non-destructive automated package verification from checks 
 
 The automated Windows gate does not run an installer or executable. It performs these steps:
 
-1. runs the complete source test, lint, type, and release-consistency suite;
-2. builds an unpacked Windows application with publishing disabled;
-3. verifies the packaged executable and ASAR are present;
-4. verifies packaged server, tool-registry, configuration, CLI, dashboard, changelog, and package metadata files;
-5. verifies the bundled Windows ngrok seed exists and is nonempty; and
-6. confirms the packaged version matches the repository version.
+1. runs the complete source test, lint, type, release-consistency, and color-accessibility suite;
+2. verifies canonical light/dark token parity, contrast thresholds, generated color artifacts, status semantics, and the raw-color policy;
+3. builds an unpacked Windows application with publishing disabled;
+4. verifies the packaged executable and ASAR are present;
+5. verifies packaged server, tool-registry, color-token, configuration, CLI, dashboard, changelog, and package metadata files;
+6. verifies the bundled Windows ngrok seed exists and is nonempty; and
+7. confirms the packaged version matches the repository version.
 
 Run the same checks locally:
 
 ```powershell
+npm run test:colors
 npm run test:all
 npm run electron:build
 npm run verify:packaged
@@ -39,6 +41,8 @@ Before publishing a release, test installation on a disposable Windows VM or ano
 - **ChatGPT OAuth:** a real ChatGPT app must discover the OAuth endpoints, complete approval, and successfully call `relai_status`.
 - **Live approval-token rotation:** the existing ChatGPT app must lose its current grants, request approval again, and reconnect with the replacement token without changing the MCP URL.
 - **Update from a previous published release:** the previous installed release must discover, download, verify, and install the candidate through the production GitHub Releases feed.
+- **Color and theme review:** inspect dashboard Overview, Workspaces, Sessions, Activity, Tools, Settings, Diagnostics, setup, recovery, and OAuth states in light and dark themes. Verify default, hover, focus, active, selected, disabled, loading, success, warning, danger, disconnected, and empty states at desktop and narrow viewport sizes.
+- **Accessibility simulation:** review Windows high contrast and common color-vision-deficiency simulations, confirming that status, focus, selection, and errors never rely on color alone.
 
 Do not automate installer or uninstaller execution on a developer machine running Rel.AI MCP. The packaged executable uses the same application identity and single-instance behavior as the live app, so an automated installed-app harness can terminate or interfere with the active bridge.
 

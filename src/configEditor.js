@@ -9,7 +9,8 @@ const NUMBER_KEYS = ["maxOutputBytes"];
 // rejected so junk keys never persist into config.json.
 const ALLOWED_SECTION_KEYS = {
   productUx: new Set(["showAutomaticValidation", "staleHours", "cleanupOlderThanHours", "enableStateExport"]),
-  release: new Set(["minimumReadinessScore", "requireHttpToken"])
+  release: new Set(["minimumReadinessScore", "requireHttpToken"]),
+  telemetry: new Set(["enabled", "endpoint"])
 };
 
 const DEFAULT_CONTEXT = {
@@ -88,7 +89,7 @@ function applyAllowedSection(next, values, section, changed) {
 }
 
 function applyAllowedSections(next, values, changed) {
-  for (const section of ["productUx", "release"]) applyAllowedSection(next, values, section, changed);
+  for (const section of ["productUx", "release", "telemetry"]) applyAllowedSection(next, values, section, changed);
 }
 
 function _handleDeleteWorkspace(alias, payload, next) {

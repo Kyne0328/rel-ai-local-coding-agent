@@ -2,6 +2,15 @@
 
 const crypto = require('node:crypto');
 const { AsyncLocalStorage } = require('node:async_hooks');
+const {
+  buildToolActivityDetails,
+  completeProgress,
+  createActivityEvent,
+  deriveTaskTitle,
+  normalizeTaskProgress,
+  sanitizeActivityMetadata,
+  sanitizeDisplayText
+} = require('./taskObservability');
 
 const DEFAULT_TASK_IDLE_MS = 5 * 60_000;
 const activityContext = new AsyncLocalStorage();
@@ -44,23 +53,56 @@ function createToolActivityTracker(options = {}) {
 
     const connectorCall = details.connector !== false;
     const operationId = crypto.randomUUID();
+    const initialActivity = buildToolActivityDetails(
+      String(details.tool || ''),
+      details.input || {},
+      null,
+      null,
+      { operation: details.operation, phase: 'running', metadata: details.metadata }
+    );
     const operation = {
       id: operationId,
       tool: String(details.tool || ''),
-      label: String(details.operation || defaultOperation(details.tool)),
-      detail: String(details.detail || ''),
+      label: String(details.operation || initialActivity.title || defaultOperation(details.tool)),
+      detail: String(details.detail || initialActivity.summary || ''),
       workspace: String(details.workspace || task.workspace || ''),
-      startedAt
+      startedAt,
+      activity: createActivityEvent({
+        eventId: operationId,
+        operationId,
+        taskId: task.id,
+        sequence: ++task.sequence,
+        startedAt,
+        ...initialActivity,
+        tool: { name: String(details.tool || ''), operation: String(details.operation || initialActivity.title || '') }
+      })
     };
 
+    if (task.titleSource === 'fallback' && details.tool !== 'relai_start_task') {
+      task.title = deriveTaskTitle({
+        tool: details.tool,
+        operation: details.operation,
+        workspace: details.workspace,
+        ...(details.input || {})
+      });
+      task.titleSource = 'operation';
+    }
     task.workspace = operation.workspace;
+    task.correlation = mergeCorrelation(task.correlation, details.correlation, operation.workspace);
     task.lastTool = operation.tool;
     task.lastOperation = operation.label;
     task.lastOutcome = '';
     task.activeCalls += 1;
     task.calls += 1;
     task.lastActivityAt = startedAt;
+    task.updatedAt = startedAt;
+    task.status = initialActivity.category === 'validation' ? 'validating' : 'running';
+    task.currentStage = initialActivity.currentStage || operation.label;
+    task.currentActivity = initialActivity.currentActivity || operation.detail;
+    task.progress = normalizeTaskProgress(initialActivity.progress, task.status);
     task.currentOperations.set(operationId, operation);
+    task.events.push(operation.activity);
+    if (task.events.length > 200) task.events.splice(0, task.events.length - 200);
     activeToolCalls += 1;
     if (connectorCall) activeConnectorCalls += 1;
 
@@ -68,7 +110,8 @@ function createToolActivityTracker(options = {}) {
       tool: operation.tool,
       workspace: operation.workspace,
       operation: operation.label,
-      operationId
+      operationId,
+      activityEvent: cloneActivityEvent(operation.activity)
     });
 
     let finish;
@@ -108,19 +151,27 @@ function createToolActivityTracker(options = {}) {
       if (!current) return;
       if (patch.operation != null) current.label = String(patch.operation);
       if (patch.detail != null) current.detail = String(patch.detail);
+      if (patch.summary != null) current.detail = String(patch.summary);
       if (patch.workspace != null) current.workspace = String(patch.workspace);
       if (patch.tool != null) current.tool = String(patch.tool);
+      applyActivityPatch(current.activity, patch.activity && typeof patch.activity === 'object' ? patch.activity : patch);
       task.workspace = current.workspace || task.workspace;
       task.lastTool = current.tool || task.lastTool;
       task.lastOperation = current.label || task.lastOperation;
       task.lastActivityAt = now();
+      task.updatedAt = task.lastActivityAt;
+      task.currentStage = String(patch.currentStage || current.activity?.title || task.currentStage || 'Running tool');
+      task.currentActivity = String(patch.currentActivity || current.activity?.summary || current.detail || task.currentActivity || '');
+      if (patch.progress) task.progress = normalizeTaskProgress(patch.progress, task.status);
+      if (patch.status === 'blocked') task.status = 'waiting_for_approval';
       finish.operation = task.lastOperation;
       notify('progress', task, {
         tool: current.tool,
         workspace: current.workspace,
         operation: current.label,
         detail: current.detail,
-        operationId
+        operationId,
+        activityEvent: cloneActivityEvent(current.activity)
       });
     };
 
@@ -137,6 +188,37 @@ function createToolActivityTracker(options = {}) {
       task.lastOperation = current.label || task.lastOperation;
       task.lastOutcome = result.ok === false ? 'failed' : 'succeeded';
       task.lastActivityAt = finishedAt;
+      task.updatedAt = finishedAt;
+      const completionActivity = result.activity && typeof result.activity === 'object'
+        ? result.activity
+        : buildToolActivityDetails(current.tool, {}, null, result.ok === false ? { message: result.error } : null, {
+            operation: current.label,
+            phase: 'complete'
+          });
+      applyActivityPatch(current.activity, completionActivity);
+      current.activity.status = result.ok === false ? (completionActivity.status || 'failed') : (completionActivity.status === 'blocked' ? 'blocked' : 'succeeded');
+      current.activity.completedAt = new Date(finishedAt).toISOString();
+      current.activity.durationMs = Math.max(0, finishedAt - startedAt);
+      const queueWaitMs = Number(current.activity?.metadata?.waitMs || 0);
+      if (queueWaitMs > 0 && !/waited\s/i.test(current.activity.summary || '')) {
+        current.activity.summary = `${current.activity.summary || 'Operation completed.'} Waited ${formatWait(queueWaitMs)} for the workspace execution queue.`;
+      }
+      task.currentStage = completionActivity.currentStage || task.currentStage;
+      task.currentActivity = completionActivity.currentActivity || current.activity.summary || task.currentActivity;
+      task.progress = normalizeTaskProgress(completionActivity.progress || task.progress, task.status);
+      task.successes += result.ok === false ? 0 : 1;
+      task.errorSummary = result.ok === false ? sanitizeDisplayText(result.error || current.activity.error?.message || '', 500) : task.errorSummary;
+      if (task.activeCalls === 0 && !task.completionRequest) {
+        if (current.activity.status === 'blocked') {
+          task.status = 'waiting_for_approval';
+          task.currentStage = 'Waiting for approval';
+          task.progress = { mode: 'indeterminate', label: 'Approval required' };
+        } else {
+          task.status = 'planning';
+          task.currentStage = 'Planning next step';
+          task.progress = { mode: 'indeterminate', label: 'Waiting for the next task step' };
+        }
+      }
       activeToolCalls = Math.max(0, activeToolCalls - 1);
       if (connectorCall) activeConnectorCalls = Math.max(0, activeConnectorCalls - 1);
       finish.operation = task.lastOperation;
@@ -148,7 +230,8 @@ function createToolActivityTracker(options = {}) {
         operationId,
         ok: result.ok !== false,
         error: String(result.error || ''),
-        durationMs: Math.max(0, finishedAt - startedAt)
+        durationMs: Math.max(0, finishedAt - startedAt),
+        activityEvent: cloneActivityEvent(current.activity)
       });
       if (result.ok === false && current.tool === 'relai_complete_task') task.completionRequest = null;
       if (task.activeCalls === 0) {
@@ -241,18 +324,40 @@ function createToolActivityTracker(options = {}) {
 
   function createTask(scopeId, details, timestamp, requestedTaskId = '') {
     const id = requestedTaskId || crypto.randomUUID();
+    const explicitTitle = String(details.title || '').trim();
     return {
       id,
       scopeId,
+      title: deriveTaskTitle({
+        title: explicitTitle,
+        objective: details.objective,
+        tool: details.tool,
+        operation: details.operation,
+        workspace: details.workspace,
+        ...(details.input || {})
+      }),
+      titleSource: explicitTitle ? 'explicit' : details.objective ? 'objective' : details.tool === 'relai_start_task' ? 'fallback' : 'operation',
+      objective: sanitizeDisplayText(details.objective, 500),
+      correlation: compactCorrelation(details.correlation, details.workspace),
+      status: 'planning',
+      progress: { mode: 'indeterminate', label: 'Planning task' },
+      currentStage: 'Planning',
+      currentActivity: String(details.operation || ''),
       activeCalls: 0,
       calls: 0,
+      successes: 0,
       failures: 0,
+      sequence: 0,
+      events: [],
+      errorSummary: '',
       workspace: String(details.workspace || ''),
       lastTool: String(details.tool || ''),
       lastOperation: String(details.operation || defaultOperation(details.tool)),
       lastOutcome: '',
       completionRequest: null,
+      createdAt: timestamp,
       startedAt: timestamp,
+      updatedAt: timestamp,
       lastActivityAt: timestamp,
       completionTimer: null,
       currentOperations: new Map()
@@ -283,21 +388,38 @@ function createToolActivityTracker(options = {}) {
     task.completionTimer = null;
     removeTask(task);
     const endedAt = now();
+    const status = task.failures > 0 ? 'attention' : 'inactive';
     lastTask = {
       taskId: task.id,
+      sessionId: task.id,
       id: task.id,
-      status: task.failures > 0 ? 'attention' : 'inactive',
+      title: task.title,
+      objective: task.objective,
+      status,
+      progress: normalizeTaskProgress(task.progress, status),
+      currentStage: task.failures > 0 ? 'Needs attention' : 'Inactive',
+      currentActivity: task.currentActivity,
       endReason: 'inactivity_window',
       calls: task.calls,
+      toolCallCount: task.calls,
+      successfulToolCallCount: task.successes,
+      failedToolCallCount: task.failures,
       failures: task.failures,
       workspace: task.workspace,
       lastTool: task.lastTool,
       operation: task.lastOperation,
       lastOutcome: task.lastOutcome,
+      errorSummary: task.errorSummary,
+      correlation: { ...task.correlation },
+      createdAt: new Date(task.createdAt).toISOString(),
       startedAt: task.startedAt,
+      startedAtIso: new Date(task.startedAt).toISOString(),
+      updatedAt: new Date(endedAt).toISOString(),
       endedAt,
       completedAt: endedAt,
-      durationMs: Math.max(0, endedAt - task.startedAt)
+      completedAtIso: new Date(endedAt).toISOString(),
+      durationMs: Math.max(0, endedAt - task.startedAt),
+      events: task.events.map(cloneActivityEvent)
     };
     notify('inactive', task, { task: lastTask, endReason: lastTask.endReason });
   }
@@ -309,27 +431,45 @@ function createToolActivityTracker(options = {}) {
     removeTask(task);
     const completedAt = now();
     const completion = task.completionRequest;
+    const status = task.failures > 0 ? 'completed_with_warnings' : 'completed';
     lastTask = {
       taskId: task.id,
+      sessionId: task.id,
       id: task.id,
-      status: 'completed',
+      title: task.title,
+      objective: task.objective,
+      status,
+      progress: completeProgress('Task completed'),
+      currentStage: 'Completed',
+      currentActivity: completion.summary || task.currentActivity,
       completionKnown: true,
       endReason: 'explicit_completion',
       summary: completion.summary,
+      resultSummary: completion.summary,
       validationStatus: completion.validationStatus,
       validationLevel: completion.validationLevel,
       validationAt: completion.validationAt,
       changedFiles: completion.changedFiles,
       calls: task.calls,
+      toolCallCount: task.calls,
+      successfulToolCallCount: task.successes,
+      failedToolCallCount: task.failures,
       failures: task.failures,
       workspace: task.workspace,
       lastTool: task.lastTool,
       operation: task.lastOperation,
       lastOutcome: task.lastOutcome,
+      errorSummary: task.errorSummary,
+      correlation: { ...task.correlation },
+      createdAt: new Date(task.createdAt).toISOString(),
       startedAt: task.startedAt,
+      startedAtIso: new Date(task.startedAt).toISOString(),
+      updatedAt: new Date(completedAt).toISOString(),
       endedAt: completedAt,
       completedAt,
-      durationMs: Math.max(0, completedAt - task.startedAt)
+      completedAtIso: new Date(completedAt).toISOString(),
+      durationMs: Math.max(0, completedAt - task.startedAt),
+      events: task.events.map(cloneActivityEvent)
     };
     notify('completed', task, { task: lastTask, endReason: lastTask.endReason });
   }
@@ -377,11 +517,21 @@ function createToolActivityTracker(options = {}) {
     return {
       id: task.id,
       taskId: task.id,
+      sessionId: task.id,
       scopeId: task.scopeId,
+      title: task.title,
+      objective: task.objective,
+      status: task.status,
       state: task.activeCalls > 0 ? 'working' : 'waiting',
+      progress: normalizeTaskProgress(task.progress, task.status),
+      currentStage: task.currentStage,
+      currentActivity: task.currentActivity,
       completionKnown: false,
       activeCalls: task.activeCalls,
       calls: task.calls,
+      toolCallCount: task.calls,
+      successfulToolCallCount: task.successes,
+      failedToolCallCount: task.failures,
       failures: task.failures,
       workspace: task.workspace,
       tool: current?.tool || task.lastTool,
@@ -389,8 +539,14 @@ function createToolActivityTracker(options = {}) {
       operation: current?.label || task.lastOperation,
       lastOperation: task.lastOperation,
       lastOutcome: task.lastOutcome,
+      errorSummary: task.errorSummary,
+      correlation: { ...task.correlation },
       currentOperations,
+      events: task.events.map(cloneActivityEvent),
+      createdAt: new Date(task.createdAt).toISOString(),
       startedAt: task.startedAt,
+      startedAtIso: new Date(task.startedAt).toISOString(),
+      updatedAt: new Date(task.updatedAt).toISOString(),
       lastActivityAt: task.lastActivityAt
     };
   }
@@ -403,6 +559,7 @@ function createToolActivityTracker(options = {}) {
       taskActiveCalls: task.activeCalls,
       taskCalls: task.calls,
       taskFailures: task.failures,
+      task: taskSnapshot(task),
       ...extras
     });
   }
@@ -451,6 +608,44 @@ function createToolActivityTracker(options = {}) {
     reset,
     idleMs
   };
+}
+
+function applyActivityPatch(activity, patch = {}) {
+  if (!activity || !patch || typeof patch !== 'object') return activity;
+  for (const key of ['category', 'action', 'status', 'title', 'summary', 'target', 'result', 'error']) {
+    if (patch[key] !== undefined) activity[key] = patch[key];
+  }
+  if (patch.metadata !== undefined) {
+    activity.metadata = {
+      ...(activity.metadata || {}),
+      ...(sanitizeActivityMetadata(patch.metadata) || {})
+    };
+  }
+  if (patch.tool && typeof patch.tool === 'object') activity.tool = { ...(activity.tool || {}), ...patch.tool };
+  activity.timestamp = new Date().toISOString();
+  return activity;
+}
+
+function compactCorrelation(value = {}, workspace = '') {
+  return Object.fromEntries(Object.entries({
+    requestId: sanitizeDisplayText(value?.requestId, 200),
+    traceId: sanitizeDisplayText(value?.traceId, 200),
+    workspaceId: sanitizeDisplayText(value?.workspaceId || workspace, 200),
+    conversationId: sanitizeDisplayText(value?.conversationId, 200)
+  }).filter(([, item]) => item));
+}
+
+function mergeCorrelation(current = {}, incoming = {}, workspace = '') {
+  return { ...compactCorrelation(incoming, workspace), ...current };
+}
+
+function formatWait(waitMs) {
+  return waitMs < 1000 ? `${Math.max(0, Math.round(waitMs))} ms` : `${(waitMs / 1000).toFixed(1)} seconds`;
+}
+
+function cloneActivityEvent(activity) {
+  if (!activity) return null;
+  return JSON.parse(JSON.stringify(activity));
 }
 
 function runWithToolActivity(activity, callback) {

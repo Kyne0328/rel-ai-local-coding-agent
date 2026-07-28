@@ -2,6 +2,7 @@ import { pillHtml } from '../../components/pill.js';
 import { esc, formatDuration, timeAgo } from '../../utils.js';
 import { getWorkspaceFilter, routeHref } from '../../router.js';
 import { connectionSummary } from '../../connection-state.js';
+import { taskProgressHtml } from '../../components/task-progress.js';
 
 export function mountHome(container, data) {
   container.innerHTML = '';
@@ -109,7 +110,7 @@ function connectionHero(state, endpoint, workspaces) {
 function taskActivityCard(activity = {}, persistedTask = null) {
   const activeTasks = activeTaskList(activity);
   const active = activeTasks.length > 0;
-  if (!active && persistedTask?.status !== 'attention') return null;
+  if (!active && !['failed', 'blocked', 'completed_with_warnings', 'attention'].includes(persistedTask?.status)) return null;
   const task = active ? primaryActiveTask(activeTasks) : persistedTask || activity.lastTask;
   if (!task) return null;
   const card = document.createElement('section');
@@ -133,15 +134,15 @@ function renderObservedSessionCard(card, activity, activeTasks, task) {
   const activeCalls = Number(activity.activeCalls || activeTasks.reduce((sum, item) => sum + Number(item.activeCalls || 0), 0));
   const waiting = activeCalls === 0;
   const location = activeTaskLocation(activeTasks);
-  const operation = task.operation || taskAction(task.lastTool || task.tool);
-  let title = waiting ? 'Logical task open.' : operation;
-  if (!waiting && sessionCount > 1) title = `${activeCalls} Rel.AI tool calls are running.`;
+  const operation = task.currentActivity || task.operation || taskAction(task.lastTool || task.tool);
+  let title = task.title || (waiting ? 'Logical task open.' : operation);
+  if (!task.title && !waiting && sessionCount > 1) title = `${activeCalls} Rel.AI tool calls are running.`;
   let description = waiting
-    ? 'No Rel.AI tool call is executing now. This explicit task remains open until completion is reported or it expires.'
-    : `${esc(operation)} in <strong>${esc(task.workspace || location)}</strong>.`;
+    ? `${esc(task.currentStage || 'Planning next step')} · no Rel.AI tool call is executing now.`
+    : `${esc(task.currentStage || operation)} in <strong>${esc(task.workspace || location)}</strong>.`;
   if (!waiting && sessionCount > 1) description = `${activeCalls} ${pluralLabel(activeCalls, 'active tool call')} across ${location}.`;
   const activityLabel = waiting
-    ? 'Open · no active call'
+    ? `${statusLabel(task.status)} · no active call`
     : `${activeCalls} ${pluralLabel(activeCalls, 'active call')}`;
   card.className = `card task-overview ${waiting ? 'waiting' : 'active'}`;
   card.innerHTML = `
@@ -150,23 +151,24 @@ function renderObservedSessionCard(card, activity, activeTasks, task) {
       <div class="overview-kicker">Observed Rel.AI activity</div>
       <h3>${esc(title)}</h3>
       <p>${description}</p>
+      ${taskProgressHtml(task.progress, task.status, { compact: true })}
     </div>
     <div class="task-overview-meta">
       <span>${activityLabel}</span>
-      <strong>${formatDuration(Date.now() - Number(task.startedAt || Date.now()))}</strong>
+      <strong data-clock-elapsed-start="${esc(task.startedAtIso || task.createdAt || task.startedAt || '')}">${formatDuration(Date.now() - (Date.parse(task.startedAtIso || task.createdAt || '') || Number(task.startedAt || Date.now())))}</strong>
     </div>`;
 }
 
 function renderInactiveSessionCard(card, task) {
-  const attention = task.status === 'attention';
-  const completed = task.status === 'completed' && task.completionKnown === true;
+  const attention = ['failed', 'blocked', 'attention'].includes(task.status);
+  const completed = ['completed', 'completed_with_warnings'].includes(task.status) && task.completionKnown === true;
   const failed = Number(task.failures || 0);
   const callCount = Number(task.calls || 0);
   let mark = '•';
   let title = 'Last Rel.AI session is inactive';
   if (attention) {
     mark = '!';
-    title = 'Last Rel.AI session had a failed call';
+    title = task.status === 'blocked' ? 'Last Rel.AI task was blocked' : 'Last Rel.AI task failed';
   } else if (completed) {
     mark = '✓';
     title = 'Task completion reported';
@@ -174,15 +176,16 @@ function renderInactiveSessionCard(card, task) {
   const failureText = failed ? ` · ${failed} failed` : '';
   let completionText = ' · overall ChatGPT completion not reported';
   if (completed) completionText = ` · ${esc(task.summary || 'final validation passed')}`;
-  card.className = `card task-overview ${attention ? 'attention' : 'completed'}`;
+  card.className = `card task-overview ${attention ? 'attention' : completed ? 'completed' : 'waiting'}`;
   card.innerHTML = `
     <div class="task-overview-mark" aria-hidden="true">${mark}</div>
     <div class="task-overview-copy">
       <div class="overview-kicker">Previous observed session</div>
-      <h3>${title}</h3>
+      <h3>${esc(task.title || title)}</h3>
       <p>${esc(task.workspace || 'workspace')} · ${callCount} ${pluralLabel(callCount, 'tool call')}${failureText}${completionText}</p>
+      ${taskProgressHtml(task.progress, task.status, { compact: true })}
     </div>
-    <div class="task-overview-meta"><span>${esc(timeAgo(task.endedAt || task.completedAt))}</span><strong>${formatDuration(task.durationMs)}</strong></div>`;
+    <div class="task-overview-meta"><span data-clock-relative="${esc(task.endedAt || task.completedAt || '')}">${esc(timeAgo(task.endedAt || task.completedAt))}</span><strong>${formatDuration(task.durationMs)}</strong></div>`;
 }
 
 function activeTaskLocation(tasks) {
@@ -270,19 +273,27 @@ function recentTasksCard(tasks) {
     const status = recentTaskStatus(task.status);
     const endedAt = task.endedAt || task.completedAt;
     const time = endedAt ? timeAgo(endedAt) : 'now';
+    const timeClock = endedAt ? `data-clock-relative="${esc(endedAt)}"` : '';
     const operation = task.operation || taskAction(task.lastTool);
-    return `<div class="activity-row"><span class="activity-time">${esc(time)}</span><span class="activity-name truncate"><strong>${esc(operation)}</strong> · ${esc(task.workspace || 'workspace')} · ${esc(task.calls || 0)} calls</span>${status}</div>`;
+    return `<div class="activity-row"><span class="activity-time" ${timeClock}>${esc(time)}</span><span class="activity-name truncate"><strong>${esc(task.title || operation)}</strong> · ${esc(task.workspace || 'workspace')} · ${esc(task.toolCallCount ?? task.calls ?? 0)} calls</span>${status}</div>`;
   }).join('') || '<div class="empty">Sessions appear after ChatGPT or the local dashboard calls a Rel.AI tool.</div>';
   card.appendChild(body);
   return card;
 }
 
 function recentTaskStatus(status) {
-  if (status === 'attention') return pillHtml('failed');
+  if (status === 'failed' || status === 'attention') return pillHtml('failed');
+  if (status === 'blocked') return pillHtml('blocked');
+  if (status === 'completed_with_warnings') return pillHtml('warning');
   if (status === 'completed') return pillHtml('completed');
-  if (status === 'working') return pillHtml('working');
-  if (status === 'waiting' || status === 'settling') return '<span class="status-pill">open</span>';
-  return '<span class="status-pill">inactive</span>';
+  if (status === 'running' || status === 'working') return pillHtml('running');
+  if (status === 'validating') return pillHtml('validating');
+  if (['queued', 'planning', 'waiting_for_approval', 'waiting', 'settling'].includes(status)) return '<span class="status-pill">open</span>';
+  return '<span class="status-pill">cancelled</span>';
+}
+
+function statusLabel(status) {
+  return String(status || 'open').replaceAll('_', ' ');
 }
 
 function hasValidation(workspace) {

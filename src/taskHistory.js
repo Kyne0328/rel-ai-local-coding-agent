@@ -43,7 +43,14 @@ function summarizeTask(taskId, events, activeTask) {
   const endedAt = activeTask ? null : new Date(endedMs).toISOString();
   return {
     id: taskId,
-    status: activeTask ? normalizeActiveState(activeTask.state) : completionEvent ? 'completed' : failures ? 'attention' : 'inactive',
+    taskId,
+    sessionId: taskId,
+    title: activeTask?.title || titleFromEvents(ordered),
+    objective: activeTask?.objective || '',
+    status: activeTask?.status || (activeTask ? normalizeActiveState(activeTask.state) : completionEvent ? 'completed' : failures ? 'failed' : 'cancelled'),
+    progress: activeTask?.progress || (completionEvent ? { mode: 'complete', percentage: 100, label: 'Complete' } : { mode: 'indeterminate', label: 'Progress unavailable' }),
+    currentStage: activeTask?.currentStage || '',
+    currentActivity: activeTask?.currentActivity || activeTask?.operation || last.operation || '',
     completionKnown: activeTask?.completionKnown === true || Boolean(completionEvent),
     endReason: activeTask ? null : completionEvent ? 'explicit_completion' : 'inactivity_window',
     summary: activeTask?.summary || completionEvent?.taskSummary || '',
@@ -53,6 +60,9 @@ function summarizeTask(taskId, events, activeTask) {
     completedAt: endedAt,
     durationMs: activeTask ? Math.max(0, Date.now() - startedMs) : Math.max(0, endedMs - startedMs),
     calls: Math.max(ordered.length, Number(activeTask?.calls || 0)),
+    toolCallCount: Math.max(ordered.length, Number(activeTask?.toolCallCount || activeTask?.calls || 0)),
+    successfulToolCallCount: Number(activeTask?.successfulToolCallCount || Math.max(0, ordered.filter(entry => entry.ok !== false).length)),
+    failedToolCallCount: Math.max(failures, Number(activeTask?.failedToolCallCount || 0)),
     activeCalls: Number(activeTask?.activeCalls || 0),
     failures,
     changedFiles,
@@ -65,24 +75,35 @@ function summarizeTask(taskId, events, activeTask) {
     operation: activeTask?.operation || activeTask?.lastOperation || completionEvent?.operation || last.operation || operationForTool(last.tool),
     lastOutcome: activeTask?.lastOutcome || (last.ok === false ? 'failed' : 'succeeded'),
     currentOperations: Array.isArray(activeTask?.currentOperations) ? activeTask.currentOperations : [],
-    events: ordered.slice(-100)
+    events: mergeEvents(ordered, activeTask?.events || []).slice(-200)
   };
 }
 
 function activeTaskFromActivity(activity) {
   const taskId = activity.id || activity.taskId;
+  const startedAt = activity.startedAtIso || activity.createdAt || new Date(activity.startedAt || Date.now()).toISOString();
   return {
     id: taskId,
-    status: normalizeActiveState(activity.state),
+    taskId,
+    sessionId: activity.sessionId || taskId,
+    title: activity.title || operationForTool(activity.lastTool || activity.tool) || 'Rel.AI workspace task',
+    objective: activity.objective || '',
+    status: activity.status || normalizeActiveState(activity.state),
+    progress: activity.progress || { mode: 'indeterminate', label: 'Progress unavailable' },
+    currentStage: activity.currentStage || '',
+    currentActivity: activity.currentActivity || activity.operation || activity.lastOperation || '',
     completionKnown: activity.completionKnown === true,
     endReason: null,
     summary: activity.summary || '',
     workspace: activity.workspace || '',
-    startedAt: new Date(activity.startedAt || Date.now()).toISOString(),
+    startedAt,
     endedAt: null,
     completedAt: null,
-    durationMs: Math.max(0, Date.now() - Number(activity.startedAt || Date.now())),
+    durationMs: Math.max(0, Date.now() - Date.parse(startedAt)),
     calls: Number(activity.calls || activity.activeCalls || 1),
+    toolCallCount: Number(activity.toolCallCount || activity.calls || activity.activeCalls || 1),
+    successfulToolCallCount: Number(activity.successfulToolCallCount || 0),
+    failedToolCallCount: Number(activity.failedToolCallCount || activity.failures || 0),
     activeCalls: Number(activity.activeCalls || 0),
     failures: Number(activity.failures || 0),
     changedFiles: [],
@@ -95,13 +116,35 @@ function activeTaskFromActivity(activity) {
     operation: activity.operation || activity.lastOperation || operationForTool(activity.lastTool || activity.tool),
     lastOutcome: activity.lastOutcome || '',
     currentOperations: Array.isArray(activity.currentOperations) ? activity.currentOperations : [],
-    events: []
+    events: Array.isArray(activity.events) ? activity.events : []
   };
 }
 
 function normalizeActiveState(state) {
-  if (state === 'working' || state === 'waiting') return state;
-  return 'waiting';
+  if (state === 'working') return 'running';
+  if (state === 'waiting') return 'planning';
+  return 'planning';
+}
+
+function titleFromEvents(events) {
+  const operation = [...events].reverse().find(event => event.operation)?.operation;
+  if (operation && !/^(task|request|tool call|mcp operation)$/i.test(operation)) return operation;
+  const workspace = events.find(event => event.workspace)?.workspace;
+  return workspace ? `Historical task in ${workspace}` : 'Historical Rel.AI task';
+}
+
+function mergeEvents(auditEvents, activityEvents) {
+  const events = [];
+  const ids = new Map();
+  for (const event of [...auditEvents, ...(Array.isArray(activityEvents) ? activityEvents : [])]) {
+    const id = event?.eventId || event?.operationId || `${event?.ts || event?.timestamp || ''}:${event?.tool || ''}:${events.length}`;
+    if (ids.has(id)) events[ids.get(id)] = { ...events[ids.get(id)], ...event };
+    else {
+      ids.set(id, events.length);
+      events.push(event);
+    }
+  }
+  return events.sort((left, right) => Number(left?.sequence || 0) - Number(right?.sequence || 0) || Date.parse(left?.timestamp || left?.ts || 0) - Date.parse(right?.timestamp || right?.ts || 0));
 }
 
 function validationSummary(events) {

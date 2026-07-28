@@ -263,18 +263,18 @@ function applyFilters(entries) {
   const rangeMs = ranges[_filterState.timeRange];
   return sortEntries(entries).filter(entry => {
     if (rangeMs) {
-      const timestamp = Date.parse(String(entry.ts || entry.at || entry.createdAt || ''));
+      const timestamp = Date.parse(String(entry.timestamp || entry.ts || entry.at || entry.createdAt || ''));
       if (!Number.isFinite(timestamp) || now - timestamp > rangeMs) return false;
     }
     if (_filterState.search) {
       const query = _filterState.search.toLowerCase();
-      const haystack = [entry.tool, entry.type, entry.message, entry.error, entry.path, entry.workspace, JSON.stringify(entry.args || '')]
+      const haystack = [entry.tool, entry.type, entry.title, entry.operation, entry.summary, entry.message, entry.error?.message || entry.error, entry.path, entry.resourceUri, entry.workspace, entry.category, entry.status]
         .filter(Boolean).join(' ').toLowerCase();
       if (!haystack.includes(query)) return false;
     }
     if (_filterState.workspace && entry.workspace !== _filterState.workspace) return false;
     if (_filterState.tool && (entry.tool || entry.type) !== _filterState.tool) return false;
-    if (_filterState.status && (entry.ok === false ? 'error' : 'ok') !== _filterState.status) return false;
+    if (_filterState.status && (entryFailed(entry) ? 'error' : 'ok') !== _filterState.status) return false;
     if (_filterState.task && entry.taskId !== _filterState.task) return false;
     return true;
   });
@@ -296,17 +296,17 @@ function renderTable(entries) {
     return;
   }
   _virtualizer = virtualizeTable(body, entries, entry => {
-    const status = entry.ok === false ? 'error' : 'ok';
-    const message = entry.error || entry.message || entry.path || '';
+    const status = entry.status || (entryFailed(entry) ? 'failed' : 'succeeded');
+    const message = entry.summary || entry.message || entry.result?.outcome || entry.error?.message || entry.error || entry.path || '';
     const row = document.createElement('tr');
     row.className = 'clickable-row';
     if (_requestedEventId && activityEventId(entry) === _requestedEventId) row.classList.add('activity-requested-row');
     row.innerHTML = `
-      <td class="nowrap small">${esc(timeAgo(entry.ts || entry.at || entry.createdAt))}</td>
-      <td class="truncate mono">${esc(entry.tool || entry.type || 'activity')}</td>
+      <td class="nowrap small" data-clock-relative="${esc(entry.timestamp || entry.ts || entry.at || entry.createdAt || '')}">${esc(timeAgo(entry.timestamp || entry.ts || entry.at || entry.createdAt))}</td>
+      <td class="truncate mono" title="${esc(entry.title || entry.operation || '')}">${esc(entry.tool || entry.type || 'activity')}</td>
       <td class="truncate">${esc(entry.workspace || '—')}</td>
       <td>${pillHtml(status)}</td>
-      <td class="truncate">${esc(message)}</td>
+      <td class="truncate"><strong>${esc(entry.title || entry.operation || '')}</strong>${entry.title || entry.operation ? ' · ' : ''}${esc(message)}</td>
       <td><button class="secondary activity-row-button" type="button" aria-label="Open ${esc(entry.tool || entry.type || 'activity')} event details">›</button></td>`;
     row.onclick = () => openDetail(entry);
     row.querySelector('.activity-row-button')?.addEventListener('click', event => {
@@ -332,10 +332,15 @@ function openDetail(entry) {
 
   const head = document.createElement('div');
   head.className = 'activity-detail-head';
-  head.innerHTML = `<div>${pillHtml(entry.ok === false ? 'error' : 'ok')}</div><span class="muted">${esc(new Date(entry.ts || entry.at || entry.createdAt || '').toLocaleString())}</span>`;
+  const displayStatus = entry.status || (entryFailed(entry) ? 'failed' : 'succeeded');
+  const eventTime = entry.timestamp || entry.ts || entry.at || entry.createdAt || '';
+  head.innerHTML = `<div>${pillHtml(displayStatus)}</div><span class="muted">${esc(new Date(eventTime).toLocaleString())}</span>`;
   content.appendChild(head);
 
   const fields = [
+    ['Title', entry.title || entry.operation || 'Activity event'],
+    ['Category', entry.category || 'tool'],
+    ['Action', entry.action || entry.operation || 'execute'],
     ['Tool', entry.tool || entry.type || 'activity'],
     ['Workspace', entry.workspace || '—'],
     ...(entry.path ? [['Path', entry.path]] : []),
@@ -353,9 +358,11 @@ function openDetail(entry) {
   }
   content.appendChild(fieldGroup);
 
-  appendDetailSection(content, entry.error ? 'Error' : 'Message', entry.error || entry.message);
-  appendDetailSection(content, 'Arguments', entry.args);
-  appendDetailSection(content, 'Result', entry.result || entry.output || entry.summary);
+  appendDetailSection(content, 'Summary', entry.summary || entry.message);
+  appendDetailSection(content, 'Target', entry.target || (entry.path ? { workspaceRelativePath: entry.path } : null));
+  appendDetailSection(content, 'Result', entry.result);
+  appendDetailSection(content, 'Error', entry.error);
+  appendDetailSection(content, 'Safe metadata', entry.metadata);
 
   const actions = document.createElement('div');
   actions.className = 'activity-detail-actions';
@@ -365,7 +372,7 @@ function openDetail(entry) {
   copyButton.textContent = 'Copy event JSON';
   copyButton.onclick = async () => {
     try {
-      await copyText(JSON.stringify(entry, null, 2));
+      await copyText(JSON.stringify(safeEventProjection(entry), null, 2));
       copyButton.dataset.state = 'success';
       copyButton.textContent = 'Copied';
       window.setTimeout(() => {
@@ -378,7 +385,7 @@ function openDetail(entry) {
   };
   actions.appendChild(copyButton);
   content.appendChild(actions);
-  openDrawer({ title: entry.tool || entry.type || 'Activity detail', content });
+  openDrawer({ title: entry.title || entry.operation || entry.tool || entry.type || 'Activity detail', content });
 }
 
 function appendDetailSection(container, title, value) {
@@ -403,10 +410,37 @@ export function sortEntries(entries) {
 }
 
 function activityTimestamp(entry) {
-  const timestamp = Date.parse(entry?.ts || entry?.at || entry?.createdAt || '');
+  const timestamp = Date.parse(entry?.timestamp || entry?.ts || entry?.at || entry?.createdAt || '');
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
+function entryFailed(entry) {
+  const status = String(entry?.status || '').toLowerCase();
+  return entry?.ok === false || ['failed', 'blocked', 'cancelled', 'error'].includes(status);
+}
+
+function safeEventProjection(entry) {
+  return {
+    eventId: entry.eventId || entry.id,
+    taskId: entry.taskId,
+    sessionId: entry.sessionId,
+    sequence: entry.sequence,
+    timestamp: entry.timestamp || entry.ts,
+    category: entry.category,
+    action: entry.action,
+    status: entry.status || (entryFailed(entry) ? 'failed' : 'succeeded'),
+    title: entry.title || entry.operation,
+    summary: entry.summary || entry.message,
+    durationMs: entry.durationMs || entry.ms,
+    tool: entry.tool,
+    workspace: entry.workspace,
+    target: entry.target || (entry.path ? { workspaceRelativePath: entry.path } : undefined),
+    result: entry.result,
+    error: entry.error,
+    metadata: entry.metadata
+  };
+}
+
 function entryKey(entry) {
-  return entry?.id || [entry?.ts || entry?.at || entry?.createdAt || '', entry?.tool || entry?.type || '', entry?.workspace || '', entry?.message || entry?.error || entry?.path || ''].join('|');
+  return entry?.eventId || entry?.id || [entry?.timestamp || entry?.ts || entry?.at || entry?.createdAt || '', entry?.tool || entry?.type || '', entry?.workspace || '', entry?.summary || entry?.message || entry?.error?.message || entry?.error || entry?.path || ''].join('|');
 }

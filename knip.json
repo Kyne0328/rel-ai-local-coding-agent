@@ -13,6 +13,7 @@
         "bin/**/*.js",
         "scripts/**/*.mjs",
         "src/**/*.js",
+        "src/**/*.mjs",
         "test/**/*.mjs",
         "public/**/*.js",
         "src/**/*.css",

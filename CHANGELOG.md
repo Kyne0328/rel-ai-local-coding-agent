@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.23.0] — 2026-07-28
+
+### MCP 2026-07-28 hard cutover
+- **Move the connector to the MCP `2026-07-28` request model through the stable v2 SDK.** Discovery uses `server/discover`; there is no `initialize` handshake, transport session, legacy SSE/messages route, JSON-RPC batch path, or compatibility alias layer.
+- **Require explicit request identity and metadata.** Every request carries the protocol version, method, client identity, capabilities, tracing context, and named target; `Mcp-Session-Id` is rejected instead of being treated as task state.
+- **Publish one 33-tool surface at tool-surface version 22.** Tools now include stable output schemas, private cache hints, signed approval state, and exact task ownership.
+
+### Durable local coding runtime
+- **Add managed persistent processes.** ChatGPT can start, read, write to, stop, and list long-running commands through stable process IDs, cursor-based logs, process-tree termination, ownership checks, crash-safe metadata, and a dedicated dashboard Processes page.
+- **Add durable deferred operations for long-running one-shot work.** `relai_exec`, diagnostics, and validation may return an `operationTaskId` that can be polled or cancelled without holding an MCP request open. This is the supported fallback because the stable TypeScript SDK does not currently expose a usable native MCP Tasks extension boundary.
+- **Add managed Git worktrees.** Rel.AI creates isolated branches under its managed worktree root, registers dynamic workspace aliases, inherits workspace policy, refuses unsafe removal, and preserves branches by default.
+- **Expand code intelligence and validation.** Private local hybrid semantic search, symbol/import/caller/test tracing, normalized diagnostics, signed change-aware validation plans, reverse-impact analysis, and affected-test selection are available through the public tool surface.
+
+### Security, telemetry, and caching
+- **Harden OAuth as an issuer-bound OAuth 2.1 flow.** Dynamic registrations, authorization codes, access tokens, and refresh tokens are bound to the active issuer and exact resource; redirects are exact, PKCE S256 is mandatory, scopes accumulate safely, refresh tokens rotate, reuse is rejected, and approval-token replacement revokes registrations and grants.
+- **Add OpenTelemetry tracing with W3C propagation.** MCP requests, logical tasks, tools, workspace queues, managed processes, validation, and OAuth operations emit redacted spans without file contents, credentials, environment values, or approval material.
+- **Add revision-aware private resource caching.** Discovery, tool, and resource responses use bounded TTLs and invalidate when configuration, workspace state, or the tool surface changes.
+
+### Color-system ESM hard cutover
+- **Replace the temporary CommonJS color module with one build-time ESM manifest.** The generator imports `src/ui/colorTokens.mjs` directly; runtime CommonJS code consumes generated assets rather than an interop bridge.
+- **Delete every legacy CSS alias.** Dashboard and Electron component styles now use semantic `--ui-*` properties directly, and automated checks reject the removed shorthand names.
+- **Serve generated OAuth styling as a static asset.** Authorization and error pages link `/public/oauth.css`, removing duplicated inline CSS and runtime palette imports.
+- **Keep release packaging lean.** The build-time manifest is not shipped as a backend resource; packaged verification requires the generated OAuth and Electron renderer styles instead.
+
+### Breaking upgrade behavior
+- **Do not migrate old clients, sessions, aliases, registrations, removed protocol routes, or color-token aliases.** Existing users that need the previous handshake or connector behavior must remain on the previous release and create a new 0.23.0 connector when upgrading.
+
+### Validation
+- `npm run test:all` — 125/125 test files passed
+- `npm run release:check`
+- `npm run electron:build`
+- `npm run verify:packaged`
+
+Bump root/electron/status UI/lockfiles to 0.23.0.
+
 ## [0.22.1] — 2026-07-28
 
 ### Static analysis and dependency integrity
@@ -8,9 +43,21 @@
 - **Declare direct tooling dependencies explicitly.** `@electron/asar` is now a root development dependency instead of being resolved through Electron's transitive dependency tree.
 - **Keep dead-code removal reviewable.** Existing unused-export and exported-type findings remain visible for a separate source-verified cleanup pass rather than being suppressed or automatically deleted.
 
+### Dashboard activity layout
+- **Use the full available Activity tab height for event log entries.** The route, event card, body, and table wrapper now expand through unused desktop viewport space while retaining page-level vertical scrolling, horizontal table overflow, and responsive behavior.
+- **Add regression coverage for the full-height event log layout.** Activity scrolling, accessibility, responsive behavior, and the dashboard UI smoke suite verify the updated screen utilization.
+
+### Accessible color-system consolidation
+- **Centralize dashboard, Electron, OAuth, and startup-window colors in one canonical manifest.** Generated light and dark CSS now expose equivalent semantic roles for surfaces, text, borders, actions, focus, selection, statuses, disabled controls, overlays, scrollbars, and elevation.
+- **Fix measured WCAG contrast failures without replacing the established Rel.AI identity.** Primary actions use theme-specific foregrounds, tertiary text is readable on primary and secondary surfaces, light warnings use an explicit accessible pair, and disabled controls no longer lose legibility through whole-control opacity.
+- **Standardize operational meaning across every renderer.** Running and active states use information blue, approval and degraded states use warning amber, positive terminal states use success green, failures use danger red, and neutral terminal states remain non-alarming.
+- **Remove color-only notification cues.** Toasts include a visible symbol and announced severity, while status pills retain readable labels and accessible tone descriptions.
+- **Enforce the architecture automatically.** The new color test calculates representative contrast, checks theme parity and token aliases, rejects raw component colors, verifies Electron and OAuth integration, and validates deterministic dashboard, Electron, and SVG reference artifacts.
+
 ### Validation
+- `npm run test:colors`
 - `npm run knip:dependencies`
-- `npm run test:all` — 113/113 test files passed
+- `npm run test:all` — 120/120 test files passed
 
 Bump root/electron/status UI/lockfiles to 0.22.1.
 

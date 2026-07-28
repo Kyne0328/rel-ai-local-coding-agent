@@ -117,7 +117,7 @@ function setBaseHeaders(req, res, options = {}) {
     res.setHeader("Access-Control-Allow-Origin", corsOrigin);
     res.setHeader("Vary", "Origin");
   }
-  res.setHeader("Access-Control-Allow-Headers", "content-type, authorization");
+  res.setHeader('Access-Control-Allow-Headers', 'content-type, authorization, mcp-protocol-version, mcp-method, mcp-name, traceparent, tracestate, baggage');
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
 }
 
@@ -170,7 +170,8 @@ function sendJson(res, status, payload, ae = "") {
   });
 }
 
-function sendSse(res, event, data) {
+function sendSse(res, event, data, options = {}) {
+  if (options.id != null && options.id !== '') res.write(`id: ${String(options.id).replace(/[\r\n]/g, '')}\n`);
   res.write(`event: ${event}\n`);
   const text = typeof data === "string" ? data : JSON.stringify(data);
   for (const line of text.split(/\r?\n/)) res.write(`data: ${line}\n`);
@@ -204,6 +205,7 @@ module.exports = {
   isAuthorized,
   timingSafeEqual,
   unauthorized,
+  readRawBody,
   readJsonBody,
   readFormOrJsonBody,
   setBaseHeaders,

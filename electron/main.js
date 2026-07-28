@@ -24,6 +24,8 @@ const configModule = require(path.join(srcPath, 'config')); const diagnosticsMod
 const { ERROR_CODES, deriveConnectionState } = require(path.join(srcPath, 'desktopUxContracts'));
 const oauthProvider = require(path.join(srcPath, 'oauthProvider')); const { startHttpServer } = require(path.join(srcPath, 'httpServer'));
 const { killProcess } = require(path.join(srcPath, 'processKill'));
+const { stopAllManagedProcesses } = require(path.join(srcPath, 'processManager'));
+const { shutdownTelemetry } = require(path.join(srcPath, 'telemetry'));
 const managedNgrok = require('./managed-ngrok');
 const {
   hasExistingConfig,
@@ -123,6 +125,9 @@ if (!gotLock) {
 
 app.on('before-quit', () => {
   isQuitting = true;
+  const runtimeConfig = configModule.readConfig();
+  void stopAllManagedProcesses(runtimeConfig).catch(() => {});
+  void shutdownTelemetry().catch(() => {});
   desktopLifecycle.markCleanShutdown();
   appUpdater?.stop();
   toolActivityRuntime.stop();
@@ -349,6 +354,7 @@ async function startServer() {
 }
 
 function stopServer(options = {}) {
+  try { void stopAllManagedProcesses(configModule.readConfig()).catch(() => {}); } catch {}
   if (tunnelProcess) {
     killProcess(tunnelProcess);
   }

@@ -37,8 +37,7 @@ function makeDefaultPatchConfig() {
 
 function makeDefaultConfig() {
   return {
-    version: 2,
-    sourceVersion: 2,
+    version: 3,
     stateDir: path.join(os.homedir(), ".rel-ai-mcp"),
     auditLogPath: "",
     maxOutputBytes: 2 * 1024 * 1024,
@@ -54,6 +53,10 @@ function makeDefaultConfig() {
     release: {
       minimumReadinessScore: 80,
       requireHttpToken: true
+    },
+    telemetry: {
+      enabled: false,
+      endpoint: ""
     },
     patch: makeDefaultPatchConfig(),
     workspaces: {}
@@ -134,7 +137,7 @@ function normalizeConfig(config) {
   const base = makeDefaultConfig();
   const input = config || {};
   const next = mergeConfigBase(base, input);
-  normalizeCorePaths(next, base, input);
+  normalizeCorePaths(next, base);
   normalizeTrustedMode(next, input);
   normalizeProductSettings(next, base, input);
   next.patch = normalizePatchConfig(input.patch);
@@ -151,14 +154,14 @@ function mergeConfigBase(base, input) {
     trustedBudgetMultiplier: input.trustedBudgetMultiplier ?? base.trustedBudgetMultiplier,
     productUx: { ...base.productUx, ...objectOrEmpty(input.productUx) },
     release: { ...base.release, ...objectOrEmpty(input.release) },
+    telemetry: { ...base.telemetry, ...objectOrEmpty(input.telemetry) },
     patch: { ...objectOrEmpty(input.patch) },
     workspaces: { ...objectOrEmpty(input.workspaces) }
   };
 }
 
-function normalizeCorePaths(next, base, input) {
-  next.sourceVersion = Number.isFinite(Number(input.version)) ? Number(input.version) : base.sourceVersion;
-  next.version = 2;
+function normalizeCorePaths(next, base) {
+  next.version = 3;
   next.stateDir = expandHome(next.stateDir || base.stateDir);
   if (!path.isAbsolute(next.stateDir)) next.stateDir = path.resolve(next.stateDir);
   next.auditLogPath = next.auditLogPath ? expandHome(next.auditLogPath) : path.join(next.stateDir, "audit.jsonl");
@@ -189,6 +192,11 @@ function normalizeProductSettings(next, base, input) {
   next.release = { ...base.release, ...objectOrEmpty(input.release) };
   next.release.minimumReadinessScore = clampNumber(next.release.minimumReadinessScore, 0, 100, base.release.minimumReadinessScore);
   next.release.requireHttpToken = normalizeBoolean(next.release.requireHttpToken, base.release.requireHttpToken);
+  const telemetry = { ...base.telemetry, ...objectOrEmpty(input.telemetry) };
+  next.telemetry = {
+    enabled: normalizeBoolean(telemetry.enabled, base.telemetry.enabled),
+    endpoint: String(telemetry.endpoint || '').trim()
+  };
 }
 
 function normalizeBoolean(value, fallback) {
@@ -300,18 +308,18 @@ function workspaceResolutionError(code, message, details = {}) {
 }
 
 function resolveWorkspaceInput(config, input) {
-  const aliases = Object.keys(config.workspaces || {}).sort((left, right) => left.localeCompare(right));
+  const aliases = allWorkspaceAliases(config);
   const omitted = input == null || String(input).trim() === '';
   const key = String(input || '').trim();
   if (omitted) return { input: '', alias: '', source: 'omitted', aliases };
-  if (Object.hasOwn(config.workspaces || {}, key)) return { input: key, alias: key, source: 'alias', aliases };
+  if (workspaceEntryForAlias(config, key)) return { input: key, alias: key, source: 'alias', aliases };
   if (!isAbsoluteWorkspaceInput(key)) return { input: key, alias: '', source: 'unmatched_alias', aliases };
 
   const inputCanonical = canonicalWorkspacePath(key);
   if (!inputCanonical) return { input: key, alias: '', source: 'path_unavailable', aliases };
   const matches = [];
   for (const alias of aliases) {
-    const configuredCanonical = canonicalWorkspacePath(config.workspaces?.[alias]?.path);
+    const configuredCanonical = canonicalWorkspacePath(workspaceEntryForAlias(config, alias)?.path);
     if (configuredCanonical && configuredCanonical === inputCanonical) matches.push(alias);
   }
   if (matches.length > 1) {
@@ -404,7 +412,7 @@ function resolveWorkspace(config, alias) {
     });
   }
   const resolvedAlias = resolution.alias || key;
-  const entry = config.workspaces?.[resolvedAlias];
+  const entry = workspaceEntryForAlias(config, resolvedAlias);
   if (!entry) {
     throw workspaceResolutionError('WORKSPACE_NOT_CONFIGURED', `Workspace '${key}' is not configured.`, {
       workspaceInput: key,
@@ -427,8 +435,29 @@ function resolveWorkspace(config, alias) {
     allowedRemotes: entry.allowedRemotes || ["origin"],
     repoSlug: entry.repoSlug || "",
     context: normalizeContextConfig(entry.context),
-    validationRules: entry.validationRules && typeof entry.validationRules === "object" ? entry.validationRules : {}
+    validationRules: entry.validationRules && typeof entry.validationRules === "object" ? entry.validationRules : {},
+    ...(entry.managedWorktree ? {
+      managedWorktree: true,
+      sourceAlias: entry.sourceAlias,
+      branch: entry.branch,
+      base: entry.base
+    } : {})
   };
+}
+
+function allWorkspaceAliases(config) {
+  const staticAliases = Object.keys(config.workspaces || {});
+  let managedAliases = [];
+  try { managedAliases = require('./worktreeManager').managedWorktreeAliases(config); } catch {}
+  return [...new Set([...staticAliases, ...managedAliases])].sort((left, right) => left.localeCompare(right));
+}
+
+function workspaceEntryForAlias(config, alias) {
+  if (Object.hasOwn(config.workspaces || {}, alias)) return config.workspaces[alias];
+  try { return require('./worktreeManager').resolveManagedWorktree(config, alias); } catch (error) {
+    if (/was not found|source workspace/.test(String(error?.message || ''))) return null;
+    throw error;
+  }
 }
 
 function isSafeWorkspaceAlias(value) {
@@ -461,6 +490,15 @@ function publicConfigSummary(config) {
     },
     productUx: config.productUx,
     release: config.release,
+    telemetry: require('./telemetry').telemetryStatus(config),
+    managedWorktrees: Object.values(require('./worktreeManager').readRegistry(config).worktrees || {}).map((entry) => ({
+      alias: entry.alias,
+      sourceAlias: entry.sourceAlias,
+      path: entry.path,
+      branch: entry.branch,
+      base: entry.base,
+      createdAt: entry.createdAt
+    })).sort((left, right) => left.alias.localeCompare(right.alias)),
     workspaces: Object.entries(config.workspaces || {}).map(([alias, entry]) => {
       const discovered = safeDiscoverCommands(entry.path);
       const validationCommands = safeDetectValidationChecks(entry.path);
@@ -538,5 +576,7 @@ module.exports = {
   resolveWorkspaceInput,
   normalizeWorkspacePathForComparison,
   resolveWorkspace,
-  publicConfigSummary
+  publicConfigSummary,
+  allWorkspaceAliases,
+  workspaceEntryForAlias
 };

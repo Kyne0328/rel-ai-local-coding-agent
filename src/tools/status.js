@@ -1,6 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const { resolveWorkspace } = require("../config");
+const { resolveWorkspace, allWorkspaceAliases } = require('../config');
 const { collectTextFiles, collectOptionsFromWorkspace, resolveSafePath } = require("../safety");
 const { discoverCommands, staleCommandKeys: staleCommandKeyList } = require("../commandDiscovery");
 const { summarizeOperations } = require("../journal");
@@ -25,7 +25,7 @@ async function relaiStatus(config, args = {}, context = {}) {
   const localDiagnostics = context?.connector !== true;
   const scripts = localDiagnostics ? (safeReadPackageJson().scripts || {}) : {};
   const ci = localDiagnostics ? ciScriptStatus(scripts) : null;
-  const workspaceAliases = sortedKeys(config.workspaces);
+  const workspaceAliases = allWorkspaceAliases(config);
   let selectedWorkspace = null;
   if (args.workspace) {
     try {
@@ -112,15 +112,21 @@ function safeReadPackageJson() {
 }
 
 function workspaceList(config) {
-  const workspaces = Object.entries(config.workspaces || {}).map(([alias, item]) => ({
-    alias,
-    path: item.path,
-    repoSlug: item.repoSlug || "",
-    testCommandKeys: sortedKeys(item.testCommands),
-    commandKeys: sortedKeys(item.commands),
-    protectedBranches: Array.isArray(item.protectedBranches) ? item.protectedBranches : [],
-    context: item.context || {}
-  })).sort((left, right) => left.alias.localeCompare(right.alias));
+  const workspaces = allWorkspaceAliases(config).map(alias => {
+    const item = resolveWorkspace(config, alias);
+    return {
+      alias,
+      path: item.path,
+      repoSlug: item.repoSlug || '',
+      testCommandKeys: sortedKeys(item.testCommands),
+      commandKeys: sortedKeys(item.commands),
+      protectedBranches: Array.isArray(item.protectedBranches) ? item.protectedBranches : [],
+      context: item.context || {},
+      managedWorktree: item.managedWorktree === true,
+      ...(item.sourceAlias ? { sourceAlias: item.sourceAlias } : {}),
+      ...(item.branch ? { branch: item.branch } : {})
+    };
+  }).sort((left, right) => left.alias.localeCompare(right.alias));
   return { ok: true, count: workspaces.length, workspaces };
 }
 

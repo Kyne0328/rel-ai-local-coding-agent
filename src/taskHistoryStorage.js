@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const MAX_SESSIONS = 500;
-const HISTORY_FORMAT_MARKER = '.task-history-v2';
+const HISTORY_FORMAT_MARKER = '.task-history-v3';
 const MAX_PARSED_CACHE_ENTRIES = 2 * MAX_SESSIONS;
 const parsedCache = new Map();
 
@@ -19,8 +19,7 @@ function ensureCurrentHistory(config) {
   const marker = path.join(path.dirname(directory), HISTORY_FORMAT_MARKER);
   if (fs.existsSync(marker)) return;
   fs.mkdirSync(path.dirname(directory), { recursive: true, mode: 0o700 });
-  fs.rmSync(directory, { recursive: true, force: true });
-  clearCachedDirectory(directory);
+  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
   fs.writeFileSync(marker, `${new Date().toISOString()}\n`, { mode: 0o600 });
 }
 

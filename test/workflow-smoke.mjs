@@ -57,8 +57,9 @@ function taskCall(id, name, args) {
 }
 
 try {
-  client.send(1, 'initialize', { protocolVersion: '2025-06-18' });
-  await client.waitFor(1);
+  client.discover(1);
+  const discovery = await client.waitFor(1);
+  if (!discovery.result?.supportedVersions?.includes('2026-07-28')) throw new Error('MCP 2026 discovery failed.');
 
   taskCall(2, 'relai_start_task', { workspace: 'smoke' });
   const startedTask = structuredContentOf(await client.waitFor(2));

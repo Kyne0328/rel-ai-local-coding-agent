@@ -9,14 +9,17 @@ const { enhanceToolError } = require('./tools/errors');
 const {
   buildExtraAudit,
   applyCautionAudit,
-  invalidateSessionCacheForCall,
-  maybeStartSession
+  invalidateSessionCacheForCall
 } = require('./tools/session');
-const { beginConnectorToolCall, runWithToolActivity, normalizeTaskId } = require('./toolActivity');
+const { beginConnectorToolCall, normalizeTaskId, onToolActivity } = require('./toolActivity');
+const { buildToolActivityDetails } = require('./taskObservability');
+const { bindTaskHistoryActivityPersistence } = require('./taskHistoryStore');
 const { assertKnownTask, taskAuditContext, withTaskIdentity } = require('./tools/task');
-const { runWorkspaceOperation } = require('./workspaceOperationQueue');
 const { clearSessionPolicy } = require('./policyResolver');
 const { describeToolOperation } = require('./tools/operation');
+const { executeToolCall } = require('./tools/execution');
+
+bindTaskHistoryActivityPersistence(onToolActivity, readConfig);
 
 async function callTool(name, args = {}, context = {}) {
   const config = readConfig();
@@ -27,7 +30,7 @@ async function callTool(name, args = {}, context = {}) {
   let workspaceResolution;
   let finishActivity = null;
   let activityResult = { ok: true };
-  let sessionStart = { started: false, alias: '' };
+  let sessionStart;
   try {
     if (!isToolCallable(name)) {
       throw new Error(`Unknown tool '${name}'. Available tools: ${TOOL_NAMES.join(', ')}. Restart/reconnect ChatGPT if the tool list looks stale.`);
@@ -46,14 +49,15 @@ async function callTool(name, args = {}, context = {}) {
       createTask: name === 'relai_start_task',
       trackTask: name === 'relai_start_task' || Boolean(requestedTaskId),
       connector,
-      operation: describeToolOperation(name, effectiveArgs || {})
+      operation: describeToolOperation(name, effectiveArgs || {}),
+      title: effectiveArgs?.title,
+      objective: effectiveArgs?.objective,
+      input: effectiveArgs || {}
     });
-    const value = await runWithToolActivity(finishActivity, () => runWorkspaceOperation(effectiveArgs?.workspace, () => {
-      sessionStart = maybeStartSession(config, name, effectiveArgs || {}, { taskId: finishActivity?.taskId });
-      const definition = getToolDefinition(name);
-      if (typeof definition?.handler !== 'function') throw new Error(`Tool '${name}' has no executable handler.`);
-      return definition.handler(config, effectiveArgs || {}, { connector });
-    }, { mode: workspaceLockMode(name) }));
+    const definition = getToolDefinition(name);
+    const execution = await executeToolCall({ config, name, effectiveArgs, context, finishActivity, definition, started });
+    const value = execution.value;
+    sessionStart = execution.sessionStart;
     const valueOk = value?.ok !== false;
     activityResult = {
       ok: valueOk,
@@ -61,6 +65,11 @@ async function callTool(name, args = {}, context = {}) {
     };
     if (sessionStart.started && !hasWorkspaceChanges(value)) clearSessionPolicy(config, sessionStart.alias, finishActivity?.taskId);
     const extraAudit = buildExtraAudit(name, value, effectiveArgs || {});
+    activityResult.activity = buildToolActivityDetails(name, effectiveArgs || {}, value, valueOk ? null : activityResult.error, {
+      operation: finishActivity?.operation,
+      phase: 'complete',
+      metadata: extraAudit
+    });
     applyCautionAudit(extraAudit, name, effectiveArgs || {}, value, config);
     invalidateSessionCacheForCall(config, name, effectiveArgs || {});
     safeLogAudit(config, {
@@ -83,7 +92,15 @@ async function callTool(name, args = {}, context = {}) {
     return ok(withTaskIdentity(responseValue, finishActivity?.taskId));
   } catch (error) {
     const enhanced = enhanceToolError(name, error);
-    activityResult = { ok: false, error: enhanced.message };
+    activityResult = {
+      ok: false,
+      error: enhanced.message,
+      activity: buildToolActivityDetails(name, effectiveArgs || {}, null, enhanced, {
+        operation: finishActivity?.operation,
+        phase: 'complete',
+        metadata: { errorCode: enhanced.code, retryable: enhanced.retryable === true }
+      })
+    };
     if (finishActivity?.taskId || requestedTaskId) enhanced.taskId = finishActivity?.taskId || requestedTaskId;
     safeLogAudit(config, {
       ...taskAuditContext(context, finishActivity, requestedTaskId, name, false),
@@ -96,8 +113,9 @@ async function callTool(name, args = {}, context = {}) {
       workspaceMatchStatus: enhanced.workspaceMatchStatus || undefined,
       workspaceResolutionFailure: enhanced.workspaceResolutionFailure || undefined,
       configuredWorkspaceAliases: enhanced.configuredWorkspaceAliases || undefined,
-      sessionContextAvailable: Boolean(context?.transportSessionId),
-      initializationContextAvailable: Boolean(context?.initializationRequestId),
+      protocolVersion: context?.protocolVersion || undefined,
+      clientName: context?.clientName || undefined,
+      clientVersion: context?.clientVersion || undefined,
       ms: Date.now() - started,
       error: enhanced.message,
       errorCode: enhanced.code || undefined
@@ -106,13 +124,6 @@ async function callTool(name, args = {}, context = {}) {
   } finally {
     finishActivity?.(activityResult);
   }
-}
-
-// Read-only tools share the workspace lock so a batch of reads/searches dispatched in
-// one JSON-RPC batch runs concurrently instead of one at a time. Everything else —
-// including any tool without an explicit read-only annotation — stays exclusive.
-function workspaceLockMode(name) {
-  return getToolDefinition(name)?.annotations?.readOnlyHint === true ? 'read' : 'write';
 }
 
 function resolveConfiguredWorkspaceArgument(config, input) {

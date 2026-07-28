@@ -1,7 +1,7 @@
 {
   "name": "rel-ai-mcp",
   "productName": "Rel.AI MCP",
-  "version": "0.22.1",
+  "version": "0.23.0",
   "description": "Local ChatGPT repo bridge: one reliable workflow for snapshot, read, write, verify, diff, and reset configured local workspaces.",
   "private": true,
   "license": "MIT",
@@ -22,6 +22,7 @@
     "knip": "knip",
     "knip:dependencies": "knip --dependencies --treat-config-hints-as-errors",
     "knip:production": "knip --production",
+    "generate:color-tokens": "node scripts/generate-color-tokens.mjs",
     "typecheck": "tsc -p tsconfig.boundaries.json",
     "init-config": "node bin/relai-mcp-config.js init",
     "workspace:add": "node bin/relai-mcp-config.js workspace add",
@@ -59,9 +60,10 @@
     "test:checks": "node test/command-checks-smoke.mjs",
     "test:git-workflow": "node test/git-workflow-smoke.mjs",
     "test:staged-write": "node test/staged-write-fallback-unit.mjs",
+    "test:colors": "npm run generate:color-tokens && node test/color-system-unit.mjs",
     "test:all": "npm run build:css && npm run check && npm run lint && npm run typecheck && npm run knip:dependencies && node scripts/release-check.mjs && node test/run-tests.mjs",
-    "build:css": "npx @tailwindcss/cli -i ./src/ui/styles/app.css -o ./public/dashboard.css --minify",
-    "watch:css": "npx @tailwindcss/cli -i ./src/ui/styles/app.css -o ./public/dashboard.css --watch"
+    "build:css": "npm run generate:color-tokens && npx @tailwindcss/cli -i ./src/ui/styles/app.css -o ./public/dashboard.css --minify",
+    "watch:css": "npm run generate:color-tokens && npx @tailwindcss/cli -i ./src/ui/styles/app.css -o ./public/dashboard.css --watch"
   },
   "keywords": [
     "mcp",
@@ -91,8 +93,13 @@
     "typescript": "7.0.2"
   },
   "dependencies": {
-    "@modelcontextprotocol/node": "2.0.0-beta.5",
-    "@modelcontextprotocol/server": "2.0.0-beta.5"
+    "@modelcontextprotocol/node": "^2.0.0",
+    "@modelcontextprotocol/server": "^2.0.0",
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.221.0",
+    "@opentelemetry/resources": "^2.10.0",
+    "@opentelemetry/sdk-trace-node": "^2.10.0",
+    "@opentelemetry/semantic-conventions": "^1.43.0"
   },
   "overrides": {
     "@hono/node-server": "2.0.12"

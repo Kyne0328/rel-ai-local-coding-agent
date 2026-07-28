@@ -60,6 +60,13 @@ const electronPkg = JSON.parse(fs.readFileSync(path.join(root, 'electron', 'pack
 const srcResource = electronPkg.build.extraResources.find((item) => item.from === '../src');
 assert.ok(srcResource, 'electron build must bundle src resources');
 assert.deepEqual(srcResource.filter, ['**/*.js'], 'electron build must package backend JavaScript without the source Tailwind stylesheet');
+assert.equal(fs.existsSync(path.join(root, 'src', 'ui', 'colorTokens.mjs')), true, 'the build-time ESM color manifest must exist');
+assert.equal(fs.existsSync(path.join(root, 'src', 'ui', 'colorTokens.js')), false, 'the removed CommonJS color manifest must not return');
+assert.equal(srcResource.filter.includes('**/*.mjs'), false, 'the build-time color manifest must not be packaged as a runtime backend resource');
+for (const renderer of ['status.html', 'wizard.html']) {
+  const html = fs.readFileSync(path.join(root, 'electron', 'renderer', renderer), 'utf8');
+  assert.ok(html.indexOf('color-tokens.css') < html.indexOf('app.css'), `${renderer} must load canonical color tokens before component styles`);
+}
 const rootModulesResource = electronPkg.build.extraResources.find((item) => item.from === '../node_modules');
 assert.ok(rootModulesResource, 'electron build must package root MCP SDK runtime dependencies');
 for (const packagePath of ['@modelcontextprotocol/core/**', '@modelcontextprotocol/node/**', '@modelcontextprotocol/server/**', '@hono/node-server/**', 'hono/**', 'zod/**']) {

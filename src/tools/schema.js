@@ -38,6 +38,7 @@ function schemaFromDefinition(definition) {
       properties,
       required
     },
+    outputSchema: definition.outputSchema,
     annotations: definition.annotations
   };
 }
@@ -77,7 +78,9 @@ function getToolMetadata() {
     requiresApproval: definition.dashboard?.requiresApproval === true,
     state: definition.lifecycle?.state || 'active',
     replacements: definition.lifecycle?.replacements || (definition.lifecycle?.replacement ? [definition.lifecycle.replacement] : []),
-    parameters: Object.keys(schemaFromDefinition(definition).inputSchema.properties || {})
+    parameters: Object.keys(schemaFromDefinition(definition).inputSchema.properties || {}),
+    outputFields: Object.keys(definition.outputSchema?.properties || {}),
+    longRunning: definition.behavior?.longRunning === true
   }));
 }
 

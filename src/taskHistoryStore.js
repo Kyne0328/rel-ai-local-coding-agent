@@ -15,8 +15,9 @@ const {
   writeSession
 } = require('./taskHistoryStorage');
 
-const STORE_VERSION = 2;
-const MAX_SESSION_EVENTS = 100;
+const STORE_VERSION = 3;
+const MAX_SESSION_EVENTS = 200;
+let activityPersistenceBound = false;
 
 function recordTaskHistoryEvent(config, event) {
   if (!isCurrentTaskEvent(event)) return null;
@@ -24,6 +25,71 @@ function recordTaskHistoryEvent(config, event) {
   const directory = getTaskHistoryDir(config);
   const taskId = cleanTaskId(event.taskId);
   const session = applyEvent(readSession(directory, taskId) || emptySession(taskId), event);
+  writeSession(directory, session);
+  pruneSessions(directory, MAX_SESSIONS);
+  return publicSession(session);
+}
+
+function bindTaskHistoryActivityPersistence(onActivity, getConfig) {
+  if (activityPersistenceBound || typeof onActivity !== 'function' || typeof getConfig !== 'function') return;
+  activityPersistenceBound = true;
+  onActivity((activity) => {
+    try {
+      recordTaskActivityEvent(getConfig(), activity);
+    } catch (error) {
+      if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] live task history write:', error);
+    }
+  });
+}
+
+function recordTaskActivityEvent(config, activity = {}) {
+  const task = activity.task && typeof activity.task === 'object' ? activity.task : null;
+  const taskId = cleanTaskId(task?.taskId || task?.id || activity.taskId);
+  if (!taskId) return null;
+  ensureCurrentHistory(config);
+  const directory = getTaskHistoryDir(config);
+  const existing = readSession(directory, taskId) || emptySession(taskId);
+  const event = activity.activityEvent || null;
+  const events = upsertActivityEvent(existing.events || [], event);
+  const startedAt = task?.startedAtIso || task?.createdAt || toIso(task?.startedAt) || existing.startedAt || null;
+  const updatedAt = task?.updatedAt || toIso(task?.lastActivityAt) || event?.timestamp || new Date().toISOString();
+  const existingTerminal = ['completed', 'completed_with_warnings', 'failed', 'cancelled'].includes(existing?.status);
+  const existingUpdatedAt = Date.parse(existing?.updatedAt || existing?.completedAt || existing?.endedAt || '') || 0;
+  const incomingUpdatedAt = Date.parse(updatedAt || '') || 0;
+  if (existingTerminal && existingUpdatedAt > incomingUpdatedAt) return publicSession(existing);
+  const terminal = ['completed', 'completed_with_warnings', 'failed', 'cancelled'].includes(task?.status);
+  const session = {
+    ...existing,
+    ...task,
+    version: STORE_VERSION,
+    id: taskId,
+    taskId,
+    sessionId: task?.sessionId || taskId,
+    title: task?.title || existing.title || historicalTitle(existing),
+    objective: task?.objective || existing.objective || '',
+    status: task?.status || existing.status || 'planning',
+    progress: task?.progress || existing.progress || { mode: 'indeterminate', label: 'Progress unavailable' },
+    currentStage: task?.currentStage || existing.currentStage || '',
+    currentActivity: task?.currentActivity || existing.currentActivity || event?.summary || '',
+    calls: Math.max(Number(existing.calls || 0), Number(task?.toolCallCount || task?.calls || activity.taskCalls || 0)),
+    toolCallCount: Math.max(Number(existing.toolCallCount || 0), Number(task?.toolCallCount || task?.calls || activity.taskCalls || 0)),
+    successfulToolCallCount: Math.max(Number(existing.successfulToolCallCount || 0), Number(task?.successfulToolCallCount || 0)),
+    failedToolCallCount: Math.max(Number(existing.failedToolCallCount || 0), Number(task?.failedToolCallCount || task?.failures || activity.taskFailures || 0)),
+    failures: Math.max(Number(existing.failures || 0), Number(task?.failures || activity.taskFailures || 0)),
+    workspace: task?.workspace || activity.workspace || existing.workspace || '',
+    lastTool: task?.lastTool || task?.tool || activity.tool || existing.lastTool || '',
+    operation: task?.operation || task?.lastOperation || activity.operation || existing.operation || '',
+    currentOperations: Array.isArray(task?.currentOperations) ? task.currentOperations : existing.currentOperations || [],
+    startedAt,
+    updatedAt,
+    endedAt: terminal ? (task?.completedAtIso || toIso(task?.completedAt || task?.endedAt) || updatedAt) : null,
+    completedAt: terminal ? (task?.completedAtIso || toIso(task?.completedAt || task?.endedAt) || updatedAt) : null,
+    durationMs: Number(task?.durationMs || existing.durationMs || 0),
+    completionKnown: task?.completionKnown === true || existing.completionKnown === true,
+    resultSummary: task?.resultSummary || task?.summary || existing.resultSummary || '',
+    errorSummary: task?.errorSummary || existing.errorSummary || '',
+    events
+  };
   writeSession(directory, session);
   pruneSessions(directory, MAX_SESSIONS);
   return publicSession(session);
@@ -79,7 +145,14 @@ function applyEvent(session, event) {
     ...(Array.isArray(event.sessionChangedFiles) ? event.sessionChangedFiles : []),
     ...(event.filePath ? [event.filePath] : [])
   ].map(String).filter(Boolean));
-  const failures = Number(session.failures || 0) + (event.ok === false ? 1 : 0);
+  const lifecycleIndex = event.operationId
+    ? (session.events || []).findIndex(item => item?.eventId === event.operationId || item?.operationId === event.operationId)
+    : -1;
+  const represented = lifecycleIndex >= 0;
+  const failures = Math.max(
+    Number(session.failures || 0),
+    Number(session.failedToolCallCount || 0)
+  ) + (event.ok === false && !represented ? 1 : 0);
   const validation = event.validationStatus === 'not_required'
     ? 'not_required'
     : event.tool === 'relai_run_checks'
@@ -90,10 +163,20 @@ function applyEvent(session, event) {
     : new Date(timestamp).toISOString();
   const endedAt = new Date(Math.max(ended, Date.parse(session.endedAt || '') || 0)).toISOString();
 
+  const calls = Number(session.calls || 0) + (represented ? 0 : 1);
+  const auditEvent = compactEvent(event);
+  const events = represented
+    ? (session.events || []).map((item, index) => index === lifecycleIndex ? { ...auditEvent, ...item } : item)
+    : [...(session.events || []), auditEvent];
+  const status = completion || session.completionKnown ? 'completed' : failures ? 'failed' : 'cancelled';
+
   return {
     ...session,
     version: STORE_VERSION,
-    calls: Number(session.calls || 0) + 1,
+    calls,
+    toolCallCount: Math.max(Number(session.toolCallCount || 0), calls),
+    successfulToolCallCount: Math.max(0, calls - failures),
+    failedToolCallCount: failures,
     failures,
     changedFiles,
     changedFileCount: changedFiles.length,
@@ -103,7 +186,7 @@ function applyEvent(session, event) {
     prDrafted: Boolean(session.prDrafted || (event.tool === 'relai_git_draft_pr' && event.ok !== false)),
     completionKnown: Boolean(session.completionKnown || completion),
     endReason: completion || session.completionKnown ? 'explicit_completion' : 'inactivity_window',
-    status: completion || session.completionKnown ? 'completed' : failures ? 'attention' : 'inactive',
+    status,
     summary: event.taskSummary || session.summary || '',
     workspace: event.workspace || session.workspace || '',
     startedAt,
@@ -115,11 +198,15 @@ function applyEvent(session, event) {
     operation: event.operation || session.operation || operationForTool(event.tool),
     lastOutcome: event.ok === false ? 'failed' : 'succeeded',
     currentOperations: [],
-    events: [...(session.events || []), compactEvent(event)].slice(-MAX_SESSION_EVENTS)
+    events: events.slice(-MAX_SESSION_EVENTS)
   };
 }
 
 function overlayActiveSession(persisted, active) {
+  const persistedTerminal = ['completed', 'completed_with_warnings', 'failed', 'cancelled'].includes(persisted?.status);
+  const persistedTime = Date.parse(persisted?.updatedAt || persisted?.completedAt || persisted?.endedAt || '') || 0;
+  const activeTime = Date.parse(active?.updatedAt || active?.lastActivityAt || active?.startedAt || '') || 0;
+  if (persistedTerminal && persistedTime >= activeTime) return persisted;
   return {
     ...persisted,
     ...active,
@@ -132,32 +219,80 @@ function overlayActiveSession(persisted, active) {
     pushed: Boolean(persisted.pushed),
     prDrafted: Boolean(persisted.prDrafted),
     completionKnown: active.completionKnown === true || persisted.completionKnown === true,
-    events: persisted.events || []
+    events: mergeActivityEvents(persisted.events || [], active.events || [])
   };
+}
+
+function upsertActivityEvent(events, event) {
+  if (!event?.eventId) return [...events].slice(-MAX_SESSION_EVENTS);
+  const next = [...events];
+  const index = next.findIndex(item => item?.eventId === event.eventId);
+  if (index >= 0) next[index] = { ...next[index], ...event };
+  else next.push(event);
+  return next.sort((left, right) => Number(left?.sequence || 0) - Number(right?.sequence || 0) || eventTime(left) - eventTime(right)).slice(-MAX_SESSION_EVENTS);
+}
+
+function mergeActivityEvents(persisted, active) {
+  let merged = [...persisted];
+  for (const event of active) merged = upsertActivityEvent(merged, event);
+  return merged;
+}
+
+function toIso(value) {
+  if (value == null || value === '') return '';
+  const parsed = typeof value === 'number' ? value : Date.parse(value);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : '';
+}
+
+function historicalTitle(session) {
+  const operation = String(session?.operation || '').trim();
+  if (operation && !/^(task|request|tool call|mcp operation)$/i.test(operation)) return operation;
+  const workspace = String(session?.workspace || '').trim();
+  return workspace ? `Historical task in ${workspace}` : 'Historical Rel.AI task';
 }
 
 function compactEvent(event) {
   const keep = [
-    'id', 'ts', 'pid', 'taskId', 'operationId', 'requestId', 'serverInstanceId',
+    'id', 'eventId', 'ts', 'pid', 'taskId', 'operationId', 'requestId', 'serverInstanceId',
     'transportType', 'clientName', 'clientVersion', 'taskIdentityVersion', 'taskIdExplicit',
     'taskHistoryEligible', 'duplicateRequest', 'eventType', 'tool', 'operation', 'workspace',
     'ok', 'ms', 'changedFiles', 'sessionChangedFiles', 'filePath', 'validationStatus',
     'completionKnown', 'endReason', 'completionSource', 'taskSummary', 'message', 'error', 'path'
   ];
-  return Object.fromEntries(keep.filter(key => event[key] !== undefined).map(key => [key, event[key]]));
+  const compact = Object.fromEntries(keep.filter(key => event[key] !== undefined).map(key => [key, event[key]]));
+  if (!compact.eventId && compact.operationId) compact.eventId = compact.operationId;
+  return compact;
 }
 
 function publicSession(session) {
   if (!session || typeof session !== 'object') return session;
   const { version, ...value } = session;
-  return value;
+  return {
+    ...value,
+    taskId: value.taskId || value.id,
+    sessionId: value.sessionId || value.id,
+    title: value.title || historicalTitle(value),
+    progress: value.progress || (['completed', 'completed_with_warnings'].includes(value.status) ? { mode: 'complete', percentage: 100, label: 'Complete' } : { mode: 'indeterminate', label: 'Progress unavailable' }),
+    toolCallCount: Number(value.toolCallCount ?? value.calls ?? 0),
+    successfulToolCallCount: Number(value.successfulToolCallCount ?? Math.max(0, Number(value.calls || 0) - Number(value.failures || 0))),
+    failedToolCallCount: Number(value.failedToolCallCount ?? value.failures ?? 0),
+    currentStage: value.currentStage || '',
+    currentActivity: value.currentActivity || value.operation || ''
+  };
 }
 
 function emptySession(id) {
   return {
     version: STORE_VERSION,
     id,
-    status: 'inactive',
+    taskId: id,
+    sessionId: id,
+    title: 'Historical Rel.AI task',
+    objective: '',
+    status: 'cancelled',
+    progress: { mode: 'indeterminate', label: 'Progress unavailable' },
+    currentStage: '',
+    currentActivity: '',
     completionKnown: false,
     endReason: 'inactivity_window',
     summary: '',
@@ -167,6 +302,9 @@ function emptySession(id) {
     completedAt: null,
     durationMs: 0,
     calls: 0,
+    toolCallCount: 0,
+    successfulToolCallCount: 0,
+    failedToolCallCount: 0,
     activeCalls: 0,
     failures: 0,
     changedFiles: [],
@@ -200,9 +338,11 @@ function isStoredSessionNoise(session, activeIds) {
 }
 
 module.exports = {
+  bindTaskHistoryActivityPersistence,
   clearTaskHistory,
   getTaskHistoryDir,
   readTaskHistory,
   readTaskHistorySession,
+  recordTaskActivityEvent,
   recordTaskHistoryEvent
 };

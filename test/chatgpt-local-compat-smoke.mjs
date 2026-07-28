@@ -18,13 +18,9 @@ fs.writeFileSync(configPath, JSON.stringify({
 
 const client = startMcpClient({ root, configPath });
 try {
-  client.send(1, 'initialize', {
-    protocolVersion: '2025-06-18',
-    capabilities: {},
-    clientInfo: { name: 'relai-sdk-smoke', version: '1.0.0' }
-  });
-  await client.waitFor(1);
-  client.notify('notifications/initialized');
+  client.discover(1);
+  const discovery = await client.waitFor(1);
+  assert.ok(discovery.result?.supportedVersions?.includes('2026-07-28'));
 
   let requestId = 10;
   for (const removed of ['relai_apply_bundle', 'relai_package_snapshot', 'relai_apply_update', 'relai_clear_files', 'relai_feature_probe', 'relai_git_fetch', 'relai_session_summary']) {

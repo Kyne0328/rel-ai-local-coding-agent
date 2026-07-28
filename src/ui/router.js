@@ -12,6 +12,7 @@ const ROUTE_TITLES = {
   home: 'Overview',
   tasks: 'Sessions',
   workspaces: 'Workspaces',
+  processes: 'Processes',
   activity: 'Activity',
   tools: 'Tools',
   settings: 'Settings'
@@ -30,6 +31,7 @@ const ROUTE_DESCRIPTIONS = {
   home: 'Connection health, workspace readiness, and recent Rel.AI sessions.',
   tasks: 'Review running, open, and completed work grouped into explicit logical sessions.',
   workspaces: 'Manage the repositories that ChatGPT is allowed to inspect and update.',
+  processes: 'Inspect persistent development commands, recent output, and runtime state.',
   activity: 'Inspect individual Rel.AI tool calls, failures, and recorded output.',
   tools: 'Browse the MCP tools available to ChatGPT and their parameters.',
   settings: 'Configure the desktop app, connection, validation, and diagnostics.'

@@ -1,12 +1,27 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
-export function startMcpClient({ root, configPath, env = {}, timeoutMs = 5000 }) {
+export function startMcpClient({
+  root,
+  configPath,
+  env = {},
+  timeoutMs = 5000,
+  clientInfo = { name: 'relai-test-client', version: '2026.7.28' },
+  clientCapabilities = {}
+}) {
+  const ownedStateDir = env.REL_AI_MCP_STATE_DIR ? '' : fs.mkdtempSync(path.join(os.tmpdir(), 'relai-mcp-client-'));
   const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp.js')], {
     cwd: root,
     stdio: ['pipe', 'pipe', 'pipe'],
-    env: { ...process.env, ...env, REL_AI_MCP_CONFIG: configPath }
+    env: {
+      ...process.env,
+      ...env,
+      REL_AI_MCP_CONFIG: configPath,
+      REL_AI_MCP_STATE_DIR: env.REL_AI_MCP_STATE_DIR || ownedStateDir
+    }
   });
   const responses = new Map();
   const waiters = new Map();
@@ -42,14 +57,30 @@ export function startMcpClient({ root, configPath, env = {}, timeoutMs = 5000 })
     waiters.clear();
   });
 
+  function withMeta(params = {}) {
+    return {
+      ...params,
+      _meta: {
+        ...(params?._meta || {}),
+        'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+        'io.modelcontextprotocol/clientInfo': clientInfo,
+        'io.modelcontextprotocol/clientCapabilities': clientCapabilities
+      }
+    };
+  }
+
   function send(id, method, params = {}) {
     if (closed) throw new Error(`Cannot send ${method}; MCP process is closed.`);
-    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
+    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params: withMeta(params) })}\n`);
   }
 
   function notify(method, params = {}) {
     if (closed) throw new Error(`Cannot send ${method}; MCP process is closed.`);
-    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method, params })}\n`);
+    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method, params: withMeta(params) })}\n`);
+  }
+
+  function discover(id) {
+    send(id, 'server/discover');
   }
 
   function call(id, name, args = {}) {
@@ -78,9 +109,10 @@ export function startMcpClient({ root, configPath, env = {}, timeoutMs = 5000 })
       child.kill('SIGTERM');
       await once(child, 'close').catch(() => {});
     }
+    if (ownedStateDir) fs.rmSync(ownedStateDir, { recursive: true, force: true });
   }
 
-  return { send, notify, call, waitFor, close };
+  return { send, notify, discover, call, waitFor, close };
 }
 
 export function structuredContentOf(response) {

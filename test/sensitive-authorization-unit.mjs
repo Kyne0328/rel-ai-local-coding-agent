@@ -30,7 +30,7 @@ try {
   fs.writeFileSync(path.join(root, '.env'), 'TOKEN=secret\n');
   fs.writeFileSync(path.join(root, '.npmrc'), '//registry.example/:_authToken=secret\n');
 
-  const noScope = await relaiGitCommit(workspace, config, { message: 'blocked', allowSecretPaths: true });
+  const noScope = await relaiGitCommit(workspace, config, { message: 'blocked' });
   assert.equal(noScope.ok, false);
   assert.deepEqual(noScope.unauthorizedSecretPaths.sort(), ['.env', '.npmrc']);
 
@@ -65,13 +65,10 @@ try {
   assert.deepEqual(allowed.sensitiveAuthorization.paths.sort(), ['.env', '.npmrc']);
 
   fs.writeFileSync(path.join(root, '.env'), 'TOKEN=next\n');
-  const legacyExplicit = await relaiGitCommit(workspace, config, {
-    message: 'legacy explicit',
-    paths: ['.env'],
-    allowSecretPaths: true
-  });
-  assert.equal(legacyExplicit.ok, true);
-  assert.equal(legacyExplicit.sensitiveAuthorization.source, 'legacy-explicit-path-compatibility');
+  await assert.rejects(
+    () => relaiGitCommit(workspace, config, { message: 'legacy override rejected', paths: ['.env'], allowSecretPaths: true }),
+    /(blocked sensitive path|explicit sensitive authorization|required sensitive authorization)/i
+  );
 
   assert.rejects(
     () => relaiGitCommit(workspace, config, {

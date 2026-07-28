@@ -5,8 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
-const dashboardTokens = read('src/ui/styles/app.css');
-const electronCss = read('electron/renderer/app.css');
+const dashboardTokens = `${read('src/ui/styles/color-tokens.css')}\n${read('src/ui/styles/app.css')}`;
+const electronCss = `${read('electron/renderer/color-tokens.css')}\n${read('electron/renderer/app.css')}`;
 const dashboardJs = read('public/dashboard.js');
 const dashboardServer = read('src/http/dashboard.js');
 const dashboardShellChrome = read('src/http/dashboardShellChrome.js');
@@ -21,7 +21,7 @@ function tokenValue(source, name) {
   return match[1].trim().replace(/\s+/g, ' ');
 }
 
-for (const name of ['--bg', '--surface', '--surface-2', '--surface-3', '--text', '--text-muted', '--text-dim', '--blue', '--green', '--yellow', '--red', '--scrollbar-size', '--scrollbar-size-compact', '--scrollbar-track', '--scrollbar-thumb', '--scrollbar-thumb-hover', '--scrollbar-thumb-active', '--scrollbar-corner']) {
+for (const name of ['--ui-canvas', '--ui-surface-primary', '--ui-surface-secondary', '--ui-surface-raised', '--ui-text-primary', '--ui-text-secondary', '--ui-text-tertiary', '--ui-action-primary', '--ui-status-success-foreground', '--ui-status-warning-foreground', '--ui-status-danger-foreground', '--scrollbar-size', '--scrollbar-size-compact', '--ui-scrollbar-track', '--ui-scrollbar-thumb', '--ui-scrollbar-thumb-hover', '--ui-scrollbar-thumb-active', '--ui-scrollbar-corner']) {
   assert.equal(tokenValue(electronCss, name), tokenValue(dashboardTokens, name), `${name} must match between Electron and dashboard themes`);
 }
 
@@ -101,7 +101,7 @@ assert.match(electronCss, /status-health-grid/);
 assert.match(electronCss, /notification-switch/);
 assert.match(electronCss, /fallback-intro/);
 assert.match(electronCss, /\.app-card[^}]*box-shadow: none/s);
-assert.match(electronCss, /\.setup-card,\s*\.status-hero \{ box-shadow: var\(--elev-2\); \}/s);
+assert.match(electronCss, /\.setup-card,\s*\.status-hero \{ box-shadow: var\(--ui-electron-elevation2\); \}/s);
 assert.match(electronCss, /\.status-health-grid[^}]*gap: 0/s);
 assert.doesNotMatch(electronCss, /\.status-badge\.ready::before[^}]*box-shadow/s);
 assert.doesNotMatch(electronCss, /settings-shell|settings-page|settings-footer/);

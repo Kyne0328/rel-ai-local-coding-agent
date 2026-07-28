@@ -40,6 +40,7 @@ export interface ToolBehavior {
   deferStagedSession: boolean;
   sessionWrite: boolean;
   summary: SummaryKind;
+  longRunning: boolean;
 }
 
 export interface ToolDashboardMetadata {
@@ -62,6 +63,7 @@ export interface ToolDefinition {
   title: string;
   description: string;
   inputSchema: ObjectJsonSchema;
+  outputSchema: JsonSchema;
   annotations: ToolAnnotations;
   handler: ToolHandler;
   connectorStrip: string[];
@@ -76,12 +78,15 @@ export interface ToolSchema {
   title: string;
   description: string;
   inputSchema: ObjectJsonSchema;
+  outputSchema: JsonSchema;
   annotations: ToolAnnotations;
 }
 
 export interface ToolArgs extends Record<string, unknown> {
   workspace?: string;
   task_id?: string;
+  title?: string;
+  objective?: string;
   path?: string;
   paths?: string[];
   startLine?: number;
@@ -106,6 +111,30 @@ export interface ToolArgs extends Record<string, unknown> {
   cwd?: string;
   env?: Record<string, string>;
   maxOutputBytes?: number;
+  processId?: string;
+  stdoutOffset?: number;
+  stderrOffset?: number;
+  input?: string;
+  label?: string;
+  startupWaitMs?: number;
+  maxLogBytes?: number;
+  graceMs?: number;
+  limit?: number;
+  status?: string;
+  name?: string;
+  base?: string;
+  branch?: string;
+  alias?: string;
+  force?: boolean;
+  query?: string;
+  pathPrefix?: string;
+  language?: string;
+  commands?: string[];
+  planId?: string;
+  planLevel?: string;
+  release?: boolean;
+  defer?: boolean;
+  operationTaskId?: string;
   complete?: boolean;
   summary?: string;
 }
@@ -158,7 +187,7 @@ export type AppConfig = Record<string, unknown> & {
   workspaces?: Record<string, unknown>;
 };
 
-export type ToolHandler = (config: AppConfig, args: ToolArgs, context?: { connector?: boolean }) => unknown | Promise<unknown>;
+export type ToolHandler = (config: AppConfig, args: ToolArgs, context?: { connector?: boolean; taskId?: string; requestHeaders?: Record<string, string>; mcp?: Record<string, unknown> }) => unknown | Promise<unknown>;
 
 export interface LauncherConfigInput {
   port?: number | string;

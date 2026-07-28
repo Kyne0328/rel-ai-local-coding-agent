@@ -26,9 +26,9 @@ Tool use is intentionally small but flexible. ChatGPT should skip stages it does
 relai_start_task -> relai_repo_snapshot (when useful) -> relai_search / relai_code_inspect -> relai_read -> relai_edit -> relai_run_checks (complete:true + summary)
 ```
 
-No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. MCP SDK v2 exposes the same 20 callable workspace tools over stdio and OAuth-protected Streamable HTTP, all active. `relai_code_inspect` adds live symbol, reference, impact, affected-test, and diagnostics-readiness analysis without a stale background index.
+No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. Rel.AI targets MCP `2026-07-28` through the stable MCP SDK v2 and exposes 33 active tools over stdio and OAuth-protected stateless HTTP. The core protocol has no initialize handshake or protocol session; every request carries its protocol version, client identity, capabilities, trace context, method, and named target explicitly.
 
-When ChatGPT first edits a workspace, the server starts a session and records the pre-edit state, so later status/diff output can separate the files this session changed from files that were already modified. The session expires after a period of inactivity.
+Logical coding work is isolated by opaque `task_id`, persistent commands by `processId`, deferred operations by durable `operationTaskId`, worktrees by dynamic workspace alias, and resumable approvals by signed `requestState`. These visible handles replace hidden transport-session state.
 
 Rel.AI MCP still lightly nods to the original Rel.AI idea, but this README stands on its own: this is now a local MCP bridge for ChatGPT.
 
@@ -58,6 +58,12 @@ It can:
 - tidy session-owned untracked artifacts through an expiry-bound plan
 - run validation checks such as tests and analyzers
 - run one-shot development commands such as dependency installation, migrations, compilers, and repository utilities
+- start, read, write to, stop, and list persistent development processes with local logs
+- create and remove isolated Git worktrees with dynamic workspace aliases
+- search by exact text or private local hybrid semantic ranking
+- trace definitions, callers, importers, tests, UI surfaces, and registration paths
+- normalize compiler, analyzer, and linter diagnostics
+- create signed change-aware validation plans
 - load repository-specific guidance from `REL_AI.md` and `.relai/instructions.md`
 - inspect git diffs
 - run explicit git status, commit, push, and PR-draft flows
@@ -223,7 +229,7 @@ The installed Windows app can also enable **Launch at sign-in** under **Settings
 3. In ChatGPT, go to **Settings > Apps > Create** and paste that URL.
 4. Set authentication to **OAuth**. ChatGPT opens a sign-in page — enter your Rel.AI approval token to approve.
 
-The approval token is under **Settings > Connection**. Replacing it requires typing `REPLACE`; Rel.AI revokes current OAuth access and refresh tokens, preserves the MCP endpoint and existing ChatGPT app registration, then marks ChatGPT as requiring approval again.
+The approval token is under **Settings > Connection**. Replacing it requires typing `REPLACE`; Rel.AI revokes authorization codes, access tokens, refresh tokens, and Dynamic Client Registrations. ChatGPT must register and approve a new issuer-bound OAuth client. This release intentionally does not preserve old connector registrations.
 
 Because the domain is static, the connector keeps working across restarts. You configure it once.
 
@@ -235,7 +241,7 @@ See [docs/ONE_CLICK_SETUP.md](docs/ONE_CLICK_SETUP.md) for the full setup walkth
 
 **Open dashboard** shows the full dashboard inside a secured Electron window. The same dashboard is also reachable in a normal browser at the local `/dashboard` route; Electron is the default host, not a separate implementation. The desktop host exchanges a single-use bootstrap code for an HttpOnly local session cookie, so the long-lived approval token is never stored in the embedded renderer or left in its URL.
 
-The dashboard includes grouped **Sessions**, lower-level **Activity**, workspace-scoped filtering, operational Git and validation state, actionable diagnostics, live/reconnecting status, and persistent desktop window and route state. Work is grouped by explicit logical `task_id`, not by MCP connection, repository, or assumed ChatGPT conversation identity. Multiple tasks may share one client connection while retaining independent activity and completion state. A task is marked completed only after an explicit completion signal: either `relai_run_checks` with `complete:true` and `summary`, or `relai_complete_task` after a post-validation read-only review. Otherwise inactivity closes it as inactive without claiming the overall request finished.
+The dashboard includes grouped **Sessions**, managed **Processes** with recent output and stop controls, lower-level **Activity**, workspace-scoped filtering, operational Git and validation state, actionable diagnostics, live/reconnecting status, and persistent desktop window and route state. Work is grouped by explicit logical `task_id`, not by MCP connection, repository, or assumed ChatGPT conversation identity. Multiple tasks may share one client connection while retaining independent activity and completion state. A task is marked completed only after an explicit completion signal: either `relai_run_checks` with `complete:true` and `summary`, or `relai_complete_task` after a post-validation read-only review. Otherwise inactivity closes it as inactive without claiming the overall request finished.
 
 ---
 
@@ -272,32 +278,47 @@ Windows CI and the release workflow build the unpacked application and run `npm 
 
 ## MCP tools
 
-Rel.AI exposes 20 callable workspace tools, all active, through MCP SDK v2. The six compatibility tools were removed in tool-surface version 10. HTTP clients use only `POST /mcp`; legacy MCP `/sse` and `/messages` routes are removed. `relai_edit` is the single file-change tool. Start each independent objective with `relai_start_task`, retain the returned opaque `task_id`, and pass it on every later call for that task. Task completion is explicit: final validation can close the logical task atomically with `complete:true` and `summary`, while `relai_complete_task` remains available after post-validation read-only review.
+Rel.AI exposes 33 active tools through MCP SDK v2 and MCP `2026-07-28`. HTTP clients use stateless `POST /mcp` requests with `MCP-Protocol-Version`, `Mcp-Method`, and `Mcp-Name` where applicable. The removed initialize handshake, `Mcp-Session-Id`, `/sse`, `/messages`, compatibility aliases, and legacy client recovery are not accepted. Older clients must remain on an earlier Rel.AI release.
+
+Each tool publishes an input and output JSON Schema. Expensive one-shot commands, diagnostics, and validation can run with `defer:true`; Rel.AI returns a durable operation handle that is polled or cancelled through normal MCP tools under the same logical `task_id`. The stable TypeScript SDK does not yet ship the Tasks extension adapter, so this release does not advertise nonfunctional native `tasks/*` methods. Destructive actions can return `input_required`; the client resumes them with the accepted input and the signed opaque `requestState`.
 
 | Tool | Purpose |
 | --- | --- |
-| `relai_start_task` | Create an independent logical task and return an opaque `task_id`; pass it on subsequent calls for that task. |
-| `relai_repo_snapshot` | Return a filtered project snapshot, manifests, discovered checks, context hints, and size-based write guidance. |
-| `relai_read` | Read focused files or directory summaries. Optional `startLine`/`endLine` returns one line range for the whole batch, `ranges` gives individual paths their own window in a single call, and `guidanceMode` controls full, compact, or omitted write guidance. |
-| `relai_search` | Search workspace files for a pattern. Adaptive `auto` mode is the default: focused searches receive broader context and noisy searches receive smaller prioritized ranges. Explicit `compact` and `context` modes remain available. |
-| `relai_code_inspect` | Build a fingerprint-invalidated live code index for symbol definitions, references and calls, structural related-file ranking, reverse-import impact, affected tests, and diagnostic-command readiness. |
-| `relai_exec` | Run a one-shot development command in a workspace-relative directory. Returns exit status, separate bounded stdout/stderr, timing, timeout state, and detected Git-status changes. |
-| `relai_edit` | The primary edit tool. Pass `oldText`+`newText` for exact edits, `content` for full-file writes (large files chunk automatically), `updateText` for unified-diff changes, or `edits: [...]` for a batch — plus `runChecks` / `returnDiff` to validate and review in one call. |
-| `relai_tidy_plan` | Read-only. Prepare a bounded tidy plan of session-owned untracked artifacts (server selects candidates). |
-| `relai_tidy_run` | Apply a prepared tidy plan by `planId` (expiry-bound and hash-checked before any change). |
-| `relai_run_checks` | Run detected or requested validation checks. On final validation, `complete:true` with `summary` validates and closes the task atomically only when every selected check passes. |
-| `relai_http_probe` | Probe a local Rel.AI route such as `/health` or `/dashboard`; arbitrary URLs are rejected. |
-| `relai_ui_check` | Run one declared `package.json` script intended for UI or browser validation. |
-| `relai_diff` | Review git status and diff. |
-| `relai_restore_paths` | Restore only listed tracked paths from `HEAD`; unrelated and untracked files are untouched. |
-| `relai_reset_workspace` | Reset all tracked changes with explicit `RESET` confirmation; optional untracked cleanup requires `RESET_AND_CLEAN`. |
-| `relai_status` | Workspace and repository status. With `workspace`, returns command configuration, session policy, branch, ahead/behind counts, ownership-split changes, and untracked-file state under `workspace.repository`. |
-| `relai_git_commit` | Record a commit with an explicit message (refuses secret-looking staged files). |
-| `relai_git_push` | Publish a branch to an allowlisted remote. |
-| `relai_git_draft_pr` | Prepare a local pull-request title/body from a base/head diff without contacting a hosting provider or changing the remote. |
-| `relai_complete_task` | Explicitly close the exact validated `task_id` after any final read-only review when completion was not requested on `relai_run_checks`. Rejects missing task-scoped validation, later task changes, or changes made to the shared workspace by another task after validation. Duplicate retries return the original completion idempotently. |
+| `relai_start_task` | Create an independent logical task and return the opaque `task_id` required by subsequent calls. |
+| `relai_repo_snapshot` | Return a filtered repository map, manifests, checks, Git summary, and project instructions. |
+| `relai_read` | Read bounded files, line ranges, or directory summaries. |
+| `relai_search` | Search tracked and untracked workspace text with adaptive bounded context. |
+| `relai_code_inspect` | Inspect symbols, references, related files, impact, full relationship traces, affected tests, and diagnostic readiness. |
+| `relai_exec` | Run one bounded one-shot workspace command with separate output, timeout, cancellation, and file-change reporting. |
+| `relai_process_start` | Start a persistent development process with stable identity, logs, stdin, and task/workspace attribution. |
+| `relai_process_read` | Read process state and independent stdout/stderr ranges by byte cursor. |
+| `relai_process_write` | Send bounded UTF-8 input to a running managed process. |
+| `relai_process_stop` | Stop a managed process and its process tree and return final state and recent output. |
+| `relai_process_list` | List active and recently exited managed processes. |
+| `relai_worktree_create` | Create a managed Git worktree, branch, and dynamic workspace alias. |
+| `relai_worktree_list` | List managed worktrees with availability and dirty state. |
+| `relai_worktree_remove` | Safely remove a managed worktree while preserving its branch. |
+| `relai_semantic_search` | Rank local source using private hashed-vector, lexical, path, and symbol signals. |
+| `relai_diagnostics_run` | Run diagnostics and normalize path, line, column, severity, code, message, and source. |
+| `relai_validation_plan` | Create a signed short-lived validation plan from changes, impact, tests, and repository checks. |
+| `relai_operation_task_get` | Read the status, progress, result, or error for a deferred operation owned by the same logical task. |
+| `relai_operation_task_cancel` | Cancel a deferred operation and cooperatively terminate its active process tree. |
+| `relai_tidy_plan` | Prepare an expiry-bound cleanup plan for task-owned untracked artifacts. |
+| `relai_tidy_run` | Apply a prepared cleanup plan after ownership and hash verification. |
+| `relai_run_checks` | Run direct or plan-bound validation and optionally close the logical task atomically. |
+| `relai_http_probe` | Probe one configured local application route. |
+| `relai_ui_check` | Run one declared package script intended for interface validation. |
+| `relai_diff` | Review repository status and diff with sensitive-file redaction support. |
+| `relai_restore_paths` | Restore only selected tracked paths from `HEAD`. |
+| `relai_reset_workspace` | Reset tracked changes and optionally clean untracked files after explicit approval. |
+| `relai_status` | Return tool-surface, workspace, repository, validation, task, and runtime readiness. |
+| `relai_git_commit` | Create a scoped commit with explicit authorization for every sensitive path. |
+| `relai_git_push` | Publish an allowlisted branch and remote after explicit approval. |
+| `relai_git_draft_pr` | Generate local pull-request title and body text from a Git diff. |
+| `relai_edit` | Apply all file mutations: exact replacements, full files, structured patches, batches, environment operations, and staged writes. |
+| `relai_complete_task` | Explicitly complete the exact validated logical task after final read-only review. |
 
-Removed workflows are not part of the MCP anymore: update application loops, generated update helpers, local-edit tools, task runners, multi-agent schedulers, Docker runners, and PR/CI repair loops.
+The hard cutover deliberately removes compatibility aliases, protocol-session inference, automatic client recovery, generated update helpers, local-edit fallbacks, and hidden task selection.
 
 ---
 
@@ -319,7 +340,7 @@ Use `.relaiignore` in a repo to add repo-specific AI-context exclusions.
 
 The snapshot is only a structural map. It does not restrict `relai_search` or direct `relai_read` calls: ChatGPT may continue locating and reading any relevant non-sensitive file inside the configured workspace. The default map contains up to 3,000 files while generated and cache directories remain excluded.
 
-The runtime roadmap is in [docs/CHATGPT_CODING_RUNTIME_ROADMAP.md](docs/CHATGPT_CODING_RUNTIME_ROADMAP.md). The current build includes repository context, live code-intelligence analysis, one-shot commands, and project instructions; persistent processes, managed worktrees, task plans, and independent workers are deferred.
+The runtime roadmap is in [docs/CHATGPT_CODING_RUNTIME_ROADMAP.md](docs/CHATGPT_CODING_RUNTIME_ROADMAP.md). The current build includes repository context, live and hybrid code intelligence, one-shot and persistent commands, project instructions, managed worktrees, durable deferred operations, signed validation plans, structured diagnostics, multi-round-trip approvals, resource caching, and optional OpenTelemetry export. Independent model workers remain deferred.
 
 ---
 
@@ -335,7 +356,7 @@ A nonzero command exit is returned normally with `ok:false`, preserving compiler
 
 `relai_exec` does not count as final validation, even when it runs a test command. After the last relevant mutation, use `relai_run_checks`. Pass `complete:true` with `summary` on the final validation to close atomically, or validate without completion when a read-only review must follow.
 
-Persistent process management, managed worktrees, and persistent task plans are deferred and are not exposed by this build.
+Persistent processes use `relai_process_*`; isolated branches use `relai_worktree_*`; and change-aware validation uses `relai_validation_plan`. These handles are explicit and survive the stateless protocol boundary.
 
 `relai_run_checks` can run explicit validation checks inside configured workspaces:
 
@@ -375,7 +396,8 @@ Use this guide together with the `writeGuidance` returned by `relai_repo_snapsho
 | Multi-file patch-shaped change | `relai_edit` with `updateText` |
 | Several edits in one approval | `relai_edit` with `edits: [...]` |
 | Tidy session-created files | `relai_tidy_plan` then `relai_tidy_run` |
-| Install dependencies, run migrations, or invoke repository tooling | `relai_exec` |
+| Install dependencies, run migrations, or invoke repository tooling | `relai_exec`; pass `defer:true` for long one-shot commands |
+| Poll or cancel deferred work | `relai_operation_task_get` / `relai_operation_task_cancel` with the same logical `task_id` |
 | Validate and finish atomically | `relai_run_checks` with the task's `task_id`, `complete:true`, and `summary` |
 | Finish after a post-validation read-only review | `relai_complete_task` with the same `task_id` after the final successful validation and review |
 | Probe a local HTTP route | `relai_http_probe` |

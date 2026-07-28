@@ -25,16 +25,21 @@ function bearerToken(req) {
 }
 
 // An OAuth access token issued by our /token endpoint is a valid bearer for /mcp.
-function isOAuthAuthorized(req) {
+function oauthAuthorization(req, options) {
   const token = bearerToken(req);
-  return Boolean(token && oauth.validateAccessToken(token));
+  if (!token) return null;
+  return oauth.validateAccessToken(token, resolveBaseUrl(options));
+}
+
+function isOAuthAuthorized(req, options) {
+  return Boolean(oauthAuthorization(req, options));
 }
 
 // MCP access is granted by either the static REL_AI_MCP_TOKEN bearer (local/API
 // clients) or an OAuth-issued access token (the ChatGPT OAuth connector). There is
 // no unauthenticated path.
 function isMcpAuthorized(req, options) {
-  return isAuthorized(req, options) || isOAuthAuthorized(req);
+  return isAuthorized(req, options) || isOAuthAuthorized(req, options);
 }
 
 function unauthorizedMcp(res, baseUrl, req) {
@@ -78,12 +83,14 @@ function resolveRequireHttpToken(parsed, config) {
 
 function oauthErrorPage(message) {
   const safe = String(message == null ? "" : message).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Cannot authorize</title></head><body style="font-family:system-ui,sans-serif;background:#0b0f1a;color:#e6eaf2;padding:48px;"><h2>Cannot authorize this connection</h2><p style="color:#9aa6bd;">' + safe + '</p></body></html>';
+  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Cannot authorize</title><link rel="stylesheet" href="/public/oauth.css"></head><body class="oauth-page oauth-error-page"><main class="oauth-card oauth-error-card"><h2>Cannot authorize this connection</h2><p>' + safe + '</p></main></body></html>';
 }
 
 module.exports = {
   resolveBaseUrl,
   isOAuthAuthorized,
+  oauthAuthorization,
+  bearerToken,
   isMcpAuthorized,
   unauthorizedMcp,
   oauthErrorPage,
