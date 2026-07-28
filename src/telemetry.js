@@ -1,11 +1,11 @@
-'use strict';
 
-const api = require('@opentelemetry/api');
-const { NodeTracerProvider, BatchSpanProcessor } = require('@opentelemetry/sdk-trace-node');
-const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
-const { resourceFromAttributes } = require('@opentelemetry/resources');
-const { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } = require('@opentelemetry/semantic-conventions');
-const pkg = require('../package.json');
+
+import * as api from "@opentelemetry/api";
+import { NodeTracerProvider, BatchSpanProcessor } from "@opentelemetry/sdk-trace-node";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import { resourceFromAttributes } from "@opentelemetry/resources";
+import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from "@opentelemetry/semantic-conventions";
+import { packageMetadata as pkg } from './packageMetadata.js';
 
 const REDACTED_ATTRIBUTE = '[redacted]';
 const MAX_ATTRIBUTE_CHARS = 1000;
@@ -112,13 +112,4 @@ function telemetryStatus(config = {}) {
   };
 }
 
-module.exports = {
-  initializeTelemetry,
-  runSpan,
-  addSpanEvent,
-  setSpanAttributes,
-  shutdownTelemetry,
-  telemetryStatus,
-  sanitizeAttributes,
-  extractTraceContext
-};
+export { initializeTelemetry, runSpan, addSpanEvent, setSpanAttributes, shutdownTelemetry, telemetryStatus, sanitizeAttributes, extractTraceContext };

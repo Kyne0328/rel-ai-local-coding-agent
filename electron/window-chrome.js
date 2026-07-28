@@ -1,4 +1,4 @@
-'use strict';
+
 
 function dashboardWindowChrome(platform = process.platform) {
   if (platform === 'win32') {
@@ -96,4 +96,4 @@ function readWindowFlag(win, method) {
   }
 }
 
-module.exports = { createDashboardWindowChromeController, dashboardWindowChrome, dashboardWindowChromeState };
+export { createDashboardWindowChromeController, dashboardWindowChrome, dashboardWindowChromeState };

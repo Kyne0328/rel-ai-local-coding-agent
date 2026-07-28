@@ -1,13 +1,12 @@
-'use strict';
-
-const crypto = require('node:crypto');
-const connection = require('../connectionProfile');
-const productUx = require('../productUx');
-const release = require('../release');
-const { deriveConnectionState } = require('../desktopUxContracts');
-const { getApplicationMetadata } = require('../appMetadata');
-const { readTaskHistory } = require('../taskHistoryStore');
-const { buildWorkspaceStates } = require('../workspaceState');
+import { listManagedProcesses } from '../processManager.js';
+import * as crypto from "node:crypto";
+import * as connection from "../connectionProfile.js";
+import * as productUx from "../productUx.js";
+import * as release from "../release.js";
+import { deriveConnectionState } from "../desktopUxContracts.js";
+import { getApplicationMetadata } from "../appMetadata.js";
+import { readTaskHistory } from "../taskHistoryStore.js";
+import { buildWorkspaceStates } from "../workspaceState.js";
 
 const DASHBOARD_STREAM_ID = crypto.randomUUID();
 let dashboardSnapshotSequence = 0;
@@ -55,7 +54,7 @@ function buildDashboardPayload(config, options = {}, requireHttpToken = false) {
     auditTail,
     tasks,
     workspaceStates,
-    managedProcesses: require('../processManager').listManagedProcesses(config, { limit: 200 }).processes
+    managedProcesses: listManagedProcesses(config, { limit: 200 }).processes
   };
 }
 
@@ -106,4 +105,4 @@ function normalizeDashboardActivity(entry) {
   };
 }
 
-module.exports = { buildDashboardPayload, mergeDashboardActivity };
+export { buildDashboardPayload, mergeDashboardActivity };

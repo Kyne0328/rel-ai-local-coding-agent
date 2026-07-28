@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { aliasConsistencyCheck } = require('../src/productUx.js');
+import { aliasConsistencyCheck } from "../src/productUx.js";
 
 for (const config of [{}, { workspaces: {} }, { workspaces: null }]) {
   const result = aliasConsistencyCheck(config);

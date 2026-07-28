@@ -1,7 +1,7 @@
-'use strict';
 
-const { getCurrentToolActivityContext, taskError } = require('../toolActivity');
-const { readTaskHistorySession } = require('../taskHistoryStore');
+
+import { getCurrentToolActivityContext, taskError } from "../toolActivity.js";
+import { readTaskHistorySession } from "../taskHistoryStore.js";
 
 function startTask(workspace, args = {}) {
   const context = getCurrentToolActivityContext();
@@ -70,4 +70,4 @@ function withTaskIdentity(value, taskId) {
   return { ok: true, value, task_id: identity };
 }
 
-module.exports = { startTask, assertKnownTask, taskAuditContext, withTaskIdentity };
+export { startTask, assertKnownTask, taskAuditContext, withTaskIdentity };

@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { dashboardWindowChrome, dashboardWindowChromeState } = require('../electron/window-chrome.js');
+import { dashboardWindowChrome, dashboardWindowChromeState } from "../electron/window-chrome.js";
 
 const windows = dashboardWindowChrome('win32');
 assert.equal(windows.platform, 'win32');

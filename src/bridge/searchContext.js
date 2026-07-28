@@ -1,8 +1,8 @@
-const fs = require("node:fs");
-const crypto = require("node:crypto");
-const { resolveSafePath, looksBinary } = require("../safety");
-const { clampNumber } = require("./limits");
-const { rankMatchGroups } = require("./searchPlanner");
+import * as fs from "node:fs";
+import * as crypto from "node:crypto";
+import { resolveSafePath, looksBinary } from "../safety.js";
+import { clampNumber } from "./limits.js";
+import { rankMatchGroups } from "./searchPlanner.js";
 
 const DEFAULT_CONTEXT_LINES = 3;
 const DEFAULT_MAX_FILES = 20;
@@ -275,6 +275,4 @@ function flattenContextFiles(files) {
   })));
 }
 
-module.exports = {
-  buildContextualSearch
-};
+export { buildContextualSearch };

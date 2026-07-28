@@ -1,11 +1,11 @@
-'use strict';
 
-const path = require('node:path');
-const { runProcess, summarizeCommand } = require('../process');
-const { detectVerifyChecks } = require('./checkDetection');
-const { clampNumber } = require('./limits');
-const { runSpan } = require('../telemetry');
-const { operationTaskSignal } = require('../operationTasks');
+
+import * as path from "node:path";
+import { runProcess, summarizeCommand } from "../process.js";
+import { detectVerifyChecks } from "./checkDetection.js";
+import { clampNumber } from "./limits.js";
+import { runSpan } from "../telemetry.js";
+import { operationTaskSignal } from "../operationTasks.js";
 
 async function relaiDiagnosticsRun(workspace, config, args = {}) {
   const commands = selectDiagnosticCommands(workspace, args);
@@ -114,4 +114,4 @@ function deduplicateDiagnostics(items) {
   });
 }
 
-module.exports = { relaiDiagnosticsRun, parseDiagnostics, parseDiagnosticLine };
+export { relaiDiagnosticsRun, parseDiagnostics, parseDiagnosticLine };

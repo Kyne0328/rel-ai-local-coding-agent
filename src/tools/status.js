@@ -1,17 +1,16 @@
-const fs = require("node:fs");
-const path = require("node:path");
-const { resolveWorkspace, allWorkspaceAliases } = require('../config');
-const { collectTextFiles, collectOptionsFromWorkspace, resolveSafePath } = require("../safety");
-const { discoverCommands, staleCommandKeys: staleCommandKeyList } = require("../commandDiscovery");
-const { summarizeOperations } = require("../journal");
-const { resolvePolicy } = require("../policyResolver");
-const { getVersion } = require("../version");
-const { debugSwallow } = require("./session");
-function toolSchema() {
-  return require('./schema');
-}
-const { readProjectInstructions, summarizeProjectInstructions } = require('../projectInstructions');
-const { workspaceGitStatus } = require('../repo/gitOps');
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { packageMetadata, packageRoot } from '../packageMetadata.js';
+import { resolveWorkspace, allWorkspaceAliases } from '../config.js';
+import { collectTextFiles, collectOptionsFromWorkspace, resolveSafePath } from '../safety.js';
+import { discoverCommands, staleCommandKeys as staleCommandKeyList } from '../commandDiscovery.js';
+import { summarizeOperations } from '../journal.js';
+import { resolvePolicy } from '../policyResolver.js';
+import { getVersion } from '../version.js';
+import { debugSwallow } from './session.js';
+import * as toolSchema from './schema.js';
+import { readProjectInstructions, summarizeProjectInstructions } from '../projectInstructions.js';
+import { workspaceGitStatus } from '../repo/gitOps.js';
 
 // Locale-aware sort of an object's keys so ordering remains explicit and stable.
 function sortedKeys(obj) {
@@ -49,7 +48,7 @@ async function relaiStatus(config, args = {}, context = {}) {
       selectedWorkspace = { alias: String(args.workspace), error: error instanceof Error ? error.message : String(error) };
     }
   }
-  const { TOOL_NAMES, getToolGroups, getToolSurfaceManifest } = toolSchema();
+  const { TOOL_NAMES, getToolGroups, getToolSurfaceManifest } = toolSchema;
   return {
     ok: true,
     version: getVersion(),
@@ -69,7 +68,7 @@ function ciScriptStatus(scripts) {
   // directory, so a cwd-based scan found no workflows and silently reported ok:true.
   // This keeps the CI scan on the same basis as safeReadPackageJson (the scripts it
   // is checked against).
-  const projectRoot = path.join(__dirname, "..");
+  const projectRoot = packageRoot;
   const workflowDir = path.join(projectRoot, ".github", "workflows");
   const missing = [];
   const files = [];
@@ -92,23 +91,7 @@ function collectWorkflowFiles(dir, out) {
 }
 
 function safeReadPackageJson() {
-  const path = require("node:path");
-  // Read this server's OWN package.json (stable relative to the module) first.
-  // process.cwd() is unreliable — when launched from the packaged launcher it is
-  // the launcher's directory, which yields version:"" and the wrong scripts.
-  const candidates = [
-    path.join(__dirname, "..", "package.json"),
-    path.join(process.cwd(), "package.json")
-  ];
-  for (const file of candidates) {
-    try {
-      return JSON.parse(fs.readFileSync(file, "utf8"));
-    } catch (error) {
-      // Missing/invalid candidate — fall through to the next path.
-      debugSwallow("read-package-json", error);
-    }
-  }
-  return {};
+  return packageMetadata;
 }
 
 function workspaceList(config) {
@@ -147,7 +130,7 @@ function workspaceInspect(config, args = {}) {
         skipped: tree.skipped,
         truncated: tree.truncated
       },
-      requiredFlow: toolSchema().TOOL_NAMES,
+      requiredFlow: toolSchema.TOOL_NAMES,
       operationJournal: summarizeOperations(config, { alias: profile.workspace, path: profile.root }, args.journalLimit || 10)
     };
   } catch (error) {
@@ -214,10 +197,4 @@ function workspaceProfile(config, args = {}) {
   };
 }
 
-module.exports = {
-  relaiStatus,
-  workspaceList,
-  workspaceInspect,
-  workspaceTree,
-  workspaceProfile
-};
+export { relaiStatus, workspaceList, workspaceInspect, workspaceTree, workspaceProfile };

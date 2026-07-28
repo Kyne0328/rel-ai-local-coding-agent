@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { createApprovalTokenManager } = require('../electron/approval-token.js');
+import { createApprovalTokenManager } from "../electron/approval-token.js";
 
 const currentConfig = {
   port: 3333,

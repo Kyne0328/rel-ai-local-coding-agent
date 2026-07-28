@@ -1,5 +1,5 @@
-const fs = require("node:fs");
-const path = require("node:path");
+import { packageMetadata, resolvePackagePath } from './packageMetadata.js';
+import * as fs from "node:fs";
 
 // Last-resort fallback if CHANGELOG.md cannot be read/parsed. Use the package
 // version so the dashboard never renders a bare "v" (the packaged launcher hit this
@@ -13,7 +13,7 @@ const FALLBACK = {
 
 function readPackageVersion() {
   try {
-    return require("../package.json").version || "";
+    return packageMetadata.version || "";
   } catch (error) {
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] package version:', error);
     return "";
@@ -134,7 +134,7 @@ function fallbackReleaseNotes() {
 
 function getReleaseNotes() {
   try {
-    const md = fs.readFileSync(path.join(__dirname, "..", "CHANGELOG.md"), "utf8");
+    const md = fs.readFileSync(resolvePackagePath('CHANGELOG.md'), "utf8");
     const parsed = parseChangelog(md);
     if (parsed?.version) return parsed;
   } catch (error) {
@@ -143,4 +143,4 @@ function getReleaseNotes() {
   return fallbackReleaseNotes();
 }
 
-module.exports = { getReleaseNotes };
+export { getReleaseNotes };

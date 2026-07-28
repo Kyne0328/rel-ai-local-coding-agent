@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { enhanceToolError } = require('../src/tools.js');
-const { serializeToolError } = require('../src/tools/errors.js');
+import { enhanceToolError } from "../src/tools.js";
+import { serializeToolError } from "../src/tools/errors.js";
 
 assert.ok(typeof enhanceToolError === 'function');
 assert.ok(typeof serializeToolError === 'function');

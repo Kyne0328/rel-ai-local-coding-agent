@@ -2,16 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const {
-  startManagedProcess,
-  readManagedProcess,
-  writeManagedProcess,
-  stopManagedProcess,
-  listManagedProcesses
-} = require('../src/processManager.js');
+import { startManagedProcess, readManagedProcess, writeManagedProcess, stopManagedProcess, listManagedProcesses } from "../src/processManager.js";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-process-manager-'));
 const stateDir = path.join(root, 'state');

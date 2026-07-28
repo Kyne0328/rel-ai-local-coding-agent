@@ -23,6 +23,7 @@ for (const file of [
   'electron/package.json',
   'electron/package-lock.json',
   'electron/renderer/status.html',
+  'src/packageMetadata.js',
   'src/version.js',
   'scripts/release-check.mjs',
   'scripts/release-bump.mjs',
@@ -81,7 +82,7 @@ assert.deepEqual(electronPackage.author, { name: 'Kyne', url: 'https://github.co
 assert.match(electronPackage.dependencies['electron-updater'], /^\^6\./);
 assert.match(rootPackage.scripts['electron:build'], /--publish never/);
 assert.match(rootPackage.scripts['electron:dist'], /--publish never/);
-assert.equal(rootPackage.scripts['verify:packaged'], 'node scripts/verify-packaged-app.mjs');
+assert.equal(rootPackage.scripts['verify:packaged'], 'npm run verify:color-tokens && node scripts/verify-packaged-app.mjs');
 assert.equal(rootPackage.scripts['test:connector-acceptance'], 'node scripts/packaged-connector-acceptance.mjs');
 assert.equal(rootPackage.scripts['test:installed'], undefined);
 assert.match(rootPackage.scripts['build:css'], /--minify/);

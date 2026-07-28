@@ -15,7 +15,7 @@ const docs = read('docs/USABILITY_ACCEPTANCE.md');
 
 assert.equal(rootPackage.scripts['test:installed'], undefined);
 assert.equal(rootPackage.scripts['release:evidence:check'], undefined);
-assert.equal(rootPackage.scripts['verify:packaged'], 'node scripts/verify-packaged-app.mjs');
+assert.equal(rootPackage.scripts['verify:packaged'], 'npm run verify:color-tokens && node scripts/verify-packaged-app.mjs');
 assert.equal(rootPackage.scripts['test:connector-acceptance'], 'node scripts/packaged-connector-acceptance.mjs');
 
 for (const removedPath of [

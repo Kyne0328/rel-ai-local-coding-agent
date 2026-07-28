@@ -1,4 +1,4 @@
-'use strict';
+
 
 function createApprovalTokenManager({
   readGuiConfig,
@@ -81,4 +81,4 @@ function messageOf(error) {
   return error instanceof Error ? error.message : String(error || 'Unknown error');
 }
 
-module.exports = { createApprovalTokenManager };
+export { createApprovalTokenManager };

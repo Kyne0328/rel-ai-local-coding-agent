@@ -3,19 +3,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const {
-  relaiGitCommit,
-  relaiGitPush,
-  relaiGitDraftPr,
-  relaiApplyPatch,
-  workspaceWrite,
-  relaiRestorePaths
-} = require('../src/localRepoBridge.js');
-const { workspaceGitStatus } = require('../src/repo/gitOps.js');
-const { writeSessionPolicy } = require('../src/policyResolver.js');
+import { relaiApplyPatch, relaiDiff, relaiGitCommit, relaiGitDraftPr, relaiGitPush, relaiRestorePaths, workspaceWrite } from '../src/localRepoBridge.js';
+import { workspaceGitStatus } from "../src/repo/gitOps.js";
+import { writeSessionPolicy } from "../src/policyResolver.js";
 
 const GIT_EXECUTABLE = process.platform === 'win32'
   ? String.raw`C:\Program Files\Git\cmd\git.exe`
@@ -165,7 +156,7 @@ const revertedReadme = fs.readFileSync(path.join(workspace.path, 'README.md'), '
 assert.equal(revertedReadme, '# Git smoke\n', 'README reverted');
 
 fs.writeFileSync(path.join(workspace.path, 'untracked-review.txt'), 'review this content\n');
-const untrackedReview = await require('../src/localRepoBridge.js').relaiDiff(workspace, config, { path: 'untracked-review.txt' });
+const untrackedReview = await relaiDiff(workspace, config, { path: 'untracked-review.txt' });
 assert.match(untrackedReview.diff, /new file mode/);
 assert.match(untrackedReview.diff, /\+review this content/);
 

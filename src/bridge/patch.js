@@ -1,15 +1,12 @@
-const fs = require("node:fs");
-const path = require("node:path");
-const { runProcess, summarizeCommand } = require("../process");
-const { resolveSafePath, writeTextFileSafe, fileSha256 } = require("../safety");
-const { appendOperation, makeOperationId } = require("../journal");
-const {
-  assertPatchUpdateSafe, ensureGitRepo, requireCleanGitIfConfigured,
-  shouldMakePatchBackup, makePatchBackup, inspectPatchPaths
-} = require("../repo/gitOps");
-const { clampNumber } = require("./limits");
-const { relaiVerify, hasRequestedChecks } = require("./validation");
-const { relaiDiff } = require("./review");
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { runProcess, summarizeCommand } from "../process.js";
+import { resolveSafePath, writeTextFileSafe, fileSha256 } from "../safety.js";
+import { appendOperation, makeOperationId } from "../journal.js";
+import { assertPatchUpdateSafe, ensureGitRepo, requireCleanGitIfConfigured, shouldMakePatchBackup, makePatchBackup, inspectPatchPaths } from "../repo/gitOps.js";
+import { clampNumber } from "./limits.js";
+import { relaiVerify, hasRequestedChecks } from "./validation.js";
+import { relaiDiff } from "./review.js";
 
 const DEFAULT_MAX_DIFF_BYTES = 1024 * 1024;
 
@@ -409,4 +406,4 @@ function diagnosePatchFailure(stderrText, patch, touchedPaths) {
   return { touchedPaths, diagnostics, raw: text.trim() };
 }
 
-module.exports = { relaiApplyPatch, normalizeOpenAIPatchFormat };
+export { relaiApplyPatch, normalizeOpenAIPatchFormat };

@@ -78,4 +78,4 @@ function serializeToolError(toolName, error) {
   };
 }
 
-module.exports = { enhanceToolError, serializeToolError };
+export { enhanceToolError, serializeToolError };

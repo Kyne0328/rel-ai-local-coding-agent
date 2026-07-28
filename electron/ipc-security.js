@@ -1,4 +1,4 @@
-'use strict';
+
 
 const MAX_CLIPBOARD_TEXT_BYTES = 64 * 1024;
 
@@ -33,4 +33,4 @@ function logIpcFailure(error) {
   if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] secured IPC action:', error);
 }
 
-module.exports = { MAX_CLIPBOARD_TEXT_BYTES, createWindowGuards, isAllowedNgrokUrl, logIpcFailure };
+export { MAX_CLIPBOARD_TEXT_BYTES, createWindowGuards, isAllowedNgrokUrl, logIpcFailure };

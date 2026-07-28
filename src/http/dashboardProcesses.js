@@ -1,8 +1,8 @@
-'use strict';
 
-const { readConfig } = require('../config');
-const { readJsonBody, sendJson } = require('./io');
-const { stopManagedProcess } = require('../processManager');
+
+import { readConfig } from "../config.js";
+import { readJsonBody, sendJson } from "./io.js";
+import { stopManagedProcess } from "../processManager.js";
 
 async function handleApiProcessStop(ctx) {
   try {
@@ -19,4 +19,4 @@ async function handleApiProcessStop(ctx) {
   }
 }
 
-module.exports = { handleApiProcessStop };
+export { handleApiProcessStop };

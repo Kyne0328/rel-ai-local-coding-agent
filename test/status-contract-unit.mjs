@@ -3,12 +3,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { relaiStatus } = require('../src/tools/status.js');
-const { relaiGitCommit } = require('../src/repo/gitOps.js');
-const { writeSessionPolicy } = require('../src/policyResolver.js');
+import { relaiStatus } from "../src/tools/status.js";
+import { relaiGitCommit } from "../src/repo/gitOps.js";
+import { writeSessionPolicy } from "../src/policyResolver.js";
 
 const gitExecutable = process.platform === 'win32'
   ? String.raw`C:\Program Files\Git\cmd\git.exe`

@@ -1,4 +1,4 @@
-'use strict';
+
 
 const DASHBOARD_WINDOW_STATE_VERSION = 2;
 const DASHBOARD_WINDOW_LIMITS = Object.freeze({
@@ -100,10 +100,4 @@ function finite(value, fallback) {
   return Number.isFinite(Number(value)) ? Number(value) : fallback;
 }
 
-module.exports = {
-  DASHBOARD_WINDOW_LIMITS,
-  DASHBOARD_WINDOW_STATE_VERSION,
-  dashboardWindowState,
-  defaultDashboardBounds,
-  restoreDashboardBounds
-};
+export { DASHBOARD_WINDOW_LIMITS, DASHBOARD_WINDOW_STATE_VERSION, dashboardWindowState, defaultDashboardBounds, restoreDashboardBounds };

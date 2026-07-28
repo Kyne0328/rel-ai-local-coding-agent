@@ -1,13 +1,13 @@
-'use strict';
 
-const crypto = require('node:crypto');
-const fs = require('node:fs');
-const path = require('node:path');
-const { collectTextFiles, collectOptionsFromWorkspace, resolveSafePath, isPathInside, realRootOf } = require('../safety');
-const { discoverCommands } = require('../commandDiscovery');
-const { detectVerifyChecks } = require('./checkDetection');
-const { clampNumber } = require('./limits');
-const { EXTENSION_LANGUAGE, MAX_LINE_CHARS, buildIndex, escapeRegExp, isTestPath } = require('./codeIndex');
+
+import * as crypto from "node:crypto";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { collectTextFiles, collectOptionsFromWorkspace, resolveSafePath, isPathInside, realRootOf } from "../safety.js";
+import { discoverCommands } from "../commandDiscovery.js";
+import { detectVerifyChecks } from "./checkDetection.js";
+import { clampNumber } from "./limits.js";
+import { EXTENSION_LANGUAGE, MAX_LINE_CHARS, buildIndex, escapeRegExp, isTestPath } from "./codeIndex.js";
 
 const CACHE = new Map();
 const DEFAULT_MAX_RESULTS = 200;
@@ -336,4 +336,4 @@ function simpleSymbol(symbol) {
   return String(symbol).split(/[.:#-]/).filter(Boolean).at(-1) || String(symbol);
 }
 
-module.exports = { relaiCodeInspect, isTestPath, loadIndex };
+export { relaiCodeInspect, isTestPath, loadIndex };

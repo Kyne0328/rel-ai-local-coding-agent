@@ -5,4 +5,4 @@ function resolveBudget(baseValue, policy, config) {
   return Math.floor(baseValue * multiplier);
 }
 
-module.exports = { resolveBudget };
+export { resolveBudget };

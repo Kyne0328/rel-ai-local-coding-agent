@@ -1,19 +1,9 @@
-'use strict';
 
-const { buildTaskHistory } = require('./taskHistory');
-const { DEFAULT_TASK_IDLE_MS } = require('./toolActivity');
-const { clamp, cleanTaskId, eventTime, isCurrentTaskEvent, operationForTool, unique } = require('./taskEvents');
-const {
-  MAX_SESSIONS,
-  clearTaskHistory,
-  ensureCurrentHistory,
-  getTaskHistoryDir,
-  listSessions,
-  pruneSessions,
-  readSession,
-  removeSession,
-  writeSession
-} = require('./taskHistoryStorage');
+
+import { buildTaskHistory } from "./taskHistory.js";
+import { DEFAULT_TASK_IDLE_MS } from "./toolActivity.js";
+import { clamp, cleanTaskId, eventTime, isCurrentTaskEvent, operationForTool, unique } from "./taskEvents.js";
+import { MAX_SESSIONS, clearTaskHistory, ensureCurrentHistory, getTaskHistoryDir, listSessions, pruneSessions, readSession, removeSession, writeSession } from "./taskHistoryStorage.js";
 
 const STORE_VERSION = 3;
 const MAX_SESSION_EVENTS = 200;
@@ -337,12 +327,4 @@ function isStoredSessionNoise(session, activeIds) {
   return Boolean(endedAt && Date.now() - endedAt > DEFAULT_TASK_IDLE_MS);
 }
 
-module.exports = {
-  bindTaskHistoryActivityPersistence,
-  clearTaskHistory,
-  getTaskHistoryDir,
-  readTaskHistory,
-  readTaskHistorySession,
-  recordTaskActivityEvent,
-  recordTaskHistoryEvent
-};
+export { bindTaskHistoryActivityPersistence, clearTaskHistory, getTaskHistoryDir, readTaskHistory, readTaskHistorySession, recordTaskActivityEvent, recordTaskHistoryEvent };

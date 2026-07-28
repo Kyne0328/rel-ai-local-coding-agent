@@ -1,13 +1,10 @@
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
 
 // Access the non-exported helper via re-require with internal eval trick: re-export via test require.
 // Easier: re-load module text and detect helper presence by reading the module source. Instead, we
 // invoke through relaiApplyPatch's exported path by simulating a converted patch on a fake patch
 // rather than calling git. Since normalizeOpenAIPatchFormat is internal, expose via test surface.
-const { normalizeOpenAIPatchFormat } = require('../src/localRepoBridge.js');
+import { normalizeOpenAIPatchFormat } from "../src/localRepoBridge.js";
 
 assert.ok(typeof normalizeOpenAIPatchFormat === 'function', 'normalizeOpenAIPatchFormat must be exported');
 

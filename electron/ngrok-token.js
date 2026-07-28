@@ -1,4 +1,4 @@
-'use strict';
+
 
 function normalizeNgrokAuthtoken(value) {
   const token = String(value || '').trim();
@@ -8,4 +8,4 @@ function normalizeNgrokAuthtoken(value) {
   return token;
 }
 
-module.exports = { normalizeNgrokAuthtoken };
+export { normalizeNgrokAuthtoken };

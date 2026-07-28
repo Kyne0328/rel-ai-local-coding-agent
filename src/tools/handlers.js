@@ -1,47 +1,23 @@
 // @ts-check
-'use strict';
 
-/** @typedef {import('../../types/boundaries').ToolHandler} ToolHandler */
 
-const { resolveWorkspace } = require('../config');
-const {
-  repoSnapshot,
-  relaiRead,
-  workspaceTidyPlan,
-  workspaceTidyRun,
-  relaiVerify,
-  relaiHttpProbe,
-  relaiUiCheck,
-  relaiDiff,
-  relaiRestorePaths,
-  relaiResetWorkspace,
-  relaiGitCommit,
-  relaiGitPush,
-  relaiGitDraftPr
-} = require('../localRepoBridge');
-const { planEdit } = require('../executionPlanner');
-const { relaiStatus } = require('./status');
-const { completeTask } = require('./completion');
-const { relaiSearch } = require('../bridge/search');
-const { relaiCodeInspect } = require('../bridge/codeIntelligence');
-const { relaiExec } = require('../bridge/exec');
-const { startTask } = require('./task');
-const {
-  startManagedProcess,
-  readManagedProcess,
-  writeManagedProcess,
-  stopManagedProcess,
-  listManagedProcesses
-} = require('../processManager');
-const {
-  createManagedWorktree,
-  listManagedWorktrees,
-  removeManagedWorktree
-} = require('../worktreeManager');
-const { relaiSemanticSearch } = require('../bridge/semanticSearch');
-const { relaiDiagnosticsRun } = require('../bridge/diagnosticsRunner');
-const { createValidationPlan } = require('../bridge/validationPlan');
-const { getDeferredOperation, cancelDeferredOperation } = require('./operationTaskHandlers');
+/** @typedef {import('../../types/boundaries.d.ts').ToolHandler} ToolHandler */
+
+import { resolveWorkspace } from "../config.js";
+import { repoSnapshot, relaiRead, workspaceTidyPlan, workspaceTidyRun, relaiVerify, relaiHttpProbe, relaiUiCheck, relaiDiff, relaiRestorePaths, relaiResetWorkspace, relaiGitCommit, relaiGitPush, relaiGitDraftPr } from "../localRepoBridge.js";
+import { planEdit } from "../executionPlanner.js";
+import { relaiStatus } from "./status.js";
+import { completeTask } from "./completion.js";
+import { relaiSearch } from "../bridge/search.js";
+import { relaiCodeInspect } from "../bridge/codeIntelligence.js";
+import { relaiExec } from "../bridge/exec.js";
+import { startTask } from "./task.js";
+import { startManagedProcess, readManagedProcess, writeManagedProcess, stopManagedProcess, listManagedProcesses } from "../processManager.js";
+import { createManagedWorktree, listManagedWorktrees, removeManagedWorktree } from "../worktreeManager.js";
+import { relaiSemanticSearch } from "../bridge/semanticSearch.js";
+import { relaiDiagnosticsRun } from "../bridge/diagnosticsRunner.js";
+import { createValidationPlan } from "../bridge/validationPlan.js";
+import { getDeferredOperation, cancelDeferredOperation } from "./operationTaskHandlers.js";
 
 /** @type {ToolHandler} */
 const statusHandler = (config, args, context) => relaiStatus(config, args, context);
@@ -115,4 +91,4 @@ function mapCheckArgs(args = {}) {
 /**
  * @param {string} handlerName
  */
-module.exports = { HANDLERS };
+export { HANDLERS };

@@ -1,13 +1,11 @@
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const require = createRequire(import.meta.url);
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-oauth-proto-'));
 process.env.REL_AI_MCP_STATE_DIR = stateDir;
-const oauth = require('../src/oauthProvider.js');
+import * as oauth from "../src/oauthProvider.js";
 const issuer = 'https://relai.example.test';
 const poisonKeys = ['constructor', '__proto__', 'toString', 'valueOf', 'hasOwnProperty', 'isPrototypeOf', 'propertyIsEnumerable', 'toLocaleString'];
 

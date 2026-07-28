@@ -1,14 +1,14 @@
-'use strict';
+
 
 // OAuth 2.1 authorization server for the MCP 2026-07-28 hard-cutover release.
 // Client registrations, authorization codes, access tokens, and refresh tokens are
 // bound to one canonical issuer. An issuer change intentionally invalidates prior
 // registrations so the client performs Dynamic Client Registration again.
 
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const crypto = require('node:crypto');
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import * as crypto from "node:crypto";
 
 const ACCESS_TOKEN_TTL_MS = 60 * 60 * 1000;
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -545,24 +545,4 @@ function verifyLogin(submittedToken, serverToken) {
   return timingSafeEqual(submittedToken, serverToken);
 }
 
-module.exports = {
-  protectedResourceMetadata,
-  authorizationServerMetadata,
-  wwwAuthenticateHeader,
-  registerClient,
-  validateAuthorizationRequest,
-  issueAuthorizationCode,
-  buildRedirectUrl,
-  exchangeToken,
-  validateAccessToken,
-  renderLoginPage,
-  verifyLogin,
-  authorizationStatus,
-  revokeAuthorizations,
-  canonicalIssuer,
-  resourceForIssuer,
-  normalizeScope,
-  SCOPE,
-  OFFLINE_SCOPE,
-  SUPPORTED_SCOPES
-};
+export { protectedResourceMetadata, authorizationServerMetadata, wwwAuthenticateHeader, registerClient, validateAuthorizationRequest, issueAuthorizationCode, buildRedirectUrl, exchangeToken, validateAccessToken, renderLoginPage, verifyLogin, authorizationStatus, revokeAuthorizations, canonicalIssuer, resourceForIssuer, normalizeScope, SCOPE, OFFLINE_SCOPE, SUPPORTED_SCOPES };

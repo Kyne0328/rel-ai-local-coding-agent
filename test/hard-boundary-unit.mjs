@@ -2,10 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { resolveSafePath, validateRelativePath, isSecretPath, SECRET_PATH_PATTERNS } = require('../src/safety.js');
+import { resolveSafePath, validateRelativePath, isSecretPath, SECRET_PATH_PATTERNS } from "../src/safety.js";
 
 const ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-hard-boundary-'));
 

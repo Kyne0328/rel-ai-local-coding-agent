@@ -3,10 +3,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { buildWorkspaceStates, resolveGitExecutable } = require('../src/workspaceState.js');
+import { buildWorkspaceStates, resolveGitExecutable } from "../src/workspaceState.js";
 
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-workspace-state-'));
 const repo = path.join(sandbox, 'repo');

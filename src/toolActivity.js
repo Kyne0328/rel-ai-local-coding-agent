@@ -1,16 +1,8 @@
-'use strict';
 
-const crypto = require('node:crypto');
-const { AsyncLocalStorage } = require('node:async_hooks');
-const {
-  buildToolActivityDetails,
-  completeProgress,
-  createActivityEvent,
-  deriveTaskTitle,
-  normalizeTaskProgress,
-  sanitizeActivityMetadata,
-  sanitizeDisplayText
-} = require('./taskObservability');
+
+import * as crypto from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { buildToolActivityDetails, completeProgress, createActivityEvent, deriveTaskTitle, normalizeTaskProgress, sanitizeActivityMetadata, sanitizeDisplayText } from "./taskObservability.js";
 
 const DEFAULT_TASK_IDLE_MS = 5 * 60_000;
 const activityContext = new AsyncLocalStorage();
@@ -717,14 +709,18 @@ function resolveIdleMs(value) {
 }
 
 const defaultTracker = createToolActivityTracker();
+const beginConnectorToolCall = defaultTracker.beginConnectorToolCall;
+const onToolActivity = defaultTracker.onToolActivity;
+const getToolActivity = defaultTracker.getToolActivity;
+const resetToolActivity = defaultTracker.reset;
 
-module.exports = {
+export {
   DEFAULT_TASK_IDLE_MS,
   createToolActivityTracker,
-  beginConnectorToolCall: defaultTracker.beginConnectorToolCall,
-  onToolActivity: defaultTracker.onToolActivity,
-  getToolActivity: defaultTracker.getToolActivity,
-  resetToolActivity: defaultTracker.reset,
+  beginConnectorToolCall,
+  onToolActivity,
+  getToolActivity,
+  resetToolActivity,
   runWithToolActivity,
   updateCurrentToolActivity,
   requestCurrentTaskCompletion,

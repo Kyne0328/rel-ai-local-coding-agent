@@ -173,4 +173,4 @@ function compactForConnector(name, value, args = {}) {
   }
 }
 
-module.exports = { compactForConnector, policySentence };
+export { compactForConnector, policySentence };

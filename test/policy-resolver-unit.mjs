@@ -2,10 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { resolvePolicy, writeSessionPolicy, clearSessionPolicy, readSessionPolicy } = require('../src/policyResolver.js');
+import { resolvePolicy, writeSessionPolicy, clearSessionPolicy, readSessionPolicy } from "../src/policyResolver.js";
 
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-policy-'));
 const config = { stateDir };

@@ -1,15 +1,10 @@
-const fs = require('node:fs');
-const path = require('node:path');
-const { normalizeNgrokAuthtoken } = require('./ngrok-token');
+import { importResourceModule, resolveResourcePath } from './resource-path.js';
+import { normalizeNgrokAuthtoken } from './ngrok-token.js';
+
+const connection = await importResourceModule('src/connectionProfile.js');
 
 function resolveSrcPath() {
-  const packagedSrc = process.resourcesPath ? path.join(process.resourcesPath, 'src') : '';
-  if (packagedSrc && fs.existsSync(path.join(packagedSrc, 'connectionProfile.js'))) return packagedSrc;
-  return path.join(__dirname, '..', 'src');
-}
-
-function connectionModule() {
-  return require(path.join(resolveSrcPath(), 'connectionProfile'));
+  return resolveResourcePath('src');
 }
 
 function normalizePort(value, fallback = 3333) {
@@ -75,7 +70,6 @@ function buildMcpUrl(publicBaseUrl) {
 }
 
 function hasExistingConfig() {
-  const connection = connectionModule();
   const profile = connection.readConnectionProfile();
   const env = connection.readLaunchEnv();
   try {
@@ -89,7 +83,6 @@ function hasExistingConfig() {
 }
 
 function readGuiConfig() {
-  const connection = connectionModule();
   const profile = connection.readConnectionProfile();
   const env = connection.readLaunchEnv();
   let ngrokDomain = env.REL_AI_MCP_NGROK_DOMAIN || profile.ngrokDomain || '';
@@ -107,13 +100,4 @@ function readGuiConfig() {
   };
 }
 
-module.exports = {
-  resolveSrcPath,
-  normalizePort,
-  normalizeNgrokDomain,
-  normalizeNgrokAuthtoken,
-  buildTunnelCommand,
-  buildMcpUrl,
-  hasExistingConfig,
-  readGuiConfig
-};
+export { resolveSrcPath, normalizePort, normalizeNgrokDomain, normalizeNgrokAuthtoken, buildTunnelCommand, buildMcpUrl, hasExistingConfig, readGuiConfig };

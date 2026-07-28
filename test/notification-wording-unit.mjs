@@ -1,13 +1,6 @@
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const {
-  buildCompletionNotification,
-  buildFailureNotification,
-  cleanNotificationText,
-  truncateNotificationText
-} = require('../electron/tool-sleep-blocker.js');
+import { buildCompletionNotification, buildFailureNotification, cleanNotificationText, truncateNotificationText } from "../electron/tool-sleep-blocker.js";
 
 assert.equal(cleanNotificationText('  line one\n  line two  '), 'line one line two');
 assert.equal(truncateNotificationText('abcdef', 4), 'abc…');

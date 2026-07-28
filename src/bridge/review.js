@@ -1,10 +1,10 @@
-const { runProcess } = require('../process');
-const fs = require('node:fs');
-const { resolveSafePath, looksBinary, isSecretPath } = require('../safety');
-const { classifyStatusOwnership } = require('../repo/gitOps');
-const { INTERNAL_STATUS_MAX_BYTES, gitStatusArgs, formatGitStatus } = require('../repo/gitStatus');
-const { clampNumber } = require('./limits');
-const { buildSensitiveReview } = require('./sensitiveReview');
+import { runProcess } from "../process.js";
+import * as fs from "node:fs";
+import { resolveSafePath, looksBinary, isSecretPath } from "../safety.js";
+import { classifyStatusOwnership } from "../repo/gitOps.js";
+import { INTERNAL_STATUS_MAX_BYTES, gitStatusArgs, formatGitStatus } from "../repo/gitStatus.js";
+import { clampNumber } from "./limits.js";
+import { buildSensitiveReview } from "./sensitiveReview.js";
 
 const DEFAULT_MAX_DIFF_BYTES = 1024 * 1024;
 
@@ -107,4 +107,4 @@ function buildUntrackedDiff(workspace, paths) {
   return sections.join('');
 }
 
-module.exports = { relaiDiff };
+export { relaiDiff };

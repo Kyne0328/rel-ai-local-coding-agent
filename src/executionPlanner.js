@@ -1,31 +1,13 @@
-'use strict';
 
-const fs = require('node:fs');
-const path = require('node:path');
 
-const {
-  workspaceReplace,
-  workspaceWrite,
-  relaiApplyPatch,
-  relaiVerify,
-  relaiDiff,
-  writeStagedPayload,
-  readStagedPayload,
-  clearStagedPayload,
-  resolveStagedWriteId,
-  STAGED_WRITE_BYTE_THRESHOLD,
-  STAGED_WRITE_LINE_THRESHOLD
-} = require('./localRepoBridge');
-const { makeOperationId, appendOperation } = require('./journal');
-const { resolveSafePath } = require('./safety');
-const { runEnvOperation } = require('./envOperations');
-const {
-  MAX_BATCH_EDITS,
-  MAX_BATCH_REPLACEMENTS,
-  MAX_BATCH_INPUT_BYTES,
-  MAX_BATCH_SNAPSHOT_BYTES,
-  BATCH_RESULT_COMPACT_THRESHOLD
-} = require('./editLimits');
+import * as fs from "node:fs";
+import * as path from "node:path";
+
+import { workspaceReplace, workspaceWrite, relaiApplyPatch, relaiVerify, relaiDiff, writeStagedPayload, readStagedPayload, clearStagedPayload, resolveStagedWriteId, STAGED_WRITE_BYTE_THRESHOLD, STAGED_WRITE_LINE_THRESHOLD } from "./localRepoBridge.js";
+import { makeOperationId, appendOperation } from "./journal.js";
+import { resolveSafePath } from "./safety.js";
+import { runEnvOperation } from "./envOperations.js";
+import { MAX_BATCH_EDITS, MAX_BATCH_REPLACEMENTS, MAX_BATCH_INPUT_BYTES, MAX_BATCH_SNAPSHOT_BYTES, BATCH_RESULT_COMPACT_THRESHOLD } from "./editLimits.js";
 
 const STAGED_CHUNK_BYTES = 12000;
 
@@ -465,4 +447,4 @@ async function planEdit(workspace, config, args) {
   return _handleSingleEdit(workspace, config, args);
 }
 
-module.exports = { planEdit };
+export { planEdit };

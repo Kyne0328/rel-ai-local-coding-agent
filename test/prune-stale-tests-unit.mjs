@@ -2,9 +2,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
 
 // Isolate config writes to a temp config file before requiring config-backed modules.
 // Setting only REL_AI_MCP_STATE_DIR is not enough: getConfigPath() otherwise still
@@ -17,8 +14,8 @@ const configPath = path.join(stateDir, 'config.json');
 process.env.REL_AI_MCP_STATE_DIR = stateDir;
 process.env.REL_AI_MCP_CONFIG = configPath;
 
-const { updateWorkspace } = require('../src/configEditor.js');
-const { readConfig } = require('../src/config.js');
+import { updateWorkspace } from "../src/configEditor.js";
+import { readConfig } from "../src/config.js";
 
 // Workspace with a package.json exposing only `test` and `build` scripts.
 const wsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-prune-ws-'));

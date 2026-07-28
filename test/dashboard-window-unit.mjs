@@ -2,15 +2,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { createDashboardWindowManager, validateConnection, normalizeRouteHash } = require('../electron/dashboard-window.js');
-const {
-  DASHBOARD_WINDOW_STATE_VERSION,
-  defaultDashboardBounds,
-  restoreDashboardBounds
-} = require('../electron/dashboard-window-bounds.js');
+import { createDashboardWindowManager, validateConnection, normalizeRouteHash } from "../electron/dashboard-window.js";
+import { DASHBOARD_WINDOW_STATE_VERSION, defaultDashboardBounds, restoreDashboardBounds } from "../electron/dashboard-window-bounds.js";
 
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-dashboard-window-'));
 const folderToOpen = path.join(sandbox, 'repo');
@@ -117,7 +111,9 @@ try {
   assert.equal(win.options.titleBarStyle, 'hidden');
   assert.equal(win.options.webPreferences.nodeIntegration, false);
   assert.equal(win.options.webPreferences.contextIsolation, true);
-  assert.ok(win.options.webPreferences.preload.endsWith('dashboard-preload.js'));
+  assert.ok(win.options.webPreferences.preload.endsWith('preload.cjs'));
+  assert.deepEqual(win.options.webPreferences.additionalArguments, ['--relai-preload-surface=dashboard']);
+  assert.equal(win.options.backgroundColor, '#1f2937');
   assert.equal(win.options.webPreferences.sandbox, true);
   assert.equal(win.options.webPreferences.backgroundThrottling, false);
   assert.equal(win.options.webPreferences.partition, 'relai-dashboard');
@@ -143,10 +139,10 @@ try {
   assert.equal(await manager.pickFolder(), folderToOpen);
   assert.equal(await manager.openFolder(folderToOpen), path.resolve(folderToOpen));
   assert.deepEqual(openedPaths, [path.resolve(folderToOpen)]);
-  const reused = await manager.open('#settings/desktop');
+  const reused = await manager.open('#settings/connection');
   assert.equal(reused, win);
   assert.equal(windows.length, 1);
-  assert.equal(win.webContents.url.endsWith('#settings/desktop'), true);
+  assert.equal(win.webContents.url.endsWith('#settings/connection'), true);
   assert.deepEqual(manager.getState(), {
     platform: 'win32', customTitleBar: true, controls: 'custom',
     maximized: false, minimized: false, fullScreen: false
@@ -192,8 +188,8 @@ try {
   );
 
   assert.equal(validateConnection({ url: 'http://localhost:3333/dashboard' }).pathname, '/dashboard');
-  assert.equal(normalizeRouteHash('settings/desktop'), '#settings/desktop');
-  assert.throws(() => normalizeRouteHash('settings/desktop?token=secret'), /Invalid dashboard route/);
+  assert.equal(normalizeRouteHash('settings/connection'), '#settings/connection');
+  assert.throws(() => normalizeRouteHash('settings/connection?token=secret'), /Invalid dashboard route/);
   assert.throws(() => validateConnection({ url: 'https://example.com/dashboard' }), /local loopback/);
   assert.throws(() => validateConnection({ url: 'http://127.0.0.1:3333/health' }), /local loopback/);
 } finally {

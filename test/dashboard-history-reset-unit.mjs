@@ -1,10 +1,9 @@
+import { startHttpServer } from "../src/httpServer.js";
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-history-reset-'));
 const stateDir = path.join(temp, 'state');
 const configPath = path.join(temp, 'config.json');
@@ -24,7 +23,7 @@ try {
   process.env.REL_AI_MCP_CONFIG = configPath;
   process.env.REL_AI_MCP_STATE_DIR = stateDir;
 
-  const { startHttpServer } = require('../src/httpServer.js');
+  
   server = startHttpServer({
     host: '127.0.0.1',
     port: 0,

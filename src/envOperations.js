@@ -1,10 +1,10 @@
-'use strict';
 
-const fs = require('node:fs');
-const path = require('node:path');
-const crypto = require('node:crypto');
-const { resolveSafePath } = require('./safety');
-const { appendOperation, makeOperationId } = require('./journal');
+
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as crypto from "node:crypto";
+import { resolveSafePath } from "./safety.js";
+import { appendOperation, makeOperationId } from "./journal.js";
 
 const ENV_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -175,4 +175,4 @@ function atomicWrite(absolutePath, content) {
   }
 }
 
-module.exports = { runEnvOperation, parseEnv };
+export { runEnvOperation, parseEnv };

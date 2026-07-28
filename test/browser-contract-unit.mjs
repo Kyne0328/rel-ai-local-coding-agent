@@ -4,10 +4,8 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { once } from 'node:events';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { relaiHttpProbe, relaiUiCheck } = require('../src/bridge/browser.js');
+import { relaiHttpProbe, relaiUiCheck } from "../src/bridge/browser.js";
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-browser-contract-'));
 const workspaceRoot = path.join(temp, 'repo');

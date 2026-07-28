@@ -1,17 +1,11 @@
+import { callTool } from "../src/tools.js";
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const {
-  createToolActivityTracker,
-  getToolActivity,
-  onToolActivity,
-  resetToolActivity
-} = require('../src/toolActivity.js');
-const { createToolSleepBlocker, createTaskActivityRuntime } = require('../electron/tool-sleep-blocker.js');
+import { createToolActivityTracker, getToolActivity, onToolActivity, resetToolActivity } from "../src/toolActivity.js";
+import { createToolSleepBlocker, createTaskActivityRuntime } from "../electron/tool-sleep-blocker.js";
 
 let nowValue = 1000;
 let timerId = 0;
@@ -231,7 +225,7 @@ fs.writeFileSync(process.env.REL_AI_MCP_CONFIG, JSON.stringify({
 
 try {
   resetToolActivity();
-  const { callTool } = require('../src/tools.js');
+  
   const callEvents = [];
   const stopListening = onToolActivity(event => callEvents.push(event));
 

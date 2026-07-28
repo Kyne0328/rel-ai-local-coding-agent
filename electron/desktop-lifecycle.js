@@ -1,8 +1,8 @@
-'use strict';
 
-const fs = require('node:fs');
-const path = require('node:path');
-const crypto = require('node:crypto');
+
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as crypto from "node:crypto";
 
 function createDesktopLifecycleManager(options = {}) {
   const {
@@ -201,4 +201,4 @@ function cleanText(value, limit) {
   return `${text.slice(0, Math.max(0, limit - 1)).trimEnd()}…`;
 }
 
-module.exports = { createDesktopLifecycleManager, detectStartupSupport };
+export { createDesktopLifecycleManager, detectStartupSupport };

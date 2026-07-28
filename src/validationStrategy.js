@@ -1,4 +1,4 @@
-const { execSync } = require('node:child_process');
+import { execSync } from "node:child_process";
 
 const VALID_LEVELS = new Set(['minimal', 'focused', 'broad', 'extended']);
 
@@ -114,4 +114,4 @@ function selectValidationLevel(workspacePath, workspaceConfig, overrideLevel) {
   return { level, reason, changedFiles };
 }
 
-module.exports = { selectValidationLevel, classifyFiles };
+export { selectValidationLevel, classifyFiles };

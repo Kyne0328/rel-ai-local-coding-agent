@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { classifySensitivePath, isSecretPath } = require('../src/safety.js');
+import { classifySensitivePath, isSecretPath } from "../src/safety.js";
 
 assert.deepEqual(classifySensitivePath('known_hosts'), {
   sensitive: false,

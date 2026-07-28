@@ -1,13 +1,13 @@
-'use strict';
 
-const crypto = require('node:crypto');
-const fs = require('node:fs');
-const path = require('node:path');
-const { spawn } = require('node:child_process');
-const { getStateDir } = require('./audit');
-const { resolveCommandCwd, normalizeCommandEnv, resolveShell, redactCommandForAudit } = require('./bridge/exec');
-const { killProcessTree } = require('./process');
-const { runSpan, addSpanEvent } = require('./telemetry');
+
+import * as crypto from "node:crypto";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { spawn } from "node:child_process";
+import { getStateDir } from './statePaths.js';
+import { resolveCommandCwd, normalizeCommandEnv, resolveShell, redactCommandForAudit } from "./bridge/exec.js";
+import { killProcessTree } from "./process.js";
+import { runSpan, addSpanEvent } from "./telemetry.js";
 
 const processes = new Map();
 const RECENT_RETENTION_MS = 24 * 60 * 60 * 1000;
@@ -308,13 +308,4 @@ function clampNumber(value, min, max, fallback) {
   return Math.min(max, Math.max(min, Math.floor(number)));
 }
 
-module.exports = {
-  startManagedProcess,
-  readManagedProcess,
-  writeManagedProcess,
-  stopManagedProcess,
-  listManagedProcesses,
-  activeProcessesForWorkspace,
-  stopAllManagedProcesses,
-  pruneManagedProcesses
-};
+export { startManagedProcess, readManagedProcess, writeManagedProcess, stopManagedProcess, listManagedProcesses, activeProcessesForWorkspace, stopAllManagedProcesses, pruneManagedProcesses };

@@ -1,11 +1,11 @@
-'use strict';
 
-const { serveStdio } = require('@modelcontextprotocol/server/stdio');
-const { createRelaiMcpServer, SERVER_INSTANCE_ID } = require('./mcpServer');
-const { readConfig } = require('./config');
-const { initializeTelemetry, shutdownTelemetry } = require('./telemetry');
-const { stopAllManagedProcesses, pruneManagedProcesses } = require('./processManager');
-const { pruneOperationTasks } = require('./operationTasks');
+
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
+import { createRelaiMcpServer, SERVER_INSTANCE_ID } from "./mcpServer.js";
+import { readConfig } from "./config.js";
+import { initializeTelemetry, shutdownTelemetry } from "./telemetry.js";
+import { stopAllManagedProcesses, pruneManagedProcesses } from "./processManager.js";
+import { pruneOperationTasks } from "./operationTasks.js";
 
 function main() {
   const config = readConfig();
@@ -29,4 +29,4 @@ function main() {
   );
 }
 
-module.exports = { main, SERVER_INSTANCE_ID };
+export { main, SERVER_INSTANCE_ID };

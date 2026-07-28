@@ -1,12 +1,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createRequire } from 'node:module';
+import { listPackage } from '@electron/asar';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const require = createRequire(import.meta.url);
-const { listPackage } = require('@electron/asar');
 const args = process.argv.slice(2);
 const dirIndex = args.indexOf('--dir');
 const requestedDirectory = dirIndex >= 0 ? args[dirIndex + 1] : '';
@@ -45,7 +43,7 @@ for (const relativePath of requiredFiles) {
 
 const asarPath = path.join(packageDirectory, 'resources', 'app.asar');
 const asarEntries = new Set(listPackage(asarPath).map(entry => entry.replaceAll('\\', '/').replace(/^\//, '')));
-for (const relativePath of ['renderer/app.css', 'renderer/color-tokens.css', 'renderer/status.html', 'renderer/wizard.html']) {
+for (const relativePath of ['preload.cjs', 'startup-background.js', 'renderer/app.css', 'renderer/color-tokens.css', 'renderer/status.html', 'renderer/wizard.html']) {
   assert.ok(asarEntries.has(relativePath), `Packaged ASAR is missing: ${relativePath}`);
 }
 

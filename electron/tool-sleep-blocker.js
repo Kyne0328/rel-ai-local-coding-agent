@@ -1,4 +1,4 @@
-'use strict';
+
 
 const NOTIFICATION_BODY_LIMIT = 260;
 const NOTIFICATION_SUMMARY_LIMIT = 150;
@@ -166,11 +166,4 @@ function createTaskActivityRuntime(options) {
   };
 }
 
-module.exports = {
-  buildCompletionNotification,
-  buildFailureNotification,
-  cleanNotificationText,
-  createToolSleepBlocker,
-  createTaskActivityRuntime,
-  truncateNotificationText
-};
+export { buildCompletionNotification, buildFailureNotification, cleanNotificationText, createToolSleepBlocker, createTaskActivityRuntime, truncateNotificationText };

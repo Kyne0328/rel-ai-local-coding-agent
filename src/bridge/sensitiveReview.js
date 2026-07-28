@@ -1,10 +1,10 @@
-'use strict';
 
-const fs = require('node:fs');
-const crypto = require('node:crypto');
-const { resolveSafePath } = require('../safety');
-const { parseEnv } = require('../envOperations');
-const { runProcess } = require('../process');
+
+import * as fs from "node:fs";
+import * as crypto from "node:crypto";
+import { resolveSafePath } from "../safety.js";
+import { parseEnv } from "../envOperations.js";
+import { runProcess } from "../process.js";
 
 async function buildSensitiveReview(workspace, config, paths, ownership, staged) {
   const entries = [];
@@ -76,4 +76,4 @@ function isDotEnvPath(relativePath) {
   return leaf === '.env' || leaf.startsWith('.env.') || leaf.startsWith('.env-');
 }
 
-module.exports = { buildSensitiveReview };
+export { buildSensitiveReview };

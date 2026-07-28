@@ -1,9 +1,12 @@
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { spawn } = require('node:child_process');
-const { killProcess } = require('../src/processKill');
-const { normalizeNgrokAuthtoken } = require('./ngrok-token');
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { spawn } from 'node:child_process';
+
+const electronRoot = path.dirname(fileURLToPath(import.meta.url));
+import { killProcess } from "../src/processKill.js";
+import { normalizeNgrokAuthtoken } from "./ngrok-token.js";
 
 const UPDATE_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 const URL_RE = /https:\/\/[^\s"'<>]+/i;
@@ -38,8 +41,8 @@ function bundledNgrokPath() {
   const fileName = platform === 'win32' ? 'ngrok.exe' : 'ngrok';
   const candidates = [
     process.resourcesPath ? path.join(process.resourcesPath, 'bin', 'ngrok', platform, fileName) : '',
-    path.join(__dirname, 'bin', 'ngrok', platform, fileName),
-    path.join(__dirname, '..', 'vendor', 'ngrok', platform, fileName),
+    path.join(electronRoot, 'bin', 'ngrok', platform, fileName),
+    path.join(electronRoot, '..', 'vendor', 'ngrok', platform, fileName),
     path.join(process.cwd(), 'vendor', 'ngrok', platform, fileName)
   ].filter(Boolean);
 
@@ -259,17 +262,4 @@ function previewManagedNgrokCommand(domain, port) {
   return `managed ngrok http --url=https://${safeDomain} http://127.0.0.1:${safePort} --config ${ngrokConfigPath()} --log=stdout`;
 }
 
-module.exports = {
-  UPDATE_INTERVAL_MS,
-  bundledNgrokPath,
-  managedNgrokPath,
-  ngrokConfigPath,
-  normalizeNgrokAuthtoken,
-  ensureManagedNgrok,
-  writeNgrokConfig,
-  maybeUpdateManagedNgrok,
-  prepareManagedNgrok,
-  startManagedNgrokTunnel,
-  previewManagedNgrokCommand,
-  extractPublicUrl
-};
+export { UPDATE_INTERVAL_MS, bundledNgrokPath, managedNgrokPath, ngrokConfigPath, normalizeNgrokAuthtoken, ensureManagedNgrok, writeNgrokConfig, maybeUpdateManagedNgrok, prepareManagedNgrok, startManagedNgrokTunnel, previewManagedNgrokCommand, extractPublicUrl };

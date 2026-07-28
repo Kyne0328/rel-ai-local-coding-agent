@@ -1,5 +1,5 @@
-const { runProcess, summarizeCommand } = require("../process");
-const { resolveSafePath } = require("../safety");
+import { runProcess, summarizeCommand } from "../process.js";
+import { resolveSafePath } from "../safety.js";
 
 // resolveSafePath validates these as filesystem paths, but git reads them as
 // pathspecs: "*" or "." after `--` matches the whole worktree, so a single-file
@@ -70,4 +70,4 @@ async function relaiResetWorkspace(workspace, config, args = {}) {
   };
 }
 
-module.exports = { relaiResetWorkspace, relaiRestorePaths };
+export { relaiResetWorkspace, relaiRestorePaths };

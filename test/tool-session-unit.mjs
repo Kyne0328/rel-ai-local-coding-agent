@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { buildExtraAudit } = require('../src/tools/session.js');
+import { buildExtraAudit } from "../src/tools/session.js";
 
 assert.deepEqual(
   buildExtraAudit('relai_edit', { plannerPath: 'replace', plannerReason: 'exact text supplied' }, { path: 'src/example.js' }),

@@ -1,10 +1,14 @@
-'use strict';
 
-const fs = require('node:fs');
-const path = require('node:path');
-const { URL } = require('node:url');
-const { DASHBOARD_WINDOW_LIMITS, dashboardWindowState, restoreDashboardBounds } = require('./dashboard-window-bounds');
-const { createDashboardWindowChromeController, dashboardWindowChrome } = require('./window-chrome');
+
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { fileURLToPath, URL } from 'node:url';
+import { DASHBOARD_WINDOW_LIMITS, dashboardWindowState, restoreDashboardBounds } from './dashboard-window-bounds.js';
+import { localWindowWebPreferences } from './window-security.js';
+import { STARTUP_BACKGROUND_COLOR } from './startup-background.js';
+
+const dashboardPreloadPath = fileURLToPath(new URL('./preload.cjs', import.meta.url));
+import { createDashboardWindowChromeController, dashboardWindowChrome } from "./window-chrome.js";
 
 function createDashboardWindowManager(deps) {
   const {
@@ -48,16 +52,10 @@ function createDashboardWindowManager(deps) {
       show: false,
       autoHideMenuBar: true,
       title: 'Rel.AI MCP Dashboard',
+      backgroundColor: STARTUP_BACKGROUND_COLOR,
       webPreferences: {
-        preload: path.join(__dirname, 'dashboard-preload.js'),
-        nodeIntegration: false,
-        contextIsolation: true,
-        sandbox: true,
-        webSecurity: true,
-        allowRunningInsecureContent: false,
-        backgroundThrottling: false,
-        spellcheck: false,
-        partition: 'relai-dashboard'
+        ...localWindowWebPreferences(dashboardPreloadPath, 'relai-dashboard', 'dashboard'),
+        backgroundThrottling: false
       }
     });
     secureSession(dashboardWindow.webContents.session);
@@ -213,4 +211,4 @@ function safeOrigin(value) {
   return safeUrl(value)?.origin || '';
 }
 
-module.exports = { createDashboardWindowManager, validateConnection, normalizeRouteHash };
+export { createDashboardWindowManager, validateConnection, normalizeRouteHash };

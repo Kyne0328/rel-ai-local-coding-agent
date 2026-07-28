@@ -1,12 +1,13 @@
-const fs = require("node:fs");
-const path = require("node:path");
-const { runProcess } = require("../process");
-const { resolveSafePath, fileSha256 } = require("../safety");
-const { getStateDir } = require("../audit");
-const { appendOperation, makeOperationId } = require("../journal");
-const { classifyStatusOwnership } = require("../repo/gitOps");
-const { INTERNAL_STATUS_MAX_BYTES, gitStatusArgs } = require("../repo/gitStatus");
-const { clampNumber } = require("./limits");
+import { randomBytes } from 'node:crypto';
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { runProcess } from "../process.js";
+import { resolveSafePath, fileSha256 } from "../safety.js";
+import { getStateDir } from '../statePaths.js';
+import { appendOperation, makeOperationId } from "../journal.js";
+import { classifyStatusOwnership } from "../repo/gitOps.js";
+import { INTERNAL_STATUS_MAX_BYTES, gitStatusArgs } from "../repo/gitStatus.js";
+import { clampNumber } from "./limits.js";
 
 const TIDY_PLAN_TTL_MS = 15 * 60 * 1000;
 const TIDY_PLAN_ID_PATTERN = /^tidy_[a-z0-9]+_[a-f0-9]{12}$/;
@@ -48,7 +49,7 @@ function tidyPlanPath(config, workspace, planId) {
 }
 
 function makeTidyPlanId() {
-  return `tidy_${Date.now().toString(36)}_${require("node:crypto").randomBytes(6).toString("hex")}`;
+  return `tidy_${Date.now().toString(36)}_${randomBytes(6).toString("hex")}`;
 }
 
 function normalizeTidyMode(raw) {
@@ -223,7 +224,4 @@ function preflightTidyCandidates(candidates, workspace, currentUntracked) {
   return { preflight, refused };
 }
 
-module.exports = {
-  workspaceTidyPlan,
-  workspaceTidyRun: relaiWorkspaceTidyRun
-};
+export { workspaceTidyPlan, relaiWorkspaceTidyRun as workspaceTidyRun };

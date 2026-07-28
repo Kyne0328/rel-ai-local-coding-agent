@@ -3,10 +3,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { createValidationPlan, readValidationPlan } = require('../src/bridge/validationPlan.js');
+import { createValidationPlan, readValidationPlan } from "../src/bridge/validationPlan.js";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-validation-plan-'));
 const stateDir = path.join(root, 'state');

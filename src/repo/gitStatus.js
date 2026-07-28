@@ -1,4 +1,4 @@
-'use strict';
+
 
 const INTERNAL_STATUS_MAX_BYTES = 8 * 1024 * 1024;
 
@@ -119,11 +119,4 @@ function statusMapFromOutput(output) {
   return map;
 }
 
-module.exports = {
-  INTERNAL_STATUS_MAX_BYTES,
-  gitStatusArgs,
-  parseGitStatus,
-  parseStatusBranchLine,
-  formatGitStatus,
-  statusMapFromOutput
-};
+export { INTERNAL_STATUS_MAX_BYTES, gitStatusArgs, parseGitStatus, parseStatusBranchLine, formatGitStatus, statusMapFromOutput };

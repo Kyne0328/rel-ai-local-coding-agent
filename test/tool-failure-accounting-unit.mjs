@@ -1,10 +1,12 @@
+import { callTool } from "../src/tools.js";
+import { getToolActivity, resetToolActivity } from "../src/toolActivity.js";
+import { readAudit } from "../src/audit.js";
+import { readConfig } from "../src/config.js";
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-tool-failure-'));
 const workspace = path.join(temp, 'workspace');
 const configPath = path.join(temp, 'config.json');
@@ -21,10 +23,10 @@ fs.writeFileSync(configPath, JSON.stringify({
 process.env.REL_AI_MCP_CONFIG = configPath;
 
 try {
-  const { callTool } = require('../src/tools.js');
-  const { getToolActivity, resetToolActivity } = require('../src/toolActivity.js');
-  const { readAudit } = require('../src/audit.js');
-  const { readConfig } = require('../src/config.js');
+  
+  
+  
+  
   resetToolActivity();
   const context = { publicHttpOnly: true };
   const task = await callTool('relai_start_task', { workspace: 'app' }, context);

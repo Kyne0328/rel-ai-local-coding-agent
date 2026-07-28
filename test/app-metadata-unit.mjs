@@ -1,12 +1,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const require = createRequire(import.meta.url);
-const { getApplicationMetadata } = require('../src/appMetadata.js');
+import { getApplicationMetadata } from "../src/appMetadata.js";
 const rootPackage = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const electronPackage = JSON.parse(fs.readFileSync(path.join(root, 'electron', 'package.json'), 'utf8'));
 const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8');

@@ -3,15 +3,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const {
-  createManagedWorktree,
-  listManagedWorktrees,
-  removeManagedWorktree,
-  resolveManagedWorktree
-} = require('../src/worktreeManager.js');
+import { createManagedWorktree, listManagedWorktrees, removeManagedWorktree, resolveManagedWorktree } from "../src/worktreeManager.js";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-worktree-'));
 const repository = path.join(root, 'repository');

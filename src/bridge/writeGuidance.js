@@ -1,6 +1,6 @@
-'use strict';
 
-const path = require('node:path');
+
+import * as path from "node:path";
 
 const DEFAULT_STAGED_CHUNK_BYTES = 12000;
 const STAGED_WRITE_BYTE_THRESHOLD = 8000;
@@ -152,10 +152,4 @@ function countLines(text) {
   return String(text).split(/\r?\n/).length;
 }
 
-module.exports = {
-  STAGED_WRITE_BYTE_THRESHOLD,
-  STAGED_WRITE_LINE_THRESHOLD,
-  workspaceWriteGuidance,
-  analyzeFileShape,
-  fileWriteGuidance
-};
+export { STAGED_WRITE_BYTE_THRESHOLD, STAGED_WRITE_LINE_THRESHOLD, workspaceWriteGuidance, analyzeFileShape, fileWriteGuidance };

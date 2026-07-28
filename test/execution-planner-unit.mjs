@@ -3,16 +3,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { planEdit } = require('../src/executionPlanner.js');
-const {
-  MAX_BATCH_EDITS,
-  MAX_BATCH_REPLACEMENTS,
-  MAX_BATCH_INPUT_BYTES,
-  MAX_BATCH_SNAPSHOT_BYTES
-} = require('../src/editLimits.js');
+import { planEdit } from "../src/executionPlanner.js";
+import { MAX_BATCH_EDITS, MAX_BATCH_REPLACEMENTS, MAX_BATCH_INPUT_BYTES, MAX_BATCH_SNAPSHOT_BYTES } from "../src/editLimits.js";
 
 assert.equal(MAX_BATCH_EDITS, 100);
 assert.equal(MAX_BATCH_REPLACEMENTS, 500);
