@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const require = createRequire(import.meta.url);
+const { listPackage } = require('@electron/asar');
 const args = process.argv.slice(2);
 const dirIndex = args.indexOf('--dir');
 const requestedDirectory = dirIndex >= 0 ? args[dirIndex + 1] : '';
@@ -16,6 +19,7 @@ const requiredFiles = [
   'Rel.AI MCP.exe',
   'resources/app.asar',
   'resources/src/httpServer.js',
+  'resources/public/oauth.css',
   'resources/src/tools/registry.js',
   'resources/src/config.js',
   'resources/src/mcpServer.js',
@@ -37,6 +41,12 @@ for (const relativePath of requiredFiles) {
   assert.ok(fs.existsSync(file), `Packaged application is missing: ${relativePath}`);
   assert.ok(fs.statSync(file).isFile(), `Packaged application entry is not a file: ${relativePath}`);
   assert.ok(fs.statSync(file).size > 0, `Packaged application file is empty: ${relativePath}`);
+}
+
+const asarPath = path.join(packageDirectory, 'resources', 'app.asar');
+const asarEntries = new Set(listPackage(asarPath).map(entry => entry.replaceAll('\\', '/').replace(/^\//, '')));
+for (const relativePath of ['renderer/app.css', 'renderer/color-tokens.css', 'renderer/status.html', 'renderer/wizard.html']) {
+  assert.ok(asarEntries.has(relativePath), `Packaged ASAR is missing: ${relativePath}`);
 }
 
 const rootPackage = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));

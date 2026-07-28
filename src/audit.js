@@ -7,7 +7,7 @@ function defaultStateDir() {
 }
 
 function getStateDir(config = {}) {
-  return config.stateDir || process.env.REL_AI_MCP_STATE_DIR || defaultStateDir();
+  return process.env.REL_AI_MCP_STATE_DIR || config.stateDir || defaultStateDir();
 }
 
 function getAuditPath(config = {}) {

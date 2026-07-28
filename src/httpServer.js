@@ -31,6 +31,7 @@ const {
 } = require("./http/dashboard");
 const { handleApiHistoryReset } = require("./http/dashboardHistory");
 const { handleApiDiagnostics, handleApiDiagnosticsReset } = require("./http/dashboardDiagnostics");
+const { handleApiProcessStop } = require('./http/dashboardProcesses');
 const {
   handleOauthProtectedResource,
   handleOauthMetadata,
@@ -40,8 +41,14 @@ const {
   handleToken,
   handleMcpGetDiagnostic,
   handleMcpStreamable,
-  getMcpAccess
-} = require("./http/mcp");
+  getMcpAccess,
+  oauthWellKnownPaths
+} = require('./http/mcp');
+const { resolveBaseUrl } = require('./http/auth');
+const { initializeTelemetry, shutdownTelemetry } = require('./telemetry');
+const { stopAllManagedProcesses, pruneManagedProcesses } = require('./processManager');
+const { pruneOperationTasks } = require('./operationTasks');
+const { readConfig } = require('./config');
 
 const DEFAULT_MAX_BODY_BYTES = 10 * 1024 * 1024;
 
@@ -69,6 +76,12 @@ function startHttpServer(options = {}) {
   const getRuntimeLogs = typeof options.getRuntimeLogs === "function" ? options.getRuntimeLogs : null;
   const clearRuntimeLogs = typeof options.clearRuntimeLogs === "function" ? options.clearRuntimeLogs : null;
 
+  require('./config').ensureConfig();
+  const runtimeConfig = readConfig();
+  initializeTelemetry(runtimeConfig);
+  pruneManagedProcesses(runtimeConfig);
+  pruneOperationTasks(runtimeConfig);
+
   if (!token && !allowNoAuth) {
     throw new Error("REL_AI_MCP_TOKEN is required for the HTTP server. Set a strong token, or set REL_AI_MCP_ALLOW_NO_AUTH=1 for local-only testing.");
   }
@@ -81,6 +94,11 @@ function startHttpServer(options = {}) {
       const code = error?.errorCode || errorCodeForRequest(req);
       sendJson(res, status, errorPayload(code, error instanceof Error ? error.message : String(error)));
     }
+  });
+
+  server.on('close', () => {
+    void stopAllManagedProcesses(runtimeConfig).catch(() => {});
+    void shutdownTelemetry().catch(() => {});
   });
 
   server.on("clientError", (_error, socket) => {
@@ -145,7 +163,7 @@ const NOT_FOUND_PAYLOAD = {
     healthMonitorApi: "GET /api/health-monitor", readinessApi: "GET /api/readiness",
     workspacePreflightApi: "GET /api/workspace/preflight?workspace=...", events: "GET /events",
     streamableHttp: "POST /mcp (Authentication: OAuth, or Bearer token)",
-    oauthDiscovery: "GET /.well-known/oauth-protected-resource"
+    oauthDiscovery: 'GET /.well-known/oauth-protected-resource/mcp'
   }
 };
 
@@ -189,8 +207,9 @@ async function tryPrefixGet(ctx) {
 }
 
 async function tryOAuthOrMcpGet(ctx) {
-  if (ctx.p === "/.well-known/oauth-protected-resource") { await handleOauthProtectedResource(ctx); return true; }
-  if (ctx.p === "/.well-known/oauth-authorization-server" || ctx.p === "/.well-known/openid-configuration") { await handleOauthMetadata(ctx); return true; }
+  const wellKnown = oauthWellKnownPaths(resolveBaseUrl(ctx.options));
+  if (ctx.p === wellKnown.protectedResource) { await handleOauthProtectedResource(ctx); return true; }
+  if (ctx.p === wellKnown.authorizationServer || ctx.p === wellKnown.openidConfiguration) { await handleOauthMetadata(ctx); return true; }
   if (ctx.p === "/authorize") { await handleAuthorizeGet(ctx); return true; }
   if (ctx.mcpAccess.kind === "streamable-http") { await handleMcpGetDiagnostic(ctx); return true; }
   return false;
@@ -245,7 +264,8 @@ const POST_ROUTES = {
   "/api/diagnostics/reset": { auth: authDashboard, handler: handleApiDiagnosticsReset },
   "/api/pick-folder": { auth: authDashboard, handler: handlePickFolder },
   "/api/open-folder": { auth: authDashboard, handler: handleOpenFolder },
-  "/api/workspace/checks": { auth: authDashboard, handler: handleWorkspaceChecks }
+  "/api/workspace/checks": { auth: authDashboard, handler: handleWorkspaceChecks },
+  "/api/processes/stop": { auth: authDashboard, handler: handleApiProcessStop }
 };
 
 function errorCodeForRequest(req) {

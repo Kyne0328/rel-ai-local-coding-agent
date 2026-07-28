@@ -10,7 +10,21 @@ const css = read('src/ui/styles/app.css');
 const activity = read('src/ui/features/activity/index.js');
 
 const tableWrapRule = css.match(/\.table-wrap\s*\{([^}]*)\}/)?.[1] || '';
+const routeRootRule = css.match(/\.route-root\s*\{([^}]*)\}/)?.[1] || '';
+const activityPageRule = css.match(/\.activity-page\s*\{([^}]*)\}/)?.[1] || '';
+const activityCardRule = css.match(/\.activity-event-card\s*\{([^}]*)\}/)?.[1] || '';
+const activityCardBodyRule = css.match(/\.activity-event-card \.card-body\s*\{([^}]*)\}/)?.[1] || '';
+const activityTableWrapRule = css.match(/\.activity-event-card \.table-wrap\s*\{([^}]*)\}/)?.[1] || '';
+
 assert.match(activity, /class="table-wrap"/, 'Activity must render its event log inside the shared table wrapper');
+assert.match(css, /\.main\s*\{[^}]*@apply flex min-w-0 w-full flex-col/, 'the main dashboard column must expose remaining height to route content');
+assert.match(routeRootRule, /@apply flex min-w-0 flex-col/, 'route content must use a vertical flex layout');
+assert.match(routeRootRule, /flex:\s*1 0 auto/, 'route content must claim unused dashboard height without shrinking long pages');
+assert.match(activityPageRule, /flex:\s*1 0 auto/, 'Activity must fill the available route height');
+assert.match(activityCardRule, /@apply flex min-w-0 flex-col/, 'the event log card must lay out its header and body vertically');
+assert.match(activityCardRule, /flex:\s*1 0 auto/, 'the event log card must claim remaining Activity height');
+assert.match(activityCardBodyRule, /flex:\s*1 0 auto/, 'the event log body must fill the card');
+assert.match(activityTableWrapRule, /flex:\s*1 0 auto/, 'the event log table wrapper must fill the body');
 assert.match(tableWrapRule, /overscroll-behavior-x:\s*contain/, 'horizontal table overscroll should remain contained');
 assert.match(tableWrapRule, /overscroll-behavior-y:\s*auto/, 'vertical wheel and touch scrolling must chain to the Activity page');
 assert.doesNotMatch(tableWrapRule, /overscroll-behavior:\s*contain/, 'the table wrapper must not trap vertical page scrolling');

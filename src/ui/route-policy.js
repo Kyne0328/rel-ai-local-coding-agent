@@ -2,6 +2,7 @@ const CANONICAL_PATHS = new Set([
   'home',
   'tasks',
   'workspaces',
+  'processes',
   'activity',
   'tools',
   'settings',
@@ -28,6 +29,7 @@ const ALLOWED_PARAMS = {
   home: new Set(['workspace']),
   tasks: new Set(['workspace']),
   workspaces: new Set(['workspace', 'focus']),
+  processes: new Set(['workspace']),
   activity: new Set(['workspace', 'search', 'time', 'tool', 'status', 'task', 'event']),
   'settings/diagnostics': new Set(['workspace'])
 };

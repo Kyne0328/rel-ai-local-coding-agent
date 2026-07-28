@@ -437,22 +437,7 @@ async function relaiGitCommit(workspace, config, args = {}) {
 
 function normalizeSensitiveAuthorization(workspace, args = {}) {
   const raw = args.sensitiveAuthorization;
-  const explicitPaths = Array.isArray(args.paths) ? args.paths.map(normalizeGitPath).filter(Boolean) : [];
-  if (raw == null) {
-    if (args.allowSecretPaths === true && explicitPaths.length > 0) {
-      const sensitivePaths = explicitPaths.filter((item) => isSecretPath(item));
-      return {
-        authorizedPaths: new Set(sensitivePaths),
-        metadata: sensitivePaths.length > 0 ? {
-          operation: "commit",
-          paths: sensitivePaths,
-          reasonProvided: false,
-          source: "legacy-explicit-path-compatibility"
-        } : null
-      };
-    }
-    return { authorizedPaths: new Set(), metadata: null };
-  }
+  if (raw == null) return { authorizedPaths: new Set(), metadata: null };
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     throw new Error("sensitiveAuthorization must be an object with operation, paths, and reason.");
   }

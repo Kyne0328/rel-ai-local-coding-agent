@@ -45,20 +45,20 @@ fs.writeFileSync(configPath, JSON.stringify({
 }, null, 2));
 
 try {
-  client = startMcpClient({ root: repoRoot, configPath, timeoutMs: 40000 });
-  let requestId = 0;
-
-  client.send(++requestId, 'initialize', {
-    protocolVersion: '2025-06-18',
-    capabilities: {},
+  client = startMcpClient({
+    root: repoRoot,
+    configPath,
+    timeoutMs: 40000,
     clientInfo: { name: 'deterministic-sdk-client', version: '2.0.0' }
   });
-  const initialization = await client.waitFor(requestId);
-  assert.equal(initialization.result.capabilities.experimental.relai.taskIdentityVersion, 2);
-  assert.match(initialization.result.instructions, /relai_start_task exactly once/);
-  assert.match(initialization.result.instructions, /configured workspace alias \(appA, appB\)/);
-  assert.match(initialization.result.instructions, /never treat an MCP transport session.*as the task identity/);
-  client.notify('notifications/initialized');
+  let requestId = 0;
+
+  client.discover(++requestId);
+  const discovery = await client.waitFor(requestId);
+  assert.equal(discovery.result.capabilities.experimental.relai.taskIdentityVersion, 2);
+  assert.match(discovery.result.instructions, /relai_start_task exactly once/);
+  assert.match(discovery.result.instructions, /configured workspace alias \(appA, appB\)/);
+  assert.match(discovery.result.instructions, /never treat an MCP transport session.*as the task identity/);
 
   async function rpc(name, args, { allowError = false } = {}) {
     const id = ++requestId;
@@ -73,7 +73,7 @@ try {
 
   client.send(++requestId, 'tools/list', {});
   const listedTools = await client.waitFor(requestId);
-  assert.equal(listedTools.result.tools.length, 20);
+  assert.equal(listedTools.result.tools.length, 33);
   const listedStartTask = listedTools.result.tools.find(tool => tool.name === 'relai_start_task');
   assert.match(listedStartTask.inputSchema.properties.workspace.description, /Aliases: appA, appB/);
 

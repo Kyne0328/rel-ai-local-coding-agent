@@ -2,12 +2,13 @@
 'use strict';
 
 /** @typedef {import('../../types/boundaries').ToolDefinition} ToolDefinition */
-/** @typedef {Omit<ToolDefinition, 'annotations' | 'connectorStrip' | 'groups' | 'behavior' | 'dashboard'> & { annotations?: Partial<ToolDefinition['annotations']>, connectorStrip?: string[], groups?: import('../../types/boundaries').ToolGroup[], behavior?: Partial<ToolDefinition['behavior']>, dashboard?: Partial<ToolDefinition['dashboard']> }} ToolDefinitionInput */
+/** @typedef {Omit<ToolDefinition, 'annotations' | 'connectorStrip' | 'groups' | 'behavior' | 'dashboard' | 'outputSchema'> & { annotations?: Partial<ToolDefinition['annotations']>, connectorStrip?: string[], groups?: import('../../types/boundaries').ToolGroup[], behavior?: Partial<ToolDefinition['behavior']>, dashboard?: Partial<ToolDefinition['dashboard']>, outputSchema?: import('../../types/boundaries').JsonSchema }} ToolDefinitionInput */
 
 const { MAX_BATCH_EDITS } = require('../editLimits');
 const { HANDLERS } = require('./handlers');
+const { outputSchemaFor } = require('./outputSchemas');
 
-const TOOL_SURFACE_VERSION = 12;
+const TOOL_SURFACE_VERSION = 22;
 
 /** @type {ToolDefinitionInput[]} */
 const TOOL_DEFINITION_VALUES = [
@@ -15,7 +16,7 @@ const TOOL_DEFINITION_VALUES = [
     name: "relai_start_task",
     title: "Start Logical Task",
     description: "Create an independent logical Rel.AI task and return an opaque task_id. Call this once for each unrelated ChatGPT task, then pass the returned task_id to every subsequent task-scoped tool call. The identity does not depend on ChatGPT conversation metadata or transport sessions.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"}},"required":["workspace"],"additionalProperties":false},
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"title":{"type":"string","minLength":1,"maxLength":100},"objective":{"type":"string","minLength":1,"maxLength":500}},"required":["workspace"],"additionalProperties":false},
     handler: HANDLERS.startTask,
 
     dashboard: {"category":"Workflow"}
@@ -47,7 +48,7 @@ const TOOL_DEFINITION_VALUES = [
     name: "relai_code_inspect",
     title: "Code Intelligence",
     description: "Read-only. Build a fingerprint-invalidated live code index and inspect recognized symbols, references and calls, structurally related files, reverse-import impact, affected tests, and available language-diagnostic commands. This is bounded lexical and import-graph analysis, not an embedding service or compiler language server.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"action":{"type":"string","enum":["symbol","references","related","impact","diagnostics"]},"symbol":{"type":"string","minLength":1,"maxLength":256},"query":{"type":"string","minLength":1,"maxLength":1000},"paths":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":100},"maxResults":{"type":"number","minimum":1,"maximum":1000},"maxDepth":{"type":"number","minimum":1,"maximum":8},"maxFiles":{"type":"number","minimum":1,"maximum":20000}},"required":["workspace","action"],"additionalProperties":false},
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"action":{"type":"string","enum":["symbol","references","related","impact","trace","diagnostics"]},"symbol":{"type":"string","minLength":1,"maxLength":256},"query":{"type":"string","minLength":1,"maxLength":1000},"paths":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":100},"maxResults":{"type":"number","minimum":1,"maximum":1000},"maxDepth":{"type":"number","minimum":1,"maximum":8},"maxFiles":{"type":"number","minimum":1,"maximum":20000}},"required":["workspace","action"],"additionalProperties":false},
     handler: HANDLERS.codeInspect,
     groups: ["audit"],
   },
@@ -55,9 +56,114 @@ const TOOL_DEFINITION_VALUES = [
     name: "relai_exec",
     title: "Run Workspace Command",
     description: "Run a one-shot development command inside a configured workspace and return exit status, bounded stdout and stderr, timing, and detected file changes. cwd is workspace-relative. A successful result does not replace final relai_run_checks validation.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"command":{"type":"string","minLength":1,"maxLength":20000},"cwd":{"type":"string"},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000},"env":{"type":"object","additionalProperties":{"type":"string"}},"maxOutputBytes":{"type":"number","minimum":1000,"maximum":16777216}},"required":["workspace","command"],"additionalProperties":false},
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"command":{"type":"string","minLength":1,"maxLength":20000},"cwd":{"type":"string"},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000},"env":{"type":"object","additionalProperties":{"type":"string"}},"maxOutputBytes":{"type":"number","minimum":1000,"maximum":16777216},"defer":{"type":"boolean"}},"required":["workspace","command"],"additionalProperties":false},
     handler: HANDLERS.exec,
+    behavior: {"audit":"exec","cache":"workspace","longRunning":true},
+  },
+  {
+    name: "relai_process_start",
+    title: "Start Managed Process",
+    description: "Start a persistent development process with stable identity, bounded persistent logs, interactive stdin, and workspace/task attribution.",
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"command":{"type":"string","minLength":1,"maxLength":20000},"cwd":{"type":"string"},"env":{"type":"object","additionalProperties":{"type":"string"}},"label":{"type":"string","maxLength":120},"startupWaitMs":{"type":"number","minimum":0,"maximum":30000},"maxLogBytes":{"type":"number","minimum":65536,"maximum":268435456}},"required":["workspace","command"],"additionalProperties":false},
+    handler: HANDLERS.processStart,
     behavior: {"audit":"exec","cache":"workspace"},
+  },
+  {
+    name: "relai_process_read",
+    title: "Read Managed Process",
+    description: "Read process state and new stdout/stderr ranges using independent byte cursors.",
+    inputSchema: {"type":"object","properties":{"processId":{"type":"string","minLength":1,"maxLength":200},"stdoutOffset":{"type":"number","minimum":0},"stderrOffset":{"type":"number","minimum":0},"maxBytes":{"type":"number","minimum":1000,"maximum":1048576}},"required":["processId"],"additionalProperties":false},
+    handler: HANDLERS.processRead,
+  },
+  {
+    name: "relai_process_write",
+    title: "Write Managed Process Input",
+    description: "Write bounded UTF-8 input to a running managed process stdin.",
+    inputSchema: {"type":"object","properties":{"processId":{"type":"string","minLength":1,"maxLength":200},"input":{"type":"string","maxLength":1048576}},"required":["processId","input"],"additionalProperties":false},
+    handler: HANDLERS.processWrite,
+    behavior: {"audit":"exec"},
+  },
+  {
+    name: "relai_process_stop",
+    title: "Stop Managed Process",
+    description: "Stop a managed process and its process tree, then return final state and recent output.",
+    inputSchema: {"type":"object","properties":{"processId":{"type":"string","minLength":1,"maxLength":200},"graceMs":{"type":"number","minimum":0,"maximum":30000}},"required":["processId"],"additionalProperties":false},
+    handler: HANDLERS.processStop,
+    behavior: {"audit":"exec"},
+  },
+  {
+    name: "relai_process_list",
+    title: "List Managed Processes",
+    description: "List active and recently exited managed processes, optionally filtered by workspace or status.",
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"status":{"type":"string","enum":["starting","running","stopping","exited","failed","stopped","orphaned"]},"limit":{"type":"number","minimum":1,"maximum":500}},"required":[],"additionalProperties":false},
+    handler: HANDLERS.processList,
+  },
+  {
+    name: "relai_worktree_create",
+    title: "Create Managed Worktree",
+    description: "Create a Git worktree and branch under Rel.AI-managed storage and register its dynamic workspace alias.",
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"name":{"type":"string","minLength":1,"maxLength":80},"base":{"type":"string","maxLength":200},"branch":{"type":"string","maxLength":200}},"required":["workspace","name"],"additionalProperties":false},
+    handler: HANDLERS.worktreeCreate,
+    groups: ["git"],
+    behavior: {"audit":"exec","cache":"workspace"},
+  },
+  {
+    name: "relai_worktree_list",
+    title: "List Managed Worktrees",
+    description: "List managed worktrees with branch, availability, and dirty-state information.",
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"}},"required":[],"additionalProperties":false},
+    handler: HANDLERS.worktreeList,
+    groups: ["git","audit"],
+  },
+  {
+    name: "relai_worktree_remove",
+    title: "Remove Managed Worktree",
+    description: "Remove one managed worktree. Dirty worktrees and active managed processes are refused unless separately resolved; the branch is preserved.",
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"alias":{"type":"string","minLength":1,"maxLength":180},"force":{"type":"boolean"}},"required":["workspace","alias"],"additionalProperties":false},
+    handler: HANDLERS.worktreeRemove,
+    groups: ["git","cleanup"],
+    behavior: {"audit":"exec","cache":"workspace"},
+    dashboard: {"requiresApproval":true}
+  },
+  {
+    name: "relai_semantic_search",
+    title: "Hybrid Semantic Search",
+    description: "Read-only. Rank local source files with private hashed-vector, lexical, path, and symbol signals. No source text leaves the machine.",
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"query":{"type":"string","minLength":1,"maxLength":2000},"maxResults":{"type":"number","minimum":1,"maximum":100},"maxFiles":{"type":"number","minimum":1,"maximum":20000},"pathPrefix":{"type":"string","maxLength":500},"language":{"type":"string","maxLength":80}},"required":["workspace","query"],"additionalProperties":false},
+    handler: HANDLERS.semanticSearch,
+  },
+  {
+    name: "relai_diagnostics_run",
+    title: "Run Structured Diagnostics",
+    description: "Run detected or explicit language diagnostics and normalize file, line, column, severity, code, message, and source.",
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"command":{"type":"string","maxLength":20000},"commands":{"type":"array","items":{"type":"string"},"maxItems":50},"level":{"type":"string","enum":["quick","standard","release"]},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000},"maxResults":{"type":"number","minimum":1,"maximum":5000},"stopOnFailure":{"type":"boolean"},"defer":{"type":"boolean"}},"required":["workspace"],"additionalProperties":false},
+    handler: HANDLERS.diagnosticsRun,
+    behavior: {"audit":"checks","summary":"checks","longRunning":true},
+  },
+  {
+    name: "relai_validation_plan",
+    title: "Plan Change-Aware Validation",
+    description: "Read-only. Build a short-lived hash-bound validation plan from current changes, import impact, affected tests, and repository checks.",
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"release":{"type":"boolean"}},"required":["workspace"],"additionalProperties":false},
+    handler: HANDLERS.validationPlan,
+    groups: ["audit"],
+  },
+  {
+    name: "relai_operation_task_get",
+    title: "Get Deferred Operation",
+    description: "Read-only. Return the current status, progress, result, or error for one durable Rel.AI deferred operation owned by the same logical task.",
+    inputSchema: {"type":"object","properties":{"operationTaskId":{"type":"string","minLength":1,"maxLength":200}},"required":["operationTaskId"],"additionalProperties":false},
+    handler: HANDLERS.operationTaskGet,
+    dashboard: {"category":"Workflow"}
+  },
+  {
+    name: "relai_operation_task_cancel",
+    title: "Cancel Deferred Operation",
+    description: "Cancel one active durable Rel.AI deferred operation owned by the same logical task. Cooperative commands receive an abort signal and terminate their process tree.",
+    inputSchema: {"type":"object","properties":{"operationTaskId":{"type":"string","minLength":1,"maxLength":200}},"required":["operationTaskId"],"additionalProperties":false},
+    handler: HANDLERS.operationTaskCancel,
+    behavior: {"audit":"exec"},
+    dashboard: {"category":"Workflow"}
   },
   {
     name: "relai_tidy_plan",
@@ -79,9 +185,9 @@ const TOOL_DEFINITION_VALUES = [
     name: "relai_run_checks",
     title: "Workspace Checks",
     description: "Run workspace validation checks (tests, linters, analyzers, build). Use level quick, standard, or release. Output is bounded to each step's tail where failures appear; pass fullOutput:true for a larger tail. On the final validation, pass complete:true with summary to explicitly validate and close the task atomically. Otherwise use relai_complete_task after any final read-only review.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"level":{"type":"string","enum":["quick","standard","release"]},"check":{"type":"string"},"checks":{"type":"array","items":{"type":"string"},"minItems":0},"checksText":{"type":"string"},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000},"stopOnFailure":{"type":"boolean"},"fullOutput":{"type":"boolean"},"complete":{"type":"boolean"},"summary":{"type":"string","minLength":1,"maxLength":2000}},"required":["workspace"],"additionalProperties":false},
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"level":{"type":"string","enum":["quick","standard","release"]},"check":{"type":"string"},"checks":{"type":"array","items":{"type":"string"},"minItems":0},"checksText":{"type":"string"},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000},"stopOnFailure":{"type":"boolean"},"fullOutput":{"type":"boolean"},"planId":{"type":"string","minLength":1,"maxLength":100},"planLevel":{"type":"string","enum":["focused","quick","standard","release"]},"defer":{"type":"boolean"},"complete":{"type":"boolean"},"summary":{"type":"string","minLength":1,"maxLength":2000}},"required":["workspace"],"additionalProperties":false},
     handler: HANDLERS.runChecks,
-    behavior: {"audit":"checks","summary":"checks"},
+    behavior: {"audit":"checks","summary":"checks","longRunning":true},
   },
   {
     name: "relai_http_probe",
@@ -136,8 +242,8 @@ const TOOL_DEFINITION_VALUES = [
   {
     name: "relai_git_commit",
     title: "Record Commit",
-    description: "Record a commit with an explicit message and optional path scoping. Sensitive paths require sensitiveAuthorization:{ operation:'commit', paths:[...], reason:'...' }; every staged sensitive path must be listed. The legacy allowSecretPaths flag is accepted only with explicit paths during migration.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"message":{"type":"string"},"dryRun":{"type":"boolean"},"addAll":{"type":"boolean"},"allowSecretPaths":{"type":"boolean"},"sensitiveAuthorization":{"type":"object","properties":{"operation":{"type":"string","enum":["commit"]},"paths":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":200},"reason":{"type":"string","minLength":1,"maxLength":500}},"required":["operation","paths","reason"],"additionalProperties":false},"paths":{"type":"array","items":{"type":"string"},"minItems":0,"maxItems":200},"maxBytes":{"type":"number","minimum":1000,"maximum":5242880},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000}},"required":["workspace","message"],"additionalProperties":false},
+    description: "Record a commit with an explicit message and optional path scoping. Sensitive paths require sensitiveAuthorization:{ operation:'commit', paths:[...], reason:'...' }; every staged sensitive path must be listed.",
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"message":{"type":"string"},"dryRun":{"type":"boolean"},"addAll":{"type":"boolean"},"sensitiveAuthorization":{"type":"object","properties":{"operation":{"type":"string","enum":["commit"]},"paths":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":200},"reason":{"type":"string","minLength":1,"maxLength":500}},"required":["operation","paths","reason"],"additionalProperties":false},"paths":{"type":"array","items":{"type":"string"},"minItems":0,"maxItems":200},"maxBytes":{"type":"number","minimum":1000,"maximum":5242880},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000}},"required":["workspace","message"],"additionalProperties":false},
     handler: HANDLERS.gitCommit,
     groups: ["git"],
   },
@@ -176,13 +282,16 @@ const TOOL_DEFINITION_VALUES = [
   },
 ];
 const READ_ONLY_TOOLS = new Set([
-  'relai_repo_snapshot', 'relai_read', 'relai_search', 'relai_code_inspect', 'relai_http_probe', 'relai_diff', 'relai_status',
-  'relai_git_draft_pr'
+  'relai_repo_snapshot', 'relai_read', 'relai_search', 'relai_code_inspect', 'relai_semantic_search',
+  'relai_process_read', 'relai_process_list', 'relai_worktree_list', 'relai_validation_plan', 'relai_operation_task_get',
+  'relai_http_probe', 'relai_diff', 'relai_status', 'relai_git_draft_pr'
 ]);
 const DESTRUCTIVE_TOOLS = new Set([
-  'relai_exec', 'relai_tidy_run', 'relai_restore_paths', 'relai_reset_workspace', 'relai_edit'
+  'relai_exec', 'relai_process_start', 'relai_process_write', 'relai_process_stop',
+  'relai_worktree_create', 'relai_worktree_remove', 'relai_diagnostics_run', 'relai_operation_task_cancel',
+  'relai_tidy_run', 'relai_restore_paths', 'relai_reset_workspace', 'relai_edit'
 ]);
-const OPEN_WORLD_TOOLS = new Set(['relai_exec', 'relai_git_push']);
+const OPEN_WORLD_TOOLS = new Set(['relai_exec', 'relai_process_start', 'relai_diagnostics_run', 'relai_git_push']);
 
 function annotationsFor(name) {
   const readOnly = READ_ONLY_TOOLS.has(name);
@@ -195,7 +304,7 @@ function annotationsFor(name) {
 }
 
 const DEFAULT_BEHAVIOR = Object.freeze({
-  audit: '', cache: '', startsSession: false, deferStagedSession: false, sessionWrite: false, summary: ''
+  audit: '', cache: '', startsSession: false, deferStagedSession: false, sessionWrite: false, summary: '', longRunning: false
 });
 const DEFAULT_DASHBOARD = Object.freeze({
   category: 'Workspace tools', requiredProfile: 'workspace', requiresApproval: false
@@ -208,6 +317,7 @@ function defineTool(definition) {
     connectorStrip: [...(definition.connectorStrip || [])],
     groups: [...(definition.groups || [])],
     annotations: Object.freeze(annotationsFor(definition.name)),
+    outputSchema: Object.freeze(definition.outputSchema || outputSchemaFor(definition.name)),
     behavior: Object.freeze({ ...DEFAULT_BEHAVIOR, ...(definition.behavior || {}) }),
     dashboard: Object.freeze({ ...DEFAULT_DASHBOARD, ...(definition.dashboard || {}) })
   });

@@ -44,8 +44,9 @@ function admitWaiting(state) {
 }
 
 function acquire(state, mode) {
-  return new Promise((admit) => {
-    state.queue.push({ mode, admit });
+  const queuedAt = Date.now();
+  return new Promise((resolve) => {
+    state.queue.push({ mode, admit: () => resolve(Date.now() - queuedAt) });
     admitWaiting(state);
   });
 }
@@ -69,7 +70,8 @@ async function runWorkspaceOperation(workspaceAlias, operation, options = {}) {
 
   const mode = options.mode === READ ? READ : WRITE;
   const state = lockStateFor(key);
-  await acquire(state, mode);
+  const waitMs = await acquire(state, mode);
+  if (typeof options.onWait === 'function') options.onWait(waitMs, { workspace: key, mode, queued: state.queue.length });
   try {
     return await operation();
   } finally {

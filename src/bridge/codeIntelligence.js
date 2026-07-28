@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { collectTextFiles, collectOptionsFromWorkspace, resolveSafePath, isPathInside, realRootOf } = require('../safety');
 const { discoverCommands } = require('../commandDiscovery');
-const { detectVerifyChecks } = require('./validation');
+const { detectVerifyChecks } = require('./checkDetection');
 const { clampNumber } = require('./limits');
 const { EXTENSION_LANGUAGE, MAX_LINE_CHARS, buildIndex, escapeRegExp, isTestPath } = require('./codeIndex');
 
@@ -15,8 +15,8 @@ const DEFAULT_MAX_FILES = 5000;
 
 async function relaiCodeInspect(workspace, _config, args = {}) {
   const action = String(args.action || '').trim().toLowerCase();
-  if (!['symbol', 'references', 'related', 'impact', 'diagnostics'].includes(action)) {
-    throw new Error('relai_code_inspect action must be one of: symbol, references, related, impact, diagnostics.');
+  if (!['symbol', 'references', 'related', 'impact', 'trace', 'diagnostics'].includes(action)) {
+    throw new Error('relai_code_inspect action must be one of: symbol, references, related, impact, trace, diagnostics.');
   }
   const maxResults = Math.floor(clampNumber(args.maxResults, 1, 1000, DEFAULT_MAX_RESULTS));
   const loaded = loadIndex(workspace, args);
@@ -58,7 +58,9 @@ async function relaiCodeInspect(workspace, _config, args = {}) {
   if (action === 'references') {
     return { ...base, symbol, definitions, ...references };
   }
-  return { ...base, ...(symbol ? { symbol } : {}), ...impactAnalysis(workspace, loaded.index, symbol, definitions, references, args, maxResults) };
+  const impact = impactAnalysis(workspace, loaded.index, symbol, definitions, references, args, maxResults);
+  if (action === 'trace') return { ...base, symbol, ...traceAnalysis(loaded.index, symbol, definitions, references, impact, maxResults) };
+  return { ...base, ...(symbol ? { symbol } : {}), ...impact };
 }
 
 function emptyReferences() {
@@ -233,6 +235,58 @@ function impactAnalysis(workspace, index, symbol, definitions, references, args,
   };
 }
 
+function traceAnalysis(index, symbol, definitions, references, impact, maxResults) {
+  const definitionPaths = new Set(definitions.map(item => item.path));
+  const directCallers = references.items.filter(item => item.classification === 'call');
+  const importers = references.items.filter(item => item.classification === 'import');
+  const relatedSymbols = [];
+  for (const item of definitions) {
+    const file = index.fileByPath.get(item.path);
+    if (!file) continue;
+    for (const candidate of file.definitions) {
+      if (candidate.name === simpleSymbol(symbol)) continue;
+      relatedSymbols.push({ path: candidate.path, line: candidate.line, name: candidate.name, kind: candidate.kind, reason: 'same-definition-file' });
+    }
+  }
+  const uiSurfaces = impact.impactedPaths
+    .filter(item => /(?:^|\/)(?:ui|electron|public|renderer|components?|features?)(?:\/|$)/i.test(item.path))
+    .slice(0, maxResults);
+  const testSurfaces = impact.affectedTests.slice(0, maxResults);
+  const registrationSurfaces = impact.impactedPaths
+    .filter(item => /(?:registry|schema|handlers|tools|routes?|mcpServer|http)/i.test(item.path))
+    .slice(0, maxResults);
+  const recommendedReadOrder = [
+    ...definitions.map(item => item.path),
+    ...importers.map(item => item.path),
+    ...directCallers.map(item => item.path),
+    ...registrationSurfaces.map(item => item.path),
+    ...testSurfaces
+  ].filter((value, indexPosition, values) => value && values.indexOf(value) === indexPosition).slice(0, maxResults);
+  return {
+    definitions,
+    definitionPaths: [...definitionPaths],
+    directCallers: directCallers.slice(0, maxResults),
+    importers: importers.slice(0, maxResults),
+    references: references.items.slice(0, maxResults),
+    indirectImpact: impact.impactedPaths.slice(0, maxResults),
+    importEdges: impact.importEdges.slice(0, maxResults),
+    relatedSymbols: relatedSymbols.slice(0, maxResults),
+    affectedTests: testSurfaces,
+    uiSurfaces,
+    registrationSurfaces,
+    recommendedReadOrder,
+    summary: {
+      definitions: definitions.length,
+      directCalls: directCallers.length,
+      imports: importers.length,
+      impactedPaths: impact.impactedPathCount,
+      affectedTests: impact.affectedTests.length
+    },
+    truncated: impact.truncated || relatedSymbols.length > maxResults,
+    next: 'Read recommendedReadOrder in sequence; validate affectedTests after the final mutation.'
+  };
+}
+
 function diagnosticReadiness(workspace, index) {
   const discovered = discoverCommands(workspace.path);
   const diagnosticCommands = Object.entries(discovered)
@@ -282,4 +336,4 @@ function simpleSymbol(symbol) {
   return String(symbol).split(/[.:#-]/).filter(Boolean).at(-1) || String(symbol);
 }
 
-module.exports = { relaiCodeInspect, isTestPath };
+module.exports = { relaiCodeInspect, isTestPath, loadIndex };

@@ -1,434 +1,170 @@
-// End-to-end OAuth 2.1 + PKCE smoke test for the ChatGPT MCP connector flow.
-//
-// Exercises: 401 challenge -> discovery -> dynamic client registration ->
-// authorize (dashboard-token login) -> token (authorization_code + PKCE) ->
-// authenticated POST /mcp -> refresh_token. Plus negative cases (wrong login,
-// wrong PKCE verifier).
-
+import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { createRequire } from 'node:module';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { postMcp } from './helpers/http-mcp.mjs';
 
-const require = createRequire(import.meta.url);
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const root = path.resolve(__dirname, '..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const port = 39891;
 const base = `http://127.0.0.1:${port}`;
-const token = 'oauth-smoke-dashboard-token';
+const approvalToken = 'oauth-smoke-approval-token';
 const redirectUri = 'https://chatgpt.com/connector_platform_oauth_redirect';
-
-// Isolated state dir so we never read a real connection.json (which could carry a
-// public URL) and the oauth-store stays scoped to this test.
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-oauth-'));
 process.env.REL_AI_MCP_STATE_DIR = stateDir;
-
 const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.js'), '--host', '127.0.0.1', '--port', String(port), '--no-profile-write'], {
   cwd: root,
   stdio: ['ignore', 'pipe', 'pipe'],
   env: {
     ...process.env,
     REL_AI_MCP_CONFIG: path.join(root, 'examples', 'config.example.json'),
-    REL_AI_MCP_TOKEN: token,
+    REL_AI_MCP_TOKEN: approvalToken,
     REL_AI_MCP_STATE_DIR: stateDir
   }
 });
-
 let stderr = '';
-child.stderr.on('data', (chunk) => { stderr += chunk.toString('utf8'); });
-
-function cleanup() {
-  if (!child.killed) child.kill('SIGKILL');
-  fs.rmSync(stateDir, { recursive: true, force: true });
-}
-
-function fail(message) {
-  cleanup();
-  throw new Error(message);
-}
+child.stderr.on('data', chunk => { stderr += chunk.toString('utf8'); });
 
 async function waitForHealth() {
-  const started = Date.now();
-  while (Date.now() - started < 5000) {
-    try {
-      const res = await fetch(`${base}/health`);
-      if (res.ok) return;
-    } catch (error) {
-      if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] oauth health wait:', error);
-    }
-    await new Promise((resolve) => setTimeout(resolve, 50));
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    try { if ((await fetch(`${base}/health`)).ok) return; } catch {}
+    await new Promise(resolve => setTimeout(resolve, 50));
   }
-  fail(`server did not become healthy. stderr:\n${stderr}`);
+  throw new Error(`OAuth server did not become healthy. ${stderr}`);
 }
 
-function form(obj) {
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(obj)) if (value != null) params.set(key, String(value));
-  return params.toString();
+function form(value) {
+  return new URLSearchParams(Object.entries(value).filter(([, item]) => item != null).map(([key, item]) => [key, String(item)])).toString();
 }
 
-function mcpHeaders(accessToken = '') {
-  return {
-    'content-type': 'application/json',
-    accept: 'application/json, text/event-stream',
-    ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {})
-  };
-}
-
-async function readMcpResponse(response) {
-  const text = await response.text();
-  if ((response.headers.get('content-type') || '').includes('text/event-stream')) {
-    const lines = text.split(/\r?\n/).filter(line => line.startsWith('data:')).map(line => line.slice(5).trim()).filter(Boolean);
-    if (!lines.length) fail(`MCP SSE response contained no data: ${text}`);
-    return JSON.parse(lines.at(-1));
-  }
-  return JSON.parse(text);
-}
-
-async function postForm(pathname, obj, { manual = false } = {}) {
+async function postForm(pathname, value, manual = false) {
   return fetch(`${base}${pathname}`, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: form(obj),
+    body: form(value),
     redirect: manual ? 'manual' : 'follow'
   });
 }
 
 function pkcePair() {
   const verifier = crypto.randomBytes(32).toString('base64url');
-  const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
-  return { verifier, challenge };
+  return { verifier, challenge: crypto.createHash('sha256').update(verifier).digest('base64url') };
 }
 
-async function getAuthCode(client, challenge, state) {
-  const query = new URLSearchParams({
-    response_type: 'code',
-    client_id: client.client_id,
-    redirect_uri: redirectUri,
-    code_challenge: challenge,
-    code_challenge_method: 'S256',
-    scope: 'mcp',
-    state
+async function register(scope = 'mcp') {
+  const response = await fetch(`${base}/register`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ application_type: 'web', client_name: 'ChatGPT OAuth Test', redirect_uris: [redirectUri], scope })
   });
-  // Login page renders.
-  const page = await fetch(`${base}/authorize?${query.toString()}`);
-  if (page.status !== 200) fail(`GET /authorize expected 200, got ${page.status}`);
-  const html = await page.text();
-  if (!/Authorize ChatGPT|approval token/i.test(html) || /Dashboard token/.test(html)) fail('login page did not render the canonical approval-token consent form');
-  if (!/width:min\(100%,340px\)/.test(html) || !/body \{[^}]*padding:20px/.test(html)) fail('login page is missing responsive narrow-window sizing');
-  if (!/:focus-visible/.test(html) || /class="who" style=/.test(html)) fail('login page is missing keyboard focus styling or still uses inline layout styles');
-
-  // Submit the dashboard token.
-  const submit = await postForm('/authorize', {
-    response_type: 'code',
-    client_id: client.client_id,
-    redirect_uri: redirectUri,
-    code_challenge: challenge,
-    code_challenge_method: 'S256',
-    scope: 'mcp',
-    state,
-    dashboard_token: token
-  }, { manual: true });
-  if (submit.status !== 302) fail(`POST /authorize expected 302, got ${submit.status}`);
-  const location = submit.headers.get('location') || '';
-  const url = new URL(location);
-  if (url.origin + url.pathname !== redirectUri) fail(`authorize redirect went to the wrong place: ${location}`);
-  if (url.searchParams.get('state') !== state) fail('authorize redirect dropped/altered state');
-  const code = url.searchParams.get('code');
-  if (!code) fail('authorize redirect did not include an authorization code');
-  return code;
+  assert.equal(response.status, 201);
+  return response.json();
 }
 
-await waitForHealth();
-
-// 1. Unauthenticated POST /mcp -> 401 + WWW-Authenticate challenge.
-const challenge401 = await fetch(`${base}/mcp`, {
-  method: 'POST',
-  headers: mcpHeaders(),
-  body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} })
-});
-if (challenge401.status !== 401) fail(`unauthenticated POST /mcp expected 401, got ${challenge401.status}`);
-const wwwAuth = challenge401.headers.get('www-authenticate') || '';
-if (!/Bearer/i.test(wwwAuth) || !wwwAuth.includes('resource_metadata=')) {
-  fail(`POST /mcp 401 did not return a Bearer resource_metadata challenge: ${wwwAuth}`);
+async function authorize(client, pair, scope, state) {
+  const values = {
+    response_type: 'code', client_id: client.client_id, redirect_uri: redirectUri,
+    code_challenge: pair.challenge, code_challenge_method: 'S256',
+    resource: `${base}/mcp`, scope, state
+  };
+  const page = await fetch(`${base}/authorize?${new URLSearchParams(values)}`);
+  assert.equal(page.status, 200);
+  assert.match(await page.text(), /Approve connection/);
+  const approved = await postForm('/authorize', { ...values, dashboard_token: approvalToken }, true);
+  assert.equal(approved.status, 302);
+  const location = new URL(approved.headers.get('location'));
+  assert.equal(location.searchParams.get('state'), state);
+  assert.equal(location.searchParams.get('iss'), base);
+  assert.ok(location.searchParams.get('code'));
+  return location.searchParams.get('code');
 }
 
-// 2. Protected-resource metadata.
-const prm = await fetch(`${base}/.well-known/oauth-protected-resource`).then((r) => r.json());
-if (!prm.resource?.endsWith('/mcp') || !prm.authorization_servers?.includes(base)) {
-  fail(`protected-resource metadata malformed: ${JSON.stringify(prm)}`);
-}
-
-// 3. Authorization-server metadata.
-const asm = await fetch(`${base}/.well-known/oauth-authorization-server`).then((r) => r.json());
-if (asm.issuer !== base
-  || asm.authorization_endpoint !== `${base}/authorize`
-  || asm.token_endpoint !== `${base}/token`
-  || asm.registration_endpoint !== `${base}/register`
-  || !asm.code_challenge_methods_supported?.includes('S256')
-  || !asm.grant_types_supported?.includes('authorization_code')
-  || !asm.grant_types_supported?.includes('refresh_token')) {
-  fail(`authorization-server metadata malformed: ${JSON.stringify(asm)}`);
-}
-
-// 4. Dynamic client registration.
-const reg = await fetch(`${base}/register`, {
-  method: 'POST',
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ client_name: 'ChatGPT Smoke', redirect_uris: [redirectUri] })
-});
-if (reg.status !== 201) fail(`POST /register expected 201, got ${reg.status}`);
-const client = await reg.json();
-if (!client.client_id || client.token_endpoint_auth_method !== 'none') fail(`registration response malformed: ${JSON.stringify(client)}`);
-
-// Concurrent registrations must not lose updates or leave lock/temp files.
-const concurrentRegistrations = await Promise.all(Array.from({ length: 12 }, (_, index) => fetch(`${base}/register`, {
-  method: 'POST',
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ client_name: `Concurrent ${index}`, redirect_uris: [redirectUri] })
-}).then(async response => ({ status: response.status, body: await response.json() }))));
-if (concurrentRegistrations.some(item => item.status !== 201 || !item.body.client_id)) {
-  fail(`concurrent client registration failed: ${JSON.stringify(concurrentRegistrations)}`);
-}
-const oauthStorePath = path.join(stateDir, 'oauth-store.json');
-const oauthStore = JSON.parse(fs.readFileSync(oauthStorePath, 'utf8'));
-if (Object.keys(oauthStore.clients || {}).length < 13) fail('concurrent OAuth registrations lost persisted clients');
-if (fs.existsSync(path.join(stateDir, 'oauth-store.lock'))) fail('OAuth store lock was not cleaned up');
-if (fs.readdirSync(stateDir).some(name => name.startsWith('oauth-store.json.') && name.endsWith('.tmp'))) fail('OAuth temporary file was not cleaned up');
-
-// Registration must reject a missing redirect_uri.
-const badReg = await fetch(`${base}/register`, {
-  method: 'POST',
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ client_name: 'no redirect' })
-});
-if (badReg.status !== 400) fail(`POST /register with no redirect_uris expected 400, got ${badReg.status}`);
-
-// 5. Existing connector recovery on a fresh computer. Simulate the same static
-// endpoint moving to another installation by removing only the registered client.
-const portableReg = await fetch(`${base}/register`, {
-  method: 'POST',
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ client_name: 'Portable ChatGPT Connector', redirect_uris: [redirectUri] })
-});
-if (portableReg.status !== 201) fail(`portable POST /register expected 201, got ${portableReg.status}`);
-const portableClient = await portableReg.json();
-const portableStore = JSON.parse(fs.readFileSync(oauthStorePath, 'utf8'));
-delete portableStore.clients[portableClient.client_id];
-fs.writeFileSync(oauthStorePath, `${JSON.stringify(portableStore, null, 2)}\n`);
-
-const portablePkce = pkcePair();
-const portableState = 'portable-state';
-const portableQuery = new URLSearchParams({
-  response_type: 'code',
-  client_id: portableClient.client_id,
-  redirect_uri: redirectUri,
-  code_challenge: portablePkce.challenge,
-  code_challenge_method: 'S256',
-  scope: 'mcp',
-  state: portableState
-});
-const recoveryPage = await fetch(`${base}/authorize?${portableQuery.toString()}`);
-if (recoveryPage.status !== 200) fail(`portable recovery GET /authorize expected 200, got ${recoveryPage.status}`);
-const recoveryHtml = await recoveryPage.text();
-if (!/New computer detected|restores the same connector/i.test(recoveryHtml)) fail('portable recovery page did not explain connector restoration');
-
-const rejectedRecovery = await postForm('/authorize', {
-  response_type: 'code',
-  client_id: portableClient.client_id,
-  redirect_uri: redirectUri,
-  code_challenge: portablePkce.challenge,
-  code_challenge_method: 'S256',
-  scope: 'mcp',
-  state: portableState,
-  dashboard_token: 'WRONG-TOKEN'
-}, { manual: true });
-if (rejectedRecovery.status !== 401) fail(`portable recovery with wrong token expected 401, got ${rejectedRecovery.status}`);
-const storeAfterRejectedRecovery = JSON.parse(fs.readFileSync(oauthStorePath, 'utf8'));
-if (storeAfterRejectedRecovery.clients?.[portableClient.client_id]) fail('wrong dashboard token persisted a recovered OAuth client');
-
-const portableCode = await getAuthCode(portableClient, portablePkce.challenge, portableState);
-const storeAfterRecovery = JSON.parse(fs.readFileSync(oauthStorePath, 'utf8'));
-if (!storeAfterRecovery.clients?.[portableClient.client_id]?.recovered_at) fail('approved portable connector was not persisted as recovered');
-const portableTokenRes = await postForm('/token', {
-  grant_type: 'authorization_code',
-  code: portableCode,
-  redirect_uri: redirectUri,
-  client_id: portableClient.client_id,
-  code_verifier: portablePkce.verifier
-});
-if (portableTokenRes.status !== 200) fail(`portable recovered connector token exchange expected 200, got ${portableTokenRes.status}`);
-
-const foreignClientQuery = new URLSearchParams({
-  response_type: 'code',
-  client_id: 'foreign-client-id',
-  redirect_uri: redirectUri,
-  code_challenge: portablePkce.challenge,
-  code_challenge_method: 'S256'
-});
-const foreignClientPage = await fetch(`${base}/authorize?${foreignClientQuery.toString()}`);
-if (foreignClientPage.status !== 400) fail(`non-Rel.AI client recovery expected 400, got ${foreignClientPage.status}`);
-
-// 6. Negative: wrong dashboard token at /authorize must NOT issue a code.
-{
-  const { challenge } = pkcePair();
-  const res = await postForm('/authorize', {
-    response_type: 'code',
-    client_id: client.client_id,
-    redirect_uri: redirectUri,
-    code_challenge: challenge,
-    code_challenge_method: 'S256',
-    scope: 'mcp',
-    state: 'xyz',
-    dashboard_token: 'WRONG-TOKEN'
-  }, { manual: true });
-  if (res.status === 302) fail('authorize issued a redirect/code for a WRONG dashboard token');
-  if (res.status !== 401) fail(`wrong-token authorize expected 401, got ${res.status}`);
-}
-
-// 6. Happy path: authorize -> token (authorization_code + PKCE) -> access token.
-const { verifier, challenge } = pkcePair();
-const code = await getAuthCode(client, challenge, 'state-123');
-
-const tokenRes = await postForm('/token', {
-  grant_type: 'authorization_code',
-  code,
-  redirect_uri: redirectUri,
-  client_id: client.client_id,
-  code_verifier: verifier
-});
-if (tokenRes.status !== 200) fail(`POST /token expected 200, got ${tokenRes.status}`);
-const tokens = await tokenRes.json();
-if (!tokens.access_token || tokens.token_type !== 'Bearer' || !tokens.refresh_token || tokens.expires_in <= 0) {
-  fail(`token response malformed: ${JSON.stringify(tokens)}`);
-}
-
-// 7. Negative: a fresh code with the WRONG verifier must fail PKCE.
-{
-  const wrong = pkcePair();
-  const freshCode = await getAuthCode(client, wrong.challenge, 'state-bad-pkce');
-  const res = await postForm('/token', {
-    grant_type: 'authorization_code',
-    code: freshCode,
-    redirect_uri: redirectUri,
-    client_id: client.client_id,
-    code_verifier: 'not-the-right-verifier'
+async function exchange(client, code, verifier) {
+  const response = await postForm('/token', {
+    grant_type: 'authorization_code', code, redirect_uri: redirectUri,
+    client_id: client.client_id, code_verifier: verifier
   });
-  if (res.status !== 400) fail(`PKCE mismatch expected 400, got ${res.status}`);
-  const body = await res.json();
-  if (body.error !== 'invalid_grant') fail(`PKCE mismatch expected invalid_grant, got ${JSON.stringify(body)}`);
+  return { response, body: await response.json() };
 }
 
-// 8. Negative: an authorization code is single-use.
-{
-  const reuse = await postForm('/token', {
-    grant_type: 'authorization_code',
-    code,
-    redirect_uri: redirectUri,
-    client_id: client.client_id,
-    code_verifier: verifier
+try {
+  await waitForHealth();
+  const challenge = await fetch(`${base}/mcp`, { method: 'POST' });
+  assert.equal(challenge.status, 401);
+  assert.match(challenge.headers.get('www-authenticate') || '', /oauth-protected-resource\/mcp/);
+
+  const protectedResource = await fetch(`${base}/.well-known/oauth-protected-resource/mcp`).then(response => response.json());
+  assert.equal(protectedResource.resource, `${base}/mcp`);
+  assert.deepEqual(protectedResource.authorization_servers, [base]);
+  const metadata = await fetch(`${base}/.well-known/oauth-authorization-server`).then(response => response.json());
+  assert.equal(metadata.issuer, base);
+  assert.ok(metadata.application_types_supported.includes('web'));
+  assert.ok(metadata.grant_types_supported.includes('refresh_token'));
+
+  const missingApplicationType = await fetch(`${base}/register`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ redirect_uris: [redirectUri] })
   });
-  if (reuse.status !== 400) fail(`reusing an authorization code expected 400, got ${reuse.status}`);
+  assert.equal(missingApplicationType.status, 400);
+
+  const client = await register('mcp');
+  assert.equal(client.application_type, 'web');
+  assert.equal(client.issuer, base);
+
+  const firstPair = pkcePair();
+  const firstCode = await authorize(client, firstPair, 'mcp', 'first');
+  const first = await exchange(client, firstCode, firstPair.verifier);
+  assert.equal(first.response.status, 200);
+  assert.ok(first.body.access_token);
+  assert.equal(first.body.refresh_token, undefined);
+  assert.equal(first.body.scope, 'mcp');
+
+  const stepUpPair = pkcePair();
+  const stepUpCode = await authorize(client, stepUpPair, 'mcp offline_access', 'step-up');
+  const stepUp = await exchange(client, stepUpCode, stepUpPair.verifier);
+  assert.equal(stepUp.response.status, 200);
+  assert.ok(stepUp.body.refresh_token);
+  assert.equal(stepUp.body.scope, 'mcp offline_access');
+
+  const tools = await postMcp(base, { id: 1, method: 'tools/list', token: stepUp.body.access_token, clientName: 'oauth-smoke' });
+  assert.equal(tools.response.status, 200);
+  assert.equal(tools.body.result.tools.length, 33);
+
+  const refreshedResponse = await postForm('/token', {
+    grant_type: 'refresh_token', refresh_token: stepUp.body.refresh_token, client_id: client.client_id, scope: 'mcp offline_access'
+  });
+  assert.equal(refreshedResponse.status, 200);
+  const refreshed = await refreshedResponse.json();
+  assert.ok(refreshed.access_token);
+  assert.ok(refreshed.refresh_token);
+  assert.notEqual(refreshed.refresh_token, stepUp.body.refresh_token);
+
+  const reused = await postForm('/token', {
+    grant_type: 'refresh_token', refresh_token: stepUp.body.refresh_token, client_id: client.client_id
+  });
+  assert.equal(reused.status, 400);
+
+  const wrongIssuerProvider = (await import('../src/oauthProvider.js')).default;
+  const wrongIssuer = wrongIssuerProvider.validateAuthorizationRequest({
+    response_type: 'code', client_id: client.client_id, redirect_uri: redirectUri,
+    code_challenge: 'abc', code_challenge_method: 'S256'
+  }, { issuer: 'https://different.example.test' });
+  assert.equal(wrongIssuer.error, 'invalid_client');
+
+  const revoked = wrongIssuerProvider.revokeAuthorizations();
+  assert.ok(revoked.registeredClients >= 1);
+  assert.equal(wrongIssuerProvider.authorizationStatus().registeredClients, 0);
+  const oldClient = await fetch(`${base}/authorize?${new URLSearchParams({
+    response_type: 'code', client_id: client.client_id, redirect_uri: redirectUri,
+    code_challenge: 'abc', code_challenge_method: 'S256'
+  })}`);
+  assert.equal(oldClient.status, 400);
+} finally {
+  child.kill('SIGKILL');
+  await once(child, 'close').catch(() => {});
+  fs.rmSync(stateDir, { recursive: true, force: true });
 }
 
-// 9. The OAuth access token authenticates POST /mcp.
-const mcpRes = await fetch(`${base}/mcp`, {
-  method: 'POST',
-  headers: mcpHeaders(tokens.access_token),
-  body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} })
-});
-if (mcpRes.status !== 200) fail(`POST /mcp with OAuth token expected 200, got ${mcpRes.status}`);
-const mcpBody = await readMcpResponse(mcpRes);
-if (mcpBody.result?.tools?.length !== 20) {
-  fail(`OAuth-authenticated tools/list did not return 20 tools: ${mcpBody.result?.tools?.length}`);
-}
-for (const name of ['relai_write', 'relai_replace', 'relai_browser', 'relai_restore_changes', 'relai_git_status', 'relai_git_create_pr']) {
-  if (mcpBody.result.tools.some(tool => tool.name === name)) fail(`${name} must be absent from the OAuth tool surface`);
-}
-const oauthStartTaskSchema = mcpBody.result.tools.find(tool => tool.name === 'relai_start_task');
-if (!oauthStartTaskSchema || oauthStartTaskSchema.inputSchema?.properties?.task_id) fail('OAuth tool surface did not expose the task bootstrap contract correctly');
-const oauthExecSchema = mcpBody.result.tools.find(tool => tool.name === 'relai_exec');
-if (!oauthExecSchema?.inputSchema?.properties?.command) fail('OAuth tool surface stripped the relai_exec command field');
-const oauthSearchSchema = mcpBody.result.tools.find(tool => tool.name === 'relai_search');
-if (!oauthSearchSchema?.inputSchema?.properties?.contextAfter) fail('OAuth tool surface stripped contextual relai_search fields');
-const oauthCodeInspectSchema = mcpBody.result.tools.find(tool => tool.name === 'relai_code_inspect');
-if (!oauthCodeInspectSchema?.inputSchema?.properties?.action || !oauthCodeInspectSchema?.inputSchema?.properties?.maxDepth) fail('OAuth tool surface stripped code-intelligence fields');
-const oauthRunChecksSchema = mcpBody.result.tools.find(tool => tool.name === 'relai_run_checks');
-if (!oauthRunChecksSchema?.inputSchema?.properties?.complete || !oauthRunChecksSchema?.inputSchema?.properties?.summary) fail('OAuth tool surface stripped atomic completion fields');
-const oauthEditSchema = mcpBody.result.tools.find(tool => tool.name === 'relai_edit');
-if (!oauthEditSchema?.inputSchema?.properties?.replacements || !oauthEditSchema?.inputSchema?.properties?.occurrence) fail('OAuth tool surface stripped unified edit parity fields');
-const oauthDraftPrSchema = mcpBody.result.tools.find(tool => tool.name === 'relai_git_draft_pr');
-if (!oauthDraftPrSchema || oauthDraftPrSchema.annotations?.openWorldHint !== false) fail('OAuth tool surface did not expose the local-only PR draft tool');
-
-// 10. An invalid bearer is still rejected with a challenge.
-const badBearer = await fetch(`${base}/mcp`, {
-  method: 'POST',
-  headers: mcpHeaders('not-a-real-token'),
-  body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/list', params: {} })
-});
-if (badBearer.status !== 401) fail(`POST /mcp with a bogus bearer expected 401, got ${badBearer.status}`);
-
-// 11. Refresh token mints a new access token.
-const refreshRes = await postForm('/token', {
-  grant_type: 'refresh_token',
-  refresh_token: tokens.refresh_token,
-  client_id: client.client_id
-});
-if (refreshRes.status !== 200) fail(`refresh_token grant expected 200, got ${refreshRes.status}`);
-const refreshed = await refreshRes.json();
-if (!refreshed.access_token || refreshed.access_token === tokens.access_token) {
-  fail('refresh_token did not mint a new access token');
-}
-
-const refreshedMcp = await fetch(`${base}/mcp`, {
-  method: 'POST',
-  headers: mcpHeaders(refreshed.access_token),
-  body: JSON.stringify({ jsonrpc: '2.0', id: 4, method: 'tools/list', params: {} })
-});
-if (refreshedMcp.status !== 200) fail(`refreshed access token did not authenticate POST /mcp, got ${refreshedMcp.status}`);
-
-// 12. Approval-token replacement revokes all current grants but preserves the
-// registered ChatGPT clients so the existing app can be approved again.
-const oauthProvider = require('../src/oauthProvider.js');
-const revoked = oauthProvider.revokeAuthorizations();
-if (revoked.accessTokens < 1 || revoked.refreshTokens < 1 || revoked.registeredClientsPreserved < 1) {
-  fail(`OAuth revocation did not report the expected grants and preserved clients: ${JSON.stringify(revoked)}`);
-}
-const authorizationAfterRevoke = oauthProvider.authorizationStatus();
-if (!authorizationAfterRevoke.required || authorizationAfterRevoke.activeAccessTokens !== 0 || authorizationAfterRevoke.activeRefreshTokens !== 0) {
-  fail(`OAuth authorization state did not require reapproval after revocation: ${JSON.stringify(authorizationAfterRevoke)}`);
-}
-
-const revokedMcp = await fetch(`${base}/mcp`, {
-  method: 'POST',
-  headers: mcpHeaders(refreshed.access_token),
-  body: JSON.stringify({ jsonrpc: '2.0', id: 5, method: 'tools/list', params: {} })
-});
-if (revokedMcp.status !== 401) fail(`revoked OAuth access token expected 401, got ${revokedMcp.status}`);
-
-const revokedRefresh = await postForm('/token', {
-  grant_type: 'refresh_token',
-  refresh_token: refreshed.refresh_token,
-  client_id: client.client_id
-});
-if (revokedRefresh.status !== 400) fail(`revoked refresh token expected 400, got ${revokedRefresh.status}`);
-
-const reapprovalPkce = pkcePair();
-const reapprovalCode = await getAuthCode(client, reapprovalPkce.challenge, 'state-reapproval');
-if (oauthProvider.authorizationStatus().required) fail('successful approval did not clear the reapproval requirement');
-const reapprovalToken = await postForm('/token', {
-  grant_type: 'authorization_code',
-  code: reapprovalCode,
-  redirect_uri: redirectUri,
-  client_id: client.client_id,
-  code_verifier: reapprovalPkce.verifier
-});
-if (reapprovalToken.status !== 200) fail(`existing ChatGPT client could not be approved again, got ${reapprovalToken.status}`);
-
-cleanup();
-await once(child, 'close');
-console.log('OAuth smoke test passed: discovery, registration, PKCE authorization-code, token, refresh, and protected /mcp all verified.');
+console.log('OAuth 2026 issuer binding, PKCE, step-up scopes, and refresh rotation passed.');

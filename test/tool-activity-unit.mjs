@@ -31,6 +31,7 @@ tracker.onToolActivity(event => trackerEvents.push(event));
 
 const finishRead = tracker.beginConnectorToolCall({ tool: 'relai_start_task', workspace: 'repo', scopeId: 'request-a', createTask: true, operation: 'Reading src/app.js' });
 assert.equal(tracker.getToolActivity().tasks.find(task => task.id === finishRead.taskId)?.operation, 'Reading src/app.js');
+assert.equal(tracker.getToolActivity().tasks.find(task => task.id === finishRead.taskId)?.title, 'Reading src/app.js');
 finishRead.update({ operation: 'Reading src/config.js' });
 assert.equal(tracker.getToolActivity().tasks.find(task => task.id === finishRead.taskId)?.operation, 'Reading src/config.js');
 const finishChecks = tracker.beginConnectorToolCall({ tool: 'relai_start_task', workspace: 'other', scopeId: 'request-b', createTask: true });
@@ -47,6 +48,10 @@ const finishEdit = tracker.beginConnectorToolCall({ tool: 'relai_edit', workspac
 assert.equal(finishEdit.taskId, finishRead.taskId, 'follow-up calls must use the supplied exact task ID');
 assert.equal(tracker.getToolActivity().tasks.find(task => task.id === finishRead.taskId)?.calls, 2);
 finishEdit();
+const waitingTask = tracker.getToolActivity().tasks.find(task => task.id === finishRead.taskId);
+assert.equal(waitingTask?.status, 'planning');
+assert.equal(waitingTask?.events.length, 2, 'each tool invocation must retain one lifecycle event');
+assert.equal(waitingTask?.events.at(-1)?.status, 'succeeded');
 assert.equal([...timers.values()].every(timer => timer.delay === 60_000), true);
 
 nowValue = 91_000;
@@ -58,6 +63,7 @@ assert.equal(inactive.length, 2);
 assert.equal(inactive.find(task => task.taskId === finishRead.taskId)?.calls, 2);
 assert.equal(inactive.find(task => task.taskId === finishChecks.taskId)?.calls, 1);
 assert.equal(inactive.every(task => task.status === 'inactive' && task.endReason === 'inactivity_window'), true);
+assert.equal(inactive.every(task => task.title && ['determinate', 'indeterminate'].includes(task.progress?.mode)), true);
 
 const reconnectTracker = createToolActivityTracker({ idleMs: 60_000 });
 const startedTask = reconnectTracker.beginConnectorToolCall({ tool: 'relai_start_task', workspace: 'repo', scopeId: 'transport-a', createTask: true });

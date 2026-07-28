@@ -58,7 +58,7 @@ assert.match(css, /\.connection-actions-bar/);
 assert.match(settingsIndex, /shell\.className = 'settings-layout settings-shell'/);
 assert.match(settingsIndex, /content\.className = 'settings-content'/);
 assert.match(css, /\.settings-nav-button\.active/);
-assert.match(css, /\.settings-panel-intro[\s\S]*border-left-color: var\(--blue\)/);
+assert.match(css, /\.settings-panel-intro[\s\S]*border-left-color: var\(--ui-action-primary\)/);
 assert.match(css, /\.tool-card[\s\S]*box-shadow: none/);
 assert.doesNotMatch(css, /\.tool-card:hover[^}]*box-shadow:/s);
 
@@ -74,15 +74,15 @@ assert.match(css, /\.session-row, \.task-row[\s\S]*min-h-\[76px\]/);
 assert.doesNotMatch(sessions, /Not published/);
 assert.match(sessions, /publish \? `<span class="task-row-publish">/);
 assert.match(css, /\.status-pill\.ok::before/);
-assert.match(css, /\.status-pill\.open[\s\S]*var\(--blue\)/);
-assert.match(css, /\.status-pill\.incomplete[\s\S]*var\(--yellow\)/);
+assert.match(css, /\.status-pill\.open[\s\S]*var\(--ui-status-info-foreground\)/);
+assert.match(css, /\.status-pill\.incomplete[\s\S]*var\(--ui-status-warning-foreground\)/);
 assert.match(sessions, /status-pill open/);
 assert.match(sessions, /status-pill incomplete/);
 assert.doesNotMatch(css, /\.status-pill\.ok::before[^}]*animation/s);
 
 assert.match(css, /\.diagnostic-metrics[\s\S]*grid-template-columns: repeat\(3,minmax\(0,1fr\)\)/);
 assert.match(css, /\.diagnostic-finding[\s\S]*border-l-\[3px\]/);
-assert.match(css, /\.diagnostic-log-row\.error[\s\S]*inset 2px 0 var\(--red\)/);
+assert.match(css, /\.diagnostic-log-row\.error[\s\S]*inset 2px 0 var\(--ui-status-danger-foreground\)/);
 assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.summary-metrics \.metric/);
 
 assert.match(wizardHtml, /class="setup-principles"/);
@@ -92,7 +92,7 @@ assert.doesNotMatch(wizardHtml, /setup-check|setup-benefits/);
 assert.match(electronCss, /\.setup-principles[^}]*grid-template-columns: repeat\(3/s);
 assert.match(electronCss, /\.setup-principle \{/);
 assert.match(electronCss, /\.app-card \{[^}]*box-shadow: none;/s);
-assert.match(electronCss, /\.setup-card,\s*\.status-hero \{ box-shadow: var\(--elev-2\); \}/s);
+assert.match(electronCss, /\.setup-card,\s*\.status-hero \{ box-shadow: var\(--ui-electron-elevation2\); \}/s);
 assert.doesNotMatch(electronCss, /\.status-badge\.ready::before[^}]*box-shadow/s);
 
 console.log('Visual hierarchy smoke test passed.');

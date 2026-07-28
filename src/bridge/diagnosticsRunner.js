@@ -1,0 +1,117 @@
+'use strict';
+
+const path = require('node:path');
+const { runProcess, summarizeCommand } = require('../process');
+const { detectVerifyChecks } = require('./checkDetection');
+const { clampNumber } = require('./limits');
+const { runSpan } = require('../telemetry');
+const { operationTaskSignal } = require('../operationTasks');
+
+async function relaiDiagnosticsRun(workspace, config, args = {}) {
+  const commands = selectDiagnosticCommands(workspace, args);
+  if (!commands.length) {
+    return { ok: false, workspace: workspace.alias, commands: [], diagnostics: [], message: 'No diagnostic command was detected. Pass command or configure lint/typecheck/analyze/vet/clippy checks.' };
+  }
+  const timeout = clampNumber(args.timeoutMs, 1000, 24 * 60 * 60 * 1000, 180000);
+  const results = [];
+  const diagnostics = [];
+  const signal = args._operationTaskId ? operationTaskSignal(config, args._operationTaskId) : undefined;
+  for (const command of commands) {
+    const result = await runSpan(config, 'relai.validation.diagnostics', {
+      'relai.workspace': workspace.alias,
+      'relai.diagnostics.command': command.slice(0, 300)
+    }, () => runProcess(command, [], { cwd: workspace.path, shell: true, commandString: command, timeout, maxOutputBytes: 8 * 1024 * 1024, signal }, config));
+    const summary = summarizeCommand(result);
+    const parsed = parseDiagnostics(`${result.stdout || ''}\n${result.stderr || ''}`, command, workspace.path);
+    results.push({ command, ...summary, diagnostics: parsed.length });
+    diagnostics.push(...parsed);
+    if (args.stopOnFailure !== false && result.exitCode !== 0) break;
+  }
+  const unique = deduplicateDiagnostics(diagnostics).slice(0, clampNumber(args.maxResults, 1, 5000, 500));
+  return {
+    ok: results.every(item => item.ok),
+    workspace: workspace.alias,
+    commands,
+    results,
+    diagnostics: unique,
+    diagnosticCount: diagnostics.length,
+    truncated: diagnostics.length > unique.length
+  };
+}
+
+function selectDiagnosticCommands(workspace, args) {
+  const explicit = [];
+  if (typeof args.command === 'string' && args.command.trim()) explicit.push(args.command.trim());
+  if (Array.isArray(args.commands)) explicit.push(...args.commands.map(String).map(item => item.trim()).filter(Boolean));
+  if (explicit.length) return [...new Set(explicit)];
+  const candidates = detectVerifyChecks(workspace.path, String(args.level || 'quick'));
+  const diagnostic = candidates.filter(command => /(?:typecheck|tsc|eslint|lint|analy[sz]e|mypy|pyright|ruff|vet|clippy|doctor|check)/i.test(command));
+  return diagnostic.length ? diagnostic : candidates.slice(0, 2);
+}
+
+function parseDiagnostics(output, command, workspaceRoot) {
+  const source = diagnosticSource(command);
+  const diagnostics = [];
+  for (const rawLine of String(output || '').split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const parsed = parseDiagnosticLine(line);
+    if (!parsed) continue;
+    diagnostics.push({
+      path: normalizeDiagnosticPath(parsed.path, workspaceRoot),
+      line: parsed.line,
+      column: parsed.column,
+      severity: parsed.severity,
+      code: parsed.code,
+      message: parsed.message.slice(0, 2000),
+      source
+    });
+  }
+  return diagnostics;
+}
+
+function parseDiagnosticLine(line) {
+  let match = /^(.*?)[(:](\d+)[,:](\d+)\)?\s*[-:]\s*(error|warning|warn|info)?\s*([A-Za-z]+\d+)?\s*[:-]?\s*(.+)$/i.exec(line);
+  if (match) return { path: match[1], line: Number(match[2]), column: Number(match[3]), severity: normalizeSeverity(match[4]), code: match[5] || '', message: match[6] };
+  match = /^(.*?):(\d+):(\d+):\s*(error|warning|note|info):\s*(.+?)(?:\s+\[([^\]]+)\])?$/i.exec(line);
+  if (match) return { path: match[1], line: Number(match[2]), column: Number(match[3]), severity: normalizeSeverity(match[4]), code: match[6] || '', message: match[5] };
+  match = /^(.+?):(\d+):(\d+)\s+([A-Z]\d+)\s+(.+)$/.exec(line);
+  if (match) return { path: match[1], line: Number(match[2]), column: Number(match[3]), severity: 'error', code: match[4], message: match[5] };
+  return null;
+}
+
+function normalizeDiagnosticPath(value, root) {
+  const text = String(value || '').trim().replace(/^['"]|['"]$/g, '');
+  if (!text) return '';
+  if (path.isAbsolute(text)) return path.relative(root, text).replaceAll(path.sep, '/');
+  return text.replaceAll('\\', '/').replace(/^\.\//, '');
+}
+
+function normalizeSeverity(value) {
+  const text = String(value || 'error').toLowerCase();
+  if (text === 'warn') return 'warning';
+  if (text === 'note') return 'info';
+  return ['error', 'warning', 'info'].includes(text) ? text : 'error';
+}
+
+function diagnosticSource(command) {
+  const text = String(command).toLowerCase();
+  for (const source of ['typescript', 'eslint', 'mypy', 'pyright', 'ruff', 'dart', 'flutter', 'clippy', 'cargo', 'go', 'javac', 'gradle']) {
+    if (text.includes(source)) return source;
+  }
+  if (text.includes('tsc')) return 'typescript';
+  if (text.includes('analyze')) return 'analyzer';
+  return 'command';
+}
+
+function deduplicateDiagnostics(items) {
+  const seen = new Set();
+  return items.filter(item => {
+    const key = `${item.path}:${item.line}:${item.column}:${item.code}:${item.message}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+module.exports = { relaiDiagnosticsRun, parseDiagnostics, parseDiagnosticLine };

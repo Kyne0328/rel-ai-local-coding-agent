@@ -4,7 +4,7 @@
 
 This document defines the implementation path from the current Rel.AI MCP repository bridge to a broader local coding runtime for ChatGPT.
 
-Phases 1, 2, and 4A are included in the current build. Phase 3 is paused and hidden. Phases 4B, 4C, and 5 are deferred and are not included in the current build. Their sections remain as non-active design notes for possible future work.
+Phases 1, 2, 3, 4A, and 4B are included in the 0.23.0 build. Phase 4C remains deferred as a generic optional task ledger, and Phase 5 remains deferred as a separate model-worker layer. The runtime also includes durable deferred operations, semantic search, structured diagnostics, change-aware validation plans, output schemas, OAuth hardening, OpenTelemetry, and revision-aware resource caching.
 
 The target is not to reproduce Claude Code's user interface. The target is to remove the practical runtime limitations that matter during complex coding work:
 
@@ -23,19 +23,21 @@ Use these files as the authoritative integration points:
 
 | Concern | Current implementation |
 | --- | --- |
-| Tool definitions and JSON schemas | `src/tools/registry.js` |
-| Connector-visible schema generation | `src/tools/schema.js` |
-| Tool handlers | `src/tools/handlers.js` |
-| Handler dispatch | `src/tools/dispatch.js` |
-| Tool orchestration, audit, activity, workspace queue | `src/tools.js` |
-| One-shot child processes and process-tree termination | `src/process.js` |
-| Active operation and task tracking | `src/toolActivity.js` |
-| Workspace resolution and configuration | `src/config.js` |
-| Workspace serialization and editing | `src/configEditor.js` |
-| Session ownership and baseline tracking | `src/policyResolver.js` |
+| Tool definitions and input schemas | `src/tools/registry.js`, `src/tools/schema.js` |
+| Stable tool output schemas | `src/tools/outputSchemas.js` |
+| Tool handlers and execution orchestration | `src/tools/handlers.js`, `src/tools/execution.js`, `src/tools.js` |
+| One-shot child processes and process-tree termination | `src/process.js`, `src/bridge/exec.js` |
+| Managed persistent processes and log cursors | `src/processManager.js` |
+| Durable deferred operations | `src/operationTasks.js`, `src/tools/operationTaskHandlers.js` |
+| Logical task observability and activity | `src/taskObservability.js`, `src/toolActivity.js` |
+| Workspace resolution and configuration | `src/config.js`, `src/configEditor.js` |
+| Managed Git worktrees | `src/worktreeManager.js` |
 | Git operations | `src/repo/gitOps.js` |
-| Live symbol, reference, import-impact, affected-test, and diagnostic-readiness analysis | `src/bridge/codeIntelligence.js` |
-| MCP HTTP transport and parallel JSON-RPC batches | `src/http/mcp.js` |
+| Lexical trace, semantic search, diagnostics, and validation plans | `src/bridge/codeIntelligence.js`, `src/bridge/semanticSearch.js`, `src/bridge/diagnosticsRunner.js`, `src/bridge/validationPlan.js` |
+| MCP request context, approvals, results, and HTTP transport | `src/mcp/context.js`, `src/mcp/approval.js`, `src/mcp/results.js`, `src/http/mcp.js`, `src/mcpServer.js` |
+| OAuth authorization server | `src/oauthProvider.js` |
+| OpenTelemetry tracing | `src/telemetry.js` |
+| Resource generation and cache revisions | `src/resources.js` |
 | Electron application lifecycle | `electron/main.js` |
 | Dashboard sections and actions | `src/ui/features/` |
 | Boundary types | `types/boundaries.d.ts` |
@@ -89,7 +91,7 @@ Implemented.
 
 ### Runtime rule
 
-The snapshot is an initial map, not an access boundary. ChatGPT may call `relai_search`, `relai_code_inspect`, and `relai_read` for any relevant non-sensitive path inside the configured workspace, whether or not the path appeared in the snapshot. Code intelligence is best-effort lexical and import-graph analysis; it does not claim compiler-accurate language-server semantics or embedding-based semantic retrieval.
+The snapshot is an initial map, not an access boundary. ChatGPT may call `relai_search`, `relai_semantic_search`, `relai_code_inspect`, and `relai_read` for any relevant non-sensitive path inside the configured workspace, whether or not the path appeared in the snapshot. Code intelligence remains best-effort lexical, hashed-vector, and import-graph analysis; it does not claim compiler-accurate language-server semantics or transmit repository content to an external embedding service.
 
 ---
 
@@ -309,7 +311,7 @@ and receive accurate exit status, bounded output, timeout behavior, audit histor
 
 ## Status
 
-Paused. Not included in the current build or public tool surface.
+Implemented in 0.23.0 and included in the public tool surface.
 
 ## Objective
 
@@ -629,7 +631,7 @@ Cache by path, modification time, and size. Invalidate on edits to either instru
 
 ### Status
 
-Deferred. Not included in the current build or public tool surface.
+Implemented in 0.23.0 and included in the public tool surface.
 
 ### Objective
 
@@ -748,6 +750,8 @@ Support an explicit force field only after returning the dirty status in a previ
 ### Status
 
 Deferred. Not included in the current build or public tool surface.
+
+Durable deferred operations and signed validation plans are implemented, but they are not a generic user-authored task ledger. They track executable work and validation scope rather than arbitrary plan steps.
 
 ### Objective
 
@@ -1046,12 +1050,11 @@ Phase 5 is complete when the main ChatGPT conversation can delegate two independ
 
 ## Configuration migration
 
-Every configuration change must:
+Every configuration change must choose and document one explicit compatibility policy. Normal releases may normalize the immediately previous shape, but a declared hard-cutover release may reject or ignore obsolete keys and state instead of migrating them. In either case it must:
 
-- accept the immediately previous shape;
-- normalize to one canonical shape;
-- stop writing obsolete keys;
-- include a migration regression test;
+- write one canonical shape only;
+- avoid hidden aliases or silent fallback behavior;
+- include regression coverage for the selected policy;
 - update `examples/config.example.json`, README, status output, and dashboard forms.
 
 ## Tool registry integrity
@@ -1107,29 +1110,24 @@ Run the installed-app smoke test before release when the phase changes packaged 
 
 Recommended releases:
 
-| Release | Scope |
-| --- | --- |
-| Phase 1 release | Context policy migration and flexible file discovery |
-| Phase 2 release | `relai_exec` one-shot commands |
-| Phase 3 release | Managed persistent processes and dashboard |
-| Phase 4A release | Project instruction files |
-| Phase 4B release | Managed Git worktrees |
-| Phase 4C release | Optional task ledger |
-| Phase 5 preview | Disabled-by-default independent workers |
+| Release | Scope | Status |
+| --- | --- | --- |
+| Phase 1 | Context policy and flexible file discovery | Implemented |
+| Phase 2 | `relai_exec` one-shot commands | Implemented |
+| Phase 3 | Managed persistent processes and dashboard | Implemented in 0.23.0 |
+| Phase 4A | Project instruction files | Implemented |
+| Phase 4B | Managed Git worktrees | Implemented in 0.23.0 |
+| Phase 4C | Optional generic task ledger | Deferred |
+| Phase 5 preview | Disabled-by-default independent workers | Deferred |
 
-Avoid combining unrestricted commands, persistent processes, worktrees, and workers into one release. Each changes a different lifecycle boundary and needs isolated regression coverage.
+The 0.23.0 hard cutover combines several mature runtime boundaries behind one explicit 33-tool surface. Future lifecycle additions should still receive focused regression coverage and independent ownership boundaries.
 
 ---
 
 # Recommended implementation order
 
-1. Ship and observe Phase 1.
-2. Implement `relai_exec` using the existing process runner.
-3. Refactor process execution into reusable one-shot and managed-process primitives.
-4. Add persistent process tools and dashboard lifecycle controls.
-5. Add project instructions.
-6. Add managed worktrees.
-7. Add the optional task ledger if complex tasks need explicit progress state.
-8. Add independent API workers only after the local runtime is stable.
+1. Operate and harden the shipped one-shot, persistent-process, instruction, worktree, semantic-search, diagnostics, and validation-plan runtime.
+2. Add the optional generic task ledger only if users need editable plan steps beyond existing task observability and deferred-operation state.
+3. Add independent API workers only after the local runtime and worktree lifecycle have accumulated production evidence.
 
-The main practical parity gain comes from Phases 2 and 3. Phase 4 improves repository continuity and isolation. Phase 5 adds true separate-context parallel reasoning and should be treated as an optional agent-host product layer rather than a basic MCP bridge feature.
+The main practical parity gain now comes from the shipped command, process, worktree, intelligence, diagnostics, and validation capabilities. Phase 4C would add editable planning semantics rather than execution capability. Phase 5 would add true separate-context parallel reasoning and remains an optional agent-host product layer rather than a basic MCP bridge feature.

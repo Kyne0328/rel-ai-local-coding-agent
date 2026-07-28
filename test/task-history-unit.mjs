@@ -28,13 +28,14 @@ const entries = [
 const sessions = buildTaskHistory(entries, { state: 'idle' });
 assert.equal(sessions.length, 3);
 const inactive = sessions.find(session => session.id === 'task-1');
-assert.equal(inactive.status, 'inactive');
+assert.equal(inactive.status, 'cancelled');
+assert.ok(inactive.title);
 assert.equal(inactive.calls, 3);
 assert.deepEqual(inactive.changedFiles, ['src/a.js', 'test/a.test.js']);
 assert.equal(inactive.validation, 'passed');
 assert.equal(inactive.committed, true);
 const failed = sessions.find(session => session.id === 'task-2');
-assert.equal(failed.status, 'attention');
+assert.equal(failed.status, 'failed');
 assert.equal(failed.validation, 'failed');
 const completed = sessions.find(session => session.id === 'task-3');
 assert.equal(completed.status, 'completed');
@@ -46,7 +47,7 @@ const strictIdentity = buildTaskHistory([
   event('completion-task', { ts: '2026-07-11T09:00:03.000Z', tool: 'relai_complete_task', completionKnown: true, relatedTaskIds: ['validation-task'], scopeId: 'old-transport-b' })
 ], { state: 'idle' });
 assert.equal(strictIdentity.length, 2, 'different explicit task IDs must never be reconciled');
-assert.equal(strictIdentity.find(item => item.id === 'validation-task').status, 'inactive');
+assert.equal(strictIdentity.find(item => item.id === 'validation-task').status, 'cancelled');
 assert.equal(strictIdentity.find(item => item.id === 'completion-task').status, 'completed');
 
 const ignoredLegacy = buildTaskHistory([
@@ -76,7 +77,7 @@ const active = buildTaskHistory([], {
   ]
 });
 assert.equal(active.length, 2);
-assert.equal(active.find(session => session.id === 'task-active-a').status, 'working');
-assert.equal(active.find(session => session.id === 'task-active-b').status, 'waiting');
+assert.equal(active.find(session => session.id === 'task-active-a').status, 'running');
+assert.equal(active.find(session => session.id === 'task-active-b').status, 'planning');
 
 console.log('Current task history uses exact explicit task IDs and ignores legacy data.');

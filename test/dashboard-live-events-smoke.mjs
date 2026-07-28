@@ -21,6 +21,7 @@ assert.doesNotMatch(eventClientSource, /visibilityState === 'hidden'/, 'backgrou
 assert.match(eventClientSource, /visibilityState !== 'visible'/, 'visibility recovery must reconnect only when the window becomes visible and the stream is absent');
 assert.match(eventClientSource, /new EventSource\(url, \{ withCredentials: true \}\)/, 'Electron EventSource requests must include the dashboard session cookie');
 assert.match(dashboardSource, /sendSnapshot\(true\)/, 'every new SSE connection must receive an immediate catch-up snapshot');
+assert.match(dashboardSource, /payload\.snapshot\.streamId.*payload\.snapshot\.sequence/, 'SSE snapshots must expose a stable stream ID and monotonic sequence');
 assert.match(dashboardClientSource, /source: 'visibility-resume'/, 'returning to the dashboard must force a catch-up refresh');
 assert.match(dashboardSource, /onToolActivity\(scheduleSnapshot\)/, 'tool activity must schedule dashboard snapshots');
 assert.doesNotMatch(dashboardSource, /setInterval\(\(\) => sendSnapshot/, 'dashboard updates must not depend on a polling timer');
@@ -92,6 +93,9 @@ try {
   const initialSnapshot = await stream.nextDashboardEvent();
   assert.equal(initialSnapshot.desktopStatus?.tunnelStatus, 'connecting');
   assert.equal(initialSnapshot.connectionState?.localService?.status, 'running');
+  assert.equal(initialSnapshot.snapshot?.modelVersion, 3);
+  assert.ok(initialSnapshot.snapshot?.streamId);
+  assert.ok(initialSnapshot.snapshot?.sequence > 0);
 
   const entry = {
     ts: new Date().toISOString(),
@@ -115,6 +119,8 @@ try {
   assert.equal(updated.desktopStatus?.tunnelStatus, 'connecting');
   assert.equal(updated.connectionState?.localService?.status, 'running');
   assert.equal(updated.connectionState?.publicEndpoint?.status, 'connecting');
+  assert.equal(updated.snapshot?.streamId, initialSnapshot.snapshot?.streamId);
+  assert.ok(updated.snapshot?.sequence > initialSnapshot.snapshot?.sequence);
   assert.ok(
     updated.auditTail?.entries?.some(item => item.tool === 'relai_read' && item.workspace === 'test'),
     'dashboard SSE must emit newly appended audit entries without a manual refresh'
@@ -138,6 +144,7 @@ try {
   assert.equal(desktopUpdated.desktopStatus?.mcpUrl, 'https://example.ngrok-free.dev/mcp');
   assert.equal(desktopUpdated.connectionState?.publicEndpoint?.status, 'available');
   assert.equal(desktopUpdated.connectionState?.chatgptReadiness?.status, 'ready');
+  assert.ok(desktopUpdated.snapshot?.sequence > updated.snapshot?.sequence);
 } finally {
   controller.abort();
   await responseReader?.cancel().catch(() => {});

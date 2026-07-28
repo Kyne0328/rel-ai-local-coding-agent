@@ -9,6 +9,8 @@ import { initCommandPalette } from './ui/command-palette.js';
 import { normalizeRouteKey } from './ui/route-policy.js';
 import { closeDrawer } from './ui/components/drawer.js';
 import { initWindowChrome } from './ui/window-chrome.js';
+import { createDashboardClock } from './ui/clock.js';
+import { createSnapshotGate } from './ui/snapshot-order.js';
 
 initUiPreferences();
 
@@ -27,7 +29,7 @@ restoreRoute();
 
 let _routerReady = false;
 let _lastEventAt = null;
-let _clockTimer = null;
+let _dashboardClock = null;
 let _shellStatus = { label: 'Connecting', tone: 'warn' };
 let _liveState = 'connecting';
 let _refreshPromise = null;
@@ -35,6 +37,7 @@ let _renderFingerprint = '';
 let _renderFrame = 0;
 let _renderWaiters = [];
 let _deferredViewRender = false;
+const _snapshotGate = createSnapshotGate();
 
 function cleanLaunchQuery() {
   const clean = new URLSearchParams(location.search);
@@ -80,8 +83,11 @@ function ensureRouteRoot() {
 }
 
 async function boot() {
+  _dashboardClock = createDashboardClock({ onTick: renderLastEventTime }).start();
+  window.addEventListener('pagehide', () => _dashboardClock?.stop(), { once: true });
   const initialPayload = readInitialPayload();
   const initial = initialPayload?.ok !== false ? withConnectionState(initialPayload || {}, _liveState) : initialPayload;
+  _snapshotGate.accept(initialPayload);
   initStore(initial?.ok !== false ? initial || {} : {});
   const routeRoot = ensureRouteRoot();
   if (!routeRoot) return;
@@ -133,6 +139,7 @@ function getSections() {
     home: element => mountHome(element, getStore()),
     tasks: element => import('./ui/features/sessions/index.js').then(module => module.mountTasks(element, getStore())).catch(debugError),
     workspaces: element => import('./ui/features/workspaces/index.js').then(module => module.mountWorkspaces(element, getStore())).catch(debugError),
+    processes: element => import('./ui/features/processes/index.js').then(module => module.mountProcesses(element, getStore())).catch(debugError),
     activity: element => import('./ui/features/activity/index.js').then(module => module.mountActivity(element)).catch(debugError),
     tools: element => import('./ui/features/tools/index.js').then(module => module.mountTools(element)).catch(debugError),
     reference: element => import('./ui/features/tools/index.js').then(module => module.mountTools(element)).catch(debugError),
@@ -221,7 +228,7 @@ function renderDashboardState(kind, title, description) {
 }
 
 async function liveOnEvent(data) {
-  if (!data || data.ok === false) return;
+  if (!data || data.ok === false || !_snapshotGate.accept(data)) return;
   const hydrated = withConnectionState(data, _liveState);
   initStore(hydrated);
   updateShell(hydrated);
@@ -239,7 +246,6 @@ function liveStateChange(detail) {
   initStore(withConnectionState(getStore(), _liveState));
   renderConnectionStatus();
   if (_routerReady && currentRoutePath() === 'settings/connection') void renderViewIfChanged(getStore());
-  ensureClock();
 }
 
 function updateShell(data) {
@@ -343,6 +349,9 @@ function viewFingerprint(data = {}) {
     case 'workspaces':
       payload = [route, config.workspaces || [], data.workspaceStates || {}, data.health || {}];
       break;
+    case 'processes':
+      payload = [route, data.managedProcesses || []];
+      break;
     case 'tools':
     case 'reference':
       payload = [route, data.tools || []];
@@ -398,15 +407,10 @@ function renderConnectionStatus() {
   status.setAttribute('aria-label', `Open Connection settings; current status ${presentation.label}`);
 }
 
-function ensureClock() {
-  if (_clockTimer) return;
-  _clockTimer = window.setInterval(renderLastEventTime, 1000);
-}
-
-function renderLastEventTime() {
+function renderLastEventTime(now = Date.now()) {
   const updated = document.getElementById('lastUpdated');
   if (!updated || !_lastEventAt) return;
-  const seconds = Math.max(0, Math.floor((Date.now() - _lastEventAt) / 1000));
+  const seconds = Math.max(0, Math.floor((now - _lastEventAt) / 1000));
   if (seconds < 5) {
     updated.textContent = 'Updated just now';
     return;

@@ -7,11 +7,31 @@ const { resolvePolicy } = require("../policyResolver");
 const { clampNumber } = require("./limits");
 const { updateCurrentToolActivity } = require("../toolActivity");
 const { finalizeValidationResult, normalizeCompletionSummary } = require("../tools/completion");
+const { readValidationPlan } = require('./validationPlan');
+const { workspaceGitStatus } = require('../repo/gitOps');
+const { runSpan } = require('../telemetry');
+const { operationTaskSignal } = require('../operationTasks');
 const CHECK_OUTPUT_TAIL_DEFAULT = 4000, CHECK_OUTPUT_TAIL_FULL = 40000;
 async function relaiVerify(workspace, config, args = {}) {
-  const level = String(args.level || "standard").toLowerCase();
+  let effectiveArgs = args;
+  let validationPlan = null;
+  let planSelection = '';
+  if (args.planId) {
+    validationPlan = readValidationPlan(config, args.planId, workspace);
+    const current = await workspaceGitStatus(workspace, config, { maxBytes: 256 * 1024 });
+    const expectedFiles = [...(validationPlan.changedFiles || [])].sort();
+    const currentFiles = [...(current.changedFiles || [])].sort();
+    if (JSON.stringify(expectedFiles) !== JSON.stringify(currentFiles)) {
+      throw new Error('Validation plan is stale because the workspace changed. Create a new relai_validation_plan.');
+    }
+    planSelection = String(args.planLevel || args.level || validationPlan.recommended || 'focused').toLowerCase();
+    const plannedChecks = validationPlan.checks?.[planSelection];
+    if (!Array.isArray(plannedChecks)) throw new Error(`Validation plan has no '${planSelection}' check set.`);
+    effectiveArgs = { ...args, checks: plannedChecks };
+  }
+  const level = String(planSelection === 'focused' ? 'quick' : (args.level || planSelection || "standard")).toLowerCase();
   const complete = args.complete === true, completionSummary = complete ? normalizeCompletionSummary(args.summary) : '';
-  const { checks, aliasNormalizations } = normalizeVerifyChecks(args, workspace.path, level);
+  const { checks, aliasNormalizations } = normalizeVerifyChecks(effectiveArgs, workspace.path, level);
   const { level: validationLevel, reason: validationLevelReason, changedFiles } = selectValidationLevel(workspace.path, workspace, args.validationLevel);
   const policy = resolvePolicy(workspace, config);
   if (checks.length === 0) {
@@ -39,18 +59,26 @@ async function relaiVerify(workspace, config, args = {}) {
     : config;
   const tailChars = fullOutput ? CHECK_OUTPUT_TAIL_FULL : CHECK_OUTPUT_TAIL_DEFAULT;
   const results = [];
+  const signal = args._operationTaskId ? operationTaskSignal(config, args._operationTaskId) : undefined;
   for (let index = 0; index < checks.length; index += 1) {
     const command = checks[index];
     updateCurrentToolActivity({
       operation: `Running validation ${index + 1}/${checks.length}: ${command}`,
       detail: command
     });
-    const result = await runProcess(command, [], {
+    const result = await runSpan(config, 'relai.validation.step', {
+      'relai.workspace': workspace.alias,
+      'relai.validation.command': command.slice(0, 300),
+      'relai.validation.index': index + 1,
+      'relai.validation.total': checks.length,
+      'relai.validation.plan_id': String(args.planId || '')
+    }, () => runProcess(command, [], {
       cwd: workspace.path,
       shell: true,
       commandString: command,
-      timeout: clampNumber(args.timeoutMs, 1000, 24 * 60 * 60 * 1000, 120000)
-    }, runConfig);
+      timeout: clampNumber(args.timeoutMs, 1000, 24 * 60 * 60 * 1000, 120000),
+      signal
+    }, runConfig));
     const summary = boundCheckOutput({ command, ...summarizeCommand(result) }, tailChars);
     results.push(summary);
     if (!summary.ok && stopOnFailure) break;
@@ -74,6 +102,7 @@ async function relaiVerify(workspace, config, args = {}) {
     validated: results.length > 0,
     validationStatus: ok ? "passed" : "failed",
     nextAction,
+    ...(validationPlan ? { planId: validationPlan.planId, planSelection, planCreatedAt: validationPlan.createdAt } : {}),
     ...(fullOutput ? { fullOutput: true } : {})
   };
   if (!ok || !complete) return validationResult;

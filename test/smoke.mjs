@@ -11,17 +11,13 @@ const client = startMcpClient({
 });
 
 try {
-  client.send(1, 'initialize', {
-    protocolVersion: '2025-06-18',
-    capabilities: {},
-    clientInfo: { name: 'relai-smoke', version: '1.0.0' }
-  });
-  const init = await client.waitFor(1);
-  client.notify('notifications/initialized');
-  if (!init.result?.capabilities?.tools) throw new Error('initialize did not advertise tools capability');
-  if (!init.result?.capabilities?.resources) throw new Error('initialize did not advertise resources capability');
-  if (!String(init.result?.instructions || '').includes('relai_complete_task')) {
-    throw new Error('initialize did not advertise the explicit final-completion contract');
+  client.discover(1);
+  const discovery = await client.waitFor(1);
+  if (!discovery.result?.capabilities?.tools) throw new Error('server/discover did not advertise tools capability');
+  if (!discovery.result?.capabilities?.resources) throw new Error('server/discover did not advertise resources capability');
+  if (!discovery.result?.supportedVersions?.includes('2026-07-28')) throw new Error('server/discover did not advertise MCP 2026-07-28');
+  if (!String(discovery.result?.instructions || '').includes('relai_complete_task')) {
+    throw new Error('server/discover did not advertise the explicit final-completion contract');
   }
 
   client.send(2, 'tools/list');

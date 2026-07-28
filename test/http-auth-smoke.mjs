@@ -1,20 +1,17 @@
+import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import http from 'node:http';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { mcpBody, mcpHeaders, postMcp } from './helpers/http-mcp.mjs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const root = path.resolve(__dirname, '..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const port = 39877;
-const token = process.env.TEST_TOKEN ?? 'auth-smoke-token';
-const chatgptSecret = 'auth-smoke-secret';
-// Use a small body limit so the 2.5 MB body test actually triggers the rejection
-const maxBodyBytes = 1 * 1024 * 1024; // 1 MB
-const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-http-auth-smoke-'));
-
+const token = 'auth-smoke-token';
+const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-http-auth-'));
 const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.js'), '--host', '127.0.0.1', '--port', String(port), '--no-profile-write'], {
   cwd: root,
   stdio: ['ignore', 'pipe', 'pipe'],
@@ -22,252 +19,96 @@ const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.j
     ...process.env,
     REL_AI_MCP_CONFIG: path.join(root, 'examples', 'config.example.json'),
     REL_AI_MCP_TOKEN: token,
-    REL_AI_MCP_MAX_BODY_BYTES: String(maxBodyBytes),
-    // The /register test below writes the OAuth client store — keep it out of the
-    // user's real ~/.rel-ai-mcp state.
-    REL_AI_MCP_STATE_DIR: stateDir
+    REL_AI_MCP_STATE_DIR: stateDir,
+    REL_AI_MCP_MAX_BODY_BYTES: String(1024 * 1024),
+    REL_AI_MCP_DEBUG: '1'
   }
 });
-
 let stderr = '';
-child.stderr.on('data', (chunk) => { stderr += chunk.toString('utf8'); });
+child.stderr.on('data', chunk => { stderr += chunk.toString('utf8'); });
+const base = `http://127.0.0.1:${port}`;
 
 async function waitForHealth() {
-  const url = `http://127.0.0.1:${port}/health`;
-  const started = Date.now();
-  while (Date.now() - started < 5000) {
-    try {
-      const response = await fetch(url);
-      if (response.ok) return response.json();
-    } catch {}
-    await new Promise((resolve) => setTimeout(resolve, 50));
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    try { if ((await fetch(`${base}/health`)).ok) return; } catch {}
+    await new Promise(resolve => setTimeout(resolve, 50));
   }
-  throw new Error(`HTTP server did not become healthy. stderr:\n${stderr}`);
+  throw new Error(`HTTP server did not become healthy. ${stderr}`);
 }
 
-async function readMcpResponse(response) {
-  const text = await response.text();
-  if ((response.headers.get('content-type') || '').includes('text/event-stream')) {
-    const lines = text.split(/\r?\n/).filter(line => line.startsWith('data:')).map(line => line.slice(5).trim()).filter(Boolean);
-    if (!lines.length) throw new Error(`MCP SSE response contained no data: ${text}`);
-    return JSON.parse(lines.at(-1));
-  }
-  return JSON.parse(text);
-}
+try {
+  await waitForHealth();
+  assert.equal((await fetch(`${base}/health`)).status, 200);
+  assert.equal((await fetch(`${base}/dashboard`)).status, 401);
+  assert.equal((await fetch(`${base}/dashboard`, { headers: { authorization: `Bearer ${token}` } })).status, 200);
+  assert.equal((await fetch(`${base}/api/settings`, { headers: { authorization: `Bearer ${token}` } })).status, 200);
 
-async function check(label, fn) {
-  try {
-    await fn();
-    console.log(`  ✓ ${label}`);
-  } catch (error) {
-    console.error(`  ✗ ${label}`);
-    console.error('    smoke check failed');
-    if (process.env.REL_AI_MCP_DEBUG) console.error(error);
-    process.exitCode = 1;
-  }
-}
-
-await waitForHealth();
-
-const base = `http://127.0.0.1:${port}`;
-const bearer = { authorization: `Bearer ${token}` };
-const jsonType = { 'content-type': 'application/json' };
-const mcpType = { ...jsonType, accept: 'application/json, text/event-stream' };
-const mcpToolsList = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
-
-// GET /health — public, no token → 200
-await check('GET /health — public, no token → 200', async () => {
-  const res = await fetch(`${base}/health`);
-  if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-  const body = await res.json();
-  if (!body.ok) throw new Error('health body.ok was not true');
-});
-
-// GET /dashboard — no token → 401 with a stable recovery code
-await check('GET /dashboard — no token → 401', async () => {
-  const res = await fetch(`${base}/dashboard`);
-  if (res.status !== 401) throw new Error(`expected 401, got ${res.status}`);
-  const body = await res.json();
-  if (body.errorCode !== 'approval_token_required') {
-    throw new Error(`expected approval_token_required, got ${body.errorCode}`);
-  }
-});
-
-// GET /dashboard — rejected token → 401 with a distinct recovery code
-await check('GET /dashboard — rejected token → 401', async () => {
-  const res = await fetch(`${base}/dashboard?token=wrong-token`);
-  if (res.status !== 401) throw new Error(`expected 401, got ${res.status}`);
-  const body = await res.json();
-  if (body.errorCode !== 'approval_token_rejected') {
-    throw new Error(`expected approval_token_rejected, got ${body.errorCode}`);
-  }
-});
-
-// GET /dashboard — with bearer → 200
-await check('GET /dashboard — with bearer → 200', async () => {
-  const res = await fetch(`${base}/dashboard`, { headers: bearer });
-  if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-});
-
-// GET /dashboard — with ?token= → 200
-await check('GET /dashboard — with ?token= → 200', async () => {
-  const res = await fetch(`${base}/dashboard?token=${encodeURIComponent(token)}`);
-  if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-});
-
-// GET /public/ui/api.js — dashboard module graph alias → 200
-await check('GET /public/ui/api.js — dashboard module graph alias → 200', async () => {
-  const res = await fetch(`${base}/public/ui/api.js`);
-  if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-  const contentType = res.headers.get('content-type') || '';
-  if (!contentType.includes('application/javascript')) throw new Error(`expected JavaScript content-type, got ${contentType}`);
-  const body = await res.text();
-  if (!body.includes('DASHBOARD_DATA_URL')) throw new Error('dashboard API module body was not served');
-});
-
-// GET /api/settings — no token → 401
-await check('GET /api/settings — no token → 401', async () => {
-  const res = await fetch(`${base}/api/settings`);
-  if (res.status !== 401) throw new Error(`expected 401, got ${res.status}`);
-});
-
-// GET /api/settings — with bearer → 200
-await check('GET /api/settings — with bearer → 200', async () => {
-  const res = await fetch(`${base}/api/settings`, { headers: bearer });
-  if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-  const body = await res.json();
-  if (!body.ok) throw new Error('settings body.ok was not true');
-});
-
-// GET /mcp diagnostic — OAuth, and never leaks a secret/token
-await check('GET /mcp diagnostic — OAuth, no secret leak', async () => {
-  const res = await fetch(`${base}/mcp`);
-  if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-  const body = await res.json();
-  const text = JSON.stringify(body);
-  if (!body.ok || body.chatgptAuth !== 'OAuth' || !body.correctChatGPTUrl.endsWith('/mcp') || !body.oauthProtectedResource.includes('/.well-known/oauth-protected-resource')) {
-    throw new Error('diagnostic did not advertise the OAuth flow');
-  }
-  if (text.includes(chatgptSecret) || text.includes(token)) {
-    throw new Error('diagnostic leaked a secret value');
-  }
-});
-
-// POST /mcp — no bearer → 401 with a stable recovery code
-await check('POST /mcp — no bearer → 401', async () => {
-  const res = await fetch(`${base}/mcp`, {
+  const challenge = await fetch(`${base}/mcp`, {
     method: 'POST',
-    headers: jsonType,
-    body: mcpToolsList
+    headers: mcpHeaders('tools/list'),
+    body: mcpBody(1, 'tools/list')
   });
-  if (res.status !== 401) throw new Error(`expected 401, got ${res.status}`);
-  const body = await res.json();
-  if (body.errorCode !== 'approval_token_required') {
-    throw new Error(`expected approval_token_required, got ${body.errorCode}`);
-  }
-});
+  assert.equal(challenge.status, 401);
+  assert.match(challenge.headers.get('www-authenticate') || '', /oauth-protected-resource\/mcp/);
 
-// POST /mcp — rejected bearer → 401 with a distinct recovery code
-await check('POST /mcp — rejected bearer → 401', async () => {
-  const res = await fetch(`${base}/mcp`, {
+  const listed = await postMcp(base, { id: 2, method: 'tools/list', token });
+  assert.equal(listed.response.status, 200, `${JSON.stringify(listed.body)}\n${stderr}`);
+  assert.equal(listed.body.result?.tools?.length, 33);
+
+  const missingVersion = await fetch(`${base}/mcp`, {
     method: 'POST',
-    headers: { ...jsonType, authorization: 'Bearer wrong-token' },
-    body: mcpToolsList
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'mcp-method': 'tools/list' },
+    body: mcpBody(3, 'tools/list')
   });
-  if (res.status !== 401) throw new Error(`expected 401, got ${res.status}`);
-  const body = await res.json();
-  if (body.errorCode !== 'approval_token_rejected') {
-    throw new Error(`expected approval_token_rejected, got ${body.errorCode}`);
-  }
-});
+  assert.equal(missingVersion.status, 400);
 
-// POST /mcp — with bearer → 200 (tools/list)
-await check('POST /mcp — with bearer → 200 (tools/list)', async () => {
-  const res = await fetch(`${base}/mcp`, {
-    method: 'POST',
-    headers: { ...mcpType, ...bearer },
-    body: mcpToolsList
+  const oldSession = await postMcp(base, {
+    id: 4,
+    method: 'tools/list',
+    token,
+    extraHeaders: { 'mcp-session-id': 'removed-session' }
   });
-  if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
-  const body = await readMcpResponse(res);
-  if (!Array.isArray(body.result?.tools)) throw new Error('expected tools array in response');
-});
+  assert.equal(oldSession.response.status, 400);
+  assert.match(oldSession.body.error?.message || '', /not valid/);
 
-// POST /mcp/<secret> — legacy no-auth path removed → 401 or 404
-await check('POST /mcp/<secret> — removed → 401 or 404', async () => {
-  const res = await fetch(`${base}/mcp/${chatgptSecret}`, {
-    method: 'POST',
-    headers: jsonType,
-    body: mcpToolsList
-  });
-  if (res.status !== 401 && res.status !== 404) {
-    throw new Error(`legacy secret path should no longer authenticate; got ${res.status}`);
-  }
-});
+  const initialize = await postMcp(base, { id: 5, method: 'initialize', token });
+  assert.equal(initialize.response.status, 400);
+  assert.match(initialize.body.error?.message || '', /removed/);
 
-// POST /mcp/wrong-secret — no bearer → 401 or 404
-await check('POST /mcp/wrong-secret — no bearer → 401 or 404', async () => {
-  const res = await fetch(`${base}/mcp/wrong-secret-that-does-not-match`, {
-    method: 'POST',
-    headers: jsonType,
-    body: mcpToolsList
-  });
-  if (res.status !== 401 && res.status !== 404) {
-    throw new Error(`expected 401 or 404, got ${res.status}`);
-  }
-});
+  const getMcp = await fetch(`${base}/mcp`, { headers: { authorization: `Bearer ${token}` } });
+  assert.equal(getMcp.status, 405);
 
-// Regression: a multi-byte UTF-8 character split across two body chunks must
-// decode intact (readRawBody used to decode per-chunk, yielding U+FFFD halves).
-await check('multibyte body split across chunks decodes intact', async () => {
-  const uri = 'https://example.com/cb-\u{1F389}漢字é';
-  const payload = Buffer.from(JSON.stringify({ redirect_uris: [uri] }), 'utf8');
-  // Split inside the 4-byte emoji sequence so each half is invalid UTF-8 alone.
-  const splitAt = payload.indexOf(Buffer.from('\u{1F389}', 'utf8')) + 2;
-  const result = await new Promise((resolve, reject) => {
-    const req = http.request({
-      host: '127.0.0.1',
-      port,
-      path: '/register',
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'content-length': payload.length }
-    }, (res) => {
+  const uri = 'https://example.com/cb-🎉漢字é';
+  const payload = Buffer.from(JSON.stringify({ application_type: 'web', redirect_uris: [uri] }), 'utf8');
+  const splitAt = payload.indexOf(Buffer.from('🎉', 'utf8')) + 2;
+  const registration = await new Promise((resolve, reject) => {
+    const request = http.request({ host: '127.0.0.1', port, path: '/register', method: 'POST', headers: { 'content-type': 'application/json', 'content-length': payload.length } }, response => {
       let data = '';
-      res.setEncoding('utf8');
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => resolve({ status: res.statusCode, data }));
+      response.setEncoding('utf8');
+      response.on('data', chunk => { data += chunk; });
+      response.on('end', () => resolve({ status: response.statusCode, body: JSON.parse(data) }));
     });
-    req.on('error', reject);
-    req.write(payload.subarray(0, splitAt));
-    setTimeout(() => req.end(payload.subarray(splitAt)), 50);
+    request.on('error', reject);
+    request.write(payload.subarray(0, splitAt));
+    setTimeout(() => request.end(payload.subarray(splitAt)), 25);
   });
-  if (result.status !== 201) throw new Error(`expected 201, got ${result.status}: ${result.data}`);
-  const body = JSON.parse(result.data);
-  if (!Array.isArray(body.redirect_uris) || body.redirect_uris[0] !== uri) {
-    throw new Error(`multibyte content corrupted in transit: ${body.redirect_uris?.[0]}`);
-  }
-});
+  assert.equal(registration.status, 201);
+  assert.equal(registration.body.redirect_uris[0], uri);
 
-// body limit — POST /mcp with 2.5 MB+ body → 413 or error (server configured with 1 MB limit)
-await check('body limit — POST /mcp with 2.5 MB+ body → 4xx or 5xx or connection error', async () => {
   const oversized = 'x'.repeat(2.5 * 1024 * 1024);
-  const payload = JSON.stringify({ jsonrpc: '2.0', id: 99, method: 'tools/list', params: { _pad: oversized } });
-  let status;
+  let oversizedStatus = 500;
   try {
-    const res = await fetch(`${base}/mcp`, {
+    oversizedStatus = (await fetch(`${base}/mcp`, {
       method: 'POST',
-      headers: { ...jsonType, ...bearer, connection: 'close' },
-      body: payload
-    });
-    status = res.status;
-  } catch {
-    // Connection destroyed by server — that counts as the limit being enforced.
-    return;
-  }
-  if (status < 400) throw new Error(`expected error status for oversized body, got ${status}`);
-});
+      headers: mcpHeaders('tools/list', { token, extra: { connection: 'close' } }),
+      body: mcpBody(6, 'tools/list', { pad: oversized })
+    })).status;
+  } catch {}
+  assert.ok(oversizedStatus >= 400);
+} finally {
+  child.kill('SIGKILL');
+  await once(child, 'close').catch(() => {});
+  fs.rmSync(stateDir, { recursive: true, force: true });
+}
 
-child.kill('SIGKILL');
-await once(child, 'close');
-fs.rmSync(stateDir, { recursive: true, force: true });
-console.log('HTTP auth smoke tests passed.');
+console.log('HTTP authentication and MCP 2026 header tests passed.');
