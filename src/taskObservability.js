@@ -255,7 +255,8 @@ function actionForTool(name) {
 }
 
 function stageForTool(name, status) {
-  if (status === 'failed' || status === 'blocked') return 'Resolving failure';
+  if (status === 'blocked') return 'Waiting for approval';
+  if (status === 'failed') return 'Resolving failure';
   if (/run_checks|diagnostics|validation/.test(name)) return 'Validating';
   if (/git_commit|git_push/.test(name)) return 'Publishing changes';
   if (/edit|restore|reset|tidy_run/.test(name)) return 'Updating repository';
@@ -294,6 +295,9 @@ function resultForTool(name, args, value, ok) {
 
 function summaryForTool(name, args, value, error, operation, result) {
   if (error) return `${operation || titleForTool(name, args) || 'Tool execution'} failed: ${error.message}`;
+  if (name === 'relai_start_task') return args?.title
+    ? `Started logical task “${sanitizeDisplayText(args.title, 120)}”.`
+    : 'Started a logical workspace task.';
   if (name === 'relai_read') return result.affectedItemCount
     ? `Read ${result.affectedItemCount} repository item${result.affectedItemCount === 1 ? '' : 's'}.`
     : 'Read repository content.';
@@ -382,7 +386,7 @@ function normalizeRelativePath(value) {
 function sanitizeDisplayText(value, maxLength = 200) {
   let text = String(value == null ? '' : value);
   text = text
-    .replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi, 'Bearer [redacted]')
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer [redacted]')
     .replace(/\b(token|secret|password|api[_-]?key|authorization|cookie)\s*[:=]\s*([^\s,;]+)/gi, '$1=[redacted]')
     .replace(/https?:\/\/[^\s<>"')\]]+/gi, match => sanitizeUrl(match));
   return cleanText(text, maxLength);

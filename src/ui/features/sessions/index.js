@@ -164,6 +164,9 @@ function openSession(session) {
     <div class="task-detail-current"><strong>${esc(session.currentStage || 'Current stage unavailable')}</strong><span>${esc(session.currentActivity || session.operation || 'No current activity recorded.')}</span></div>
     <div class="task-detail-grid">
       ${detail('Workspace', session.workspace || '—')}
+      ${session.correlation?.requestId ? detail('Request ID', session.correlation.requestId) : ''}
+      ${session.correlation?.traceId ? detail('Trace ID', session.correlation.traceId) : ''}
+      ${session.correlation?.conversationId ? detail('Conversation ID', session.correlation.conversationId) : ''}
       ${detail('Observed state', statusLabel(session.status))}
       ${detail('Current operation', session.operation || operationForTool(session.lastTool))}
       ${clockDetail('Duration', session.startedAt || session.createdAt, session.endedAt || session.completedAt, session.durationMs)}

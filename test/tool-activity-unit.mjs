@@ -52,7 +52,84 @@ const waitingTask = tracker.getToolActivity().tasks.find(task => task.id === fin
 assert.equal(waitingTask?.status, 'planning');
 assert.equal(waitingTask?.events.length, 2, 'each tool invocation must retain one lifecycle event');
 assert.equal(waitingTask?.events.at(-1)?.status, 'succeeded');
+assert.equal(waitingTask?.correlation?.workspaceId, 'repo');
 assert.equal([...timers.values()].every(timer => timer.delay === 60_000), true);
+
+const queueTracker = createToolActivityTracker({ idleMs: 60_000 });
+const finishQueuedRead = queueTracker.beginConnectorToolCall({
+  tool: 'relai_read',
+  workspace: 'repo',
+  scopeId: 'queue-test',
+  taskId: finishRead.taskId,
+  input: { paths: ['src/app.js'] }
+});
+finishQueuedRead.update({
+  currentStage: 'Workspace queue admitted',
+  currentActivity: 'Waited 1.8 seconds for the workspace execution queue.',
+  metadata: { waitMs: 1800, queueMode: 'write', queued: 2 }
+});
+finishQueuedRead({
+  ok: true,
+  activity: {
+    status: 'succeeded',
+    title: 'Read repository files',
+    summary: 'Read 1 repository item.',
+    currentStage: 'Inspecting repository',
+    currentActivity: 'Read 1 repository item.',
+    progress: { mode: 'determinate', completedUnits: 1, totalUnits: 1, percentage: 100, source: 'batch' },
+    metadata: { pathCount: 1 }
+  }
+});
+const queuedEvent = queueTracker.getToolActivity().tasks[0]?.events[0];
+assert.equal(queuedEvent?.metadata?.waitMs, 1800);
+assert.match(queuedEvent?.summary || '', /Waited 1\.8 seconds for the workspace execution queue/);
+
+const approvalTracker = createToolActivityTracker({ idleMs: 60_000 });
+const finishApproval = approvalTracker.beginConnectorToolCall({
+  tool: 'relai_edit',
+  workspace: 'repo',
+  scopeId: 'approval-test',
+  createTask: true
+});
+finishApproval({
+  ok: false,
+  error: 'Approval required.',
+  activity: {
+    status: 'blocked',
+    title: 'Update repository files',
+    summary: 'Approval is required before updating repository files.',
+    currentStage: 'Waiting for approval',
+    currentActivity: 'Approval is required before updating repository files.',
+    progress: { mode: 'indeterminate', label: 'Approval required' }
+  }
+});
+const approvalTask = approvalTracker.getToolActivity().tasks[0];
+assert.equal(approvalTask?.status, 'waiting_for_approval');
+assert.equal(approvalTask?.currentStage, 'Waiting for approval');
+assert.equal(approvalTask?.events[0]?.status, 'blocked');
+
+const volumeTracker = createToolActivityTracker({ idleMs: 60_000 });
+const finishVolumeStart = volumeTracker.beginConnectorToolCall({
+  tool: 'relai_start_task',
+  workspace: 'repo',
+  scopeId: 'volume-test',
+  createTask: true
+});
+const volumeTaskId = finishVolumeStart.taskId;
+finishVolumeStart();
+for (let index = 1; index < 250; index += 1) {
+  const finishVolumeCall = volumeTracker.beginConnectorToolCall({
+    tool: 'relai_status',
+    workspace: 'repo',
+    scopeId: `volume-${index}`,
+    taskId: volumeTaskId
+  });
+  finishVolumeCall();
+}
+const volumeTask = volumeTracker.getToolActivity().tasks[0];
+assert.equal(volumeTask?.calls, 250);
+assert.equal(volumeTask?.events.length, 200, 'long tasks must retain a bounded activity timeline');
+assert.equal(new Set(volumeTask?.events.map(event => event.eventId)).size, 200, 'bounded timelines must retain unique lifecycle events');
 
 nowValue = 91_000;
 for (const { callback } of [...timers.values()]) callback();

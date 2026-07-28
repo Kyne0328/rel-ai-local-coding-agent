@@ -59,11 +59,14 @@ try {
   assert.equal(session.toolCallCount, 3);
   assert.equal(session.failedToolCallCount, 0);
   assert.equal(session.resultSummary, 'Inspected and verified session activity persistence.');
+  assert.equal(session.correlation.requestId, 'request-1');
+  assert.equal(session.correlation.workspaceId, 'repo');
   assert.equal(session.events.length, 3, 'one canonical lifecycle event must be persisted per tool call');
   assert.deepEqual(session.events.map(event => event.sequence), [1, 2, 3]);
   assert.equal(session.events.every(event => event.taskId === started.task_id && event.sessionId === started.task_id), true);
   assert.equal(session.events.find(event => event.tool?.name === 'relai_read')?.result?.affectedItemCount, 2);
   assert.equal(session.events.at(-1)?.status, 'succeeded');
+  assert.match(session.events[0]?.summary, /Started logical task/);
 } finally {
   if (previousConfig == null) delete process.env.REL_AI_MCP_CONFIG;
   else process.env.REL_AI_MCP_CONFIG = previousConfig;
