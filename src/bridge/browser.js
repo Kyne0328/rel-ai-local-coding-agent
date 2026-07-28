@@ -1,8 +1,8 @@
-const fs = require("node:fs");
-const path = require("node:path");
-const { runProcess, summarizeCommand } = require("../process");
-const { clampNumber } = require("./limits");
-const { relaiHttpProbe, resolveLocalRouteTarget } = require("./httpProbe");
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { runProcess, summarizeCommand } from "../process.js";
+import { clampNumber } from "./limits.js";
+import { relaiHttpProbe, resolveLocalRouteTarget } from "./httpProbe.js";
 
 const SAFE_UI_CHECK_NAME = /^[A-Za-z0-9:._-]+$/;
 
@@ -52,4 +52,4 @@ async function relaiUiCheck(workspace, config, args = {}) {
   return runNamedUiCheck(workspace, config, args, "relai_ui_check");
 }
 
-module.exports = { relaiHttpProbe, relaiUiCheck, resolveLocalRouteTarget };
+export { relaiHttpProbe, relaiUiCheck, resolveLocalRouteTarget };

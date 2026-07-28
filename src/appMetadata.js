@@ -1,7 +1,7 @@
-'use strict';
 
-const pkg = require('../package.json');
-const { getVersion } = require('./version');
+
+import { packageMetadata as pkg } from './packageMetadata.js';
+import { getVersion } from "./version.js";
 
 function githubUsername(profileUrl) {
   try {
@@ -33,4 +33,4 @@ function getApplicationMetadata() {
   };
 }
 
-module.exports = { getApplicationMetadata };
+export { getApplicationMetadata };

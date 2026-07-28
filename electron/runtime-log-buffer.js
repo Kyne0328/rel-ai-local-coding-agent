@@ -1,8 +1,8 @@
-'use strict';
 
-const fs = require('node:fs');
-const path = require('node:path');
-const { sanitizeText } = require('../src/diagnostics');
+
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { sanitizeText } from "../src/diagnostics.js";
 
 function createRuntimeLogBuffer({ maxEntries = 200, now = () => new Date().toISOString(), filePath = '' } = {}) {
   const entries = [];
@@ -125,4 +125,4 @@ function normalizeLevel(value) {
   return 'info';
 }
 
-module.exports = { createRuntimeLogBuffer };
+export { createRuntimeLogBuffer };

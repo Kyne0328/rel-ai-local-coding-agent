@@ -2,10 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { createDesktopLifecycleManager, detectStartupSupport } = require('../electron/desktop-lifecycle.js');
+import { createDesktopLifecycleManager, detectStartupSupport } from "../electron/desktop-lifecycle.js";
 
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-lifecycle-'));
 let loginEnabled = false;

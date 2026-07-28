@@ -1,17 +1,10 @@
-'use strict';
 
-const { readAudit } = require('../audit');
-const { resolveWorkspace } = require('../config');
-const { clearSessionPolicy, resolvePolicy } = require('../policyResolver');
-const { readTaskHistorySession } = require('../taskHistoryStore');
-const { sanitizeCompletionSummary } = require('../taskObservability');
-const {
-  getCurrentToolActivityContext,
-  requestCurrentTaskCompletion,
-  taskError,
-  normalizeTaskId
-} = require('../toolActivity');
-
+import { readAudit } from '../audit.js';
+import { resolveWorkspace } from '../config.js';
+import { clearSessionPolicy, resolvePolicy } from '../policyResolver.js';
+import { readTaskHistorySession } from '../taskHistoryStore.js';
+import { sanitizeCompletionSummary } from '../taskObservability.js';
+import { getCurrentToolActivityContext, requestCurrentTaskCompletion, taskError, normalizeTaskId } from '../toolActivity.js';
 const CODE_MUTATING_TOOLS = new Set([
   'relai_edit',
   'relai_tidy_run',
@@ -244,11 +237,4 @@ function unique(values) {
   return [...new Set(values)];
 }
 
-module.exports = {
-  completeTask,
-  finalizeValidatedTask,
-  finalizeValidationResult,
-  normalizeCompletionSummary,
-  CODE_MUTATING_TOOLS,
-  eventMutatedCode
-};
+export { completeTask, finalizeValidatedTask, finalizeValidationResult, normalizeCompletionSummary, CODE_MUTATING_TOOLS, eventMutatedCode };

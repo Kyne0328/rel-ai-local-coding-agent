@@ -1,8 +1,6 @@
-'use strict';
 
-const crypto = require('node:crypto');
-const { TERMINAL_TASK_STATUSES, normalizeHistoricalTaskStatus } = require('./taskState');
-
+import * as crypto from 'node:crypto';
+import { TERMINAL_TASK_STATUSES, normalizeHistoricalTaskStatus } from './taskState.js';
 const TASK_MODEL_VERSION = 3;
 const MAX_TITLE_LENGTH = 100;
 const MAX_OBJECTIVE_LENGTH = 500;
@@ -543,7 +541,7 @@ function isoTime(value) {
   return new Date(Number.isFinite(timestamp) ? timestamp : Date.now()).toISOString();
 }
 
-module.exports = {
+export {
   TASK_MODEL_VERSION,
   TERMINAL_STATUSES,
   buildSafeActivityProjection,

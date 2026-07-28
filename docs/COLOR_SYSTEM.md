@@ -1,25 +1,34 @@
 # Rel.AI MCP color system
 
-`src/ui/colorTokens.mjs` is the build-time ESM owner of application colors. Dashboard, Electron setup/recovery, and OAuth surfaces consume generated CSS artifacts; runtime CommonJS modules do not import the manifest.
+`src/ui/colorTokens.mjs` is the build-time ESM owner of application colors. Dashboard, Electron setup/recovery, and OAuth surfaces consume generated CSS artifacts; runtime application modules do not import the manifest.
 
 The system preserves the established blue-and-slate Rel.AI identity while enforcing WCAG 2.2 Level AA contrast, consistent operational meaning, and centralized maintenance.
 
 ## Generated artifacts
 
-Run:
+Verify committed output without changing files:
+
+```powershell
+npm run verify:color-tokens
+```
+
+The command runs `node scripts/generate-color-tokens.mjs --check` and must execute before tests, release checks, or packaging. It fails when any generated file differs from the canonical output.
+
+Regenerate only after intentionally changing the manifest or when restoring a detected stale asset:
 
 ```powershell
 npm run generate:color-tokens
+npm run verify:color-tokens
 ```
 
-This command generates:
+The generator writes:
 
 - `src/ui/styles/color-tokens.css` for the dashboard;
 - `electron/renderer/color-tokens.css` for setup and recovery renderers;
 - `public/oauth.css` for OAuth authorization and error pages; and
 - `docs/color-system-reference.svg` as the reviewable palette reference.
 
-Generated files must not be edited directly. `test/color-system-unit.mjs` rejects stale output.
+Generated files must not be edited directly. `test/color-token-staleness-unit.mjs` proves that a modified generated asset fails verification, regeneration restores the exact canonical file, and verification then passes.
 
 ## Token layers
 
@@ -92,6 +101,8 @@ The dashboard supports persisted `system`, `dark`, and `light` preferences. Elec
 
 OAuth remains intentionally minimal and dark. Its static stylesheet is generated from the canonical dark theme and served through `/public/oauth.css`; authorization code does not import the build-time manifest.
 
+`electron/startup-background.js` separately owns one neutral BrowserWindow pre-render canvas value. It prevents the default white first frame before generated renderer CSS loads and intentionally does not duplicate the theme palette.
+
 ## Raw-color policy
 
 Raw `#hex`, `rgb()`, and `rgba()` values are prohibited in:
@@ -109,6 +120,7 @@ The automated color-system test enforces this policy. Generated CSS and the cano
 Run:
 
 ```powershell
+npm run verify:color-tokens
 npm run test:colors
 npm run test:all
 ```
@@ -120,9 +132,10 @@ The color test verifies:
 - absence of every removed compatibility alias;
 - native ESM exports with no CommonJS bridge;
 - deterministic dashboard, Electron, OAuth, and SVG output;
+- explicit stale-generated-asset failure and exact regeneration;
 - absence of raw component colors;
 - consistent running, waiting, success, and failure semantics;
-- Electron token stylesheet ordering; and
+- Electron token stylesheet ordering and startup-canvas ownership; and
 - OAuth use of the shared manifest.
 
 Before release, manually inspect the representative dashboard, Electron setup/recovery, and OAuth flows in light, dark, Windows high-contrast, and common color-vision-deficiency simulations. Review default, hover, focus, active, selected, disabled, loading, success, warning, danger, offline, and empty states at desktop and narrow viewport sizes.

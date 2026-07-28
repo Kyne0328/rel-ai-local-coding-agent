@@ -1,9 +1,9 @@
-'use strict';
 
-const crypto = require('node:crypto');
-const fs = require('node:fs');
-const path = require('node:path');
-const { getStateDir } = require('./audit');
+
+import * as crypto from "node:crypto";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { getStateDir } from './statePaths.js';
 
 const TASK_TTL_MS = 24 * 60 * 60 * 1000;
 const tasks = new Map();
@@ -178,15 +178,4 @@ function pruneOperationTasks(config) {
   return { removed };
 }
 
-module.exports = {
-  createOperationTask,
-  updateOperationTask,
-  completeOperationTask,
-  failOperationTask,
-  cancelOperationTask,
-  getOperationTask,
-  operationTaskSignal,
-  assertOperationTaskPrincipal,
-  assertOperationTaskLogicalOwner,
-  pruneOperationTasks
-};
+export { createOperationTask, updateOperationTask, completeOperationTask, failOperationTask, cancelOperationTask, getOperationTask, operationTaskSignal, assertOperationTaskPrincipal, assertOperationTaskLogicalOwner, pruneOperationTasks };

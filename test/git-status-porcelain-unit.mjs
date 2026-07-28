@@ -3,12 +3,10 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { workspaceGitStatus } = require('../src/repo/gitOps.js');
-const { relaiDiff } = require('../src/bridge/review.js');
-const { writeSessionPolicy, captureBaselineDirty } = require('../src/policyResolver.js');
+import { workspaceGitStatus } from "../src/repo/gitOps.js";
+import { relaiDiff } from "../src/bridge/review.js";
+import { writeSessionPolicy, captureBaselineDirty } from "../src/policyResolver.js";
 
 const gitExecutable = process.platform === 'win32'
   ? String.raw`C:\Program Files\Git\cmd\git.exe`

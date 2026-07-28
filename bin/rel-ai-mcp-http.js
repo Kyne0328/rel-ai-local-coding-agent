@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-const { startHttpServer } = require("../src/httpServer");
+import { startHttpServer } from "../src/httpServer.js";
 
 function parseArgs(argv) {
   const options = {};

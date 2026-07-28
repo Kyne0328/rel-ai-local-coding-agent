@@ -2,6 +2,7 @@
   "name": "rel-ai-mcp-launcher",
   "version": "0.23.0",
   "private": true,
+  "type": "module",
   "description": "Desktop launcher and dashboard host for Rel.AI MCP.",
   "author": {
     "name": "Kyne",
@@ -38,7 +39,7 @@
     },
     "files": [
       "main.js",
-      "preload.js",
+      "preload.cjs",
       "launcher-utils.js",
       "ngrok-token.js",
       "managed-ngrok.js",
@@ -50,7 +51,7 @@
       "dashboard-window.js",
       "dashboard-window-bounds.js",
       "window-chrome.js",
-      "dashboard-preload.js",
+      "startup-background.js",
       "desktop-tray.js",
       "desktop-status.js",
       "approval-token.js",
@@ -102,7 +103,13 @@
           "@hono/node-server/**",
           "hono/**",
           "zod/**",
-          "!**/*.map"
+          "!**/*.map",
+          "!**/src/**",
+          "!**/test/**",
+          "!**/tests/**",
+          "!**/*.ts",
+          "!**/*.cts",
+          "!**/*.mts"
         ]
       },
       {

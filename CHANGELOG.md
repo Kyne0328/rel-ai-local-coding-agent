@@ -36,6 +36,7 @@
 - **Make generated assets and module direction enforceable.** CI regenerates and diffs color assets, browser UI source has an explicit ESM package scope, and a module-system audit prevents CommonJS growth or mixed modules before the coordinated backend and Electron hard cutover.
 - **Add an opt-in native MCP Tasks interoperability canary.** `REL_AI_NATIVE_TASKS_PROBE=1` advertises the Tasks extension and exposes a diagnostic tool that verifies task creation, polling, cancellation, capability negotiation, routing headers, and authenticated task ownership without replacing the supported `operationTaskId` workflow.
 - **Reduce the published npm package to an explicit runtime allowlist.** The package now ships only the CLI, service source, dashboard assets, examples, type boundaries, README, and license, reducing the dry-run artifact from 418 entries and about 4.09 MB to 175 entries and about 0.53 MB.
+- **Remove build-only SDK files from the Electron runtime.** Packaged MCP dependencies exclude source, test, TypeScript, and declaration trees; final `resources/` size is 39.00 MiB and packaged connector acceptance verifies the reduced runtime.
 
 ### Color-system ESM hard cutover
 - **Replace the temporary CommonJS color module with one build-time ESM manifest.** The generator imports `src/ui/colorTokens.mjs` directly; runtime CommonJS code consumes generated assets rather than an interop bridge.
@@ -47,14 +48,17 @@
 - **Do not migrate old clients, sessions, aliases, registrations, removed protocol routes, or color-token aliases.** Existing users that need the previous handshake or connector behavior must remain on the previous release and create a new 0.23.0 connector when upgrading.
 
 ### Validation
-- `npm run test:all` - 128/128 test files passed
+- `npm run test:all` - 137/137 test files passed
 - `npm run audit:production` - zero production advisories
 - `npm run release:check`
 - `npm run electron:build`
-- `npm run verify:packaged -- --dir dist/build-check/win-unpacked`
+- `npm run electron:dist` - NSIS installer, portable executable, blockmap, and `win-unpacked` generated
+- `npm run verify:packaged -- --dir dist/win-unpacked` - packaged TypeScript/source exclusions verified
 - Electron fuse verification passed against the packaged executable
 - Packaged OAuth/MCP connector acceptance passed
-- `npm pack --dry-run` - 175 entries, 532,746 bytes compressed, 1,561,415 bytes unpacked
+- Strict 0.23.0 package-size baseline passed: 104.89 MiB installer, 104.59 MiB portable, 340.25 MiB unpacked, 39.00 MiB `resources/`
+- CycloneDX SBOM generation passed
+- `npm pack --dry-run` - 185 entries, 543,925 bytes compressed, 1,608,158 bytes unpacked
 
 Bump root/electron/status UI/lockfiles to 0.23.0.
 

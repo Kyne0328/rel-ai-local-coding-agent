@@ -1,17 +1,16 @@
-'use strict';
+import { getStateDir } from './statePaths.js';
 
-const crypto = require('node:crypto');
-const fs = require('node:fs');
-const path = require('node:path');
-const { sanitizeTaskRecord } = require('./taskObservability');
-
+import * as crypto from 'node:crypto';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { sanitizeTaskRecord } from './taskObservability.js';
 const MAX_SESSIONS = 500;
 const HISTORY_FORMAT_MARKER = '.task-history-v3';
 const MAX_PARSED_CACHE_ENTRIES = 2 * MAX_SESSIONS;
 const parsedCache = new Map();
 
 function getTaskHistoryDir(config = {}) {
-  const { getStateDir } = require('./audit');
+
   return path.join(getStateDir(config), 'sessions');
 }
 
@@ -156,15 +155,4 @@ function resetTaskHistoryCaches() {
   parsedCache.clear();
 }
 
-module.exports = {
-  MAX_SESSIONS,
-  clearTaskHistory,
-  ensureCurrentHistory,
-  getTaskHistoryDir,
-  listSessions,
-  pruneSessions,
-  readSession,
-  removeSession,
-  resetTaskHistoryCaches,
-  writeSession
-};
+export { MAX_SESSIONS, clearTaskHistory, ensureCurrentHistory, getTaskHistoryDir, listSessions, pruneSessions, readSession, removeSession, resetTaskHistoryCaches, writeSession };

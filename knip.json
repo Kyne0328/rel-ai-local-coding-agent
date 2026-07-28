@@ -30,15 +30,14 @@
     },
     "electron": {
       "entry": [
-        "preload.js",
-        "dashboard-preload.js",
+        "preload.cjs",
         "build/after-pack.js",
-        "scripts/*.js",
-        "renderer/*.js",
+        "scripts/*.js",        "renderer/*.js",
         "renderer/*.css"
       ],
       "project": [
-        "**/*.js"
+        "**/*.js",
+        "**/*.cjs"
       ],
       "ignoreDependencies": [
         "electron-builder"

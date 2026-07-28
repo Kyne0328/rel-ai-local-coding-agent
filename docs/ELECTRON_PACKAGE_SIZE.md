@@ -2,22 +2,22 @@
 
 ## Executive summary
 
-This audit measured the Windows x64 Electron artifacts, identified the dominant size contributors, implemented low-risk packaging changes, rebuilt both an unoptimized control and an optimized distribution from the same source state, and added release-time size reporting. The original comparison remains below as historical evidence; the active release baseline is now the 0.22.0 Electron 43 + MCP SDK candidate.
+This audit measured the Windows x64 Electron artifacts, identified the dominant size contributors, implemented low-risk packaging changes, rebuilt both an unoptimized control and an optimized distribution from the same source state, and added release-time size reporting. The original comparison remains below as historical evidence; the active release baseline is now the 0.23.0 Electron 43, ESM, task-observability, and fuse-hardened candidate.
 
-### Current 0.22.0 release baseline
+### Current 0.23.0 release baseline
 
 | Metric | Bytes | Display size |
 | --- | ---: | ---: |
-| NSIS installer | 102,612,369 B | 97.86 MiB |
-| Portable executable | 102,295,585 B | 97.56 MiB |
-| Unpacked application | 361,270,067 B | 344.53 MiB |
-| `resources/` | 45,386,010 B | 43.28 MiB |
-| `resources/app.asar` | 1,658,656 B | 1.58 MiB |
+| NSIS installer | 109,986,736 B | 104.89 MiB |
+| Portable executable | 109,669,958 B | 104.59 MiB |
+| Unpacked application | 356,780,892 B | 340.25 MiB |
+| `resources/` | 40,896,835 B | 39.00 MiB |
+| `resources/app.asar` | 1,668,443 B | 1.59 MiB |
 | Electron packaged dependencies | 1,107,187 B | 1.06 MiB |
 | `locales/en-US.pak` | 566,095 B | 552.83 KiB |
-| Compiled dashboard CSS | 117,524 B | 114.77 KiB |
+| Compiled dashboard CSS | 135,902 B | 132.72 KiB |
 
-The baseline was captured from the final 0.22.0 installer and portable artifacts on 2026-07-27. It includes Electron 43.2.0, the explicitly packaged MCP SDK v2 backend runtime, and the unchanged 31.26 MiB Windows ngrok seed. The committed 3% warning threshold now compares future releases against these exact measurements.
+The baseline was captured from the final 0.23.0 installer and portable artifacts on 2026-07-29. It includes Electron 43.2.0, the ESM runtime, fuse hardening, task-observability UI, the explicitly packaged MCP SDK v2 backend runtime, and the unchanged 31.26 MiB Windows ngrok seed. The committed 3% warning threshold now compares future releases against these exact measurements.
 
 | Artifact | Before | After | Reduction | Reduction |
 | --- | ---: | ---: | ---: | ---: |
@@ -44,7 +44,7 @@ The repository uses npm with separate root and Electron lockfiles:
 - CLI launchers: `bin/**/*.js`
 - Dashboard assets: `public/**`
 - Electron main entry: `electron/main.js`
-- Electron preload entries: `electron/preload.js`, `electron/dashboard-preload.js`
+- Electron preload boundary: `electron/preload.cjs` (sandbox-required, surface-gated)
 - Electron renderer assets: `electron/renderer/**`
 - Offline tunnel binary: `vendor/ngrok/win32/ngrok.exe`
 - Windows targets: NSIS and portable
@@ -74,23 +74,25 @@ Largest files in `win-unpacked`:
 
 | Path or component | Category | Raw size | Required at runtime | Action |
 | --- | --- | ---: | --- | --- |
-| `Rel.AI MCP.exe` | Electron runtime | 180,905,984 B | Yes | Retain despite size |
+| `Rel.AI MCP.exe` | Electron runtime | 225,688,064 B | Yes | Retain despite size |
 | `resources/bin/ngrok/win32/ngrok.exe` | Bundled platform binary | 32,774,984 B | Yes for offline first use | Retain; evaluate optional delivery separately |
-| `icudtl.dat` | Chromium ICU data | 10,468,208 B | Yes | Retain |
-| `LICENSES.chromium.html` | Required legal notices | 9,451,912 B | Yes | Retain |
-| `libGLESv2.dll` | Chromium graphics runtime | 8,058,368 B | Yes | Retain |
-| `resources.pak` | Chromium resources | 5,547,739 B | Yes | Retain |
-| `vk_swiftshader.dll` | Software graphics fallback | 5,475,328 B | Hardware-dependent | Retain pending cross-hardware proof |
-| `d3dcompiler_47.dll` | Direct3D shader compiler | 4,916,728 B | Graphics-dependent | Retain |
-| `ffmpeg.dll` | Chromium media runtime | 2,682,880 B | Runtime dependency | Retain |
-| `resources/app.asar` | Electron application and updater dependencies | 1,692,241 B | Yes | Optimized |
-| `vulkan-1.dll` | Vulkan loader | 961,024 B | Hardware-dependent | Retain pending proof |
-| `locales/en-US.pak` | Supported locale | 464,976 B | Yes | Retain only supported locale |
+| `dxcompiler.dll` | Chromium graphics compiler | 25,616,896 B | Hardware-dependent | Retain pending cross-hardware proof |
+| `LICENSES.chromium.html` | Required legal notices | 20,313,957 B | Yes | Retain |
+| `icudtl.dat` | Chromium ICU data | 10,876,560 B | Yes | Retain |
+| `libGLESv2.dll` | Chromium graphics runtime | 8,024,064 B | Yes | Retain |
+| `resources.pak` | Chromium resources | 7,148,145 B | Yes | Retain |
+| `vk_swiftshader.dll` | Software graphics fallback | 5,502,464 B | Hardware-dependent | Retain pending cross-hardware proof |
+| `d3dcompiler_47.dll` | Direct3D shader compiler | 4,741,488 B | Graphics-dependent | Retain |
+| `ffmpeg.dll` | Chromium media runtime | 3,067,904 B | Runtime dependency | Retain |
+| `resources/app.asar` | Electron application and updater dependencies | 1,668,443 B | Yes | Optimized |
+| `dxil.dll` | DirectX intermediate language runtime | 1,509,760 B | Graphics-dependent | Retain |
+| `vulkan-1.dll` | Vulkan loader | 930,304 B | Hardware-dependent | Retain pending proof |
+| `locales/en-US.pak` | Supported locale | 566,095 B | Yes | Retain only supported locale |
 | `resources/public/assets/relai-logo.png` | UI asset | 152,388 B | Yes | Retain |
-| `resources/public/dashboard.css` | Compiled UI CSS | 111,236 B | Yes | Minified |
-| `resources/CHANGELOG.md` | In-app release information | 104,440 B | Yes | Retain |
+| `resources/public/dashboard.css` | Compiled UI CSS | 135,902 B | Yes | Minified |
+| `resources/CHANGELOG.md` | In-app release information | 132,395 B | Yes | Retain |
 
-The current 0.22.0 `resources/` directory totals 45,386,010 B (43.28 MiB). It includes the allowlisted MCP SDK runtime and contains no `.map` files, TypeScript sources, tests, fixtures, examples, or `.git` metadata.
+The current 0.23.0 `resources/` directory totals 40,896,835 B (39.00 MiB). It includes the allowlisted MCP SDK runtime and contains no `.map` files, TypeScript sources, tests, fixtures, examples, or `.git` metadata.
 
 The source stylesheet `src/ui/styles/app.css` is no longer packaged. The desktop distribution includes only the compiled `resources/public/dashboard.css`, saving approximately 69 KiB raw and keeping build-only Tailwind source out of runtime resources.
 
@@ -100,11 +102,12 @@ The source stylesheet `src/ui/styles/app.css` is no longer packaged. The desktop
 | --- | --- | --- | --- | ---: | --- | --- |
 | All 55 Electron locale packs were shipped | P1 | Confirmed | Final baseline `win-unpacked/locales` inventory | 37.84 MiB raw; dominant installer reduction | Ship only `en-US` | Product language policy must remain English-only |
 | Dependency source maps were included in `app.asar` | P1 | Confirmed | 47 `.map` files in baseline ASAR; zero after | 451,095 B ASAR reduction including archive overhead | Exclude `!**/*.map` | Public production debugging must use private/source-map artifacts if later required |
+| SDK source and declaration trees were copied into `resources/node_modules` | P1 | Confirmed | Final 0.23.0 package inventory | 4.57 MiB raw resources reduction | Exclude dependency `src`, test, `.ts`, `.cts`, and `.mts` files | Low; packaged connector acceptance verifies runtime exports |
 | Tailwind output was not minified | P2 | Confirmed | Final CSS comparison | 24,446 B raw | Add `--minify` to `build:css` | Low |
 | Maximum electron-builder compression did not help | Retain | Confirmed | Isolated packaging experiment | Approximately 0.7 KiB larger per executable | Keep default compression | None |
-| Electron runtime is the majority of installed size | Retain despite size | Confirmed | Final file inventory | 172.53 MiB main executable plus support files | Retain | Removing Chromium resources is unsafe without platform testing |
+| Electron runtime is the majority of installed size | Retain despite size | Confirmed | Final file inventory | 215.23 MiB main executable plus support files | Retain | Removing Chromium resources is unsafe without platform testing |
 | Bundled ngrok is the largest application-controlled component | Deferred/P2 | Confirmed | `resources/bin/ngrok/win32/ngrok.exe` | 31.26 MiB raw | Keep for offline reliability; evaluate optional delivery only as a separate product decision | High operational and recovery risk |
-| Production dependencies are explicitly allowlisted | Retain | Confirmed | Electron ASAR inventory plus root SDK resources | Small relative to Electron/ngrok | Retain the updater and MCP SDK dependency sets | Low |
+| Production dependencies are explicitly allowlisted | Retain | Confirmed | Electron ASAR and root SDK resource inventory | Small relative to Electron/ngrok | Retain the updater and MCP SDK dependency sets | Low |
 | Installed-app smoke shared the production application identity | Removed safety defect | Confirmed | Installer execution terminated the active Rel.AI host | Small package reduction | Replaced with read-only packaged-layout verification | High if restored on a developer machine |
 
 ## Dependency analysis
@@ -157,7 +160,7 @@ ASAR unpack rules are not required because there are no native Node modules. The
 
 | File | Change | Purpose |
 | --- | --- | --- |
-| `electron/package.json` | Filter Electron locales to `en-US`; exclude source maps and source CSS; explicitly package MCP SDK runtime modules | Remove unnecessary payload while preserving the new protocol runtime |
+| `electron/package.json` | Filter Electron locales to `en-US`; exclude source maps, TypeScript/declaration trees, dependency source/test trees, and source CSS; explicitly package MCP SDK runtime modules | Remove unnecessary payload while preserving the new protocol runtime |
 | `package.json` | Minify Tailwind output; add `electron:size` | Reduce CSS and expose reproducible reporting |
 | `scripts/electron-package-size.mjs` | Add final-artifact inventory, comparison, and warnings | Detect package growth and packaging leaks |
 | `scripts/electron-size-baseline.json` | Record optimized Windows x64 baseline and 3% warning threshold | Establish regression reference |
@@ -171,28 +174,29 @@ ASAR unpack rules are not required because there are no native Node modules. The
 
 ### Passed
 
-- Clean baseline and optimized Windows x64 builds
+- Clean optimized Windows x64 build
 - NSIS installer generation
 - Portable executable generation
 - `latest.yml` generation
-- Installer blockmap generation: 85,183 B
+- Installer blockmap generation: 117,386 B
 - Package inventory checks
 - One locale only: `en-US.pak`
 - Zero packaged source maps
-- Zero TypeScript files
+- Zero packaged TypeScript source or declaration files
 - Zero tests, fixtures, examples, or `.git` metadata
 - No duplicate production dependency versions
-- JavaScript syntax check
-- TypeScript boundary check during the full suite
-- Release consistency check
-- Full repository suite: 97/97 test files passed
-- Electron launcher packaging contract test
-- Release workflow contract test
+- JavaScript syntax, ESLint, and TypeScript boundary checks
+- Knip dependency analysis and repository-health budgets
+- Release consistency and workflow contract checks
+- Full repository suite: 137/137 test files passed
+- Real Electron Chromium dashboard acceptance
+- Packaged OAuth/MCP connector acceptance against `dist/win-unpacked`
+- Electron fuse-policy verification against the final executable
+- Root and Electron production dependency audits: zero advisories
 - Strict package-size baseline comparison
-- Direct unpacked packaged smoke: HTTP 200, packaged resources present, health OK
-- Portable executable smoke: HTTP 200, all current public tools, packaged resources present, health OK
+- CycloneDX SBOM generation
 
-### Startup and memory comparison
+### Historical 0.22.0 startup and memory comparison
 
 Measurements used isolated user-data/state directories and sampled all four Electron processes approximately one second after a window appeared.
 
@@ -203,7 +207,7 @@ Measurements used isolated user-data/state directories and sampled all four Elec
 | Optimized | Cold | 402 ms | 4 | 296.7 MiB |
 | Optimized | Warm | 318 ms | 4 | 296.6 MiB |
 
-The differences are within normal launch variance. No material startup or memory regression was observed.
+These historical 0.22.0 measurements were within normal launch variance. The 0.23.0 automated release gates validate the real Chromium renderer with the development Electron host and validate the packaged backend separately; installer and production-identity desktop startup remain manual on a disposable machine.
 
 ### Validation limitations
 
@@ -268,4 +272,4 @@ The committed baseline uses a 3% warning threshold. The release workflow runs th
 
 ## Final recommendation
 
-The Windows x64 distribution is appropriately bounded for the current Electron 43 and MCP SDK architecture. The historical locale/source-map/minification work remains effective, while the 0.22.0 release establishes a new measured baseline after the intentional runtime upgrade and SDK packaging. Further large reductions require a product-level decision about the bundled ngrok binary or replacing Electron itself; neither is justified as routine cleanup.
+The Windows x64 distribution is appropriately bounded for the current Electron 43 and MCP SDK architecture. The historical locale/source-map/minification work remains effective, while the 0.23.0 release establishes a new measured baseline after the ESM cutover, runtime hardening, task-observability expansion, and removal of build-only SDK sources from packaged resources. Further large reductions require a product-level decision about the bundled ngrok binary or replacing Electron itself; neither is justified as routine cleanup.

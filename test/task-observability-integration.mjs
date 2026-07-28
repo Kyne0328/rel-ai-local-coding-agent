@@ -1,8 +1,9 @@
+import { callTool } from "../src/tools.js";
+import { readTaskHistorySession } from "../src/taskHistoryStore.js";
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-task-observability-integration-'));
 const workspacePath = path.join(sandbox, 'repo');
@@ -22,11 +23,10 @@ fs.writeFileSync(configPath, JSON.stringify({
 
 const previousConfig = process.env.REL_AI_MCP_CONFIG;
 process.env.REL_AI_MCP_CONFIG = configPath;
-const require = createRequire(import.meta.url);
 
 try {
-  const { callTool } = require('../src/tools.js');
-  const { readTaskHistorySession } = require('../src/taskHistoryStore.js');
+
+
   const context = { publicHttpOnly: true, requestId: 'request-1', serverInstanceId: 'server-1', transportType: 'streamable-http' };
 
   const started = await callTool('relai_start_task', {

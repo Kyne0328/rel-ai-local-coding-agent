@@ -23,6 +23,7 @@ for (const file of [
   'electron/package.json',
   'electron/package-lock.json',
   'electron/renderer/status.html',
+  'src/packageMetadata.js',
   'src/version.js',
   'scripts/release-check.mjs',
   'scripts/release-bump.mjs',
@@ -60,6 +61,8 @@ function readJson(relativePath) {
 }
 
 run('release-check.mjs');
+const copiedChangelogPath = path.join(tmp, 'CHANGELOG.md');
+fs.writeFileSync(copiedChangelogPath, fs.readFileSync(copiedChangelogPath, 'utf8').replace(/\r?\n/g, '\r\n'));
 run('release-bump.mjs', [
   '0.99.0',
   '--date', '2099-01-02',
@@ -84,7 +87,7 @@ assert.equal(electronPackage.devDependencies['electron-builder'], '26.15.7');
 assert.equal(electronPackage.devDependencies['@electron/fuses'], '2.1.3');
 assert.match(rootPackage.scripts['electron:build'], /--publish never/);
 assert.match(rootPackage.scripts['electron:dist'], /--publish never/);
-assert.equal(rootPackage.scripts['verify:packaged'], 'node scripts/verify-packaged-app.mjs');
+assert.equal(rootPackage.scripts['verify:packaged'], 'npm run verify:color-tokens && node scripts/verify-packaged-app.mjs');
 assert.equal(rootPackage.scripts['test:connector-acceptance'], 'node scripts/packaged-connector-acceptance.mjs');
 assert.equal(rootPackage.scripts['test:installed'], undefined);
 assert.match(rootPackage.scripts['build:css'], /--minify/);
@@ -119,7 +122,13 @@ assert.deepEqual(rootModulesResource?.filter, [
   '@hono/node-server/**',
   'hono/**',
   'zod/**',
-  '!**/*.map'
+  '!**/*.map',
+  '!**/src/**',
+  '!**/test/**',
+  '!**/tests/**',
+  '!**/*.ts',
+  '!**/*.cts',
+  '!**/*.mts'
 ]);
 assert.deepEqual(electronPackage.build.nsis, {
   oneClick: false,

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-const path = require("node:path");
-const { readConfig, writeConfig, getConfigPath, makeDefaultConfig } = require("../src/config");
-const productUx = require("../src/productUx");
+import * as path from "node:path";
+import { readConfig, writeConfig, getConfigPath, makeDefaultConfig } from "../src/config.js";
+import * as productUx from "../src/productUx.js";
 
 function printUsage() {
   console.log(`Usage:

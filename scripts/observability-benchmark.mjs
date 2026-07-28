@@ -2,13 +2,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
-const { createToolActivityTracker } = require('../src/toolActivity.js');
-const { recordTaskActivityEvent, readTaskHistory } = require('../src/taskHistoryStore.js');
-const { buildDashboardPayload } = require('../src/http/dashboardData.js');
-const { sanitizeDisplayText } = require('../src/taskObservability.js');
+import { execFileSync } from 'node:child_process';
+import { createToolActivityTracker } from '../src/toolActivity.js';
+import { recordTaskActivityEvent, readTaskHistory } from '../src/taskHistoryStore.js';
+import { buildDashboardPayload } from '../src/http/dashboardData.js';
+import { sanitizeDisplayText } from '../src/taskObservability.js';
 
 const outputArg = process.argv.find(arg => arg.startsWith('--output='));
 const outputPath = path.resolve(outputArg ? outputArg.slice('--output='.length) : 'dist/observability-benchmark.json');
@@ -172,7 +170,7 @@ function directoryBytes(directory) {
 
 function gitCommit() {
   try {
-    return require('node:child_process').execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    return execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
   } catch {
     return '';
   }

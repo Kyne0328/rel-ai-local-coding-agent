@@ -1,19 +1,13 @@
 // @ts-check
-/** @typedef {import('../types/boundaries').LauncherConfigInput} LauncherConfigInput */
-/** @typedef {import('../types/boundaries').LauncherConfig} LauncherConfig */
+/** @typedef {import('../types/boundaries.d.ts').LauncherConfigInput} LauncherConfigInput */
+/** @typedef {import('../types/boundaries.d.ts').LauncherConfig} LauncherConfig */
 
-const net = require('node:net');
-const path = require('node:path');
-const { resolveResourcePath } = require('./resource-path');
-const srcPath = resolveResourcePath('src');
-const connection = require(path.join(srcPath, 'connectionProfile'));
-const configModule = require(path.join(srcPath, 'config'));
-const {
-  buildTunnelCommand,
-  normalizeNgrokDomain,
-  normalizeNgrokAuthtoken,
-  normalizePort
-} = require('./launcher-utils');
+import * as net from "node:net";
+import { importResourceModule } from './resource-path.js';
+
+const connection = await importResourceModule('src/connectionProfile.js');
+const configModule = await importResourceModule('src/config.js');
+import { buildTunnelCommand, normalizeNgrokDomain, normalizeNgrokAuthtoken, normalizePort } from "./launcher-utils.js";
 
 /** @param {number} port @returns {Promise<boolean>} */
 function isPortAvailable(port) {
@@ -67,4 +61,4 @@ function saveLauncherConfig(config = {}) {
   return normalized;
 }
 
-module.exports = { isPortAvailable, normalizeWizardConfig, saveLauncherConfig };
+export { isPortAvailable, normalizeWizardConfig, saveLauncherConfig };

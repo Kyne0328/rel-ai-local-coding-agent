@@ -1,19 +1,19 @@
 {
   "schemaVersion": 1,
-  "capturedAt": "2026-07-27",
+  "capturedAt": "2026-07-29",
   "platform": "win32",
   "architecture": "x64",
   "electronVersion": "43.2.0",
   "warningThresholdPercent": 3,
   "metrics": {
-    "installerBytes": 102612369,
-    "portableBytes": 102295585,
-    "unpackedBytes": 361270067,
-    "resourcesBytes": 45386010,
-    "appAsarBytes": 1658656,
+    "installerBytes": 109986736,
+    "portableBytes": 109669958,
+    "unpackedBytes": 356780892,
+    "resourcesBytes": 40896835,
+    "appAsarBytes": 1668443,
     "packagedDependencyBytes": 1107187,
     "localesBytes": 566095,
     "ngrokBytes": 32774984,
-    "dashboardCssBytes": 117524
+    "dashboardCssBytes": 135902
   }
 }

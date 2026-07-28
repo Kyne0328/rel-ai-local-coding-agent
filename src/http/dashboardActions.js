@@ -1,9 +1,8 @@
-'use strict';
-
-const fs = require('node:fs');
-const path = require('node:path');
-const { readConfig } = require('../config');
-const { readJsonBody, sendJson } = require('./io');
+import { callTool } from '../tools.js';
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { readConfig } from "../config.js";
+import { readJsonBody, sendJson } from "./io.js";
 
 async function handleOpenFolder(ctx) {
   if (typeof ctx.options.openFolder !== 'function') {
@@ -27,7 +26,7 @@ async function handleWorkspaceChecks(ctx) {
     const payload = await readJsonBody(ctx.req, ctx.options.maxBodyBytes);
     const workspace = String(payload.workspace || '').trim();
     if (!workspace) throw new Error('workspace is required');
-    const result = await require('../tools').callTool('relai_run_checks', { workspace }, { publicHttpOnly: false });
+    const result = await callTool('relai_run_checks', { workspace }, { publicHttpOnly: false });
     sendJson(ctx.res, 200, result, ctx.ae);
   } catch (error) {
     sendJson(ctx.res, 200, { ok: false, error: error instanceof Error ? error.message : String(error) }, ctx.ae);
@@ -74,9 +73,4 @@ function workspacePathPreflight(rawPath) {
   };
 }
 
-module.exports = {
-  handleOpenFolder,
-  handleWorkspaceChecks,
-  handlePickFolder,
-  workspacePathPreflight
-};
+export { handleOpenFolder, handleWorkspaceChecks, handlePickFolder, workspacePathPreflight };

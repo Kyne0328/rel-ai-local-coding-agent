@@ -1,17 +1,8 @@
-'use strict';
 
-const {
-  AUTO_CHECK_INTERVAL_MS,
-  AUTO_CHECK_DELAY_MS,
-  cleanText,
-  createLogger,
-  createUpdateStateStore,
-  detectUpdateSupport,
-  normalizeStatus,
-  progressPayload
-} = require('./app-updater-state');
-const { bindUpdaterEvents } = require('./app-updater-events');
-const { compareVersions, isStableVersion, parseStableVersion } = require('./update-version');
+
+import { AUTO_CHECK_INTERVAL_MS, AUTO_CHECK_DELAY_MS, cleanText, createLogger, createUpdateStateStore, detectUpdateSupport, normalizeStatus, progressPayload } from "./app-updater-state.js";
+import { bindUpdaterEvents } from "./app-updater-events.js";
+import { compareVersions, isStableVersion, parseStableVersion } from "./update-version.js";
 
 function createAppUpdater(options = {}) {
   const {
@@ -185,14 +176,4 @@ function createAppUpdater(options = {}) {
   return { start, stop, getStatus: snapshot, checkForUpdates, downloadUpdate, installUpdate };
 }
 
-module.exports = {
-  AUTO_CHECK_DELAY_MS,
-  AUTO_CHECK_INTERVAL_MS,
-  compareVersions,
-  createAppUpdater,
-  detectUpdateSupport,
-  isStableVersion,
-  normalizeStatus,
-  parseStableVersion,
-  progressPayload
-};
+export { AUTO_CHECK_DELAY_MS, AUTO_CHECK_INTERVAL_MS, compareVersions, createAppUpdater, detectUpdateSupport, isStableVersion, normalizeStatus, parseStableVersion, progressPayload };

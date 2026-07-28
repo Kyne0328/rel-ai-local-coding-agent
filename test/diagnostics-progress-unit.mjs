@@ -2,11 +2,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { createToolActivityTracker, runWithToolActivity } = require('../src/toolActivity.js');
-const { relaiDiagnosticsRun } = require('../src/bridge/diagnosticsRunner.js');
+import { createToolActivityTracker, runWithToolActivity } from '../src/toolActivity.js';
+import { relaiDiagnosticsRun } from '../src/bridge/diagnosticsRunner.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-diagnostics-progress-'));
 const workspace = { alias: 'app', path: root, commands: {}, testCommands: {} };

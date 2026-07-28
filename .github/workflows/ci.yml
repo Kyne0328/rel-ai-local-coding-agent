@@ -24,6 +24,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm ci --ignore-scripts
         working-directory: electron
+      - run: npm run verify:color-tokens
       - run: npm run audit:production
       - run: npm run test:all
 
@@ -48,6 +49,8 @@ jobs:
         env:
           NGROK_PLATFORMS: win32
         run: pwsh scripts/fetch-ngrok.ps1
+      - name: Verify generated color assets
+        run: npm run verify:color-tokens
       - name: Build unpacked Windows application
         run: npm run electron:build
       - name: Verify packaged application layout

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { createRequire } from 'node:module';
+import * as asar from '@electron/asar';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -120,9 +120,6 @@ function buildPackageSizeReport(options) {
 }
 
 function inspectAsar(asarPath) {
-  const require = createRequire(import.meta.url);
-  const asarModulePath = require.resolve('@electron/asar', { paths: [path.join(root, 'electron')] });
-  const asar = require(asarModulePath);
   const entries = asar.listPackage(asarPath);
   let nodeModulesBytes = 0;
   let sourceMapBytes = 0;

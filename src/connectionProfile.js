@@ -1,8 +1,8 @@
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
-const crypto = require("node:crypto");
-const { safeReadJson } = require("./safety");
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import * as crypto from "node:crypto";
+import { safeReadJson } from "./safety.js";
 
 function stateDir() {
   return process.env.REL_AI_MCP_STATE_DIR || path.join(os.homedir(), ".rel-ai-mcp");
@@ -200,17 +200,4 @@ function printConnectionSummary(summary) {
   console.error(lines.join("\n"));
 }
 
-module.exports = {
-  stateDir,
-  getEnvPath,
-  getConnectionProfilePath,
-  generateToken,
-  readLaunchEnv,
-  writeLaunchEnv,
-  readConnectionProfile,
-  writeConnectionProfile,
-  normalizePublicUrl,
-  localBaseUrl,
-  buildConnectionSummary,
-  printConnectionSummary
-};
+export { stateDir, getEnvPath, getConnectionProfilePath, generateToken, readLaunchEnv, writeLaunchEnv, readConnectionProfile, writeConnectionProfile, normalizePublicUrl, localBaseUrl, buildConnectionSummary, printConnectionSummary };

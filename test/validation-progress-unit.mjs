@@ -3,9 +3,6 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-validation-progress-'));
 const workspace = path.join(temp, 'workspace');
 const stateDir = path.join(temp, 'state');
@@ -38,9 +35,9 @@ const fail = 'node -e "process.exit(1)"';
 const slow = 'node -e "setTimeout(() => process.exit(0), 5000)"';
 
 try {
-  const { callTool } = require('../src/tools.js');
-  const { getToolActivity, onToolActivity, resetToolActivity } = require('../src/toolActivity.js');
-  const { readTaskHistorySession } = require('../src/taskHistoryStore.js');
+  const { callTool } = await import('../src/tools.js');
+  const { getToolActivity, onToolActivity, resetToolActivity } = await import('../src/toolActivity.js');
+  const { readTaskHistorySession } = await import('../src/taskHistoryStore.js');
   const config = { stateDir, auditLogPath: path.join(stateDir, 'audit.jsonl') };
   const events = [];
   const stopListening = onToolActivity(event => events.push(event));

@@ -1,12 +1,12 @@
-'use strict';
 
-const { readConfig } = require('../config');
-const { readAudit, clearAuditHistory } = require('../audit');
-const productUx = require('../productUx');
-const connection = require('../connectionProfile');
-const { deriveConnectionState, ERROR_CODES, errorPayload } = require('../desktopUxContracts');
-const { buildDiagnosticReport } = require('../diagnostics');
-const { readJsonBody, sendJson } = require('./io');
+
+import { readConfig } from "../config.js";
+import { readAudit, clearAuditHistory } from "../audit.js";
+import * as productUx from "../productUx.js";
+import * as connection from "../connectionProfile.js";
+import { deriveConnectionState, ERROR_CODES, errorPayload } from "../desktopUxContracts.js";
+import { buildDiagnosticReport } from "../diagnostics.js";
+import { readJsonBody, sendJson } from "./io.js";
 
 function handleApiDiagnostics(ctx) {
   const config = readConfig();
@@ -96,4 +96,4 @@ function resetMessage(target) {
   return 'Session, activity, and service logs cleared.';
 }
 
-module.exports = { handleApiDiagnostics, handleApiDiagnosticsReset };
+export { handleApiDiagnostics, handleApiDiagnosticsReset };

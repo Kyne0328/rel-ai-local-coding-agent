@@ -2,10 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
-const { createToolActivityTracker } = require('../src/toolActivity.js');
+import { createToolActivityTracker } from '../src/toolActivity.js';
 
 let now = 1000;
 const phases = [];
@@ -63,10 +60,10 @@ fs.writeFileSync(configPath, JSON.stringify({
 process.env.REL_AI_MCP_CONFIG = configPath;
 
 try {
-  const { callTool } = require('../src/tools.js');
-  const { readTaskHistorySession } = require('../src/taskHistoryStore.js');
-  const { readAudit } = require('../src/audit.js');
-  const { resetToolActivity } = require('../src/toolActivity.js');
+  const { callTool } = await import('../src/tools.js');
+  const { readTaskHistorySession } = await import('../src/taskHistoryStore.js');
+  const { readAudit } = await import('../src/audit.js');
+  const { resetToolActivity } = await import('../src/toolActivity.js');
   resetToolActivity();
   const context = { publicHttpOnly: true, requestId: 'cancel-test' };
   const started = await callTool('relai_start_task', { workspace: 'app', title: 'Cancelable task' }, context);

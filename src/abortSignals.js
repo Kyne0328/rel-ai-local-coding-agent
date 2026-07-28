@@ -24,4 +24,4 @@ function combineAbortSignals(...values) {
   return controller.signal;
 }
 
-module.exports = { combineAbortSignals };
+export { combineAbortSignals };

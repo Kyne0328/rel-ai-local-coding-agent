@@ -1,4 +1,4 @@
-const { screen } = require('electron');
+import { screen } from "electron";
 
 const centeredWindows = new WeakSet();
 
@@ -55,4 +55,4 @@ function fitWindowToContent(win, options = {}) {
   }
 }
 
-module.exports = { fitWindowToContent, WINDOW_SIZE_LIMITS };
+export { fitWindowToContent, WINDOW_SIZE_LIMITS };

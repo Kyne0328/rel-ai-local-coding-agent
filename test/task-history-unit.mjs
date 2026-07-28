@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { buildTaskHistory } = require('../src/taskHistory.js');
+import { buildTaskHistory } from "../src/taskHistory.js";
 
 function event(taskId, values = {}) {
   return {

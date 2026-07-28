@@ -1,4 +1,4 @@
-'use strict';
+
 
 const STRING = { type: 'string' };
 const STRING_NULL = { type: ['string', 'null'] };
@@ -173,4 +173,4 @@ function outputSchemaFor(name) {
   };
 }
 
-module.exports = { outputSchemaFor, TOOL_FIELDS, FIELD_SCHEMAS };
+export { outputSchemaFor, TOOL_FIELDS, FIELD_SCHEMAS };

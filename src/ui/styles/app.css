@@ -818,7 +818,7 @@
   .appearance-swatch strong { @apply block text-[12px]; }
   .appearance-swatch span { @apply mt-1 block text-[11px]; color: var(--ui-text-secondary); }
 
-  .runtime-compatibility-card { border-color: var(--ui-status-warning-border); background: var(--ui-status-warning-surface); }
+  .runtime-compatibility-card { border-color: var(--ui-status-warning-border); background: var(--ui-status-warning-background); }
   .runtime-compatibility-card .card-body { @apply grid gap-3; }
   .runtime-compatibility-card p { @apply m-0; }
   .runtime-compatibility-grid { @apply grid gap-2 sm:grid-cols-2; }

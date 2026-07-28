@@ -1,7 +1,4 @@
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
 const {
   CANONICAL_TASK_STATUSES,
   TASK_TRANSITIONS,
@@ -10,7 +7,7 @@ const {
   isCanonicalTaskStatus,
   isTerminalTaskStatus,
   normalizeHistoricalTaskStatus
-} = require('../src/taskState.js');
+} = await import('../src/taskState.js');
 
 assert.deepEqual(CANONICAL_TASK_STATUSES, [
   'queued', 'planning', 'running', 'waiting_for_approval', 'blocked', 'validating',

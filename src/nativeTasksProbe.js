@@ -1,11 +1,11 @@
 'use strict';
 
-const crypto = require('node:crypto');
-const fs = require('node:fs');
-const path = require('node:path');
-const { CLIENT_CAPABILITIES_META_KEY, fromJsonSchema } = require('@modelcontextprotocol/server');
-const { getStateDir } = require('./audit');
-const { toolResult } = require('./mcp/results');
+import * as crypto from 'node:crypto';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { CLIENT_CAPABILITIES_META_KEY, fromJsonSchema } from '@modelcontextprotocol/server';
+import { getStateDir } from './statePaths.js';
+import { toolResult } from './mcp/results.js';
 
 const TASKS_EXTENSION_ID = 'io.modelcontextprotocol/tasks';
 const PROBE_TOOL_NAME = 'relai_native_tasks_probe';
@@ -286,14 +286,4 @@ function errorResponse(id, code, message, data) {
   };
 }
 
-module.exports = {
-  TASKS_EXTENSION_ID,
-  PROBE_TOOL_NAME,
-  PROBE_ENV_NAME,
-  nativeTasksProbeEnabled,
-  clientSupportsNativeTasks,
-  nativeTasksServerCapability,
-  registerNativeTasksProbeTool,
-  expectedNativeTaskName,
-  handleNativeTasksProbeRequest
-};
+export { TASKS_EXTENSION_ID, PROBE_TOOL_NAME, PROBE_ENV_NAME, nativeTasksProbeEnabled, clientSupportsNativeTasks, nativeTasksServerCapability, registerNativeTasksProbeTool, expectedNativeTaskName, handleNativeTasksProbeRequest };

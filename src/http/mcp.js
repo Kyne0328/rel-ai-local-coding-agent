@@ -1,24 +1,13 @@
-'use strict';
 
-const { toNodeHandler } = require('@modelcontextprotocol/node');
-const { createMcpHandler } = require('@modelcontextprotocol/server');
-const { createRelaiMcpServer } = require('../mcpServer');
-const oauth = require('../oauthProvider');
-const {
-  resolveBaseUrl,
-  isMcpAuthorized,
-  oauthAuthorization,
-  unauthorizedMcp,
-  oauthErrorPage
-} = require('./auth');
-const { readRawBody, readFormOrJsonBody, sendJson, sendHtml } = require('./io');
-const { runSpan } = require('../telemetry');
-const { readConfig } = require('../config');
-const {
-  expectedNativeTaskName,
-  handleNativeTasksProbeRequest
-} = require('../nativeTasksProbe');
-
+import { toNodeHandler } from '@modelcontextprotocol/node';
+import { createMcpHandler } from '@modelcontextprotocol/server';
+import { createRelaiMcpServer } from '../mcpServer.js';
+import * as oauth from '../oauthProvider.js';
+import { resolveBaseUrl, isMcpAuthorized, oauthAuthorization, unauthorizedMcp, oauthErrorPage } from './auth.js';
+import { readRawBody, readFormOrJsonBody, sendJson, sendHtml } from './io.js';
+import { runSpan } from '../telemetry.js';
+import { readConfig } from '../config.js';
+import { expectedNativeTaskName, handleNativeTasksProbeRequest } from '../nativeTasksProbe.js';
 const MCP_PROTOCOL_VERSION = '2026-07-28';
 let nodeMcpHandler = null;
 
@@ -195,18 +184,4 @@ function oauthWellKnownPaths(baseUrl) {
   };
 }
 
-module.exports = {
-  MCP_PROTOCOL_VERSION,
-  getMcpAccess,
-  handleOauthProtectedResource,
-  handleOauthMetadata,
-  handleRegister,
-  handleAuthorizeGet,
-  handleAuthorizePost,
-  handleToken,
-  handleMcpGetDiagnostic,
-  handleMcpStreamable,
-  validateMcpRequestHeaders,
-  expectedMcpName,
-  oauthWellKnownPaths
-};
+export { MCP_PROTOCOL_VERSION, getMcpAccess, handleOauthProtectedResource, handleOauthMetadata, handleRegister, handleAuthorizeGet, handleAuthorizePost, handleToken, handleMcpGetDiagnostic, handleMcpStreamable, validateMcpRequestHeaders, expectedMcpName, oauthWellKnownPaths };

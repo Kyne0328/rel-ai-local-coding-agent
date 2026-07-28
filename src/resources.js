@@ -1,9 +1,10 @@
-const crypto = require('node:crypto');
-const fs = require('node:fs');
-const { readConfig, publicConfigSummary, allWorkspaceAliases, resolveWorkspace } = require('./config');
-const { getToolSurfaceManifest } = require('./tools');
-const { workspaceProfile, workspaceTree, workspaceInspect, workspaceList } = require('./tools/status');
-const pkg = require('../package.json');
+import * as path from 'node:path';
+import * as crypto from "node:crypto";
+import * as fs from "node:fs";
+import { readConfig, publicConfigSummary, allWorkspaceAliases, resolveWorkspace } from "./config.js";
+import { getToolSurfaceManifest } from "./tools.js";
+import { workspaceProfile, workspaceTree, workspaceInspect, workspaceList } from "./tools/status.js";
+import { packageMetadata as pkg } from './packageMetadata.js';
 
 const MIME_JSON = 'application/json';
 const MIME_MARKDOWN = 'text/markdown';
@@ -88,7 +89,7 @@ function resourceRevision(config, uri) {
       hash.update('\0').update(workspace.path).update('\0').update(String(stat.mtimeMs));
       for (const relative of ['package.json', 'REL_AI.md', '.relai/instructions.md']) {
         try {
-          const fileStat = fs.statSync(require('node:path').join(workspace.path, relative));
+          const fileStat = fs.statSync(path.join(workspace.path, relative));
           hash.update(relative).update(String(fileStat.mtimeMs)).update(String(fileStat.size));
         } catch {}
       }
@@ -131,4 +132,4 @@ ${workspaces}
 `;
 }
 
-module.exports = { listResources, readResource, resourceCacheHint, resourceRevision };
+export { listResources, readResource, resourceCacheHint, resourceRevision };

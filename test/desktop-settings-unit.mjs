@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { createDesktopSettingsManager } = require('../electron/desktop-settings.js');
+import { createDesktopSettingsManager } from "../electron/desktop-settings.js";
 
 let config = {
   port: 3333,

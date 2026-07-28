@@ -1,6 +1,6 @@
-const crypto = require("node:crypto");
-const zlib = require("node:zlib");
-const { ERROR_CODES, errorPayload } = require("../desktopUxContracts");
+import * as crypto from "node:crypto";
+import * as zlib from "node:zlib";
+import { ERROR_CODES, errorPayload } from "../desktopUxContracts.js";
 
 function isAuthorized(req, options) {
   if (!options.token && options.allowNoAuth) return true;
@@ -201,17 +201,4 @@ function jsonForHtmlScript(value) {
   return JSON.stringify(value).replaceAll("<", String.raw`\u003c`).replaceAll(">", String.raw`\u003e`).replaceAll("&", String.raw`\u0026`);
 }
 
-module.exports = {
-  isAuthorized,
-  timingSafeEqual,
-  unauthorized,
-  readRawBody,
-  readJsonBody,
-  readFormOrJsonBody,
-  setBaseHeaders,
-  sendJson,
-  sendSse,
-  sendHtml,
-  contentTypeForStaticAsset,
-  jsonForHtmlScript
-};
+export { isAuthorized, timingSafeEqual, unauthorized, readRawBody, readJsonBody, readFormOrJsonBody, setBaseHeaders, sendJson, sendSse, sendHtml, contentTypeForStaticAsset, jsonForHtmlScript };

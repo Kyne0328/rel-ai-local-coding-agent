@@ -2,10 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { cautionSummary } = require('../src/productUx.js');
+import { cautionSummary } from "../src/productUx.js";
 
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-caution-summary-'));
 const auditPath = path.join(TMP, 'audit.jsonl');

@@ -2,12 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
-
-const require = createRequire(import.meta.url);
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const { relaiRead } = require(path.join(root, 'src', 'localRepoBridge.js'));
+import { relaiRead } from '../src/localRepoBridge.js';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-read-default-'));
 const wsRoot = path.join(tmp, 'repo');

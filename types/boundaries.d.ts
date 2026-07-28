@@ -58,19 +58,23 @@ export interface ToolLifecycleMetadata {
   note?: string;
 }
 
-export interface ToolDefinition {
+export interface ToolDefinitionMetadata {
   name: ToolName;
   title: string;
   description: string;
   inputSchema: ObjectJsonSchema;
   outputSchema: JsonSchema;
   annotations: ToolAnnotations;
-  handler: ToolHandler;
+  handlerName: string;
   connectorStrip: string[];
   groups: ToolGroup[];
   behavior: ToolBehavior;
   dashboard: ToolDashboardMetadata;
   lifecycle?: ToolLifecycleMetadata;
+}
+
+export interface ToolDefinition extends ToolDefinitionMetadata {
+  handler: ToolHandler;
 }
 
 export interface ToolSchema {

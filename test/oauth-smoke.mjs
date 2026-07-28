@@ -72,7 +72,9 @@ async function authorize(client, pair, scope, state) {
   };
   const page = await fetch(`${base}/authorize?${new URLSearchParams(values)}`);
   assert.equal(page.status, 200);
-  assert.match(await page.text(), /Approve connection/);
+  const pageHtml = await page.text();
+  assert.match(pageHtml, /Approve connection/);
+  assert.match(pageHtml, /href="\/public\/oauth\.css"/);
   const approved = await postForm('/authorize', { ...values, dashboard_token: approvalToken }, true);
   assert.equal(approved.status, 302);
   const location = new URL(approved.headers.get('location'));
@@ -92,6 +94,23 @@ async function exchange(client, code, verifier) {
 
 try {
   await waitForHealth();
+
+  const expectedOauthCss = fs.readFileSync(path.join(root, 'public', 'oauth.css'), 'utf8');
+  const oauthCss = await fetch(`${base}/public/oauth.css`);
+  assert.equal(oauthCss.status, 200);
+  assert.match(oauthCss.headers.get('content-type') || '', /^text\/css(?:;\s*charset=utf-8)?$/i);
+  const servedOauthCss = await oauthCss.text();
+  assert.equal(servedOauthCss, expectedOauthCss);
+  assert.doesNotMatch(servedOauthCss, /[A-Za-z]:\\|file:\/\/|\/home\/|\/Users\//);
+
+  const missingOauthCss = await fetch(`${base}/public/oauth-missing.css`);
+  assert.equal(missingOauthCss.status, 404);
+  assert.equal(await missingOauthCss.text(), 'Not found');
+
+  const invalidAuthorize = await fetch(`${base}/authorize`);
+  assert.equal(invalidAuthorize.status, 400);
+  assert.match(await invalidAuthorize.text(), /href="\/public\/oauth\.css"/);
+
   const challenge = await fetch(`${base}/mcp`, { method: 'POST' });
   assert.equal(challenge.status, 401);
   assert.match(challenge.headers.get('www-authenticate') || '', /oauth-protected-resource\/mcp/);
@@ -155,8 +174,7 @@ try {
   assert.ok(Object.keys(storedOAuth.accessTokens).every(key => /^sha256:[a-f0-9]{64}$/.test(key)));
   assert.ok(Object.keys(storedOAuth.refreshTokens).every(key => /^sha256:[a-f0-9]{64}$/.test(key)));
 
-  const wrongIssuerProvider = (await import('../src/oauthProvider.js')).default;
-  const wrongIssuer = wrongIssuerProvider.validateAuthorizationRequest({
+  const wrongIssuerProvider = await import('../src/oauthProvider.js');  const wrongIssuer = wrongIssuerProvider.validateAuthorizationRequest({
     response_type: 'code', client_id: client.client_id, redirect_uri: redirectUri,
     code_challenge: 'abc', code_challenge_method: 'S256'
   }, { issuer: 'https://different.example.test' });

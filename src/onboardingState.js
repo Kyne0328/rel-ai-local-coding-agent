@@ -1,7 +1,7 @@
-const fs = require("node:fs");
-const path = require("node:path");
-const connection = require("./connectionProfile");
-const { readConfig } = require("./config");
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as connection from "./connectionProfile.js";
+import { readConfig } from "./config.js";
 
 function onboardingPath() {
   return path.join(connection.stateDir(), "onboarding.json");
@@ -49,4 +49,4 @@ function getOnboardingStatus() {
   };
 }
 
-module.exports = { getOnboardingStatus, writeOnboardingState };
+export { getOnboardingStatus, writeOnboardingState };

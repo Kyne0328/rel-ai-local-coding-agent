@@ -1,4 +1,4 @@
-'use strict';
+
 
 // Per-workspace reader/writer lock.
 //
@@ -83,4 +83,4 @@ function pendingWorkspaceOperations() {
   return locks.size;
 }
 
-module.exports = { runWorkspaceOperation, pendingWorkspaceOperations };
+export { runWorkspaceOperation, pendingWorkspaceOperations };

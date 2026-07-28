@@ -1,24 +1,26 @@
-'use strict';
-
-const { runProcess, summarizeCommand } = require('../process');
-const { discoverCommands } = require('../commandDiscovery');
-const { detectVerifyChecks } = require('./checkDetection');
-const { normalizeCommandAlias } = require('../commandNormalizer');
-const { selectValidationLevel } = require('../validationStrategy');
-const { resolvePolicy } = require('../policyResolver');
-const { clampNumber } = require('./limits');
-const { getCurrentTaskAbortSignal, updateCurrentToolActivity } = require('../toolActivity');
-const { sanitizeDisplayText } = require('../taskObservability');
-const { combineAbortSignals } = require('../abortSignals');
-const { finalizeValidationResult, normalizeCompletionSummary } = require('../tools/completion');
-const { readValidationPlan } = require('./validationPlan');
-const { workspaceGitStatus } = require('../repo/gitOps');
-const { runSpan } = require('../telemetry');
-const { operationTaskSignal } = require('../operationTasks');
+import { runProcess, summarizeCommand } from '../process.js';
+import { detectVerifyChecks } from './checkDetection.js';
+import { selectValidationLevel } from '../validationStrategy.js';
+import { resolvePolicy } from '../policyResolver.js';
+import { clampNumber } from './limits.js';
+import { getCurrentTaskAbortSignal, updateCurrentToolActivity } from '../toolActivity.js';
+import { sanitizeDisplayText } from '../taskObservability.js';
+import { combineAbortSignals } from '../abortSignals.js';
+import { finalizeValidationResult, normalizeCompletionSummary } from '../tools/completion.js';
+import { readValidationPlan } from './validationPlan.js';
+import { workspaceGitStatus } from '../repo/gitOps.js';
+import { runSpan } from '../telemetry.js';
+import { operationTaskSignal } from '../operationTasks.js';
+import { hasRequestedChecks, normalizeVerifyChecks } from './validationChecks.js';
+import {
+  boundCheckOutput,
+  checkResultStatus,
+  completedValidationUnits,
+  publishValidationProgress
+} from './validationProgress.js';
 
 const CHECK_OUTPUT_TAIL_DEFAULT = 4000;
 const CHECK_OUTPUT_TAIL_FULL = 40000;
-
 async function relaiVerify(workspace, config, args = {}) {
   let effectiveArgs = args;
   let validationPlan = null;
@@ -177,150 +179,8 @@ async function relaiVerify(workspace, config, args = {}) {
   return finalizeValidationResult(config, workspace, validationResult, completionSummary);
 }
 
-function publishValidationProgress({ checks, skippedChecks = [], results, currentCheck = '', currentIndex = 0, resultStatus = 'pending', final = false }) {
-  const total = checks.length;
-  const completed = Math.min(completedValidationUnits(results), total);
-  const passed = results.filter(item => item.ok).length;
-  const failed = results.filter(item => !item.ok && !item.cancelled).length;
-  const cancelled = results.some(item => item.cancelled === true) || resultStatus === 'cancelled';
-  const current = sanitizeDisplayText(currentCheck, 300);
-  const stage = resultStatus === 'cancelled'
-    ? 'Validation cancelled'
-    : resultStatus === 'failed' || resultStatus === 'timed_out'
-      ? 'Validation failed'
-      : final && resultStatus === 'passed'
-        ? 'Validation completed'
-        : currentIndex > 0
-          ? `Validating check ${currentIndex} of ${total}`
-          : 'Preparing validation';
-  const activity = current
-    ? `${current}${resultStatus && resultStatus !== 'pending' ? ` — ${resultStatus.replaceAll('_', ' ')}` : ''}`
-    : `${completed} of ${total} checks completed`;
-  updateCurrentToolActivity({
-    status: 'validating',
-    operation: currentIndex > 0 ? `Running validation ${currentIndex}/${total}: ${current || 'check'}` : `Preparing ${total} validation checks`,
-    detail: activity,
-    currentStage: stage,
-    currentActivity: activity,
-    progress: {
-      mode: 'determinate',
-      completedUnits: completed,
-      totalUnits: total,
-      percentage: final && resultStatus !== 'passed' && completed === total ? 99 : Math.round((completed / total) * 100),
-      source: 'validation',
-      label: `${completed} of ${total} checks`
-    },
-    activity: {
-      category: 'validation',
-      status: 'running',
-      title: 'Run repository validation',
-      summary: activity,
-      metadata: {
-        checkCount: total,
-        passedCount: passed,
-        failedCount: failed,
-        skippedCount: skippedChecks.length,
-        currentCheck: current,
-        currentIndex,
-        resultStatus,
-        failedCheck: failed ? current : '',
-        cancelled
-      }
-    }
-  });
-}
-
-function completedValidationUnits(results) {
-  return results.filter(item => item.cancelled !== true).length;
-}
-
-function checkResultStatus(summary) {
-  if (summary.cancelled) return 'cancelled';
-  if (summary.timedOut) return 'timed_out';
-  return summary.ok ? 'passed' : 'failed';
-}
-
-function tailString(text, maxChars) {
-  const value = String(text);
-  if (value.length <= maxChars) return value;
-  return `[rel-ai-mcp kept last ${maxChars} of ${value.length} chars]\n${value.slice(value.length - maxChars)}`;
-}
-
-function boundCheckOutput(summary, maxChars) {
-  const bounded = { ...summary };
-  if (typeof bounded.stdout === 'string') bounded.stdout = tailString(bounded.stdout, maxChars);
-  if (typeof bounded.stderr === 'string') bounded.stderr = tailString(bounded.stderr, maxChars);
-  return bounded;
-}
-
-function hasRequestedChecks(args = {}) {
-  return Boolean(args.verify || args.check || args.checks || args.checksText || args.command || args.commands || args.commandsText);
-}
-
-function normalizeVerifyChecks(args, root, level) {
-  const discovered = discoverCommands(root);
-  const aliasNormalizations = { count: 0 };
-  const resolveAndTrack = makeResolver(discovered, aliasNormalizations);
-  const explicit = collectExplicitChecks(args, resolveAndTrack);
-  const candidates = explicit.length ? explicit : detectVerifyChecks(root, level);
-  const checks = [];
-  const skippedChecks = [];
-  const seen = new Set();
-  for (const item of candidates) {
-    const command = String(item || '').trim();
-    if (!command) {
-      skippedChecks.push({ command: '', reason: 'empty' });
-      continue;
-    }
-    if (seen.has(command)) {
-      skippedChecks.push({ command, reason: 'duplicate' });
-      continue;
-    }
-    seen.add(command);
-    checks.push(command);
-  }
-  return { checks, skippedChecks, aliasNormalizations: aliasNormalizations.count };
-}
-
-function makeResolver(discovered, aliasNormalizations) {
-  return raw => {
-    const trimmed = String(raw || '').trim();
-    if (!trimmed) return trimmed;
-    const { command, normalized } = normalizeCommandAlias(trimmed, trimmed, discovered);
-    if (normalized) aliasNormalizations.count += 1;
-    return command;
-  };
-}
-
-function collectExplicitChecks(args, resolveAndTrack) {
-  const explicit = [];
-  pushResolvedExplicit(explicit, args.check ?? args.command, resolveAndTrack);
-  pushResolvedCommands(explicit, args.checks ?? args.commands, resolveAndTrack);
-  pushResolvedCommandText(explicit, args.checksText ?? args.commandsText, resolveAndTrack);
-  return explicit;
-}
-
-function pushResolvedExplicit(target, value, resolveAndTrack) {
-  if (typeof value === 'string' && value.trim()) target.push(resolveAndTrack(value));
-}
-
-function pushResolvedCommands(target, commands, resolveAndTrack) {
-  if (!Array.isArray(commands)) return;
-  for (const item of commands) {
-    const command = resolveAndTrack(String(item || ''));
-    if (command) target.push(command);
-  }
-}
-
-function pushResolvedCommandText(target, commandsText, resolveAndTrack) {
-  if (typeof commandsText !== 'string' || !commandsText.trim()) return;
-  for (const line of commandsText.split(/\r?\n/)) {
-    const trimmedLine = line.trim();
-    if (trimmedLine && !trimmedLine.startsWith('#')) target.push(resolveAndTrack(trimmedLine));
-  }
-}
-
-module.exports = {
+// Re-exported so config summaries, diagnostics, and tests keep a single import site.
+export {
   relaiVerify,
   hasRequestedChecks,
   detectVerifyChecks,

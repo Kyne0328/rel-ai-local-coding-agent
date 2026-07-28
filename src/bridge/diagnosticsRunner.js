@@ -1,15 +1,13 @@
-'use strict';
 
-const path = require('node:path');
-const { runProcess, summarizeCommand } = require('../process');
-const { detectVerifyChecks } = require('./checkDetection');
-const { clampNumber } = require('./limits');
-const { runSpan } = require('../telemetry');
-const { operationTaskSignal } = require('../operationTasks');
-const { combineAbortSignals } = require('../abortSignals');
-const { getCurrentTaskAbortSignal, updateCurrentToolActivity } = require('../toolActivity');
-const { sanitizeDisplayText } = require('../taskObservability');
-
+import * as path from 'node:path';
+import { runProcess, summarizeCommand } from '../process.js';
+import { detectVerifyChecks } from './checkDetection.js';
+import { clampNumber } from './limits.js';
+import { runSpan } from '../telemetry.js';
+import { operationTaskSignal } from '../operationTasks.js';
+import { combineAbortSignals } from '../abortSignals.js';
+import { getCurrentTaskAbortSignal, updateCurrentToolActivity } from '../toolActivity.js';
+import { sanitizeDisplayText } from '../taskObservability.js';
 async function relaiDiagnosticsRun(workspace, config, args = {}) {
   const commands = selectDiagnosticCommands(workspace, args);
   if (!commands.length) {
@@ -177,4 +175,4 @@ function deduplicateDiagnostics(items) {
   });
 }
 
-module.exports = { relaiDiagnosticsRun, parseDiagnostics, parseDiagnosticLine, publishDiagnosticsProgress };
+export { relaiDiagnosticsRun, parseDiagnostics, parseDiagnosticLine, publishDiagnosticsProgress };

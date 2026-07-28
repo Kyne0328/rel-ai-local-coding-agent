@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { compactForConnector, policySentence } = require('../src/tools.js');
+import { compactForConnector, policySentence } from "../src/tools.js";
 
 const idleStatus = compactForConnector('relai_status', {
   ok: true,

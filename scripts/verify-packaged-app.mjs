@@ -1,12 +1,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createRequire } from 'node:module';
+import { listPackage } from '@electron/asar';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const require = createRequire(import.meta.url);
-const { listPackage } = require('@electron/asar');
 const args = process.argv.slice(2);
 const dirIndex = args.indexOf('--dir');
 const requestedDirectory = dirIndex >= 0 ? args[dirIndex + 1] : '';
@@ -45,7 +43,7 @@ for (const relativePath of requiredFiles) {
 
 const asarPath = path.join(packageDirectory, 'resources', 'app.asar');
 const asarEntries = new Set(listPackage(asarPath).map(entry => entry.replaceAll('\\', '/').replace(/^\//, '')));
-for (const relativePath of ['renderer/app.css', 'renderer/color-tokens.css', 'renderer/status.html', 'renderer/wizard.html']) {
+for (const relativePath of ['preload.cjs', 'startup-background.js', 'renderer/app.css', 'renderer/color-tokens.css', 'renderer/status.html', 'renderer/wizard.html']) {
   assert.ok(asarEntries.has(relativePath), `Packaged ASAR is missing: ${relativePath}`);
 }
 
@@ -54,5 +52,17 @@ const packagedPackage = JSON.parse(fs.readFileSync(path.join(packageDirectory, '
 assert.equal(packagedPackage.name, rootPackage.name, 'Packaged package metadata has the wrong product name.');
 assert.equal(packagedPackage.version, rootPackage.version, 'Packaged package metadata has the wrong version.');
 assert.equal(fs.existsSync(path.join(packageDirectory, 'resources', 'src', 'ui', 'styles', 'app.css')), false, 'Compiled dashboard CSS must be packaged without the source Tailwind stylesheet.');
+const packagedTypeScript = collectFiles(path.join(packageDirectory, 'resources', 'node_modules')).filter(file => /\.(?:ts|cts|mts)$/i.test(file));
+assert.deepEqual(packagedTypeScript, [], 'Packaged runtime dependencies must exclude TypeScript sources and declarations.');
+
+function collectFiles(directory) {
+  const files = [];
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const target = path.join(directory, entry.name);
+    if (entry.isDirectory()) files.push(...collectFiles(target));
+    else if (entry.isFile()) files.push(path.relative(packageDirectory, target).replaceAll('\\', '/'));
+  }
+  return files;
+}
 
 console.log(`Packaged application layout verified for v${packagedPackage.version}: ${requiredFiles.length} required files are present.`);

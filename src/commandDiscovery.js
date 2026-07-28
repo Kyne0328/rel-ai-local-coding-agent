@@ -1,5 +1,5 @@
-const fs = require("node:fs");
-const path = require("node:path");
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 function _discoverNpmScripts(discovered, root) {
   const pkgPath = path.join(root, "package.json");
@@ -113,9 +113,4 @@ function staleCommandKeys(configured = {}, discovered = {}) {
   });
 }
 
-module.exports = {
-  discoverCommands,
-  discoveryManifestSignature,
-  clearCommandDiscoveryCache,
-  staleCommandKeys
-};
+export { discoverCommands, discoveryManifestSignature, clearCommandDiscoveryCache, staleCommandKeys };

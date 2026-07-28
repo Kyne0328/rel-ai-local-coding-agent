@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { createRecoveryWindowManager } = require('../electron/recovery-window.js');
+import { createRecoveryWindowManager } from "../electron/recovery-window.js";
 
 const windows = [];
 class FakeWindow {
@@ -48,9 +46,8 @@ let readyCalls = 0;
 const securityErrors = [];
 const manager = createRecoveryWindowManager({
   BrowserWindow: FakeWindow,
-  preloadPath: 'preload.js',
-  rendererUrl: 'relai-app://renderer/status.html',
-  limits: { minWidth: 480, minHeight: 420 },
+  preloadPath: 'preload.cjs',
+  rendererUrl: 'relai-app://renderer/status.html',  limits: { minWidth: 480, minHeight: 420 },
   isQuitting: () => quitting,
   onReady: () => { readyCalls += 1; },
   onSecurityError: error => securityErrors.push(error.message)
@@ -65,6 +62,8 @@ assert.equal(first.options.webPreferences.webSecurity, true);
 assert.equal(first.options.webPreferences.contextIsolation, true);
 assert.equal(first.options.webPreferences.nodeIntegration, false);
 assert.equal(first.options.webPreferences.partition, 'relai-recovery');
+assert.deepEqual(first.options.webPreferences.additionalArguments, ['--relai-preload-surface=application']);
+assert.equal(first.options.backgroundColor, '#1f2937');
 assert.equal(first.visible, true);
 assert.equal(first.focused, true);
 first.webEvents.get('did-finish-load')?.();

@@ -2,15 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const {
-  clearTaskHistory,
-  getTaskHistoryDir,
-  readTaskHistory,
-  recordTaskHistoryEvent
-} = require('../src/taskHistoryStore.js');
+import { clearTaskHistory, getTaskHistoryDir, readTaskHistory, recordTaskHistoryEvent } from "../src/taskHistoryStore.js";
 
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-task-history-store-'));
 const config = { stateDir: sandbox, auditLogPath: path.join(sandbox, 'audit.jsonl') };

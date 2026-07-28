@@ -2,18 +2,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const {
-  createToolActivityTracker,
-  runWithToolActivity
-} = require('../src/toolActivity.js');
-const {
-  clearSessionPolicy,
-  ensureSessionStarted,
-  readSessionPolicy
-} = require('../src/policyResolver.js');
+import { createToolActivityTracker, runWithToolActivity } from "../src/toolActivity.js";
+import { clearSessionPolicy, ensureSessionStarted, readSessionPolicy } from "../src/policyResolver.js";
 
 // Two logical tasks sharing one MCP transport scope must remain independent.
 {

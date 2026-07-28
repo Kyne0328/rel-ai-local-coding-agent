@@ -3,10 +3,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { relaiResetWorkspace, relaiRestorePaths } = require('../src/bridge/restore.js');
+import { relaiResetWorkspace, relaiRestorePaths } from "../src/bridge/restore.js";
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-restore-contract-'));
 const repo = path.join(temp, 'repo');

@@ -1,13 +1,12 @@
-const { spawn } = require("node:child_process");
-const { StringDecoder } = require("node:string_decoder");
-const { resolveGitExecutable } = require("../gitExecutable");
-const { appendLimited, killProcessTree } = require("../process");
-const { makeProcessEnvironment } = require("../processEnvironment");
-const { isSecretPath } = require("../safety");
-const { clampNumber } = require("./limits");
-const { buildContextualSearch } = require("./searchContext");
-const { resolveSearchPlan } = require("./searchPlanner");
-
+import { spawn } from 'node:child_process';
+import { StringDecoder } from 'node:string_decoder';
+import { resolveGitExecutable } from '../gitExecutable.js';
+import { appendLimited, killProcessTree } from '../process.js';
+import { makeProcessEnvironment } from '../processEnvironment.js';
+import { isSecretPath } from '../safety.js';
+import { clampNumber } from './limits.js';
+import { buildContextualSearch } from './searchContext.js';
+import { resolveSearchPlan } from './searchPlanner.js';
 const DEFAULT_MAX_RESULTS = 200;
 const MAX_LINE_CHARS = 400;
 const SEARCH_TIMEOUT_MS = 15000;
@@ -173,4 +172,4 @@ function parseGitGrepLine(line) {
   };
 }
 
-module.exports = { relaiSearch };
+export { relaiSearch };

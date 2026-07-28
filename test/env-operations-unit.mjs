@@ -2,10 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { runEnvOperation } = require('../src/envOperations.js');
+import { runEnvOperation } from "../src/envOperations.js";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-env-operations-'));
 const workspace = { alias: 'repo', path: root };

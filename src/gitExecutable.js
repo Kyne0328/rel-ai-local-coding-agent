@@ -1,7 +1,7 @@
-'use strict';
 
-const fs = require('node:fs');
-const path = require('node:path');
+
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 function fixedCandidates() {
   if (process.platform === 'win32') {
@@ -26,4 +26,4 @@ function resolveGitExecutable() {
   return candidates.find(candidate => path.isAbsolute(candidate) && fs.existsSync(candidate)) || '';
 }
 
-module.exports = { resolveGitExecutable };
+export { resolveGitExecutable };

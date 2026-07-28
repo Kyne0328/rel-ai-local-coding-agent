@@ -1,6 +1,6 @@
-'use strict';
 
-const { ERROR_CODES, errorGuidance, normalizeErrorCode } = require('./desktopUxContracts');
+
+import { ERROR_CODES, errorGuidance, normalizeErrorCode } from "./desktopUxContracts.js";
 
 const SENSITIVE_KEY = /token|secret|password|authorization|api[_-]?key|authtoken|client[_-]?secret|bootstrap/i;
 const SECRET_TEXT_PATTERNS = [
@@ -305,9 +305,4 @@ function humanize(value) {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-module.exports = {
-  sanitizeText,
-  sanitizeDiagnosticValue,
-  buildDiagnosticReport,
-  formatDiagnosticReport
-};
+export { sanitizeText, sanitizeDiagnosticValue, buildDiagnosticReport, formatDiagnosticReport };

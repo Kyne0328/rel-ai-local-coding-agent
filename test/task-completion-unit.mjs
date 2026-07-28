@@ -1,10 +1,13 @@
+import { callTool } from "../src/tools.js";
+import { getToolActivity, resetToolActivity } from "../src/toolActivity.js";
+import { readConfig } from "../src/config.js";
+import { readAudit } from "../src/audit.js";
+import { resolvePolicy } from "../src/policyResolver.js";
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-task-completion-'));
 const workspace = path.join(temp, 'workspace');
 const stateDir = path.join(temp, 'state');
@@ -31,11 +34,11 @@ fs.writeFileSync(configPath, JSON.stringify({
 process.env.REL_AI_MCP_CONFIG = configPath;
 
 try {
-  const { callTool } = require('../src/tools.js');
-  const { getToolActivity, resetToolActivity } = require('../src/toolActivity.js');
-  const { readConfig } = require('../src/config.js');
-  const { readAudit } = require('../src/audit.js');
-  const { resolvePolicy } = require('../src/policyResolver.js');
+
+
+
+
+
 
   async function startTask(scopeId) {
     const result = await callTool('relai_start_task', { workspace: 'app' }, {

@@ -1,7 +1,7 @@
 'use strict';
 
-const fs = require('node:fs');
-const path = require('node:path');
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 const LOCAL_SCHEME = 'relai-app';
 const LOCAL_HOST = 'renderer';
@@ -73,10 +73,4 @@ function resolveLocalRendererPath(target, rendererRoot) {
   }
 }
 
-module.exports = {
-  LOCAL_SCHEME,
-  installLocalProtocol,
-  localRendererUrl,
-  registerLocalScheme,
-  resolveLocalRendererPath
-};
+export { LOCAL_SCHEME, installLocalProtocol, localRendererUrl, registerLocalScheme, resolveLocalRendererPath };

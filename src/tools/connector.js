@@ -156,9 +156,6 @@ function compactForConnector(name, value, args = {}) {
         mutationTracking: value.mutationTracking
       };
     case "relai_repo_snapshot": {
-      // Drop config-forced constants, budget telemetry, the operation journal, the full text
-      // of every manifest, and the skipped-entry list (kept as a count) — keep manifest
-      // NAMES, project hints, and the inline git summary.
       return pruneEmpty({
         ok: value.ok,
         workspace: value.workspace,
@@ -179,4 +176,4 @@ function compactForConnector(name, value, args = {}) {
   }
 }
 
-module.exports = { compactForConnector, policySentence };
+export { compactForConnector, policySentence };

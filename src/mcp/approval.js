@@ -1,8 +1,8 @@
-'use strict';
 
-const crypto = require('node:crypto');
-const { inputRequired, acceptedContent } = require('@modelcontextprotocol/server');
-const { toolResult } = require('./results');
+
+import * as crypto from "node:crypto";
+import { inputRequired, acceptedContent } from "@modelcontextprotocol/server";
+import { toolResult } from "./results.js";
 
 async function requireApprovalIfNeeded(name, args, context, codec) {
   const requirement = approvalRequirement(name, args);
@@ -55,4 +55,4 @@ function stableJson(value) {
   return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
 }
 
-module.exports = { requireApprovalIfNeeded, approvalRequirement, approvalDigest };
+export { requireApprovalIfNeeded, approvalRequirement, approvalDigest };

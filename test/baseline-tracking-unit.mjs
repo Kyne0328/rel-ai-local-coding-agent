@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { createRequire } from 'node:module';
 
 const GIT_EXECUTABLE = process.platform === 'win32'
   ? String.raw`C:\Program Files\Git\cmd\git.exe`
@@ -13,9 +12,8 @@ function git(args, options = {}) {
   return spawnSync(GIT_EXECUTABLE, args, options);
 }
 
-const require = createRequire(import.meta.url);
-const { writeSessionPolicy, resolvePolicy, captureBaselineDirty } = require('../src/policyResolver.js');
-const { classifyStatusOwnership } = require('../src/localRepoBridge.js');
+import { writeSessionPolicy, resolvePolicy, captureBaselineDirty } from "../src/policyResolver.js";
+import { classifyStatusOwnership } from "../src/localRepoBridge.js";
 
 function makeRepo() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-baseline-'));

@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { MAX_CLIPBOARD_TEXT_BYTES, isAllowedNgrokUrl, registerIpcHandlers } = require('../electron/ipc-handlers.js');
-const { createWindowGuards } = require('../electron/ipc-security.js');
+import { MAX_CLIPBOARD_TEXT_BYTES, isAllowedNgrokUrl, registerIpcHandlers } from "../electron/ipc-handlers.js";
+import { createWindowGuards } from "../electron/ipc-security.js";
 
 const handles = new Map();
 const listeners = new Map();

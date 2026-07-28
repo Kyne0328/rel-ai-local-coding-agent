@@ -1,11 +1,15 @@
-const fs = require("node:fs");
-const os = require("node:os");
-const path = require("node:path");
-const { safeReadJson, realRootOf, clearRealRootCache } = require("./safety");
-const { discoverCommands, staleCommandKeys } = require("./commandDiscovery");
-const { readProjectInstructions, summarizeProjectInstructions } = require('./projectInstructions');
-const { normalizeAllowedKeys } = require('./processEnvironment');
-
+import * as worktreeManager from './worktreeManager.js';
+import { telemetryStatus } from './telemetry.js';
+import { detectVerifyChecks } from './bridge/checkDetection.js';
+import { TOOL_NAMES } from './tools/schema.js';
+import { assertSafeWorkspaceRoot } from './workspaceSafety.js';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { safeReadJson, realRootOf, clearRealRootCache } from './safety.js';
+import { discoverCommands, staleCommandKeys } from './commandDiscovery.js';
+import { readProjectInstructions, summarizeProjectInstructions } from './projectInstructions.js';
+import { normalizeAllowedKeys } from './processEnvironment.js';
 const REMOVED_WORKSPACE_COMMAND_KEYS = new Set([
   'npm:test:fast-task',
   'npm:test:oneclick',
@@ -273,31 +277,6 @@ function normalizeStringList(value) {
   return String(value).split(/[\n,]/).map((item) => item.trim()).filter(Boolean);
 }
 
-function assertSafeWorkspaceRoot(rawPath, label = "Workspace path") {
-  const text = String(rawPath || "").trim();
-  if (!text) throw new Error(`${label} is required.`);
-  if (!path.isAbsolute(text)) throw new Error(`${label} must be absolute.`);
-  const resolved = path.resolve(text);
-  const strip = (value) => {
-    let text = String(value || "");
-    while (text.endsWith("/") || text.endsWith("\\")) text = text.slice(0, -1);
-    return text || String(value || "");
-  };
-  const parsed = path.parse(resolved);
-  const root = strip(parsed.root);
-  const normalized = strip(resolved).toLowerCase();
-  const unsafe = new Set([root.toLowerCase()]);
-
-  for (const item of ["Windows", "Program Files", "Program Files (x86)", "Users", "etc", "usr", "bin", "sbin", "var", "tmp", "home", "System", "Library", "Applications"]) {
-    unsafe.add(strip(path.join(parsed.root, item)).toLowerCase());
-  }
-
-  if (unsafe.has(normalized)) {
-    throw new Error(`Unsafe workspace path refused: ${resolved}. Choose a project directory, not a system root.`);
-  }
-  return resolved;
-}
-
 function workspaceResolutionError(code, message, details = {}) {
   const error = new Error(message);
   error.code = code;
@@ -459,13 +438,13 @@ function resolveWorkspace(config, alias) {
 function allWorkspaceAliases(config) {
   const staticAliases = Object.keys(config.workspaces || {});
   let managedAliases = [];
-  try { managedAliases = require('./worktreeManager').managedWorktreeAliases(config); } catch {}
+  try { managedAliases = worktreeManager.managedWorktreeAliases(config); } catch {}
   return [...new Set([...staticAliases, ...managedAliases])].sort((left, right) => left.localeCompare(right));
 }
 
 function workspaceEntryForAlias(config, alias) {
   if (Object.hasOwn(config.workspaces || {}, alias)) return config.workspaces[alias];
-  try { return require('./worktreeManager').resolveManagedWorktree(config, alias); } catch (error) {
+  try { return worktreeManager.resolveManagedWorktree(config, alias); } catch (error) {
     if (/was not found|source workspace/.test(String(error?.message || ''))) return null;
     throw error;
   }
@@ -494,15 +473,15 @@ function publicConfigSummary(config) {
     patch: normalizePatchConfig(config.patch),
     localRepoBridge: {
       mode: "trusted",
-      visibleTools: require("./tools").TOOL_NAMES,
+      visibleTools: TOOL_NAMES,
       writeAccess: true,
       verificationAccess: true,
       restoreAccess: true
     },
     productUx: config.productUx,
     release: config.release,
-    telemetry: require('./telemetry').telemetryStatus(config),
-    managedWorktrees: Object.values(require('./worktreeManager').readRegistry(config).worktrees || {}).map((entry) => ({
+    telemetry: telemetryStatus(config),
+    managedWorktrees: Object.values(worktreeManager.readRegistry(config).worktrees || {}).map((entry) => ({
       alias: entry.alias,
       sourceAlias: entry.sourceAlias,
       path: entry.path,
@@ -552,7 +531,7 @@ function safeDiscoverCommands(workspacePath) {
 function safeDetectValidationChecks(workspacePath) {
   try {
     if (!workspacePath || !fs.existsSync(workspacePath)) return [];
-    return require('./bridge/validation').detectVerifyChecks(workspacePath, 'standard');
+    return detectVerifyChecks(workspacePath, 'standard');
   } catch (error) {
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] detect validation checks:', error);
     return [];
@@ -576,24 +555,4 @@ function clampNumber(value, min, max, fallback) {
   return Math.min(Math.max(Math.floor(n), min), max);
 }
 
-module.exports = {
-  getConfigPath,
-  makeDefaultConfig,
-  makeDefaultContextConfig,
-  normalizeContextConfig,
-  makeDefaultPatchConfig,
-  normalizePatchConfig,
-  readConfig,
-  invalidateConfigCache,
-  ensureConfig,
-  writeConfig,
-  normalizeConfig,
-  expandHome,
-  assertSafeWorkspaceRoot,
-  resolveWorkspaceInput,
-  normalizeWorkspacePathForComparison,
-  resolveWorkspace,
-  publicConfigSummary,
-  allWorkspaceAliases,
-  workspaceEntryForAlias
-};
+export { getConfigPath, makeDefaultConfig, makeDefaultContextConfig, normalizeContextConfig, makeDefaultPatchConfig, normalizePatchConfig, readConfig, invalidateConfigCache, ensureConfig, writeConfig, normalizeConfig, expandHome, resolveWorkspaceInput, normalizeWorkspacePathForComparison, resolveWorkspace, publicConfigSummary, allWorkspaceAliases, workspaceEntryForAlias };

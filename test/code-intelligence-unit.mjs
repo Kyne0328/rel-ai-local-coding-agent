@@ -2,10 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { relaiCodeInspect, isTestPath } = require('../src/bridge/codeIntelligence.js');
+import { relaiCodeInspect, isTestPath } from "../src/bridge/codeIntelligence.js";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-code-intel-'));
 const workspace = {

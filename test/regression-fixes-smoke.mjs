@@ -5,20 +5,18 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
-import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
-const require = createRequire(import.meta.url);
 
 const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-regressions-'));
 process.env.REL_AI_MCP_CONFIG = path.join(tmpRoot, 'config.json');
 
-const { makeDefaultConfig, normalizeConfig, publicConfigSummary } = require('../src/config.js');
-const { updateWorkspace } = require('../src/configEditor.js');
-const productUx = require('../src/productUx.js');
-const { getVersion } = require('../src/version.js');
+import { makeDefaultConfig, normalizeConfig, publicConfigSummary } from "../src/config.js";
+import { updateWorkspace } from "../src/configEditor.js";
+import * as productUx from "../src/productUx.js";
+import { getVersion } from "../src/version.js";
 
 function read(rel) {
   return fs.readFileSync(path.join(root, rel), 'utf8');

@@ -61,4 +61,4 @@ function evictLru() {
   if (oldestKey) cache.delete(oldestKey);
 }
 
-module.exports = { getCachedRead, getCachedReadEntry, setCachedRead, invalidatePath, invalidateAlias, invalidateAll, cacheStats };
+export { getCachedRead, getCachedReadEntry, setCachedRead, invalidatePath, invalidateAlias, invalidateAll, cacheStats };

@@ -1,9 +1,9 @@
-'use strict';
 
-const { readConfig } = require('../config');
-const { clearAuditHistory } = require('../audit');
-const { ERROR_CODES, errorPayload } = require('../desktopUxContracts');
-const { readJsonBody, sendJson } = require('./io');
+
+import { readConfig } from "../config.js";
+import { clearAuditHistory } from "../audit.js";
+import { ERROR_CODES, errorPayload } from "../desktopUxContracts.js";
+import { readJsonBody, sendJson } from "./io.js";
 
 async function handleApiHistoryReset(ctx) {
   const payload = await readJsonBody(ctx.req, ctx.options.maxBodyBytes);
@@ -32,4 +32,4 @@ async function handleApiHistoryReset(ctx) {
   }, ctx.ae);
 }
 
-module.exports = { handleApiHistoryReset };
+export { handleApiHistoryReset };

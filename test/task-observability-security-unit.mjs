@@ -3,22 +3,19 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
 const {
   buildSafeActivityProjection,
   sanitizeCompletionSummary,
   sanitizeDisplayText,
   sanitizeTaskRecord
-} = require('../src/taskObservability.js');
-const { createToolActivityTracker } = require('../src/toolActivity.js');
+} = await import('../src/taskObservability.js');
+const { createToolActivityTracker } = await import('../src/toolActivity.js');
 const {
   getTaskHistoryDir,
   readTaskHistorySession,
   recordTaskActivityEvent
-} = require('../src/taskHistoryStore.js');
-const { mergeDashboardActivity } = require('../src/http/dashboardData.js');
+} = await import('../src/taskHistoryStore.js');
+const { mergeDashboardActivity } = await import('../src/http/dashboardData.js');
 
 const syntheticSecrets = [
   'Authorization: Bearer relai_test_bearer_123456',

@@ -3,11 +3,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { createRequire } from 'node:module';
 
-const require = createRequire(import.meta.url);
-const { workspaceTidyPlan, workspaceTidyRun } = require('../src/localRepoBridge.js');
-const { writeSessionPolicy } = require('../src/policyResolver.js');
+import { workspaceTidyPlan, workspaceTidyRun } from "../src/localRepoBridge.js";
+import { writeSessionPolicy } from "../src/policyResolver.js";
 
 const GIT_EXECUTABLE = process.platform === 'win32'
   ? String.raw`C:\Program Files\Git\cmd\git.exe`
