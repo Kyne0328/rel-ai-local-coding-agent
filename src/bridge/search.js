@@ -2,6 +2,7 @@ const { spawn } = require("node:child_process");
 const { StringDecoder } = require("node:string_decoder");
 const { resolveGitExecutable } = require("../gitExecutable");
 const { appendLimited, killProcessTree } = require("../process");
+const { makeProcessEnvironment } = require("../processEnvironment");
 const { isSecretPath } = require("../safety");
 const { clampNumber } = require("./limits");
 const { buildContextualSearch } = require("./searchContext");
@@ -80,7 +81,7 @@ function runGitGrep(workspace, gitArgs, maxResults) {
     const executable = resolveGitExecutable() || "git";
     const child = spawn(executable, gitArgs, {
       cwd: workspace.path,
-      env: { ...process.env, REL_AI_MCP: "1" },
+      env: makeProcessEnvironment(),
       shell: false,
       detached: process.platform !== "win32"
     });

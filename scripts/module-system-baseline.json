@@ -1,0 +1,7 @@
+{
+  "roots": ["bin", "src", "electron"],
+  "maxCommonJsFiles": 132,
+  "minEsmFiles": 54,
+  "maxMixedFiles": 0,
+  "allowedScriptFiles": 2
+}

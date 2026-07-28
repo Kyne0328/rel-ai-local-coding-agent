@@ -1,5 +1,7 @@
 # Rel.AI MCP Dependency Audit and Upgrade Report
 
+> Historical audit for the 0.21.0 implementation state. Current runtime, dependency, packaging-security, and package-management policy is defined by `package.json`, `electron/package.json`, `docs/PACKAGING_SECURITY.md`, and `docs/PACKAGE_MANAGEMENT.md`.
+
 **Audit date:** 2026-07-26
 **Repository:** `rel-ai-mcp`
 **Application version:** `0.21.0`

@@ -32,6 +32,8 @@
       "entry": [
         "preload.js",
         "dashboard-preload.js",
+        "build/after-pack.js",
+        "scripts/*.js",
         "renderer/*.js",
         "renderer/*.css"
       ],

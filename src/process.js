@@ -1,5 +1,7 @@
 const { spawn, spawnSync } = require("node:child_process");
 const { resolveGitExecutable } = require("./gitExecutable");
+const { makeProcessEnvironment } = require("./processEnvironment");
+const { traceContextEnvironment } = require("./telemetry");
 const TASKKILL_EXE = String.raw`C:\Windows\System32\taskkill.exe`;
 
 // Kill the whole process tree. A plain child.kill() on Windows only terminates the
@@ -44,9 +46,11 @@ function runProcess(command, args, options = {}, config = {}) {
       ? Number(options.timeout)
       : 0;
     const executable = command === "git" ? (resolveGitExecutable() || command) : command;
+    const childEnvironment = makeProcessEnvironment(options.env, { allow: config.processEnvironment?.allow });
+    Object.assign(childEnvironment, traceContextEnvironment());
     const spawnOptions = {
       cwd: options.cwd,
-      env: makeEnv(options.env),
+      env: childEnvironment,
       detached: process.platform !== "win32",
       windowsHide: true
     };
@@ -147,12 +151,6 @@ function runProcess(command, args, options = {}, config = {}) {
       });
     });
   });
-}
-
-function makeEnv(extra) {
-  const env = { ...process.env, REL_AI_MCP: "1" };
-  if (extra && typeof extra === "object") Object.assign(env, extra);
-  return env;
 }
 
 function appendLimited(current, next, maxBytes) {

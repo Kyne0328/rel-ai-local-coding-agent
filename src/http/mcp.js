@@ -14,6 +14,10 @@ const {
 const { readRawBody, readFormOrJsonBody, sendJson, sendHtml } = require('./io');
 const { runSpan } = require('../telemetry');
 const { readConfig } = require('../config');
+const {
+  expectedNativeTaskName,
+  handleNativeTasksProbeRequest
+} = require('../nativeTasksProbe');
 
 const MCP_PROTOCOL_VERSION = '2026-07-28';
 let nodeMcpHandler = null;
@@ -142,7 +146,13 @@ async function handleMcpStreamable(ctx) {
     catch { return sendMcpProtocolError(ctx.res, 400, -32700, 'Parse error.'); }
     const validation = validateMcpRequestHeaders(ctx.req.headers, message);
     if (!validation.ok) return sendMcpProtocolError(ctx.res, validation.status, validation.code, validation.error, message?.id);
-    ctx.req.auth = oauthAuthorization(ctx.req, ctx.options) || { clientId: 'static-bearer' };
+    const authorization = oauthAuthorization(ctx.req, ctx.options) || { clientId: 'static-bearer' };
+    ctx.req.auth = authorization;
+    const nativeTasksResponse = handleNativeTasksProbeRequest(readConfig(), message, authorization.clientId || 'static-bearer');
+    if (nativeTasksResponse) {
+      sendJson(ctx.res, nativeTasksResponse.status, nativeTasksResponse.body, ctx.ae);
+      return;
+    }
     await getNodeMcpHandler()(ctx.req, ctx.res, message);
   }, { carrier: ctx.req.headers });
 }
@@ -168,7 +178,7 @@ function validateMcpRequestHeaders(headers = {}, message) {
 function expectedMcpName(method, params) {
   if (method === 'tools/call' || method === 'prompts/get') return String(params.name || '');
   if (['resources/read', 'resources/subscribe', 'resources/unsubscribe'].includes(method)) return String(params.uri || '');
-  return '';
+  return expectedNativeTaskName(method, params);
 }
 
 function sendMcpProtocolError(res, status, code, message, id = null) {

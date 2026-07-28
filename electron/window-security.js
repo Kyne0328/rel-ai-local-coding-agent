@@ -1,8 +1,5 @@
 'use strict';
 
-const path = require('node:path');
-const { fileURLToPath } = require('node:url');
-
 function localWindowWebPreferences(preload, partition) {
   return {
     preload,
@@ -18,9 +15,9 @@ function localWindowWebPreferences(preload, partition) {
   };
 }
 
-function secureLocalWindow(window, { allowedFile, onError = () => {} } = {}) {
+function secureLocalWindow(window, { allowedUrl, onError = () => {} } = {}) {
   if (!window?.webContents) throw new TypeError('A BrowserWindow is required.');
-  const allowedPath = normalizeFilePath(allowedFile);
+  const expectedTarget = normalizeLocalTarget(allowedUrl);
   const { webContents } = window;
   const session = webContents.session;
 
@@ -29,7 +26,7 @@ function secureLocalWindow(window, { allowedFile, onError = () => {} } = {}) {
   session?.on?.('will-download', event => event.preventDefault());
   webContents.on?.('will-attach-webview', event => event.preventDefault());
   const blockUnexpectedNavigation = (event, target) => {
-    if (isAllowedLocalTarget(target, allowedPath)) return;
+    if (isAllowedLocalTarget(target, expectedTarget)) return;
     event.preventDefault();
     onError(new Error('Blocked navigation outside the local Electron renderer.'));
   };
@@ -39,23 +36,22 @@ function secureLocalWindow(window, { allowedFile, onError = () => {} } = {}) {
   return window;
 }
 
-function isAllowedLocalTarget(target, allowedPath) {
-  if (!allowedPath) return false;
-  const expectedPath = normalizeFilePath(allowedPath);
-  try {
-    const url = new URL(String(target || ''));
-    if (url.protocol !== 'file:') return false;
-    url.search = '';
-    url.hash = '';
-    return normalizeFilePath(fileURLToPath(url)) === expectedPath;
-  } catch {
-    return false;
-  }
+function isAllowedLocalTarget(target, allowedUrl) {
+  const expected = normalizeLocalTarget(allowedUrl);
+  const actual = normalizeLocalTarget(target);
+  return Boolean(expected && actual && actual === expected);
 }
 
-function normalizeFilePath(value) {
-  const resolved = path.resolve(String(value || ''));
-  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+function normalizeLocalTarget(value) {
+  try {
+    const url = new URL(String(value || ''));
+    if (url.protocol !== 'relai-app:' || url.hostname !== 'renderer') return '';
+    url.search = '';
+    url.hash = '';
+    return url.href;
+  } catch {
+    return '';
+  }
 }
 
 module.exports = { localWindowWebPreferences, secureLocalWindow, isAllowedLocalTarget };

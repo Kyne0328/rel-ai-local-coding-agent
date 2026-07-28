@@ -8,14 +8,20 @@
     "url": "https://github.com/Kyne0328"
   },
   "main": "main.js",
+  "engines": {
+    "node": ">=24.0.0 <25",
+    "npm": ">=11.0.0 <12"
+  },
   "devDependencies": {
-    "electron": "^43.2.0",
-    "electron-builder": "26.15.3"
+    "@electron/fuses": "2.1.3",
+    "electron": "43.2.0",
+    "electron-builder": "26.15.7"
   },
   "build": {
     "appId": "com.relai.mcp",
     "productName": "Rel.AI MCP",
     "electronUpdaterCompatibility": ">=2.16",
+    "afterPack": "build/after-pack.js",
     "electronLanguages": [
       "en-US"
     ],
@@ -50,6 +56,7 @@
       "approval-token.js",
       "recovery-window.js",
       "window-security.js",
+      "local-protocol.js",
       "runtime-log-buffer.js",
       "diagnostic-files.js",
       "app-updater.js",
@@ -60,7 +67,7 @@
       "desktop-settings.js",
       "desktop-lifecycle.js",
       "renderer/**",
-      "build/**",
+      "build/icon.png",
       "!**/*.map"
     ],
     "extraResources": [
@@ -133,6 +140,6 @@
     }
   },
   "dependencies": {
-    "electron-updater": "^6.8.9"
+    "electron-updater": "6.8.9"
   }
 }

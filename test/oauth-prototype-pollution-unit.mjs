@@ -13,6 +13,7 @@ const poisonKeys = ['constructor', '__proto__', 'toString', 'valueOf', 'hasOwnPr
 
 try {
   fs.writeFileSync(path.join(stateDir, 'oauth-store.json'), JSON.stringify({ version: 3, clients: {}, codes: {}, accessTokens: {}, refreshTokens: {} }));
+  assert.match(oauth.secretKey('__proto__'), /^sha256:[a-f0-9]{64}$/);
   for (const key of poisonKeys) {
     assert.equal(oauth.validateAccessToken(key, issuer), null);
     const refresh = oauth.exchangeToken({ grant_type: 'refresh_token', refresh_token: key, client_id: key }, issuer);

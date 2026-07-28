@@ -1,7 +1,7 @@
 'use strict';
 
 const api = require('@opentelemetry/api');
-const { NodeTracerProvider, BatchSpanProcessor } = require('@opentelemetry/sdk-trace-node');
+const { NodeTracerProvider, BatchSpanProcessor, ParentBasedSampler, TraceIdRatioBasedSampler } = require('@opentelemetry/sdk-trace-node');
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
 const { resourceFromAttributes } = require('@opentelemetry/resources');
 const { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } = require('@opentelemetry/semantic-conventions');
@@ -11,14 +11,22 @@ const REDACTED_ATTRIBUTE = '[redacted]';
 const MAX_ATTRIBUTE_CHARS = 1000;
 let provider = null;
 let initializedEndpoint = '';
+let initializedSampleRatio = null;
 
 function telemetryEndpoint(config = {}) {
   return String(config.telemetry?.endpoint || process.env.REL_AI_OTEL_EXPORTER_OTLP_ENDPOINT || process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT || '').trim();
 }
 
+function telemetrySampleRatio(config = {}) {
+  const value = Number(config.telemetry?.sampleRatio ?? process.env.REL_AI_OTEL_SAMPLE_RATIO ?? 1);
+  if (!Number.isFinite(value)) return 1;
+  return Math.min(1, Math.max(0, value));
+}
+
 function initializeTelemetry(config = {}) {
   const endpoint = telemetryEndpoint(config);
   if (!endpoint || provider) return Boolean(provider);
+  const sampleRatio = telemetrySampleRatio(config);
   const exporter = new OTLPTraceExporter({ url: endpoint });
   provider = new NodeTracerProvider({
     resource: resourceFromAttributes({
@@ -27,10 +35,12 @@ function initializeTelemetry(config = {}) {
       'service.instance.id': String(process.pid),
       'relai.telemetry.mode': 'optional'
     }),
+    sampler: new ParentBasedSampler({ root: new TraceIdRatioBasedSampler(sampleRatio) }),
     spanProcessors: [new BatchSpanProcessor(exporter)]
   });
   provider.register();
   initializedEndpoint = endpoint;
+  initializedSampleRatio = sampleRatio;
   return true;
 }
 
@@ -47,6 +57,10 @@ function sanitizeAttributes(attributes = {}) {
       safe[key] = REDACTED_ATTRIBUTE;
       continue;
     }
+    if (/(?:^|\.)(?:command|command_line)$/i.test(key)) {
+      safe[key] = summarizeCommandForTelemetry(value);
+      continue;
+    }
     if (Array.isArray(value)) {
       safe[key] = value.slice(0, 100).map(item => sanitizeScalar(item));
       continue;
@@ -56,10 +70,26 @@ function sanitizeAttributes(attributes = {}) {
   return safe;
 }
 
+function summarizeCommandForTelemetry(value) {
+  const parts = String(value || '').replace(/[\r\n\t]+/g, ' ').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '';
+  return parts.length === 1 ? parts[0] : `${parts[0]} [${parts.length - 1} args]`;
+}
+
 function sanitizeScalar(value) {
   if (typeof value === 'boolean' || typeof value === 'number') return value;
   const text = String(value).replace(/[\r\n\t]+/g, ' ').trim();
   return text.length > MAX_ATTRIBUTE_CHARS ? `${text.slice(0, MAX_ATTRIBUTE_CHARS - 1)}…` : text;
+}
+
+function traceContextEnvironment() {
+  const carrier = {};
+  const setter = { set: (target, key, value) => { target[String(key).toLowerCase()] = String(value); } };
+  api.propagation.inject(api.context.active(), carrier, setter);
+  return {
+    ...(carrier.traceparent ? { TRACEPARENT: carrier.traceparent } : {}),
+    ...(carrier.tracestate ? { TRACESTATE: carrier.tracestate } : {})
+  };
 }
 
 function extractTraceContext(carrier = {}) {
@@ -99,6 +129,7 @@ async function shutdownTelemetry() {
   const current = provider;
   provider = null;
   initializedEndpoint = '';
+  initializedSampleRatio = null;
   if (current) await current.shutdown();
 }
 
@@ -108,7 +139,8 @@ function telemetryStatus(config = {}) {
     initialized: Boolean(provider),
     exporter: provider ? 'otlp-http' : '',
     endpointConfigured: Boolean(telemetryEndpoint(config)),
-    endpoint: initializedEndpoint ? '[configured]' : ''
+    endpoint: initializedEndpoint ? '[configured]' : '',
+    sampleRatio: initializedSampleRatio ?? telemetrySampleRatio(config)
   };
 }
 
@@ -120,5 +152,8 @@ module.exports = {
   shutdownTelemetry,
   telemetryStatus,
   sanitizeAttributes,
+  summarizeCommandForTelemetry,
+  telemetrySampleRatio,
+  traceContextEnvironment,
   extractTraceContext
 };

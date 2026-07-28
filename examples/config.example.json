@@ -5,6 +5,14 @@
   "toolMode": "chatgpt_local_repo",
   "trustedLocalAgent": true,
   "maxOutputBytes": 2097152,
+  "telemetry": {
+    "enabled": false,
+    "endpoint": "",
+    "sampleRatio": 1
+  },
+  "processEnvironment": {
+    "allow": []
+  },
   "workspaces": {
     "myapp": {
       "path": "/absolute/path/to/myapp",

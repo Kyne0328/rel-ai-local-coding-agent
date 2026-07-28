@@ -93,10 +93,13 @@ assert.ok(electronPkg.build.files.includes('app-updater-state.js'), 'electron bu
 assert.ok(electronPkg.build.files.includes('desktop-settings.js'), 'electron build must include extracted desktop settings ownership');
 assert.ok(electronPkg.build.files.includes('desktop-lifecycle.js'), 'electron build must include desktop lifecycle state and startup ownership');
 assert.ok(electronPkg.build.files.includes('window-security.js'), 'electron build must include local renderer isolation policy');
+assert.ok(electronPkg.build.files.includes('local-protocol.js'), 'electron build must include the restricted local renderer protocol');
 assert.ok(electronPkg.build.files.includes('ipc-security.js'), 'electron build must include IPC sender policy');
 assert.ok(electronPkg.build.files.includes('app-updater-events.js'), 'electron build must include fail-closed updater event handling');
 assert.ok(electronPkg.build.files.includes('update-version.js'), 'electron build must include monotonic update version checks');
-assert.match(electronPkg.dependencies['electron-updater'], /^\^6\./);
+assert.equal(electronPkg.dependencies['electron-updater'], '6.8.9');
+assert.equal(electronPkg.devDependencies['@electron/fuses'], '2.1.3');
+assert.equal(electronPkg.build.afterPack, 'build/after-pack.js');
 assert.equal(electronPkg.build.publish[0].provider, 'github');
 assert.equal(electronPkg.build.publish[0].repo, 'rel-ai-mcp');
 assert.ok(electronPkg.build.extraResources.some((item) => item.from === '../vendor/ngrok'), 'electron build must bundle ngrok seed binaries');

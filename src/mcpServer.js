@@ -14,6 +14,10 @@ const {
   failOperationTask,
   getOperationTask
 } = require('./operationTasks');
+const {
+  nativeTasksServerCapability,
+  registerNativeTasksProbeTool
+} = require('./nativeTasksProbe');
 const pkg = require('../package.json');
 
 function createRelaiMcpServer(options = {}) {
@@ -24,6 +28,7 @@ function createRelaiMcpServer(options = {}) {
     ttlSeconds: 10 * 60,
     bind: context => `${context.mcpReq.method}\0${context.http?.authInfo?.clientId || clientName(context) || 'stdio'}`
   });
+  const nativeTasksExtension = nativeTasksServerCapability();
   const server = new McpServer({
     name: pkg.name,
     version: pkg.version,
@@ -39,7 +44,8 @@ function createRelaiMcpServer(options = {}) {
           statelessCore: true,
           manifestResource: 'relai://server/tool-surface'
         }
-      }
+      },
+      ...(nativeTasksExtension ? { extensions: nativeTasksExtension } : {})
     },
     instructions: connectorInstructions(config),
     cacheHints: {
@@ -53,6 +59,7 @@ function createRelaiMcpServer(options = {}) {
   });
 
   for (const definition of getToolSchemas(config)) registerTool(server, config, definition, requestStateCodec, options);
+  registerNativeTasksProbeTool(server, options);
   for (const resource of listResources().resources) {
     server.registerResource(resource.name, resource.uri, {
       description: resource.description,

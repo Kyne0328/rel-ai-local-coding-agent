@@ -13,7 +13,7 @@ const {
   getOperationTask,
   assertOperationTaskPrincipal
 } = require('../src/operationTasks.js');
-const { sanitizeAttributes } = require('../src/telemetry.js');
+const { sanitizeAttributes, summarizeCommandForTelemetry, telemetrySampleRatio } = require('../src/telemetry.js');
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-operation-task-'));
 const config = { stateDir: root };
@@ -43,12 +43,18 @@ try {
     'authorization': 'Bearer secret',
     'approval_token': 'secret',
     'command.env.PASSWORD': 'secret',
+    'relai.process.command': 'npm run test -- --watch',
     'safe.number': 2
   });
   assert.equal(attributes.authorization, '[redacted]');
   assert.equal(attributes.approval_token, '[redacted]');
   assert.equal(attributes['command.env.PASSWORD'], '[redacted]');
+  assert.equal(attributes['relai.process.command'], 'npm [4 args]');
   assert.equal(attributes['safe.number'], 2);
+  assert.equal(summarizeCommandForTelemetry('git status --short'), 'git [2 args]');
+  assert.equal(telemetrySampleRatio({ telemetry: { sampleRatio: 0.25 } }), 0.25);
+  assert.equal(telemetrySampleRatio({ telemetry: { sampleRatio: 2 } }), 1);
+  assert.equal(telemetrySampleRatio({ telemetry: { sampleRatio: -1 } }), 0);
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }

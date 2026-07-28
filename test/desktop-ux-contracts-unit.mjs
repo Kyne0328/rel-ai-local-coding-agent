@@ -371,7 +371,7 @@ assert.deepEqual(baseline.desktopSecurityPolicy, {
   localRendererSandbox: true,
   permissionsDenied: true,
   downloadsDenied: true,
-  navigationLockedToLocalFile: true,
+  navigationLockedToCustomProtocol: true,
   contentSecurityPolicy: true,
   windowControlsSenderScoped: true,
   genericIpcExposed: false,
@@ -490,7 +490,7 @@ assert.match(dashboardPreload, /desktop:diagnostics:export/);
 assert.match(dashboardPreload, /desktop:diagnostics:open-folder/);
 assert.match(ipcHandlers, /getDashboardWindow/);
 assert.match(ipcHandlers, /desktop:update:install/);
-assert.match(electronPackage.dependencies['electron-updater'], /^\^6\./);
+assert.equal(electronPackage.dependencies['electron-updater'], '6.8.9');
 assert.equal(electronPackage.build.publish[0].provider, 'github');
 assert.match(releaseWorkflow, /latest\.yml/);
 assert.match(releaseWorkflow, /\*\.blockmap/);
@@ -522,8 +522,9 @@ assert.match(desktopConnection, /ngrok account key is write-only/);
 assert.match(approvalToken, /original token was restored/);
 assert.match(approvalToken, /restartRequired/);
 assert.match(approvalToken, /approvalToken,/);
-assert.match(securityDoc, /currently unsigned/);
-assert.match(securityDoc, /do not prove publisher identity/);
+assert.match(securityDoc, /Release publication requires protected Windows signing credentials/);
+assert.match(securityDoc, /verifies Authenticode signatures/);
+assert.match(securityDoc, /Local development builds remain unsigned/);
 assert.match(lifecyclePage, /Startup and recovery/);
 assert.match(lifecyclePage, /Launch Rel\.AI at sign-in/);
 assert.match(lifecyclePage, /Update completed/);

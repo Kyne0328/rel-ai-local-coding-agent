@@ -31,7 +31,7 @@ class FakeWindow {
     windows.push(this);
   }
 
-  loadFile(file) { this.loadedFile = file; }
+  loadURL(url) { this.loadedUrl = url; }
   on(name, callback) { this.events.set(name, callback); }
   show() { this.visible = true; }
   hide() { this.visible = false; }
@@ -49,7 +49,7 @@ const securityErrors = [];
 const manager = createRecoveryWindowManager({
   BrowserWindow: FakeWindow,
   preloadPath: 'preload.js',
-  rendererPath: 'status.html',
+  rendererUrl: 'relai-app://renderer/status.html',
   limits: { minWidth: 480, minHeight: 420 },
   isQuitting: () => quitting,
   onReady: () => { readyCalls += 1; },
@@ -58,7 +58,7 @@ const manager = createRecoveryWindowManager({
 
 const first = manager.show();
 assert.equal(windows.length, 1);
-assert.equal(first.loadedFile, 'status.html');
+assert.equal(first.loadedUrl, 'relai-app://renderer/status.html');
 assert.equal(first.options.title, 'Rel.AI MCP Recovery');
 assert.equal(first.options.webPreferences.sandbox, true);
 assert.equal(first.options.webPreferences.webSecurity, true);

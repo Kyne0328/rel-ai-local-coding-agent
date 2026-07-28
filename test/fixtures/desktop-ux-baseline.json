@@ -215,7 +215,7 @@
     "localRendererSandbox": true,
     "permissionsDenied": true,
     "downloadsDenied": true,
-    "navigationLockedToLocalFile": true,
+    "navigationLockedToCustomProtocol": true,
     "contentSecurityPolicy": true,
     "windowControlsSenderScoped": true,
     "genericIpcExposed": false,
