@@ -28,7 +28,7 @@ function schemaFromDefinition(definition) {
   const stripped = definition.connectorStrip || [];
   for (const key of stripped) delete properties[key];
   const required = (definition.inputSchema?.required || []).filter((key) => !stripped.includes(key));
-  if (definition.name === 'relai_complete_task' && !required.includes('task_id')) required.push('task_id');
+  if (['relai_complete_task', 'relai_cancel_task'].includes(definition.name) && !required.includes('task_id')) required.push('task_id');
   return {
     name: definition.name,
     title: definition.title,

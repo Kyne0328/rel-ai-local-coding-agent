@@ -110,6 +110,10 @@
         "to": "package.json"
       },
       {
+        "from": "../release-manifest.json",
+        "to": "release-manifest.json"
+      },
+      {
         "from": "../CHANGELOG.md",
         "to": "CHANGELOG.md"
       },

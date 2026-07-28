@@ -22,11 +22,12 @@ const config = {
 try {
   const status = await relaiStatus(config);
   assert.equal(status.workspaceCount, 4);
-  assert.equal(status.toolSurface.toolSurfaceVersion, 22);
-  assert.equal(status.toolSurface.toolCount, 33);
+  assert.equal(status.toolSurface.toolSurfaceVersion, 23);
+  assert.equal(status.toolSurface.toolCount, 34);
   assert.deepEqual(status.toolSurface.deprecations, []);
   assert.deepEqual(status.workspaceAliases, ['api', 'app', 'worker', 'zebra']);
   assert.equal(status.workspace, null);
+  assert.equal(status.runtimeCompatibility.status, 'repository_unavailable');
 
   const missing = await relaiStatus(config, { workspace: 'unknown' });
   assert.equal(missing.workspace.alias, 'unknown');

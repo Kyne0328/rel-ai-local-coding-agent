@@ -131,7 +131,7 @@ try {
 
   const tools = await postMcp(base, { id: 1, method: 'tools/list', token: stepUp.body.access_token, clientName: 'oauth-smoke' });
   assert.equal(tools.response.status, 200);
-  assert.equal(tools.body.result.tools.length, 33);
+  assert.equal(tools.body.result.tools.length, 34);
 
   const refreshedResponse = await postForm('/token', {
     grant_type: 'refresh_token', refresh_token: stepUp.body.refresh_token, client_id: client.client_id, scope: 'mcp offline_access'

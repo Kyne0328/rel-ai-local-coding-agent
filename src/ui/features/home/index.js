@@ -25,6 +25,8 @@ function buildOverview(data) {
 
   const root = document.createElement('div');
   root.className = 'section';
+  const compatibilityCard = runtimeCompatibilityCard(data.runtimeCompatibility, data.runtime, data.repositoryRuntime);
+  if (compatibilityCard) root.appendChild(compatibilityCard);
   const taskCard = taskActivityCard(data.taskActivity, tasks[0]);
   if (taskCard) root.appendChild(taskCard);
   root.appendChild(connectionHero(bridgeState, effectiveEndpoint, workspaces));
@@ -38,6 +40,51 @@ function buildOverview(data) {
   grid.appendChild(recentTasksCard(tasks));
   root.appendChild(grid);
   return root;
+}
+
+function runtimeCompatibilityCard(compatibility = {}, runtime = {}, repository = {}) {
+  if (!compatibility.available || compatibility.compatible) return null;
+  const card = document.createElement('section');
+  card.className = 'card runtime-compatibility-card attention';
+  card.setAttribute('role', 'status');
+  card.setAttribute('aria-live', 'polite');
+  const blocked = compatibility.schemaSensitiveOperationsBlocked === true;
+  const active = compatibility.activeTasksPreventRestart === true;
+  const runtimeVersion = runtime.applicationVersion || runtime.packageVersion || 'unknown';
+  const repositoryVersion = repository.applicationVersion || repository.packageVersion || 'unknown';
+  const runtimeSurface = runtime.toolSurfaceVersion || 'unknown';
+  const repositorySurface = repository.toolSurfaceVersion || 'unknown';
+  const action = active
+    ? 'Finish or cancel active tasks, then restart the local service.'
+    : compatibility.restartRequired
+      ? 'Restart the local service and reconnect ChatGPT before continuing.'
+      : 'Reconnect to a repository and runtime built from the same release.';
+  card.innerHTML = `
+    <div class="card-head">
+      <div><div class="overview-kicker">Runtime compatibility</div><h3>Restart or reconnect required</h3></div>
+      <span class="status-pill warn">${blocked ? 'Schema operations paused' : 'Mismatch detected'}</span>
+    </div>
+    <div class="card-body">
+      <p>${esc(compatibility.message || action)}</p>
+      <dl class="runtime-compatibility-grid">
+        <div><dt>Connected runtime</dt><dd>${esc(runtimeVersion)} · tool surface ${esc(runtimeSurface)}</dd></div>
+        <div><dt>Repository</dt><dd>${esc(repositoryVersion)} · tool surface ${esc(repositorySurface)}</dd></div>
+      </dl>
+      <p><strong>${esc(action)}</strong> Task history is preserved.</p>
+      <div class="runtime-compatibility-actions">
+        ${window.relaiDesktop && compatibility.restartRequired
+          ? `<button type="button" class="compact-button" data-runtime-restart ${active ? 'disabled' : ''}>${active ? 'Active tasks prevent restart' : 'Restart local service'}</button>`
+          : ''}
+        <a class="buttonlike secondary compact-button" href="#settings/connection">Open connection settings</a>
+      </div>
+    </div>`;
+  card.querySelector('[data-runtime-restart]')?.addEventListener('click', event => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    button.textContent = 'Restart requested';
+    window.relaiDesktop.restartService();
+  });
+  return card;
 }
 
 function resolveBridgeState({ endpoint, workspaces, findings, connectionState }) {

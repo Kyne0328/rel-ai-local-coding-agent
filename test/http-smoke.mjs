@@ -44,7 +44,7 @@ try {
 
   const compressed = await fetch(`${base}/api/tools?token=${encodeURIComponent(token)}`, { headers: { 'accept-encoding': 'gzip' } });
   assert.equal(compressed.headers.get('content-encoding'), 'gzip');
-  assert.equal((await compressed.json()).length, 33);
+  assert.equal((await compressed.json()).length, 34);
 
   const dashboard = await fetch(`${base}/api/dashboard/v10?token=${encodeURIComponent(token)}`).then(response => response.json());
   assert.equal(dashboard.ok, true);
@@ -55,12 +55,14 @@ try {
   const discovery = await postMcp(base, { id: 1, method: 'server/discover', token, clientName: 'relai-http-smoke' });
   assert.equal(discovery.response.status, 200);
   assert.ok(discovery.body.result?.supportedVersions?.includes('2026-07-28'));
-  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolSurfaceVersion, 22);
+  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolSurfaceVersion, 23);
+  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolCount, 34);
+  assert.match(discovery.body.result?.capabilities?.experimental?.relai?.manifestHash || '', /^[A-Za-z0-9_-]{24}$/);
   assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.statelessCore, true);
   assert.equal(discovery.body.result?.capabilities?.extensions?.['io.modelcontextprotocol/tasks'], undefined);
 
   const listed = await postMcp(base, { id: 2, method: 'tools/list', token, clientName: 'relai-http-smoke' });
-  assert.equal(listed.body.result?.tools?.length, 33);
+  assert.equal(listed.body.result?.tools?.length, 34);
   const names = listed.body.result.tools.map(tool => tool.name);
   for (const expected of ['relai_process_start', 'relai_worktree_create', 'relai_semantic_search', 'relai_diagnostics_run', 'relai_validation_plan']) {
     assert.ok(names.includes(expected), `${expected} missing`);
@@ -80,8 +82,8 @@ try {
   const surface = await postMcp(base, { id: 4, method: 'resources/read', token, name: 'relai://server/tool-surface', params: { uri: 'relai://server/tool-surface' } });
   assert.ok(surface.body.result?.contents, JSON.stringify(surface.body));
   const manifest = JSON.parse(surface.body.result.contents[0].text);
-  assert.equal(manifest.toolSurfaceVersion, 22);
-  assert.equal(manifest.toolCount, 33);
+  assert.equal(manifest.toolSurfaceVersion, 23);
+  assert.equal(manifest.toolCount, 34);
   assert.equal(manifest.cache.cacheScope, 'private');
   assert.ok(manifest.cache.revision);
 
