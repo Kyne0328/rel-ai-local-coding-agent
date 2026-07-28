@@ -21,6 +21,7 @@ const stateDir = path.join(sandbox, 'state');
 const configPath = path.join(sandbox, 'config.json');
 const approvalToken = 'packaged-connector-approval-token';
 const redirectUri = 'https://chatgpt.com/connector_platform_oauth_redirect';
+const mcpProtocolVersion = '2026-07-28';
 const port = await availablePort();
 const base = `http://127.0.0.1:${port}`;
 let child;
@@ -67,7 +68,11 @@ try {
   const registration = await fetch(`${base}/register`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ client_name: 'Packaged ChatGPT Acceptance', redirect_uris: [redirectUri] })
+    body: JSON.stringify({
+      client_name: 'Packaged ChatGPT Acceptance',
+      application_type: 'web',
+      redirect_uris: [redirectUri]
+    })
   });
   assert.equal(registration.status, 201);
   const client = await registration.json();
@@ -86,16 +91,16 @@ try {
   const tokens = await tokenResponse.json();
   assert.ok(tokens.access_token);
 
-  const initialized = await mcp(10, 'initialize', {
-    protocolVersion: '2025-06-18',
-    capabilities: {},
-    clientInfo: { name: 'packaged-chatgpt-acceptance', version: '1.0.0' }
-  }, tokens.access_token);
-  assert.ok(initialized.result?.capabilities?.tools);
-  assert.ok(initialized.result?.capabilities?.resources);
+  const discovered = await mcp(10, 'server/discover', {}, tokens.access_token);
+  assert.ok(discovered.result?.capabilities?.tools);
+  assert.ok(discovered.result?.capabilities?.resources);
 
   const tools = await mcp(11, 'tools/list', {}, tokens.access_token);
-  assert.equal(tools.result?.tools?.length, 20);
+  assert.equal(tools.result?.tools?.length, 33);
+  const toolNames = new Set(tools.result.tools.map(tool => tool.name));
+  for (const requiredTool of ['relai_start_task', 'relai_read', 'relai_complete_task']) {
+    assert.equal(toolNames.has(requiredTool), true, `Packaged tool surface is missing ${requiredTool}.`);
+  }
   const resourcesList = await mcp(12, 'resources/list', {}, tokens.access_token);
   assert.ok(resourcesList.result?.resources?.some(item => item.uri === 'relai://server/tool-surface'));
   assert.ok(resourcesList.result?.resources?.some(item => item.uri === 'relai://server/workspaces'));
@@ -114,12 +119,9 @@ try {
   }, tokens.access_token);
   assert.equal(completed.completionKnown, true);
 
-  const reconnected = await mcp(20, 'initialize', {
-    protocolVersion: '2025-06-18',
-    capabilities: {},
-    clientInfo: { name: 'packaged-chatgpt-acceptance', version: '2.0.0' }
-  }, tokens.access_token);
-  assert.ok(reconnected.result?.serverInfo);
+  const reconnected = await mcp(20, 'server/discover', {}, tokens.access_token, { clientVersion: '2.0.0' });
+  assert.ok(reconnected.result?.capabilities?.tools);
+  assert.ok(reconnected.result?.capabilities?.resources);
   const rejected = await mcp(21, 'tools/call', {
     name: 'relai_read',
     arguments: { workspace: 'acceptance', task_id: taskId, paths: ['acceptance.txt'], guidanceMode: 'none' }
@@ -210,19 +212,34 @@ async function postForm(pathname, values, manual = false) {
   });
 }
 
-function mcpHeaders(accessToken) {
+function mcpHeaders(method, accessToken, name = '') {
   return {
     'content-type': 'application/json',
     accept: 'application/json, text/event-stream',
+    'mcp-protocol-version': mcpProtocolVersion,
+    'mcp-method': method,
+    ...(name ? { 'mcp-name': name } : {}),
     ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {})
   };
 }
 
-async function mcp(id, method, params, accessToken) {
+async function mcp(id, method, params, accessToken, options = {}) {
+  const name = method === 'tools/call' ? String(params?.name || '') : '';
+  const requestParams = {
+    ...(params || {}),
+    _meta: {
+      'io.modelcontextprotocol/protocolVersion': mcpProtocolVersion,
+      'io.modelcontextprotocol/clientInfo': {
+        name: 'packaged-chatgpt-acceptance',
+        version: options.clientVersion || '1.0.0'
+      },
+      'io.modelcontextprotocol/clientCapabilities': {}
+    }
+  };
   const response = await fetch(`${base}/mcp`, {
     method: 'POST',
-    headers: mcpHeaders(accessToken),
-    body: JSON.stringify({ jsonrpc: '2.0', id, method, params })
+    headers: mcpHeaders(method, accessToken, name),
+    body: JSON.stringify({ jsonrpc: '2.0', id, method, params: requestParams })
   });
   assert.equal(response.status, 200, `${method} returned HTTP ${response.status}`);
   return readMcpResponse(response);
