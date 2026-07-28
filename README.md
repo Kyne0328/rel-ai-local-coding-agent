@@ -260,7 +260,11 @@ Then:
 npm run electron:dev         # run the desktop app from source
 npm run electron:dist        # build the Windows installer into dist/
 npm test                     # full suite
+npm run knip                 # full unused files, dependencies, and exports audit
+npm run knip:production      # production-only dead-code audit
 ```
+
+The normal test gate includes `npm run knip:dependencies` so dependency drift and invalid Knip configuration fail CI. The broader Knip reports remain explicit review commands because removing files or exports requires source-level verification.
 
 `electron:build` and `electron:dist` refuse to run when the ngrok seed is missing — packaging without it produces an installer whose tunnel cannot start.
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.22.1] — 2026-07-28
+
+### Static analysis and dependency integrity
+- **Add repository-aware Knip analysis.** The configuration covers the Node.js service, dashboard module aliases, Tailwind source, Electron preload scripts, and renderer entry points without masking unresolved imports or unused files.
+- **Gate dependency integrity in the standard test workflow.** Full, production-only, and dependency-only commands are available, while `npm run test:all` now rejects dependency drift and invalid Knip configuration.
+- **Declare direct tooling dependencies explicitly.** `@electron/asar` is now a root development dependency instead of being resolved through Electron's transitive dependency tree.
+- **Keep dead-code removal reviewable.** Existing unused-export and exported-type findings remain visible for a separate source-verified cleanup pass rather than being suppressed or automatically deleted.
+
+### Validation
+- `npm run knip:dependencies`
+- `npm run test:all` — 113/113 test files passed
+
+Bump root/electron/status UI/lockfiles to 0.22.1.
+
 ## [0.22.0] — 2026-07-27
 
 ### MCP SDK v2 hard cutover

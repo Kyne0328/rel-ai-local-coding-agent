@@ -1,7 +1,7 @@
 {
   "name": "rel-ai-mcp",
   "productName": "Rel.AI MCP",
-  "version": "0.22.0",
+  "version": "0.22.1",
   "description": "Local ChatGPT repo bridge: one reliable workflow for snapshot, read, write, verify, diff, and reset configured local workspaces.",
   "private": true,
   "license": "MIT",
@@ -19,6 +19,9 @@
     "start:http": "npm run build:css && node bin/rel-ai-mcp-http.js",
     "check": "node test/check-js.mjs",
     "lint": "eslint src electron test scripts bin --max-warnings=0",
+    "knip": "knip",
+    "knip:dependencies": "knip --dependencies --treat-config-hints-as-errors",
+    "knip:production": "knip --production",
     "typecheck": "tsc -p tsconfig.boundaries.json",
     "init-config": "node bin/relai-mcp-config.js init",
     "workspace:add": "node bin/relai-mcp-config.js workspace add",
@@ -56,7 +59,7 @@
     "test:checks": "node test/command-checks-smoke.mjs",
     "test:git-workflow": "node test/git-workflow-smoke.mjs",
     "test:staged-write": "node test/staged-write-fallback-unit.mjs",
-    "test:all": "npm run build:css && npm run check && npm run lint && npm run typecheck && node scripts/release-check.mjs && node test/run-tests.mjs",
+    "test:all": "npm run build:css && npm run check && npm run lint && npm run typecheck && npm run knip:dependencies && node scripts/release-check.mjs && node test/run-tests.mjs",
     "build:css": "npx @tailwindcss/cli -i ./src/ui/styles/app.css -o ./public/dashboard.css --minify",
     "watch:css": "npx @tailwindcss/cli -i ./src/ui/styles/app.css -o ./public/dashboard.css --watch"
   },
@@ -78,10 +81,12 @@
     "url": "git+https://github.com/Kyne0328/rel-ai-mcp.git"
   },
   "devDependencies": {
+    "@electron/asar": "^4.2.1",
     "@eslint/js": "^10.0.1",
     "@tailwindcss/cli": "^4.3.3",
     "eslint": "^10.8.0",
     "globals": "^17.7.0",
+    "knip": "^6.29.0",
     "tailwindcss": "^4.3.3",
     "typescript": "7.0.2"
   },

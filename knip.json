@@ -1,0 +1,45 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": [
+        "bin/*.js",
+        "scripts/*.mjs",
+        "test/*.mjs",
+        "public/dashboard.js",
+        "src/ui/styles/app.css"
+      ],
+      "project": [
+        "bin/**/*.js",
+        "scripts/**/*.mjs",
+        "src/**/*.js",
+        "test/**/*.mjs",
+        "public/**/*.js",
+        "src/**/*.css",
+        "types/**/*.d.ts"
+      ],
+      "paths": {
+        "./ui/*": [
+          "src/ui/*"
+        ]
+      },
+      "ignoreBinaries": [
+        "pwsh"
+      ]
+    },
+    "electron": {
+      "entry": [
+        "preload.js",
+        "dashboard-preload.js",
+        "renderer/*.js",
+        "renderer/*.css"
+      ],
+      "project": [
+        "**/*.js"
+      ],
+      "ignoreDependencies": [
+        "electron-builder"
+      ]
+    }
+  }
+}
