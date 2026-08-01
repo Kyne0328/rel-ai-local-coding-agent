@@ -5,6 +5,7 @@ import { copyText } from '../../clipboard.js';
 import { get as getStore } from '../../store.js';
 import { connectionLayerViews, connectionStateFor, connectionSummary, isMcpAuthenticationReady } from '../../connection-state.js';
 import { mountDesktopConnection } from './desktop-connection.js';
+import { clientCapabilityViews } from '../../task-identity.js';
 import { esc as escapeHtml } from '../../utils.js';
 
 export function mountConnector(container) {
@@ -32,7 +33,7 @@ async function loadConnector(container) {
     layerGrid(state),
     actionCard(state, mcpConnection),
     setupCard(payload, state),
-    technicalDetailsCard(payload, mcpConnection)
+    technicalDetailsCard(payload, mcpConnection, dashboardState)
   );
   const controls = document.createElement('section');
   controls.className = 'connection-controls-section';
@@ -194,10 +195,11 @@ function setupCard(payload, state) {
   return card;
 }
 
-function technicalDetailsCard(payload, mcpConnection = {}) {
+function technicalDetailsCard(payload, mcpConnection = {}, dashboardState = {}) {
   const details = document.createElement('details');
   details.className = 'card connector-details';
   const dashboardNoToken = dashboardUrl(payload);
+  const capability = clientCapabilityViews({ ...dashboardState, mcpConnection })[0];
   details.innerHTML = `
     <summary class="connector-details-summary">
       <span><strong>Local and diagnostic URLs</strong><small>Health checks and local dashboard access</small></span>
@@ -207,6 +209,9 @@ function technicalDetailsCard(payload, mcpConnection = {}) {
       <div class="connection-facts">
         <div class="connection-fact"><span class="connection-fact-label">Authentication</span><span>${escapeHtml(payload.chatgptAuthMode || 'OAuth')}</span></div>
         <div class="connection-fact"><span class="connection-fact-label">MCP activity</span><span>${escapeHtml(mcpConnection.activityStatus || mcpConnection.status || 'unknown')}</span></div>
+        <div class="connection-fact"><span class="connection-fact-label">Native MCP Tasks</span><span>${escapeHtml(capability.capabilityLabel.replace('Native MCP Tasks: ', ''))}</span></div>
+        <div class="connection-fact"><span class="connection-fact-label">Execution mode</span><span>${escapeHtml(capability.executionLabel.replace('Execution mode: ', ''))}</span></div>
+        <div class="connection-fact"><span class="connection-fact-label">Observed client</span><span>${escapeHtml(capability.clientLabel)}</span></div>
         <div class="connection-fact"><span class="connection-fact-label">Active requests</span><span>${escapeHtml(String(mcpConnection.activeRequestCount || 0))}</span></div>
         <div class="connection-fact"><span class="connection-fact-label">Visible tools</span><span>${escapeHtml(String(mcpConnection.externallyVisibleToolCount || 0))}</span></div>
         <div class="connection-fact"><span class="connection-fact-label">Tool manifest</span><code>${escapeHtml(mcpConnection.toolManifestVersion || '—')}</code></div>

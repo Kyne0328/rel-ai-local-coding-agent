@@ -24,7 +24,6 @@ const forbidden = [
   'PUBLIC_HTTP_TOOL_NAMES',
   'BRIDGE_TOOL_NAMES',
   'getPublicToolDefinitions',
-  'getPublicToolSchemas',
   'getPublicToolMetadata',
   'publicOrder',
   'publicStrip',
@@ -67,6 +66,7 @@ assert.equal(fs.existsSync(path.join(root, 'src', 'doctor.js')), false);
 assert.equal(fs.existsSync(path.join(root, 'src', 'repo', 'archiveUtils.js')), false);
 assert.equal(fs.existsSync(path.join(root, 'src', 'repo', 'audit.js')), false);
 assert.equal(fs.existsSync(path.join(root, 'src', 'ui', 'components', 'badge.js')), false);
+assert.equal(fs.existsSync(path.join(root, 'src', 'nativeTasksProbe.js')), false);
 
 const removedCompatibilityNames = [
   'relai_write', 'relai_replace', 'relai_browser',
@@ -76,6 +76,26 @@ for (const relativePath of ['src/tools/registry.js', 'src/tools/handlers.js', 's
   const text = fs.readFileSync(path.join(root, relativePath), 'utf8');
   for (const name of removedCompatibilityNames) {
     assert.equal(text.includes(name), false, `${relativePath} still routes removed tool ${name}`);
+  }
+}
+
+const removedTaskSurfaceNames = [
+  'relai_native_tasks_probe',
+  'relai_operation_task_get',
+  'relai_operation_task_update',
+  'relai_operation_task_cancel',
+  'relai_validation_plan',
+  'relai_ui_check'
+];
+for (const relativePath of [
+  'src/mcp/transportTasks.js',
+  'src/tools/operation.js',
+  'src/tools/registry.js',
+  'src/tools/handlers.js'
+]) {
+  const text = fs.readFileSync(path.join(root, relativePath), 'utf8');
+  for (const name of removedTaskSurfaceNames) {
+    assert.equal(text.includes(name), false, `${relativePath} still contains removed task surface ${name}`);
   }
 }
 

@@ -49,10 +49,10 @@ try {
     ts: new Date(base + 300000).toISOString(), tool: 'relai_run_checks', validationStatus: 'passed'
   }));
   recordTaskHistoryEvent(config, currentEvent('exact-task', {
-    ts: new Date(base + 301000).toISOString(), tool: 'relai_complete_task', completionKnown: true, taskSummary: 'Completed exactly.'
+    ts: new Date(base + 301000).toISOString(), tool: 'relai_finish_work', completionKnown: true, taskSummary: 'Completed exactly.'
   }));
   recordTaskHistoryEvent(config, currentEvent('separate-task', {
-    ts: new Date(base + 302000).toISOString(), tool: 'relai_complete_task', completionKnown: true,
+    ts: new Date(base + 302000).toISOString(), tool: 'relai_finish_work', completionKnown: true,
     relatedTaskIds: ['exact-task'], taskSummary: 'Must remain separate.'
   }));
   recordTaskHistoryEvent(config, currentEvent('atomic-completion', {
@@ -63,7 +63,7 @@ try {
     ts: new Date(base + 304000).toISOString(), tool: 'relai_git_draft_pr'
   }));
   recordTaskHistoryEvent(config, currentEvent('abandoned-start', {
-    ts: '2020-01-01T00:00:00.000Z', eventType: 'task.started', tool: 'relai_start_task'
+    ts: '2020-01-01T00:00:00.000Z', eventType: 'task.started', tool: 'relai_begin_work'
   }));
   recordTaskHistoryEvent(config, { taskId: 'legacy-event', tool: 'relai_read', ok: true });
   writeSession(historyDir, {

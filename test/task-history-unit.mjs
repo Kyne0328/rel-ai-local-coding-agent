@@ -20,7 +20,7 @@ const entries = [
   event('task-1', { ts: '2026-07-11T06:00:05.000Z', tool: 'relai_git_commit', operation: 'Creating a Git commit', ms: 500, changedFiles: ['src/a.js', 'test/a.test.js'] }),
   event('task-2', { ts: '2026-07-11T05:00:00.000Z', tool: 'relai_run_checks', ok: false, validationStatus: 'failed' }),
   event('task-3', { ts: '2026-07-11T08:00:00.000Z', tool: 'relai_run_checks', validationStatus: 'passed' }),
-  event('task-3', { ts: '2026-07-11T08:00:03.000Z', tool: 'relai_complete_task', completionKnown: true, taskSummary: 'Implemented and validated.' })
+  event('task-3', { ts: '2026-07-11T08:00:03.000Z', tool: 'relai_finish_work', completionKnown: true, taskSummary: 'Implemented and validated.' })
 ];
 
 const sessions = buildTaskHistory(entries, { state: 'idle' });
@@ -42,7 +42,7 @@ assert.equal(completed.summary, 'Implemented and validated.');
 
 const strictIdentity = buildTaskHistory([
   event('validation-task', { ts: '2026-07-11T09:00:00.000Z', tool: 'relai_run_checks', validationStatus: 'passed', scopeId: 'old-transport-a' }),
-  event('completion-task', { ts: '2026-07-11T09:00:03.000Z', tool: 'relai_complete_task', completionKnown: true, relatedTaskIds: ['validation-task'], scopeId: 'old-transport-b' })
+  event('completion-task', { ts: '2026-07-11T09:00:03.000Z', tool: 'relai_finish_work', completionKnown: true, relatedTaskIds: ['validation-task'], scopeId: 'old-transport-b' })
 ], { state: 'idle' });
 assert.equal(strictIdentity.length, 2, 'different explicit task IDs must never be reconciled');
 assert.equal(strictIdentity.find(item => item.id === 'validation-task').status, 'cancelled');
@@ -52,7 +52,7 @@ const ignoredLegacy = buildTaskHistory([
   { taskId: 'old-task', ts: '2026-07-11T07:00:00.000Z', tool: 'relai_read', workspace: 'repo', ok: true },
   { ts: '2026-07-11T07:01:00.000Z', pid: 42, tool: 'relai_edit', workspace: 'repo', ok: true },
   event('implicit-task', { taskIdExplicit: false, tool: 'relai_status' }),
-  event('rejected-task', { taskIdExplicit: false, taskHistoryEligible: false, eventType: 'task.start.rejected', tool: 'relai_start_task' })
+  event('rejected-task', { taskIdExplicit: false, taskHistoryEligible: false, eventType: 'task.start.rejected', tool: 'relai_begin_work' })
 ], { state: 'idle' });
 assert.equal(ignoredLegacy.length, 0, 'legacy, implicit, and rejected rows must be discarded');
 

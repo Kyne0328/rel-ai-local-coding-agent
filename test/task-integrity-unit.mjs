@@ -39,7 +39,7 @@ const event = (taskId, tool, extra = {}) => ({
 });
 
 try {
-  recordTaskIntegrityEvent(config, event(taskOne, 'relai_start_task'));
+  recordTaskIntegrityEvent(config, event(taskOne, 'relai_begin_work'));
   const initial = readTaskIntegrity(config, taskOne, 'app');
   assert.ok(initial.baseline.changedFiles.includes('ambient.txt'));
   assert.deepEqual(initial.taskOwnedChangedFiles, []);
@@ -48,7 +48,7 @@ try {
   fs.writeFileSync(path.join(workspacePath, 'task-one.js'), 'export const one = 1;\n');
   recordTaskIntegrityEvent(config, event(taskOne, 'relai_edit', { changedFiles: ['task-one.js'] }));
   fs.writeFileSync(path.join(workspacePath, 'task-two.js'), 'export const two = 2;\n');
-  recordTaskIntegrityEvent(config, event(taskTwo, 'relai_start_task'));
+  recordTaskIntegrityEvent(config, event(taskTwo, 'relai_begin_work'));
   recordTaskIntegrityEvent(config, event(taskTwo, 'relai_edit', { changedFiles: ['task-two.js'] }));
 
   const one = readTaskIntegrity(config, taskOne, 'app');

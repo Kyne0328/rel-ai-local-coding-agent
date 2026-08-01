@@ -74,6 +74,7 @@
     "prepare:release-assets": "node scripts/prepare-release-assets.mjs",
     "verify:fuses": "cd electron && node scripts/verify-fuses.js",
     "test:connector-acceptance": "node scripts/packaged-connector-acceptance.mjs",
+    "test:native-tasks-release-gate": "node scripts/native-tasks-release-gate.mjs",
     "test:http-auth": "node test/http-auth-smoke.mjs",
     "test:oauth": "node test/oauth-smoke.mjs",
     "test:safety-paths": "node test/safety-paths.mjs",
@@ -107,6 +108,7 @@
   },
   "devDependencies": {
     "@electron/asar": "^4.2.1",
+    "@modelcontextprotocol/core": "2.0.0",
     "@eslint/js": "^10.0.1",
     "@tailwindcss/cli": "^4.3.3",
     "eslint": "^10.8.0",

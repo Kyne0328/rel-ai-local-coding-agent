@@ -10,7 +10,7 @@ import { clearSessionPolicy, ensureSessionStarted, readSessionPolicy } from "../
 {
   const tracker = createToolActivityTracker({ idleMs: 60_000 });
   const startA = tracker.beginConnectorToolCall({
-    tool: 'relai_start_task',
+    tool: 'relai_begin_work',
     workspace: 'repo',
     scopeId: 'mcp:transport:shared',
     createTask: true
@@ -19,7 +19,7 @@ import { clearSessionPolicy, ensureSessionStarted, readSessionPolicy } from "../
   startA();
 
   const startB = tracker.beginConnectorToolCall({
-    tool: 'relai_start_task',
+    tool: 'relai_begin_work',
     workspace: 'repo',
     scopeId: 'mcp:transport:shared',
     createTask: true
@@ -62,15 +62,15 @@ import { clearSessionPolicy, ensureSessionStarted, readSessionPolicy } from "../
 // Completion locking is task-local: task A may complete while task B is active.
 {
   const tracker = createToolActivityTracker({ idleMs: 60_000 });
-  const startA = tracker.beginConnectorToolCall({ tool: 'relai_start_task', workspace: 'repo-a', scopeId: 'shared', createTask: true });
+  const startA = tracker.beginConnectorToolCall({ tool: 'relai_begin_work', workspace: 'repo-a', scopeId: 'shared', createTask: true });
   const taskA = startA.taskId;
   startA();
-  const startB = tracker.beginConnectorToolCall({ tool: 'relai_start_task', workspace: 'repo-b', scopeId: 'shared', createTask: true });
+  const startB = tracker.beginConnectorToolCall({ tool: 'relai_begin_work', workspace: 'repo-b', scopeId: 'shared', createTask: true });
   const taskB = startB.taskId;
   startB();
 
   const busyB = tracker.beginConnectorToolCall({ tool: 'relai_exec', workspace: 'repo-b', scopeId: 'shared', taskId: taskB });
-  const completeA = tracker.beginConnectorToolCall({ tool: 'relai_complete_task', workspace: 'repo-a', scopeId: 'shared', taskId: taskA });
+  const completeA = tracker.beginConnectorToolCall({ tool: 'relai_finish_work', workspace: 'repo-a', scopeId: 'shared', taskId: taskA });
   const completion = runWithToolActivity(completeA, () => completeA.requestCompletion({ summary: 'A complete.' }));
   assert.equal(completion.taskId, taskA);
   completeA();
@@ -82,11 +82,11 @@ import { clearSessionPolicy, ensureSessionStarted, readSessionPolicy } from "../
 // Concurrent completion retries for the same task must collapse into one idempotent transition.
 {
   const tracker = createToolActivityTracker({ idleMs: 60_000 });
-  const start = tracker.beginConnectorToolCall({ tool: 'relai_start_task', workspace: 'repo', scopeId: 'shared', createTask: true });
+  const start = tracker.beginConnectorToolCall({ tool: 'relai_begin_work', workspace: 'repo', scopeId: 'shared', createTask: true });
   const taskId = start.taskId;
   start();
-  const first = tracker.beginConnectorToolCall({ tool: 'relai_complete_task', workspace: 'repo', scopeId: 'shared', taskId });
-  const second = tracker.beginConnectorToolCall({ tool: 'relai_complete_task', workspace: 'repo', scopeId: 'shared', taskId });
+  const first = tracker.beginConnectorToolCall({ tool: 'relai_finish_work', workspace: 'repo', scopeId: 'shared', taskId });
+  const second = tracker.beginConnectorToolCall({ tool: 'relai_finish_work', workspace: 'repo', scopeId: 'shared', taskId });
   const accepted = runWithToolActivity(first, () => first.requestCompletion({ summary: 'Completed once.' }));
   const duplicate = runWithToolActivity(second, () => second.requestCompletion({ summary: 'Duplicate request.' }));
   assert.equal(accepted.duplicate, false);

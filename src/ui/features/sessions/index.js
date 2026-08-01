@@ -1,11 +1,22 @@
+import { postJson, requestDashboardRefresh } from '../../api.js';
+import { runButtonAction } from '../../action-state.js';
 import { closeDrawer, openDrawer } from '../../components/drawer.js';
+import { copyText } from '../../clipboard.js';
 import { pillHtml } from '../../components/pill.js';
+import { toast } from '../../components/toast.js';
 import { esc, formatDuration, metricHtml, timeAgo } from '../../utils.js';
 import { getWorkspaceFilter, routeHref } from '../../router.js';
 import { activityEventId } from '../../activity-event.js';
 import { bindWorkspaceMenus, workspaceMenuHtml } from '../../components/workspace-menu.js';
 import { taskProgressHtml } from '../../components/task-progress.js';
-import { recoveryStateView, taskEntityView } from '../../task-identity.js';
+import {
+  clientCapabilityViews,
+  nativeTaskCollection,
+  nativeTaskView,
+  recoveryStateView,
+  taskEntityView,
+  workSessionStateView
+} from '../../task-identity.js';
 
 const SESSION_PAGE_SIZE = 50;
 const DETAIL_FILE_PREVIEW = 12;
@@ -16,31 +27,40 @@ export function mountTasks(container, data = {}) {
   const workspace = getWorkspaceFilter();
   const sessions = orderSessionsForDisplay((Array.isArray(data.tasks) ? data.tasks : [])
     .filter(session => !workspace || session.workspace === workspace));
-  const working = sessions.filter(session => ['running', 'validating', 'working'].includes(session.status)).length;
-  const open = sessions.filter(session => ['queued', 'planning', 'waiting_for_approval', 'blocked', 'validation_failed', 'waiting', 'settling'].includes(session.status)).length;
-  const completed = sessions.filter(session => session.status === 'completed').length;
+  const sessionById = new Map(sessions.map(session => [sessionIdentifier(session), session]));
+  const nativeCollection = nativeTaskCollection(data);
+  const nativeTasks = nativeCollection.tasks
+    .map(task => nativeTaskView(task, data.managedProcesses || []))
+    .filter(task => !workspace || task.workspace === workspace || sessionById.get(task.logicalTaskId)?.workspace === workspace)
+    .sort(orderNativeTasks);
+  const working = sessions.filter(session => workSessionStateView(session).active).length;
+  const open = sessions.filter(session => !workSessionStateView(session).terminal && !workSessionStateView(session).active).length;
+  const completed = sessions.filter(session => workSessionStateView(session).status === 'completed').length;
   const scopeKey = workspace || '__all__';
 
   container.innerHTML = '';
   const root = document.createElement('div');
-  root.className = 'section sessions-page';
+  root.className = 'section sessions-page runtime-observability-page';
   root.innerHTML = `
     <div class="feature-toolbar sessions-toolbar">
-      <p>An open logical task is a workspace objective with no Rel.AI tool call executing at this moment.</p>
+      <p>A work session is a repository objective. A native MCP Task is one asynchronous request. A managed process is one operating-system process.</p>
       <div class="section-head-actions">
         ${workspaceMenuHtml(data.config?.workspaces || [], workspace, { id: 'sessionsWorkspaceMenu' })}
-        <span class="feature-count">${sessions.length} logical task${sessions.length === 1 ? '' : 's'}${workspace ? ` in ${esc(workspace)}` : ''}</span>
+        <span class="feature-count">${sessions.length} work session${sessions.length === 1 ? '' : 's'}${workspace ? ` in ${esc(workspace)}` : ''}</span>
       </div>
     </div>
     <div class="overview-grid overview-grid-compact summary-metrics">
-      ${metricHtml('Running now', working, 'tool calls currently executing', working ? 'blue' : 'good')}
-      ${metricHtml('Open', open, 'no tool call currently executing', open ? 'blue' : 'good')}
-      ${metricHtml('Completed', completed, 'explicit completion reported', completed ? 'good' : 'blue')}
+      ${metricHtml('Active work sessions', working, 'repository workflows currently executing', working ? 'blue' : 'good')}
+      ${metricHtml('Open work sessions', open, 'waiting, blocked, or ready for another step', open ? 'blue' : 'good')}
+      ${metricHtml('Completed', completed, 'work-session completion explicitly reported', completed ? 'good' : 'blue')}
     </div>`;
+
+  root.appendChild(capabilityCard(data));
+  root.appendChild(nativeTasksCard(nativeCollection, nativeTasks));
 
   const card = document.createElement('section');
   card.className = 'card sessions-history-card';
-  card.innerHTML = '<div class="card-head"><h3>Logical task history</h3><div class="card-head-actions"><a class="section-action" href="#activity">Open tool events</a><a class="section-action" href="#settings/diagnostics">History controls</a></div></div>';
+  card.innerHTML = '<div class="card-head"><div><h3>Repository work sessions</h3><p>Objectives spanning multiple Rel.AI tool calls. Their lifecycle is independent from native tasks and managed processes.</p></div><div class="card-head-actions"><a class="section-action" href="#activity">Open tool events</a><a class="section-action" href="#settings/diagnostics">History controls</a></div></div>';
   const body = document.createElement('div');
   body.className = 'card-body task-list';
   renderSessionRows(body, sessions, scopeKey);
@@ -53,23 +73,160 @@ export function mountTasks(container, data = {}) {
     }
     const button = event.target.closest('[data-task-id]');
     if (!button) return;
-    openSession(sessions.find(session => session.id === button.dataset.taskId));
+    openSession(sessions.find(session => sessionIdentifier(session) === button.dataset.taskId));
   });
   card.appendChild(body);
   root.appendChild(card);
   container.appendChild(root);
   bindWorkspaceMenus(root);
+  bindCopyActions(root);
+  bindNativeTaskActions(root);
+}
+
+function capabilityCard(data) {
+  const views = clientCapabilityViews(data);
+  const card = document.createElement('section');
+  card.className = 'card runtime-capability-card';
+  card.innerHTML = `
+    <div class="card-head"><div><h3>Client task capability</h3><p>Observed from actual MCP client capability advertisements. Transport or product branding is not used as a proxy.</p></div><span class="feature-count">${views.length} observed</span></div>
+    <div class="card-body runtime-capability-list">${views.map(capabilityRow).join('')}</div>`;
+  return card;
+}
+
+function capabilityRow(view) {
+  const observed = view.observedAt
+    ? `<span data-clock-relative="${esc(view.observedAt)}">Observed ${esc(timeAgo(view.observedAt) || 'now')}</span>`
+    : '<span>Observation time unavailable</span>';
+  return `<article class="runtime-capability-row" aria-label="${esc(`${view.capabilityLabel}. ${view.executionLabel}.`)}">
+    <div class="runtime-capability-main">
+      <div class="runtime-entity-heading"><strong>${esc(view.clientLabel)}</strong>${pillHtml(view.pill, view.pillClass)}</div>
+      <span>${esc(view.capabilityLabel)}</span>
+      <span>${esc(view.executionLabel)}</span>
+      <small>${esc(view.description)}</small>
+    </div>
+    <div class="runtime-capability-meta">
+      ${observed}
+      ${view.connectionId ? identifierHtml('Request or connection ID', view.connectionId) : '<span>Connection ID unavailable</span>'}
+    </div>
+  </article>`;
+}
+
+function nativeTasksCard(collection, tasks) {
+  const card = document.createElement('section');
+  card.className = 'card native-tasks-card';
+  const source = collection.available ? `Backend field: ${collection.sourceField}` : `Required backend field: ${collection.requiredField}`;
+  card.innerHTML = `
+    <div class="card-head"><div><h3>Native MCP tasks</h3><p>One asynchronous MCP request per record. Persistent processes may continue after their startup task completes.</p></div><span class="feature-count">${esc(source)}</span></div>
+    <div class="card-body native-task-list">${nativeTaskListHtml(collection, tasks)}</div>`;
+  return card;
+}
+
+function nativeTaskListHtml(collection, tasks) {
+  if (!collection.available) {
+    return '<div class="empty runtime-data-unknown" role="status"><strong>Native task records are unavailable.</strong><span>The dashboard will render them when the backend supplies a <code>nativeTasks</code> collection. Capability status above remains based on real client advertisements.</span></div>';
+  }
+  if (!tasks.length) return '<div class="empty">No retained native MCP tasks match the current workspace filter.</div>';
+  return tasks.map(nativeTaskRow).join('');
+}
+
+function nativeTaskRow(task) {
+  const summary = task.errorSummary || task.resultSummary || task.statusMessage || task.description;
+  const relationship = relationshipHtml(task.logicalTaskId, task.taskId, task.processId);
+  const statusMarker = task.showSpinner
+    ? '<span class="runtime-activity-spinner" aria-hidden="true"></span>'
+    : '<span class="runtime-status-symbol" aria-hidden="true">•</span>';
+  const updated = task.updatedAt || task.startedAt;
+  return `<article class="native-task-row${task.active ? ' active' : ''}${task.terminal ? ' terminal' : ''}" aria-label="Native task ${esc(task.taskId || 'unknown')}: ${esc(task.label)}">
+    <div class="native-task-head">
+      <div class="runtime-status-marker">${statusMarker}</div>
+      <div class="native-task-title">
+        <div class="runtime-entity-heading"><strong>${esc(task.operation)}</strong>${pillHtml(task.label, task.pillClass)}</div>
+        ${identifierHtml('Native task ID', task.taskId || 'unknown')}
+      </div>
+      <div class="native-task-time">
+        ${task.startedAt ? `<span>Started <span data-clock-relative="${esc(task.startedAt)}">${esc(timeAgo(task.startedAt) || 'now')}</span></span>` : '<span>Start time unavailable</span>'}
+        ${updated ? `<span>Updated <span data-clock-relative="${esc(updated)}">${esc(timeAgo(updated) || 'now')}</span></span>` : ''}
+      </div>
+    </div>
+    ${relationship}
+    <div class="native-task-detail-grid">
+      <div><span>Status</span><strong>${esc(task.label)}</strong></div>
+      <div><span>Work session</span><strong>${esc(task.logicalTaskId || 'Not associated')}</strong></div>
+      <div><span>Managed process</span><strong>${esc(task.processId || 'Not associated')}</strong></div>
+      <div><span>Workspace</span><strong>${esc(task.workspace || 'Unavailable')}</strong></div>
+    </div>
+    <div class="runtime-state-copy${task.waitingForInput ? ' input-required' : ''}" role="status">
+      <strong>${esc(task.description)}</strong>
+      ${summary ? `<span>${esc(summary)}</span>` : ''}
+      ${task.canCancel ? '<span>This active native task has an explicit backend-published cancellation action.</span>' : '<span>No dashboard native-task cancel control is shown without an explicit cancellable backend action.</span>'}
+    </div>
+    ${task.canCancel ? `<div class="native-task-actions"><button class="secondary danger" type="button" data-cancel-native-task data-cancel-url="${esc(task.cancelUrl)}" data-native-task-id="${esc(task.taskId)}" aria-label="Cancel native task ${esc(task.taskId)}">Cancel native task</button></div>` : ''}
+  </article>`;
+}
+
+function relationshipHtml(workSessionId, nativeTaskId, processId) {
+  const items = [
+    ['Work session', workSessionId],
+    ['Native task', nativeTaskId],
+    ['Process', processId]
+  ].filter(([, value]) => value);
+  if (!items.length) return '<div class="runtime-relationship muted">No lifecycle relationships were supplied.</div>';
+  return `<div class="runtime-relationship" aria-label="Lifecycle relationship">${items.map(([label, value], index) => `${index ? '<span aria-hidden="true">→</span>' : ''}<span><small>${esc(label)}</small><code>${esc(value)}</code></span>`).join('')}</div>`;
+}
+
+function identifierHtml(label, value) {
+  return `<span class="runtime-identifier"><span>${esc(label)}</span><code>${esc(value)}</code><button class="runtime-copy-id" type="button" data-copy-value="${esc(value)}" aria-label="Copy ${esc(label)} ${esc(value)}">Copy</button></span>`;
+}
+
+function bindCopyActions(root) {
+  root.addEventListener('click', event => {
+    const button = event.target.closest('[data-copy-value]');
+    if (!button) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const value = button.dataset.copyValue || '';
+    void copyText(value)
+      .then(() => toast('Identifier copied.', { variant: 'success' }))
+      .catch(error => toast(error instanceof Error ? error.message : String(error), { variant: 'error' }));
+  });
+}
+
+function bindNativeTaskActions(root) {
+  root.addEventListener('click', event => {
+    const button = event.target.closest('[data-cancel-native-task]');
+    if (!button) return;
+    const url = button.dataset.cancelUrl || '';
+    const taskId = button.dataset.nativeTaskId || '';
+    if (!url.startsWith('/api/') || !taskId) return;
+    void runButtonAction(button, {
+      idleText: 'Cancel native task',
+      loadingText: 'Requesting cancellation…',
+      successText: 'Cancellation requested',
+      errorText: 'Retry cancellation'
+    }, () => postJson(url, { taskId }, { timeout: 10000 }))
+      .then(result => {
+        if (result?.ok !== false) requestDashboardRefresh();
+      });
+  });
+}
+
+function orderNativeTasks(left, right) {
+  const activeDifference = Number(right.active) - Number(left.active);
+  if (activeDifference) return activeDifference;
+  const timeDifference = Date.parse(right.updatedAt || right.startedAt || 0) - Date.parse(left.updatedAt || left.startedAt || 0);
+  if (Number.isFinite(timeDifference) && timeDifference) return timeDifference;
+  return String(left.taskId).localeCompare(String(right.taskId), 'en-US', { numeric: true, sensitivity: 'base' });
 }
 
 function renderSessionRows(body, sessions, scopeKey) {
   if (!sessions.length) {
-    body.innerHTML = '<div class="empty">Logical tasks appear when ChatGPT starts an explicit Rel.AI workspace objective.</div>';
+    body.innerHTML = '<div class="empty">Work sessions appear when ChatGPT starts an explicit Rel.AI repository objective.</div>';
     return;
   }
   const visible = sessions.slice(0, visibleCountFor(scopeKey));
   const remaining = Math.max(0, sessions.length - visible.length);
   body.innerHTML = visible.map(sessionRow).join('') + (remaining
-    ? `<div class="session-list-footer"><span>${remaining} older logical task${remaining === 1 ? '' : 's'} hidden</span><button class="secondary" type="button" data-load-more-sessions>Show ${Math.min(SESSION_PAGE_SIZE, remaining)} more</button></div>`
+    ? `<div class="session-list-footer"><span>${remaining} older work session${remaining === 1 ? '' : 's'} hidden</span><button class="secondary" type="button" data-load-more-sessions>Show ${Math.min(SESSION_PAGE_SIZE, remaining)} more</button></div>`
     : '');
 }
 
@@ -78,8 +235,10 @@ function visibleCountFor(scopeKey) {
 }
 
 function sessionRow(session) {
+  const id = sessionIdentifier(session);
+  const state = workSessionStateView(session);
   const live = isOngoingSession(session);
-  const status = statusLabel(session.status);
+  const status = state.label;
   const workspace = session.workspace || 'workspace';
   const validation = validationLabel(session.validation);
   const operation = session.currentActivity || session.operation || operationForTool(session.lastTool);
@@ -97,10 +256,11 @@ function sessionRow(session) {
   const publish = publishLabel(session);
 
   return `
-    <button class="task-row" type="button" data-task-id="${esc(session.id)}">
-      <span class="task-row-status">${statusPill(status)}</span>
+    <button class="task-row" type="button" data-task-id="${esc(id)}">
+      <span class="task-row-status">${statusPill(status, state.pillClass)}</span>
       <span class="task-row-main">
         <strong>${esc(session.title || operation)}</strong>
+        <span class="task-row-id">Work session ID <code>${esc(id || 'unknown')}</code></span>
         <span>${esc(workspace)} · ${esc(session.currentStage || operation)} · ${activity} · ${session.changedFileCount || 0} file${session.changedFileCount === 1 ? '' : 's'} changed · ${validation}</span>
         ${taskProgressHtml(session.progress, session.status, { compact: true })}
       </span>
@@ -110,21 +270,8 @@ function sessionRow(session) {
     </button>`;
 }
 
-function statusLabel(status) {
-  if (status === 'running' || status === 'working') return 'running';
-  if (status === 'validating') return 'validating';
-  if (status === 'queued' || status === 'planning' || status === 'waiting' || status === 'settling') return 'open';
-  if (status === 'waiting_for_approval') return 'approval';
-  if (status === 'blocked') return 'blocked';
-  if (status === 'validation_failed') return 'validation failed';
-  if (status === 'failed' || status === 'attention') return 'error';
-  if (status === 'completed') return 'completed';
-  if (status === 'cancelled') return 'cancelled';
-  return 'unknown';
-}
-
-function statusPill(status) {
-  return pillHtml(status);
+function statusPill(status, classOverride = '') {
+  return pillHtml(status, classOverride);
 }
 
 function timingHtml(session, live) {
@@ -158,24 +305,25 @@ function openSession(session) {
   const endMeaning = sessionMeaning(session.status);
   const identities = taskEntityView(session);
   const recovery = recoveryStateView(session);
+  const state = workSessionStateView(session);
 
   content.innerHTML = `
     <header class="task-detail-header">
-      <div><span class="overview-kicker">Logical task</span><h2>${esc(session.title || session.operation || operationForTool(session.lastTool))}</h2>${session.objective ? `<p>${esc(session.objective)}</p>` : ''}</div>
-      ${statusPill(statusLabel(session.status))}
+      <div><span class="overview-kicker">Work session</span><h2>${esc(session.title || session.operation || operationForTool(session.lastTool))}</h2>${session.objective ? `<p>${esc(session.objective)}</p>` : ''}</div>
+      ${statusPill(state.label, state.pillClass)}
     </header>
     ${taskProgressHtml(session.progress, session.status)}
     <div class="task-detail-current"><strong>${esc(session.currentStage || 'Current stage unavailable')}</strong><span>${esc(session.currentActivity || session.operation || 'No current activity recorded.')}</span></div>
     ${recovery ? `<div class="connection-notice ${esc(recovery.tone)}"><strong>${esc(recovery.title)}</strong><div>${esc(recovery.message)}</div><div>${esc(recovery.action)}</div></div>` : ''}
     <div class="task-detail-grid">
       ${detail('Workspace', session.workspace || '—')}
-      ${detail('Logical task ID', identities.logicalTaskId || '—')}
-      ${identities.nativeTaskId ? detail('Native task ID', identities.nativeTaskId) : ''}
-      ${identities.processId ? detail('Process ID', identities.processId) : ''}
-      ${session.correlation?.requestId ? detail('Request ID', session.correlation.requestId) : ''}
-      ${session.correlation?.traceId ? detail('Trace ID', session.correlation.traceId) : ''}
-      ${session.correlation?.conversationId ? detail('Conversation ID', session.correlation.conversationId) : ''}
-      ${detail('Observed state', statusLabel(session.status))}
+      ${identifierDetail('Work session ID', identities.logicalTaskId || '—')}
+      ${identities.nativeTaskId ? identifierDetail('Native task ID', identities.nativeTaskId) : ''}
+      ${identities.processId ? identifierDetail('Process ID', identities.processId) : ''}
+      ${session.correlation?.requestId ? identifierDetail('Request ID', session.correlation.requestId) : ''}
+      ${session.correlation?.traceId ? identifierDetail('Trace ID', session.correlation.traceId) : ''}
+      ${session.correlation?.conversationId ? identifierDetail('Conversation ID', session.correlation.conversationId) : ''}
+      ${detail('Work-session state', state.label)}
       ${detail('Current operation', session.operation || operationForTool(session.lastTool))}
       ${clockDetail('Duration', session.startedAt || session.createdAt, session.endedAt || session.completedAt, session.durationMs)}
       ${detail('Tool calls', session.toolCallCount ?? session.calls)}
@@ -190,11 +338,13 @@ function openSession(session) {
     ${operations}
     ${changedFilesSection(session.changedFiles || [])}
     ${toolEventsSection(session.events || [], session)}
-    <div class="session-detail-actions"><a class="buttonlike secondary" href="${routeHref('activity', { workspace: session.workspace, task: session.id })}">Open in Activity</a></div>`;
+    <div class="session-detail-actions"><a class="buttonlike secondary" href="${routeHref('activity', { workspace: session.workspace, task: sessionIdentifier(session) })}">Open in Activity</a></div>`;
   for (const link of content.querySelectorAll('[data-task-event-link], .session-detail-actions a')) {
     link.addEventListener('click', closeDrawer);
   }
-  openDrawer({ title: session.title || `Logical task ${session.id.slice(0, 8)}`, content, panelClass: 'session-detail-drawer' });
+  bindCopyActions(content);
+  const id = sessionIdentifier(session);
+  openDrawer({ title: session.title || `Work session ${id ? id.slice(0, 8) : 'unknown'}`, content, panelClass: 'session-detail-drawer' });
 }
 
 function changedFilesSection(files) {
@@ -231,13 +381,17 @@ export function orderSessionsForDisplay(sessions = []) {
     if (ongoingDifference) return ongoingDifference;
     const timestampDifference = sessionTimestamp(right) - sessionTimestamp(left);
     if (timestampDifference) return timestampDifference;
-    return String(left?.id || '').localeCompare(String(right?.id || ''), 'en-US', { numeric: true, sensitivity: 'base' });
+    return sessionIdentifier(left).localeCompare(sessionIdentifier(right), 'en-US', { numeric: true, sensitivity: 'base' });
   });
 }
 
+function sessionIdentifier(session = {}) {
+  return String(session.id || session.taskId || session.work_id || '').trim();
+}
+
 function isOngoingSession(session) {
-  const status = String(session?.status || '');
-  return ['queued', 'planning', 'running', 'waiting_for_approval', 'blocked', 'validation_failed', 'validating', 'working', 'waiting', 'settling'].includes(status);
+  const state = workSessionStateView(session);
+  return !state.terminal && state.status !== 'unknown';
 }
 
 export function orderChangedFiles(files = []) {
@@ -260,15 +414,17 @@ function eventTimestamp(event) {
 }
 
 function sessionMeaning(status) {
-  if (status === 'running' || status === 'working') return 'A Rel.AI tool operation is executing now.';
-  if (status === 'validating') return 'Rel.AI is running validation for this task.';
-  if (status === 'waiting_for_approval') return 'The task is paused until the required approval is provided.';
-  if (status === 'blocked') return 'The task cannot continue until the reported blocker is resolved.';
-  if (status === 'validation_failed') return 'Validation failed. The task remains open for repair and another validation run.';
-  if (status === 'queued' || status === 'planning' || status === 'waiting') return 'This logical task remains open, but no Rel.AI tool operation is executing now.';
-  if (status === 'completed') return 'Task completion was explicitly reported. Any non-fatal warnings remain visible in the call counts and tool events.';
-  if (status === 'failed') return 'The task ended after a failure. Review the failed activity and normalized error.';
-  return 'The task was cancelled or expired before completion was reported.';
+  if (status === 'running' || status === 'working') return 'A Rel.AI tool operation is executing within this repository work session.';
+  if (status === 'validating') return 'Rel.AI is validating repository changes for this work session.';
+  if (status === 'waiting_for_approval') return 'The work session is paused until the required approval is provided.';
+  if (status === 'blocked') return 'The work session cannot continue until the reported blocker is resolved.';
+  if (status === 'validation_failed') return 'Validation failed. The work session remains open for repair and another validation run.';
+  if (status === 'queued' || status === 'planning' || status === 'waiting' || status === 'settling') return 'This work session remains open, but no Rel.AI tool operation is executing now.';
+  if (status === 'completed') return 'Work-session completion was explicitly reported. A managed process started earlier may still be running independently.';
+  if (status === 'failed' || status === 'attention') return 'The work session ended after a failure. Review the failed activity and normalized error.';
+  if (status === 'expired' || status === 'inactive') return 'The work session expired after inactivity and is no longer active.';
+  if (status === 'cancelled') return 'The work session was cancelled before completion was reported.';
+  return 'The work-session state is unavailable or unrecognized.';
 }
 
 function currentOperations(session) {
@@ -283,6 +439,10 @@ function detail(label, value) {
   return `<div><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`;
 }
 
+function identifierDetail(label, value) {
+  return `<div><span>${esc(label)}</span><strong class="task-detail-identifier"><code>${esc(value)}</code><button class="runtime-copy-id" type="button" data-copy-value="${esc(value)}" aria-label="Copy ${esc(label)} ${esc(value)}">Copy</button></strong></div>`;
+}
+
 function clockDetail(label, start, end, durationMs) {
   const endAttribute = end ? ` data-clock-elapsed-end="${esc(end)}"` : '';
   return `<div><span>${esc(label)}</span><strong class="task-detail-clock" data-clock-elapsed-start="${esc(start || '')}"${endAttribute}>${esc(formatDuration(durationMs))}</strong></div>`;
@@ -292,7 +452,7 @@ function eventRow(event, session) {
   const operation = event.title || event.tool?.operation || event.operation || operationForTool(event.tool?.name || event.tool);
   const href = routeHref('activity', {
     workspace: event.workspace || session.workspace,
-    task: event.taskId || session.id,
+    task: event.taskId || sessionIdentifier(session),
     event: activityEventId(event),
     time: 'all'
   });

@@ -10,7 +10,7 @@ The system reports what Rel.AI can observe: tool acquisition, queueing, approval
 
 ```text
 MCP tools/call
-→ src/tools.js validates explicit task_id and runtime compatibility
+→ src/tools.js validates explicit work_id and runtime compatibility
 → src/toolActivity.js creates or acquires the logical task
 → src/tools/execution.js enters the workspace queue and tool handler
 → process, repository, validation, Git, or approval layer executes
@@ -102,7 +102,7 @@ Historical records are sanitized before entering the parsed-session cache. Unsaf
 
 ## Explicit cancellation
 
-`relai_cancel_task` targets the exact supplied `task_id`.
+`relai_cancel_work` targets the exact supplied `work_id`.
 
 Cancellation:
 
@@ -205,7 +205,7 @@ When repository metadata is available, Rel.AI compares:
 
 A repository-ahead mismatch reports `restart_required`. A runtime-ahead or other incompatible mismatch reports the precise direction and differences. The dashboard shows both versions and tool surfaces, preserves task history, and explains whether active tasks prevent a safe restart.
 
-Known incompatibility blocks new schema-sensitive operations. Status, exact task completion/cancellation, operation-task inspection/cancellation, and managed-process inspection/stop remain available so users can protect or finish active work before reconnecting. Repository metadata being unavailable is reported explicitly and does not fabricate a match.
+Known incompatibility is advisory and never blocks tool calls. This is essential when Rel.AI edits its own checkout: changing release or tool-surface metadata must not revoke the editing tools needed to finish or repair that work. The dashboard still reports the mismatch and offers restart/reconnect guidance, while active work can continue normally. Repository metadata being unavailable is reported explicitly and does not fabricate a match.
 
 ## Frontend clock and accessibility
 

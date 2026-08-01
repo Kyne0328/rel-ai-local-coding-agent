@@ -85,7 +85,7 @@ try {
   assert.equal(result.initial.reducedMotion, true);
   assert.equal(result.taskInteraction.dialog, true);
   assert.ok(result.taskInteraction.detailText.length > 100);
-  assert.equal(result.taskInteraction.logicalTaskId, true);
+  assert.equal(result.taskInteraction.workSessionId, true);
   // Native task and process identities are covered by the adapter contract until the backend handoff fields are persisted.
   assert.ok(result.taskInteraction.eventLinks > 0);
   assert.notEqual(result.keyboard.afterFocus.tag, 'BODY');
@@ -152,7 +152,7 @@ function seedSessions(directory) {
     writeSession(directory, {
       id,
       taskId: id,
-      task_id: id,
+      work_id: id,
       version: 3,
       title: status === 'running' ? `Extremely long task title ${'x'.repeat(120)} accessible in full` : `${status.replaceAll('_', ' ')} task`,
       objective: 'Renderer acceptance state.',

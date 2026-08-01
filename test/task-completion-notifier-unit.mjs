@@ -55,7 +55,7 @@ const runtime = createTaskActivityRuntime({
 
 function startTask(workspace, scopeId) {
   const finish = tracker.beginConnectorToolCall({
-    tool: 'relai_start_task',
+    tool: 'relai_begin_work',
     operation: 'Starting task',
     workspace,
     scopeId,
@@ -132,7 +132,7 @@ assert.equal(runtime.getStatus().lastTask.failures, 1);
 
 const completedTask = startTask('repo', 'conversation-completed');
 const finishCompleted = tracker.beginConnectorToolCall({
-  tool: 'relai_complete_task',
+  tool: 'relai_finish_work',
   operation: 'Reporting task completion',
   workspace: 'repo',
   scopeId: 'conversation-completed',

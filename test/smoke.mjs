@@ -17,10 +17,10 @@ try {
   if (!discovery.result?.capabilities?.tools) throw new Error('server/discover did not advertise tools capability');
   if (!discovery.result?.capabilities?.resources) throw new Error('server/discover did not advertise resources capability');
   if (!discovery.result?.supportedVersions?.includes(MCP_VERSION)) throw new Error('server/discover did not advertise MCP 2026-07-28');
-  if (discovery.result?.capabilities?.extensions?.['io.modelcontextprotocol/tasks']) {
-    throw new Error('stdio must not advertise native Tasks without a stdio Tasks router');
+  if (!discovery.result?.capabilities?.extensions?.['io.modelcontextprotocol/tasks']) {
+    throw new Error('stdio must advertise native Tasks support through the task-aware transport');
   }
-  if (!String(discovery.result?.instructions || '').includes('relai_complete_task')) {
+  if (!String(discovery.result?.instructions || '').includes('relai_finish_work')) {
     throw new Error('server/discover did not advertise the explicit final-completion contract');
   }
 

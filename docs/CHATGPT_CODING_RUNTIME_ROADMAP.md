@@ -28,7 +28,7 @@ Use these files as the authoritative integration points:
 | Tool handlers and execution orchestration | `src/tools/handlers.js`, `src/tools/execution.js`, `src/tools.js` |
 | One-shot child processes and process-tree termination | `src/process.js`, `src/bridge/exec.js` |
 | Managed persistent processes and log cursors | `src/processManager.js` |
-| Native MCP Tasks | `src/mcp/nativeTaskService.js`, `src/nativeTasksProbe.js` |
+| Native MCP Tasks and transport routing | `src/mcp/nativeTaskService.js`, `src/mcp/executionMode.js`, `src/mcp/transportTasks.js` |
 | Logical task observability and activity | `src/taskObservability.js`, `src/toolActivity.js` |
 | Workspace resolution and configuration | `src/config.js`, `src/configEditor.js` |
 | Managed Git worktrees | `src/worktreeManager.js` |
@@ -247,13 +247,13 @@ Add a cache behavior such as `workspace` or handle `relai_exec` explicitly in `i
 
 ## Validation separation
 
-`relai_exec` must never satisfy the structured final-validation requirement used by either atomic `relai_run_checks` completion or standalone `relai_complete_task`.
+`relai_exec` must never satisfy the structured final-validation requirement used by either atomic `relai_run_checks` completion or standalone `relai_finish_work`.
 
 Examples:
 
 - `relai_exec { command: "npm test" }` is command output only.
 - `relai_run_checks { level: "standard" }` records structured validation.
-- Completion remains valid only after structured `relai_run_checks`; the final checks may close atomically with `complete:true` and `summary`, or standalone `relai_complete_task` may close after read-only review.
+- Completion remains valid only after structured `relai_run_checks`; the final checks may close atomically with `complete:true` and `summary`, or standalone `relai_finish_work` may close after read-only review.
 
 This separation preserves reliable completion semantics without restricting command execution.
 
@@ -576,7 +576,7 @@ Implemented.
 - Caps the combined connector payload at 64 KiB with UTF-8-safe truncation and source/byte metadata.
 - Rejects symbolic links, non-files, workspace escapes, and binary-looking instruction files.
 - Caches results by real workspace path, target directory, payload limit, modification time, size, and mode.
-- Exposes full instructions through the compact `relai_start_task` bootstrap, `relai_repo_snapshot`, and `relai://workspace/<alias>/inspect`.
+- Exposes full instructions through the compact `relai_begin_work` bootstrap, `relai_repo_snapshot`, and `relai://workspace/<alias>/inspect`.
 - Keeps instruction content out of dashboard/config summaries while showing configured source paths.
 - Leaves both supported files available through explicit `relai_read` calls when full content is needed.
 - Treats instruction content as guidance only; Rel.AI never executes it automatically.
@@ -807,7 +807,7 @@ skipped
 - associate a plan with the current task scope when available;
 - show progress in Sessions and the workspace dashboard;
 - include the active plan in status summaries;
-- do not let plan completion substitute for an explicit validated completion signal (`relai_run_checks` with `complete:true` or standalone `relai_complete_task`);
+- do not let plan completion substitute for an explicit validated completion signal (`relai_run_checks` with `complete:true` or standalone `relai_finish_work`);
 - do not require a plan before edits or commands.
 
 ### Tests
@@ -1083,7 +1083,7 @@ Do not create hidden public tools or a second registry.
 
 ## Validation and completion
 
-Every explicit completion path must continue to require structured final validation. Atomic completion belongs on `relai_run_checks`; standalone `relai_complete_task` remains for post-validation read-only review.
+Every explicit completion path must continue to require structured final validation. Atomic completion belongs on `relai_run_checks`; standalone `relai_finish_work` remains for post-validation read-only review.
 
 These actions do not independently satisfy completion:
 

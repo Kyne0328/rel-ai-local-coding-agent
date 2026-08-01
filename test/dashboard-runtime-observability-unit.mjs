@@ -1,0 +1,238 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import {
+  DASHBOARD_RUNTIME_HANDOFF_FIELDS,
+  clientCapabilityViews,
+  nativeTaskCollection,
+  nativeTaskStatusView,
+  nativeTaskView,
+  processOutputView,
+  processStateView,
+  workSessionStateView
+} from '../src/ui/task-identity.js';
+import { taskProgressHtml } from '../src/ui/components/task-progress.js';
+import { activeTaskList } from '../src/ui/features/home/index.js';
+
+const TASKS_EXTENSION_ID = 'io.modelcontextprotocol/tasks';
+
+const supported = clientCapabilityViews({
+  mcpConnection: {
+    recentEvents: [{
+      type: 'mcp_request_received',
+      requestId: 'request-supported',
+      timestamp: '2026-08-01T05:00:00.000Z',
+      clientInfo: { name: 'Compatible host', version: '1.0' },
+      clientCapabilities: { extensions: { [TASKS_EXTENSION_ID]: {} } }
+    }]
+  }
+})[0];
+assert.equal(supported.capabilityState, 'supported');
+assert.equal(supported.capabilityLabel, 'Native MCP Tasks: Supported');
+assert.equal(supported.executionLabel, 'Execution mode: Native asynchronous');
+
+const nestedMode = clientCapabilityViews({
+  taskCapabilityConnections: [{
+    connectionId: 'connection-nested-mode',
+    clientTasksCapability: { supported: true, mode: 'native_asynchronous' }
+  }]
+})[0];
+assert.equal(nestedMode.capabilityState, 'supported');
+assert.equal(nestedMode.executionMode, 'native_tasks');
+
+const unsupported = clientCapabilityViews({
+  mcpConnection: {
+    recentEvents: [{
+      type: 'mcp_request_received',
+      requestId: 'request-unsupported',
+      clientCapabilities: { extensions: {} }
+    }]
+  }
+})[0];
+assert.equal(unsupported.capabilityState, 'not_advertised');
+assert.equal(unsupported.capabilityLabel, 'Native MCP Tasks: Not advertised by client');
+assert.equal(unsupported.executionLabel, 'Execution mode: Bounded synchronous fallback');
+assert.match(unsupported.description, /not a Rel\.AI server failure/i);
+
+const unknown = clientCapabilityViews({ mcpConnection: { recentEvents: [] } })[0];
+assert.equal(unknown.capabilityState, 'unknown');
+assert.equal(unknown.capabilityLabel, 'Native MCP Tasks: Unknown');
+assert.equal(unknown.executionLabel, 'Execution mode: Unknown');
+const malformedCapability = clientCapabilityViews({
+  taskCapabilityConnections: [{ clientCapabilities: { extensions: null } }]
+})[0];
+assert.equal(malformedCapability.capabilityState, 'unknown');
+
+const working = nativeTaskStatusView('working');
+assert.equal(working.active, true);
+assert.equal(working.showSpinner, true);
+assert.equal(working.terminal, false);
+
+const inputRequired = nativeTaskStatusView('input_required');
+assert.equal(inputRequired.waitingForInput, true);
+assert.equal(inputRequired.showSpinner, false);
+assert.match(inputRequired.description, /waiting for the client/i);
+
+for (const status of ['completed', 'failed', 'cancelled']) {
+  const view = nativeTaskStatusView(status, { cancellationConfirmed: status === 'cancelled' });
+  assert.equal(view.terminal, true, `${status} must be terminal`);
+  assert.equal(view.showSpinner, false, `${status} must not animate`);
+}
+
+const cancellationRequested = nativeTaskStatusView('working', { cancelRequested: true });
+assert.equal(cancellationRequested.label, 'Cancellation requested');
+assert.equal(cancellationRequested.terminal, false);
+assert.equal(cancellationRequested.showSpinner, false);
+const cancellationConfirmed = nativeTaskStatusView('cancelled', { cancellationConfirmed: true });
+assert.equal(cancellationConfirmed.label, 'Cancelled (confirmed)');
+
+const missingCollection = nativeTaskCollection({});
+assert.equal(missingCollection.available, false);
+assert.equal(missingCollection.requiredField, 'nativeTasks');
+assert.deepEqual(missingCollection.tasks, []);
+
+const taskWithoutOptionalFields = nativeTaskView({ taskId: 'task-minimal', status: 'working' });
+assert.equal(taskWithoutOptionalFields.taskId, 'task-minimal');
+assert.equal(taskWithoutOptionalFields.operation, 'Asynchronous MCP operation');
+assert.equal(taskWithoutOptionalFields.canCancel, false);
+assert.equal(taskWithoutOptionalFields.logicalTaskId, '');
+assert.equal(taskWithoutOptionalFields.processId, '');
+
+const explicitCancellableTask = nativeTaskView({
+  taskId: 'task-cancellable',
+  status: 'working',
+  actions: { cancel: { available: true, url: '/api/native-tasks/task-cancellable/cancel' } }
+});
+assert.equal(explicitCancellableTask.canCancel, true);
+const inputRequiredCancellableTask = nativeTaskView({
+  taskId: 'task-input',
+  status: 'input_required',
+  actions: { cancel: { available: true, url: '/api/native-tasks/task-input/cancel' } }
+});
+assert.equal(inputRequiredCancellableTask.canCancel, true);
+const cancellationAlreadyRequestedTask = nativeTaskView({
+  taskId: 'task-cancelling',
+  status: 'working',
+  cancelRequested: true,
+  actions: { cancel: { available: true, url: '/api/native-tasks/task-cancelling/cancel' } }
+});
+assert.equal(cancellationAlreadyRequestedTask.canCancel, false);
+const unknownStatusTask = nativeTaskView({
+  taskId: 'task-unknown',
+  status: 'future_status',
+  actions: { cancel: { available: true, url: '/api/native-tasks/task-unknown/cancel' } }
+});
+assert.equal(unknownStatusTask.canCancel, false);
+const completedTask = nativeTaskView({
+  taskId: 'task-startup',
+  status: 'completed',
+  origin: { name: 'relai_process_start', logicalTaskId: 'work-session-1' },
+  result: { processId: 'proc-persistent' }
+});
+assert.equal(completedTask.canCancel, false);
+assert.equal(completedTask.processId, 'proc-persistent');
+assert.equal(completedTask.logicalTaskId, 'work-session-1');
+
+const persistentProcess = processStateView({
+  processId: 'proc-persistent',
+  status: 'running',
+  originatingTaskId: 'task-startup'
+}, [{ taskId: 'task-startup', status: 'completed' }]);
+assert.equal(persistentProcess.independent, true);
+assert.equal(persistentProcess.label, 'Running independently');
+assert.equal(persistentProcess.canStop, true);
+assert.equal(persistentProcess.terminal, false);
+
+const stoppingProcess = processStateView({ status: 'stopping' });
+assert.equal(stoppingProcess.canStop, false);
+assert.equal(stoppingProcess.active, true);
+const restartedProcess = processStateView({ status: 'orphaned', pid: 123 });
+assert.equal(restartedProcess.label, 'Unknown after restart');
+assert.equal(restartedProcess.canStop, true);
+assert.match(restartedProcess.recovery, /Stop the process explicitly/i);
+const stoppedProcess = processStateView({ status: 'stopped' });
+assert.equal(stoppedProcess.terminal, true);
+assert.equal(stoppedProcess.canStop, false);
+const restartAliasProcess = processStateView({ status: 'unknown_after_restart', pid: 456 });
+assert.equal(restartAliasProcess.status, 'orphaned');
+assert.equal(restartAliasProcess.label, 'Unknown after restart');
+assert.equal(restartAliasProcess.canStop, true);
+
+const unavailableOutput = processOutputView({ stdoutBytes: 8, stderrBytes: 2 });
+assert.equal(unavailableOutput.included, false);
+assert.equal(unavailableOutput.hasOutput, false);
+assert.match(unavailableOutput.message, /Required backend fields: stdoutTail and stderrTail/);
+const emptyIncludedOutput = processOutputView({ stdoutTail: '', stderrTail: '' });
+assert.equal(emptyIncludedOutput.included, true);
+assert.equal(emptyIncludedOutput.hasOutput, false);
+assert.match(emptyIncludedOutput.message, /No recent stdout or stderr output was recorded/);
+const includedOutput = processOutputView({ stdoutTail: 'ready\n', stderrTail: '' });
+assert.equal(includedOutput.hasOutput, true);
+assert.equal(includedOutput.stdout, 'ready\n');
+
+for (const status of ['blocked', 'validating', 'validation_failed', 'completed', 'failed', 'cancelled', 'expired']) {
+  const view = workSessionStateView({ status });
+  assert.notEqual(view.label, 'Unknown', `${status} must have an explicit work-session label`);
+}
+assert.equal(workSessionStateView({ status: 'expired' }).terminal, true);
+assert.equal(workSessionStateView({ status: 'validating' }).active, true);
+assert.equal(workSessionStateView({ status: 'blocked' }).terminal, false);
+
+const observableActiveSessions = activeTaskList({
+  activeCalls: 9,
+  tasks: [
+    { id: 'terminal', status: 'completed', activeCalls: 9 },
+    { id: 'open', status: 'planning', activeCalls: 0 }
+  ]
+});
+assert.deepEqual(observableActiveSessions.map(task => task.id), ['open']);
+assert.deepEqual(activeTaskList({ tasks: [{ id: 'expired', status: 'expired', activeCalls: 1 }] }), []);
+
+for (const status of ['completed', 'failed', 'cancelled', 'expired']) {
+  const html = taskProgressHtml({}, status);
+  assert.doesNotMatch(html, /indeterminate/, `${status} must not retain indeterminate progress`);
+  assert.doesNotMatch(html, /runtime-activity-spinner/, `${status} must not render an activity spinner`);
+}
+
+assert.ok(DASHBOARD_RUNTIME_HANDOFF_FIELDS.hostRequest.includes('clientCapabilities'));
+assert.ok(DASHBOARD_RUNTIME_HANDOFF_FIELDS.hostRequest.includes('executionMode'));
+assert.ok(DASHBOARD_RUNTIME_HANDOFF_FIELDS.nativeTask.includes('cancellationRequestedAt'));
+assert.ok(DASHBOARD_RUNTIME_HANDOFF_FIELDS.nativeTask.includes('actions'));
+assert.ok(DASHBOARD_RUNTIME_HANDOFF_FIELDS.process.includes('originatingTaskId'));
+assert.ok(DASHBOARD_RUNTIME_HANDOFF_FIELDS.process.includes('workSessionId'));
+assert.ok(DASHBOARD_RUNTIME_HANDOFF_FIELDS.process.includes('stdoutTail'));
+assert.ok(DASHBOARD_RUNTIME_HANDOFF_FIELDS.process.includes('stderrTail'));
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const taskIdentitySource = fs.readFileSync(path.join(root, 'src/ui/task-identity.js'), 'utf8');
+const sessionsSource = fs.readFileSync(path.join(root, 'src/ui/features/sessions/index.js'), 'utf8');
+const processesSource = fs.readFileSync(path.join(root, 'src/ui/features/processes/index.js'), 'utf8');
+const connectorSource = fs.readFileSync(path.join(root, 'src/ui/features/settings/connector.js'), 'utf8');
+const cssSource = fs.readFileSync(path.join(root, 'src/ui/styles/app.css'), 'utf8');
+
+assert.match(sessionsSource, /Client task capability/);
+assert.match(sessionsSource, /Native MCP tasks/);
+assert.match(sessionsSource, /Repository work sessions/);
+assert.match(sessionsSource, /Required backend field: \$\{collection\.requiredField\}/);
+assert.match(sessionsSource, /aria-label="Copy \$\{esc\(label\)\}/);
+assert.match(sessionsSource, /No dashboard native-task cancel control is shown without an explicit cancellable backend action/);
+assert.match(sessionsSource, /task\.canCancel \? `<div class="native-task-actions">/);
+assert.match(sessionsSource, /data-cancel-native-task/);
+assert.match(sessionsSource, /url\.startsWith\('\/api\/'\)/);
+assert.match(processesSource, /Stop process/);
+assert.match(processesSource, /data-stop-process/);
+assert.match(processesSource, /Startup task completed; process still running/);
+assert.match(processesSource, /Use Stop process here rather than cancelling the completed native task/);
+assert.doesNotMatch(processesSource, /Cancel task|data-cancel-native-task/);
+assert.match(processesSource, /aria-label="Recent \$\{stream\} output"/);
+assert.match(taskIdentitySource, /Required backend fields: stdoutTail and stderrTail/);
+assert.match(processesSource, /Output observed/);
+assert.match(connectorSource, /Native MCP Tasks/);
+assert.match(connectorSource, /Execution mode/);
+assert.match(cssSource, /\.native-task-row\.terminal \{ box-shadow: none; \}/);
+assert.match(cssSource, /\.runtime-activity-spinner[\s\S]*animation: spin/);
+assert.match(cssSource, /@media \(prefers-reduced-motion: reduce\)/);
+
+console.log('Dashboard capability, work-session, native-task, process, accessibility, and missing-field observability contracts passed.');

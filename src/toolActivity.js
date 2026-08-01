@@ -41,7 +41,7 @@ function createToolActivityTracker(options = {}) {
       tasksById.set(task.id, task);
     } else {
       if (!requestedTaskId) {
-        throw taskError('TASK_ID_REQUIRED', 'Task-scoped tool calls require the exact task_id returned by relai_start_task.');
+        throw taskError('TASK_ID_REQUIRED', 'Task-scoped tool calls require the exact work_id returned by relai_begin_work.');
       }
       task = tasksById.get(requestedTaskId);
       if (!task) {
@@ -80,7 +80,7 @@ function createToolActivityTracker(options = {}) {
       })
     };
 
-    if (task.titleSource === 'fallback' && details.tool !== 'relai_start_task') {
+    if (task.titleSource === 'fallback' && details.tool !== 'relai_begin_work') {
       task.title = deriveTaskTitle({
         tool: details.tool,
         operation: details.operation,
@@ -98,7 +98,7 @@ function createToolActivityTracker(options = {}) {
     task.calls += 1;
     task.lastActivityAt = startedAt;
     task.updatedAt = startedAt;
-    const controlCall = operation.tool === 'relai_cancel_task';
+    const controlCall = operation.tool === 'relai_cancel_work';
     if (!controlCall) {
       task.status = initialActivity.category === 'validation' ? 'validating' : 'running';
       task.currentStage = initialActivity.currentStage || operation.label;
@@ -127,7 +127,7 @@ function createToolActivityTracker(options = {}) {
         return { taskId: task.id, scopeId: task.scopeId, duplicate: true };
       }
       const conflicting = [...task.currentOperations.values()].filter(item =>
-        item.id !== operationId && item.tool !== 'relai_complete_task'
+        item.id !== operationId && item.tool !== 'relai_finish_work'
       );
       if (conflicting.length > 0) {
         throw taskError(
@@ -204,7 +204,7 @@ function createToolActivityTracker(options = {}) {
             phase: 'complete'
           });
       applyActivityPatch(current.activity, completionActivity);
-      current.activity.status = terminalBeforeFinish && task.status === 'cancelled' && current.tool !== 'relai_cancel_task'
+      current.activity.status = terminalBeforeFinish && task.status === 'cancelled' && current.tool !== 'relai_cancel_work'
         ? 'cancelled'
         : result.ok === false
           ? (completionActivity.status || 'failed')
@@ -271,7 +271,7 @@ function createToolActivityTracker(options = {}) {
         durationMs: Math.max(0, finishedAt - startedAt),
         activityEvent: cloneActivityEvent(current.activity)
       });
-      if (result.ok === false && current.tool === 'relai_complete_task') task.completionRequest = null;
+      if (result.ok === false && current.tool === 'relai_finish_work') task.completionRequest = null;
       if (task.activeCalls === 0) {
         if (isTerminalTaskStatus(task.status)) {
           lastTask = buildTerminalTaskSnapshot(task);
@@ -359,7 +359,7 @@ function createToolActivityTracker(options = {}) {
     finish.operation = operation.label;
     finish.update = update;
     finish.requestCompletion = () => {
-      throw taskError('TASK_ID_REQUIRED', 'Task completion requires an explicit task_id returned by relai_start_task.');
+      throw taskError('TASK_ID_REQUIRED', 'Task completion requires an explicit work_id returned by relai_begin_work.');
     };
     return finish;
   }
@@ -378,9 +378,10 @@ function createToolActivityTracker(options = {}) {
         workspace: details.workspace,
         ...(details.input || {})
       }),
-      titleSource: explicitTitle ? 'explicit' : details.objective ? 'objective' : details.tool === 'relai_start_task' ? 'fallback' : 'operation',
+      titleSource: explicitTitle ? 'explicit' : details.objective ? 'objective' : details.tool === 'relai_begin_work' ? 'fallback' : 'operation',
       objective: sanitizeDisplayText(details.objective, 500),
       correlation: compactCorrelation(details.correlation, details.workspace),
+      principalFingerprint: String(details.principalFingerprint || ''),
       status: 'planning',
       progress: { mode: 'indeterminate', label: 'Planning task' },
       currentStage: 'Planning',
@@ -423,7 +424,7 @@ function createToolActivityTracker(options = {}) {
       if (lastTask?.taskId === id && lastTask.status === 'cancelled') {
         return cancellationResult(lastTask, true);
       }
-      throw taskError('TASK_NOT_FOUND', 'The supplied task_id is not an active cancellable task.');
+      throw taskError('TASK_NOT_FOUND', 'The supplied work_id is not an active cancellable task.');
     }
     if (task.status === 'cancelled') return cancellationResult(buildTerminalTaskSnapshot(task), true);
     if (isTerminalTaskStatus(task.status)) throw taskError('INVALID_TASK_STATE', `Task ${id} is already ${task.status}.`);
@@ -444,7 +445,7 @@ function createToolActivityTracker(options = {}) {
     task.updatedAt = endedAt;
     task.completionRequest = null;
     for (const operation of task.currentOperations.values()) {
-      if (operation.tool === 'relai_cancel_task') continue;
+      if (operation.tool === 'relai_cancel_work') continue;
       operation.activity.status = 'cancelled';
       operation.activity.summary = sanitizeDisplayText(`${operation.activity.summary || operation.label || 'Operation'} Cancelled: ${reason}`, 500);
       operation.activity.completedAt = new Date(endedAt).toISOString();
@@ -669,6 +670,7 @@ function createToolActivityTracker(options = {}) {
       lastOutcome: task.lastOutcome,
       errorSummary: task.errorSummary,
       correlation: { ...task.correlation },
+      principalFingerprint: task.principalFingerprint,
       currentOperations,
       events: task.events.map(cloneActivityEvent),
       createdAt: new Date(task.createdAt).toISOString(),
@@ -837,8 +839,8 @@ function taskError(code, message, details = {}) {
   error.allowedAlternatives = Array.isArray(details.allowedAlternatives)
     ? details.allowedAlternatives.map(String).filter(Boolean)
     : [
-        'Call relai_start_task once for each independent task.',
-        'Pass the returned task_id on every subsequent task-scoped tool call.'
+        'Call relai_begin_work once for each independent task.',
+        'Pass the returned work_id on every subsequent task-scoped tool call.'
       ];
   if (Number.isFinite(details.candidateCount)) error.candidateCount = Number(details.candidateCount);
   return error;
@@ -852,7 +854,7 @@ function normalizeTaskId(value) {
     return code <= 0x1f || code === 0x7f;
   });
   if (id.length > 200 || hasControlCharacter) {
-    throw taskError('TASK_NOT_FOUND', 'The supplied task_id is invalid.');
+    throw taskError('TASK_NOT_FOUND', 'The supplied work_id is invalid.');
   }
   return id;
 }

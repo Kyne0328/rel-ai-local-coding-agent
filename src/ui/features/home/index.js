@@ -3,6 +3,7 @@ import { esc, formatDuration, timeAgo } from '../../utils.js';
 import { getWorkspaceFilter, routeHref } from '../../router.js';
 import { connectionStateFor, connectionSummary } from '../../connection-state.js';
 import { taskProgressHtml } from '../../components/task-progress.js';
+import { workSessionStateView } from '../../task-identity.js';
 
 export function mountHome(container, data) {
   container.innerHTML = '';
@@ -48,21 +49,20 @@ function runtimeCompatibilityCard(compatibility = {}, runtime = {}, repository =
   card.className = 'card runtime-compatibility-card attention';
   card.setAttribute('role', 'status');
   card.setAttribute('aria-live', 'polite');
-  const blocked = compatibility.schemaSensitiveOperationsBlocked === true;
   const active = compatibility.activeTasksPreventRestart === true;
   const runtimeVersion = runtime.applicationVersion || runtime.packageVersion || 'unknown';
   const repositoryVersion = repository.applicationVersion || repository.packageVersion || 'unknown';
   const runtimeSurface = runtime.toolSurfaceVersion || 'unknown';
   const repositorySurface = repository.toolSurfaceVersion || 'unknown';
   const action = active
-    ? 'Finish or cancel active tasks, then restart the local service.'
+    ? 'Keep working normally; finish or cancel active tasks before restarting the local service.'
     : compatibility.restartRequired
-      ? 'Restart the local service and reconnect ChatGPT before continuing.'
-      : 'Reconnect to a repository and runtime built from the same release.';
+      ? 'Keep working normally, then restart the local service when convenient to load the new runtime.'
+      : 'Keep working normally; reconnect to a matching repository and runtime when convenient.';
   card.innerHTML = `
     <div class="card-head">
-      <div><div class="overview-kicker">Runtime compatibility</div><h3>Restart or reconnect required</h3></div>
-      ${pillHtml(blocked ? 'Schema operations paused' : 'Mismatch detected')}
+      <div><div class="overview-kicker">Runtime compatibility</div><h3>Runtime changed while running</h3></div>
+      ${pillHtml('Tools remain available')}
     </div>
     <div class="card-body">
       <p>${esc(compatibility.message || action)}</p>
@@ -138,7 +138,7 @@ function connectionHero(state, endpoint, workspaces) {
     primaryAction = '<a class="buttonlike primary" href="#workspaces">Add workspace</a>';
     secondaryAction = '<a class="buttonlike secondary" href="#settings/connection">Connection settings</a>';
   } else if (endpoint) {
-    primaryAction = `<a class="buttonlike primary" href="${routeHref('tasks')}">Open logical tasks</a>`;
+    primaryAction = `<a class="buttonlike primary" href="${routeHref('tasks')}">Open work sessions</a>`;
   }
   hero.className = `overview-hero ${state.tone}`;
   hero.innerHTML = `
@@ -158,7 +158,7 @@ function taskActivityCard(activity = {}, persistedTask = null) {
   const activeTasks = activeTaskList(activity);
   const active = activeTasks.length > 0;
   const completedWithWarnings = persistedTask?.status === 'completed' && Number(persistedTask?.failedToolCallCount ?? persistedTask?.failures ?? 0) > 0;
-  if (!active && !['failed', 'blocked', 'attention'].includes(persistedTask?.status) && !completedWithWarnings) return null;
+  if (!active && !['failed', 'blocked', 'attention', 'validation_failed'].includes(persistedTask?.status) && !completedWithWarnings) return null;
   const task = active ? primaryActiveTask(activeTasks) : persistedTask || activity.lastTask;
   if (!task) return null;
   const card = document.createElement('section');
@@ -167,10 +167,13 @@ function taskActivityCard(activity = {}, persistedTask = null) {
   return card;
 }
 
-function activeTaskList(activity) {
-  if (Array.isArray(activity.tasks)) return activity.tasks;
-  if (activity.taskId && activity.state !== 'idle') return [activity];
-  return [];
+export function activeTaskList(activity = {}) {
+  const tasks = Array.isArray(activity.tasks)
+    ? activity.tasks
+    : activity.taskId && activity.state !== 'idle'
+      ? [activity]
+      : [];
+  return tasks.filter(task => !workSessionStateView(task).terminal);
 }
 
 function primaryActiveTask(tasks) {
@@ -179,11 +182,11 @@ function primaryActiveTask(tasks) {
 
 function renderObservedSessionCard(card, activity, activeTasks, task) {
   const sessionCount = activeTasks.length;
-  const activeCalls = Number(activity.activeCalls || activeTasks.reduce((sum, item) => sum + Number(item.activeCalls || 0), 0));
+  const activeCalls = activeTasks.reduce((sum, item) => sum + Number(item.activeCalls || 0), 0);
   const waiting = activeCalls === 0;
   const location = activeTaskLocation(activeTasks);
   const operation = task.currentActivity || task.operation || taskAction(task.lastTool || task.tool);
-  let title = task.title || (waiting ? 'Logical task open.' : operation);
+  let title = task.title || (waiting ? 'Work session open.' : operation);
   if (!task.title && !waiting && sessionCount > 1) title = `${activeCalls} Rel.AI tool calls are running.`;
   let description = waiting
     ? `${esc(task.currentStage || 'Planning next step')} · no Rel.AI tool call is executing now.`
@@ -208,18 +211,22 @@ function renderObservedSessionCard(card, activity, activeTasks, task) {
 }
 
 function renderInactiveSessionCard(card, task) {
-  const attention = ['failed', 'blocked', 'attention'].includes(task.status);
+  const attention = ['failed', 'blocked', 'attention', 'validation_failed'].includes(task.status);
   const completed = task.status === 'completed' && task.completionKnown === true;
   const failed = Number(task.failures || 0);
   const callCount = Number(task.calls || 0);
   let mark = '•';
-  let title = 'Last logical task is inactive';
+  let title = 'Last work session is inactive';
   if (attention) {
     mark = '!';
-    title = task.status === 'blocked' ? 'Last Rel.AI task was blocked' : 'Last Rel.AI task failed';
+    title = task.status === 'blocked'
+      ? 'Last work session was blocked'
+      : task.status === 'validation_failed'
+        ? 'Last work session needs repair'
+        : 'Last work session failed';
   } else if (completed) {
     mark = '✓';
-    title = 'Task completion reported';
+    title = 'Work-session completion reported';
   }
   const failureText = failed
     ? completed
@@ -232,7 +239,7 @@ function renderInactiveSessionCard(card, task) {
   card.innerHTML = `
     <div class="task-overview-mark" aria-hidden="true">${mark}</div>
     <div class="task-overview-copy">
-      <div class="overview-kicker">Previous logical task</div>
+      <div class="overview-kicker">Previous work session</div>
       <h3>${esc(task.title || title)}</h3>
       <p>${esc(task.workspace || 'workspace')} · ${callCount} ${pluralLabel(callCount, 'tool call')}${failureText}${completionText}</p>
       ${taskProgressHtml(task.progress, task.status, { compact: true })}
@@ -318,7 +325,7 @@ function workspaceSummaryCard(workspaces) {
 function recentTasksCard(tasks) {
   const card = document.createElement('section');
   card.className = 'card';
-  card.innerHTML = `<div class="card-head"><h3>Latest logical tasks</h3><a class="section-action" href="${routeHref('tasks')}">Open task history</a></div>`;
+  card.innerHTML = `<div class="card-head"><h3>Latest work sessions</h3><a class="section-action" href="${routeHref('tasks')}">Open session history</a></div>`;
   const body = document.createElement('div');
   body.className = 'card-body';
   body.innerHTML = tasks.slice(0, 5).map(task => {
@@ -330,7 +337,7 @@ function recentTasksCard(tasks) {
     const warnings = task.status === 'completed' ? Number(task.failedToolCallCount ?? task.failures ?? 0) : 0;
     const warningText = warnings ? ` · ${warnings} warning${warnings === 1 ? '' : 's'}` : '';
     return `<div class="activity-row"><span class="activity-time" ${timeClock}>${esc(time)}</span><span class="activity-name truncate"><strong>${esc(task.title || operation)}</strong> · ${esc(task.workspace || 'workspace')} · ${esc(task.toolCallCount ?? task.calls ?? 0)} calls${warningText}</span>${status}</div>`;
-  }).join('') || '<div class="empty">Logical tasks appear after ChatGPT or the local dashboard starts an explicit workspace objective.</div>';
+  }).join('') || '<div class="empty">Work sessions appear after ChatGPT or the local dashboard starts an explicit repository objective.</div>';
   card.appendChild(body);
   return card;
 }
@@ -341,8 +348,11 @@ function recentTaskStatus(status) {
   if (status === 'completed') return pillHtml('completed');
   if (status === 'running' || status === 'working') return pillHtml('running');
   if (status === 'validating') return pillHtml('validating');
+  if (status === 'validation_failed') return pillHtml('validation failed');
+  if (status === 'expired' || status === 'inactive') return pillHtml('expired');
+  if (status === 'cancelled') return pillHtml('cancelled');
   if (['queued', 'planning', 'waiting_for_approval', 'waiting', 'settling'].includes(status)) return pillHtml('open');
-  return pillHtml('cancelled');
+  return pillHtml('unknown');
 }
 
 function statusLabel(status) {
@@ -375,4 +385,3 @@ function overviewTimestamp(task) {
   const timestamp = Date.parse(task?.endedAt || task?.completedAt || task?.lastActivityAt || task?.startedAt || '');
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
-

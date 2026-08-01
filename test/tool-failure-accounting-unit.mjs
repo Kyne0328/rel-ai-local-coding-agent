@@ -29,9 +29,9 @@ try {
 
   resetToolActivity();
   const context = { publicHttpOnly: true };
-  const task = await callTool('relai_start_task', { workspace: 'app' }, context);
+  const task = await callTool('relai_begin_work', { workspace: 'app' }, context);
   const result = await callTool('relai_exec', {
-    workspace: 'app', task_id: task.task_id, command: 'node -e "process.exit(1)"'
+    workspace: 'app', work_id: task.work_id, command: 'node -e "process.exit(1)"'
   }, context);
   assert.equal(result.ok, false);
   assert.equal(getToolActivity().failures, 1, 'returned ok:false must increment task failures');

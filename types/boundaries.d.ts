@@ -18,6 +18,11 @@ export interface JsonSchema {
   minLength?: number;
   maxLength?: number;
   enum?: string[];
+  const?: unknown;
+  oneOf?: JsonSchema[];
+  anyOf?: JsonSchema[];
+  not?: JsonSchema;
+  pattern?: string;
 }
 
 export interface ObjectJsonSchema extends JsonSchema {
@@ -34,6 +39,12 @@ export interface ToolAnnotations {
   openWorldHint: boolean;
 }
 
+export type ToolExecutionClass = 'always_immediate' | 'bounded_synchronous' | 'native_task_eligible' | 'persistent_process';
+
+export interface ToolExecution {
+  taskSupport: 'required' | 'optional' | 'forbidden';
+}
+
 export interface ToolBehavior {
   audit: AuditKind;
   cache: CacheKind;
@@ -44,6 +55,7 @@ export interface ToolBehavior {
   longRunning: boolean;
   taskScope: 'required' | 'optional' | 'none';
   concurrencyScope: 'task' | 'workspace';
+  executionClass: ToolExecutionClass;
 }
 
 export interface ToolDashboardMetadata {
@@ -68,6 +80,7 @@ export interface ToolDefinitionMetadata {
   inputSchema: ObjectJsonSchema;
   outputSchema: JsonSchema;
   annotations: ToolAnnotations;
+  execution?: ToolExecution;
   handlerName: string;
   connectorStrip: string[];
   groups: ToolGroup[];
@@ -85,13 +98,14 @@ export interface ToolSchema {
   title: string;
   description: string;
   inputSchema: ObjectJsonSchema;
-  outputSchema: JsonSchema;
+  outputSchema?: JsonSchema;
   annotations: ToolAnnotations;
+  execution?: ToolExecution;
 }
 
 export interface ToolArgs extends Record<string, unknown> {
   workspace?: string;
-  task_id?: string;
+  work_id?: string;
   title?: string;
   objective?: string;
   bootstrap?: 'compact' | 'full' | 'none';

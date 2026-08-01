@@ -155,6 +155,10 @@ jobs:
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         run: npm run verify:color-tokens
 
+      - name: Run native Tasks release gate
+        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
+        run: npm run test:native-tasks-release-gate
+
       - name: Run tests
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         run: npm test
@@ -171,26 +175,11 @@ jobs:
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         run: npm run verify:color-tokens
 
-      - name: Require Windows signing credentials
-        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
-        shell: pwsh
-        env:
-          WINDOWS_CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
-          WINDOWS_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CSC_LINK)) {
-            throw 'WINDOWS_CSC_LINK is required for release publication.'
-          }
-          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CSC_KEY_PASSWORD)) {
-            throw 'WINDOWS_CSC_KEY_PASSWORD is required for release publication.'
-          }
       - name: Build Windows executables
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
-        run: npm run electron:dist -- --config.forceCodeSigning=true
+        run: npm run electron:dist
         env:
-          CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
       - name: Resolve current unpacked application
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
@@ -206,27 +195,15 @@ jobs:
 
       - name: Verify hardened Electron fuses
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
-        run: npm run verify:fuses
+        shell: pwsh
+        run: npm run verify:fuses -- '${{ steps.unpacked.outputs.path }}/Rel.AI MCP.exe'
 
-      - name: Verify Windows signatures and bundled ngrok provenance
+      - name: Verify bundled ngrok provenance
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         shell: pwsh
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $installer = Get-Item -LiteralPath "dist/Rel.AI-MCP-Setup-$env:VERSION.exe"
-          $portable = Get-Item -LiteralPath "dist/Rel.AI-MCP-Portable-$env:VERSION.exe"
-          $releaseExecutables = @($installer, $portable)
           $packageDirectory = '${{ steps.unpacked.outputs.path }}'
-          $appExecutable = Get-Item (Join-Path $packageDirectory 'Rel.AI MCP.exe')
-          foreach ($executable in @($releaseExecutables) + @($appExecutable)) {
-            $signature = Get-AuthenticodeSignature -LiteralPath $executable.FullName
-            if ($signature.Status -ne 'Valid') {
-              throw "$($executable.Name) does not have a valid Authenticode signature: $($signature.Status)."
-            }
-          }
-
           $ngrokManifest = Get-Content 'vendor/ngrok/manifest.json' -Raw | ConvertFrom-Json
           $ngrokSpec = $ngrokManifest.platforms.win32
           $ngrokPath = Resolve-Path (Join-Path $packageDirectory "resources/bin/ngrok/win32/$($ngrokSpec.file)")

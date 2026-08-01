@@ -1,15 +1,16 @@
 import * as crypto from 'node:crypto';
-import { getToolSchemas, getToolSurfaceManifest } from '../tools/schema.js';
+import { getPublicToolSchemas, getToolSurfaceManifest } from '../tools/schema.js';
 
 function buildToolManifest(config = {}) {
   const surface = getToolSurfaceManifest();
-  const tools = getToolSchemas(config)
+  const surfaceByName = new Map(surface.tools.map(tool => [tool.name, tool]));
+  const tools = getPublicToolSchemas(config)
     .map(tool => ({
+      ...executionMetadata(surfaceByName.get(tool.name)),
       name: String(tool.name || ''),
       title: String(tool.title || ''),
       description: String(tool.description || ''),
       inputSchema: canonicalValue(tool.inputSchema || {}),
-      outputSchema: canonicalValue(tool.outputSchema || {}),
       annotations: canonicalValue(tool.annotations || {}),
       enabled: true,
       authorizationVisibility: 'authenticated'
@@ -30,6 +31,13 @@ function buildToolManifest(config = {}) {
     filteredToolCount: 0,
     externallyVisibleToolCount: tools.length
   });
+}
+
+function executionMetadata(surfaceTool) {
+  return {
+    executionClass: String(surfaceTool?.executionClass || 'bounded_synchronous'),
+    taskSupport: String(surfaceTool?.taskSupport || 'forbidden')
+  };
 }
 
 function canonicalValue(value) {

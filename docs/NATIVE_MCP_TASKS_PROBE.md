@@ -1,23 +1,11 @@
-# Native MCP Tasks probe
+# Native MCP Tasks diagnostics
 
-Rel.AI exposes a diagnostic canary for testing whether an HTTP MCP host implements the `io.modelcontextprotocol/tasks` extension.
+Rel.AI supports `io.modelcontextprotocol/tasks` for selected operations on both HTTP and stdio. Native Tasks are reached through normal eligible tool calls; there is no public probe tool.
 
-## Availability
+The server advertises Tasks support, but execution mode is selected from the current request's client capability. A request that advertises Tasks may receive a native asynchronous task. A request that does not advertise Tasks uses bounded synchronous execution when the operation is safe within the configured limits. Rel.AI cannot make ChatGPT or another client advertise the capability.
 
-No environment variable or alternate startup mode is required. During stateless HTTP discovery Rel.AI:
+Persistent interactive commands use `relai_process_*` and return a `processId`; they are independent from the native task that may have started them.
 
-- advertises `capabilities.extensions["io.modelcontextprotocol/tasks"]`;
-- includes `relai_native_tasks_probe` in `tools/list`;
-- recognizes `tasks/get`, `tasks/update`, and `tasks/cancel`;
-- validates the `Mcp-Name` routing header and authenticated task ownership.
+Protocol and service tests retain internal diagnostic operations for task creation, polling, input updates, cancellation, authorization, persistence, restart behavior, and transport parity. They are not registered in the public tool catalog and must not appear in `tools/list`, help text, or agent workflows.
 
-Client support is supplied in every request's protocol metadata. Stdio does not advertise the extension because the pinned core stdio router does not dispatch extension methods.
-
-## Test from ChatGPT
-
-Reconnect the custom MCP app after installing or restarting the updated Rel.AI runtime, then ask ChatGPT to run `relai_native_tasks_probe`.
-
-- Without the client capability, the call returns the standard missing-capability error.
-- With the capability, the HTTP adapter returns `resultType: "task"`. The host calls `tasks/get` using the returned task ID until it receives the final `CallToolResult`.
-
-The probe implements task get, update, and cancellation; binds task access to the authenticated client; persists state under the Rel.AI state directory; enforces expiry; and preserves final result and cancellation behavior across restart.
+See [NATIVE_TASKS_RELEASE_GATE.md](NATIVE_TASKS_RELEASE_GATE.md) for the architecture, capability matrix, operator diagnostics, and release-blocking test gate.

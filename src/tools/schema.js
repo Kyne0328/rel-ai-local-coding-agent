@@ -8,11 +8,11 @@ import { TOOL_DEFINITIONS, getToolDefinition, getToolDefinitions, getToolGroups,
 
 const TOOL_NAMES = TOOL_DEFINITIONS.map((definition) => definition.name);
 const TOOL_NAME_SET = new Set(TOOL_NAMES);
-const TASK_ID_SCHEMA = Object.freeze({
+const WORK_ID_SCHEMA = Object.freeze({
   type: 'string',
   minLength: 1,
   maxLength: 200,
-  description: 'Opaque logical task ID returned by relai_start_task.'
+  description: 'Opaque principal-bound work-session ID returned by relai_begin_work.'
 });
 
 /** @param {ToolDefinitionMetadata} definition @returns {ToolSchema} */
@@ -20,13 +20,13 @@ function schemaFromDefinition(definition) {
   const properties = { ...(definition.inputSchema?.properties || {}) };
   const taskScoped = definition.behavior?.taskScope === 'required';
   const taskAware = taskScoped || definition.behavior?.taskScope === 'optional';
-  if (taskAware) properties.task_id = TASK_ID_SCHEMA;
+  if (taskAware) properties.work_id = WORK_ID_SCHEMA;
   const stripped = definition.connectorStrip || [];
   for (const key of stripped) delete properties[key];
   const required = (definition.inputSchema?.required || [])
     .filter((key) => !stripped.includes(key))
     .filter((key) => !(taskScoped && key === 'workspace'));
-  if (taskScoped && !required.includes('task_id')) required.push('task_id');
+  if (taskScoped && !required.includes('work_id')) required.push('work_id');
   return {
     name: definition.name,
     title: definition.title,
@@ -43,11 +43,20 @@ function schemaFromDefinition(definition) {
 
 /** @type {ToolSchema[]} */
 const toolSchemas = TOOL_DEFINITIONS.map(schemaFromDefinition);
+const publicToolSchemas = toolSchemas.map(({ outputSchema: _outputSchema, ...schema }) => schema);
 
 function getToolSchemas(config) {
+  return withWorkspaceAliases(toolSchemas, config);
+}
+
+function getPublicToolSchemas(config) {
+  return withWorkspaceAliases(publicToolSchemas, config);
+}
+
+function withWorkspaceAliases(schemas, config) {
   const aliases = Object.keys(config?.workspaces || {}).sort((left, right) => left.localeCompare(right));
-  if (aliases.length === 0) return toolSchemas;
-  return toolSchemas.map((schema) => {
+  if (aliases.length === 0) return schemas;
+  return schemas.map((schema) => {
     if (!schema.inputSchema?.properties?.workspace) return schema;
     return {
       ...schema,
@@ -79,7 +88,9 @@ function getToolMetadata() {
     parameters: Object.keys(schemaFromDefinition(definition).inputSchema.properties || {}),
     outputFields: Object.keys(definition.outputSchema?.properties || {}),
     longRunning: definition.behavior?.longRunning === true,
-    taskScope: definition.behavior?.taskScope || 'required'
+    taskScope: definition.behavior?.taskScope || 'required',
+    executionClass: definition.behavior?.executionClass || 'bounded_synchronous',
+    taskSupport: definition.execution?.taskSupport || 'forbidden'
   }));
 }
 
@@ -88,4 +99,4 @@ function isToolCallable(name) {
   return TOOL_NAME_SET.has(name);
 }
 
-export { toolSchemas, getToolSchemas, getToolMetadata, getToolDefinition, getToolDefinitions, getToolGroups, getToolSurfaceManifest, isToolCallable, TOOL_NAMES };
+export { toolSchemas, publicToolSchemas, getToolSchemas, getPublicToolSchemas, getToolMetadata, getToolDefinition, getToolDefinitions, getToolGroups, getToolSurfaceManifest, isToolCallable, TOOL_NAMES };

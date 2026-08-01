@@ -14,7 +14,7 @@ const events = [];
 tracker.onToolActivity(event => events.push(event));
 
 try {
-  const start = tracker.beginConnectorToolCall({ tool: 'relai_start_task', workspace: 'app', createTask: true });
+  const start = tracker.beginConnectorToolCall({ tool: 'relai_begin_work', workspace: 'app', createTask: true });
   const taskId = start.taskId;
   start({ ok: true });
   const finish = tracker.beginConnectorToolCall({ tool: 'relai_diagnostics_run', workspace: 'app', taskId });

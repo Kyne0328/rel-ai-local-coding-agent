@@ -60,7 +60,7 @@ async function createManagedWorktree(workspace, config, args = {}, context = {})
     path: fs.realpathSync(target),
     branch,
     base,
-    owningTaskId: String(context.taskId || args.task_id || ''),
+    owningTaskId: String(context.taskId || args.work_id || ''),
     createdAt: new Date().toISOString()
   };
   registry.worktrees = registry.worktrees || {};
@@ -72,7 +72,7 @@ async function createManagedWorktree(workspace, config, args = {}, context = {})
 async function listManagedWorktrees(config, args = {}, context = {}) {
   const registry = readRegistry(config);
   const sourceAlias = String(args.workspace || '').trim();
-  const taskId = String(context.taskId || args.task_id || '').trim();
+  const taskId = String(context.taskId || args.work_id || '').trim();
   const worktrees = [];
   for (const entry of Object.values(registry.worktrees || {})) {
     if (taskId && entry.owningTaskId !== taskId) continue;
@@ -89,7 +89,7 @@ async function removeManagedWorktree(workspace, config, args = {}, context = {})
   const alias = String(args.alias || args.worktree || '').trim();
   const entry = registry.worktrees?.[alias];
   if (!entry) throw new Error(`Managed worktree '${alias}' was not found.`);
-  const taskId = String(context.taskId || args.task_id || '').trim();
+  const taskId = String(context.taskId || args.work_id || '').trim();
   if (entry.owningTaskId && entry.owningTaskId !== taskId) {
     throw taskError('TASK_OWNERSHIP_MISMATCH', `Managed worktree '${alias}' belongs to a different logical task.`);
   }

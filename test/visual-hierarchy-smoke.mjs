@@ -76,7 +76,7 @@ assert.match(sessions, /publish \? `<span class="task-row-publish">/);
 assert.match(css, /\.status-pill\.ok::before/);
 assert.match(css, /\.status-pill\.open[\s\S]*var\(--ui-status-info-foreground\)/);
 assert.match(css, /\.status-pill\.incomplete[\s\S]*var\(--ui-status-warning-foreground\)/);
-assert.match(sessions, /return pillHtml\(status\)/);
+assert.match(sessions, /return pillHtml\(status, classOverride\)/);
 assert.doesNotMatch(sessions, /status-pill incomplete/);
 assert.doesNotMatch(css, /\.status-pill\.ok::before[^}]*animation/s);
 

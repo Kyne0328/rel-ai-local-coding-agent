@@ -11,8 +11,8 @@ const {
 
 const current = runtimeMetadata();
 assert.equal(current.applicationVersion, '0.23.0');
-assert.equal(current.toolSurfaceVersion, 25);
-assert.equal(current.toolCount, 33);
+assert.equal(current.toolSurfaceVersion, 27);
+assert.equal(current.toolCount, 30);
 assert.match(current.manifestHash, /^[A-Za-z0-9_-]{24}$/);
 
 const equal = assessRuntimeCompatibility(current, { ...current, source: 'repository' });
@@ -27,17 +27,19 @@ const repositoryAhead = assessRuntimeCompatibility(
 );
 assert.equal(repositoryAhead.status, 'restart_required');
 assert.equal(repositoryAhead.restartRequired, true);
-assert.equal(repositoryAhead.schemaSensitiveOperationsBlocked, true);
+assert.equal(repositoryAhead.schemaSensitiveOperationsBlocked, false);
+assert.equal(repositoryAhead.advisoryOnly, true);
 assert.equal(repositoryAhead.activeTasksPreventRestart, true);
-assert.match(repositoryAhead.message, /run final validation with complete:true/i);
+assert.match(repositoryAhead.message, /tools remain available/i);
 
 const runtimeAhead = assessRuntimeCompatibility(
-  { ...current, applicationVersion: '0.24.0', packageVersion: '0.24.0', toolSurfaceVersion: 25 },
+  { ...current, applicationVersion: '0.24.0', packageVersion: '0.24.0' },
   { ...current, source: 'repository' }
 );
 assert.equal(runtimeAhead.status, 'runtime_newer');
 assert.equal(runtimeAhead.restartRequired, false);
-assert.equal(runtimeAhead.schemaSensitiveOperationsBlocked, true);
+assert.equal(runtimeAhead.schemaSensitiveOperationsBlocked, false);
+assert.equal(runtimeAhead.advisoryOnly, true);
 
 const surfaceMismatch = assessRuntimeCompatibility(
   current,
@@ -66,16 +68,21 @@ try {
   assert.equal(repository.applicationVersion, '0.24.0');
   assert.equal(repository.workspace, 'repo');
   const config = { workspaces: { repo: { path: temp } } };
-  assert.throws(
-    () => assertRuntimeCompatibility(config, 'relai_edit', { workspace: 'repo' }, { activeTaskCount: 1 }),
-    error => error?.code === 'RUNTIME_RESTART_REQUIRED' && error.details.activeTasksPreventRestart === true
+  const editCompatibility = assertRuntimeCompatibility(
+    config,
+    'relai_edit',
+    { workspace: 'repo' },
+    { activeTaskCount: 1 }
   );
+  assert.equal(editCompatibility.compatibility.status, 'restart_required');
+  assert.equal(editCompatibility.compatibility.schemaSensitiveOperationsBlocked, false);
   assert.doesNotThrow(() => assertRuntimeCompatibility(config, 'relai_status', { workspace: 'repo' }));
-  assert.doesNotThrow(() => assertRuntimeCompatibility(config, 'relai_cancel_task', { workspace: 'repo' }));
+  assert.doesNotThrow(() => assertRuntimeCompatibility(config, 'relai_begin_work', { workspace: 'repo' }));
+  assert.doesNotThrow(() => assertRuntimeCompatibility(config, 'relai_cancel_work', { workspace: 'repo' }));
   assert.doesNotThrow(() => assertRuntimeCompatibility(
     config,
     'relai_run_checks',
-    { workspace: 'repo', task_id: 'task-1', complete: true, summary: 'Validate and close.' },
+    { workspace: 'repo', work_id: 'task-1', complete: true, summary: 'Validate and close.' },
     { activeTaskCount: 1 }
   ));
 
@@ -93,4 +100,4 @@ try {
   fs.rmSync(temp, { recursive: true, force: true });
 }
 
-console.log('Runtime/repository application, protocol, tool-surface, count, hash, and safe-operation skew handling passed.');
+console.log('Runtime/repository skew remains observable without blocking self-hosted editing or other tools.');

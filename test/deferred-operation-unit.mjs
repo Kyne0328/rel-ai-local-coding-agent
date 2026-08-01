@@ -48,7 +48,7 @@ async function call(name, args) {
 try {
   client.initialize(++requestId);
   const discovery = await client.waitFor(requestId);
-  assert.equal(discovery.result.capabilities.extensions?.['io.modelcontextprotocol/tasks'], undefined);
+  assert.deepEqual(discovery.result.capabilities.extensions?.['io.modelcontextprotocol/tasks'], {});
 
   client.send(++requestId, 'tools/list');
   const listed = await client.waitFor(requestId);
@@ -59,16 +59,16 @@ try {
   for (const name of ['relai_exec', 'relai_diagnostics_run', 'relai_run_checks']) {
     const tool = tools.find(candidate => candidate.name === name);
     assert.equal(tool.inputSchema.properties.defer, undefined, `${name} must not expose defer`);
-    assert.equal(tool.outputSchema.properties.operationTask, undefined, `${name} must not expose operationTask`);
+    assert.equal(tool.outputSchema?.properties?.operationTask, undefined, `${name} must not expose operationTask`);
   }
 
-  const started = await call('relai_start_task', { workspace: 'app' });
+  const started = await call('relai_begin_work', { workspace: 'app' });
   assert.equal(started.result?.isError, false, JSON.stringify(started));
-  const logicalTaskId = started.result.structuredContent.task_id;
+  const logicalTaskId = started.result.structuredContent.work_id;
 
   const rejectedDefer = await call('relai_exec', {
     workspace: 'app',
-    task_id: logicalTaskId,
+    work_id: logicalTaskId,
     command: 'node pass.cjs',
     timeoutMs: 10000,
     defer: true
@@ -78,7 +78,7 @@ try {
 
   for (const removed of ['relai_operation_task_get', 'relai_operation_task_cancel']) {
     const response = await call(removed, {
-      task_id: logicalTaskId,
+      work_id: logicalTaskId,
       operationTaskId: 'task_removed'
     });
     assert.ok(response.error || response.result?.isError, JSON.stringify(response));
@@ -87,7 +87,7 @@ try {
 
   const synchronous = await call('relai_exec', {
     workspace: 'app',
-    task_id: logicalTaskId,
+    work_id: logicalTaskId,
     command: 'node pass.cjs',
     timeoutMs: 10000
   });
@@ -99,4 +99,4 @@ try {
   fs.rmSync(temp, { recursive: true, force: true });
 }
 
-console.log('Legacy deferred-operation controls are absent and long-running tools execute synchronously over MCP.');
+console.log('Legacy deferred-operation controls are absent and non-capable requests use bounded synchronous execution.');

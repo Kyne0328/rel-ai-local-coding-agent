@@ -1,6 +1,6 @@
 import { readConfig, resolveWorkspace, resolveWorkspaceInput } from './config.js';
 import { safeLogAudit } from './audit.js';
-import { toolSchemas, getToolSchemas, getToolMetadata, getToolGroups, getToolSurfaceManifest, isToolCallable, TOOL_NAMES } from './tools/schema.js';
+import { toolSchemas, getToolSchemas, getPublicToolSchemas, getToolMetadata, getToolGroups, getToolSurfaceManifest, isToolCallable, TOOL_NAMES } from './tools/schema.js';
 import { getExecutableToolDefinition, getExecutableToolDefinitions } from './tools/runtimeRegistry.js';
 import { compactForConnector, policySentence } from './tools/connector.js';
 import { enhanceToolError } from './tools/errors.js';
@@ -14,6 +14,7 @@ import { clearSessionPolicy } from './policyResolver.js';
 import { describeToolOperation } from './tools/operation.js';
 import { executeToolCall } from './tools/execution.js';
 import { readTaskIntegrity } from './taskIntegrity.js';
+import { principalFingerprint, principalForContext } from './mcp/principal.js';
 bindTaskHistoryActivityPersistence(onToolActivity, readConfig);
 
 async function callTool(name, args = {}, context = {}) {
@@ -22,8 +23,7 @@ async function callTool(name, args = {}, context = {}) {
   const connector = Boolean(context?.publicHttpOnly);
   let requestedTaskId = '';
   let effectiveArgs = args || {};
-  let workspaceResolution;
-  let knownTask = null;
+  let workspaceResolution, knownTask = null;
   let finishActivity = null;
   let activityResult = { ok: true };
   let sessionStart;
@@ -35,12 +35,13 @@ async function callTool(name, args = {}, context = {}) {
     const taskScope = definition?.behavior?.taskScope || 'required';
     const taskScoped = taskScope === 'required';
     const taskAware = taskScoped || taskScope === 'optional';
-    requestedTaskId = normalizeTaskId(effectiveArgs?.task_id || effectiveArgs?.taskId);
+    const effectivePrincipal = principalForContext(context, connector);
+    requestedTaskId = normalizeTaskId(effectiveArgs?.work_id);
     if (taskScoped && !requestedTaskId) {
-      throw taskError('TASK_ID_REQUIRED', `${name} requires the task_id returned by relai_start_task.`);
+      throw taskError('TASK_ID_REQUIRED', `${name} requires the work_id returned by relai_begin_work.`);
     }
-    if (requestedTaskId && name !== 'relai_start_task') {
-      knownTask = assertKnownTask(config, requestedTaskId, '', name);
+    if (requestedTaskId && name !== 'relai_begin_work') {
+      knownTask = assertKnownTask(config, requestedTaskId, '', name, effectivePrincipal);
       if (taskAware && !String(effectiveArgs?.workspace || '').trim()) {
         effectiveArgs = { ...effectiveArgs, workspace: knownTask.workspace };
       }
@@ -48,7 +49,7 @@ async function callTool(name, args = {}, context = {}) {
     workspaceResolution = resolveConfiguredWorkspaceArgument(config, effectiveArgs?.workspace);
     if (workspaceResolution?.alias) effectiveArgs = { ...effectiveArgs, workspace: workspaceResolution.alias };
     if (knownTask) {
-      assertKnownTask(config, requestedTaskId, effectiveArgs?.workspace, name);
+      assertKnownTask(config, requestedTaskId, effectiveArgs?.workspace, name, effectivePrincipal);
       const integrity = readTaskIntegrity(config, requestedTaskId, effectiveArgs?.workspace);
       if (!integrity) {
         throw taskError(
@@ -61,21 +62,22 @@ async function callTool(name, args = {}, context = {}) {
     assertRuntimeCompatibility(config, name, effectiveArgs, {
       activeTaskCount: getToolActivity().activeTaskCount
     });
-    const duplicateTerminalCancellation = name === 'relai_cancel_task' && knownTask?.status === 'cancelled';
+    const duplicateTerminalCancellation = name === 'relai_cancel_work' && knownTask?.status === 'cancelled';
     finishActivity = beginConnectorToolCall({
       tool: name,
       workspace: effectiveArgs?.workspace,
       scopeId: requestedTaskId ? `task:${requestedTaskId}` : (connector ? 'mcp:request' : 'local:default'),
       taskId: requestedTaskId,
-      createTask: name === 'relai_start_task',
-      trackTask: !duplicateTerminalCancellation && (name === 'relai_start_task' || Boolean(requestedTaskId)),
+      createTask: name === 'relai_begin_work',
+      trackTask: !duplicateTerminalCancellation && (name === 'relai_begin_work' || Boolean(requestedTaskId)),
       connector,
       operation: describeToolOperation(name, effectiveArgs || {}),
       title: effectiveArgs?.title,
       objective: effectiveArgs?.objective,
       correlation: { requestId: context?.requestId, traceId: context?.traceId,
         workspaceId: effectiveArgs?.workspace, conversationId: context?.conversationId },
-      input: effectiveArgs || {}
+      input: effectiveArgs || {},
+      principalFingerprint: principalFingerprint(effectivePrincipal)
     });
     const execution = await executeToolCall({ config, name, effectiveArgs, context, finishActivity, definition, started });
     const value = execution.value;
@@ -160,11 +162,9 @@ function resolveConfiguredWorkspaceArgument(config, input) {
 }
 
 function hasWorkspaceChanges(value) {
-  if (!value || typeof value !== 'object') return false;
-  if (value.changed === true) return true;
-  if (Array.isArray(value.changedFiles) && value.changedFiles.length > 0) return true;
-  if (Array.isArray(value.statusAfter?.sessionChangedFiles) && value.statusAfter.sessionChangedFiles.length > 0) return true;
-  return false;
+  return Boolean(value && typeof value === 'object' && (value.changed === true
+    || (Array.isArray(value.changedFiles) && value.changedFiles.length > 0)
+    || (Array.isArray(value.statusAfter?.sessionChangedFiles) && value.statusAfter.sessionChangedFiles.length > 0)));
 }
 
 function ok(value) {
@@ -176,4 +176,4 @@ function ok(value) {
 const getToolDefinition = getExecutableToolDefinition;
 const getToolDefinitions = getExecutableToolDefinitions;
 
-export { toolSchemas, getToolSchemas, getToolMetadata, getToolDefinition, getToolDefinitions, getToolGroups, getToolSurfaceManifest, TOOL_NAMES, callTool, enhanceToolError, compactForConnector, policySentence };
+export { toolSchemas, getToolSchemas, getPublicToolSchemas, getToolMetadata, getToolDefinition, getToolDefinitions, getToolGroups, getToolSurfaceManifest, TOOL_NAMES, callTool, enhanceToolError, compactForConnector, policySentence };

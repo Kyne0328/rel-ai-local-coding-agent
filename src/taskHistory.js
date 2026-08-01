@@ -38,7 +38,7 @@ function summarizeTask(taskId, events, activeTask) {
   const failures = Math.max(ordered.filter(entry => entry.ok === false).length, Number(activeTask?.failures || 0));
   const validation = validationSummary(ordered);
   const completionEvent = [...ordered].reverse().find(entry =>
-    entry.ok !== false && (entry.completionKnown === true || entry.tool === 'relai_complete_task')
+    entry.ok !== false && (entry.completionKnown === true || entry.tool === 'relai_finish_work')
   ) || null;
   const endedAt = activeTask ? null : new Date(endedMs).toISOString();
   return {

@@ -35,7 +35,7 @@ function titleForTool(tool, details = {}) {
   const workspace = cleanText(details.workspace, 60);
   const suffix = path ? ` ${displayPath(path)}` : workspace ? ` ${workspace}` : '';
   const titles = {
-    relai_start_task: workspace ? `Work in ${workspace}` : 'Start workspace task',
+    relai_begin_work: workspace ? `Work in ${workspace}` : 'Start workspace task',
     relai_repo_snapshot: `Inspect repository${suffix}`,
     relai_read: path ? `Read ${displayPath(path)}` : 'Read repository files',
     relai_search: 'Search repository',
@@ -50,14 +50,13 @@ function titleForTool(tool, details = {}) {
     relai_process_list: 'List managed processes',
     relai_run_checks: 'Run repository validation',
     relai_diagnostics_run: 'Run code diagnostics',
-    relai_validation_plan: 'Plan repository validation',
     relai_git_commit: 'Create Git commit',
     relai_git_push: 'Publish Git branch',
     relai_git_draft_pr: 'Draft pull request',
     relai_diff: 'Review repository changes',
     relai_status: 'Inspect repository status',
-    relai_cancel_task: 'Cancel logical task',
-    relai_complete_task: 'Complete logical task'
+    relai_cancel_work: 'Cancel work session',
+    relai_finish_work: 'Finish work session'
   };
   return titles[String(tool || '')] || '';
 }
@@ -134,7 +133,7 @@ function progressForTool(name, args = {}, value = null, ok = true, phase = 'comp
     if (!ok && progress.percentage >= 100) progress.percentage = 99;
     return progress;
   }
-  if (phase === 'complete' && ok && name === 'relai_complete_task') return completeProgress('Task completed');
+  if (phase === 'complete' && ok && name === 'relai_finish_work') return completeProgress('Task completed');
   return { mode: 'indeterminate', label: stageForTool(name, phase === 'running' ? 'running' : ok ? 'succeeded' : 'failed') };
 }
 
@@ -320,7 +319,7 @@ function summaryForTool(name, args, value, error, operation, result) {
     return `Task completion paused: ${error.message}`;
   }
   if (error) return `${operation || titleForTool(name, args) || 'Tool execution'} failed: ${error.message}`;
-  if (name === 'relai_start_task') return args?.title
+  if (name === 'relai_begin_work') return args?.title
     ? `Started logical task “${sanitizeDisplayText(args.title, 120)}”.`
     : 'Started a logical workspace task.';
   if (name === 'relai_read') return result.affectedItemCount
@@ -344,8 +343,8 @@ function summaryForTool(name, args, value, error, operation, result) {
   }
   if (name === 'relai_git_commit') return value?.commit ? `Created Git commit ${cleanText(value.commit, 20)}.` : 'Created a Git commit.';
   if (name === 'relai_git_push') return 'Published the Git branch.';
-  if (name === 'relai_cancel_task') return sanitizeDisplayText(value?.terminalReason || args?.reason, MAX_SUMMARY_LENGTH) || 'Task cancellation was reported.';
-  if (name === 'relai_complete_task') return sanitizeDisplayText(value?.summary || args?.summary, MAX_SUMMARY_LENGTH) || 'Task completion was reported.';
+  if (name === 'relai_cancel_work') return sanitizeDisplayText(value?.terminalReason || args?.reason, MAX_SUMMARY_LENGTH) || 'Task cancellation was reported.';
+  if (name === 'relai_finish_work') return sanitizeDisplayText(value?.summary || args?.summary, MAX_SUMMARY_LENGTH) || 'Task completion was reported.';
   return cleanText(result?.outcome, MAX_SUMMARY_LENGTH) || `${operation || titleForTool(name, args) || 'Tool operation'} completed.`;
 }
 

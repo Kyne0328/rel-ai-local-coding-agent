@@ -8,16 +8,20 @@ import { runSpan, addSpanEvent, setSpanAttributes } from "../telemetry.js";
 async function executeToolCall({ config, name, effectiveArgs, context, finishActivity, definition, started }) {
   let sessionStart = { started: false, alias: '' };
   const value = await runWithToolActivity(finishActivity, () => runSpan(config,
-    name === 'relai_start_task' ? 'relai.logical_task.start' : 'relai.tool.call',
+    name === 'relai_begin_work' ? 'relai.logical_task.start' : 'relai.tool.call',
     spanAttributes(name, effectiveArgs, context, finishActivity),
-    () => runWorkspaceOperation(name === 'relai_cancel_task' ? '' : effectiveArgs?.workspace, async () => {
+    () => runWorkspaceOperation(name === 'relai_cancel_work' ? '' : effectiveArgs?.workspace, async () => {
       sessionStart = maybeStartSession(config, name, effectiveArgs || {}, { taskId: finishActivity?.taskId });
       if (typeof definition?.handler !== 'function') throw new Error(`Tool '${name}' has no executable handler.`);
       const result = await definition.handler(config, effectiveArgs || {}, {
         connector: Boolean(context?.publicHttpOnly),
         taskId: finishActivity?.taskId,
         requestHeaders: context?.requestHeaders || {},
-        mcp: context?.mcp || {}
+        mcp: context?.mcp || {},
+        signal: context?.signal,
+        principal: context?.principal,
+        nativeTaskId: context?.nativeTaskId,
+        transportType: context?.transportType
       });
       setSpanAttributes({
         'relai.tool.ok': result?.ok !== false,
@@ -34,7 +38,7 @@ async function executeToolCall({ config, name, effectiveArgs, context, finishAct
           'relai.workspace': details.workspace,
           'relai.queue.mode': details.mode,
           'relai.queue.scope': details.scope,
-          ...(details.taskId ? { 'relai.queue.task_id': details.taskId } : {}),
+          ...(details.taskId ? { 'relai.queue.work_id': details.taskId } : {}),
           'relai.queue.wait_ms': waitMs,
           'relai.queue.pending': details.queued
         });
@@ -54,7 +58,7 @@ function spanAttributes(name, args, context, activity) {
   return {
     'relai.tool.name': name,
     'relai.workspace': String(args?.workspace || ''),
-    'relai.task.id': String(activity?.taskId || args?.task_id || args?.taskId || ''),
+    'relai.task.id': String(activity?.taskId || args?.work_id || args?.taskId || ''),
     'relai.transport': String(context?.transportType || ''),
     'relai.client.name': String(context?.clientName || ''),
     'relai.client.version': String(context?.clientVersion || '')

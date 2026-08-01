@@ -29,28 +29,28 @@ try {
 
   const context = { publicHttpOnly: true, requestId: 'request-1', serverInstanceId: 'server-1', transportType: 'streamable-http' };
 
-  const started = await callTool('relai_start_task', {
+  const started = await callTool('relai_begin_work', {
     workspace: 'repo',
     title: 'Inspect session activity model',
     objective: 'Verify canonical task and activity persistence.'
   }, context);
-  assert.ok(started.task_id);
+  assert.ok(started.work_id);
   assert.equal(started.title, 'Inspect session activity model');
 
   const read = await callTool('relai_read', {
     workspace: 'repo',
-    task_id: started.task_id,
+    work_id: started.work_id,
     paths: ['package.json', 'src.txt']
   }, { ...context, requestId: 'request-2' });
   assert.equal(read.ok, true);
 
-  await callTool('relai_complete_task', {
+  await callTool('relai_finish_work', {
     workspace: 'repo',
-    task_id: started.task_id,
+    work_id: started.work_id,
     summary: 'Inspected and verified session activity persistence.'
   }, { ...context, requestId: 'request-3' });
 
-  const session = readTaskHistorySession({ stateDir, auditLogPath: path.join(stateDir, 'audit.jsonl') }, started.task_id);
+  const session = readTaskHistorySession({ stateDir, auditLogPath: path.join(stateDir, 'audit.jsonl') }, started.work_id);
   assert.equal(session.title, 'Inspect session activity model');
   assert.equal(session.objective, 'Verify canonical task and activity persistence.');
   assert.equal(session.status, 'completed');
@@ -63,7 +63,7 @@ try {
   assert.equal(session.correlation.workspaceId, 'repo');
   assert.equal(session.events.length, 3, 'one canonical lifecycle event must be persisted per tool call');
   assert.deepEqual(session.events.map(event => event.sequence), [1, 2, 3]);
-  assert.equal(session.events.every(event => event.taskId === started.task_id && event.sessionId === started.task_id), true);
+  assert.equal(session.events.every(event => event.taskId === started.work_id && event.sessionId === started.work_id), true);
   assert.equal(session.events.find(event => event.tool?.name === 'relai_read')?.result?.affectedItemCount, 2);
   assert.equal(session.events.at(-1)?.status, 'succeeded');
   assert.match(session.events[0]?.summary, /Started logical task/);

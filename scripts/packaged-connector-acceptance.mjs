@@ -37,6 +37,7 @@ let child;
 let primarySession = null;
 let reconnectSession = null;
 let stderr = '';
+let nativeTaskRequestId = 10000;
 
 fs.mkdirSync(workspace, { recursive: true });
 fs.writeFileSync(path.join(workspace, 'acceptance.txt'), 'packaged connector acceptance\n');
@@ -136,45 +137,45 @@ try {
   const tools = await mcp(primarySession, 11, 'tools/list', {});
   assert.equal(tools.result?.tools?.length, toolCount);
   const toolNames = new Set(tools.result.tools.map(tool => tool.name));
-  for (const requiredTool of ['relai_start_task', 'relai_read', 'relai_complete_task']) {
+  for (const requiredTool of ['relai_begin_work', 'relai_read', 'relai_finish_work']) {
     assert.equal(toolNames.has(requiredTool), true, `Packaged tool surface is missing ${requiredTool}.`);
   }
-  const nativeProbe = await mcp(primarySession, 111, 'tools/call', {
-    name: 'relai_native_tasks_probe', arguments: { durationMs: 1000, label: 'Packaged native Tasks acceptance' }
-  });
-  assert.equal(nativeProbe.result?.resultType, 'task');
-  const nativeTaskId = nativeProbe.result?.taskId;
-  assert.ok(nativeTaskId);
-  await new Promise(resolve => setTimeout(resolve, 1100));
-  const nativeTask = await mcp(primarySession, 112, 'tasks/get', { taskId: nativeTaskId });
-  assert.equal(nativeTask.result?.status, 'completed');
-  assert.equal(nativeTask.result?.result?.structuredContent?.nativeTasksProbe, true);
+  assert.equal(toolNames.has('relai_native_tasks_probe'), false);
+  const toolByName = new Map(tools.result.tools.map(tool => [tool.name, tool]));
+  assert.equal(toolByName.get('relai_run_checks')?.execution, undefined);
+  assert.equal(toolByName.get('relai_exec')?.execution, undefined);
+  assert.equal(toolByName.get('relai_process_start')?.execution, undefined);
   const resourcesList = await mcp(primarySession, 12, 'resources/list', {});
   assert.ok(resourcesList.result?.resources?.some(item => item.uri === 'relai://server/tool-surface'));
   assert.ok(resourcesList.result?.resources?.some(item => item.uri === 'relai://server/workspaces'));
   const surface = await readResource(primarySession, 13, 'relai://server/tool-surface');
   assert.equal(surface.toolSurfaceVersion, toolSurfaceVersion);
   assert.equal(surface.toolCount, toolCount);
+  const surfaceByName = new Map(surface.tools.map(tool => [tool.name, tool]));
+  assert.equal(surfaceByName.get('relai_exec').executionClass, 'native_task_eligible');
+  assert.equal(surfaceByName.get('relai_exec').taskSupport, 'optional');
+  assert.equal(surfaceByName.get('relai_process_start').executionClass, 'persistent_process');
+  assert.equal(surfaceByName.get('relai_process_start').taskSupport, 'forbidden');
   assert.deepEqual(surface.compatibilityAliases, {});
   const help = await readResourceText(primarySession, 14, 'relai://server/help');
   assert.ok(help.includes(`version: ${applicationVersion}`));
 
-  const started = await callTool(primarySession, 15, 'relai_start_task', {
+  const started = await callTool(primarySession, 15, 'relai_begin_work', {
     workspace: 'acceptance',
     title: 'Packaged connector acceptance',
     objective: 'Verify packaged ESM runtime, guarded mutation, validation, observability, completion, and reconnect behavior.'
   });
-  const taskId = started.task_id;
+  const taskId = started.work_id;
   assert.ok(taskId);
-  await callTool(primarySession, 16, 'relai_repo_snapshot', { workspace: 'acceptance', task_id: taskId, maxEntries: 50 });
+  await callTool(primarySession, 16, 'relai_repo_snapshot', { workspace: 'acceptance', work_id: taskId, maxEntries: 50 });
   const read = await callTool(primarySession, 17, 'relai_read', {
-    workspace: 'acceptance', task_id: taskId, paths: ['acceptance.txt'], guidanceMode: 'none'
+    workspace: 'acceptance', work_id: taskId, paths: ['acceptance.txt'], guidanceMode: 'none'
   });
   assert.equal(read.items?.[0]?.content, 'packaged connector acceptance\n');
 
   const edited = await callTool(primarySession, 18, 'relai_edit', {
     workspace: 'acceptance',
-    task_id: taskId,
+    work_id: taskId,
     path: 'acceptance.txt',
     oldText: 'packaged connector acceptance\n',
     newText: 'packaged connector acceptance verified\n',
@@ -184,7 +185,7 @@ try {
   assert.ok(edited.changedFiles?.includes('acceptance.txt'));
   assert.equal(fs.readFileSync(path.join(workspace, 'acceptance.txt'), 'utf8'), 'packaged connector acceptance verified\n');
 
-  const status = await callTool(primarySession, 19, 'relai_status', { workspace: 'acceptance', task_id: taskId });
+  const status = await callTool(primarySession, 19, 'relai_status', { workspace: 'acceptance', work_id: taskId });
   assert.equal(status.version, applicationVersion);
   assert.equal(status.toolSurface?.toolCount, toolCount);
   assert.equal(status.toolSurface?.toolSurfaceVersion, toolSurfaceVersion);
@@ -199,11 +200,11 @@ try {
 
   const completed = await callTool(primarySession, 20, 'relai_run_checks', {
     workspace: 'acceptance',
-    task_id: taskId,
+    work_id: taskId,
     check: 'npm run check',
     complete: true,
     summary: 'Packaged ESM connector accepted after guarded write, validation, activity inspection, and reconnect verification.'
-  });
+  }, { expectNativeTask: true });
   assert.equal(completed.validationStatus, 'passed');
   assert.equal(completed.completionKnown, true);
   assert.equal(completed.completionSource, 'relai_run_checks');
@@ -231,7 +232,7 @@ try {
 
   const rejected = await mcp(reconnectSession, 31, 'tools/call', {
     name: 'relai_read',
-    arguments: { workspace: 'acceptance', task_id: taskId, paths: ['acceptance.txt'], guidanceMode: 'none' }
+    arguments: { workspace: 'acceptance', work_id: taskId, paths: ['acceptance.txt'], guidanceMode: 'none' }
   });
   assert.equal(rejected.result?.isError, true);
   assert.equal(rejected.result?.structuredContent?.errorCode, 'INVALID_TASK_STATE');
@@ -253,7 +254,8 @@ try {
   const chatGptInitialize = await readMcpResponse(chatGptInitializeResponse);
   assert.equal(chatGptInitializeResponse.status, 200, JSON.stringify(chatGptInitialize));
   assert.equal(chatGptInitialize.result?.protocolVersion, '2025-11-25');
-  assert.ok(chatGptInitialize.result?.capabilities?.tools);
+  assert.equal(chatGptInitialize.result?.serverInfo?.name, 'rel-ai-mcp');
+  assert.equal(chatGptInitializeResponse.headers.get('mcp-session-id'), null);
 
   const chatGptInitializedResponse = await fetch(`${base}/mcp`, {
     method: 'POST',
@@ -263,7 +265,8 @@ try {
     },
     body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} })
   });
-  assert.ok([200, 202, 204].includes(chatGptInitializedResponse.status));
+  assert.equal(chatGptInitializedResponse.status, 202);
+  assert.equal(await chatGptInitializedResponse.text(), '');
 
   const chatGptToolsResponse = await fetch(`${base}/mcp`, {
     method: 'POST',
@@ -277,22 +280,37 @@ try {
   assert.equal(chatGptToolsResponse.status, 200, JSON.stringify(chatGptTools));
   assert.equal(chatGptTools.result?.tools?.length, toolCount);
 
-  const legacyResponse = await fetch(`${base}/mcp`, {
+  const chatGptStatusResponse = await fetch(`${base}/mcp`, {
+    method: 'POST',
+    headers: mcpHeaders('', primarySession),
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 34,
+      method: 'tools/call',
+      params: { name: 'relai_status', arguments: { workspace: 'acceptance' } }
+    })
+  });
+  const chatGptStatus = await readMcpResponse(chatGptStatusResponse);
+  assert.equal(chatGptStatusResponse.status, 200, JSON.stringify(chatGptStatus));
+  assert.equal(chatGptStatus.result?.isError, false, JSON.stringify(chatGptStatus));
+  assert.equal(chatGptStatus.result?.structuredContent?.ok, true);
+
+  const initializeInsideModernEnvelope = await fetch(`${base}/mcp`, {
     method: 'POST',
     headers: mcpHeaders('initialize', primarySession),
     body: JSON.stringify({ jsonrpc: '2.0', id: 32, method: 'initialize', params: {
       protocolVersion: '2025-11-25', capabilities: {}, clientInfo: primarySession.clientInfo
     } })
   });
-  assert.equal(legacyResponse.status, 400);
-  assert.equal((await readMcpResponse(legacyResponse)).error?.code, -32601);
+  assert.equal(initializeInsideModernEnvelope.status, 400);
+  assert.equal((await readMcpResponse(initializeInsideModernEnvelope)).error?.code, -32601);
 
   for (const removedPath of ['/sse', '/messages']) {
     const response = await fetch(`${base}${removedPath}`);
     assert.equal(response.status, 404, `${removedPath} must remain removed`);
   }
 
-  console.log('Packaged connector acceptance passed: OAuth, modern stateless discovery, ChatGPT legacy initialization/tool scan compatibility, native Tasks, release/tool versions, guarded write attribution, validation, dashboard history, reconnect persistence, strict modern lifecycle rejection, and removed routes verified.');
+  console.log('Packaged connector acceptance passed: OAuth, strict MCP 2026-07-28 discovery, stateless ChatGPT initialization, adaptive direct/native execution, release/tool versions, guarded write attribution, validation, dashboard history, reconnect persistence, and removed routes verified.');
 } finally {
   if (reconnectSession) await closeMcpSession(reconnectSession).catch(() => {});
   if (primarySession && !primarySession.closed) await closeMcpSession(primarySession).catch(() => {});
@@ -472,10 +490,31 @@ function mcpBody(session, id, method, params = {}) {
   });
 }
 
-async function callTool(session, id, name, args) {
+async function callTool(session, id, name, args, options = {}) {
   const response = await mcp(session, id, 'tools/call', { name, arguments: args });
+  if (response.result?.resultType === 'task') {
+    assert.equal(options.expectNativeTask, true, `${name} unexpectedly returned a native task.`);
+    const taskId = response.result.taskId;
+    assert.match(taskId || '', /^task_[A-Za-z0-9_-]{32,160}$/);
+    const task = await waitForNativeToolResult(session, taskId);
+    assert.equal(task.status, 'completed', `${name} native task ended as ${task.status}: ${JSON.stringify(task.error)}`);
+    assert.equal(task.result?.isError, false, `${name} native task failed: ${JSON.stringify(task.result?.structuredContent || task.error)}`);
+    return task.result?.structuredContent;
+  }
+  assert.notEqual(options.expectNativeTask, true, `${name} did not return the negotiated native task handle.`);
   assert.equal(response.result?.isError, false, `${name} failed: ${JSON.stringify(response.result?.structuredContent || response.error)}`);
-  return response.result.structuredContent;
+  return response.result?.structuredContent;
+}
+
+async function waitForNativeToolResult(session, taskId) {
+  for (let attempt = 0; attempt < 240; attempt += 1) {
+    const response = await mcp(session, nativeTaskRequestId++, 'tasks/get', { taskId });
+    assert.equal(response.error, undefined, JSON.stringify(response));
+    const task = response.result;
+    if (['completed', 'failed', 'cancelled'].includes(task?.status)) return task;
+    await new Promise(resolve => setTimeout(resolve, Math.max(25, Number(task?.pollIntervalMs) || 25)));
+  }
+  throw new Error(`Native task ${taskId} did not reach a terminal state.`);
 }
 
 async function readMcpResponse(response) {

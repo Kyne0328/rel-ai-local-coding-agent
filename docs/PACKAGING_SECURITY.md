@@ -8,8 +8,8 @@ Rel AI MCP separates runtime dependency security from release-tool dependency se
 - `npm run audit:packaging` is a blocking, fail-closed Electron build-tool audit. It accepts only the documented advisory URL and package set, only when every affected lockfile node is dev, peer, or optional build tooling, and only until the policy expiration date.
 - Every packaged build must pass layout verification, connector acceptance, and Electron fuse verification.
 - Release artifacts must be generated from a clean output directory.
-- Published Windows builds must use `forceCodeSigning`; release publication fails instead of producing an unsigned candidate.
-- The packaged application executable, installer, and portable executable must have valid Authenticode signatures.
+- Published Windows builds currently disable certificate auto-discovery and are intentionally unsigned until a trusted Windows code-signing certificate is configured.
+- Every published Rel.AI executable must be covered by `SHA256SUMS.txt`; bundled ngrok must retain its valid upstream Authenticode signature and match the pinned manifest.
 
 ## Bundled ngrok policy
 
@@ -17,11 +17,11 @@ Rel.AI keeps a one-installer user experience: ngrok remains embedded in the appl
 
 `vendor/ngrok/manifest.json` pins the reviewed ngrok version, distribution URL, exact size, and SHA-256. Windows release preparation also verifies the upstream Authenticode publisher and certificate issuer. The same manifest is packaged with the application, checked against the packaged binary, and represented in the CycloneDX SBOM.
 
-The writable managed copy is replaced whenever it differs from the packaged hash. ngrok update checks and remote management are disabled, so executable bytes change only through a signed Rel.AI release. This deterministic component lifecycle improves incident analysis and antivirus false-positive submissions without requiring users to install ngrok separately.
+The writable managed copy is replaced whenever it differs from the packaged hash. ngrok update checks and remote management are disabled, so executable bytes change only through a reviewed Rel.AI release. This deterministic component lifecycle improves incident analysis and antivirus false-positive submissions without requiring users to install ngrok separately.
 
 ## Antivirus classification
 
-Tunneling agents may receive generic PUA, PUP, or capability-based classifications even when their signature and provenance are valid. A detection is not bypassed or suppressed in product code. The exact signed release candidate is inspected component-by-component, and incorrect detections are submitted to the relevant antivirus vendor before broad distribution.
+Tunneling agents may receive generic PUA, PUP, or capability-based classifications even when their signature and provenance are valid. A detection is not bypassed or suppressed in product code. The exact release candidate is inspected component-by-component, and incorrect detections are submitted to the relevant antivirus vendor before broad distribution.
 
 See [ANTIVIRUS_FALSE_POSITIVES.md](ANTIVIRUS_FALSE_POSITIVES.md) for the release decision and submission procedure.
 
@@ -43,6 +43,6 @@ The release pipeline mitigates packaging-tool risk through:
 - disabled ngrok self-update and remote management;
 - hardened Electron fuses;
 - packaged-layout and connector-flow validation;
-- component-level signature and hash verification;
+- component-level hash verification and upstream ngrok signature verification;
 - exact canonical release filenames, updater SHA-512 verification, SHA-256 coverage, SBOM generation, and GitHub artifact attestations;
-- mandatory Authenticode signing and signature verification for published Windows executables.
+- explicit unsigned-build configuration for Rel.AI-owned executables until trusted code signing is introduced.

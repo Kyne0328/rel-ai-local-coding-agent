@@ -27,12 +27,12 @@ const { callTool } = await import('../src/tools.js');
 const { toolResult } = await import('../src/mcpServer.js');
 
 try {
-  const task = await callTool('relai_start_task', {
+  const task = await callTool('relai_begin_work', {
     workspace: 'repo',
     bootstrap: 'none'
   }, { publicHttpOnly: true, requestId: 1, transportType: 'test' });
   const output = await callTool('relai_read', {
-    task_id: task.task_id,
+    work_id: task.work_id,
     paths: ['big.txt'],
     maxBytes: 256 * 1024,
     guidanceMode: 'none'
@@ -44,7 +44,8 @@ try {
   assert.equal(item.returnedBytes, 256 * 1024);
   assert.equal(item.truncated, true);
   assert.equal(result.structuredContent.message, undefined, 'result must not collapse to the generic outer truncation summary');
-  assert.match(result.content[0].text, /"items"/, 'text content must include the complete structured read result');
+  assert.match(result.content[0].text, /Rel\.AI operation succeeded\./, 'text content must provide a concise human-readable summary');
+  assert.doesNotMatch(result.content[0].text, /"items"/, 'large structured results must not be duplicated into text content');
 
   console.log('Connector read result limit unit test passed.');
 } finally {

@@ -23,12 +23,12 @@ const tracker = createToolActivityTracker({
 });
 tracker.onToolActivity(event => trackerEvents.push(event));
 
-const finishRead = tracker.beginConnectorToolCall({ tool: 'relai_start_task', workspace: 'repo', scopeId: 'request-a', createTask: true, operation: 'Reading src/app.js' });
+const finishRead = tracker.beginConnectorToolCall({ tool: 'relai_begin_work', workspace: 'repo', scopeId: 'request-a', createTask: true, operation: 'Reading src/app.js' });
 assert.equal(tracker.getToolActivity().tasks.find(task => task.id === finishRead.taskId)?.operation, 'Reading src/app.js');
 assert.equal(tracker.getToolActivity().tasks.find(task => task.id === finishRead.taskId)?.title, 'Reading src/app.js');
 finishRead.update({ operation: 'Reading src/config.js' });
 assert.equal(tracker.getToolActivity().tasks.find(task => task.id === finishRead.taskId)?.operation, 'Reading src/config.js');
-const finishChecks = tracker.beginConnectorToolCall({ tool: 'relai_start_task', workspace: 'other', scopeId: 'request-b', createTask: true });
+const finishChecks = tracker.beginConnectorToolCall({ tool: 'relai_begin_work', workspace: 'other', scopeId: 'request-b', createTask: true });
 assert.notEqual(finishRead.taskId, finishChecks.taskId, 'each explicit task start must create a separate task');
 assert.equal(tracker.getToolActivity().activeConnectorCalls, 2);
 assert.equal(tracker.getToolActivity().activeTaskCount, 2);
@@ -104,7 +104,7 @@ assert.equal(approvalTask?.events[0]?.status, 'blocked');
 
 const revalidationTracker = createToolActivityTracker({ idleMs: 60_000 });
 const finishRevalidation = revalidationTracker.beginConnectorToolCall({
-  tool: 'relai_complete_task',
+  tool: 'relai_finish_work',
   workspace: 'repo',
   scopeId: 'revalidation-test',
   createTask: true
@@ -135,7 +135,7 @@ assert.equal(revalidationTask?.events[0]?.result?.outcome, 'Final validation req
 
 const volumeTracker = createToolActivityTracker({ idleMs: 60_000 });
 const finishVolumeStart = volumeTracker.beginConnectorToolCall({
-  tool: 'relai_start_task',
+  tool: 'relai_begin_work',
   workspace: 'repo',
   scopeId: 'volume-test',
   createTask: true
@@ -168,9 +168,9 @@ assert.equal(inactive.every(task => task.status === 'cancelled' && task.endReaso
 assert.equal(inactive.every(task => task.endedAt && task.title && ['determinate', 'indeterminate'].includes(task.progress?.mode)), true);
 
 const reconnectTracker = createToolActivityTracker({ idleMs: 60_000 });
-const startedTask = reconnectTracker.beginConnectorToolCall({ tool: 'relai_start_task', workspace: 'repo', scopeId: 'transport-a', createTask: true });
+const startedTask = reconnectTracker.beginConnectorToolCall({ tool: 'relai_begin_work', workspace: 'repo', scopeId: 'transport-a', createTask: true });
 startedTask();
-const rotatedTransport = reconnectTracker.beginConnectorToolCall({ tool: 'relai_complete_task', workspace: 'repo', scopeId: 'transport-b', taskId: startedTask.taskId });
+const rotatedTransport = reconnectTracker.beginConnectorToolCall({ tool: 'relai_finish_work', workspace: 'repo', scopeId: 'transport-b', taskId: startedTask.taskId });
 assert.equal(rotatedTransport.taskId, startedTask.taskId, 'an exact task ID must survive transport rotation');
 rotatedTransport();
 assert.throws(
@@ -178,14 +178,14 @@ assert.throws(
   error => error?.code === 'TASK_ID_REQUIRED',
   'tracked calls without an explicit task ID must fail rather than infer by scope or workspace'
 );
-const secondTask = reconnectTracker.beginConnectorToolCall({ tool: 'relai_start_task', workspace: 'repo', scopeId: 'transport-b', createTask: true });
+const secondTask = reconnectTracker.beginConnectorToolCall({ tool: 'relai_begin_work', workspace: 'repo', scopeId: 'transport-b', createTask: true });
 assert.notEqual(secondTask.taskId, startedTask.taskId, 'separate explicit starts remain isolated even on one transport');
 secondTask();
 reconnectTracker.reset();
 
 const warningCompletionTracker = createToolActivityTracker({ idleMs: 60_000 });
 const warningStart = warningCompletionTracker.beginConnectorToolCall({
-  tool: 'relai_start_task',
+  tool: 'relai_begin_work',
   workspace: 'repo',
   scopeId: 'warning-completion',
   createTask: true,
@@ -201,7 +201,7 @@ const failedProbe = warningCompletionTracker.beginConnectorToolCall({
 });
 failedProbe({ ok: false, error: 'Probe unavailable.' });
 const warningCompletion = warningCompletionTracker.beginConnectorToolCall({
-  tool: 'relai_complete_task',
+  tool: 'relai_finish_work',
   workspace: 'repo',
   scopeId: 'warning-completion',
   taskId: warningTaskId
