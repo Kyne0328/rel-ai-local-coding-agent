@@ -96,6 +96,7 @@ function readGuiConfig() {
     ngrokDomain: ngrokDomain ? normalizeNgrokDomain(ngrokDomain) : '',
     token: env.REL_AI_MCP_TOKEN || '',
     ngrokAuthtoken: env.REL_AI_MCP_NGROK_AUTHTOKEN || profile.ngrokAuthtoken || '',
+    ngrokDownloadAccepted: env.REL_AI_MCP_NGROK_DOWNLOAD_ACCEPTED === '1',
     publicUrl: profile.publicUrl || (ngrokDomain ? `https://${normalizeNgrokDomain(ngrokDomain)}` : '')
   };
 }

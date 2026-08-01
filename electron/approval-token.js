@@ -73,7 +73,8 @@ function connectionConfig(current, token) {
     port: current.port,
     token,
     ngrokDomain: current.ngrokDomain,
-    ngrokAuthtoken: current.ngrokAuthtoken
+    ngrokAuthtoken: current.ngrokAuthtoken,
+    ngrokDownloadAccepted: current.ngrokDownloadAccepted === true
   };
 }
 

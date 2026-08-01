@@ -144,12 +144,9 @@ jobs:
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         run: npm run audit:packaging
 
-      - name: Fetch bundled ngrok seed binary
+      - name: Verify official ngrok acquisition end to end
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
-        shell: pwsh
-        env:
-          NGROK_PLATFORMS: win32
-        run: pwsh scripts/fetch-ngrok.ps1
+        run: npm run verify:ngrok -- --download
 
       - name: Verify generated color assets
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
@@ -208,7 +205,7 @@ jobs:
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         run: npm run verify:fuses
 
-      - name: Verify Windows signatures and bundled ngrok provenance
+      - name: Verify Windows signatures and ngrok acquisition boundary
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         shell: pwsh
         env:
@@ -227,22 +224,13 @@ jobs:
             }
           }
 
-          $ngrokManifest = Get-Content 'vendor/ngrok/manifest.json' -Raw | ConvertFrom-Json
-          $ngrokSpec = $ngrokManifest.platforms.win32
-          $ngrokPath = Resolve-Path (Join-Path $packageDirectory "resources/bin/ngrok/win32/$($ngrokSpec.file)")
-          $ngrokHash = (Get-FileHash -LiteralPath $ngrokPath -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($ngrokHash -ne [string]$ngrokSpec.sha256) {
-            throw "Packaged ngrok SHA-256 mismatch. Expected $($ngrokSpec.sha256), got $ngrokHash."
+          $packagedNgrok = Join-Path $packageDirectory 'resources/bin/ngrok/win32/ngrok.exe'
+          if (Test-Path -LiteralPath $packagedNgrok) {
+            throw 'The release package embeds ngrok.exe; first-run acquisition requires a manifest-only package.'
           }
-          $ngrokSignature = Get-AuthenticodeSignature -LiteralPath $ngrokPath
-          if ($ngrokSignature.Status -ne 'Valid') {
-            throw "Packaged ngrok Authenticode signature is not valid: $($ngrokSignature.Status)."
-          }
-          if (-not $ngrokSignature.SignerCertificate.Subject.Contains([string]$ngrokSpec.authenticode.publisher, [System.StringComparison]::OrdinalIgnoreCase)) {
-            throw "Packaged ngrok publisher mismatch: $($ngrokSignature.SignerCertificate.Subject)."
-          }
-          if (-not $ngrokSignature.SignerCertificate.Issuer.Contains([string]$ngrokSpec.authenticode.issuer, [System.StringComparison]::OrdinalIgnoreCase)) {
-            throw "Packaged ngrok certificate issuer mismatch: $($ngrokSignature.SignerCertificate.Issuer)."
+          $packagedManifest = Join-Path $packageDirectory 'resources/bin/ngrok/manifest.json'
+          if (-not (Test-Path -LiteralPath $packagedManifest -PathType Leaf)) {
+            throw 'The packaged ngrok acquisition manifest is missing.'
           }
 
       - name: Generate CycloneDX SBOM

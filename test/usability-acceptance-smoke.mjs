@@ -41,8 +41,9 @@ for (const required of [
   'resources/src/httpServer.js',
   'resources/src/tools/registry.js',
   'resources/public/dashboard.js',
-  'resources/bin/ngrok/win32/ngrok.exe'
+  'resources/bin/ngrok/manifest.json'
 ]) assert.ok(verifier.includes(required), `packaged verifier must check ${required}`);
+assert.match(verifier, /must not embed ngrok\.exe/, 'packaged verification must reject an embedded ngrok executable');
 assert.doesNotMatch(verifier, /spawn|execFile|execSync|Start-Process|uninstall/i, 'packaged verification must remain read-only');
 
 assert.match(ci, /name: packaged Windows application/);

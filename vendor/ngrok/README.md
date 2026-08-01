@@ -1,22 +1,31 @@
-# ngrok seed binaries
+# ngrok acquisition manifest
 
-Rel.AI MCP ships ngrok inside the Windows installer so users do not need a separate download. The binary itself remains outside Git, while `manifest.json` records the exact reviewed release component.
+Rel.AI MCP does not store or package `ngrok.exe`. `manifest.json` records the exact reviewed Windows x64 component that the desktop app may download after explicit first-run consent.
 
 ```text
 vendor/ngrok/manifest.json
-vendor/ngrok/win32/ngrok.exe
-vendor/ngrok/darwin/ngrok
-vendor/ngrok/linux/ngrok
 ```
 
-Fetch and verify the declared binaries with:
+The manifest pins:
+
+- the exact ngrok version;
+- an immutable official HTTPS archive URL;
+- archive size and SHA-256;
+- executable filename, size, and SHA-256; and
+- Windows Authenticode publisher and certificate issuer.
+
+Validate the manifest without downloading:
 
 ```sh
-pwsh scripts/fetch-ngrok.ps1
+npm run verify:ngrok
 ```
 
-The fetch fails closed unless the downloaded file matches the manifest's exact size and SHA-256. Windows builds additionally require a valid Authenticode signature from `ngrok, Inc.`, the expected certificate issuer, and the declared ngrok version.
+Exercise the complete Windows acquisition in a temporary directory:
 
-When ngrok publishes a new stable agent, review it first, update `manifest.json`, and then rebuild Rel.AI. Do not accept a new upstream binary by weakening or bypassing provenance checks.
+```sh
+npm run verify:ngrok -- --download
+```
 
-At runtime Rel.AI copies the packaged binary into the user's writable state directory. The managed copy is synchronized back to the packaged hash on launch. ngrok self-update checks and remote management are disabled; agent upgrades arrive only through signed Rel.AI application releases.
+The end-to-end check downloads the official archive, verifies it, extracts exactly one expected executable, validates executable integrity, Authenticode identity, and version, then removes the temporary files. It never writes a seed into this repository.
+
+At runtime Rel.AI performs the same verification before atomically installing the managed agent under the user state directory. Existing bytes are reused only while they remain valid. ngrok self-update checks and remote management are disabled.
