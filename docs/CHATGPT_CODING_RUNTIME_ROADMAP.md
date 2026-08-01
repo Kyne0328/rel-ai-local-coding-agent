@@ -4,7 +4,7 @@
 
 This document defines the implementation path from the current Rel.AI MCP repository bridge to a broader local coding runtime for ChatGPT.
 
-Phases 1, 2, 3, 4A, and 4B are included in the 0.23.0 build. Phase 4C remains deferred as a generic optional task ledger, and Phase 5 remains deferred as a separate model-worker layer. The runtime also includes durable deferred operations, semantic search, structured diagnostics, change-aware validation plans, output schemas, OAuth hardening, OpenTelemetry, and revision-aware resource caching.
+Phases 1, 2, 3, 4A, and 4B are included in the 0.23.0 build. Phase 4C remains deferred as a generic optional task ledger, and Phase 5 remains deferred as a separate model-worker layer. The runtime also includes native MCP Tasks interoperability on HTTP, semantic search, structured diagnostics, change-aware validation plans, output schemas, OAuth hardening, OpenTelemetry, and revision-aware resource caching.
 
 The target is not to reproduce Claude Code's user interface. The target is to remove the practical runtime limitations that matter during complex coding work:
 
@@ -28,7 +28,7 @@ Use these files as the authoritative integration points:
 | Tool handlers and execution orchestration | `src/tools/handlers.js`, `src/tools/execution.js`, `src/tools.js` |
 | One-shot child processes and process-tree termination | `src/process.js`, `src/bridge/exec.js` |
 | Managed persistent processes and log cursors | `src/processManager.js` |
-| Durable deferred operations | `src/operationTasks.js`, `src/tools/operationTaskHandlers.js` |
+| Native MCP Tasks | `src/mcp/nativeTaskService.js`, `src/nativeTasksProbe.js` |
 | Logical task observability and activity | `src/taskObservability.js`, `src/toolActivity.js` |
 | Workspace resolution and configuration | `src/config.js`, `src/configEditor.js` |
 | Managed Git worktrees | `src/worktreeManager.js` |
@@ -571,12 +571,12 @@ Implemented.
 
 ### Delivered behavior
 
-- Loads `REL_AI.md` and `.relai/instructions.md` in documented precedence order.
+- Loads `REL_AI.md`, `.relai/instructions.md`, and target-aware hierarchical `AGENTS.override.md` / `AGENTS.md` guidance in documented precedence order.
 - Concatenates both sources with named headings and explicit precedence metadata.
 - Caps the combined connector payload at 64 KiB with UTF-8-safe truncation and source/byte metadata.
 - Rejects symbolic links, non-files, workspace escapes, and binary-looking instruction files.
-- Caches results by real workspace path, payload limit, modification time, size, and mode.
-- Exposes full instructions through `relai_repo_snapshot` and `relai://workspace/<alias>/inspect`.
+- Caches results by real workspace path, target directory, payload limit, modification time, size, and mode.
+- Exposes full instructions through the compact `relai_start_task` bootstrap, `relai_repo_snapshot`, and `relai://workspace/<alias>/inspect`.
 - Keeps instruction content out of dashboard/config summaries while showing configured source paths.
 - Leaves both supported files available through explicit `relai_read` calls when full content is needed.
 - Treats instruction content as guidance only; Rel.AI never executes it automatically.
@@ -590,7 +590,8 @@ Give ChatGPT repository-specific architecture, style, command, and definition-of
 Load, in precedence order:
 
 1. `REL_AI.md` at the workspace root;
-2. `.relai/instructions.md`.
+2. `.relai/instructions.md`;
+3. the nearest applicable `AGENTS.override.md` or `AGENTS.md`, followed by parent-directory agent guidance up to the workspace root.
 
 Recommended behavior:
 
@@ -599,12 +600,12 @@ Recommended behavior:
 - return source paths and truncation metadata;
 - reject binary-looking instruction files;
 - never execute content from instruction files automatically;
-- include instructions in `relai_repo_snapshot` and `relai://workspace/<alias>/inspect`;
+- include instructions in task bootstrap, `relai_repo_snapshot`, and `relai://workspace/<alias>/inspect`;
 - allow direct reads for the full files when truncated.
 
 ### Caching
 
-Cache by path, modification time, and size. Invalidate on edits to either instruction path.
+Cache by target path, selected instruction paths, modification time, and size. Invalidate when any selected instruction file changes.
 
 ### Result shape
 
@@ -752,7 +753,7 @@ Support an explicit force field only after returning the dirty status in a previ
 
 Deferred. Not included in the current build or public tool surface.
 
-Durable deferred operations and signed validation plans are implemented, but they are not a generic user-authored task ledger. They track executable work and validation scope rather than arbitrary plan steps.
+Native MCP Tasks and signed validation plans are implemented, but they are not a generic user-authored task ledger. They track asynchronous protocol work and validation scope rather than arbitrary plan steps.
 
 ### Objective
 
@@ -1121,14 +1122,14 @@ Recommended releases:
 | Phase 4C | Optional generic task ledger | Deferred |
 | Phase 5 preview | Disabled-by-default independent workers | Deferred |
 
-The 0.23.0 hard cutover combines several mature runtime boundaries behind one explicit 34-tool surface. Future lifecycle additions should still receive focused regression coverage and independent ownership boundaries.
+The 0.23.0 hard cutover combines several mature runtime boundaries behind one explicit 33-tool surface. Future lifecycle additions should still receive focused regression coverage and independent ownership boundaries.
 
 ---
 
 # Recommended implementation order
 
 1. Operate and harden the shipped one-shot, persistent-process, instruction, worktree, semantic-search, diagnostics, and validation-plan runtime.
-2. Add the optional generic task ledger only if users need editable plan steps beyond existing task observability and deferred-operation state.
+2. Add the optional generic task ledger only if users need editable plan steps beyond existing task observability and native Tasks state.
 3. Add independent API workers only after the local runtime and worktree lifecycle have accumulated production evidence.
 
 The main practical parity gain now comes from the shipped command, process, worktree, intelligence, diagnostics, and validation capabilities. Phase 4C would add editable planning semantics rather than execution capability. Phase 5 would add true separate-context parallel reasoning and remains an optional agent-host product layer rather than a basic MCP bridge feature.

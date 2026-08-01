@@ -1,6 +1,6 @@
 # Connecting to ChatGPT
 
-Rel.AI MCP exposes the same 20 callable workspace tools through MCP SDK v2 over stdio and the OAuth-protected Streamable HTTP endpoint at `POST /mcp`. All are active; the six compatibility tools were removed in tool-surface version 10.
+Rel.AI MCP exposes 34 callable workspace tools through MCP SDK v2 over stdio and the OAuth-protected Streamable HTTP endpoint at `POST /mcp`.
 
 - `relai_start_task`
 - `relai_repo_snapshot`
@@ -23,7 +23,7 @@ Rel.AI MCP exposes the same 20 callable workspace tools through MCP SDK v2 over 
 - `relai_edit`
 - `relai_complete_task`
 
-Use `relai_start_task` once for each independent logical task and pass its `task_id` on subsequent calls for that task. Use `relai_repo_snapshot` for repository context, `relai_search` for raw text and contextual location, `relai_code_inspect` for symbol/reference/impact relationships and affected-test discovery, `relai_read` for source beyond the returned ranges, and `relai_edit` for all file changes. Search defaults to adaptive `mode:"auto"`: focused searches receive broader context, while noisy searches receive smaller prioritized ranges. Use explicit `mode:"compact"` for path/line-only results or `mode:"context"` for fixed caller-controlled limits. `relai_edit` supports exact replacement arrays, occurrence targeting, complete content, staged content or patches, and atomic batches.
+Use `relai_start_task` once for each independent logical task. It returns compact repository and instruction bootstrap context plus a workspace-bound `task_id`. Every later task-scoped call requires that ID and resolves the bound workspace automatically; pass `workspace` only when you want an explicit ownership check. Use `relai_repo_snapshot` only when the bootstrap needs refreshing, `relai_search` for raw text and contextual location, `relai_code_inspect` for symbol/reference/impact relationships and affected-test discovery, `relai_read` for source beyond the returned ranges, and `relai_edit` for all file changes. Search defaults to adaptive `mode:"auto"`: focused searches receive broader context, while noisy searches receive smaller prioritized ranges.
 
 Use `relai_exec` for one-shot project commands such as dependency installation, migrations, compilers, and repository utilities. It returns the exit status, bounded output, timeout state, and detected file changes. It does not replace structured final validation.
 
@@ -37,9 +37,9 @@ Use `relai_status` with a workspace alias for command configuration, session pol
 
 Use `relai_git_draft_pr` to prepare local pull-request title/body text from a base/head diff. It does not call GitHub, GitLab, or another hosting provider; it does not create a pull request, push a branch, or modify the repository.
 
-Repository snapshots automatically include guidance from `REL_AI.md` and `.relai/instructions.md` when present. `REL_AI.md` has higher precedence. The combined connector payload is capped at 64 KiB and reports its sources and truncation state; use `relai_read` on the named file when the complete text is needed. Instruction text is never executed automatically.
+Task bootstrap and repository snapshots automatically include guidance from `REL_AI.md`, `.relai/instructions.md`, and applicable hierarchical `AGENTS.override.md` / `AGENTS.md` files. `REL_AI.md` has highest precedence; nearer target-directory agent instructions override parent agent instructions. The combined connector payload is capped at 64 KiB and reports its sources and truncation state; use `relai_read` on a named file when complete text is needed. Instruction text is never executed automatically.
 
-Persistent process management, managed worktrees, durable deferred operations, and task history are available through the current tool surface. Managed worktrees use isolated aliases and preserve branches by default; removal refuses dirty worktrees, active processes, and active operations unless the required explicit approval is supplied.
+Persistent process management, managed worktrees, native MCP Tasks interoperability, and task history are available through the current surface. Managed worktrees use isolated aliases and preserve branches by default; removal refuses dirty worktrees and active processes unless the required explicit approval is supplied.
 
 Tracked-file deletion is handled through a structured `Delete File` patch sent to `relai_edit`. Session-owned untracked artifacts are removed only through `relai_tidy_plan` followed by `relai_tidy_run`.
 
@@ -69,7 +69,7 @@ https://your-domain.example/mcp
 
 ChatGPT discovers the OAuth endpoints through `/.well-known/oauth-protected-resource`. Opening `/mcp` in a browser displays only a diagnostic; MCP clients use `POST /mcp`. The former `/sse` and `/messages` MCP routes are not supported.
 
-When you replace the approval token, Rel.AI revokes current ChatGPT access and refresh tokens. The existing ChatGPT app and MCP URL remain valid. Retry the app and enter the new token when authorization opens; do not delete and recreate the app.
+When you replace the approval token, Rel.AI revokes current ChatGPT access and refresh tokens. The existing ChatGPT app and MCP URL remain valid. Copy the new token, then in ChatGPT Web open **Settings > Apps > Enabled Apps** and select the existing **Rel.AI MCP** app. Choose **Connect** or **Reconnect** if shown; otherwise, select Rel.AI MCP in a new chat and ask ChatGPT to use it. Paste the token on the Rel.AI authorization page, approve access, and retry the request. Do not delete and recreate the app.
 
 ## Tunnel requirement
 

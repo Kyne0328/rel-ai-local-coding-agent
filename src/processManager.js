@@ -8,6 +8,7 @@ import { resolveCommandCwd, normalizeCommandEnv, resolveShell, redactCommandForA
 import { killProcessTree } from './process.js';
 import { makeProcessEnvironment } from './processEnvironment.js';
 import { runSpan, addSpanEvent, traceContextEnvironment } from './telemetry.js';
+import { taskError } from './toolActivity.js';
 const processes = new Map();
 const RECENT_RETENTION_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_MAX_LOG_BYTES = 16 * 1024 * 1024;
@@ -123,8 +124,9 @@ function trimLog(file, maxBytes) {
   } catch {}
 }
 
-function readManagedProcess(config, args = {}) {
+function readManagedProcess(config, args = {}, context = {}) {
   const record = requireProcess(config, args.processId);
+  assertProcessTaskOwner(record, args, context);
   const maxBytes = clampNumber(args.maxBytes, 1000, 1024 * 1024, 65536);
   return {
     ...processSnapshot(record),
@@ -133,8 +135,9 @@ function readManagedProcess(config, args = {}) {
   };
 }
 
-function writeManagedProcess(config, args = {}) {
+function writeManagedProcess(config, args = {}, context = {}) {
   const record = requireProcess(config, args.processId);
+  assertProcessTaskOwner(record, args, context);
   if (!record.child || !record.child.stdin || record.child.stdin.destroyed || !['starting', 'running'].includes(record.status)) {
     throw new Error(`Process ${record.processId} does not have writable stdin.`);
   }
@@ -145,8 +148,9 @@ function writeManagedProcess(config, args = {}) {
   return { ok: true, processId: record.processId, acceptedBytes: bytes, status: record.status };
 }
 
-async function stopManagedProcess(config, args = {}) {
+async function stopManagedProcess(config, args = {}, context = {}) {
   const record = requireProcess(config, args.processId);
+  assertProcessTaskOwner(record, args, context);
   if (!record.child || !['starting', 'running', 'stopping'].includes(record.status)) return processSnapshot(record);
   record.status = 'stopping';
   persistMetadata(config, record);
@@ -157,18 +161,28 @@ async function stopManagedProcess(config, args = {}) {
   return processSnapshot(record, { includeTail: true, tailBytes: 8192 });
 }
 
-function listManagedProcesses(config, args = {}) {
+function listManagedProcesses(config, args = {}, context = {}) {
   hydrateProcessMetadata(config);
   pruneManagedProcesses(config);
   const workspace = String(args.workspace || '').trim();
   const status = String(args.status || '').trim();
+  const logicalTaskId = String(context.taskId || args.task_id || '').trim();
   const items = [...processes.values()]
+    .filter(item => !logicalTaskId || item.logicalTaskId === logicalTaskId)
     .filter(item => !workspace || item.workspace === workspace)
     .filter(item => !status || item.status === status)
     .sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt))
     .slice(0, clampNumber(args.limit, 1, 500, 100))
     .map(item => processSnapshot(item));
   return { ok: true, processes: items, count: items.length };
+}
+
+function assertProcessTaskOwner(record, args = {}, context = {}) {
+  const expected = String(record.logicalTaskId || '').trim();
+  const actual = String(context.taskId || args.task_id || '').trim();
+  if (expected && actual !== expected) {
+    throw taskError('TASK_OWNERSHIP_MISMATCH', 'The managed process belongs to a different logical task.');
+  }
 }
 
 function processSnapshot(record, options = {}) {

@@ -1,7 +1,7 @@
 # Rel.AI MCP Task Isolation Architecture
 
 **Originally investigated:** 2026-07-26  
-**Current architecture:** 0.23.0 MCP `2026-07-28` hard cutover
+**Current architecture:** 0.23.0 MCP `2026-07-28` stateless HTTP
 
 ## Summary
 
@@ -19,7 +19,7 @@ or relai_complete_task
 -> exact task_id only
 ```
 
-MCP transport state, HTTP connections, process IDs, operation-task IDs, worktree aliases, workspace aliases, and ChatGPT conversation metadata are not logical task identities and are never used to select or merge tasks.
+MCP transport state, HTTP connections, process IDs, native MCP Task IDs, worktree aliases, workspace aliases, and ChatGPT conversation metadata are not logical task identities and are never used to select or merge tasks.
 
 ## Protocol boundary
 
@@ -27,17 +27,17 @@ Rel.AI targets MCP `2026-07-28` through the stable MCP SDK v2.
 
 ```text
 stdio client
--> request-scoped MCP SDK transport
+-> server/discover with per-request metadata
 -> registered Rel.AI tool handler
 
 HTTP/OAuth client
 -> OAuth or bearer authorization
--> stateless POST /mcp
--> request-scoped MCP SDK handler
+-> server/discover POST /mcp
+-> stateless versioned requests with per-request metadata
 -> registered Rel.AI tool handler
 ```
 
-The protocol uses `server/discover`; there is no `initialize` handshake or protocol session. Each request carries its protocol version, method, client identity, capabilities, trace context, and named target explicitly. Rel.AI rejects `Mcp-Session-Id`, JSON-RPC batches, removed SSE/messages routes, and legacy aliases instead of treating them as compatibility input.
+Every request supplies protocol version, client capabilities, and optional client implementation metadata. No HTTP protocol session identifies a coding task. Rel.AI rejects JSON-RPC batches, removed SSE/messages routes, legacy lifecycle calls, and old aliases.
 
 Dashboard live updates remain a separate authenticated `/events` stream and are not part of MCP transport identity.
 
@@ -52,7 +52,7 @@ Dashboard live updates remain a separate authenticated `/events` stream and are 
 | Workspace alias/path | Repository resource | No |
 | `task_id` | Logical coding-task ownership | **Yes — exact match only** |
 | `processId` | One managed persistent child process | No |
-| `operationTaskId` | One durable deferred operation | No; it is owned by a `task_id` |
+| Native MCP Task ID | One standards-based asynchronous HTTP operation | No |
 | Managed worktree alias | One isolated repository worktree | No |
 | Signed `requestState` | One resumable approval round trip | No |
 
@@ -65,7 +65,7 @@ Rules:
 5. A task ID cannot be used with another workspace.
 6. Completed IDs cannot be reused for work and fail with `INVALID_TASK_STATE`.
 7. Duplicate completion is idempotent and returns the original result.
-8. Multiple tasks may share one MCP connection or one physical workspace while retaining independent activity, validation ownership, deferred operations, and completion state.
+8. Multiple tasks may share one transport connection or one physical workspace while retaining independent activity, validation ownership, and completion state.
 
 ## Runtime ownership
 
@@ -73,10 +73,10 @@ Rules:
 Rel.AI process
 ├── request-scoped MCP SDK handlers
 ├── task tracker keyed by task_id
-│   ├── task A activity, approvals, operations, and completion state
-│   └── task B activity, approvals, operations, and completion state
+│   ├── task A activity, approvals, and completion state
+│   └── task B activity, approvals, and completion state
 ├── managed process registry keyed by processId
-├── durable deferred-operation registry keyed by operationTaskId
+├── native MCP Tasks store keyed by authenticated Task ID
 ├── managed worktree registry keyed by dynamic workspace alias
 ├── per-task workspace baseline and validation records
 ├── per-workspace reader/writer operation queue
@@ -86,7 +86,7 @@ Rel.AI process
 
 The per-workspace queue serializes mutations against the same physical worktree while allowing compatible reads. Identity isolation does not make one checkout immutable. If another task changes a workspace after task A validates, task A must revalidate before completion.
 
-Managed processes and deferred operations retain exact logical-task ownership. A caller cannot read, write, stop, cancel, or poll another task's runtime handle merely by knowing its ID.
+Managed processes retain exact logical-task ownership. Native MCP Tasks are separately bound to the authenticated principal, so another principal cannot poll or cancel them merely by knowing an ID.
 
 ## Persistent processes
 
@@ -94,11 +94,9 @@ Managed processes and deferred operations retain exact logical-task ownership. A
 
 Process identity does not complete or validate the owning logical task.
 
-## Durable deferred operations
+## Native MCP Tasks
 
-`relai_exec`, `relai_diagnostics_run`, and `relai_run_checks` may run with `defer:true`. The initial call returns an `operationTaskId`; the same logical task may poll it with `relai_operation_task_get` or request cooperative cancellation with `relai_operation_task_cancel`.
-
-This is a Rel.AI runtime contract rather than native MCP `tasks/*`. The stable TypeScript SDK currently rejects that extension at its codec boundary and does not expose a stable server adapter that Rel.AI can register without replacing the SDK transport.
+HTTP discovery advertises `io.modelcontextprotocol/tasks`, and requests that advertise the same capability can exercise durable task get, update, and cancellation through `relai_native_tasks_probe`. The public tool schemas no longer expose proprietary `defer` fields or operation-polling tools. Persistent interactive commands use `relai_process_*`.
 
 ## Managed worktrees
 
@@ -139,6 +137,8 @@ Relevant errors include:
 - `TASK_NOT_FOUND`
 - `TASK_OWNERSHIP_MISMATCH`
 - `INVALID_TASK_STATE`
+- `TASK_VALIDATION_REQUIRED`
+- `TASK_REVALIDATION_REQUIRED`
 - `TASK_COMPLETION_IN_PROGRESS`
 - `TASK_PERSISTENCE_CONFLICT`
 
@@ -167,7 +167,7 @@ The release gate verifies:
 - duplicate completion and completed-task reuse rejection;
 - current-version task-history persistence;
 - persistent-process start/read/write/stop/list behavior and cleanup;
-- durable deferred-operation polling, ownership, and cancellation;
+- native MCP Task persistence, principal ownership, polling, and cancellation;
 - managed worktree creation, inherited configuration, refusal, and removal;
 - semantic search, trace analysis, structured diagnostics, and signed validation plans;
 - OAuth discovery, registration, PKCE, issuer/resource binding, rotating refresh tokens, and revocation;

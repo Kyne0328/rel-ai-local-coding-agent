@@ -136,6 +136,9 @@ const files = [
 ];
 
 for (const file of files) updateJsonVersion(file, version);
+const releaseManifest = readJson('release-manifest.json');
+releaseManifest.applicationVersion = version;
+writeJson('release-manifest.json', releaseManifest);
 replaceExact(path.join('electron', 'renderer', 'status.html'), `id="appVersion">v${current}</span>`, `id="appVersion">v${version}</span>`);
 if (!noChangelog) insertChangelog(version, date);
 

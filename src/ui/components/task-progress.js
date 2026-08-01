@@ -7,7 +7,7 @@ export function taskProgressHtml(progress = {}, status = '', options = {}) {
     const label = progress.label || `${progress.completedUnits || 0} of ${progress.totalUnits || 0} complete`;
     return `<div class="task-progress ${compact ? 'compact' : ''}"><div class="task-progress-label"><span>${esc(label)}</span><strong>${value}%</strong></div><progress class="task-progress-track" aria-label="${esc(label)}" value="${value}" max="100"></progress></div>`;
   }
-  if (progress?.mode === 'complete' && ['completed', 'completed_with_warnings'].includes(status)) {
+  if (progress?.mode === 'complete' && status === 'completed') {
     return `<div class="task-progress ${compact ? 'compact' : ''}"><div class="task-progress-label"><span>${esc(progress.label || 'Complete')}</span><strong>100%</strong></div><progress class="task-progress-track" aria-label="Task complete" value="100" max="100"></progress></div>`;
   }
   const label = progress?.label || 'Workload size is not yet known';

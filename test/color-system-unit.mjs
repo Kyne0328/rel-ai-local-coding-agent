@@ -12,6 +12,7 @@ import {
   renderColorReferenceSvg,
   contrastRatio
 } from '../src/ui/colorTokens.mjs';
+import { pillHtml } from '../src/ui/components/pill.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -155,5 +156,7 @@ assert.doesNotMatch(startupBackground, /colorTokens|getTheme|require\s*\(/);
 
 assert.match(read('src/ui/components/toast.js'), /toast-marker/);
 assert.match(read('src/ui/components/pill.js'), /information: \['run'[\s\S]*'wait'/);
+assert.match(pillHtml('succeeded'), /class="status-pill ok"/, 'succeeded activity must use the success tone');
+assert.match(pillHtml('succeeded'), /\(success\)/, 'succeeded activity must expose the success accessibility label');
 
 console.log('ESM color-system hard-cutover, contrast, status, and raw-color checks passed.');

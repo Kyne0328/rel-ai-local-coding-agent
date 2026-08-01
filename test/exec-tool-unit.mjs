@@ -86,11 +86,12 @@ try {
 
   const secret = 'exec-secret-value';
   const context = { publicHttpOnly: true };
-  const success = await callTool('relai_exec', {
-    workspace: 'app',
+  const initialTask = await callTool('relai_start_task', { workspace: 'app', bootstrap: 'none' }, context);
+  const execCall = (args) => callTool('relai_exec', { task_id: initialTask.task_id, ...args }, context);
+  const success = await execCall({
     command: `${nodeCommand(path.join(workspace, 'scripts', 'emit.js'))} --token ${secret}`,
     env: { RELAI_EXEC_TEST: 'visible', API_TOKEN: secret }
-  }, context);
+  });
   assert.equal(success.ok, true);
   assert.equal(success.exitCode, 0);
   assert.match(success.stdout, /cwd=workspace;env=visible;relai=1/);
@@ -108,72 +109,65 @@ try {
 
   sessionCache.setCachedRead('app', path.join(workspace, 'src', 'index.js'), 1, 'cached');
   assert.equal(sessionCache.cacheStats().entries, 1);
-  await callTool('relai_exec', {
-    workspace: 'app',
+  await execCall({
     command: nodeCommand(path.join(workspace, 'scripts', 'emit.js'))
-  }, context);
+  });
   assert.equal(sessionCache.cacheStats().entries, 0, 'every command must invalidate the workspace read cache');
 
-  const nestedResult = await callTool('relai_exec', {
-    workspace: 'app',
+  const nestedResult = await execCall({
     command: nodeCommand(path.join(workspace, 'scripts', 'emit.js')),
     cwd: 'nested',
     env: { RELAI_EXEC_TEST: 'nested' }
-  }, context);
+  });
   assert.equal(nestedResult.cwd, 'nested');
   assert.match(nestedResult.stdout, /cwd=nested;env=nested/);
 
-  const failure = await callTool('relai_exec', {
-    workspace: 'app',
+  const failure = await execCall({
     command: nodeCommand(path.join(workspace, 'scripts', 'fail.js'))
-  }, context);
+  });
   assert.equal(failure.ok, false);
   assert.equal(failure.exitCode, 7);
   assert.match(failure.stderr, /expected failure/);
 
   await assert.rejects(
-    () => callTool('relai_exec', { workspace: 'app', command: 'echo invalid', cwd: '..' }, context),
+    () => execCall({ command: 'echo invalid', cwd: '..' }),
     /escapes the workspace/i
   );
   await assert.rejects(
-    () => callTool('relai_exec', { workspace: 'app', command: 'echo invalid', env: { INVALID: 1 } }, context),
+    () => execCall({ command: 'echo invalid', env: { INVALID: 1 } }),
     /must be a string/i
   );
 
-  const large = await callTool('relai_exec', {
-    workspace: 'app',
+  const large = await execCall({
     command: nodeCommand(path.join(workspace, 'scripts', 'large.js')),
     maxOutputBytes: 1000
-  }, context);
+  });
   assert.equal(large.ok, true);
   assert.equal(large.stdoutTruncated, true);
   assert.equal(large.stdoutBytes, 20000);
   assert.match(large.stdout, /truncated output/);
   assert.ok(Buffer.byteLength(large.stdout, 'utf8') <= 1000);
 
-  const timedOut = await callTool('relai_exec', {
-    workspace: 'app',
+  const timedOut = await execCall({
     command: nodeCommand(path.join(workspace, 'scripts', 'hang.js')),
     timeoutMs: 1000
-  }, context);
+  });
   assert.equal(timedOut.ok, false);
   assert.equal(timedOut.timedOut, true);
   assert.match(timedOut.error, /Timed out after 1000ms/);
 
-  const mutation = await callTool('relai_exec', {
-    workspace: 'app',
+  const mutation = await execCall({
     command: nodeCommand(path.join(workspace, 'scripts', 'mutate.js'), 'generated.txt')
-  }, context);
+  });
   assert.equal(mutation.ok, true);
   assert.deepEqual(mutation.changedFiles, ['generated.txt']);
   assert.equal(mutation.mutationTracking, 'git');
   fs.rmSync(path.join(workspace, 'generated.txt'));
 
   const quotedMutationPath = 'generated café file.txt';
-  const quotedMutation = await callTool('relai_exec', {
-    workspace: 'app',
+  const quotedMutation = await execCall({
     command: nodeCommand(path.join(workspace, 'scripts', 'mutate.js'), quotedMutationPath)
-  }, context);
+  });
   assert.equal(quotedMutation.ok, true);
   assert.deepEqual(quotedMutation.changedFiles, [quotedMutationPath], 'mutation tracking must preserve spaces and non-ASCII names');
   fs.rmSync(path.join(workspace, quotedMutationPath));

@@ -7,12 +7,20 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
+import {
+  CLIENT_CAPABILITIES_META_KEY,
+  CLIENT_INFO_META_KEY,
+  PROTOCOL_VERSION_META_KEY
+} from '@modelcontextprotocol/server';
+import { resolveCurrentUnpacked } from './current-unpacked.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const releaseManifest = JSON.parse(fs.readFileSync(path.join(root, 'release-manifest.json'), 'utf8'));
 const { applicationVersion, protocolVersion: mcpProtocolVersion, toolSurfaceVersion, toolCount } = releaseManifest;
 const directoryArgument = process.argv.indexOf('--dir');
-const packageDirectory = path.resolve(root, directoryArgument >= 0 ? String(process.argv[directoryArgument + 1] || '') : 'dist/build-check/win-unpacked');
+const packageDirectory = directoryArgument >= 0
+  ? path.resolve(root, String(process.argv[directoryArgument + 1] || ''))
+  : resolveCurrentUnpacked(root, { allowBuildCheck: true });
 const resources = path.join(packageDirectory, 'resources');
 const packagedServer = path.join(resources, 'bin', 'rel-ai-mcp-http.js');
 assert.equal(fs.existsSync(packagedServer), true, `Packaged backend is missing from ${packageDirectory}. Build the unpacked app before connector acceptance.`);
@@ -26,6 +34,8 @@ const redirectUri = 'https://chatgpt.com/connector_platform_oauth_redirect';
 const port = await availablePort();
 const base = `http://127.0.0.1:${port}`;
 let child;
+let primarySession = null;
+let reconnectSession = null;
 let stderr = '';
 
 fs.mkdirSync(workspace, { recursive: true });
@@ -116,53 +126,65 @@ try {
   const tokens = await tokenResponse.json();
   assert.ok(tokens.access_token);
 
-  const discovered = await mcp(10, 'server/discover', {}, tokens.access_token);
+  primarySession = await initializeMcp(tokens.access_token, '1.0.0');
+  const discovered = primarySession.discovery;
+  assert.ok(discovered.result?.supportedVersions?.includes(mcpProtocolVersion));
   assert.ok(discovered.result?.capabilities?.tools);
   assert.ok(discovered.result?.capabilities?.resources);
   assert.equal(discovered.result?.capabilities?.experimental?.relai?.toolSurfaceVersion, toolSurfaceVersion);
 
-  const tools = await mcp(11, 'tools/list', {}, tokens.access_token);
+  const tools = await mcp(primarySession, 11, 'tools/list', {});
   assert.equal(tools.result?.tools?.length, toolCount);
   const toolNames = new Set(tools.result.tools.map(tool => tool.name));
   for (const requiredTool of ['relai_start_task', 'relai_read', 'relai_complete_task']) {
     assert.equal(toolNames.has(requiredTool), true, `Packaged tool surface is missing ${requiredTool}.`);
   }
-  const resourcesList = await mcp(12, 'resources/list', {}, tokens.access_token);
+  const nativeProbe = await mcp(primarySession, 111, 'tools/call', {
+    name: 'relai_native_tasks_probe', arguments: { durationMs: 1000, label: 'Packaged native Tasks acceptance' }
+  });
+  assert.equal(nativeProbe.result?.resultType, 'task');
+  const nativeTaskId = nativeProbe.result?.taskId;
+  assert.ok(nativeTaskId);
+  await new Promise(resolve => setTimeout(resolve, 1100));
+  const nativeTask = await mcp(primarySession, 112, 'tasks/get', { taskId: nativeTaskId });
+  assert.equal(nativeTask.result?.status, 'completed');
+  assert.equal(nativeTask.result?.result?.structuredContent?.nativeTasksProbe, true);
+  const resourcesList = await mcp(primarySession, 12, 'resources/list', {});
   assert.ok(resourcesList.result?.resources?.some(item => item.uri === 'relai://server/tool-surface'));
   assert.ok(resourcesList.result?.resources?.some(item => item.uri === 'relai://server/workspaces'));
-  const surface = await readResource(13, 'relai://server/tool-surface', tokens.access_token);
+  const surface = await readResource(primarySession, 13, 'relai://server/tool-surface');
   assert.equal(surface.toolSurfaceVersion, toolSurfaceVersion);
   assert.equal(surface.toolCount, toolCount);
   assert.deepEqual(surface.compatibilityAliases, {});
-  const help = await readResourceText(14, 'relai://server/help', tokens.access_token);
+  const help = await readResourceText(primarySession, 14, 'relai://server/help');
   assert.ok(help.includes(`version: ${applicationVersion}`));
 
-  const started = await callTool(15, 'relai_start_task', {
+  const started = await callTool(primarySession, 15, 'relai_start_task', {
     workspace: 'acceptance',
     title: 'Packaged connector acceptance',
     objective: 'Verify packaged ESM runtime, guarded mutation, validation, observability, completion, and reconnect behavior.'
-  }, tokens.access_token);
+  });
   const taskId = started.task_id;
   assert.ok(taskId);
-  await callTool(16, 'relai_repo_snapshot', { workspace: 'acceptance', task_id: taskId, maxEntries: 50 }, tokens.access_token);
-  const read = await callTool(17, 'relai_read', {
+  await callTool(primarySession, 16, 'relai_repo_snapshot', { workspace: 'acceptance', task_id: taskId, maxEntries: 50 });
+  const read = await callTool(primarySession, 17, 'relai_read', {
     workspace: 'acceptance', task_id: taskId, paths: ['acceptance.txt'], guidanceMode: 'none'
-  }, tokens.access_token);
+  });
   assert.equal(read.items?.[0]?.content, 'packaged connector acceptance\n');
 
-  const edited = await callTool(18, 'relai_edit', {
+  const edited = await callTool(primarySession, 18, 'relai_edit', {
     workspace: 'acceptance',
     task_id: taskId,
     path: 'acceptance.txt',
     oldText: 'packaged connector acceptance\n',
     newText: 'packaged connector acceptance verified\n',
     returnDiff: true
-  }, tokens.access_token);
+  });
   assert.equal(edited.changed, true);
   assert.ok(edited.changedFiles?.includes('acceptance.txt'));
   assert.equal(fs.readFileSync(path.join(workspace, 'acceptance.txt'), 'utf8'), 'packaged connector acceptance verified\n');
 
-  const status = await callTool(19, 'relai_status', { workspace: 'acceptance', task_id: taskId }, tokens.access_token);
+  const status = await callTool(primarySession, 19, 'relai_status', { workspace: 'acceptance', task_id: taskId });
   assert.equal(status.version, applicationVersion);
   assert.equal(status.toolSurface?.toolCount, toolCount);
   assert.equal(status.toolSurface?.toolSurfaceVersion, toolSurfaceVersion);
@@ -175,13 +197,13 @@ try {
   assert.ok(activeTask, 'dashboard task history must contain the active packaged acceptance task');
   assert.ok(activeDashboard.auditTail?.entries?.some(item => item.taskId === taskId && item.tool === 'relai_edit' && item.ok !== false));
 
-  const completed = await callTool(20, 'relai_run_checks', {
+  const completed = await callTool(primarySession, 20, 'relai_run_checks', {
     workspace: 'acceptance',
     task_id: taskId,
     check: 'npm run check',
     complete: true,
     summary: 'Packaged ESM connector accepted after guarded write, validation, activity inspection, and reconnect verification.'
-  }, tokens.access_token);
+  });
   assert.equal(completed.validationStatus, 'passed');
   assert.equal(completed.completionKnown, true);
   assert.equal(completed.completionSource, 'relai_run_checks');
@@ -197,7 +219,9 @@ try {
     assert.ok(completedDashboard.auditTail?.entries?.some(item => item.taskId === taskId && item.tool === expectedTool), `dashboard activity is missing ${expectedTool}`);
   }
 
-  const reconnected = await mcp(30, 'server/discover', {}, tokens.access_token, { clientVersion: '2.0.0' });
+  reconnectSession = await initializeMcp(tokens.access_token, '2.0.0');
+  const reconnected = reconnectSession.discovery;
+  assert.ok(reconnected.result?.supportedVersions?.includes(mcpProtocolVersion));
   assert.ok(reconnected.result?.capabilities?.tools);
   assert.ok(reconnected.result?.capabilities?.resources);
   const reconnectedDashboard = await dashboard();
@@ -205,20 +229,73 @@ try {
   assert.equal(reconnectedTask?.completionKnown, true);
   assert.equal(reconnectedTask?.status, 'completed');
 
-  const rejected = await mcp(31, 'tools/call', {
+  const rejected = await mcp(reconnectSession, 31, 'tools/call', {
     name: 'relai_read',
     arguments: { workspace: 'acceptance', task_id: taskId, paths: ['acceptance.txt'], guidanceMode: 'none' }
-  }, tokens.access_token);
+  });
   assert.equal(rejected.result?.isError, true);
   assert.equal(rejected.result?.structuredContent?.errorCode, 'INVALID_TASK_STATE');
+
+  const chatGptInitializeResponse = await fetch(`${base}/mcp`, {
+    method: 'POST',
+    headers: mcpHeaders('', primarySession),
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 30,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2025-11-25',
+        capabilities: {},
+        clientInfo: { name: 'ChatGPT', version: '1.0.0' }
+      }
+    })
+  });
+  const chatGptInitialize = await readMcpResponse(chatGptInitializeResponse);
+  assert.equal(chatGptInitializeResponse.status, 200, JSON.stringify(chatGptInitialize));
+  assert.equal(chatGptInitialize.result?.protocolVersion, '2025-11-25');
+  assert.ok(chatGptInitialize.result?.capabilities?.tools);
+
+  const chatGptInitializedResponse = await fetch(`${base}/mcp`, {
+    method: 'POST',
+    headers: {
+      ...mcpHeaders('', primarySession),
+      'mcp-protocol-version': '2025-11-25'
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} })
+  });
+  assert.ok([200, 202, 204].includes(chatGptInitializedResponse.status));
+
+  const chatGptToolsResponse = await fetch(`${base}/mcp`, {
+    method: 'POST',
+    headers: {
+      ...mcpHeaders('', primarySession),
+      'mcp-protocol-version': '2025-11-25'
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 33, method: 'tools/list', params: {} })
+  });
+  const chatGptTools = await readMcpResponse(chatGptToolsResponse);
+  assert.equal(chatGptToolsResponse.status, 200, JSON.stringify(chatGptTools));
+  assert.equal(chatGptTools.result?.tools?.length, toolCount);
+
+  const legacyResponse = await fetch(`${base}/mcp`, {
+    method: 'POST',
+    headers: mcpHeaders('initialize', primarySession),
+    body: JSON.stringify({ jsonrpc: '2.0', id: 32, method: 'initialize', params: {
+      protocolVersion: '2025-11-25', capabilities: {}, clientInfo: primarySession.clientInfo
+    } })
+  });
+  assert.equal(legacyResponse.status, 400);
+  assert.equal((await readMcpResponse(legacyResponse)).error?.code, -32601);
 
   for (const removedPath of ['/sse', '/messages']) {
     const response = await fetch(`${base}${removedPath}`);
     assert.equal(response.status, 404, `${removedPath} must remain removed`);
   }
 
-  console.log('Packaged connector acceptance passed: packaged OAuth CSS, release/tool versions, guarded write attribution, validation, dashboard activity/history, atomic completion, reconnect persistence/rejection, and removed legacy routes verified.');
+  console.log('Packaged connector acceptance passed: OAuth, modern stateless discovery, ChatGPT legacy initialization/tool scan compatibility, native Tasks, release/tool versions, guarded write attribution, validation, dashboard history, reconnect persistence, strict modern lifecycle rejection, and removed routes verified.');
 } finally {
+  if (reconnectSession) await closeMcpSession(reconnectSession).catch(() => {});
+  if (primarySession && !primarySession.closed) await closeMcpSession(primarySession).catch(() => {});
   if (child && !child.killed) child.kill('SIGKILL');
   if (child) await Promise.race([once(child, 'close'), new Promise(resolve => setTimeout(resolve, 2000))]).catch(() => {});
   fs.rmSync(sandbox, { recursive: true, force: true });
@@ -239,12 +316,12 @@ async function dashboard() {
   return payload;
 }
 
-async function readResource(id, uri, accessToken) {
-  return JSON.parse(await readResourceText(id, uri, accessToken));
+async function readResource(session, id, uri) {
+  return JSON.parse(await readResourceText(session, id, uri));
 }
 
-async function readResourceText(id, uri, accessToken) {
-  const response = await mcp(id, 'resources/read', { uri }, accessToken);
+async function readResourceText(session, id, uri) {
+  const response = await mcp(session, id, 'resources/read', { uri });
   const text = response.result?.contents?.[0]?.text;
   assert.equal(typeof text, 'string', `resource ${uri} did not return text`);
   return text;
@@ -321,38 +398,55 @@ async function postForm(pathname, values, manual = false) {
   });
 }
 
-function mcpHeaders(method, accessToken, name = '') {
+function mcpHeaders(method, session = null, name = '') {
   return {
     'content-type': 'application/json',
     accept: 'application/json, text/event-stream',
-    'mcp-protocol-version': mcpProtocolVersion,
-    'mcp-method': method,
+    ...(method ? { 'mcp-protocol-version': mcpProtocolVersion, 'mcp-method': method } : {}),
     ...(name ? { 'mcp-name': name } : {}),
-    ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {})
+    ...(session?.accessToken ? { authorization: `Bearer ${session.accessToken}` } : {})
   };
 }
 
-async function mcp(id, method, params, accessToken, options = {}) {
+async function initializeMcp(accessToken, clientVersion) {
+  const session = {
+    accessToken,
+    clientInfo: { name: 'packaged-chatgpt-acceptance', version: clientVersion },
+    clientCapabilities: { extensions: { 'io.modelcontextprotocol/tasks': {} } },
+    discovery: null,
+    closed: false
+  };
+  const response = await fetch(`${base}/mcp`, {
+    method: 'POST',
+    headers: mcpHeaders('server/discover', session),
+    body: mcpBody(session, 10, 'server/discover', {})
+  });
+  if (response.status !== 200) {
+    const body = await response.text();
+    assert.equal(response.status, 200, `server/discover returned HTTP ${response.status}: ${body}`);
+  }
+  assert.equal(response.headers.get('mcp-session-id'), null);
+  session.discovery = await readMcpResponse(response);
+  return session;
+}
+
+async function closeMcpSession(session) {
+  if (!session || session.closed) return;
+  session.closed = true;
+}
+
+async function mcp(session, id, method, params) {
   const name = method === 'tools/call'
     ? String(params?.name || '')
     : method === 'resources/read'
       ? String(params?.uri || '')
+      : ['tasks/get', 'tasks/update', 'tasks/cancel'].includes(method)
+        ? String(params?.taskId || '')
       : '';
-  const requestParams = {
-    ...(params || {}),
-    _meta: {
-      'io.modelcontextprotocol/protocolVersion': mcpProtocolVersion,
-      'io.modelcontextprotocol/clientInfo': {
-        name: 'packaged-chatgpt-acceptance',
-        version: options.clientVersion || '1.0.0'
-      },
-      'io.modelcontextprotocol/clientCapabilities': {}
-    }
-  };
   const response = await fetch(`${base}/mcp`, {
     method: 'POST',
-    headers: mcpHeaders(method, accessToken, name),
-    body: JSON.stringify({ jsonrpc: '2.0', id, method, params: requestParams })
+    headers: mcpHeaders(method, session, name),
+    body: mcpBody(session, id, method, params)
   });
   if (response.status !== 200) {
     const body = await response.text();
@@ -361,8 +455,25 @@ async function mcp(id, method, params, accessToken, options = {}) {
   return readMcpResponse(response);
 }
 
-async function callTool(id, name, args, accessToken) {
-  const response = await mcp(id, 'tools/call', { name, arguments: args }, accessToken);
+function mcpBody(session, id, method, params = {}) {
+  return JSON.stringify({
+    jsonrpc: '2.0',
+    id,
+    method,
+    params: {
+      ...params,
+      _meta: {
+        ...(params?._meta || {}),
+        [PROTOCOL_VERSION_META_KEY]: mcpProtocolVersion,
+        [CLIENT_INFO_META_KEY]: session.clientInfo,
+        [CLIENT_CAPABILITIES_META_KEY]: session.clientCapabilities
+      }
+    }
+  });
+}
+
+async function callTool(session, id, name, args) {
+  const response = await mcp(session, id, 'tools/call', { name, arguments: args });
   assert.equal(response.result?.isError, false, `${name} failed: ${JSON.stringify(response.result?.structuredContent || response.error)}`);
   return response.result.structuredContent;
 }

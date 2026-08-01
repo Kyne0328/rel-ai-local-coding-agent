@@ -7,17 +7,17 @@
 import { MAX_BATCH_EDITS } from "../editLimits.js";
 import { outputSchemaFor } from "./outputSchemas.js";
 
-const TOOL_SURFACE_VERSION = 23;
+const TOOL_SURFACE_VERSION = 25;
 
 /** @type {ToolDefinitionInput[]} */
 const TOOL_DEFINITION_VALUES = [
   {
     name: "relai_start_task",
     title: "Start Logical Task",
-    description: "Create an independent logical Rel.AI task and return an opaque task_id. Call this once for each unrelated ChatGPT task, then pass the returned task_id to every subsequent task-scoped tool call. The identity does not depend on ChatGPT conversation metadata or transport sessions.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"title":{"type":"string","minLength":1,"maxLength":100},"objective":{"type":"string","minLength":1,"maxLength":500}},"required":["workspace"],"additionalProperties":false},
+    description: "Create an independent workspace-bound Rel.AI task and return its opaque task_id plus compact repository bootstrap context. Call this once for each unrelated ChatGPT task. Subsequent task-scoped tools require task_id and resolve the bound workspace automatically; workspace may be supplied only as an ownership assertion.",
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"title":{"type":"string","minLength":1,"maxLength":100},"objective":{"type":"string","minLength":1,"maxLength":500},"bootstrap":{"type":"string","enum":["compact","full","none"],"description":"Initial repository context returned with the task. Defaults to compact."},"instructionPath":{"type":"string","maxLength":1000,"description":"Optional workspace-relative file or directory used to discover applicable nested AGENTS.md instructions."}},"required":["workspace"],"additionalProperties":false},
     handlerName: 'startTask',
-
+    behavior: {"taskScope":"none"},
     dashboard: {"category":"Workflow"}
   },
   {
@@ -55,7 +55,7 @@ const TOOL_DEFINITION_VALUES = [
     name: "relai_exec",
     title: "Run Workspace Command",
     description: "Run a one-shot development command inside a configured workspace and return exit status, bounded stdout and stderr, timing, and detected file changes. cwd is workspace-relative. A successful result does not replace final relai_run_checks validation.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"command":{"type":"string","minLength":1,"maxLength":20000},"cwd":{"type":"string"},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000},"env":{"type":"object","additionalProperties":{"type":"string"}},"maxOutputBytes":{"type":"number","minimum":1000,"maximum":16777216},"defer":{"type":"boolean"}},"required":["workspace","command"],"additionalProperties":false},
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"command":{"type":"string","minLength":1,"maxLength":20000},"cwd":{"type":"string"},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000},"env":{"type":"object","additionalProperties":{"type":"string"}},"maxOutputBytes":{"type":"number","minimum":1000,"maximum":16777216}},"required":["workspace","command"],"additionalProperties":false},
     handlerName: 'exec',
     behavior: {"audit":"exec","cache":"workspace","longRunning":true},
   },
@@ -104,7 +104,7 @@ const TOOL_DEFINITION_VALUES = [
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"name":{"type":"string","minLength":1,"maxLength":80},"base":{"type":"string","maxLength":200},"branch":{"type":"string","maxLength":200}},"required":["workspace","name"],"additionalProperties":false},
     handlerName: 'worktreeCreate',
     groups: ["git"],
-    behavior: {"audit":"exec","cache":"workspace"},
+    behavior: {"audit":"exec","cache":"workspace","concurrencyScope":"workspace"},
   },
   {
     name: "relai_worktree_list",
@@ -121,7 +121,7 @@ const TOOL_DEFINITION_VALUES = [
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"alias":{"type":"string","minLength":1,"maxLength":180},"force":{"type":"boolean"}},"required":["workspace","alias"],"additionalProperties":false},
     handlerName: 'worktreeRemove',
     groups: ["git","cleanup"],
-    behavior: {"audit":"exec","cache":"workspace"},
+    behavior: {"audit":"exec","cache":"workspace","concurrencyScope":"workspace"},
     dashboard: {"requiresApproval":true}
   },
   {
@@ -135,7 +135,7 @@ const TOOL_DEFINITION_VALUES = [
     name: "relai_diagnostics_run",
     title: "Run Structured Diagnostics",
     description: "Run detected or explicit language diagnostics and normalize file, line, column, severity, code, message, and source.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"command":{"type":"string","maxLength":20000},"commands":{"type":"array","items":{"type":"string"},"maxItems":50},"level":{"type":"string","enum":["quick","standard","release"]},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000},"maxResults":{"type":"number","minimum":1,"maximum":5000},"stopOnFailure":{"type":"boolean"},"defer":{"type":"boolean"}},"required":["workspace"],"additionalProperties":false},
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"command":{"type":"string","maxLength":20000},"commands":{"type":"array","items":{"type":"string"},"maxItems":50},"level":{"type":"string","enum":["quick","standard","release"]},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000},"maxResults":{"type":"number","minimum":1,"maximum":5000},"stopOnFailure":{"type":"boolean"}},"required":["workspace"],"additionalProperties":false},
     handlerName: 'diagnosticsRun',
     behavior: {"audit":"checks","summary":"checks","longRunning":true},
   },
@@ -148,20 +148,13 @@ const TOOL_DEFINITION_VALUES = [
     groups: ["audit"],
   },
   {
-    name: "relai_operation_task_get",
-    title: "Get Deferred Operation",
-    description: "Read-only. Return the current status, progress, result, or error for one durable Rel.AI deferred operation owned by the same logical task.",
-    inputSchema: {"type":"object","properties":{"operationTaskId":{"type":"string","minLength":1,"maxLength":200}},"required":["operationTaskId"],"additionalProperties":false},
-    handlerName: 'operationTaskGet',
-    dashboard: {"category":"Workflow"}
-  },
-  {
-    name: "relai_operation_task_cancel",
-    title: "Cancel Deferred Operation",
-    description: "Cancel one active durable Rel.AI deferred operation owned by the same logical task. Cooperative commands receive an abort signal and terminate their process tree.",
-    inputSchema: {"type":"object","properties":{"operationTaskId":{"type":"string","minLength":1,"maxLength":200}},"required":["operationTaskId"],"additionalProperties":false},
-    handlerName: 'operationTaskCancel',
-    behavior: {"audit":"exec"},
+    name: "relai_native_tasks_probe",
+    title: "Probe Native MCP Tasks",
+    description: "Diagnostic canary for native MCP Tasks support. An HTTP client that advertises io.modelcontextprotocol/tasks receives a native asynchronous task. Other clients receive a synchronous capability report.",
+    inputSchema: {"type":"object","properties":{"durationMs":{"type":"number","minimum":1000,"maximum":30000},"label":{"type":"string","maxLength":120}},"required":[],"additionalProperties":false},
+    outputSchema: {"type":"object","properties":{"ok":{"type":"boolean"},"probeEnabled":{"type":"boolean"},"extensionId":{"type":"string"},"clientAdvertisedTasks":{"type":"boolean"},"transport":{"type":"string"},"nativeTaskReturned":{"type":"boolean"},"message":{"type":"string"},"nextAction":{"type":"string"}},"required":["ok","probeEnabled","extensionId","clientAdvertisedTasks","transport","nativeTaskReturned","message"],"additionalProperties":false},
+    handlerName: 'nativeTasksProbe',
+    behavior: {"taskScope":"none"},
     dashboard: {"category":"Workflow"}
   },
   {
@@ -179,12 +172,13 @@ const TOOL_DEFINITION_VALUES = [
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"planId":{"type":"string"}},"required":["workspace","planId"],"additionalProperties":false},
     handlerName: 'tidyRun',
     groups: ["cleanup"],
+    behavior: {"concurrencyScope":"workspace"},
   },
   {
     name: "relai_run_checks",
     title: "Workspace Checks",
     description: "Run workspace validation checks (tests, linters, analyzers, build). Use level quick, standard, or release. Output is bounded to each step's tail where failures appear; pass fullOutput:true for a larger tail. On the final validation, pass complete:true with summary to explicitly validate and close the task atomically. Otherwise use relai_complete_task after any final read-only review.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"level":{"type":"string","enum":["quick","standard","release"]},"check":{"type":"string"},"checks":{"type":"array","items":{"type":"string"},"minItems":0},"checksText":{"type":"string"},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000},"stopOnFailure":{"type":"boolean"},"fullOutput":{"type":"boolean"},"planId":{"type":"string","minLength":1,"maxLength":100},"planLevel":{"type":"string","enum":["focused","quick","standard","release"]},"defer":{"type":"boolean"},"complete":{"type":"boolean"},"summary":{"type":"string","minLength":1,"maxLength":2000}},"required":["workspace"],"additionalProperties":false},
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"level":{"type":"string","enum":["quick","standard","release"]},"check":{"type":"string"},"checks":{"type":"array","items":{"type":"string"},"minItems":0},"checksText":{"type":"string"},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000},"stopOnFailure":{"type":"boolean"},"fullOutput":{"type":"boolean"},"planId":{"type":"string","minLength":1,"maxLength":100},"planLevel":{"type":"string","enum":["focused","quick","standard","release"]},"complete":{"type":"boolean"},"summary":{"type":"string","minLength":1,"maxLength":2000}},"required":["workspace"],"additionalProperties":false},
     handlerName: 'runChecks',
     behavior: {"audit":"checks","summary":"checks","longRunning":true},
   },
@@ -219,7 +213,7 @@ const TOOL_DEFINITION_VALUES = [
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"paths":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":100}},"required":["workspace","paths"],"additionalProperties":false},
     handlerName: 'restorePaths',
     groups: ["cleanup"],
-    behavior: {"cache":"paths"},
+    behavior: {"cache":"paths","concurrencyScope":"workspace"},
   },
   {
     name: "relai_reset_workspace",
@@ -228,7 +222,7 @@ const TOOL_DEFINITION_VALUES = [
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"confirmation":{"type":"string","enum":["RESET","RESET_AND_CLEAN"]},"removeUntracked":{"type":"boolean"}},"required":["workspace","confirmation"],"additionalProperties":false},
     handlerName: 'resetWorkspace',
     groups: ["cleanup"],
-    behavior: {"cache":"workspace"},
+    behavior: {"cache":"workspace","concurrencyScope":"workspace"},
     dashboard: {"requiresApproval":true}
   },
   {
@@ -237,6 +231,7 @@ const TOOL_DEFINITION_VALUES = [
     description: "Read-only. Return configured workspace aliases and tool-surface status. When workspace is provided, also return command configuration, session policy, branch, ahead/behind counts, ownership-split changes, and untracked-file state under workspace.repository.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"maxBytes":{"type":"number","minimum":1000,"maximum":5242880}},"required":[],"additionalProperties":false},
     handlerName: 'status',
+    behavior: {"taskScope":"optional"},
   },
   {
     name: "relai_git_commit",
@@ -245,6 +240,7 @@ const TOOL_DEFINITION_VALUES = [
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"message":{"type":"string"},"dryRun":{"type":"boolean"},"addAll":{"type":"boolean"},"sensitiveAuthorization":{"type":"object","properties":{"operation":{"type":"string","enum":["commit"]},"paths":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":200},"reason":{"type":"string","minLength":1,"maxLength":500}},"required":["operation","paths","reason"],"additionalProperties":false},"paths":{"type":"array","items":{"type":"string"},"minItems":0,"maxItems":200},"maxBytes":{"type":"number","minimum":1000,"maximum":5242880},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000}},"required":["workspace","message"],"additionalProperties":false},
     handlerName: 'gitCommit',
     groups: ["git"],
+    behavior: {"concurrencyScope":"workspace"},
   },
   {
     name: "relai_git_push",
@@ -253,6 +249,7 @@ const TOOL_DEFINITION_VALUES = [
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"remote":{"type":"string"},"branch":{"type":"string"},"dryRun":{"type":"boolean"},"setUpstream":{"type":"boolean"},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000}},"required":["workspace"],"additionalProperties":false},
     handlerName: 'gitPush',
     groups: ["git"],
+    behavior: {"concurrencyScope":"workspace"},
   },
   {
     name: "relai_git_draft_pr",
@@ -291,12 +288,12 @@ const TOOL_DEFINITION_VALUES = [
 ];
 const READ_ONLY_TOOLS = new Set([
   'relai_repo_snapshot', 'relai_read', 'relai_search', 'relai_code_inspect', 'relai_semantic_search',
-  'relai_process_read', 'relai_process_list', 'relai_worktree_list', 'relai_validation_plan', 'relai_operation_task_get',
-  'relai_http_probe', 'relai_diff', 'relai_status', 'relai_git_draft_pr'
+  'relai_process_read', 'relai_process_list', 'relai_worktree_list', 'relai_validation_plan',
+  'relai_native_tasks_probe', 'relai_http_probe', 'relai_diff', 'relai_status', 'relai_git_draft_pr'
 ]);
 const DESTRUCTIVE_TOOLS = new Set([
   'relai_exec', 'relai_process_start', 'relai_process_write', 'relai_process_stop',
-  'relai_worktree_create', 'relai_worktree_remove', 'relai_diagnostics_run', 'relai_operation_task_cancel',
+  'relai_worktree_create', 'relai_worktree_remove', 'relai_diagnostics_run',
   'relai_tidy_run', 'relai_restore_paths', 'relai_reset_workspace', 'relai_edit', 'relai_cancel_task'
 ]);
 const OPEN_WORLD_TOOLS = new Set(['relai_exec', 'relai_process_start', 'relai_diagnostics_run', 'relai_git_push']);
@@ -312,7 +309,8 @@ function annotationsFor(name) {
 }
 
 const DEFAULT_BEHAVIOR = Object.freeze({
-  audit: '', cache: '', startsSession: false, deferStagedSession: false, sessionWrite: false, summary: '', longRunning: false
+  audit: '', cache: '', startsSession: false, deferStagedSession: false, sessionWrite: false, summary: '', longRunning: false,
+  taskScope: 'required', concurrencyScope: 'task'
 });
 const DEFAULT_DASHBOARD = Object.freeze({
   category: 'Workspace tools', requiredProfile: 'workspace', requiresApproval: false

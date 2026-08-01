@@ -17,6 +17,8 @@ function debugSwallow(context, error) {
 }
 
 /** @type {Readonly<Record<string, AuditEnricher>>} */
+const CODE_MUTATING_TOOLS = new Set(['relai_edit', 'relai_tidy_run', 'relai_restore_paths', 'relai_reset_workspace']);
+
 const AUDIT_ENRICHERS = Object.freeze({
   edit: enrichEditAudit,
   exec: enrichExecAudit,
@@ -37,11 +39,8 @@ function buildExtraAudit(name, value, args) {
 }
 
 function enrichCommonAudit(extra, name, value) {
-  const changedFiles = Array.isArray(value?.changedFiles)
-    ? value.changedFiles
-    : Array.isArray(value?.statusAfter?.sessionChangedFiles)
-      ? value.statusAfter.sessionChangedFiles
-      : [];
+  const mutationCapable = CODE_MUTATING_TOOLS.has(name) || name === 'relai_exec';
+  const changedFiles = mutationCapable && Array.isArray(value?.changedFiles) ? value.changedFiles : [];
   if (changedFiles.length) extra.changedFiles = changedFiles.slice(0, 200);
   assignTruthy(extra, "validationStatus", value?.validationStatus);
   if (name === "relai_git_commit" && value?.ok !== false) extra.commitCreated = true;
@@ -74,6 +73,7 @@ function enrichExecAudit(extra, value) {
 function enrichChecksAudit(extra, value) {
   assignTruthy(extra, "validationLevel", value?.validationLevel);
   assignTruthy(extra, "validationLevelReason", value?.validationLevelReason);
+  assignTruthy(extra, "validationFingerprint", value?.validationFingerprint);
   assignDefined(extra, "aliasNormalizations", value?.aliasNormalizations);
   if (value?.policy) extra.policySessionActive = value.policy.sessionActive;
   if (value?.completionKnown === true) enrichCompletionAudit(extra, value);

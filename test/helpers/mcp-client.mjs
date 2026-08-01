@@ -3,6 +3,13 @@ import { once } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import {
+  CLIENT_CAPABILITIES_META_KEY,
+  CLIENT_INFO_META_KEY,
+  PROTOCOL_VERSION_META_KEY
+} from '@modelcontextprotocol/server';
+
+export const MCP_VERSION = '2026-07-28';
 
 export function startMcpClient({
   root,
@@ -57,34 +64,44 @@ export function startMcpClient({
     waiters.clear();
   });
 
-  function withMeta(params = {}) {
-    return {
-      ...params,
-      _meta: {
-        ...(params?._meta || {}),
-        'io.modelcontextprotocol/protocolVersion': '2026-07-28',
-        'io.modelcontextprotocol/clientInfo': clientInfo,
-        'io.modelcontextprotocol/clientCapabilities': clientCapabilities
-      }
-    };
-  }
-
-  function send(id, method, params = {}) {
+  function send(id, method, params = {}, requestOptions = {}) {
     if (closed) throw new Error(`Cannot send ${method}; MCP process is closed.`);
-    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params: withMeta(params) })}\n`);
+    child.stdin.write(`${JSON.stringify(message(id, method, params, requestOptions))}\n`);
   }
 
-  function notify(method, params = {}) {
+  function notify(method, params = {}, requestOptions = {}) {
+    if (method === 'notifications/initialized') return;
     if (closed) throw new Error(`Cannot send ${method}; MCP process is closed.`);
-    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method, params: withMeta(params) })}\n`);
+    child.stdin.write(`${JSON.stringify(message(null, method, params, requestOptions))}\n`);
   }
 
-  function discover(id) {
+  function initialize(id) {
     send(id, 'server/discover');
   }
 
-  function call(id, name, args = {}) {
-    send(id, 'tools/call', { name, arguments: args });
+  function call(id, name, args = {}, requestOptions = {}) {
+    send(id, 'tools/call', { name, arguments: args }, requestOptions);
+  }
+
+  function message(id, method, params, requestOptions) {
+    const capabilities = requestOptions.clientCapabilities === undefined
+      ? clientCapabilities
+      : requestOptions.clientCapabilities;
+    const implementation = requestOptions.clientInfo || clientInfo;
+    return {
+      jsonrpc: '2.0',
+      ...(id == null ? {} : { id }),
+      method,
+      params: {
+        ...params,
+        _meta: {
+          ...(params?._meta || {}),
+          [PROTOCOL_VERSION_META_KEY]: MCP_VERSION,
+          [CLIENT_INFO_META_KEY]: implementation,
+          [CLIENT_CAPABILITIES_META_KEY]: capabilities
+        }
+      }
+    };
   }
 
   function waitFor(id, waitTimeoutMs = timeoutMs) {
@@ -112,7 +129,7 @@ export function startMcpClient({
     if (ownedStateDir) fs.rmSync(ownedStateDir, { recursive: true, force: true });
   }
 
-  return { send, notify, discover, call, waitFor, close };
+  return { send, notify, initialize, call, waitFor, close };
 }
 
 export function structuredContentOf(response) {

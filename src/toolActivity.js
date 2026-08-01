@@ -192,11 +192,9 @@ function createToolActivityTracker(options = {}) {
       const terminalBeforeFinish = isTerminalTaskStatus(task.status);
       task.currentOperations.delete(operationId);
       task.activeCalls = Math.max(0, task.activeCalls - 1);
-      if (!terminalBeforeFinish && result.ok === false) task.failures += 1;
       task.lastTool = current.tool || task.lastTool;
       task.workspace = current.workspace || task.workspace;
       task.lastOperation = current.label || task.lastOperation;
-      if (!terminalBeforeFinish) task.lastOutcome = result.ok === false ? 'failed' : 'succeeded';
       task.lastActivityAt = finishedAt;
       task.updatedAt = finishedAt;
       const completionActivity = result.activity && typeof result.activity === 'object'
@@ -211,6 +209,11 @@ function createToolActivityTracker(options = {}) {
         : result.ok === false
           ? (completionActivity.status || 'failed')
           : (completionActivity.status === 'blocked' ? 'blocked' : 'succeeded');
+      const blockedResult = current.activity.status === 'blocked';
+      const validationStatus = String(current.activity?.metadata?.validationStatus || '');
+      const recoverableValidationFailure = current.tool === 'relai_run_checks' && ['failed', 'not_run'].includes(validationStatus);
+      if (!terminalBeforeFinish && result.ok === false && !blockedResult && !recoverableValidationFailure) task.failures += 1;
+      if (!terminalBeforeFinish) task.lastOutcome = blockedResult ? 'blocked' : result.ok === false ? 'failed' : 'succeeded';
       current.activity.completedAt = new Date(finishedAt).toISOString();
       current.activity.durationMs = Math.max(0, finishedAt - startedAt);
       const queueWaitMs = Number(current.activity?.metadata?.waitMs || 0);
@@ -222,13 +225,28 @@ function createToolActivityTracker(options = {}) {
         task.currentActivity = completionActivity.currentActivity || current.activity.summary || task.currentActivity;
         task.progress = normalizeTaskProgress(completionActivity.progress || task.progress, task.status);
         task.successes += result.ok === false ? 0 : 1;
-        task.errorSummary = result.ok === false ? sanitizeDisplayText(result.error || current.activity.error?.message || '', 500) : task.errorSummary;
+        task.errorSummary = result.ok === false && !blockedResult
+          ? sanitizeDisplayText(result.error || current.activity.error?.message || '', 500)
+          : '';
       }
       if (!terminalBeforeFinish && task.activeCalls === 0 && !task.completionRequest) {
-        if (current.activity.status === 'blocked') {
-          task.status = 'waiting_for_approval';
-          task.currentStage = 'Waiting for approval';
-          task.progress = { mode: 'indeterminate', label: 'Approval required' };
+        if (recoverableValidationFailure) {
+          task.status = 'validation_failed';
+          task.currentStage = 'Validation failed';
+          task.progress = normalizeTaskProgress({
+            ...task.progress,
+            percentage: Math.min(99, Number(task.progress?.percentage ?? 99)),
+            label: 'Fix issues and revalidate'
+          }, task.status);
+        } else if (current.activity.status === 'blocked') {
+          const blockedCode = String(current.activity?.error?.code || current.activity?.metadata?.errorCode || '');
+          const validationRequired = /VALIDATION_REQUIRED|TASK_PERSISTENCE_CONFLICT/.test(blockedCode);
+          task.status = validationRequired ? 'blocked' : 'waiting_for_approval';
+          task.currentStage = validationRequired ? 'Validation required' : 'Waiting for approval';
+          task.progress = {
+            mode: 'indeterminate',
+            label: validationRequired ? 'Final validation required' : 'Approval required'
+          };
         } else {
           task.status = 'planning';
           const preserveWorkflowProgress = task.progress?.mode === 'determinate';
@@ -463,13 +481,13 @@ function createToolActivityTracker(options = {}) {
       ...taskSnapshot(task),
       state: 'ended',
       status: task.status,
-      completionKnown: task.status === 'completed' || task.status === 'completed_with_warnings',
+      completionKnown: task.status === 'completed',
       endReason: task.endReason || (task.status === 'cancelled' ? 'explicit_cancellation' : 'terminal'),
       terminalReason: task.terminalReason || task.currentActivity,
       cancellationInitiator: task.cancellationInitiator || undefined,
       endedAt,
       cancelledAt: task.cancelledAt || undefined,
-      completedAt: task.status === 'completed' || task.status === 'completed_with_warnings' ? endedAt : undefined,
+      completedAt: task.status === 'completed' ? endedAt : undefined,
       updatedAt: new Date(task.updatedAt || endedAt).toISOString(),
       durationMs: Math.max(0, endedAt - task.startedAt)
     });
@@ -495,7 +513,8 @@ function createToolActivityTracker(options = {}) {
     task.completionTimer = null;
     removeTask(task);
     const endedAt = now();
-    const status = task.failures > 0 ? 'failed' : 'cancelled';
+    const unresolvedFailure = task.lastOutcome === 'failed';
+    const status = unresolvedFailure ? 'failed' : 'cancelled';
     lastTask = sanitizeTaskRecord({
       taskId: task.id,
       sessionId: task.id,
@@ -504,7 +523,7 @@ function createToolActivityTracker(options = {}) {
       objective: task.objective,
       status,
       progress: normalizeTaskProgress(task.progress, status),
-      currentStage: task.failures > 0 ? 'Failed after inactivity' : 'Cancelled after inactivity',
+      currentStage: unresolvedFailure ? 'Failed after inactivity' : 'Cancelled after inactivity',
       currentActivity: task.currentActivity,
       endReason: 'inactivity_window',
       calls: task.calls,
@@ -526,7 +545,7 @@ function createToolActivityTracker(options = {}) {
       completedAt: endedAt,
       completedAtIso: new Date(endedAt).toISOString(),
       durationMs: Math.max(0, endedAt - task.startedAt),
-      terminalReason: task.failures > 0 ? 'Task became inactive after an unrecovered failure.' : 'Task was cancelled after the inactivity window elapsed.',
+      terminalReason: unresolvedFailure ? 'Task became inactive after an unrecovered failure.' : 'Task was cancelled after the inactivity window elapsed.',
       events: task.events.map(cloneActivityEvent)
     });
     notify(status, task, { task: lastTask, endReason: lastTask.endReason });
@@ -539,7 +558,7 @@ function createToolActivityTracker(options = {}) {
     removeTask(task);
     const completedAt = now();
     const completion = task.completionRequest;
-    const status = task.failures > 0 ? 'completed_with_warnings' : 'completed';
+    const status = 'completed';
     lastTask = sanitizeTaskRecord({
       taskId: task.id,
       sessionId: task.id,
@@ -815,10 +834,12 @@ function taskError(code, message, details = {}) {
   error.operation = 'task_resolution';
   error.retryable = details.retryable === true;
   error.requiresUserConfirmation = false;
-  error.allowedAlternatives = [
-    'Call relai_start_task once for each independent task.',
-    'Pass the returned task_id on every subsequent task-scoped tool call.'
-  ];
+  error.allowedAlternatives = Array.isArray(details.allowedAlternatives)
+    ? details.allowedAlternatives.map(String).filter(Boolean)
+    : [
+        'Call relai_start_task once for each independent task.',
+        'Pass the returned task_id on every subsequent task-scoped tool call.'
+      ];
   if (Number.isFinite(details.candidateCount)) error.candidateCount = Number(details.candidateCount);
   return error;
 }

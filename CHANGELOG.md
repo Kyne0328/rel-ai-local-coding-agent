@@ -2,10 +2,11 @@
 
 ## [0.23.0] — 2026-07-28
 
-### MCP 2026-07-28 hard cutover
-- **Move the connector to the MCP `2026-07-28` request model through the stable v2 SDK.** Discovery uses `server/discover`; there is no `initialize` handshake, transport session, legacy SSE/messages route, JSON-RPC batch path, or compatibility alias layer.
-- **Require explicit request identity and metadata.** Every request carries the protocol version, method, client identity, capabilities, tracing context, and named target; `Mcp-Session-Id` is rejected instead of being treated as task state.
-- **Publish one 34-tool surface at tool-surface version 23.** Tools now include stable output schemas, private cache hints, signed approval state, exact task ownership, and explicit logical-task cancellation.
+### Standards-compliant MCP lifecycle and recovery
+- **Target MCP `2026-07-28` through the stable v2 SDK without breaking ChatGPT connection scans.** Native stdio and HTTP use `server/discover` plus per-request protocol metadata. The OAuth-protected HTTP endpoint also delegates frozen `2025-11-25` `initialize` and tool-discovery requests to the SDK's stateless compatibility path because ChatGPT still uses that lifecycle; Rel.AI keeps no legacy transport implementation, issues no `MCP-Session-Id`, and does not restore `/sse`, `/messages`, JSON-RPC batches, or tool aliases.
+- **Keep transport connections separate from coding-task identity.** Every stateless request supplies its capabilities and authenticated principal; only the opaque `task_id` returned by `relai_start_task` owns logical work.
+- **Detect and recover stale client state.** Rel.AI fingerprints the canonical tool manifest, serves the current list on every stateless request, invalidates stale credentials, and exposes explicit reconnect or host-action states in the dashboard.
+- **Publish one 33-tool surface at tool-surface version 25.** Task-scoped schemas require a workspace-bound `task_id`, resolve the task workspace automatically, return compact repository bootstrap on task creation, and discover hierarchical `AGENTS.md` guidance.
 
 ### Task observability, privacy, and runtime integrity
 - **Sanitize completion summaries before they enter task state.** One bounded sanitizer now covers credential-bearing headers, token/password assignments, cookies, secret URL fields, private-key blocks, and approval or authorization codes at completion input, tracker, activity, persistence, historical-read, dashboard, SSE, and copy/export boundaries.
@@ -13,12 +14,13 @@
 - **Add explicit cooperative cancellation.** `relai_cancel_task` targets the exact task ID, is idempotent, preserves partial progress, bypasses the workspace lock, records a bounded reason, and signals supported process-backed operations without claiming every external side effect can be reversed.
 - **Report real validation and diagnostics progress.** Known workflows establish a deduplicated denominator before execution, advance after every check, identify failures and timeouts, persist midpoint progress, and never present failed or cancelled work as successful 100% completion.
 - **Detect repository/runtime skew.** Status, MCP discovery, dashboard data, and packaged metadata compare application, protocol, tool-surface, tool-count, schema, and manifest-hash values; incompatible schema-sensitive calls pause until the runtime is restarted or reconnected while safe control calls remain available.
-- **Add production-path regression and acceptance infrastructure.** Security tests inspect raw persisted history and every dashboard projection, real Electron Chromium acceptance covers task states and accessibility, and the machine-readable observability benchmark establishes backend release budgets plus explicit blocked renderer metrics when Electron cannot launch.
+- **Add production-path regression and acceptance infrastructure.** Security tests inspect raw persisted history and every dashboard projection, real Electron Chromium acceptance covers task states, keyboard reachability, 200%/400% zoom, and accessibility, and the machine-readable observability benchmark executes both backend and isolated Electron renderer workloads while failing incomplete runs.
 - **Normalize historical state without destructive migration.** Existing `inactive`, `attention`, and related aliases remain readable through evidence-based mapping; sanitized canonical records are used in memory and on subsequent persistence.
+- **Fail closed on native-task storage faults.** Request validation, task unavailability, record corruption, and filesystem failures now use separate typed errors; protocol responses never expose host paths, corrupt records move out of the active task directory, and pruning reports quarantined records.
 
 ### Durable local coding runtime
 - **Add managed persistent processes.** ChatGPT can start, read, write to, stop, and list long-running commands through stable process IDs, cursor-based logs, process-tree termination, ownership checks, crash-safe metadata, and a dedicated dashboard Processes page.
-- **Add durable deferred operations for long-running one-shot work.** `relai_exec`, diagnostics, and validation may return an `operationTaskId` that can be polled or cancelled without holding an MCP request open. This is the supported fallback because the stable TypeScript SDK does not currently expose a usable native MCP Tasks extension boundary.
+- **Remove the proprietary deferred-operation surface.** The canonical catalog contains 33 tools; `defer`, `operationTaskId`, and the two operation polling tools are no longer public. Persistent commands use `relai_process_*`, while standards-based asynchronous interoperability is exercised through native MCP Tasks on HTTP.
 - **Add managed Git worktrees.** Rel.AI creates isolated branches under its managed worktree root, registers dynamic workspace aliases, inherits workspace policy, refuses unsafe removal, and preserves branches by default.
 - **Expand code intelligence and validation.** Private local hybrid semantic search, symbol/import/caller/test tracing, normalized diagnostics, signed change-aware validation plans, reverse-impact analysis, and affected-test selection are available through the public tool surface.
 
@@ -30,13 +32,16 @@
 
 ### Runtime and release modernization
 - **Require Node.js 24 LTS and npm 11.** Root and Electron manifests declare the runtime policy, npm is pinned through `packageManager`, and CI uses immutable action commit SHAs.
-- **Update and exact-pin the release-critical stack.** Electron remains at 43.2.0, electron-builder moves to 26.15.7, electron-updater is pinned to 6.8.9, MCP SDK packages are pinned to 2.0.0, and `globals` moves to 17.8.0.
+- **Update and exact-pin the release-critical stack.** Electron remains at 43.2.0, electron-builder is pinned to 26.15.3, electron-updater is pinned to 6.8.9, MCP SDK packages are pinned to 2.0.0, and `globals` moves to 17.8.0.
 - **Harden Electron packages before publication.** Setup and recovery pages use the restricted `relai-app://renderer` protocol; packaged binaries disable RunAsNode, `NODE_OPTIONS`, CLI inspection, and extra file-protocol privileges while requiring integrity-validated ASAR loading.
 - **Make Windows releases signed and attributable.** Publication requires protected Authenticode credentials and valid signatures, generates a CycloneDX SBOM, and creates GitHub build-provenance and SBOM attestations.
 - **Make generated assets and module direction enforceable.** CI regenerates and diffs color assets, browser UI source has an explicit ESM package scope, and a module-system audit prevents CommonJS growth or mixed modules before the coordinated backend and Electron hard cutover.
-- **Add an opt-in native MCP Tasks interoperability canary.** `REL_AI_NATIVE_TASKS_PROBE=1` advertises the Tasks extension and exposes a diagnostic tool that verifies task creation, polling, cancellation, capability negotiation, routing headers, and authenticated task ownership without replacing the supported `operationTaskId` workflow.
-- **Reduce the published npm package to an explicit runtime allowlist.** The package now ships only the CLI, service source, dashboard assets, examples, type boundaries, README, and license, reducing the dry-run artifact from 418 entries and about 4.09 MB to 175 entries and about 0.53 MB.
-- **Remove build-only SDK files from the Electron runtime.** Packaged MCP dependencies exclude source, test, TypeScript, and declaration trees; final `resources/` size is 39.00 MiB and packaged connector acceptance verifies the reduced runtime.
+- **Make the native MCP Tasks interoperability canary permanently available on HTTP.** Stateless discovery advertises the Tasks extension, the canonical 33-tool catalog includes `relai_native_tasks_probe`, and HTTP recognizes task polling, update, cancellation, routing headers, and authenticated ownership.
+- **Reduce the published npm package to an explicit runtime allowlist.** The package now ships only the CLI, service source, dashboard assets, examples, type boundaries, README, and license, reducing the dry-run artifact from 418 entries and about 4.09 MB to 194 entries and about 0.57 MB compressed.
+- **Remove build-only SDK files from the Electron runtime.** Packaged MCP and telemetry dependencies exclude source, test, TypeScript, declaration, and source-map trees; final `resources/` size is 45.36 MiB and packaged connector acceptance verifies the reduced runtime.
+- **Make dependency and package budgets release-blocking.** Production Knip models the shipped CLI, backend, dashboard, Electron main, and renderer entries; production npm audits must remain clean; the build-tool audit accepts only one expiry-bound build-only advisory graph; and package size fails above the strict 3% tolerance.
+- **Publish one exact updater artifact contract.** Installer, portable, and blockmap names are version-derived and canonical; `latest.yml` must name the exact installer and match its SHA-512 bytes; `SHA256SUMS.txt` and the release asset list must cover the same basenames before publication.
+- **Invalidate derived release evidence on every rebuild.** A completed Electron release promotion removes stale checksums, asset lists, SBOMs, and size reports before new evidence is generated, preventing old metadata from authenticating newly built executables.
 
 ### Color-system ESM hard cutover
 - **Replace the temporary CommonJS color module with one build-time ESM manifest.** The generator imports `src/ui/colorTokens.mjs` directly; runtime CommonJS code consumes generated assets rather than an interop bridge.
@@ -44,21 +49,41 @@
 - **Serve generated OAuth styling as a static asset.** Authorization and error pages link `/public/oauth.css`, removing duplicated inline CSS and runtime palette imports.
 - **Keep release packaging lean.** The build-time manifest is not shipped as a backend resource; packaged verification requires the generated OAuth and Electron renderer styles instead.
 
+### Bundled ngrok provenance and antivirus handling
+- **Keep the one-installer experience while making ngrok deterministic.** Rel.AI bundles reviewed ngrok 3.39.10, pins its exact size and SHA-256, validates the upstream Authenticode publisher and issuer, packages the provenance manifest, and records ngrok in the CycloneDX SBOM.
+- **Move ngrok upgrades into signed Rel.AI releases.** The writable managed copy is restored whenever it differs from the packaged hash; ngrok self-update checks and remote management are disabled so executable bytes cannot drift independently after installation.
+- **Make release signing fail closed.** The protected Windows workflow enables `forceCodeSigning` and separately verifies the installer, portable executable, unpacked Rel.AI executable, and packaged ngrok identity before publication.
+- **Document component-level antivirus triage.** Release candidates are scanned as separate Rel.AI and ngrok samples, Trojan classifications block publication pending investigation, and generic ngrok PUA/PUP results follow vendor false-positive submission instead of concealment or separate user downloads.
+
+### Active-controller build safety
+- **Prevent development builds from deleting their own controller.** Electron records its live PID, executable, resource, application, and working-directory paths in a non-secret runtime marker; packaging and cleanup reject any target tree that contains those active files.
+- **Centralize Electron packaging in a fail-closed wrapper.** `electron:build` and `electron:dist` run validation and electron-builder with `--publish never`, never execute generated installers or applications, and preserve an installed controller when it lives outside the build output.
+- **Fix Windows packaging under Node 24.** The wrapper invokes pinned JavaScript CLI entrypoints through `process.execPath` instead of spawning `npm.cmd` or `npx.cmd`, avoiding the Windows `spawnSync ... EINVAL` failure without enabling a command shell.
+- **Eliminate the combined-target executable rename race.** Release packaging creates `win-unpacked` once, validates it, then produces NSIS and portable artifacts sequentially with `--prepackaged`; parallel targets can no longer race to rename the same `electron.exe`.
+- **Tolerate transient Windows build-directory locks.** Guarded cleanup uses bounded `fs.rmSync` retries before failing with an actionable lock diagnostic; it never kills processes or bypasses active-controller protection.
+- **Stage release builds outside the VS Code workspace.** Electron Builder now works in an OS-temporary directory and atomically promotes completed artifacts into `dist`. A VS Code-held legacy `app.asar` is preserved, while the current unpacked application is published under `dist/unpacked-builds` and recorded in `dist/current-unpacked.json` instead of failing the release.
+- **Make package verification follow the promoted build.** Fuse, layout, connector-acceptance, signature, and bundled-ngrok checks resolve the authoritative `current-unpacked.json` marker rather than validating a stale fixed directory.
+- **Block production-identity installer lifecycle work while Rel.AI is active.** Install, update, uninstall, and replacement operations are reserved for an explicitly stopped controller or an isolated release machine.
+- **Isolate development and test servers from the production connector profile.** Programmatic servers on an ephemeral port ignore saved launch state and cannot rewrite `connection.json`, preventing validation runs from repointing the active app or ChatGPT endpoint.
+
 ### Breaking upgrade behavior
-- **Do not migrate old clients, sessions, aliases, registrations, removed protocol routes, or color-token aliases.** Existing users that need the previous handshake or connector behavior must remain on the previous release and create a new 0.23.0 connector when upgrading.
+- **Do not migrate old aliases, registrations, removed protocol routes, or color-token aliases.** Native clients must negotiate MCP `2026-07-28` and send current metadata on every stateless request. ChatGPT may negotiate the SDK-managed frozen `2025-11-25` HTTP lifecycle for connection and tool discovery; this exception does not restore any removed Rel.AI compatibility code or routes.
 
 ### Validation
-- `npm run test:all` - 137/137 test files passed
+- Workstream-specific release, dashboard, audit, updater, dependency, and benchmark tests passed; aggregate `npm run test:all` remains the final concurrent-workstream reconciliation gate
 - `npm run audit:production` - zero production advisories
+- `npm run audit:packaging` - only the expiry-bound reviewed build-only advisory graph accepted
+- `npm run knip:production` - shipped runtime dependency model passed
+- `npm run benchmark:observability` - 18/18 mandatory backend and renderer metrics passed
 - `npm run release:check`
 - `npm run electron:build`
-- `npm run electron:dist` - NSIS installer, portable executable, blockmap, and `win-unpacked` generated
-- `npm run verify:packaged -- --dir dist/win-unpacked` - packaged TypeScript/source exclusions verified
+- `npm run electron:dist` - canonical NSIS installer, portable executable, blockmap, update metadata, and promoted unpacked directory generated
+- `npm run verify:packaged -- --dir <current-unpacked>` - packaged TypeScript/source exclusions verified
 - Electron fuse verification passed against the packaged executable
 - Packaged OAuth/MCP connector acceptance passed
-- Strict 0.23.0 package-size baseline passed: 104.89 MiB installer, 104.59 MiB portable, 340.25 MiB unpacked, 39.00 MiB `resources/`
+- Strict 0.23.0 package-size baseline passed: 106.26 MiB installer, 95.39 MiB portable, 346.61 MiB unpacked, 45.36 MiB `resources/`
 - CycloneDX SBOM generation passed
-- `npm pack --dry-run` - 185 entries, 543,925 bytes compressed, 1,608,158 bytes unpacked
+- `npm pack --dry-run` - 194 entries, 567,887 bytes compressed, 1,712,287 bytes unpacked
 
 Bump root/electron/status UI/lockfiles to 0.23.0.
 

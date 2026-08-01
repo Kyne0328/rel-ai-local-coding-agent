@@ -5,6 +5,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 import { createValidationPlan, readValidationPlan } from "../src/bridge/validationPlan.js";
+import { relaiVerify } from '../src/bridge/validation.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-validation-plan-'));
 const stateDir = path.join(root, 'state');
@@ -31,6 +32,12 @@ try {
   assert.ok(plan.checks.quick.length > 0);
   const loaded = readValidationPlan(config, plan.planId, workspace);
   assert.equal(loaded.signature, plan.signature);
+
+  fs.writeFileSync(path.join(root, 'src', 'app.js'), 'module.exports = () => 3;\n');
+  await assert.rejects(
+    () => relaiVerify(workspace, config, { planId: plan.planId, planLevel: 'quick' }),
+    /stale because relevant workspace content changed/i
+  );
 
   const file = path.join(stateDir, 'validation-plans', `${plan.planId}.json`);
   const tampered = JSON.parse(fs.readFileSync(file, 'utf8'));

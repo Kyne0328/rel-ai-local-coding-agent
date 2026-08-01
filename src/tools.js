@@ -1,11 +1,11 @@
 import { readConfig, resolveWorkspace, resolveWorkspaceInput } from './config.js';
-import { logAudit } from './audit.js';
+import { safeLogAudit } from './audit.js';
 import { toolSchemas, getToolSchemas, getToolMetadata, getToolGroups, getToolSurfaceManifest, isToolCallable, TOOL_NAMES } from './tools/schema.js';
 import { getExecutableToolDefinition, getExecutableToolDefinitions } from './tools/runtimeRegistry.js';
 import { compactForConnector, policySentence } from './tools/connector.js';
 import { enhanceToolError } from './tools/errors.js';
 import { buildExtraAudit, applyCautionAudit, invalidateSessionCacheForCall } from './tools/session.js';
-import { beginConnectorToolCall, getToolActivity, normalizeTaskId, onToolActivity } from './toolActivity.js';
+import { beginConnectorToolCall, getToolActivity, normalizeTaskId, onToolActivity, taskError } from './toolActivity.js';
 import { assertRuntimeCompatibility } from './runtimeCompatibility.js';
 import { buildToolActivityDetails } from './taskObservability.js';
 import { bindTaskHistoryActivityPersistence } from './taskHistoryStore.js';
@@ -13,6 +13,7 @@ import { assertKnownTask, taskAuditContext, withTaskIdentity } from './tools/tas
 import { clearSessionPolicy } from './policyResolver.js';
 import { describeToolOperation } from './tools/operation.js';
 import { executeToolCall } from './tools/execution.js';
+import { readTaskIntegrity } from './taskIntegrity.js';
 bindTaskHistoryActivityPersistence(onToolActivity, readConfig);
 
 async function callTool(name, args = {}, context = {}) {
@@ -30,11 +31,32 @@ async function callTool(name, args = {}, context = {}) {
     if (!isToolCallable(name)) {
       throw new Error(`Unknown tool '${name}'. Available tools: ${TOOL_NAMES.join(', ')}. Restart/reconnect ChatGPT if the tool list looks stale.`);
     }
-    workspaceResolution = resolveConfiguredWorkspaceArgument(config, args?.workspace);
-    if (workspaceResolution?.alias) effectiveArgs = { ...args, workspace: workspaceResolution.alias };
+    const definition = getExecutableToolDefinition(name);
+    const taskScope = definition?.behavior?.taskScope || 'required';
+    const taskScoped = taskScope === 'required';
+    const taskAware = taskScoped || taskScope === 'optional';
     requestedTaskId = normalizeTaskId(effectiveArgs?.task_id || effectiveArgs?.taskId);
+    if (taskScoped && !requestedTaskId) {
+      throw taskError('TASK_ID_REQUIRED', `${name} requires the task_id returned by relai_start_task.`);
+    }
     if (requestedTaskId && name !== 'relai_start_task') {
-      knownTask = assertKnownTask(config, requestedTaskId, effectiveArgs?.workspace, name);
+      knownTask = assertKnownTask(config, requestedTaskId, '', name);
+      if (taskAware && !String(effectiveArgs?.workspace || '').trim()) {
+        effectiveArgs = { ...effectiveArgs, workspace: knownTask.workspace };
+      }
+    }
+    workspaceResolution = resolveConfiguredWorkspaceArgument(config, effectiveArgs?.workspace);
+    if (workspaceResolution?.alias) effectiveArgs = { ...effectiveArgs, workspace: workspaceResolution.alias };
+    if (knownTask) {
+      assertKnownTask(config, requestedTaskId, effectiveArgs?.workspace, name);
+      const integrity = readTaskIntegrity(config, requestedTaskId, effectiveArgs?.workspace);
+      if (!integrity) {
+        throw taskError(
+          'TASK_INTEGRITY_STATE_MISSING',
+          'Authoritative integrity state is missing for this logical task. Start a new logical task; no task-scoped operation was executed.',
+          { retryable: false }
+        );
+      }
     }
     assertRuntimeCompatibility(config, name, effectiveArgs, {
       activeTaskCount: getToolActivity().activeTaskCount
@@ -55,7 +77,6 @@ async function callTool(name, args = {}, context = {}) {
         workspaceId: effectiveArgs?.workspace, conversationId: context?.conversationId },
       input: effectiveArgs || {}
     });
-    const definition = getExecutableToolDefinition(name);
     const execution = await executeToolCall({ config, name, effectiveArgs, context, finishActivity, definition, started });
     const value = execution.value;
     sessionStart = execution.sessionStart;
@@ -88,7 +109,7 @@ async function callTool(name, args = {}, context = {}) {
       ms: Date.now() - started,
       ...extraAudit,
       ...(valueOk ? {} : { error: activityResult.error })
-    });
+    }, { strictIntegrity: true });
     const responseValue = connector ? compactForConnector(name, value, effectiveArgs || {}) : value;
     return ok(withTaskIdentity(responseValue, finishActivity?.taskId || requestedTaskId));
   } catch (error) {
@@ -103,7 +124,7 @@ async function callTool(name, args = {}, context = {}) {
       })
     };
     if (finishActivity?.taskId || requestedTaskId) enhanced.taskId = finishActivity?.taskId || requestedTaskId;
-    safeLogAudit(config, {
+    if (!/^TASK_INTEGRITY_/.test(String(enhanced.code || ''))) safeLogAudit(config, {
       ...taskAuditContext(context, finishActivity, requestedTaskId, name, false),
       tool: name,
       operation: finishActivity?.operation,
@@ -136,14 +157,6 @@ function resolveConfiguredWorkspaceArgument(config, input) {
     resolveWorkspace(config, input);
   }
   return resolution;
-}
-
-function safeLogAudit(config, event) {
-  try {
-    logAudit(config, event);
-  } catch (error) {
-    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] audit write:', error);
-  }
 }
 
 function hasWorkspaceChanges(value) {

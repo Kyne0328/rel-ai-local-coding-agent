@@ -1,0 +1,41 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": [
+        "scripts/knip-production-runtime.mjs!",
+        "bin/**/*.js!",
+        "src/**/*.js!",
+        "public/**/*.js!"
+      ],
+      "project": [
+        "scripts/knip-production-runtime.mjs!",
+        "bin/**/*.js!",
+        "src/**/*.js!",
+        "public/**/*.js!"
+      ],
+      "paths": {
+        "./ui/*": [
+          "src/ui/*"
+        ]
+      }
+    },
+    "electron": {
+      "entry": [
+        "*.js!",
+        "*.cjs!",
+        "renderer/**/*.js!",
+        "build/**/*.js!"
+      ],
+      "project": [
+        "*.js!",
+        "*.cjs!",
+        "renderer/**/*.js!",
+        "build/**/*.js!"
+      ],
+      "ignoreDependencies": [
+        "electron-builder"
+      ]
+    }
+  }
+}

@@ -3,18 +3,19 @@
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { MCP_PROTOCOL_VERSION } from './mcp/protocol.js';
 import { packageMetadata as pkg } from './packageMetadata.js';
 import { getVersion } from './version.js';
 import { getToolSurfaceManifest } from './tools/schema.js';
 import { allWorkspaceAliases, resolveWorkspace } from './config.js';
+import { buildToolManifest } from './mcp/toolManifest.js';
 
-const PROTOCOL_VERSION = '2026-07-28';
+const PROTOCOL_VERSION = MCP_PROTOCOL_VERSION;
 const SAFE_DURING_RUNTIME_MISMATCH = new Set([
   'relai_status',
   'relai_cancel_task',
   'relai_complete_task',
-  'relai_operation_task_get',
-  'relai_operation_task_cancel',
+  'relai_run_checks',
   'relai_process_read',
   'relai_process_list',
   'relai_process_stop'
@@ -22,15 +23,16 @@ const SAFE_DURING_RUNTIME_MISMATCH = new Set([
 
 function runtimeMetadata() {
   const surface = getToolSurfaceManifest();
+  const manifest = buildToolManifest({});
   return normalizeMetadata({
     source: 'runtime',
     applicationVersion: getVersion(),
     packageVersion: pkg.version,
     protocolVersion: PROTOCOL_VERSION,
     toolSurfaceVersion: surface.toolSurfaceVersion,
-    toolCount: surface.toolCount,
-    manifestHash: toolManifestHash(surface),
-    schemaVersion: surface.schemaVersion
+    toolCount: manifest.activeToolCount,
+    manifestHash: manifest.version,
+    schemaVersion: manifest.schemaVersion
   });
 }
 
@@ -138,7 +140,7 @@ function assessRuntimeCompatibility(runtime, repository, options = {}) {
     differences,
     message: restartRequired
       ? activeTaskCount > 0
-        ? 'The repository contains a newer runtime or tool surface. Finish or cancel active tasks before restarting.'
+        ? 'The repository contains a newer runtime or tool surface. Run final validation with complete:true for active tasks, or cancel them, then restart.'
         : 'The repository contains a newer runtime or tool surface. Restart or reconnect before schema-sensitive operations.'
       : runtimeAhead
         ? 'The connected runtime is newer than the repository metadata. Reconnect to a matching repository or runtime before schema-sensitive operations.'

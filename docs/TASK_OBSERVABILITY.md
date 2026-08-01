@@ -55,11 +55,10 @@ New writes use only these machine-readable states:
 - `blocked`
 - `validating`
 - `completed`
-- `completed_with_warnings`
 - `failed`
 - `cancelled`
 
-Terminal states are `completed`, `completed_with_warnings`, `failed`, and `cancelled`. The shared terminal predicate is used by the tracker and persistence layer so terminal timestamps and progress are not discarded by a different local status list.
+Terminal states are `completed`, `failed`, and `cancelled`. Warning counts are secondary execution metadata and do not replace an explicitly reported `completed` lifecycle state. The shared terminal predicate is used by the tracker and persistence layer so terminal timestamps and progress are not discarded by a different local status list.
 
 ### Allowed transitions
 
@@ -67,10 +66,10 @@ Terminal states are `completed`, `completed_with_warnings`, `failed`, and `cance
 | --- | --- |
 | `queued` | `planning`, `running`, `cancelled` |
 | `planning` | `running`, `waiting_for_approval`, `blocked`, `validating`, `completed`, `failed`, `cancelled` |
-| `running` | `planning`, `waiting_for_approval`, `blocked`, `validating`, `completed`, `completed_with_warnings`, `failed`, `cancelled` |
+| `running` | `planning`, `waiting_for_approval`, `blocked`, `validating`, `completed`, `failed`, `cancelled` |
 | `waiting_for_approval` | `running`, `blocked`, `failed`, `cancelled` |
 | `blocked` | `running`, `waiting_for_approval`, `failed`, `cancelled` |
-| `validating` | `running`, `completed`, `completed_with_warnings`, `failed`, `cancelled` |
+| `validating` | `running`, `completed`, `failed`, `cancelled` |
 | Any terminal state | no nonterminal transition |
 
 Repeating the same state is idempotent. A stale running or progress update cannot reopen or overwrite a terminal task.
@@ -216,33 +215,39 @@ Determinate progress uses native `progress[value]` with a valid accessible label
 
 ## Performance baseline and budgets
 
-`npm run benchmark:observability` produces machine-readable JSON. The current Windows x64 / Node.js 24 release baseline, measured on 2026-07-28, has no preimplementation comparison and therefore establishes regression budgets rather than claiming an improvement.
+`npm run benchmark:observability` produces machine-readable JSON. The current Windows x64 / Node.js 24 release baseline has no preimplementation comparison and therefore establishes regression budgets rather than claiming an improvement. The benchmark launches an isolated Electron Chromium renderer for mandatory UI measurements; a launch failure, missing metric, nonnumeric result, or budget failure marks the report incomplete or failed and exits nonzero.
 
 | Metric | Workload | Result | Budget |
 | --- | --- | ---: | ---: |
 | Activity events | 100 serial calls with one progress update | 300 | ≤305 |
-| Atomic history writes | same workload | 300 | ≤305 |
+| Atomic history writes | same workload | 0 | ≤305 |
 | Coalesced snapshot publications | same burst | 1 | ≤5 |
 | Queue-wait events | uncontended workload | 0 | 0 |
 | History growth | 100 calls | 67,000 bytes | ≤2 MiB |
-| Heap after 1,000 additional calls | bounded 200-event task timeline | 7,242,432 bytes | ≤256 MiB |
-| Heap delta after GC | 1,000 additional calls | 543,888 bytes | ≤32 MiB |
+| Heap after 1,000 additional calls | bounded 200-event task timeline | 23,542,912 bytes | ≤256 MiB |
+| Heap delta after GC | 1,000 additional calls | 550,336 bytes | ≤32 MiB |
 | Snapshot size | canonical current task | 133,348 bytes | ≤512 KiB |
-| Snapshot serialization | current task | 0.205 ms | ≤25 ms |
-| Sanitization | 10,000 credential-like summaries | 39.632 ms | ≤250 ms |
-| Reconnect snapshot | warm median of five | 7.362 ms | ≤150 ms |
+| Snapshot serialization | current task | 0.342 ms | ≤25 ms |
+| Sanitization | 10,000 credential-like summaries | 43.588 ms | ≤250 ms |
+| Reconnect snapshot | warm median of five | 9.799 ms | ≤150 ms |
 | Shared clock node updates | quiet 60 seconds | 60 | ≤60 |
+| Quiet full dashboard renders | 60 direct clock updates | 0 | 0 |
+| Full renders during progress | 100 progress updates | 0 | 0 |
+| Timeline render | 200 events | 2.2 ms | ≤200 ms |
+| Logical-task switch heap delta | 40 panel switches | 307,942 bytes | ≤16 MiB |
+| Hidden-window timer | requested 100 ms | 104.1 ms | ≤1,500 ms |
+| Renderer reconnect | 500-record current-state snapshot | 2.7 ms | ≤500 ms |
 
-Renderer render counts, 200-event timeline time, session-switch memory, hidden-tab timing, and renderer reconnect latency require a launch-capable Electron Chromium host. The benchmark marks those metrics blocked rather than inventing results when the renderer cannot start.
+Latency and memory results vary by host; budgets are the release contract. Renderer metrics are never replaced with hardcoded or blocked placeholders.
 
 ## Known limitations
 
 - Cancellation is cooperative and cannot reverse a side effect already committed outside a supported process boundary.
 - Sanitization is bounded and pattern-based; callers must not intentionally place secrets in descriptive text.
 - Runtime compatibility cannot be compared when repository release metadata is unavailable.
-- Renderer acceptance and performance measurements require a Windows host on which the exact Electron candidate can start and execute JavaScript.
-- Windows artifacts are currently unsigned; checksums detect byte changes but do not establish publisher identity.
+- Renderer acceptance and performance measurements require a Windows host on which Electron can start and execute JavaScript; inability to run them is a release failure, not a passing placeholder.
+- Local development artifacts may be unsigned. Published artifacts require protected Authenticode signing and signature verification.
 
 ## Verification
 
-Required coverage includes completion-summary sanitization, historical reads, canonical transitions, terminal timestamps, explicit cancellation, live validation and diagnostics progress, partial failure, reconnect restoration, runtime-version mismatch, snapshot ordering, shared-clock behavior, real Chromium dashboard interaction, packaged Electron rendering, accessibility, performance budgets, packaged connector acceptance, and release-artifact launch checks. A blocked or failed mandatory renderer or artifact-launch check keeps the release decision at **Not ready**.
+Required coverage includes completion-summary sanitization, historical reads, canonical transitions, terminal timestamps, explicit cancellation, live validation and diagnostics progress, partial failure, reconnect restoration, runtime-version mismatch, snapshot ordering, shared-clock behavior, real Chromium dashboard interaction at 200% and 400% zoom, accessibility, executable performance budgets, packaged connector acceptance, and read-only release-artifact verification. Any failed or incomplete mandatory metric keeps the release decision at **Not ready**.

@@ -11,8 +11,8 @@ const {
 
 const current = runtimeMetadata();
 assert.equal(current.applicationVersion, '0.23.0');
-assert.equal(current.toolSurfaceVersion, 23);
-assert.equal(current.toolCount, 34);
+assert.equal(current.toolSurfaceVersion, 25);
+assert.equal(current.toolCount, 33);
 assert.match(current.manifestHash, /^[A-Za-z0-9_-]{24}$/);
 
 const equal = assessRuntimeCompatibility(current, { ...current, source: 'repository' });
@@ -29,10 +29,10 @@ assert.equal(repositoryAhead.status, 'restart_required');
 assert.equal(repositoryAhead.restartRequired, true);
 assert.equal(repositoryAhead.schemaSensitiveOperationsBlocked, true);
 assert.equal(repositoryAhead.activeTasksPreventRestart, true);
-assert.match(repositoryAhead.message, /finish or cancel active tasks/i);
+assert.match(repositoryAhead.message, /run final validation with complete:true/i);
 
 const runtimeAhead = assessRuntimeCompatibility(
-  { ...current, applicationVersion: '0.24.0', packageVersion: '0.24.0', toolSurfaceVersion: 24 },
+  { ...current, applicationVersion: '0.24.0', packageVersion: '0.24.0', toolSurfaceVersion: 25 },
   { ...current, source: 'repository' }
 );
 assert.equal(runtimeAhead.status, 'runtime_newer');
@@ -59,7 +59,7 @@ try {
     applicationVersion: '0.24.0',
     protocolVersion: current.protocolVersion,
     toolSurfaceVersion: 24,
-    toolCount: 35,
+    toolCount: 33,
     manifestHash: 'new-surface'
   }));
   const repository = readRepositoryMetadata(temp, 'repo');
@@ -72,6 +72,12 @@ try {
   );
   assert.doesNotThrow(() => assertRuntimeCompatibility(config, 'relai_status', { workspace: 'repo' }));
   assert.doesNotThrow(() => assertRuntimeCompatibility(config, 'relai_cancel_task', { workspace: 'repo' }));
+  assert.doesNotThrow(() => assertRuntimeCompatibility(
+    config,
+    'relai_run_checks',
+    { workspace: 'repo', task_id: 'task-1', complete: true, summary: 'Validate and close.' },
+    { activeTaskCount: 1 }
+  ));
 
   fs.writeFileSync(path.join(temp, 'package.json'), JSON.stringify({ name: 'rel-ai-mcp', version: current.applicationVersion }));
   fs.writeFileSync(path.join(temp, 'release-manifest.json'), JSON.stringify({

@@ -30,10 +30,12 @@ try {
   resetToolActivity();
   const context = { publicHttpOnly: true };
   const task = await callTool('relai_start_task', { workspace: 'app' }, context);
-  const result = await callTool('relai_run_checks', { workspace: 'app', task_id: task.task_id }, context);
+  const result = await callTool('relai_exec', {
+    workspace: 'app', task_id: task.task_id, command: 'node -e "process.exit(1)"'
+  }, context);
   assert.equal(result.ok, false);
   assert.equal(getToolActivity().failures, 1, 'returned ok:false must increment task failures');
-  const event = readAudit(readConfig(), { limit: 20 }).entries.find(entry => entry.tool === 'relai_run_checks');
+  const event = readAudit(readConfig(), { limit: 20 }).entries.find(entry => entry.tool === 'relai_exec');
   assert.equal(event.ok, false, 'returned ok:false must be persisted as a failed audit event');
 } finally {
   if (previous == null) delete process.env.REL_AI_MCP_CONFIG;

@@ -102,6 +102,37 @@ assert.equal(approvalTask?.status, 'waiting_for_approval');
 assert.equal(approvalTask?.currentStage, 'Waiting for approval');
 assert.equal(approvalTask?.events[0]?.status, 'blocked');
 
+const revalidationTracker = createToolActivityTracker({ idleMs: 60_000 });
+const finishRevalidation = revalidationTracker.beginConnectorToolCall({
+  tool: 'relai_complete_task',
+  workspace: 'repo',
+  scopeId: 'revalidation-test',
+  createTask: true
+});
+finishRevalidation({
+  ok: false,
+  error: 'Task completion is paused because code changed after validation.',
+  activity: {
+    status: 'blocked',
+    title: 'Finalizing logical task',
+    summary: 'Task completion paused: final validation is required.',
+    currentStage: 'Validation required',
+    currentActivity: 'Task completion paused: final validation is required.',
+    progress: { mode: 'indeterminate', label: 'Final validation required' },
+    error: { code: 'TASK_REVALIDATION_REQUIRED', message: 'Final validation is required.', retryable: true },
+    metadata: { errorCode: 'TASK_REVALIDATION_REQUIRED', retryable: true },
+    result: { outcome: 'Final validation required' }
+  }
+});
+const revalidationTask = revalidationTracker.getToolActivity().tasks[0];
+assert.equal(revalidationTask?.status, 'blocked');
+assert.equal(revalidationTask?.currentStage, 'Validation required');
+assert.equal(revalidationTask?.progress?.label, 'Final validation required');
+assert.equal(revalidationTask?.lastOutcome, 'blocked');
+assert.equal(revalidationTask?.failures, 0);
+assert.equal(revalidationTask?.events[0]?.status, 'blocked');
+assert.equal(revalidationTask?.events[0]?.result?.outcome, 'Final validation required');
+
 const volumeTracker = createToolActivityTracker({ idleMs: 60_000 });
 const finishVolumeStart = volumeTracker.beginConnectorToolCall({
   tool: 'relai_start_task',
@@ -151,6 +182,39 @@ const secondTask = reconnectTracker.beginConnectorToolCall({ tool: 'relai_start_
 assert.notEqual(secondTask.taskId, startedTask.taskId, 'separate explicit starts remain isolated even on one transport');
 secondTask();
 reconnectTracker.reset();
+
+const warningCompletionTracker = createToolActivityTracker({ idleMs: 60_000 });
+const warningStart = warningCompletionTracker.beginConnectorToolCall({
+  tool: 'relai_start_task',
+  workspace: 'repo',
+  scopeId: 'warning-completion',
+  createTask: true,
+  title: 'Completed task with retained warnings'
+});
+const warningTaskId = warningStart.taskId;
+warningStart();
+const failedProbe = warningCompletionTracker.beginConnectorToolCall({
+  tool: 'relai_http_probe',
+  workspace: 'repo',
+  scopeId: 'warning-completion',
+  taskId: warningTaskId
+});
+failedProbe({ ok: false, error: 'Probe unavailable.' });
+const warningCompletion = warningCompletionTracker.beginConnectorToolCall({
+  tool: 'relai_complete_task',
+  workspace: 'repo',
+  scopeId: 'warning-completion',
+  taskId: warningTaskId
+});
+warningCompletion.requestCompletion({ summary: 'Task completed after a non-fatal diagnostic warning.' });
+warningCompletion();
+const completedWithWarningMetadata = warningCompletionTracker.getToolActivity().lastTask;
+assert.equal(completedWithWarningMetadata?.status, 'completed', 'explicit completion must remain the primary lifecycle status');
+assert.equal(completedWithWarningMetadata?.completionKnown, true);
+assert.equal(completedWithWarningMetadata?.failures, 1, 'failed calls remain available as warning metadata');
+assert.equal(completedWithWarningMetadata?.failedToolCallCount, 1);
+assert.equal(completedWithWarningMetadata?.progress?.percentage, 100);
+warningCompletionTracker.reset();
 
 let nextId = 40;
 const started = new Set();
@@ -251,13 +315,9 @@ try {
   callEvents.length = 0;
   await assert.rejects(
     () => callTool('relai_read', {}, { publicHttpOnly: true }),
-    /Workspace alias is required|Unknown workspace|workspace/i
+    error => error?.code === 'TASK_ID_REQUIRED'
   );
-  assert.deepEqual(callEvents.map(event => [event.phase, event.tool, event.activeConnectorCalls]), [
-    ['started', 'relai_read', 1],
-    ['finished', 'relai_read', 0]
-  ], 'failed connector calls must always release the activity count');
-  assert.equal(callEvents.every(event => event.taskId === ''), true, 'rejected taskless calls must not acquire task identity');
+  assert.deepEqual(callEvents, [], 'schema-level task rejection must happen before activity begins');
   assert.equal(getToolActivity().activeTaskCount, 0, 'rejected taskless calls must not leave waiting sessions');
   stopListening();
   resetToolActivity();

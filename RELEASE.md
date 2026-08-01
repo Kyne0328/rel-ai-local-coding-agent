@@ -6,10 +6,13 @@ Rel.AI MCP uses a strict release path so a tag cannot ship mismatched versions, 
 
 ```bash
 npm run test:all
-npm audit --omit=dev
+npm run knip:production
+npm run audit:production
+npm run audit:packaging
+npm run benchmark:observability
 ```
 
-`test:all` builds the dashboard CSS, performs JavaScript checks, runs ESLint with zero warnings, type-checks module boundaries, verifies release consistency, and executes every test file. CI runs the supported Node.js 22 and 24 lines.
+`test:all` builds the dashboard CSS, performs JavaScript checks, runs ESLint with zero warnings, type-checks module boundaries, verifies release consistency, and executes every test file. CI and release packaging use Node.js 24.
 
 When working through Rel.AI itself, use:
 
@@ -21,7 +24,7 @@ relai_diff
 
 ## 2. Verify the MCP contract
 
-The release must retain one 20-tool surface for stdio and HTTP/OAuth clients.
+The release must retain one 35-tool surface for stdio and HTTP/OAuth clients, with the count and manifest hash derived from the registered schema rather than duplicated constants.
 
 Required invariants:
 
@@ -40,12 +43,13 @@ The main protocol tests are `smoke.mjs`, `http-smoke.mjs`, `oauth-smoke.mjs`, `m
 
 ```bash
 npm run fetch:ngrok
+npm run verify:ngrok
 npm run electron:build
 npm run verify:packaged
 npm run test:connector-acceptance
 ```
 
-`verify:packaged` checks the unpacked application layout without launching the Electron executable. `test:connector-acceptance` launches only the packaged Node backend from `resources/` and verifies the actual packaged OAuth and MCP stack:
+The ngrok fetch is accepted only when it matches `vendor/ngrok/manifest.json`; Windows verification also requires the declared version and a valid upstream Authenticode identity. `verify:packaged` checks the unpacked application layout and packaged ngrok hash without launching the Electron executable. `test:connector-acceptance` launches only the packaged Node backend from `resources/` and verifies the actual packaged OAuth and MCP stack:
 
 - OAuth discovery and dynamic client registration;
 - authorization-code flow with PKCE S256;
@@ -100,7 +104,7 @@ npm run electron:dist
 npm run electron:size
 ```
 
-Review every increase. Update `scripts/electron-size-baseline.json` only from the final release candidate when the increase is explained by intentional runtime changes such as the MCP SDK. Keep the warning threshold at 3% unless a separate policy change is approved.
+The size gate is blocking. It requires the exact canonical installer and portable filenames, rejects packaged source CSS, source maps, unsupported locales, missing metrics, and any measured value more than the documented 3% tolerance above the accepted baseline. Update `scripts/electron-size-baseline.json` only from a reviewed final release candidate with an explicit explanation for every increase.
 
 ## 7. Manual release checks
 
@@ -118,12 +122,16 @@ Do not run installer lifecycle tests on a developer machine that is hosting acti
 
 Pushing the version commit to `main` triggers `.github/workflows/release.yml`. The workflow builds the installer and portable executable and publishes:
 
-- the NSIS installer;
-- the portable executable;
+- `Rel.AI-MCP-Setup-<version>.exe`;
+- `Rel.AI-MCP-Portable-<version>.exe`;
+- `Rel.AI-MCP-Setup-<version>.exe.blockmap`;
 - `latest.yml`;
-- the installer blockmap;
+- the CycloneDX SBOM;
+- the strict package-size report;
 - `SHA256SUMS.txt`.
 
-The workflow requires nonempty SHA-512 updater metadata and matching release versions. Windows artifacts are currently unsigned, so users may see an unidentified-publisher warning. SHA-256 verifies bytes against the manifest but does not establish publisher identity.
+The workflow requires exact release-asset basenames, matching release versions, nonempty and byte-correct SHA-512 updater metadata, SHA-256 coverage, protected Windows signing credentials, and `forceCodeSigning`. It verifies valid Authenticode signatures for the installer, portable executable, unpacked Rel.AI executable, and bundled ngrok executable. SHA-256 binds every published asset to `SHA256SUMS.txt` and binds the packaged ngrok bytes to the reviewed manifest; Authenticode establishes the configured publishers.
+
+Scan the installer, portable executable, unpacked Rel.AI executable, and bundled ngrok executable as separate samples before broad distribution. A Trojan or malware classification on a Rel.AI-owned executable blocks publication until investigated. Generic PUA/PUP labels limited to the authentic ngrok component require documented vendor submission and review; do not evade them through renaming, repacking, or post-install downloads. See `docs/ANTIVIRUS_FALSE_POSITIVES.md`.
 
 A local release-preparation commit must not be pushed until all automated and manual checks required for the candidate are complete.

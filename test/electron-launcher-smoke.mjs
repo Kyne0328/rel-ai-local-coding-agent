@@ -9,7 +9,7 @@ const utils = await import(pathToFileURL(path.join(root, 'electron', 'launcher-u
 const launcherConfigModule = await import(pathToFileURL(path.join(root, 'electron', 'launcher-config.js')).href);
 const managedNgrokModule = await import(pathToFileURL(path.join(root, 'electron', 'managed-ngrok.js')).href);
 const { saveLauncherConfig } = launcherConfigModule.default || launcherConfigModule;
-const { extractPublicUrl } = managedNgrokModule.default || managedNgrokModule;
+const { extractPublicUrl, extractStartedTunnelUrl, synchronizeManagedBinary, writeNgrokConfig } = managedNgrokModule.default || managedNgrokModule;
 const {
   buildTunnelCommand,
   buildMcpUrl,
@@ -36,6 +36,22 @@ assert.equal(
   'managed ngrok must ignore unrelated HTTPS URLs and select the configured domain'
 );
 assert.equal(extractPublicUrl('https://wrong.ngrok-free.dev', 'my-domain.ngrok-free.dev'), '');
+assert.equal(
+  extractStartedTunnelUrl(
+    "failed to start tunnel: The endpoint 'https://my-domain.ngrok-free.dev' is already online. ERR_NGROK_334",
+    'my-domain.ngrok-free.dev'
+  ),
+  '',
+  'an ngrok error that names the configured endpoint must not be treated as a published tunnel'
+);
+assert.equal(
+  extractStartedTunnelUrl(
+    'lvl=info msg="started tunnel" obj=tunnels url=https://my-domain.ngrok-free.dev',
+    'my-domain.ngrok-free.dev'
+  ),
+  'https://my-domain.ngrok-free.dev',
+  'managed ngrok must become ready only after its explicit started-tunnel event'
+);
 
 const tunnelCommand3333 = buildTunnelCommand('my-domain.ngrok-free.dev', 3333);
 const tunnelCommand4444 = buildTunnelCommand('MY-DOMAIN.ngrok-free.dev', 4444);
@@ -69,11 +85,11 @@ for (const renderer of ['status.html', 'wizard.html']) {
 }
 const rootModulesResource = electronPkg.build.extraResources.find((item) => item.from === '../node_modules');
 assert.ok(rootModulesResource, 'electron build must package root MCP SDK runtime dependencies');
-for (const packagePath of ['@modelcontextprotocol/core/**', '@modelcontextprotocol/node/**', '@modelcontextprotocol/server/**', '@hono/node-server/**', 'hono/**', 'zod/**']) {
+for (const packagePath of ['@modelcontextprotocol/core/**', '@modelcontextprotocol/node/**', '@modelcontextprotocol/server/**', '@opentelemetry/**', '@hono/node-server/**', 'hono/**', 'zod/**']) {
   assert.ok(rootModulesResource.filter.includes(packagePath), `electron build must package ${packagePath}`);
 }
 assert.ok(rootModulesResource.filter.includes('!**/*.map'), 'packaged MCP SDK dependencies must exclude source maps');
-for (const exclusion of ['!**/src/**', '!**/test/**', '!**/tests/**', '!**/*.ts', '!**/*.cts', '!**/*.mts']) {
+for (const exclusion of ['!@modelcontextprotocol/*/src/**', '!@opentelemetry/*/src/**', '!@hono/*/src/**', '!hono/src/**', '!zod/src/**', '!**/test/**', '!**/tests/**', '!**/*.ts', '!**/*.cts', '!**/*.mts']) {
   assert.ok(rootModulesResource.filter.includes(exclusion), 'packaged MCP SDK dependencies must include ' + exclusion);
 }
 assert.ok(electronPkg.build.files.includes('ngrok-token.js'), 'electron build must include ngrok authtoken normalization used by launcher code');
@@ -95,6 +111,7 @@ assert.ok(electronPkg.build.files.includes('app-updater.js'), 'electron build mu
 assert.ok(electronPkg.build.files.includes('app-updater-state.js'), 'electron build must include updater state persistence');
 assert.ok(electronPkg.build.files.includes('desktop-settings.js'), 'electron build must include extracted desktop settings ownership');
 assert.ok(electronPkg.build.files.includes('desktop-lifecycle.js'), 'electron build must include desktop lifecycle state and startup ownership');
+assert.ok(electronPkg.build.files.includes('controller-runtime.js'), 'electron build must include the active-controller runtime marker');
 assert.ok(electronPkg.build.files.includes('window-security.js'), 'electron build must include local renderer isolation policy');
 assert.ok(electronPkg.build.files.includes('local-protocol.js'), 'electron build must include the restricted local renderer protocol');
 assert.ok(electronPkg.build.files.includes('ipc-security.js'), 'electron build must include IPC sender policy');
@@ -105,7 +122,9 @@ assert.equal(electronPkg.devDependencies['@electron/fuses'], '2.1.3');
 assert.equal(electronPkg.build.afterPack, 'build/after-pack.js');
 assert.equal(electronPkg.build.publish[0].provider, 'github');
 assert.equal(electronPkg.build.publish[0].repo, 'rel-ai-mcp');
-assert.ok(electronPkg.build.extraResources.some((item) => item.from === '../vendor/ngrok'), 'electron build must bundle ngrok seed binaries');
+const ngrokResource = electronPkg.build.extraResources.find((item) => item.from === '../vendor/ngrok');
+assert.ok(ngrokResource, 'electron build must bundle ngrok seed binaries');
+assert.deepEqual(ngrokResource.filter, ['manifest.json', 'win32/**'], 'electron build must bundle the ngrok provenance manifest with the Windows seed');
 
 const electronMain = fs.readFileSync(path.join(root, 'electron', 'main.js'), 'utf8');
 assert.doesNotMatch(electronMain, /--installed-smoke|--window-smoke|runInstalledSmoke|runWindowSmoke|smokeWindowRoles|getSmokeWindowRole/, 'production Electron main must not expose destructive smoke entry points');
@@ -131,6 +150,8 @@ assert.match(
 );
 assert.match(electronMain, /app\.setName\('Rel\.AI MCP'\)/, 'Electron must expose the product name instead of the generic Electron app name');
 assert.match(electronMain, /app\.setAppUserModelId\('com\.relai\.mcp'\)/, 'Windows notifications must use the packaged Rel.AI application identity');
+assert.match(electronMain, /writeControllerRuntimeMarker\(app\)/, 'Electron must publish its runtime paths before starting the controller');
+assert.match(electronMain, /removeControllerRuntimeMarker\(\)/, 'Electron must remove only its own runtime marker during clean shutdown');
 assert.match(electronMain, /powerSaveBlocker/, 'Electron main must use the native sleep-prevention API');
 assert.match(electronMain, /createTaskActivityRuntime/, 'Electron main must bind connector activity to sleep prevention, live status, and completion alerts');
 assert.match(electronMain, /toolActivityRuntime\.stop\(\)/, 'tool activity runtime must stop during application shutdown');
@@ -206,6 +227,25 @@ assert.match(electronMain, /dashboard\?surface=desktop/, 'the embedded dashboard
 assert.match(electronMain, /options\.firstRun \? '#settings\/connection' : ''/, 'first-run desktop setup must hand off directly to Connection');
 assert.match(fs.readFileSync(path.join(root, 'electron', 'ipc-handlers.js'), 'utf8'), /firstRun: config\?\.restart !== true/, 'recovery edits must not be treated as fresh first-run setup');
 assert.doesNotMatch(electronMain, /shell\.openExternal\(`http:\/\/127\.0\.0\.1:.*dashboard/, 'Open Dashboard must not launch the system browser');
+
+const ngrokTestDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-ngrok-test-'));
+const ngrokSource = path.join(ngrokTestDir, 'source.exe');
+const ngrokTarget = path.join(ngrokTestDir, 'managed', 'ngrok.exe');
+fs.writeFileSync(ngrokSource, 'verified-ngrok-release');
+const firstSync = synchronizeManagedBinary(ngrokSource, ngrokTarget);
+assert.equal(firstSync.copied, true, 'managed ngrok must be seeded from the bundled release binary');
+assert.equal(fs.readFileSync(ngrokTarget, 'utf8'), 'verified-ngrok-release');
+const secondSync = synchronizeManagedBinary(ngrokSource, ngrokTarget);
+assert.equal(secondSync.copied, false, 'matching managed ngrok must not be rewritten');
+fs.writeFileSync(ngrokTarget, 'stale-self-updated-ngrok');
+const repairedSync = synchronizeManagedBinary(ngrokSource, ngrokTarget);
+assert.equal(repairedSync.copied, true, 'a changed managed ngrok binary must be restored from the signed Rel.AI release');
+assert.equal(fs.readFileSync(ngrokTarget, 'utf8'), 'verified-ngrok-release');
+process.env.REL_AI_MCP_STATE_DIR = path.join(ngrokTestDir, 'state');
+const managedConfig = fs.readFileSync(writeNgrokConfig('abc12345'), 'utf8');
+assert.match(managedConfig, /update_check: false/, 'managed ngrok must not self-update outside the Rel.AI release process');
+assert.match(managedConfig, /remote_management: false/, 'managed ngrok remote management must remain disabled');
+fs.rmSync(ngrokTestDir, { recursive: true, force: true });
 
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-gui-test-'));
 process.env.REL_AI_MCP_STATE_DIR = stateDir;

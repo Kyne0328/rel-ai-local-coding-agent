@@ -53,12 +53,12 @@ try {
   });
   let requestId = 0;
 
-  client.discover(++requestId);
+  client.initialize(++requestId);
   const discovery = await client.waitFor(requestId);
   assert.equal(discovery.result.capabilities.experimental.relai.taskIdentityVersion, 2);
   assert.match(discovery.result.instructions, /relai_start_task exactly once/);
   assert.match(discovery.result.instructions, /configured workspace alias \(appA, appB\)/);
-  assert.match(discovery.result.instructions, /never treat an MCP transport session.*as the task identity/);
+  assert.match(discovery.result.instructions, /no transport identifier is a task identity/);
 
   async function rpc(name, args, { allowError = false } = {}) {
     const id = ++requestId;
@@ -73,22 +73,49 @@ try {
 
   client.send(++requestId, 'tools/list', {});
   const listedTools = await client.waitFor(requestId);
-  assert.equal(listedTools.result.tools.length, 34);
+  assert.equal(listedTools.result.tools.length, 33);
   const listedStartTask = listedTools.result.tools.find(tool => tool.name === 'relai_start_task');
   assert.match(listedStartTask.inputSchema.properties.workspace.description, /Aliases: appA, appB/);
 
-  const startA = await rpc('relai_start_task', { workspace: 'appA' });
-  const startB = await rpc('relai_start_task', { workspace: 'appB' });
+  const startA = await rpc('relai_start_task', { workspace: 'appA', objective: 'Validate task A.', bootstrap: 'compact' });
+  const startB = await rpc('relai_start_task', { workspace: 'appB', objective: 'Validate task B.', bootstrap: 'compact' });
+  const startMismatch = await rpc('relai_start_task', { workspace: 'appA', objective: 'Exercise workspace ownership.', bootstrap: 'none' });
   const taskA = startA.payload.task_id;
   const taskB = startB.payload.task_id;
+  const mismatchTaskId = startMismatch.payload.task_id;
   assert.ok(taskA && taskB);
   assert.notEqual(taskA, taskB, 'one SDK connection must support independent logical tasks');
+  assert.equal(startA.payload.workspaceBinding.alias, 'appA');
+  assert.equal(startA.payload.bootstrap.mode, 'compact');
+  assert.ok(Array.isArray(startA.payload.bootstrap.files));
+
+  const missingTaskRequestId = ++requestId;
+  client.call(missingTaskRequestId, 'relai_read', { paths: ['src/index.js'] });
+  const missingTask = await client.waitFor(missingTaskRequestId, 40000);
+  assert.equal(missingTask.result?.isError, true, 'the MCP schema must reject task-scoped calls without task_id');
+  assert.match(JSON.stringify(missingTask.result?.content), /task_id/i);
+
+  const mismatchedWorkspace = await rpc('relai_read', {
+    task_id: mismatchTaskId,
+    workspace: 'appB',
+    paths: ['src/index.js']
+  }, { allowError: true });
+  assert.equal(mismatchedWorkspace.isError, true);
+  assert.equal(mismatchedWorkspace.payload.errorCode, 'TASK_OWNERSHIP_MISMATCH');
+
+  const recoveredMismatchTask = await rpc('relai_read', {
+    task_id: mismatchTaskId,
+    paths: ['src/index.js']
+  });
+  assert.equal(recoveredMismatchTask.payload.workspace, 'appA', 'one rejected assertion must not terminalize its task');
+
+  const boundWorkspaceRead = await rpc('relai_read', { task_id: taskA, paths: ['src/index.js'] });
+  assert.equal(boundWorkspaceRead.payload.workspace, 'appA');
 
   const readyFile = path.join(sandbox, 'task-b.ready');
   const releaseFile = path.join(sandbox, 'task-b.release');
   const execRequestId = ++requestId;
   client.call(execRequestId, 'relai_exec', {
-    workspace: 'appB',
     task_id: taskB,
     command: 'node wait-barrier.js',
     timeoutMs: 30000,
@@ -97,10 +124,10 @@ try {
   const runningB = client.waitFor(execRequestId, 40000);
   await waitForFile(readyFile, 10000);
 
-  const validationA = await rpc('relai_run_checks', { workspace: 'appA', task_id: taskA, level: 'standard' });
+  const validationA = await rpc('relai_run_checks', { task_id: taskA, level: 'standard' });
   assert.equal(validationA.payload.validationStatus, 'passed');
   const completedA = await rpc('relai_complete_task', {
-    workspace: 'appA', task_id: taskA, summary: 'Task A completed while task B was still executing.'
+    task_id: taskA, summary: 'Task A completed while task B was still executing.'
   });
   assert.equal(completedA.payload.completionKnown, true);
 
@@ -109,21 +136,21 @@ try {
   assert.equal(finishedB.result?.isError, false, JSON.stringify(finishedB));
   assert.equal(finishedB.result.structuredContent.task_id, taskB);
 
-  const validationB = await rpc('relai_run_checks', { workspace: 'appB', task_id: taskB, level: 'standard' });
+  const validationB = await rpc('relai_run_checks', { task_id: taskB, level: 'standard' });
   assert.equal(validationB.payload.validationStatus, 'passed');
   const completedB = await rpc('relai_complete_task', {
-    workspace: 'appB', task_id: taskB, summary: 'Task B completed independently.'
+    task_id: taskB, summary: 'Task B completed independently.'
   });
   assert.equal(completedB.payload.completionKnown, true);
 
   const duplicateA = await rpc('relai_complete_task', {
-    workspace: 'appA', task_id: taskA, summary: 'A retry must remain idempotent.'
+    task_id: taskA, summary: 'A retry must remain idempotent.'
   });
   assert.equal(duplicateA.payload.duplicate, true);
   assert.equal(duplicateA.payload.summary, 'Task A completed while task B was still executing.');
 
   const completedReuse = await rpc('relai_read', {
-    workspace: 'appA', task_id: taskA, paths: ['src/index.js']
+    task_id: taskA, paths: ['src/index.js']
   }, { allowError: true });
   assert.equal(completedReuse.isError, true);
   assert.equal(completedReuse.payload.errorCode, 'INVALID_TASK_STATE');

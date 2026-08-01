@@ -54,6 +54,7 @@ fs.writeFileSync(configPath, JSON.stringify({
 }, null, 2));
 
 process.env.REL_AI_MCP_CONFIG = configPath;
+process.env.REL_AI_MCP_STATE_DIR = sandbox;
 const { startHttpServer } = await import('../src/httpServer.js');
 const server = startHttpServer({
   host: '127.0.0.1',
@@ -69,6 +70,7 @@ try {
   await waitForListening(server);
   const address = server.address();
   assert.ok(address && typeof address !== 'string');
+  assert.equal(fs.existsSync(path.join(sandbox, 'connection.json')), false, 'ephemeral validation servers must not publish or replace the active connector profile');
 
   const bootstrap = dashboardSessions.createDashboardBootstrap(token);
   const dashboardResponse = await fetch(`http://127.0.0.1:${address.port}/dashboard?surface=desktop&bootstrap=${encodeURIComponent(bootstrap)}`);

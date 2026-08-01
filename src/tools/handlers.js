@@ -12,39 +12,53 @@ import { cancelTask } from './cancellation.js';
 import { relaiSearch } from '../bridge/search.js';
 import { relaiCodeInspect } from '../bridge/codeIntelligence.js';
 import { relaiExec } from '../bridge/exec.js';
-import { startTask } from './task.js';
+import { startTask, taskBootstrapFromSnapshot } from './task.js';
 import { startManagedProcess, readManagedProcess, writeManagedProcess, stopManagedProcess, listManagedProcesses } from '../processManager.js';
 import { createManagedWorktree, listManagedWorktrees, removeManagedWorktree } from '../worktreeManager.js';
 import { relaiSemanticSearch } from '../bridge/semanticSearch.js';
 import { relaiDiagnosticsRun } from '../bridge/diagnosticsRunner.js';
 import { createValidationPlan } from '../bridge/validationPlan.js';
-import { getDeferredOperation, cancelDeferredOperation } from './operationTaskHandlers.js';
+import { nativeTasksProbeFallback } from '../nativeTasksProbe.js';
 /** @type {ToolHandler} */
 const statusHandler = (config, args, context) => relaiStatus(config, args, context);
 
 /** @type {ToolHandler} */
 const completeTaskHandler = (config, args) => completeTask(config, args);
 
+const startTaskHandler = inWorkspace(async (workspace, config, args) => {
+  const task = startTask(workspace, args);
+  const bootstrapMode = String(args.bootstrap || 'compact').toLowerCase();
+  if (bootstrapMode === 'none') return task;
+  const snapshot = await repoSnapshot(workspace, config, {
+    maxEntries: bootstrapMode === 'full' ? undefined : 600,
+    includeFiles: true,
+    instructionPath: args.instructionPath
+  });
+  return {
+    ...task,
+    bootstrap: taskBootstrapFromSnapshot(snapshot, bootstrapMode)
+  };
+});
+
 const HANDLERS = Object.freeze({
-  startTask: inWorkspace((workspace, _config, args) => startTask(workspace, args)),
+  startTask: startTaskHandler,
   repoSnapshot: inWorkspace((workspace, config, args) => repoSnapshot(workspace, config, args)),
   read: inWorkspace((workspace, config, args, context) => relaiRead(workspace, config, args, context)),
   search: inWorkspace((workspace, config, args) => relaiSearch(workspace, config, args)),
   codeInspect: inWorkspace((workspace, config, args) => relaiCodeInspect(workspace, config, args)),
   exec: inWorkspace((workspace, config, args) => relaiExec(workspace, config, args)),
   processStart: inWorkspace((workspace, config, args, context) => startManagedProcess(workspace, config, args, context)),
-  processRead: (config, args) => readManagedProcess(config, args),
-  processWrite: (config, args) => writeManagedProcess(config, args),
-  processStop: (config, args) => stopManagedProcess(config, args),
-  processList: (config, args) => listManagedProcesses(config, args),
+  processRead: (config, args, context) => readManagedProcess(config, args, context),
+  processWrite: (config, args, context) => writeManagedProcess(config, args, context),
+  processStop: (config, args, context) => stopManagedProcess(config, args, context),
+  processList: (config, args, context) => listManagedProcesses(config, args, context),
   worktreeCreate: inWorkspace((workspace, config, args, context) => createManagedWorktree(workspace, config, args, context)),
-  worktreeList: (config, args) => listManagedWorktrees(config, args),
-  worktreeRemove: inWorkspace((workspace, config, args) => removeManagedWorktree(workspace, config, args)),
+  worktreeList: (config, args, context) => listManagedWorktrees(config, args, context),
+  worktreeRemove: inWorkspace((workspace, config, args, context) => removeManagedWorktree(workspace, config, args, context)),
   semanticSearch: inWorkspace((workspace, config, args) => relaiSemanticSearch(workspace, config, args)),
   diagnosticsRun: inWorkspace((workspace, config, args) => relaiDiagnosticsRun(workspace, config, args)),
   validationPlan: inWorkspace((workspace, config, args) => createValidationPlan(workspace, config, args)),
-  operationTaskGet: (config, args, context) => getDeferredOperation(config, args, context),
-  operationTaskCancel: (config, args, context) => cancelDeferredOperation(config, args, context),
+  nativeTasksProbe: (config, args, context) => nativeTasksProbeFallback(config, args, context),
   tidyPlan: inWorkspace((workspace, config, args) => workspaceTidyPlan(workspace, config, args)),
   tidyRun: inWorkspace((workspace, config, args) => workspaceTidyRun(workspace, config, args)),
   runChecks: inWorkspace((workspace, config, args) => relaiVerify(workspace, config, mapCheckArgs(args))),

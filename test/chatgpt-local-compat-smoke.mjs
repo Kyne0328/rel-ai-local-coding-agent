@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { startMcpClient } from './helpers/mcp-client.mjs';
+import { startMcpClient, structuredContentOf, MCP_VERSION } from './helpers/mcp-client.mjs';
 import { activeToolCount } from './helpers/tool-surface.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -18,9 +18,9 @@ fs.writeFileSync(configPath, JSON.stringify({
 
 const client = startMcpClient({ root, configPath });
 try {
-  client.discover(1);
+  client.initialize(1);
   const discovery = await client.waitFor(1);
-  assert.ok(discovery.result?.supportedVersions?.includes('2026-07-28'));
+  assert.ok(discovery.result?.supportedVersions?.includes(MCP_VERSION));
 
   let requestId = 10;
   for (const removed of ['relai_apply_bundle', 'relai_package_snapshot', 'relai_apply_update', 'relai_clear_files', 'relai_feature_probe', 'relai_git_fetch', 'relai_session_summary']) {
@@ -39,7 +39,11 @@ try {
   assert.equal(Object.hasOwn(payload.toolGroups || {}, 'internal'), false);
   requestId += 1;
 
-  client.call(requestId, 'relai_run_checks', { workspace: 'repo', check: 'node -e "process.exit(1)"' });
+  client.call(requestId, 'relai_start_task', { workspace: 'repo' });
+  const task = structuredContentOf(await client.waitFor(requestId));
+  requestId += 1;
+
+  client.call(requestId, 'relai_run_checks', { workspace: 'repo', task_id: task.task_id, check: 'node -e "process.exit(1)"' });
   const failedCheck = await client.waitFor(requestId);
   assert.equal(failedCheck.result.isError, true, 'returned ok:false tool results must set MCP isError');
   assert.equal(failedCheck.result.structuredContent.ok, false, 'structured failure payload must be preserved');

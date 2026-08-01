@@ -14,7 +14,9 @@ for (const name of ['workspaceList', 'workspaceInspect', 'workspaceTree', 'works
 }
 const instructions = connectorInstructions({ workspaces: { repo: { path: '/repo' } } });
 assert.match(instructions, /relai_start_task exactly once/);
-assert.match(instructions, /Pass that task_id to every subsequent Rel\.AI tool call/);
-assert.match(instructions, /never treat an MCP transport session.*as the task identity/);
+assert.match(instructions, /Pass task_id to every later task-scoped Rel\.AI call/);
+assert.match(instructions, /omit workspace unless you want Rel\.AI to verify an ownership assertion/);
+assert.match(instructions, /MCP 2026-07-28 is stateless/);
+assert.match(instructions, /no transport identifier is a task identity/);
 
 console.log('MCP SDK boundary exposes only /mcp and uses explicit task_id identity.');

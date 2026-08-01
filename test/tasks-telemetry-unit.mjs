@@ -14,19 +14,23 @@ try {
     logicalTaskId: 'logical-task', principal: 'client-a'
   });
   assert.equal(created.status, 'working');
+  assert.match(created.taskId, /^task_/);
   assertOperationTaskPrincipal(config, created.taskId, 'client-a');
-  assert.throws(() => assertOperationTaskPrincipal(config, created.taskId, 'client-b'), /authorization context/);
+  assert.throws(() => assertOperationTaskPrincipal(config, created.taskId, 'client-b'), /not available/);
 
   const updated = updateOperationTask(config, created.taskId, { progress: 0.5, message: 'Halfway' });
   assert.equal(updated.progress, 0.5);
   const completed = completeOperationTask(config, created.taskId, { ok: true });
   assert.equal(completed.status, 'completed');
+  assert.equal(completed.message, 'Operation completed.');
   assert.deepEqual(getOperationTask(config, created.taskId).result, { ok: true });
 
   const cancellable = createOperationTask(config, { method: 'tools/call', name: 'relai_exec', principal: 'client-a' });
   const cancelled = cancelOperationTask(config, cancellable.taskId);
   assert.equal(cancelled.status, 'cancelled');
   assert.equal(cancelled.cancelRequested, true);
+  assert.equal(fs.existsSync(path.join(root, 'operation-tasks')), false, 'legacy operation-task storage must not be recreated');
+  assert.equal(fs.existsSync(path.join(root, 'native-tasks')), true, 'compatibility callers must use the canonical native task store');
 
   const attributes = sanitizeAttributes({
     'relai.workspace': 'app',
@@ -49,4 +53,4 @@ try {
   fs.rmSync(root, { recursive: true, force: true });
 }
 
-console.log('Operation task persistence, principal binding, cancellation, and telemetry redaction tests passed.');
+console.log('Canonical task compatibility facade, principal binding, cancellation, and telemetry redaction tests passed.');

@@ -31,7 +31,12 @@ const readyUiState = connectionUi.withConnectionState({
     error: null
   }
 }, 'live').connectionState;
-assert.equal(connectionUi.connectionSummary(readyUiState).label, 'Available');
+assert.equal(connectionUi.connectionSummary(readyUiState).label, 'Waiting for host');
+const synchronizedUiState = connectionUi.connectionStateFor({
+  connectionState: readyUiState,
+  mcpConnection: { status: 'connected' }
+}, 'live');
+assert.equal(connectionUi.connectionSummary(synchronizedUiState).label, 'Host active');
 const rendererOwnedLiveState = connectionUi.connectionStateFor({
   connectionState: readyUiState,
   desktopStatus: {
@@ -45,10 +50,11 @@ assert.equal(rendererOwnedLiveState.dashboardUpdates.status, 'live', 'the active
 assert.deepEqual(connectionUi.connectionLayerViews(readyUiState).map(layer => layer.title), [
   'Local service',
   'Public endpoint',
-  'ChatGPT readiness',
+  'ChatGPT authorization',
+  'MCP host activity',
   'Dashboard updates'
 ]);
-assert.equal(connectionUi.connectionLayerViews(readyUiState)[3].label, 'Live');
+assert.equal(connectionUi.connectionLayerViews(readyUiState)[4].label, 'Live');
 assert.equal(connectionUi.connectionSummary({
   ...readyUiState,
   chatgptReadiness: { status: 'authentication_required' }
@@ -198,7 +204,7 @@ const windowSecurity = fs.readFileSync(path.join(root, 'electron', 'window-secur
 const statusHtml = fs.readFileSync(path.join(root, 'electron', 'renderer', 'status.html'), 'utf8');
 const securityDoc = fs.readFileSync(path.join(root, 'docs', 'SECURITY.md'), 'utf8');
 
-assert.equal(baseline.version, 29);
+assert.equal(baseline.version, 31);
 assert.deepEqual(baseline.canonicalRoutes, {
   tools: '#tools',
   general: '#settings',
@@ -207,7 +213,7 @@ assert.deepEqual(baseline.canonicalRoutes, {
   diagnostics: '#settings/diagnostics',
   advanced: '#settings/advanced'
 });
-assert.deepEqual(baseline.connectionLayers, ['Local service', 'Public endpoint', 'ChatGPT readiness', 'Dashboard updates']);
+assert.deepEqual(baseline.connectionLayers, ['Local service', 'Public endpoint', 'ChatGPT authorization', 'MCP host activity', 'Dashboard updates']);
 assert.deepEqual(baseline.approvalTokenReplacement, {
   confirmation: 'REPLACE',
   revokesOAuthGrants: true,
@@ -296,7 +302,10 @@ assert.deepEqual(baseline.accessibilityResponsive, {
   forcedColorScrollbarFallback: true,
   keyboardWindowControls: true,
   reducedMotion: true,
-  electronStepVisibility: true
+  electronStepVisibility: true,
+  highZoomTaskVisibility: true,
+  highZoomKeyboardReachability: true,
+  statusTextIndependentOfColor: true
 });
 assert.deepEqual(baseline.visualHierarchy, {
   elevatedSurfaces: ['Sidebar', 'Topbar', 'Dialogs', 'Electron setup', 'Electron recovery hero'],
@@ -312,7 +321,7 @@ assert.deepEqual(baseline.visualHierarchy, {
   connectionSetupCollapsedWhenReady: true,
   connectionLayerSingleStateMarker: true,
   routineStatusGlowDisabled: true,
-  unpublishedSessionLabelSuppressed: true,
+  unpublishedTaskLabelSuppressed: true,
   settingsPanelsQuiet: true,
   electronSecondaryCardsFlat: true
 });
@@ -347,6 +356,7 @@ assert.deepEqual(baseline.installerPolicy, {
   silentAutomationSupported: true
 });
 assert.deepEqual(electronPackage.build.nsis, {
+  artifactName: 'Rel.AI-MCP-Setup-${version}.${ext}',
   oneClick: false,
   perMachine: false,
   allowElevation: true,
@@ -355,6 +365,9 @@ assert.deepEqual(electronPackage.build.nsis, {
   createStartMenuShortcut: true,
   shortcutName: 'Rel.AI MCP',
   runAfterFinish: true
+});
+assert.deepEqual(electronPackage.build.portable, {
+  artifactName: 'Rel.AI-MCP-Portable-${version}.${ext}'
 });
 assert.deepEqual(baseline.desktopSecurityPolicy, {
   securedIpcSenders: true,
@@ -484,10 +497,10 @@ assert.match(ipcHandlers, /desktop:update:install/);
 assert.equal(electronPackage.dependencies['electron-updater'], '6.8.9');
 assert.equal(electronPackage.build.publish[0].provider, 'github');
 assert.match(releaseWorkflow, /latest\.yml/);
-assert.match(releaseWorkflow, /\*\.blockmap/);
+assert.match(releaseWorkflow, /Rel\.AI-MCP-Setup-\$env:VERSION\.exe\.blockmap/);
 assert.match(releaseWorkflow, /SHA256SUMS\.txt/);
 assert.match(releaseWorkflow, /Get-FileHash/);
-assert.match(releaseWorkflow, /sha512:/);
+assert.match(releaseWorkflow, /prepare:release-assets/);
 assert.match(appUpdaterState, /integrityVerified/);
 assert.match(appUpdaterState, /state === 'downloaded' && value\.integrityVerified === true/);
 assert.match(appUpdaterEvents, /not newer than installed version/);

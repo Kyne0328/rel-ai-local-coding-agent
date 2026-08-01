@@ -1,21 +1,22 @@
 # ngrok seed binaries
 
-Place the ngrok agent binaries here before building the Electron app:
+Rel.AI MCP ships ngrok inside the Windows installer so users do not need a separate download. The binary itself remains outside Git, while `manifest.json` records the exact reviewed release component.
 
-```txt
+```text
+vendor/ngrok/manifest.json
 vendor/ngrok/win32/ngrok.exe
 vendor/ngrok/darwin/ngrok
 vendor/ngrok/linux/ngrok
 ```
 
-These binaries are **not committed to git** (they are gitignored). Fetch them with:
+Fetch and verify the declared binaries with:
 
 ```sh
-pwsh scripts/fetch-ngrok.ps1   # Windows
-scripts/fetch-ngrok.sh         # macOS / Linux / CI
+pwsh scripts/fetch-ngrok.ps1
 ```
 
-Both download the official ngrok v3 stable agent (amd64 by default; set `NGROK_ARCH=arm64`
-for Apple Silicon / arm64 Linux). Do not commit unofficial or unverified binaries.
+The fetch fails closed unless the downloaded file matches the manifest's exact size and SHA-256. Windows builds additionally require a valid Authenticode signature from `ngrok, Inc.`, the expected certificate issuer, and the declared ngrok version.
 
-Rel.AI MCP copies the bundled seed binary to the user's writable Rel.AI state folder on first launch, then runs the managed copy from there. The managed copy can update itself without requiring users to install npm, Node, or ngrok manually.
+When ngrok publishes a new stable agent, review it first, update `manifest.json`, and then rebuild Rel.AI. Do not accept a new upstream binary by weakening or bypassing provenance checks.
+
+At runtime Rel.AI copies the packaged binary into the user's writable state directory. The managed copy is synchronized back to the packaged hash on launch. ngrok self-update checks and remote management are disabled; agent upgrades arrive only through signed Rel.AI application releases.

@@ -33,7 +33,9 @@ async function invoke(name, args, context = {}) {
 }
 
 try {
-  const response = await invoke('relai_read', { workspace: 'repo', paths: ['.env'], guidanceMode: 'none' });
+  const initialTaskResponse = await invoke('relai_start_task', { workspace: 'repo', bootstrap: 'none' });
+  const initialTaskId = initialTaskResponse.structuredContent.task_id;
+  const response = await invoke('relai_read', { task_id: initialTaskId, paths: ['.env'], guidanceMode: 'none' });
 
   assert.equal(response.isError, false, 'relai_read returns per-path skips rather than throwing');
   const readPayload = response.structuredContent;
@@ -52,7 +54,7 @@ try {
   assert.deepEqual(dotWorkspace.errorDetails.configuredWorkspaceAliases, ['repo']);
   assert.match(dotWorkspace.error, /configured workspace alias/);
 
-  const directPathResponse = await invoke('relai_start_task', { workspace: workspaceRoot }, { publicHttpOnly: true });
+  const directPathResponse = await invoke('relai_start_task', { workspace: workspaceRoot, bootstrap: 'none' }, { publicHttpOnly: true });
   assert.equal(directPathResponse.isError, false);
   assert.equal(directPathResponse.structuredContent.workspace, 'repo');
   const taskId = directPathResponse.structuredContent.task_id;

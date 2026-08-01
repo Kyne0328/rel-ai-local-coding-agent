@@ -1,0 +1,6 @@
+{
+  "name": "relai-electron-observability-benchmark",
+  "private": true,
+  "type": "module",
+  "main": "index.js"
+}

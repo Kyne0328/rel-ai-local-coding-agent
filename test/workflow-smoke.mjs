@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { startMcpClient, structuredContentOf } from './helpers/mcp-client.mjs';
+import { MCP_VERSION, startMcpClient, structuredContentOf } from './helpers/mcp-client.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'rel-ai-mcp-workflow-'));
@@ -57,9 +57,9 @@ function taskCall(id, name, args) {
 }
 
 try {
-  client.discover(1);
+  client.initialize(1);
   const discovery = await client.waitFor(1);
-  if (!discovery.result?.supportedVersions?.includes('2026-07-28')) throw new Error('MCP 2026 discovery failed.');
+  if (!discovery.result?.supportedVersions?.includes(MCP_VERSION)) throw new Error('MCP discovery failed.');
 
   taskCall(2, 'relai_start_task', { workspace: 'smoke' });
   const startedTask = structuredContentOf(await client.waitFor(2));

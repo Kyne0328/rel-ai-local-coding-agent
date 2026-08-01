@@ -17,7 +17,7 @@ Rel.AI MCP exposes 20 callable tools, all active. The six compatibility tools we
 12. Prepare review text when useful: relai_git_draft_pr
 ```
 
-The initial snapshot is a bounded repository map, not an access boundary. Search and direct reads can continue anywhere inside the configured workspace. When `projectInstructions` is present, apply its sources in order: `REL_AI.md` overrides `.relai/instructions.md`. Read the named file directly if the combined 64 KiB payload is truncated. The server does not execute instruction content, generate helper scripts, expose hidden tool tiers, or route around the registered workspace tools.
+The compact task bootstrap and any refreshed snapshot are bounded repository maps, not access boundaries. Search and direct reads can continue anywhere inside the task-bound workspace. When `projectInstructions` is present, apply its sources in the returned precedence order: `REL_AI.md` overrides `.relai/instructions.md`, and the nearest applicable `AGENTS.override.md` or `AGENTS.md` overrides parent-directory agent guidance. Read a named file directly if the combined 64 KiB payload is truncated. The server does not execute instruction content, generate helper scripts, expose hidden tool tiers, or route around the registered workspace tools.
 
 ## Tool selection
 
@@ -73,7 +73,7 @@ Completion is never inferred from validation alone. Passing `complete:true` with
 
 `relai_git_draft_pr` only prepares local title/body text from a Git diff. It never calls a hosting provider or changes a remote pull request.
 
-Persistent process management, managed worktrees, durable deferred operations, and explicit task completion are part of the current tool surface. Long-running one-shot operations return an `operationTaskId`; managed processes and worktrees retain separate stable identities and ownership checks.
+Persistent process management, managed worktrees, native MCP Tasks interoperability, and explicit task completion are part of the current surface. Managed processes and worktrees retain separate stable identities and ownership checks; one-shot commands do not expose proprietary deferred-operation handles.
 
 ## Edit safeguards
 

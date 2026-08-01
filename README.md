@@ -23,25 +23,27 @@ ChatGPT asks -> Rel.AI MCP inspects, changes, validates, and reviews locally -> 
 Tool use is intentionally small but flexible. ChatGPT should skip stages it does not need. A common workflow is:
 
 ```text
-relai_start_task -> relai_repo_snapshot (when useful) -> relai_search / relai_code_inspect -> relai_read -> relai_edit -> relai_run_checks (complete:true + summary)
+relai_start_task (returns compact bootstrap) -> relai_search / relai_code_inspect -> relai_read -> relai_edit -> relai_run_checks (complete:true + summary)
 ```
 
-No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. First-party application code is ESM-only except for one sandbox-required Electron preload boundary. Rel.AI targets MCP `2026-07-28` through the stable MCP SDK v2 and exposes 33 active tools over stdio and OAuth-protected stateless HTTP. The core protocol has no initialize handshake or protocol session; every request carries its protocol version, client identity, capabilities, trace context, method, and named target explicitly.
+No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. First-party application code is ESM-only except for one sandbox-required Electron preload boundary. Rel.AI targets MCP `2026-07-28` through the stable MCP SDK v2 and exposes 33 active tools over stdio and OAuth-protected stateless HTTP. Clients use `server/discover`; every request carries protocol, client, and capability metadata without creating transport-session identity.
 
-Logical coding work is isolated by opaque `task_id`, persistent commands by `processId`, deferred operations by durable `operationTaskId`, worktrees by dynamic workspace alias, and resumable approvals by signed `requestState`. These visible handles replace hidden transport-session state.
+Logical coding work is isolated by an opaque workspace-bound `task_id`, persistent commands by `processId`, native asynchronous work by MCP Task IDs, worktrees by dynamic workspace alias, and resumable approvals by signed `requestState`. After task creation, task-scoped tools require `task_id` and resolve the bound workspace automatically; an optional `workspace` argument acts only as an ownership assertion.
 
 Rel.AI MCP still lightly nods to the original Rel.AI idea, but this README stands on its own: this is now a local MCP bridge for ChatGPT.
 
 ### Repository-specific instructions
 
-Rel.AI automatically includes project guidance in repository snapshots when either of these files exists:
+Rel.AI automatically includes project guidance in task bootstrap and repository snapshots. It supports the existing root files:
 
 ```text
 REL_AI.md
 .relai/instructions.md
 ```
 
-`REL_AI.md` has higher precedence. When both files exist, their content is returned with named headings and explicit source order. The combined connector payload is capped at 64 KiB; when it is truncated, ChatGPT can read either source directly with `relai_read`. Binary-looking files, symbolic links, and paths that escape the workspace are rejected. The content is guidance only and is never executed automatically.
+It also discovers `AGENTS.override.md` or `AGENTS.md` from the workspace root down to the optional `instructionPath` supplied to `relai_start_task`. In each directory, `AGENTS.override.md` replaces `AGENTS.md`; instructions nearer the target path override parent instructions. `REL_AI.md` remains highest precedence, followed by `.relai/instructions.md`.
+
+Instruction content is returned with named headings and explicit source order. The combined connector payload is capped at 64 KiB; when truncated, ChatGPT can read a named source directly with `relai_read`. Binary-looking files, symbolic links, and paths that escape the workspace are rejected. The content is guidance only and is never executed automatically.
 
 ---
 
@@ -64,7 +66,7 @@ It can:
 - trace definitions, callers, importers, tests, UI surfaces, and registration paths
 - normalize compiler, analyzer, and linter diagnostics
 - create signed change-aware validation plans
-- load repository-specific guidance from `REL_AI.md` and `.relai/instructions.md`
+- load repository-specific guidance from hierarchical `AGENTS.md`, `REL_AI.md`, and `.relai/instructions.md`
 - inspect git diffs
 - run explicit git status, commit, push, and PR-draft flows
 - restore local changes
@@ -205,7 +207,7 @@ The important design choice: ChatGPT does the thinking, but the local bridge kee
 
 Rel.AI MCP is a self-contained Windows desktop app. Download the latest installer from the [Releases page](https://github.com/Kyne0328/rel-ai-mcp/releases) and run it. The standard setup wizard lets you install for the current user or for all users, review the destination folder, and click **Install**. Selecting **all users** requests Windows administrator approval when the installer is not already elevated. The Finish page includes an optional **Run Rel.AI MCP** checkbox, enabled by default.
 
-You do **not** need to install Node.js, npm, or ngrok. The app ships its own runtime and its own ngrok agent, and it keeps that agent updated on its own.
+You do **not** need to install Node.js, npm, or ngrok. The app ships its own runtime and a pinned, upstream-signed ngrok agent. Agent upgrades arrive through signed Rel.AI application updates, so users still install only Rel.AI.
 
 The one thing it cannot create for you is an ngrok account. Before first launch, sign up at [ngrok.com](https://ngrok.com) (the free tier is enough) and grab two things:
 
@@ -229,7 +231,7 @@ The installed Windows app can also enable **Launch at sign-in** under **Settings
 3. In ChatGPT, go to **Settings > Apps > Create** and paste that URL.
 4. Set authentication to **OAuth**. ChatGPT opens a sign-in page — enter your Rel.AI approval token to approve.
 
-The approval token is under **Settings > Connection**. Replacing it requires typing `REPLACE`; Rel.AI revokes authorization codes, access tokens, refresh tokens, and Dynamic Client Registrations. ChatGPT must register and approve a new issuer-bound OAuth client. This release intentionally does not preserve old connector registrations.
+The approval token is under **Settings > Connection**. Replacing it requires typing `REPLACE`; Rel.AI revokes authorization codes, access tokens, and refresh tokens while preserving issuer-bound ChatGPT client registrations. The existing ChatGPT app can then reconnect and approve again with the new token.
 
 Because the domain is static, the connector keeps working across restarts. You configure it once.
 
@@ -273,19 +275,19 @@ npm run knip:production      # production-only dead-code audit
 
 The normal test gate includes `npm run knip:dependencies` so dependency drift and invalid Knip configuration fail CI. The broader Knip reports remain explicit review commands because removing files or exports requires source-level verification.
 
-`electron:build` and `electron:dist` refuse to run when the ngrok seed is missing — packaging without it produces an installer whose tunnel cannot start.
+`electron:build` and `electron:dist` refuse to run when the ngrok seed is missing or differs from its reviewed provenance manifest. Windows verification requires the exact version, size, SHA-256, Authenticode publisher, and certificate issuer.
 
-Windows CI and the release workflow build from a clean output directory, verify the packaged layout and hardened Electron fuses, then exercise OAuth/PKCE and the MCP task lifecycle through the packaged Node backend. Production publication requires protected Windows signing credentials and valid Authenticode signatures, then generates a CycloneDX SBOM and GitHub provenance attestations. Windows x64 is the only packaged target validated and published by the current automation. Installer, uninstall, first-run UI, real ngrok publication, logged-in ChatGPT app selection, live approval-token rotation, and update-from-prior-release behavior remain manual checks on a disposable Windows machine. See [docs/USABILITY_ACCEPTANCE.md](docs/USABILITY_ACCEPTANCE.md), [docs/INSTALLER_TEST_SAFETY.md](docs/INSTALLER_TEST_SAFETY.md), and [docs/PACKAGING_SECURITY.md](docs/PACKAGING_SECURITY.md).
+Windows CI and the release workflow build from a clean output directory, verify the packaged layout and hardened Electron fuses, then exercise OAuth/PKCE and the MCP task lifecycle through the packaged Node backend. Production publication requires protected Windows signing credentials and `forceCodeSigning`, verifies the installer, portable app, unpacked app, and bundled ngrok component independently, then generates a CycloneDX SBOM and GitHub provenance attestations. Windows x64 is the only packaged target validated and published by the current automation. Installer, uninstall, first-run UI, real ngrok publication, antivirus-vendor review, logged-in ChatGPT app selection, live approval-token rotation, and update-from-prior-release behavior remain manual checks on a disposable Windows machine. See [docs/USABILITY_ACCEPTANCE.md](docs/USABILITY_ACCEPTANCE.md), [docs/INSTALLER_TEST_SAFETY.md](docs/INSTALLER_TEST_SAFETY.md), [docs/PACKAGING_SECURITY.md](docs/PACKAGING_SECURITY.md), and [docs/ANTIVIRUS_FALSE_POSITIVES.md](docs/ANTIVIRUS_FALSE_POSITIVES.md).
 
 ## MCP tools
 
-Rel.AI exposes 34 active tools through MCP SDK v2 and MCP `2026-07-28`. HTTP clients use stateless `POST /mcp` requests with `MCP-Protocol-Version`, `Mcp-Method`, and `Mcp-Name` where applicable. The removed initialize handshake, `Mcp-Session-Id`, `/sse`, `/messages`, compatibility aliases, and legacy client recovery are not accepted. Older clients must remain on an earlier Rel.AI release.
+Rel.AI exposes 33 active tools through MCP SDK v2 and MCP `2026-07-28`. HTTP clients call `server/discover` and send `MCP-Protocol-Version`, `Mcp-Method`, and the matching per-request `_meta` envelope on every `/mcp` request. Rel.AI does not issue `MCP-Session-Id`; removed lifecycle methods, `/sse`, `/messages`, compatibility aliases, and JSON-RPC batches remain unsupported.
 
-Each tool publishes an input and output JSON Schema. Expensive one-shot commands, diagnostics, and validation can run with `defer:true`; Rel.AI returns a durable operation handle that is polled or cancelled through normal MCP tools under the same logical `task_id`. The stable TypeScript SDK does not yet ship the Tasks extension adapter, so this release does not advertise nonfunctional native `tasks/*` methods. Destructive actions can return `input_required`; the client resumes them with the accepted input and the signed opaque `requestState`.
+Each tool publishes an input and output JSON Schema. HTTP discovery advertises the native MCP Tasks extension and exposes a capability-safe diagnostic probe: requests that advertise the extension may receive a native task, while requests without it receive the standard missing-capability error. One-shot commands, diagnostics, and validation remain ordinary tool calls; persistent interactive work uses `relai_process_*`. Destructive actions can return `input_required`; the client resumes them with the accepted input and the signed opaque `requestState`.
 
 | Tool | Purpose |
 | --- | --- |
-| `relai_start_task` | Create an independent logical task and return the opaque `task_id` required by subsequent calls. |
+| `relai_start_task` | Create a workspace-bound logical task and return its `task_id` with compact repository and instruction bootstrap context. |
 | `relai_repo_snapshot` | Return a filtered repository map, manifests, checks, Git summary, and project instructions. |
 | `relai_read` | Read bounded files, line ranges, or directory summaries. |
 | `relai_search` | Search tracked and untracked workspace text with adaptive bounded context. |
@@ -302,8 +304,7 @@ Each tool publishes an input and output JSON Schema. Expensive one-shot commands
 | `relai_semantic_search` | Rank local source using private hashed-vector, lexical, path, and symbol signals. |
 | `relai_diagnostics_run` | Run diagnostics and normalize path, line, column, severity, code, message, and source. |
 | `relai_validation_plan` | Create a signed short-lived validation plan from changes, impact, tests, and repository checks. |
-| `relai_operation_task_get` | Read the status, progress, result, or error for a deferred operation owned by the same logical task. |
-| `relai_operation_task_cancel` | Cancel a deferred operation and cooperatively terminate its active process tree. |
+| `relai_native_tasks_probe` | Diagnose native MCP Tasks negotiation, routing, polling, update, cancellation, ownership, and final results. |
 | `relai_tidy_plan` | Prepare an expiry-bound cleanup plan for task-owned untracked artifacts. |
 | `relai_tidy_run` | Apply a prepared cleanup plan after ownership and hash verification. |
 | `relai_run_checks` | Run direct or plan-bound validation and optionally close the logical task atomically. |
@@ -342,7 +343,7 @@ Use `.relaiignore` in a repo to add repo-specific AI-context exclusions.
 
 The snapshot is only a structural map. It does not restrict `relai_search` or direct `relai_read` calls: ChatGPT may continue locating and reading any relevant non-sensitive file inside the configured workspace. The default map contains up to 3,000 files while generated and cache directories remain excluded.
 
-The runtime roadmap is in [docs/CHATGPT_CODING_RUNTIME_ROADMAP.md](docs/CHATGPT_CODING_RUNTIME_ROADMAP.md). The current build includes repository context, live and hybrid code intelligence, one-shot and persistent commands, project instructions, managed worktrees, durable deferred operations, signed validation plans, structured diagnostics, multi-round-trip approvals, resource caching, and optional OpenTelemetry export. Independent model workers remain deferred.
+The runtime roadmap is in [docs/CHATGPT_CODING_RUNTIME_ROADMAP.md](docs/CHATGPT_CODING_RUNTIME_ROADMAP.md). The current build includes repository context, live and hybrid code intelligence, one-shot and persistent commands, project instructions, managed worktrees, native MCP Tasks interoperability on HTTP, signed validation plans, structured diagnostics, multi-round-trip approvals, resource caching, and optional OpenTelemetry export. Independent model workers remain deferred.
 
 ---
 
@@ -388,8 +389,8 @@ Use this guide together with the `writeGuidance` returned by `relai_repo_snapsho
 
 | Situation | Use |
 | --- | --- |
-| Start an independent objective | `relai_start_task`; retain its `task_id` and pass it on every later call for that objective |
-| Need a repository overview | `relai_repo_snapshot` with the same `task_id` |
+| Start an independent objective | `relai_start_task`; use its bootstrap, retain its workspace-bound `task_id`, and pass the ID on every later task-scoped call |
+| Need a refreshed repository overview | `relai_repo_snapshot` with the same `task_id`; the bound workspace may be omitted |
 | Locate code by content | `relai_search`; default auto mode includes bounded prioritized source when useful. Use `mode:"compact"` for inventory-only output or `mode:"context"` for fixed caller-controlled context limits. |
 | Trace a symbol, callers, importers, impact, or affected tests | `relai_code_inspect` |
 | Need focused file content | `relai_read`; add `startLine` / `endLine` for large files, or `ranges` for several files at once |
@@ -398,8 +399,8 @@ Use this guide together with the `writeGuidance` returned by `relai_repo_snapsho
 | Multi-file patch-shaped change | `relai_edit` with `updateText` |
 | Several edits in one approval | `relai_edit` with `edits: [...]` |
 | Tidy session-created files | `relai_tidy_plan` then `relai_tidy_run` |
-| Install dependencies, run migrations, or invoke repository tooling | `relai_exec`; pass `defer:true` for long one-shot commands |
-| Poll or cancel deferred work | `relai_operation_task_get` / `relai_operation_task_cancel` with the same logical `task_id` |
+| Install dependencies, run migrations, or invoke repository tooling | `relai_exec`; use `relai_process_*` when the command must remain interactive or persistent |
+| Probe or control native asynchronous work | `relai_native_tasks_probe` plus MCP `tasks/get`, `tasks/update`, and `tasks/cancel` when the request advertises the Tasks extension |
 | Validate and finish atomically | `relai_run_checks` with the task's `task_id`, `complete:true`, and `summary` |
 | Finish after a post-validation read-only review | `relai_complete_task` with the same `task_id` after the final successful validation and review |
 | Probe a local HTTP route | `relai_http_probe` |
@@ -423,11 +424,11 @@ Alternative when review must follow validation:
 relai_start_task -> inspect -> read -> change -> relai_run_checks -> relai_diff / relai_status -> relai_complete_task (same task_id throughout)
 ```
 
-Adaptive search requires no mode field: `{ "workspace": "myapp", "task_id": "<task-id>", "pattern": "getDepartments" }`. Up to 20 matches use the focused tier, 21–100 use the moderate tier, and broader searches use smaller bounded context. Auto mode prioritizes files whose paths resemble the query and files with more retained matches. Results remain grouped by file, overlapping ranges are merged, and each contextual file includes a SHA-256 hash.
+Adaptive search requires no mode field: `{ "task_id": "<task-id>", "pattern": "getDepartments" }`. Up to 20 matches use the focused tier, 21–100 use the moderate tier, and broader searches use smaller bounded context. Auto mode prioritizes files whose paths resemble the query and files with more retained matches. Results remain grouped by file, overlapping ranges are merged, and each contextual file includes a SHA-256 hash.
 
 Use `{ "mode": "compact" }` for the original path/line-only response. Use `{ "mode": "context", "contextBefore": 5, "contextAfter": 8, "maxBytes": 131072 }` when exact caller-controlled context is required. Supplying context options without a mode also retains explicit context behavior for compatibility. Use `groupByFile:false` for flat ranges or `mergeOverlaps:false` to retain one range per match.
 
-For large files, request only the relevant lines when possible, for example `{ "workspace": "myapp", "task_id": "<task-id>", "paths": ["src/server.js"], "startLine": 120, "endLine": 220 }`.
+For large files, request only the relevant lines when possible, for example `{ "task_id": "<task-id>", "paths": ["src/server.js"], "startLine": 120, "endLine": 220 }`.
 
 `startLine`/`endLine` apply to every path in the batch. When several files need different windows, pass `ranges` instead of making one call per file:
 

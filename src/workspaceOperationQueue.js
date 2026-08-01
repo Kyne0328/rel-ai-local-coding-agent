@@ -1,20 +1,21 @@
-
-
-// Per-workspace reader/writer lock.
+// Hierarchical workspace/task reader-writer queue.
 //
-// Every tool call used to serialize behind one FIFO chain per workspace alias, which
-// meant a batch of read-only calls (the common ChatGPT pattern: several relai_read or
-// relai_search calls in one JSON-RPC batch) ran strictly one at a time even though
-// the transport already dispatched them in parallel. Reads now share the lock with
-// each other while writers stay exclusive, so a mutation still never races a read.
+// Normal tool calls share a workspace-level read barrier and then acquire a
+// task-local reader/writer lane. This keeps calls within one logical task ordered
+// while allowing independent ChatGPT sessions/tasks to work in the same workspace
+// concurrently. Repository-global operations acquire the workspace barrier as a
+// writer, so commit, push, reset, restore, tidy, and worktree changes remain
+// exclusive across every task.
 //
-// The queue is FIFO-fair: a waiting writer at the head blocks later readers, so a
-// steady stream of reads cannot starve an edit.
+// Both levels are FIFO-fair: a waiting writer blocks later readers, preventing
+// workspace-global maintenance and task-local writes from starving.
 
 const locks = new Map();
 
 const READ = 'read';
 const WRITE = 'write';
+const TASK_SCOPE = 'task';
+const WORKSPACE_SCOPE = 'workspace';
 
 function lockStateFor(key) {
   let state = locks.get(key);
@@ -60,23 +61,77 @@ function release(key, state, mode) {
   }
 }
 
-/**
- * Run `operation` under the workspace lock. `options.mode` is 'write' by default so
- * an un-annotated caller keeps the original exclusive behavior.
- */
-async function runWorkspaceOperation(workspaceAlias, operation, options = {}) {
-  const key = String(workspaceAlias || '').trim();
-  if (!key) return operation();
-
-  const mode = options.mode === READ ? READ : WRITE;
+async function withLock(key, mode, operation) {
   const state = lockStateFor(key);
   const waitMs = await acquire(state, mode);
-  if (typeof options.onWait === 'function') options.onWait(waitMs, { workspace: key, mode, queued: state.queue.length });
   try {
-    return await operation();
+    return await operation(waitMs, state);
   } finally {
     release(key, state, mode);
   }
+}
+
+function workspaceKey(workspace) {
+  return `workspace:${workspace}`;
+}
+
+function taskKey(workspace, taskId) {
+  return `workspace:${workspace}:task:${taskId}`;
+}
+
+function notifyWait(options, waitMs, details) {
+  if (typeof options.onWait !== 'function') return;
+  try {
+    options.onWait(waitMs, details);
+  } catch {
+    // Observability must never strand an acquired lock or fail the operation.
+  }
+}
+
+/**
+ * Run `operation` under hierarchical workspace/task locking.
+ *
+ * Task scope is the default when `taskId` is present. Calls in different tasks may
+ * overlap, while calls in the same task retain reader/writer ordering. Workspace
+ * scope is reserved for repository-global operations that must exclude every task.
+ * Calls without a task identity retain the original workspace-level behavior.
+ */
+async function runWorkspaceOperation(workspaceAlias, operation, options = {}) {
+  const workspace = String(workspaceAlias || '').trim();
+  if (!workspace) return operation();
+
+  const mode = options.mode === READ ? READ : WRITE;
+  const taskId = String(options.taskId || '').trim();
+  const scope = options.scope === WORKSPACE_SCOPE || !taskId ? WORKSPACE_SCOPE : TASK_SCOPE;
+  const outerKey = workspaceKey(workspace);
+
+  if (scope === WORKSPACE_SCOPE) {
+    return withLock(outerKey, mode, async (waitMs, state) => {
+      notifyWait(options, waitMs, {
+        workspace,
+        taskId,
+        scope,
+        mode,
+        queued: state.queue.length
+      });
+      return operation();
+    });
+  }
+
+  return withLock(outerKey, READ, async (workspaceWaitMs, workspaceState) => {
+    const laneKey = taskKey(workspace, taskId);
+    return withLock(laneKey, mode, async (taskWaitMs, taskState) => {
+      const waitMs = workspaceWaitMs + taskWaitMs;
+      notifyWait(options, waitMs, {
+        workspace,
+        taskId,
+        scope,
+        mode,
+        queued: workspaceState.queue.length + taskState.queue.length
+      });
+      return operation();
+    });
+  });
 }
 
 function pendingWorkspaceOperations() {

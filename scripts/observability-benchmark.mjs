@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { createToolActivityTracker } from '../src/toolActivity.js';
 import { recordTaskActivityEvent, readTaskHistory } from '../src/taskHistoryStore.js';
 import { buildDashboardPayload } from '../src/http/dashboardData.js';
@@ -114,17 +115,29 @@ try {
   addMetric('reconnect_snapshot_latency_ms', `warm canonical dashboard snapshot with ${tasks.length} task session(s); median of 5`, null, round(reconnectMs), round(range(reconnectSamples)), 150, '<=');
 
   const quietClockUpdates = 60;
-  addMetric('quiet_clock_direct_node_updates_60s', 'shared one-second clock contract; no full render', null, quietClockUpdates, 0, 60, '<=');
-  addMetric('quiet_full_dashboard_renders_60s', 'requires Electron Chromium renderer host', null, null, null, 0, '<=', 'blocked', 'Electron host exited before JavaScript in this environment.');
-  addMetric('full_renders_during_100_progress_updates', 'requires Electron Chromium renderer host', null, null, null, 5, '<=', 'blocked', 'Renderer benchmark not executable until Electron launch blocker is resolved.');
-  addMetric('timeline_200_event_render_ms', 'requires Electron Chromium renderer host', null, null, null, 200, '<=', 'blocked', 'Renderer benchmark not executable until Electron launch blocker is resolved.');
-  addMetric('session_switch_memory_delta_bytes', 'requires Electron Chromium renderer host', null, null, null, 16 * 1024 * 1024, '<=', 'blocked', 'Renderer benchmark not executable until Electron launch blocker is resolved.');
-  addMetric('hidden_tab_timer_behavior', 'requires Electron Chromium renderer host', null, null, null, 0, '<=', 'blocked', 'Renderer benchmark not executable until Electron launch blocker is resolved.');
-  addMetric('renderer_reconnect_to_current_state_ms', 'requires Electron Chromium renderer host', null, null, null, 500, '<=', 'blocked', 'Renderer benchmark not executable until Electron launch blocker is resolved.');
+  addMetric('quiet_clock_direct_node_updates_60s', '60 direct clock-node updates; no dashboard tree replacement', null, quietClockUpdates, 0, 60, '<=');
+  const renderer = runRendererBenchmark();
+  if (renderer.ok) {
+    addMetric('quiet_full_dashboard_renders_60s', 'executed hidden Electron renderer workload with 60 direct clock updates', null, renderer.result.quietFullRenders, 0, 0, '<=');
+    addMetric('full_renders_during_100_progress_updates', 'executed 100 progress text updates in Electron', null, renderer.result.progressFullRenders, round(renderer.result.progressLatencyMs), 0, '<=');
+    addMetric('timeline_200_event_render_ms', 'executed creation and attachment of a 200-event timeline in Electron', null, round(renderer.result.timelineRenderMs), 0, 200, '<=');
+    addMetric('logical_task_switch_memory_delta_bytes', 'executed 40 logical-task panel switches in Electron with precise memory information', null, renderer.result.logicalTaskSwitchMemoryDeltaBytes, 0, 16 * 1024 * 1024, '<=');
+    addMetric('hidden_tab_timer_elapsed_ms', 'executed a 100 ms timer in a hidden Electron BrowserWindow', null, round(renderer.result.hiddenTimerElapsedMs), 0, 1500, '<=');
+    addMetric('renderer_reconnect_to_current_state_ms', 'executed replacement with a 500-record current-state snapshot in Electron', null, round(renderer.result.reconnectMs), 0, 500, '<=');
+  } else {
+    for (const [metric, threshold] of [
+      ['quiet_full_dashboard_renders_60s', 0],
+      ['full_renders_during_100_progress_updates', 0],
+      ['timeline_200_event_render_ms', 200],
+      ['logical_task_switch_memory_delta_bytes', 16 * 1024 * 1024],
+      ['hidden_tab_timer_elapsed_ms', 1500],
+      ['renderer_reconnect_to_current_state_ms', 500]
+    ]) addMetric(metric, 'required Electron renderer workload', null, null, null, threshold, '<=', 'incomplete', renderer.diagnostic);
+  }
 
   tracker.cancelTask(taskId, { reason: 'Benchmark completed.', initiator: 'benchmark' });
   const report = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     generatedAt: new Date().toISOString(),
     commit: gitCommit(),
     baselineAvailable: false,
@@ -137,15 +150,17 @@ try {
       totalMemoryBytes: os.totalmem()
     },
     metrics,
+    complete: metrics.every(item => item.status !== 'incomplete'),
     summary: {
       passed: metrics.filter(item => item.status === 'pass').length,
       failed: metrics.filter(item => item.status === 'fail').length,
-      blocked: metrics.filter(item => item.status === 'blocked').length
+      incomplete: metrics.filter(item => item.status === 'incomplete').length
     }
   };
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
   fs.writeFileSync(outputPath, JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
+  if (!report.complete || report.summary.failed > 0) process.exitCode = 1;
 } finally {
   if (publicationTimer) clearTimeout(publicationTimer);
   unsubscribe();
@@ -154,8 +169,44 @@ try {
 }
 
 function addMetric(metric, workload, baseline, result, variance, threshold, comparator, forcedStatus, note = '') {
-  const status = forcedStatus || (result == null ? 'blocked' : comparator === '<=' ? (result <= threshold ? 'pass' : 'fail') : (result >= threshold ? 'pass' : 'fail'));
+  const status = forcedStatus || (result == null ? 'incomplete' : comparator === '<=' ? (result <= threshold ? 'pass' : 'fail') : (result >= threshold ? 'pass' : 'fail'));
   metrics.push({ metric, workload, baseline, result, variance, threshold, comparator, status, note });
+}
+
+function runRendererBenchmark() {
+  try {
+    const electronRoot = path.join(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'), 'electron', 'node_modules', 'electron');
+    const executableName = fs.readFileSync(path.join(electronRoot, 'path.txt'), 'utf8').trim();
+    const executable = path.join(electronRoot, 'dist', executableName);
+    const fixture = path.join(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'), 'test', 'fixtures', 'electron-observability-benchmark');
+    if (!fs.existsSync(executable)) throw new Error(`Electron executable is missing: ${executable}`);
+    const child = spawnSync(executable, [fixture], {
+      cwd: fixture,
+      env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: 'true' },
+      encoding: 'utf8',
+      timeout: 60_000,
+      maxBuffer: 4 * 1024 * 1024,
+      windowsHide: true,
+      shell: false
+    });
+    if (child.error) throw child.error;
+    if (child.signal) throw new Error(`Electron renderer workload was terminated by ${child.signal}.`);
+    const output = `${child.stdout || ''}\n${child.stderr || ''}`;
+    const marker = output.match(/REL_AI_RENDERER_BENCHMARK_RESULT=([A-Za-z0-9+/=]+)/);
+    if (child.status !== 0 || !marker) {
+      const encodedError = output.match(/REL_AI_RENDERER_BENCHMARK_ERROR=([A-Za-z0-9+/=]+)/)?.[1];
+      const detail = encodedError ? Buffer.from(encodedError, 'base64').toString('utf8') : output.trim();
+      throw new Error(`Electron renderer workload failed with exit ${child.status}: ${detail}`);
+    }
+    const result = JSON.parse(Buffer.from(marker[1], 'base64').toString('utf8'));
+    const required = ['quietFullRenders', 'progressFullRenders', 'progressLatencyMs', 'timelineRenderMs', 'logicalTaskSwitchMemoryDeltaBytes', 'hiddenTimerElapsedMs', 'reconnectMs'];
+    for (const name of required) {
+      if (!Number.isFinite(result[name])) throw new Error(`Electron renderer metric ${name} is missing or non-numeric.`);
+    }
+    return { ok: true, result };
+  } catch (error) {
+    return { ok: false, diagnostic: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 function directoryBytes(directory) {

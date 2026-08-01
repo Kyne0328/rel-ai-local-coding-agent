@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage, powerSaveBlocker, Notification, dialog, screen, protocol } from 'electron';
-import { autoUpdater } from 'electron-updater';
+import electronUpdater from 'electron-updater';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { importResourceModule } from './resource-path.js';
@@ -20,9 +20,11 @@ import { createDesktopSettingsManager } from './desktop-settings.js';
 import { createAppUpdater } from './app-updater.js';
 import { createDesktopLifecycleManager } from './desktop-lifecycle.js';
 import { STARTUP_BACKGROUND_COLOR } from './startup-background.js';
+import { removeControllerRuntimeMarker, writeControllerRuntimeMarker } from './controller-runtime.js';
 import * as managedNgrok from './managed-ngrok.js';
 import { hasExistingConfig, readGuiConfig, buildMcpUrl, normalizeNgrokDomain, normalizeNgrokAuthtoken, normalizePort } from './launcher-utils.js';
 
+const { autoUpdater } = electronUpdater;
 const electronRoot = path.dirname(fileURLToPath(import.meta.url));
 const preloadPath = path.join(electronRoot, 'preload.cjs');
 const APP_ICON_PATH = path.join(electronRoot, 'build', 'icon.png');
@@ -121,6 +123,7 @@ if (!gotLock) {
   });
 
   app.whenReady().then(async () => {
+    writeControllerRuntimeMarker(app);
     installLocalProtocol(protocol, RENDERER_ROOT);
     const lifecycleStatus = desktopLifecycle.start();
     desktopTray.setup();
@@ -132,6 +135,7 @@ if (!gotLock) {
 
 app.on('before-quit', () => {
   isQuitting = true;
+  removeControllerRuntimeMarker();
   const runtimeConfig = configModule.readConfig();
   void stopAllManagedProcesses(runtimeConfig).catch(() => {});
   void shutdownTelemetry().catch(() => {});

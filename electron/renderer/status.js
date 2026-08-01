@@ -161,7 +161,7 @@ function renderTaskMeta() {
     ? `${activeCalls} ${pluralize(activeCalls, 'active call')}`
     : 'no active Rel.AI call';
   const workspace = activityLocation(activity, tasks);
-  const taskLabel = `${taskCount} ${pluralize(taskCount, 'session')}`;
+  const taskLabel = `${taskCount} ${pluralize(taskCount, 'logical task')}`;
   element.innerHTML = `<span class="activity-pulse" aria-hidden="true"></span><strong>${escapeText(taskLabel)}</strong><span>${escapeText(workspace)}</span><span>${escapeText(calls)}</span><time id="taskElapsed"></time>`;
   renderTemporalText();
 }
@@ -221,10 +221,10 @@ function renderLastTask() {
   const completed = task.status === 'completed' && task.completionKnown === true;
   card.className = `app-card last-task-card ${attention ? 'attention' : 'completed'}`;
   let icon = '•';
-  let title = 'Last Rel.AI session is inactive';
+  let title = 'Last logical task is inactive';
   if (attention) {
     icon = '!';
-    title = 'Last Rel.AI session had a failed call';
+    title = 'Last logical task had a failed call';
   } else if (completed) {
     icon = '✓';
     title = 'Task completion reported';

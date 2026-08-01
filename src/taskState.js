@@ -7,23 +7,23 @@ const CANONICAL_TASK_STATUSES = Object.freeze([
   'waiting_for_approval',
   'blocked',
   'validating',
+  'validation_failed',
   'completed',
-  'completed_with_warnings',
   'failed',
   'cancelled'
 ]);
 
 const CANONICAL_TASK_STATUS_SET = new Set(CANONICAL_TASK_STATUSES);
-const TERMINAL_TASK_STATUSES = new Set(['completed', 'completed_with_warnings', 'failed', 'cancelled']);
+const TERMINAL_TASK_STATUSES = new Set(['completed', 'failed', 'cancelled']);
 const TASK_TRANSITIONS = Object.freeze({
   queued: Object.freeze(['planning', 'running', 'cancelled']),
-  planning: Object.freeze(['running', 'waiting_for_approval', 'blocked', 'validating', 'completed', 'failed', 'cancelled']),
-  running: Object.freeze(['planning', 'waiting_for_approval', 'blocked', 'validating', 'completed', 'completed_with_warnings', 'failed', 'cancelled']),
+  planning: Object.freeze(['running', 'waiting_for_approval', 'blocked', 'validating', 'validation_failed', 'completed', 'failed', 'cancelled']),
+  running: Object.freeze(['planning', 'waiting_for_approval', 'blocked', 'validating', 'validation_failed', 'completed', 'failed', 'cancelled']),
   waiting_for_approval: Object.freeze(['running', 'blocked', 'failed', 'cancelled']),
-  blocked: Object.freeze(['running', 'waiting_for_approval', 'failed', 'cancelled']),
-  validating: Object.freeze(['running', 'completed', 'completed_with_warnings', 'failed', 'cancelled']),
+  blocked: Object.freeze(['running', 'waiting_for_approval', 'validating', 'validation_failed', 'failed', 'cancelled']),
+  validating: Object.freeze(['running', 'validation_failed', 'completed', 'failed', 'cancelled']),
+  validation_failed: Object.freeze(['planning', 'running', 'blocked', 'validating', 'completed', 'failed', 'cancelled']),
   completed: Object.freeze([]),
-  completed_with_warnings: Object.freeze([]),
   failed: Object.freeze([]),
   cancelled: Object.freeze([])
 });
@@ -38,17 +38,18 @@ function isTerminalTaskStatus(value) {
 
 function normalizeHistoricalTaskStatus(value, record = {}) {
   const status = String(value || '').trim().toLowerCase();
+  if (status === 'completed_with_warnings') return 'completed';
   if (isCanonicalTaskStatus(status)) return status;
   if (status === 'working' || status === 'active') return 'running';
   if (status === 'waiting' || status === 'settling' || status === 'open') return 'planning';
   if (status === 'approval' || status === 'awaiting_approval') return 'waiting_for_approval';
-  if (status === 'attention') return record.completionKnown === true ? 'completed_with_warnings' : 'failed';
+  if (status === 'attention') return record.completionKnown === true ? 'completed' : 'failed';
   if (status === 'inactive' || status === 'expired') {
-    if (record.completionKnown === true) return Number(record.failures || 0) > 0 ? 'completed_with_warnings' : 'completed';
+    if (record.completionKnown === true) return 'completed';
     if (hasFailureEvidence(record)) return 'failed';
     return 'cancelled';
   }
-  if (record.completionKnown === true) return Number(record.failures || 0) > 0 ? 'completed_with_warnings' : 'completed';
+  if (record.completionKnown === true) return 'completed';
   if (hasFailureEvidence(record)) return 'failed';
   if (record.endedAt || record.completedAt) return 'cancelled';
   return 'planning';

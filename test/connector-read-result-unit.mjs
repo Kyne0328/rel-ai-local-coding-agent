@@ -27,12 +27,16 @@ const { callTool } = await import('../src/tools.js');
 const { toolResult } = await import('../src/mcpServer.js');
 
 try {
-  const output = await callTool('relai_read', {
+  const task = await callTool('relai_start_task', {
     workspace: 'repo',
+    bootstrap: 'none'
+  }, { publicHttpOnly: true, requestId: 1, transportType: 'test' });
+  const output = await callTool('relai_read', {
+    task_id: task.task_id,
     paths: ['big.txt'],
     maxBytes: 256 * 1024,
     guidanceMode: 'none'
-  }, { publicHttpOnly: true, requestId: 1, transportType: 'test' });
+  }, { publicHttpOnly: true, requestId: 2, transportType: 'test' });
   const result = toolResult(output, false);
   assert.equal(result.isError, false);
   assert.ok(Array.isArray(result.structuredContent?.items), 'connector result must retain the relai_read item array');

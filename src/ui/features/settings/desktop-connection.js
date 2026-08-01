@@ -150,8 +150,16 @@ function maskToken(value) {
 function approvalStatusNotice() {
   if (!state.approvalRequired) return null;
   const notice = document.createElement('div');
-  notice.className = 'connection-notice warn approval-required-notice';
-  notice.innerHTML = '<strong>ChatGPT approval is required.</strong><br>Open the existing Rel.AI app in ChatGPT and retry it. ChatGPT should open the authorization page, where you enter the current approval token. Do not delete or recreate the app.';
+  notice.className = 'connection-notice warn approval-required-notice connection-auth-recovery';
+  notice.innerHTML = `
+    <strong>Reconnect the existing app from ChatGPT Web.</strong>
+    <ol>
+      <li>Copy the current approval token above.</li>
+      <li>In ChatGPT Web, open <strong>Settings &gt; Apps &gt; Enabled Apps</strong> and select <strong>Rel.AI MCP</strong>.</li>
+      <li>Select <strong>Connect</strong> or <strong>Reconnect</strong> if shown. Otherwise, select Rel.AI MCP in a new chat and ask ChatGPT to use it.</li>
+      <li>When the Rel.AI authorization page opens, paste this token and approve access.</li>
+    </ol>
+    <p>Return to ChatGPT and retry your request. The endpoint is unchanged. Do not delete or recreate the app.</p>`;
   return notice;
 }
 
@@ -167,8 +175,9 @@ function replacementSuccessNotice() {
     <ol>
       <li>Copy the new approval token above.</li>
       ${restartRequired ? '<li>Restart the local service from the dashboard or tray.</li>' : ''}
-      <li>Open the existing Rel.AI app in ChatGPT and retry it.</li>
-      <li>Enter the new token when the Rel.AI authorization page opens.</li>
+      <li>In ChatGPT Web, open <strong>Settings &gt; Apps &gt; Enabled Apps</strong> and select the existing <strong>Rel.AI MCP</strong> app.</li>
+      <li>Select <strong>Connect</strong> or <strong>Reconnect</strong> if shown. Otherwise, select the app in a new chat and ask ChatGPT to use it.</li>
+      <li>Paste the new token when the Rel.AI authorization page opens, approve access, then retry your request.</li>
     </ol>`;
   return notice;
 }
@@ -372,4 +381,3 @@ function numberLabel(value) {
 function messageOf(error) {
   return error instanceof Error ? error.message : String(error || 'Connection settings failed.');
 }
-

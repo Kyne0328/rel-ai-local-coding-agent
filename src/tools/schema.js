@@ -18,11 +18,15 @@ const TASK_ID_SCHEMA = Object.freeze({
 /** @param {ToolDefinitionMetadata} definition @returns {ToolSchema} */
 function schemaFromDefinition(definition) {
   const properties = { ...(definition.inputSchema?.properties || {}) };
-  if (definition.name !== 'relai_start_task') properties.task_id = TASK_ID_SCHEMA;
+  const taskScoped = definition.behavior?.taskScope === 'required';
+  const taskAware = taskScoped || definition.behavior?.taskScope === 'optional';
+  if (taskAware) properties.task_id = TASK_ID_SCHEMA;
   const stripped = definition.connectorStrip || [];
   for (const key of stripped) delete properties[key];
-  const required = (definition.inputSchema?.required || []).filter((key) => !stripped.includes(key));
-  if (['relai_complete_task', 'relai_cancel_task'].includes(definition.name) && !required.includes('task_id')) required.push('task_id');
+  const required = (definition.inputSchema?.required || [])
+    .filter((key) => !stripped.includes(key))
+    .filter((key) => !(taskScoped && key === 'workspace'));
+  if (taskScoped && !required.includes('task_id')) required.push('task_id');
   return {
     name: definition.name,
     title: definition.title,
@@ -74,7 +78,8 @@ function getToolMetadata() {
     replacements: definition.lifecycle?.replacements || (definition.lifecycle?.replacement ? [definition.lifecycle.replacement] : []),
     parameters: Object.keys(schemaFromDefinition(definition).inputSchema.properties || {}),
     outputFields: Object.keys(definition.outputSchema?.properties || {}),
-    longRunning: definition.behavior?.longRunning === true
+    longRunning: definition.behavior?.longRunning === true,
+    taskScope: definition.behavior?.taskScope || 'required'
   }));
 }
 
