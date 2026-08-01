@@ -8,16 +8,16 @@ This audit measured the Windows x64 Electron artifacts, identified the dominant 
 
 | Metric | Bytes | Display size |
 | --- | ---: | ---: |
-| NSIS installer | 111,424,956 B | 106.26 MiB |
-| Portable executable | 100,029,273 B | 95.40 MiB |
-| Unpacked application | 363,459,639 B | 346.62 MiB |
-| `resources/` | 47,575,582 B | 45.37 MiB |
-| `resources/app.asar` | 1,668,963 B | 1.59 MiB |
+| NSIS installer | 102,847,272 B | 98.08 MiB |
+| Portable executable | 91,751,333 B | 87.50 MiB |
+| Unpacked application | 330,207,144 B | 314.91 MiB |
+| `resources/` | 14,323,087 B | 13.66 MiB |
+| `resources/app.asar` | 1,689,948 B | 1.61 MiB |
 | Electron packaged dependencies | 1,107,187 B | 1.06 MiB |
 | `locales/en-US.pak` | 566,095 B | 552.83 KiB |
 | Compiled dashboard CSS | 137,539 B | 134.32 KiB |
 
-The baseline was recaptured from the reconciled 0.23.0 installer and portable artifacts on 2026-08-01. It includes Electron 43.2.0, the ESM runtime, fuse hardening, task observability, the explicitly packaged MCP SDK v2 and OpenTelemetry runtimes, and the pinned 31.73 MiB Windows ngrok seed. Relative to the earlier workstream baseline, the installer grew 1.31%, the portable executable shrank 8.79%, and the total unpacked application grew 1.87%; the larger `resources/` ratio is the deliberate telemetry dependency and ngrok update rather than duplicate locales, source maps, or source CSS. The committed strict policy now rejects any metric more than 3% above these reconciled measurements.
+The baseline was recaptured from the final 0.23.0 installer and portable artifacts on 2026-08-01 after removing `ngrok.exe` from the package. It includes Electron 43.2.0, the ESM runtime, fuse hardening, task observability, the explicitly packaged MCP SDK v2 and OpenTelemetry runtimes, and only the schema-v2 ngrok acquisition manifest. Relative to the previous bundled-ngrok baseline, the installer is 8.18 MiB smaller, the portable executable is 7.89 MiB smaller, the unpacked application is 31.71 MiB smaller, and `resources/` is 69.89% smaller. The committed strict policy rejects any metric more than 3% above these measurements.
 
 | Artifact | Before | After | Reduction | Reduction |
 | --- | ---: | ---: | ---: | ---: |
@@ -30,7 +30,7 @@ The baseline was recaptured from the reconciled 0.23.0 installer and portable ar
 
 The primary avoidable cost was Electron shipping 55 Chromium locale packs for an English-only application. The optimized package ships only `en-US.pak`. Production dependency source maps were also removed from `app.asar`, and Tailwind output is now minified. Maximum electron-builder compression was tested and rejected because it made both Windows executables approximately 0.7 KiB larger.
 
-The practical minimum remains dominated by Electron/Chromium and the bundled offline ngrok seed. The application-controlled runtime payload is comparatively small.
+The practical minimum is now dominated by Electron/Chromium. Rel.AI-controlled runtime resources are comparatively small, and the ngrok executable contributes zero packaged bytes.
 
 ## Build and packaging architecture
 
@@ -46,17 +46,17 @@ The repository uses npm with separate root and Electron lockfiles:
 - Electron main entry: `electron/main.js`
 - Electron preload boundary: `electron/preload.cjs` (sandbox-required, surface-gated)
 - Electron renderer assets: `electron/renderer/**`
-- Offline tunnel binary: `vendor/ngrok/win32/ngrok.exe`
+- Tunnel provenance manifest: `vendor/ngrok/manifest.json`; the executable is acquired only after first-run consent
 - Windows targets: NSIS and portable
 - Supported package produced by the current release workflow: Windows x64
 
 The source-to-artifact flow is:
 
 1. Tailwind compiles `src/ui/styles/app.css` to `public/dashboard.css`.
-2. `scripts/verify-ngrok-seed.mjs` verifies the Windows ngrok seed.
+2. `scripts/verify-ngrok-seed.mjs` validates the acquisition manifest; release validation also downloads and verifies the official component in a temporary directory.
 3. The guarded release wrapper creates an OS-temporary output directory outside the VS Code workspace.
 4. electron-builder packages the Electron main/preload/renderer files into `resources/app.asar` once.
-5. Runtime backend JavaScript, public dashboard assets, the root package manifest, changelog, and Windows ngrok seed are copied under `resources/`.
+5. Runtime backend JavaScript, public dashboard assets, the root package manifest, changelog, and the ngrok acquisition manifest are copied under `resources/`; `ngrok.exe` is rejected.
 6. NSIS and portable artifacts are generated sequentially from the same prepackaged application.
 7. Completed artifacts are promoted into `dist`, and `dist/current-unpacked.json` records the authoritative unpacked directory when a legacy `dist/win-unpacked` is locked.
 
@@ -77,7 +77,6 @@ Largest files in `win-unpacked`:
 | Path or component | Category | Raw size | Required at runtime | Action |
 | --- | --- | ---: | --- | --- |
 | `Rel.AI MCP.exe` | Electron runtime | 225,688,064 B | Yes | Retain despite size |
-| `resources/bin/ngrok/win32/ngrok.exe` | Bundled platform binary | 33,273,672 B | Yes for offline first use | Retain; evaluate optional delivery separately |
 | `dxcompiler.dll` | Chromium graphics compiler | 25,616,896 B | Hardware-dependent | Retain pending cross-hardware proof |
 | `LICENSES.chromium.html` | Required legal notices | 20,313,957 B | Yes | Retain |
 | `icudtl.dat` | Chromium ICU data | 10,876,560 B | Yes | Retain |
@@ -86,7 +85,7 @@ Largest files in `win-unpacked`:
 | `vk_swiftshader.dll` | Software graphics fallback | 5,502,464 B | Hardware-dependent | Retain pending cross-hardware proof |
 | `d3dcompiler_47.dll` | Direct3D shader compiler | 4,741,488 B | Graphics-dependent | Retain |
 | `ffmpeg.dll` | Chromium media runtime | 3,067,904 B | Runtime dependency | Retain |
-| `resources/app.asar` | Electron application and updater dependencies | 1,668,963 B | Yes | Optimized |
+| `resources/app.asar` | Electron application and updater dependencies | 1,689,948 B | Yes | Optimized |
 | `dxil.dll` | DirectX intermediate language runtime | 1,509,760 B | Graphics-dependent | Retain |
 | `vulkan-1.dll` | Vulkan loader | 930,304 B | Hardware-dependent | Retain pending proof |
 | `locales/en-US.pak` | Supported locale | 566,095 B | Yes | Retain only supported locale |
@@ -94,7 +93,7 @@ Largest files in `win-unpacked`:
 | `resources/public/dashboard.css` | Compiled UI CSS | 137,539 B | Yes | Minified |
 | `resources/CHANGELOG.md` | In-app release information | 138,857 B | Yes | Retain |
 
-The current 0.23.0 `resources/` directory totals 47,575,582 B (45.37 MiB). It includes the allowlisted MCP SDK and OpenTelemetry runtimes and contains no `.map` files, TypeScript sources, tests, fixtures, examples, or `.git` metadata.
+The current 0.23.0 `resources/` directory totals 14,323,087 B (13.66 MiB). It includes the allowlisted MCP SDK and OpenTelemetry runtimes plus the ngrok acquisition manifest, but no ngrok executable, `.map` files, TypeScript sources, tests, fixtures, examples, or `.git` metadata.
 
 The source stylesheet `src/ui/styles/app.css` is no longer packaged. The desktop distribution includes only the compiled `resources/public/dashboard.css`, saving approximately 69 KiB raw and keeping build-only Tailwind source out of runtime resources.
 
@@ -108,7 +107,7 @@ The source stylesheet `src/ui/styles/app.css` is no longer packaged. The desktop
 | Tailwind output was not minified | P2 | Confirmed | Final CSS comparison | 24,446 B raw | Add `--minify` to `build:css` | Low |
 | Maximum electron-builder compression did not help | Retain | Confirmed | Isolated packaging experiment | Approximately 0.7 KiB larger per executable | Keep default compression | None |
 | Electron runtime is the majority of installed size | Retain despite size | Confirmed | Final file inventory | 215.23 MiB main executable plus support files | Retain | Removing Chromium resources is unsafe without platform testing |
-| Bundled ngrok is the largest application-controlled component | Deferred/P2 | Confirmed | `resources/bin/ngrok/win32/ngrok.exe` | 31.73 MiB raw | Keep for offline reliability; evaluate optional delivery only as a separate product decision | High operational and recovery risk |
+| Embedded ngrok inflated package size and antivirus attribution | Resolved/P1 | Confirmed | Final package reports `ngrokBytes: 0` | 31.73 MiB raw removed; installer −8.18 MiB | Verified first-run acquisition with consent, hashes, Authenticode, atomic repair, and release testing | First use and repair require network access |
 | Production dependencies are explicitly allowlisted | Retain | Confirmed | Electron ASAR and root SDK resource inventory | Small relative to Electron/ngrok | Retain the updater and MCP SDK dependency sets | Low |
 | Installed-app smoke shared the production application identity | Removed safety defect | Confirmed | Installer execution terminated the active Rel.AI host | Small package reduction | Replaced with read-only packaged-layout verification | High if restored on a developer machine |
 
@@ -128,7 +127,7 @@ Largest dependency payloads inside the optimized ASAR:
 | `graceful-fs` | 27,363 B |
 | `debug` | 20,109 B |
 
-No native Node.js modules are present. The only separately bundled native executable is the Windows ngrok seed. No macOS or Linux ngrok binaries are included in the Windows package.
+No native Node.js modules or third-party tunnel executables are bundled. The Windows package contains only the reviewed ngrok acquisition manifest.
 
 `electron-updater` and its transitive packages should remain external runtime dependencies inside ASAR. Bundling or replacing them would provide little absolute saving and would increase updater risk.
 
@@ -142,7 +141,7 @@ Implemented production controls:
 - `app.asar` excludes `**/*.map`.
 - Electron locales are filtered to `en-US`.
 - ASAR remains enabled.
-- Only the Windows ngrok binary is copied to the Windows build.
+- No ngrok executable is copied to the Windows build; only its acquisition manifest is packaged.
 - The package contains no test trees, TypeScript source, repository metadata, or unsupported native binaries.
 
 Potentially bundling all backend code would save less than 1 MiB raw while increasing dynamic-loading, diagnostics, and maintenance risk. It is not justified by the current package profile.
@@ -154,9 +153,9 @@ The existing packaging configuration already uses explicit top-level allowlists 
 - `electronLanguages: ["en-US"]`
 - `!**/*.map` in the ASAR file list
 
-The current `extraResources` entries remain explicit for backend JavaScript, MCP SDK runtime modules, CLI files, compiled public assets, package metadata, changelog, and Windows ngrok. Source CSS is excluded.
+The current `extraResources` entries remain explicit for backend JavaScript, MCP SDK runtime modules, CLI files, compiled public assets, package metadata, changelog, and the ngrok acquisition manifest. Source CSS and `ngrok.exe` are excluded.
 
-ASAR unpack rules are not required because there are no native Node modules. The ngrok executable is correctly copied outside ASAR. NSIS and portable targets remain because both are part of the documented release contract.
+ASAR unpack rules are not required because there are no native Node modules. The managed ngrok executable is downloaded into user state only after consent and complete provenance verification. NSIS and portable targets remain because both are part of the documented release contract.
 
 ## Implemented changes
 
@@ -181,7 +180,7 @@ ASAR unpack rules are not required because there are no native Node modules. The
 - Portable executable generation
 - `latest.yml` generation
 - Installer blockmap generation: 117,386 B
-- Package inventory checks
+- Package inventory checks, including manifest presence and embedded-ngrok rejection
 - One locale only: `en-US.pak`
 - Zero packaged source maps
 - Zero packaged TypeScript source or declaration files
@@ -196,6 +195,7 @@ ASAR unpack rules are not required because there are no native Node modules. The
 - Electron fuse-policy verification against the final executable
 - Root and Electron production dependency audits: zero advisories
 - Strict package-size baseline comparison
+- End-to-end official ngrok archive download, SHA-256, extraction, Authenticode, and exact-version verification
 - CycloneDX SBOM generation
 
 ### Historical 0.22.0 startup and memory comparison
@@ -239,24 +239,16 @@ The committed baseline uses a strict 3% tolerance. The release workflow runs `np
 ## Retained large components
 
 - **Electron/Chromium runtime:** establishes the practical minimum. Removing graphics, ICU, media, accessibility, or software-rendering files without a hardware/platform matrix is unsafe.
-- **Windows ngrok seed:** retained because the application promises offline first-use availability and managed tunnel recovery. On-demand delivery could save 31.73 MiB raw, but it introduces network, integrity, rollback, version-compatibility, and first-run failure modes.
 - **Chromium license notices:** legally required.
 - **Both NSIS and portable artifacts:** the 0.22.0 candidates are approximately 97.6–97.9 MiB each. Publishing both doubles release storage, not an individual user's download. Removing one is a distribution-policy decision.
 
 ## Deferred opportunities
 
-1. **Optional ngrok component** — high potential raw reduction, high product and reliability risk. Requires signed/integrity-verified downloads, offline fallback, version pinning, atomic replacement, and recovery testing.
-2. **Duplicate logo consolidation** — approximately 152 KiB raw per duplicate candidate, low installer impact. Requires confirming every renderer/icon call site.
-3. **Private source-map publication** — source maps are currently excluded. Add a separate private artifact only if production crash diagnostics require it.
-4. **Backend bundling proof of concept** — likely less than 1 MiB raw saving and not justified unless startup/module tracing demonstrates a separate benefit.
+1. **Duplicate logo consolidation** — approximately 152 KiB raw per duplicate candidate, low installer impact. Requires confirming every renderer/icon call site.
+2. **Private source-map publication** — source maps are currently excluded. Add a separate private artifact only if production crash diagnostics require it.
+3. **Backend bundling proof of concept** — likely less than 1 MiB raw saving and not justified unless startup/module tracing demonstrates a separate benefit.
 
 ## Prioritized remaining tasks
-
-### P2 — Evaluate optional ngrok delivery
-
-- Affected: managed ngrok bootstrap/update/recovery and release distribution.
-- Acceptance: offline behavior, signature/hash verification, atomic install, rollback, and version compatibility are proven before removing the seed.
-- Rollback: retain the bundled seed.
 
 ### P3 — Review duplicate image assets
 
@@ -266,4 +258,4 @@ The committed baseline uses a strict 3% tolerance. The release workflow runs `np
 
 ## Final recommendation
 
-The Windows x64 distribution is appropriately bounded for the current Electron 43 and MCP SDK architecture. The historical locale/source-map/minification work remains effective, while the 0.23.0 release establishes a new measured baseline after the ESM cutover, runtime hardening, task-observability expansion, and removal of build-only SDK sources from packaged resources. Further large reductions require a product-level decision about the bundled ngrok binary or replacing Electron itself; neither is justified as routine cleanup.
+The Windows x64 distribution is appropriately bounded for the current Electron 43 and MCP SDK architecture. The historical locale/source-map/minification work remains effective, while the 0.23.0 release establishes a new measured baseline after the ESM cutover, runtime hardening, task-observability expansion, and removal of build-only SDK sources from packaged resources. The ngrok package reduction is complete. Further large reductions would require replacing or substantially restructuring Electron itself, which is not justified as routine cleanup.

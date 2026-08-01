@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -38,25 +37,31 @@ for (const file of [
   '.github/workflows/release.yml'
 ]) copyFile(file);
 
-const seedPath = path.join(tmp, 'vendor', 'ngrok', 'win32', 'ngrok.exe');
-const seedBytes = Buffer.alloc(5 * 1024 * 1024);
-fs.mkdirSync(path.dirname(seedPath), { recursive: true });
-fs.writeFileSync(seedPath, seedBytes);
-const seedHash = crypto.createHash('sha256').update(seedBytes).digest('hex');
 const ngrokManifestPath = path.join(tmp, 'vendor', 'ngrok', 'manifest.json');
-fs.writeFileSync(ngrokManifestPath, `${JSON.stringify({
-  schemaVersion: 1,
-  version: 'test',
+fs.mkdirSync(path.dirname(ngrokManifestPath), { recursive: true });
+const acquisitionManifest = {
+  schemaVersion: 2,
+  version: '3.39.10',
+  delivery: 'verified-first-run-download',
   platforms: {
     win32: {
-      architecture: 'amd64',
-      file: 'ngrok.exe',
-      size: seedBytes.length,
-      sha256: seedHash,
+      architecture: 'x64',
+      archive: {
+        format: 'zip',
+        url: 'https://bin.ngrok.com/a/reviewed/ngrok-v3-3.39.10-windows-amd64.zip',
+        size: 123456,
+        sha256: 'a'.repeat(64)
+      },
+      executable: {
+        file: 'ngrok.exe',
+        size: 654321,
+        sha256: 'b'.repeat(64)
+      },
       authenticode: { publisher: 'ngrok, Inc.', issuer: 'DigiCert' }
     }
   }
-}, null, 2)}\n`);
+};
+fs.writeFileSync(ngrokManifestPath, `${JSON.stringify(acquisitionManifest, null, 2)}\n`);
 
 function run(script, args = []) {
   const result = spawnSync(process.execPath, [path.join(tmp, 'scripts', script), ...args], {
@@ -156,7 +161,7 @@ assert.ok(electronPackage.build.files.includes('!**/*.map'));
 const sourceResource = electronPackage.build.extraResources.find(resource => resource.to === 'src');
 assert.deepEqual(sourceResource?.filter, ['**/*.js']);
 const ngrokResource = electronPackage.build.extraResources.find(resource => resource.to === 'bin/ngrok');
-assert.deepEqual(ngrokResource?.filter, ['manifest.json', 'win32/**']);
+assert.deepEqual(ngrokResource?.filter, ['manifest.json']);
 const rootModulesResource = electronPackage.build.extraResources.find(resource => resource.to === 'node_modules');
 assert.deepEqual(rootModulesResource?.filter, [
   '@modelcontextprotocol/core/**',
@@ -204,15 +209,15 @@ assert.doesNotMatch(changelog.split('## [0.15.7]')[0], /TODO|placeholder/i);
 const releaseWorkflow = fs.readFileSync(path.join(tmp, '.github/workflows/release.yml'), 'utf8');
 const productionAuditIndex = releaseWorkflow.indexOf('- name: Audit production dependencies');
 const packagingAuditIndex = releaseWorkflow.indexOf('- name: Audit packaging dependencies');
-const fetchSeedIndex = releaseWorkflow.indexOf('- name: Fetch bundled ngrok seed binary');
+const verifyAcquisitionIndex = releaseWorkflow.indexOf('- name: Verify official ngrok acquisition end to end');
 const runTestsIndex = releaseWorkflow.indexOf('- name: Run tests');
 const buildIndex = releaseWorkflow.indexOf('- name: Build Windows executables');
 assert.ok(productionAuditIndex >= 0, 'release workflow must audit production dependencies');
 assert.ok(packagingAuditIndex > productionAuditIndex, 'packaging audit must follow production audit');
 assert.ok(packagingAuditIndex < buildIndex, 'packaging audit must block packaging');
-assert.ok(fetchSeedIndex >= 0, 'release workflow must fetch the bundled ngrok seed');
-assert.ok(fetchSeedIndex < runTestsIndex, 'ngrok seed must be fetched before release consistency tests');
-assert.ok(fetchSeedIndex < buildIndex, 'ngrok seed must be fetched before packaging');
+assert.ok(verifyAcquisitionIndex >= 0, 'release workflow must exercise the official ngrok acquisition path');
+assert.ok(verifyAcquisitionIndex < runTestsIndex, 'ngrok acquisition verification must run before release tests');
+assert.ok(verifyAcquisitionIndex < buildIndex, 'ngrok acquisition verification must block packaging');
 assert.match(releaseWorkflow, /workflow_dispatch:/);
 assert.match(releaseWorkflow, /\.github\/workflows\/release\.yml/);
 assert.match(releaseWorkflow, /Release workflow changed while package version remains/);
@@ -230,8 +235,6 @@ assert.match(releaseWorkflow, /Rel\.AI-MCP-Portable-\$env:VERSION\.exe/);
 assert.match(releaseWorkflow, /Rel\.AI-MCP-Setup-\$env:VERSION\.exe\.blockmap/);
 assert.match(releaseWorkflow, /release-assets\.txt/);
 assert.match(releaseWorkflow, /SHA256SUMS\.txt/);
-assert.match(releaseWorkflow, /Get-FileHash/);
-assert.match(releaseWorkflow, /-Algorithm SHA256/);
 assert.match(releaseWorkflow, /npm run prepare:release-assets/);
 assert.match(releaseWorkflow, /exact updater contract/);
 assert.match(releaseWorkflow, /npm run benchmark:observability/);
@@ -251,12 +254,13 @@ assert.match(releaseWorkflow, /Require Windows signing credentials/);
 assert.match(releaseWorkflow, /WINDOWS_CSC_LINK is required for release publication/);
 assert.match(releaseWorkflow, /WINDOWS_CSC_KEY_PASSWORD is required for release publication/);
 assert.match(releaseWorkflow, /--config\.forceCodeSigning=true/);
-assert.match(releaseWorkflow, /Verify Windows signatures and bundled ngrok provenance/);
+assert.match(releaseWorkflow, /Verify Windows signatures and ngrok acquisition boundary/);
 assert.match(releaseWorkflow, /steps\.unpacked\.outputs\.path/);
 assert.match(releaseWorkflow, /Join-Path \$packageDirectory 'Rel\.AI MCP\.exe'/);
-assert.match(releaseWorkflow, /vendor\/ngrok\/manifest\.json/);
-assert.match(releaseWorkflow, /Packaged ngrok SHA-256 mismatch/);
-assert.match(releaseWorkflow, /Packaged ngrok Authenticode signature is not valid/);
+assert.match(releaseWorkflow, /npm run verify:ngrok -- --download/);
+assert.match(releaseWorkflow, /resources\/bin\/ngrok\/manifest\.json/);
+assert.match(releaseWorkflow, /release package embeds ngrok\.exe/);
+assert.doesNotMatch(releaseWorkflow, /Packaged ngrok SHA-256 mismatch|Packaged ngrok Authenticode signature is not valid/);
 assert.doesNotMatch(releaseWorkflow, /artifacts will be unsigned|SIGNING_CONFIGURED/);
 assert.match(releaseWorkflow, /Generate CycloneDX SBOM/);
 assert.match(releaseWorkflow, /sbom\.cdx\.json/);
@@ -269,17 +273,17 @@ assert.match(releaseWorkflow, /electron-size-report\.json/);
 assert.match(releaseWorkflow, /if-no-files-found: error/);
 assert.doesNotMatch(releaseWorkflow, /Upload release usability evidence|exact-installer usability evidence JSON is missing|release usability screenshot archive is missing/);
 
-const tamperedSeed = Buffer.from(seedBytes);
-tamperedSeed[0] = 1;
-fs.writeFileSync(seedPath, tamperedSeed);
-const tampered = runWithEnv('release-check.mjs', { REL_AI_TARGET_PLATFORM: 'win32' });
-assert.notEqual(tampered.status, 0, 'release consistency must fail when the target ngrok seed hash changes');
-assert.match(`${tampered.stdout}\n${tampered.stderr}`, /bundled ngrok seed SHA-256 for win32/i);
-fs.writeFileSync(seedPath, seedBytes);
+const tamperedManifest = structuredClone(acquisitionManifest);
+tamperedManifest.platforms.win32.archive.sha256 = 'invalid';
+fs.writeFileSync(ngrokManifestPath, `${JSON.stringify(tamperedManifest, null, 2)}\n`);
+const tampered = runWithEnv('release-check.mjs');
+assert.notEqual(tampered.status, 0, 'release consistency must fail when the ngrok archive hash is invalid');
+assert.match(`${tampered.stdout}\n${tampered.stderr}`, /archive SHA-256 must be exact/i);
+fs.writeFileSync(ngrokManifestPath, `${JSON.stringify(acquisitionManifest, null, 2)}\n`);
 
-fs.rmSync(seedPath, { force: true });
-const missingSeed = runWithEnv('release-check.mjs', { REL_AI_TARGET_PLATFORM: 'win32' });
-assert.notEqual(missingSeed.status, 0, 'release consistency must fail when the target ngrok seed is missing');
-assert.match(`${missingSeed.stdout}\n${missingSeed.stderr}`, /bundled ngrok seed is missing for win32/i);
+fs.rmSync(ngrokManifestPath, { force: true });
+const missingManifest = runWithEnv('release-check.mjs');
+assert.notEqual(missingManifest.status, 0, 'release consistency must fail when the ngrok acquisition manifest is missing');
+assert.match(`${missingManifest.stdout}\n${missingManifest.stderr}`, /ngrok acquisition manifest is missing/i);
 
 console.log('Release workflow smoke test passed.');

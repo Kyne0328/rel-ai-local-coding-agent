@@ -255,10 +255,11 @@ npm ci --ignore-scripts
 npm ci --prefix electron
 ```
 
-The ngrok agent binaries are not committed to git, so fetch the seed before running or packaging:
+The ngrok agent binary is neither committed nor packaged. Validate the acquisition manifest locally, and exercise the real temporary download when preparing a release:
 
 ```bash
-npm run fetch:ngrok          # Windows (pwsh); use scripts/fetch-ngrok.sh elsewhere
+npm run verify:ngrok         # validate the pinned first-run acquisition manifest
+npm run fetch:ngrok          # exercise download, hash, signature, and version verification
 ```
 
 Then:
@@ -275,9 +276,9 @@ npm run knip:production      # production-only dead-code audit
 
 The normal test gate includes `npm run knip:dependencies` so dependency drift and invalid Knip configuration fail CI. The broader Knip reports remain explicit review commands because removing files or exports requires source-level verification.
 
-`electron:build` and `electron:dist` refuse to run when the ngrok seed is missing or differs from its reviewed provenance manifest. Windows verification requires the exact version, size, SHA-256, Authenticode publisher, and certificate issuer.
+`electron:build` and `electron:dist` require a valid schema-v2 ngrok acquisition manifest and reject any `ngrok.exe` embedded in the source or packaged application. The manifest pins the official archive and executable sizes, SHA-256 values, exact version, Authenticode publisher, and certificate issuer. The first-run wizard requires explicit consent before Rel.AI downloads the official archive, verifies it, and installs the managed agent.
 
-Windows CI and the release workflow build from a clean output directory, verify the packaged layout and hardened Electron fuses, then exercise OAuth/PKCE and the MCP task lifecycle through the packaged Node backend. Production publication requires protected Windows signing credentials and `forceCodeSigning`, verifies the installer, portable app, unpacked app, and bundled ngrok component independently, then generates a CycloneDX SBOM and GitHub provenance attestations. Windows x64 is the only packaged target validated and published by the current automation. Installer, uninstall, first-run UI, real ngrok publication, antivirus-vendor review, logged-in ChatGPT app selection, live approval-token rotation, and update-from-prior-release behavior remain manual checks on a disposable Windows machine. See [docs/USABILITY_ACCEPTANCE.md](docs/USABILITY_ACCEPTANCE.md), [docs/INSTALLER_TEST_SAFETY.md](docs/INSTALLER_TEST_SAFETY.md), [docs/PACKAGING_SECURITY.md](docs/PACKAGING_SECURITY.md), and [docs/ANTIVIRUS_FALSE_POSITIVES.md](docs/ANTIVIRUS_FALSE_POSITIVES.md).
+Windows CI and the release workflow build from a clean output directory, verify the packaged layout and hardened Electron fuses, exercise the complete temporary ngrok acquisition path, and test OAuth/PKCE plus the MCP task lifecycle through the packaged Node backend. Production publication still requires protected Windows signing credentials and `forceCodeSigning` for Rel.AI-owned executables, then generates a CycloneDX SBOM and GitHub provenance attestations. Windows x64 is the only packaged target validated and published by the current automation. Installer, uninstall, first-run consent and download UI, real ngrok publication, antivirus-vendor review, logged-in ChatGPT app selection, live approval-token rotation, and update-from-prior-release behavior remain manual checks on a disposable Windows machine. See [docs/USABILITY_ACCEPTANCE.md](docs/USABILITY_ACCEPTANCE.md), [docs/INSTALLER_TEST_SAFETY.md](docs/INSTALLER_TEST_SAFETY.md), [docs/PACKAGING_SECURITY.md](docs/PACKAGING_SECURITY.md), and [docs/ANTIVIRUS_FALSE_POSITIVES.md](docs/ANTIVIRUS_FALSE_POSITIVES.md).
 
 ## MCP tools
 

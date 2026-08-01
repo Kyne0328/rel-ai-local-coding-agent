@@ -3,6 +3,7 @@ const state = {
   token: '',
   ngrokAuth: '',
   ngrokDomain: '',
+  ngrokDownloadAccepted: false,
   editMode: false
 };
 
@@ -90,6 +91,7 @@ function syncLocalState() {
 function syncConnectionState() {
   state.ngrokAuth = String(document.getElementById('ngrokTokenInput').value || '').trim();
   state.ngrokDomain = normalizeDomain(document.getElementById('domainInput').value);
+  state.ngrokDownloadAccepted = document.getElementById('ngrokDownloadConsent').checked === true;
 }
 
 function validateLocalFields({ announce = true } = {}) {
@@ -106,6 +108,7 @@ function validateConnectionFields({ announce = true } = {}) {
   syncConnectionState();
   const keyValid = isValidNgrokKey(state.ngrokAuth);
   const domainValid = isValidDomain(state.ngrokDomain);
+  const consentValid = state.ngrokDownloadAccepted;
 
   if (announce || state.ngrokAuth) {
     setMessage(
@@ -122,9 +125,15 @@ function validateConnectionFields({ announce = true } = {}) {
     );
   }
 
-  document.getElementById('reviewSetupBtn').disabled = !(keyValid && domainValid);
+  setMessage(
+    'ngrokConsentMessage',
+    consentValid ? 'Official ngrok acquisition is approved.' : 'Approval is required before Rel.AI can download or repair ngrok.',
+    consentValid ? 'success' : (announce ? 'error' : '')
+  );
+
+  document.getElementById('reviewSetupBtn').disabled = !(keyValid && domainValid && consentValid);
   updateNgrokPreview();
-  return keyValid && domainValid;
+  return keyValid && domainValid && consentValid;
 }
 
 function goTo(stepNumber) {
@@ -203,6 +212,7 @@ function renderSummary() {
     ['Local service', `http://127.0.0.1:${state.port}`],
     ['Approval token', 'Stored privately in ~/.rel-ai-mcp/.env'],
     ['ngrok account key', 'Stored privately in Rel.AI ngrok.yml'],
+    ['ngrok agent', 'Official pinned download; verified before installation'],
     ['ChatGPT endpoint', `https://${state.ngrokDomain}/mcp`]
   ];
   for (const [key, value] of rows) {
@@ -230,6 +240,7 @@ async function launch() {
   const errorElement = document.getElementById('launchError');
   const button = document.getElementById('launchBtn');
   errorElement.textContent = '';
+  document.getElementById('acquisitionProgress').textContent = 'Preparing the verified ngrok component…';
   button.disabled = true;
   button.dataset.state = 'loading';
   button.textContent = state.editMode ? 'Saving and restarting…' : 'Saving and starting…';
@@ -241,10 +252,12 @@ async function launch() {
       token: state.token,
       ngrokAuthtoken: state.ngrokAuth,
       ngrokDomain: state.ngrokDomain,
+      ngrokDownloadAccepted: state.ngrokDownloadAccepted,
       restart: state.editMode
     });
   } catch (error) {
     launchPending = false;
+    document.getElementById('acquisitionProgress').textContent = '';
     errorElement.textContent = error instanceof Error ? error.message : 'Rel.AI could not launch.';
     button.disabled = false;
     button.dataset.state = 'error';
@@ -263,6 +276,7 @@ async function loadRecoveryConfig() {
   state.token = String(config.token || '');
   state.ngrokAuth = String(config.ngrokAuthtoken || '');
   state.ngrokDomain = normalizeDomain(config.ngrokDomain || '');
+  state.ngrokDownloadAccepted = config.ngrokDownloadAccepted === true;
 
   document.title = 'Rel.AI MCP - Connection Recovery';
   document.getElementById('wizardBrandTitle').textContent = 'Rel.AI MCP Recovery';
@@ -275,6 +289,7 @@ async function loadRecoveryConfig() {
   document.getElementById('portInput').value = state.port;
   document.getElementById('ngrokTokenInput').value = state.ngrokAuth;
   document.getElementById('domainInput').value = state.ngrokDomain;
+  document.getElementById('ngrokDownloadConsent').checked = state.ngrokDownloadAccepted;
   document.getElementById('tokenBox').textContent = state.token;
   document.getElementById('regenTokenBtn').hidden = true;
   document.getElementById('tokenHint').textContent = 'The current approval token is preserved. Replace it later from Settings > Connection after the dashboard is restored.';
@@ -321,6 +336,13 @@ function bindEvents() {
   document.getElementById('portInput').addEventListener('input', () => validateLocalFields({ announce: false }));
   document.getElementById('ngrokTokenInput').addEventListener('input', () => validateConnectionFields({ announce: false }));
   document.getElementById('domainInput').addEventListener('input', () => validateConnectionFields({ announce: false }));
+  document.getElementById('ngrokDownloadConsent').addEventListener('change', () => validateConnectionFields({ announce: true }));
+  window.electronAPI.onServerLog(entry => {
+    if (!launchPending) return;
+    const message = typeof entry === 'string' ? entry : String(entry?.message || '');
+    if (message) document.getElementById('acquisitionProgress').textContent = message.trim();
+    requestWindowFit();
+  });
   document.addEventListener('keydown', handleEnter);
 
   for (const button of document.querySelectorAll('[data-go]')) {

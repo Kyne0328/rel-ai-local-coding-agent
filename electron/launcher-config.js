@@ -27,7 +27,8 @@ function normalizeWizardConfig(config = {}) {
   const ngrokDomain = normalizeNgrokDomain(config.ngrokDomain || config.domain || '');
   const ngrokAuthtoken = normalizeNgrokAuthtoken(config.ngrokAuthtoken || config.ngrokToken || '');
   const token = String(config.token || '').trim() || connection.generateToken(32);
-  return { port, ngrokDomain, ngrokAuthtoken, token };
+  const ngrokDownloadAccepted = config.ngrokDownloadAccepted === true || config.ngrokDownloadAccepted === '1';
+  return { port, ngrokDomain, ngrokAuthtoken, ngrokDownloadAccepted, token };
 }
 
 /** @param {LauncherConfigInput} [config] @returns {LauncherConfig} */
@@ -42,6 +43,7 @@ function saveLauncherConfig(config = {}) {
     REL_AI_MCP_TOKEN: normalized.token,
     REL_AI_MCP_NGROK_DOMAIN: normalized.ngrokDomain,
     REL_AI_MCP_NGROK_AUTHTOKEN: normalized.ngrokAuthtoken,
+    REL_AI_MCP_NGROK_DOWNLOAD_ACCEPTED: normalized.ngrokDownloadAccepted ? '1' : '0',
     REL_AI_MCP_PUBLIC_URL: publicUrl,
     REL_AI_MCP_TUNNEL_COMMAND: tunnelCommand
   });

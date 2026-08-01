@@ -1,4 +1,3 @@
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -54,29 +53,29 @@ function assertJsonVersion(relativePath, version) {
   }
 }
 
-function assertNgrokSeed() {
-  const platform = String(process.env.REL_AI_TARGET_PLATFORM || (process.platform === 'win32' ? 'win32' : '')).trim();
-  if (!platform) return;
+function assertNgrokAcquisitionManifest() {
   const manifestPath = rel('vendor', 'ngrok', 'manifest.json');
   if (!fs.existsSync(manifestPath)) {
-    fail(`ngrok provenance manifest is missing: ${path.relative(root, manifestPath)}`);
+    fail(`ngrok acquisition manifest is missing: ${path.relative(root, manifestPath)}`);
     return;
   }
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  const spec = manifest.platforms?.[platform];
-  if (!spec) {
-    fail(`ngrok provenance manifest has no entry for ${platform}`);
-    return;
-  }
-  const seedPath = rel('vendor', 'ngrok', platform, spec.file);
-  if (!fs.existsSync(seedPath)) {
-    fail(`bundled ngrok seed is missing for ${platform}: ${path.relative(root, seedPath)}`);
-    return;
-  }
-  const bytes = fs.readFileSync(seedPath);
-  const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
-  expectEqual(bytes.length, Number(spec.size), `bundled ngrok seed size for ${platform}`);
-  expectEqual(sha256, String(spec.sha256).toLowerCase(), `bundled ngrok seed SHA-256 for ${platform}`);
+  expectEqual(manifest.schemaVersion, 2, 'ngrok acquisition manifest schemaVersion');
+  expectEqual(manifest.delivery, 'verified-first-run-download', 'ngrok acquisition manifest delivery');
+  expect(/^\d+\.\d+\.\d+$/.test(String(manifest.version || '')), 'ngrok acquisition manifest version must be exact semver');
+  const spec = manifest.platforms?.win32;
+  expect(Boolean(spec), 'ngrok acquisition manifest must declare win32');
+  if (!spec) return;
+  expectEqual(spec.architecture, 'x64', 'ngrok acquisition architecture');
+  expect(/^https:\/\/bin\.ngrok\.com\//.test(String(spec.archive?.url || '')), 'ngrok acquisition archive must use the reviewed bin.ngrok.com URL');
+  expect(Number.isSafeInteger(Number(spec.archive?.size)) && Number(spec.archive.size) > 0, 'ngrok acquisition archive size must be positive');
+  expect(/^[a-f0-9]{64}$/.test(String(spec.archive?.sha256 || '')), 'ngrok acquisition archive SHA-256 must be exact');
+  expectEqual(spec.executable?.file, 'ngrok.exe', 'ngrok acquisition executable filename');
+  expect(Number.isSafeInteger(Number(spec.executable?.size)) && Number(spec.executable.size) > 0, 'ngrok acquisition executable size must be positive');
+  expect(/^[a-f0-9]{64}$/.test(String(spec.executable?.sha256 || '')), 'ngrok acquisition executable SHA-256 must be exact');
+  expect(Boolean(String(spec.authenticode?.publisher || '').trim()), 'ngrok acquisition publisher must be declared');
+  expect(Boolean(String(spec.authenticode?.issuer || '').trim()), 'ngrok acquisition certificate issuer must be declared');
+  expect(!fs.existsSync(rel('vendor', 'ngrok', 'win32', 'ngrok.exe')), 'ngrok executable must not be committed or bundled from vendor/ngrok');
 }
 
 const packageJson = readJson('package.json');
@@ -87,7 +86,7 @@ assertJsonVersion('package.json', version);
 assertJsonVersion('package-lock.json', version);
 assertJsonVersion(path.join('electron', 'package.json'), version);
 assertJsonVersion(path.join('electron', 'package-lock.json'), version);
-assertNgrokSeed();
+assertNgrokAcquisitionManifest();
 
 const statusHtml = read(path.join('electron', 'renderer', 'status.html'));
 expect(statusHtml.includes(`id="appVersion">v${version}</span>`), `electron/renderer/status.html must display v${version}`);

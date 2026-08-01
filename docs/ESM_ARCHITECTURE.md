@@ -77,7 +77,7 @@ Only canonical dashboard routes are supported. Removed or unknown routes fall ba
 2. Run `npm ci` and `npm ci --prefix electron`.
 3. Run `npm run verify:color-tokens` before any generation step.
 4. Run `npm run test:all` and `npm run release:check`.
-5. Fetch and verify the platform ngrok seed.
+5. Validate the ngrok acquisition manifest and exercise the complete temporary Windows download and verification path.
 6. Build and inspect the unpacked Electron application.
 7. Run packaged backend connector acceptance.
 8. Build the installer and portable executable from the exact release commit.

@@ -42,6 +42,7 @@
       "preload.cjs",
       "launcher-utils.js",
       "ngrok-token.js",
+      "ngrok-provenance.js",
       "managed-ngrok.js",
       "ipc-handlers.js",
       "launcher-config.js",
@@ -134,8 +135,7 @@
         "from": "../vendor/ngrok",
         "to": "bin/ngrok",
         "filter": [
-          "manifest.json",
-          "win32/**"
+          "manifest.json"
         ]
       }
     ],

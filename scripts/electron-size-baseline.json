@@ -7,14 +7,14 @@
   "policy": "strict",
   "tolerancePercent": 3,
   "metrics": {
-    "installerBytes": 111424956,
-    "portableBytes": 100029273,
-    "unpackedBytes": 363459639,
-    "resourcesBytes": 47575582,
-    "appAsarBytes": 1668963,
+    "installerBytes": 102847272,
+    "portableBytes": 91751333,
+    "unpackedBytes": 330207144,
+    "resourcesBytes": 14323087,
+    "appAsarBytes": 1689948,
     "packagedDependencyBytes": 1107187,
     "localesBytes": 566095,
-    "ngrokBytes": 33273672,
+    "ngrokBytes": 0,
     "dashboardCssBytes": 137539
   }
 }
