@@ -33,9 +33,9 @@ async function invoke(name, args, context = {}) {
 }
 
 try {
-  const initialTaskResponse = await invoke('relai_start_task', { workspace: 'repo', bootstrap: 'none' });
-  const initialTaskId = initialTaskResponse.structuredContent.task_id;
-  const response = await invoke('relai_read', { task_id: initialTaskId, paths: ['.env'], guidanceMode: 'none' });
+  const initialTaskResponse = await invoke('relai_begin_work', { workspace: 'repo', bootstrap: 'none' });
+  const initialTaskId = initialTaskResponse.structuredContent.work_id;
+  const response = await invoke('relai_read', { work_id: initialTaskId, paths: ['.env'], guidanceMode: 'none' });
 
   assert.equal(response.isError, false, 'relai_read returns per-path skips rather than throwing');
   const readPayload = response.structuredContent;
@@ -44,7 +44,7 @@ try {
   assert.match(readPayload.skipped[0].reason, /blocked sensitive path/);
   assert.doesNotMatch(JSON.stringify(readPayload), /not-returned/);
 
-  const dotWorkspaceResponse = await invoke('relai_start_task', { workspace: '.' }, { publicHttpOnly: true });
+  const dotWorkspaceResponse = await invoke('relai_begin_work', { workspace: '.' }, { publicHttpOnly: true });
   assert.equal(dotWorkspaceResponse.isError, true);
   const dotWorkspace = dotWorkspaceResponse.structuredContent;
   assert.equal(dotWorkspace.errorCode, 'WORKSPACE_AMBIGUOUS_RELATIVE_INPUT');
@@ -54,21 +54,21 @@ try {
   assert.deepEqual(dotWorkspace.errorDetails.configuredWorkspaceAliases, ['repo']);
   assert.match(dotWorkspace.error, /configured workspace alias/);
 
-  const directPathResponse = await invoke('relai_start_task', { workspace: workspaceRoot, bootstrap: 'none' }, { publicHttpOnly: true });
+  const directPathResponse = await invoke('relai_begin_work', { workspace: workspaceRoot, bootstrap: 'none' }, { publicHttpOnly: true });
   assert.equal(directPathResponse.isError, false);
   assert.equal(directPathResponse.structuredContent.workspace, 'repo');
-  const taskId = directPathResponse.structuredContent.task_id;
+  const taskId = directPathResponse.structuredContent.work_id;
 
   const unknownPath = path.join(tmp, 'unknown-repo');
   fs.mkdirSync(unknownPath);
-  const unknownPathResponse = await invoke('relai_start_task', { workspace: unknownPath }, { publicHttpOnly: true });
+  const unknownPathResponse = await invoke('relai_begin_work', { workspace: unknownPath }, { publicHttpOnly: true });
   assert.equal(unknownPathResponse.isError, true);
   assert.equal(unknownPathResponse.structuredContent.errorCode, 'WORKSPACE_PATH_NOT_CONFIGURED');
 
-  const omittedWorkspaceResponse = await invoke('relai_start_task', {}, { publicHttpOnly: true });
+  const omittedWorkspaceResponse = await invoke('relai_begin_work', {}, { publicHttpOnly: true });
   assert.equal(omittedWorkspaceResponse.structuredContent.errorCode, 'WORKSPACE_INPUT_OMITTED');
 
-  const writeResponse = await invoke('relai_edit', { workspace: 'repo', task_id: taskId, path: '.env', content: 'API_KEY=replacement\n' });
+  const writeResponse = await invoke('relai_edit', { workspace: 'repo', work_id: taskId, path: '.env', content: 'API_KEY=replacement\n' }, { publicHttpOnly: true });
 
   assert.equal(writeResponse.isError, true);
   const payload = writeResponse.structuredContent;
@@ -85,7 +85,7 @@ try {
 
   const largeFailureResponse = await invoke('relai_run_checks', {
     workspace: 'repo',
-    task_id: taskId,
+    work_id: taskId,
     check: `node -e "process.stderr.write('failure-detail-'.repeat(800));process.exit(1)"`
   }, { publicHttpOnly: true });
 

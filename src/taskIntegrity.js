@@ -35,7 +35,7 @@ function recordTaskIntegrityEvent(config, event = {}) {
     return withIntegrityLock(config, () => {
       let authority = readJson(taskFile(config, taskId));
       if (!authority) {
-        if (clean(event.tool) !== 'relai_start_task') {
+        if (clean(event.tool) !== 'relai_begin_work') {
           throw new TaskIntegrityError(
             'TASK_INTEGRITY_STATE_MISSING',
             `Authoritative integrity state is missing for logical task '${taskId}'. Start a new logical task rather than reconstructing safety state from audit history.`
@@ -126,11 +126,11 @@ function applyIntegrityEvent(authority, workspaceState, workspace, event) {
     }
   }
 
-  if (event.completionKnown === true || tool === 'relai_complete_task' && event.ok !== false) {
+  if (event.completionKnown === true || tool === 'relai_finish_work' && event.ok !== false) {
     authority.finalCompletionGeneration = authority.mutationGeneration;
     authority.completedAt = timestamp;
   }
-  if (tool === 'relai_cancel_task' && event.ok !== false) authority.cancelledAt = timestamp;
+  if (tool === 'relai_cancel_work' && event.ok !== false) authority.cancelledAt = timestamp;
 
   authority.ambientChangedFiles = repositoryChangedFiles(workspace.path);
   authority.externalChangedFiles = authority.ambientChangedFiles.filter(file =>

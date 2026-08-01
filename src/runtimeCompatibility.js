@@ -11,16 +11,6 @@ import { allWorkspaceAliases, resolveWorkspace } from './config.js';
 import { buildToolManifest } from './mcp/toolManifest.js';
 
 const PROTOCOL_VERSION = MCP_PROTOCOL_VERSION;
-const SAFE_DURING_RUNTIME_MISMATCH = new Set([
-  'relai_status',
-  'relai_cancel_task',
-  'relai_complete_task',
-  'relai_run_checks',
-  'relai_process_read',
-  'relai_process_list',
-  'relai_process_stop'
-]);
-
 function runtimeMetadata() {
   const surface = getToolSurfaceManifest();
   const manifest = buildToolManifest({});
@@ -95,6 +85,7 @@ function assessRuntimeCompatibility(runtime, repository, options = {}) {
       compatible: true,
       restartRequired: false,
       schemaSensitiveOperationsBlocked: false,
+      advisoryOnly: true,
       activeTaskCount,
       activeTasksPreventRestart: false,
       message: 'Repository release metadata is unavailable; runtime compatibility could not be compared.'
@@ -117,6 +108,7 @@ function assessRuntimeCompatibility(runtime, repository, options = {}) {
       compatible: true,
       restartRequired: false,
       schemaSensitiveOperationsBlocked: false,
+      advisoryOnly: true,
       activeTaskCount,
       activeTasksPreventRestart: false,
       differences: [],
@@ -134,17 +126,18 @@ function assessRuntimeCompatibility(runtime, repository, options = {}) {
     status,
     compatible: false,
     restartRequired,
-    schemaSensitiveOperationsBlocked: true,
+    schemaSensitiveOperationsBlocked: false,
+    advisoryOnly: true,
     activeTaskCount,
     activeTasksPreventRestart: restartRequired && activeTaskCount > 0,
     differences,
     message: restartRequired
       ? activeTaskCount > 0
-        ? 'The repository contains a newer runtime or tool surface. Run final validation with complete:true for active tasks, or cancel them, then restart.'
-        : 'The repository contains a newer runtime or tool surface. Restart or reconnect before schema-sensitive operations.'
+        ? 'The repository contains a newer runtime or tool surface. Tools remain available; finish active work before restarting when convenient.'
+        : 'The repository contains a newer runtime or tool surface. Tools remain available; restart or reconnect when convenient to load the new surface.'
       : runtimeAhead
-        ? 'The connected runtime is newer than the repository metadata. Reconnect to a matching repository or runtime before schema-sensitive operations.'
-        : 'The runtime and repository metadata disagree. Reconnect to a matching build before schema-sensitive operations.'
+        ? 'The connected runtime is newer than the repository metadata. Tools remain available; reconnect to a matching repository or runtime when convenient.'
+        : 'The runtime and repository metadata disagree. Tools remain available; reconnect to a matching build when convenient.'
   };
 }
 
@@ -161,23 +154,13 @@ function runtimeCompatibility(config, options = {}) {
 }
 
 function assertRuntimeCompatibility(config, toolName, args = {}, options = {}) {
-  if (SAFE_DURING_RUNTIME_MISMATCH.has(String(toolName || ''))) return null;
-  const result = runtimeCompatibility(config, {
+  // Runtime/repository drift is expected while Rel.AI edits its own checkout.
+  // Keep this comparison observable, but never let it revoke the tool surface
+  // that is needed to finish or repair the in-progress change.
+  return runtimeCompatibility(config, {
     workspace: args.workspace,
     activeTaskCount: options.activeTaskCount
   });
-  if (!result.compatibility.schemaSensitiveOperationsBlocked) return result;
-  const error = new Error(result.compatibility.message);
-  error.code = 'RUNTIME_RESTART_REQUIRED';
-  error.details = {
-    status: result.compatibility.status,
-    restartRequired: result.compatibility.restartRequired,
-    activeTasksPreventRestart: result.compatibility.activeTasksPreventRestart,
-    runtime: result.runtime,
-    repository: result.repository,
-    differences: result.compatibility.differences
-  };
-  throw error;
 }
 
 function toolManifestHash(surface) {
@@ -236,4 +219,4 @@ function stableJson(value) {
   return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
 }
 
-export { PROTOCOL_VERSION, SAFE_DURING_RUNTIME_MISMATCH, assessRuntimeCompatibility, assertRuntimeCompatibility, readRepositoryMetadata, repositoryMetadata, runtimeCompatibility, runtimeMetadata, toolManifestHash };
+export { PROTOCOL_VERSION, assessRuntimeCompatibility, assertRuntimeCompatibility, readRepositoryMetadata, repositoryMetadata, runtimeCompatibility, runtimeMetadata, toolManifestHash };

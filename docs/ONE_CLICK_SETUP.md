@@ -126,13 +126,13 @@ Diagnostics also owns the controls for clearing session and activity history or 
 Use this after connecting the app in ChatGPT:
 
 ```text
-Use Rel.AI MCP. Call relai_start_task for the configured workspace, retain the returned task_id, then call relai_repo_snapshot with that task_id. Do not modify files yet.
+Use Rel.AI MCP. Call relai_begin_work for the configured workspace, retain the returned work_id, then call relai_repo_snapshot with that work_id. Do not modify files yet.
 ```
 
 Then test a workspace read:
 
 ```text
-Use Rel.AI MCP on workspace myapp. Start a task, retain its task_id, then show the workspace profile and the first 100 tree entries using that task_id. Do not modify files.
+Use Rel.AI MCP on workspace myapp. Start a task, retain its work_id, then show the workspace profile and the first 100 tree entries using that work_id. Do not modify files.
 ```
 
 ## Troubleshooting
@@ -162,8 +162,8 @@ Use this exact diagnostic prompt:
 
 ```text
 Use the Rel.AI MCP tools directly.
-Call relai_start_task with workspace "myapp" and retain the returned task_id.
-Call relai_repo_snapshot with workspace "myapp", that task_id, and maxEntries 200.
+Call relai_begin_work with workspace "myapp" and retain the returned work_id.
+Call relai_repo_snapshot with workspace "myapp", that work_id, and maxEntries 200.
 Do not use file search. Do not modify files.
 ```
 

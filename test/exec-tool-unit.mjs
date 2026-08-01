@@ -86,8 +86,8 @@ try {
 
   const secret = 'exec-secret-value';
   const context = { publicHttpOnly: true };
-  const initialTask = await callTool('relai_start_task', { workspace: 'app', bootstrap: 'none' }, context);
-  const execCall = (args) => callTool('relai_exec', { task_id: initialTask.task_id, ...args }, context);
+  const initialTask = await callTool('relai_begin_work', { workspace: 'app', bootstrap: 'none' }, context);
+  const execCall = (args) => callTool('relai_exec', { work_id: initialTask.work_id, ...args }, context);
   const success = await execCall({
     command: `${nodeCommand(path.join(workspace, 'scripts', 'emit.js'))} --token ${secret}`,
     env: { RELAI_EXEC_TEST: 'visible', API_TOKEN: secret }
@@ -174,15 +174,15 @@ try {
 
   resetToolActivity();
   const noValidationContext = { publicHttpOnly: true };
-  const noValidationTask = await callTool('relai_start_task', { workspace: 'app' }, noValidationContext);
+  const noValidationTask = await callTool('relai_begin_work', { workspace: 'app' }, noValidationContext);
   await callTool('relai_exec', {
     workspace: 'app',
-    task_id: noValidationTask.task_id,
+    work_id: noValidationTask.work_id,
     command: nodeCommand(path.join(workspace, 'scripts', 'emit.js'))
   }, noValidationContext);
-  const readOnlyExecCompletion = await callTool('relai_complete_task', {
+  const readOnlyExecCompletion = await callTool('relai_finish_work', {
     workspace: 'app',
-    task_id: noValidationTask.task_id,
+    work_id: noValidationTask.work_id,
     summary: 'Read-only command task completed without validation.'
   }, noValidationContext);
   assert.equal(readOnlyExecCompletion.ok, true);
@@ -190,33 +190,33 @@ try {
 
   resetToolActivity();
   const validatedContext = { publicHttpOnly: true };
-  const validatedTask = await callTool('relai_start_task', { workspace: 'app' }, validatedContext);
-  await callTool('relai_run_checks', { workspace: 'app', task_id: validatedTask.task_id, level: 'standard' }, validatedContext);
+  const validatedTask = await callTool('relai_begin_work', { workspace: 'app' }, validatedContext);
+  await callTool('relai_run_checks', { workspace: 'app', work_id: validatedTask.work_id, level: 'standard' }, validatedContext);
   await callTool('relai_exec', {
     workspace: 'app',
-    task_id: validatedTask.task_id,
+    work_id: validatedTask.work_id,
     command: nodeCommand(path.join(workspace, 'scripts', 'emit.js'))
   }, validatedContext);
-  const completion = await callTool('relai_complete_task', {
+  const completion = await callTool('relai_finish_work', {
     workspace: 'app',
-    task_id: validatedTask.task_id,
+    work_id: validatedTask.work_id,
     summary: 'Read-only command followed the passed validation.'
   }, validatedContext);
   assert.equal(completion.ok, true);
 
   resetToolActivity();
   const mutationContext = { publicHttpOnly: true };
-  const mutationTask = await callTool('relai_start_task', { workspace: 'app' }, mutationContext);
-  await callTool('relai_run_checks', { workspace: 'app', task_id: mutationTask.task_id, level: 'standard' }, mutationContext);
+  const mutationTask = await callTool('relai_begin_work', { workspace: 'app' }, mutationContext);
+  await callTool('relai_run_checks', { workspace: 'app', work_id: mutationTask.work_id, level: 'standard' }, mutationContext);
   await callTool('relai_exec', {
     workspace: 'app',
-    task_id: mutationTask.task_id,
+    work_id: mutationTask.work_id,
     command: nodeCommand(path.join(workspace, 'scripts', 'mutate.js'), 'after-validation.txt')
   }, mutationContext);
   await assert.rejects(
-    () => callTool('relai_complete_task', {
+    () => callTool('relai_finish_work', {
       workspace: 'app',
-      task_id: mutationTask.task_id,
+      work_id: mutationTask.work_id,
       summary: 'Mutation after validation must be rejected.'
     }, mutationContext),
     /code changed after the last passed validation/i

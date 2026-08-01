@@ -26,6 +26,7 @@ jobs:
         working-directory: electron
       - run: npm run verify:color-tokens
       - run: npm run audit:production
+      - run: npm run test:native-tasks-release-gate
       - run: npm run test:all
 
   packaged-app:

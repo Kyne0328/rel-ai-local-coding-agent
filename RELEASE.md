@@ -5,6 +5,7 @@ Rel.AI MCP uses a strict release path so a tag cannot ship mismatched versions, 
 ## 1. Validate source
 
 ```bash
+npm run test:native-tasks-release-gate
 npm run test:all
 npm run knip:production
 npm run audit:production
@@ -24,20 +25,23 @@ relai_diff
 
 ## 2. Verify the MCP contract
 
-The release must retain one 35-tool surface for stdio and HTTP/OAuth clients, with the count and manifest hash derived from the registered schema rather than duplicated constants.
+The release must retain one 32-tool surface for stdio and HTTP/OAuth clients, with the count and manifest hash derived from the registered schema rather than duplicated constants.
 
 Required invariants:
 
 - MCP protocol handling is provided by `@modelcontextprotocol/server` and `@modelcontextprotocol/node`.
 - HTTP MCP is exposed only at `POST /mcp`.
 - Legacy MCP `/sse` and `/messages` routes remain absent.
-- `relai_start_task` creates a new opaque `task_id`.
+- HTTP and stdio advertise native Tasks support, but return a native task only when the current request advertises `io.modelcontextprotocol/tasks`.
+- Clients without Tasks support receive bounded synchronous results for safe eligible operations; no request may run indefinitely or continue as hidden background work.
+- Repository work sessions, native MCP Tasks, and managed processes retain separate identifiers and lifecycle semantics.
+- `relai_begin_work` creates a new opaque `work_id`.
 - Every later task-scoped call requires the exact ID.
 - Transport, conversation, workspace, and timestamp inference remain absent.
 - `relai_edit` is the only file-change tool.
 - `relai_git_draft_pr` prepares local text only and does not contact a hosting provider.
 
-The main protocol tests are `smoke.mjs`, `http-smoke.mjs`, `oauth-smoke.mjs`, `multi-chat-mcp-integration.mjs`, and `mcp-task-scope-unit.mjs`.
+The native Tasks source release gate is `npm run test:native-tasks-release-gate`. It covers both transport capability matrices, lifecycle and persistence, authorization, synchronous limits, cancellation cleanup, process separation, public surface, dashboard states, and ChatGPT-compatible fallback. The complete packaged gate additionally requires `verify:packaged` and `test:connector-acceptance`. See `docs/NATIVE_TASKS_RELEASE_GATE.md`.
 
 ## 3. Build and verify the desktop package
 
@@ -69,7 +73,7 @@ For 0.22.0 and later, release notes must state that the hard cutover:
 - deletes old task-history session files on first current-version access;
 - removes MCP `/sse` and `/messages`;
 - requires standards-compliant MCP initialization fields;
-- requires explicit `task_id` on task-scoped calls;
+- requires explicit `work_id` on task-scoped calls;
 - packages MCP SDK runtime dependencies.
 
 See `docs/RELEASE_NOTES_0.22.0.md` for the 0.22.0 notice.
@@ -130,7 +134,7 @@ Pushing the version commit to `main` triggers `.github/workflows/release.yml`. T
 - the strict package-size report;
 - `SHA256SUMS.txt`.
 
-The workflow requires exact release-asset basenames, matching release versions, nonempty and byte-correct SHA-512 updater metadata, SHA-256 coverage, protected Windows signing credentials, and `forceCodeSigning`. It verifies valid Authenticode signatures for the installer, portable executable, unpacked Rel.AI executable, and bundled ngrok executable. SHA-256 binds every published asset to `SHA256SUMS.txt` and binds the packaged ngrok bytes to the reviewed manifest; Authenticode establishes the configured publishers.
+The workflow requires exact release-asset basenames, matching release versions, nonempty and byte-correct SHA-512 updater metadata, and SHA-256 coverage. Rel.AI-owned Windows artifacts are currently published unsigned with certificate auto-discovery disabled. SHA-256 binds every published asset to `SHA256SUMS.txt`; the packaged ngrok bytes must also match the reviewed manifest and retain ngrok's valid upstream Authenticode signature.
 
 Scan the installer, portable executable, unpacked Rel.AI executable, and bundled ngrok executable as separate samples before broad distribution. A Trojan or malware classification on a Rel.AI-owned executable blocks publication until investigated. Generic PUA/PUP labels limited to the authentic ngrok component require documented vendor submission and review; do not evade them through renaming, repacking, or post-install downloads. See `docs/ANTIVIRUS_FALSE_POSITIVES.md`.
 

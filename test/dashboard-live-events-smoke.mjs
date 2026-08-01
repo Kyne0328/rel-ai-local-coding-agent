@@ -110,7 +110,7 @@ try {
   fs.appendFileSync(auditPath, `${JSON.stringify(entry)}\n`, 'utf8');
   const finishStart = beginConnectorToolCall({
     scopeId: 'dashboard-live-events-test',
-    tool: 'relai_start_task',
+    tool: 'relai_begin_work',
     operation: 'Starting dashboard test task',
     workspace: 'test',
     createTask: true

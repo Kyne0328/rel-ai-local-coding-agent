@@ -86,12 +86,17 @@ function recordTaskActivityEvent(config, activity = {}) {
 }
 
 function readTaskHistorySession(config, taskId) {
+  const session = readTaskHistorySessionRecord(config, taskId);
+  return session ? publicSession(session) : null;
+}
+
+function readTaskHistorySessionRecord(config, taskId) {
   const id = cleanTaskId(taskId);
   if (!id) return null;
   try {
     ensureCurrentHistory(config);
     const session = readSession(getTaskHistoryDir(config), id);
-    return session ? publicSession(session) : null;
+    return session ? sanitizeTaskRecord(session) : null;
   } catch (error) {
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] task history session read:', error);
     return null;
@@ -128,8 +133,8 @@ function readTaskHistory(config, activity = {}, options = {}) {
 function applyEvent(session, event) {
   const timestamp = Date.parse(event.ts || '') || Date.now();
   const ended = timestamp + Math.max(0, Number(event.ms || 0));
-  const completion = event.ok !== false && (event.completionKnown === true || event.tool === 'relai_complete_task');
-  const cancellation = event.ok !== false && event.tool === 'relai_cancel_task';
+  const completion = event.ok !== false && (event.completionKnown === true || event.tool === 'relai_finish_work');
+  const cancellation = event.ok !== false && event.tool === 'relai_cancel_work';
   const changedFiles = unique([
     ...(session.changedFiles || []),
     ...(Array.isArray(event.taskOwnedChangedFiles) ? event.taskOwnedChangedFiles : []),
@@ -277,7 +282,7 @@ function compactEvent(event) {
 
 function publicSession(session) {
   if (!session || typeof session !== 'object') return session;
-  const { version, ...value } = sanitizeTaskRecord(session);
+  const { version, principalFingerprint, ...value } = sanitizeTaskRecord(session);
   const terminal = isTerminalTaskStatus(value.status);
   return {
     ...value,
@@ -346,9 +351,9 @@ function isStoredSessionNoise(session, activeIds) {
   const events = Array.isArray(session.events) ? session.events : [];
   if (events.length !== 1 || session.completionKnown || Number(session.changedFileCount || 0) > 0) return false;
   const event = events[0] || {};
-  if (event.tool !== 'relai_start_task') return false;
+  if (event.tool !== 'relai_begin_work') return false;
   const endedAt = eventTime(session);
   return Boolean(endedAt && Date.now() - endedAt > DEFAULT_TASK_IDLE_MS);
 }
 
-export { bindTaskHistoryActivityPersistence, clearTaskHistory, getTaskHistoryDir, readTaskHistory, readTaskHistorySession, recordTaskActivityEvent, recordTaskHistoryEvent };
+export { bindTaskHistoryActivityPersistence, clearTaskHistory, getTaskHistoryDir, readTaskHistory, readTaskHistorySession, readTaskHistorySessionRecord, recordTaskActivityEvent, recordTaskHistoryEvent };

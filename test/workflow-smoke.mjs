@@ -52,7 +52,7 @@ let taskId = '';
 function taskCall(id, name, args) {
   client.call(id, name, {
     ...args,
-    ...(taskId && name !== 'relai_start_task' ? { task_id: taskId } : {})
+    ...(taskId && name !== 'relai_begin_work' ? { work_id: taskId } : {})
   });
 }
 
@@ -61,10 +61,10 @@ try {
   const discovery = await client.waitFor(1);
   if (!discovery.result?.supportedVersions?.includes(MCP_VERSION)) throw new Error('MCP discovery failed.');
 
-  taskCall(2, 'relai_start_task', { workspace: 'smoke' });
+  taskCall(2, 'relai_begin_work', { workspace: 'smoke' });
   const startedTask = structuredContentOf(await client.waitFor(2));
-  taskId = startedTask.task_id;
-  if (!taskId || startedTask.identity !== 'logical_task') throw new Error('Logical task bootstrap failed.');
+  taskId = startedTask.work_id;
+  if (!taskId || startedTask.identity !== 'work_session') throw new Error('Work-session bootstrap failed.');
 
   taskCall(3, 'relai_repo_snapshot', { workspace: 'smoke', maxEntries: 100 });
   const snapshot = structuredContentOf(await client.waitFor(3));

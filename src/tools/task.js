@@ -1,32 +1,30 @@
 
+import * as crypto from 'node:crypto';
 import { getCurrentToolActivityContext, taskError } from '../toolActivity.js';
-import { readTaskHistorySession } from '../taskHistoryStore.js';
+import { readTaskHistorySessionRecord } from '../taskHistoryStore.js';
+import { principalFingerprint } from '../mcp/principal.js';
 import { isTerminalTaskStatus } from '../taskState.js';
 function startTask(workspace, args = {}) {
   const context = getCurrentToolActivityContext();
   if (!context?.taskId) {
-    throw taskError('CONNECTION_CONTEXT_UNAVAILABLE', 'Rel.AI could not create a logical task for this request.');
+    throw taskError('CONNECTION_CONTEXT_UNAVAILABLE', 'Rel.AI could not create a work session for this request.');
   }
   return {
     ok: true,
     workspace: workspace.alias,
-    task_id: context.taskId,
+    work_id: context.taskId,
     status: 'planning',
-    identity: 'logical_task',
-    workspaceBinding: {
-      alias: workspace.alias,
-      root: workspace.path
-    },
+    identity: 'work_session',
+    workspaceBinding: { alias: workspace.alias },
     title: String(args.title || context.title || '').trim() || undefined,
     objective: String(args.objective || context.objective || '').trim() || undefined,
-    nextAction: 'Use the bootstrap context to choose the next tool. Pass this task_id on every subsequent task-scoped Rel.AI call; the bound workspace may be omitted.'
+    nextAction: 'Use the bootstrap context to choose the next tool. Pass this work_id on every subsequent work-scoped Rel.AI call; the bound workspace may be omitted.'
   };
 }
 
 function taskBootstrapFromSnapshot(snapshot, mode = 'compact') {
   const common = {
     mode,
-    root: snapshot.root,
     manifests: snapshot.manifests,
     discoveredCommands: snapshot.discoveredCommands,
     projectInstructions: snapshot.projectInstructions,
@@ -47,29 +45,40 @@ function taskBootstrapFromSnapshot(snapshot, mode = 'compact') {
   };
 }
 
-function assertKnownTask(config, taskId, workspace, toolName) {
-  const session = readTaskHistorySession(config, taskId);
+function assertKnownTask(config, taskId, workspace, toolName, principal) {
+  const session = readTaskHistorySessionRecord(config, taskId);
   if (!session) {
-    throw taskError('TASK_NOT_FOUND', 'The supplied task_id is unknown or expired. Start a new logical task with relai_start_task.');
+    throw taskError('TASK_NOT_FOUND', 'The supplied work_id is unknown or expired. Start a new work session with relai_begin_work.');
   }
-  if (session.status === 'cancelled' && toolName === 'relai_cancel_task') return session;
-  if (session.status === 'completed' && toolName === 'relai_complete_task') return session;
+  const expectedPrincipal = String(session.principalFingerprint || '');
+  const actualPrincipal = principalFingerprint(principal || 'anonymous');
+  if (!expectedPrincipal || !safeEqual(expectedPrincipal, actualPrincipal)) {
+    throw taskError('TASK_NOT_FOUND', 'The supplied work_id is unknown or expired. Start a new work session with relai_begin_work.');
+  }
+  if (session.status === 'cancelled' && toolName === 'relai_cancel_work') return session;
+  if (session.status === 'completed' && toolName === 'relai_finish_work') return session;
   if (isTerminalTaskStatus(session.status)) {
-    throw taskError('INVALID_TASK_STATE', `This logical task is already ${session.status}. Start a new task instead of reusing its task_id.`);
+    throw taskError('INVALID_TASK_STATE', `This work session is already ${session.status}. Start a new work session instead of reusing its work_id.`);
   }
   const requestedWorkspace = String(workspace || '').trim();
   const ownedWorkspace = String(session.workspace || '').trim();
   if (requestedWorkspace && ownedWorkspace && requestedWorkspace !== ownedWorkspace) {
-    throw taskError('TASK_OWNERSHIP_MISMATCH', 'The supplied task_id belongs to a different workspace.');
+    throw taskError('TASK_OWNERSHIP_MISMATCH', 'The supplied work_id belongs to a different workspace.');
   }
   return session;
 }
 
+function safeEqual(left, right) {
+  const a = Buffer.from(String(left || ''));
+  const b = Buffer.from(String(right || ''));
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
 function taskAuditContext(context, activity, requestedTaskId, toolName, ok, value = null) {
-  const duplicateCompletion = toolName === 'relai_complete_task' && value?.duplicate === true;
-  const duplicateCancellation = toolName === 'relai_cancel_task' && value?.duplicate === true;
+  const duplicateCompletion = toolName === 'relai_finish_work' && value?.duplicate === true;
+  const duplicateCancellation = toolName === 'relai_cancel_work' && value?.duplicate === true;
   const taskId = activity?.taskId || requestedTaskId || '';
-  const taskHistoryEligible = Boolean(taskId && (requestedTaskId || toolName === 'relai_start_task'));
+  const taskHistoryEligible = Boolean(taskId && (requestedTaskId || toolName === 'relai_begin_work'));
   return {
     taskId,
     scopeId: activity?.scopeId || '',
@@ -85,11 +94,11 @@ function taskAuditContext(context, activity, requestedTaskId, toolName, ok, valu
     taskIdExplicit: taskHistoryEligible,
     taskHistoryEligible,
     duplicateRequest: duplicateCompletion || duplicateCancellation,
-    eventType: toolName === 'relai_start_task'
+    eventType: toolName === 'relai_begin_work'
       ? (ok ? 'task.started' : 'task.start.rejected')
-      : toolName === 'relai_complete_task'
+      : toolName === 'relai_finish_work'
         ? (ok ? (duplicateCompletion ? 'task.completion.duplicate' : 'task.completion.committed') : 'task.completion.rejected')
-        : toolName === 'relai_cancel_task'
+        : toolName === 'relai_cancel_work'
           ? (ok ? (duplicateCancellation ? 'task.cancellation.duplicate' : 'task.cancellation.committed') : 'task.cancellation.rejected')
           : 'tool.call.completed'
   };
@@ -98,8 +107,8 @@ function taskAuditContext(context, activity, requestedTaskId, toolName, ok, valu
 function withTaskIdentity(value, taskId) {
   const identity = String(taskId || '').trim();
   if (!identity) return value;
-  if (value && typeof value === 'object' && !Array.isArray(value)) return { ...value, task_id: identity };
-  return { ok: true, value, task_id: identity };
+  if (value && typeof value === 'object' && !Array.isArray(value)) return { ...value, work_id: identity };
+  return { ok: true, value, work_id: identity };
 }
 
 export { startTask, taskBootstrapFromSnapshot, assertKnownTask, taskAuditContext, withTaskIdentity };

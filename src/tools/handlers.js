@@ -4,7 +4,7 @@
 /** @typedef {import('../../types/boundaries.d.ts').ToolHandler} ToolHandler */
 
 import { resolveWorkspace } from '../config.js';
-import { repoSnapshot, relaiRead, workspaceTidyPlan, workspaceTidyRun, relaiVerify, relaiHttpProbe, relaiUiCheck, relaiDiff, relaiRestorePaths, relaiResetWorkspace, relaiGitCommit, relaiGitPush, relaiGitDraftPr } from '../localRepoBridge.js';
+import { repoSnapshot, relaiRead, workspaceTidyPlan, workspaceTidyRun, relaiVerify, relaiHttpProbe, relaiDiff, relaiRestorePaths, relaiResetWorkspace, relaiGitCommit, relaiGitPush, relaiGitDraftPr } from '../localRepoBridge.js';
 import { planEdit } from '../executionPlanner.js';
 import { relaiStatus } from './status.js';
 import { completeTask } from './completion.js';
@@ -17,8 +17,6 @@ import { startManagedProcess, readManagedProcess, writeManagedProcess, stopManag
 import { createManagedWorktree, listManagedWorktrees, removeManagedWorktree } from '../worktreeManager.js';
 import { relaiSemanticSearch } from '../bridge/semanticSearch.js';
 import { relaiDiagnosticsRun } from '../bridge/diagnosticsRunner.js';
-import { createValidationPlan } from '../bridge/validationPlan.js';
-import { nativeTasksProbeFallback } from '../nativeTasksProbe.js';
 /** @type {ToolHandler} */
 const statusHandler = (config, args, context) => relaiStatus(config, args, context);
 
@@ -46,7 +44,7 @@ const HANDLERS = Object.freeze({
   read: inWorkspace((workspace, config, args, context) => relaiRead(workspace, config, args, context)),
   search: inWorkspace((workspace, config, args) => relaiSearch(workspace, config, args)),
   codeInspect: inWorkspace((workspace, config, args) => relaiCodeInspect(workspace, config, args)),
-  exec: inWorkspace((workspace, config, args) => relaiExec(workspace, config, args)),
+  exec: inWorkspace((workspace, config, args, context) => relaiExec(workspace, config, args, context)),
   processStart: inWorkspace((workspace, config, args, context) => startManagedProcess(workspace, config, args, context)),
   processRead: (config, args, context) => readManagedProcess(config, args, context),
   processWrite: (config, args, context) => writeManagedProcess(config, args, context),
@@ -56,14 +54,11 @@ const HANDLERS = Object.freeze({
   worktreeList: (config, args, context) => listManagedWorktrees(config, args, context),
   worktreeRemove: inWorkspace((workspace, config, args, context) => removeManagedWorktree(workspace, config, args, context)),
   semanticSearch: inWorkspace((workspace, config, args) => relaiSemanticSearch(workspace, config, args)),
-  diagnosticsRun: inWorkspace((workspace, config, args) => relaiDiagnosticsRun(workspace, config, args)),
-  validationPlan: inWorkspace((workspace, config, args) => createValidationPlan(workspace, config, args)),
-  nativeTasksProbe: (config, args, context) => nativeTasksProbeFallback(config, args, context),
+  diagnosticsRun: inWorkspace((workspace, config, args, context) => relaiDiagnosticsRun(workspace, config, args, context)),
   tidyPlan: inWorkspace((workspace, config, args) => workspaceTidyPlan(workspace, config, args)),
   tidyRun: inWorkspace((workspace, config, args) => workspaceTidyRun(workspace, config, args)),
-  runChecks: inWorkspace((workspace, config, args) => relaiVerify(workspace, config, mapCheckArgs(args))),
+  runChecks: inWorkspace((workspace, config, args, context) => relaiVerify(workspace, config, mapCheckArgs(args), context)),
   httpProbe: inWorkspace((workspace, config, args) => relaiHttpProbe(workspace, config, args)),
-  uiCheck: inWorkspace((workspace, config, args) => relaiUiCheck(workspace, config, args)),
   diff: inWorkspace((workspace, config, args) => relaiDiff(workspace, config, args)),
   restorePaths: inWorkspace((workspace, config, args) => relaiRestorePaths(workspace, config, args)),
   resetWorkspace: inWorkspace((workspace, config, args) => relaiResetWorkspace(workspace, config, args)),

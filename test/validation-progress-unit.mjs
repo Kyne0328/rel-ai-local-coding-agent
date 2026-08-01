@@ -46,7 +46,7 @@ try {
   async function startTask(label) {
     resetToolActivity();
     events.length = 0;
-    return callTool('relai_start_task', { workspace: 'app', title: label }, context);
+    return callTool('relai_begin_work', { workspace: 'app', title: label }, context);
   }
 
   function sequence(taskId) {
@@ -57,101 +57,100 @@ try {
   }
 
   async function cancel(taskId, reason = 'Test cleanup') {
-    return callTool('relai_cancel_task', { workspace: 'app', task_id: taskId, reason }, context);
+    return callTool('relai_cancel_work', { workspace: 'app', work_id: taskId, reason }, context);
   }
 
   const successTask = await startTask('Two successful checks');
   events.length = 0;
   const success = await callTool('relai_run_checks', {
-    workspace: 'app', task_id: successTask.task_id, checks: [pass, 'node -e "console.log(\'second\')"']
+    workspace: 'app', work_id: successTask.work_id, checks: [pass, 'node -e "console.log(\'second\')"']
   }, context);
   assert.equal(success.ok, true);
-  assert.deepEqual(sequence(successTask.task_id), ['0/2', '1/2', '2/2']);
+  assert.deepEqual(sequence(successTask.work_id), ['0/2', '1/2', '2/2']);
   assert.equal(success.completedUnits, 2);
   assert.equal(success.totalUnits, 2);
-  await cancel(successTask.task_id);
+  await cancel(successTask.work_id);
 
   const stopTask = await startTask('Stop on first failure');
   events.length = 0;
   const stopped = await callTool('relai_run_checks', {
-    workspace: 'app', task_id: stopTask.task_id, checks: [fail, pass], stopOnFailure: true
+    workspace: 'app', work_id: stopTask.work_id, checks: [fail, pass], stopOnFailure: true
   }, context);
   assert.equal(stopped.validationStatus, 'failed');
   assert.equal(stopped.completedUnits, 1);
   assert.equal(stopped.totalUnits, 2);
   assert.equal(stopped.failedCheck, fail);
-  assert.deepEqual(sequence(stopTask.task_id), ['0/2', '1/2']);
-  await cancel(stopTask.task_id);
+  assert.deepEqual(sequence(stopTask.work_id), ['0/2', '1/2']);
+  await cancel(stopTask.work_id);
 
   const continueTask = await startTask('Continue after failure');
   events.length = 0;
   const continued = await callTool('relai_run_checks', {
-    workspace: 'app', task_id: continueTask.task_id, checks: [fail, pass], stopOnFailure: false
+    workspace: 'app', work_id: continueTask.work_id, checks: [fail, pass], stopOnFailure: false
   }, context);
   assert.equal(continued.validationStatus, 'failed');
   assert.equal(continued.completedUnits, 2);
   assert.equal(continued.totalUnits, 2);
-  assert.deepEqual(sequence(continueTask.task_id), ['0/2', '1/2', '2/2']);
-  const continuedTask = getToolActivity().tasks.find(task => task.taskId === continueTask.task_id);
+  assert.deepEqual(sequence(continueTask.work_id), ['0/2', '1/2', '2/2']);
+  const continuedTask = getToolActivity().tasks.find(task => task.taskId === continueTask.work_id);
   assert.equal(continuedTask.progress.percentage, 99, 'failed validation must not present as successful 100% completion');
-  await cancel(continueTask.task_id);
+  await cancel(continueTask.work_id);
 
   const lastFailureTask = await startTask('Failure on last check');
   events.length = 0;
   const lastFailure = await callTool('relai_run_checks', {
-    workspace: 'app', task_id: lastFailureTask.task_id, checks: [pass, fail]
+    workspace: 'app', work_id: lastFailureTask.work_id, checks: [pass, fail]
   }, context);
   assert.equal(lastFailure.validationStatus, 'failed');
   assert.equal(lastFailure.completedUnits, 2);
   assert.equal(lastFailure.failedCheck, fail);
-  assert.deepEqual(sequence(lastFailureTask.task_id), ['0/2', '1/2', '2/2']);
-  await cancel(lastFailureTask.task_id);
+  assert.deepEqual(sequence(lastFailureTask.work_id), ['0/2', '1/2', '2/2']);
+  await cancel(lastFailureTask.work_id);
 
   const duplicateTask = await startTask('Duplicate checks');
   events.length = 0;
   const deduplicated = await callTool('relai_run_checks', {
-    workspace: 'app', task_id: duplicateTask.task_id, checks: [pass, pass]
+    workspace: 'app', work_id: duplicateTask.work_id, checks: [pass, pass]
   }, context);
   assert.equal(deduplicated.totalUnits, 1);
   assert.equal(deduplicated.skippedChecks.length, 1);
   assert.equal(deduplicated.skippedChecks[0].reason, 'duplicate');
-  assert.deepEqual(sequence(duplicateTask.task_id), ['0/1', '1/1']);
-  await cancel(duplicateTask.task_id);
+  assert.deepEqual(sequence(duplicateTask.work_id), ['0/1', '1/1']);
+  await cancel(duplicateTask.work_id);
 
   const planTask = await startTask('Dynamic validation plan');
-  const plan = await callTool('relai_validation_plan', { workspace: 'app', task_id: planTask.task_id }, context);
   events.length = 0;
   const planned = await callTool('relai_run_checks', {
-    workspace: 'app', task_id: planTask.task_id, planId: plan.planId, planLevel: 'standard'
+    workspace: 'app', work_id: planTask.work_id, level: 'standard'
   }, context);
   assert.ok(planned.totalUnits > 0);
-  assert.equal(sequence(planTask.task_id).at(0), `0/${planned.totalUnits}`);
-  assert.equal(sequence(planTask.task_id).at(-1), `${planned.completedUnits}/${planned.totalUnits}`);
-  await cancel(planTask.task_id);
+  assert.equal(sequence(planTask.work_id).at(0), `0/${planned.totalUnits}`);
+  assert.equal(sequence(planTask.work_id).at(-1), `${planned.completedUnits}/${planned.totalUnits}`);
+  await cancel(planTask.work_id);
 
   const timeoutTask = await startTask('Timed-out check');
   events.length = 0;
   const timedOut = await callTool('relai_run_checks', {
-    workspace: 'app', task_id: timeoutTask.task_id, checks: [slow], timeoutMs: 1000
+    workspace: 'app', work_id: timeoutTask.work_id, checks: [slow], timeoutMs: 1000
   }, context);
   assert.equal(timedOut.validationStatus, 'failed');
   assert.equal(timedOut.results[0].timedOut, true);
-  assert.equal(getToolActivity().tasks.find(task => task.taskId === timeoutTask.task_id).progress.percentage, 99);
-  await cancel(timeoutTask.task_id);
+  assert.equal(getToolActivity().tasks.find(task => task.taskId === timeoutTask.work_id).progress.percentage, 99);
+  await cancel(timeoutTask.work_id);
 
   const cancelledTask = await startTask('Cancelled validation');
   events.length = 0;
   const runningCancellation = callTool('relai_run_checks', {
-    workspace: 'app', task_id: cancelledTask.task_id, checks: [slow], timeoutMs: 10000
+    workspace: 'app', work_id: cancelledTask.work_id, checks: [slow], timeoutMs: 10000
   }, context);
-  await waitFor(() => events.some(event => event.phase === 'progress' && event.taskId === cancelledTask.task_id && event.task?.progress?.totalUnits === 1));
-  const cancellation = await cancel(cancelledTask.task_id, 'Cancel active validation');
+  await waitFor(() => events.some(event => event.phase === 'progress' && event.taskId === cancelledTask.work_id && event.task?.progress?.totalUnits === 1));
+  const cancellation = await cancel(cancelledTask.work_id, 'Cancel active validation');
   const cancelledValidation = await runningCancellation;
   assert.equal(cancellation.status, 'cancelled');
   assert.equal(cancelledValidation.validationStatus, 'cancelled');
   assert.equal(cancelledValidation.completedUnits, 0);
   assert.equal(cancelledValidation.totalUnits, 1);
-  const cancelledHistory = readTaskHistorySession(config, cancelledTask.task_id);
+  const cancelledHistory = readTaskHistorySession(config, cancelledTask.work_id);
   assert.equal(cancelledHistory.status, 'cancelled');
   assert.equal(cancelledHistory.progress.completedUnits, 0);
   assert.notEqual(cancelledHistory.progress.percentage, 100);
@@ -159,7 +158,7 @@ try {
   const atomicTask = await startTask('Atomic validation completion');
   events.length = 0;
   const atomic = await callTool('relai_run_checks', {
-    workspace: 'app', task_id: atomicTask.task_id, checks: [pass, pass], complete: true,
+    workspace: 'app', work_id: atomicTask.work_id, checks: [pass, pass], complete: true,
     summary: 'Validated and completed without credential data.'
   }, context);
   assert.equal(atomic.completionKnown, true);
@@ -169,14 +168,14 @@ try {
   const reconnectTask = await startTask('Persist progress during reconnect');
   events.length = 0;
   const midwayRun = callTool('relai_run_checks', {
-    workspace: 'app', task_id: reconnectTask.task_id,
+    workspace: 'app', work_id: reconnectTask.work_id,
     checks: [pass, slow], timeoutMs: 10000
   }, context);
-  await waitFor(() => sequence(reconnectTask.task_id).includes('1/2'));
-  const midway = readTaskHistorySession(config, reconnectTask.task_id);
+  await waitFor(() => sequence(reconnectTask.work_id).includes('1/2'));
+  const midway = readTaskHistorySession(config, reconnectTask.work_id);
   assert.equal(midway.progress.completedUnits, 1);
   assert.equal(midway.progress.totalUnits, 2);
-  await cancel(reconnectTask.task_id, 'End reconnect test');
+  await cancel(reconnectTask.work_id, 'End reconnect test');
   await midwayRun;
 
   stopListening();

@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
   BAGGAGE_META_KEY,
+  createRequestStateCodec,
   CLIENT_CAPABILITIES_META_KEY,
   CLIENT_INFO_META_KEY,
   PROTOCOL_VERSION_META_KEY,
@@ -11,6 +12,7 @@ import {
 } from '@modelcontextprotocol/server';
 import { getStateDir } from '../statePaths.js';
 import { MCP_PROTOCOL_VERSION } from './protocol.js';
+import { principalIdentity } from './principal.js';
 
 const SERVER_INSTANCE_ID = crypto.randomUUID();
 
@@ -32,6 +34,8 @@ function toolContext(context, options = {}) {
     clientVersion: String(client.version || ''),
     clientCapabilities: capabilities,
     requestHeaders,
+    principal: principalIdentity(options.principal || context?.http?.authInfo),
+    signal: options.signal || context?.http?.req?.signal,
     mcp: {
       envelope,
       method: context?.mcpReq?.method,
@@ -55,6 +59,14 @@ function httpHeaders(request) {
   return result;
 }
 
+function createRelaiRequestStateCodec(config, principal) {
+  return createRequestStateCodec({
+    key: requestStateKey(config),
+    ttlSeconds: 10 * 60,
+    bind: context => `${context?.mcpReq?.method || ''}\0${principalIdentity(principal || context?.principal || context?.http?.authInfo)}`
+  });
+}
+
 function requestStateKey(config) {
   const explicit = String(process.env.REL_AI_REQUEST_STATE_KEY || '').trim();
   if (Buffer.byteLength(explicit, 'utf8') >= 32) return explicit;
@@ -73,4 +85,4 @@ function objectValue(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 }
 
-export { SERVER_INSTANCE_ID, clientName, requestStateKey, toolContext };
+export { SERVER_INSTANCE_ID, clientName, createRelaiRequestStateCodec, requestStateKey, toolContext };

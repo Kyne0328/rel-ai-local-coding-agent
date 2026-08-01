@@ -8,7 +8,7 @@ let now = 1000;
 const phases = [];
 const tracker = createToolActivityTracker({ idleMs: 60_000, now: () => now });
 tracker.onToolActivity(event => phases.push(event.phase));
-const start = tracker.beginConnectorToolCall({ tool: 'relai_start_task', workspace: 'repo', createTask: true });
+const start = tracker.beginConnectorToolCall({ tool: 'relai_begin_work', workspace: 'repo', createTask: true });
 const taskId = start.taskId;
 start({ ok: true });
 now = 2000;
@@ -66,40 +66,40 @@ try {
   const { resetToolActivity } = await import('../src/toolActivity.js');
   resetToolActivity();
   const context = { publicHttpOnly: true, requestId: 'cancel-test' };
-  const started = await callTool('relai_start_task', { workspace: 'app', title: 'Cancelable task' }, context);
+  const started = await callTool('relai_begin_work', { workspace: 'app', title: 'Cancelable task' }, context);
   assert.equal(started.status, 'planning');
-  const result = await callTool('relai_cancel_task', {
+  const result = await callTool('relai_cancel_work', {
     workspace: 'app',
-    task_id: started.task_id,
+    work_id: started.work_id,
     reason: 'User stopped this work.'
   }, context);
   assert.equal(result.ok, true);
-  assert.equal(result.task_id, started.task_id);
+  assert.equal(result.work_id, started.work_id);
   assert.equal(result.status, 'cancelled');
   assert.equal(result.duplicate, false);
   assert.equal(result.endReason, 'explicit_cancellation');
   assert.ok(result.endedAt);
 
-  const persisted = readTaskHistorySession({ stateDir, auditLogPath: path.join(stateDir, 'audit.jsonl') }, started.task_id);
+  const persisted = readTaskHistorySession({ stateDir, auditLogPath: path.join(stateDir, 'audit.jsonl') }, started.work_id);
   assert.equal(persisted.status, 'cancelled');
   assert.equal(persisted.endReason, 'explicit_cancellation');
   assert.ok(persisted.endedAt);
   assert.equal(persisted.progress.percentage === 100, false, 'cancelled work must not be fabricated as complete');
 
-  const duplicate = await callTool('relai_cancel_task', {
-    workspace: 'app', task_id: started.task_id, reason: 'Retry'
+  const duplicate = await callTool('relai_cancel_work', {
+    workspace: 'app', work_id: started.work_id, reason: 'Retry'
   }, context);
   assert.equal(duplicate.duplicate, true);
   await assert.rejects(
-    () => callTool('relai_read', { workspace: 'app', task_id: started.task_id, paths: ['package.json'] }, context),
+    () => callTool('relai_read', { workspace: 'app', work_id: started.work_id, paths: ['package.json'] }, context),
     error => error?.code === 'INVALID_TASK_STATE'
   );
   await assert.rejects(
-    () => callTool('relai_cancel_task', { workspace: 'app', task_id: 'unknown-task', reason: 'Wrong target' }, context),
+    () => callTool('relai_cancel_work', { workspace: 'app', work_id: 'unknown-task', reason: 'Wrong target' }, context),
     error => error?.code === 'TASK_NOT_FOUND'
   );
   const audit = readAudit({ stateDir, auditLogPath: path.join(stateDir, 'audit.jsonl') }, { limit: 100 });
-  assert.ok(audit.entries.some(entry => entry.taskId === started.task_id && entry.eventType === 'task.cancellation.committed'));
+  assert.ok(audit.entries.some(entry => entry.taskId === started.work_id && entry.eventType === 'task.cancellation.committed'));
 } finally {
   if (previousConfig == null) delete process.env.REL_AI_MCP_CONFIG;
   else process.env.REL_AI_MCP_CONFIG = previousConfig;

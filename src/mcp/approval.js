@@ -41,7 +41,7 @@ function approvalRequirement(name, args) {
 
 function approvalDigest(name, args) {
   const safe = { ...args };
-  delete safe.task_id;
+  delete safe.work_id;
   delete safe.taskId;
   delete safe._deferredExecution;
   delete safe._operationTaskId;

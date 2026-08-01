@@ -5,19 +5,18 @@ import { readTaskHistorySession } from '../taskHistoryStore.js';
 import { sanitizeDisplayText } from '../taskObservability.js';
 
 function cancelTask(config, args = {}) {
-  const taskId = String(args.task_id || args.taskId || '').trim();
-  if (!taskId) throw taskError('TASK_ID_REQUIRED', 'task_id is required to cancel a logical task.');
+  const taskId = String(args.work_id || '').trim();
+  if (!taskId) throw taskError('TASK_ID_REQUIRED', 'work_id is required to cancel a work session.');
 
   const session = readTaskHistorySession(config, taskId);
   if (session?.status === 'cancelled') {
     return {
       ok: true,
-      taskId,
-      task_id: taskId,
+      work_id: taskId,
       status: 'cancelled',
       duplicate: true,
       endReason: session.endReason || 'explicit_cancellation',
-      terminalReason: session.terminalReason || session.currentActivity || 'Task cancelled.',
+      terminalReason: session.terminalReason || session.currentActivity || 'Work session cancelled.',
       endedAt: session.endedAt || null,
       cancelledAt: session.cancelledAt || session.endedAt || null,
       progress: session.progress
@@ -25,13 +24,12 @@ function cancelTask(config, args = {}) {
   }
 
   const cancellation = requestCurrentTaskCancellation({
-    reason: sanitizeDisplayText(args.reason || 'Task cancelled by request.', 500),
+    reason: sanitizeDisplayText(args.reason || 'Work session cancelled by request.', 500),
     initiator: 'connector_client'
   });
   return {
     ok: true,
-    taskId: cancellation.taskId,
-    task_id: cancellation.taskId,
+    work_id: cancellation.taskId,
     status: cancellation.status,
     duplicate: cancellation.duplicate,
     endReason: cancellation.endReason,

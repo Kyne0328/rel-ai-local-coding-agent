@@ -11,6 +11,7 @@ function resolveCurrentUnpacked(root = defaultRoot, options = {}) {
 function resolveCurrentUnpackedFromDist(distRoot, options = {}) {
   const resolvedDist = path.resolve(distRoot);
   const markerPath = path.join(resolvedDist, 'current-unpacked.json');
+  let markedCandidate = null;
 
   if (fs.existsSync(markerPath)) {
     let marker;
@@ -21,15 +22,23 @@ function resolveCurrentUnpackedFromDist(distRoot, options = {}) {
     }
     const relativePath = String(marker.relativePath || '').trim();
     if (!relativePath) throw new Error(`Current unpacked marker does not contain relativePath: ${markerPath}.`);
-    const candidate = path.resolve(resolvedDist, relativePath);
-    assertContained(resolvedDist, candidate, markerPath);
-    assertPackageDirectory(candidate, markerPath);
-    return candidate;
+    markedCandidate = path.resolve(resolvedDist, relativePath);
+    assertContained(resolvedDist, markedCandidate, markerPath);
+    assertPackageDirectory(markedCandidate, markerPath);
+    if (options.allowBuildCheck !== true) return markedCandidate;
   }
 
-  const candidates = [path.join(resolvedDist, 'win-unpacked')];
-  if (options.allowBuildCheck === true) candidates.push(path.join(resolvedDist, 'build-check', 'win-unpacked'));
-  const candidate = candidates.find(directory => fs.existsSync(directory) && fs.statSync(directory).isDirectory());
+  const candidates = [
+    ...(markedCandidate ? [markedCandidate] : []),
+    path.join(resolvedDist, 'win-unpacked'),
+    ...(options.allowBuildCheck === true ? [path.join(resolvedDist, 'build-check', 'win-unpacked')] : [])
+  ]
+    .filter((directory, index, values) => values.indexOf(directory) === index)
+    .filter(directory => fs.existsSync(directory) && fs.statSync(directory).isDirectory());
+
+  const candidate = options.allowBuildCheck === true
+    ? candidates.sort((left, right) => fs.statSync(right).mtimeMs - fs.statSync(left).mtimeMs)[0]
+    : candidates[0];
   if (candidate) return candidate;
   throw new Error(`No current unpacked application was found. Run npm run electron:dist${options.allowBuildCheck ? ' or npm run electron:build' : ''}.`);
 }

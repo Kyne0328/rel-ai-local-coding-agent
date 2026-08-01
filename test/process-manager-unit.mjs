@@ -1,71 +1,305 @@
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { startManagedProcess, readManagedProcess, writeManagedProcess, stopManagedProcess, listManagedProcesses } from "../src/processManager.js";
+import {
+  cancelNativeTask,
+  completeNativeTask,
+  createNativeTask,
+  getNativeTask
+} from '../src/mcp/nativeTaskService.js';
+import {
+  listManagedProcesses,
+  readManagedProcess,
+  startManagedProcess,
+  stopAllManagedProcesses,
+  stopManagedProcess,
+  writeManagedProcess
+} from '../src/processManager.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-process-manager-'));
 const stateDir = path.join(root, 'state');
 const workspaceRoot = path.join(root, 'workspace');
-fs.mkdirSync(workspaceRoot, { recursive: true });
-fs.writeFileSync(path.join(workspaceRoot, 'managed-child.cjs'), `
-process.stdout.write('READY\\n');
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', value => process.stdout.write('ECHO:' + value));
-setInterval(() => {}, 1000);
-`);
 const config = { stateDir };
 const workspace = { alias: 'app', path: workspaceRoot };
-const taskContext = { taskId: 'task-process-test' };
-let processId = '';
+const otherWorkspace = { alias: 'other', path: path.join(root, 'other-workspace') };
+const ownerStart = { taskId: 'work-session-a', principal: 'client-a', workspace: 'app' };
+const ownerLater = { taskId: 'work-session-b', principal: 'client-a', workspace: 'app' };
+const otherPrincipal = { taskId: 'work-session-c', principal: 'client-b', workspace: 'app' };
+const otherWorkspaceContext = { taskId: 'work-session-d', principal: 'client-a', workspace: 'other' };
+const createdProcessIds = [];
+let externalChild = null;
+
+fs.mkdirSync(workspaceRoot, { recursive: true });
+fs.mkdirSync(otherWorkspace.path, { recursive: true });
+const persistentScript = path.join(workspaceRoot, 'persistent-child.cjs');
+const exitScript = path.join(workspaceRoot, 'exit-child.cjs');
+fs.writeFileSync(persistentScript, `
+process.stdout.write(Buffer.from([0xff, 0xfe, 0xfd]));
+process.stdout.write('READY\\n');
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', value => {
+  if (value.startsWith('NOISE:')) {
+    const count = Number(value.slice(6)) || 0;
+    process.stdout.write('x'.repeat(count) + '\\n');
+    return;
+  }
+  process.stdout.write('ECHO:' + value);
+});
+setInterval(() => {}, 1000);
+`);
+fs.writeFileSync(exitScript, `process.stderr.write('startup failed\\n'); process.exit(7);\n`);
 
 try {
+  const startupController = new AbortController();
+  const startupTask = createNativeTask(config, {
+    principal: 'client-a',
+    method: 'tools/call',
+    name: 'relai_process_start',
+    logicalTaskId: ownerStart.taskId,
+    executor: { controller: startupController }
+  });
   const started = await startManagedProcess(workspace, config, {
-    command: 'node managed-child.cjs',
-    startupWaitMs: 0,
-    label: 'managed-test'
-  }, taskContext);
-  processId = started.processId;
-  assert.match(processId, /^proc_/);
-  assert.equal(started.workspace, 'app');
-  assert.ok(['starting', 'running'].includes(started.status));
+    command: nodeCommand(persistentScript),
+    startupWaitMs: 100,
+    maxLogBytes: 65536,
+    label: 'persistent-managed-test',
+    _operationTaskId: startupTask.taskId
+  }, ownerStart);
+  createdProcessIds.push(started.processId);
 
-  const first = await waitForStdout(processId, /READY/);
+  assert.match(started.processId, /^proc_[A-Za-z0-9_-]{20,160}$/);
+  assert.equal(started.workspaceId, 'app');
+  assert.equal(started.lifecycle, 'persistent');
+  assert.equal(started.originatingTaskId, startupTask.taskId);
+  assert.equal(started.workSessionId, ownerStart.taskId);
+  assert.equal(started.readiness.verified, true);
+  assert.equal(started.status, 'running');
+
+  const first = await waitForProcess(started.processId, ownerStart, snapshot => snapshot.stdout.text.includes('READY'));
   assert.match(first.stdout.text, /READY/);
-  const nextOffset = first.stdout.nextOffset;
+  assert.equal(first.stdout.invalidUtf8, true);
+  assert.ok(first.stdout.base64.length > 0);
+
+  completeNativeTask(config, startupTask.taskId, {
+    ok: true,
+    processId: started.processId,
+    readiness: started.readiness
+  }, { principal: 'client-a' });
+  assert.throws(
+    () => cancelNativeTask(config, startupTask.taskId, { principal: 'client-a' }),
+    /terminal state completed/i
+  );
+  await sleep(100);
+  const afterCompletedTaskCancellation = readManagedProcess(config, {
+    processId: started.processId,
+    stdoutOffset: first.stdout.nextOffset,
+    stderrOffset: 0
+  }, ownerLater);
+  assert.equal(afterCompletedTaskCancellation.status, 'running');
 
   assert.throws(
-    () => readManagedProcess(config, { processId }, { taskId: 'another-task' }),
-    error => error?.code === 'TASK_OWNERSHIP_MISMATCH'
+    () => readManagedProcess(config, { processId: started.processId }, otherPrincipal),
+    error => error?.code === 'PROCESS_ACCESS_DENIED'
   );
-  const written = writeManagedProcess(config, { processId, input: 'hello\n' }, taskContext);
+  assert.throws(
+    () => readManagedProcess(config, { processId: started.processId }, otherWorkspaceContext),
+    error => error?.code === 'PROCESS_WORKSPACE_MISMATCH'
+  );
+
+  const written = writeManagedProcess(config, {
+    processId: started.processId,
+    input: 'hello\n'
+  }, ownerLater);
   assert.equal(written.acceptedBytes, 6);
-  await new Promise(resolve => setTimeout(resolve, 150));
-  const second = readManagedProcess(config, { processId, stdoutOffset: nextOffset, stderrOffset: 0 }, taskContext);
-  assert.match(second.stdout.text, /ECHO:hello/);
+  const echoed = await waitForProcess(started.processId, ownerLater, snapshot => snapshot.stdout.text.includes('ECHO:hello'), {
+    stdoutOffset: first.stdout.nextOffset
+  });
+  assert.match(echoed.stdout.text, /ECHO:hello/);
 
-  const listed = listManagedProcesses(config, { workspace: 'app' }, taskContext);
-  assert.equal(listed.count, 1);
-  assert.equal(listed.processes[0].processId, processId);
+  writeManagedProcess(config, {
+    processId: started.processId,
+    input: 'NOISE:120000\n'
+  }, ownerLater);
+  const noisy = await waitForProcess(started.processId, ownerLater, snapshot => snapshot.stdoutBytes >= 120000);
+  assert.ok(noisy.stdoutRetainedFromOffset > 0);
+  assert.equal(noisy.stdout.truncatedBefore, true);
+  assert.equal(noisy.stdout.offset, noisy.stdout.retainedFromOffset);
+  assert.ok(noisy.stdout.totalBytes >= 120000);
+  assert.ok(fs.statSync(path.join(stateDir, 'processes', started.processId, 'stdout.log')).size <= 65536);
 
-  const stopped = await stopManagedProcess(config, { processId, graceMs: 250 }, taskContext);
-  assert.ok(['stopped', 'exited', 'failed'].includes(stopped.status));
+  const cursor = noisy.stdout.totalBytes;
+  writeManagedProcess(config, {
+    processId: started.processId,
+    input: 'after-noise\n'
+  }, ownerLater);
+  const incremental = await waitForProcess(started.processId, ownerLater, snapshot => snapshot.stdout.text.includes('ECHO:after-noise'), {
+    stdoutOffset: cursor
+  });
+  assert.equal(incremental.stdout.requestedOffset, cursor);
+  assert.match(incremental.stdout.text, /ECHO:after-noise/);
+
+  const listedByNewSession = listManagedProcesses(config, { workspace: 'app' }, ownerLater);
+  assert.ok(listedByNewSession.processes.some(item => item.processId === started.processId));
+  const hiddenFromOtherPrincipal = listManagedProcesses(config, { workspace: 'app' }, otherPrincipal);
+  assert.equal(hiddenFromOtherPrincipal.processes.some(item => item.processId === started.processId), false);
+  assert.throws(
+    () => listManagedProcesses(config, { workspace: 'other' }, ownerLater),
+    error => error?.code === 'PROCESS_WORKSPACE_MISMATCH'
+  );
+
+  const stopped = await stopManagedProcess(config, {
+    processId: started.processId,
+    graceMs: 500
+  }, ownerLater);
+  assert.equal(stopped.status, 'stopped');
   assert.ok(stopped.endedAt);
+  assert.equal(stopped.duplicate, false);
+  const duplicateStop = await stopManagedProcess(config, {
+    processId: started.processId,
+    graceMs: 0
+  }, ownerLater);
+  assert.equal(duplicateStop.status, stopped.status);
+  assert.equal(duplicateStop.endedAt, stopped.endedAt);
+  assert.equal(duplicateStop.duplicate, true);
+
+  const cancellationController = new AbortController();
+  const cancellationTask = createNativeTask(config, {
+    principal: 'client-a',
+    method: 'tools/call',
+    name: 'relai_process_start',
+    logicalTaskId: 'work-session-cancel',
+    executor: { controller: cancellationController }
+  });
+  const cancelledStart = startManagedProcess(workspace, config, {
+    command: nodeCommand(persistentScript),
+    startupWaitMs: 3000,
+    label: 'cancel-during-startup',
+    _operationTaskId: cancellationTask.taskId
+  }, { taskId: 'work-session-cancel', principal: 'client-a', workspace: 'app' });
+  setTimeout(() => cancelNativeTask(config, cancellationTask.taskId, { principal: 'client-a' }), 100);
+  await assert.rejects(
+    cancelledStart,
+    error => error?.code === 'TASK_CANCELLED' && error.cancelled === true
+  );
+  assert.equal(getNativeTask(config, cancellationTask.taskId, { principal: 'client-a' }).status, 'cancelled');
+  const afterStartupCancellation = listManagedProcesses(config, { workspace: 'app' }, ownerLater);
+  assert.equal(afterStartupCancellation.processes.some(item => item.label === 'cancel-during-startup'
+    && ['starting', 'running', 'stopping'].includes(item.status)), false);
+
+  await assert.rejects(
+    startManagedProcess(workspace, config, {
+      command: nodeCommand(exitScript),
+      startupWaitMs: 500,
+      label: 'startup-failure'
+    }, ownerLater),
+    /exited during startup|Could not start managed process/i
+  );
+  const afterStartupFailure = listManagedProcesses(config, { workspace: 'app' }, ownerLater);
+  assert.equal(afterStartupFailure.processes.some(item => item.label === 'startup-failure'
+    && ['starting', 'running', 'stopping'].includes(item.status)), false);
+
+  externalChild = spawn(process.execPath, [persistentScript], {
+    cwd: workspaceRoot,
+    detached: process.platform !== 'win32',
+    windowsHide: true,
+    stdio: ['ignore', 'ignore', 'ignore']
+  });
+  await once(externalChild, 'spawn');
+  const staleProcessId = `proc_${'r'.repeat(24)}`;
+  const staleDirectory = path.join(stateDir, 'processes', staleProcessId);
+  fs.mkdirSync(staleDirectory, { recursive: true });
+  fs.writeFileSync(path.join(staleDirectory, 'stdout.log'), 'historical output\n');
+  fs.writeFileSync(path.join(staleDirectory, 'stderr.log'), '');
+  fs.writeFileSync(path.join(staleDirectory, 'metadata.json'), JSON.stringify({
+    schemaVersion: 2,
+    runtimeId: 'previous-runtime',
+    processId: staleProcessId,
+    workspaceId: 'app',
+    workspacePath: workspaceRoot,
+    lifecycle: 'persistent',
+    commandSummary: 'stale child',
+    label: 'stale-restart-record',
+    cwd: '.',
+    status: 'running',
+    startedAt: new Date().toISOString(),
+    endedAt: '',
+    exitCode: null,
+    signal: '',
+    pid: externalChild.pid,
+    stdoutBytes: 18,
+    stderrBytes: 0,
+    stdoutStartOffset: 0,
+    stderrStartOffset: 0,
+    environmentKeys: [],
+    maxLogBytes: 65536
+  }, null, 2));
+
+  assert.throws(
+    () => readManagedProcess(config, { processId: staleProcessId }, {
+      connector: true,
+      principal: 'client-a',
+      workspace: 'app'
+    }),
+    error => error?.code === 'PROCESS_ACCESS_DENIED'
+  );
+  const restored = readManagedProcess(config, { processId: staleProcessId });
+  assert.equal(restored.status, 'orphaned');
+  assert.match(restored.error, /survived a Rel\.AI restart/i);
+  const restoredStop = await stopManagedProcess(config, { processId: staleProcessId, graceMs: 250 });
+  assert.equal(restoredStop.status, 'stopped');
+  assert.equal(restoredStop.duplicate, false);
+  assert.equal(await waitForChildExit(externalChild, 3000), true);
+  externalChild = null;
+
+  console.log('Managed process identity, ownership, persistence, bounded output, restart, cancellation, and idempotent stop tests passed.');
 } finally {
-  if (processId) await stopManagedProcess(config, { processId, graceMs: 0 }, taskContext).catch(() => {});
-  fs.rmSync(root, { recursive: true, force: true });
+  await stopAllManagedProcesses(config).catch(() => {});
+  if (externalChild) {
+    try { externalChild.kill('SIGKILL'); } catch {}
+    await waitForChildExit(externalChild, 3000).catch(() => false);
+  }
+  fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
 }
 
-console.log('Managed process lifecycle and cursor tests passed.');
-
-async function waitForStdout(id, pattern, timeoutMs = 3000) {
+async function waitForProcess(processId, context, predicate, options = {}, timeoutMs = 5000) {
   const deadline = Date.now() + timeoutMs;
   let snapshot = null;
   while (Date.now() < deadline) {
-    snapshot = readManagedProcess(config, { processId: id, stdoutOffset: 0, stderrOffset: 0 }, taskContext);
-    if (pattern.test(snapshot.stdout.text)) return snapshot;
-    await new Promise(resolve => setTimeout(resolve, 50));
+    snapshot = readManagedProcess(config, {
+      processId,
+      stdoutOffset: options.stdoutOffset || 0,
+      stderrOffset: options.stderrOffset || 0,
+      maxBytes: options.maxBytes || 65536
+    }, context);
+    if (predicate(snapshot)) return snapshot;
+    await sleep(25);
   }
-  return snapshot;
+  assert.fail(`Timed out waiting for managed process ${processId}: ${JSON.stringify(snapshot)}`);
+}
+
+async function waitForChildExit(child, timeoutMs) {
+  if (!child || child.exitCode !== null || child.signalCode) return true;
+  return Promise.race([
+    once(child, 'close').then(() => true),
+    sleep(timeoutMs).then(() => child.exitCode !== null || Boolean(child.signalCode))
+  ]);
+}
+
+function nodeCommand(script, ...args) {
+  const pieces = [quote(process.execPath), quote(script), ...args.map(quote)];
+  return process.platform === 'win32' ? `& ${pieces.join(' ')}` : pieces.join(' ');
+}
+
+function quote(value) {
+  const text = String(value);
+  if (process.platform === 'win32') return `'${text.replaceAll("'", "''")}'`;
+  return `'${text.replaceAll("'", `'"'"'`)}'`;
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }

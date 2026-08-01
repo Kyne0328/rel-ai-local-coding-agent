@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startMcpClient } from './helpers/mcp-client.mjs';
+import { activeToolCount } from './helpers/tool-surface.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-mcp-multichat-'));
@@ -56,9 +58,9 @@ try {
   client.initialize(++requestId);
   const discovery = await client.waitFor(requestId);
   assert.equal(discovery.result.capabilities.experimental.relai.taskIdentityVersion, 2);
-  assert.match(discovery.result.instructions, /relai_start_task exactly once/);
+  assert.match(discovery.result.instructions, /relai_begin_work exactly once/);
   assert.match(discovery.result.instructions, /configured workspace alias \(appA, appB\)/);
-  assert.match(discovery.result.instructions, /no transport identifier is a task identity/);
+  assert.match(discovery.result.instructions, /no transport identifier is a work-session identity/);
 
   async function rpc(name, args, { allowError = false } = {}) {
     const id = ++requestId;
@@ -66,23 +68,23 @@ try {
     const response = await client.waitFor(id, 40000);
     if (response.error) throw new Error(`${name} protocol error: ${JSON.stringify(response.error)}`);
     const payload = response.result?.structuredContent;
-    assert.ok(payload, `${name} must return structured MCP content`);
+    assert.ok(payload, `${name} must return structured MCP content: ${JSON.stringify(response)}`);
     if (!allowError) assert.equal(response.result.isError, false, `${name} failed: ${JSON.stringify(payload)}`);
     return { payload, isError: response.result.isError === true };
   }
 
   client.send(++requestId, 'tools/list', {});
   const listedTools = await client.waitFor(requestId);
-  assert.equal(listedTools.result.tools.length, 33);
-  const listedStartTask = listedTools.result.tools.find(tool => tool.name === 'relai_start_task');
+  assert.equal(listedTools.result.tools.length, activeToolCount);
+  const listedStartTask = listedTools.result.tools.find(tool => tool.name === 'relai_begin_work');
   assert.match(listedStartTask.inputSchema.properties.workspace.description, /Aliases: appA, appB/);
 
-  const startA = await rpc('relai_start_task', { workspace: 'appA', objective: 'Validate task A.', bootstrap: 'compact' });
-  const startB = await rpc('relai_start_task', { workspace: 'appB', objective: 'Validate task B.', bootstrap: 'compact' });
-  const startMismatch = await rpc('relai_start_task', { workspace: 'appA', objective: 'Exercise workspace ownership.', bootstrap: 'none' });
-  const taskA = startA.payload.task_id;
-  const taskB = startB.payload.task_id;
-  const mismatchTaskId = startMismatch.payload.task_id;
+  const startA = await rpc('relai_begin_work', { workspace: 'appA', objective: 'Validate task A.', bootstrap: 'compact' });
+  const startB = await rpc('relai_begin_work', { workspace: 'appB', objective: 'Validate task B.', bootstrap: 'compact' });
+  const startMismatch = await rpc('relai_begin_work', { workspace: 'appA', objective: 'Exercise workspace ownership.', bootstrap: 'none' });
+  const taskA = startA.payload.work_id;
+  const taskB = startB.payload.work_id;
+  const mismatchTaskId = startMismatch.payload.work_id;
   assert.ok(taskA && taskB);
   assert.notEqual(taskA, taskB, 'one SDK connection must support independent logical tasks');
   assert.equal(startA.payload.workspaceBinding.alias, 'appA');
@@ -92,11 +94,11 @@ try {
   const missingTaskRequestId = ++requestId;
   client.call(missingTaskRequestId, 'relai_read', { paths: ['src/index.js'] });
   const missingTask = await client.waitFor(missingTaskRequestId, 40000);
-  assert.equal(missingTask.result?.isError, true, 'the MCP schema must reject task-scoped calls without task_id');
-  assert.match(JSON.stringify(missingTask.result?.content), /task_id/i);
+  assert.equal(missingTask.result?.isError, true, 'the MCP schema must reject task-scoped calls without work_id');
+  assert.match(JSON.stringify(missingTask.result?.content), /work_id/i);
 
   const mismatchedWorkspace = await rpc('relai_read', {
-    task_id: mismatchTaskId,
+    work_id: mismatchTaskId,
     workspace: 'appB',
     paths: ['src/index.js']
   }, { allowError: true });
@@ -104,53 +106,54 @@ try {
   assert.equal(mismatchedWorkspace.payload.errorCode, 'TASK_OWNERSHIP_MISMATCH');
 
   const recoveredMismatchTask = await rpc('relai_read', {
-    task_id: mismatchTaskId,
+    work_id: mismatchTaskId,
     paths: ['src/index.js']
   });
   assert.equal(recoveredMismatchTask.payload.workspace, 'appA', 'one rejected assertion must not terminalize its task');
 
-  const boundWorkspaceRead = await rpc('relai_read', { task_id: taskA, paths: ['src/index.js'] });
+  const boundWorkspaceRead = await rpc('relai_read', { work_id: taskA, paths: ['src/index.js'] });
   assert.equal(boundWorkspaceRead.payload.workspace, 'appA');
 
   const readyFile = path.join(sandbox, 'task-b.ready');
   const releaseFile = path.join(sandbox, 'task-b.release');
   const execRequestId = ++requestId;
   client.call(execRequestId, 'relai_exec', {
-    task_id: taskB,
+    work_id: taskB,
     command: 'node wait-barrier.js',
     timeoutMs: 30000,
     env: { READY_FILE: readyFile, RELEASE_FILE: releaseFile }
   });
   const runningB = client.waitFor(execRequestId, 40000);
+  runningB.catch(() => {});
   await waitForFile(readyFile, 10000);
 
-  const validationA = await rpc('relai_run_checks', { task_id: taskA, level: 'standard' });
+  const validationA = await rpc('relai_run_checks', { work_id: taskA, level: 'standard' });
   assert.equal(validationA.payload.validationStatus, 'passed');
-  const completedA = await rpc('relai_complete_task', {
-    task_id: taskA, summary: 'Task A completed while task B was still executing.'
+  const completedA = await rpc('relai_finish_work', {
+    work_id: taskA, summary: 'Task A completed while task B was still executing.'
   });
   assert.equal(completedA.payload.completionKnown, true);
 
   fs.writeFileSync(releaseFile, 'release');
   const finishedB = await runningB;
   assert.equal(finishedB.result?.isError, false, JSON.stringify(finishedB));
-  assert.equal(finishedB.result.structuredContent.task_id, taskB);
+  assert.equal(finishedB.result.structuredContent.work_id, taskB);
 
-  const validationB = await rpc('relai_run_checks', { task_id: taskB, level: 'standard' });
+  const validationB = await rpc('relai_run_checks', { work_id: taskB, level: 'standard' });
   assert.equal(validationB.payload.validationStatus, 'passed');
-  const completedB = await rpc('relai_complete_task', {
-    task_id: taskB, summary: 'Task B completed independently.'
+  const completedB = await rpc('relai_finish_work', {
+    work_id: taskB, summary: 'Task B completed independently.'
   });
   assert.equal(completedB.payload.completionKnown, true);
 
-  const duplicateA = await rpc('relai_complete_task', {
-    task_id: taskA, summary: 'A retry must remain idempotent.'
+  const duplicateA = await rpc('relai_finish_work', {
+    work_id: taskA, summary: 'A retry must remain idempotent.'
   });
   assert.equal(duplicateA.payload.duplicate, true);
   assert.equal(duplicateA.payload.summary, 'Task A completed while task B was still executing.');
 
   const completedReuse = await rpc('relai_read', {
-    task_id: taskA, paths: ['src/index.js']
+    work_id: taskA, paths: ['src/index.js']
   }, { allowError: true });
   assert.equal(completedReuse.isError, true);
   assert.equal(completedReuse.payload.errorCode, 'INVALID_TASK_STATE');
@@ -177,7 +180,36 @@ try {
   console.log('MCP SDK stdio preserves concurrent explicit tasks, completion isolation, audit identity, and retries.');
 } finally {
   await client?.close().catch(() => {});
-  fs.rmSync(sandbox, { recursive: true, force: true });
+  await removeDirectoryWithRetry(sandbox);
+}
+
+async function removeDirectoryWithRetry(directory, attempts = 50) {
+  let lastError;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      fs.rmSync(directory, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!['EPERM', 'EBUSY', 'ENOTEMPTY'].includes(error?.code)) throw error;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+  if (process.platform === 'win32') {
+    const command = process.env.ComSpec || 'cmd.exe';
+    const removed = spawnSync(command, ['/d', '/s', '/c', `rmdir /s /q "${directory}"`], {
+      encoding: 'utf8',
+      windowsHide: true
+    });
+    if (removed.status === 0 && !fs.existsSync(directory)) return;
+    if (lastError?.code === 'EPERM') {
+      process.once('exit', () => {
+        try { fs.rmSync(directory, { recursive: true, force: true }); } catch {}
+      });
+      return;
+    }
+  }
+  throw lastError;
 }
 
 async function waitForFile(filePath, timeoutMs) {

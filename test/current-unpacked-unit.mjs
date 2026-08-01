@@ -16,6 +16,14 @@ try {
   }, null, 2)}\n`);
   assert.equal(resolveCurrentUnpacked(root), versioned);
 
+  const recentBuildCheck = path.join(dist, 'build-check', 'win-unpacked');
+  fs.mkdirSync(recentBuildCheck, { recursive: true });
+  fs.writeFileSync(path.join(recentBuildCheck, 'Rel.AI MCP.exe'), 'newer-binary');
+  const oldTime = new Date(Date.now() - 60_000);
+  fs.utimesSync(versioned, oldTime, oldTime);
+  assert.equal(resolveCurrentUnpacked(root, { allowBuildCheck: true }), recentBuildCheck);
+  fs.rmSync(path.join(dist, 'build-check'), { recursive: true, force: true });
+
   fs.writeFileSync(path.join(dist, 'current-unpacked.json'), JSON.stringify({ relativePath: '../outside' }));
   assert.throws(() => resolveCurrentUnpacked(root), /escapes dist/);
 

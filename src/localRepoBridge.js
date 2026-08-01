@@ -13,7 +13,7 @@ import { runProcess } from "./process.js";
 import { INTERNAL_STATUS_MAX_BYTES, gitStatusArgs } from "./repo/gitStatus.js";
 import { clampNumber } from "./bridge/limits.js";
 import { relaiVerify } from "./bridge/validation.js";
-import { relaiHttpProbe, relaiUiCheck } from "./bridge/browser.js";
+import { relaiHttpProbe } from "./bridge/browser.js";
 import { relaiDiff } from "./bridge/review.js";
 import { relaiResetWorkspace, relaiRestorePaths } from "./bridge/restore.js";
 import { workspaceTidyPlan, workspaceTidyRun as relaiWorkspaceTidyRun } from "./bridge/tidy.js";
@@ -59,7 +59,7 @@ async function repoSnapshot(workspace, config, args = {}) {
     truncated: tree.truncated,
     hints: projectHints(Object.keys(manifests)),
     ...(git ? { git } : {}),
-    recommendedFlow: ["Use the minimum tool calls needed", "relai_search when the code location is unknown; adaptive context is included by default", "relai_read only when a wider range or complete file is needed before editing", "relai_edit { runChecks: true, returnDiff: true } when practical", "On final validation use relai_run_checks { complete: true, summary }; use relai_complete_task only after post-validation read-only review"],
+    recommendedFlow: ["Use the minimum tool calls needed", "relai_search when the code location is unknown; adaptive context is included by default", "relai_read only when a wider range or complete file is needed before editing", "relai_edit { runChecks: true, returnDiff: true } when practical", "On final validation use relai_run_checks { complete: true, summary }; use relai_finish_work only after post-validation read-only review"],
     writeGuidance: workspaceWriteGuidance(),
     operationJournal: summarizeOperations(config, workspace, args.journalLimit || 10)
   };
@@ -88,8 +88,9 @@ async function snapshotGitSummary(workspace, config) {
 }
 
 function relaiRead(workspace, config, args = {}, context = {}) {
-  const paths = Array.isArray(args.paths) ? args.paths : [];
-  if (paths.length === 0) throw new Error("paths must contain at least one path.");
+  const rangePaths = Array.isArray(args.ranges) ? args.ranges.map(entry => entry?.path).filter(Boolean) : [];
+  const paths = Array.isArray(args.paths) && args.paths.length > 0 ? args.paths : rangePaths;
+  if (paths.length === 0) throw new Error("relai_read requires paths or ranges.");
   const policy = resolvePolicy(workspace, config || {});
   const sessionActive = policy?.sessionActive === true;
   const baseReadBytes = context.connector ? DEFAULT_CONNECTOR_READ_BYTES : DEFAULT_MAX_READ_BYTES;
@@ -755,4 +756,4 @@ function sha256Text(text) {
   return crypto.createHash("sha256").update(String(text), "utf8").digest("hex");
 }
 
-export { repoSnapshot, relaiRead, workspaceWrite, workspaceReplace, relaiApplyPatch, relaiVerify, relaiHttpProbe, relaiUiCheck, relaiDiff, relaiRestorePaths, relaiResetWorkspace, relaiGitCommit, relaiGitPush, relaiGitDraftPr, normalizeOpenAIPatchFormat, classifyStatusOwnership, STAGED_WRITE_BYTE_THRESHOLD, STAGED_WRITE_LINE_THRESHOLD, writeStagedPayload, readStagedPayload, clearStagedPayload, resolveStagedWriteId, workspaceTidyPlan, relaiWorkspaceTidyRun as workspaceTidyRun };
+export { repoSnapshot, relaiRead, workspaceWrite, workspaceReplace, relaiApplyPatch, relaiVerify, relaiHttpProbe, relaiDiff, relaiRestorePaths, relaiResetWorkspace, relaiGitCommit, relaiGitPush, relaiGitDraftPr, normalizeOpenAIPatchFormat, classifyStatusOwnership, STAGED_WRITE_BYTE_THRESHOLD, STAGED_WRITE_LINE_THRESHOLD, writeStagedPayload, readStagedPayload, clearStagedPayload, resolveStagedWriteId, workspaceTidyPlan, relaiWorkspaceTidyRun as workspaceTidyRun };

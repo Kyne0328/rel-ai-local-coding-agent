@@ -113,11 +113,11 @@ Rel.AI targets MCP ${MCP_PROTOCOL_VERSION}. Every request carries its own protoc
 
 ## Workflow
 
-Call \`relai_start_task\` once per independent objective. Use \`relai_repo_snapshot\`, \`relai_search\`, \`relai_semantic_search\`, \`relai_code_inspect\`, and \`relai_read\` only as needed. Use \`relai_process_*\` for persistent development commands and \`relai_worktree_*\` for isolated branches. Use \`relai_validation_plan\` for change-aware checks and \`relai_diagnostics_run\` for normalized compiler or analyzer output.
+Call \`relai_begin_work\` once per independent objective. Use \`relai_repo_snapshot\`, \`relai_search\`, \`relai_semantic_search\`, \`relai_code_inspect\`, and \`relai_read\` only as needed. Use \`relai_process_*\` for persistent development commands and \`relai_worktree_*\` for isolated branches. Use \`relai_run_checks\` for internally planned change-aware validation and \`relai_diagnostics_run\` for normalized compiler or analyzer output.
 
 Use \`relai_edit\` as the single file mutation tool. Destructive operations may return \`input_required\`; retry with the accepted response and integrity-protected requestState. Native asynchronous work is returned only when the current request advertises \`io.modelcontextprotocol/tasks\`, then polled with \`tasks/get\` and controlled with \`tasks/update\` or \`tasks/cancel\`.
 
-Final completion requires \`relai_run_checks\` with \`complete:true\` and a summary, or \`relai_complete_task\` after post-validation read-only review.
+Final completion requires \`relai_run_checks\` with \`complete:true\` and a summary, or \`relai_finish_work\` after post-validation read-only review.
 
 ## Configured workspaces
 

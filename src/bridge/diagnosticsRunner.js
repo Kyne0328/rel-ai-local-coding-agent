@@ -8,7 +8,7 @@ import { operationTaskSignal } from '../operationTasks.js';
 import { combineAbortSignals } from '../abortSignals.js';
 import { getCurrentTaskAbortSignal, updateCurrentToolActivity } from '../toolActivity.js';
 import { sanitizeDisplayText } from '../taskObservability.js';
-async function relaiDiagnosticsRun(workspace, config, args = {}) {
+async function relaiDiagnosticsRun(workspace, config, args = {}, context = {}) {
   const commands = selectDiagnosticCommands(workspace, args);
   if (!commands.length) {
     return { ok: false, workspace: workspace.alias, commands: [], diagnostics: [], message: 'No diagnostic command was detected. Pass command or configure lint/typecheck/analyze/vet/clippy checks.' };
@@ -18,7 +18,8 @@ async function relaiDiagnosticsRun(workspace, config, args = {}) {
   const diagnostics = [];
   const signal = combineAbortSignals(
     getCurrentTaskAbortSignal(),
-    args._operationTaskId ? operationTaskSignal(config, args._operationTaskId) : undefined
+    args._operationTaskId ? operationTaskSignal(config, args._operationTaskId) : undefined,
+    context.signal
   );
   publishDiagnosticsProgress(commands, results, '', 0, 'pending');
   for (let index = 0; index < commands.length; index += 1) {
@@ -28,7 +29,14 @@ async function relaiDiagnosticsRun(workspace, config, args = {}) {
     const result = await runSpan(config, 'relai.validation.diagnostics', {
       'relai.workspace': workspace.alias,
       'relai.diagnostics.command': command.slice(0, 300)
-    }, () => runProcess(command, [], { cwd: workspace.path, shell: true, commandString: command, timeout, maxOutputBytes: 8 * 1024 * 1024, signal }, config));
+    }, () => runProcess(command, [], {
+      cwd: workspace.path,
+      shell: true,
+      commandString: command,
+      timeout,
+      maxOutputBytes: Math.min(Number(args._transportMaxOutputBytes) || 8 * 1024 * 1024, 8 * 1024 * 1024),
+      signal
+    }, config));
     const summary = summarizeCommand(result);
     const parsed = parseDiagnostics(`${result.stdout || ''}\n${result.stderr || ''}`, command, workspace.path);
     results.push({ command, ...summary, diagnostics: parsed.length });

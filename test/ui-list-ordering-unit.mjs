@@ -16,7 +16,6 @@ const orderedTools = orderToolsForCatalog([
   { name: 'relai_code_inspect', title: 'Code Intelligence' },
   { name: 'relai_git_push', title: 'Publish Branch' },
   { name: 'relai_http_probe', title: 'HTTP Route Probe' },
-  { name: 'relai_ui_check', title: 'Named UI Check' },
   { name: 'relai_edit', title: 'Unified Workspace Edit' },
   { name: 'relai_run_checks', title: 'Workspace Checks' }
 ]);
@@ -26,7 +25,6 @@ assert.deepEqual(orderedTools.map(tool => tool.name), [
   'relai_status',
   'relai_edit',
   'relai_http_probe',
-  'relai_ui_check',
   'relai_run_checks',
   'relai_git_push',
   'relai_reset_workspace',

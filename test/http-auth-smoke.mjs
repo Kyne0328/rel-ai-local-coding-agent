@@ -7,17 +7,25 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHttpMcpSession, mcpBody, mcpHeaders, postMcp, readMcpResponse } from './helpers/http-mcp.mjs';
+import { activeToolCount } from './helpers/tool-surface.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const port = 39877;
 const token = 'auth-smoke-token';
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-http-auth-'));
+const configPath = path.join(stateDir, 'config.json');
+fs.writeFileSync(configPath, JSON.stringify({
+  version: 2,
+  stateDir,
+  patch: { backup: false, requireCleanGit: false, maxUpdateBytes: 2097152 },
+  workspaces: { repo: { path: root } }
+}, null, 2));
 const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.js'), '--host', '127.0.0.1', '--port', String(port), '--no-profile-write'], {
   cwd: root,
   stdio: ['ignore', 'pipe', 'pipe'],
   env: {
     ...process.env,
-    REL_AI_MCP_CONFIG: path.join(root, 'examples', 'config.example.json'),
+    REL_AI_MCP_CONFIG: configPath,
     REL_AI_MCP_TOKEN: token,
     REL_AI_MCP_STATE_DIR: stateDir,
     REL_AI_MCP_MAX_BODY_BYTES: String(1024 * 1024),
@@ -55,7 +63,7 @@ try {
   session = await createHttpMcpSession(base, { token, clientName: 'relai-http-auth' });
   const listed = await session.request('tools/list');
   assert.equal(listed.response.status, 200, `${JSON.stringify(listed.body)}\n${stderr}`);
-  assert.equal(listed.body.result?.tools?.length, 33);
+  assert.equal(listed.body.result?.tools?.length, activeToolCount);
 
   const legacyInitializeResponse = await fetch(`${base}/mcp`, {
     method: 'POST',
@@ -78,7 +86,8 @@ try {
   const legacyInitialize = await readMcpResponse(legacyInitializeResponse);
   assert.equal(legacyInitializeResponse.status, 200, `${JSON.stringify(legacyInitialize)}\n${stderr}`);
   assert.equal(legacyInitialize.result?.protocolVersion, '2025-11-25');
-  assert.ok(legacyInitialize.result?.capabilities?.tools);
+  assert.equal(legacyInitialize.result?.serverInfo?.name, 'rel-ai-mcp');
+  assert.equal(legacyInitializeResponse.headers.get('mcp-session-id'), null);
 
   const legacyInitializedResponse = await fetch(`${base}/mcp`, {
     method: 'POST',
@@ -90,7 +99,8 @@ try {
     },
     body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} })
   });
-  assert.ok([200, 202, 204].includes(legacyInitializedResponse.status));
+  assert.equal(legacyInitializedResponse.status, 202);
+  assert.equal(await legacyInitializedResponse.text(), '');
 
   const legacyToolsResponse = await fetch(`${base}/mcp`, {
     method: 'POST',
@@ -104,7 +114,44 @@ try {
   });
   const legacyTools = await readMcpResponse(legacyToolsResponse);
   assert.equal(legacyToolsResponse.status, 200, `${JSON.stringify(legacyTools)}\n${stderr}`);
-  assert.equal(legacyTools.result?.tools?.length, 33);
+  assert.equal(legacyTools.result?.tools?.length, activeToolCount);
+
+  const legacyStatusResponse = await fetch(`${base}/mcp`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+      authorization: `Bearer ${token}`,
+      'mcp-protocol-version': '2025-11-25'
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 22,
+      method: 'tools/call',
+      params: { name: 'relai_status', arguments: { workspace: 'repo' } }
+    })
+  });
+  const legacyStatus = await readMcpResponse(legacyStatusResponse);
+  assert.equal(legacyStatusResponse.status, 200, `${JSON.stringify(legacyStatus)}\n${stderr}`);
+  assert.equal(legacyStatus.result?.isError, false, JSON.stringify(legacyStatus));
+  assert.equal(legacyStatus.result?.structuredContent?.ok, true);
+
+  const legacyBatchResponse = await fetch(`${base}/mcp`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+      authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify([
+      { jsonrpc: '2.0', id: 23, method: 'tools/list', params: {} },
+      { jsonrpc: '2.0', id: 24, method: 'resources/list', params: {} }
+    ])
+  });
+  const legacyBatch = await readMcpResponse(legacyBatchResponse);
+  assert.equal(legacyBatchResponse.status, 400);
+  assert.equal(legacyBatch.error?.code, -32600);
+  assert.match(legacyBatch.error?.message || '', /batches are not supported/i);
 
   const missingVersion = await fetch(`${base}/mcp`, {
     method: 'POST',
@@ -176,4 +223,4 @@ try {
   fs.rmSync(stateDir, { recursive: true, force: true });
 }
 
-console.log('HTTP authentication, session validation, protocol header, and Origin protection tests passed.');
+console.log('HTTP authentication, stateless ChatGPT initialization, modern protocol validation, and Origin protection tests passed.');

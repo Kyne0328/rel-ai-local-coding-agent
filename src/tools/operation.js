@@ -7,7 +7,7 @@ function describeToolOperation(name, args = {}) {
   const path = String(args.path || '').trim();
   const suffix = workspace ? ` in ${workspace}` : '';
   switch (name) {
-    case 'relai_start_task': return workspace ? `Resolving workspace ${workspace} for a new logical task` : 'Resolving workspace for a new logical task';
+    case 'relai_begin_work': return workspace ? `Resolving workspace ${workspace} for a new logical task` : 'Resolving workspace for a new logical task';
     case 'relai_repo_snapshot': return `Scanning the repository${suffix}`;
     case 'relai_read': {
       const paths = Array.isArray(args.paths) ? args.paths.filter(Boolean) : [];
@@ -27,9 +27,6 @@ function describeToolOperation(name, args = {}) {
     case 'relai_worktree_remove': return `Removing managed worktree ${args.alias || ''}${suffix}`.trim();
     case 'relai_semantic_search': return `Semantically searching for ${String(args.query || '').slice(0, 60) || 'a concept'}${suffix}`;
     case 'relai_diagnostics_run': return `Running structured diagnostics${suffix}`;
-    case 'relai_validation_plan': return `Planning change-aware validation${suffix}`;
-    case 'relai_operation_task_get': return `Reading deferred operation ${args.operationTaskId || ''}`.trim();
-    case 'relai_operation_task_cancel': return `Cancelling deferred operation ${args.operationTaskId || ''}`.trim();
     case 'relai_edit': {
       if (path) return `Editing ${path}${suffix}`;
       if (Array.isArray(args.edits)) return `Applying ${args.edits.length} file edits${suffix}`;
@@ -40,7 +37,6 @@ function describeToolOperation(name, args = {}) {
     case 'relai_tidy_run': return `Removing approved generated artifacts${suffix}`;
     case 'relai_run_checks': return `Running ${String(args.level || 'standard')} validation${suffix}`;
     case 'relai_http_probe': return `Probing local route ${args.route || '/'}${suffix}`;
-    case 'relai_ui_check': return `Running UI check ${args.check || '(unnamed)'}${suffix}`;
     case 'relai_diff': return `Reviewing repository changes${suffix}`;
     case 'relai_restore_paths': return `Restoring ${Array.isArray(args.paths) ? args.paths.length : 0} tracked paths${suffix}`;
     case 'relai_reset_workspace': return args.removeUntracked ? `Resetting and cleaning the workspace${suffix}` : `Resetting tracked workspace changes${suffix}`;
@@ -48,7 +44,7 @@ function describeToolOperation(name, args = {}) {
     case 'relai_git_push': return `Publishing the current branch${suffix}`;
     case 'relai_git_draft_pr': return `Preparing local pull request text${suffix}`;
     case 'relai_status': return workspace ? `Reading workspace and repository status for ${workspace}` : 'Reading Rel.AI status';
-    case 'relai_complete_task': return `Finalizing logical task${suffix}`;
+    case 'relai_finish_work': return `Finalizing logical task${suffix}`;
     default: return `Running ${String(name || 'Rel.AI tool').replace(/^relai_/, '').replaceAll('_', ' ')}`;
   }
 }

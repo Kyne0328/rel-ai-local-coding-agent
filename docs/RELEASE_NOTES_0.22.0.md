@@ -12,7 +12,7 @@ Release date: 2026-07-27
 - Existing task-history session files are deleted the first time 0.22.0 accesses history. Rel.AI creates `.task-history-v2` and records only new explicit identity-v2 tasks. Audit logs remain available but are not reconstructed into task history.
 - Legacy MCP `GET /sse` and `POST /messages` endpoints are removed. Clients must use stdio or Streamable HTTP at `POST /mcp`.
 - MCP initialization must provide the standard `capabilities` and `clientInfo` fields expected by MCP SDK v2.
-- Every independent objective must call `relai_start_task` once. Every later task-scoped call must pass the returned exact `task_id`; Rel.AI no longer infers tasks from a connection, conversation, workspace, process, or timestamp.
+- Every independent objective must call `relai_begin_work` once. Every later task-scoped call must pass the returned exact `work_id`; Rel.AI no longer infers tasks from a connection, conversation, workspace, process, or timestamp.
 - The desktop package now includes the MCP SDK v2 runtime and required transitive packages.
 
 Back up any configuration values or session-history files you need before installing this release. Old history is intentionally not converted.

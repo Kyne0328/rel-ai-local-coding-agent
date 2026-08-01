@@ -76,7 +76,7 @@ Set `REL_AI_MCP_ALLOW_NO_AUTH=1` only for local testing on a trusted machine.
 - Restart-to-install is blocked while a Rel.AI tool call is active.
 - Updater logs use the same bounded sanitized runtime-log path as other desktop diagnostics and do not include approval tokens, ngrok account keys, or dashboard credentials.
 - GitHub releases include `SHA256SUMS.txt`, a CycloneDX SBOM, and GitHub provenance/SBOM attestations for the installer, portable executable, updater metadata, and blockmap.
-- Release publication requires protected Windows signing credentials and verifies Authenticode signatures for both executables. Local development builds remain unsigned and must not be published.
+- Release publication explicitly disables Windows certificate auto-discovery. Rel.AI-owned artifacts are currently unsigned and covered by SHA-256 checksums plus GitHub attestations; bundled ngrok retains upstream Authenticode verification.
 - Electron fuses disable RunAsNode, `NODE_OPTIONS`, CLI inspection, and extra file-protocol privileges while requiring packaged code to load from the integrity-validated ASAR.
 
 ## Desktop lifecycle boundary

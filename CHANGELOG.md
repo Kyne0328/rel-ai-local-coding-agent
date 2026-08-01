@@ -3,17 +3,17 @@
 ## [0.23.0] — 2026-07-28
 
 ### Standards-compliant MCP lifecycle and recovery
-- **Target MCP `2026-07-28` through the stable v2 SDK without breaking ChatGPT connection scans.** Native stdio and HTTP use `server/discover` plus per-request protocol metadata. The OAuth-protected HTTP endpoint also delegates frozen `2025-11-25` `initialize` and tool-discovery requests to the SDK's stateless compatibility path because ChatGPT still uses that lifecycle; Rel.AI keeps no legacy transport implementation, issues no `MCP-Session-Id`, and does not restore `/sse`, `/messages`, JSON-RPC batches, or tool aliases.
-- **Keep transport connections separate from coding-task identity.** Every stateless request supplies its capabilities and authenticated principal; only the opaque `task_id` returned by `relai_start_task` owns logical work.
+- **Use MCP `2026-07-28` through the stable v2 SDK without cutting off ChatGPT.** Native stdio and modern HTTP use `server/discover` plus per-request protocol, client, and capability metadata. HTTP also serves the SDK-supported stateless `2025-11-25` initialize flow used by ChatGPT. `MCP-Session-Id`, `/sse`, `/messages`, JSON-RPC batches, and removed tool aliases remain rejected.
+- **Keep transport, work-session, native-task, and process identity separate.** Every stateless request supplies its authenticated principal; the principal-bound `work_id` returned by `relai_begin_work` owns repository work, native `taskId` owns one asynchronous MCP request, and `processId` owns one managed process.
 - **Detect and recover stale client state.** Rel.AI fingerprints the canonical tool manifest, serves the current list on every stateless request, invalidates stale credentials, and exposes explicit reconnect or host-action states in the dashboard.
-- **Publish one 33-tool surface at tool-surface version 25.** Task-scoped schemas require a workspace-bound `task_id`, resolve the task workspace automatically, return compact repository bootstrap on task creation, and discover hierarchical `AGENTS.md` guidance.
+- **Publish one 30-tool surface at tool-surface version 27.** The public native-Tasks probe, standalone validation-plan tool, named UI-check wrapper, and duplicate protocol routers are removed. Work-scoped schemas require a principal- and workspace-bound `work_id`; `relai_run_checks` plans change-aware validation internally.
 
 ### Task observability, privacy, and runtime integrity
 - **Sanitize completion summaries before they enter task state.** One bounded sanitizer now covers credential-bearing headers, token/password assignments, cookies, secret URL fields, private-key blocks, and approval or authorization codes at completion input, tracker, activity, persistence, historical-read, dashboard, SSE, and copy/export boundaries.
 - **Use one canonical task state machine.** New writes no longer emit `inactive` or `attention`; historical aliases normalize on read, terminal states share one predicate, stale updates cannot reopen terminal work, and terminal timestamps, reasons, counters, and partial progress are preserved.
-- **Add explicit cooperative cancellation.** `relai_cancel_task` targets the exact task ID, is idempotent, preserves partial progress, bypasses the workspace lock, records a bounded reason, and signals supported process-backed operations without claiming every external side effect can be reversed.
+- **Add explicit cooperative cancellation.** `relai_cancel_work` targets the exact work session, is idempotent, preserves partial progress, bypasses the workspace lock, records a bounded reason, and signals supported process-backed operations without claiming every external side effect can be reversed.
 - **Report real validation and diagnostics progress.** Known workflows establish a deduplicated denominator before execution, advance after every check, identify failures and timeouts, persist midpoint progress, and never present failed or cancelled work as successful 100% completion.
-- **Detect repository/runtime skew.** Status, MCP discovery, dashboard data, and packaged metadata compare application, protocol, tool-surface, tool-count, schema, and manifest-hash values; incompatible schema-sensitive calls pause until the runtime is restarted or reconnected while safe control calls remain available.
+- **Detect repository/runtime skew without locking the workspace.** Status, MCP discovery, dashboard data, and packaged metadata compare application, protocol, tool-surface, tool-count, schema, and manifest-hash values. A mismatch remains visible with restart or reconnect guidance, but it is advisory: every tool stays available so Rel.AI can always finish or repair edits to its own checkout.
 - **Add production-path regression and acceptance infrastructure.** Security tests inspect raw persisted history and every dashboard projection, real Electron Chromium acceptance covers task states, keyboard reachability, 200%/400% zoom, and accessibility, and the machine-readable observability benchmark executes both backend and isolated Electron renderer workloads while failing incomplete runs.
 - **Normalize historical state without destructive migration.** Existing `inactive`, `attention`, and related aliases remain readable through evidence-based mapping; sanitized canonical records are used in memory and on subsequent persistence.
 - **Centralize and verify status-color semantics.** Tasks, validation, native Tasks, processes, workspaces, connection layers, diagnostics, application updates, and Electron status surfaces now share one status-to-tone classifier: normal progress is information blue, success is green, intervention is amber, failure is red, and inactive terminal state is neutral. Exhaustive dark/light contrast and status-matrix tests prevent silent fallback or cross-screen disagreement.
@@ -22,9 +22,9 @@
 
 ### Durable local coding runtime
 - **Add managed persistent processes.** ChatGPT can start, read, write to, stop, and list long-running commands through stable process IDs, cursor-based logs, process-tree termination, ownership checks, crash-safe metadata, and a dedicated dashboard Processes page.
-- **Remove the proprietary deferred-operation surface.** The canonical catalog contains 33 tools; `defer`, `operationTaskId`, and the two operation polling tools are no longer public. Persistent commands use `relai_process_*`, while standards-based asynchronous interoperability is exercised through native MCP Tasks on HTTP.
+- **Remove proprietary deferred-operation, probe, and validation-wrapper tools.** The canonical catalog contains 30 tools; `defer`, `operationTaskId`, operation polling, `relai_native_tasks_probe`, `relai_validation_plan`, and `relai_ui_check` are no longer public. Persistent commands use `relai_process_*`, while selected long-running operations use native MCP Tasks or bounded direct execution.
 - **Add managed Git worktrees.** Rel.AI creates isolated branches under its managed worktree root, registers dynamic workspace aliases, inherits workspace policy, refuses unsafe removal, and preserves branches by default.
-- **Expand code intelligence and validation.** Private local hybrid semantic search, symbol/import/caller/test tracing, normalized diagnostics, signed change-aware validation plans, reverse-impact analysis, and affected-test selection are available through the public tool surface.
+- **Expand code intelligence and validation.** Private local hybrid semantic search, symbol/import/caller/test tracing, normalized diagnostics, internal content-bound validation planning, reverse-impact analysis, and affected-test selection are available through the public tool surface.
 
 ### Security, telemetry, and caching
 - **Harden OAuth as an issuer-bound OAuth 2.1 flow.** Dynamic registrations, authorization codes, access tokens, and refresh tokens are bound to the active issuer and exact resource; redirects are exact, PKCE S256 is mandatory, scopes accumulate safely, refresh tokens rotate, reuse is rejected, public issuers require HTTPS, and approval-token replacement revokes registrations and grants. Authorization codes and bearer tokens are persisted under SHA-256 identifiers rather than plaintext map keys.
@@ -38,7 +38,8 @@
 - **Harden Electron packages before publication.** Setup and recovery pages use the restricted `relai-app://renderer` protocol; packaged binaries disable RunAsNode, `NODE_OPTIONS`, CLI inspection, and extra file-protocol privileges while requiring integrity-validated ASAR loading.
 - **Make Windows releases signed and attributable.** Publication requires protected Authenticode credentials and valid signatures, generates a CycloneDX SBOM, and creates GitHub build-provenance and SBOM attestations.
 - **Make generated assets and module direction enforceable.** CI regenerates and diffs color assets, browser UI source has an explicit ESM package scope, and a module-system audit prevents CommonJS growth or mixed modules before the coordinated backend and Electron hard cutover.
-- **Make the native MCP Tasks interoperability canary permanently available on HTTP.** Stateless discovery advertises the Tasks extension, the canonical 33-tool catalog includes `relai_native_tasks_probe`, and HTTP recognizes task polling, update, cancellation, routing headers, and authenticated ownership.
+- **Make native MCP Tasks selective and production-facing.** Stateless HTTP and stdio discovery advertise the Tasks extension; `relai_exec`, `relai_diagnostics_run`, and `relai_run_checks` are task-eligible, process tools retain process semantics, clients without Tasks support receive bounded synchronous results, and both transports enforce task polling, update, cancellation, capability, and principal ownership.
+- **Add a release-blocking native Tasks matrix.** A machine-readable gate covers HTTP/stdio capability negotiation, strict modern envelopes, stateless ChatGPT initialization, adaptive direct/native execution, notification no-response behavior, server identity metadata, lifecycle and persistence, input idempotency, cancellation cleanup, process independence, principal isolation, the 30-tool public surface, and dashboard terminal states.
 - **Reduce the published npm package to an explicit runtime allowlist.** The package now ships only the CLI, service source, dashboard assets, examples, type boundaries, README, and license, reducing the dry-run artifact from 418 entries and about 4.09 MB to 194 entries and about 0.57 MB compressed.
 - **Remove build-only SDK files from the Electron runtime.** Packaged MCP and telemetry dependencies exclude source, test, TypeScript, declaration, and source-map trees; final `resources/` size is 45.36 MiB and packaged connector acceptance verifies the reduced runtime.
 - **Make dependency and package budgets release-blocking.** Production Knip models the shipped CLI, backend, dashboard, Electron main, and renderer entries; production npm audits must remain clean; the build-tool audit accepts only one expiry-bound build-only advisory graph; and package size fails above the strict 3% tolerance.
@@ -64,12 +65,12 @@
 - **Eliminate the combined-target executable rename race.** Release packaging creates `win-unpacked` once, validates it, then produces NSIS and portable artifacts sequentially with `--prepackaged`; parallel targets can no longer race to rename the same `electron.exe`.
 - **Tolerate transient Windows build-directory locks.** Guarded cleanup uses bounded `fs.rmSync` retries before failing with an actionable lock diagnostic; it never kills processes or bypasses active-controller protection.
 - **Stage release builds outside the VS Code workspace.** Electron Builder now works in an OS-temporary directory and atomically promotes completed artifacts into `dist`. A VS Code-held legacy `app.asar` is preserved, while the current unpacked application is published under `dist/unpacked-builds` and recorded in `dist/current-unpacked.json` instead of failing the release.
-- **Make package verification follow the promoted build.** Fuse, layout, connector-acceptance, signature, and bundled-ngrok checks resolve the authoritative `current-unpacked.json` marker rather than validating a stale fixed directory.
+- **Make package verification follow the promoted build.** Layout, connector-acceptance, signature, and bundled-ngrok checks resolve the authoritative unpacked directory. Fuse verification now requires the exact executable path and refuses implicit selection, preventing a stale `dist/win-unpacked` build from satisfying the gate.
 - **Block production-identity installer lifecycle work while Rel.AI is active.** Install, update, uninstall, and replacement operations are reserved for an explicitly stopped controller or an isolated release machine.
 - **Isolate development and test servers from the production connector profile.** Programmatic servers on an ephemeral port ignore saved launch state and cannot rewrite `connection.json`, preventing validation runs from repointing the active app or ChatGPT endpoint.
 
 ### Breaking upgrade behavior
-- **Do not migrate old aliases, registrations, removed protocol routes, or color-token aliases.** Native clients must negotiate MCP `2026-07-28` and send current metadata on every stateless request. ChatGPT may negotiate the SDK-managed frozen `2025-11-25` HTTP lifecycle for connection and tool discovery; this exception does not restore any removed Rel.AI compatibility code or routes.
+- **Do not restore old aliases, sessionful protocol routes, or color-token aliases.** Modern clients negotiate MCP `2026-07-28` through `server/discover` and send current metadata on every stateless request; the HTTP endpoint separately accepts ChatGPT's SDK-supported stateless initialize flow.
 
 ### Validation
 - Workstream-specific release, dashboard, audit, updater, dependency, and benchmark tests passed; aggregate `npm run test:all` remains the final concurrent-workstream reconciliation gate
@@ -120,7 +121,7 @@ Bump root/electron/status UI/lockfiles to 0.22.1.
 ### MCP SDK v2 hard cutover
 - **Replace the custom JSON-RPC and transport implementation with MCP SDK v2.** Stdio framing, initialization, capability negotiation, tool and resource registration, schema validation, protocol errors, and Streamable HTTP now use `@modelcontextprotocol/server` and `@modelcontextprotocol/node`.
 - **Remove the legacy MCP SSE transport.** `GET /sse`, `POST /messages`, custom session IDs, conversation-header hashing, and transport-derived task scopes are deleted; HTTP clients use the OAuth-protected `POST /mcp` endpoint.
-- **Require exact logical task identity.** Each independent objective calls `relai_start_task` once and every later task-scoped call supplies the returned `task_id`. Rel.AI no longer selects or merges tasks by transport, ChatGPT conversation metadata, workspace, process, timestamp, or validation aliases.
+- **Require exact logical task identity.** Each independent objective calls `relai_begin_work` once and every later task-scoped call supplies the returned `work_id`. Rel.AI no longer selects or merges tasks by transport, ChatGPT conversation metadata, workspace, process, timestamp, or validation aliases.
 - **Make task history current-version-only.** The first 0.22.0 history access deletes the previous sessions directory, writes `.task-history-v2`, and stores only explicit identity-v2 events. Existing audit logs remain activity records but are not reconstructed into task history.
 - **Remove configuration compatibility.** Legacy `workflow`, `flow`, `cautionZone`, top-level `maxIndexFiles`, workspace `fastTask`, context `includePaths`, and patch `maxPatchBytes` values are ignored instead of migrated or written back.
 - **Keep OAuth and managed ngrok as active product features.** OAuth discovery, dynamic client registration, authorization code plus PKCE, access/refresh tokens, revocation, connector recovery, static-domain delivery, and bundled ngrok remain supported.
@@ -138,7 +139,7 @@ Bump root/electron/status UI/lockfiles to 0.22.1.
 
 ### Breaking upgrade behavior
 - Back up any removed configuration values or old session-history files before upgrading if they are still needed.
-- Clients must use stdio or `POST /mcp`, send standards-compliant initialization fields, call `relai_start_task`, and preserve the returned `task_id`.
+- Clients must use stdio or `POST /mcp`, send standards-compliant initialization fields, call `relai_begin_work`, and preserve the returned `work_id`.
 - Old task-history sessions are intentionally discarded and are not converted.
 
 - **Synchronize every release surface at 0.22.0.** Root and Electron manifests, both lockfiles, the desktop status badge, changelog, and release metadata now agree.
@@ -243,7 +244,7 @@ Bump root/electron/status UI/lockfiles to 0.21.1.
 ## [0.21.0] - 2026-07-25
 
 ### Logical task isolation and completion
-- **Introduce explicit logical task identity for MCP clients.** `relai_start_task` creates an independent opaque `task_id`; clients must retain it and pass it to later task-scoped calls, and `relai_complete_task` now requires it. Calls without an ID are accepted only when one task can be resolved unambiguously.
+- **Introduce explicit logical task identity for MCP clients.** `relai_begin_work` creates an independent opaque `work_id`; clients must retain it and pass it to later task-scoped calls, and `relai_finish_work` now requires it. Calls without an ID are accepted only when one task can be resolved unambiguously.
 - **Isolate concurrent ChatGPT work on shared connections and repositories.** Each logical task keeps separate activity, workspace-policy baselines, validation ownership, and completion state, so one conversation cannot overwrite or close another conversation's task.
 - **Make validation and completion exact, atomic, and retry-safe.** Final `relai_run_checks` calls can use `complete:true` with a non-empty `summary`; standalone completion remains available after read-only review, rejects post-validation changes, and returns the original result for duplicate retries.
 - **Detect shared-worktree interference before completion.** A task must revalidate when another logical task changes the same repository after its last passing validation, while unrelated tasks can continue or complete independently.
@@ -545,7 +546,7 @@ Bump root/electron/status UI/lockfiles to 0.20.4.
 
 ### Desktop workflow reliability
 - **Fix Activity event JSON copying in the sandboxed Electron dashboard by routing clipboard writes through the main process, with browser clipboard and legacy-copy fallbacks.**
-- **Recover safe passed validations when ChatGPT rotates connector or task identity before calling relai_complete_task, while still rejecting every successful workspace mutation made after that validation.**
+- **Recover safe passed validations when ChatGPT rotates connector or task identity before calling relai_finish_work, while still rejecting every successful workspace mutation made after that validation.**
 - **Keep one waiting workspace session grouped across connector reconnects, extend the grouping window to five minutes, merge recovered completion history, and let a later successful validation supersede an earlier failed attempt.**
 - **Remove release-validation flakiness by allocating an available HTTP test port and writing unpacked validation builds to a dedicated directory that is not locked by a running installed app.**
 - **Remove stale launcher metadata, obsolete Cloudflare setup material, outdated tool counts, and legacy one-click/tunnel validation aliases from normalized workspace configuration.**
@@ -604,9 +605,9 @@ Bump root/electron/status UI/lockfiles to 0.19.7.
 
 ### Electron startup and task completion regression fixes
 - **Fix the 0.19.5 packaged-app crash `Cannot access 'dashboardWindowManager' before initialization`.** The dashboard window manager and tray controller are now initialized before the task-activity runtime emits its synchronous initial status update.
-- **Keep Rel.AI task identity stable when ChatGPT rotates MCP transport sessions.** Conversation identifiers now take precedence over `Mcp-Session-Id`, allowing `relai_complete_task` to find the successful final validation from the same conversation.
+- **Keep Rel.AI task identity stable when ChatGPT rotates MCP transport sessions.** Conversation identifiers now take precedence over `Mcp-Session-Id`, allowing `relai_finish_work` to find the successful final validation from the same conversation.
 - **Add regression assertions for launcher initialization order and task completion across rotated MCP transport sessions.**
-- **Make the installed-app smoke test derive its expected tool count from the current public schema, confirming that the packaged 17-tool surface includes `relai_complete_task`.**
+- **Make the installed-app smoke test derive its expected tool count from the current public schema, confirming that the packaged 17-tool surface includes `relai_finish_work`.**
 - **Revalidate the complete release suite and Windows Electron package after these corrections.**
 
 Bump root/electron/status UI/lockfiles to 0.19.6.
@@ -625,8 +626,8 @@ Bump root/electron/status UI/lockfiles to 0.19.5.
 ## [0.19.4] — 2026-07-11
 
 ### Explicit validated task completion
-- **Add `relai_complete_task` as the final workflow signal ChatGPT can call after the coding work is finished, increasing the unified MCP surface to 17 tools.**
-- **Advertise the completion contract through MCP initialization instructions and the tool description: run one final `relai_run_checks`, then call `relai_complete_task` exactly once as the final Rel.AI tool.**
+- **Add `relai_finish_work` as the final workflow signal ChatGPT can call after the coding work is finished, increasing the unified MCP surface to 17 tools.**
+- **Advertise the completion contract through MCP initialization instructions and the tool description: run one final `relai_run_checks`, then call `relai_finish_work` exactly once as the final Rel.AI tool.**
 - **Reject completion when the current work session has no successful validation, when code changed after the latest passed validation, or while another Rel.AI tool call remains active.**
 - **Record explicit completion with `completionKnown: true`, an `explicit_completion` end reason, validation metadata, changed files, and a concise ChatGPT-provided summary.**
 - **Show confirmed completion distinctly from inactivity throughout Sessions, Overview, audit-derived history, and the Electron status window; restore desktop completion notifications only for this explicit validated signal.**

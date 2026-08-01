@@ -129,7 +129,7 @@ function changedStatusFiles(before, after) {
   return { files: files.slice(0, MAX_CHANGED_FILES), truncated: files.length > MAX_CHANGED_FILES };
 }
 
-async function relaiExec(workspace, config, args = {}) {
+async function relaiExec(workspace, config, args = {}, context = {}) {
   const command = String(args.command || '').trim();
   if (!command) throw new Error('relai_exec requires a non-empty command.');
   if (command.length > 20000) throw new Error('relai_exec command must be 20000 characters or fewer.');
@@ -141,7 +141,8 @@ async function relaiExec(workspace, config, args = {}) {
   const statusBefore = await readGitStatusMap(workspace, config);
   const signal = combineAbortSignals(
     getCurrentTaskAbortSignal(),
-    args._operationTaskId ? operationTaskSignal(config, args._operationTaskId) : undefined
+    args._operationTaskId ? operationTaskSignal(config, args._operationTaskId) : undefined,
+    context.signal
   );
   const result = await runSpan(config, 'relai.process.exec', {
     'relai.workspace': workspace.alias,

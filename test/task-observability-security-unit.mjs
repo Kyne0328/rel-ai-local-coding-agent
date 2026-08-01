@@ -53,7 +53,7 @@ tracker.onToolActivity(event => recordTaskActivityEvent(config, event));
 const originalSecret = 'production-path-secret-123456';
 try {
   const start = tracker.beginConnectorToolCall({
-    tool: 'relai_start_task',
+    tool: 'relai_begin_work',
     operation: 'Starting security regression task',
     workspace: 'repo',
     createTask: true
@@ -62,7 +62,7 @@ try {
   start({ ok: true });
 
   const complete = tracker.beginConnectorToolCall({
-    tool: 'relai_complete_task',
+    tool: 'relai_finish_work',
     operation: 'Reporting task completion',
     workspace: 'repo',
     taskId

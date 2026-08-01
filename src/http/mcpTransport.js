@@ -2,15 +2,17 @@ import {
   CLIENT_CAPABILITIES_META_KEY,
   CLIENT_INFO_META_KEY,
   PROTOCOL_VERSION_META_KEY,
-  createMcpHandler
+  createMcpHandler,
+  isLegacyRequest
 } from '@modelcontextprotocol/server';
-import { toNodeHandler } from '@modelcontextprotocol/node';
+import { toNodeHandler, toWebRequest } from '@modelcontextprotocol/node';
 import { readConfig } from '../config.js';
 import { mcpConnectionManager } from '../mcp/connectionManager.js';
-import { LEGACY_LIFECYCLE_METHODS, MCP_PROTOCOL_VERSION } from '../mcp/protocol.js';
+import { LEGACY_LIFECYCLE_METHODS, MCP_PROTOCOL_VERSION, TASK_METHODS } from '../mcp/protocol.js';
+import { createHttpTaskPrincipal } from '../mcp/principal.js';
 import { buildToolManifest } from '../mcp/toolManifest.js';
+import { handleTransportTaskRequest } from '../mcp/transportTasks.js';
 import { createRelaiMcpServer } from '../mcpServer.js';
-import { expectedNativeTaskName, handleNativeTasksRequest } from '../nativeTasksProbe.js';
 import { runSpan } from '../telemetry.js';
 import { isMcpAuthorized, oauthAuthorization, resolveBaseUrl, unauthorizedMcp } from './auth.js';
 import { readJsonBody, readRawBody, sendJson } from './io.js';
@@ -21,12 +23,17 @@ let coreNodeHandler = null;
 function getCoreNodeHandler() {
   if (coreNodeHandler) return coreNodeHandler;
   coreHandler = createMcpHandler(
-    () => createRelaiMcpServer({
-      publicHttpOnly: true,
-      transportType: 'streamable-http',
-      nativeTasks: true,
-      legacyCompatibility: true
-    }),
+    context => {
+      const authInfo = context.authInfo || {};
+      const authMode = String(authInfo.authMode || 'oauth');
+      return createRelaiMcpServer({
+        publicHttpOnly: true,
+        transportType: 'streamable-http',
+        nativeTasks: context.era === 'modern',
+        legacyCompatibility: context.era === 'legacy',
+        principal: createHttpTaskPrincipal(authInfo, authMode)
+      });
+    },
     {
       legacy: 'stateless',
       responseMode: 'auto',
@@ -73,15 +80,25 @@ async function handleMcpStreamable(ctx) {
   }
 
   const authorization = oauthAuthorization(ctx.req, ctx.options);
-  const principal = authorization?.clientId || (ctx.options.allowNoAuth ? 'local-no-auth' : 'static-bearer');
+  const principalId = authorization?.clientId || (ctx.options.allowNoAuth ? 'local-no-auth' : 'static-bearer');
   const authMode = authorization ? 'oauth' : ctx.options.allowNoAuth ? 'local_no_auth' : 'static_bearer';
-  ctx.req.auth = authorization || { clientId: principal, scopes: ['mcp'] };
+  const authInfo = { ...(authorization || { clientId: principalId, scopes: ['mcp'] }), authMode };
+  const principal = createHttpTaskPrincipal(authInfo, authMode);
+  ctx.req.auth = authInfo;
   const config = readConfig();
-  const legacy = isLegacyMcpRequest(ctx.req.headers, message);
+  if (Array.isArray(message)) {
+    sendMcpProtocolError(ctx.res, 400, -32600, 'One JSON-RPC request object is required; batches are not supported.');
+    return;
+  }
+  if (headerValue(ctx.req.headers, 'mcp-session-id')) {
+    sendMcpProtocolError(ctx.res, 400, -32600, 'Mcp-Session-Id is not supported by this stateless endpoint.', message?.id);
+    return;
+  }
+  const legacy = await isLegacyHttpRequest(ctx.req, message);
   const params = objectValue(message?.params);
   const meta = legacy ? {} : objectValue(params._meta);
   const requestId = mcpConnectionManager.beginRequest({
-    principal,
+    principal: principalId,
     method: message?.method,
     authMode,
     clientInfo: legacy ? params.clientInfo : meta[CLIENT_INFO_META_KEY],
@@ -96,10 +113,12 @@ async function handleMcpStreamable(ctx) {
 
   try {
     if (legacy) {
+      const manifest = buildToolManifest(config);
+      await mcpConnectionManager.observeManifest(manifest, message?.method);
       await runSpan(config, 'relai.mcp.request', {
         'mcp.protocol.version': String(params.protocolVersion || headerValue(ctx.req.headers, 'mcp-protocol-version') || 'legacy'),
         'mcp.method': String(message?.method || ''),
-        'oauth.client_id': principal
+        'oauth.client_id': principalId
       }, async () => {
         await getCoreNodeHandler()(ctx.req, ctx.res, message);
         finishRequest(ctx.res.statusCode < 400);
@@ -127,16 +146,28 @@ async function handleMcpStreamable(ctx) {
     await runSpan(config, 'relai.mcp.request', {
       'mcp.protocol.version': MCP_PROTOCOL_VERSION,
       'mcp.method': message.method,
-      'oauth.client_id': principal
+      'oauth.client_id': principalId
     }, async () => {
-      const nativeResponse = handleNativeTasksRequest(config, message, principal);
-      if (nativeResponse) {
-        finishRequest(!nativeResponse.body.error);
-        sendJson(ctx.res, nativeResponse.status, nativeResponse.body, ctx.ae);
-        return;
+      const requestAbort = createHttpRequestAbortScope(ctx.req, ctx.res);
+      try {
+        const transportResponse = await handleTransportTaskRequest(config, message, {
+          principal,
+          transportType: 'streamable-http',
+          envelope: meta,
+          authInfo,
+          requestHeaders: ctx.req.headers,
+          signal: requestAbort.signal
+        });
+        if (transportResponse) {
+          finishRequest(!transportResponse.body?.error);
+          sendTransportResponse(ctx, transportResponse);
+          return;
+        }
+        await getCoreNodeHandler()(ctx.req, ctx.res, message);
+        finishRequest(ctx.res.statusCode < 400);
+      } finally {
+        requestAbort.dispose();
       }
-      await getCoreNodeHandler()(ctx.req, ctx.res, message);
-      finishRequest(ctx.res.statusCode < 400);
     }, { carrier: ctx.req.headers });
   } catch (error) {
     finishRequest(false);
@@ -180,7 +211,7 @@ function validateMcpRequestHeaders(headers = {}, message) {
     return rejection(400, -32600, 'Mcp-Session-Id is not supported by MCP 2026-07-28.');
   }
   if (LEGACY_LIFECYCLE_METHODS.includes(message.method)) {
-    return rejection(400, -32601, `Legacy MCP method is not supported: ${message.method}.`);
+    return rejection(400, -32601, `Initialize lifecycle methods are not valid inside a modern MCP request envelope: ${message.method}.`);
   }
   const protocolHeader = headerValue(headers, 'mcp-protocol-version');
   if (protocolHeader !== MCP_PROTOCOL_VERSION) {
@@ -222,19 +253,18 @@ function validateMcpRequestHeaders(headers = {}, message) {
   return { ok: true };
 }
 
-function isLegacyMcpRequest(headers = {}, message = {}) {
-  const method = String(message?.method || '');
-  const params = objectValue(message?.params);
-  const meta = objectValue(params._meta);
-  const protocolHeader = headerValue(headers, 'mcp-protocol-version');
-  const protocolMeta = String(meta[PROTOCOL_VERSION_META_KEY] || '');
-  const declaredVersion = protocolHeader || protocolMeta;
+async function isLegacyHttpRequest(req, message) {
+  const request = await toWebRequest(req, message);
+  return isLegacyRequest(request, message);
+}
 
-  if (method === 'server/discover') return false;
-  if (declaredVersion === MCP_PROTOCOL_VERSION) return false;
-  if (LEGACY_LIFECYCLE_METHODS.includes(method)) return true;
-  if (!declaredVersion) return true;
-  return /^\d{4}-\d{2}-\d{2}$/.test(declaredVersion) && declaredVersion < MCP_PROTOCOL_VERSION;
+function sendTransportResponse(ctx, response) {
+  if (response.body == null) {
+    ctx.res.statusCode = response.status || 204;
+    ctx.res.end();
+    return;
+  }
+  sendJson(ctx.res, response.status || 200, response.body, ctx.ae);
 }
 
 function expectedMcpName(method, params = {}) {
@@ -242,7 +272,34 @@ function expectedMcpName(method, params = {}) {
   if (['resources/read', 'resources/subscribe', 'resources/unsubscribe'].includes(method)) {
     return String(params.uri || '');
   }
-  return expectedNativeTaskName(method, params);
+  if (TASK_METHODS.includes(method)) return String(params.taskId || '');
+  return '';
+}
+
+function createHttpRequestAbortScope(req, res) {
+  const controller = new AbortController();
+  const abort = message => {
+    if (!controller.signal.aborted) controller.abort(new Error(message));
+  };
+  const onRequestAborted = () => abort('HTTP MCP request was aborted by the client.');
+  const onResponseClosed = () => {
+    if (!res.writableEnded) abort('HTTP MCP response connection closed before completion.');
+  };
+  const onSocketClosed = () => {
+    if (!res.writableEnded) abort('HTTP MCP connection closed before completion.');
+  };
+  req.once('aborted', onRequestAborted);
+  res.once('close', onResponseClosed);
+  req.socket?.once('close', onSocketClosed);
+  if (req.aborted || res.destroyed) onRequestAborted();
+  return {
+    signal: controller.signal,
+    dispose() {
+      req.off('aborted', onRequestAborted);
+      res.off('close', onResponseClosed);
+      req.socket?.off('close', onSocketClosed);
+    }
+  };
 }
 
 function validateTransportOrigin(ctx) {
@@ -343,6 +400,7 @@ async function shutdownMcpTransport() {
 
 export {
   MCP_PROTOCOL_VERSION,
+  createHttpRequestAbortScope,
   expectedMcpName,
   handleMcpConnectionState,
   handleMcpDelete,

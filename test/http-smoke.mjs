@@ -52,7 +52,7 @@ try {
 
   const compressed = await fetch(`${base}/api/tools?token=${encodeURIComponent(token)}`, { headers: { 'accept-encoding': 'gzip' } });
   assert.equal(compressed.headers.get('content-encoding'), 'gzip');
-  assert.equal((await compressed.json()).length, 33);
+  assert.equal((await compressed.json()).length, 30);
 
   const dashboard = await fetch(`${base}/api/dashboard/v10?token=${encodeURIComponent(token)}`).then(response => response.json());
   assert.equal(dashboard.ok, true);
@@ -64,13 +64,13 @@ try {
   const discovery = client.discovery;
   assert.equal(discovery.response.status, 200);
   assert.deepEqual(discovery.body.result?.supportedVersions, [MCP_VERSION]);
-  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolSurfaceVersion, 25);
-  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolCount, 33);
+  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolSurfaceVersion, 27);
+  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolCount, 30);
   assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.statelessRequestModel, true);
   assert.deepEqual(discovery.body.result?.capabilities?.extensions?.['io.modelcontextprotocol/tasks'], {});
   assert.equal(discovery.body.result?._meta?.[SERVER_INFO_META_KEY]?.name, 'rel-ai-mcp');
   assert.match(discovery.body.result?._meta?.[SERVER_INFO_META_KEY]?.version || '', /^0\./);
-  assert.match(discovery.body.result?.instructions || '', /MCP 2026-07-28 is stateless/);
+  assert.match(discovery.body.result?.instructions || '', /MCP 2026-07-28.*strict and stateless/);
   assert.equal(discovery.body.result?.cacheScope, 'private');
   assert.equal(discovery.body.result?.ttlMs, 30000);
   assert.equal(discovery.response.headers.get('mcp-session-id'), null);
@@ -82,22 +82,27 @@ try {
   assert.deepEqual(liveDashboard.mcpConnection.activeSessions, []);
 
   const listed = await client.request('tools/list');
-  assert.equal(listed.body.result?.tools?.length, 33);
+  assert.equal(listed.body.result?.tools?.length, 30);
+  assert.ok(Buffer.byteLength(JSON.stringify(listed.body.result)) < 80_000);
   const names = listed.body.result.tools.map(tool => tool.name);
-  for (const expected of ['relai_process_start', 'relai_worktree_create', 'relai_semantic_search', 'relai_diagnostics_run', 'relai_validation_plan', 'relai_native_tasks_probe']) {
+  for (const expected of ['relai_process_start', 'relai_worktree_create', 'relai_semantic_search', 'relai_diagnostics_run', 'relai_cancel_work']) {
     assert.ok(names.includes(expected), `${expected} missing`);
   }
+  assert.equal(names.includes('relai_native_tasks_probe'), false);
   assert.equal(names.includes('relai_operation_task_get'), false);
   assert.equal(names.includes('relai_operation_task_cancel'), false);
   const inspect = listed.body.result.tools.find(tool => tool.name === 'relai_code_inspect');
   assert.ok(inspect.inputSchema.properties.action.enum.includes('trace'));
-  assert.equal(inspect.outputSchema.type, 'object');
+  assert.equal(inspect.outputSchema, undefined);
+  assert.equal(inspect.execution, undefined);
+  const processStart = listed.body.result.tools.find(tool => tool.name === 'relai_process_start');
+  assert.equal(processStart.execution, undefined);
   const checks = listed.body.result.tools.find(tool => tool.name === 'relai_run_checks');
-  assert.ok(checks.inputSchema.properties.planId);
-  assert.ok(checks.inputSchema.properties.planLevel);
+  assert.equal(checks.execution, undefined);
+  assert.equal(checks.inputSchema.properties.planId, undefined);
+  assert.equal(checks.inputSchema.properties.planLevel, undefined);
   assert.equal(checks.inputSchema.properties.defer, undefined);
-  assert.equal(checks.outputSchema.properties.operationTask, undefined);
-  assert.equal(checks.outputSchema.type, 'object');
+  assert.equal(checks.outputSchema, undefined);
 
   const status = await client.request('tools/call', {
     name: 'relai_status',
@@ -125,7 +130,7 @@ try {
   assert.equal(changedDashboard.mcpConnection.metrics.capabilityMismatches, 0);
 
   const synchronizedTools = await client.request('tools/list');
-  assert.equal(synchronizedTools.body.result?.tools?.length, 33);
+  assert.equal(synchronizedTools.body.result?.tools?.length, 30);
   const synchronizedDashboard = await fetch(`${base}/api/dashboard/v10?token=${encodeURIComponent(token)}`).then(response => response.json());
   assert.equal(synchronizedDashboard.mcpConnection.status, 'ready');
   assert.notEqual(synchronizedDashboard.mcpConnection.toolManifestVersion, liveDashboard.mcpConnection.toolManifestVersion);
@@ -137,8 +142,13 @@ try {
   const surface = await client.request('resources/read', { uri: 'relai://server/tool-surface' });
   assert.ok(surface.body.result?.contents, JSON.stringify(surface.body));
   const manifest = JSON.parse(surface.body.result.contents[0].text);
-  assert.equal(manifest.toolSurfaceVersion, 25);
-  assert.equal(manifest.toolCount, 33);
+  assert.equal(manifest.toolSurfaceVersion, 27);
+  assert.equal(manifest.toolCount, 30);
+  const surfaceByName = new Map(manifest.tools.map(tool => [tool.name, tool]));
+  assert.equal(surfaceByName.get('relai_exec').executionClass, 'native_task_eligible');
+  assert.equal(surfaceByName.get('relai_exec').taskSupport, 'optional');
+  assert.equal(surfaceByName.get('relai_process_start').executionClass, 'persistent_process');
+  assert.equal(surfaceByName.get('relai_process_start').taskSupport, 'forbidden');
   assert.equal(manifest.cache.cacheScope, 'private');
   assert.ok(manifest.cache.revision);
 

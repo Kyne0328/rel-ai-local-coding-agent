@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { once } from 'node:events';
 
-import { relaiHttpProbe, relaiUiCheck } from "../src/bridge/browser.js";
+import { relaiHttpProbe } from "../src/bridge/browser.js";
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-browser-contract-'));
 const workspaceRoot = path.join(temp, 'repo');
@@ -63,18 +63,7 @@ try {
     /configured local Rel\.AI origin/,
     'backslash-normalized routes must not escape the local origin'
   );
-  const uiCheck = await relaiUiCheck(workspace, {}, { check: 'ui:pass' });
-  assert.equal(uiCheck.ok, true);
-  assert.equal(uiCheck.mode, 'ui-check');
-  assert.equal(uiCheck.check, 'ui:pass');
-  assert.match(uiCheck.stdout, /ui-ok/);
-
-  const unknown = await relaiUiCheck(workspace, {}, { check: 'missing' });
-  assert.equal(unknown.ok, false);
-  assert.match(unknown.error, /relai_ui_check runs named package\.json scripts only/);
-  assert.deepEqual(unknown.availableChecks, ['ui:pass']);
-
-  console.log('HTTP probing and named UI checks contract passed.');
+  console.log('HTTP probing contract passed. Named package scripts execute through relai_run_checks.');
 } finally {
   if (previousStateDir == null) delete process.env.REL_AI_MCP_STATE_DIR;
   else process.env.REL_AI_MCP_STATE_DIR = previousStateDir;

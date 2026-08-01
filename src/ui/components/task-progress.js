@@ -1,11 +1,11 @@
 import { esc } from '../utils.js';
 
 const STATIC_PROGRESS_STATES = Object.freeze({
-  failed: Object.freeze({ fallback: 'Task failed', state: 'Failed', className: 'terminal failed' }),
-  attention: Object.freeze({ fallback: 'Task failed', state: 'Failed', className: 'terminal failed' }),
-  cancelled: Object.freeze({ fallback: 'Task ended without completion', state: 'Ended', className: 'terminal cancelled' }),
-  inactive: Object.freeze({ fallback: 'Task ended without completion', state: 'Ended', className: 'terminal cancelled' }),
-  expired: Object.freeze({ fallback: 'Task ended without completion', state: 'Ended', className: 'terminal cancelled' }),
+  failed: Object.freeze({ fallback: 'Work session failed', state: 'Failed', className: 'terminal failed' }),
+  attention: Object.freeze({ fallback: 'Work session failed', state: 'Failed', className: 'terminal failed' }),
+  cancelled: Object.freeze({ fallback: 'Work session cancelled', state: 'Cancelled', className: 'terminal cancelled' }),
+  inactive: Object.freeze({ fallback: 'Work session expired', state: 'Expired', className: 'terminal cancelled' }),
+  expired: Object.freeze({ fallback: 'Work session expired', state: 'Expired', className: 'terminal cancelled' }),
   validation_failed: Object.freeze({ fallback: 'Fix issues and revalidate', state: 'Action required', className: 'paused failed' }),
   blocked: Object.freeze({ fallback: 'Resolve the blocker to continue', state: 'Action required', className: 'paused blocked' }),
   waiting_for_approval: Object.freeze({ fallback: 'Approval required', state: 'Paused', className: 'paused approval' })
@@ -14,8 +14,8 @@ const STATIC_PROGRESS_STATES = Object.freeze({
 export function taskProgressHtml(progress = {}, status = '', options = {}) {
   const compact = options.compact === true;
   const normalizedStatus = String(status || '').trim().toLowerCase();
-  if (progress?.mode === 'complete' && normalizedStatus === 'completed') {
-    return `<div class="task-progress complete ${compact ? 'compact' : ''}"><div class="task-progress-label"><span>${esc(progress.label || 'Complete')}</span><strong>100%</strong></div><progress class="task-progress-track" aria-label="Task complete" value="100" max="100"></progress></div>`;
+  if (normalizedStatus === 'completed') {
+    return `<div class="task-progress complete ${compact ? 'compact' : ''}" role="status" aria-label="Work session completed. 100 percent."><div class="task-progress-label"><span>${esc(progress?.label || 'Complete')}</span><strong>100%</strong></div><progress class="task-progress-track" aria-label="Work session complete" value="100" max="100"></progress></div>`;
   }
   const staticState = STATIC_PROGRESS_STATES[normalizedStatus];
   if (staticState) return staticProgressHtml(progress, staticState, compact);

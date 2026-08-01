@@ -8,9 +8,9 @@ import { getCurrentToolActivityContext, requestCurrentTaskCompletion, taskError,
 
 async function completeTask(config, args = {}) {
   const workspace = resolveWorkspace(config, args.workspace);
-  const requestedTaskId = normalizeTaskId(args.task_id || args.taskId);
+  const requestedTaskId = normalizeTaskId(args.work_id);
   if (!requestedTaskId) {
-    throw taskError('TASK_ID_REQUIRED', 'relai_complete_task requires the task_id returned by relai_start_task.');
+    throw taskError('TASK_ID_REQUIRED', 'relai_finish_work requires the work_id returned by relai_begin_work.');
   }
   const context = requireMatchingTaskContext(requestedTaskId);
   const previous = readTaskHistorySession(config, requestedTaskId);
@@ -20,7 +20,7 @@ async function completeTask(config, args = {}) {
   if (previous?.status === 'cancelled' || previous?.status === 'failed') {
     throw taskError(
       'INVALID_TASK_STATE',
-      `Cannot complete a logical task whose terminal status is '${previous.status}'. Start a new logical task for additional work.`,
+      `Cannot complete a work session whose terminal status is '${previous.status}'. Start a new work session for additional work.`,
       { retryable: false }
     );
   }
@@ -39,11 +39,11 @@ async function completeTask(config, args = {}) {
   if (mutationGeneration > 0 && authority.hasPassedValidation === true && validatedMutationGeneration !== mutationGeneration) {
     throw taskError(
       'TASK_REVALIDATION_REQUIRED',
-      'Task completion is paused because code changed after the last passed validation. Run relai_run_checks with complete:true, summary, and the same task_id to validate and close the task atomically.',
+      'Work-session completion is paused because code changed after the last passed validation. Run relai_run_checks with complete:true, summary, and the same work_id to validate and close the work session atomically.',
       {
         retryable: true,
         allowedAlternatives: [
-          'Run relai_run_checks with complete:true, summary, and the same task_id.',
+          'Run relai_run_checks with complete:true, summary, and the same work_id.',
           'Cancel the task only when the remaining changes should not be completed.'
         ]
       }
@@ -53,11 +53,11 @@ async function completeTask(config, args = {}) {
   if (mutationGeneration > 0 && authority.validationResult !== 'passed') {
     throw taskError(
       'TASK_VALIDATION_REQUIRED',
-      'Task completion is paused because no successful final validation is recorded for this exact task_id. Run relai_run_checks with complete:true, summary, and the same task_id to validate and close the task atomically.',
+      'Work-session completion is paused because no successful final validation is recorded for this exact work_id. Run relai_run_checks with complete:true, summary, and the same work_id to validate and close the work session atomically.',
       {
         retryable: true,
         allowedAlternatives: [
-          'Run relai_run_checks with complete:true, summary, and the same task_id.',
+          'Run relai_run_checks with complete:true, summary, and the same work_id.',
           'Cancel the task only when the unvalidated changes should not be completed.'
         ]
       }
@@ -70,11 +70,11 @@ async function completeTask(config, args = {}) {
     if (Number(workspaceState.generation || 0) > validatedWorkspaceGeneration) {
       const error = taskError(
         'TASK_PERSISTENCE_CONFLICT',
-        'Task completion is paused because another logical task changed the shared workspace after this task was validated. Re-run validation for this task_id against the current workspace state.',
+        'Work-session completion is paused because another work session changed the shared workspace after this work session was validated. Re-run validation for this work_id against the current workspace state.',
         {
           retryable: true,
           allowedAlternatives: [
-            'Run relai_run_checks with complete:true, summary, and this task_id against the current workspace state.',
+            'Run relai_run_checks with complete:true, summary, and this work_id against the current workspace state.',
             'Cancel this task only when it should not be completed against the shared workspace.'
           ]
         }
@@ -88,11 +88,11 @@ async function completeTask(config, args = {}) {
       if (currentFingerprint.fingerprint !== validatedFingerprint) {
         throw taskError(
           'TASK_REVALIDATION_REQUIRED',
-          'Task completion is paused because relevant workspace content changed after the last passed validation. Re-run validation with the same task_id against the current content.',
+          'Work-session completion is paused because relevant workspace content changed after the last passed validation. Re-run validation with the same work_id against the current content.',
           {
             retryable: true,
             allowedAlternatives: [
-              'Run relai_run_checks with complete:true, summary, and the same task_id.',
+              'Run relai_run_checks with complete:true, summary, and the same work_id.',
               'Cancel the task only when the changed workspace should not be completed.'
             ]
           }
@@ -108,7 +108,7 @@ async function completeTask(config, args = {}) {
     validationAt: authority.validationAt || '',
     validationFingerprint: authority.validatedRepositoryFingerprint || authority.validationFingerprint || '',
     changedFiles: authority.taskOwnedChangedFiles || [],
-    completionSource: 'relai_complete_task'
+    completionSource: 'relai_finish_work'
   });
 }
 
@@ -116,7 +116,7 @@ function finalizeValidatedTask(config, workspace, options = {}) {
   const summary = normalizeCompletionSummary(options.summary);
   const context = getCurrentToolActivityContext();
   if (!context?.taskId) {
-    throw taskError('CONNECTION_CONTEXT_UNAVAILABLE', 'Task completion requires an active Rel.AI tool invocation.');
+    throw taskError('CONNECTION_CONTEXT_UNAVAILABLE', 'Work-session completion requires an active Rel.AI tool invocation.');
   }
   const taskId = normalizeTaskId(context.taskId);
   if (!taskId) {
@@ -125,7 +125,7 @@ function finalizeValidatedTask(config, workspace, options = {}) {
   const changedFiles = Array.isArray(options.changedFiles)
     ? unique(options.changedFiles.map(String).filter(Boolean))
     : changedFilesForTask(config, workspace.alias, taskId);
-  const completionSource = String(options.completionSource || 'relai_complete_task');
+  const completionSource = String(options.completionSource || 'relai_finish_work');
   const validationStatus = String(options.validationStatus || 'passed');
   const completion = requestCurrentTaskCompletion({
     summary,
@@ -138,8 +138,7 @@ function finalizeValidatedTask(config, workspace, options = {}) {
   return {
     ok: true,
     workspace: workspace.alias,
-    taskId: completion.taskId,
-    task_id: completion.taskId,
+    work_id: completion.taskId,
     duplicate: completion.duplicate === true,
     completionKnown: true,
     endReason: 'explicit_completion',
@@ -184,12 +183,11 @@ function finalizeDuplicateCompletion(config, workspace, context, previous) {
   return {
     ok: true,
     workspace: workspace.alias,
-    taskId: context.taskId,
-    task_id: context.taskId,
+    work_id: context.taskId,
     duplicate: true,
     completionKnown: true,
     endReason: 'explicit_completion',
-    completionSource: 'relai_complete_task',
+    completionSource: 'relai_finish_work',
     summary,
     validationStatus: previous.validation || 'passed',
     validationLevel: previous.validationLevel || '',
@@ -207,17 +205,17 @@ function requireMatchingTaskContext(taskId) {
     throw taskError('CONNECTION_CONTEXT_UNAVAILABLE', 'Task completion requires an active Rel.AI tool invocation.');
   }
   if (context.taskId !== taskId) {
-    throw taskError('TASK_OWNERSHIP_MISMATCH', 'The supplied task_id does not match the logical task bound to this invocation.');
+    throw taskError('TASK_OWNERSHIP_MISMATCH', 'The supplied work_id does not match the logical task bound to this invocation.');
   }
   return context;
 }
 
 function completionMessage(source, duplicate) {
-  if (duplicate) return 'Duplicate task completion request accepted idempotently.';
+  if (duplicate) return 'Duplicate work-session completion request accepted idempotently.';
   if (source === 'relai_run_checks') {
-    return 'Validation passed and this logical task was completed in the same Rel.AI call. Other tasks remain unchanged.';
+    return 'Validation passed and this work session was completed in the same Rel.AI call. Other work sessions remain unchanged.';
   }
-  return 'Task completion accepted for this task_id. Other logical tasks remain active and unchanged.';
+  return 'Work-session completion accepted for this work_id. Other work sessions remain active and unchanged.';
 }
 
 function normalizeCompletionSummary(value) {

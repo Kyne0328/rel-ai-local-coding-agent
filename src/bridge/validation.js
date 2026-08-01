@@ -7,7 +7,7 @@ import { getCurrentTaskAbortSignal, updateCurrentToolActivity } from '../toolAct
 import { sanitizeDisplayText } from '../taskObservability.js';
 import { combineAbortSignals } from '../abortSignals.js';
 import { finalizeValidationResult, normalizeCompletionSummary } from '../tools/completion.js';
-import { createValidationFingerprint, readValidationPlan } from './validationPlan.js';
+import { createValidationFingerprint, createValidationPlan, readValidationPlan } from './validationPlan.js';
 import { runSpan } from '../telemetry.js';
 import { operationTaskSignal } from '../operationTasks.js';
 import { hasRequestedChecks, normalizeVerifyChecks } from './validationChecks.js';
@@ -20,15 +20,23 @@ import {
 
 const CHECK_OUTPUT_TAIL_DEFAULT = 4000;
 const CHECK_OUTPUT_TAIL_FULL = 40000;
-async function relaiVerify(workspace, config, args = {}) {
+async function relaiVerify(workspace, config, args = {}, context = {}) {
   let effectiveArgs = args;
   let validationPlan = null;
   let planSelection = '';
-  if (args.planId) {
+  if (!args.planId && !hasRequestedChecks(args)) {
+    validationPlan = await createValidationPlan(workspace, config, {
+      release: String(args.level || '').toLowerCase() === 'release'
+    });
+    planSelection = String(args.planLevel || args.level || validationPlan.recommended || 'focused').toLowerCase();
+    const plannedChecks = validationPlan.checks?.[planSelection];
+    if (!Array.isArray(plannedChecks)) throw new Error(`Validation plan has no '${planSelection}' check set.`);
+    effectiveArgs = { ...args, checks: plannedChecks };
+  } else if (args.planId) {
     validationPlan = readValidationPlan(config, args.planId, workspace);
     const current = await createValidationFingerprint(workspace, config);
     if (!validationPlan.workspaceFingerprint || validationPlan.workspaceFingerprint !== current.fingerprint) {
-      throw new Error('Validation plan is stale because relevant workspace content changed. Create a new relai_validation_plan.');
+      throw new Error('Validation plan is stale because relevant workspace content changed. Run relai_run_checks again to generate a current internal plan.');
     }
     planSelection = String(args.planLevel || args.level || validationPlan.recommended || 'focused').toLowerCase();
     const plannedChecks = validationPlan.checks?.[planSelection];
@@ -88,7 +96,8 @@ async function relaiVerify(workspace, config, args = {}) {
   const results = [];
   const signal = combineAbortSignals(
     getCurrentTaskAbortSignal(),
-    args._operationTaskId ? operationTaskSignal(config, args._operationTaskId) : undefined
+    args._operationTaskId ? operationTaskSignal(config, args._operationTaskId) : undefined,
+    context.signal
   );
 
   publishValidationProgress({ checks, skippedChecks, results, currentIndex: 0, resultStatus: 'pending' });
@@ -147,7 +156,7 @@ async function relaiVerify(workspace, config, args = {}) {
   });
 
   const nextAction = ok
-    ? 'Completion is not automatic. If the task is finished, call relai_complete_task once; on future final validations, pass complete:true with summary to validate and close the session atomically.'
+    ? 'Completion is not automatic. If the work session is finished, call relai_finish_work once; on future final validations, pass complete:true with summary to validate and close the session atomically.'
     : cancelled
       ? 'The validation was cancelled. Review partial results before starting a new task or rerunning validation.'
       : 'Fix the failing validation before reporting task completion.';

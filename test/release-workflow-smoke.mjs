@@ -25,6 +25,7 @@ for (const file of [
   'electron/package.json',
   'electron/package-lock.json',
   'electron/renderer/status.html',
+  'electron/scripts/verify-fuses.js',
   'src/packageMetadata.js',
   'src/version.js',
   'scripts/release-check.mjs',
@@ -139,6 +140,7 @@ assert.equal(rootPackage.scripts['verify:packaged'], 'node scripts/verify-packag
 assert.equal(rootPackage.scripts['verify:updater-artifacts'], 'node scripts/verify-updater-artifacts.mjs');
 assert.equal(rootPackage.scripts['prepare:release-assets'], 'node scripts/prepare-release-assets.mjs');
 assert.equal(rootPackage.scripts['test:connector-acceptance'], 'node scripts/packaged-connector-acceptance.mjs');
+assert.equal(rootPackage.scripts['test:native-tasks-release-gate'], 'node scripts/native-tasks-release-gate.mjs');
 assert.equal(rootPackage.scripts['test:installed'], undefined);
 assert.match(rootPackage.scripts['build:css'], /--minify/);
 assert.equal(
@@ -245,6 +247,8 @@ assert.match(releaseWorkflow, /npm run prepare:release-assets/);
 assert.match(releaseWorkflow, /exact updater contract/);
 assert.match(releaseWorkflow, /npm run benchmark:observability/);
 assert.match(releaseWorkflow, /npm run test:observability-browser/);
+assert.match(releaseWorkflow, /Run native Tasks release gate/);
+assert.match(releaseWorkflow, /npm run test:native-tasks-release-gate/);
 assert.match(releaseWorkflow, /Verify packaged application layout/);
 assert.match(releaseWorkflow, /Resolve current unpacked application/);
 assert.match(releaseWorkflow, /node scripts\/current-unpacked\.mjs/);
@@ -256,17 +260,18 @@ assert.doesNotMatch(releaseWorkflow, /test:installed|REL_AI_SMOKE_INSTALLER|REL_
 assert.match(releaseWorkflow, /node-version:\s*24/);
 assert.doesNotMatch(releaseWorkflow, /actions\/(?:checkout|setup-node|upload-artifact|attest-build-provenance|attest-sbom)@v\d+/);
 assert.match(releaseWorkflow, /Verify hardened Electron fuses/);
-assert.match(releaseWorkflow, /Require Windows signing credentials/);
-assert.match(releaseWorkflow, /WINDOWS_CSC_LINK is required for release publication/);
-assert.match(releaseWorkflow, /WINDOWS_CSC_KEY_PASSWORD is required for release publication/);
-assert.match(releaseWorkflow, /--config\.forceCodeSigning=true/);
-assert.match(releaseWorkflow, /Verify Windows signatures and bundled ngrok provenance/);
+assert.match(releaseWorkflow, /npm run verify:fuses -- '\$\{\{ steps\.unpacked\.outputs\.path \}\}\/Rel\.AI MCP\.exe'/);
+const fuseVerifier = fs.readFileSync(path.join(tmp, 'electron/scripts/verify-fuses.js'), 'utf8');
+assert.match(fuseVerifier, /Pass the exact unpacked Rel\.AI MCP executable path/);
+assert.doesNotMatch(fuseVerifier, /resolveCurrentUnpacked/);
+assert.match(releaseWorkflow, /CSC_IDENTITY_AUTO_DISCOVERY:\s*'false'/);
+assert.doesNotMatch(releaseWorkflow, /WINDOWS_CSC_LINK|WINDOWS_CSC_KEY_PASSWORD|CSC_LINK|CSC_KEY_PASSWORD|forceCodeSigning|Require Windows signing credentials/);
+assert.match(releaseWorkflow, /Verify bundled ngrok provenance/);
 assert.match(releaseWorkflow, /steps\.unpacked\.outputs\.path/);
-assert.match(releaseWorkflow, /Join-Path \$packageDirectory 'Rel\.AI MCP\.exe'/);
 assert.match(releaseWorkflow, /vendor\/ngrok\/manifest\.json/);
 assert.match(releaseWorkflow, /Packaged ngrok SHA-256 mismatch/);
 assert.match(releaseWorkflow, /Packaged ngrok Authenticode signature is not valid/);
-assert.doesNotMatch(releaseWorkflow, /artifacts will be unsigned|SIGNING_CONFIGURED/);
+assert.doesNotMatch(releaseWorkflow, /Join-Path \$packageDirectory 'Rel\.AI MCP\.exe'|does not have a valid Authenticode signature/);
 assert.match(releaseWorkflow, /Generate CycloneDX SBOM/);
 assert.match(releaseWorkflow, /sbom\.cdx\.json/);
 assert.match(releaseWorkflow, /Attest release artifact provenance/);

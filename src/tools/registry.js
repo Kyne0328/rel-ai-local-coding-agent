@@ -7,14 +7,14 @@
 import { MAX_BATCH_EDITS } from "../editLimits.js";
 import { outputSchemaFor } from "./outputSchemas.js";
 
-const TOOL_SURFACE_VERSION = 25;
+const TOOL_SURFACE_VERSION = 27;
 
 /** @type {ToolDefinitionInput[]} */
 const TOOL_DEFINITION_VALUES = [
   {
-    name: "relai_start_task",
+    name: "relai_begin_work",
     title: "Start Logical Task",
-    description: "Create an independent workspace-bound Rel.AI task and return its opaque task_id plus compact repository bootstrap context. Call this once for each unrelated ChatGPT task. Subsequent task-scoped tools require task_id and resolve the bound workspace automatically; workspace may be supplied only as an ownership assertion.",
+    description: "Create an independent workspace-bound Rel.AI task and return its opaque work_id plus compact repository bootstrap context. Call this once for each unrelated ChatGPT task. Subsequent task-scoped tools require work_id and resolve the bound workspace automatically; workspace may be supplied only as an ownership assertion.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"title":{"type":"string","minLength":1,"maxLength":100},"objective":{"type":"string","minLength":1,"maxLength":500},"bootstrap":{"type":"string","enum":["compact","full","none"],"description":"Initial repository context returned with the task. Defaults to compact."},"instructionPath":{"type":"string","maxLength":1000,"description":"Optional workspace-relative file or directory used to discover applicable nested AGENTS.md instructions."}},"required":["workspace"],"additionalProperties":false},
     handlerName: 'startTask',
     behavior: {"taskScope":"none"},
@@ -32,7 +32,7 @@ const TOOL_DEFINITION_VALUES = [
     name: "relai_read",
     title: "Read Local Repo Paths",
     description: "Read-only. Batch-read files or directory summaries. Ordinary hidden and Git-ignored files can be read when explicitly targeted; snapshot exclusions are not direct-access restrictions. Secret-bearing paths remain blocked. Use startLine/endLine for one bounded line range across the whole batch, or ranges:[{path,startLine,endLine}] to give individual paths their own window in a single call. guidanceMode accepts full, compact, or none.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"paths":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":100},"maxBytes":{"type":"number","minimum":1000,"maximum":10485760},"maxEntries":{"type":"number","minimum":1,"maximum":20000},"startLine":{"type":"number","minimum":1,"maximum":10000000},"endLine":{"type":"number","minimum":1,"maximum":10000000},"ranges":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"startLine":{"type":"number","minimum":1,"maximum":10000000},"endLine":{"type":"number","minimum":1,"maximum":10000000}},"required":["path"],"additionalProperties":false},"minItems":1,"maxItems":100},"guidanceMode":{"type":"string","enum":["full","compact","none"]}},"required":["workspace","paths"],"additionalProperties":false},
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"paths":{"type":"array","items":{"type":"string","minLength":1,"maxLength":1000},"minItems":1,"maxItems":100},"maxBytes":{"type":"number","minimum":1000,"maximum":10485760},"maxEntries":{"type":"number","minimum":1,"maximum":20000},"startLine":{"type":"number","minimum":1,"maximum":10000000},"endLine":{"type":"number","minimum":1,"maximum":10000000},"ranges":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string","minLength":1,"maxLength":1000},"startLine":{"type":"number","minimum":1,"maximum":10000000},"endLine":{"type":"number","minimum":1,"maximum":10000000}},"required":["path"],"additionalProperties":false},"minItems":1,"maxItems":100},"guidanceMode":{"type":"string","enum":["full","compact","none"]}},"required":["workspace"],"anyOf":[{"required":["paths"]},{"required":["ranges"]}],"additionalProperties":false},
     handlerName: 'read',
     behavior: {"audit":"read"},
   },
@@ -135,33 +135,15 @@ const TOOL_DEFINITION_VALUES = [
     name: "relai_diagnostics_run",
     title: "Run Structured Diagnostics",
     description: "Run detected or explicit language diagnostics and normalize file, line, column, severity, code, message, and source.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"command":{"type":"string","maxLength":20000},"commands":{"type":"array","items":{"type":"string"},"maxItems":50},"level":{"type":"string","enum":["quick","standard","release"]},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000},"maxResults":{"type":"number","minimum":1,"maximum":5000},"stopOnFailure":{"type":"boolean"}},"required":["workspace"],"additionalProperties":false},
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"command":{"type":"string","minLength":1,"maxLength":20000},"commands":{"type":"array","items":{"type":"string","minLength":1,"maxLength":20000},"minItems":1,"maxItems":50},"level":{"type":"string","enum":["quick","standard","release"]},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000},"maxResults":{"type":"number","minimum":1,"maximum":5000},"stopOnFailure":{"type":"boolean"}},"required":["workspace"],"oneOf":[{"required":["command"],"not":{"anyOf":[{"required":["commands"]},{"required":["level"]}]}},{"required":["commands"],"not":{"anyOf":[{"required":["command"]},{"required":["level"]}]}},{"required":["level"],"not":{"anyOf":[{"required":["command"]},{"required":["commands"]}]}},{"not":{"anyOf":[{"required":["command"]},{"required":["commands"]},{"required":["level"]}]}}],"additionalProperties":false},
     handlerName: 'diagnosticsRun',
     behavior: {"audit":"checks","summary":"checks","longRunning":true},
-  },
-  {
-    name: "relai_validation_plan",
-    title: "Plan Change-Aware Validation",
-    description: "Read-only. Build a short-lived hash-bound validation plan from current changes, import impact, affected tests, and repository checks.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"release":{"type":"boolean"}},"required":["workspace"],"additionalProperties":false},
-    handlerName: 'validationPlan',
-    groups: ["audit"],
-  },
-  {
-    name: "relai_native_tasks_probe",
-    title: "Probe Native MCP Tasks",
-    description: "Diagnostic canary for native MCP Tasks support. An HTTP client that advertises io.modelcontextprotocol/tasks receives a native asynchronous task. Other clients receive a synchronous capability report.",
-    inputSchema: {"type":"object","properties":{"durationMs":{"type":"number","minimum":1000,"maximum":30000},"label":{"type":"string","maxLength":120}},"required":[],"additionalProperties":false},
-    outputSchema: {"type":"object","properties":{"ok":{"type":"boolean"},"probeEnabled":{"type":"boolean"},"extensionId":{"type":"string"},"clientAdvertisedTasks":{"type":"boolean"},"transport":{"type":"string"},"nativeTaskReturned":{"type":"boolean"},"message":{"type":"string"},"nextAction":{"type":"string"}},"required":["ok","probeEnabled","extensionId","clientAdvertisedTasks","transport","nativeTaskReturned","message"],"additionalProperties":false},
-    handlerName: 'nativeTasksProbe',
-    behavior: {"taskScope":"none"},
-    dashboard: {"category":"Workflow"}
   },
   {
     name: "relai_tidy_plan",
     title: "Workspace Tidy Plan",
     description: "Read-only. Prepare a bounded workspace tidy plan for session-owned untracked artifacts. The server selects candidates; callers do not provide file paths.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"mode":{"type":"string"},"maxCandidates":{"type":"number","minimum":1,"maximum":100}},"required":["workspace"],"additionalProperties":false},
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"mode":{"type":"string","enum":["session_untracked"]},"maxCandidates":{"type":"number","minimum":1,"maximum":100}},"required":["workspace"],"additionalProperties":false},
     handlerName: 'tidyPlan',
     groups: ["cleanup"],
   },
@@ -169,7 +151,7 @@ const TOOL_DEFINITION_VALUES = [
     name: "relai_tidy_run",
     title: "Run Workspace Tidy Plan",
     description: "Apply a previously prepared workspace tidy plan by planId. The plan is expiry-bound and hash-checked before any workspace change.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"planId":{"type":"string"}},"required":["workspace","planId"],"additionalProperties":false},
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"planId":{"type":"string","minLength":20,"maxLength":120,"pattern":"^tidy_[A-Za-z0-9_-]+$"}},"required":["workspace","planId"],"additionalProperties":false},
     handlerName: 'tidyRun',
     groups: ["cleanup"],
     behavior: {"concurrencyScope":"workspace"},
@@ -177,8 +159,8 @@ const TOOL_DEFINITION_VALUES = [
   {
     name: "relai_run_checks",
     title: "Workspace Checks",
-    description: "Run workspace validation checks (tests, linters, analyzers, build). Use level quick, standard, or release. Output is bounded to each step's tail where failures appear; pass fullOutput:true for a larger tail. On the final validation, pass complete:true with summary to explicitly validate and close the task atomically. Otherwise use relai_complete_task after any final read-only review.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"level":{"type":"string","enum":["quick","standard","release"]},"check":{"type":"string"},"checks":{"type":"array","items":{"type":"string"},"minItems":0},"checksText":{"type":"string"},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000},"stopOnFailure":{"type":"boolean"},"fullOutput":{"type":"boolean"},"planId":{"type":"string","minLength":1,"maxLength":100},"planLevel":{"type":"string","enum":["focused","quick","standard","release"]},"complete":{"type":"boolean"},"summary":{"type":"string","minLength":1,"maxLength":2000}},"required":["workspace"],"additionalProperties":false},
+    description: "Run workspace validation checks (tests, linters, analyzers, build). Use level quick, standard, or release. Output is bounded to each step's tail where failures appear; pass fullOutput:true for a larger tail. On the final validation, pass complete:true with summary to explicitly validate and close the task atomically. Otherwise use relai_finish_work after any final read-only review.",
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"level":{"type":"string","enum":["quick","standard","release"]},"check":{"type":"string","minLength":1,"maxLength":20000},"checks":{"type":"array","items":{"type":"string","minLength":1,"maxLength":20000},"minItems":1,"maxItems":50},"checksText":{"type":"string","minLength":1,"maxLength":100000},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000},"stopOnFailure":{"type":"boolean"},"fullOutput":{"type":"boolean"},"complete":{"type":"boolean"},"summary":{"type":"string","minLength":1,"maxLength":2000}},"required":["workspace"],"oneOf":[{"required":["check"],"not":{"anyOf":[{"required":["checks"]},{"required":["checksText"]},{"required":["level"]}]}},{"required":["checks"],"not":{"anyOf":[{"required":["check"]},{"required":["checksText"]},{"required":["level"]}]}},{"required":["checksText"],"not":{"anyOf":[{"required":["check"]},{"required":["checks"]},{"required":["level"]}]}},{"required":["level"],"not":{"anyOf":[{"required":["check"]},{"required":["checks"]},{"required":["checksText"]}]}},{"not":{"anyOf":[{"required":["check"]},{"required":["checks"]},{"required":["checksText"]},{"required":["level"]}]}}],"additionalProperties":false},
     handlerName: 'runChecks',
     behavior: {"audit":"checks","summary":"checks","longRunning":true},
   },
@@ -188,14 +170,6 @@ const TOOL_DEFINITION_VALUES = [
     description: "Read-only. Check one configured local Rel.AI route such as /health or /dashboard and return reachability, HTTP status, final URL, response byte count, title, and bounded diagnostics. The route must be a local path.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"route":{"type":"string","minLength":1},"timeoutMs":{"type":"number","minimum":1000,"maximum":600000}},"required":["workspace","route"],"additionalProperties":false},
     handlerName: 'httpProbe',
-  },
-  {
-    name: "relai_ui_check",
-    title: "Named UI Check",
-    description: "Run one declared package.json script intended for interface validation. The check name must exactly match an existing script.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"check":{"type":"string","minLength":1},"timeoutMs":{"type":"number","minimum":1000,"maximum":1800000}},"required":["workspace","check"],"additionalProperties":false},
-    handlerName: 'uiCheck',
-    behavior: {"audit":"checks","summary":"checks"},
   },
   {
     name: "relai_diff",
@@ -237,7 +211,7 @@ const TOOL_DEFINITION_VALUES = [
     name: "relai_git_commit",
     title: "Record Commit",
     description: "Record a commit with an explicit message and optional path scoping. Sensitive paths require sensitiveAuthorization:{ operation:'commit', paths:[...], reason:'...' }; every staged sensitive path must be listed.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"message":{"type":"string"},"dryRun":{"type":"boolean"},"addAll":{"type":"boolean"},"sensitiveAuthorization":{"type":"object","properties":{"operation":{"type":"string","enum":["commit"]},"paths":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":200},"reason":{"type":"string","minLength":1,"maxLength":500}},"required":["operation","paths","reason"],"additionalProperties":false},"paths":{"type":"array","items":{"type":"string"},"minItems":0,"maxItems":200},"maxBytes":{"type":"number","minimum":1000,"maximum":5242880},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000}},"required":["workspace","message"],"additionalProperties":false},
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"message":{"type":"string","minLength":1,"maxLength":4000},"dryRun":{"type":"boolean"},"addAll":{"type":"boolean"},"sensitiveAuthorization":{"type":"object","properties":{"operation":{"type":"string","enum":["commit"]},"paths":{"type":"array","items":{"type":"string","minLength":1,"maxLength":1000},"minItems":1,"maxItems":200},"reason":{"type":"string","minLength":1,"maxLength":500}},"required":["operation","paths","reason"],"additionalProperties":false},"paths":{"type":"array","items":{"type":"string","minLength":1,"maxLength":1000},"minItems":1,"maxItems":200},"maxBytes":{"type":"number","minimum":1000,"maximum":5242880},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000}},"required":["workspace","message"],"additionalProperties":false},
     handlerName: 'gitCommit',
     groups: ["git"],
     behavior: {"concurrencyScope":"workspace"},
@@ -246,7 +220,7 @@ const TOOL_DEFINITION_VALUES = [
     name: "relai_git_push",
     title: "Publish Branch",
     description: "Publish a branch to a remote, with optional dry-run and set-upstream behavior.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"remote":{"type":"string"},"branch":{"type":"string"},"dryRun":{"type":"boolean"},"setUpstream":{"type":"boolean"},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000}},"required":["workspace"],"additionalProperties":false},
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"remote":{"type":"string","minLength":1,"maxLength":200},"branch":{"type":"string","minLength":1,"maxLength":500},"dryRun":{"type":"boolean"},"setUpstream":{"type":"boolean"},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000}},"required":["workspace"],"additionalProperties":false},
     handlerName: 'gitPush',
     groups: ["git"],
     behavior: {"concurrencyScope":"workspace"},
@@ -263,23 +237,23 @@ const TOOL_DEFINITION_VALUES = [
     name: "relai_edit",
     title: "Unified Workspace Edit",
     description: `The one tool for changing files. Use oldText/newText with optional occurrence, replacements:[...] for several exact edits in one file, content for full-file replacement, updateText for patch-shaped changes, or edits:[...] for an atomic batch of up to ${MAX_BATCH_EDITS} files. Use updateText or staged updateText for larger repository-wide changes. Large content stages automatically; explicit stage start/append/commit accepts either content chunks or updateText chunks. expectedSha256 is supported for direct, staged, and batch file edits.`,
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"path":{"type":"string"},"oldText":{"type":"string"},"newText":{"type":"string"},"occurrence":{"type":"number","minimum":1,"maximum":1000000},"replacements":{"type":"array","items":{"type":"object","properties":{"oldText":{"type":"string"},"newText":{"type":"string"},"occurrence":{"type":"number","minimum":1,"maximum":1000000}},"required":["oldText","newText"],"additionalProperties":false},"minItems":1,"maxItems":50},"content":{"type":"string"},"expectedSha256":{"type":"string"},"updateText":{"type":"string"},"envAction":{"type":"string","enum":["list","set","remove","compare"]},"key":{"type":"string","minLength":1,"maxLength":256},"value":{"type":"string","maxLength":65536},"templatePath":{"type":"string"},"edits":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"oldText":{"type":"string"},"newText":{"type":"string"},"occurrence":{"type":"number","minimum":1,"maximum":1000000},"replacements":{"type":"array","items":{"type":"object","properties":{"oldText":{"type":"string"},"newText":{"type":"string"},"occurrence":{"type":"number","minimum":1,"maximum":1000000}},"required":["oldText","newText"],"additionalProperties":false},"minItems":1,"maxItems":50},"content":{"type":"string"},"expectedSha256":{"type":"string"}},"required":["path"],"additionalProperties":false},"minItems":1,"maxItems":MAX_BATCH_EDITS},"runChecks":{"type":"boolean"},"level":{"type":"string","enum":["quick","standard","release"]},"returnDiff":{"type":"boolean"},"dryRun":{"type":"boolean"},"stage":{"type":"string","enum":["start","append","commit","abort"]},"writeId":{"type":"string"}},"required":["workspace"],"additionalProperties":false},
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"path":{"type":"string","minLength":1,"maxLength":1000},"oldText":{"type":"string"},"newText":{"type":"string"},"occurrence":{"type":"number","minimum":1,"maximum":1000000},"replacements":{"type":"array","items":{"type":"object","properties":{"oldText":{"type":"string"},"newText":{"type":"string"},"occurrence":{"type":"number","minimum":1,"maximum":1000000}},"required":["oldText","newText"],"additionalProperties":false},"minItems":1,"maxItems":50},"content":{"type":"string"},"expectedSha256":{"type":"string","pattern":"^[a-fA-F0-9]{64}$"},"updateText":{"type":"string"},"envAction":{"type":"string","enum":["list","set","remove","compare"]},"key":{"type":"string","minLength":1,"maxLength":256},"value":{"type":"string","maxLength":65536},"templatePath":{"type":"string"},"edits":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"oldText":{"type":"string"},"newText":{"type":"string"},"occurrence":{"type":"number","minimum":1,"maximum":1000000},"replacements":{"type":"array","items":{"type":"object","properties":{"oldText":{"type":"string"},"newText":{"type":"string"},"occurrence":{"type":"number","minimum":1,"maximum":1000000}},"required":["oldText","newText"],"additionalProperties":false},"minItems":1,"maxItems":50},"content":{"type":"string"},"expectedSha256":{"type":"string","pattern":"^[a-fA-F0-9]{64}$"}},"required":["path"],"additionalProperties":false},"minItems":1,"maxItems":MAX_BATCH_EDITS},"runChecks":{"type":"boolean"},"level":{"type":"string","enum":["quick","standard","release"]},"returnDiff":{"type":"boolean"},"dryRun":{"type":"boolean"},"stage":{"type":"string","enum":["start","append","commit","abort"]},"writeId":{"type":"string","minLength":1,"maxLength":200}},"required":["workspace"],"oneOf":[{"required":["path","oldText","newText"],"not":{"anyOf":[{"required":["replacements"]},{"required":["content"]},{"required":["updateText"]},{"required":["edits"]},{"required":["envAction"]},{"required":["stage"]}]}},{"required":["path","replacements"],"not":{"anyOf":[{"required":["oldText"]},{"required":["content"]},{"required":["updateText"]},{"required":["edits"]},{"required":["envAction"]},{"required":["stage"]}]}},{"required":["path","content"],"not":{"anyOf":[{"required":["oldText"]},{"required":["replacements"]},{"required":["updateText"]},{"required":["edits"]},{"required":["envAction"]},{"required":["stage"]}]}},{"required":["updateText"],"not":{"anyOf":[{"required":["oldText"]},{"required":["replacements"]},{"required":["content"]},{"required":["edits"]},{"required":["envAction"]},{"required":["stage"]}]}},{"required":["edits"],"not":{"anyOf":[{"required":["oldText"]},{"required":["replacements"]},{"required":["content"]},{"required":["updateText"]},{"required":["envAction"]},{"required":["stage"]}]}},{"required":["envAction"],"not":{"anyOf":[{"required":["oldText"]},{"required":["replacements"]},{"required":["content"]},{"required":["updateText"]},{"required":["edits"]},{"required":["stage"]}]}},{"required":["stage"],"not":{"anyOf":[{"required":["oldText"]},{"required":["replacements"]},{"required":["edits"]},{"required":["envAction"]}]}}],"additionalProperties":false},
     handlerName: 'edit',
     behavior: {"audit":"edit","cache":"edit","startsSession":true,"deferStagedSession":true,"sessionWrite":true,"summary":"edit"},
   },
   {
-    name: "relai_cancel_task",
+    name: "relai_cancel_work",
     title: "Cancel Logical Task",
-    description: "Cancel the exact logical task identified by task_id. Cancellation is idempotent, preserves partial progress and final timestamps, records a bounded reason, and cooperatively aborts active subprocess-backed operations when supported.",
+    description: "Cancel the exact logical task identified by work_id. Cancellation is idempotent, preserves partial progress and final timestamps, records a bounded reason, and cooperatively aborts active subprocess-backed operations when supported.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"reason":{"type":"string","maxLength":500}},"required":[],"additionalProperties":false},
     handlerName: 'cancelTask',
     behavior: {"audit":"exec"},
     dashboard: {"category":"Workflow"}
   },
   {
-    name: "relai_complete_task",
+    name: "relai_finish_work",
     title: "Report Task Completion",
-    description: "Explicitly close the task identified by task_id after its final read-only review. Use this when the final relai_run_checks call did not pass complete:true with summary. Validation and mutation checks are restricted to that exact logical task; Rel.AI never falls back to another task in the workspace.",
+    description: "Explicitly close the task identified by work_id after its final read-only review. Use this when the final relai_run_checks call did not pass complete:true with summary. Validation and mutation checks are restricted to that exact logical task; Rel.AI never falls back to another task in the workspace.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"summary":{"type":"string","minLength":1,"maxLength":2000}},"required":["workspace","summary"],"additionalProperties":false},
     handlerName: 'completeTask',
     behavior: {"audit":"completion","summary":"completion"},
@@ -288,29 +262,53 @@ const TOOL_DEFINITION_VALUES = [
 ];
 const READ_ONLY_TOOLS = new Set([
   'relai_repo_snapshot', 'relai_read', 'relai_search', 'relai_code_inspect', 'relai_semantic_search',
-  'relai_process_read', 'relai_process_list', 'relai_worktree_list', 'relai_validation_plan',
-  'relai_native_tasks_probe', 'relai_http_probe', 'relai_diff', 'relai_status', 'relai_git_draft_pr'
+  'relai_process_read', 'relai_process_list', 'relai_worktree_list',
+  'relai_tidy_plan', 'relai_http_probe', 'relai_diff', 'relai_status', 'relai_git_draft_pr'
 ]);
 const DESTRUCTIVE_TOOLS = new Set([
   'relai_exec', 'relai_process_start', 'relai_process_write', 'relai_process_stop',
-  'relai_worktree_create', 'relai_worktree_remove', 'relai_diagnostics_run',
-  'relai_tidy_run', 'relai_restore_paths', 'relai_reset_workspace', 'relai_edit', 'relai_cancel_task'
+  'relai_worktree_remove', 'relai_diagnostics_run', 'relai_tidy_run', 'relai_run_checks',
+  'relai_restore_paths', 'relai_reset_workspace', 'relai_edit'
 ]);
-const OPEN_WORLD_TOOLS = new Set(['relai_exec', 'relai_process_start', 'relai_diagnostics_run', 'relai_git_push']);
+const IDEMPOTENT_TOOLS = new Set([
+  ...READ_ONLY_TOOLS,
+  'relai_process_stop', 'relai_restore_paths', 'relai_reset_workspace',
+  'relai_cancel_work', 'relai_finish_work'
+]);
+const OPEN_WORLD_TOOLS = new Set([
+  'relai_exec', 'relai_process_start', 'relai_process_write',
+  'relai_diagnostics_run', 'relai_run_checks', 'relai_git_push'
+]);
+const NATIVE_TASK_ELIGIBLE_TOOLS = new Set([
+  'relai_exec', 'relai_diagnostics_run', 'relai_run_checks'
+]);
+const PERSISTENT_PROCESS_TOOLS = new Set([
+  'relai_process_start', 'relai_process_read', 'relai_process_write', 'relai_process_stop', 'relai_process_list'
+]);
+const ALWAYS_IMMEDIATE_TOOLS = new Set([
+  'relai_begin_work', 'relai_repo_snapshot', 'relai_read', 'relai_search',
+  'relai_status', 'relai_cancel_work', 'relai_finish_work'
+]);
 
 function annotationsFor(name) {
-  const readOnly = READ_ONLY_TOOLS.has(name);
   return {
-    readOnlyHint: readOnly,
+    readOnlyHint: READ_ONLY_TOOLS.has(name),
     destructiveHint: DESTRUCTIVE_TOOLS.has(name),
-    idempotentHint: readOnly,
+    idempotentHint: IDEMPOTENT_TOOLS.has(name),
     openWorldHint: OPEN_WORLD_TOOLS.has(name)
   };
 }
 
+function executionClassFor(name) {
+  if (NATIVE_TASK_ELIGIBLE_TOOLS.has(name)) return 'native_task_eligible';
+  if (PERSISTENT_PROCESS_TOOLS.has(name)) return 'persistent_process';
+  if (ALWAYS_IMMEDIATE_TOOLS.has(name)) return 'always_immediate';
+  return 'bounded_synchronous';
+}
+
 const DEFAULT_BEHAVIOR = Object.freeze({
   audit: '', cache: '', startsSession: false, deferStagedSession: false, sessionWrite: false, summary: '', longRunning: false,
-  taskScope: 'required', concurrencyScope: 'task'
+  taskScope: 'required', concurrencyScope: 'task', executionClass: 'bounded_synchronous'
 });
 const DEFAULT_DASHBOARD = Object.freeze({
   category: 'Workspace tools', requiredProfile: 'workspace', requiresApproval: false
@@ -323,8 +321,15 @@ function defineTool(definition) {
     connectorStrip: [...(definition.connectorStrip || [])],
     groups: [...(definition.groups || [])],
     annotations: Object.freeze(annotationsFor(definition.name)),
+    ...(NATIVE_TASK_ELIGIBLE_TOOLS.has(definition.name)
+      ? { execution: Object.freeze({ taskSupport: 'optional' }) }
+      : {}),
     outputSchema: Object.freeze(definition.outputSchema || outputSchemaFor(definition.name)),
-    behavior: Object.freeze({ ...DEFAULT_BEHAVIOR, ...(definition.behavior || {}) }),
+    behavior: Object.freeze({
+      ...DEFAULT_BEHAVIOR,
+      ...(definition.behavior || {}),
+      executionClass: executionClassFor(definition.name)
+    }),
     dashboard: Object.freeze({ ...DEFAULT_DASHBOARD, ...(definition.dashboard || {}) })
   });
 }
@@ -350,6 +355,8 @@ function getToolSurfaceManifest() {
     return {
       name: definition.name,
       state: lifecycle.state,
+      executionClass: definition.behavior.executionClass,
+      taskSupport: definition.execution?.taskSupport || 'forbidden',
       ...(lifecycle.replacement ? { replacement: lifecycle.replacement } : {}),
       ...(Array.isArray(lifecycle.replacements) && lifecycle.replacements.length ? { replacements: [...lifecycle.replacements] } : {}),
       ...(lifecycle.deprecatedSince ? { deprecatedSince: lifecycle.deprecatedSince } : {}),

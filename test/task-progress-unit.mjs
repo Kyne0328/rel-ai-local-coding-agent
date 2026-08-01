@@ -5,10 +5,10 @@ import { taskProgressHtml } from '../src/ui/components/task-progress.js';
 const indeterminate = { mode: 'indeterminate', label: 'Running command' };
 
 for (const [status, className, state, fallback] of [
-  ['failed', 'static terminal failed', 'Failed', 'Task failed'],
-  ['cancelled', 'static terminal cancelled', 'Ended', 'Task ended without completion'],
-  ['inactive', 'static terminal cancelled', 'Ended', 'Task ended without completion'],
-  ['expired', 'static terminal cancelled', 'Ended', 'Task ended without completion']
+  ['failed', 'static terminal failed', 'Failed', 'Work session failed'],
+  ['cancelled', 'static terminal cancelled', 'Cancelled', 'Work session cancelled'],
+  ['inactive', 'static terminal cancelled', 'Expired', 'Work session expired'],
+  ['expired', 'static terminal cancelled', 'Expired', 'Work session expired']
 ]) {
   const html = taskProgressHtml(indeterminate, status);
   assert.match(html, new RegExp(className.replaceAll(' ', '\\s+')));
@@ -38,5 +38,11 @@ assert.match(running, /task-progress-track/);
 const completed = taskProgressHtml({ mode: 'complete', label: 'Complete' }, 'completed');
 assert.match(completed, /task-progress complete/);
 assert.match(completed, /value="100"/);
+
+const completedWithoutProgress = taskProgressHtml({}, 'completed');
+assert.match(completedWithoutProgress, /task-progress complete/);
+assert.match(completedWithoutProgress, /role="status"/);
+assert.match(completedWithoutProgress, /Work session completed/);
+assert.doesNotMatch(completedWithoutProgress, /indeterminate/);
 
 console.log('Terminal and paused task progress renders static states without perpetual loading animation.');

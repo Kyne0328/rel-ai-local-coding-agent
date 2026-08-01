@@ -2,7 +2,7 @@
 
 ## 0.23.0 ESM hard cutover
 
-Version `0.23.0` remains unreleased. The consolidated `main` candidate now contains the reconciled runtime-hardening, task-observability, release, ESM, ChatGPT connection-scan compatibility, and native-task storage work. Aggregate source, dashboard, packaging, dependency, updater, protocol, and benchmark validation passes; publication still requires the protected signed build and disposable-machine lifecycle checks.
+Version `0.23.0` remains unreleased. The consolidated `main` candidate now contains the reconciled runtime-hardening, work-session observability, release, ESM, strict modern MCP `2026-07-28`, stateless ChatGPT HTTP compatibility, and native-task storage work. Aggregate source, dashboard, packaging, dependency, updater, protocol, and benchmark validation passes; publication still requires the protected signed build and disposable-machine lifecycle checks.
 
 ### Implemented
 
@@ -13,12 +13,12 @@ Version `0.23.0` remains unreleased. The consolidated `main` candidate now conta
 - BrowserWindow startup canvases use one neutral main-process-owned pre-render color.
 - OAuth CSS is tested through the production HTTP route.
 - MCP SDK runtime resources exclude build-only source, test, TypeScript, and declaration trees.
-- HTTP accepts the SDK-supported stateless ChatGPT `2025-11-25` initialization and tool-scan envelope while native `2026-07-28` requests and stdio remain strict.
+- Modern HTTP and stdio accept MCP `2026-07-28`. HTTP additionally accepts ChatGPT's SDK-supported stateless `2025-11-25` initialize flow. `MCP-Session-Id`, `/sse`, `/messages`, JSON-RPC batches, and initialize-based stdio remain rejected.
 - Native-task storage errors are typed and sanitized, corrupt records are quarantined, and release rebuilds invalidate stale derived evidence before regeneration.
 
 ### Automated gates passed
 
-- JavaScript syntax, ESLint, TypeScript boundaries, production and dependency Knip models, release consistency, and the complete 157-file aggregate test suite pass.
+- JavaScript syntax, ESLint, TypeScript boundaries, production and dependency Knip models, release consistency, and the complete 166-file aggregate test suite pass.
 - Real Electron Chromium dashboard acceptance across 640px, 320 CSS-pixel, 375 CSS-pixel, and 400% zoom scenarios; temporary screenshots are reviewed during the test and removed.
 - Root and Electron production dependency audits: zero advisories; production Knip covers shipped root, dashboard, and Electron runtime entries.
 - Windows x64 unpacked build, NSIS installer, portable executable, blockmap, and update metadata generation.

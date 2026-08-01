@@ -1,17 +1,29 @@
-
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { spawn } from 'node:child_process';
-import { getStateDir } from './statePaths.js';
+import { combineAbortSignals } from './abortSignals.js';
 import { resolveCommandCwd, normalizeCommandEnv, resolveShell, redactCommandForAudit } from './bridge/exec.js';
-import { killProcessTree } from './process.js';
+import { acknowledgeNativeTaskCancellation } from './mcp/nativeTaskService.js';
+import { operationTaskSignal } from './operationTasks.js';
+import { isProcessTreeAlive, terminateProcessTree } from './process.js';
 import { makeProcessEnvironment } from './processEnvironment.js';
+import { getStateDir } from './statePaths.js';
+import { readTaskHistorySession } from './taskHistoryStore.js';
 import { runSpan, addSpanEvent, traceContextEnvironment } from './telemetry.js';
-import { taskError } from './toolActivity.js';
-const processes = new Map();
+import { getCurrentTaskAbortSignal, taskError } from './toolActivity.js';
+
+const PROCESS_SCHEMA_VERSION = 2;
+const RUNTIME_ID = crypto.randomUUID();
 const RECENT_RETENTION_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_MAX_LOG_BYTES = 16 * 1024 * 1024;
+const DEFAULT_STARTUP_WAIT_MS = 750;
+const DEFAULT_STOP_GRACE_MS = 3000;
+const DEFAULT_FORCE_WAIT_MS = 2000;
+const METADATA_FLUSH_DELAY_MS = 50;
+const ACTIVE_STATUSES = new Set(['starting', 'running', 'stopping']);
+const TERMINAL_STATUSES = new Set(['exited', 'failed', 'stopped']);
+const processes = new Map();
 
 function processRoot(config) {
   return path.join(getStateDir(config), 'processes');
@@ -36,16 +48,20 @@ async function startManagedProcess(workspace, config, args = {}, context = {}) {
   const shell = resolveShell();
   const processId = `proc_${crypto.randomBytes(24).toString('base64url')}`;
   const directory = processDirectory(config, processId);
-  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
   const stdoutPath = path.join(directory, 'stdout.log');
   const stderrPath = path.join(directory, 'stderr.log');
-  fs.writeFileSync(stdoutPath, '', { mode: 0o600 });
-  fs.writeFileSync(stderrPath, '', { mode: 0o600 });
+  const workSessionId = String(context.taskId || args.work_id || '').trim();
+  const originatingTaskId = String(args._operationTaskId || context.nativeTaskId || '').trim();
   const record = {
+    schemaVersion: PROCESS_SCHEMA_VERSION,
+    runtimeId: RUNTIME_ID,
     processId,
-    workspace: workspace.alias,
+    workspaceId: workspace.alias,
     workspacePath: workspace.path,
-    logicalTaskId: String(context.taskId || args.task_id || ''),
+    originatingTaskId,
+    workSessionId,
+    principalKey: principalKeyForContext(context),
+    lifecycle: 'persistent',
     command,
     commandSummary: redactCommandForAudit(command),
     label: String(args.label || '').trim().slice(0, 120) || redactCommandForAudit(command),
@@ -57,87 +73,228 @@ async function startManagedProcess(workspace, config, args = {}, context = {}) {
     signal: '',
     stdoutBytes: 0,
     stderrBytes: 0,
+    stdoutStartOffset: 0,
+    stderrStartOffset: 0,
     stdoutPath,
     stderrPath,
     environmentKeys: Object.keys(env).sort(),
     child: null,
-    maxLogBytes: clampNumber(args.maxLogBytes, 65536, 256 * 1024 * 1024, DEFAULT_MAX_LOG_BYTES)
+    maxLogBytes: clampNumber(args.maxLogBytes, 65536, 256 * 1024 * 1024, DEFAULT_MAX_LOG_BYTES),
+    persistTimer: null,
+    persistenceFailureHandled: false,
+    discarded: false
   };
+
+  try {
+    fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(stdoutPath, '', { mode: 0o600 });
+    fs.writeFileSync(stderrPath, '', { mode: 0o600 });
+  } catch (error) {
+    fs.rmSync(directory, { recursive: true, force: true });
+    throw new Error(`Could not initialize managed process storage: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+  }
 
   return runSpan(config, 'relai.process.start', {
     'relai.process.id': processId,
     'relai.workspace': workspace.alias,
     'relai.process.command': record.commandSummary,
-    'relai.task.id': record.logicalTaskId
+    'relai.task.id': workSessionId,
+    'relai.native_task.id': originatingTaskId
   }, async () => {
     const childEnvironment = makeProcessEnvironment(env, { allow: config.processEnvironment?.allow });
     Object.assign(childEnvironment, traceContextEnvironment());
-    const child = spawn(shell.executable, shell.args(command), {
-      cwd: cwd.absolutePath,
-      env: childEnvironment,
-      detached: process.platform !== 'win32',
-      windowsHide: true,
-      stdio: ['pipe', 'pipe', 'pipe']
-    });
+    let child;
+    try {
+      child = spawn(shell.executable, shell.args(command), {
+        cwd: cwd.absolutePath,
+        env: childEnvironment,
+        detached: process.platform !== 'win32',
+        windowsHide: true,
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+    } catch (error) {
+      fs.rmSync(directory, { recursive: true, force: true });
+      throw error;
+    }
+
     record.child = child;
     record.pid = child.pid || null;
     processes.set(processId, record);
-    persistMetadata(config, record);
+    const startupSignal = combineAbortSignals(
+      context.signal,
+      getCurrentTaskAbortSignal(),
+      originatingTaskId ? safeOperationTaskSignal(config, originatingTaskId) : undefined
+    );
+    const initialState = observeInitialProcessState(child, startupSignal);
+
     child.stdout?.on('data', chunk => appendLog(config, record, 'stdout', chunk));
     child.stderr?.on('data', chunk => appendLog(config, record, 'stderr', chunk));
     child.once('spawn', () => {
+      if (record.status !== 'starting') return;
       record.status = 'running';
-      persistMetadata(config, record);
+      safePersistMetadata(config, record);
       addSpanEvent('process.spawned', { 'process.pid': record.pid || 0 });
     });
-    child.once('error', error => finishRecord(config, record, { status: 'failed', exitCode: -1, error: error.message }));
+    child.once('error', error => finishRecord(config, record, {
+      status: 'failed',
+      exitCode: -1,
+      error: error.message
+    }));
     child.once('close', (code, signal) => finishRecord(config, record, {
       status: record.status === 'stopping' ? 'stopped' : (code === 0 ? 'exited' : 'failed'),
       exitCode: typeof code === 'number' ? code : -1,
       signal: signal || ''
     }));
-    const startupWaitMs = clampNumber(args.startupWaitMs, 0, 30000, 750);
-    if (startupWaitMs > 0) await new Promise(resolve => setTimeout(resolve, startupWaitMs));
-    return processSnapshot(record, { includeTail: true, tailBytes: 8192 });
+
+    try {
+      persistMetadata(config, record);
+    } catch (error) {
+      record.discarded = true;
+      record.persistenceFailureHandled = true;
+      clearScheduledPersist(record);
+      await terminateProcessTree(child, { graceMs: 0, forceWaitMs: DEFAULT_FORCE_WAIT_MS }).catch(() => null);
+      record.child = null;
+      processes.delete(processId);
+      fs.rmSync(directory, { recursive: true, force: true });
+      throw new Error(`Could not persist managed process record: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+    }
+
+    const initial = await initialState;
+    if (initial.type === 'aborted') {
+      const stopped = await stopRecordInternal(config, record, { graceMs: DEFAULT_STOP_GRACE_MS });
+      acknowledgeStartupTaskCancellation(config, originatingTaskId, stopped);
+      throw cancellationError('Managed process startup was cancelled before readiness was established.');
+    }
+    if (initial.type === 'error') {
+      await cleanupFailedStartup(config, record);
+      throw new Error(`Could not start managed process: ${initial.error?.message || 'spawn failed'}`);
+    }
+    if (initial.type === 'closed') {
+      await cleanupFailedStartup(config, record);
+      throw new Error(`Managed process exited during startup with code ${initial.code ?? -1}.`);
+    }
+
+    const startupWaitMs = clampNumber(args.startupWaitMs, 0, 30000, DEFAULT_STARTUP_WAIT_MS);
+    const startupResult = await waitDuringStartup(record, startupWaitMs, startupSignal);
+    if (startupResult === 'aborted') {
+      const stopped = await stopRecordInternal(config, record, { graceMs: DEFAULT_STOP_GRACE_MS });
+      acknowledgeStartupTaskCancellation(config, originatingTaskId, stopped);
+      throw cancellationError('Managed process startup was cancelled.');
+    }
+    if (startupResult === 'closed') {
+      await cleanupFailedStartup(config, record);
+      throw new Error(`Managed process exited during startup with code ${record.exitCode ?? -1}.`);
+    }
+
+    return {
+      ...processSnapshot(record, { includeTail: true, tailBytes: 8192 }),
+      readiness: {
+        verified: record.status === 'running',
+        observedAt: new Date().toISOString(),
+        waitedMs: startupWaitMs,
+        status: record.status,
+        stdoutBytes: record.stdoutBytes,
+        stderrBytes: record.stderrBytes
+      }
+    };
+  });
+}
+
+function observeInitialProcessState(child, signal) {
+  return new Promise(resolve => {
+    let settled = false;
+    const onSpawn = () => finish({ type: 'spawned' });
+    const onError = error => finish({ type: 'error', error });
+    const onClose = (code, childSignal) => finish({ type: 'closed', code, signal: childSignal || '' });
+    const onAbort = () => finish({ type: 'aborted' });
+
+    child.once('spawn', onSpawn);
+    child.once('error', onError);
+    child.once('close', onClose);
+    if (signal?.aborted) onAbort();
+    else signal?.addEventListener?.('abort', onAbort, { once: true });
+
+    function finish(result) {
+      if (settled) return;
+      settled = true;
+      child.off?.('spawn', onSpawn);
+      child.off?.('error', onError);
+      child.off?.('close', onClose);
+      signal?.removeEventListener?.('abort', onAbort);
+      resolve(result);
+    }
+  });
+}
+
+function waitDuringStartup(record, waitMs, signal) {
+  if (signal?.aborted) return Promise.resolve('aborted');
+  if (!ACTIVE_STATUSES.has(record.status)) return Promise.resolve('closed');
+  if (waitMs <= 0) return Promise.resolve('ready');
+  return new Promise(resolve => {
+    let settled = false;
+    const onClose = () => finish('closed');
+    const onAbort = () => finish('aborted');
+    const timer = setTimeout(() => finish('ready'), waitMs);
+    record.child?.once?.('close', onClose);
+    signal?.addEventListener?.('abort', onAbort, { once: true });
+
+    function finish(result) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      record.child?.off?.('close', onClose);
+      signal?.removeEventListener?.('abort', onAbort);
+      resolve(result);
+    }
   });
 }
 
 function appendLog(config, record, stream, chunk) {
+  if (record.discarded || record.persistenceFailureHandled) return;
   const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
   const file = stream === 'stdout' ? record.stdoutPath : record.stderrPath;
-  fs.appendFileSync(file, buffer);
-  record[`${stream}Bytes`] += buffer.length;
-  trimLog(file, record.maxLogBytes);
-  persistMetadata(config, record);
+  try {
+    fs.appendFileSync(file, buffer);
+    record[`${stream}Bytes`] += buffer.length;
+    trimLog(record, stream);
+    scheduleMetadataPersist(config, record);
+  } catch (error) {
+    handlePersistenceFailure(config, record, error);
+  }
 }
 
-function trimLog(file, maxBytes) {
+function trimLog(record, stream) {
+  const file = stream === 'stdout' ? record.stdoutPath : record.stderrPath;
+  const totalKey = `${stream}Bytes`;
+  const startKey = `${stream}StartOffset`;
+  const stat = fs.statSync(file);
+  if (stat.size <= record.maxLogBytes) return;
+  const keep = Math.max(1, Math.floor(record.maxLogBytes * 0.75));
+  const fd = fs.openSync(file, 'r');
   try {
-    const stat = fs.statSync(file);
-    if (stat.size <= maxBytes) return;
-    const keep = Math.floor(maxBytes * 0.75);
-    const fd = fs.openSync(file, 'r');
     const buffer = Buffer.allocUnsafe(keep);
     fs.readSync(fd, buffer, 0, keep, stat.size - keep);
+    fs.writeFileSync(file, buffer, { mode: 0o600 });
+    record[startKey] = Math.max(0, Number(record[totalKey] || 0) - keep);
+  } finally {
     fs.closeSync(fd);
-    fs.writeFileSync(file, Buffer.concat([Buffer.from('[older process output removed]\n'), buffer]), { mode: 0o600 });
-  } catch {}
+  }
 }
 
 function readManagedProcess(config, args = {}, context = {}) {
   const record = requireProcess(config, args.processId);
-  assertProcessTaskOwner(record, args, context);
+  assertProcessAccess(config, record, args, context);
   const maxBytes = clampNumber(args.maxBytes, 1000, 1024 * 1024, 65536);
   return {
     ...processSnapshot(record),
-    stdout: readLogRange(record.stdoutPath, args.stdoutOffset, maxBytes),
-    stderr: readLogRange(record.stderrPath, args.stderrOffset, maxBytes)
+    stdout: readLogRange(record, 'stdout', args.stdoutOffset, maxBytes),
+    stderr: readLogRange(record, 'stderr', args.stderrOffset, maxBytes)
   };
 }
 
 function writeManagedProcess(config, args = {}, context = {}) {
   const record = requireProcess(config, args.processId);
-  assertProcessTaskOwner(record, args, context);
+  assertProcessAccess(config, record, args, context);
   if (!record.child || !record.child.stdin || record.child.stdin.destroyed || !['starting', 'running'].includes(record.status)) {
     throw new Error(`Process ${record.processId} does not have writable stdin.`);
   }
@@ -150,26 +307,62 @@ function writeManagedProcess(config, args = {}, context = {}) {
 
 async function stopManagedProcess(config, args = {}, context = {}) {
   const record = requireProcess(config, args.processId);
-  assertProcessTaskOwner(record, args, context);
-  if (!record.child || !['starting', 'running', 'stopping'].includes(record.status)) return processSnapshot(record);
+  assertProcessAccess(config, record, args, context);
+  const duplicate = TERMINAL_STATUSES.has(record.status) && !isProcessTreeAlive(record.pid);
+  if (!duplicate) {
+    await stopRecordInternal(config, record, {
+      graceMs: clampNumber(args.graceMs, 0, 30000, DEFAULT_STOP_GRACE_MS)
+    });
+  }
+  return {
+    ...processSnapshot(record, { includeTail: true, tailBytes: 8192 }),
+    duplicate
+  };
+}
+
+async function stopRecordInternal(config, record, options = {}) {
+  const target = record.child || record.pid;
+  if (!target || !isProcessTreeAlive(target)) {
+    if (!TERMINAL_STATUSES.has(record.status)) {
+      finishRecord(config, record, {
+        status: 'stopped',
+        exitCode: record.exitCode,
+        signal: record.signal || 'unobserved'
+      });
+    }
+    return processSnapshot(record);
+  }
+
   record.status = 'stopping';
-  persistMetadata(config, record);
-  killProcessTree(record.child);
-  const graceMs = clampNumber(args.graceMs, 0, 30000, 3000);
-  if (graceMs > 0 && record.status === 'stopping') await new Promise(resolve => setTimeout(resolve, Math.min(graceMs, 5000)));
-  if (record.status === 'stopping') finishRecord(config, record, { status: 'stopped', exitCode: -1, signal: 'SIGTERM' });
-  return processSnapshot(record, { includeTail: true, tailBytes: 8192 });
+  safePersistMetadata(config, record);
+  const outcome = await terminateProcessTree(target, {
+    graceMs: clampNumber(options.graceMs, 0, 30000, DEFAULT_STOP_GRACE_MS),
+    forceWaitMs: DEFAULT_FORCE_WAIT_MS
+  });
+
+  if (!outcome.exited) {
+    record.status = 'orphaned';
+    record.error = 'Managed process termination could not be confirmed.';
+    safePersistMetadata(config, record);
+  } else if (record.status === 'stopping') {
+    finishRecord(config, record, {
+      status: 'stopped',
+      exitCode: typeof record.exitCode === 'number' ? record.exitCode : -1,
+      signal: outcome.forced ? 'SIGKILL' : 'SIGTERM'
+    });
+  }
+  return processSnapshot(record);
 }
 
 function listManagedProcesses(config, args = {}, context = {}) {
   hydrateProcessMetadata(config);
   pruneManagedProcesses(config);
-  const workspace = String(args.workspace || '').trim();
+  const requestedWorkspace = resolveCallerWorkspace(config, args, context);
+  assertRequestedWorkspaceBoundary(config, args, context, requestedWorkspace);
   const status = String(args.status || '').trim();
-  const logicalTaskId = String(context.taskId || args.task_id || '').trim();
   const items = [...processes.values()]
-    .filter(item => !logicalTaskId || item.logicalTaskId === logicalTaskId)
-    .filter(item => !workspace || item.workspace === workspace)
+    .filter(item => canAccessProcess(config, item, args, context))
+    .filter(item => !requestedWorkspace || workspaceMatches(item, requestedWorkspace))
     .filter(item => !status || item.status === status)
     .sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt))
     .slice(0, clampNumber(args.limit, 1, 500, 100))
@@ -177,45 +370,140 @@ function listManagedProcesses(config, args = {}, context = {}) {
   return { ok: true, processes: items, count: items.length };
 }
 
-function assertProcessTaskOwner(record, args = {}, context = {}) {
-  const expected = String(record.logicalTaskId || '').trim();
-  const actual = String(context.taskId || args.task_id || '').trim();
-  if (expected && actual !== expected) {
-    throw taskError('TASK_OWNERSHIP_MISMATCH', 'The managed process belongs to a different logical task.');
+function assertProcessAccess(config, record, args = {}, context = {}) {
+  if (trustedLocalContext(args, context)) return;
+  const actualPrincipalKey = principalKeyForContext(context);
+  if ((!record.principalKey && context.connector === true)
+    || (record.principalKey && actualPrincipalKey !== record.principalKey)) {
+    throw taskError('PROCESS_ACCESS_DENIED', 'Managed process is not available to this caller.');
   }
+
+  const callerWorkspace = resolveCallerWorkspace(config, args, context);
+  if (callerWorkspace && !workspaceMatches(record, callerWorkspace)) {
+    throw taskError('PROCESS_WORKSPACE_MISMATCH', 'Managed process belongs to a different workspace.');
+  }
+  if (!callerWorkspace && context.connector === true) {
+    throw taskError('PROCESS_WORKSPACE_CONTEXT_REQUIRED', 'Managed process access requires a workspace-bound logical task.');
+  }
+
+  const workSessionId = String(context.taskId || args.work_id || '').trim();
+  if (record.status === 'starting' && record.workSessionId && workSessionId && record.workSessionId !== workSessionId) {
+    throw taskError('PROCESS_SESSION_MISMATCH', 'Managed process startup belongs to a different work session.');
+  }
+}
+
+function canAccessProcess(config, record, args, context) {
+  try {
+    assertProcessAccess(config, record, args, context);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function assertRequestedWorkspaceBoundary(config, args, context, requestedWorkspace) {
+  const explicit = String(args.workspace || '').trim();
+  const sessionWorkspace = String(
+    context.workspace || workSessionWorkspace(config, context.taskId || args.work_id) || ''
+  ).trim();
+  if (explicit && sessionWorkspace && !sameWorkspaceReference(explicit, sessionWorkspace)) {
+    throw taskError('PROCESS_WORKSPACE_MISMATCH', 'Requested process workspace differs from the logical task workspace.');
+  }
+  if (context.connector === true && !requestedWorkspace) {
+    throw taskError('PROCESS_WORKSPACE_CONTEXT_REQUIRED', 'Managed process listing requires a workspace-bound logical task.');
+  }
+}
+
+function resolveCallerWorkspace(config, args = {}, context = {}) {
+  return String(
+    args.workspace
+    || context.workspace
+    || workSessionWorkspace(config, context.taskId || args.work_id)
+    || ''
+  ).trim();
+}
+
+function workSessionWorkspace(config, taskId) {
+  const id = String(taskId || '').trim();
+  if (!id) return '';
+  return String(readTaskHistorySession(config, id)?.workspace || '').trim();
+}
+
+function principalKeyForContext(context = {}) {
+  const authInfo = context.mcp?.authInfo || context.authInfo || {};
+  const authExtra = authInfo?.extra && typeof authInfo.extra === 'object' ? authInfo.extra : {};
+  const principal = String(
+    context.principal
+    || authInfo.clientId
+    || authInfo.client_id
+    || authExtra.clientId
+    || authExtra.client_id
+    || context.requestHeaders?.authorization
+    || (context.connector === true ? 'connector:anonymous' : context.taskId ? 'local:stdio' : '')
+    || ''
+  ).trim();
+  if (!principal) return '';
+  return crypto.createHash('sha256').update(`relai-process-principal\0${principal}`).digest('base64url');
+}
+
+function trustedLocalContext(args = {}, context = {}) {
+  return context.internal === true
+    || (Object.keys(context).length === 0 && !args.work_id && !args.taskId && !args.workspace);
+}
+
+function workspaceMatches(record, workspace) {
+  const expected = normalizeWorkspaceReference(workspace);
+  return expected === normalizeWorkspaceReference(record.workspaceId)
+    || expected === normalizeWorkspaceReference(record.workspacePath);
+}
+
+function sameWorkspaceReference(left, right) {
+  return normalizeWorkspaceReference(left) === normalizeWorkspaceReference(right);
+}
+
+function normalizeWorkspaceReference(value) {
+  const text = String(value || '').trim();
+  return process.platform === 'win32' ? text.toLowerCase() : text;
 }
 
 function processSnapshot(record, options = {}) {
   const result = {
-    ok: !['failed'].includes(record.status),
+    ok: !['failed', 'orphaned'].includes(record.status),
     processId: record.processId,
     pid: record.pid || null,
-    workspace: record.workspace,
+    workspace: record.workspaceId,
+    workspaceId: record.workspaceId,
     label: record.label,
     commandSummary: record.commandSummary,
     cwd: record.cwd,
     status: record.status,
+    lifecycle: record.lifecycle || 'persistent',
+    originatingTaskId: record.originatingTaskId || null,
+    workSessionId: record.workSessionId || null,
     startedAt: record.startedAt,
     endedAt: record.endedAt || null,
     exitCode: record.exitCode,
     signal: record.signal || null,
-    stdoutBytes: record.stdoutBytes,
-    stderrBytes: record.stderrBytes,
+    stdoutBytes: Number(record.stdoutBytes || 0),
+    stderrBytes: Number(record.stderrBytes || 0),
+    stdoutRetainedFromOffset: Number(record.stdoutStartOffset || 0),
+    stderrRetainedFromOffset: Number(record.stderrStartOffset || 0),
     environmentKeys: record.environmentKeys || []
   };
   if (record.error) result.error = record.error;
   if (options.includeTail) {
-    result.stdoutTail = readLogTail(record.stdoutPath, options.tailBytes || 8192);
-    result.stderrTail = readLogTail(record.stderrPath, options.tailBytes || 8192);
+    result.stdoutTail = readLogTail(record, 'stdout', options.tailBytes || 8192);
+    result.stderrTail = readLogTail(record, 'stderr', options.tailBytes || 8192);
   }
   return result;
 }
 
 function finishRecord(config, record, fields) {
-  if (['exited', 'failed', 'stopped'].includes(record.status) && record.endedAt) return;
+  if (TERMINAL_STATUSES.has(record.status) && record.endedAt) return;
+  clearScheduledPersist(record);
   Object.assign(record, fields, { endedAt: new Date().toISOString() });
   record.child = null;
-  persistMetadata(config, record);
+  if (!record.discarded) safePersistMetadata(config, record);
 }
 
 function requireProcess(config, processId) {
@@ -224,7 +512,7 @@ function requireProcess(config, processId) {
   if (!record) {
     record = readMetadata(config, id);
     if (!record) throw new Error(`Unknown managed process: ${id}`);
-    if (['starting', 'running', 'stopping'].includes(record.status)) record.status = 'orphaned';
+    reconcileRestoredRecord(config, record);
     processes.set(id, record);
   }
   return record;
@@ -232,26 +520,159 @@ function requireProcess(config, processId) {
 
 function persistMetadata(config, record) {
   const directory = processDirectory(config, record.processId);
+  const target = path.join(directory, 'metadata.json');
+  const temporary = `${target}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const metadata = { ...record };
-  delete metadata.child;
-  delete metadata.command;
-  fs.writeFileSync(path.join(directory, 'metadata.json'), `${JSON.stringify(metadata, null, 2)}\n`, { mode: 0o600 });
+  try {
+    fs.writeFileSync(temporary, `${JSON.stringify(metadataRecord(record), null, 2)}\n`, { mode: 0o600 });
+    fs.renameSync(temporary, target);
+  } catch (error) {
+    try { fs.rmSync(temporary, { force: true }); } catch {}
+    throw error;
+  }
+}
+
+function metadataRecord(record) {
+  return {
+    schemaVersion: PROCESS_SCHEMA_VERSION,
+    runtimeId: record.runtimeId || RUNTIME_ID,
+    processId: record.processId,
+    workspaceId: record.workspaceId,
+    workspacePath: record.workspacePath,
+    originatingTaskId: record.originatingTaskId || '',
+    workSessionId: record.workSessionId || '',
+    principalKey: record.principalKey || '',
+    lifecycle: record.lifecycle || 'persistent',
+    commandSummary: record.commandSummary,
+    label: record.label,
+    cwd: record.cwd,
+    status: record.status,
+    startedAt: record.startedAt,
+    endedAt: record.endedAt || '',
+    exitCode: record.exitCode,
+    signal: record.signal || '',
+    error: record.error || '',
+    pid: record.pid || null,
+    stdoutBytes: Number(record.stdoutBytes || 0),
+    stderrBytes: Number(record.stderrBytes || 0),
+    stdoutStartOffset: Number(record.stdoutStartOffset || 0),
+    stderrStartOffset: Number(record.stderrStartOffset || 0),
+    environmentKeys: record.environmentKeys || [],
+    maxLogBytes: record.maxLogBytes
+  };
+}
+
+function safePersistMetadata(config, record) {
+  if (record.discarded) return false;
+  try {
+    persistMetadata(config, record);
+    return true;
+  } catch (error) {
+    handlePersistenceFailure(config, record, error);
+    return false;
+  }
+}
+
+function scheduleMetadataPersist(config, record) {
+  if (record.persistTimer || record.persistenceFailureHandled) return;
+  record.persistTimer = setTimeout(() => {
+    record.persistTimer = null;
+    safePersistMetadata(config, record);
+  }, METADATA_FLUSH_DELAY_MS);
+  record.persistTimer.unref?.();
+}
+
+function clearScheduledPersist(record) {
+  if (!record.persistTimer) return;
+  clearTimeout(record.persistTimer);
+  record.persistTimer = null;
+}
+
+function handlePersistenceFailure(config, record, error) {
+  if (record.persistenceFailureHandled) return;
+  record.persistenceFailureHandled = true;
+  clearScheduledPersist(record);
+  record.error = `Managed process persistence failed: ${error instanceof Error ? error.message : String(error)}`;
+  const target = record.child || record.pid;
+  void terminateProcessTree(target, { graceMs: 0, forceWaitMs: DEFAULT_FORCE_WAIT_MS })
+    .then(outcome => {
+      record.status = outcome.exited ? 'failed' : 'orphaned';
+      if (outcome.exited) record.endedAt = new Date().toISOString();
+      record.child = null;
+      try { persistMetadata(config, record); } catch {}
+    })
+    .catch(() => {
+      record.status = 'orphaned';
+      record.child = null;
+    });
 }
 
 function readMetadata(config, processId) {
   try {
     const directory = processDirectory(config, processId);
     const metadata = JSON.parse(fs.readFileSync(path.join(directory, 'metadata.json'), 'utf8'));
+    if (!metadata || metadata.processId !== processId) return null;
+    const stdoutPath = path.join(directory, 'stdout.log');
+    const stderrPath = path.join(directory, 'stderr.log');
+    const stdoutSize = fileSize(stdoutPath);
+    const stderrSize = fileSize(stderrPath);
+    const stdoutBytes = Math.max(Number(metadata.stdoutBytes || 0), Number(metadata.stdoutStartOffset || 0) + stdoutSize);
+    const stderrBytes = Math.max(Number(metadata.stderrBytes || 0), Number(metadata.stderrStartOffset || 0) + stderrSize);
     return {
-      ...metadata,
-      stdoutPath: path.join(directory, 'stdout.log'),
-      stderrPath: path.join(directory, 'stderr.log'),
-      child: null
+      schemaVersion: PROCESS_SCHEMA_VERSION,
+      runtimeId: String(metadata.runtimeId || ''),
+      processId,
+      workspaceId: String(metadata.workspaceId || metadata.workspace || ''),
+      workspacePath: String(metadata.workspacePath || ''),
+      originatingTaskId: String(metadata.originatingTaskId || ''),
+      workSessionId: String(metadata.workSessionId || metadata.logicalTaskId || ''),
+      principalKey: String(metadata.principalKey || ''),
+      lifecycle: String(metadata.lifecycle || 'persistent'),
+      commandSummary: String(metadata.commandSummary || ''),
+      label: String(metadata.label || metadata.commandSummary || processId),
+      cwd: String(metadata.cwd || '.'),
+      status: String(metadata.status || 'orphaned'),
+      startedAt: String(metadata.startedAt || ''),
+      endedAt: String(metadata.endedAt || ''),
+      exitCode: typeof metadata.exitCode === 'number' ? metadata.exitCode : null,
+      signal: String(metadata.signal || ''),
+      error: String(metadata.error || ''),
+      pid: Number.isSafeInteger(Number(metadata.pid)) ? Number(metadata.pid) : null,
+      stdoutBytes,
+      stderrBytes,
+      stdoutStartOffset: Number.isFinite(Number(metadata.stdoutStartOffset))
+        ? Number(metadata.stdoutStartOffset)
+        : Math.max(0, stdoutBytes - stdoutSize),
+      stderrStartOffset: Number.isFinite(Number(metadata.stderrStartOffset))
+        ? Number(metadata.stderrStartOffset)
+        : Math.max(0, stderrBytes - stderrSize),
+      stdoutPath,
+      stderrPath,
+      environmentKeys: Array.isArray(metadata.environmentKeys) ? metadata.environmentKeys : [],
+      child: null,
+      maxLogBytes: clampNumber(metadata.maxLogBytes, 65536, 256 * 1024 * 1024, DEFAULT_MAX_LOG_BYTES),
+      persistTimer: null,
+      persistenceFailureHandled: false,
+      discarded: false
     };
   } catch {
     return null;
   }
+}
+
+function reconcileRestoredRecord(config, record) {
+  if (record.runtimeId === RUNTIME_ID && processes.has(record.processId)) return record;
+  if (![...ACTIVE_STATUSES, 'orphaned'].includes(record.status)) return record;
+  if (record.pid && isProcessTreeAlive(record.pid)) {
+    record.status = 'orphaned';
+    record.error = record.error || 'Process survived a Rel.AI restart; live pipes and stdin cannot be reattached.';
+  } else {
+    record.status = 'stopped';
+    record.endedAt = record.endedAt || new Date().toISOString();
+    record.signal = record.signal || 'unobserved_restart';
+  }
+  try { persistMetadata(config, record); } catch {}
+  return record;
 }
 
 function hydrateProcessMetadata(config) {
@@ -259,45 +680,92 @@ function hydrateProcessMetadata(config) {
   if (!fs.existsSync(root)) return;
   for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
     if (!entry.isDirectory() || processes.has(entry.name)) continue;
-    try { requireProcess(config, entry.name); } catch {}
+    const record = readMetadata(config, entry.name);
+    if (!record) continue;
+    reconcileRestoredRecord(config, record);
+    processes.set(entry.name, record);
   }
 }
 
-function readLogRange(file, offsetValue, maxBytes) {
+function readLogRange(record, stream, offsetValue, maxBytes) {
+  const file = stream === 'stdout' ? record.stdoutPath : record.stderrPath;
+  const totalBytes = Number(record[`${stream}Bytes`] || 0);
+  const retainedFromOffset = Number(record[`${stream}StartOffset`] || 0);
+  const requestedOffset = Math.max(0, Number(offsetValue) || 0);
+  const offset = Math.min(totalBytes, Math.max(retainedFromOffset, requestedOffset));
   try {
     const stat = fs.statSync(file);
-    const offset = Math.min(stat.size, Math.max(0, Number(offsetValue) || 0));
-    const length = Math.min(maxBytes, stat.size - offset);
-    const buffer = Buffer.alloc(length);
-    const fd = fs.openSync(file, 'r');
-    fs.readSync(fd, buffer, 0, length, offset);
-    fs.closeSync(fd);
-    return { offset, nextOffset: offset + length, totalBytes: stat.size, truncated: offset + length < stat.size, text: buffer.toString('utf8').replace(/^\uFFFD+/u, '') };
+    const fileOffset = Math.min(stat.size, Math.max(0, offset - retainedFromOffset));
+    const length = Math.min(maxBytes, stat.size - fileOffset, totalBytes - offset);
+    const buffer = Buffer.alloc(Math.max(0, length));
+    if (length > 0) {
+      const fd = fs.openSync(file, 'r');
+      try { fs.readSync(fd, buffer, 0, length, fileOffset); } finally { fs.closeSync(fd); }
+    }
+    const decoded = decodeLogBuffer(buffer);
+    return {
+      requestedOffset,
+      offset,
+      nextOffset: offset + length,
+      totalBytes,
+      retainedFromOffset,
+      truncatedBefore: requestedOffset < retainedFromOffset,
+      truncated: offset + length < totalBytes,
+      text: decoded.text,
+      encoding: 'utf8',
+      ...(decoded.invalidUtf8 ? { invalidUtf8: true, base64: buffer.toString('base64') } : {})
+    };
   } catch {
-    return { offset: 0, nextOffset: 0, totalBytes: 0, truncated: false, text: '' };
+    return {
+      requestedOffset,
+      offset: retainedFromOffset,
+      nextOffset: retainedFromOffset,
+      totalBytes,
+      retainedFromOffset,
+      truncatedBefore: requestedOffset < retainedFromOffset,
+      truncated: retainedFromOffset < totalBytes,
+      text: '',
+      encoding: 'utf8'
+    };
   }
 }
 
-function readLogTail(file, maxBytes) {
+function decodeLogBuffer(buffer) {
   try {
-    const stat = fs.statSync(file);
-    const start = Math.max(0, stat.size - maxBytes);
-    return readLogRange(file, start, maxBytes).text;
+    return { text: new TextDecoder('utf-8', { fatal: true }).decode(buffer), invalidUtf8: false };
   } catch {
-    return '';
+    return { text: buffer.toString('utf8'), invalidUtf8: true };
   }
+}
+
+function readLogTail(record, stream, maxBytes) {
+  const totalBytes = Number(record[`${stream}Bytes`] || 0);
+  const start = Math.max(Number(record[`${stream}StartOffset`] || 0), totalBytes - maxBytes);
+  return readLogRange(record, stream, start, maxBytes).text;
+}
+
+function fileSize(file) {
+  try { return fs.statSync(file).size; } catch { return 0; }
 }
 
 function activeProcessesForWorkspace(config, workspaceAlias) {
   hydrateProcessMetadata(config);
-  return [...processes.values()].filter(item => item.workspace === workspaceAlias && ['starting', 'running', 'stopping'].includes(item.status));
+  return [...processes.values()].filter(item => workspaceMatches(item, workspaceAlias)
+    && processNeedsTermination(item));
 }
 
 async function stopAllManagedProcesses(config) {
   hydrateProcessMetadata(config);
-  const active = [...processes.values()].filter(item => ['starting', 'running', 'stopping'].includes(item.status));
-  await Promise.all(active.map(item => stopManagedProcess(config, { processId: item.processId, graceMs: 1000 }).catch(() => null)));
-  return { stopped: active.length };
+  const active = [...processes.values()].filter(processNeedsTermination);
+  const results = await Promise.all(active.map(item => stopManagedProcess(config, {
+    processId: item.processId,
+    graceMs: 1000
+  }, { internal: true }).catch(() => null)));
+  return {
+    stopped: results.filter(item => item && TERMINAL_STATUSES.has(item.status)).length,
+    attempted: active.length,
+    orphaned: results.filter(item => item?.status === 'orphaned').length
+  };
 }
 
 function pruneManagedProcesses(config) {
@@ -306,9 +774,11 @@ function pruneManagedProcesses(config) {
   let removed = 0;
   for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
-    const record = readMetadata(config, entry.name);
-    const timestamp = Date.parse(record?.endedAt || record?.startedAt || 0);
-    if (record && !['starting', 'running', 'stopping', 'orphaned'].includes(record.status) && Date.now() - timestamp > RECENT_RETENTION_MS) {
+    const record = processes.get(entry.name) || readMetadata(config, entry.name);
+    if (!record) continue;
+    reconcileRestoredRecord(config, record);
+    const timestamp = Date.parse(record.endedAt || record.startedAt || 0);
+    if (TERMINAL_STATUSES.has(record.status) && Date.now() - timestamp > RECENT_RETENTION_MS) {
       fs.rmSync(path.join(root, entry.name), { recursive: true, force: true });
       processes.delete(entry.name);
       removed += 1;
@@ -317,10 +787,66 @@ function pruneManagedProcesses(config) {
   return { removed };
 }
 
+async function cleanupFailedStartup(config, record) {
+  const target = record.child || record.pid;
+  if (!target) return { exited: true, forced: false };
+  const outcome = await terminateProcessTree(target, {
+    graceMs: 0,
+    forceWaitMs: DEFAULT_FORCE_WAIT_MS
+  });
+  if (!outcome.exited) {
+    record.status = 'orphaned';
+    record.error = 'Managed process startup failed and descendant termination could not be confirmed.';
+    safePersistMetadata(config, record);
+  }
+  return outcome;
+}
+
+function processNeedsTermination(record) {
+  if (ACTIVE_STATUSES.has(record.status)) return true;
+  if (record.status === 'orphaned') return isProcessTreeAlive(record.pid);
+  return TERMINAL_STATUSES.has(record.status)
+    && record.runtimeId === RUNTIME_ID
+    && isProcessTreeAlive(record.pid);
+}
+
+function safeOperationTaskSignal(config, taskId) {
+  try { return operationTaskSignal(config, taskId); } catch { return undefined; }
+}
+
+function acknowledgeStartupTaskCancellation(config, taskId, processResult) {
+  if (!taskId || !TERMINAL_STATUSES.has(processResult?.status)) return false;
+  try {
+    acknowledgeNativeTaskCancellation(config, taskId, {
+      executionStopped: true,
+      statusMessage: 'Managed process startup cancelled after process termination was confirmed.'
+    });
+    return true;
+  } catch (error) {
+    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] acknowledge startup task cancellation:', error);
+    return false;
+  }
+}
+
+function cancellationError(message) {
+  const error = taskError('TASK_CANCELLED', message);
+  error.cancelled = true;
+  return error;
+}
+
 function clampNumber(value, min, max, fallback) {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
   return Math.min(max, Math.max(min, Math.floor(number)));
 }
 
-export { startManagedProcess, readManagedProcess, writeManagedProcess, stopManagedProcess, listManagedProcesses, activeProcessesForWorkspace, stopAllManagedProcesses, pruneManagedProcesses };
+export {
+  activeProcessesForWorkspace,
+  listManagedProcesses,
+  pruneManagedProcesses,
+  readManagedProcess,
+  startManagedProcess,
+  stopAllManagedProcesses,
+  stopManagedProcess,
+  writeManagedProcess
+};

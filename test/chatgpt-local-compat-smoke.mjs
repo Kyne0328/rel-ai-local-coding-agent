@@ -34,16 +34,16 @@ try {
   client.call(requestId, 'relai_status', { workspace: 'repo' });
   const status = await client.waitFor(requestId);
   assert.equal(status.result.isError, false);
-  const payload = JSON.parse(status.result.content[0].text);
+  const payload = structuredContentOf(status);
   assert.equal(payload.tools.length, activeToolCount);
   assert.equal(Object.hasOwn(payload.toolGroups || {}, 'internal'), false);
   requestId += 1;
 
-  client.call(requestId, 'relai_start_task', { workspace: 'repo' });
+  client.call(requestId, 'relai_begin_work', { workspace: 'repo' });
   const task = structuredContentOf(await client.waitFor(requestId));
   requestId += 1;
 
-  client.call(requestId, 'relai_run_checks', { workspace: 'repo', task_id: task.task_id, check: 'node -e "process.exit(1)"' });
+  client.call(requestId, 'relai_run_checks', { workspace: 'repo', work_id: task.work_id, check: 'node -e "process.exit(1)"' });
   const failedCheck = await client.waitFor(requestId);
   assert.equal(failedCheck.result.isError, true, 'returned ok:false tool results must set MCP isError');
   assert.equal(failedCheck.result.structuredContent.ok, false, 'structured failure payload must be preserved');

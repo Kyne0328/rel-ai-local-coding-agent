@@ -119,4 +119,4 @@ assert.equal(expectedMcpName('tools/call', { name: 'relai_status' }), 'relai_sta
 assert.equal(expectedMcpName('resources/read', { uri: 'relai://server/help' }), 'relai://server/help');
 assert.equal(expectedMcpName('tasks/get', { taskId: 'task_abc' }), 'task_abc');
 
-console.log('MCP 2026-07-28 protocol headers, metadata, names, session rejection, and legacy rejection matrix passed.');
+console.log('Strict MCP 2026-07-28 protocol headers, metadata, names, and session rejection matrix passed.');

@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { createOperationTask, updateOperationTask, completeOperationTask, cancelOperationTask, getOperationTask, assertOperationTaskPrincipal } from '../src/operationTasks.js';
+import { acknowledgeNativeTaskCancellation } from '../src/mcp/nativeTaskService.js';
 import { sanitizeAttributes, summarizeCommandForTelemetry, telemetrySampleRatio } from '../src/telemetry.js';
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-operation-task-'));
 const config = { stateDir: root };
@@ -26,7 +27,11 @@ try {
   assert.deepEqual(getOperationTask(config, created.taskId).result, { ok: true });
 
   const cancellable = createOperationTask(config, { method: 'tools/call', name: 'relai_exec', principal: 'client-a' });
-  const cancelled = cancelOperationTask(config, cancellable.taskId);
+  const cancellationRequested = cancelOperationTask(config, cancellable.taskId);
+  assert.equal(cancellationRequested.status, 'working');
+  assert.equal(cancellationRequested.cancelRequested, true);
+  acknowledgeNativeTaskCancellation(config, cancellable.taskId, { principal: 'client-a', executionStopped: true });
+  const cancelled = getOperationTask(config, cancellable.taskId);
   assert.equal(cancelled.status, 'cancelled');
   assert.equal(cancelled.cancelRequested, true);
   assert.equal(fs.existsSync(path.join(root, 'operation-tasks')), false, 'legacy operation-task storage must not be recreated');

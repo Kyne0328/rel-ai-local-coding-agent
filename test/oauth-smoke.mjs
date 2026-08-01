@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHttpMcpSession, readMcpResponse } from './helpers/http-mcp.mjs';
+import { activeToolCount } from './helpers/tool-surface.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const port = 39891;
@@ -202,7 +203,7 @@ try {
   mcpSession = await createHttpMcpSession(base, { token: stepUp.body.access_token, clientName: 'oauth-smoke' });
   const tools = await mcpSession.request('tools/list');
   assert.equal(tools.response.status, 200);
-  assert.equal(tools.body.result.tools.length, 33);
+  assert.equal(tools.body.result.tools.length, activeToolCount);
 
   const chatGptInitializeResponse = await fetch(`${base}/mcp`, {
     method: 'POST',
@@ -225,7 +226,8 @@ try {
   const chatGptInitialize = await readMcpResponse(chatGptInitializeResponse);
   assert.equal(chatGptInitializeResponse.status, 200, JSON.stringify(chatGptInitialize));
   assert.equal(chatGptInitialize.result?.protocolVersion, '2025-11-25');
-  assert.ok(chatGptInitialize.result?.capabilities?.tools);
+  assert.equal(chatGptInitialize.result?.serverInfo?.name, 'rel-ai-mcp');
+  assert.equal(chatGptInitializeResponse.headers.get('mcp-session-id'), null);
 
   const chatGptInitializedResponse = await fetch(`${base}/mcp`, {
     method: 'POST',
@@ -237,7 +239,8 @@ try {
     },
     body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} })
   });
-  assert.ok([200, 202, 204].includes(chatGptInitializedResponse.status));
+  assert.equal(chatGptInitializedResponse.status, 202);
+  assert.equal(await chatGptInitializedResponse.text(), '');
 
   const chatGptToolsResponse = await fetch(`${base}/mcp`, {
     method: 'POST',
@@ -251,7 +254,7 @@ try {
   });
   const chatGptTools = await readMcpResponse(chatGptToolsResponse);
   assert.equal(chatGptToolsResponse.status, 200, JSON.stringify(chatGptTools));
-  assert.equal(chatGptTools.result?.tools?.length, 33);
+  assert.equal(chatGptTools.result?.tools?.length, activeToolCount);
 
   const refreshedResponse = await postForm('/token', {
     grant_type: 'refresh_token', refresh_token: stepUp.body.refresh_token, client_id: client.client_id, scope: 'mcp offline_access'
