@@ -125,6 +125,15 @@ assert.match(electronPackageWrapper, /promoteReleaseOutput\(stagingRoot, path\.j
 assert.match(electronPackageWrapper, /invalidateDerivedReleaseEvidence\(destinationRoot, version\)/);
 assert.match(electronPackageWrapper, /current-unpacked\.json/);
 assert.match(electronPackageWrapper, /--prepackaged', prepackaged/);
+assert.match(electronPackageWrapper, /--prepackaged', portablePrepackaged/);
+assert.match(electronPackageWrapper, /await Promise\.all/);
+assert.match(electronPackageWrapper, /fs\.cpSync\(prepackaged, portablePrepackaged/);
+assert.match(electronPackageWrapper, /collectArtifactFiles\(nsisOutput/);
+assert.match(electronPackageWrapper, /collectArtifactFiles\(portableOutput/);
+assert.match(electronPackageWrapper, /RELEASE_ARCHIVE_COMPRESSION_LEVEL = '5'/);
+assert.match(electronPackageWrapper, /ELECTRON_BUILDER_COMPRESSION_LEVEL: RELEASE_ARCHIVE_COMPRESSION_LEVEL/);
+assert.doesNotMatch(electronPackageWrapper, /'--win',\s*'nsis',\s*'portable'/);
+assert.doesNotMatch(electronPackageWrapper, /color-token generation/);
 assert.doesNotMatch(electronPackageWrapper, /quitAndInstall|Setup.*\.exe|uninstall/i);
 assert.equal(rootPackage.scripts['verify:packaged'], 'node scripts/verify-packaged-wrapper.mjs');
 assert.equal(rootPackage.scripts['verify:updater-artifacts'], 'node scripts/verify-updater-artifacts.mjs');

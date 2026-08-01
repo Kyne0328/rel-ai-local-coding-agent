@@ -57,8 +57,8 @@ The source-to-artifact flow is:
 3. The guarded release wrapper creates an OS-temporary output directory outside the VS Code workspace.
 4. electron-builder packages the Electron main/preload/renderer files into `resources/app.asar` once.
 5. Runtime backend JavaScript, public dashboard assets, the root package manifest, changelog, and Windows ngrok seed are copied under `resources/`.
-6. NSIS and portable artifacts are generated sequentially from the same prepackaged application.
-7. Completed artifacts are promoted into `dist`, and `dist/current-unpacked.json` records the authoritative unpacked directory when a legacy `dist/win-unpacked` is locked.
+6. NSIS and portable artifacts are generated concurrently from isolated copies of the same verified prepackaged application. The isolation prevents signing and executable-renaming races while avoiding two serial compression passes. Release archives use deterministic 7-Zip level 5 rather than Electron Builder's level-9 default.
+7. Completed canonical artifacts are collected into the staging root and promoted into `dist`; `dist/current-unpacked.json` records the authoritative unpacked directory when a legacy `dist/win-unpacked` is locked.
 
 ## Baseline methodology
 
@@ -170,6 +170,7 @@ ASAR unpack rules are not required because there are no native Node modules. The
 | `test/electron-launcher-smoke.mjs` | Assert the current packaged source-resource contract | Protect packaging configuration |
 | `test/release-workflow-smoke.mjs` | Assert locale, source-map, minification, and CI reporting contracts | Prevent regression |
 | `scripts/verify-packaged-app.mjs` | Verify unpacked executable and required resources without execution | Preserve package validation without installer risk |
+| `scripts/electron-package.mjs` | Reuse one unpacked build, clone only the portable working tree, build NSIS/portable artifacts concurrently into isolated outputs, and pin archive compression to level 5 | Reduce `electron:dist` from 158 seconds to about 76 seconds without restoring the previous shared-target race; measured artifact growth remains within the 3% release budget |
 | `public/dashboard.css` | Rebuilt as minified production CSS | Runtime size reduction |
 
 ## Validation results
