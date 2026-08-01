@@ -6,8 +6,7 @@ let config = {
   port: 3333,
   token: 'preserved-token',
   ngrokDomain: 'example.ngrok-free.dev',
-  ngrokAuthtoken: 'account-key',
-  ngrokDownloadAccepted: true
+  ngrokAuthtoken: 'account-key'
 };
 let notificationsEnabled = true;
 const saved = [];
@@ -34,7 +33,6 @@ assert.deepEqual(manager.get(), {
   ngrokDomain: 'example.ngrok-free.dev',
   ngrokAuthtoken: '',
   ngrokAuthtokenConfigured: true,
-  ngrokDownloadAccepted: true,
   approvalRequired: true,
   notificationsEnabled: true
 });
@@ -51,8 +49,7 @@ assert.deepEqual(saved.at(-1), {
   port: 4444,
   token: 'preserved-token',
   ngrokDomain: 'updated.ngrok-free.dev',
-  ngrokAuthtoken: 'account-key',
-  ngrokDownloadAccepted: true
+  ngrokAuthtoken: 'account-key'
 });
 assert.equal(notificationsEnabled, false);
 
@@ -65,8 +62,7 @@ assert.deepEqual(saved.at(-1), {
   port: 4555,
   token: 'preserved-token',
   ngrokDomain: 'replacement.ngrok-free.dev',
-  ngrokAuthtoken: 'new-account-key',
-  ngrokDownloadAccepted: true
+  ngrokAuthtoken: 'new-account-key'
 });
 assert.equal(restarts, 2);
 assert.equal(manager.get().ngrokAuthtoken, '');

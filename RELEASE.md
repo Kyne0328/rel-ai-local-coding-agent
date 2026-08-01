@@ -49,7 +49,7 @@ npm run verify:packaged
 npm run test:connector-acceptance
 ```
 
-The package contains only `vendor/ngrok/manifest.json`; it must not contain `ngrok.exe`. `npm run verify:ngrok -- --download` exercises the exact official archive acquisition in a temporary directory and requires the declared archive and executable sizes, SHA-256 values, version, and upstream Authenticode identity. `verify:packaged` checks the manifest-only application boundary without launching Electron. `test:connector-acceptance` launches only the packaged Node backend from `resources/` and verifies the actual packaged OAuth and MCP stack:
+The ngrok fetch is accepted only when it matches `vendor/ngrok/manifest.json`; Windows verification also requires the declared version and a valid upstream Authenticode identity. `verify:packaged` checks the unpacked application layout and packaged ngrok hash without launching the Electron executable. `test:connector-acceptance` launches only the packaged Node backend from `resources/` and verifies the actual packaged OAuth and MCP stack:
 
 - OAuth discovery and dynamic client registration;
 - authorization-code flow with PKCE S256;
@@ -130,8 +130,8 @@ Pushing the version commit to `main` triggers `.github/workflows/release.yml`. T
 - the strict package-size report;
 - `SHA256SUMS.txt`.
 
-The workflow requires exact release-asset basenames, matching release versions, nonempty and byte-correct SHA-512 updater metadata, SHA-256 coverage, protected Windows signing credentials, and `forceCodeSigning`. It verifies valid Authenticode signatures for the installer, portable executable, and unpacked Rel.AI executable. It separately proves that the package contains no ngrok executable and that the reviewed official ngrok archive can be downloaded, hashed, extracted, signature-checked, and version-checked. SHA-256 binds every published Rel.AI asset to `SHA256SUMS.txt`; the acquisition manifest binds the external ngrok component.
+The workflow requires exact release-asset basenames, matching release versions, nonempty and byte-correct SHA-512 updater metadata, SHA-256 coverage, protected Windows signing credentials, and `forceCodeSigning`. It verifies valid Authenticode signatures for the installer, portable executable, unpacked Rel.AI executable, and bundled ngrok executable. SHA-256 binds every published asset to `SHA256SUMS.txt` and binds the packaged ngrok bytes to the reviewed manifest; Authenticode establishes the configured publishers.
 
-Scan the installer, portable executable, and unpacked Rel.AI executable as Rel.AI-owned samples before broad distribution. Separately scan the exact ngrok executable acquired through the reviewed manifest. A Trojan or malware classification on a Rel.AI-owned executable blocks publication until investigated. Generic PUA/PUP labels limited to the authentic upstream ngrok component require documented vendor submission and review; do not evade them through renaming, repacking, proxying, or exclusions. See `docs/ANTIVIRUS_FALSE_POSITIVES.md`.
+Scan the installer, portable executable, unpacked Rel.AI executable, and bundled ngrok executable as separate samples before broad distribution. A Trojan or malware classification on a Rel.AI-owned executable blocks publication until investigated. Generic PUA/PUP labels limited to the authentic ngrok component require documented vendor submission and review; do not evade them through renaming, repacking, or post-install downloads. See `docs/ANTIVIRUS_FALSE_POSITIVES.md`.
 
 A local release-preparation commit must not be pushed until all automated and manual checks required for the candidate are complete.

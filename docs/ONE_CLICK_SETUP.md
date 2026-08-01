@@ -2,7 +2,7 @@
 
 This guide takes you from a downloaded installer to a working ChatGPT connector that survives restarts.
 
-Rel.AI MCP is a self-contained Windows desktop app. It bundles its own runtime but does not embed `ngrok.exe` in the installer. During first-run setup, Rel.AI asks for explicit consent, downloads the exact pinned official ngrok archive, verifies its archive and executable hashes, version, publisher, and certificate issuer, then configures the agent automatically. There is nothing to install or configure manually — no Node.js, no npm, and no separate ngrok installer. A network connection is required for the first acquisition or a later repair.
+Rel.AI MCP is a self-contained Windows desktop app. It bundles its own runtime and a pinned, upstream-signed ngrok agent, so there is nothing to install manually — no Node.js, no npm, and no separate ngrok download. ngrok upgrades arrive through signed Rel.AI application updates.
 
 ## What you need first
 
@@ -21,12 +21,12 @@ The static domain is the part that matters for a permanent setup. A random tempo
 2. Choose whether to install **for the current user** or **for all users**. Current-user installation is the default and does not require administrator access. Choosing all users triggers a Windows administrator prompt when the installer is not already elevated.
 3. Review the installation folder, change it when needed, and click **Install**. The installer creates Start menu and desktop shortcuts.
 4. On the Finish page, leave **Run Rel.AI MCP** selected to open it immediately, or clear the checkbox and launch it later from the Start menu or desktop shortcut.
-5. The Rel.AI setup wizard appears on first run only. Paste your ngrok authtoken and static domain, pick a local port (`3333` by default), and approve the official ngrok component download.
-6. Save. Rel.AI downloads the pinned archive from ngrok, verifies it before execution, installs it into managed storage, writes its config, generates an approval token, starts the local server, and brings up the tunnel.
+5. The Rel.AI setup wizard appears on first run only. Paste your ngrok authtoken and static domain, and pick a local port (`3333` by default).
+6. Save. The app writes its config, generates an approval token, starts the local server, and brings up the tunnel.
 
 The desktop app creates `config.json` automatically. Skipping the dashboard onboarding leaves an empty but valid workspace configuration, so the app remains usable and workspaces can be added later. The `npm run init-config` command is only for repository/CLI development and is not required by the installed application.
 
-On first launch, after consent, the app downloads the pinned official ngrok archive into a temporary directory. It verifies the archive size and SHA-256, extracts exactly one expected executable, verifies the executable size, SHA-256, exact version, Authenticode publisher, and certificate issuer, and only then atomically installs it under `~/.rel-ai-mcp/managed-ngrok/`. Temporary files are removed. Later launches reuse the managed copy only when it still passes every check. A missing or invalid copy is never executed and is repaired through the same verified acquisition path. The agent does not self-update; Rel.AI updates the pinned manifest through application releases.
+On first launch the app copies its bundled ngrok agent into `~/.rel-ai-mcp/managed-ngrok/` and runs it from there. On later launches, Rel.AI compares that managed copy with the packaged release hash and restores it when they differ. The agent does not self-update; upgrades arrive with the next signed Rel.AI release.
 
 Every ordinary launch after this goes straight to the dashboard. The app lives in the system tray — closing a window leaves it running, and you quit it from the tray menu. The installed Windows app can also launch at sign-in in the background, starting the tray, local service, and public endpoint without opening the dashboard.
 

@@ -34,7 +34,6 @@ const deps = {
   openRecoverySetup: () => ({ ok: true }),
   startServer: () => ({ ok: true, started: true }),
   stopServer: () => { stopCalls += 1; return { ok: true }; },
-  prepareManagedNgrok: async options => { calls.push(['prepareManagedNgrok', options.allowDownload]); return { ok: true }; },
   launchConfiguredDesktop: async options => { restartCalls += 1; calls.push(['launch', options]); return { serverRunning: true }; },
   openSettingsWindow: () => ({ ok: true }),
   openDashboardWindow: () => ({ ok: true }),
@@ -57,11 +56,7 @@ const deps = {
   exportDiagnosticState: report => ({ ok: true, report }),
   openDiagnosticsFolder: () => ({ ok: true }),
   fitWindowToContent: (window, options) => calls.push(['fit', window.id, options]),
-  saveLauncherConfig: config => {
-    const normalized = { ...config, ngrokAuthtoken: 'account-key', ngrokDownloadAccepted: config.ngrokDownloadAccepted === true };
-    calls.push(['save', normalized]);
-    return normalized;
-  }
+  saveLauncherConfig: config => calls.push(['save', config])
 };
 registerIpcHandlers(deps);
 
@@ -107,9 +102,8 @@ assert.equal(clipboardText, 'safetext');
 await handles.get('url:open-link')(eventFor(wizard), 'https://dashboard.ngrok.com/get-started/setup/windows');
 assert.equal(openedUrl, 'https://dashboard.ngrok.com/get-started/setup/windows');
 
-await handles.get('wizard:done')(eventFor(wizard), { port: 3333, restart: false, ngrokDownloadAccepted: true });
+await handles.get('wizard:done')(eventFor(wizard), { port: 3333, restart: false });
 assert.ok(calls.some(entry => entry[0] === 'save'));
-assert.ok(calls.some(entry => entry[0] === 'prepareManagedNgrok' && entry[1] === true));
 assert.ok(calls.some(entry => entry[0] === 'closeWizard'));
 assert.ok(calls.some(entry => entry[0] === 'launch' && entry[1].firstRun === true));
 

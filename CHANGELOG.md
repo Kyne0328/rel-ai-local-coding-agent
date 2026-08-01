@@ -49,13 +49,11 @@
 - **Serve generated OAuth styling as a static asset.** Authorization and error pages link `/public/oauth.css`, removing duplicated inline CSS and runtime palette imports.
 - **Keep release packaging lean.** The build-time manifest is not shipped as a backend resource; packaged verification requires the generated OAuth and Electron renderer styles instead.
 
-### Verified first-run ngrok acquisition and antivirus isolation
-- **Remove `ngrok.exe` from every Rel.AI application package.** The installer ships only a schema-v2 provenance manifest, reducing the package and preventing ngrok-specific signatures from being attributed to the Rel.AI installer.
-- **Require explicit acquisition consent.** First-run and recovery setup identify the official ngrok component, require user approval, stream progress, and preserve that decision for verified repairs without requiring a separate installer or manual configuration.
-- **Verify every byte before execution.** Rel.AI pins the immutable official archive URL, archive and executable sizes and SHA-256 values, exact version, Authenticode publisher, and certificate issuer; downloads use bounded retries and size limits, extraction rejects unexpected contents, and installation is atomic with rollback.
-- **Fail closed on missing, modified, or quarantined agents.** Existing managed bytes are reused only while complete verification passes. Invalid bytes are never executed and can be reacquired through the same consented path; ngrok self-update checks and remote management remain disabled.
-- **Exercise the real boundary in release automation.** Windows release validation downloads and verifies ngrok in a temporary directory, packaged verification rejects embedded copies, and the SBOM records the externally acquired component and archive provenance.
-- **Document component-level antivirus triage.** Rel.AI-owned artifacts and the separately acquired ngrok executable are scanned independently; generic upstream ngrok PUA/PUP labels follow vendor submission rather than concealment, exclusions, or evasion.
+### Bundled ngrok provenance and antivirus handling
+- **Keep the one-installer experience while making ngrok deterministic.** Rel.AI bundles reviewed ngrok 3.39.10, pins its exact size and SHA-256, validates the upstream Authenticode publisher and issuer, packages the provenance manifest, and records ngrok in the CycloneDX SBOM.
+- **Move ngrok upgrades into signed Rel.AI releases.** The writable managed copy is restored whenever it differs from the packaged hash; ngrok self-update checks and remote management are disabled so executable bytes cannot drift independently after installation.
+- **Make release signing fail closed.** The protected Windows workflow enables `forceCodeSigning` and separately verifies the installer, portable executable, unpacked Rel.AI executable, and packaged ngrok identity before publication.
+- **Document component-level antivirus triage.** Release candidates are scanned as separate Rel.AI and ngrok samples, Trojan classifications block publication pending investigation, and generic ngrok PUA/PUP results follow vendor false-positive submission instead of concealment or separate user downloads.
 
 ### Active-controller build safety
 - **Prevent development builds from deleting their own controller.** Electron records its live PID, executable, resource, application, and working-directory paths in a non-secret runtime marker; packaging and cleanup reject any target tree that contains those active files.
@@ -64,7 +62,7 @@
 - **Eliminate the combined-target executable rename race.** Release packaging creates `win-unpacked` once, validates it, then produces NSIS and portable artifacts sequentially with `--prepackaged`; parallel targets can no longer race to rename the same `electron.exe`.
 - **Tolerate transient Windows build-directory locks.** Guarded cleanup uses bounded `fs.rmSync` retries before failing with an actionable lock diagnostic; it never kills processes or bypasses active-controller protection.
 - **Stage release builds outside the VS Code workspace.** Electron Builder now works in an OS-temporary directory and atomically promotes completed artifacts into `dist`. A VS Code-held legacy `app.asar` is preserved, while the current unpacked application is published under `dist/unpacked-builds` and recorded in `dist/current-unpacked.json` instead of failing the release.
-- **Make package verification follow the promoted build.** Fuse, layout, connector-acceptance, signature, and ngrok acquisition-boundary checks resolve the authoritative `current-unpacked.json` marker rather than validating a stale fixed directory.
+- **Make package verification follow the promoted build.** Fuse, layout, connector-acceptance, signature, and bundled-ngrok checks resolve the authoritative `current-unpacked.json` marker rather than validating a stale fixed directory.
 - **Block production-identity installer lifecycle work while Rel.AI is active.** Install, update, uninstall, and replacement operations are reserved for an explicitly stopped controller or an isolated release machine.
 - **Isolate development and test servers from the production connector profile.** Programmatic servers on an ephemeral port ignore saved launch state and cannot rewrite `connection.json`, preventing validation runs from repointing the active app or ChatGPT endpoint.
 

@@ -17,33 +17,6 @@ const outputs = [
 ];
 const check = process.argv.includes('--check');
 const failures = [];
-const RETRYABLE_WRITE_CODES = new Set(['EACCES', 'EBUSY', 'EPERM', 'UNKNOWN']);
-
-function sleep(milliseconds) {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
-}
-
-function writeGeneratedFile(target, content) {
-  const current = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : '';
-  if (current === content) return;
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  const temporary = path.join(path.dirname(target), `.${path.basename(target)}.${process.pid}.${Date.now()}.tmp`);
-  fs.writeFileSync(temporary, content, { encoding: 'utf8', flag: 'wx' });
-  try {
-    for (let attempt = 1; attempt <= 6; attempt += 1) {
-      try {
-        fs.renameSync(temporary, target);
-        return;
-      } catch (error) {
-        if (!RETRYABLE_WRITE_CODES.has(error?.code) || attempt === 6) throw error;
-        sleep(attempt * 100);
-      }
-    }
-  } finally {
-    fs.rmSync(temporary, { force: true });
-  }
-}
-
 for (const [relativePath, content] of outputs) {
   const target = path.join(root, relativePath);
   if (check) {
@@ -51,7 +24,8 @@ for (const [relativePath, content] of outputs) {
     if (current !== content) failures.push(relativePath);
     continue;
   }
-  writeGeneratedFile(target, content);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, content);
   console.log(`Generated ${relativePath}`);
 }
 if (failures.length) {

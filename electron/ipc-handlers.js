@@ -7,7 +7,7 @@ function registerIpcHandlers(deps) {
     ipcMain, BrowserWindow, clipboard, shell,
     getWizardWindow, closeWizard, getFallbackWindow, getDashboardWindow,
     getRecoveryConfig, openRecoverySetup, startServer, stopServer,
-    prepareManagedNgrok, launchConfiguredDesktop, openSettingsWindow, openDashboardWindow,
+    launchConfiguredDesktop, openSettingsWindow, openDashboardWindow,
     getDesktopSettings, saveDesktopSettings, replaceApprovalToken,
     getUpdateStatus, checkForUpdates, downloadUpdate, installUpdate,
     getLifecycleStatus, setLaunchAtLogin,
@@ -18,12 +18,7 @@ function registerIpcHandlers(deps) {
   const { isSenderWindow, windowOnly, allowedWindows } = createWindowGuards(BrowserWindow);
 
   ipcMain.handle('wizard:done', (event, config) => windowOnly(event, getWizardWindow, 'Setup completion', async () => {
-    const normalized = deps.saveLauncherConfig(config);
-    await prepareManagedNgrok({
-      authtoken: normalized.ngrokAuthtoken,
-      allowDownload: normalized.ngrokDownloadAccepted === true,
-      onLog: message => event.sender.send('server:log', { source: 'ngrok-acquisition', message: String(message) })
-    });
+    deps.saveLauncherConfig(config);
     closeWizard({ returnToFallback: false });
     await launchConfiguredDesktop({ restart: config?.restart === true, firstRun: config?.restart !== true });
     return { ok: true };

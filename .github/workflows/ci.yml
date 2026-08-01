@@ -44,8 +44,11 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm ci
         working-directory: electron
-      - name: Verify ngrok acquisition manifest
-        run: npm run verify:ngrok
+      - name: Fetch bundled ngrok seed binary
+        shell: pwsh
+        env:
+          NGROK_PLATFORMS: win32
+        run: pwsh scripts/fetch-ngrok.ps1
       - name: Verify generated color assets
         run: npm run verify:color-tokens
       - name: Build unpacked Windows application

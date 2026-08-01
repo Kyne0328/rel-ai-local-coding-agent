@@ -19,7 +19,7 @@ assertSafeControllerOperation({ operation: 'package', targetPaths: [target] });
 assertSafeBuilderArgs(options.builderArgs);
 
 const generateColorTokens = path.join(root, 'scripts', 'generate-color-tokens.mjs');
-const verifyNgrokManifest = path.join(root, 'scripts', 'verify-ngrok-seed.mjs');
+const verifyNgrok = path.join(root, 'scripts', 'verify-ngrok-seed.mjs');
 const tailwindCli = packageBin(path.join(root, 'node_modules', '@tailwindcss', 'cli'), 'tailwindcss');
 const electronBuilderCli = packageBin(path.join(electronRoot, 'node_modules', 'electron-builder'), 'electron-builder');
 
@@ -33,7 +33,7 @@ runNode('dashboard CSS build', tailwindCli, [
   '-o', path.join(root, 'public', 'dashboard.css'),
   '--minify'
 ]);
-runNode('ngrok acquisition manifest verification', verifyNgrokManifest);
+runNode('ngrok seed verification', verifyNgrok);
 
 if (mode === 'unpacked') {
   runNode('Electron unpacked packaging', electronBuilderCli, [

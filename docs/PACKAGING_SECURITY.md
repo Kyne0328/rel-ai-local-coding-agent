@@ -1,6 +1,6 @@
 # Packaging Security Policy
 
-Rel AI MCP separates runtime dependency security from release-tool dependency security and treats the externally acquired tunnel agent as an explicit, pinned runtime component.
+Rel AI MCP separates runtime dependency security from release-tool dependency security and treats the bundled tunnel agent as an explicit release component.
 
 ## Required gates
 
@@ -11,13 +11,13 @@ Rel AI MCP separates runtime dependency security from release-tool dependency se
 - Published Windows builds must use `forceCodeSigning`; release publication fails instead of producing an unsigned candidate.
 - The packaged application executable, installer, and portable executable must have valid Authenticode signatures.
 
-## Verified ngrok acquisition policy
+## Bundled ngrok policy
 
-Rel.AI keeps a one-installer user experience without embedding ngrok in that installer. The package contains only a reviewed acquisition manifest. First-run setup requires explicit user consent before any network request, and no downloaded executable is run before verification.
+Rel.AI keeps a one-installer user experience: ngrok remains embedded in the application package. It is not hidden, renamed to evade detection, packed again, or downloaded silently after installation.
 
-`vendor/ngrok/manifest.json` pins the exact ngrok version, immutable official archive URL, archive size and SHA-256, executable size and SHA-256, and Windows Authenticode publisher and certificate issuer. Runtime acquisition downloads to an isolated temporary directory, enforces a strict byte limit and bounded retries, rejects unexpected archive contents, verifies every pinned property, and atomically installs the executable into Rel.AI managed storage. Packaging and release verification fail if `ngrok.exe` appears inside the application package.
+`vendor/ngrok/manifest.json` pins the reviewed ngrok version, distribution URL, exact size, and SHA-256. Windows release preparation also verifies the upstream Authenticode publisher and certificate issuer. The same manifest is packaged with the application, checked against the packaged binary, and represented in the CycloneDX SBOM.
 
-The managed copy is reused only while it continues to pass the complete executable verification. Missing or invalid bytes are not executed and can be reacquired only after recorded consent. ngrok update checks and remote management remain disabled. The exact externally acquired component is represented in the CycloneDX SBOM.
+The writable managed copy is replaced whenever it differs from the packaged hash. ngrok update checks and remote management are disabled, so executable bytes change only through a signed Rel.AI release. This deterministic component lifecycle improves incident analysis and antivirus false-positive submissions without requiring users to install ngrok separately.
 
 ## Antivirus classification
 

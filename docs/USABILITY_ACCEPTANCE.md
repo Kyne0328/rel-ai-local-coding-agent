@@ -11,9 +11,8 @@ The automated Windows gate does not run an installer or executable. It performs 
 3. builds an unpacked Windows application with publishing disabled;
 4. verifies the packaged executable and ASAR are present;
 5. verifies packaged server, tool-registry, color-token, configuration, CLI, dashboard, changelog, and package metadata files;
-6. verifies the schema-v2 ngrok acquisition manifest is packaged and `ngrok.exe` is absent from the application;
-7. confirms the packaged version matches the repository version; and
-8. separately exercises consent, reuse, tamper repair, archive verification, and release-time end-to-end acquisition.
+6. verifies the bundled Windows ngrok seed exists and is nonempty; and
+7. confirms the packaged version matches the repository version.
 
 Run the same checks locally:
 

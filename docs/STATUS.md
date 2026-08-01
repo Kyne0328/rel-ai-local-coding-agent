@@ -27,13 +27,12 @@ Version `0.23.0` remains unreleased. The consolidated `main` candidate now conta
 - Strict 0.23.0 package-size baseline with exact canonical filenames, a 3% tolerance, one locale, zero source maps, zero source CSS, and zero packaged TypeScript files.
 - Executable observability benchmark: 18/18 backend and Electron renderer metrics passed, with incomplete runs failing closed.
 - Exact updater artifact verification binds `latest.yml` SHA-512 metadata and `SHA256SUMS.txt` to the published installer basename and bytes.
-- CycloneDX SBOM generation, including externally acquired ngrok archive and executable provenance.
-- Manifest-only Electron packaging with explicit first-run ngrok consent, verified acquisition, atomic repair, and rejection of embedded `ngrok.exe`.
+- CycloneDX SBOM generation.
 
 ### Publication and manual gates remaining
 
 - Local artifacts are unsigned because protected Windows signing credentials are not available in this environment. Publication must run through the protected release workflow and produce valid Authenticode signatures.
-- Installer install/uninstall, first-run consent/download rendering, production-identity startup, real ngrok publication, antivirus handling of the separately acquired agent, logged-in ChatGPT app selection, and upgrade behavior remain manual checks on a disposable Windows machine.
+- Installer install/uninstall, first-run desktop renderer, production-identity startup, real ngrok publication, logged-in ChatGPT app selection, and upgrade behavior remain manual checks on a disposable Windows machine.
 - The release tag and GitHub publication have not been created.
 - Electron packaging development dependencies currently report one advisory across 16 transitive build-only packages. A fail-closed policy accepts only the reviewed advisory and package set through 2026-08-31; any new, runtime-reachable, critical, or expired finding blocks publication. Shipped production dependencies report zero advisories.
 

@@ -6,8 +6,7 @@ const currentConfig = {
   port: 3333,
   token: 'old-token',
   ngrokDomain: 'example.ngrok-free.dev',
-  ngrokAuthtoken: 'ngrok-key',
-  ngrokDownloadAccepted: true
+  ngrokAuthtoken: 'ngrok-key'
 };
 
 function createHarness(options = {}) {

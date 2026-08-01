@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { listPackage } from '@electron/asar';
@@ -47,7 +48,8 @@ const requiredFiles = [
   'resources/public/dashboard.js',
   'resources/package.json',
   'resources/CHANGELOG.md',
-  'resources/bin/ngrok/manifest.json'
+  'resources/bin/ngrok/manifest.json',
+  'resources/bin/ngrok/win32/ngrok.exe'
 ];
 
 for (const relativePath of requiredFiles) {
@@ -80,11 +82,9 @@ const packagedOpenTelemetryPackages = fs.readdirSync(packagedOpenTelemetryDirect
 assert.deepEqual(packagedOpenTelemetryPackages, rootOpenTelemetryPackages, 'Packaged application must include the complete OpenTelemetry runtime dependency scope.');
 const ngrokManifest = JSON.parse(fs.readFileSync(path.join(packageDirectory, 'resources', 'bin', 'ngrok', 'manifest.json'), 'utf8'));
 const ngrokSpec = ngrokManifest.platforms.win32;
-assert.equal(ngrokManifest.schemaVersion, 2, 'Packaged ngrok acquisition manifest must use schema v2.');
-assert.equal(ngrokManifest.delivery, 'verified-first-run-download', 'Packaged ngrok delivery policy must require verified first-run acquisition.');
-assert.equal(ngrokSpec.executable.file, 'ngrok.exe', 'Packaged ngrok manifest must identify the managed executable.');
-assert.match(ngrokSpec.archive.url, /^https:\/\/bin\.ngrok\.com\//, 'Packaged ngrok archive URL must use the reviewed distribution host.');
-assert.equal(fs.existsSync(path.join(packageDirectory, 'resources', 'bin', 'ngrok', 'win32', 'ngrok.exe')), false, 'The application package must not embed ngrok.exe.');
+const packagedNgrok = fs.readFileSync(path.join(packageDirectory, 'resources', 'bin', 'ngrok', 'win32', ngrokSpec.file));
+assert.equal(packagedNgrok.length, ngrokSpec.size, 'Packaged ngrok size does not match the provenance manifest.');
+assert.equal(crypto.createHash('sha256').update(packagedNgrok).digest('hex'), ngrokSpec.sha256, 'Packaged ngrok SHA-256 does not match the provenance manifest.');
 assert.equal(fs.existsSync(path.join(packageDirectory, 'resources', 'src', 'ui', 'styles', 'app.css')), false, 'Compiled dashboard CSS must be packaged without the source Tailwind stylesheet.');
 const packagedTypeScript = collectFiles(path.join(packageDirectory, 'resources', 'node_modules')).filter(file => /\.(?:ts|cts|mts)$/i.test(file));
 assert.deepEqual(packagedTypeScript, [], 'Packaged runtime dependencies must exclude TypeScript sources and declarations.');
