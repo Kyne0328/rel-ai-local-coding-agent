@@ -45,6 +45,7 @@ app.whenReady().then(async () => {
     const rows = [...document.querySelectorAll('.task-row')];
     const progress = [...document.querySelectorAll('progress.task-progress-track')];
     const indeterminate = [...document.querySelectorAll('.task-progress.indeterminate')];
+    const terminalStatic = [...document.querySelectorAll('.task-progress.static.terminal')];
     return {
       title: document.title,
       rowCount: rows.length,
@@ -53,6 +54,8 @@ app.whenReady().then(async () => {
       determinateValid: progress.every(item => item.max === 100 && item.hasAttribute('value') && item.getAttribute('aria-label')),
       indeterminateCount: indeterminate.length,
       indeterminateValid: indeterminate.every(item => Boolean(item.getAttribute('aria-label')) && !item.hasAttribute('aria-valuenow') && item.querySelector('.task-progress-track')?.getAttribute('aria-hidden') === 'true'),
+      terminalStaticCount: terminalStatic.length,
+      terminalNoIndeterminate: terminalStatic.every(item => !item.classList.contains('indeterminate') && !item.querySelector('.task-progress-track')),
       unknownStatusCount: rows.filter(row => /unknown/i.test(row.textContent)).length,
       longTitleAccessible: rows.some(row => row.textContent.includes('Extremely long task title') && (row.getAttribute('aria-label') || row.getAttribute('title') || row.textContent.length > 80)),
       reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,

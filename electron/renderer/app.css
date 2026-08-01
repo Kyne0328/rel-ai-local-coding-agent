@@ -139,7 +139,7 @@ input:focus { border-color: var(--ui-action-primary); box-shadow: 0 0 0 3px var(
 }
 .status-badge::before { content: ""; width: 8px; height: 8px; border-radius: 999px; background: var(--ui-status-neutral-foreground); }
 .status-badge.ready::before { background: var(--ui-status-success-foreground); }
-.status-badge.connecting::before { background: var(--ui-status-warning-foreground); }
+.status-badge.connecting::before { background: var(--ui-status-info-foreground); }
 .status-badge.working::before { background: var(--ui-status-info-foreground); animation: activityPulse 1.35s ease-in-out infinite; }
 .status-badge.waiting::before, .status-badge.settling::before { background: var(--ui-status-info-foreground); }
 .status-badge.failed::before { background: var(--ui-status-danger-foreground); }
@@ -204,7 +204,7 @@ input:focus { border-color: var(--ui-action-primary); box-shadow: 0 0 0 3px var(
 .fallback-log-wrap p { margin: var(--space-3) 0 0; color: var(--ui-text-secondary); font-size: var(--font-12); }
 .fallback-log-wrap pre { max-height: 220px; margin: 0; padding: var(--space-3); overflow: auto; border: 1px solid var(--ui-border-control); border-radius: var(--radius-md); color: var(--ui-text-secondary); background: var(--ui-surface-input); font: var(--font-11)/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 
-.status-hero[data-state="working"], .status-hero[data-state="waiting"], .status-hero[data-state="settling"] { border-color: var(--ui-status-info-border); }
+.status-hero[data-state="connecting"], .status-hero[data-state="working"], .status-hero[data-state="waiting"], .status-hero[data-state="settling"] { border-color: var(--ui-status-info-border); }
 .status-hero[data-state="working"]::after { background: radial-gradient(circle, var(--ui-hero-accent-strong), transparent 68%); }
 .task-meta {
   margin-top: var(--space-3);
@@ -237,7 +237,7 @@ input:focus { border-color: var(--ui-action-primary); box-shadow: 0 0 0 3px var(
 .status-health-card:last-child { border-right: 0; }
 .status-health-card .health-dot { grid-row: 1 / 3; width: 10px; height: 10px; border-radius: 50%; background: var(--ui-text-tertiary); }
 .status-health-card.ready .health-dot { background: var(--ui-status-success-foreground); }
-.status-health-card.connecting .health-dot { background: var(--ui-status-warning-foreground); }
+.status-health-card.connecting .health-dot { background: var(--ui-status-info-foreground); }
 .status-health-card.failed .health-dot { background: var(--ui-status-danger-foreground); }
 .health-label { color: var(--ui-text-secondary); font-size: var(--font-11); font-weight: var(--weight-bold); letter-spacing: .06em; text-transform: uppercase; }
 .status-health-card strong { display: block; margin-top: 2px; }

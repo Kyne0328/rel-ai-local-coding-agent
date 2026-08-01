@@ -1,8 +1,9 @@
 import { fetchJson, postJson } from '../../api.js';
 import { toast } from '../../components/toast.js';
+import { pillHtml } from '../../components/pill.js';
 import { copyText } from '../../clipboard.js';
 import { get as getStore } from '../../store.js';
-import { connectionLayerViews, connectionStateFor, connectionSummary } from '../../connection-state.js';
+import { connectionLayerViews, connectionStateFor, connectionSummary, isMcpAuthenticationReady } from '../../connection-state.js';
 import { mountDesktopConnection } from './desktop-connection.js';
 import { esc as escapeHtml } from '../../utils.js';
 
@@ -23,7 +24,8 @@ async function loadConnector(container) {
 
   const dashboardState = getStore();
   const mcpConnection = payload.mcpConnection || dashboardState.mcpConnection || {};
-  const state = connectionStateFor({ ...dashboardState, mcpConnection });
+  const mcpAuthentication = payload.mcpAuthentication || dashboardState.mcpAuthentication || {};
+  const state = connectionStateFor({ ...dashboardState, mcpConnection, mcpAuthentication });
   const section = container.querySelector('.section');
   section.append(
     summaryCard(payload, state),
@@ -43,7 +45,7 @@ function summaryCard(payload, state) {
   const summary = connectionSummary(state);
   card.className = `card connection-summary-card ${summary.tone}`;
   card.innerHTML = `
-    <div class="card-head"><h3>ChatGPT connection</h3><span class="status-pill ${summary.tone}">${escapeHtml(summary.label)}</span></div>
+    <div class="card-head"><h3>ChatGPT connection</h3>${pillHtml(summary.label, summary.tone)}</div>
     <div class="card-body connection-stack">
       <div>
         <h3 class="connection-summary-title">${escapeHtml(summary.title)}</h3>
@@ -132,7 +134,7 @@ function mcpRecoveryButtonHtml(state) {
 
 function recoveryNoticeHtml(state, mcpConnection = {}) {
   const status = state.mcpClient?.status || '';
-  if (state.chatgptReadiness?.status === 'authentication_required' || status === 'reauthentication_required') {
+  if (!isMcpAuthenticationReady(state) && (state.chatgptReadiness?.status === 'authentication_required' || status === 'reauthentication_required')) {
     return `
       <div class="connection-notice warn connection-auth-recovery">
         <strong>Reconnect the existing app from ChatGPT Web.</strong>
@@ -151,14 +153,20 @@ function recoveryNoticeHtml(state, mcpConnection = {}) {
   if (status === 'degraded' || mcpConnection.manualRecoveryRequired) {
     return '<div class="connection-notice bad"><strong>ChatGPT action is required.</strong><br>Open ChatGPT Settings &gt; Apps, refresh the Rel.AI actions, approve changed actions if prompted, then reconnect the existing app.</div>';
   }
-  if (status === 'ready') {
-    return '<div class="connection-notice">The endpoint is healthy and approved. It is waiting for ChatGPT to send an MCP request.</div>';
+  if (state.chatgptReadiness?.status === 'bearer_authorized' && state.chatgptReadiness?.oauthApprovalRequired === true) {
+    return '<div class="connection-notice warn"><strong>Bearer access is working.</strong><br>OAuth connections still require approval with the current approval token.</div>';
+  }
+  if (status === 'no_requests' || status === 'ready') {
+    return '<div class="connection-notice">Authentication is valid and the endpoint is ready. No authorized MCP request has been received since startup.</div>';
+  }
+  if (status === 'idle') {
+    return '<div class="connection-notice">Authentication is valid and the endpoint is idle. The last successful request is outside the recent-activity window.</div>';
   }
   return '';
 }
 
 function setupCard(payload, state) {
-  const ready = state.chatgptReadiness?.status === 'ready';
+  const ready = isMcpAuthenticationReady(state);
   const extraSteps = Array.isArray(payload.nextSteps) ? payload.nextSteps : [];
   const steps = `
     <div class="setup-steps">
@@ -198,8 +206,8 @@ function technicalDetailsCard(payload, mcpConnection = {}) {
     <div class="card-body connection-stack">
       <div class="connection-facts">
         <div class="connection-fact"><span class="connection-fact-label">Authentication</span><span>${escapeHtml(payload.chatgptAuthMode || 'OAuth')}</span></div>
-        <div class="connection-fact"><span class="connection-fact-label">MCP state</span><span>${escapeHtml(mcpConnection.status || 'unknown')}</span></div>
-        <div class="connection-fact"><span class="connection-fact-label">Connected clients</span><span>${escapeHtml(String(mcpConnection.connectedClientCount || 0))}</span></div>
+        <div class="connection-fact"><span class="connection-fact-label">MCP activity</span><span>${escapeHtml(mcpConnection.activityStatus || mcpConnection.status || 'unknown')}</span></div>
+        <div class="connection-fact"><span class="connection-fact-label">Active requests</span><span>${escapeHtml(String(mcpConnection.activeRequestCount || 0))}</span></div>
         <div class="connection-fact"><span class="connection-fact-label">Visible tools</span><span>${escapeHtml(String(mcpConnection.externallyVisibleToolCount || 0))}</span></div>
         <div class="connection-fact"><span class="connection-fact-label">Tool manifest</span><code>${escapeHtml(mcpConnection.toolManifestVersion || '—')}</code></div>
         <div class="connection-fact"><span class="connection-fact-label">Health URL</span><code>${escapeHtml(payload.chatgptHealthUrl || 'Waiting for a permanent HTTPS endpoint')}</code></div>

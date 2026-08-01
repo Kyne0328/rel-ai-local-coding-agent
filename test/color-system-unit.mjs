@@ -12,7 +12,8 @@ import {
   renderColorReferenceSvg,
   contrastRatio
 } from '../src/ui/colorTokens.mjs';
-import { pillHtml } from '../src/ui/components/pill.js';
+import { pillClass, pillHtml } from '../src/ui/components/pill.js';
+import { statusDotClass, statusTone } from '../src/ui/status-tone.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -130,8 +131,10 @@ assert.match(dashboardCss, /button:disabled[\s\S]*--ui-text-disabled/);
 
 const electronCss = read('electron/renderer/app.css');
 assert.match(electronCss, /button\.primary[\s\S]*--ui-action-primary-foreground/);
+assert.match(electronCss, /status-badge\.connecting::before[^}]*--ui-status-info-foreground/);
 assert.match(electronCss, /status-badge\.working::before[\s\S]*--ui-status-info-foreground/);
 assert.match(electronCss, /status-badge\.waiting::before[\s\S]*--ui-status-info-foreground/);
+assert.match(electronCss, /status-health-card\.connecting \.health-dot[^}]*--ui-status-info-foreground/);
 
 for (const relativePath of ['electron/renderer/status.html', 'electron/renderer/wizard.html']) {
   const html = read(relativePath);
@@ -155,8 +158,46 @@ assert.match(startupBackground, /STARTUP_BACKGROUND_COLOR\s*=\s*'#[0-9a-f]{6}'/i
 assert.doesNotMatch(startupBackground, /colorTokens|getTheme|require\s*\(/);
 
 assert.match(read('src/ui/components/toast.js'), /toast-marker/);
-assert.match(read('src/ui/components/pill.js'), /information: \['run'[\s\S]*'wait'/);
-assert.match(pillHtml('succeeded'), /class="status-pill ok"/, 'succeeded activity must use the success tone');
-assert.match(pillHtml('succeeded'), /\(success\)/, 'succeeded activity must expose the success accessibility label');
 
-console.log('ESM color-system hard-cutover, contrast, status, and raw-color checks passed.');
+const statusExpectations = Object.freeze({
+  danger: [
+    'blocked', 'validation_failed', 'failed', 'error', 'unavailable', 'attention', 'needs attention'
+  ],
+  warning: [
+    'waiting_for_approval', 'approval', 'input_required', 'degraded', 'paused', 'stale',
+    'capability_mismatch', 'orphaned', 'not configured', 'warning', 'unsupported'
+  ],
+  information: [
+    'queued', 'planning', 'running', 'validating', 'working', 'active', 'starting', 'stopping',
+    'connecting', 'reconnecting', 'open', 'waiting', 'settling', 'info', 'live', 'checking',
+    'downloading', 'installing'
+  ],
+  success: [
+    'completed', 'succeeded', 'ready', 'passed', 'available', 'connected', 'exited', 'downloaded', 'up_to_date'
+  ],
+  neutral: [
+    'cancelled', 'stopped', 'idle', 'inactive', 'expired', 'unknown', 'offline', 'disabled', 'disconnected'
+  ]
+});
+const pillClasses = { danger: 'bad', warning: 'warn', information: 'working', success: 'ok', neutral: '' };
+const dotClasses = { danger: 'bad', warning: 'warn', information: 'info', success: '', neutral: 'neutral' };
+for (const [tone, statuses] of Object.entries(statusExpectations)) {
+  for (const status of statuses) {
+    assert.equal(statusTone(status), tone, `${status} must use the ${tone} semantic tone`);
+    assert.equal(pillClass(status), pillClasses[tone], `${status} must use the expected pill class`);
+    assert.equal(statusDotClass(status), dotClasses[tone], `${status} must use the expected dot class`);
+    assert.match(pillHtml(status), new RegExp(`\\(${tone}\\)`), `${status} must expose its semantic tone to assistive technology`);
+  }
+}
+
+assert.match(dashboardCss, /\.diagnostic-finding\.warning[^}]*--ui-status-warning-foreground/);
+assert.match(dashboardCss, /\.diagnostic-finding\.error[^}]*--ui-status-danger-foreground/);
+assert.match(dashboardCss, /\.diagnostic-log-row\.info[^}]*--ui-status-info-foreground/);
+assert.match(dashboardCss, /\.diagnostic-log-row\.warning[^}]*--ui-status-warning-foreground/);
+assert.match(dashboardCss, /\.diagnostic-log-row\.error[^}]*--ui-status-danger-foreground/);
+assert.match(dashboardCss, /\.dot\.neutral[^}]*--ui-status-neutral-foreground/);
+assert.match(dashboardCss, /\.connection-summary-card\.working[^}]*--ui-status-info-foreground/);
+assert.match(dashboardCss, /\.connection-path-step\.working \.connection-layer-dot[^}]*--ui-status-info-foreground/);
+assert.match(dashboardCss, /\.connection-layer-state\.working[^}]*--ui-status-info-foreground/);
+
+console.log('ESM color-system hard-cutover, contrast, exhaustive status-tone mapping, and raw-color checks passed.');

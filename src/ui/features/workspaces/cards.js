@@ -114,7 +114,6 @@ function workspaceCardView(workspace, health) {
     aliasAttr: esc(workspace.alias || ''),
     path: workspace.path || '',
     statusLabel: healthWarning ? 'Needs attention' : active ? 'Active' : 'Ready',
-    statusTone: healthWarning ? 'bad' : active ? 'warn' : 'ok',
     healthWarning,
     available,
     operational,
@@ -138,7 +137,7 @@ function listValue(value) {
 }
 
 function workspaceStatusPill(view) {
-  return `<span class="status-pill ${view.statusTone}">${esc(view.statusLabel)}<span class="sr-only"> (${view.statusTone})</span></span>`;
+  return pillHtml(view.statusLabel);
 }
 
 function workspaceHealthHtml(view) {

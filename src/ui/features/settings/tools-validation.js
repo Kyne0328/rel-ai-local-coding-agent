@@ -2,6 +2,7 @@ import { get as getStore } from '../../store.js';
 import { markUnsaved } from '../../interaction-safety.js';
 import { requestDashboardRefresh } from '../../api.js';
 import { esc as escapeHtml } from '../../utils.js';
+import { pillHtml } from '../../components/pill.js';
 import {
   loadSettingsConfig,
   saveSettings,
@@ -82,7 +83,7 @@ function workspaceRow(workspace) {
   const state = commands.length ? `${commands.length} command${commands.length === 1 ? '' : 's'}` : 'Not configured';
   return `<div class="settings-validation-row">
     <div><strong>${escapeHtml(workspace.alias || 'workspace')}</strong><span>${escapeHtml(workspace.path || '')}</span></div>
-    <span class="status-pill ${commands.length ? 'ok' : 'warn'}">${escapeHtml(state)}</span>
+    ${pillHtml(state, commands.length ? 'ok' : 'warn')}
   </div>`;
 }
 

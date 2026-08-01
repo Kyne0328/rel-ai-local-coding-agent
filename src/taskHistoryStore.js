@@ -278,6 +278,7 @@ function compactEvent(event) {
 function publicSession(session) {
   if (!session || typeof session !== 'object') return session;
   const { version, ...value } = sanitizeTaskRecord(session);
+  const terminal = isTerminalTaskStatus(value.status);
   return {
     ...value,
     taskId: value.taskId || value.id,
@@ -287,6 +288,8 @@ function publicSession(session) {
     toolCallCount: Number(value.toolCallCount ?? value.calls ?? 0),
     successfulToolCallCount: Number(value.successfulToolCallCount ?? Math.max(0, Number(value.calls || 0) - Number(value.failures || 0))),
     failedToolCallCount: Number(value.failedToolCallCount ?? value.failures ?? 0),
+    activeCalls: terminal ? 0 : Number(value.activeCalls || 0),
+    currentOperations: terminal ? [] : Array.isArray(value.currentOperations) ? value.currentOperations : [],
     currentStage: value.currentStage || '',
     currentActivity: value.currentActivity || value.operation || ''
   };

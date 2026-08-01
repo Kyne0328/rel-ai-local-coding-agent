@@ -5,6 +5,7 @@ import path from 'node:path';
 
 import * as dashboardSessions from "../src/http/dashboardSessions.js";
 import { beginConnectorToolCall, resetToolActivity } from "../src/toolActivity.js";
+import { mcpConnectionManager } from '../src/mcp/connectionManager.js';
 const dashboardSource = fs.readFileSync(new URL('../src/http/dashboard.js', import.meta.url), 'utf8');
 const eventClientSource = fs.readFileSync(new URL('../src/ui/events.js', import.meta.url), 'utf8');
 const dashboardClientSource = fs.readFileSync(new URL('../public/dashboard.js', import.meta.url), 'utf8');
@@ -27,6 +28,8 @@ assert.doesNotMatch(dashboardClientSource, /configureLiveRefresh|dashboardRefres
 assert.doesNotMatch(connectionStateSource, /polling:/);
 
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-dashboard-events-'));
+const previousConfigPath = process.env.REL_AI_MCP_CONFIG;
+const previousStateDir = process.env.REL_AI_MCP_STATE_DIR;
 const configPath = path.join(sandbox, 'config.json');
 const auditPath = path.join(sandbox, 'audit.jsonl');
 const token = 'dashboard-live-events-token';
@@ -144,13 +147,38 @@ try {
   assert.equal(desktopUpdated.desktopStatus?.mcpUrl, 'https://example.ngrok-free.dev/mcp');
   assert.equal(desktopUpdated.connectionState?.publicEndpoint?.status, 'available');
   assert.equal(desktopUpdated.connectionState?.chatgptReadiness?.status, 'ready');
+  assert.equal(desktopUpdated.mcpConnection?.activityStatus, 'no_requests');
+  assert.equal(desktopUpdated.mcpAuthentication?.status, 'awaiting_authentication');
   assert.ok(desktopUpdated.snapshot?.sequence > updated.snapshot?.sequence);
+
+  const requestId = mcpConnectionManager.beginRequest({
+    principal: 'dashboard-live-events-client',
+    method: 'tools/list',
+    authMode: 'static_bearer'
+  });
+  const activeRequest = await stream.nextDashboardEvent();
+  assert.equal(activeRequest.mcpConnection?.activityStatus, 'active');
+  assert.equal(activeRequest.mcpConnection?.activeRequestCount, 1);
+  assert.equal(activeRequest.mcpAuthentication?.status, 'bearer_authorized');
+  assert.ok(activeRequest.snapshot?.sequence > desktopUpdated.snapshot?.sequence);
+
+  mcpConnectionManager.finishRequest(requestId, { method: 'tools/list', ok: true });
+  const recentRequest = await stream.nextDashboardEvent();
+  assert.equal(recentRequest.mcpConnection?.activityStatus, 'recent');
+  assert.equal(recentRequest.mcpConnection?.activeRequestCount, 0);
+  assert.equal(recentRequest.mcpAuthentication?.status, 'bearer_authorized');
+  assert.equal(recentRequest.mcpAuthentication?.authMode, 'static_bearer');
+  assert.ok(recentRequest.snapshot?.sequence > activeRequest.snapshot?.sequence);
 } finally {
   controller.abort();
   await responseReader?.cancel().catch(() => {});
   resetToolActivity();
   server.closeAllConnections?.();
   await closeServer(server);
+  if (previousConfigPath == null) delete process.env.REL_AI_MCP_CONFIG;
+  else process.env.REL_AI_MCP_CONFIG = previousConfigPath;
+  if (previousStateDir == null) delete process.env.REL_AI_MCP_STATE_DIR;
+  else process.env.REL_AI_MCP_STATE_DIR = previousStateDir;
   fs.rmSync(sandbox, { recursive: true, force: true });
 }
 

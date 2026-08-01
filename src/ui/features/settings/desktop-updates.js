@@ -1,4 +1,5 @@
 import { toast } from '../../components/toast.js';
+import { pillHtml } from '../../components/pill.js';
 import { panel } from './shared.js';
 import { esc as escapeHtml } from '../../utils.js';
 
@@ -48,7 +49,7 @@ function renderStatus(container, status = {}) {
         <span class="application-update-label">Installed version</span>
         <strong>${currentVersion}</strong>
       </div>
-      <span class="status-pill ${view.tone}">${escapeHtml(view.label)}</span>
+      ${pillHtml(view.label, view.tone)}
     </div>
     <p class="muted application-update-copy">${escapeHtml(view.description)}</p>
     ${progressHtml(state, status.progress)}
@@ -69,7 +70,7 @@ function updateView(state, status, currentVersion, availableVersion) {
       description: status.supportReason || 'This build must be updated manually from GitHub Releases.'
     };
   }
-  if (state === 'checking') return { label: 'Checking', tone: 'warn', description: 'Checking GitHub Releases for a newer installed-app version.' };
+  if (state === 'checking') return { label: 'Checking', tone: 'working', description: 'Checking GitHub Releases for a newer installed-app version.' };
   if (state === 'up_to_date') {
     return {
       label: 'Up to date', tone: 'ok',
@@ -87,7 +88,7 @@ function updateView(state, status, currentVersion, availableVersion) {
   }
   if (state === 'downloading') {
     return {
-      label: 'Downloading', tone: 'warn',
+      label: 'Downloading', tone: 'working',
       description: `Downloading ${availableVersion || 'the update'}. Rel.AI remains available while the installer is prepared.`
     };
   }
@@ -98,7 +99,7 @@ function updateView(state, status, currentVersion, availableVersion) {
       action: { id: 'install', label: 'Restart and install', className: 'primary' }
     };
   }
-  if (state === 'installing') return { label: 'Installing', tone: 'warn', description: 'Rel.AI is restarting to install the downloaded update.' };
+  if (state === 'installing') return { label: 'Installing', tone: 'working', description: 'Rel.AI is restarting to install the downloaded update.' };
   if (state === 'error') {
     return {
       label: 'Update failed', tone: 'bad',
@@ -153,7 +154,7 @@ async function runAction(container, button, action) {
 
 function renderManual(container, reason) {
   container.innerHTML = `
-    <div class="application-update-summary"><div><span class="application-update-label">Update method</span><strong>Manual download</strong></div><span class="status-pill warn">Desktop required</span></div>
+    <div class="application-update-summary"><div><span class="application-update-label">Update method</span><strong>Manual download</strong></div>${pillHtml('Desktop required', 'warn')}</div>
     <p class="muted application-update-copy">${escapeHtml(reason)}</p>
     <div class="connection-actions"><a class="buttonlike secondary" href="${RELEASES_URL}" target="_blank" rel="noreferrer">Open GitHub Releases</a></div>`;
 }

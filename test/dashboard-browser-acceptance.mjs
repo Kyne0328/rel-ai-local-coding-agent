@@ -78,6 +78,8 @@ try {
   }
   assert.equal(result.initial.determinateValid, true);
   assert.equal(result.initial.indeterminateValid, true);
+  assert.ok(result.initial.terminalStaticCount >= 2, JSON.stringify(result.initial));
+  assert.equal(result.initial.terminalNoIndeterminate, true);
   assert.equal(result.initial.unknownStatusCount, 0);
   assert.equal(result.initial.longTitleAccessible, true);
   assert.equal(result.initial.reducedMotion, true);
@@ -141,8 +143,8 @@ function seedSessions(directory) {
     ['blocked', { mode: 'indeterminate', label: 'Blocked' }],
     ['validating', { mode: 'determinate', completedUnits: 1, totalUnits: 2, percentage: 50, label: '1 of 2 checks' }],
     ['completed', { mode: 'determinate', completedUnits: 2, totalUnits: 2, percentage: 100, label: 'Complete' }],
-    ['failed', { mode: 'determinate', completedUnits: 1, totalUnits: 2, percentage: 50, label: '1 of 2 checks' }],
-    ['cancelled', { mode: 'determinate', completedUnits: 1, totalUnits: 3, percentage: 33, label: '1 of 3 checks' }]
+    ['failed', { mode: 'indeterminate', label: 'Running failed command' }],
+    ['cancelled', { mode: 'indeterminate', label: 'Running abandoned command' }]
   ];
   states.forEach(([status, progress], index) => {
     const terminal = ['completed', 'failed', 'cancelled'].includes(status);

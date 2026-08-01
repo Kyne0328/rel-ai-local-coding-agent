@@ -2,10 +2,13 @@ import * as crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
 
 const CONNECTION_STATES = Object.freeze(['stopped', 'starting', 'ready', 'degraded', 'failed']);
+const AUTH_MODES = Object.freeze(['oauth', 'static_bearer', 'local_no_auth']);
+const RECENT_ACTIVITY_MS = 2 * 60 * 1000;
 
 class McpConnectionManager {
   constructor(options = {}) {
     this.clock = options.clock || (() => Date.now());
+    this.recentActivityMs = Math.max(1, Number(options.recentActivityMs || RECENT_ACTIVITY_MS));
     this.events = new EventEmitter();
     this.eventHistory = [];
     this.metrics = emptyMetrics();
@@ -20,6 +23,15 @@ class McpConnectionManager {
     this.lastRequestAt = null;
     this.lastRequestMethod = '';
     this.lastPrincipal = '';
+    this.activeRequests = new Map();
+    this.activityExpiryTimer = null;
+    this.lastAuthenticatedAt = null;
+    this.lastAuthenticationFailureAt = null;
+    this.lastAuthMode = '';
+    this.lastCompletedRequestAt = null;
+    this.lastSuccessfulRequestAt = null;
+    this.lastFailedRequestAt = null;
+    this.lastRequestSucceeded = null;
   }
 
   configure({ serverInstanceId, credentialGeneration, configurationGeneration, manifest }) {
@@ -34,6 +46,7 @@ class McpConnectionManager {
     this.lastRequestAt = null;
     this.lastRequestMethod = '';
     this.lastPrincipal = '';
+    this.resetRequestState();
     this.record('mcp_server_starting', { requestModel: 'stateless' });
     return this.snapshot();
   }
@@ -51,32 +64,72 @@ class McpConnectionManager {
   async shutdown(reason = 'server_shutdown') {
     this.state = 'stopped';
     this.lastDisconnectReason = String(reason || 'server_shutdown');
+    this.clearActivityExpiry();
+    this.activeRequests.clear();
     this.record('mcp_server_stopped', { reasonCode: this.lastDisconnectReason });
   }
 
-  noteRequest({ principal = '', method = '', clientInfo = {}, clientCapabilities = {} } = {}) {
+  beginRequest({ principal = '', method = '', authMode = '', clientInfo = {}, clientCapabilities = {} } = {}) {
+    const requestId = crypto.randomUUID();
     const now = this.clock();
+    const normalizedAuthMode = normalizeAuthMode(authMode);
     this.lastRequestAt = now;
     this.lastRequestMethod = String(method || '');
     this.lastPrincipal = safeId(principal);
+    this.lastAuthenticatedAt = now;
+    this.lastAuthMode = normalizedAuthMode;
+    this.activeRequests.set(requestId, {
+      method: this.lastRequestMethod,
+      authMode: normalizedAuthMode,
+      startedAt: now
+    });
     this.metrics.requestsReceived += 1;
     if (this.lastRequestMethod === 'server/discover') this.metrics.discoveryRequests += 1;
     if (this.lastRequestMethod === 'tools/list') this.metrics.toolListRequests += 1;
     if (this.lastRequestMethod.startsWith('tasks/')) this.metrics.taskRequests += 1;
+    if (this.state === 'degraded') this.state = 'ready';
     this.record('mcp_request_received', {
+      requestId,
       method: this.lastRequestMethod,
       principal: this.lastPrincipal,
+      authMode: normalizedAuthMode,
+      activeRequestCount: this.activeRequests.size,
       clientInfo: safeClientInfo(clientInfo),
       clientCapabilities: safeClientCapabilities(clientCapabilities)
     });
-    if (this.state === 'degraded') this.state = 'ready';
+    return requestId;
+  }
+
+  finishRequest(requestId, { method = '', ok = true } = {}) {
+    const normalizedRequestId = String(requestId || '');
+    const active = this.activeRequests.get(normalizedRequestId) || null;
+    if (!active) return this.snapshot();
+    this.activeRequests.delete(normalizedRequestId);
+    const completedAt = this.clock();
+    const requestMethod = String(method || active?.method || this.lastRequestMethod || '');
+    this.lastCompletedRequestAt = completedAt;
+    this.lastRequestMethod = requestMethod;
+    this.lastRequestSucceeded = ok === true;
+    if (ok) this.metrics.requestsSucceeded += 1;
+    else this.metrics.requestsFailed += 1;
+    if (ok) {
+      this.lastSuccessfulRequestAt = completedAt;
+      this.scheduleActivityExpiry();
+    } else {
+      this.lastFailedRequestAt = completedAt;
+    }
+    this.record(ok ? 'mcp_request_succeeded' : 'mcp_request_failed', {
+      requestId: normalizedRequestId,
+      method: requestMethod,
+      activeRequestCount: this.activeRequests.size
+    });
     return this.snapshot();
   }
 
-  noteRequestResult(method, ok = true) {
-    if (ok) this.metrics.requestsSucceeded += 1;
-    else this.metrics.requestsFailed += 1;
-    this.record(ok ? 'mcp_request_succeeded' : 'mcp_request_failed', { method: String(method || '') });
+  noteAuthenticationFailure(reasonCode = 'invalid_or_missing_bearer') {
+    this.lastAuthenticationFailureAt = this.clock();
+    this.record('authentication_failed', { reasonCode: String(reasonCode || 'authentication_failed') });
+    return this.snapshot();
   }
 
   async observeManifest(manifest, triggerMethod = '') {
@@ -96,6 +149,7 @@ class McpConnectionManager {
 
   async invalidateCredentials(nextGeneration, reason = 'approval_token_rotated') {
     this.credentialGeneration = Number(nextGeneration || this.credentialGeneration + 1);
+    this.resetRequestState();
     this.record('credential_generation_changed', { reasonCode: reason });
     this.record('approval_token_rotated', { reasonCode: reason });
     return this.snapshot();
@@ -116,6 +170,7 @@ class McpConnectionManager {
   snapshot() {
     return {
       status: this.state,
+      activityStatus: this.activityStatus(),
       requestModel: 'stateless',
       protocolVersion: '2026-07-28',
       serverInstanceId: this.serverInstanceId,
@@ -135,9 +190,17 @@ class McpConnectionManager {
       lastDisconnectReason: this.lastDisconnectReason,
       lastRecoveryResult: this.lastRecoveryResult,
       manualRecoveryRequired: false,
+      activeRequestCount: this.activeRequests.size,
       lastRequestAt: iso(this.lastRequestAt),
       lastRequestMethod: this.lastRequestMethod,
       lastPrincipal: this.lastPrincipal,
+      lastAuthenticatedAt: iso(this.lastAuthenticatedAt),
+      lastAuthenticationFailureAt: iso(this.lastAuthenticationFailureAt),
+      lastAuthMode: this.lastAuthMode,
+      lastCompletedRequestAt: iso(this.lastCompletedRequestAt),
+      lastSuccessfulRequestAt: iso(this.lastSuccessfulRequestAt),
+      lastFailedRequestAt: iso(this.lastFailedRequestAt),
+      lastRequestSucceeded: this.lastRequestSucceeded,
       metrics: { ...this.metrics },
       recentEvents: this.eventHistory.slice(-50),
       revision: this.revision,
@@ -168,6 +231,48 @@ class McpConnectionManager {
     this.events.on('change', listener);
     return () => this.events.off('change', listener);
   }
+
+  activityStatus() {
+    if (['stopped', 'starting', 'degraded', 'failed'].includes(this.state)) return this.state;
+    if (this.activeRequests.size > 0) return 'active';
+    if (!this.lastRequestAt) return 'no_requests';
+    if (this.lastFailedRequestAt && (!this.lastSuccessfulRequestAt || this.lastFailedRequestAt > this.lastSuccessfulRequestAt)) {
+      return 'request_failed';
+    }
+    if (this.lastSuccessfulRequestAt && this.clock() - this.lastSuccessfulRequestAt <= this.recentActivityMs) return 'recent';
+    return 'idle';
+  }
+
+  resetRequestState() {
+    this.clearActivityExpiry();
+    this.activeRequests.clear();
+    this.lastRequestAt = null;
+    this.lastRequestMethod = '';
+    this.lastPrincipal = '';
+    this.lastAuthenticatedAt = null;
+    this.lastAuthenticationFailureAt = null;
+    this.lastAuthMode = '';
+    this.lastCompletedRequestAt = null;
+    this.lastSuccessfulRequestAt = null;
+    this.lastFailedRequestAt = null;
+    this.lastRequestSucceeded = null;
+  }
+
+  scheduleActivityExpiry() {
+    this.clearActivityExpiry();
+    this.activityExpiryTimer = setTimeout(() => {
+      this.activityExpiryTimer = null;
+      this.revision += 1;
+      this.events.emit('change', this.snapshot());
+    }, this.recentActivityMs + 1);
+    this.activityExpiryTimer.unref?.();
+  }
+
+  clearActivityExpiry() {
+    if (!this.activityExpiryTimer) return;
+    clearTimeout(this.activityExpiryTimer);
+    this.activityExpiryTimer = null;
+  }
 }
 
 function emptyMetrics() {
@@ -195,6 +300,11 @@ function emptyMetrics() {
 function safeId(value) {
   const text = String(value || '');
   return text ? crypto.createHash('sha256').update(text).digest('base64url').slice(0, 12) : '';
+}
+
+function normalizeAuthMode(value) {
+  const mode = String(value || '');
+  return AUTH_MODES.includes(mode) ? mode : '';
 }
 
 function safeClientCapabilities(value) {
@@ -231,4 +341,4 @@ function messageOf(error) {
 
 const mcpConnectionManager = new McpConnectionManager();
 
-export { CONNECTION_STATES, McpConnectionManager, mcpConnectionManager, redactFields, safeId };
+export { AUTH_MODES, CONNECTION_STATES, McpConnectionManager, RECENT_ACTIVITY_MS, mcpConnectionManager, redactFields, safeId };

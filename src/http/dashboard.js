@@ -20,6 +20,7 @@ import { handleOpenFolder, handleWorkspaceChecks, handlePickFolder, workspacePat
 import { sendJson, sendHtml, sendSse, readJsonBody, contentTypeForStaticAsset, jsonForHtmlScript } from "./io.js";
 import { mcpConnectionManager } from '../mcp/connectionManager.js';
 import { buildToolManifest } from '../mcp/toolManifest.js';
+import { readMcpAuthenticationStatus } from '../mcp/authenticationStatus.js';
 
 function buildToolMetadata() {
   return getToolMetadata();
@@ -114,6 +115,7 @@ function handleOnboardingStatus(ctx) {
 
 function handleConnection(ctx) {
   const latestProfile = connection.readConnectionProfile();
+  const mcpConnection = mcpConnectionManager.snapshot();
   sendJson(ctx.res, 200, {
     ...connection.buildConnectionSummary({
       host: latestProfile.host || ctx.options.host,
@@ -124,7 +126,10 @@ function handleConnection(ctx) {
       showToken: false,
       includeTokenInUrls: false
     }),
-    mcpConnection: mcpConnectionManager.snapshot()
+    mcpConnection,
+    mcpAuthentication: readMcpAuthenticationStatus(mcpConnection, {
+      staticBearerConfigured: Boolean(ctx.options.token)
+    })
   }, ctx.ae);
 }
 
