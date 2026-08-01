@@ -1,13 +1,14 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { assertSafeControllerOperation } from './active-controller-guard.mjs';
 import { invalidateDerivedReleaseEvidence, releaseArtifactNames } from './release-artifacts.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const electronRoot = path.join(root, 'electron');
+const RELEASE_ARCHIVE_COMPRESSION_LEVEL = '5';
 const options = parseArgs(process.argv.slice(2));
 const mode = options.mode;
 if (!['unpacked', 'release'].includes(mode)) {
@@ -27,7 +28,6 @@ if (mode === 'unpacked') {
   runNode('unpacked output cleanup', path.join(root, 'scripts', 'clean.mjs'), ['--electron']);
 }
 runNode('color-token verification', generateColorTokens, ['--check']);
-runNode('color-token generation', generateColorTokens);
 runNode('dashboard CSS build', tailwindCli, [
   '-i', path.join(root, 'src', 'ui', 'styles', 'app.css'),
   '-o', path.join(root, 'public', 'dashboard.css'),
@@ -44,41 +44,71 @@ if (mode === 'unpacked') {
     ...options.builderArgs
   ], { cwd: electronRoot });
 } else {
-  packageRelease(electronBuilderCli, options.builderArgs);
+  await packageRelease(electronBuilderCli, options.builderArgs);
 }
 
 console.log(`Electron ${mode} package completed without launching or installing the generated application.`);
 
-function packageRelease(electronBuilder, builderArgs) {
+async function packageRelease(electronBuilder, builderArgs) {
+  const releaseStartedAt = Date.now();
   const stagingRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'rel-ai-mcp-release-'));
-  const outputArg = `--config.directories.output=${stagingRoot}`;
+  const stagingOutputArg = `--config.directories.output=${stagingRoot}`;
   const prepackaged = path.join(stagingRoot, 'win-unpacked');
+  const targetRoot = path.join(stagingRoot, '.artifact-targets');
+  const portablePrepackaged = path.join(targetRoot, 'portable-win-unpacked');
+  const nsisOutput = path.join(targetRoot, 'nsis-output');
+  const portableOutput = path.join(targetRoot, 'portable-output');
   let completed = false;
   try {
+    const stagingStartedAt = Date.now();
     runNode('Electron release staging', electronBuilder, [
       '--win',
       '--dir',
-      outputArg,
+      stagingOutputArg,
       '--publish', 'never',
       ...builderArgs
     ], { cwd: electronRoot });
     assertPrepackagedApp(prepackaged);
-    runNode('NSIS artifact packaging', electronBuilder, [
-      '--win', 'nsis',
-      '--prepackaged', prepackaged,
-      outputArg,
-      '--publish', 'never',
-      ...builderArgs
-    ], { cwd: electronRoot });
-    runNode('portable artifact packaging', electronBuilder, [
-      '--win', 'portable',
-      '--prepackaged', prepackaged,
-      outputArg,
-      '--publish', 'never',
-      ...builderArgs
-    ], { cwd: electronRoot });
+    console.log(`[electron-package] Shared unpacked application prepared in ${formatDuration(Date.now() - stagingStartedAt)}.`);
+
+    const cloneStartedAt = Date.now();
+    fs.mkdirSync(targetRoot, { recursive: true });
+    fs.cpSync(prepackaged, portablePrepackaged, { recursive: true, force: true, dereference: true });
+    assertPrepackagedApp(portablePrepackaged);
+    console.log(`[electron-package] Isolated portable working copy prepared in ${formatDuration(Date.now() - cloneStartedAt)}.`);
+
+    const artifactStartedAt = Date.now();
+    const artifactEnvironment = {
+      ...process.env,
+      ELECTRON_BUILDER_COMPRESSION_LEVEL: RELEASE_ARCHIVE_COMPRESSION_LEVEL
+    };
+    await Promise.all([
+      runNodeAsync('NSIS artifact packaging', electronBuilder, [
+        '--win', 'nsis',
+        '--prepackaged', prepackaged,
+        `--config.directories.output=${nsisOutput}`,
+        '--publish', 'never',
+        ...builderArgs
+      ], { cwd: electronRoot, env: artifactEnvironment }),
+      runNodeAsync('portable artifact packaging', electronBuilder, [
+        '--win', 'portable',
+        '--prepackaged', portablePrepackaged,
+        `--config.directories.output=${portableOutput}`,
+        '--publish', 'never',
+        ...builderArgs
+      ], { cwd: electronRoot, env: artifactEnvironment })
+    ]);
+    console.log(`[electron-package] NSIS and portable artifacts completed in parallel in ${formatDuration(Date.now() - artifactStartedAt)}.`);
+
+    const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
+    const canonical = releaseArtifactNames(version);
+    collectArtifactFiles(nsisOutput, stagingRoot, [canonical.installer, canonical.blockmap, canonical.metadata]);
+    collectArtifactFiles(portableOutput, stagingRoot, [canonical.portable]);
+    removeDirectory(targetRoot);
+
     const promoted = promoteReleaseOutput(stagingRoot, path.join(root, 'dist'));
     console.log(`Current unpacked application: ${path.relative(root, promoted.unpackedPath)}`);
+    console.log(`[electron-package] Release packaging completed in ${formatDuration(Date.now() - releaseStartedAt)}.`);
     completed = true;
   } finally {
     if (completed) {
@@ -86,6 +116,16 @@ function packageRelease(electronBuilder, builderArgs) {
     } else {
       console.error(`[electron-package] Release staging preserved for diagnostics: ${stagingRoot}`);
     }
+  }
+}
+
+function collectArtifactFiles(sourceDirectory, destinationDirectory, names) {
+  for (const name of names) {
+    const source = path.join(sourceDirectory, name);
+    if (!fs.existsSync(source) || !fs.statSync(source).isFile()) {
+      throw new Error(`Artifact build did not produce ${name} in ${sourceDirectory}.`);
+    }
+    promoteFile(source, path.join(destinationDirectory, name));
   }
 }
 
@@ -259,6 +299,33 @@ function runNode(label, script, args = [], options = {}) {
   if (result.error) throw new Error(`${label} could not start: ${result.error.message}`, { cause: result.error });
   if (result.signal) throw new Error(`${label} was terminated by ${result.signal}.`);
   if (result.status !== 0) throw new Error(`${label} failed with exit code ${result.status || 1}.`);
+}
+
+function runNodeAsync(label, script, args = [], options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [script, ...args], {
+      cwd: options.cwd || root,
+      env: options.env || process.env,
+      stdio: 'inherit',
+      windowsHide: true
+    });
+    child.once('error', error => reject(new Error(`${label} could not start: ${error.message}`, { cause: error })));
+    child.once('exit', (code, signal) => {
+      if (signal) {
+        reject(new Error(`${label} was terminated by ${signal}.`));
+        return;
+      }
+      if (code !== 0) {
+        reject(new Error(`${label} failed with exit code ${code || 1}.`));
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+function formatDuration(milliseconds) {
+  return `${(Number(milliseconds) / 1000).toFixed(1)}s`;
 }
 
 function messageOf(error) {
