@@ -50,7 +50,7 @@ async function handleMcpDelete(ctx) {
 async function handleMcpStreamable(ctx) {
   const baseUrl = resolveBaseUrl(ctx.options);
   if (!isMcpAuthorized(ctx.req, ctx.options)) {
-    mcpConnectionManager.record('authentication_failed', { reasonCode: 'invalid_or_missing_bearer' });
+    mcpConnectionManager.noteAuthenticationFailure('invalid_or_missing_bearer');
     unauthorizedMcp(ctx.res, baseUrl, ctx.req);
     return;
   }
@@ -74,76 +74,74 @@ async function handleMcpStreamable(ctx) {
 
   const authorization = oauthAuthorization(ctx.req, ctx.options);
   const principal = authorization?.clientId || (ctx.options.allowNoAuth ? 'local-no-auth' : 'static-bearer');
+  const authMode = authorization ? 'oauth' : ctx.options.allowNoAuth ? 'local_no_auth' : 'static_bearer';
   ctx.req.auth = authorization || { clientId: principal, scopes: ['mcp'] };
   const config = readConfig();
-
-  if (isLegacyMcpRequest(ctx.req.headers, message)) {
-    const params = objectValue(message?.params);
-    mcpConnectionManager.noteRequest({
-      principal,
-      method: message?.method,
-      clientInfo: params.clientInfo,
-      clientCapabilities: params.capabilities
-    });
-    await runSpan(config, 'relai.mcp.request', {
-      'mcp.protocol.version': String(params.protocolVersion || headerValue(ctx.req.headers, 'mcp-protocol-version') || 'legacy'),
-      'mcp.method': String(message?.method || ''),
-      'oauth.client_id': principal
-    }, async () => {
-      try {
-        await getCoreNodeHandler()(ctx.req, ctx.res, message);
-        mcpConnectionManager.noteRequestResult(message?.method, ctx.res.statusCode < 400);
-      } catch (error) {
-        mcpConnectionManager.noteRequestResult(message?.method, false);
-        throw error;
-      }
-    }, { carrier: ctx.req.headers });
-    return;
-  }
-
-  const validation = validateMcpRequestHeaders(ctx.req.headers, message);
-  if (!validation.ok) {
-    mcpConnectionManager.noteRequestResult(message?.method, false);
-    sendMcpProtocolError(
-      ctx.res,
-      validation.status,
-      validation.code,
-      validation.error,
-      message?.id,
-      validation.data
-    );
-    return;
-  }
-
-  const meta = message.params._meta;
-  const manifest = buildToolManifest(config);
-  await mcpConnectionManager.observeManifest(manifest, message.method);
-  mcpConnectionManager.noteRequest({
+  const legacy = isLegacyMcpRequest(ctx.req.headers, message);
+  const params = objectValue(message?.params);
+  const meta = legacy ? {} : objectValue(params._meta);
+  const requestId = mcpConnectionManager.beginRequest({
     principal,
-    method: message.method,
-    clientInfo: meta[CLIENT_INFO_META_KEY],
-    clientCapabilities: meta[CLIENT_CAPABILITIES_META_KEY]
+    method: message?.method,
+    authMode,
+    clientInfo: legacy ? params.clientInfo : meta[CLIENT_INFO_META_KEY],
+    clientCapabilities: legacy ? params.capabilities : meta[CLIENT_CAPABILITIES_META_KEY]
   });
+  let requestFinished = false;
+  const finishRequest = (ok) => {
+    if (requestFinished) return;
+    requestFinished = true;
+    mcpConnectionManager.finishRequest(requestId, { method: message?.method, ok });
+  };
 
-  await runSpan(config, 'relai.mcp.request', {
-    'mcp.protocol.version': MCP_PROTOCOL_VERSION,
-    'mcp.method': message.method,
-    'oauth.client_id': principal
-  }, async () => {
-    const nativeResponse = handleNativeTasksRequest(config, message, principal);
-    if (nativeResponse) {
-      mcpConnectionManager.noteRequestResult(message.method, !nativeResponse.body.error);
-      sendJson(ctx.res, nativeResponse.status, nativeResponse.body, ctx.ae);
+  try {
+    if (legacy) {
+      await runSpan(config, 'relai.mcp.request', {
+        'mcp.protocol.version': String(params.protocolVersion || headerValue(ctx.req.headers, 'mcp-protocol-version') || 'legacy'),
+        'mcp.method': String(message?.method || ''),
+        'oauth.client_id': principal
+      }, async () => {
+        await getCoreNodeHandler()(ctx.req, ctx.res, message);
+        finishRequest(ctx.res.statusCode < 400);
+      }, { carrier: ctx.req.headers });
       return;
     }
-    try {
-      await getCoreNodeHandler()(ctx.req, ctx.res, message);
-      mcpConnectionManager.noteRequestResult(message.method, ctx.res.statusCode < 400);
-    } catch (error) {
-      mcpConnectionManager.noteRequestResult(message.method, false);
-      throw error;
+
+    const validation = validateMcpRequestHeaders(ctx.req.headers, message);
+    if (!validation.ok) {
+      finishRequest(false);
+      sendMcpProtocolError(
+        ctx.res,
+        validation.status,
+        validation.code,
+        validation.error,
+        message?.id,
+        validation.data
+      );
+      return;
     }
-  }, { carrier: ctx.req.headers });
+
+    const manifest = buildToolManifest(config);
+    await mcpConnectionManager.observeManifest(manifest, message.method);
+
+    await runSpan(config, 'relai.mcp.request', {
+      'mcp.protocol.version': MCP_PROTOCOL_VERSION,
+      'mcp.method': message.method,
+      'oauth.client_id': principal
+    }, async () => {
+      const nativeResponse = handleNativeTasksRequest(config, message, principal);
+      if (nativeResponse) {
+        finishRequest(!nativeResponse.body.error);
+        sendJson(ctx.res, nativeResponse.status, nativeResponse.body, ctx.ae);
+        return;
+      }
+      await getCoreNodeHandler()(ctx.req, ctx.res, message);
+      finishRequest(ctx.res.statusCode < 400);
+    }, { carrier: ctx.req.headers });
+  } catch (error) {
+    finishRequest(false);
+    throw error;
+  }
 }
 
 async function handleUnsupportedHttpMethod(ctx) {

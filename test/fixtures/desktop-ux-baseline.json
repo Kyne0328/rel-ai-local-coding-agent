@@ -1,6 +1,6 @@
 {
-  "version": 31,
-  "capturedAt": "2026-07-29",
+  "version": 32,
+  "capturedAt": "2026-08-01",
   "mainNavigation": [
     "Overview",
     "Sessions",
@@ -47,8 +47,8 @@
   "connectionLayers": [
     "Local service",
     "Public endpoint",
-    "ChatGPT authorization",
-    "MCP host activity",
+    "MCP authentication",
+    "MCP activity",
     "Dashboard updates"
   ],
   "approvalTokenReplacement": {

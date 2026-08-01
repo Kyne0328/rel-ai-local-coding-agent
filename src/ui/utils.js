@@ -1,3 +1,5 @@
+import { statusDotClass } from './status-tone.js';
+
 // Shared UI helpers for dashboard sections.
 export function esc(v) {
   return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({
@@ -10,11 +12,7 @@ export function esc(v) {
 }
 
 export function statusClass(v) {
-  const s = String(v || '').toLowerCase();
-  if (s.includes('fail') || s.includes('error') || s.includes('rejected') || s.includes('repair') || s.includes('blocked') || s === 'false') return 'bad';
-  if (s.includes('pending') || s.includes('warn') || s.includes('approval') || s.includes('authentication_required') || s.includes('input_required') || s.includes('retry') || s.includes('degraded') || s.includes('paused')) return 'warn';
-  if (s.includes('run') || s.includes('active') || s.includes('starting') || s.includes('stopping') || s.includes('connecting') || s.includes('open') || s.includes('wait') || s.includes('settling') || s.includes('queued')) return 'info';
-  return 'ok';
+  return statusDotClass(v);
 }
 
 export function metricHtml(label, value, meta, type) {

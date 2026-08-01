@@ -26,17 +26,19 @@ const readyUiState = connectionUi.withConnectionState({
   connectionState: {
     localService: { status: 'running' },
     publicEndpoint: { status: 'available' },
-    chatgptReadiness: { status: 'ready' },
     dashboardUpdates: { status: 'offline' },
     error: null
-  }
+  },
+  mcpAuthentication: { status: 'bearer_authorized', oauthApprovalRequired: true },
+  mcpConnection: { status: 'ready', activityStatus: 'no_requests' }
 }, 'live').connectionState;
-assert.equal(connectionUi.connectionSummary(readyUiState).label, 'Waiting for host');
+assert.equal(connectionUi.connectionSummary(readyUiState).label, 'Ready');
 const synchronizedUiState = connectionUi.connectionStateFor({
   connectionState: readyUiState,
-  mcpConnection: { status: 'connected' }
+  mcpAuthentication: { status: 'oauth_authorized' },
+  mcpConnection: { status: 'ready', activityStatus: 'recent', lastRequestMethod: 'tools/list' }
 }, 'live');
-assert.equal(connectionUi.connectionSummary(synchronizedUiState).label, 'Host active');
+assert.equal(connectionUi.connectionSummary(synchronizedUiState).label, 'Recently active');
 const rendererOwnedLiveState = connectionUi.connectionStateFor({
   connectionState: readyUiState,
   desktopStatus: {
@@ -50,14 +52,14 @@ assert.equal(rendererOwnedLiveState.dashboardUpdates.status, 'live', 'the active
 assert.deepEqual(connectionUi.connectionLayerViews(readyUiState).map(layer => layer.title), [
   'Local service',
   'Public endpoint',
-  'ChatGPT authorization',
-  'MCP host activity',
+  'MCP authentication',
+  'MCP activity',
   'Dashboard updates'
 ]);
 assert.equal(connectionUi.connectionLayerViews(readyUiState)[4].label, 'Live');
 assert.equal(connectionUi.connectionSummary({
   ...readyUiState,
-  chatgptReadiness: { status: 'authentication_required' }
+  chatgptReadiness: { status: 'authentication_required', oauthApprovalRequired: true }
 }).label, 'Approval required');
 
 assert.deepEqual(
@@ -204,7 +206,7 @@ const windowSecurity = fs.readFileSync(path.join(root, 'electron', 'window-secur
 const statusHtml = fs.readFileSync(path.join(root, 'electron', 'renderer', 'status.html'), 'utf8');
 const securityDoc = fs.readFileSync(path.join(root, 'docs', 'SECURITY.md'), 'utf8');
 
-assert.equal(baseline.version, 31);
+assert.equal(baseline.version, 32);
 assert.deepEqual(baseline.canonicalRoutes, {
   tools: '#tools',
   general: '#settings',
@@ -213,7 +215,7 @@ assert.deepEqual(baseline.canonicalRoutes, {
   diagnostics: '#settings/diagnostics',
   advanced: '#settings/advanced'
 });
-assert.deepEqual(baseline.connectionLayers, ['Local service', 'Public endpoint', 'ChatGPT authorization', 'MCP host activity', 'Dashboard updates']);
+assert.deepEqual(baseline.connectionLayers, ['Local service', 'Public endpoint', 'MCP authentication', 'MCP activity', 'Dashboard updates']);
 assert.deepEqual(baseline.approvalTokenReplacement, {
   confirmation: 'REPLACE',
   revokesOAuthGrants: true,

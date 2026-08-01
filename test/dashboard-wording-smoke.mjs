@@ -91,6 +91,16 @@ if (!dashboardData?.connectionState?.localService || !dashboardData?.connectionS
   console.error('Dashboard wording smoke test FAILED — normalized connection layers are missing');
   process.exit(1);
 }
+if (!dashboardData?.mcpAuthentication || typeof dashboardData?.mcpAuthentication?.status !== 'string') {
+  child.kill('SIGKILL');
+  console.error('Dashboard wording smoke test FAILED — authoritative MCP authentication status is missing');
+  process.exit(1);
+}
+if (!dashboardData?.mcpConnection || dashboardData?.mcpConnection?.activityStatus !== 'no_requests') {
+  child.kill('SIGKILL');
+  console.error('Dashboard wording smoke test FAILED — stateless MCP request activity is missing or incorrect');
+  process.exit(1);
+}
 if (dashboardJson.includes('prepared') || dashboardJson.includes('apply_bundle')) {
   child.kill('SIGKILL');
   console.error('Dashboard wording smoke test FAILED — obsolete prepared/bundle workflow wording remains');

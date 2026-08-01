@@ -360,10 +360,10 @@ function viewFingerprint(data = {}) {
     case 'connection':
     case 'connector':
     case 'diagnostics':
-      payload = [route, data.application || {}, config, data.connectionState || {}, desktopState];
+      payload = [route, data.application || {}, config, data.connectionState || {}, data.mcpAuthentication || {}, data.mcpConnection || {}, desktopState];
       break;
     default:
-      payload = [route, config.workspaces || [], data.tasks || [], data.taskActivity || {}, data.health || {}, data.connectionState || {}, desktopState];
+      payload = [route, config.workspaces || [], data.tasks || [], data.taskActivity || {}, data.health || {}, data.connectionState || {}, data.mcpAuthentication || {}, data.mcpConnection || {}, desktopState];
   }
   return JSON.stringify(payload);
 }

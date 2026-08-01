@@ -44,26 +44,30 @@ function patchSafeguardsPanel() {
   const safeguards = panel('Patch safeguards');
   safeguards.body.appendChild(settingsIntro(
     'Protected update defaults',
-    'These settings apply to relai_edit updateText patches. Exact replacements and full-file writes are unaffected.'
+    'These defaults apply only to relai_edit updateText patches, including staged patches when committed. Exact replacements, batch edits, and full-file writes are unaffected.'
   ));
   safeguards.body.appendChild(field('Require clean git before patch', toggleControl(patch.requireCleanGit === true, value => {
     updatePatchSetting('requireCleanGit', value);
-  }, { enabled: 'Require clean git', disabled: 'Allow existing changes' }), 'Blocks updateText patches when the workspace already has uncommitted changes.'));
+  }, { enabled: 'Require clean git', disabled: 'Allow existing changes' }), 'Rejects updateText patches when Git reports tracked or untracked workspace changes.'));
   safeguards.body.appendChild(field('Create backup before patch', toggleControl(patch.backup !== false, value => {
     updatePatchSetting('backup', value);
-  }, { enabled: 'Backup enabled', disabled: 'No automatic backup' }), 'Records a git stash backup before patching over tracked changes.'));
+  }, { enabled: 'Backup enabled', disabled: 'No automatic backup' }), 'Creates a non-destructive Git stash entry for existing tracked changes before applying a patch. Untracked files are not included.'));
   safeguards.body.appendChild(field('Patch limit (MiB)', megabyteControl(patch.maxUpdateBytes || 2 * MIB, value => {
     updatePatchSetting('maxUpdateBytes', value);
-  }, 50), 'Current per-update limit for updateText patches.'));
+  }, 50), 'Maximum UTF-8 size of the complete updateText patch. Staged chunks are checked when committed.'));
   return safeguards;
 }
 
 function resourceLimitsPanel() {
   const resources = panel('Resource limits');
-  resources.body.appendChild(field('Command output retained (MiB)', megabyteControl(draft.maxOutputBytes || 2 * MIB, value => {
+  resources.body.appendChild(settingsIntro(
+    'Subprocess output defaults',
+    'Individual tools and requests may use dedicated limits instead of this default.'
+  ));
+  resources.body.appendChild(field('Default output retained per stream (MiB)', megabyteControl(draft.maxOutputBytes || 2 * MIB, value => {
     draft.maxOutputBytes = value;
     checkDirty();
-  }, 19), 'Current stdout and stderr retention limit per operation. Larger output is truncated.'));
+  }, 19), 'Default cap applied separately to stdout and stderr for subprocess operations. Output beyond the active limit is truncated.'));
   return resources;
 }
 

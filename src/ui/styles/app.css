@@ -521,6 +521,7 @@
 
   .connection-page { @apply gap-3; }
   .connection-summary-card.good { border-color: color-mix(in srgb, var(--ui-status-success-foreground) 34%, var(--ui-border-default)); }
+  .connection-summary-card.working { border-color: color-mix(in srgb, var(--ui-status-info-foreground) 34%, var(--ui-border-default)); }
   .connection-summary-card.warn { border-color: color-mix(in srgb, var(--ui-status-warning-foreground) 34%, var(--ui-border-default)); }
   .connection-summary-card.bad { border-color: color-mix(in srgb, var(--ui-status-danger-foreground) 34%, var(--ui-border-default)); }
   .connection-stack { @apply flex flex-col gap-4; }
@@ -539,11 +540,13 @@
   .connection-layer-card-head { @apply flex items-start gap-3; }
   .connection-layer-dot { @apply mt-1 size-2 rounded-full; background: var(--ui-text-tertiary); }
   .connection-path-step.ok .connection-layer-dot { background: var(--ui-status-success-foreground); }
+  .connection-path-step.working .connection-layer-dot { background: var(--ui-status-info-foreground); }
   .connection-path-step.warn .connection-layer-dot { background: var(--ui-status-warning-foreground); }
   .connection-path-step.bad .connection-layer-dot { background: var(--ui-status-danger-foreground); }
   .connection-layer-card-head h4 { @apply text-[12px]; }
   .connection-layer-state { @apply mt-1 block text-[11px] font-semibold; color: var(--ui-text-secondary); }
   .connection-layer-state.ok { color: var(--ui-status-success-foreground); }
+  .connection-layer-state.working { color: var(--ui-status-info-foreground); }
   .connection-layer-state.warn { color: var(--ui-status-warning-foreground); }
   .connection-layer-state.bad { color: var(--ui-status-danger-foreground); }
   .connection-path-step > p { @apply mt-3 text-[11px] leading-5; color: var(--ui-text-secondary); }
@@ -607,10 +610,13 @@
 
   .diagnostic-metrics { @apply grid gap-0 overflow-hidden rounded-xl; grid-template-columns: repeat(3,minmax(0,1fr)); background: var(--ui-surface-primary); border: 1px solid var(--ui-border-default); }
   .diagnostic-metrics > * { @apply border-r p-4 last:border-r-0; border-color: var(--ui-border-default); }
-  .diagnostic-finding { @apply border-l-[3px] p-3; background: var(--ui-surface-primary); border-top: 1px solid var(--ui-border-subtle); border-right: 1px solid var(--ui-border-subtle); border-bottom: 1px solid var(--ui-border-subtle); border-left-color: var(--ui-status-warning-foreground); }
-  .diagnostic-finding.bad { border-left-color: var(--ui-status-danger-foreground); }
+  .diagnostic-finding { @apply border-l-[3px] p-3; background: var(--ui-surface-primary); border-top: 1px solid var(--ui-border-subtle); border-right: 1px solid var(--ui-border-subtle); border-bottom: 1px solid var(--ui-border-subtle); border-left-color: var(--ui-status-info-foreground); }
+  .diagnostic-finding.warning { border-left-color: var(--ui-status-warning-foreground); }
+  .diagnostic-finding.error { border-left-color: var(--ui-status-danger-foreground); }
   .diagnostic-log-grid { @apply grid gap-3; grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
   .diagnostic-log-row { @apply rounded-lg px-3 py-2 text-[11px]; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-subtle); }
+  .diagnostic-log-row.info { box-shadow: inset 2px 0 var(--ui-status-info-foreground); }
+  .diagnostic-log-row.warning { box-shadow: inset 2px 0 var(--ui-status-warning-foreground); }
   .diagnostic-log-row.error { box-shadow: inset 2px 0 var(--ui-status-danger-foreground); }
   .diagnostic-maintenance-row { @apply flex flex-wrap items-center justify-between gap-3 border-t py-3; border-color: var(--ui-border-subtle); }
 
@@ -691,6 +697,7 @@
   .dot.info { background: var(--ui-status-info-foreground); }
   .dot.warn { background: var(--ui-status-warning-foreground); }
   .dot.bad { background: var(--ui-status-danger-foreground); }
+  .dot.neutral { background: var(--ui-status-neutral-foreground); }
 
   input[type="checkbox"]:not(.toggle-input), input[type="radio"] {
     @apply h-4 w-4 min-h-0 shrink-0 cursor-pointer p-0;
@@ -721,6 +728,12 @@
   .task-progress-label { @apply flex min-w-0 items-center justify-between gap-3 text-[10px]; color: var(--ui-text-secondary); }
   .task-progress-label span { @apply min-w-0 truncate; }
   .task-progress-label strong { @apply shrink-0 text-[10px] font-bold tabular-nums; color: var(--ui-text-primary); }
+  .task-progress.static { @apply rounded-md px-2 py-1; background: var(--ui-status-neutral-background); border: 1px solid var(--ui-status-neutral-border); }
+  .task-progress.static.terminal.failed, .task-progress.static.paused.failed, .task-progress.static.paused.blocked { background: var(--ui-status-danger-background); border-color: var(--ui-status-danger-border); }
+  .task-progress.static.terminal.failed .task-progress-label, .task-progress.static.paused.failed .task-progress-label, .task-progress.static.paused.blocked .task-progress-label { color: var(--ui-status-danger-foreground); }
+  .task-progress.static.terminal.cancelled { background: var(--ui-status-neutral-background); border-color: var(--ui-status-neutral-border); }
+  .task-progress.static.paused.approval { background: var(--ui-status-warning-background); border-color: var(--ui-status-warning-border); }
+  .task-progress.static.paused.approval .task-progress-label { color: var(--ui-status-warning-foreground); }
   .task-progress-track { @apply block h-2 w-full overflow-hidden rounded-full border-0; appearance: none; background: var(--ui-surface-raised); }
   .task-progress.compact .task-progress-track { height: 5px; }
   .task-progress-track::-webkit-progress-bar { background: var(--ui-surface-raised); }
@@ -907,7 +920,8 @@
   .diagnostic-metric.warning strong { color: var(--ui-status-warning-foreground); }
   .diagnostic-metric.info strong { color: var(--ui-action-primary); }
   .diagnostic-finding { @apply grid gap-4 rounded-xl; grid-template-columns: 96px minmax(0,1fr); }
-  .diagnostic-severity { @apply text-[10px] font-bold uppercase tracking-[.08em]; color: var(--ui-status-warning-foreground); }
+  .diagnostic-severity { @apply text-[10px] font-bold uppercase tracking-[.08em]; color: var(--ui-status-info-foreground); }
+  .diagnostic-finding.warning .diagnostic-severity { color: var(--ui-status-warning-foreground); }
   .diagnostic-finding.error .diagnostic-severity { color: var(--ui-status-danger-foreground); }
   .diagnostic-copy { @apply min-w-0; }
   .diagnostic-code { @apply mb-1 text-[10px] font-semibold; color: var(--ui-text-tertiary); }
@@ -926,7 +940,10 @@
   .diagnostic-log-row time, .diagnostic-log-row code, .diagnostic-log-row small { @apply text-[10px]; }
   .diagnostic-log-row time { color: var(--ui-text-tertiary); }
   .diagnostic-log-row span { @apply min-w-0 break-words; }
-  .diagnostic-log-row small { grid-column: 3; color: var(--ui-status-danger-foreground); }
+  .diagnostic-log-row small { grid-column: 3; color: var(--ui-text-tertiary); }
+  .diagnostic-log-row.info small { color: var(--ui-status-info-foreground); }
+  .diagnostic-log-row.warning small { color: var(--ui-status-warning-foreground); }
+  .diagnostic-log-row.error small { color: var(--ui-status-danger-foreground); }
   .diagnostic-log-empty { @apply rounded-lg p-4 text-center text-[11px]; background: var(--ui-surface-secondary); color: var(--ui-text-secondary); }
   .diagnostic-clear { @apply flex flex-col gap-1 rounded-xl p-4; background: var(--ui-status-success-background); border: 1px solid color-mix(in srgb, var(--ui-status-success-foreground) 28%, transparent); }
   .diagnostic-clear span { @apply text-[11px]; color: var(--ui-text-secondary); }

@@ -17,7 +17,7 @@ export function mountTasks(container, data = {}) {
   const sessions = orderSessionsForDisplay((Array.isArray(data.tasks) ? data.tasks : [])
     .filter(session => !workspace || session.workspace === workspace));
   const working = sessions.filter(session => ['running', 'validating', 'working'].includes(session.status)).length;
-  const open = sessions.filter(session => ['queued', 'planning', 'waiting_for_approval', 'blocked', 'waiting', 'settling'].includes(session.status)).length;
+  const open = sessions.filter(session => ['queued', 'planning', 'waiting_for_approval', 'blocked', 'validation_failed', 'waiting', 'settling'].includes(session.status)).length;
   const completed = sessions.filter(session => session.status === 'completed').length;
   const scopeKey = workspace || '__all__';
 
@@ -116,6 +116,7 @@ function statusLabel(status) {
   if (status === 'queued' || status === 'planning' || status === 'waiting' || status === 'settling') return 'open';
   if (status === 'waiting_for_approval') return 'approval';
   if (status === 'blocked') return 'blocked';
+  if (status === 'validation_failed') return 'validation failed';
   if (status === 'failed' || status === 'attention') return 'error';
   if (status === 'completed') return 'completed';
   if (status === 'cancelled') return 'cancelled';
@@ -123,9 +124,6 @@ function statusLabel(status) {
 }
 
 function statusPill(status) {
-  if (status === 'open') return '<span class="status-pill open">open<span class="sr-only"> (open, no active call)</span></span>';
-  if (status === 'completed') return pillHtml('completed');
-  if (status === 'cancelled') return '<span class="status-pill incomplete">cancelled<span class="sr-only"> (completion not reported)</span></span>';
   return pillHtml(status);
 }
 
@@ -239,7 +237,7 @@ export function orderSessionsForDisplay(sessions = []) {
 
 function isOngoingSession(session) {
   const status = String(session?.status || '');
-  return ['queued', 'planning', 'running', 'waiting_for_approval', 'blocked', 'validating', 'working', 'waiting', 'settling'].includes(status);
+  return ['queued', 'planning', 'running', 'waiting_for_approval', 'blocked', 'validation_failed', 'validating', 'working', 'waiting', 'settling'].includes(status);
 }
 
 export function orderChangedFiles(files = []) {
@@ -266,6 +264,7 @@ function sessionMeaning(status) {
   if (status === 'validating') return 'Rel.AI is running validation for this task.';
   if (status === 'waiting_for_approval') return 'The task is paused until the required approval is provided.';
   if (status === 'blocked') return 'The task cannot continue until the reported blocker is resolved.';
+  if (status === 'validation_failed') return 'Validation failed. The task remains open for repair and another validation run.';
   if (status === 'queued' || status === 'planning' || status === 'waiting') return 'This logical task remains open, but no Rel.AI tool operation is executing now.';
   if (status === 'completed') return 'Task completion was explicitly reported. Any non-fatal warnings remain visible in the call counts and tool events.';
   if (status === 'failed') return 'The task ended after a failure. Review the failed activity and normalized error.';
@@ -273,7 +272,8 @@ function sessionMeaning(status) {
 }
 
 function currentOperations(session) {
-  const operations = Array.isArray(session.currentOperations) ? session.currentOperations : [];
+  const executable = ['running', 'validating', 'working'].includes(String(session?.status || '')) && Number(session?.activeCalls || 0) > 0;
+  const operations = executable && Array.isArray(session.currentOperations) ? session.currentOperations : [];
   if (!operations.length) return '';
   return `<section class="task-detail-section"><div class="task-detail-heading"><h3>Running operations</h3><span>${operations.length}</span></div><div class="task-event-list">${operations.map(operation => `
     <div class="task-event"><span data-clock-elapsed-start="${esc(operation.startedAt || '')}">${formatDuration(Date.now() - Number(operation.startedAt || Date.now()))}</span><code>${esc(operation.label || operation.tool || 'operation')}</code>${pillHtml('running')}</div>`).join('')}</div></section>`;

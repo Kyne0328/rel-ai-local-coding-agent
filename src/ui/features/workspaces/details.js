@@ -58,7 +58,7 @@ function workspaceValidationHtml(view) {
     : '<p class="workspace-validation-empty">No automatic validation command was detected. You can still use the workspace and configure project checks later.</p>';
   const statusPill = ready
     ? pillHtml('ready')
-    : '<span class="status-pill warn">not configured<span class="sr-only"> (warn)</span></span>';
+    : pillHtml('not configured');
   return `<section class="workspace-validation ${ready ? 'ready' : 'missing'}">
     <div class="workspace-validation-head">
       <div>

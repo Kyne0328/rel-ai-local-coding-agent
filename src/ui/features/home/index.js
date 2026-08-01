@@ -1,7 +1,7 @@
 import { pillHtml } from '../../components/pill.js';
 import { esc, formatDuration, timeAgo } from '../../utils.js';
 import { getWorkspaceFilter, routeHref } from '../../router.js';
-import { connectionSummary } from '../../connection-state.js';
+import { connectionStateFor, connectionSummary } from '../../connection-state.js';
 import { taskProgressHtml } from '../../components/task-progress.js';
 
 export function mountHome(container, data) {
@@ -19,7 +19,7 @@ function buildOverview(data) {
   const tasks = orderOverviewTasks((Array.isArray(data.tasks) ? data.tasks : []).filter(task => !workspaceFilter || task.workspace === workspaceFilter));
   const findings = actionableFindings(health);
   const endpoint = String(connection.chatgptMcpUrl || '');
-  const connectionState = data.connectionState || {};
+  const connectionState = connectionStateFor(data);
   const effectiveEndpoint = connectionState.publicEndpoint?.status === 'available' ? endpoint : '';
   const bridgeState = resolveBridgeState({ endpoint: effectiveEndpoint, workspaces, findings, connectionState });
 
@@ -62,7 +62,7 @@ function runtimeCompatibilityCard(compatibility = {}, runtime = {}, repository =
   card.innerHTML = `
     <div class="card-head">
       <div><div class="overview-kicker">Runtime compatibility</div><h3>Restart or reconnect required</h3></div>
-      <span class="status-pill warn">${blocked ? 'Schema operations paused' : 'Mismatch detected'}</span>
+      ${pillHtml(blocked ? 'Schema operations paused' : 'Mismatch detected')}
     </div>
     <div class="card-body">
       <p>${esc(compatibility.message || action)}</p>
@@ -308,7 +308,7 @@ function workspaceSummaryCard(workspaces) {
     ? workspaces.slice(0, 6).map(ws => `
       <div class="compact-workspace">
         <div><strong>${esc(ws.alias || 'workspace')}</strong><div class="compact-workspace-path">${esc(ws.path || '')}</div></div>
-        ${pillHtml(hasValidation(ws) ? 'ready' : 'check')}
+        ${pillHtml(hasValidation(ws) ? 'ready' : 'not configured')}
       </div>`).join('')
     : '<div class="empty">No workspaces configured. <a href="#workspaces">Add your first repository.</a></div>';
   card.appendChild(body);
@@ -341,8 +341,8 @@ function recentTaskStatus(status) {
   if (status === 'completed') return pillHtml('completed');
   if (status === 'running' || status === 'working') return pillHtml('running');
   if (status === 'validating') return pillHtml('validating');
-  if (['queued', 'planning', 'waiting_for_approval', 'waiting', 'settling'].includes(status)) return '<span class="status-pill">open</span>';
-  return '<span class="status-pill">cancelled</span>';
+  if (['queued', 'planning', 'waiting_for_approval', 'waiting', 'settling'].includes(status)) return pillHtml('open');
+  return pillHtml('cancelled');
 }
 
 function statusLabel(status) {
