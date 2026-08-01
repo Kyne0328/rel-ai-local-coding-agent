@@ -7,6 +7,7 @@ import { getStateDir } from './statePaths.js';
 import { runProcess, summarizeCommand } from "./process.js";
 import { activeProcessesForWorkspace } from "./processManager.js";
 import { assertSafeWorkspaceRoot } from './workspaceSafety.js';
+import { taskError } from './toolActivity.js';
 
 function registryPath(config) {
   return path.join(getStateDir(config), 'worktrees', 'index.json');
@@ -68,11 +69,13 @@ async function createManagedWorktree(workspace, config, args = {}, context = {})
   return { ok: true, ...entry, git: summarizeCommand(command) };
 }
 
-async function listManagedWorktrees(config, args = {}) {
+async function listManagedWorktrees(config, args = {}, context = {}) {
   const registry = readRegistry(config);
   const sourceAlias = String(args.workspace || '').trim();
+  const taskId = String(context.taskId || args.task_id || '').trim();
   const worktrees = [];
   for (const entry of Object.values(registry.worktrees || {})) {
+    if (taskId && entry.owningTaskId !== taskId) continue;
     if (sourceAlias && entry.sourceAlias !== sourceAlias && entry.alias !== sourceAlias) continue;
     const status = await worktreeStatus(entry, config);
     worktrees.push({ ...entry, ...status });
@@ -81,11 +84,15 @@ async function listManagedWorktrees(config, args = {}) {
   return { ok: true, worktrees, count: worktrees.length };
 }
 
-async function removeManagedWorktree(workspace, config, args = {}) {
+async function removeManagedWorktree(workspace, config, args = {}, context = {}) {
   const registry = readRegistry(config);
   const alias = String(args.alias || args.worktree || '').trim();
   const entry = registry.worktrees?.[alias];
   if (!entry) throw new Error(`Managed worktree '${alias}' was not found.`);
+  const taskId = String(context.taskId || args.task_id || '').trim();
+  if (entry.owningTaskId && entry.owningTaskId !== taskId) {
+    throw taskError('TASK_OWNERSHIP_MISMATCH', `Managed worktree '${alias}' belongs to a different logical task.`);
+  }
   const status = await worktreeStatus(entry, config);
   const active = activeProcessesForWorkspace(config, alias);
   const force = args.force === true;

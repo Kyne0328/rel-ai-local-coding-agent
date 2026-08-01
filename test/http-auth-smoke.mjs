@@ -6,7 +6,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { mcpBody, mcpHeaders, postMcp } from './helpers/http-mcp.mjs';
+import { createHttpMcpSession, mcpBody, mcpHeaders, postMcp, readMcpResponse } from './helpers/http-mcp.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const port = 39877;
@@ -36,6 +36,7 @@ async function waitForHealth() {
   throw new Error(`HTTP server did not become healthy. ${stderr}`);
 }
 
+let session = null;
 try {
   await waitForHealth();
   assert.equal((await fetch(`${base}/health`)).status, 200);
@@ -51,13 +52,63 @@ try {
   assert.equal(challenge.status, 401);
   assert.match(challenge.headers.get('www-authenticate') || '', /oauth-protected-resource\/mcp/);
 
-  const listed = await postMcp(base, { id: 2, method: 'tools/list', token });
+  session = await createHttpMcpSession(base, { token, clientName: 'relai-http-auth' });
+  const listed = await session.request('tools/list');
   assert.equal(listed.response.status, 200, `${JSON.stringify(listed.body)}\n${stderr}`);
-  assert.equal(listed.body.result?.tools?.length, 34);
+  assert.equal(listed.body.result?.tools?.length, 33);
+
+  const legacyInitializeResponse = await fetch(`${base}/mcp`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+      authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 20,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2025-11-25',
+        capabilities: {},
+        clientInfo: { name: 'chatgpt-compatibility-smoke', version: '1.0.0' }
+      }
+    })
+  });
+  const legacyInitialize = await readMcpResponse(legacyInitializeResponse);
+  assert.equal(legacyInitializeResponse.status, 200, `${JSON.stringify(legacyInitialize)}\n${stderr}`);
+  assert.equal(legacyInitialize.result?.protocolVersion, '2025-11-25');
+  assert.ok(legacyInitialize.result?.capabilities?.tools);
+
+  const legacyInitializedResponse = await fetch(`${base}/mcp`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+      authorization: `Bearer ${token}`,
+      'mcp-protocol-version': '2025-11-25'
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} })
+  });
+  assert.ok([200, 202, 204].includes(legacyInitializedResponse.status));
+
+  const legacyToolsResponse = await fetch(`${base}/mcp`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+      authorization: `Bearer ${token}`,
+      'mcp-protocol-version': '2025-11-25'
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 21, method: 'tools/list', params: {} })
+  });
+  const legacyTools = await readMcpResponse(legacyToolsResponse);
+  assert.equal(legacyToolsResponse.status, 200, `${JSON.stringify(legacyTools)}\n${stderr}`);
+  assert.equal(legacyTools.result?.tools?.length, 33);
 
   const missingVersion = await fetch(`${base}/mcp`, {
     method: 'POST',
-    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'mcp-method': 'tools/list' },
+    headers: mcpHeaders('tools/list', { token, sessionId: session.sessionId, protocolVersion: '' }),
     body: mcpBody(3, 'tools/list')
   });
   assert.equal(missingVersion.status, 400);
@@ -66,17 +117,30 @@ try {
     id: 4,
     method: 'tools/list',
     token,
-    extraHeaders: { 'mcp-session-id': 'removed-session' }
+    sessionId: 'removed-session'
   });
   assert.equal(oldSession.response.status, 400);
-  assert.match(oldSession.body.error?.message || '', /not valid/);
+  assert.match(oldSession.body.error?.message || '', /session.*not supported/i);
 
-  const initialize = await postMcp(base, { id: 5, method: 'initialize', token });
+  const initialize = await postMcp(base, {
+    id: 5,
+    method: 'initialize',
+    token,
+    params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'second-client', version: '1.0.0' } }
+  });
   assert.equal(initialize.response.status, 400);
-  assert.match(initialize.body.error?.message || '', /removed/);
+  assert.equal(initialize.body.error?.code, -32601);
 
   const getMcp = await fetch(`${base}/mcp`, { headers: { authorization: `Bearer ${token}` } });
   assert.equal(getMcp.status, 405);
+
+  const invalidOrigin = await fetch(`${base}/mcp`, {
+    method: 'POST',
+    headers: mcpHeaders('tools/list', { token, sessionId: session.sessionId, extra: { origin: 'https://attacker.example' } }),
+    body: mcpBody(6, 'tools/list')
+  });
+  assert.equal(invalidOrigin.status, 403);
+  assert.match(await invalidOrigin.text(), /(?:invalid|forbidden) origin/i);
 
   const uri = 'https://example.com/cb-🎉漢字é';
   const payload = Buffer.from(JSON.stringify({ application_type: 'web', redirect_uris: [uri] }), 'utf8');
@@ -100,15 +164,16 @@ try {
   try {
     oversizedStatus = (await fetch(`${base}/mcp`, {
       method: 'POST',
-      headers: mcpHeaders('tools/list', { token, extra: { connection: 'close' } }),
-      body: mcpBody(6, 'tools/list', { pad: oversized })
+      headers: mcpHeaders('tools/list', { token, sessionId: session.sessionId, extra: { connection: 'close' } }),
+      body: mcpBody(7, 'tools/list', { pad: oversized })
     })).status;
   } catch {}
   assert.ok(oversizedStatus >= 400);
 } finally {
+  if (session) await session.close().catch(() => {});
   child.kill('SIGKILL');
   await once(child, 'close').catch(() => {});
   fs.rmSync(stateDir, { recursive: true, force: true });
 }
 
-console.log('HTTP authentication and MCP 2026 header tests passed.');
+console.log('HTTP authentication, session validation, protocol header, and Origin protection tests passed.');

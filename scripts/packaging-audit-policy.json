@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "scope": "Electron build-time dependencies only",
+  "expiresOn": "2026-08-31",
+  "allowedAdvisoryUrls": [
+    "https://github.com/advisories/GHSA-mh99-v99m-4gvg"
+  ],
+  "allowedPackages": [
+    "@electron/asar",
+    "@electron/universal",
+    "app-builder-lib",
+    "brace-expansion",
+    "dir-compare",
+    "dmg-builder",
+    "ejs",
+    "electron-builder",
+    "electron-builder-squirrel-windows",
+    "electron-winstaller",
+    "filelist",
+    "glob",
+    "jake",
+    "minimatch",
+    "rimraf",
+    "temp"
+  ],
+  "rationale": "electron-builder 26.15.3 is the current supported release, but its optional and cross-platform build graph still resolves legacy minimatch branches affected by one brace-expansion denial-of-service advisory. Production dependency audits remain clean. This temporary exception is fail-closed, applies only to dev/peer build packages, and must be removed or renewed after upstream publishes a compatible fixed graph."
+}

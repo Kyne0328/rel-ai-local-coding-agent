@@ -4,18 +4,44 @@ import { isAuthorized, timingSafeEqual, sendJson } from "./io.js";
 import * as dashboardSessions from "./dashboardSessions.js";
 import { ERROR_CODES, errorPayload } from "../desktopUxContracts.js";
 
-// External origin ChatGPT reaches us on — used as the OAuth issuer and for building
-// absolute authorize/token/registration URLs in discovery metadata. Prefer the
-// configured public HTTPS URL; fall back to the local bind address.
-function resolveBaseUrl(options) {
-  const latestProfile = connection.readConnectionProfile();
-  const base = latestProfile.publicUrl
-    || options.publicUrl
-    || (connection.localBaseUrl ? connection.localBaseUrl(options.host, options.port) : "")
-    || `http://${options.host || "127.0.0.1"}:${options.port || 3333}`;
-  let s = String(base || "");
-  while (s.endsWith("/")) s = s.slice(0, -1);
-  return s;
+// The active process is authoritative. Persisted profile state is only a fallback.
+function resolveBaseUrl(options = {}) {
+  return resolveBaseUrlDetails(options).baseUrl;
+}
+
+function resolveBaseUrlDetails(options = {}) {
+  const profile = connection.readConnectionProfile();
+  const candidates = [
+    ['active_runtime', options.activeRuntimeUrl || options.runtimePublicUrl || options.activePublicUrl || options.proxyVisibleOrigin],
+    ['explicit_process', options.publicUrl],
+    ['managed_connection', options.managedPublicUrl || options.tunnelUrl || profile.activePublicUrl || profile.managedPublicUrl || profile.tunnelUrl],
+    ['persisted_profile', profile.publicUrl],
+    ['loopback_fallback', connection.localBaseUrl ? connection.localBaseUrl(options.host || '127.0.0.1', options.port || 3333) : `http://${options.host || '127.0.0.1'}:${options.port || 3333}`]
+  ];
+  const selected = candidates.find(([, value]) => String(value || '').trim());
+  const baseUrl = oauth.canonicalIssuer(selected?.[1]);
+  const persistedUrl = canonicalOptional(profile.publicUrl);
+  const diagnostics = [];
+  if (persistedUrl && persistedUrl !== baseUrl && selected?.[0] !== 'persisted_profile') {
+    diagnostics.push({
+      code: 'OAUTH_ISSUER_PROFILE_DISAGREEMENT',
+      activeIssuer: baseUrl,
+      persistedIssuer: persistedUrl,
+      selectedSource: selected?.[0] || 'loopback_fallback',
+      action: 'The active runtime issuer remains authoritative; update the persisted profile only if the runtime URL is intended to change.'
+    });
+  }
+  return {
+    baseUrl,
+    source: selected?.[0] || 'loopback_fallback',
+    persistedUrl,
+    diagnostics
+  };
+}
+
+function canonicalOptional(value) {
+  if (!String(value || '').trim()) return '';
+  try { return oauth.canonicalIssuer(value); } catch { return ''; }
 }
 
 function bearerToken(req) {
@@ -86,4 +112,4 @@ function oauthErrorPage(message) {
   return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Cannot authorize</title><link rel="stylesheet" href="/public/oauth.css"></head><body class="oauth-page oauth-error-page"><main class="oauth-card oauth-error-card"><h2>Cannot authorize this connection</h2><p>' + safe + '</p></main></body></html>';
 }
 
-export { resolveBaseUrl, isOAuthAuthorized, oauthAuthorization, bearerToken, isMcpAuthorized, unauthorizedMcp, oauthErrorPage, isDashboardAuthorized, resolveRequireHttpToken };
+export { resolveBaseUrl, resolveBaseUrlDetails, isOAuthAuthorized, oauthAuthorization, bearerToken, isMcpAuthorized, unauthorizedMcp, oauthErrorPage, isDashboardAuthorized, resolveRequireHttpToken };

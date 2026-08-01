@@ -16,7 +16,7 @@
   "devDependencies": {
     "@electron/fuses": "2.1.3",
     "electron": "43.2.0",
-    "electron-builder": "26.15.7"
+    "electron-builder": "26.15.3"
   },
   "build": {
     "appId": "com.relai.mcp",
@@ -67,6 +67,7 @@
       "ipc-security.js",
       "desktop-settings.js",
       "desktop-lifecycle.js",
+      "controller-runtime.js",
       "renderer/**",
       "build/icon.png",
       "!**/*.map"
@@ -100,11 +101,16 @@
           "@modelcontextprotocol/core/**",
           "@modelcontextprotocol/node/**",
           "@modelcontextprotocol/server/**",
+          "@opentelemetry/**",
           "@hono/node-server/**",
           "hono/**",
           "zod/**",
           "!**/*.map",
-          "!**/src/**",
+          "!@modelcontextprotocol/*/src/**",
+          "!@opentelemetry/*/src/**",
+          "!@hono/*/src/**",
+          "!hono/src/**",
+          "!zod/src/**",
           "!**/test/**",
           "!**/tests/**",
           "!**/*.ts",
@@ -128,6 +134,7 @@
         "from": "../vendor/ngrok",
         "to": "bin/ngrok",
         "filter": [
+          "manifest.json",
           "win32/**"
         ]
       }
@@ -140,6 +147,7 @@
       "icon": "build/icon.png"
     },
     "nsis": {
+      "artifactName": "Rel.AI-MCP-Setup-${version}.${ext}",
       "oneClick": false,
       "perMachine": false,
       "allowElevation": true,
@@ -148,6 +156,9 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Rel.AI MCP",
       "runAfterFinish": true
+    },
+    "portable": {
+      "artifactName": "Rel.AI-MCP-Portable-${version}.${ext}"
     }
   },
   "dependencies": {

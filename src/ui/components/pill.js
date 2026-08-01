@@ -2,7 +2,7 @@ const STATUS_TONES = Object.freeze({
   danger: ['fail', 'error', 'denied', 'blocked', 'invalid', 'unavailable'],
   warning: ['pending', 'warn', 'approval', 'authentication_required', 'input_required', 'retry', 'rate-limit', 'degraded', 'partial', 'incomplete'],
   information: ['run', 'active', 'starting', 'stopping', 'connecting', 'reconnecting', 'open', 'wait', 'settling', 'queued'],
-  success: ['ready', 'success', 'complete', 'available', 'connected', 'passed'],
+  success: ['ready', 'success', 'succeeded', 'complete', 'available', 'connected', 'passed'],
   neutral: ['cancel', 'disconnect', 'expired', 'unknown', 'inactive', 'idle', 'stopped']
 });
 

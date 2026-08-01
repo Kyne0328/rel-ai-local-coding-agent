@@ -15,7 +15,7 @@ const docs = read('docs/USABILITY_ACCEPTANCE.md');
 
 assert.equal(rootPackage.scripts['test:installed'], undefined);
 assert.equal(rootPackage.scripts['release:evidence:check'], undefined);
-assert.equal(rootPackage.scripts['verify:packaged'], 'npm run verify:color-tokens && node scripts/verify-packaged-app.mjs');
+assert.equal(rootPackage.scripts['verify:packaged'], 'node scripts/verify-packaged-wrapper.mjs');
 assert.equal(rootPackage.scripts['test:connector-acceptance'], 'node scripts/packaged-connector-acceptance.mjs');
 
 for (const removedPath of [
@@ -52,8 +52,10 @@ assert.match(ci, /npm run test:connector-acceptance/);
 assert.doesNotMatch(ci, /test:installed|installed-app-usability-evidence|REL_AI_RELEASE_EVIDENCE_DIR/);
 
 assert.match(release, /Verify packaged application layout/);
-assert.match(release, /npm run verify:packaged -- --dir dist\/win-unpacked/);
-assert.match(release, /npm run test:connector-acceptance -- --dir dist\/win-unpacked/);
+assert.match(release, /Resolve current unpacked application/);
+assert.match(release, /node scripts\/current-unpacked\.mjs/);
+assert.match(release, /npm run verify:packaged -- --dir '\$\{\{ steps\.unpacked\.outputs\.path \}\}'/);
+assert.match(release, /npm run test:connector-acceptance -- --dir '\$\{\{ steps\.unpacked\.outputs\.path \}\}'/);
 assert.doesNotMatch(release, /test:installed|REL_AI_SMOKE_INSTALLER|REL_AI_RELEASE_EVIDENCE_DIR|release-readiness\.json|release-usability-evidence\.zip/);
 
 assert.match(docs, /does not run an installer or executable/);

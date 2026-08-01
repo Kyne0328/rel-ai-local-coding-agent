@@ -34,9 +34,10 @@ const config = {
   }
 };
 const workspace = { alias: 'app', ...config.workspaces.app };
+const taskContext = { taskId: 'task-worktree' };
 
 try {
-  const created = await createManagedWorktree(workspace, config, { name: 'feature', base: currentBranch }, { taskId: 'task-worktree' });
+  const created = await createManagedWorktree(workspace, config, { name: 'feature', base: currentBranch }, taskContext);
   assert.equal(created.ok, true);
   assert.equal(created.alias, 'app--feature');
   assert.equal(fs.existsSync(created.path), true);
@@ -48,17 +49,22 @@ try {
   assert.equal(dynamic.managedWorktree, true);
   assert.equal(dynamic.testCommands.test, 'node --test');
 
-  const listed = await listManagedWorktrees(config, { workspace: 'app' });
+  const listed = await listManagedWorktrees(config, { workspace: 'app' }, taskContext);
   assert.equal(listed.count, 1);
   assert.equal(listed.worktrees[0].dirty, false);
+  assert.equal((await listManagedWorktrees(config, { workspace: 'app' }, { taskId: 'another-task' })).count, 0);
 
   fs.writeFileSync(path.join(created.path, 'dirty.txt'), 'dirty\n');
   await assert.rejects(
-    () => removeManagedWorktree(workspace, config, { alias: created.alias }),
+    () => removeManagedWorktree(workspace, config, { alias: created.alias }, taskContext),
     /dirty/
   );
+  await assert.rejects(
+    () => removeManagedWorktree(workspace, config, { alias: created.alias }, { taskId: 'another-task' }),
+    error => error?.code === 'TASK_OWNERSHIP_MISMATCH'
+  );
   fs.rmSync(path.join(created.path, 'dirty.txt'));
-  const removed = await removeManagedWorktree(workspace, config, { alias: created.alias });
+  const removed = await removeManagedWorktree(workspace, config, { alias: created.alias }, taskContext);
   assert.equal(removed.ok, true);
   assert.equal(removed.branchPreserved, true);
   assert.equal(fs.existsSync(created.path), false);

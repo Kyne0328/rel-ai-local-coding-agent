@@ -131,6 +131,19 @@ jobs:
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         run: npm ci --ignore-scripts
 
+      - name: Install Electron dependencies
+        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
+        run: npm ci
+        working-directory: electron
+
+      - name: Audit production dependencies
+        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
+        run: npm run audit:production
+
+      - name: Audit packaging dependencies
+        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
+        run: npm run audit:packaging
+
       - name: Fetch bundled ngrok seed binary
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         shell: pwsh
@@ -146,10 +159,13 @@ jobs:
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         run: npm test
 
-      - name: Install Electron dependencies
+      - name: Enforce observability performance budgets
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
-        run: npm ci
-        working-directory: electron
+        run: npm run benchmark:observability
+
+      - name: Verify responsive and accessible dashboard behavior
+        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
+        run: npm run test:observability-browser
 
       - name: Reverify generated color assets before packaging
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
@@ -171,29 +187,62 @@ jobs:
           }
       - name: Build Windows executables
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
-        run: npm run electron:dist
+        run: npm run electron:dist -- --config.forceCodeSigning=true
         env:
           CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
 
-      - name: Verify hardened Electron fuses
+      - name: Resolve current unpacked application
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
-        run: cd electron && node scripts/verify-fuses.js "../dist/win-unpacked/Rel.AI MCP.exe"
-
-      - name: Verify Windows signatures
-        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
+        id: unpacked
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $executables = @(Get-ChildItem -Path dist -Filter '*.exe' -File)
-          if ($executables.Count -lt 2) {
-            throw 'Signing verification requires both installed and portable Windows executables.'
+          $packageDirectory = (node scripts/current-unpacked.mjs).Trim()
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $packageDirectory -PathType Container)) {
+            throw 'Could not resolve the current unpacked application.'
           }
-          foreach ($executable in $executables) {
-            $signature = Get-AuthenticodeSignature -FilePath $executable.FullName
+          "path=$packageDirectory" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Verify hardened Electron fuses
+        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
+        run: npm run verify:fuses
+
+      - name: Verify Windows signatures and bundled ngrok provenance
+        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = Get-Item -LiteralPath "dist/Rel.AI-MCP-Setup-$env:VERSION.exe"
+          $portable = Get-Item -LiteralPath "dist/Rel.AI-MCP-Portable-$env:VERSION.exe"
+          $releaseExecutables = @($installer, $portable)
+          $packageDirectory = '${{ steps.unpacked.outputs.path }}'
+          $appExecutable = Get-Item (Join-Path $packageDirectory 'Rel.AI MCP.exe')
+          foreach ($executable in @($releaseExecutables) + @($appExecutable)) {
+            $signature = Get-AuthenticodeSignature -LiteralPath $executable.FullName
             if ($signature.Status -ne 'Valid') {
               throw "$($executable.Name) does not have a valid Authenticode signature: $($signature.Status)."
             }
+          }
+
+          $ngrokManifest = Get-Content 'vendor/ngrok/manifest.json' -Raw | ConvertFrom-Json
+          $ngrokSpec = $ngrokManifest.platforms.win32
+          $ngrokPath = Resolve-Path (Join-Path $packageDirectory "resources/bin/ngrok/win32/$($ngrokSpec.file)")
+          $ngrokHash = (Get-FileHash -LiteralPath $ngrokPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($ngrokHash -ne [string]$ngrokSpec.sha256) {
+            throw "Packaged ngrok SHA-256 mismatch. Expected $($ngrokSpec.sha256), got $ngrokHash."
+          }
+          $ngrokSignature = Get-AuthenticodeSignature -LiteralPath $ngrokPath
+          if ($ngrokSignature.Status -ne 'Valid') {
+            throw "Packaged ngrok Authenticode signature is not valid: $($ngrokSignature.Status)."
+          }
+          if (-not $ngrokSignature.SignerCertificate.Subject.Contains([string]$ngrokSpec.authenticode.publisher, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "Packaged ngrok publisher mismatch: $($ngrokSignature.SignerCertificate.Subject)."
+          }
+          if (-not $ngrokSignature.SignerCertificate.Issuer.Contains([string]$ngrokSpec.authenticode.issuer, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "Packaged ngrok certificate issuer mismatch: $($ngrokSignature.SignerCertificate.Issuer)."
           }
 
       - name: Generate CycloneDX SBOM
@@ -215,11 +264,13 @@ jobs:
 
       - name: Verify packaged application layout
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
-        run: npm run verify:packaged -- --dir dist/win-unpacked
+        shell: pwsh
+        run: npm run verify:packaged -- --dir '${{ steps.unpacked.outputs.path }}'
 
       - name: Verify packaged OAuth and MCP connector flow
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
-        run: npm run test:connector-acceptance -- --dir dist/win-unpacked
+        shell: pwsh
+        run: npm run test:connector-acceptance -- --dir '${{ steps.unpacked.outputs.path }}'
 
       - name: Prepare release assets and notes
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
@@ -230,35 +281,26 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
 
-          $executables = @(Get-ChildItem -Path dist -Filter '*.exe' -File)
-          if ($executables.Count -lt 2) {
-            throw 'electron:dist must produce both installed and portable Windows executables in dist/.'
+          $dist = (Resolve-Path dist).Path
+          $assetNames = @(
+            "Rel.AI-MCP-Setup-$env:VERSION.exe",
+            "Rel.AI-MCP-Portable-$env:VERSION.exe",
+            "Rel.AI-MCP-Setup-$env:VERSION.exe.blockmap",
+            'latest.yml',
+            'sbom.cdx.json',
+            'electron-size-report.json'
+          )
+          $hashInputs = foreach ($assetName in $assetNames) {
+            $assetPath = Join-Path $dist $assetName
+            if (-not (Test-Path -LiteralPath $assetPath -PathType Leaf)) {
+              throw "Required release asset is missing under its exact basename: $assetName"
+            }
+            Get-Item -LiteralPath $assetPath
           }
-          $latestMetadata = Join-Path (Resolve-Path dist) 'latest.yml'
-          if (-not (Test-Path $latestMetadata -PathType Leaf)) {
-            throw 'electron:dist completed without producing dist/latest.yml for installed-app update discovery.'
+          npm run prepare:release-assets
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Release assets could not be prepared under the exact updater contract.'
           }
-          $latestContent = Get-Content $latestMetadata -Raw
-          if ($latestContent -notmatch '(?m)^\s*sha512:\s*\S+') {
-            throw 'dist/latest.yml does not contain SHA-512 update metadata.'
-          }
-          $blockmaps = @(Get-ChildItem -Path dist -Filter '*.blockmap' -File)
-          if ($blockmaps.Count -eq 0) {
-            throw 'electron:dist completed without producing an installer blockmap.'
-          }
-          $sbom = Join-Path (Resolve-Path dist) 'sbom.cdx.json'
-          if (-not (Test-Path $sbom -PathType Leaf)) {
-            throw 'CycloneDX SBOM is missing from dist/sbom.cdx.json.'
-          }
-          $hashInputs = @($executables) + @(Get-Item $latestMetadata) + $blockmaps + @(Get-Item $sbom)
-          $checksumManifest = Join-Path (Resolve-Path dist) 'SHA256SUMS.txt'
-          $hashLines = $hashInputs | Sort-Object Name | ForEach-Object {
-            $hash = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            "$hash  $($_.Name)"
-          }
-          $hashLines | Set-Content -Path $checksumManifest -Encoding ascii
-          $assets = $hashInputs + @(Get-Item $checksumManifest)
-          $assets.FullName | Sort-Object -Unique | Set-Content -Path release-assets.txt -Encoding utf8
 
           $changelog = Get-Content CHANGELOG.md -Raw
           $escapedVersion = [regex]::Escape($env:VERSION)
@@ -301,7 +343,15 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
 
-          $assets = @(Get-Content release-assets.txt | Where-Object { $_.Trim() })
+          $dist = (Resolve-Path dist).Path
+          $assetNames = @(Get-Content -LiteralPath (Join-Path $dist 'release-assets.txt') | Where-Object { $_.Trim() })
+          $assets = @($assetNames | ForEach-Object {
+            $assetPath = Join-Path $dist $_
+            if (-not (Test-Path -LiteralPath $assetPath -PathType Leaf)) {
+              throw "Prepared release asset is missing: $_"
+            }
+            $assetPath
+          })
           if ($assets.Count -eq 0) {
             throw 'No release assets were prepared.'
           }

@@ -5,6 +5,7 @@ import { readConfig, publicConfigSummary, allWorkspaceAliases, resolveWorkspace 
 import { getToolSurfaceManifest } from "./tools.js";
 import { workspaceProfile, workspaceTree, workspaceInspect, workspaceList } from "./tools/status.js";
 import { packageMetadata as pkg } from './packageMetadata.js';
+import { MCP_PROTOCOL_VERSION } from './mcp/protocol.js';
 
 const MIME_JSON = 'application/json';
 const MIME_MARKDOWN = 'text/markdown';
@@ -87,7 +88,7 @@ function resourceRevision(config, uri) {
       const workspace = resolveWorkspace(config, parsed.workspace);
       const stat = fs.statSync(workspace.path);
       hash.update('\0').update(workspace.path).update('\0').update(String(stat.mtimeMs));
-      for (const relative of ['package.json', 'REL_AI.md', '.relai/instructions.md']) {
+      for (const relative of ['package.json', 'AGENTS.override.md', 'AGENTS.md', 'REL_AI.md', '.relai/instructions.md']) {
         try {
           const fileStat = fs.statSync(path.join(workspace.path, relative));
           hash.update(relative).update(String(fileStat.mtimeMs)).update(String(fileStat.size));
@@ -108,13 +109,13 @@ function helpMarkdown(config) {
   const workspaces = workspaceList(config).workspaces.map(item => `- ${item.alias}: ${item.path}`).join('\n') || '- No workspaces are configured yet.';
   return `# Rel.AI MCP connector
 
-Rel.AI targets MCP 2026-07-28. Requests are stateless at the protocol layer; logical work is owned by explicit Rel.AI task IDs and managed runtime handles.
+Rel.AI targets MCP ${MCP_PROTOCOL_VERSION}. Every request carries its own protocol version, client identity, and capabilities; no MCP transport session is created or used as task identity.
 
 ## Workflow
 
 Call \`relai_start_task\` once per independent objective. Use \`relai_repo_snapshot\`, \`relai_search\`, \`relai_semantic_search\`, \`relai_code_inspect\`, and \`relai_read\` only as needed. Use \`relai_process_*\` for persistent development commands and \`relai_worktree_*\` for isolated branches. Use \`relai_validation_plan\` for change-aware checks and \`relai_diagnostics_run\` for normalized compiler or analyzer output.
 
-Use \`relai_edit\` as the single file mutation tool. Destructive actions may return \`input_required\`; retry with the accepted response and unchanged signed requestState. Long-running commands and checks can use \`defer:true\`; poll or cancel the returned operation handle with \`relai_operation_task_get\` and \`relai_operation_task_cancel\`.
+Use \`relai_edit\` as the single file mutation tool. Destructive operations may return \`input_required\`; retry with the accepted response and integrity-protected requestState. Native asynchronous work is returned only when the current request advertises \`io.modelcontextprotocol/tasks\`, then polled with \`tasks/get\` and controlled with \`tasks/update\` or \`tasks/cancel\`.
 
 Final completion requires \`relai_run_checks\` with \`complete:true\` and a summary, or \`relai_complete_task\` after post-validation read-only review.
 
@@ -127,7 +128,7 @@ ${workspaces}
 - name: ${pkg.name}
 - version: ${pkg.version}
 - tool surface version: ${getToolSurfaceManifest().toolSurfaceVersion}
-- protocol: 2026-07-28
+- protocol: ${MCP_PROTOCOL_VERSION}
 - tool surface manifest: relai://server/tool-surface
 `;
 }

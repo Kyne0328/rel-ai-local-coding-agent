@@ -18,6 +18,8 @@ import { onToolActivity } from "../toolActivity.js";
 import { buildDashboardPayload, mergeDashboardActivity } from "./dashboardData.js";
 import { handleOpenFolder, handleWorkspaceChecks, handlePickFolder, workspacePathPreflight } from "./dashboardActions.js";
 import { sendJson, sendHtml, sendSse, readJsonBody, contentTypeForStaticAsset, jsonForHtmlScript } from "./io.js";
+import { mcpConnectionManager } from '../mcp/connectionManager.js';
+import { buildToolManifest } from '../mcp/toolManifest.js';
 
 function buildToolMetadata() {
   return getToolMetadata();
@@ -49,10 +51,17 @@ async function handleFavicon(ctx) {
 }
 
 function handleHealth(ctx) {
+  const mcpConnection = mcpConnectionManager.snapshot();
   sendJson(ctx.res, 200, {
-    ok: true, name: pkg.name, version: getVersion(),
+    ok: mcpConnection.status !== 'failed',
+    name: pkg.name,
+    version: getVersion(),
     transports: ["streamable-http"],
-    auth: ctx.options.token ? "bearer" : "disabled"
+    auth: ctx.options.token ? "bearer" : "disabled",
+    serverStatus: mcpConnection.status,
+    connectedClientCount: mcpConnection.connectedClientCount,
+    toolManifestVersion: mcpConnection.toolManifestVersion,
+    activeToolCount: mcpConnection.currentActiveToolCount
   }, ctx.ae);
 }
 
@@ -105,15 +114,18 @@ function handleOnboardingStatus(ctx) {
 
 function handleConnection(ctx) {
   const latestProfile = connection.readConnectionProfile();
-  sendJson(ctx.res, 200, connection.buildConnectionSummary({
-    host: latestProfile.host || ctx.options.host,
-    port: latestProfile.port || ctx.options.port,
-    publicUrl: latestProfile.publicUrl || ctx.options.publicUrl,
-    token: ctx.options.token,
-    tunnelProvider: latestProfile.tunnelProvider || "none",
-    showToken: false,
-    includeTokenInUrls: false
-  }), ctx.ae);
+  sendJson(ctx.res, 200, {
+    ...connection.buildConnectionSummary({
+      host: latestProfile.host || ctx.options.host,
+      port: latestProfile.port || ctx.options.port,
+      publicUrl: latestProfile.publicUrl || ctx.options.publicUrl,
+      token: ctx.options.token,
+      tunnelProvider: latestProfile.tunnelProvider || "none",
+      showToken: false,
+      includeTokenInUrls: false
+    }),
+    mcpConnection: mcpConnectionManager.snapshot()
+  }, ctx.ae);
 }
 
 function handleDashboardV10(ctx) {
@@ -152,13 +164,21 @@ async function handleOnboardingComplete(ctx) {
 async function handleApiSettingsPost(ctx) {
   const current = readConfig();
   const payload = await readJsonBody(ctx.req, ctx.options.maxBodyBytes);
-  sendJson(ctx.res, 200, configEditor.updateSettings(current, payload), ctx.ae);
+  const result = configEditor.updateSettings(current, payload);
+  await refreshMcpManifest('settings_changed');
+  sendJson(ctx.res, 200, result, ctx.ae);
 }
 
 async function handleApiWorkspaces(ctx) {
   const current = readConfig();
   const payload = await readJsonBody(ctx.req, ctx.options.maxBodyBytes);
-  sendJson(ctx.res, 200, configEditor.updateWorkspace(current, payload), ctx.ae);
+  const result = configEditor.updateWorkspace(current, payload);
+  await refreshMcpManifest('workspaces_changed');
+  sendJson(ctx.res, 200, result, ctx.ae);
+}
+
+async function refreshMcpManifest(trigger) {
+  await mcpConnectionManager.observeManifest(buildToolManifest(readConfig()), trigger);
 }
 
 function readConfigCached() {
@@ -202,7 +222,8 @@ function openDashboardEvents(res, req, options) {
       statSignature(getConfigPath()),
       statSignature(config?.auditLogPath),
       JSON.stringify(taskActivity),
-      JSON.stringify(desktopStatus)
+      JSON.stringify(desktopStatus),
+      String(mcpConnectionManager.snapshot().revision)
     ].join("|");
   };
   let lastSignature = changeSignature();
@@ -233,12 +254,14 @@ function openDashboardEvents(res, req, options) {
     pendingSnapshot.unref?.();
   };
   const unsubscribe = onToolActivity(scheduleSnapshot);
+  const unsubscribeConnection = mcpConnectionManager.onChange(scheduleSnapshot);
   const heartbeat = setInterval(() => {
     if (!res.destroyed) res.write(`: keepalive ${Date.now()}\n\n`);
   }, 15000);
   heartbeat.unref?.();
   req.on("close", () => {
     unsubscribe();
+    unsubscribeConnection();
     if (pendingSnapshot) clearTimeout(pendingSnapshot);
     clearInterval(heartbeat);
   });

@@ -6,6 +6,7 @@ export type SummaryKind = '' | 'checks' | 'diff' | 'edit' | 'completion';
 
 export interface JsonSchema {
   type?: string | string[];
+  description?: string;
   properties?: Record<string, JsonSchema>;
   required?: string[];
   additionalProperties?: boolean | JsonSchema;
@@ -41,6 +42,8 @@ export interface ToolBehavior {
   sessionWrite: boolean;
   summary: SummaryKind;
   longRunning: boolean;
+  taskScope: 'required' | 'optional' | 'none';
+  concurrencyScope: 'task' | 'workspace';
 }
 
 export interface ToolDashboardMetadata {
@@ -91,6 +94,8 @@ export interface ToolArgs extends Record<string, unknown> {
   task_id?: string;
   title?: string;
   objective?: string;
+  bootstrap?: 'compact' | 'full' | 'none';
+  instructionPath?: string;
   path?: string;
   paths?: string[];
   startLine?: number;

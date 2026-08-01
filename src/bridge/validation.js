@@ -7,8 +7,7 @@ import { getCurrentTaskAbortSignal, updateCurrentToolActivity } from '../toolAct
 import { sanitizeDisplayText } from '../taskObservability.js';
 import { combineAbortSignals } from '../abortSignals.js';
 import { finalizeValidationResult, normalizeCompletionSummary } from '../tools/completion.js';
-import { readValidationPlan } from './validationPlan.js';
-import { workspaceGitStatus } from '../repo/gitOps.js';
+import { createValidationFingerprint, readValidationPlan } from './validationPlan.js';
 import { runSpan } from '../telemetry.js';
 import { operationTaskSignal } from '../operationTasks.js';
 import { hasRequestedChecks, normalizeVerifyChecks } from './validationChecks.js';
@@ -27,11 +26,9 @@ async function relaiVerify(workspace, config, args = {}) {
   let planSelection = '';
   if (args.planId) {
     validationPlan = readValidationPlan(config, args.planId, workspace);
-    const current = await workspaceGitStatus(workspace, config, { maxBytes: 256 * 1024 });
-    const expectedFiles = [...(validationPlan.changedFiles || [])].sort();
-    const currentFiles = [...(current.changedFiles || [])].sort();
-    if (JSON.stringify(expectedFiles) !== JSON.stringify(currentFiles)) {
-      throw new Error('Validation plan is stale because the workspace changed. Create a new relai_validation_plan.');
+    const current = await createValidationFingerprint(workspace, config);
+    if (!validationPlan.workspaceFingerprint || validationPlan.workspaceFingerprint !== current.fingerprint) {
+      throw new Error('Validation plan is stale because relevant workspace content changed. Create a new relai_validation_plan.');
     }
     planSelection = String(args.planLevel || args.level || validationPlan.recommended || 'focused').toLowerCase();
     const plannedChecks = validationPlan.checks?.[planSelection];
@@ -48,6 +45,7 @@ async function relaiVerify(workspace, config, args = {}) {
   const policy = resolvePolicy(workspace, config);
 
   if (checks.length === 0) {
+    const validationFingerprint = (await createValidationFingerprint(workspace, config)).fingerprint;
     updateCurrentToolActivity({
       status: 'validating',
       operation: `No ${level} validation commands were detected`,
@@ -76,6 +74,7 @@ async function relaiVerify(workspace, config, args = {}) {
       policy,
       validated: false,
       validationStatus: 'not_run',
+      validationFingerprint,
       message: 'Validation status: NOT RUN. No validation checks were detected or executed. This is not a passed validation. Define a check/test/build script or pass an explicit check.'
     };
   }
@@ -152,6 +151,7 @@ async function relaiVerify(workspace, config, args = {}) {
     : cancelled
       ? 'The validation was cancelled. Review partial results before starting a new task or rerunning validation.'
       : 'Fix the failing validation before reporting task completion.';
+  const validationFingerprint = (await createValidationFingerprint(workspace, config)).fingerprint;
   const validationResult = {
     ok,
     workspace: workspace.alias,
@@ -167,6 +167,7 @@ async function relaiVerify(workspace, config, args = {}) {
     policy,
     validated: results.length > 0,
     validationStatus,
+    validationFingerprint,
     cancelled,
     completedUnits: completedValidationUnits(results),
     totalUnits: checks.length,

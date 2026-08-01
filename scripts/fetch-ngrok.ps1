@@ -1,53 +1,93 @@
-# Fetch the ngrok seed binaries used by the Electron bundle.
+# Fetch the exact ngrok seed binaries declared in vendor/ngrok/manifest.json.
 #
-# Downloads the official ngrok v3 stable agent for each platform and writes it to
-# vendor/ngrok/<platform>/. These binaries are intentionally NOT committed to git
-# (see vendor/ngrok/README.md); run this before packaging the Electron app.
+# The stable download URL is intentionally paired with pinned size and SHA-256
+# values. When ngrok publishes a new stable build, this script fails closed until
+# the manifest is reviewed and updated.
 #
 # Usage:   pwsh scripts/fetch-ngrok.ps1
-#          $env:NGROK_ARCH='arm64'; pwsh scripts/fetch-ngrok.ps1        # darwin/linux arm64
-#          $env:NGROK_PLATFORMS='win32'; pwsh scripts/fetch-ngrok.ps1   # only the win32 seed
+#          $env:NGROK_PLATFORMS='win32'; pwsh scripts/fetch-ngrok.ps1
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $base = Join-Path $repoRoot 'vendor/ngrok'
+$manifestPath = Join-Path $base 'manifest.json'
+if (-not (Test-Path $manifestPath -PathType Leaf)) {
+  throw "ngrok provenance manifest is missing: $manifestPath"
+}
+
+$manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+$platforms = @{}
+foreach ($property in $manifest.platforms.PSObject.Properties) {
+  $platforms[$property.Name] = $property.Value
+}
+if ($platforms.Count -eq 0) {
+  throw 'ngrok provenance manifest does not declare any platforms.'
+}
+
+$wanted = if ($env:NGROK_PLATFORMS) {
+  @($env:NGROK_PLATFORMS.Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+} else {
+  @($platforms.Keys | Sort-Object)
+}
+$unknown = @($wanted | Where-Object { -not $platforms.ContainsKey($_) })
+if ($unknown.Count -gt 0) {
+  throw "Unknown NGROK_PLATFORMS value(s): $($unknown -join ', '). Valid: $($platforms.Keys -join ', ')."
+}
+
 $tmp = Join-Path ([System.IO.Path]::GetTempPath()) "ngrok-seed-$([guid]::NewGuid().ToString('N'))"
 New-Item -ItemType Directory -Force $tmp | Out-Null
 
-# darwin/linux default to amd64; override with NGROK_ARCH=arm64. Windows is always amd64.
-$arch = if ($env:NGROK_ARCH) { $env:NGROK_ARCH } else { 'amd64' }
+try {
+  foreach ($platform in $wanted) {
+    $spec = $platforms[$platform]
+    $zip = Join-Path $tmp "$($spec.asset).zip"
+    Write-Host "GET $($spec.url)"
+    Invoke-WebRequest -Uri $spec.url -OutFile $zip -UseBasicParsing
 
-$targets = @(
-  @{ plat = 'win32';  asset = 'windows-amd64'; out = 'ngrok.exe' },
-  @{ plat = 'darwin'; asset = "darwin-$arch";  out = 'ngrok' },
-  @{ plat = 'linux';  asset = "linux-$arch";   out = 'ngrok' }
-)
+    $extractDir = Join-Path $tmp $spec.asset
+    New-Item -ItemType Directory -Force $extractDir | Out-Null
+    Expand-Archive -Path $zip -DestinationPath $extractDir -Force
+    $binary = Get-ChildItem -Path $extractDir -Recurse -File | Where-Object { $_.Name -eq $spec.file } | Select-Object -First 1
+    if (-not $binary) {
+      throw "ngrok binary '$($spec.file)' was not found in $($spec.asset)."
+    }
 
-# Packaging only bundles the build host's platform, so CI fetches just that seed.
-if ($env:NGROK_PLATFORMS) {
-  $wanted = $env:NGROK_PLATFORMS.Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ }
-  $unknown = $wanted | Where-Object { $_ -notin $targets.plat }
-  if ($unknown) { throw "Unknown NGROK_PLATFORMS value(s): $($unknown -join ', '). Valid: win32, darwin, linux." }
-  $targets = $targets | Where-Object { $_.plat -in $wanted }
+    if ($binary.Length -ne [int64]$spec.size) {
+      throw "ngrok $platform size mismatch. Expected $($spec.size), got $($binary.Length). Update the reviewed manifest before accepting a new upstream build."
+    }
+    $hash = (Get-FileHash -LiteralPath $binary.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($hash -ne [string]$spec.sha256) {
+      throw "ngrok $platform SHA-256 mismatch. Expected $($spec.sha256), got $hash."
+    }
+
+    if ($platform -eq 'win32') {
+      $signature = Get-AuthenticodeSignature -LiteralPath $binary.FullName
+      if ($signature.Status -ne 'Valid') {
+        throw "ngrok Windows Authenticode signature is not valid: $($signature.Status)."
+      }
+      $publisher = [string]$spec.authenticode.publisher
+      $issuer = [string]$spec.authenticode.issuer
+      if (-not $signature.SignerCertificate.Subject.Contains($publisher, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "ngrok Windows signer mismatch. Expected publisher containing '$publisher', got '$($signature.SignerCertificate.Subject)'."
+      }
+      if (-not $signature.SignerCertificate.Issuer.Contains($issuer, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "ngrok Windows certificate issuer mismatch. Expected '$issuer', got '$($signature.SignerCertificate.Issuer)'."
+      }
+      $versionText = (& $binary.FullName version 2>&1 | Out-String).Trim()
+      if ($versionText -ne "ngrok version $($manifest.version)") {
+        throw "ngrok Windows version mismatch. Expected $($manifest.version), got '$versionText'."
+      }
+    }
+
+    $destDir = Join-Path $base $platform
+    New-Item -ItemType Directory -Force $destDir | Out-Null
+    $dest = Join-Path $destDir $spec.file
+    Copy-Item $binary.FullName $dest -Force
+    $mb = [math]::Round((Get-Item $dest).Length / 1MB, 1)
+    Write-Host "  -> vendor/ngrok/$platform/$($spec.file) ($mb MB, sha256=$hash)"
+  }
+} finally {
+  Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
 }
 
-foreach ($t in $targets) {
-  $url = "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-$($t.asset).zip"
-  $zip = Join-Path $tmp "$($t.asset).zip"
-  Write-Host "GET $url"
-  Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
-  $ex = Join-Path $tmp $t.asset
-  New-Item -ItemType Directory -Force $ex | Out-Null
-  Expand-Archive -Path $zip -DestinationPath $ex -Force
-  $bin = Get-ChildItem -Path $ex -Recurse -File | Where-Object { $_.Name -in 'ngrok', 'ngrok.exe' } | Select-Object -First 1
-  if (-not $bin) { throw "ngrok binary not found in $($t.asset) archive" }
-  $destDir = Join-Path $base $t.plat
-  New-Item -ItemType Directory -Force $destDir | Out-Null
-  $dest = Join-Path $destDir $t.out
-  Copy-Item $bin.FullName $dest -Force
-  $mb = [math]::Round((Get-Item $dest).Length / 1MB, 1)
-  Write-Host "  -> vendor/ngrok/$($t.plat)/$($t.out)  ($mb MB)"
-}
-
-Remove-Item -Recurse -Force $tmp
-Write-Host 'ngrok seed binaries ready.'
+Write-Host "ngrok $($manifest.version) seed binaries verified and ready."

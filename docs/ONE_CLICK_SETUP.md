@@ -2,7 +2,7 @@
 
 This guide takes you from a downloaded installer to a working ChatGPT connector that survives restarts.
 
-Rel.AI MCP is a self-contained Windows desktop app. It bundles its own runtime and its own ngrok agent, so there is nothing to install manually — no Node.js, no npm, no separate ngrok download. The app also keeps its ngrok agent up to date on its own.
+Rel.AI MCP is a self-contained Windows desktop app. It bundles its own runtime and a pinned, upstream-signed ngrok agent, so there is nothing to install manually — no Node.js, no npm, and no separate ngrok download. ngrok upgrades arrive through signed Rel.AI application updates.
 
 ## What you need first
 
@@ -26,7 +26,7 @@ The static domain is the part that matters for a permanent setup. A random tempo
 
 The desktop app creates `config.json` automatically. Skipping the dashboard onboarding leaves an empty but valid workspace configuration, so the app remains usable and workspaces can be added later. The `npm run init-config` command is only for repository/CLI development and is not required by the installed application.
 
-On first launch the app copies its bundled ngrok agent into `~/.rel-ai-mcp/managed-ngrok/` and runs it from there, so it can update the agent later without touching the installed program files.
+On first launch the app copies its bundled ngrok agent into `~/.rel-ai-mcp/managed-ngrok/` and runs it from there. On later launches, Rel.AI compares that managed copy with the packaged release hash and restores it when they differ. The agent does not self-update; upgrades arrive with the next signed Rel.AI release.
 
 Every ordinary launch after this goes straight to the dashboard. The app lives in the system tray — closing a window leaves it running, and you quit it from the tray menu. The installed Windows app can also launch at sign-in in the background, starting the tray, local service, and public endpoint without opening the dashboard.
 
@@ -39,7 +39,7 @@ All state lives under `~/.rel-ai-mcp/`:
 | `config.json` | Workspaces, validation commands, safety settings |
 | `.env` | Your approval token (`REL_AI_MCP_TOKEN`) — keep private |
 | `connection.json` | Host, port, and public URL of the current session |
-| `managed-ngrok/` | The managed ngrok agent, its config, and update state |
+| `managed-ngrok/` | The managed ngrok agent and its local configuration |
 
 The installed desktop app also stores `desktop-lifecycle.json` in Electron's per-user application-data directory. It contains only non-secret version, launch-count, running-marker, and clean-exit metadata.
 
@@ -77,8 +77,9 @@ Open **Settings > Connection** and choose **Replace approval token**. Type `REPL
 After replacement:
 
 1. Copy the new approval token.
-2. Open the existing Rel.AI app in ChatGPT and retry it.
-3. Enter the new token when the authorization page opens.
+2. In ChatGPT Web, open **Settings > Apps > Enabled Apps** and select the existing **Rel.AI MCP** app.
+3. Choose **Connect** or **Reconnect** if shown. Otherwise, select Rel.AI MCP in a new chat and ask ChatGPT to use it.
+4. Paste the new token on the Rel.AI authorization page, approve access, and retry your request.
 
 Do not delete or recreate the ChatGPT app.
 

@@ -67,10 +67,10 @@ function buildToolActivityDetails(name, args = {}, value = null, error = null, o
   const category = categoryForTool(name, options);
   const operation = cleanText(options.operation, 160) || titleForTool(name, { ...args, tool: name });
   const target = targetForTool(args, value);
-  const result = resultForTool(name, args, value, ok);
   const normalizedError = error ? normalizeActivityError(error) : value?.ok === false
     ? normalizeActivityError({ message: value.error || value.message || `${name} failed`, code: value.errorCode })
     : undefined;
+  const result = resultForTool(name, args, value, ok, normalizedError);
   const summary = summaryForTool(name, args, value, normalizedError, operation, result);
   const progress = progressForTool(name, args, value, ok, options.phase);
   const status = normalizedError ? errorStatus(normalizedError) : options.phase === 'running' ? 'running' : ok ? 'succeeded' : 'failed';
@@ -80,7 +80,9 @@ function buildToolActivityDetails(name, args = {}, value = null, error = null, o
     status,
     title: operation || titleForTool(name, args) || 'Rel.AI tool operation',
     summary,
-    currentStage: stageForTool(name, status),
+    currentStage: isValidationBlock(normalizedError)
+      ? 'Validation required'
+      : stageForTool(name, status),
     currentActivity: summary,
     target,
     result,
@@ -154,7 +156,7 @@ function completeProgress(label = 'Complete') {
 }
 
 function normalizeTaskProgress(progress, status) {
-  if ((status === 'completed' || status === 'completed_with_warnings')) return completeProgress(progress?.label || 'Complete');
+  if (status === 'completed') return completeProgress(progress?.label || 'Complete');
   if (progress?.mode === 'determinate') {
     const normalized = determinateProgress(progress.completedUnits, progress.totalUnits, progress.source, progress.label);
     if (Number.isFinite(Number(progress.percentage))) {
@@ -298,11 +300,13 @@ function targetForTool(args = {}, value = {}) {
   });
 }
 
-function resultForTool(name, args, value, ok) {
+function resultForTool(name, args, value, ok, error = null) {
   const changed = changedFiles(value);
   const affectedItemCount = affectedCount(value, args, changed);
   const warningCount = Number(value?.warningCount || value?.warnings?.length || 0);
-  let outcome = ok ? 'Completed successfully' : 'Failed';
+  let outcome = isValidationBlock(error)
+    ? 'Final validation required'
+    : ok ? 'Completed successfully' : 'Failed';
   if (name === 'relai_read' && affectedItemCount) outcome = `Read ${affectedItemCount} item${affectedItemCount === 1 ? '' : 's'}`;
   else if (name === 'relai_search' && Number.isFinite(value?.matchCount)) outcome = `Found ${value.matchCount} match${value.matchCount === 1 ? '' : 'es'}`;
   else if (changed.length) outcome = `Updated ${changed.length} file${changed.length === 1 ? '' : 's'}`;
@@ -312,6 +316,9 @@ function resultForTool(name, args, value, ok) {
 }
 
 function summaryForTool(name, args, value, error, operation, result) {
+  if (isValidationBlock(error)) {
+    return `Task completion paused: ${error.message}`;
+  }
   if (error) return `${operation || titleForTool(name, args) || 'Tool execution'} failed: ${error.message}`;
   if (name === 'relai_start_task') return args?.title
     ? `Started logical task “${sanitizeDisplayText(args.title, 120)}”.`
@@ -342,8 +349,13 @@ function summaryForTool(name, args, value, error, operation, result) {
   return cleanText(result?.outcome, MAX_SUMMARY_LENGTH) || `${operation || titleForTool(name, args) || 'Tool operation'} completed.`;
 }
 
+function isValidationBlock(error) {
+  return /VALIDATION_REQUIRED|TASK_PERSISTENCE_CONFLICT/.test(String(error?.code || ''));
+}
+
 function errorStatus(error) {
   const code = String(error?.code || '');
+  if (isValidationBlock(error)) return 'blocked';
   if (/APPROVAL|AUTHORIZATION/.test(code)) return 'blocked';
   if (/CANCEL/.test(code)) return 'cancelled';
   return 'failed';
@@ -371,11 +383,7 @@ function affectedCount(value, args, changed) {
 }
 
 function changedFiles(value = {}) {
-  const values = Array.isArray(value?.changedFiles)
-    ? value.changedFiles
-    : Array.isArray(value?.statusAfter?.sessionChangedFiles)
-      ? value.statusAfter.sessionChangedFiles
-      : [];
+  const values = Array.isArray(value?.changedFiles) ? value.changedFiles : [];
   return [...new Set(values.map(item => normalizeRelativePath(item)).filter(Boolean))].slice(0, 200);
 }
 

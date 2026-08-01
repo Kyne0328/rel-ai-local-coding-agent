@@ -3,9 +3,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { looksBinary } from "./safety.js";
+import { discoverProjectInstructionPaths } from './projectInstructionDiscovery.js';
 
 const MAX_PROJECT_INSTRUCTION_BYTES = 64 * 1024;
-const PROJECT_INSTRUCTION_PATHS = Object.freeze(['REL_AI.md', '.relai/instructions.md']);
+const LEGACY_PROJECT_INSTRUCTION_PATHS = Object.freeze(['REL_AI.md', '.relai/instructions.md']);
+const PROJECT_INSTRUCTION_PATHS = LEGACY_PROJECT_INSTRUCTION_PATHS;
 const instructionCache = new Map();
 
 function readProjectInstructions(workspace, options = {}) {
@@ -16,14 +18,17 @@ function readProjectInstructions(workspace, options = {}) {
   catch (error) { return emptyInstructions(error instanceof Error ? error.message : String(error)); }
 
   const maxBytes = clampBytes(options.maxBytes, MAX_PROJECT_INSTRUCTION_BYTES);
-  const signature = instructionSignature(root);
-  const cacheKey = `${root}\u0000${maxBytes}`;
+  const target = discoverProjectInstructionPaths(root, options.targetPath, LEGACY_PROJECT_INSTRUCTION_PATHS);
+  if (target.error) return emptyInstructions(target.error);
+  const instructionPaths = target.instructionPaths;
+  const signature = instructionSignature(root, instructionPaths);
+  const cacheKey = `${root}\u0000${target.relativeDirectory}\u0000${maxBytes}`;
   const cached = instructionCache.get(cacheKey);
   if (cached?.signature === signature) return cloneInstructions(cached.value);
 
   const sources = [];
   const rejectedSources = [];
-  for (const relativePath of PROJECT_INSTRUCTION_PATHS) {
+  for (const relativePath of instructionPaths) {
     const loaded = loadInstructionFile(root, relativePath, maxBytes);
     if (loaded.source) sources.push(loaded.source);
     if (loaded.rejected) rejectedSources.push(loaded.rejected);
@@ -41,7 +46,8 @@ function readProjectInstructions(workspace, options = {}) {
     truncated: totalBytes > Buffer.byteLength(content, 'utf8'),
     totalBytes,
     returnedBytes: Buffer.byteLength(content, 'utf8'),
-    precedence: 'Earlier sources override later sources.',
+    precedence: 'Earlier sources override later sources. AGENTS.override.md replaces AGENTS.md in the same directory, and instructions nearer the target path override parent-directory AGENTS.md files.',
+    targetPath: target.relativeDirectory || '.',
     ...(rejectedSources.length ? { rejectedSources } : {})
   };
   instructionCache.set(cacheKey, { signature, value });
@@ -79,8 +85,8 @@ function readPrefix(file, maxBytes) {
   }
 }
 
-function instructionSignature(root) {
-  return PROJECT_INSTRUCTION_PATHS.map(relativePath => {
+function instructionSignature(root, instructionPaths) {
+  return instructionPaths.map(relativePath => {
     const absolutePath = path.join(root, ...relativePath.split('/'));
     try {
       const stat = fs.lstatSync(absolutePath);
@@ -107,7 +113,8 @@ function summarizeProjectInstructions(value) {
 function emptyInstructions(error = '') {
   return {
     sources: [], content: '', truncated: false, totalBytes: 0, returnedBytes: 0,
-    precedence: 'Earlier sources override later sources.',
+    precedence: 'Earlier sources override later sources. AGENTS.override.md replaces AGENTS.md in the same directory.',
+    targetPath: '.',
     ...(error ? { error } : {})
   };
 }

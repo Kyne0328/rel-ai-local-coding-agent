@@ -129,20 +129,21 @@ function applyEvent(session, event) {
   const timestamp = Date.parse(event.ts || '') || Date.now();
   const ended = timestamp + Math.max(0, Number(event.ms || 0));
   const completion = event.ok !== false && (event.completionKnown === true || event.tool === 'relai_complete_task');
+  const cancellation = event.ok !== false && event.tool === 'relai_cancel_task';
   const changedFiles = unique([
     ...(session.changedFiles || []),
-    ...(Array.isArray(event.changedFiles) ? event.changedFiles : []),
-    ...(Array.isArray(event.sessionChangedFiles) ? event.sessionChangedFiles : []),
-    ...(event.filePath ? [event.filePath] : [])
+    ...(Array.isArray(event.taskOwnedChangedFiles) ? event.taskOwnedChangedFiles : []),
+    ...(Array.isArray(event.changedFiles) ? event.changedFiles : [])
   ].map(String).filter(Boolean));
   const lifecycleIndex = event.operationId
     ? (session.events || []).findIndex(item => item?.eventId === event.operationId || item?.operationId === event.operationId)
     : -1;
   const represented = lifecycleIndex >= 0;
+  const recoverableValidationFailure = event.tool === 'relai_run_checks' && ['failed', 'not_run'].includes(String(event.validationStatus || ''));
   const failures = Math.max(
     Number(session.failures || 0),
     Number(session.failedToolCallCount || 0)
-  ) + (event.ok === false && !represented ? 1 : 0);
+  ) + (event.ok === false && !represented && !recoverableValidationFailure ? 1 : 0);
   const validation = event.validationStatus === 'not_required'
     ? 'not_required'
     : event.tool === 'relai_run_checks'
@@ -151,14 +152,23 @@ function applyEvent(session, event) {
   const startedAt = session.startedAt && Date.parse(session.startedAt) <= timestamp
     ? session.startedAt
     : new Date(timestamp).toISOString();
-  const endedAt = new Date(Math.max(ended, Date.parse(session.endedAt || '') || 0)).toISOString();
+  const lastActivityAt = new Date(Math.max(ended, Date.parse(session.endedAt || '') || 0)).toISOString();
 
   const calls = Number(session.calls || 0) + (represented ? 0 : 1);
   const auditEvent = compactEvent(event);
   const events = represented
     ? (session.events || []).map((item, index) => index === lifecycleIndex ? { ...auditEvent, ...item } : item)
     : [...(session.events || []), auditEvent];
-  const status = completion || session.completionKnown ? 'completed' : failures ? 'failed' : 'cancelled';
+  const status = completion || session.completionKnown
+    ? 'completed'
+    : cancellation
+      ? 'cancelled'
+      : isTerminalTaskStatus(session.status)
+        ? session.status
+        : recoverableValidationFailure
+          ? 'validation_failed'
+          : 'planning';
+  const terminal = isTerminalTaskStatus(status);
 
   return {
     ...session,
@@ -175,14 +185,20 @@ function applyEvent(session, event) {
     pushed: Boolean(session.pushed || (event.tool === 'relai_git_push' && event.ok !== false)),
     prDrafted: Boolean(session.prDrafted || (event.tool === 'relai_git_draft_pr' && event.ok !== false)),
     completionKnown: Boolean(session.completionKnown || completion),
-    endReason: completion || session.completionKnown ? 'explicit_completion' : 'inactivity_window',
+    endReason: completion || session.completionKnown
+      ? 'explicit_completion'
+      : cancellation
+        ? 'explicit_cancellation'
+        : terminal
+          ? session.endReason || ''
+          : '',
     status,
     summary: event.taskSummary || session.summary || '',
-    workspace: event.workspace || session.workspace || '',
+    workspace: session.workspace || event.workspace || '',
     startedAt,
-    endedAt,
-    completedAt: endedAt,
-    durationMs: Math.max(0, Date.parse(endedAt) - Date.parse(startedAt)),
+    endedAt: terminal ? lastActivityAt : null,
+    completedAt: terminal ? lastActivityAt : null,
+    durationMs: Math.max(0, Date.parse(lastActivityAt) - Date.parse(startedAt)),
     activeCalls: 0,
     lastTool: event.tool || session.lastTool || '',
     operation: event.operation || session.operation || operationForTool(event.tool),
@@ -247,7 +263,8 @@ function compactEvent(event) {
     'id', 'eventId', 'ts', 'pid', 'taskId', 'operationId', 'requestId', 'serverInstanceId',
     'transportType', 'clientName', 'clientVersion', 'taskIdentityVersion', 'taskIdExplicit',
     'taskHistoryEligible', 'duplicateRequest', 'eventType', 'tool', 'operation', 'workspace',
-    'ok', 'ms', 'changedFiles', 'sessionChangedFiles', 'filePath', 'validationStatus',
+    'ok', 'ms', 'changedFiles', 'taskOwnedChangedFiles', 'externalChangedFiles', 'validationStatus',
+    'validationFingerprint', 'taskMutationGeneration', 'taskValidatedMutationGeneration', 'taskWorkspaceGeneration',
     'completionKnown', 'endReason', 'completionSource', 'taskSummary', 'message', 'error', 'path'
   ];
   const compact = Object.fromEntries(keep.filter(key => event[key] !== undefined).map(key => [key, event[key]]));
@@ -266,7 +283,7 @@ function publicSession(session) {
     taskId: value.taskId || value.id,
     sessionId: value.sessionId || value.id,
     title: value.title || historicalTitle(value),
-    progress: value.progress || (['completed', 'completed_with_warnings'].includes(value.status) ? { mode: 'complete', percentage: 100, label: 'Complete' } : { mode: 'indeterminate', label: 'Progress unavailable' }),
+    progress: value.progress || (value.status === 'completed' ? { mode: 'complete', percentage: 100, label: 'Complete' } : { mode: 'indeterminate', label: 'Progress unavailable' }),
     toolCallCount: Number(value.toolCallCount ?? value.calls ?? 0),
     successfulToolCallCount: Number(value.successfulToolCallCount ?? Math.max(0, Number(value.calls || 0) - Number(value.failures || 0))),
     failedToolCallCount: Number(value.failedToolCallCount ?? value.failures ?? 0),

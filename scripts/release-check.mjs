@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -6,7 +7,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(process.env.REL_AI_RELEASE_ROOT || path.join(__dirname, '..'));
 const failures = [];
 const ESCAPED_DOT = String.raw`\.`;
-const MIN_NGROK_SEED_BYTES = 5 * 1024 * 1024;
 
 function rel(...parts) {
   return path.join(root, ...parts);
@@ -57,14 +57,26 @@ function assertJsonVersion(relativePath, version) {
 function assertNgrokSeed() {
   const platform = String(process.env.REL_AI_TARGET_PLATFORM || (process.platform === 'win32' ? 'win32' : '')).trim();
   if (!platform) return;
-  const fileName = platform === 'win32' ? 'ngrok.exe' : 'ngrok';
-  const seedPath = rel('vendor', 'ngrok', platform, fileName);
+  const manifestPath = rel('vendor', 'ngrok', 'manifest.json');
+  if (!fs.existsSync(manifestPath)) {
+    fail(`ngrok provenance manifest is missing: ${path.relative(root, manifestPath)}`);
+    return;
+  }
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  const spec = manifest.platforms?.[platform];
+  if (!spec) {
+    fail(`ngrok provenance manifest has no entry for ${platform}`);
+    return;
+  }
+  const seedPath = rel('vendor', 'ngrok', platform, spec.file);
   if (!fs.existsSync(seedPath)) {
     fail(`bundled ngrok seed is missing for ${platform}: ${path.relative(root, seedPath)}`);
     return;
   }
-  const size = fs.statSync(seedPath).size;
-  expect(size >= MIN_NGROK_SEED_BYTES, `bundled ngrok seed for ${platform} is too small (${size} bytes)`);
+  const bytes = fs.readFileSync(seedPath);
+  const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
+  expectEqual(bytes.length, Number(spec.size), `bundled ngrok seed size for ${platform}`);
+  expectEqual(sha256, String(spec.sha256).toLowerCase(), `bundled ngrok seed SHA-256 for ${platform}`);
 }
 
 const packageJson = readJson('package.json');
@@ -96,6 +108,26 @@ const versionModulePath = rel('src', 'version.js');
 if (fs.existsSync(versionModulePath)) {
   const { getVersion } = await import(pathToFileURL(versionModulePath).href);
   expectEqual(getVersion(), version, 'src/version.js getVersion()');
+}
+
+const releaseManifestPath = rel('release-manifest.json');
+if (!fs.existsSync(releaseManifestPath)) {
+  fail('release-manifest.json is missing');
+} else {
+  const releaseManifest = readJson('release-manifest.json');
+  expectEqual(releaseManifest.applicationVersion, version, 'release-manifest.json applicationVersion');
+  expectEqual(releaseManifest.protocolVersion, '2026-07-28', 'release-manifest.json protocolVersion');
+  expect(Number.isInteger(releaseManifest.toolCount) && releaseManifest.toolCount > 0, 'release-manifest.json toolCount must be a positive integer');
+  expect(/^[A-Za-z0-9_-]{24}$/.test(String(releaseManifest.manifestHash || '')), 'release-manifest.json manifestHash must be a 24-character base64url digest');
+
+  const runtimeMetadataPath = rel('src', 'runtimeCompatibility.js');
+  if (fs.existsSync(runtimeMetadataPath)) {
+    const { runtimeMetadata } = await import(`${pathToFileURL(runtimeMetadataPath).href}?releaseCheck=${Date.now()}`);
+    const runtime = runtimeMetadata();
+    for (const field of ['applicationVersion', 'protocolVersion', 'toolSurfaceVersion', 'toolCount', 'manifestHash', 'schemaVersion']) {
+      expectEqual(releaseManifest[field], runtime[field], `release-manifest.json ${field}`);
+    }
+  }
 }
 
 if (failures.length) {

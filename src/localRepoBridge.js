@@ -39,7 +39,7 @@ async function repoSnapshot(workspace, config, args = {}) {
   const tree = collectTextFiles(workspace.path, collectOptionsFromWorkspace(workspace, { maxEntries }));
   const manifests = readManifests(workspace.path);
   const discoveredCommands = discoverCommands(workspace.path);
-  const projectInstructions = readProjectInstructions(workspace);
+  const projectInstructions = readProjectInstructions(workspace, { targetPath: args.instructionPath });
   const git = await gitSummary;
   return {
     ok: true,

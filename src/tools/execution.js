@@ -27,10 +27,14 @@ async function executeToolCall({ config, name, effectiveArgs, context, finishAct
       return result;
     }, {
       mode: definition?.annotations?.readOnlyHint === true ? 'read' : 'write',
+      scope: definition?.behavior?.concurrencyScope === 'workspace' ? 'workspace' : 'task',
+      taskId: finishActivity?.taskId,
       onWait: (waitMs, details) => {
         addSpanEvent('workspace.queue.admitted', {
           'relai.workspace': details.workspace,
           'relai.queue.mode': details.mode,
+          'relai.queue.scope': details.scope,
+          ...(details.taskId ? { 'relai.queue.task_id': details.taskId } : {}),
           'relai.queue.wait_ms': waitMs,
           'relai.queue.pending': details.queued
         });
@@ -38,7 +42,7 @@ async function executeToolCall({ config, name, effectiveArgs, context, finishAct
           updateCurrentToolActivity({
             currentStage: 'Workspace queue admitted',
             currentActivity: `Waited ${formatWait(waitMs)} for the workspace execution queue.`,
-            metadata: { waitMs, queueMode: details.mode, queued: details.queued }
+            metadata: { waitMs, queueMode: details.mode, queueScope: details.scope, queued: details.queued }
           });
         }
       }

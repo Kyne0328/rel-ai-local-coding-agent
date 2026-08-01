@@ -1,25 +1,23 @@
-'use strict';
+import { CLIENT_CAPABILITIES_META_KEY } from '@modelcontextprotocol/server';
+import {
+  cancelNativeTask,
+  createNativeTask,
+  getNativeTask,
+  updateNativeTaskInputs,
+  updateNativeTaskRecovery
+} from './mcp/nativeTaskService.js';
+import {
+  MISSING_TASKS_CAPABILITY_CODE,
+  TASK_METHODS,
+  TASKS_EXTENSION_ID
+} from './mcp/protocol.js';
 
-import * as crypto from 'node:crypto';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import { CLIENT_CAPABILITIES_META_KEY, fromJsonSchema } from '@modelcontextprotocol/server';
-import { getStateDir } from './statePaths.js';
-import { toolResult } from './mcp/results.js';
-
-const TASKS_EXTENSION_ID = 'io.modelcontextprotocol/tasks';
 const PROBE_TOOL_NAME = 'relai_native_tasks_probe';
-const PROBE_ENV_NAME = 'REL_AI_NATIVE_TASKS_PROBE';
 const DEFAULT_DURATION_MS = 5000;
 const MIN_DURATION_MS = 1000;
 const MAX_DURATION_MS = 30000;
 const DEFAULT_POLL_INTERVAL_MS = 1000;
 const TASK_TTL_MS = 10 * 60 * 1000;
-const TASK_ID_PATTERN = /^probe_[A-Za-z0-9_-]{20,160}$/;
-
-function nativeTasksProbeEnabled() {
-  return process.env[PROBE_ENV_NAME] === '1';
-}
 
 function clientSupportsNativeTasks(capabilities) {
   const extensions = capabilities?.extensions;
@@ -30,245 +28,141 @@ function clientCapabilitiesFromMessage(message) {
   return message?.params?._meta?.[CLIENT_CAPABILITIES_META_KEY] || {};
 }
 
-function nativeTasksServerCapability() {
-  return nativeTasksProbeEnabled() ? { [TASKS_EXTENSION_ID]: {} } : null;
-}
-
-function registerNativeTasksProbeTool(server, options = {}) {
-  if (!nativeTasksProbeEnabled()) return false;
-  server.registerTool(PROBE_TOOL_NAME, {
-    title: 'Probe Native MCP Tasks',
-    description: 'Diagnostic canary for native MCP Tasks support. With the probe flag enabled, an HTTP client that advertises io.modelcontextprotocol/tasks receives a native asynchronous task. Other clients receive a synchronous capability report.',
-    inputSchema: fromJsonSchema({
-      type: 'object',
-      properties: {
-        durationMs: { type: 'number', minimum: MIN_DURATION_MS, maximum: MAX_DURATION_MS },
-        label: { type: 'string', maxLength: 120 }
-      },
-      additionalProperties: false
-    }),
-    outputSchema: fromJsonSchema({
-      type: 'object',
-      properties: {
-        ok: { type: 'boolean' },
-        probeEnabled: { type: 'boolean' },
-        extensionId: { type: 'string' },
-        clientAdvertisedTasks: { type: 'boolean' },
-        transport: { type: 'string' },
-        nativeTaskReturned: { type: 'boolean' },
-        message: { type: 'string' },
-        nextAction: { type: 'string' }
-      },
-      required: ['ok', 'probeEnabled', 'extensionId', 'clientAdvertisedTasks', 'transport', 'nativeTaskReturned', 'message'],
-      additionalProperties: false
-    }),
-    annotations: {
-      readOnlyHint: true,
-      destructiveHint: false,
-      idempotentHint: false,
-      openWorldHint: false
-    }
-  }, async (_args, context) => {
-    const envelope = context?.mcpReq?.envelope || {};
-    const capabilities = envelope[CLIENT_CAPABILITIES_META_KEY] || {};
-    const clientAdvertisedTasks = clientSupportsNativeTasks(capabilities);
-    const transport = String(options.transportType || (context?.http ? 'streamable-http' : 'stdio'));
-    const nativeEligible = clientAdvertisedTasks && transport === 'streamable-http';
-    return toolResult({
-      ok: true,
-      probeEnabled: true,
-      extensionId: TASKS_EXTENSION_ID,
-      clientAdvertisedTasks,
-      transport,
-      nativeTaskReturned: false,
-      message: clientAdvertisedTasks
-        ? 'The client advertised native MCP Tasks, but this call reached the synchronous fallback instead of the HTTP extension adapter.'
-        : 'The client did not advertise the native MCP Tasks extension on this tool call.',
-      nextAction: nativeEligible
-        ? 'Inspect the HTTP adapter logs and request envelope; a native-capable HTTP call should return resultType task before SDK dispatch.'
-        : 'Reconnect the MCP app after enabling the probe, then invoke this tool from the client being tested.'
-    }, false);
-  });
-  return true;
+function nativeTasksProbeFallback(_config, _args = {}, context = {}) {
+  const error = new Error('Missing required client capability: io.modelcontextprotocol/tasks');
+  error.code = MISSING_TASKS_CAPABILITY_CODE;
+  error.data = requiredTasksCapability();
+  error.clientAdvertisedTasks = clientSupportsNativeTasks(context.clientCapabilities || {});
+  throw error;
 }
 
 function expectedNativeTaskName(method, params = {}) {
-  if (!nativeTasksProbeEnabled()) return '';
-  if (['tasks/get', 'tasks/update', 'tasks/cancel'].includes(String(method || ''))) {
-    return String(params.taskId || '');
-  }
-  return '';
+  return TASK_METHODS.includes(String(method || '')) ? String(params.taskId || '') : '';
 }
 
-function handleNativeTasksProbeRequest(config, message, principal = '') {
-  if (!nativeTasksProbeEnabled() || !message || typeof message !== 'object') return null;
+function handleNativeTasksRequest(config, message, principal = '') {
+  if (!message || typeof message !== 'object' || Array.isArray(message)) return null;
   const method = String(message.method || '');
+  const isProbe = method === 'tools/call' && message.params?.name === PROBE_TOOL_NAME;
+  const isTaskMethod = TASK_METHODS.includes(method);
+  if (!isProbe && !isTaskMethod) return null;
+
   const capabilities = clientCapabilitiesFromMessage(message);
-  const supportsTasks = clientSupportsNativeTasks(capabilities);
-
-  if (method === 'tools/call' && message.params?.name === PROBE_TOOL_NAME) {
-    if (!supportsTasks) return null;
-    try {
-      const args = normalizeProbeArguments(message.params?.arguments);
-      const task = createProbeTask(config, { ...args, principal });
-      return successResponse(message.id, { resultType: 'task', ...publicTask(task) });
-    } catch (error) {
-      return errorResponse(message.id, -32602, error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  if (!['tasks/get', 'tasks/update', 'tasks/cancel'].includes(method)) return null;
-  if (!supportsTasks) {
-    return errorResponse(message.id, -32003, 'Missing required client capability', {
-      requiredCapabilities: { extensions: { [TASKS_EXTENSION_ID]: {} } }
-    });
+  if (!clientSupportsNativeTasks(capabilities)) {
+    return errorResponse(
+      message.id,
+      MISSING_TASKS_CAPABILITY_CODE,
+      'Missing required client capability',
+      requiredTasksCapability()
+    );
   }
 
   try {
-    const taskId = validateTaskId(message.params?.taskId);
-    const task = requireOwnedTask(config, taskId, principal);
+    if (isProbe) return createProbeResponse(config, message, principal);
+    const taskId = String(message.params?.taskId || '');
     if (method === 'tasks/get') {
-      const refreshed = refreshProbeTask(config, task);
-      return successResponse(message.id, { resultType: 'complete', ...detailedTask(refreshed) });
+      return successResponse(message.id, { resultType: 'complete', ...getNativeTask(config, taskId, { principal }) });
     }
-    if (method === 'tasks/cancel') {
-      cancelProbeTask(config, task);
+    if (method === 'tasks/update') {
+      updateNativeTaskInputs(config, taskId, message.params?.inputResponses, { principal });
       return successResponse(message.id, { resultType: 'complete' });
     }
+    cancelNativeTask(config, taskId, {
+      principal,
+      immediate: true,
+      statusMessage: 'Native MCP task cancelled by the client.'
+    });
     return successResponse(message.id, { resultType: 'complete' });
-  } catch (_error) {
-    return errorResponse(message.id, -32602, 'Invalid task ID or task is not available to this client.');
+  } catch (error) {
+    return taskErrorResponse(message.id, error);
   }
+}
+
+function createProbeResponse(config, message, principal) {
+  const args = normalizeProbeArguments(message.params?.arguments);
+  const now = Date.now();
+  const completion = {
+    content: [{
+      type: 'text',
+      text: 'Native MCP Tasks probe completed. The client retrieved the final tool result through tasks/get.'
+    }],
+    structuredContent: {
+      ok: true,
+      nativeTasksProbe: true,
+      extensionId: TASKS_EXTENSION_ID,
+      durationMs: args.durationMs
+    },
+    isError: false
+  };
+  const task = createNativeTask(config, {
+    principal,
+    method: 'tools/call',
+    name: PROBE_TOOL_NAME,
+    restartPolicy: 'restart_reconcilable',
+    ttlMs: TASK_TTL_MS,
+    pollIntervalMs: DEFAULT_POLL_INTERVAL_MS,
+    statusMessage: `${args.label} is running.`,
+    recovery: {
+      mode: 'deadline',
+      completeAtMs: now + args.durationMs,
+      statusMessage: 'Native MCP Tasks probe completed.'
+    }
+  });
+  completion.structuredContent.taskId = task.taskId;
+  updateNativeTaskRecovery(config, task.taskId, {
+    mode: 'deadline',
+    completeAtMs: now + args.durationMs,
+    statusMessage: 'Native MCP Tasks probe completed.',
+    result: completion
+  }, { principal });
+  return successResponse(message.id, { resultType: 'task', ...task });
 }
 
 function normalizeProbeArguments(value) {
   const args = value == null ? {} : value;
-  if (!args || typeof args !== 'object' || Array.isArray(args)) throw new Error('Probe arguments must be an object.');
+  if (!args || typeof args !== 'object' || Array.isArray(args)) throw invalidTaskRequest('Probe arguments must be an object.');
   const allowed = new Set(['durationMs', 'label']);
   const unknown = Object.keys(args).filter(key => !allowed.has(key));
-  if (unknown.length) throw new Error(`Unknown probe argument: ${unknown[0]}`);
+  if (unknown.length) throw invalidTaskRequest(`Unknown probe argument: ${unknown[0]}`);
   const durationMs = args.durationMs == null ? DEFAULT_DURATION_MS : Number(args.durationMs);
   if (!Number.isFinite(durationMs) || durationMs < MIN_DURATION_MS || durationMs > MAX_DURATION_MS) {
-    throw new Error(`durationMs must be between ${MIN_DURATION_MS} and ${MAX_DURATION_MS}.`);
+    throw invalidTaskRequest(`durationMs must be between ${MIN_DURATION_MS} and ${MAX_DURATION_MS}.`);
   }
   const label = String(args.label || '').trim().slice(0, 120) || 'ChatGPT native MCP Tasks probe';
   return { durationMs: Math.round(durationMs), label };
 }
 
-function taskDirectory(config) {
-  return path.join(getStateDir(config), 'native-task-probes');
+function requiredTasksCapability() {
+  return { requiredCapabilities: { extensions: { [TASKS_EXTENSION_ID]: {} } } };
 }
 
-function taskPath(config, taskId) {
-  return path.join(taskDirectory(config), `${validateTaskId(taskId)}.json`);
+function taskErrorMessage(error) {
+  if (error?.code === 'NATIVE_TASK_UNAVAILABLE') return 'Invalid task ID or task is not available to this client.';
+  if (error?.code === 'NATIVE_TASK_INVALID_REQUEST') return error.message;
+  return 'Native task request failed.';
 }
 
-function validateTaskId(taskId) {
-  const value = String(taskId || '').trim();
-  if (!TASK_ID_PATTERN.test(value)) throw new Error('Invalid native task probe ID.');
-  return value;
-}
-
-function principalFingerprint(principal) {
-  return crypto.createHash('sha256').update(String(principal || 'anonymous')).digest('base64url');
-}
-
-function createProbeTask(config, options) {
-  const nowMs = Date.now();
-  const now = new Date(nowMs).toISOString();
-  const task = {
-    taskId: `probe_${crypto.randomBytes(24).toString('base64url')}`,
-    status: 'working',
-    statusMessage: `${options.label} is running.`,
-    createdAt: now,
-    lastUpdatedAt: now,
-    ttlMs: TASK_TTL_MS,
-    pollIntervalMs: DEFAULT_POLL_INTERVAL_MS,
-    durationMs: options.durationMs,
-    completeAtMs: nowMs + options.durationMs,
-    principalFingerprint: principalFingerprint(options.principal),
-    result: null
-  };
-  persistTask(config, task);
-  return task;
-}
-
-function readProbeTask(config, taskId) {
-  try {
-    const task = JSON.parse(fs.readFileSync(taskPath(config, taskId), 'utf8'));
-    const createdAtMs = Date.parse(task.createdAt || 0);
-    if (!Number.isFinite(createdAtMs) || Date.now() > createdAtMs + Number(task.ttlMs || TASK_TTL_MS)) {
-      fs.rmSync(taskPath(config, taskId), { force: true });
-      return null;
-    }
-    return task;
-  } catch {
-    return null;
+function taskErrorResponse(id, error) {
+  if (error?.code === 'NATIVE_TASK_UNAVAILABLE' || error?.code === 'NATIVE_TASK_INVALID_REQUEST') {
+    return errorResponse(id, -32602, taskErrorMessage(error));
   }
+  if (error?.code === 'NATIVE_TASK_STORE_ERROR') {
+    const corrupt = error.reason === 'record_corrupt';
+    return errorResponse(id, -32603, corrupt ? 'Native task record is corrupt.' : 'Native task storage is unavailable.', {
+      reason: corrupt ? 'task_record_corrupt' : 'task_store_unavailable',
+      retryable: error.retryable !== false
+    });
+  }
+  return errorResponse(id, -32603, 'Native task request failed.', {
+    reason: 'internal_error',
+    retryable: true
+  });
 }
 
-function requireOwnedTask(config, taskId, principal) {
-  const task = readProbeTask(config, taskId);
-  if (!task || task.principalFingerprint !== principalFingerprint(principal)) throw new Error('Task unavailable.');
-  return task;
-}
-
-function refreshProbeTask(config, task) {
-  if (task.status !== 'working' || Date.now() < Number(task.completeAtMs || 0)) return task;
-  task.status = 'completed';
-  task.statusMessage = 'Native MCP Tasks probe completed.';
-  task.lastUpdatedAt = new Date().toISOString();
-  task.result = {
-    content: [{ type: 'text', text: 'Native MCP Tasks probe completed. The client successfully retrieved the final tool result through tasks/get.' }],
-    structuredContent: {
-      ok: true,
-      nativeTasksProbe: true,
-      extensionId: TASKS_EXTENSION_ID,
-      taskId: task.taskId,
-      durationMs: task.durationMs,
-      completedAt: task.lastUpdatedAt
-    },
-    isError: false
-  };
-  persistTask(config, task);
-  return task;
-}
-
-function cancelProbeTask(config, task) {
-  if (['completed', 'failed', 'cancelled'].includes(task.status)) return task;
-  task.status = 'cancelled';
-  task.statusMessage = 'Native MCP Tasks probe cancelled by the client.';
-  task.lastUpdatedAt = new Date().toISOString();
-  persistTask(config, task);
-  return task;
-}
-
-function persistTask(config, task) {
-  const directory = taskDirectory(config);
-  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const target = taskPath(config, task.taskId);
-  const temporary = `${target}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;
-  fs.writeFileSync(temporary, `${JSON.stringify(task, null, 2)}\n`, { mode: 0o600 });
-  fs.renameSync(temporary, target);
-}
-
-function publicTask(task) {
-  return {
-    taskId: task.taskId,
-    status: task.status,
-    statusMessage: task.statusMessage,
-    createdAt: task.createdAt,
-    lastUpdatedAt: task.lastUpdatedAt,
-    ttlMs: task.ttlMs,
-    pollIntervalMs: task.pollIntervalMs
-  };
-}
-
-function detailedTask(task) {
-  return {
-    ...publicTask(task),
-    ...(task.status === 'completed' && task.result ? { result: task.result } : {})
-  };
+function invalidTaskRequest(message) {
+  const error = new Error(message);
+  error.code = 'NATIVE_TASK_INVALID_REQUEST';
+  return error;
 }
 
 function successResponse(id, result) {
@@ -286,4 +180,12 @@ function errorResponse(id, code, message, data) {
   };
 }
 
-export { TASKS_EXTENSION_ID, PROBE_TOOL_NAME, PROBE_ENV_NAME, nativeTasksProbeEnabled, clientSupportsNativeTasks, nativeTasksServerCapability, registerNativeTasksProbeTool, expectedNativeTaskName, handleNativeTasksProbeRequest };
+export {
+  PROBE_TOOL_NAME,
+  TASKS_EXTENSION_ID,
+  clientCapabilitiesFromMessage,
+  clientSupportsNativeTasks,
+  expectedNativeTaskName,
+  handleNativeTasksRequest,
+  nativeTasksProbeFallback
+};

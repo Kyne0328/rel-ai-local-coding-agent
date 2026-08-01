@@ -52,6 +52,34 @@ try {
   assert.ok(both.content.indexOf('Root architecture rule') < both.content.indexOf('Nested style rule'));
   assert.match(both.precedence, /Earlier sources override later sources/);
 
+  fs.writeFileSync(path.join(repo, 'AGENTS.md'), 'Root agent rule.\n', 'utf8');
+  const rootAgents = readProjectInstructions(workspace);
+  assert.deepEqual(rootAgents.sources, ['REL_AI.md', '.relai/instructions.md', 'AGENTS.md']);
+  assert.match(rootAgents.content, /Root agent rule/);
+
+  fs.writeFileSync(path.join(repo, 'AGENTS.override.md'), 'Root override rule.\n', 'utf8');
+  const rootOverride = readProjectInstructions(workspace);
+  assert.deepEqual(rootOverride.sources, ['REL_AI.md', '.relai/instructions.md', 'AGENTS.override.md']);
+  assert.match(rootOverride.content, /Root override rule/);
+  assert.doesNotMatch(rootOverride.content, /Root agent rule/, 'AGENTS.override.md must replace AGENTS.md in the same directory');
+
+  const nestedDirectory = path.join(repo, 'src', 'feature');
+  fs.mkdirSync(nestedDirectory, { recursive: true });
+  fs.writeFileSync(path.join(repo, 'src', 'AGENTS.md'), 'Source agent rule.\n', 'utf8');
+  fs.writeFileSync(path.join(nestedDirectory, 'AGENTS.md'), 'Feature agent rule.\n', 'utf8');
+  fs.writeFileSync(path.join(nestedDirectory, 'index.js'), 'export {};\n', 'utf8');
+  const nestedAgents = readProjectInstructions(workspace, { targetPath: 'src/feature/index.js' });
+  assert.deepEqual(nestedAgents.sources, [
+    'REL_AI.md',
+    '.relai/instructions.md',
+    'src/feature/AGENTS.md',
+    'src/AGENTS.md',
+    'AGENTS.override.md'
+  ]);
+  assert.equal(nestedAgents.targetPath, 'src/feature');
+  assert.ok(nestedAgents.content.indexOf('Feature agent rule') < nestedAgents.content.indexOf('Source agent rule'));
+  assert.ok(nestedAgents.content.indexOf('Source agent rule') < nestedAgents.content.indexOf('Root override rule'));
+
   const directRead = relaiRead(workspace, config, { paths: ['.relai/instructions.md'] });
   assert.match(directRead.items[0].content, /Nested style rule/, 'the explicit .relai instruction file must remain directly readable');
 
@@ -65,7 +93,7 @@ try {
 
   fs.writeFileSync(path.join(repo, '.relai', 'instructions.md'), Buffer.from([0, 1, 2, 3]));
   const binaryRejected = readProjectInstructions(workspace);
-  assert.deepEqual(binaryRejected.sources, ['REL_AI.md']);
+  assert.deepEqual(binaryRejected.sources, ['REL_AI.md', 'AGENTS.override.md']);
   assert.deepEqual(binaryRejected.rejectedSources, [{ path: '.relai/instructions.md', reason: 'binary-looking instruction file' }]);
 
   fs.writeFileSync(path.join(repo, 'REL_AI.md'), '🙂'.repeat(20000), 'utf8');
@@ -82,7 +110,7 @@ try {
   fs.writeFileSync(path.join(repo, '.relai', 'instructions.md'), 'Inspect instruction.\n', 'utf8');
   resetProjectInstructionCacheForTests();
   const snapshot = await repoSnapshot(workspace, config, { includeFiles: false });
-  assert.deepEqual(snapshot.projectInstructions.sources, ['REL_AI.md', '.relai/instructions.md']);
+  assert.deepEqual(snapshot.projectInstructions.sources, ['REL_AI.md', '.relai/instructions.md', 'AGENTS.override.md']);
   assert.match(snapshot.projectInstructions.content, /Snapshot instruction/);
 
   const compact = compactForConnector('relai_repo_snapshot', snapshot, {});
@@ -93,7 +121,7 @@ try {
   assert.match(inspect.projectInstructions.content, /Inspect instruction/);
 
   const summary = publicConfigSummary(config).workspaces[0].projectInstructions;
-  assert.deepEqual(summary.sources, ['REL_AI.md', '.relai/instructions.md']);
+  assert.deepEqual(summary.sources, ['REL_AI.md', '.relai/instructions.md', 'AGENTS.override.md']);
   assert.equal(summary.configured, true);
   assert.equal(Object.hasOwn(summary, 'content'), false, 'dashboard/config summaries must not include full instruction content');
 

@@ -1,4 +1,4 @@
-import { fetchJson } from '../../api.js';
+import { fetchJson, postJson } from '../../api.js';
 import { toast } from '../../components/toast.js';
 import { copyText } from '../../clipboard.js';
 import { get as getStore } from '../../store.js';
@@ -21,14 +21,16 @@ async function loadConnector(container) {
     return;
   }
 
-  const state = connectionStateFor(getStore());
+  const dashboardState = getStore();
+  const mcpConnection = payload.mcpConnection || dashboardState.mcpConnection || {};
+  const state = connectionStateFor({ ...dashboardState, mcpConnection });
   const section = container.querySelector('.section');
   section.append(
     summaryCard(payload, state),
     layerGrid(state),
-    actionCard(state),
+    actionCard(state, mcpConnection),
     setupCard(payload, state),
-    technicalDetailsCard(payload)
+    technicalDetailsCard(payload, mcpConnection)
   );
   const controls = document.createElement('section');
   controls.className = 'connection-controls-section';
@@ -83,7 +85,7 @@ function layerCard(layer) {
   return card;
 }
 
-function actionCard(state) {
+function actionCard(state, mcpConnection = {}) {
   const card = document.createElement('section');
   card.className = 'connection-actions-bar';
   const summary = connectionSummary(state);
@@ -93,17 +95,27 @@ function actionCard(state) {
       <strong>${escapeHtml(summary.label)}</strong>
     </div>
     <div class="connection-action-notices">
-      ${authenticationRecoveryHtml(state)}
+      ${recoveryNoticeHtml(state, mcpConnection)}
       ${state.error ? `<div class="connection-notice bad"><strong>${escapeHtml(state.error.code)}</strong><br>${escapeHtml(state.error.message)}</div>` : ''}
     </div>
     <div class="connection-actions">
-      ${window.relaiDesktop ? '<button type="button" data-desktop-restart>Restart connection</button>' : ''}
+      ${mcpRecoveryButtonHtml(state)}
+      ${window.relaiDesktop ? '<button class="secondary" type="button" data-desktop-restart>Restart local service</button>' : ''}
       <button class="secondary" type="button" data-refresh-connection>Refresh status</button>
       <a class="buttonlike secondary" href="#settings/diagnostics">Open diagnostics</a>
     </div>`;
+  card.querySelector('[data-mcp-retry]')?.addEventListener('click', async event => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    const result = await postJson('/api/mcp/recovery', { action: 'retry' }, { cache: 'no-store' });
+    button.disabled = false;
+    if (result.ok) toast(result.message || 'MCP transport reset. Waiting for a fresh client session.', { variant: 'success' });
+    else toast(result.error || 'MCP recovery requires action in ChatGPT.', { variant: 'warn' });
+    window.dispatchEvent(new CustomEvent('relai:dashboard-refresh'));
+  });
   card.querySelector('[data-desktop-restart]')?.addEventListener('click', () => {
     window.relaiDesktop.restartService();
-    toast('Connection restart requested.', { variant: 'info' });
+    toast('Local service restart requested.', { variant: 'info' });
   });
   card.querySelector('[data-refresh-connection]')?.addEventListener('click', () => {
     window.dispatchEvent(new CustomEvent('relai:dashboard-refresh'));
@@ -112,18 +124,37 @@ function actionCard(state) {
   return card;
 }
 
-function authenticationRecoveryHtml(state) {
-  if (state.chatgptReadiness?.status !== 'authentication_required') return '';
-  return `
-    <div class="connection-notice warn connection-auth-recovery">
-      <strong>Approve the existing ChatGPT app again.</strong>
-      <ol>
-        <li>Use the Approval token controls below and copy the current token.</li>
-        <li>Retry the existing Rel.AI app in ChatGPT.</li>
-        <li>Enter the token when the Rel.AI authorization page opens.</li>
-      </ol>
-      <p>The MCP endpoint is unchanged. Do not delete or recreate the ChatGPT app.</p>
-    </div>`;
+function mcpRecoveryButtonHtml(state) {
+  const status = state.mcpClient?.status || '';
+  if (!['stale', 'capability_mismatch', 'reconnecting', 'degraded'].includes(status)) return '';
+  return '<button type="button" data-mcp-retry>Reset MCP transport</button>';
+}
+
+function recoveryNoticeHtml(state, mcpConnection = {}) {
+  const status = state.mcpClient?.status || '';
+  if (state.chatgptReadiness?.status === 'authentication_required' || status === 'reauthentication_required') {
+    return `
+      <div class="connection-notice warn connection-auth-recovery">
+        <strong>Reconnect the existing app from ChatGPT Web.</strong>
+        <ol>
+          <li>Copy the current approval token below.</li>
+          <li>Open <strong>Settings &gt; Apps &gt; Enabled Apps</strong> in ChatGPT Web and select <strong>Rel.AI MCP</strong>.</li>
+          <li>Select <strong>Connect</strong> or <strong>Reconnect</strong> if shown. Otherwise, select Rel.AI MCP in a new chat and ask ChatGPT to use it.</li>
+          <li>Paste the token on the Rel.AI authorization page, approve access, then retry your request.</li>
+        </ol>
+        <p>The endpoint is unchanged. Do not delete or recreate the ChatGPT app.</p>
+      </div>`;
+  }
+  if (status === 'capability_mismatch' || status === 'reconnecting') {
+    return '<div class="connection-notice warn"><strong>Tool synchronization is in progress.</strong><br>Rel.AI requested a fresh tool list. Use Reset MCP transport if the client remains stale.</div>';
+  }
+  if (status === 'degraded' || mcpConnection.manualRecoveryRequired) {
+    return '<div class="connection-notice bad"><strong>ChatGPT action is required.</strong><br>Open ChatGPT Settings &gt; Apps, refresh the Rel.AI actions, approve changed actions if prompted, then reconnect the existing app.</div>';
+  }
+  if (status === 'ready') {
+    return '<div class="connection-notice">The endpoint is healthy and approved. It is waiting for ChatGPT to send an MCP request.</div>';
+  }
+  return '';
 }
 
 function setupCard(payload, state) {
@@ -155,7 +186,7 @@ function setupCard(payload, state) {
   return card;
 }
 
-function technicalDetailsCard(payload) {
+function technicalDetailsCard(payload, mcpConnection = {}) {
   const details = document.createElement('details');
   details.className = 'card connector-details';
   const dashboardNoToken = dashboardUrl(payload);
@@ -167,6 +198,10 @@ function technicalDetailsCard(payload) {
     <div class="card-body connection-stack">
       <div class="connection-facts">
         <div class="connection-fact"><span class="connection-fact-label">Authentication</span><span>${escapeHtml(payload.chatgptAuthMode || 'OAuth')}</span></div>
+        <div class="connection-fact"><span class="connection-fact-label">MCP state</span><span>${escapeHtml(mcpConnection.status || 'unknown')}</span></div>
+        <div class="connection-fact"><span class="connection-fact-label">Connected clients</span><span>${escapeHtml(String(mcpConnection.connectedClientCount || 0))}</span></div>
+        <div class="connection-fact"><span class="connection-fact-label">Visible tools</span><span>${escapeHtml(String(mcpConnection.externallyVisibleToolCount || 0))}</span></div>
+        <div class="connection-fact"><span class="connection-fact-label">Tool manifest</span><code>${escapeHtml(mcpConnection.toolManifestVersion || '—')}</code></div>
         <div class="connection-fact"><span class="connection-fact-label">Health URL</span><code>${escapeHtml(payload.chatgptHealthUrl || 'Waiting for a permanent HTTPS endpoint')}</code></div>
         <div class="connection-fact"><span class="connection-fact-label">Dashboard URL</span><code>${escapeHtml(dashboardNoToken || '—')}</code></div>
       </div>
@@ -231,4 +266,3 @@ function stripToken(url) {
 function debugError(error) {
   if (window.localStorage?.getItem('relai_debug') === '1') console.error(error);
 }
-

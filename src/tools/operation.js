@@ -48,7 +48,7 @@ function describeToolOperation(name, args = {}) {
     case 'relai_git_push': return `Publishing the current branch${suffix}`;
     case 'relai_git_draft_pr': return `Preparing local pull request text${suffix}`;
     case 'relai_status': return workspace ? `Reading workspace and repository status for ${workspace}` : 'Reading Rel.AI status';
-    case 'relai_complete_task': return `Reporting task completion${suffix}`;
+    case 'relai_complete_task': return `Finalizing logical task${suffix}`;
     default: return `Running ${String(name || 'Rel.AI tool').replace(/^relai_/, '').replaceAll('_', ' ')}`;
   }
 }

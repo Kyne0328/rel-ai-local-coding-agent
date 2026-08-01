@@ -53,9 +53,22 @@ jobs:
         run: npm run verify:color-tokens
       - name: Build unpacked Windows application
         run: npm run electron:build
+      - name: Resolve current unpacked application
+        id: unpacked
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $packageDirectory = (node scripts/current-unpacked.mjs).Trim()
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $packageDirectory -PathType Container)) {
+            throw 'Could not resolve the promoted unpacked application.'
+          }
+          "path=$packageDirectory" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
       - name: Verify packaged application layout
-        run: npm run verify:packaged -- --dir dist/build-check/win-unpacked
+        shell: pwsh
+        run: npm run verify:packaged -- --dir '${{ steps.unpacked.outputs.path }}'
       - name: Verify hardened Electron fuses
-        run: cd electron && node scripts/verify-fuses.js "../dist/build-check/win-unpacked/Rel.AI MCP.exe"
+        shell: pwsh
+        run: node electron/scripts/verify-fuses.js '${{ steps.unpacked.outputs.path }}/Rel.AI MCP.exe'
       - name: Verify packaged OAuth and MCP connector flow
-        run: npm run test:connector-acceptance -- --dir dist/build-check/win-unpacked
+        shell: pwsh
+        run: npm run test:connector-acceptance -- --dir '${{ steps.unpacked.outputs.path }}'

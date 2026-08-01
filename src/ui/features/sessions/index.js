@@ -5,6 +5,7 @@ import { getWorkspaceFilter, routeHref } from '../../router.js';
 import { activityEventId } from '../../activity-event.js';
 import { bindWorkspaceMenus, workspaceMenuHtml } from '../../components/workspace-menu.js';
 import { taskProgressHtml } from '../../components/task-progress.js';
+import { recoveryStateView, taskEntityView } from '../../task-identity.js';
 
 const SESSION_PAGE_SIZE = 50;
 const DETAIL_FILE_PREVIEW = 12;
@@ -17,7 +18,7 @@ export function mountTasks(container, data = {}) {
     .filter(session => !workspace || session.workspace === workspace));
   const working = sessions.filter(session => ['running', 'validating', 'working'].includes(session.status)).length;
   const open = sessions.filter(session => ['queued', 'planning', 'waiting_for_approval', 'blocked', 'waiting', 'settling'].includes(session.status)).length;
-  const completed = sessions.filter(session => ['completed', 'completed_with_warnings'].includes(session.status)).length;
+  const completed = sessions.filter(session => session.status === 'completed').length;
   const scopeKey = workspace || '__all__';
 
   container.innerHTML = '';
@@ -25,10 +26,10 @@ export function mountTasks(container, data = {}) {
   root.className = 'section sessions-page';
   root.innerHTML = `
     <div class="feature-toolbar sessions-toolbar">
-      <p>An open session is an explicit logical task with no Rel.AI tool call executing at this moment.</p>
+      <p>An open logical task is a workspace objective with no Rel.AI tool call executing at this moment.</p>
       <div class="section-head-actions">
         ${workspaceMenuHtml(data.config?.workspaces || [], workspace, { id: 'sessionsWorkspaceMenu' })}
-        <span class="feature-count">${sessions.length} session${sessions.length === 1 ? '' : 's'}${workspace ? ` in ${esc(workspace)}` : ''}</span>
+        <span class="feature-count">${sessions.length} logical task${sessions.length === 1 ? '' : 's'}${workspace ? ` in ${esc(workspace)}` : ''}</span>
       </div>
     </div>
     <div class="overview-grid overview-grid-compact summary-metrics">
@@ -39,7 +40,7 @@ export function mountTasks(container, data = {}) {
 
   const card = document.createElement('section');
   card.className = 'card sessions-history-card';
-  card.innerHTML = '<div class="card-head"><h3>Session history</h3><div class="card-head-actions"><a class="section-action" href="#activity">Open tool events</a><a class="section-action" href="#settings/diagnostics">History controls</a></div></div>';
+  card.innerHTML = '<div class="card-head"><h3>Logical task history</h3><div class="card-head-actions"><a class="section-action" href="#activity">Open tool events</a><a class="section-action" href="#settings/diagnostics">History controls</a></div></div>';
   const body = document.createElement('div');
   body.className = 'card-body task-list';
   renderSessionRows(body, sessions, scopeKey);
@@ -62,13 +63,13 @@ export function mountTasks(container, data = {}) {
 
 function renderSessionRows(body, sessions, scopeKey) {
   if (!sessions.length) {
-    body.innerHTML = '<div class="empty">Sessions appear when ChatGPT starts an explicit Rel.AI logical task.</div>';
+    body.innerHTML = '<div class="empty">Logical tasks appear when ChatGPT starts an explicit Rel.AI workspace objective.</div>';
     return;
   }
   const visible = sessions.slice(0, visibleCountFor(scopeKey));
   const remaining = Math.max(0, sessions.length - visible.length);
   body.innerHTML = visible.map(sessionRow).join('') + (remaining
-    ? `<div class="session-list-footer"><span>${remaining} older session${remaining === 1 ? '' : 's'} hidden</span><button class="secondary" type="button" data-load-more-sessions>Show ${Math.min(SESSION_PAGE_SIZE, remaining)} more</button></div>`
+    ? `<div class="session-list-footer"><span>${remaining} older logical task${remaining === 1 ? '' : 's'} hidden</span><button class="secondary" type="button" data-load-more-sessions>Show ${Math.min(SESSION_PAGE_SIZE, remaining)} more</button></div>`
     : '');
 }
 
@@ -84,11 +85,15 @@ function sessionRow(session) {
   const operation = session.currentActivity || session.operation || operationForTool(session.lastTool);
   const timing = timingHtml(session, live);
   const calls = Number(session.toolCallCount ?? session.calls ?? 0);
+  const warnings = session.status === 'completed'
+    ? Number(session.failedToolCallCount ?? session.failures ?? 0)
+    : 0;
+  const warningText = warnings ? ` · ${warnings} warning${warnings === 1 ? '' : 's'}` : '';
   const activity = Number(session.activeCalls || 0) > 0
     ? `${session.activeCalls || 0} active · ${calls} total calls`
     : live
       ? `No active call · ${calls} total calls`
-      : `${calls} total calls`;
+      : `${calls} total calls${warningText}`;
   const publish = publishLabel(session);
 
   return `
@@ -112,7 +117,6 @@ function statusLabel(status) {
   if (status === 'waiting_for_approval') return 'approval';
   if (status === 'blocked') return 'blocked';
   if (status === 'failed' || status === 'attention') return 'error';
-  if (status === 'completed_with_warnings') return 'warning';
   if (status === 'completed') return 'completed';
   if (status === 'cancelled') return 'cancelled';
   return 'unknown';
@@ -154,6 +158,8 @@ function openSession(session) {
   content.className = 'detail-stack session-detail';
   const operations = currentOperations(session);
   const endMeaning = sessionMeaning(session.status);
+  const identities = taskEntityView(session);
+  const recovery = recoveryStateView(session);
 
   content.innerHTML = `
     <header class="task-detail-header">
@@ -162,8 +168,12 @@ function openSession(session) {
     </header>
     ${taskProgressHtml(session.progress, session.status)}
     <div class="task-detail-current"><strong>${esc(session.currentStage || 'Current stage unavailable')}</strong><span>${esc(session.currentActivity || session.operation || 'No current activity recorded.')}</span></div>
+    ${recovery ? `<div class="connection-notice ${esc(recovery.tone)}"><strong>${esc(recovery.title)}</strong><div>${esc(recovery.message)}</div><div>${esc(recovery.action)}</div></div>` : ''}
     <div class="task-detail-grid">
       ${detail('Workspace', session.workspace || '—')}
+      ${detail('Logical task ID', identities.logicalTaskId || '—')}
+      ${identities.nativeTaskId ? detail('Native task ID', identities.nativeTaskId) : ''}
+      ${identities.processId ? detail('Process ID', identities.processId) : ''}
       ${session.correlation?.requestId ? detail('Request ID', session.correlation.requestId) : ''}
       ${session.correlation?.traceId ? detail('Trace ID', session.correlation.traceId) : ''}
       ${session.correlation?.conversationId ? detail('Conversation ID', session.correlation.conversationId) : ''}
@@ -186,7 +196,7 @@ function openSession(session) {
   for (const link of content.querySelectorAll('[data-task-event-link], .session-detail-actions a')) {
     link.addEventListener('click', closeDrawer);
   }
-  openDrawer({ title: session.title || `Session ${session.id.slice(0, 8)}`, content, panelClass: 'session-detail-drawer' });
+  openDrawer({ title: session.title || `Logical task ${session.id.slice(0, 8)}`, content, panelClass: 'session-detail-drawer' });
 }
 
 function changedFilesSection(files) {
@@ -257,7 +267,7 @@ function sessionMeaning(status) {
   if (status === 'waiting_for_approval') return 'The task is paused until the required approval is provided.';
   if (status === 'blocked') return 'The task cannot continue until the reported blocker is resolved.';
   if (status === 'queued' || status === 'planning' || status === 'waiting') return 'This logical task remains open, but no Rel.AI tool operation is executing now.';
-  if (status === 'completed' || status === 'completed_with_warnings') return 'Task completion was explicitly reported; warnings remain visible when present.';
+  if (status === 'completed') return 'Task completion was explicitly reported. Any non-fatal warnings remain visible in the call counts and tool events.';
   if (status === 'failed') return 'The task ended after a failure. Review the failed activity and normalized error.';
   return 'The task was cancelled or expired before completion was reported.';
 }
@@ -295,4 +305,3 @@ function operationForTool(tool) {
   const value = String(tool || '').replace(/^relai_/, '').replaceAll('_', ' ');
   return value ? value.charAt(0).toUpperCase() + value.slice(1) : 'Rel.AI activity';
 }
-

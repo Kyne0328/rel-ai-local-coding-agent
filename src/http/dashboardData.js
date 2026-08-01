@@ -9,6 +9,7 @@ import { readTaskHistory } from '../taskHistoryStore.js';
 import { buildSafeActivityProjection, sanitizeActivityEventRecord, sanitizeTaskRecord } from '../taskObservability.js';
 import { buildWorkspaceStates } from '../workspaceState.js';
 import { runtimeCompatibility } from '../runtimeCompatibility.js';
+import { mcpConnectionManager } from '../mcp/connectionManager.js';
 const DASHBOARD_STREAM_ID = crypto.randomUUID();
 let dashboardSnapshotSequence = 0;
 
@@ -36,6 +37,7 @@ function buildDashboardPayload(config, options = {}, requireHttpToken = false) {
   const auditTail = mergeDashboardActivity(base.auditTail || { entries: [] }, tasks, limit);
   const workspaceStates = buildWorkspaceStates(config, tasks, taskActivity);
   const runtimeState = runtimeCompatibility(config, { activeTaskCount: taskActivity.activeTaskCount });
+  const mcpConnection = mcpConnectionManager.snapshot();
   if (Array.isArray(base.config?.workspaces)) {
     for (const workspace of base.config.workspaces) workspace.operational = workspaceStates[workspace.alias] || null;
   }
@@ -48,6 +50,7 @@ function buildDashboardPayload(config, options = {}, requireHttpToken = false) {
     readiness: release.releaseReadiness(config, { requireHttpToken }),
     connection: connectionSummary,
     connectionState: desktopStatus?.connectionState || deriveConnectionState(connectionStateInput),
+    mcpConnection,
     taskActivity: sanitizeTaskActivity(taskActivity),
     desktopStatus,
     snapshot: {

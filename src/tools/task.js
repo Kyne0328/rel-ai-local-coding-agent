@@ -13,9 +13,37 @@ function startTask(workspace, args = {}) {
     task_id: context.taskId,
     status: 'planning',
     identity: 'logical_task',
+    workspaceBinding: {
+      alias: workspace.alias,
+      root: workspace.path
+    },
     title: String(args.title || context.title || '').trim() || undefined,
     objective: String(args.objective || context.objective || '').trim() || undefined,
-    nextAction: 'Pass this task_id on every subsequent Rel.AI tool call for this task, including relai_complete_task.'
+    nextAction: 'Use the bootstrap context to choose the next tool. Pass this task_id on every subsequent task-scoped Rel.AI call; the bound workspace may be omitted.'
+  };
+}
+
+function taskBootstrapFromSnapshot(snapshot, mode = 'compact') {
+  const common = {
+    mode,
+    root: snapshot.root,
+    manifests: snapshot.manifests,
+    discoveredCommands: snapshot.discoveredCommands,
+    projectInstructions: snapshot.projectInstructions,
+    fileCount: snapshot.fileCount,
+    files: snapshot.files,
+    truncated: snapshot.truncated,
+    hints: snapshot.hints,
+    git: snapshot.git,
+    recommendedFlow: snapshot.recommendedFlow
+  };
+  if (mode !== 'full') return common;
+  return {
+    ...common,
+    manifestContents: snapshot.manifestContents,
+    skipped: snapshot.skipped,
+    writeGuidance: snapshot.writeGuidance,
+    operationJournal: snapshot.operationJournal
   };
 }
 
@@ -25,7 +53,7 @@ function assertKnownTask(config, taskId, workspace, toolName) {
     throw taskError('TASK_NOT_FOUND', 'The supplied task_id is unknown or expired. Start a new logical task with relai_start_task.');
   }
   if (session.status === 'cancelled' && toolName === 'relai_cancel_task') return session;
-  if (['completed', 'completed_with_warnings'].includes(session.status) && toolName === 'relai_complete_task') return session;
+  if (session.status === 'completed' && toolName === 'relai_complete_task') return session;
   if (isTerminalTaskStatus(session.status)) {
     throw taskError('INVALID_TASK_STATE', `This logical task is already ${session.status}. Start a new task instead of reusing its task_id.`);
   }
@@ -74,4 +102,4 @@ function withTaskIdentity(value, taskId) {
   return { ok: true, value, task_id: identity };
 }
 
-export { startTask, assertKnownTask, taskAuditContext, withTaskIdentity };
+export { startTask, taskBootstrapFromSnapshot, assertKnownTask, taskAuditContext, withTaskIdentity };

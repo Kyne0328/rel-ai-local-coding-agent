@@ -1,6 +1,6 @@
 {
-  "version": 29,
-  "capturedAt": "2026-07-26",
+  "version": 31,
+  "capturedAt": "2026-07-29",
   "mainNavigation": [
     "Overview",
     "Sessions",
@@ -47,7 +47,8 @@
   "connectionLayers": [
     "Local service",
     "Public endpoint",
-    "ChatGPT readiness",
+    "ChatGPT authorization",
+    "MCP host activity",
     "Dashboard updates"
   ],
   "approvalTokenReplacement": {
@@ -151,7 +152,10 @@
     "forcedColorScrollbarFallback": true,
     "keyboardWindowControls": true,
     "reducedMotion": true,
-    "electronStepVisibility": true
+    "electronStepVisibility": true,
+    "highZoomTaskVisibility": true,
+    "highZoomKeyboardReachability": true,
+    "statusTextIndependentOfColor": true
   },
   "visualHierarchy": {
     "elevatedSurfaces": [
@@ -173,7 +177,7 @@
     "connectionSetupCollapsedWhenReady": true,
     "connectionLayerSingleStateMarker": true,
     "routineStatusGlowDisabled": true,
-    "unpublishedSessionLabelSuppressed": true,
+    "unpublishedTaskLabelSuppressed": true,
     "settingsPanelsQuiet": true,
     "electronSecondaryCardsFlat": true
   },

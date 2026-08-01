@@ -8,18 +8,25 @@ import { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handle
 import { handleApiHistoryReset } from "./http/dashboardHistory.js";
 import { handleApiDiagnostics, handleApiDiagnosticsReset } from "./http/dashboardDiagnostics.js";
 import { handleApiProcessStop } from "./http/dashboardProcesses.js";
-import { handleOauthProtectedResource, handleOauthMetadata, handleRegister, handleAuthorizeGet, handleAuthorizePost, handleToken, handleMcpGetDiagnostic, handleMcpStreamable, getMcpAccess, oauthWellKnownPaths } from "./http/mcp.js";
+import { handleOauthProtectedResource, handleOauthMetadata, handleRegister, handleAuthorizeGet, handleAuthorizePost, handleToken, handleMcpGetDiagnostic, handleMcpStreamable, handleMcpDelete, handleMcpRecovery, handleMcpConnectionState, shutdownMcpTransport, getMcpAccess, oauthWellKnownPaths } from "./http/mcp.js";
 import { resolveBaseUrl } from "./http/auth.js";
 import { initializeTelemetry, shutdownTelemetry } from "./telemetry.js";
 import { stopAllManagedProcesses, pruneManagedProcesses } from "./processManager.js";
 import { pruneOperationTasks } from "./operationTasks.js";
 import { ensureConfig, getConfigPath, readConfig } from './config.js';
+import { buildToolManifest } from './mcp/toolManifest.js';
+import { resolveConnectionGenerations } from './mcp/connectionGenerations.js';
+import { mcpConnectionManager } from './mcp/connectionManager.js';
+import { SERVER_INSTANCE_ID } from './mcp/context.js';
 
 const DEFAULT_MAX_BODY_BYTES = 10 * 1024 * 1024;
 
 function startHttpServer(options = {}) {
-  const launchEnv = connection.readLaunchEnv();
-  const savedProfile = connection.readConnectionProfile();
+  const isolated = options.isolated === true
+    || Number(options.port) === 0
+    || process.env.REL_AI_MCP_ISOLATED === '1';
+  const launchEnv = isolated ? {} : connection.readLaunchEnv();
+  const savedProfile = isolated ? {} : connection.readConnectionProfile();
   const host = options.host || process.env.REL_AI_MCP_HOST || savedProfile.host || "127.0.0.1";
   const port = Number(options.port ?? process.env.REL_AI_MCP_PORT ?? 3333);
   const token = options.token || process.env.REL_AI_MCP_TOKEN || launchEnv.REL_AI_MCP_TOKEN || "";
@@ -28,7 +35,7 @@ function startHttpServer(options = {}) {
   // connection.json is global state the desktop app and the ChatGPT connector read to
   // find the live server. A second instance (a test, a benchmark, a manual
   // `npm run start:http` on another port) would otherwise silently repoint it.
-  const writeProfile = options.writeProfile !== false && process.env.REL_AI_MCP_NO_PROFILE_WRITE !== "1";
+  const writeProfile = !isolated && options.writeProfile !== false && process.env.REL_AI_MCP_NO_PROFILE_WRITE !== "1";
   const maxBodyBytes = Number(options.maxBodyBytes || process.env.REL_AI_MCP_MAX_BODY_BYTES || DEFAULT_MAX_BODY_BYTES);
   // Native folder picker, injected by the Electron launcher (the HTTP server runs
   // in the same process). Absent when the server runs standalone — the endpoint then
@@ -43,6 +50,14 @@ function startHttpServer(options = {}) {
 
   ensureConfig();
   const runtimeConfig = readConfig();
+  const manifest = buildToolManifest(runtimeConfig);
+  const generations = resolveConnectionGenerations(runtimeConfig, { token, host, port, publicUrl });
+  mcpConnectionManager.configure({
+    serverInstanceId: SERVER_INSTANCE_ID,
+    credentialGeneration: generations.credentialGeneration,
+    configurationGeneration: generations.configurationGeneration,
+    manifest
+  });
   initializeTelemetry(runtimeConfig);
   pruneManagedProcesses(runtimeConfig);
   pruneOperationTasks(runtimeConfig);
@@ -62,6 +77,8 @@ function startHttpServer(options = {}) {
   });
 
   server.on('close', () => {
+    void shutdownMcpTransport().catch(() => {});
+    void mcpConnectionManager.shutdown('http_server_closed').catch(() => {});
     void stopAllManagedProcesses(runtimeConfig).catch(() => {});
     void shutdownTelemetry().catch(() => {});
   });
@@ -70,6 +87,7 @@ function startHttpServer(options = {}) {
     socket.end("HTTP/1.1 400 Bad Request\r\n\r\n");
   });
   server.on("error", (error) => {
+    mcpConnectionManager.markFailed(error);
     if (error.code === "EADDRINUSE") {
       console.error(`[rel-ai-mcp] Port ${port} is already in use. Stop the other process or use --port to pick a different port.`);
     } else {
@@ -80,6 +98,7 @@ function startHttpServer(options = {}) {
   });
 
   server.listen(port, host, () => {
+    mcpConnectionManager.markReady();
     const address = server.address();
     const actualPort = address && typeof address === "object" ? address.port : port;
     console.error(`[rel-ai-mcp] HTTP server listening on http://${host}:${actualPort}`);
@@ -127,7 +146,9 @@ const NOT_FOUND_PAYLOAD = {
     updateSettingsApi: "POST /api/settings", diagnosticsResetApi: "POST /api/diagnostics/reset", updateWorkspacesApi: "POST /api/workspaces",
     healthMonitorApi: "GET /api/health-monitor", readinessApi: "GET /api/readiness",
     workspacePreflightApi: "GET /api/workspace/preflight?workspace=...", events: "GET /events",
-    streamableHttp: "POST /mcp (Authentication: OAuth, or Bearer token)",
+    streamableHttp: "POST /mcp (MCP 2026-07-28; Authentication: OAuth, or Bearer token)",
+    mcpConnectionApi: "GET /api/mcp/connection",
+    mcpRecoveryApi: "POST /api/mcp/recovery",
     oauthDiscovery: 'GET /.well-known/oauth-protected-resource/mcp'
   }
 };
@@ -146,6 +167,8 @@ async function routeRequest(req, res, options) {
     if (await dispatchGet(ctx)) return;
   } else if (req.method === "POST") {
     if (await dispatchPost(ctx)) return;
+  } else if (req.method === "DELETE") {
+    if (ctx.mcpAccess.kind === "streamable-http") { await handleMcpDelete(ctx); return; }
   }
 
   sendJson(res, 404, NOT_FOUND_PAYLOAD, ae);
@@ -188,6 +211,7 @@ const GET_ROUTES = {
   "/api/tools": { auth: authDashboard, handler: handleApiTools },
   "/api/onboarding/status": { auth: authDashboard, handler: handleOnboardingStatus },
   "/api/connection": { auth: authDashboard, handler: handleConnection },
+  "/api/mcp/connection": { auth: authDashboard, handler: handleMcpConnectionState },
   "/api/dashboard/v10": { auth: authDashboard, handler: handleDashboardV10 },
   "/api/logs": { auth: authDashboard, handler: handleApiLogs },
   "/api/diagnostics": { auth: authDashboard, handler: handleApiDiagnostics },
@@ -230,7 +254,8 @@ const POST_ROUTES = {
   "/api/pick-folder": { auth: authDashboard, handler: handlePickFolder },
   "/api/open-folder": { auth: authDashboard, handler: handleOpenFolder },
   "/api/workspace/checks": { auth: authDashboard, handler: handleWorkspaceChecks },
-  "/api/processes/stop": { auth: authDashboard, handler: handleApiProcessStop }
+  "/api/processes/stop": { auth: authDashboard, handler: handleApiProcessStop },
+  "/api/mcp/recovery": { auth: authDashboard, handler: handleMcpRecovery }
 };
 
 function errorCodeForRequest(req) {

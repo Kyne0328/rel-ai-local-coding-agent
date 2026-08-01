@@ -2,6 +2,12 @@
   "files.associations": {
     "**/src/ui/styles/app.css": "tailwindcss"
   },
+  "files.watcherExclude": {
+    "**/dist/**": true
+  },
+  "search.exclude": {
+    "**/dist/**": true
+  },
   "css.lint.unknownAtRules": "ignore",
   "css.lint.propertyIgnoredDueToDisplay": "ignore"
 }

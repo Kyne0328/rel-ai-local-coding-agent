@@ -1,20 +1,22 @@
 import fs from 'node:fs';
 import path from 'node:path';
+
 const targetUrl = process.env.RELAI_PROBE_TARGET_URL;
 const outputPath = process.env.RELAI_PROBE_OUTPUT_PATH;
-const screenshotPath = process.env.RELAI_PROBE_SCREENSHOT_PATH;
-if (!targetUrl || !outputPath || !screenshotPath) throw new Error('Electron dashboard probe environment is incomplete.');
+const screenshotDir = process.env.RELAI_PROBE_SCREENSHOT_DIR;
+if (!targetUrl || !outputPath || !screenshotDir) throw new Error('Electron dashboard probe environment is incomplete.');
 fs.writeFileSync(outputPath, JSON.stringify({ stage: 'script_started', argv: process.argv }, null, 2));
+
 let app;
 let BrowserWindow;
 try {
   ({ app, BrowserWindow } = await import('electron'));
 } catch (error) {
-  if (outputPath) fs.writeFileSync(outputPath, JSON.stringify({ stage: 'electron_import_failed', error: error?.stack || String(error) }, null, 2));
+  fs.writeFileSync(outputPath, JSON.stringify({ stage: 'electron_import_failed', error: error?.stack || String(error) }, null, 2));
   throw error;
 }
+
 app.commandLine.appendSwitch('force-prefers-reduced-motion', 'reduce');
-app.commandLine.appendSwitch('force-high-contrast');
 app.commandLine.appendSwitch('disable-gpu');
 
 app.whenReady().then(async () => {
@@ -37,7 +39,7 @@ app.whenReady().then(async () => {
   });
   win.webContents.on('render-process-gone', (_event, details) => failures.push(`renderer:${details.reason}`));
   await win.loadURL(targetUrl);
-  await waitFor(win, `document.querySelectorAll('.task-row').length >= 10`);
+  await waitFor(win, `document.querySelectorAll('.task-row').length >= 9`);
 
   const initial = await win.webContents.executeJavaScript(`(() => {
     const rows = [...document.querySelectorAll('.task-row')];
@@ -67,6 +69,9 @@ app.whenReady().then(async () => {
     return {
       dialog: dialog?.getAttribute('role') === 'dialog',
       detailText: detail?.textContent || '',
+      logicalTaskId: /Logical task ID/.test(detail?.textContent || ''),
+      nativeTaskId: /Native task ID/.test(detail?.textContent || ''),
+      processId: /Process ID/.test(detail?.textContent || ''),
       eventLinks: detail?.querySelectorAll('.task-event-link').length || 0
     };
   })()`);
@@ -94,23 +99,85 @@ app.whenReady().then(async () => {
   await win.webContents.executeJavaScript(`document.querySelector('.drawer-panel .drawer-head button')?.click()`);
   await waitFor(win, `!document.querySelector('#__relai-drawer-backdrop')`);
   await win.webContents.executeJavaScript(`location.hash = '#tasks'`);
-  await waitFor(win, `document.querySelectorAll('.task-row').length >= 10`);
+  await waitFor(win, `document.querySelectorAll('.task-row').length >= 9`);
   const clockBefore = await win.webContents.executeJavaScript(`document.querySelector('[data-clock-relative], [data-clock-elapsed-start]')?.textContent || ''`);
   await delay(1250);
   const clockAfter = await win.webContents.executeJavaScript(`document.querySelector('[data-clock-relative], [data-clock-elapsed-start]')?.textContent || ''`);
-  await win.webContents.setZoomFactor(2);
-  win.setSize(640, 720);
-  await delay(150);
-  const responsive = await win.webContents.executeJavaScript(`(() => ({
-    zoom: window.devicePixelRatio,
-    viewport: innerWidth,
-    horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-    focusedVisible: Boolean(document.activeElement && document.activeElement !== document.body)
-  }))()`);
 
-  const image = await win.webContents.capturePage();
-  fs.mkdirSync(path.dirname(screenshotPath), { recursive: true });
-  fs.writeFileSync(screenshotPath, image.toPNG());
+  fs.mkdirSync(screenshotDir, { recursive: true });
+  win.show();
+  win.focus();
+  await delay(200);
+  const responsive = [];
+  for (const scenario of [
+    { name: 'window-640x720', width: 640, height: 720, zoom: 1, theme: 'dark' },
+    { name: 'css-320-zoom-200', width: 640, height: 720, zoom: 2, theme: 'light' },
+    { name: 'css-375-zoom-200', width: 750, height: 720, zoom: 2, theme: 'dark' },
+    { name: 'zoom-400', width: 640, height: 720, zoom: 4, theme: 'light' }
+  ]) {
+    await win.webContents.setZoomFactor(scenario.zoom);
+    win.setSize(scenario.width, scenario.height);
+    win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'TAB' });
+    win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'TAB' });
+    await win.webContents.executeJavaScript(`(() => {
+      document.documentElement.dataset.theme = ${JSON.stringify(scenario.theme)};
+      const row = document.querySelector('.task-row');
+      row?.scrollIntoView({ block: 'center', inline: 'nearest' });
+      row?.focus();
+    })()`);
+    await delay(200);
+    const focusBeforeTab = await win.webContents.executeJavaScript(`document.activeElement?.getAttribute('data-task-id') || document.activeElement?.id || document.activeElement?.tagName || ''`);
+    win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'TAB' });
+    win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'TAB' });
+    await delay(50);
+    const measurement = await win.webContents.executeJavaScript(`(() => {
+      const intersects = element => {
+        if (!element) return false;
+        const rect = element.getBoundingClientRect();
+        return rect.bottom > 0 && rect.right > 0 && rect.top < innerHeight && rect.left < innerWidth;
+      };
+      const topbar = document.querySelector('.topbar');
+      const rows = [...document.querySelectorAll('.task-row')];
+      const visibleRow = rows.find(intersects) || rows[0];
+      const status = visibleRow?.querySelector('.status-pill');
+      const primaryControls = [...document.querySelectorAll('.top-controls button, .top-controls a, .task-row')];
+      const active = document.activeElement;
+      const activeStyle = active && active !== document.body ? getComputedStyle(active) : null;
+      const focusVisible = Boolean(activeStyle && ((activeStyle.outlineStyle !== 'none' && activeStyle.outlineWidth !== '0px') || activeStyle.boxShadow !== 'none'));
+      return {
+        viewportWidth: innerWidth,
+        viewportHeight: innerHeight,
+        devicePixelRatio: window.devicePixelRatio,
+        horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+        topbarIntersects: intersects(topbar),
+        taskRowIntersects: rows.some(intersects),
+        primaryControlIntersects: primaryControls.some(intersects),
+        focusVisible,
+        focusOutline: activeStyle ? activeStyle.outlineStyle + ' ' + activeStyle.outlineWidth : '',
+        focusBoxShadow: activeStyle?.boxShadow || '',
+        activeClass: active?.className || '',
+        activeMatchesTaskRowFocus: Boolean(active?.matches?.('.task-row:focus')),
+        focusAfterTab: active?.getAttribute('data-task-id') || active?.id || active?.tagName || '',
+        statusText: status?.textContent.trim() || '',
+        longContentContained: rows.length > 0 && rows.every(row => row.scrollWidth <= row.clientWidth + 1),
+        theme: document.documentElement.dataset.theme,
+        reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
+        forcedColorsActive: matchMedia('(forced-colors: active)').matches,
+        forcedColorsSupported: CSS.supports('forced-color-adjust', 'none')
+      };
+    })()`);
+    measurement.name = scenario.name;
+    measurement.zoomFactor = scenario.zoom;
+    measurement.windowWidth = scenario.width;
+    measurement.windowHeight = scenario.height;
+    measurement.keyboardAdvanced = Boolean(focusBeforeTab && measurement.focusAfterTab && focusBeforeTab !== measurement.focusAfterTab);
+    const screenshotPath = path.join(screenshotDir, `${scenario.name}.png`);
+    const image = await win.webContents.capturePage();
+    fs.writeFileSync(screenshotPath, image.toPNG());
+    measurement.screenshot = screenshotPath;
+    responsive.push(measurement);
+  }
+
   const result = {
     initial,
     taskInteraction,

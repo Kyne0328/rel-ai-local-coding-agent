@@ -77,6 +77,67 @@ assert.deepEqual(
 );
 assert.equal(pendingWorkspaceOperations(), 0);
 
+// Independent logical tasks in one workspace must not block each other.
+const parallelTasks = [];
+const taskA = runWorkspaceOperation('shared', async () => {
+  parallelTasks.push('a:start');
+  await new Promise(resolve => setTimeout(resolve, 40));
+  parallelTasks.push('a:end');
+}, { mode: 'write', taskId: 'task-a' });
+const taskB = runWorkspaceOperation('shared', async () => {
+  parallelTasks.push('b:start');
+  await new Promise(resolve => setTimeout(resolve, 10));
+  parallelTasks.push('b:end');
+}, { mode: 'write', taskId: 'task-b' });
+await Promise.all([taskA, taskB]);
+assert.ok(
+  parallelTasks.indexOf('b:start') < parallelTasks.indexOf('a:end'),
+  'different tasks may write concurrently in one workspace'
+);
+assert.equal(pendingWorkspaceOperations(), 0);
+
+// Calls inside one logical task retain deterministic reader/writer ordering.
+const sameTask = [];
+const sameTaskWrite = runWorkspaceOperation('shared', async () => {
+  sameTask.push('write:start');
+  await new Promise(resolve => setTimeout(resolve, 30));
+  sameTask.push('write:end');
+}, { mode: 'write', taskId: 'task-one' });
+const sameTaskRead = runWorkspaceOperation('shared', async () => {
+  sameTask.push('read:start');
+  sameTask.push('read:end');
+}, { mode: 'read', taskId: 'task-one' });
+await Promise.all([sameTaskWrite, sameTaskRead]);
+assert.deepEqual(sameTask, ['write:start', 'write:end', 'read:start', 'read:end']);
+assert.equal(pendingWorkspaceOperations(), 0);
+
+// A repository-global operation excludes every task and blocks later task calls.
+const globalOrder = [];
+const activeTaskWrite = runWorkspaceOperation('global', async () => {
+  globalOrder.push('task-a:start');
+  await new Promise(resolve => setTimeout(resolve, 30));
+  globalOrder.push('task-a:end');
+}, { mode: 'write', taskId: 'task-a' });
+const globalWrite = runWorkspaceOperation('global', async () => {
+  globalOrder.push('global:start');
+  await new Promise(resolve => setTimeout(resolve, 10));
+  globalOrder.push('global:end');
+}, { mode: 'write', taskId: 'maintenance', scope: 'workspace' });
+const laterTaskRead = runWorkspaceOperation('global', async () => {
+  globalOrder.push('task-b:start');
+  globalOrder.push('task-b:end');
+}, { mode: 'read', taskId: 'task-b' });
+await Promise.all([activeTaskWrite, globalWrite, laterTaskRead]);
+assert.deepEqual(globalOrder, [
+  'task-a:start',
+  'task-a:end',
+  'global:start',
+  'global:end',
+  'task-b:start',
+  'task-b:end'
+]);
+assert.equal(pendingWorkspaceOperations(), 0);
+
 // A rejected operation must still release the lock.
 await assert.rejects(
   runWorkspaceOperation('repo', async () => { throw new Error('boom'); }, { mode: 'write' }),

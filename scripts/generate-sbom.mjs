@@ -14,6 +14,20 @@ if (result.status !== 0) {
   process.exit(result.status || 1);
 }
 const document = JSON.parse(result.stdout);
+const ngrokManifest = JSON.parse(fs.readFileSync(path.join(root, 'vendor', 'ngrok', 'manifest.json'), 'utf8'));
+const ngrok = ngrokManifest.platforms.win32;
+document.components = [
+  ...(document.components || []),
+  {
+    type: 'application',
+    'bom-ref': `pkg:generic/ngrok@${ngrokManifest.version}?arch=x86_64&os=windows`,
+    name: 'ngrok',
+    version: ngrokManifest.version,
+    supplier: { name: 'ngrok, Inc.' },
+    hashes: [{ alg: 'SHA-256', content: ngrok.sha256 }],
+    externalReferences: [{ type: 'distribution', url: ngrok.url }]
+  }
+];
 fs.mkdirSync(path.dirname(output), { recursive: true });
 fs.writeFileSync(output, `${JSON.stringify(document, null, 2)}\n`);
 console.log(`Generated ${path.relative(root, output)}`);

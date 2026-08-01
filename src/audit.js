@@ -1,4 +1,5 @@
 import { clearTaskHistory, recordTaskHistoryEvent } from './taskHistoryStore.js';
+import { recordTaskIntegrityEvent } from './taskIntegrity.js';
 import * as fs from "node:fs";
 import * as path from 'node:path';
 import { getStateDir } from './statePaths.js';
@@ -28,6 +29,8 @@ function logAudit(config, event) {
     pid: process.pid,
     ...redactEvent(event || {})
   };
+  const integrity = recordTaskIntegrityEvent(config, entry);
+  if (integrity) Object.assign(entry, integrity);
   fs.mkdirSync(path.dirname(auditPath), { recursive: true, mode: 0o700 });
   rotateIfNeeded(auditPath);
   fs.appendFileSync(auditPath, `${JSON.stringify(entry)}\n`, { mode: 0o600 });
@@ -37,6 +40,16 @@ function logAudit(config, event) {
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] session history write:', error);
   }
   return entry;
+}
+
+function safeLogAudit(config, event, options = {}) {
+  try {
+    return logAudit(config, event);
+  } catch (error) {
+    if (options.strictIntegrity === true && /^TASK_INTEGRITY_/.test(String(error?.code || ''))) throw error;
+    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] audit write:', error);
+    return null;
+  }
 }
 
 // Read only the last READ_TAIL_BYTES instead of the whole file — the dashboard polls
@@ -115,4 +128,4 @@ function redactEvent(value) {
   return out;
 }
 
-export { getAuditPath, logAudit, readAudit, clearAuditHistory };
+export { getAuditPath, logAudit, safeLogAudit, readAudit, clearAuditHistory };

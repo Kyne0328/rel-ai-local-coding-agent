@@ -2,12 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as asar from '@electron/asar';
 import { fileURLToPath } from 'node:url';
+import { resolveCurrentUnpackedFromDist } from './current-unpacked.mjs';
+import { releaseArtifactNames } from './release-artifacts.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const args = process.argv.slice(2);
-const options = parseArguments(args);
 
-try {
+function main(input = process.argv.slice(2)) {
+  const options = parseArguments(input);
   const report = buildPackageSizeReport(options);
   printReport(report);
   if (options.jsonPath) {
@@ -16,13 +17,12 @@ try {
     fs.writeFileSync(outputPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
     console.log(`Package-size report written to ${path.relative(root, outputPath) || outputPath}.`);
   }
-  if (report.warnings.length && options.strict && !options.warnOnly) process.exitCode = 1;
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
+  if (report.violations.length && options.strict) process.exitCode = 1;
+  return report;
 }
 
 function parseArguments(input) {
+  if (input.includes('--warn-only')) throw new Error('--warn-only was removed; package-size policy is a blocking release gate.');
   const valueAfter = (name, fallback = '') => {
     const index = input.indexOf(name);
     return index >= 0 ? String(input[index + 1] || fallback) : fallback;
@@ -31,8 +31,7 @@ function parseArguments(input) {
     distDir: valueAfter('--dir', 'dist'),
     baselinePath: valueAfter('--baseline', ''),
     jsonPath: valueAfter('--json', ''),
-    strict: input.includes('--strict'),
-    warnOnly: input.includes('--warn-only')
+    strict: input.includes('--strict')
   };
 }
 
@@ -40,7 +39,7 @@ function buildPackageSizeReport(options) {
   const distDir = path.resolve(root, options.distDir);
   const packageJson = readJson(path.join(root, 'package.json'));
   const version = String(packageJson.version || '').trim();
-  const unpackedDir = path.join(distDir, 'win-unpacked');
+  const unpackedDir = resolveCurrentUnpackedFromDist(distDir);
   const resourcesDir = path.join(unpackedDir, 'resources');
   const asarPath = path.join(resourcesDir, 'app.asar');
   requireDirectory(unpackedDir, 'Packaged win-unpacked directory');
@@ -50,8 +49,9 @@ function buildPackageSizeReport(options) {
   const topLevelFiles = fs.readdirSync(distDir, { withFileTypes: true })
     .filter(entry => entry.isFile())
     .map(entry => path.join(distDir, entry.name));
-  const installerPath = findArtifact(topLevelFiles, `Rel.AI MCP Setup ${version}.exe`, file => /setup.*\.exe$/i.test(path.basename(file)));
-  const portablePath = findArtifact(topLevelFiles, `Rel.AI MCP ${version}.exe`, file => /\.exe$/i.test(file) && !/setup/i.test(path.basename(file)));
+  const canonical = releaseArtifactNames(version);
+  const installerPath = findArtifact(topLevelFiles, canonical.installer);
+  const portablePath = findArtifact(topLevelFiles, canonical.portable);
   requireFile(installerPath, 'NSIS installer');
   requireFile(portablePath, 'Portable executable');
 
@@ -86,36 +86,38 @@ function buildPackageSizeReport(options) {
 
   const baseline = options.baselinePath ? readBaseline(path.resolve(root, options.baselinePath)) : null;
   const comparison = compareMetrics(metrics, baseline);
-  const warnings = [];
+  const violations = [];
   if (content.localeCount !== 1 || content.locales[0] !== 'en-US.pak') {
-    warnings.push(`Expected only en-US.pak, found: ${content.locales.join(', ') || 'none'}.`);
+    violations.push(`Expected only en-US.pak, found: ${content.locales.join(', ') || 'none'}.`);
   }
   if (content.sourceCssFiles.length > 0) {
-    warnings.push(`Source CSS is packaged: ${content.sourceCssFiles.join(', ')}.`);
+    violations.push(`Source CSS is packaged: ${content.sourceCssFiles.join(', ')}.`);
   }
-  if (content.asarSourceMapCount > 0) warnings.push(`app.asar contains ${content.asarSourceMapCount} source map files.`);
+  if (content.asarSourceMapCount > 0) violations.push(`app.asar contains ${content.asarSourceMapCount} source map files.`);
   for (const item of comparison) {
-    if (item.exceedsWarningThreshold) {
-      warnings.push(`${item.metric} is ${item.deltaPercent.toFixed(2)}% above the recorded optimized baseline.`);
+    if (item.exceedsTolerance) {
+      violations.push(`${item.metric} is ${item.deltaPercent.toFixed(2)}% above the accepted baseline.`);
     }
   }
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     generatedAt: new Date().toISOString(),
     version,
     platform: process.platform,
     architecture: process.arch,
     distDir: relativeTo(root, distDir),
+    unpackedDir: relativeTo(root, unpackedDir),
     metrics,
     content,
     baseline: baseline ? {
       path: relativeTo(root, path.resolve(root, options.baselinePath)),
       capturedAt: baseline.capturedAt,
-      warningThresholdPercent: baseline.warningThresholdPercent
+      policy: baseline.policy,
+      tolerancePercent: baseline.tolerancePercent
     } : null,
     comparison,
-    warnings
+    violations
   };
 }
 
@@ -146,13 +148,18 @@ function inspectAsar(asarPath) {
 function readBaseline(file) {
   requireFile(file, 'Package-size baseline');
   const baseline = readJson(file);
+  if (baseline.schemaVersion !== 2) throw new Error(`Unsupported package-size baseline schema: ${file}`);
+  if (baseline.policy !== 'strict') throw new Error(`Package-size baseline must declare a strict policy: ${file}`);
+  if (!Number.isFinite(baseline.tolerancePercent) || baseline.tolerancePercent < 0) {
+    throw new Error(`Package-size baseline has an invalid tolerance: ${file}`);
+  }
   if (!baseline.metrics || typeof baseline.metrics !== 'object') throw new Error(`Package-size baseline has no metrics object: ${file}`);
   return baseline;
 }
 
 function compareMetrics(metrics, baseline) {
   if (!baseline) return [];
-  const threshold = Number(baseline.warningThresholdPercent || 0);
+  const threshold = Number(baseline.tolerancePercent || 0);
   return Object.entries(baseline.metrics).flatMap(([metric, baselineBytes]) => {
     const currentBytes = metrics[metric];
     if (!Number.isFinite(currentBytes) || !Number.isFinite(baselineBytes)) return [];
@@ -164,7 +171,7 @@ function compareMetrics(metrics, baseline) {
       currentBytes,
       deltaBytes,
       deltaPercent,
-      exceedsWarningThreshold: deltaPercent > threshold
+      exceedsTolerance: deltaPercent > threshold
     }];
   });
 }
@@ -184,16 +191,16 @@ function printReport(report) {
       console.log(`  ${item.metric.padEnd(26)} ${sign}${formatBytes(item.deltaBytes)} (${sign}${item.deltaPercent.toFixed(2)}%)`);
     }
   }
-  if (report.warnings.length) {
-    console.warn('Package-size warnings:');
-    for (const warning of report.warnings) console.warn(`  - ${warning}`);
+  if (report.violations.length) {
+    console.error('Package-size policy violations:');
+    for (const violation of report.violations) console.error(`  - ${violation}`);
   } else {
-    console.log('Package-size checks passed without warnings.');
+    console.log('Package-size checks passed within the strict budget.');
   }
 }
 
-function findArtifact(files, exactName, fallback) {
-  return files.find(file => path.basename(file) === exactName) || files.find(fallback) || '';
+function findArtifact(files, exactName) {
+  return files.find(file => path.basename(file) === exactName) || '';
 }
 
 function listFiles(start) {
@@ -243,3 +250,14 @@ function formatBytes(bytes) {
   if (absolute >= 1024) return `${sign}${(absolute / 1024).toFixed(2)} KiB`;
   return `${sign}${absolute} B`;
 }
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    main();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  }
+}
+
+export { buildPackageSizeReport, compareMetrics, main, parseArguments, readBaseline };

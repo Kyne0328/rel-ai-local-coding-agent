@@ -12,12 +12,12 @@ The following commands do not install or uninstall Rel.AI MCP:
 | --- | --- | --- |
 | `npm test` | Full source test suite | Safe for normal development |
 | `npm run test:all` | Build CSS, static checks, lint, typecheck, release consistency, and source tests | Safe for normal development |
-| `npm run electron:build` | Build an unpacked application directory | Does not register or install the app |
+| `npm run electron:build` | Build an unpacked application directory | Does not register or install the app; refuses to overwrite an active unpacked controller |
 | `npm run verify:packaged` | Verify files in the unpacked application directory | Read-only |
 | `npm run test:connector-acceptance` | Launch the isolated packaged Node backend and exercise OAuth/MCP | Does not launch or install Electron and uses temporary state |
-| `npm run electron:dist` | Produce installer and portable artifacts | Builds artifacts but does not execute them |
+| `npm run electron:dist` | Produce installer and portable artifacts | Builds in OS-temporary staging, never executes artifacts, and promotes completed output without replacing files used by an active controller or editor |
 
-No package script currently installs, upgrades, repairs, or uninstalls a Windows application. The removed `test:installed` command must not be restored to `test`, `test:all`, `check`, `verify`, CI, or release verification.
+No package script currently installs, upgrades, repairs, or uninstalls a Windows application. Packaging is centralized in `scripts/electron-package.mjs`, which always uses `--publish never`, never launches generated executables, and invokes the active-controller guard before writing build output. Release builds are staged outside the repository so VS Code, antivirus, or Explorer handles cannot corrupt Electron Builder. Completed artifacts are promoted into `dist`; `dist/current-unpacked.json` identifies the authoritative unpacked application when an older `dist/win-unpacked` must be preserved. The Electron app writes `~/.rel-ai-mcp/controller-runtime.json` with its PID and runtime paths; stale markers are ignored, while a live controller under the requested output tree blocks cleanup and packaging. The removed `test:installed` command must not be restored to `test`, `test:all`, `check`, `verify`, CI, or release verification.
 
 ## Installer lifecycle validation
 
