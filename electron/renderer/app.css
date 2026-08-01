@@ -315,29 +315,6 @@ label, .field-label { display: block; margin: 14px 0 7px; color: var(--ui-text-s
 .link-grid { display: grid; gap: var(--space-2); margin: 12px 0 var(--space-4); }
 .setup-link { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); width: 100%; text-align: left; }
 .setup-link span { color: var(--ui-text-secondary); font-size: var(--font-11); }
-.component-consent {
-  margin-top: var(--space-4);
-  padding: var(--space-3);
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  gap: var(--space-3);
-  border: 1px solid var(--ui-border-control);
-  border-radius: var(--radius-md);
-  background: var(--ui-surface-secondary);
-  color: var(--ui-text-primary);
-  font-size: var(--font-13);
-  font-weight: 400;
-  letter-spacing: 0;
-  text-transform: none;
-  cursor: pointer;
-}
-.component-consent:focus-within { border-color: var(--ui-action-primary); box-shadow: 0 0 0 3px var(--ui-status-info-background); }
-.component-consent input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--ui-action-primary); }
-.component-consent span { display: grid; gap: 4px; }
-.component-consent strong { font-size: var(--font-13); }
-.component-consent small { color: var(--ui-text-secondary); font-size: var(--font-11); line-height: 1.5; }
-.acquisition-progress { min-height: 18px; margin-top: 8px; color: var(--ui-status-info-foreground); font-size: var(--font-12); line-height: 1.45; }
 .summary-box { margin-bottom: var(--space-4); border: 1px solid var(--ui-border-subtle); border-radius: var(--radius-md); overflow: hidden; }
 .summary-row { display: flex; justify-content: space-between; gap: var(--space-3); padding: 11px 12px; border-bottom: 1px solid var(--ui-border-subtle); }
 .summary-row:last-child { border-bottom: 0; }

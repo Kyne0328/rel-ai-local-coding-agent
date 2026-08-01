@@ -11,7 +11,6 @@ function resolveCurrentUnpacked(root = defaultRoot, options = {}) {
 function resolveCurrentUnpackedFromDist(distRoot, options = {}) {
   const resolvedDist = path.resolve(distRoot);
   const markerPath = path.join(resolvedDist, 'current-unpacked.json');
-  const candidates = [];
 
   if (fs.existsSync(markerPath)) {
     let marker;
@@ -25,34 +24,14 @@ function resolveCurrentUnpackedFromDist(distRoot, options = {}) {
     const candidate = path.resolve(resolvedDist, relativePath);
     assertContained(resolvedDist, candidate, markerPath);
     assertPackageDirectory(candidate, markerPath);
-    candidates.push({ directory: candidate, source: 'release-marker' });
-  } else {
-    const preferred = path.join(resolvedDist, 'win-unpacked');
-    if (isPackageDirectory(preferred)) candidates.push({ directory: preferred, source: 'preferred-release' });
+    return candidate;
   }
 
-  if (options.allowBuildCheck === true) {
-    const buildCheck = path.join(resolvedDist, 'build-check', 'win-unpacked');
-    if (isPackageDirectory(buildCheck)) candidates.push({ directory: buildCheck, source: 'build-check' });
-  }
-
-  if (candidates.length === 0) {
-    throw new Error(`No current unpacked application was found. Run npm run electron:dist${options.allowBuildCheck ? ' or npm run electron:build' : ''}.`);
-  }
-  if (candidates.length === 1) return candidates[0].directory;
-
-  candidates.sort((left, right) => packageTimestamp(right.directory) - packageTimestamp(left.directory));
-  return candidates[0].directory;
-}
-
-function packageTimestamp(directory) {
-  return fs.statSync(path.join(directory, 'Rel.AI MCP.exe')).mtimeMs;
-}
-
-function isPackageDirectory(directory) {
-  if (!fs.existsSync(directory) || !fs.statSync(directory).isDirectory()) return false;
-  const executable = path.join(directory, 'Rel.AI MCP.exe');
-  return fs.existsSync(executable) && fs.statSync(executable).isFile();
+  const candidates = [path.join(resolvedDist, 'win-unpacked')];
+  if (options.allowBuildCheck === true) candidates.push(path.join(resolvedDist, 'build-check', 'win-unpacked'));
+  const candidate = candidates.find(directory => fs.existsSync(directory) && fs.statSync(directory).isDirectory());
+  if (candidate) return candidate;
+  throw new Error(`No current unpacked application was found. Run npm run electron:dist${options.allowBuildCheck ? ' or npm run electron:build' : ''}.`);
 }
 
 function assertContained(parent, candidate, markerPath) {

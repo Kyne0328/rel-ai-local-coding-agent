@@ -206,8 +206,7 @@ function getRecoveryConfig() {
     port: settings.port,
     token,
     ngrokDomain: settings.ngrokDomain,
-    ngrokAuthtoken: settings.ngrokAuthtoken,
-    ngrokDownloadAccepted: settings.ngrokDownloadAccepted === true
+    ngrokAuthtoken: settings.ngrokAuthtoken
   };
 }
 
@@ -315,7 +314,6 @@ async function startServer() {
     try {
       await managedNgrok.prepareManagedNgrok({
         authtoken: guiConfig.ngrokAuthtoken,
-        allowDownload: guiConfig.ngrokDownloadAccepted === true,
         onLog: tunnelLog
       });
     } catch (error) {
@@ -473,7 +471,6 @@ registerIpcHandlers({
   requestDashboardClose: dashboardWindowManager.requestClose,
   getRecoveryConfig,
   openRecoverySetup,
-  prepareManagedNgrok: options => managedNgrok.prepareManagedNgrok(options),
   startServer,
   stopServer,
   launchConfiguredDesktop,

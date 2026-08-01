@@ -22,13 +22,11 @@ try {
   fs.rmSync(path.join(dist, 'current-unpacked.json'));
   const preferred = path.join(dist, 'win-unpacked');
   fs.mkdirSync(preferred, { recursive: true });
-  fs.writeFileSync(path.join(preferred, 'Rel.AI MCP.exe'), 'preferred-binary');
   assert.equal(resolveCurrentUnpacked(root), preferred);
 
   fs.rmSync(preferred, { recursive: true, force: true });
   const buildCheck = path.join(dist, 'build-check', 'win-unpacked');
   fs.mkdirSync(buildCheck, { recursive: true });
-  fs.writeFileSync(path.join(buildCheck, 'Rel.AI MCP.exe'), 'build-check-binary');
   assert.equal(resolveCurrentUnpacked(root, { allowBuildCheck: true }), buildCheck);
   assert.throws(() => resolveCurrentUnpacked(root), /No current unpacked application/);
 } finally {

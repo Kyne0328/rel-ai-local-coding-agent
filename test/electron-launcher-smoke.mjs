@@ -9,7 +9,7 @@ const utils = await import(pathToFileURL(path.join(root, 'electron', 'launcher-u
 const launcherConfigModule = await import(pathToFileURL(path.join(root, 'electron', 'launcher-config.js')).href);
 const managedNgrokModule = await import(pathToFileURL(path.join(root, 'electron', 'managed-ngrok.js')).href);
 const { saveLauncherConfig } = launcherConfigModule.default || launcherConfigModule;
-const { ensureManagedNgrok, extractPublicUrl, extractStartedTunnelUrl, writeNgrokConfig } = managedNgrokModule.default || managedNgrokModule;
+const { extractPublicUrl, extractStartedTunnelUrl, synchronizeManagedBinary, writeNgrokConfig } = managedNgrokModule.default || managedNgrokModule;
 const {
   buildTunnelCommand,
   buildMcpUrl,
@@ -93,7 +93,6 @@ for (const exclusion of ['!@modelcontextprotocol/*/src/**', '!@opentelemetry/*/s
   assert.ok(rootModulesResource.filter.includes(exclusion), 'packaged MCP SDK dependencies must include ' + exclusion);
 }
 assert.ok(electronPkg.build.files.includes('ngrok-token.js'), 'electron build must include ngrok authtoken normalization used by launcher code');
-assert.ok(electronPkg.build.files.includes('ngrok-provenance.js'), 'electron build must include ngrok acquisition provenance verification');
 assert.ok(electronPkg.build.files.includes('managed-ngrok.js'), 'electron build must include managed ngrok launcher code');
 assert.equal(electronPkg.build.files.includes('installed-smoke.js'), false, 'electron build must not ship installed-app test hooks');
 assert.equal(electronPkg.build.files.includes('window-smoke.js'), false, 'electron build must not ship renderer smoke entry points');
@@ -124,8 +123,8 @@ assert.equal(electronPkg.build.afterPack, 'build/after-pack.js');
 assert.equal(electronPkg.build.publish[0].provider, 'github');
 assert.equal(electronPkg.build.publish[0].repo, 'rel-ai-mcp');
 const ngrokResource = electronPkg.build.extraResources.find((item) => item.from === '../vendor/ngrok');
-assert.ok(ngrokResource, 'electron build must package the ngrok acquisition manifest');
-assert.deepEqual(ngrokResource.filter, ['manifest.json'], 'electron build must package only ngrok provenance, never ngrok.exe');
+assert.ok(ngrokResource, 'electron build must bundle ngrok seed binaries');
+assert.deepEqual(ngrokResource.filter, ['manifest.json', 'win32/**'], 'electron build must bundle the ngrok provenance manifest with the Windows seed');
 
 const electronMain = fs.readFileSync(path.join(root, 'electron', 'main.js'), 'utf8');
 assert.doesNotMatch(electronMain, /--installed-smoke|--window-smoke|runInstalledSmoke|runWindowSmoke|smokeWindowRoles|getSmokeWindowRole/, 'production Electron main must not expose destructive smoke entry points');
@@ -230,45 +229,18 @@ assert.match(fs.readFileSync(path.join(root, 'electron', 'ipc-handlers.js'), 'ut
 assert.doesNotMatch(electronMain, /shell\.openExternal\(`http:\/\/127\.0\.0\.1:.*dashboard/, 'Open Dashboard must not launch the system browser');
 
 const ngrokTestDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-ngrok-test-'));
+const ngrokSource = path.join(ngrokTestDir, 'source.exe');
 const ngrokTarget = path.join(ngrokTestDir, 'managed', 'ngrok.exe');
-const verifiedBytes = 'verified-ngrok-release';
-const testManifest = { version: '3.39.10' };
-const testSpec = {
-  archive: { url: 'https://bin.ngrok.com/test.zip', size: 7, sha256: 'a'.repeat(64) },
-  executable: { file: 'ngrok.exe', size: verifiedBytes.length, sha256: 'b'.repeat(64) }
-};
-let downloadCount = 0;
-const verifyExecutable = file => {
-  assert.equal(fs.readFileSync(file, 'utf8'), verifiedBytes, 'only the expected verified ngrok bytes may be installed');
-  return { sha256: testSpec.executable.sha256, bytes: verifiedBytes.length, version: testManifest.version };
-};
-const acquisition = {
-  manifest: testManifest,
-  spec: testSpec,
-  targetPath: ngrokTarget,
-  verifyExecutable,
-  verifyArchive: () => ({ sha256: testSpec.archive.sha256, bytes: testSpec.archive.size }),
-  downloadArchive: async (_url, archivePath) => {
-    downloadCount += 1;
-    fs.writeFileSync(archivePath, 'archive');
-  },
-  extractArchive: async (_archivePath, destination) => {
-    fs.mkdirSync(destination, { recursive: true });
-    fs.writeFileSync(path.join(destination, 'ngrok.exe'), verifiedBytes);
-  }
-};
-await assert.rejects(() => ensureManagedNgrok(acquisition), /approve the official ngrok download/);
-const firstAcquisition = await ensureManagedNgrok({ ...acquisition, allowDownload: true });
-assert.equal(firstAcquisition.downloaded, true, 'first-run consent must acquire the official ngrok component');
-assert.equal(downloadCount, 1);
-const reused = await ensureManagedNgrok(acquisition);
-assert.equal(reused.downloaded, false, 'a verified managed ngrok binary must be reused without network access');
-assert.equal(downloadCount, 1);
-fs.writeFileSync(ngrokTarget, 'tampered-ngrok');
-const repaired = await ensureManagedNgrok({ ...acquisition, allowDownload: true });
-assert.equal(repaired.repaired, true, 'an invalid managed ngrok binary must be replaced only after consent');
-assert.equal(downloadCount, 2);
-assert.equal(fs.readFileSync(ngrokTarget, 'utf8'), verifiedBytes);
+fs.writeFileSync(ngrokSource, 'verified-ngrok-release');
+const firstSync = synchronizeManagedBinary(ngrokSource, ngrokTarget);
+assert.equal(firstSync.copied, true, 'managed ngrok must be seeded from the bundled release binary');
+assert.equal(fs.readFileSync(ngrokTarget, 'utf8'), 'verified-ngrok-release');
+const secondSync = synchronizeManagedBinary(ngrokSource, ngrokTarget);
+assert.equal(secondSync.copied, false, 'matching managed ngrok must not be rewritten');
+fs.writeFileSync(ngrokTarget, 'stale-self-updated-ngrok');
+const repairedSync = synchronizeManagedBinary(ngrokSource, ngrokTarget);
+assert.equal(repairedSync.copied, true, 'a changed managed ngrok binary must be restored from the signed Rel.AI release');
+assert.equal(fs.readFileSync(ngrokTarget, 'utf8'), 'verified-ngrok-release');
 process.env.REL_AI_MCP_STATE_DIR = path.join(ngrokTestDir, 'state');
 const managedConfig = fs.readFileSync(writeNgrokConfig('abc12345'), 'utf8');
 assert.match(managedConfig, /update_check: false/, 'managed ngrok must not self-update outside the Rel.AI release process');

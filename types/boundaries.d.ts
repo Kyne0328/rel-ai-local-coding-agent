@@ -204,7 +204,6 @@ export interface LauncherConfigInput {
   domain?: string;
   ngrokAuthtoken?: string;
   ngrokToken?: string;
-  ngrokDownloadAccepted?: boolean | '1';
   token?: string;
 }
 
@@ -212,7 +211,6 @@ export interface LauncherConfig {
   port: number;
   ngrokDomain: string;
   ngrokAuthtoken: string;
-  ngrokDownloadAccepted: boolean;
   token: string;
 }
 

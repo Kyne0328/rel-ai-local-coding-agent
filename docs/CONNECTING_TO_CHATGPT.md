@@ -47,7 +47,7 @@ Tracked-file deletion is handled through a structured `Delete File` patch sent t
 
 Launch the **Rel.AI MCP** desktop app. It starts the local server and the public tunnel together, using the ngrok authtoken and static domain you entered in the setup wizard.
 
-ChatGPT requires a public HTTPS endpoint, which the Rel.AI-managed ngrok agent provides. The installer does not embed ngrok. First-run setup asks permission to download the exact pinned official archive, verifies it before execution, and configures it automatically. Nothing has to be installed or started separately. See [ONE_CLICK_SETUP.md](ONE_CLICK_SETUP.md) for the full first-run walkthrough.
+ChatGPT requires a public HTTPS endpoint, which the bundled ngrok agent provides. Nothing has to be installed or started separately. See [ONE_CLICK_SETUP.md](ONE_CLICK_SETUP.md) for the full first-run walkthrough.
 
 The packaged desktop app opens the dashboard in a secured Electron window by default. The same local `/dashboard` route remains accessible in a normal browser when needed; both hosts use the same dashboard code and server APIs. Electron uses a single-use bootstrap exchange and an HttpOnly local session cookie instead of exposing the permanent approval token to the embedded renderer.
 
@@ -73,6 +73,6 @@ When you replace the approval token, Rel.AI revokes current ChatGPT access and r
 
 ## Tunnel requirement
 
-Use the verified Rel.AI-managed ngrok agent with a static domain. Do not expose plain HTTP to the public internet.
+Use the bundled ngrok agent with a static domain. Do not expose plain HTTP to the public internet.
 
 Maintained by [@Kyne0328](https://github.com/Kyne0328).

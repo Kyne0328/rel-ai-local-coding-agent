@@ -96,15 +96,6 @@
         <div class="field-message" id="domainMessage" aria-live="polite"></div>
         <div class="hint">Connection preview <code id="ngrokCmdPreview">managed ngrok tunnel for &lt;domain&gt; on local port 3333</code></div>
 
-        <label class="component-consent" for="ngrokDownloadConsent">
-          <input type="checkbox" id="ngrokDownloadConsent">
-          <span>
-            <strong>Download the official ngrok agent</strong>
-            <small>Rel.AI downloads the pinned Windows x64 archive from ngrok. Before execution, it verifies the archive and executable SHA-256 values, exact version, Authenticode publisher, and certificate issuer.</small>
-          </span>
-        </label>
-        <div class="field-message" id="ngrokConsentMessage" aria-live="polite"></div>
-
         <div class="nav-row">
           <button class="secondary" data-go="2" type="button">Back</button>
           <button class="primary" id="reviewSetupBtn" type="button" disabled>Review setup</button>
@@ -118,7 +109,6 @@
         <div class="summary-box" id="summaryBox"></div>
         <button class="primary btn-success" id="launchBtn" type="button">Launch Rel.AI MCP</button>
         <p class="hint">After launch, copy the MCP endpoint into ChatGPT Apps, choose OAuth, and approve with your approval token.</p>
-        <div class="acquisition-progress" id="acquisitionProgress" role="status" aria-live="polite"></div>
         <div class="error" id="launchError" role="alert"></div>
         <div class="nav-row launch-back-row">
           <button class="secondary" data-go="3" type="button">Back and edit</button>

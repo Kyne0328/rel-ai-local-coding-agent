@@ -28,7 +28,6 @@ function createDesktopSettingsManager(options = {}) {
       ngrokDomain: String(config.ngrokDomain || ''),
       ngrokAuthtoken: '',
       ngrokAuthtokenConfigured: Boolean(String(config.ngrokAuthtoken || '').trim()),
-      ngrokDownloadAccepted: config.ngrokDownloadAccepted === true,
       approvalRequired: getApprovalRequired() === true,
       notificationsEnabled: getNotificationsEnabled() !== false
     };
@@ -41,8 +40,7 @@ function createDesktopSettingsManager(options = {}) {
       port: settings.port,
       token: current.token,
       ngrokDomain: settings.ngrokDomain,
-      ngrokAuthtoken: replacementAccountKey || current.ngrokAuthtoken,
-      ngrokDownloadAccepted: current.ngrokDownloadAccepted === true
+      ngrokAuthtoken: replacementAccountKey || current.ngrokAuthtoken
     });
     if (typeof settings.notificationsEnabled === 'boolean') {
       setNotificationsEnabled(settings.notificationsEnabled);

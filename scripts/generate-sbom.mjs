@@ -24,14 +24,8 @@ document.components = [
     name: 'ngrok',
     version: ngrokManifest.version,
     supplier: { name: 'ngrok, Inc.' },
-    hashes: [{ alg: 'SHA-256', content: ngrok.executable.sha256 }],
-    properties: [
-      { name: 'relai:delivery', value: 'verified-first-run-download' },
-      { name: 'relai:archive:sha256', value: ngrok.archive.sha256 },
-      { name: 'relai:archive:size', value: String(ngrok.archive.size) },
-      { name: 'relai:executable:size', value: String(ngrok.executable.size) }
-    ],
-    externalReferences: [{ type: 'distribution', url: ngrok.archive.url }]
+    hashes: [{ alg: 'SHA-256', content: ngrok.sha256 }],
+    externalReferences: [{ type: 'distribution', url: ngrok.url }]
   }
 ];
 fs.mkdirSync(path.dirname(output), { recursive: true });
