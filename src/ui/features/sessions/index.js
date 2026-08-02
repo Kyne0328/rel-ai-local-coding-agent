@@ -1,5 +1,3 @@
-import { postJson, requestDashboardRefresh } from '../../api.js';
-import { runButtonAction } from '../../action-state.js';
 import { closeDrawer, openDrawer } from '../../components/drawer.js';
 import { copyText } from '../../clipboard.js';
 import { pillHtml } from '../../components/pill.js';
@@ -10,10 +8,6 @@ import { activityEventId } from '../../activity-event.js';
 import { bindWorkspaceMenus, workspaceMenuHtml } from '../../components/workspace-menu.js';
 import { taskProgressHtml } from '../../components/task-progress.js';
 import {
-  clientCapabilityViews,
-  nativeTaskCollection,
-  nativeTaskView,
-  recoveryStateView,
   taskEntityView,
   workSessionStateView
 } from '../../task-identity.js';
@@ -27,12 +21,6 @@ export function mountTasks(container, data = {}) {
   const workspace = getWorkspaceFilter();
   const sessions = orderSessionsForDisplay((Array.isArray(data.tasks) ? data.tasks : [])
     .filter(session => !workspace || session.workspace === workspace));
-  const sessionById = new Map(sessions.map(session => [sessionIdentifier(session), session]));
-  const nativeCollection = nativeTaskCollection(data);
-  const nativeTasks = nativeCollection.tasks
-    .map(task => nativeTaskView(task, data.managedProcesses || []))
-    .filter(task => !workspace || task.workspace === workspace || sessionById.get(task.logicalTaskId)?.workspace === workspace)
-    .sort(orderNativeTasks);
   const working = sessions.filter(session => workSessionStateView(session).active).length;
   const open = sessions.filter(session => !workSessionStateView(session).terminal && !workSessionStateView(session).active).length;
   const completed = sessions.filter(session => workSessionStateView(session).status === 'completed').length;
@@ -40,10 +28,10 @@ export function mountTasks(container, data = {}) {
 
   container.innerHTML = '';
   const root = document.createElement('div');
-  root.className = 'section sessions-page runtime-observability-page';
+  root.className = 'section sessions-page';
   root.innerHTML = `
     <div class="feature-toolbar sessions-toolbar">
-      <p>A work session is a repository objective. A native MCP Task is one asynchronous request. A managed process is one operating-system process.</p>
+      <p>Repository work sessions track objectives that span multiple Rel.AI tool calls.</p>
       <div class="section-head-actions">
         ${workspaceMenuHtml(data.config?.workspaces || [], workspace, { id: 'sessionsWorkspaceMenu' })}
         <span class="feature-count">${sessions.length} work session${sessions.length === 1 ? '' : 's'}${workspace ? ` in ${esc(workspace)}` : ''}</span>
@@ -55,12 +43,9 @@ export function mountTasks(container, data = {}) {
       ${metricHtml('Completed', completed, 'work-session completion explicitly reported', completed ? 'good' : 'blue')}
     </div>`;
 
-  root.appendChild(capabilityCard(data));
-  root.appendChild(nativeTasksCard(nativeCollection, nativeTasks));
-
   const card = document.createElement('section');
   card.className = 'card sessions-history-card';
-  card.innerHTML = '<div class="card-head"><div><h3>Repository work sessions</h3><p>Objectives spanning multiple Rel.AI tool calls. Their lifecycle is independent from native tasks and managed processes.</p></div><div class="card-head-actions"><a class="section-action" href="#activity">Open tool events</a><a class="section-action" href="#settings/diagnostics">History controls</a></div></div>';
+  card.innerHTML = '<div class="card-head"><div><h3>Repository work sessions</h3><p>Objectives spanning multiple Rel.AI tool calls, including validation and completion state.</p></div><div class="card-head-actions"><a class="section-action" href="#activity">Open tool events</a><a class="section-action" href="#settings/diagnostics">History controls</a></div></div>';
   const body = document.createElement('div');
   body.className = 'card-body task-list';
   renderSessionRows(body, sessions, scopeKey);
@@ -80,102 +65,6 @@ export function mountTasks(container, data = {}) {
   container.appendChild(root);
   bindWorkspaceMenus(root);
   bindCopyActions(root);
-  bindNativeTaskActions(root);
-}
-
-function capabilityCard(data) {
-  const views = clientCapabilityViews(data);
-  const card = document.createElement('section');
-  card.className = 'card runtime-capability-card';
-  card.innerHTML = `
-    <div class="card-head"><div><h3>Client task capability</h3><p>Observed from actual MCP client capability advertisements. Transport or product branding is not used as a proxy.</p></div><span class="feature-count">${views.length} observed</span></div>
-    <div class="card-body runtime-capability-list">${views.map(capabilityRow).join('')}</div>`;
-  return card;
-}
-
-function capabilityRow(view) {
-  const observed = view.observedAt
-    ? `<span data-clock-relative="${esc(view.observedAt)}">Observed ${esc(timeAgo(view.observedAt) || 'now')}</span>`
-    : '<span>Observation time unavailable</span>';
-  return `<article class="runtime-capability-row" aria-label="${esc(`${view.capabilityLabel}. ${view.executionLabel}.`)}">
-    <div class="runtime-capability-main">
-      <div class="runtime-entity-heading"><strong>${esc(view.clientLabel)}</strong>${pillHtml(view.pill, view.pillClass)}</div>
-      <span>${esc(view.capabilityLabel)}</span>
-      <span>${esc(view.executionLabel)}</span>
-      <small>${esc(view.description)}</small>
-    </div>
-    <div class="runtime-capability-meta">
-      ${observed}
-      ${view.connectionId ? identifierHtml('Request or connection ID', view.connectionId) : '<span>Connection ID unavailable</span>'}
-    </div>
-  </article>`;
-}
-
-function nativeTasksCard(collection, tasks) {
-  const card = document.createElement('section');
-  card.className = 'card native-tasks-card';
-  const source = collection.available ? `Backend field: ${collection.sourceField}` : `Required backend field: ${collection.requiredField}`;
-  card.innerHTML = `
-    <div class="card-head"><div><h3>Native MCP tasks</h3><p>One asynchronous MCP request per record. Persistent processes may continue after their startup task completes.</p></div><span class="feature-count">${esc(source)}</span></div>
-    <div class="card-body native-task-list">${nativeTaskListHtml(collection, tasks)}</div>`;
-  return card;
-}
-
-function nativeTaskListHtml(collection, tasks) {
-  if (!collection.available) {
-    return '<div class="empty runtime-data-unknown" role="status"><strong>Native task records are unavailable.</strong><span>The dashboard will render them when the backend supplies a <code>nativeTasks</code> collection. Capability status above remains based on real client advertisements.</span></div>';
-  }
-  if (!tasks.length) return '<div class="empty">No retained native MCP tasks match the current workspace filter.</div>';
-  return tasks.map(nativeTaskRow).join('');
-}
-
-function nativeTaskRow(task) {
-  const summary = task.errorSummary || task.resultSummary || task.statusMessage || task.description;
-  const relationship = relationshipHtml(task.logicalTaskId, task.taskId, task.processId);
-  const statusMarker = task.showSpinner
-    ? '<span class="runtime-activity-spinner" aria-hidden="true"></span>'
-    : '<span class="runtime-status-symbol" aria-hidden="true">•</span>';
-  const updated = task.updatedAt || task.startedAt;
-  return `<article class="native-task-row${task.active ? ' active' : ''}${task.terminal ? ' terminal' : ''}" aria-label="Native task ${esc(task.taskId || 'unknown')}: ${esc(task.label)}">
-    <div class="native-task-head">
-      <div class="runtime-status-marker">${statusMarker}</div>
-      <div class="native-task-title">
-        <div class="runtime-entity-heading"><strong>${esc(task.operation)}</strong>${pillHtml(task.label, task.pillClass)}</div>
-        ${identifierHtml('Native task ID', task.taskId || 'unknown')}
-      </div>
-      <div class="native-task-time">
-        ${task.startedAt ? `<span>Started <span data-clock-relative="${esc(task.startedAt)}">${esc(timeAgo(task.startedAt) || 'now')}</span></span>` : '<span>Start time unavailable</span>'}
-        ${updated ? `<span>Updated <span data-clock-relative="${esc(updated)}">${esc(timeAgo(updated) || 'now')}</span></span>` : ''}
-      </div>
-    </div>
-    ${relationship}
-    <div class="native-task-detail-grid">
-      <div><span>Status</span><strong>${esc(task.label)}</strong></div>
-      <div><span>Work session</span><strong>${esc(task.logicalTaskId || 'Not associated')}</strong></div>
-      <div><span>Managed process</span><strong>${esc(task.processId || 'Not associated')}</strong></div>
-      <div><span>Workspace</span><strong>${esc(task.workspace || 'Unavailable')}</strong></div>
-    </div>
-    <div class="runtime-state-copy${task.waitingForInput ? ' input-required' : ''}" role="status">
-      <strong>${esc(task.description)}</strong>
-      ${summary ? `<span>${esc(summary)}</span>` : ''}
-      ${task.canCancel ? '<span>This active native task has an explicit backend-published cancellation action.</span>' : '<span>No dashboard native-task cancel control is shown without an explicit cancellable backend action.</span>'}
-    </div>
-    ${task.canCancel ? `<div class="native-task-actions"><button class="secondary danger" type="button" data-cancel-native-task data-cancel-url="${esc(task.cancelUrl)}" data-native-task-id="${esc(task.taskId)}" aria-label="Cancel native task ${esc(task.taskId)}">Cancel native task</button></div>` : ''}
-  </article>`;
-}
-
-function relationshipHtml(workSessionId, nativeTaskId, processId) {
-  const items = [
-    ['Work session', workSessionId],
-    ['Native task', nativeTaskId],
-    ['Process', processId]
-  ].filter(([, value]) => value);
-  if (!items.length) return '<div class="runtime-relationship muted">No lifecycle relationships were supplied.</div>';
-  return `<div class="runtime-relationship" aria-label="Lifecycle relationship">${items.map(([label, value], index) => `${index ? '<span aria-hidden="true">→</span>' : ''}<span><small>${esc(label)}</small><code>${esc(value)}</code></span>`).join('')}</div>`;
-}
-
-function identifierHtml(label, value) {
-  return `<span class="runtime-identifier"><span>${esc(label)}</span><code>${esc(value)}</code><button class="runtime-copy-id" type="button" data-copy-value="${esc(value)}" aria-label="Copy ${esc(label)} ${esc(value)}">Copy</button></span>`;
 }
 
 function bindCopyActions(root) {
@@ -189,33 +78,6 @@ function bindCopyActions(root) {
       .then(() => toast('Identifier copied.', { variant: 'success' }))
       .catch(error => toast(error instanceof Error ? error.message : String(error), { variant: 'error' }));
   });
-}
-
-function bindNativeTaskActions(root) {
-  root.addEventListener('click', event => {
-    const button = event.target.closest('[data-cancel-native-task]');
-    if (!button) return;
-    const url = button.dataset.cancelUrl || '';
-    const taskId = button.dataset.nativeTaskId || '';
-    if (!url.startsWith('/api/') || !taskId) return;
-    void runButtonAction(button, {
-      idleText: 'Cancel native task',
-      loadingText: 'Requesting cancellation…',
-      successText: 'Cancellation requested',
-      errorText: 'Retry cancellation'
-    }, () => postJson(url, { taskId }, { timeout: 10000 }))
-      .then(result => {
-        if (result?.ok !== false) requestDashboardRefresh();
-      });
-  });
-}
-
-function orderNativeTasks(left, right) {
-  const activeDifference = Number(right.active) - Number(left.active);
-  if (activeDifference) return activeDifference;
-  const timeDifference = Date.parse(right.updatedAt || right.startedAt || 0) - Date.parse(left.updatedAt || left.startedAt || 0);
-  if (Number.isFinite(timeDifference) && timeDifference) return timeDifference;
-  return String(left.taskId).localeCompare(String(right.taskId), 'en-US', { numeric: true, sensitivity: 'base' });
 }
 
 function renderSessionRows(body, sessions, scopeKey) {
@@ -304,7 +166,6 @@ function openSession(session) {
   const operations = currentOperations(session);
   const endMeaning = sessionMeaning(session.status);
   const identities = taskEntityView(session);
-  const recovery = recoveryStateView(session);
   const state = workSessionStateView(session);
 
   content.innerHTML = `
@@ -314,11 +175,9 @@ function openSession(session) {
     </header>
     ${taskProgressHtml(session.progress, session.status)}
     <div class="task-detail-current"><strong>${esc(session.currentStage || 'Current stage unavailable')}</strong><span>${esc(session.currentActivity || session.operation || 'No current activity recorded.')}</span></div>
-    ${recovery ? `<div class="connection-notice ${esc(recovery.tone)}"><strong>${esc(recovery.title)}</strong><div>${esc(recovery.message)}</div><div>${esc(recovery.action)}</div></div>` : ''}
     <div class="task-detail-grid">
       ${detail('Workspace', session.workspace || '—')}
       ${identifierDetail('Work session ID', identities.logicalTaskId || '—')}
-      ${identities.nativeTaskId ? identifierDetail('Native task ID', identities.nativeTaskId) : ''}
       ${identities.processId ? identifierDetail('Process ID', identities.processId) : ''}
       ${session.correlation?.requestId ? identifierDetail('Request ID', session.correlation.requestId) : ''}
       ${session.correlation?.traceId ? identifierDetail('Trace ID', session.correlation.traceId) : ''}

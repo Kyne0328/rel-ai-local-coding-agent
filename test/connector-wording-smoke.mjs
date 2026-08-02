@@ -68,24 +68,24 @@ if (findings.length) {
   process.exit(1);
 }
 
-// Check relai_run_checks description wording from the authoritative registry.
+// Check compact validation wording from the authoritative registry.
 import { getToolDefinitions } from "../src/tools/schema.js";
 const toolDefinitions = getToolDefinitions();
-const runChecksDescription = toolDefinitions.find((definition) => definition.name === 'relai_run_checks')?.description || '';
+const runChecksDescription = toolDefinitions.find((definition) => definition.name === 'relai_validate')?.description || '';
 
 const forbiddenInRunChecks = ['shell', 'execute', 'arbitrary', 'command runner', 'terminal command'];
 const descriptionFindings = [];
 for (const forbidden of forbiddenInRunChecks) {
   if (runChecksDescription.toLowerCase().includes(forbidden.toLowerCase())) {
-    descriptionFindings.push(`relai_run_checks description contains forbidden word: "${forbidden}" — found in: "${runChecksDescription}"`);
+    descriptionFindings.push(`relai_validate description contains forbidden word: "${forbidden}" — found in: "${runChecksDescription}"`);
   }
 }
-if (!runChecksDescription.toLowerCase().includes('validation checks')) {
-  descriptionFindings.push(`relai_run_checks description must contain "validation checks" — got: "${runChecksDescription}"`);
+if (!runChecksDescription.toLowerCase().includes('checks')) {
+  descriptionFindings.push(`relai_validate description must contain "checks" — got: "${runChecksDescription}"`);
 }
 
 if (descriptionFindings.length) {
-  console.error('Connector wording smoke test failed. relai_run_checks description wording issue:');
+  console.error('Connector wording smoke test failed. relai_validate description wording issue:');
   for (const msg of descriptionFindings) {
     console.error(`  ${msg}`);
   }

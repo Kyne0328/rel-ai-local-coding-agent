@@ -49,7 +49,7 @@ async function relaiStatus(config, args = {}, context = {}) {
       selectedWorkspace = { alias: String(args.workspace), error: error instanceof Error ? error.message : String(error) };
     }
   }
-  const { TOOL_NAMES, getToolGroups, getToolSurfaceManifest } = toolSchema;
+  const { getToolNames, getToolGroups, getToolSurfaceManifest } = toolSchema;
   const taskActivity = typeof context.getTaskActivity === 'function' ? context.getTaskActivity() : getToolActivity();
   const compatibility = runtimeCompatibility(config, {
     workspace: args.workspace,
@@ -60,9 +60,9 @@ async function relaiStatus(config, args = {}, context = {}) {
     runtime: compatibility.runtime,
     ...(compatibility.repository ? { repositoryRuntime: compatibility.repository } : {}),
     runtimeCompatibility: compatibility.compatibility,
-    tools: TOOL_NAMES,
-    toolGroups: getToolGroups(),
-    toolSurface: getToolSurfaceManifest(),
+    tools: getToolNames(config),
+    toolGroups: getToolGroups(config),
+    toolSurface: getToolSurfaceManifest(config),
     ...(localDiagnostics ? { scripts: sortedKeys(scripts), ci } : {}),
     workspace: selectedWorkspace,
     workspaceCount: workspaceAliases.length,
@@ -138,7 +138,7 @@ function workspaceInspect(config, args = {}) {
         skipped: tree.skipped,
         truncated: tree.truncated
       },
-      requiredFlow: toolSchema.TOOL_NAMES,
+      requiredFlow: toolSchema.getToolNames(config),
       operationJournal: summarizeOperations(config, { alias: profile.workspace, path: profile.root }, args.journalLimit || 10)
     };
   } catch (error) {

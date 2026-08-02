@@ -5,13 +5,13 @@ import { runWorkspaceOperation } from "../workspaceOperationQueue.js";
 import { maybeStartSession } from "./session.js";
 import { runSpan, addSpanEvent, setSpanAttributes } from "../telemetry.js";
 
-async function executeToolCall({ config, name, effectiveArgs, context, finishActivity, definition, started }) {
+async function executeToolCall({ config, name, executionName = name, effectiveArgs, context, finishActivity, definition, started }) {
   let sessionStart = { started: false, alias: '' };
   const value = await runWithToolActivity(finishActivity, () => runSpan(config,
-    name === 'relai_begin_work' ? 'relai.logical_task.start' : 'relai.tool.call',
+    executionName === 'relai_begin_work' ? 'relai.logical_task.start' : 'relai.tool.call',
     spanAttributes(name, effectiveArgs, context, finishActivity),
-    () => runWorkspaceOperation(name === 'relai_cancel_work' ? '' : effectiveArgs?.workspace, async () => {
-      sessionStart = maybeStartSession(config, name, effectiveArgs || {}, { taskId: finishActivity?.taskId });
+    () => runWorkspaceOperation(executionName === 'relai_cancel_work' ? '' : effectiveArgs?.workspace, async () => {
+      sessionStart = maybeStartSession(config, executionName, effectiveArgs || {}, { taskId: finishActivity?.taskId });
       if (typeof definition?.handler !== 'function') throw new Error(`Tool '${name}' has no executable handler.`);
       const result = await definition.handler(config, effectiveArgs || {}, {
         connector: Boolean(context?.publicHttpOnly),

@@ -11,9 +11,18 @@ const {
 
 const current = runtimeMetadata();
 assert.equal(current.applicationVersion, '0.23.0');
-assert.equal(current.toolSurfaceVersion, 27);
-assert.equal(current.toolCount, 30);
+assert.equal(current.toolSurfaceVersion, 29);
+assert.equal(current.toolCount, 12);
 assert.match(current.manifestHash, /^[A-Za-z0-9_-]{24}$/);
+
+const legacy = runtimeMetadata({ toolProfile: 'legacy' });
+assert.equal(legacy.toolCount, 30);
+assert.notEqual(legacy.manifestHash, current.manifestHash);
+const configured = runtimeMetadata({
+  toolProfile: 'compact',
+  workspaces: { repo: { path: process.cwd() }, another: { path: os.tmpdir() } }
+});
+assert.equal(configured.manifestHash, current.manifestHash, 'workspace aliases must not change the runtime manifest hash');
 
 const equal = assessRuntimeCompatibility(current, { ...current, source: 'repository' });
 assert.equal(equal.status, 'compatible');

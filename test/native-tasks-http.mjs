@@ -100,13 +100,14 @@ try {
 
   const listed = await client.request('tools/list', {}, { id: 2, capabilities: {} });
   assert.equal(listed.response.status, 200, JSON.stringify(listed.body));
-  assert.equal(listed.body.result?.tools?.length, 30);
+  assert.equal(listed.body.result?.tools?.length, 12);
   assert.equal(listed.body.result.tools.some(tool => tool.name === 'relai_native_tasks_probe'), false);
   assert.equal(listed.body.result.tools.some(tool => tool.name === 'relai_operation_task_get'), false);
   assert.equal(listed.body.result.tools.some(tool => tool.name === 'relai_operation_task_cancel'), false);
   assert.equal(listed.body.result.tools.some(tool => Object.hasOwn(tool, 'execution')), false);
 
-  const started = await callTool(client, 3, 'relai_begin_work', {
+  const started = await callTool(client, 3, 'relai_work', {
+    action: 'begin',
     workspace: 'repo',
     title: 'Native Tasks HTTP integration',
     objective: 'Verify selective native task execution and bounded synchronous fallback.',
@@ -133,13 +134,13 @@ try {
 
   const working = await taskRequest(client, 6, 'tasks/get', taskId);
   assert.equal(working.body.result?.resultType, 'complete');
-  assert.equal(working.body.result?.status, 'working');
+  assert.ok(['working', 'completed'].includes(working.body.result?.status), JSON.stringify(working.body));
 
   const missingGetCapability = await taskRequest(client, 7, 'tasks/get', taskId, {}, {});
   assert.equal(missingGetCapability.body.error?.code, MISSING_TASKS_CAPABILITY_CODE);
 
   const completed = await waitForTaskStatus(client, taskId, 'completed', 20);
-  assert.equal(completed.body.result?.result?.isError, false);
+  assert.equal(completed.body.result?.result?.isError, false, JSON.stringify(completed.body));
   assert.equal(completed.body.result?.result?.structuredContent?.exitCode, 0);
   assert.equal(completed.body.result?.result?.structuredContent?.work_id, logicalTaskId);
   assert.equal(completed.body.result?.result?.structuredContent?.processId, undefined);

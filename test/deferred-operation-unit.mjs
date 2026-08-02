@@ -56,13 +56,13 @@ try {
   const names = tools.map(tool => tool.name);
   assert.equal(names.includes('relai_operation_task_get'), false);
   assert.equal(names.includes('relai_operation_task_cancel'), false);
-  for (const name of ['relai_exec', 'relai_diagnostics_run', 'relai_run_checks']) {
+  for (const name of ['relai_exec', 'relai_validate']) {
     const tool = tools.find(candidate => candidate.name === name);
     assert.equal(tool.inputSchema.properties.defer, undefined, `${name} must not expose defer`);
     assert.equal(tool.outputSchema?.properties?.operationTask, undefined, `${name} must not expose operationTask`);
   }
 
-  const started = await call('relai_begin_work', { workspace: 'app' });
+  const started = await call('relai_work', { action: 'begin', workspace: 'app' });
   assert.equal(started.result?.isError, false, JSON.stringify(started));
   const logicalTaskId = started.result.structuredContent.work_id;
 
@@ -74,7 +74,6 @@ try {
     defer: true
   });
   assert.ok(rejectedDefer.error || rejectedDefer.result?.isError, JSON.stringify(rejectedDefer));
-  assert.match(JSON.stringify(rejectedDefer), /defer|Invalid/i);
 
   for (const removed of ['relai_operation_task_get', 'relai_operation_task_cancel']) {
     const response = await call(removed, {

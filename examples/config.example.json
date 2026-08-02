@@ -3,6 +3,7 @@
   "stateDir": "/Users/you/.rel-ai-mcp",
   "auditLogPath": "",
   "toolMode": "chatgpt_local_repo",
+  "toolProfile": "compact",
   "trustedLocalAgent": true,
   "maxOutputBytes": 2097152,
   "telemetry": {

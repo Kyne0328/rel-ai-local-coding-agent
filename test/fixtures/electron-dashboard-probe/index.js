@@ -73,7 +73,6 @@ app.whenReady().then(async () => {
       dialog: dialog?.getAttribute('role') === 'dialog',
       detailText: detail?.textContent || '',
       workSessionId: /Work session ID/.test(detail?.textContent || ''),
-      nativeTaskId: /Native task ID/.test(detail?.textContent || ''),
       processId: /Process ID/.test(detail?.textContent || ''),
       eventLinks: detail?.querySelectorAll('.task-event-link').length || 0
     };

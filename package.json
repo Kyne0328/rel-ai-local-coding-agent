@@ -7,11 +7,17 @@
   "type": "module",
   "license": "MIT",
   "files": [
+    ".codex-plugin/",
+    ".mcp.json",
+    "skills/",
     "bin/",
     "src/",
     "public/",
     "examples/",
-    "types/"
+    "types/",
+    "README.md",
+    "LICENSE",
+    "release-manifest.json"
   ],
   "packageManager": "npm@11.9.0",
   "engines": {
@@ -41,6 +47,9 @@
     "generate:sbom": "node scripts/generate-sbom.mjs",
     "audit:production": "npm audit --omit=dev --audit-level=high && cd electron && npm audit --omit=dev --audit-level=high",
     "audit:packaging": "node scripts/audit-packaging.mjs",
+    "validate:plugin": "node scripts/validate-plugin.mjs",
+    "test:plugin": "node test/plugin-package-unit.mjs",
+    "measure:tool-surface": "node scripts/measure-tool-surface.mjs",
     "typecheck": "tsc -p tsconfig.boundaries.json",
     "init-config": "node bin/relai-mcp-config.js init",
     "workspace:add": "node bin/relai-mcp-config.js workspace add",
@@ -126,6 +135,14 @@
     "@opentelemetry/sdk-trace-node": "^2.10.0",
     "@opentelemetry/semantic-conventions": "^1.43.0"
   },
+  "bundledDependencies": [
+    "@modelcontextprotocol/server",
+    "@opentelemetry/api",
+    "@opentelemetry/exporter-trace-otlp-http",
+    "@opentelemetry/resources",
+    "@opentelemetry/sdk-trace-node",
+    "@opentelemetry/semantic-conventions"
+  ],
   "overrides": {
     "@hono/node-server": "2.0.12"
   }

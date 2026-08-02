@@ -38,7 +38,7 @@ const runtime = createTaskActivityRuntime({
   toolActivity: tracker,
   powerSaveBlocker: {
     start(type) {
-      assert.equal(type, 'prevent-app-suspension');
+      assert.equal(type, 'prevent-display-sleep');
       const id = nextBlocker++;
       startedBlockers.add(id);
       return id;
@@ -90,7 +90,7 @@ finishRead();
 finishOther();
 assert.equal(runtime.getStatus().state, 'waiting');
 assert.equal(runtime.getStatus().activeTaskCount, 2);
-assert.equal(startedBlockers.size, 0);
+assert.equal(startedBlockers.size, 1, 'open work sessions must keep the computer awake between tool calls');
 assert.equal(notifications.length, 0, 'successful tool calls must not be presented as completed ChatGPT tasks');
 
 nowValue = 91_000;
@@ -101,6 +101,7 @@ for (const [id, timer] of [...timers]) {
 const inactive = runtime.getStatus();
 assert.equal(inactive.state, 'idle');
 assert.equal(inactive.activeTaskCount, 0);
+assert.equal(startedBlockers.size, 0, 'the sleep blocker must stop when no work session remains active');
 assert.equal(inactive.lastTask.status, 'cancelled');
 assert.equal(inactive.lastTask.endReason, 'inactivity_window');
 assert.equal(notifications.length, 0, 'inactivity must not generate a false task-completed notification');

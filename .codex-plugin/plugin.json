@@ -1,0 +1,25 @@
+{
+  "name": "rel-ai-mcp",
+  "version": "0.23.0",
+  "description": "Guarded local repository workflows through a compact Rel.AI MCP connector and workflow skill.",
+  "author": {
+    "name": "Kyne",
+    "url": "https://github.com/Kyne0328"
+  },
+  "homepage": "https://github.com/Kyne0328/rel-ai-mcp",
+  "repository": "https://github.com/Kyne0328/rel-ai-mcp",
+  "license": "MIT",
+  "keywords": ["mcp", "repository", "coding-agent", "git"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Rel.AI",
+    "shortDescription": "Guarded local repository workflows",
+    "longDescription": "Inspect, edit, validate, review, and publish configured local repositories through a compact MCP interface with explicit work sessions and approval safeguards.",
+    "developerName": "Kyne",
+    "category": "Developer Tools",
+    "capabilities": ["Repository inspection", "Guarded editing", "Validation and publishing"],
+    "websiteURL": "https://github.com/Kyne0328/rel-ai-mcp",
+    "defaultPrompt": ["Use $rel-ai-workflow for repository work through the bundled Rel.AI MCP connector."]
+  }
+}

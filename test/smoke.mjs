@@ -20,7 +20,7 @@ try {
   if (!discovery.result?.capabilities?.extensions?.['io.modelcontextprotocol/tasks']) {
     throw new Error('stdio must advertise native Tasks support through the task-aware transport');
   }
-  if (!String(discovery.result?.instructions || '').includes('relai_finish_work')) {
+  if (!String(discovery.result?.instructions || '').includes('relai_work action finish')) {
     throw new Error('server/discover did not advertise the explicit final-completion contract');
   }
 
@@ -40,7 +40,7 @@ try {
   if (!readTool.inputSchema?.properties?.startLine || !readTool.inputSchema?.properties?.endLine || !readTool.inputSchema?.properties?.guidanceMode) {
     throw new Error('relai_read schema should expose bounded line ranges and guidance mode');
   }
-  for (const longRunning of ['relai_exec', 'relai_diagnostics_run', 'relai_run_checks']) {
+  for (const longRunning of ['relai_exec', 'relai_validate']) {
     const tool = list.result.tools.find(item => item.name === longRunning);
     if (tool.inputSchema?.properties?.defer) throw new Error(`${longRunning} must not expose legacy defer`);
     if (tool.outputSchema?.properties?.operationTask) throw new Error(`${longRunning} must not expose legacy operationTask`);

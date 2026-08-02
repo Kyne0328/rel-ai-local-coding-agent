@@ -1,8 +1,9 @@
 import { fromJsonSchema } from '@modelcontextprotocol/server';
-import { getToolSchemas } from './schema.js';
+import { resolveToolOperation } from './dispatch.js';
 
-async function validateToolOutput(config, name, output) {
-  const schema = getToolSchemas(config).find(item => item.name === name)?.outputSchema;
+async function validateToolOutput(_config, name, args, output) {
+  const resolution = resolveToolOperation(name, args || {});
+  const schema = resolution?.definition?.outputSchema;
   if (!schema) return;
   const result = await fromJsonSchema(schema)['~standard'].validate(output);
   if (!result.issues) return;
@@ -18,7 +19,7 @@ async function validateToolOutput(config, name, output) {
     ? Object.keys(output).filter(key => !allowed.has(key))
     : [];
   const unexpectedSuffix = unexpected.length ? ` Unexpected fields: ${unexpected.join(', ')}.` : '';
-  throw new Error(`Output validation error for ${name}: ${details.join('; ')}.${unexpectedSuffix}`);
+  throw new Error(`Output validation error for ${name}${resolution?.action ? ` action ${resolution.action}` : ''}: ${details.join('; ')}.${unexpectedSuffix}`);
 }
 
 export { validateToolOutput };
