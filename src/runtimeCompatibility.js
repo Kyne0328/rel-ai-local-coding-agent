@@ -11,10 +11,9 @@ import { allWorkspaceAliases, resolveWorkspace } from './config.js';
 import { buildToolManifest } from './mcp/toolManifest.js';
 
 const PROTOCOL_VERSION = MCP_PROTOCOL_VERSION;
-function runtimeMetadata(config = {}) {
-  const manifestConfig = { toolProfile: config?.toolProfile };
-  const surface = getToolSurfaceManifest(manifestConfig);
-  const manifest = buildToolManifest(manifestConfig);
+function runtimeMetadata() {
+  const surface = getToolSurfaceManifest();
+  const manifest = buildToolManifest();
   return normalizeMetadata({
     source: 'runtime',
     applicationVersion: getVersion(),

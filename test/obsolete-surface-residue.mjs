@@ -36,7 +36,12 @@ const forbidden = [
   'removedLegacyWorkflows',
   'LEGACY_TO_COMPACT',
   'LEGACY_TOOL_NAMES',
-  'getLegacyExecutableToolDefinition'
+  'getLegacyExecutableToolDefinition',
+  'TOOL_PROFILE',
+  'CORE_TOOL_NAMES',
+  'profileFromConfig',
+  'resolveToolProfile',
+  'profileRegistry'
 ];
 
 function collectFiles(directory) {
@@ -70,6 +75,9 @@ assert.equal(fs.existsSync(path.join(root, 'src', 'repo', 'archiveUtils.js')), f
 assert.equal(fs.existsSync(path.join(root, 'src', 'repo', 'audit.js')), false);
 assert.equal(fs.existsSync(path.join(root, 'src', 'ui', 'components', 'badge.js')), false);
 assert.equal(fs.existsSync(path.join(root, 'src', 'nativeTasksProbe.js')), false);
+assert.equal(fs.existsSync(path.join(root, 'src', 'tools', 'profile.js')), false);
+assert.equal(fs.existsSync(path.join(root, 'src', 'tools', 'profileRegistry.js')), false);
+assert.equal(fs.existsSync(path.join(root, 'docs', 'TOOL_PROFILES.md')), false);
 
 const removedCompatibilityNames = [
   'relai_write', 'relai_replace', 'relai_browser',

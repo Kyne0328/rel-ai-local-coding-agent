@@ -10,12 +10,11 @@ import { slimCompactPublicResult } from '../src/tools/compactResult.js';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const baseline = Object.freeze({ publicTools: 30, discoverySchemaBytes: 30524, estimatedDiscoveryTokens: 7631, globalInstructionBytes: 1471 });
 
-function measure(profile) {
-  const config = { toolProfile: profile, workspaces: {} };
+function measure() {
+  const config = { workspaces: {} };
   const tools = getPublicToolSchemas(config);
   const discoverySchemaBytes = bytes({ tools });
   return {
-    profile,
     publicTools: tools.length,
     discoverySchemaBytes,
     estimatedDiscoveryTokens: Math.ceil(discoverySchemaBytes / 4),
@@ -23,11 +22,11 @@ function measure(profile) {
   };
 }
 
-const profiles = Object.fromEntries(['core', 'compact'].map(profile => [profile, measure(profile)]));
+const surface = measure();
 const representativeResult = {
   ok: true, workspace: 'repo', work_id: '00000000-0000-4000-8000-000000000000', status: 'planning',
-  identity: 'work_session', workspaceBinding: { alias: 'repo' }, title: 'Compact plugin',
-  objective: 'Implement the compact MCP profile.', nextAction: 'Use the bootstrap context.',
+  identity: 'work_session', workspaceBinding: { alias: 'repo' }, title: 'Unified plugin',
+  objective: 'Implement the unified MCP surface.', nextAction: 'Use the bootstrap context.',
   bootstrap: { mode: 'compact', files: ['README.md', 'src/index.js'], hints: [], skipped: [] }
 };
 const representativeCompactResult = slimCompactPublicResult('relai_work', 'begin', representativeResult);
@@ -44,7 +43,7 @@ const snapshot = compactForConnector('relai_repo_snapshot', {
 const skillMetrics = skillMeasurements();
 const report = {
   baseline,
-  profiles,
+  surface,
   resultBudgets: {
     workBeginBefore: bytes(representativeResult),
     workBeginAfter: bytes(representativeCompactResult),
@@ -53,17 +52,14 @@ const report = {
   },
   skills: skillMetrics,
   change: {
-    compactReductionPercent: reduction(profiles.compact.discoverySchemaBytes),
-    coreReductionPercent: reduction(profiles.core.discoverySchemaBytes)
+    discoveryReductionPercent: reduction(surface.discoverySchemaBytes)
   }
 };
 
-if (profiles.compact.publicTools > 12) throw new Error(`Compact profile exposes ${profiles.compact.publicTools} tools; limit is 12.`);
-if (profiles.compact.discoverySchemaBytes >= 29_000) throw new Error(`Compact discovery is ${profiles.compact.discoverySchemaBytes} bytes; limit is 28999.`);
-if (profiles.core.publicTools > 7) throw new Error(`Core profile exposes ${profiles.core.publicTools} tools; limit is 7.`);
-if (profiles.core.discoverySchemaBytes >= 17_000) throw new Error(`Core discovery is ${profiles.core.discoverySchemaBytes} bytes; limit is 16999.`);
-if (profiles.compact.globalInstructionBytes >= 512) throw new Error('Global connector instructions exceed 511 bytes.');
-if (report.change.coreReductionPercent < 44) throw new Error(`Core reduction is ${report.change.coreReductionPercent}%; target is at least 44%.`);
+if (surface.publicTools !== 12) throw new Error(`Unified surface exposes ${surface.publicTools} tools; expected exactly 12.`);
+if (surface.discoverySchemaBytes >= 29_000) throw new Error(`Unified discovery is ${surface.discoverySchemaBytes} bytes; limit is 28999.`);
+if (surface.globalInstructionBytes >= 512) throw new Error('Global connector instructions exceed 511 bytes.');
+if (report.change.discoveryReductionPercent < 5) throw new Error(`Discovery reduction is ${report.change.discoveryReductionPercent}%; expected a reduction from the 30-tool baseline.`);
 if (report.resultBudgets.workBeginAfter >= report.resultBudgets.workBeginBefore) throw new Error('Compact work begin result did not shrink.');
 if (report.resultBudgets.execSuccess >= 1000) throw new Error(`Exec success envelope is ${report.resultBudgets.execSuccess} bytes; limit is 999.`);
 if (report.resultBudgets.boundedSnapshot >= 16_000) throw new Error(`Snapshot result is ${report.resultBudgets.boundedSnapshot} bytes; limit is 15999.`);

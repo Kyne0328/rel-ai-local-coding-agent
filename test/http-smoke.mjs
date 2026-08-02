@@ -64,7 +64,7 @@ try {
   const discovery = client.discovery;
   assert.equal(discovery.response.status, 200);
   assert.deepEqual(discovery.body.result?.supportedVersions, [MCP_VERSION]);
-  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolSurfaceVersion, 31);
+  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolSurfaceVersion, 32);
   assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolCount, 12);
   assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.statelessRequestModel, true);
   assert.deepEqual(discovery.body.result?.capabilities?.extensions?.['io.modelcontextprotocol/tasks'], {});
@@ -89,7 +89,7 @@ try {
     assert.ok(names.includes(expected), `${expected} missing`);
   }
   for (const legacy of ['relai_begin_work', 'relai_process_start', 'relai_run_checks', 'relai_git_push']) {
-    assert.equal(names.includes(legacy), false, `${legacy} must not be exposed by the compact profile`);
+    assert.equal(names.includes(legacy), false, `${legacy} must not be exposed by the unified surface`);
   }
   const inspect = listed.body.result.tools.find(tool => tool.name === 'relai_inspect');
   assert.ok(inspect.inputSchema.properties.action.enum.includes('trace'));
@@ -157,8 +157,8 @@ try {
   const surface = await client.request('resources/read', { uri: 'relai://server/tool-surface' });
   assert.ok(surface.body.result?.contents, JSON.stringify(surface.body));
   const manifest = JSON.parse(surface.body.result.contents[0].text);
-  assert.equal(manifest.toolSurfaceVersion, 31);
-  assert.equal(manifest.profile, 'compact');
+  assert.equal(manifest.toolSurfaceVersion, 32);
+  assert.equal(Object.hasOwn(manifest, 'profile'), false);
   assert.equal(manifest.toolCount, 12);
   const surfaceByName = new Map(manifest.tools.map(tool => [tool.name, tool]));
   assert.equal(surfaceByName.get('relai_exec').executionClass, 'native_task_eligible');

@@ -18,12 +18,9 @@ This is the routing and work-session ownership skill. Specialized Rel.AI skills 
 7. Review material changes with `relai_changes` action `diff`.
 8. Complete only after actual validation, using validation `complete: true` or `relai_work` action `finish`. Cancel abandoned work explicitly.
 
-## Tool profiles
+## Public tool surface
 
-- `compact`: the default complete 12-tool workflow surface.
-- `core`: seven high-frequency repository tools for token-sensitive workflows. Persistent processes, snapshots, recovery, worktrees, and publishing are unavailable.
-
-These are the only supported profiles. Removed direct-operation profiles and aliases fail closed; use the consolidated tools and actions.
+Rel.AI always exposes the complete 12-tool capability surface. There is no profile switch and no reduced mode. Removed direct-operation tools and aliases fail closed; use the consolidated tools and actions.
 
 Use the `relai://server/tool-surface` resource when exact action fields, execution classes, or native Task eligibility are needed. Do not copy complete tool schemas into skill instructions.
 

@@ -26,7 +26,7 @@ Tool use is intentionally small but flexible. ChatGPT should skip stages it does
 relai_work begin -> relai_search / relai_inspect -> relai_read -> relai_edit -> relai_validate checks (complete:true + summary)
 ```
 
-No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. First-party application code is ESM-only except for one sandbox-required Electron preload boundary. Rel.AI targets MCP `2026-07-28` through the stable MCP SDK v2. The default `compact` profile exposes the complete 12-tool surface, while the token-sensitive `core` profile exposes seven high-frequency tools. These are the only supported profiles; the former 30-tool direct surface and redundant profile aliases were removed in a hard cutover. Modern clients use `server/discover` with per-request protocol, client, and capability metadata; HTTP also accepts ChatGPT's SDK-supported stateless initialize flow. Neither mode creates transport-session identity.
+No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. First-party application code is ESM-only except for one sandbox-required Electron preload boundary. Rel.AI targets MCP `2026-07-28` through the stable MCP SDK v2 and always exposes one complete 12-tool capability surface. The former 30-tool direct surface, reduced profiles, and redundant aliases were removed in a hard cutover. Modern clients use `server/discover` with per-request protocol, client, and capability metadata; HTTP also accepts ChatGPT's SDK-supported stateless initialize flow. Neither mode creates transport-session identity.
 
 Logical coding work is isolated by an opaque workspace-bound `work_id`, persistent commands by `processId`, native asynchronous work by MCP Task IDs, worktrees by dynamic workspace alias, and resumable approvals by signed `requestState`. After task creation, task-scoped tools require `work_id` and resolve the bound workspace automatically; an optional `workspace` argument acts only as an ownership assertion.
 
@@ -209,7 +209,7 @@ The important design choice: ChatGPT does the thinking, but the local bridge kee
 
 The repository and packaged npm artifact include one versioned `rel-ai` plugin containing the MCP connector, the core `rel-ai-workflow` skill, and focused first-party investigation, debugging, verification, and persistent-development-process skills. Install, update, or remove the plugin as one unit in a compatible host. Connector and skills remain separate internal files. See [docs/PLUGIN.md](docs/PLUGIN.md) for the package layout, provenance policy, and artifact verification.
 
-Bundling the connector and skills does not itself reduce MCP discovery context. Tool profiles and the sub-512-byte global instructions provide that reduction. Detailed skill procedures load only when selected, and direct HTTP and stdio clients remain fully usable without loading a skill.
+Bundling the connector and skills does not itself reduce MCP discovery context. The consolidated 12-tool surface and sub-512-byte global instructions provide that reduction. Detailed skill procedures load only when selected, and direct HTTP and stdio clients remain fully usable without loading a skill.
 
 ### Windows desktop app
 
@@ -292,7 +292,7 @@ Windows CI and the release workflow build from a clean output directory, verify 
 
 ## MCP tools
 
-The default compact profile exposes 12 capability-oriented tools through MCP SDK v2. Modern HTTP clients use MCP `2026-07-28`; the same endpoint also supports ChatGPT's SDK-compatible stateless initialize flow. Rel.AI does not use transport sessions as work identity. The server enforces workspace boundaries, `work_id` ownership, input bounds, cancellation, approvals, and destructive-operation protections whether or not the client loads the workflow skill.
+Rel.AI exposes 12 capability-oriented tools through MCP SDK v2. Modern HTTP clients use MCP `2026-07-28`; the same endpoint also supports ChatGPT's SDK-compatible stateless initialize flow. Rel.AI does not use transport sessions as work identity. The server enforces workspace boundaries, `work_id` ownership, input bounds, cancellation, approvals, and destructive-operation protections whether or not the client loads the workflow skill.
 
 | Tool | Purpose and actions |
 | --- | --- |
@@ -311,7 +311,7 @@ The default compact profile exposes 12 capability-oriented tools through MCP SDK
 
 The public surface is understandable and safe without packaged skills. Skills add progressively disclosed workflow guidance only in hosts that support and load them; server-side ownership, approvals, limits, Task negotiation, and destructive safeguards remain authoritative.
 
-Omit `toolProfile` or use `"compact"` for the default complete surface. Use `"core"` for the seven-tool token-sensitive surface. These are the only accepted values; removed profiles and old direct tool names fail closed. Exact action fields and action-level execution metadata are available through `relai://server/tool-surface`. See [docs/TOOL_PROFILES.md](docs/TOOL_PROFILES.md) and [docs/PLUGIN.md](docs/PLUGIN.md).
+There is no `toolProfile` configuration option. Every installation exposes the same complete 12-tool surface; old direct tool names still fail closed. Exact action fields and action-level execution metadata are available through `relai://server/tool-surface`. See [docs/PLUGIN.md](docs/PLUGIN.md).
 
 ---
 

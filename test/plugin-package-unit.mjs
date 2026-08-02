@@ -78,7 +78,6 @@ try {
 
   const config = {
     version: 3,
-    toolProfile: 'compact',
     stateDir: path.join(temp, 'state'),
     patch: { backup: false, requireCleanGit: false, maxUpdateBytes: 2097152 },
     workspaces: { repo: { path: root } }
@@ -94,7 +93,7 @@ try {
 
     client.send(2, 'tools/list');
     const listed = await client.waitFor(2);
-    assert.equal(listed.result?.tools?.length, 12, 'installed MCP server must expose the compact tool surface');
+    assert.equal(listed.result?.tools?.length, 12, 'installed MCP server must expose the unified 12-tool surface');
     assert.deepEqual(listed.result.tools, getPublicToolSchemas(config), 'source and extracted tools/list must match');
 
     client.call(3, 'relai_work', { action: 'begin', workspace: root, bootstrap: 'none' });
