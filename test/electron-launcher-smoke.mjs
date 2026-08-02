@@ -112,6 +112,7 @@ assert.ok(electronPkg.build.files.includes('app-updater.js'), 'electron build mu
 assert.ok(electronPkg.build.files.includes('app-updater-state.js'), 'electron build must include updater state persistence');
 assert.ok(electronPkg.build.files.includes('desktop-settings.js'), 'electron build must include extracted desktop settings ownership');
 assert.ok(electronPkg.build.files.includes('desktop-lifecycle.js'), 'electron build must include desktop lifecycle state and startup ownership');
+assert.ok(electronPkg.build.files.includes('shutdown-coordinator.js'), 'electron build must include coordinated shutdown ownership');
 assert.ok(electronPkg.build.files.includes('controller-runtime.js'), 'electron build must include the active-controller runtime marker');
 for (const relayFile of ['cloud-relay-state.js', 'cloud-relay-client.js', 'cloud-relay-runtime.js']) {
   assert.equal(electronPkg.build.files.includes(relayFile), false, `electron build must not include removed relay module ${relayFile}`);
@@ -157,7 +158,7 @@ assert.match(
 assert.match(electronMain, /app\.setName\('Rel\.AI MCP'\)/, 'Electron must expose the product name instead of the generic Electron app name');
 assert.match(electronMain, /app\.setAppUserModelId\('com\.relai\.mcp'\)/, 'Windows notifications must use the packaged Rel.AI application identity');
 assert.match(electronMain, /writeControllerRuntimeMarker\(app\)/, 'Electron must publish its runtime paths before starting the controller');
-assert.match(electronMain, /removeControllerRuntimeMarker\(\)/, 'Electron must remove only its own runtime marker during clean shutdown');
+assert.match(electronMain, /removeRuntimeMarker: removeControllerRuntimeMarker/, 'Electron must remove only its own runtime marker through coordinated shutdown');
 assert.match(electronMain, /powerSaveBlocker/, 'Electron main must use the native sleep-prevention API');
 assert.match(toolSleepBlocker, /prevent-display-sleep/, 'active work sessions must prevent the computer and display from sleeping');
 assert.doesNotMatch(toolSleepBlocker, /prevent-app-suspension/, 'app-only suspension blocking is insufficient for keeping the computer awake');
@@ -210,7 +211,9 @@ assert.match(desktopTray, /Download update/);
 assert.match(desktopTray, /Restart to install/);
 assert.match(electronMain, /launchConfiguredDesktop\(\{ background: lifecycleStatus\.openedAtLogin \}\)/, 'configured sign-in launches must preserve the background-startup decision');
 assert.match(electronMain, /if \(!options\.background\) await showDashboardWindow/, 'normal launches must open the dashboard while background launches remain tray-only');
-assert.equal((electronMain.match(/desktopLifecycle\.markCleanShutdown\(\)/g) || []).length, 2, 'both before-quit and immediate tray exit must persist a clean lifecycle marker');
+assert.match(electronMain, /createDesktopShutdownCoordinator/, 'Electron must coordinate service, process, telemetry, and lifecycle shutdown');
+assert.match(electronMain, /event\.preventDefault\(\)/, 'Electron must delay before-quit until owned runtime cleanup finishes');
+assert.match(electronMain, /await shutdownCoordinator\.prepare\('quit'\)/, 'tray quit must await the same shutdown coordinator');
 assert.match(desktopLifecycle, /setLoginItemSettings/);
 assert.match(desktopLifecycle, /args: \['--background'\]/);
 assert.match(desktopLifecycle, /recoveredAfterUncleanShutdown/);

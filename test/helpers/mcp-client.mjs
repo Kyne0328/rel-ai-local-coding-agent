@@ -126,7 +126,14 @@ export function startMcpClient({
       child.kill('SIGTERM');
       await once(child, 'close').catch(() => {});
     }
-    if (ownedStateDir) fs.rmSync(ownedStateDir, { recursive: true, force: true });
+    if (ownedStateDir) {
+      fs.rmSync(ownedStateDir, {
+        recursive: true,
+        force: true,
+        maxRetries: process.platform === 'win32' ? 20 : 2,
+        retryDelay: 100
+      });
+    }
   }
 
   return { send, notify, initialize, call, waitFor, close };

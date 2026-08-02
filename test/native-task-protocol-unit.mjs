@@ -15,12 +15,13 @@ import {
 import {
   INVALID_TASKS_CAPABILITY_CODE,
   MCP_PROTOCOL_VERSION,
-  MISSING_TASKS_CAPABILITY_CODE
+  MISSING_TASKS_CAPABILITY_CODE,
+  TASKS_EXTENSION_REVISION
 } from '../src/mcp/protocol.js';
 import { handleTransportTaskRequest } from '../src/mcp/transportTasks.js';
 
 const extensionId = 'io.modelcontextprotocol/tasks';
-const tasksCapability = { extensions: { [extensionId]: {} } };
+const tasksCapability = { extensions: { [extensionId]: { revision: TASKS_EXTENSION_REVISION } } };
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-native-task-protocol-'));
 const config = { stateDir: root };
 let resumeCount = 0;
@@ -112,7 +113,7 @@ try {
   assert.equal(missingCapability.body.error.code, MISSING_TASKS_CAPABILITY_CODE);
   assert.deepEqual(
     missingCapability.body.error.data.requiredCapabilities.extensions[extensionId],
-    {}
+    { revision: TASKS_EXTENSION_REVISION }
   );
 
   const malformedCapability = await handle(

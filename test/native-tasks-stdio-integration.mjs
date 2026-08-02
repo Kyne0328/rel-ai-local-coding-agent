@@ -4,14 +4,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { TASKS_EXTENSION_ID } from '../src/mcp/protocol.js';
+import { TASKS_EXTENSION_ID, TASKS_EXTENSION_REVISION } from '../src/mcp/protocol.js';
 import { startMcpClient } from './helpers/mcp-client.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-stdio-tasks-'));
 const workspaceDir = path.join(stateDir, 'workspace');
 const configPath = path.join(stateDir, 'config.json');
-const taskCaps = { extensions: { [TASKS_EXTENSION_ID]: {} } };
+const taskCaps = { extensions: { [TASKS_EXTENSION_ID]: { revision: TASKS_EXTENSION_REVISION } } };
 fs.mkdirSync(workspaceDir, { recursive: true });
 fs.writeFileSync(path.join(workspaceDir, 'README.md'), '# stdio transport test\n');
 fs.writeFileSync(configPath, `${JSON.stringify({
@@ -129,7 +129,12 @@ try {
   await native.close().catch(() => {});
   await sync.close().catch(() => {});
   await other.close().catch(() => {});
-  fs.rmSync(stateDir, { recursive: true, force: true });
+  fs.rmSync(stateDir, {
+    recursive: true,
+    force: true,
+    maxRetries: process.platform === 'win32' ? 20 : 2,
+    retryDelay: 100
+  });
 }
 
 async function startLogicalTask(client, id, title) {

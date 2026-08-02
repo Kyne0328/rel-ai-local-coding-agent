@@ -1,9 +1,11 @@
-import { callTool } from "../src/tools.js";
+import { callTool as rawCallTool } from "../src/tools.js";
 import { readTaskHistorySession } from "../src/taskHistoryStore.js";
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
+const callTool = (name, args, context = {}) => rawCallTool(name, args, { principal: 'local:trusted', ...context });
 
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-task-observability-integration-'));
 const workspacePath = path.join(sandbox, 'repo');

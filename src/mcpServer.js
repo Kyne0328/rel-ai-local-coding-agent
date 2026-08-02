@@ -2,7 +2,12 @@ import { McpServer, fromJsonSchema } from '@modelcontextprotocol/server';
 import { readConfig } from './config.js';
 import { approvalDigest, approvalRequirement } from './mcp/approval.js';
 import { createRelaiRequestStateCodec, SERVER_INSTANCE_ID, toolContext } from './mcp/context.js';
-import { MCP_PROTOCOL_VERSION, TASKS_EXTENSION_ID } from './mcp/protocol.js';
+import {
+  MCP_LEGACY_PROTOCOL_VERSIONS,
+  MCP_PROTOCOL_VERSION,
+  TASKS_EXTENSION_ID,
+  TASKS_EXTENSION_REVISION
+} from './mcp/protocol.js';
 import { toolResult } from './mcp/results.js';
 import { invokeRelaiTool } from './mcp/toolInvocation.js';
 import { validateToolOutput } from './tools/outputValidation.js';
@@ -25,10 +30,16 @@ function createRelaiMcpServer(options = {}) {
   const capabilities = {
     tools: {},
     resources: { subscribe: false },
-    ...(options.nativeTasks === true ? { extensions: { [TASKS_EXTENSION_ID]: {} } } : {}),
+    ...(options.nativeTasks === true ? {
+      extensions: { [TASKS_EXTENSION_ID]: { revision: TASKS_EXTENSION_REVISION } }
+    } : {}),
     experimental: {
       relai: {
-        protocolVersion: MCP_PROTOCOL_VERSION,
+        targetProtocolVersion: MCP_PROTOCOL_VERSION,
+        supportedProtocolVersions: legacyCompatibility
+          ? [...MCP_LEGACY_PROTOCOL_VERSIONS]
+          : [MCP_PROTOCOL_VERSION],
+        compatibilityMode: legacyCompatibility ? 'legacy_http' : 'modern',
         toolSurfaceVersion: surface.toolSurfaceVersion,
         toolCount: definitions.length,
         taskIdentityVersion: 2,
@@ -38,7 +49,9 @@ function createRelaiMcpServer(options = {}) {
     }
   };
   const server = new McpServer(MCP_SERVER_INFO, {
-    ...(legacyCompatibility ? {} : { supportedProtocolVersions: [MCP_PROTOCOL_VERSION] }),
+    supportedProtocolVersions: legacyCompatibility
+      ? [...MCP_LEGACY_PROTOCOL_VERSIONS]
+      : [MCP_PROTOCOL_VERSION],
     capabilities,
     instructions: connectorInstructions(config),
     cacheHints: {

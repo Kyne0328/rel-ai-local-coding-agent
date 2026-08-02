@@ -20,6 +20,7 @@ import { createDiagnosticFiles } from './diagnostic-files.js';
 import { createDesktopSettingsManager } from './desktop-settings.js';
 import { createAppUpdater } from './app-updater.js';
 import { createDesktopLifecycleManager } from './desktop-lifecycle.js';
+import { closeHttpServer, createDesktopShutdownCoordinator } from './shutdown-coordinator.js';
 import { STARTUP_BACKGROUND_COLOR } from './startup-background.js';
 import { removeControllerRuntimeMarker, writeControllerRuntimeMarker } from './controller-runtime.js';
 import * as managedNgrok from './managed-ngrok.js';
@@ -42,7 +43,7 @@ const diagnosticsModule = await importResourceModule('src/diagnostics.js');
 const { ERROR_CODES, deriveConnectionState } = await importResourceModule('src/desktopUxContracts.js');
 const oauthProvider = await importResourceModule('src/oauthProvider.js');
 const { startHttpServer } = await importResourceModule('src/httpServer.js');
-const { killProcess } = await importResourceModule('src/processKill.js');
+const { terminateProcessTree } = await importResourceModule('src/process.js');
 const { stopAllManagedProcesses } = await importResourceModule('src/processManager.js');
 const { shutdownTelemetry } = await importResourceModule('src/telemetry.js');let wizardWindow = null, wizardRecoveryMode = false, wizardReturnToFallback = false;
 let httpServer = null, tunnelProcess = null, startPromise = null;
@@ -109,7 +110,20 @@ const desktopLifecycle = createDesktopLifecycleManager({ app,
   onLog: (message, options) => runtimeLogs.append(message, options), errorCodes: ERROR_CODES });
 appUpdater = createAppUpdater({ app, autoUpdater, getTaskActivity: toolActivityRuntime.getStatus,
   onStatusChange: pushUpdateStatus, onLog: (message, options) => runtimeLogs.append(message, options),
+  onBeforeInstall: () => shutdownCoordinator.prepare('update_install'),
   errorCodes: ERROR_CODES });
+const shutdownCoordinator = createDesktopShutdownCoordinator({
+  stopService: () => stopServer({ silent: true }),
+  stopUpdater: () => appUpdater?.stop(),
+  stopActivity: () => toolActivityRuntime.stop(),
+  closeDashboard: () => dashboardWindowManager.close(),
+  closeRecovery: () => recoveryWindowManager.close(),
+  closeWizard: () => closeWizard({ returnToFallback: false }),
+  removeRuntimeMarker: removeControllerRuntimeMarker,
+  shutdownTelemetry,
+  markCleanShutdown: () => desktopLifecycle.markCleanShutdown(),
+  onLog: (message, options) => runtimeLogs.append(message, options)
+});
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
@@ -136,23 +150,14 @@ if (!gotLock) {
   });
 }
 
-app.on('before-quit', () => {
+app.on('before-quit', event => {
+  if (shutdownCoordinator.isPrepared()) return;
+  event.preventDefault();
   isQuitting = true;
-  removeControllerRuntimeMarker();
-  const runtimeConfig = configModule.readConfig();
-  void stopAllManagedProcesses(runtimeConfig).catch(() => {});
-  void shutdownTelemetry().catch(() => {});
-  desktopLifecycle.markCleanShutdown();
-  appUpdater?.stop();
-  toolActivityRuntime.stop();
-  dashboardWindowManager.close();
-  recoveryWindowManager.close();
-  stopServer({ silent: true });
+  void quitApplication();
 });
 
-app.on('window-all-closed', () => {
-  // Keep the tray app alive after all windows are hidden or closed.
-});
+app.on('window-all-closed', () => {}); // Keep the tray app alive after windows close.
 
 function createWizardWindow(options = {}) {
   if (wizardWindow && !wizardWindow.isDestroyed()) {
@@ -204,20 +209,10 @@ function closeWizard(options = {}) {
 
 function getRecoveryConfig() {
   const settings = desktopSettings.get(), token = settings.approvalToken || connection.generateToken(32);
-  return {
-    ok: true,
-    port: settings.port,
-    token,
-    ngrokDomain: settings.ngrokDomain,
-    ngrokAuthtoken: settings.ngrokAuthtoken
-  };
+  return { ok: true, port: settings.port, token, ngrokDomain: settings.ngrokDomain, ngrokAuthtoken: settings.ngrokAuthtoken };
 }
 
-function openRecoverySetup() {
-  recoveryWindowManager.hide();
-  createWizardWindow({ recovery: true });
-  return { ok: true };
-}
+function openRecoverySetup() { recoveryWindowManager.hide(); createWizardWindow({ recovery: true }); return { ok: true }; }
 
 function focusActiveWindow() {
   taskbarCompletionBadge.clear();
@@ -242,10 +237,7 @@ function pushStatus() {
   desktopTray.update();
 }
 
-function pushUpdateStatus(status) {
-  dashboardWindowManager.getWindow()?.webContents.send('desktop:update-status', status);
-  desktopTray.update();
-}
+function pushUpdateStatus(status) { dashboardWindowManager.getWindow()?.webContents.send('desktop:update-status', status); desktopTray.update(); }
 
 function setStatus(next) {
   const previous = currentStatus;
@@ -337,7 +329,7 @@ async function startServer() {
     });
 
     if (runToken !== lifecycleToken) {
-      if (result.process) killProcess(result.process);
+      if (result.process) await terminateProcessTree(result.process, { graceMs: 500, forceWaitMs: 1500 });
       startPromise = null;
       return currentStatus;
     }
@@ -366,30 +358,37 @@ async function startServer() {
   return startPromise;
 }
 
-function stopServer(options = {}) {
-  try { void stopAllManagedProcesses(configModule.readConfig()).catch(() => {}); } catch {}
-  if (tunnelProcess) {
-    killProcess(tunnelProcess);
-  }
+async function stopServer(options = {}) {
+  lifecycleToken += 1;
+  const runtimeConfig = configModule.readConfig();
+  const ownedTunnel = tunnelProcess;
+  const ownedServer = httpServer;
   tunnelProcess = null;
-
-  if (httpServer) {
-    try {
-      httpServer.close();
-    } catch (error) {
-      if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] server close:', error);
-    }
-  }
   httpServer = null;
   startPromise = null;
-  lifecycleToken += 1;
+
+  const [managedProcesses, tunnel, localService] = await Promise.all([
+    stopAllManagedProcesses(runtimeConfig).catch(error => ({ attempted: 0, stopped: 0, orphaned: 1, error: formatError(error) })),
+    ownedTunnel
+      ? terminateProcessTree(ownedTunnel, { graceMs: 1000, forceWaitMs: 2000 }).catch(error => ({ exited: false, error: formatError(error) }))
+      : Promise.resolve({ exited: true, forced: false }),
+    closeHttpServer(ownedServer)
+  ]);
 
   if (!options.preserveDashboard) dashboardWindowManager.close();
   dashboardSessions.clearDashboardSessions();
   currentStatus = desktopStatusModel.initial();
   if (!options.silent) pushStatus();
   else desktopTray.update();
-  return currentStatus;
+  return {
+    ...currentStatus,
+    cleanup: {
+      clean: managedProcesses.orphaned === 0 && tunnel.exited !== false && localService.closed !== false,
+      managedProcesses,
+      tunnel,
+      localService
+    }
+  };
 }
 
 function buildDashboardConnection() {
@@ -427,7 +426,7 @@ async function openDashboardDiagnostics() { return openDashboardWindow('#setting
 
 async function launchConfiguredDesktop(options = {}) {
   try {
-    if (options.restart) stopServer({ silent: true, preserveDashboard: true });
+    if (options.restart) await stopServer({ silent: true, preserveDashboard: true });
     const status = await startServer();
     if (!status.serverRunning) {
       recoveryWindowManager.show();
@@ -445,19 +444,15 @@ async function launchConfiguredDesktop(options = {}) {
   }
 }
 
-function quitApplication() {
+async function quitApplication() {
   isQuitting = true;
-  desktopLifecycle.markCleanShutdown();
-  appUpdater?.stop();
-  stopServer({ silent: true });
+  await shutdownCoordinator.prepare('quit');
   app.exit(0);
 }
 
 function openSettingsWindow() { return openDashboardSettings(); }
 
-function formatError(error) {
-  return error instanceof Error ? error.message : String(error || 'Unknown error');
-}
+function formatError(error) { return error instanceof Error ? error.message : String(error || 'Unknown error'); }
 
 registerIpcHandlers({
   ipcMain,

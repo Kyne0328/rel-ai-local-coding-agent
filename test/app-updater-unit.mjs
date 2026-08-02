@@ -132,6 +132,7 @@ assert.equal(install.ok, true);
 assert.equal(valid.updater.getStatus().state, 'installing');
 assert.equal(valid.beforeInstall(), 1);
 valid.timers.at(-1).callback();
+await Promise.resolve();
 assert.deepEqual(valid.fake.installCalls, [{ silent: false, forceRunAfter: true }]);
 assert.ok(valid.logs.some(entry => entry.options.source === 'updater'));
 assert.ok(valid.statuses.some(status => status.state === 'downloaded' && status.integrityVerified === true));

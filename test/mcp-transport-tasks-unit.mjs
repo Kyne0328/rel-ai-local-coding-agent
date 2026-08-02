@@ -17,7 +17,8 @@ import {
 } from '../src/mcp/nativeTaskService.js';
 import {
   MCP_PROTOCOL_VERSION,
-  TASKS_EXTENSION_ID
+  TASKS_EXTENSION_ID,
+  TASKS_EXTENSION_REVISION
 } from '../src/mcp/protocol.js';
 import {
   createTaskAwareStdioTransport,
@@ -31,7 +32,7 @@ const owner = { clientId: 'client-a', authMode: 'oauth' };
 const otherOwner = { clientId: 'client-b', authMode: 'oauth' };
 const localOwner = { clientId: 'stdio:session-a', authMode: 'local_session' };
 const localOtherOwner = { clientId: 'stdio:session-b', authMode: 'local_session' };
-const tasksCapabilities = { extensions: { [TASKS_EXTENSION_ID]: {} } };
+const tasksCapabilities = { extensions: { [TASKS_EXTENSION_ID]: { revision: TASKS_EXTENSION_REVISION } } };
 
 function request(id, method, params = {}, capabilities = tasksCapabilities) {
   return {
@@ -195,6 +196,24 @@ try {
     expectedCapabilities: tasksCapabilities
   });
 
+  const unsupportedRevision = await handleTransportTaskRequest(
+    config,
+    request(102, 'tasks/get', { taskId: 'task-missing' }, {
+      extensions: { [TASKS_EXTENSION_ID]: { revision: '1900-01-01' } }
+    }),
+    { principal: owner, transportType: 'streamable-http' }
+  );
+  assert.equal(unsupportedRevision.body.error.code, -32602);
+  assert.equal(unsupportedRevision.body.error.data.capabilityReason, 'unsupported_tasks_revision');
+
+  const invalidId = await handleTransportTaskRequest(
+    config,
+    { ...request(103, 'tasks/get', { taskId: 'task-missing' }), id: { invalid: true } },
+    { principal: owner, transportType: 'streamable-http' }
+  );
+  assert.equal(invalidId.body.id, null);
+  assert.equal(invalidId.body.error.code, -32600);
+
   const taskController = new AbortController();
   const task = createNativeTask(config, {
     principal: owner,
@@ -277,6 +296,16 @@ try {
   const stdioOwned = await waitForSent(stdioWire, 2);
   assert.equal(stdioOwned.result.taskId, stdioTask.taskId);
   assert.equal(stdioOwned.result.status, 'working');
+
+  let delegatedInvalid = null;
+  stdio.onmessage = message => { delegatedInvalid = message; };
+  const invalidEligibleCall = request(81, 'tools/call', {
+    name: 'relai_exec',
+    arguments: { work_id: 'work-session', command: 'echo invalid', defer: true }
+  });
+  stdioWire.receive(invalidEligibleCall);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(delegatedInvalid, invalidEligibleCall, 'invalid eligible-tool arguments must delegate to SDK validation without closing stdio');
 
   const otherWire = new FakeTransport();
   const otherStdio = createTaskAwareStdioTransport({ config, principal: localOtherOwner, transport: otherWire });

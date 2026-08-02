@@ -1,4 +1,4 @@
-import { callTool } from "../src/tools.js";
+import { callTool as rawCallTool } from "../src/tools.js";
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -6,6 +6,8 @@ import path from 'node:path';
 
 import { createToolActivityTracker, getToolActivity, onToolActivity, resetToolActivity } from "../src/toolActivity.js";
 import { createToolSleepBlocker, createTaskActivityRuntime } from "../electron/tool-sleep-blocker.js";
+
+const callTool = (name, args, context = {}) => rawCallTool(name, args, { principal: 'local:trusted', ...context });
 
 let nowValue = 1000;
 let timerId = 0;

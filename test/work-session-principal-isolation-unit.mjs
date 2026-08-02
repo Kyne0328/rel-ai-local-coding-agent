@@ -31,18 +31,20 @@ process.env.REL_AI_MCP_STATE_DIR = stateDir;
 try {
   const { callTool } = await import('../src/tools.js');
   const { readTaskHistorySession, readTaskHistorySessionRecord } = await import('../src/taskHistoryStore.js');
+  const { createLocalAdminPolicy } = await import('../src/mcp/authorizationPolicy.js');
+  const authorizationPolicy = createLocalAdminPolicy();
   const owner = {
     publicHttpOnly: true,
     transportType: 'test',
-    principal: { issuer: 'https://issuer.example', clientId: 'client-a', subject: 'user-a', authMode: 'oauth', scopes: ['mcp'] }
+    principal: { issuer: 'https://issuer.example', clientId: 'client-a', subject: 'user-a', authMode: 'oauth', scopes: ['mcp'], authorizationPolicy }
   };
   const sameOwner = {
     ...owner,
-    principal: { scopes: ['mcp'], subject: 'user-a', clientId: 'client-a', issuer: 'https://issuer.example', authMode: 'oauth' }
+    principal: { scopes: ['mcp'], subject: 'user-a', clientId: 'client-a', issuer: 'https://issuer.example', authMode: 'oauth', authorizationPolicy }
   };
   const otherOwner = {
     ...owner,
-    principal: { issuer: 'https://issuer.example', clientId: 'client-a', subject: 'user-b', authMode: 'oauth', scopes: ['mcp'] }
+    principal: { issuer: 'https://issuer.example', clientId: 'client-a', subject: 'user-b', authMode: 'oauth', scopes: ['mcp'], authorizationPolicy }
   };
 
   const started = await callTool('relai_work', { action: 'begin',

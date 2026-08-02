@@ -12,6 +12,7 @@ import {
   CLIENT_INFO_META_KEY,
   PROTOCOL_VERSION_META_KEY
 } from '@modelcontextprotocol/server';
+import { ALL_CAPABILITIES } from '../src/mcp/authorizationPolicy.js';
 import { resolveCurrentUnpacked } from './current-unpacked.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -137,14 +138,14 @@ try {
   const tools = await mcp(primarySession, 11, 'tools/list', {});
   assert.equal(tools.result?.tools?.length, toolCount);
   const toolNames = new Set(tools.result.tools.map(tool => tool.name));
-  for (const requiredTool of ['relai_begin_work', 'relai_read', 'relai_finish_work']) {
+  for (const requiredTool of ['relai_work', 'relai_read', 'relai_validate']) {
     assert.equal(toolNames.has(requiredTool), true, `Packaged tool surface is missing ${requiredTool}.`);
   }
   assert.equal(toolNames.has('relai_native_tasks_probe'), false);
   const toolByName = new Map(tools.result.tools.map(tool => [tool.name, tool]));
-  assert.equal(toolByName.get('relai_run_checks')?.execution, undefined);
+  assert.equal(toolByName.get('relai_validate')?.execution, undefined);
   assert.equal(toolByName.get('relai_exec')?.execution, undefined);
-  assert.equal(toolByName.get('relai_process_start')?.execution, undefined);
+  assert.equal(toolByName.get('relai_process')?.execution, undefined);
   const resourcesList = await mcp(primarySession, 12, 'resources/list', {});
   assert.ok(resourcesList.result?.resources?.some(item => item.uri === 'relai://server/tool-surface'));
   assert.ok(resourcesList.result?.resources?.some(item => item.uri === 'relai://server/workspaces'));
@@ -154,20 +155,21 @@ try {
   const surfaceByName = new Map(surface.tools.map(tool => [tool.name, tool]));
   assert.equal(surfaceByName.get('relai_exec').executionClass, 'native_task_eligible');
   assert.equal(surfaceByName.get('relai_exec').taskSupport, 'optional');
-  assert.equal(surfaceByName.get('relai_process_start').executionClass, 'persistent_process');
-  assert.equal(surfaceByName.get('relai_process_start').taskSupport, 'forbidden');
+  assert.equal(surfaceByName.get('relai_process').executionClass, 'persistent_process');
+  assert.equal(surfaceByName.get('relai_process').taskSupport, 'forbidden');
   assert.deepEqual(surface.compatibilityAliases, {});
   const help = await readResourceText(primarySession, 14, 'relai://server/help');
   assert.ok(help.includes(`version: ${applicationVersion}`));
 
-  const started = await callTool(primarySession, 15, 'relai_begin_work', {
+  const started = await callTool(primarySession, 15, 'relai_work', {
+    action: 'begin',
     workspace: 'acceptance',
     title: 'Packaged connector acceptance',
     objective: 'Verify packaged ESM runtime, guarded mutation, validation, observability, completion, and reconnect behavior.'
   });
   const taskId = started.work_id;
   assert.ok(taskId);
-  await callTool(primarySession, 16, 'relai_repo_snapshot', { workspace: 'acceptance', work_id: taskId, maxEntries: 50 });
+  await callTool(primarySession, 16, 'relai_snapshot', { workspace: 'acceptance', work_id: taskId, maxEntries: 50 });
   const read = await callTool(primarySession, 17, 'relai_read', {
     workspace: 'acceptance', work_id: taskId, paths: ['acceptance.txt'], guidanceMode: 'none'
   });
@@ -185,11 +187,10 @@ try {
   assert.ok(edited.changedFiles?.includes('acceptance.txt'));
   assert.equal(fs.readFileSync(path.join(workspace, 'acceptance.txt'), 'utf8'), 'packaged connector acceptance verified\n');
 
-  const status = await callTool(primarySession, 19, 'relai_status', { workspace: 'acceptance', work_id: taskId });
+  const status = await callTool(primarySession, 19, 'relai_work', { action: 'status', workspace: 'acceptance', work_id: taskId });
   assert.equal(status.version, applicationVersion);
   assert.equal(status.toolSurface?.toolCount, toolCount);
   assert.equal(status.toolSurface?.toolSurfaceVersion, toolSurfaceVersion);
-  assert.deepEqual(status.toolSurface?.compatibilityAliases, {});
   assert.ok(status.workspace?.repository?.changedFiles?.includes('acceptance.txt'));
 
   const activeDashboard = await dashboard();
@@ -198,7 +199,8 @@ try {
   assert.ok(activeTask, 'dashboard task history must contain the active packaged acceptance task');
   assert.ok(activeDashboard.auditTail?.entries?.some(item => item.taskId === taskId && item.tool === 'relai_edit' && item.ok !== false));
 
-  const completed = await callTool(primarySession, 20, 'relai_run_checks', {
+  const completed = await callTool(primarySession, 20, 'relai_validate', {
+    action: 'checks',
     workspace: 'acceptance',
     work_id: taskId,
     check: 'npm run check',
@@ -216,8 +218,14 @@ try {
   assert.equal(persistedTask.completionKnown, true);
   assert.equal(persistedTask.status, 'completed');
   assert.ok(persistedTask.changedFiles?.includes('acceptance.txt'));
-  for (const expectedTool of ['relai_repo_snapshot', 'relai_read', 'relai_edit', 'relai_status', 'relai_run_checks']) {
-    assert.ok(completedDashboard.auditTail?.entries?.some(item => item.taskId === taskId && item.tool === expectedTool), `dashboard activity is missing ${expectedTool}`);
+  const packagedAuditTools = completedDashboard.auditTail?.entries
+    ?.filter(item => item.taskId === taskId)
+    .map(item => ({ tool: item.tool, publicTool: item.publicTool, action: item.action })) || [];
+  for (const expectedTool of ['relai_snapshot', 'relai_read', 'relai_edit', 'relai_work', 'relai_validate']) {
+    assert.ok(
+      completedDashboard.auditTail?.entries?.some(item => item.taskId === taskId && item.tool === expectedTool),
+      `dashboard activity is missing ${expectedTool}: ${JSON.stringify(packagedAuditTools)}`
+    );
   }
 
   reconnectSession = await initializeMcp(tokens.access_token, '2.0.0');
@@ -287,7 +295,7 @@ try {
       jsonrpc: '2.0',
       id: 34,
       method: 'tools/call',
-      params: { name: 'relai_status', arguments: { workspace: 'acceptance' } }
+      params: { name: 'relai_work', arguments: { action: 'status', workspace: 'acceptance' } }
     })
   });
   const chatGptStatus = await readMcpResponse(chatGptStatusResponse);
@@ -396,6 +404,8 @@ async function authorize(clientId, challenge) {
     code_challenge_method: 'S256',
     scope: 'mcp',
     state,
+    capability: ALL_CAPABILITIES,
+    workspace: 'acceptance',
     dashboard_token: approvalToken
   }, true);
   assert.equal(response.status, 302);
@@ -408,10 +418,15 @@ async function authorize(clientId, challenge) {
 }
 
 async function postForm(pathname, values, manual = false) {
+  const body = new URLSearchParams();
+  for (const [key, value] of Object.entries(values)) {
+    const items = Array.isArray(value) ? value : [value];
+    for (const item of items) body.append(key, String(item));
+  }
   return fetch(`${base}${pathname}`, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams(Object.entries(values).map(([key, value]) => [key, String(value)])),
+    body,
     redirect: manual ? 'manual' : 'follow'
   });
 }
@@ -430,7 +445,7 @@ async function initializeMcp(accessToken, clientVersion) {
   const session = {
     accessToken,
     clientInfo: { name: 'packaged-chatgpt-acceptance', version: clientVersion },
-    clientCapabilities: { extensions: { 'io.modelcontextprotocol/tasks': {} } },
+    clientCapabilities: { extensions: { 'io.modelcontextprotocol/tasks': { revision: mcpProtocolVersion } } },
     discovery: null,
     closed: false
   };

@@ -1,4 +1,4 @@
-import { callTool, getToolSchemas } from "../src/tools.js";
+import { callTool as rawCallTool, getToolSchemas } from "../src/tools.js";
 import { readConfig } from "../src/config.js";
 import { readAudit } from "../src/audit.js";
 import * as sessionCache from "../src/sessionCache.js";
@@ -8,6 +8,8 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
+const callTool = (name, args, context = {}) => rawCallTool(name, args, { principal: 'local:trusted', ...context });
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-exec-tool-'));
 const workspace = path.join(temp, 'workspace');

@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 import { fileURLToPath } from 'node:url';
-import { MISSING_TASKS_CAPABILITY_CODE } from '../src/mcp/protocol.js';
+import { MISSING_TASKS_CAPABILITY_CODE, TASKS_EXTENSION_REVISION } from '../src/mcp/protocol.js';
 import { createHttpMcpSession, postMcp } from './helpers/http-mcp.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -14,7 +14,7 @@ const port = await reservePort();
 const token = 'native-tasks-http-token';
 const extensionId = 'io.modelcontextprotocol/tasks';
 const eligibleTool = 'relai_exec';
-const tasksCapability = { extensions: { [extensionId]: {} } };
+const tasksCapability = { extensions: { [extensionId]: { revision: TASKS_EXTENSION_REVISION } } };
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-native-tasks-http-'));
 const workspaceDir = path.join(stateDir, 'workspace');
 const configPath = path.join(stateDir, 'config.json');
@@ -95,7 +95,7 @@ try {
     capabilities: tasksCapability
   });
   assert.equal(client.discovery.response.headers.get('mcp-session-id'), null);
-  assert.deepEqual(client.discovery.body.result?.capabilities?.extensions?.[extensionId], {});
+  assert.deepEqual(client.discovery.body.result?.capabilities?.extensions?.[extensionId], { revision: TASKS_EXTENSION_REVISION });
   assert.deepEqual(client.discovery.body.result?.supportedVersions, ['2026-07-28']);
 
   const listed = await client.request('tools/list', {}, { id: 2, capabilities: {} });

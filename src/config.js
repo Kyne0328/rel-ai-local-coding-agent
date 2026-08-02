@@ -10,6 +10,8 @@ import { safeReadJson, realRootOf, clearRealRootCache } from './safety.js';
 import { discoverCommands, staleCommandKeys } from './commandDiscovery.js';
 import { readProjectInstructions, summarizeProjectInstructions } from './projectInstructions.js';
 import { normalizeAllowedKeys } from './processEnvironment.js';
+import { writeJsonAtomic } from './durableState.js';
+import { defaultStateDir } from './stateLayout.js';
 const REMOVED_WORKSPACE_COMMAND_KEYS = new Set([
   'npm:test:fast-task',
   'npm:test:oneclick',
@@ -17,7 +19,7 @@ const REMOVED_WORKSPACE_COMMAND_KEYS = new Set([
 ]);
 
 function getConfigPath() {
-  return process.env.REL_AI_MCP_CONFIG || path.join(os.homedir(), ".rel-ai-mcp", "config.json");
+  return process.env.REL_AI_MCP_CONFIG || path.join(defaultStateDir(), "config.json");
 }
 
 function makeDefaultContextConfig() {
@@ -43,7 +45,7 @@ function makeDefaultPatchConfig() {
 function makeDefaultConfig() {
   return {
     version: 3,
-    stateDir: path.join(os.homedir(), ".rel-ai-mcp"),
+    stateDir: defaultStateDir(),
     auditLogPath: "",
     maxOutputBytes: 2 * 1024 * 1024,
     toolMode: "chatgpt_local_repo",
@@ -117,7 +119,7 @@ function writeConfig(config, options = {}) {
   }
   fs.mkdirSync(path.dirname(configPath), { recursive: true, mode: 0o700 });
   const normalized = normalizeConfig(config);
-  fs.writeFileSync(configPath, `${JSON.stringify(normalized, null, 2)}\n`, { mode: 0o600 });
+  writeJsonAtomic(configPath, normalized, { mode: 0o600, backup: true });
   invalidateConfigCache();
   return normalized;
 }

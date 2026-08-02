@@ -2,6 +2,9 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { importResourceModule } from './resource-path.js';
+
+const { readJsonFile, writeJsonAtomic } = await importResourceModule('src/durableState.js');
 
 const AUTO_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const AUTO_CHECK_DELAY_MS = 15 * 1000;
@@ -10,18 +13,14 @@ function createUpdateStateStore({ app, onLog = () => {} }) {
   const statePath = path.join(safeUserDataPath(app), 'update-state.json');
 
   function readLastCheck() {
-    try {
-      const value = JSON.parse(fs.readFileSync(statePath, 'utf8'));
-      return Number(value.lastCheckAt || 0);
-    } catch {
-      return 0;
-    }
+    const value = readJsonFile(statePath, { backup: true, fallback: {} });
+    return Number(value.lastCheckAt || 0);
   }
 
   function writeLastCheck(timestamp) {
     try {
       fs.mkdirSync(path.dirname(statePath), { recursive: true, mode: 0o700 });
-      fs.writeFileSync(statePath, `${JSON.stringify({ lastCheckAt: Number(timestamp || 0) }, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+      writeJsonAtomic(statePath, { lastCheckAt: Number(timestamp || 0) }, { mode: 0o600, backup: true });
     } catch (error) {
       onLog(`Could not save update-check time: ${cleanText(error?.message || error, 200)}`, {
         source: 'updater',

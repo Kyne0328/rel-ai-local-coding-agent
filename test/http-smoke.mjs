@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SERVER_INFO_META_KEY } from '@modelcontextprotocol/server';
+import { TASKS_EXTENSION_REVISION } from '../src/mcp/protocol.js';
 import { createHttpMcpSession, MCP_VERSION } from './helpers/http-mcp.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -67,7 +68,10 @@ try {
   assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolSurfaceVersion, 32);
   assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolCount, 12);
   assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.statelessRequestModel, true);
-  assert.deepEqual(discovery.body.result?.capabilities?.extensions?.['io.modelcontextprotocol/tasks'], {});
+  assert.deepEqual(
+    discovery.body.result?.capabilities?.extensions?.['io.modelcontextprotocol/tasks'],
+    { revision: TASKS_EXTENSION_REVISION }
+  );
   assert.equal(discovery.body.result?._meta?.[SERVER_INFO_META_KEY]?.name, 'rel-ai-mcp');
   assert.match(discovery.body.result?._meta?.[SERVER_INFO_META_KEY]?.version || '', /^0\./);
   assert.match(discovery.body.result?.instructions || '', /Start each objective with relai_work action begin/);

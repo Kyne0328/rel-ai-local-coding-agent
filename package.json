@@ -84,7 +84,7 @@
     "verify:packaged": "node scripts/verify-packaged-wrapper.mjs",
     "verify:updater-artifacts": "node scripts/verify-updater-artifacts.mjs",
     "prepare:release-assets": "node scripts/prepare-release-assets.mjs",
-    "verify:fuses": "cd electron && node scripts/verify-fuses.js",
+    "verify:fuses": "node scripts/verify-fuses.mjs",
     "test:connector-acceptance": "node scripts/packaged-connector-acceptance.mjs",
     "test:native-tasks-release-gate": "node scripts/native-tasks-release-gate.mjs",
     "test:http-auth": "node test/http-auth-smoke.mjs",

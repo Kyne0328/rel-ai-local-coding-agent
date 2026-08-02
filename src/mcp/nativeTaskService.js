@@ -512,7 +512,6 @@ function reconcileTaskUnlocked(config, task, nowSource) {
     }
     return task;
   }
-  if (task.restartPolicy === 'resumable' && task.recovery?.leaseOwner === RUNTIME_ID) return task;
   task.status = 'failed';
   task.statusMessage = 'Task execution was interrupted and must be retried.';
   task.result = null;
@@ -542,6 +541,16 @@ function resumeExecutor(config, taskId) {
   queueMicrotask(async () => {
     try {
       await executor.resume(clone(responses));
+    } catch (error) {
+      try {
+        failNativeTask(config, taskId, error, {
+          statusMessage: 'Task failed while resuming after client input.'
+        });
+      } catch (failureError) {
+        if (process.env.REL_AI_MCP_DEBUG) {
+          console.error('[rel-ai-mcp] native task resume failure:', failureError);
+        }
+      }
     } finally {
       executor.resumeInFlight = false;
     }

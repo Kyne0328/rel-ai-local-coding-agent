@@ -34,6 +34,7 @@ for (const file of [
   'scripts/release-artifacts.mjs',
   'scripts/prepare-release-assets.mjs',
   'scripts/verify-updater-artifacts.mjs',
+  'scripts/verify-fuses.mjs',
   'scripts/current-unpacked.mjs',
   'scripts/active-controller-guard.mjs',
   '.github/workflows/release.yml'
@@ -139,6 +140,7 @@ assert.doesNotMatch(electronPackageWrapper, /quitAndInstall|Setup.*\.exe|uninsta
 assert.equal(rootPackage.scripts['verify:packaged'], 'node scripts/verify-packaged-wrapper.mjs');
 assert.equal(rootPackage.scripts['verify:updater-artifacts'], 'node scripts/verify-updater-artifacts.mjs');
 assert.equal(rootPackage.scripts['prepare:release-assets'], 'node scripts/prepare-release-assets.mjs');
+assert.equal(rootPackage.scripts['verify:fuses'], 'node scripts/verify-fuses.mjs');
 assert.equal(rootPackage.scripts['test:connector-acceptance'], 'node scripts/packaged-connector-acceptance.mjs');
 assert.equal(rootPackage.scripts['test:native-tasks-release-gate'], 'node scripts/native-tasks-release-gate.mjs');
 assert.equal(rootPackage.scripts['test:installed'], undefined);
@@ -264,6 +266,9 @@ assert.match(releaseWorkflow, /npm run verify:fuses -- '\$\{\{ steps\.unpacked\.
 const fuseVerifier = fs.readFileSync(path.join(tmp, 'electron/scripts/verify-fuses.js'), 'utf8');
 assert.match(fuseVerifier, /Pass the exact unpacked Rel\.AI MCP executable path/);
 assert.doesNotMatch(fuseVerifier, /resolveCurrentUnpacked/);
+const fuseWrapper = fs.readFileSync(path.join(tmp, 'scripts/verify-fuses.mjs'), 'utf8');
+assert.match(fuseWrapper, /resolveCurrentUnpacked\(root, \{ allowBuildCheck: true \}\)/);
+assert.match(fuseWrapper, /process\.argv\[2\]/);
 assert.match(releaseWorkflow, /CSC_IDENTITY_AUTO_DISCOVERY:\s*'false'/);
 assert.doesNotMatch(releaseWorkflow, /WINDOWS_CSC_LINK|WINDOWS_CSC_KEY_PASSWORD|CSC_LINK|CSC_KEY_PASSWORD|forceCodeSigning|Require Windows signing credentials/);
 assert.match(releaseWorkflow, /Verify bundled ngrok provenance/);

@@ -18,14 +18,14 @@ npm run benchmark:observability
 When working through Rel.AI itself, use:
 
 ```text
-relai_status
-relai_run_checks level=release
-relai_diff
+relai_work action=status
+relai_validate action=checks level=release
+relai_changes action=diff
 ```
 
 ## 2. Verify the MCP contract
 
-The release must retain one 32-tool surface for stdio and HTTP/OAuth clients, with the count and manifest hash derived from the registered schema rather than duplicated constants.
+The release must retain one 12-tool compact surface for stdio and HTTP/OAuth clients, with the count and manifest hash derived from the registered schema rather than duplicated constants.
 
 Required invariants:
 
@@ -35,11 +35,11 @@ Required invariants:
 - HTTP and stdio advertise native Tasks support, but return a native task only when the current request advertises `io.modelcontextprotocol/tasks`.
 - Clients without Tasks support receive bounded synchronous results for safe eligible operations; no request may run indefinitely or continue as hidden background work.
 - Repository work sessions, native MCP Tasks, and managed processes retain separate identifiers and lifecycle semantics.
-- `relai_begin_work` creates a new opaque `work_id`.
+- `relai_work` with `action=begin` creates a new opaque `work_id`.
 - Every later task-scoped call requires the exact ID.
 - Transport, conversation, workspace, and timestamp inference remain absent.
 - `relai_edit` is the only file-change tool.
-- `relai_git_draft_pr` prepares local text only and does not contact a hosting provider.
+- `relai_publish` with `action=draft_pr` prepares local text only and does not contact a hosting provider.
 
 The native Tasks source release gate is `npm run test:native-tasks-release-gate`. It covers both transport capability matrices, lifecycle and persistence, authorization, synchronous limits, cancellation cleanup, process separation, public surface, dashboard states, and ChatGPT-compatible fallback. The complete packaged gate additionally requires `verify:packaged` and `test:connector-acceptance`. See `docs/NATIVE_TASKS_RELEASE_GATE.md`.
 

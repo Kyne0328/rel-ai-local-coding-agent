@@ -1,4 +1,4 @@
-import { callTool } from "../src/tools.js";
+import { callTool as rawCallTool } from "../src/tools.js";
 import { getToolActivity, resetToolActivity } from "../src/toolActivity.js";
 import { readAudit } from "../src/audit.js";
 import { readConfig } from "../src/config.js";
@@ -6,6 +6,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
+const callTool = (name, args, context = {}) => rawCallTool(name, args, { principal: 'local:trusted', ...context });
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-tool-failure-'));
 const workspace = path.join(temp, 'workspace');

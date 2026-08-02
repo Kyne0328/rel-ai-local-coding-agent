@@ -9,6 +9,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
+import { createLocalAdminPolicy, normalizeAuthorizationPolicy } from './mcp/authorizationPolicy.js';
 
 const ACCESS_TOKEN_TTL_MS = 60 * 60 * 1000;
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -16,7 +17,7 @@ const AUTH_CODE_TTL_MS = 5 * 60 * 1000;
 const SCOPE = 'mcp';
 const OFFLINE_SCOPE = 'offline_access';
 const SUPPORTED_SCOPES = Object.freeze([SCOPE, OFFLINE_SCOPE]);
-const STORE_VERSION = 6;
+const STORE_VERSION = 7;
 const STORE_MAPS = ['clients', 'codes', 'accessTokens', 'refreshTokens', 'registrationAttempts'];
 const LOCK_STALE_MS = 30_000;
 const LOCK_WAIT_MS = 10;
@@ -406,6 +407,7 @@ function validStoredGrant(entry, store, options = {}) {
   try {
     if (canonicalIssuer(entry.issuer) !== entry.issuer) return false;
     if (entry.resource !== resourceForIssuer(entry.issuer)) return false;
+    normalizeAuthorizationPolicy(entry.authorizationPolicy);
   } catch {
     return false;
   }
@@ -857,6 +859,7 @@ function issueAuthorizationCode(request, baseUrl) {
       codeChallenge: request.codeChallenge,
       resource: request.resource,
       scope: client.granted_scope,
+      authorizationPolicy: normalizeAuthorizationPolicy(request.authorizationPolicy || createLocalAdminPolicy()),
       expiresAt: Date.now() + AUTH_CODE_TTL_MS
     };
     writeStore(store);
@@ -872,7 +875,7 @@ function buildRedirectUrl(redirectUri, params) {
 
 // ---- Token Endpoint --------------------------------------------------------
 
-function issueTokens(store, { issuer, clientId, scope, resource, issueRefresh = true }) {
+function issueTokens(store, { issuer, clientId, scope, resource, authorizationPolicy, issueRefresh = true }) {
   const now = Date.now();
   const accessToken = randomId('relai_at_', 32);
   store.accessTokens[secretKey(accessToken)] = {
@@ -880,6 +883,7 @@ function issueTokens(store, { issuer, clientId, scope, resource, issueRefresh = 
     clientId,
     scope,
     resource,
+    authorizationPolicy: normalizeAuthorizationPolicy(authorizationPolicy),
     issuedAt: now,
     expiresAt: now + ACCESS_TOKEN_TTL_MS
   };
@@ -897,6 +901,7 @@ function issueTokens(store, { issuer, clientId, scope, resource, issueRefresh = 
       clientId,
       scope,
       resource,
+      authorizationPolicy: normalizeAuthorizationPolicy(authorizationPolicy),
       issuedAt: now,
       expiresAt: now + REFRESH_TOKEN_TTL_MS
     };
@@ -935,6 +940,7 @@ function exchangeAuthorizationCode(store, body, issuer) {
     clientId: entry.clientId,
     scope: entry.scope,
     resource: entry.resource,
+    authorizationPolicy: entry.authorizationPolicy,
     issueRefresh: true
   });
   writeStore(store);
@@ -966,6 +972,7 @@ function exchangeRefreshToken(store, body, issuer) {
     clientId: entry.clientId,
     scope,
     resource: entry.resource,
+    authorizationPolicy: entry.authorizationPolicy,
     issueRefresh: true
   });
   writeStore(store);
@@ -1039,6 +1046,13 @@ function revokeAuthorizations() {
 
 // ---- Approval UI -----------------------------------------------------------
 
+// The approval token is the whole gate. Approving a connection grants full local
+// admin capability for every configured workspace; there is no per-repository or
+// per-capability selection on the consent page.
+function authorizationPolicyFromConsent() {
+  return createLocalAdminPolicy();
+}
+
 function renderLoginPage(request, baseUrl, options = {}) {
   const hidden = {
     client_id: request.clientId,
@@ -1052,10 +1066,13 @@ function renderLoginPage(request, baseUrl, options = {}) {
   };
   const hiddenInputs = Object.entries(hidden).map(([key, value]) => `<input type="hidden" name="${escapeHtml(key)}" value="${escapeHtml(value)}">`).join('\n      ');
   const errorHtml = options.error ? `<div class="oauth-error">${escapeHtml(options.error)}</div>` : '';
+  const redirect = new URL(request.redirectUri);
+  const verifiedChatGpt = redirect.protocol === 'https:' && redirect.hostname.toLowerCase() === 'chatgpt.com';
+  const identity = verifiedChatGpt ? 'Verified ChatGPT redirect' : 'Unverified OAuth client';
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Authorize Rel.AI MCP</title>
 <link rel="stylesheet" href="/public/oauth.css"></head>
-<body class="oauth-page"><form class="oauth-card" method="POST" action="${escapeHtml(canonicalIssuer(baseUrl))}/authorize"><h1>Authorize ChatGPT</h1><p>Connect this issuer-bound ChatGPT client to your local Rel.AI MCP workspaces.</p>${errorHtml}<label for="dashboard_token">Approval token</label><input id="dashboard_token" name="dashboard_token" type="password" autocomplete="off" autofocus required>${hiddenInputs}<button type="submit">Approve connection</button><div class="oauth-client">Client: ${escapeHtml(request.clientName || request.clientId)}<br>Scopes: ${escapeHtml(request.scope)}</div></form></body></html>`;
+<body class="oauth-page"><form class="oauth-card" method="POST" action="${escapeHtml(canonicalIssuer(baseUrl))}/authorize"><h1>Authorize Rel.AI MCP</h1><p>${escapeHtml(identity)} is requesting repository access.</p>${errorHtml}<label for="dashboard_token">Approval token</label><input id="dashboard_token" name="dashboard_token" type="password" autocomplete="off" autofocus required>${hiddenInputs}<button type="submit">Approve connection</button><div class="oauth-client">Client name: ${escapeHtml(request.clientName || request.clientId)}<br>Redirect host: ${escapeHtml(redirect.hostname)}<br>OAuth scopes: ${escapeHtml(request.scope)}</div></form></body></html>`;
 }
 
 function escapeHtml(value) {
@@ -1067,4 +1084,4 @@ function verifyLogin(submittedToken, serverToken) {
   return timingSafeEqual(submittedToken, serverToken);
 }
 
-export { protectedResourceMetadata, authorizationServerMetadata, wwwAuthenticateHeader, registerClient, validateAuthorizationRequest, issueAuthorizationCode, buildRedirectUrl, exchangeToken, validateAccessToken, renderLoginPage, verifyLogin, authorizationStatus, revokeAuthorizations, canonicalIssuer, resourceForIssuer, normalizeScope, SCOPE, OFFLINE_SCOPE, SUPPORTED_SCOPES, secretKey, DCR_LIMITS, OAuthStoreError, emptyStore as createEmptyOAuthStore, readStore as readOAuthStore, writeStore as writeOAuthStore, pruneStore, evaluateRegistrationLimits, oauthStoreRecoveryStatus, resetOAuthStoreAfterCorruption };
+export { protectedResourceMetadata, authorizationServerMetadata, wwwAuthenticateHeader, registerClient, validateAuthorizationRequest, issueAuthorizationCode, buildRedirectUrl, exchangeToken, validateAccessToken, authorizationPolicyFromConsent, renderLoginPage, verifyLogin, authorizationStatus, revokeAuthorizations, canonicalIssuer, resourceForIssuer, normalizeScope, SCOPE, OFFLINE_SCOPE, SUPPORTED_SCOPES, secretKey, DCR_LIMITS, OAuthStoreError, emptyStore as createEmptyOAuthStore, readStore as readOAuthStore, writeStore as writeOAuthStore, pruneStore, evaluateRegistrationLimits, oauthStoreRecoveryStatus, resetOAuthStoreAfterCorruption };

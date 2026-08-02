@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,7 +16,7 @@ const configPath = path.join(temp, 'config.json');
 const outputPath = path.join(temp, 'probe.json');
 const screenshotDir = path.join(temp, 'screenshots');
 const token = 'browser-acceptance-token';
-const port = 39883;
+const port = await availablePort();
 fs.mkdirSync(workspace, { recursive: true });
 fs.writeFileSync(path.join(workspace, 'package.json'), JSON.stringify({ name: 'browser-fixture', version: '1.0.0', scripts: { test: 'node -e "process.exit(0)"' } }));
 const config = {
@@ -197,6 +198,16 @@ async function waitForHealth(url) {
     await new Promise(resolve => setTimeout(resolve, 50));
   }
   throw new Error(`HTTP server did not become healthy. ${serverError}`);
+}
+
+async function availablePort() {
+  const probe = net.createServer();
+  probe.listen(0, '127.0.0.1');
+  await once(probe, 'listening');
+  const address = probe.address();
+  const selected = typeof address === 'object' && address ? address.port : 0;
+  await new Promise((resolve, reject) => probe.close(error => error ? reject(error) : resolve()));
+  return selected;
 }
 
 async function waitForProbeResult(file, timeoutMs) {

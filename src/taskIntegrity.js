@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { resolveWorkspace } from './config.js';
+import { readJsonFile, writeJsonAtomic } from './durableState.js';
 import { getStateDir } from './statePaths.js';
 
 const STORE_VERSION = 1;
@@ -285,24 +286,14 @@ function withIntegrityLock(config, callback) {
 }
 
 function readJson(file) {
-  try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch (error) {
-    if (error?.code === 'ENOENT') return null;
-    throw error;
-  }
+  return readJsonFile(file, {
+    backup: true,
+    validate: value => Boolean(value && typeof value === 'object' && !Array.isArray(value))
+  });
 }
 
 function writeJson(file, value) {
-  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-  const temporary = `${file}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;
-  try {
-    fs.writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
-    fs.renameSync(temporary, file);
-  } catch (error) {
-    try { fs.rmSync(temporary, { force: true }); } catch {}
-    throw error;
-  }
+  writeJsonAtomic(file, value, { mode: 0o600, backup: true });
 }
 
 function digest(value) {
