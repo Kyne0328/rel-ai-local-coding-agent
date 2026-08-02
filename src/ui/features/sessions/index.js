@@ -167,6 +167,9 @@ function openSession(session) {
   const endMeaning = sessionMeaning(session.status);
   const identities = taskEntityView(session);
   const state = workSessionStateView(session);
+  const hasActiveOperation = Number(session.activeCalls || 0) > 0;
+  const operationLabel = hasActiveOperation ? 'Current operation' : 'Last operation';
+  const operationValue = session.operation || operationForTool(session.lastTool) || '—';
 
   content.innerHTML = `
     <header class="task-detail-header">
@@ -183,7 +186,7 @@ function openSession(session) {
       ${session.correlation?.traceId ? identifierDetail('Trace ID', session.correlation.traceId) : ''}
       ${session.correlation?.conversationId ? identifierDetail('Conversation ID', session.correlation.conversationId) : ''}
       ${detail('Work-session state', state.label)}
-      ${detail('Current operation', session.operation || operationForTool(session.lastTool))}
+      ${detail(operationLabel, operationValue)}
       ${clockDetail('Duration', session.startedAt || session.createdAt, session.endedAt || session.completedAt, session.durationMs)}
       ${detail('Tool calls', session.toolCallCount ?? session.calls)}
       ${detail('Currently active', session.activeCalls || 0)}

@@ -3,8 +3,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { clearTaskHistory, getTaskHistoryDir, readTaskHistory, recordTaskHistoryEvent } from "../src/taskHistoryStore.js";
+import { clearTaskHistory, getTaskHistoryDir, readTaskHistory, readTaskHistorySessionRecord, recordTaskHistoryEvent } from "../src/taskHistoryStore.js";
 import { writeSession } from '../src/taskHistoryStorage.js';
+import { principalFingerprint } from '../src/mcp/principal.js';
+import { assertKnownTask } from '../src/tools/task.js';
 
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-task-history-store-'));
 const config = { stateDir: sandbox, auditLogPath: path.join(sandbox, 'audit.jsonl') };
@@ -66,6 +68,27 @@ try {
     ts: '2020-01-01T00:00:00.000Z', eventType: 'task.started', tool: 'relai_begin_work'
   }));
   recordTaskHistoryEvent(config, { taskId: 'legacy-event', tool: 'relai_read', ok: true });
+  const stalePlanningUpdatedAt = new Date(Date.now() - 10 * 60_000).toISOString();
+  writeSession(historyDir, {
+    id: 'stale-planning-session',
+    taskId: 'stale-planning-session',
+    sessionId: 'stale-planning-session',
+    version: 3,
+    title: 'Stale planning session',
+    status: 'planning',
+    state: 'waiting',
+    completionKnown: false,
+    progress: { mode: 'indeterminate', label: 'Waiting for the next task step' },
+    currentStage: 'Planning next step',
+    currentActivity: 'Last command completed successfully.',
+    activeCalls: 0,
+    currentOperations: [{ operationId: 'stale-running-op', tool: 'relai_exec', label: 'Running old command', startedAt: Date.now() - 11 * 60_000 }],
+    startedAt: new Date(Date.now() - 20 * 60_000).toISOString(),
+    updatedAt: stalePlanningUpdatedAt,
+    lastActivityAt: Date.parse(stalePlanningUpdatedAt),
+    lastOutcome: 'succeeded',
+    operation: 'Running old command'
+  });
   writeSession(historyDir, {
     id: 'terminal-with-stale-operation',
     taskId: 'terminal-with-stale-operation',
@@ -96,6 +119,35 @@ try {
   assert.equal(atomic.validation, 'passed');
   assert.deepEqual(atomic.changedFiles, ['src/atomic.js']);
   assert.equal(sessions.find(session => session.id === 'draft-task').prDrafted, true);
+  const stalePlanning = sessions.find(session => session.id === 'stale-planning-session');
+  assert.equal(stalePlanning.status, 'cancelled', 'persisted nonterminal sessions must expire after the inactivity window');
+  assert.equal(stalePlanning.endReason, 'inactivity_window');
+  assert.equal(stalePlanning.activeCalls, 0);
+  assert.deepEqual(stalePlanning.currentOperations, []);
+  assert.equal(stalePlanning.currentStage, 'Cancelled after inactivity');
+  assert.ok(stalePlanning.endedAt, 'reconciled sessions must receive a terminal timestamp');
+  assert.ok(stalePlanning.durationMs < 20 * 60_000, 'duration must stop at the inactivity deadline instead of growing forever');
+  assert.equal(readTaskHistorySessionRecord(config, 'stale-planning-session').status, 'cancelled', 'reconciliation must persist the repaired terminal state');
+  writeSession(historyDir, {
+    id: 'stale-task-access',
+    taskId: 'stale-task-access',
+    sessionId: 'stale-task-access',
+    version: 3,
+    title: 'Expired task access',
+    status: 'planning',
+    workspace: 'repo',
+    startedAt: new Date(Date.now() - 20 * 60_000).toISOString(),
+    updatedAt: new Date(Date.now() - 10 * 60_000).toISOString(),
+    lastOutcome: 'succeeded',
+    activeCalls: 0,
+    principalFingerprint: principalFingerprint('anonymous')
+  });
+  assert.throws(
+    () => assertKnownTask(config, 'stale-task-access', 'repo', 'relai_read', 'anonymous'),
+    error => error?.code === 'INVALID_TASK_STATE' && /already cancelled/i.test(error.message),
+    'task-scoped calls must not revive a persisted work session after its inactivity deadline'
+  );
+  assert.equal(readTaskHistorySessionRecord(config, 'stale-task-access').status, 'cancelled');
   const staleTerminal = sessions.find(session => session.id === 'terminal-with-stale-operation');
   assert.equal(staleTerminal.activeCalls, 0, 'terminal history must not expose stale active calls');
   assert.deepEqual(staleTerminal.currentOperations, [], 'terminal history must not expose stale running operations');
