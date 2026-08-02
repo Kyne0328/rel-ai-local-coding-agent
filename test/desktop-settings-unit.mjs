@@ -20,7 +20,6 @@ const manager = createDesktopSettingsManager({
   getApprovalRequired: () => true,
   getNotificationsEnabled: () => notificationsEnabled,
   setNotificationsEnabled: value => { notificationsEnabled = value; },
-  getCloudRelayStatus: () => ({ state: 'connected', connected: true, deviceId: 'device_test' }),
   restartDesktop: async () => {
     restarts += 1;
     return { serverRunning: true };
@@ -35,8 +34,7 @@ assert.deepEqual(manager.get(), {
   ngrokAuthtoken: '',
   ngrokAuthtokenConfigured: true,
   approvalRequired: true,
-  notificationsEnabled: true,
-  cloudRelay: { state: 'connected', connected: true, deviceId: 'device_test' }
+  notificationsEnabled: true
 });
 
 const preserveResult = await manager.save({

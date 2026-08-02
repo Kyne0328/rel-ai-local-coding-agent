@@ -40,9 +40,6 @@ const deps = {
   getDesktopSettings: () => ({ ok: true }),
   saveDesktopSettings: settings => ({ ok: true, settings }),
   replaceApprovalToken: request => ({ ok: true, request }),
-  createCloudPairingCode: () => ({ ok: true, pairingCode: 'ABCD-EFGH' }),
-  reconnectCloudRelay: () => ({ state: 'connecting' }),
-  resetCloudRelay: () => ({ state: 'unregistered' }),
   getUpdateStatus: () => ({ state: 'idle' }),
   checkForUpdates: () => ({ ok: true }),
   downloadUpdate: () => ({ ok: true }),
@@ -91,10 +88,7 @@ await assert.rejects(
 );
 
 assert.deepEqual(handles.get('desktop:settings:get')(eventFor(dashboard)), { ok: true });
-assert.deepEqual(handles.get('desktop:cloud:create-pairing-code')(eventFor(dashboard)), { ok: true, pairingCode: 'ABCD-EFGH' });
-assert.deepEqual(handles.get('desktop:cloud:reconnect')(eventFor(dashboard)), { state: 'connecting' });
-assert.deepEqual(handles.get('desktop:cloud:reset')(eventFor(dashboard)), { state: 'unregistered' });
-assert.throws(() => handles.get('desktop:cloud:reconnect')(eventFor(other)), /not available/);
+assert.equal([...handles.keys()].some(channel => channel.startsWith('desktop:cloud:')), false);
 assert.equal(handles.get('desktop:window:get-state')(eventFor(dashboard)).customTitleBar, true);
 assert.equal(handles.get('desktop:window:minimize')(eventFor(dashboard)).minimized, true);
 assert.equal(handles.get('desktop:window:toggle-maximize')(eventFor(dashboard)).maximized, true);

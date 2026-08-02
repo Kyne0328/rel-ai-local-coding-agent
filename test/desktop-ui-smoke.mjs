@@ -125,10 +125,8 @@ assert.match(dashboardPreload, /desktop:approval-token:replace/);
 assert.match(ipcHandlers, /desktop:settings:get/);
 assert.match(ipcHandlers, /desktop:settings:save/);
 assert.match(ipcHandlers, /desktop:approval-token:replace/);
-for (const channel of ['desktop:cloud:create-pairing-code', 'desktop:cloud:reconnect', 'desktop:cloud:reset']) {
-  assert.match(ipcHandlers, new RegExp(channel.replaceAll(':', '\\:')));
-  assert.match(dashboardPreload, new RegExp(channel.replaceAll(':', '\\:')));
-}
+assert.doesNotMatch(ipcHandlers, /desktop:cloud:/);
+assert.doesNotMatch(dashboardPreload, /desktop:cloud:/);
 for (const channel of ['desktop:update:get', 'desktop:update:check', 'desktop:update:download', 'desktop:update:install']) {
   assert.match(ipcHandlers, new RegExp(channel.replace(':', '\\:')));
   assert.match(dashboardPreload, new RegExp(channel.replace(':', '\\:')));
@@ -142,10 +140,8 @@ assert.match(appUpdater, /integrityVerified/);
 assert.match(appUpdaterEvents, /does not match expected version/);
 assert.match(desktopSettings, /ngrokAuthtokenConfigured/);
 assert.match(desktopSettings, /replacementAccountKey \|\| current\.ngrokAuthtoken/);
-assert.match(desktopSettings, /getCloudRelayStatus/);
-assert.match(desktopConnectionSettings, /Rel\.AI Cloud relay/);
-assert.match(desktopConnectionSettings, /createCloudPairingCode/);
-assert.match(desktopConnectionSettings, /reconnectCloudRelay/);
+assert.doesNotMatch(desktopSettings, /cloudRelay|getCloudRelayStatus/);
+assert.doesNotMatch(desktopConnectionSettings, /cloudRelay|Cloud relay|pairing code/);
 assert.match(windowSecurity, /sandbox: true/);
 assert.match(windowSecurity, /setPermissionRequestHandler/);
 assert.match(windowSecurity, /will-download/);

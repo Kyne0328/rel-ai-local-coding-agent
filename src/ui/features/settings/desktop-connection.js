@@ -24,8 +24,6 @@ function hasDesktopSettingsBridge() {
     window.relaiDesktop?.getSettings
     && window.relaiDesktop?.saveSettings
     && window.relaiDesktop?.replaceApprovalToken
-    && window.relaiDesktop?.createCloudPairingCode
-    && window.relaiDesktop?.reconnectCloudRelay
   );
 }
 
@@ -38,8 +36,7 @@ async function loadAndRender(container) {
       approvalRequired: settings.approvalRequired === true,
       ngrokDomain: normalizeDomain(settings.ngrokDomain || ''),
       ngrokAuthtoken: '',
-      ngrokAuthtokenConfigured: settings.ngrokAuthtokenConfigured === true,
-      cloudRelay: normalizeCloudRelayStatus(settings.cloudRelay)
+      ngrokAuthtokenConfigured: settings.ngrokAuthtokenConfigured === true
     };
     savedConnectionState = connectionSnapshot(state);
     markUnsaved(container, false);
@@ -64,10 +61,9 @@ function render(container) {
   container.innerHTML = '';
   container.appendChild(header(
     'Connection controls',
-    'Manage the local service, direct ngrok endpoint, Rel.AI Cloud relay, and approval token. Saving local connection credentials restarts the service.'
+    'Manage the local service, permanent ngrok endpoint, and approval token. Saving connection credentials restarts the service.'
   ));
   container.appendChild(connectionPanel(container).el);
-  container.appendChild(cloudRelayPanel(container).el);
   container.appendChild(approvalTokenPanel(container).el);
   container.appendChild(saveFooter(container));
 }
@@ -91,146 +87,6 @@ function connectionPanel(container) {
       : 'The key is sent once to the Electron main process and is not returned to the renderer afterward.'
   ));
   return connection;
-}
-
-function cloudRelayPanel(container) {
-  const cloud = panel('Rel.AI Cloud relay');
-  const relay = normalizeCloudRelayStatus(state.cloudRelay);
-  const intro = document.createElement('p');
-  intro.className = 'muted';
-  intro.textContent = 'This desktop keeps an outbound encrypted connection to the shared Rel.AI Cloud Worker. Cloud requests are forwarded only to the local Rel.AI /mcp endpoint.';
-
-  const notice = document.createElement('div');
-  const view = cloudRelayView(relay);
-  notice.className = `connection-notice ${view.tone}`;
-  notice.innerHTML = `<strong>${escapeHtml(view.title)}</strong><p>${escapeHtml(view.message)}</p>`;
-
-  const endpoint = document.createElement('code');
-  endpoint.className = 'copy-box connector-endpoint';
-  endpoint.textContent = relay.mcpUrl || 'Cloud MCP endpoint unavailable';
-
-  const facts = document.createElement('div');
-  facts.className = 'muted';
-  const factParts = [];
-  if (relay.deviceId) factParts.push(`Device: ${relay.deviceId}`);
-  if (relay.lastConnectedAt) factParts.push(`Last connected: ${formatCloudTime(relay.lastConnectedAt)}`);
-  if (relay.reconnectAttempt > 0) factParts.push(`Reconnect attempt: ${relay.reconnectAttempt}`);
-  facts.textContent = factParts.join(' · ') || 'The desktop registers automatically when the local service starts.';
-
-  const actions = document.createElement('div');
-  actions.className = 'connection-actions';
-  const pair = button(relay.pairingCode ? 'Generate new pairing code' : 'Generate pairing code', 'primary', () => generateCloudPairingCode(container, pair));
-  const reconnect = button('Reconnect relay', 'secondary', () => reconnectCloudRelay(container, reconnect));
-  const copyEndpoint = button('Copy cloud endpoint', 'secondary', () => copyCloudValue(copyEndpoint, relay.mcpUrl));
-  pair.disabled = relay.state === 'registering';
-  reconnect.disabled = relay.state === 'registering';
-  copyEndpoint.disabled = !relay.mcpUrl;
-  actions.append(pair, reconnect, copyEndpoint);
-
-  cloud.body.append(intro, notice, endpoint, facts, actions);
-  if (relay.pairingCode) cloud.body.appendChild(pairingCodeBox(relay));
-  const milestone = document.createElement('p');
-  milestone.className = 'muted';
-  milestone.textContent = 'When ChatGPT opens the Rel.AI authorization page, enter this single-use pairing code to bind that ChatGPT connection to this desktop.';
-  cloud.body.appendChild(milestone);
-  return cloud;
-}
-
-function pairingCodeBox(relay) {
-  const wrapper = document.createElement('div');
-  wrapper.className = 'approval-token-box';
-  const code = document.createElement('code');
-  code.className = 'copy-box connector-endpoint approval-token-value';
-  code.textContent = relay.pairingCode;
-  const actions = document.createElement('div');
-  actions.className = 'connection-actions';
-  const copy = button('Copy pairing code', 'secondary', () => copyCloudValue(copy, relay.pairingCode));
-  actions.appendChild(copy);
-  const expiry = document.createElement('small');
-  expiry.className = 'settings-help';
-  expiry.textContent = relay.pairingExpiresAt
-    ? `Single use. Expires ${formatCloudTime(relay.pairingExpiresAt)}.`
-    : 'Single use and short-lived.';
-  wrapper.append(code, actions, expiry);
-  return wrapper;
-}
-
-async function generateCloudPairingCode(container, actionButton) {
-  actionButton.disabled = true;
-  actionButton.textContent = 'Generating…';
-  try {
-    const result = await window.relaiDesktop.createCloudPairingCode();
-    state.cloudRelay = normalizeCloudRelayStatus(result.status || {
-      ...state.cloudRelay,
-      pairingCode: result.pairingCode,
-      pairingExpiresAt: result.expiresAt
-    });
-    toast('A single-use Rel.AI Cloud pairing code was created.', { variant: 'success' });
-    render(container);
-  } catch (error) {
-    toast(messageOf(error), { variant: 'error' });
-    actionButton.disabled = false;
-    actionButton.textContent = 'Try again';
-  }
-}
-
-async function reconnectCloudRelay(container, actionButton) {
-  actionButton.disabled = true;
-  actionButton.textContent = 'Reconnecting…';
-  try {
-    state.cloudRelay = normalizeCloudRelayStatus(await window.relaiDesktop.reconnectCloudRelay());
-    toast('Rel.AI Cloud reconnection started.', { variant: 'success' });
-    render(container);
-  } catch (error) {
-    toast(messageOf(error), { variant: 'error' });
-    actionButton.disabled = false;
-    actionButton.textContent = 'Try again';
-  }
-}
-
-async function copyCloudValue(actionButton, value) {
-  if (!value) return;
-  try {
-    await window.relaiDesktop.copyText(value);
-    const original = actionButton.textContent;
-    actionButton.textContent = 'Copied';
-    window.setTimeout(() => { actionButton.textContent = original; }, 1200);
-  } catch (error) {
-    toast(messageOf(error), { variant: 'error' });
-  }
-}
-
-function cloudRelayView(relay) {
-  if (relay.connected) return { title: 'Cloud relay connected', tone: 'ok', message: 'This desktop is registered and waiting for authenticated cloud MCP requests.' };
-  if (relay.state === 'registering') return { title: 'Registering this desktop', tone: 'warn', message: 'Rel.AI is creating a protected device identity and registering it with the Cloud Worker.' };
-  if (relay.state === 'connecting' || relay.state === 'reconnecting') {
-    return { title: 'Connecting to Rel.AI Cloud', tone: 'warn', message: relay.lastError || 'The desktop is opening its outbound relay connection.' };
-  }
-  if (relay.state === 'failed') return { title: 'Cloud relay unavailable', tone: 'warn', message: relay.lastError || 'The cloud relay could not initialize.' };
-  return { title: 'Cloud relay stopped', tone: 'warn', message: relay.lastError || 'Start or restart the local Rel.AI service to connect this desktop to Rel.AI Cloud.' };
-}
-
-function normalizeCloudRelayStatus(value) {
-  const source = value && typeof value === 'object' ? value : {};
-  return {
-    state: String(source.state || 'stopped'),
-    baseUrl: String(source.baseUrl || ''),
-    mcpUrl: String(source.mcpUrl || ''),
-    registered: source.registered === true,
-    connected: source.connected === true,
-    deviceId: String(source.deviceId || ''),
-    pairingCode: String(source.pairingCode || ''),
-    pairingExpiresAt: String(source.pairingExpiresAt || ''),
-    lastConnectedAt: String(source.lastConnectedAt || ''),
-    reconnectAttempt: Number(source.reconnectAttempt || 0),
-    lastError: String(source.lastError || '')
-  };
-}
-
-function formatCloudTime(value) {
-  const time = new Date(value);
-  if (Number.isNaN(time.getTime())) return String(value || '');
-  return time.toLocaleString();
 }
 
 function approvalTokenPanel(container) {

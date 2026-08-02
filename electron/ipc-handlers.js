@@ -9,7 +9,6 @@ function registerIpcHandlers(deps) {
     getRecoveryConfig, openRecoverySetup, startServer, stopServer,
     launchConfiguredDesktop, openSettingsWindow, openDashboardWindow,
     getDesktopSettings, saveDesktopSettings, replaceApprovalToken,
-    createCloudPairingCode, reconnectCloudRelay, resetCloudRelay,
     getUpdateStatus, checkForUpdates, downloadUpdate, installUpdate,
     getLifecycleStatus, setLaunchAtLogin,
     getCurrentStatus, getNotificationsEnabled, setNotificationsEnabled,
@@ -46,9 +45,6 @@ function registerIpcHandlers(deps) {
   ipcMain.handle('desktop:settings:get', event => dashboardOnly(event, getDesktopSettings));
   ipcMain.handle('desktop:settings:save', (event, settings) => dashboardOnly(event, () => saveDesktopSettings(settings)));
   ipcMain.handle('desktop:approval-token:replace', (event, request) => dashboardOnly(event, () => replaceApprovalToken(request)));
-  ipcMain.handle('desktop:cloud:create-pairing-code', event => dashboardOnly(event, createCloudPairingCode));
-  ipcMain.handle('desktop:cloud:reconnect', event => dashboardOnly(event, reconnectCloudRelay));
-  ipcMain.handle('desktop:cloud:reset', event => dashboardOnly(event, resetCloudRelay));
   ipcMain.handle('desktop:update:get', event => dashboardOnly(event, getUpdateStatus));
   ipcMain.handle('desktop:update:check', event => dashboardOnly(event, checkForUpdates));
   ipcMain.handle('desktop:update:download', event => dashboardOnly(event, downloadUpdate));
