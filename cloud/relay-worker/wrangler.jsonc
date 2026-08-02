@@ -1,0 +1,29 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "rel-ai-cloud",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-01",
+  "workers_dev": true,
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "DEVICE_RELAY",
+        "class_name": "DeviceRelay"
+      }
+    ]
+  },
+  "exports": {
+    "DeviceRelay": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "rel-ai-cloud",
+      "database_id": "6e3f2054-e29e-4e2d-a272-63e0d4d7f053",
+      "migrations_dir": "migrations"
+    }
+  ]
+}
