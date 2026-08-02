@@ -440,6 +440,7 @@ assert.match(sessions, /isOngoingSession/);
 assert.doesNotMatch(sessions, /sessionDisplayRank/);
 assert.match(sessions, /Show \$\{hidden\.length\} older event/);
 assert.match(sessions, /Running operations/);
+assert.match(sessions, /hasActiveOperation \? 'Current operation' : 'Last operation'/);
 assert.doesNotMatch(sessions, /Task plan|plan\.progress\.completed/);
 assert.match(sessions, /data-task-event-link/);
 assert.match(sessions, /activityEventId/);

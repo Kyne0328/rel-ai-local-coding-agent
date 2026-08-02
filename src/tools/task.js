@@ -1,6 +1,6 @@
 
 import * as crypto from 'node:crypto';
-import { getCurrentToolActivityContext, taskError } from '../toolActivity.js';
+import { getCurrentToolActivityContext, getToolActivity, taskError } from '../toolActivity.js';
 import { readTaskHistorySessionRecord } from '../taskHistoryStore.js';
 import { principalFingerprint } from '../mcp/principal.js';
 import { isTerminalTaskStatus } from '../taskState.js';
@@ -46,7 +46,11 @@ function taskBootstrapFromSnapshot(snapshot, mode = 'compact') {
 }
 
 function assertKnownTask(config, taskId, workspace, toolName, principal) {
-  const session = readTaskHistorySessionRecord(config, taskId);
+  const activeTaskIds = new Set(getToolActivity().tasks.map(task => String(task.id || task.taskId || '')).filter(Boolean));
+  const session = readTaskHistorySessionRecord(config, taskId, {
+    reconcileInactive: true,
+    activeTaskIds
+  });
   if (!session) {
     throw taskError('TASK_NOT_FOUND', 'The supplied work_id is unknown or expired. Start a new work session with relai_begin_work.');
   }

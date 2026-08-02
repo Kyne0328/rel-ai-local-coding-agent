@@ -26,6 +26,9 @@ function createHarness() {
       const pending = [...timers.values()];
       timers.clear();
       for (const timer of pending) timer.callback();
+    },
+    advanceWithoutFiringTimers() {
+      now += 300_000;
     }
   };
 }
@@ -94,6 +97,24 @@ function createHarness() {
   assert.equal(inactive?.taskId, taskId);
   assert.equal(inactive?.status, 'failed');
   assert.equal(inactive?.terminalReason, 'Task became inactive after an unrecovered failure.');
+}
+
+{
+  const { tracker, advanceWithoutFiringTimers } = createHarness();
+  const start = tracker.beginConnectorToolCall({
+    tool: 'relai_begin_work',
+    workspace: 'repo',
+    createTask: true
+  });
+  const taskId = start.taskId;
+  start({ ok: true });
+
+  advanceWithoutFiringTimers();
+  const status = tracker.getToolActivity();
+  assert.equal(status.activeTaskCount, 0, 'status reads must reap an overdue task even when its timer was delayed');
+  assert.equal(status.lastTask?.taskId, taskId);
+  assert.equal(status.lastTask?.status, 'cancelled');
+  assert.equal(status.lastTask?.endReason, 'inactivity_window');
 }
 
 console.log('Task inactivity recovery tests passed.');

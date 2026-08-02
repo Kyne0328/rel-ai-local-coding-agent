@@ -1,7 +1,7 @@
 
 import { buildTaskHistory } from './taskHistory.js';
 import { DEFAULT_TASK_IDLE_MS } from './toolActivity.js';
-import { sanitizeActivityEventRecord, sanitizeDisplayText, sanitizeTaskRecord } from './taskObservability.js';
+import { normalizeTaskProgress, sanitizeActivityEventRecord, sanitizeDisplayText, sanitizeTaskRecord } from './taskObservability.js';
 import { isTerminalTaskStatus } from './taskState.js';
 import { clamp, cleanTaskId, eventTime, isCurrentTaskEvent, operationForTool, unique } from './taskEvents.js';
 import { MAX_SESSIONS, clearTaskHistory, ensureCurrentHistory, getTaskHistoryDir, listSessions, pruneSessions, readSession, removeSession, writeSession } from './taskHistoryStorage.js';
@@ -90,13 +90,22 @@ function readTaskHistorySession(config, taskId) {
   return session ? publicSession(session) : null;
 }
 
-function readTaskHistorySessionRecord(config, taskId) {
+function readTaskHistorySessionRecord(config, taskId, options = {}) {
   const id = cleanTaskId(taskId);
   if (!id) return null;
   try {
     ensureCurrentHistory(config);
-    const session = readSession(getTaskHistoryDir(config), id);
-    return session ? sanitizeTaskRecord(session) : null;
+    const directory = getTaskHistoryDir(config);
+    const session = readSession(directory, id);
+    if (!session) return null;
+    const activeIds = options.activeTaskIds instanceof Set
+      ? options.activeTaskIds
+      : new Set(Array.isArray(options.activeTaskIds) ? options.activeTaskIds.map(String) : []);
+    const reconciled = options.reconcileInactive === true
+      ? reconcileInactiveStoredSession(session, activeIds)
+      : session;
+    if (reconciled !== session) writeSession(directory, reconciled);
+    return sanitizeTaskRecord(reconciled);
   } catch (error) {
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] task history session read:', error);
     return null;
@@ -105,18 +114,23 @@ function readTaskHistorySessionRecord(config, taskId) {
 
 function readTaskHistory(config, activity = {}, options = {}) {
   const limit = clamp(options.limit || 100, 1, MAX_SESSIONS);
+  const active = buildTaskHistory([], activity, { limit: MAX_SESSIONS });
+  const activeIds = new Set(active.map(session => session.id).filter(Boolean));
+  const directory = getTaskHistoryDir(config);
   let persisted = [];
   try {
     ensureCurrentHistory(config);
-    persisted = listSessions(getTaskHistoryDir(config), MAX_SESSIONS);
+    persisted = listSessions(directory, MAX_SESSIONS).map(session => {
+      const reconciled = reconcileInactiveStoredSession(session, activeIds);
+      if (reconciled !== session) writeSession(directory, reconciled);
+      return reconciled;
+    });
   } catch (error) {
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] session history read:', error);
   }
-  const active = buildTaskHistory([], activity, { limit: MAX_SESSIONS });
-  const activeIds = new Set(active.map(session => session.id).filter(Boolean));
   persisted = persisted.filter(session => {
     if (!isStoredSessionNoise(session, activeIds)) return true;
-    removeSession(getTaskHistoryDir(config), session.id);
+    removeSession(directory, session.id);
     return false;
   });
   const byId = new Map(persisted.map(session => [session.id, session]));
@@ -211,6 +225,62 @@ function applyEvent(session, event) {
     currentOperations: [],
     events: events.slice(-MAX_SESSION_EVENTS)
   };
+}
+
+function reconcileInactiveStoredSession(session, activeIds, timestamp = Date.now()) {
+  if (!session?.id || activeIds.has(session.id) || isTerminalTaskStatus(session.status)) return session;
+  const lastActivityMs = storedSessionActivityMs(session);
+  if (!lastActivityMs || timestamp - lastActivityMs < DEFAULT_TASK_IDLE_MS) return session;
+  const endedMs = lastActivityMs + DEFAULT_TASK_IDLE_MS;
+  const startedMs = timestampMs(session.startedAt || session.createdAt) || endedMs;
+  const unresolvedFailure = String(session.lastOutcome || '').toLowerCase() === 'failed';
+  const status = unresolvedFailure ? 'failed' : 'cancelled';
+  const terminalLabel = unresolvedFailure ? 'Failed after inactivity' : 'Cancelled after inactivity';
+  const endedAt = new Date(endedMs).toISOString();
+  return {
+    ...session,
+    state: 'ended',
+    status,
+    progress: normalizeTaskProgress({ ...(session.progress || {}), label: terminalLabel }, status),
+    currentStage: terminalLabel,
+    completionKnown: false,
+    endReason: 'inactivity_window',
+    terminalReason: unresolvedFailure
+      ? 'Task became inactive after an unrecovered failure.'
+      : 'Task was cancelled after the inactivity window elapsed.',
+    activeCalls: 0,
+    currentOperations: [],
+    updatedAt: endedAt,
+    lastActivityAt: endedMs,
+    endedAt,
+    completedAt: endedAt,
+    durationMs: Math.max(0, endedMs - startedMs)
+  };
+}
+
+function storedSessionActivityMs(session) {
+  const eventTimes = Array.isArray(session?.events)
+    ? session.events.flatMap(event => [
+        timestampMs(event?.completedAt),
+        timestampMs(event?.timestamp),
+        timestampMs(event?.ts),
+        timestampMs(event?.startedAt)
+      ])
+    : [];
+  return Math.max(
+    0,
+    timestampMs(session?.lastActivityAt),
+    timestampMs(session?.updatedAt),
+    timestampMs(session?.endedAt),
+    timestampMs(session?.completedAt),
+    ...eventTimes
+  );
+}
+
+function timestampMs(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const parsed = Date.parse(String(value || ''));
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function overlayActiveSession(persisted, active) {

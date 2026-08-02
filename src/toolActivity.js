@@ -513,7 +513,7 @@ function createToolActivityTracker(options = {}) {
   function closeInactiveSession(taskId) {
     const task = tasksById.get(taskId);
     if (!task || task.activeCalls > 0) return;
-    task.completionTimer = null;
+    cancelCompletion(task);
     removeTask(task);
     const endedAt = now();
     const unresolvedFailure = task.lastOutcome === 'failed';
@@ -617,7 +617,16 @@ function createToolActivityTracker(options = {}) {
     return () => listeners.delete(listener);
   }
 
+  function reapInactiveTasks() {
+    const timestamp = now();
+    const inactiveTaskIds = [...tasksById.values()]
+      .filter(task => task.activeCalls === 0 && !task.completionRequest && timestamp - task.lastActivityAt >= idleMs)
+      .map(task => task.id);
+    for (const taskId of inactiveTaskIds) closeInactiveSession(taskId);
+  }
+
   function getToolActivity() {
+    reapInactiveTasks();
     const tasks = [...tasksById.values()]
       .map(taskSnapshot)
       .sort((left, right) => left.startedAt - right.startedAt);
