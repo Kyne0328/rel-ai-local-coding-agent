@@ -38,7 +38,7 @@ function readResource(uri) {
   const parsed = parseRelaiUri(uri);
   if (parsed.kind === 'server' && parsed.name === 'help') return contents(uri, MIME_MARKDOWN, helpMarkdown(config), config);
   if (parsed.kind === 'server' && parsed.name === 'config') return contents(uri, MIME_JSON, publicConfigSummary(config), config);
-  if (parsed.kind === 'server' && parsed.name === 'tool-surface') return contents(uri, MIME_JSON, getToolSurfaceManifest(), config);
+  if (parsed.kind === 'server' && parsed.name === 'tool-surface') return contents(uri, MIME_JSON, getToolSurfaceManifest(config), config);
   if (parsed.kind === 'server' && parsed.name === 'workspaces') return contents(uri, MIME_JSON, workspaceList(config), config);
   if (parsed.kind === 'workspace') {
     const args = { workspace: parsed.workspace, maxEntries: 800 };
@@ -79,7 +79,7 @@ function resourceCacheHint(uri) {
 
 function resourceRevision(config, uri) {
   const hash = crypto.createHash('sha256');
-  hash.update(pkg.version).update('\0').update(String(getToolSurfaceManifest().toolSurfaceVersion));
+  hash.update(pkg.version).update('\0').update(String(getToolSurfaceManifest(config).toolSurfaceVersion));
   hash.update('\0').update(String(uri || ''));
   hash.update('\0').update(stableJson(publicConfigSummary(config)));
   const parsed = parseRelaiUri(uri);
@@ -113,11 +113,11 @@ Rel.AI targets MCP ${MCP_PROTOCOL_VERSION}. Every request carries its own protoc
 
 ## Workflow
 
-Call \`relai_begin_work\` once per independent objective. Use \`relai_repo_snapshot\`, \`relai_search\`, \`relai_semantic_search\`, \`relai_code_inspect\`, and \`relai_read\` only as needed. Use \`relai_process_*\` for persistent development commands and \`relai_worktree_*\` for isolated branches. Use \`relai_run_checks\` for internally planned change-aware validation and \`relai_diagnostics_run\` for normalized compiler or analyzer output.
+Call \`relai_work\` with action \`begin\` once per independent objective. Use \`relai_snapshot\`, \`relai_search\`, \`relai_inspect\`, and \`relai_read\` only as needed. Use \`relai_process\` for persistent commands, \`relai_worktree\` for isolated branches, and \`relai_validate\` for checks, diagnostics, or local HTTP probes.
 
 Use \`relai_edit\` as the single file mutation tool. Destructive operations may return \`input_required\`; retry with the accepted response and integrity-protected requestState. Native asynchronous work is returned only when the current request advertises \`io.modelcontextprotocol/tasks\`, then polled with \`tasks/get\` and controlled with \`tasks/update\` or \`tasks/cancel\`.
 
-Final completion requires \`relai_run_checks\` with \`complete:true\` and a summary, or \`relai_finish_work\` after post-validation read-only review.
+Complete through \`relai_validate\` action \`checks\` with \`complete:true\` and a summary, or \`relai_work\` action \`finish\` after post-validation review.
 
 ## Configured workspaces
 
@@ -127,7 +127,8 @@ ${workspaces}
 
 - name: ${pkg.name}
 - version: ${pkg.version}
-- tool surface version: ${getToolSurfaceManifest().toolSurfaceVersion}
+- tool surface version: ${getToolSurfaceManifest(config).toolSurfaceVersion}
+- tool profile: ${getToolSurfaceManifest(config).profile}
 - protocol: ${MCP_PROTOCOL_VERSION}
 - tool surface manifest: relai://server/tool-surface
 `;

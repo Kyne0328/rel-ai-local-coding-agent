@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "rel-ai-mcp": {
+      "command": "node",
+      "args": ["./bin/rel-ai-mcp.js"],
+      "cwd": "."
+    }
+  }
+}

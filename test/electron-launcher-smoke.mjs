@@ -127,6 +127,7 @@ assert.ok(ngrokResource, 'electron build must bundle ngrok seed binaries');
 assert.deepEqual(ngrokResource.filter, ['manifest.json', 'win32/**'], 'electron build must bundle the ngrok provenance manifest with the Windows seed');
 
 const electronMain = fs.readFileSync(path.join(root, 'electron', 'main.js'), 'utf8');
+const toolSleepBlocker = fs.readFileSync(path.join(root, 'electron', 'tool-sleep-blocker.js'), 'utf8');
 assert.doesNotMatch(electronMain, /--installed-smoke|--window-smoke|runInstalledSmoke|runWindowSmoke|smokeWindowRoles|getSmokeWindowRole/, 'production Electron main must not expose destructive smoke entry points');
 const desktopTray = fs.readFileSync(path.join(root, 'electron', 'desktop-tray.js'), 'utf8');
 const dashboardPreload = fs.readFileSync(path.join(root, 'electron', 'preload.cjs'), 'utf8');
@@ -153,6 +154,8 @@ assert.match(electronMain, /app\.setAppUserModelId\('com\.relai\.mcp'\)/, 'Windo
 assert.match(electronMain, /writeControllerRuntimeMarker\(app\)/, 'Electron must publish its runtime paths before starting the controller');
 assert.match(electronMain, /removeControllerRuntimeMarker\(\)/, 'Electron must remove only its own runtime marker during clean shutdown');
 assert.match(electronMain, /powerSaveBlocker/, 'Electron main must use the native sleep-prevention API');
+assert.match(toolSleepBlocker, /prevent-display-sleep/, 'active work sessions must prevent the computer and display from sleeping');
+assert.doesNotMatch(toolSleepBlocker, /prevent-app-suspension/, 'app-only suspension blocking is insufficient for keeping the computer awake');
 assert.match(electronMain, /createTaskActivityRuntime/, 'Electron main must bind connector activity to sleep prevention, live status, and completion alerts');
 assert.match(electronMain, /toolActivityRuntime\.stop\(\)/, 'tool activity runtime must stop during application shutdown');
 assert.match(electronMain, /setNotificationsEnabled: toolActivityRuntime\.setNotificationsEnabled/, 'the desktop notification toggle must control task alerts');

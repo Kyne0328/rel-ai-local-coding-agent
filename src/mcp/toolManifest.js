@@ -2,7 +2,7 @@ import * as crypto from 'node:crypto';
 import { getPublicToolSchemas, getToolSurfaceManifest } from '../tools/schema.js';
 
 function buildToolManifest(config = {}) {
-  const surface = getToolSurfaceManifest();
+  const surface = getToolSurfaceManifest(config);
   const surfaceByName = new Map(surface.tools.map(tool => [tool.name, tool]));
   const tools = getPublicToolSchemas(config)
     .map(tool => ({

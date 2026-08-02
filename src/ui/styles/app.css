@@ -835,14 +835,6 @@
   .appearance-swatch strong { @apply block text-[12px]; }
   .appearance-swatch span { @apply mt-1 block text-[11px]; color: var(--ui-text-secondary); }
 
-  .runtime-compatibility-card { border-color: var(--ui-status-warning-border); background: var(--ui-status-warning-background); }
-  .runtime-compatibility-card .card-body { @apply grid gap-3; }
-  .runtime-compatibility-card p { @apply m-0; }
-  .runtime-compatibility-grid { @apply grid gap-2 sm:grid-cols-2; }
-  .runtime-compatibility-grid div { @apply grid gap-1 rounded-lg border p-3; border-color: var(--ui-border-subtle); background: var(--ui-surface-primary); }
-  .runtime-compatibility-grid dt { @apply text-[10px] font-bold uppercase tracking-[.08em]; color: var(--ui-text-tertiary); }
-  .runtime-compatibility-grid dd { @apply m-0 text-sm font-semibold; }
-  .runtime-compatibility-actions { @apply flex flex-wrap items-center gap-2; }
   .application-update-panel .settings-panel-body { @apply gap-3; }
   .application-update-summary { @apply flex items-center justify-between gap-4; }
   .application-update-summary > div { @apply grid min-w-0 gap-1; }
@@ -1231,46 +1223,20 @@
   .process-meta span + span::before { content: none; }
 }
 
-/* Runtime architecture observability */
-.runtime-capability-card .card-head p, .native-tasks-card .card-head p, .sessions-history-card .card-head p, .processes-card .card-head p { margin: .35rem 0 0; color: var(--ui-text-secondary); font-size: .75rem; }
-.runtime-capability-list, .native-task-list { padding: 0; }
-.runtime-capability-row { display: grid; grid-template-columns: minmax(0,1fr) minmax(220px,.45fr); gap: 1rem; padding: 1rem; border-top: 1px solid var(--ui-border-subtle); }
-.runtime-capability-row:first-child { border-top: 0; }
-.runtime-capability-main, .runtime-capability-meta, .native-task-title, .native-task-time { display: grid; gap: .35rem; min-width: 0; }
-.runtime-capability-main > span, .runtime-capability-meta, .native-task-time { color: var(--ui-text-secondary); font-size: .75rem; }
-.runtime-capability-main > small { color: var(--ui-text-tertiary); line-height: 1.5; }
-.runtime-capability-meta { justify-items: end; align-content: start; }
-.runtime-entity-heading { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: .55rem; }
-.runtime-entity-heading strong { min-width: 0; overflow-wrap: anywhere; }
+/* Work-session and managed-process details */
+.sessions-history-card .card-head p, .processes-card .card-head p { margin: .35rem 0 0; color: var(--ui-text-secondary); font-size: .75rem; }
 .runtime-identifier { display: inline-flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: .4rem; color: var(--ui-text-secondary); font-size: .7rem; }
 .runtime-identifier > span { font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
 .runtime-identifier code { min-width: 0; overflow-wrap: anywhere; color: var(--ui-text-primary); text-transform: none; letter-spacing: normal; }
 .runtime-copy-id { min-height: 26px; padding: .2rem .55rem; font-size: .68rem; }
-.runtime-data-unknown { display: grid; gap: .4rem; }
-.runtime-data-unknown strong { color: var(--ui-text-primary); }
-.runtime-data-unknown span { line-height: 1.5; }
-.native-task-row { padding: 1rem; border-top: 1px solid var(--ui-border-subtle); }
-.native-task-row:first-child { border-top: 0; }
-.native-task-row.active { box-shadow: inset 3px 0 0 var(--ui-action-primary); }
-.native-task-row.terminal { box-shadow: none; }
-.native-task-head { display: grid; grid-template-columns: 28px minmax(0,1fr) auto; gap: .75rem; align-items: start; }
-.runtime-status-marker { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 999px; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-default); color: var(--ui-action-primary); }
-.runtime-activity-spinner { width: 14px; height: 14px; border: 2px solid color-mix(in srgb, var(--ui-action-primary) 28%, transparent); border-top-color: currentColor; border-radius: 999px; animation: spin .8s linear infinite; }
-.runtime-status-symbol { font-size: 1rem; line-height: 1; }
-.native-task-time { justify-items: end; white-space: nowrap; }
 .runtime-relationship { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: .55rem; margin-top: .8rem; padding: .65rem .75rem; border-radius: .55rem; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-subtle); }
 .runtime-relationship > span { display: inline-flex; min-width: 0; align-items: center; gap: .4rem; }
 .runtime-relationship > span > small { color: var(--ui-text-tertiary); font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
 .runtime-relationship code { min-width: 0; overflow-wrap: anywhere; font-size: .7rem; }
-.native-task-detail-grid, .process-detail-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 1px; margin-top: .8rem; overflow: hidden; border: 1px solid var(--ui-border-subtle); border-radius: .55rem; background: var(--ui-border-subtle); }
-.native-task-detail-grid > div, .process-detail-grid > div { display: grid; min-width: 0; gap: .25rem; padding: .7rem; background: var(--ui-surface-primary); }
-.native-task-detail-grid span, .process-detail-grid span, .process-command-summary > span { color: var(--ui-text-tertiary); font-size: .63rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
-.native-task-detail-grid strong, .process-detail-grid strong { overflow-wrap: anywhere; font-size: .75rem; }
-.runtime-state-copy { display: grid; gap: .3rem; margin-top: .8rem; padding: .75rem; border-radius: .55rem; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-subtle); }
-.runtime-state-copy strong { font-size: .76rem; }
-.runtime-state-copy span { color: var(--ui-text-secondary); font-size: .72rem; line-height: 1.5; }
-.runtime-state-copy.input-required { background: var(--ui-status-warning-background); border-color: var(--ui-status-warning-border); }
-.native-task-actions { display: flex; justify-content: flex-end; margin-top: .75rem; }
+.process-detail-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 1px; margin-top: .8rem; overflow: hidden; border: 1px solid var(--ui-border-subtle); border-radius: .55rem; background: var(--ui-border-subtle); }
+.process-detail-grid > div { display: grid; min-width: 0; gap: .25rem; padding: .7rem; background: var(--ui-surface-primary); }
+.process-detail-grid span, .process-command-summary > span { color: var(--ui-text-tertiary); font-size: .63rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.process-detail-grid strong { overflow-wrap: anywhere; font-size: .75rem; }
 .task-row-id { display: flex; align-items: center; gap: .4rem; font-size: .68rem !important; }
 .task-row-id code { color: var(--ui-text-primary); }
 .task-detail-identifier { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: .5rem; }
@@ -1285,16 +1251,12 @@
 .process-independent, .process-recovery { margin-top: .8rem; }
 .process-output-empty { margin-top: .65rem; padding: .75rem; border: 1px dashed var(--ui-border-default); border-radius: .55rem; color: var(--ui-text-secondary); font-size: .72rem; line-height: 1.5; }
 @media (max-width: 980px) {
-  .native-task-detail-grid, .process-detail-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .process-detail-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
 @media (max-width: 720px) {
-  .runtime-capability-row { grid-template-columns: minmax(0,1fr); }
-  .runtime-capability-meta, .native-task-time { justify-items: start; }
-  .native-task-head { grid-template-columns: 28px minmax(0,1fr); }
-  .native-task-time { grid-column: 2; white-space: normal; }
   .process-row-head { flex-direction: column; gap: .8rem; }
   .process-actions { width: 100%; align-items: center; flex-direction: row; justify-content: space-between; }
-  .native-task-detail-grid, .process-detail-grid { grid-template-columns: minmax(0,1fr); }
+  .process-detail-grid { grid-template-columns: minmax(0,1fr); }
   .runtime-relationship { align-items: flex-start; }
   .runtime-relationship > span { width: 100%; }
   .runtime-relationship > span[aria-hidden="true"] { display: none; }

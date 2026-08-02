@@ -128,7 +128,7 @@ try {
       jsonrpc: '2.0',
       id: 22,
       method: 'tools/call',
-      params: { name: 'relai_status', arguments: { workspace: 'repo' } }
+      params: { name: 'relai_work', arguments: { action: 'status', workspace: 'repo' } }
     })
   });
   const legacyStatus = await readMcpResponse(legacyStatusResponse);

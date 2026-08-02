@@ -29,7 +29,7 @@ const SETTINGS_TITLES = {
 };
 const ROUTE_DESCRIPTIONS = {
   home: 'Connection health, workspace readiness, and recent Rel.AI sessions.',
-  tasks: 'Distinguish negotiated client capability, native MCP tasks, and repository work sessions.',
+  tasks: 'Review active and completed repository work sessions, validation state, and recorded activity.',
   workspaces: 'Manage the repositories that ChatGPT is allowed to inspect and update.',
   processes: 'Inspect managed operating-system processes, relationships, bounded output, and independent lifecycle state.',
   activity: 'Inspect individual Rel.AI tool calls, failures, and recorded output.',

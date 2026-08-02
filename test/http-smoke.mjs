@@ -52,7 +52,7 @@ try {
 
   const compressed = await fetch(`${base}/api/tools?token=${encodeURIComponent(token)}`, { headers: { 'accept-encoding': 'gzip' } });
   assert.equal(compressed.headers.get('content-encoding'), 'gzip');
-  assert.equal((await compressed.json()).length, 30);
+  assert.equal((await compressed.json()).length, 12);
 
   const dashboard = await fetch(`${base}/api/dashboard/v10?token=${encodeURIComponent(token)}`).then(response => response.json());
   assert.equal(dashboard.ok, true);
@@ -64,13 +64,13 @@ try {
   const discovery = client.discovery;
   assert.equal(discovery.response.status, 200);
   assert.deepEqual(discovery.body.result?.supportedVersions, [MCP_VERSION]);
-  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolSurfaceVersion, 27);
-  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolCount, 30);
+  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolSurfaceVersion, 29);
+  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolCount, 12);
   assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.statelessRequestModel, true);
   assert.deepEqual(discovery.body.result?.capabilities?.extensions?.['io.modelcontextprotocol/tasks'], {});
   assert.equal(discovery.body.result?._meta?.[SERVER_INFO_META_KEY]?.name, 'rel-ai-mcp');
   assert.match(discovery.body.result?._meta?.[SERVER_INFO_META_KEY]?.version || '', /^0\./);
-  assert.match(discovery.body.result?.instructions || '', /MCP 2026-07-28.*strict and stateless/);
+  assert.match(discovery.body.result?.instructions || '', /Start each objective with relai_work action begin/);
   assert.equal(discovery.body.result?.cacheScope, 'private');
   assert.equal(discovery.body.result?.ttlMs, 30000);
   assert.equal(discovery.response.headers.get('mcp-session-id'), null);
@@ -82,22 +82,22 @@ try {
   assert.deepEqual(liveDashboard.mcpConnection.activeSessions, []);
 
   const listed = await client.request('tools/list');
-  assert.equal(listed.body.result?.tools?.length, 30);
-  assert.ok(Buffer.byteLength(JSON.stringify(listed.body.result)) < 80_000);
+  assert.equal(listed.body.result?.tools?.length, 12);
+  assert.ok(Buffer.byteLength(JSON.stringify({ tools: listed.body.result.tools })) < 18_000);
   const names = listed.body.result.tools.map(tool => tool.name);
-  for (const expected of ['relai_process_start', 'relai_worktree_create', 'relai_semantic_search', 'relai_diagnostics_run', 'relai_cancel_work']) {
+  for (const expected of ['relai_work', 'relai_snapshot', 'relai_search', 'relai_inspect', 'relai_process', 'relai_validate', 'relai_changes', 'relai_publish']) {
     assert.ok(names.includes(expected), `${expected} missing`);
   }
-  assert.equal(names.includes('relai_native_tasks_probe'), false);
-  assert.equal(names.includes('relai_operation_task_get'), false);
-  assert.equal(names.includes('relai_operation_task_cancel'), false);
-  const inspect = listed.body.result.tools.find(tool => tool.name === 'relai_code_inspect');
+  for (const legacy of ['relai_begin_work', 'relai_process_start', 'relai_run_checks', 'relai_git_push']) {
+    assert.equal(names.includes(legacy), false, `${legacy} must not be exposed by the compact profile`);
+  }
+  const inspect = listed.body.result.tools.find(tool => tool.name === 'relai_inspect');
   assert.ok(inspect.inputSchema.properties.action.enum.includes('trace'));
   assert.equal(inspect.outputSchema, undefined);
   assert.equal(inspect.execution, undefined);
-  const processStart = listed.body.result.tools.find(tool => tool.name === 'relai_process_start');
-  assert.equal(processStart.execution, undefined);
-  const checks = listed.body.result.tools.find(tool => tool.name === 'relai_run_checks');
+  const process = listed.body.result.tools.find(tool => tool.name === 'relai_process');
+  assert.equal(process.execution, undefined);
+  const checks = listed.body.result.tools.find(tool => tool.name === 'relai_validate');
   assert.equal(checks.execution, undefined);
   assert.equal(checks.inputSchema.properties.planId, undefined);
   assert.equal(checks.inputSchema.properties.planLevel, undefined);
@@ -105,12 +105,27 @@ try {
   assert.equal(checks.outputSchema, undefined);
 
   const status = await client.request('tools/call', {
-    name: 'relai_status',
-    arguments: { workspace: 'repo' }
+    name: 'relai_work',
+    arguments: { action: 'status', workspace: 'repo' }
   });
   assert.equal(status.response.status, 200, JSON.stringify(status.body));
   assert.equal(status.body.result?.isError, false, JSON.stringify(status.body));
   assert.equal(status.body.result?.structuredContent?.ok, true);
+
+  const started = await client.request('tools/call', {
+    name: 'relai_work',
+    arguments: { action: 'begin', workspace: root, bootstrap: 'none' }
+  });
+  assert.equal(started.response.status, 200, JSON.stringify(started.body));
+  assert.equal(started.body.result?.isError, false, JSON.stringify(started.body));
+  const workId = started.body.result?.structuredContent?.work_id;
+  assert.match(workId || '', /^[0-9a-f-]{36}$/i, 'HTTP Apps transport must start work from a configured workspace path');
+  const cancelled = await client.request('tools/call', {
+    name: 'relai_work',
+    arguments: { action: 'cancel', work_id: workId, reason: 'HTTP begin regression completed.' }
+  });
+  assert.equal(cancelled.body.result?.isError, false, JSON.stringify(cancelled.body));
+  assert.equal(cancelled.body.result?.structuredContent?.work_id, workId);
 
   const secondaryPath = path.join(stateDir, 'secondary-workspace');
   fs.mkdirSync(secondaryPath);
@@ -130,7 +145,7 @@ try {
   assert.equal(changedDashboard.mcpConnection.metrics.capabilityMismatches, 0);
 
   const synchronizedTools = await client.request('tools/list');
-  assert.equal(synchronizedTools.body.result?.tools?.length, 30);
+  assert.equal(synchronizedTools.body.result?.tools?.length, 12);
   const synchronizedDashboard = await fetch(`${base}/api/dashboard/v10?token=${encodeURIComponent(token)}`).then(response => response.json());
   assert.equal(synchronizedDashboard.mcpConnection.status, 'ready');
   assert.notEqual(synchronizedDashboard.mcpConnection.toolManifestVersion, liveDashboard.mcpConnection.toolManifestVersion);
@@ -142,26 +157,27 @@ try {
   const surface = await client.request('resources/read', { uri: 'relai://server/tool-surface' });
   assert.ok(surface.body.result?.contents, JSON.stringify(surface.body));
   const manifest = JSON.parse(surface.body.result.contents[0].text);
-  assert.equal(manifest.toolSurfaceVersion, 27);
-  assert.equal(manifest.toolCount, 30);
+  assert.equal(manifest.toolSurfaceVersion, 29);
+  assert.equal(manifest.profile, 'compact');
+  assert.equal(manifest.toolCount, 12);
   const surfaceByName = new Map(manifest.tools.map(tool => [tool.name, tool]));
   assert.equal(surfaceByName.get('relai_exec').executionClass, 'native_task_eligible');
   assert.equal(surfaceByName.get('relai_exec').taskSupport, 'optional');
-  assert.equal(surfaceByName.get('relai_process_start').executionClass, 'persistent_process');
-  assert.equal(surfaceByName.get('relai_process_start').taskSupport, 'forbidden');
+  assert.equal(surfaceByName.get('relai_process').executionClass, 'persistent_process');
+  assert.equal(surfaceByName.get('relai_process').taskSupport, 'forbidden');
   assert.equal(manifest.cache.cacheScope, 'private');
   assert.ok(manifest.cache.revision);
 
   const removed = await client.request('tools/call', { name: 'relai_config', arguments: {} });
   assert.equal(Boolean(removed.body.error?.code || removed.body.result?.isError), true);
 
-  const mismatch = await client.request('tools/call', { name: 'relai_status', arguments: {} }, { name: 'wrong-name' });
+  const mismatch = await client.request('tools/call', { name: 'relai_work', arguments: { action: 'status' } }, { name: 'wrong-name' });
   assert.equal(mismatch.response.status, 400);
   assert.match(mismatch.body.error?.message || '', /does not match/);
 
   const undeclaredParam = await client.request('tools/call', {
-    name: 'relai_status',
-    arguments: { workspace: 'repo' }
+    name: 'relai_work',
+    arguments: { action: 'status', workspace: 'repo' }
   }, { extraHeaders: { 'mcp-param-extra': 'not-declared' } });
   assert.equal(undeclaredParam.response.status, 400);
   assert.match(undeclaredParam.body.error?.message || '', /not declared/);

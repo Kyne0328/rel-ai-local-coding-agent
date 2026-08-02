@@ -13,10 +13,10 @@ for (const name of ['workspaceList', 'workspaceInspect', 'workspaceTree', 'works
   assert.equal(Object.hasOwn(toolExports, name), false, `${name} must not remain a public tools.js export`);
 }
 const instructions = connectorInstructions({ workspaces: { repo: { path: '/repo' } } });
-assert.match(instructions, /relai_begin_work exactly once/);
-assert.match(instructions, /Pass work_id to every later work-scoped Rel\.AI call/);
-assert.match(instructions, /omit workspace unless you want Rel\.AI to verify an ownership assertion/);
-assert.match(instructions, /MCP 2026-07-28 is strict and stateless/);
-assert.match(instructions, /no transport identifier is a work-session identity/);
+assert.match(instructions, /relai_work action begin/);
+assert.match(instructions, /pass its work_id to later calls/);
+assert.match(instructions, /bounded reads and commands/);
+assert.match(instructions, /Never bypass approval, workspace, task, or destructive-operation safeguards/);
+assert.match(instructions, /Report only checks actually run/);
 
 console.log('MCP SDK boundary exposes only /mcp and uses explicit work_id identity.');

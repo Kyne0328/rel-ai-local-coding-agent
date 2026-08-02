@@ -1,0 +1,4 @@
+interface:
+  display_name: "Rel.AI Workflow"
+  short_description: "Guarded local repository workflows"
+  default_prompt: "Use $rel-ai-workflow to inspect, edit, validate, and review the configured repository through Rel.AI."

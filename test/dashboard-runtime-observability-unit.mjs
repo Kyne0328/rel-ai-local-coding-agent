@@ -212,15 +212,12 @@ const processesSource = fs.readFileSync(path.join(root, 'src/ui/features/process
 const connectorSource = fs.readFileSync(path.join(root, 'src/ui/features/settings/connector.js'), 'utf8');
 const cssSource = fs.readFileSync(path.join(root, 'src/ui/styles/app.css'), 'utf8');
 
-assert.match(sessionsSource, /Client task capability/);
-assert.match(sessionsSource, /Native MCP tasks/);
 assert.match(sessionsSource, /Repository work sessions/);
-assert.match(sessionsSource, /Required backend field: \$\{collection\.requiredField\}/);
+assert.match(sessionsSource, /Work session ID/);
+assert.match(sessionsSource, /Process ID/);
 assert.match(sessionsSource, /aria-label="Copy \$\{esc\(label\)\}/);
-assert.match(sessionsSource, /No dashboard native-task cancel control is shown without an explicit cancellable backend action/);
-assert.match(sessionsSource, /task\.canCancel \? `<div class="native-task-actions">/);
-assert.match(sessionsSource, /data-cancel-native-task/);
-assert.match(sessionsSource, /url\.startsWith\('\/api\/'\)/);
+assert.doesNotMatch(sessionsSource, /Client task capability|Native MCP tasks|Native task ID/);
+assert.doesNotMatch(sessionsSource, /nativeTasksCard|nativeTaskRow|data-cancel-native-task|bindNativeTaskActions/);
 assert.match(processesSource, /Stop process/);
 assert.match(processesSource, /data-stop-process/);
 assert.match(processesSource, /Startup task completed; process still running/);
@@ -231,8 +228,8 @@ assert.match(taskIdentitySource, /Required backend fields: stdoutTail and stderr
 assert.match(processesSource, /Output observed/);
 assert.match(connectorSource, /Native MCP Tasks/);
 assert.match(connectorSource, /Execution mode/);
-assert.match(cssSource, /\.native-task-row\.terminal \{ box-shadow: none; \}/);
-assert.match(cssSource, /\.runtime-activity-spinner[\s\S]*animation: spin/);
+assert.doesNotMatch(cssSource, /\.native-task-row|\.runtime-activity-spinner|\.runtime-capability-row/);
+assert.match(cssSource, /\.task-progress\.static\.terminal\.cancelled[\s\S]*--ui-status-neutral-background/);
 assert.match(cssSource, /@media \(prefers-reduced-motion: reduce\)/);
 
 console.log('Dashboard capability, work-session, native-task, process, accessibility, and missing-field observability contracts passed.');

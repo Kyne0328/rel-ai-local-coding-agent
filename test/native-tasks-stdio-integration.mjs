@@ -133,7 +133,7 @@ try {
 }
 
 async function startLogicalTask(client, id, title) {
-  client.call(id, 'relai_begin_work', { workspace: 'repo', title });
+  client.call(id, 'relai_work', { action: 'begin', workspace: 'repo', title });
   const response = await client.waitFor(id);
   assert.equal(response.error, undefined, JSON.stringify(response));
   const taskId = response.result?.structuredContent?.work_id;

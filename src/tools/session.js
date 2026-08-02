@@ -1,4 +1,4 @@
-import { getToolDefinition } from './schema.js';
+import { getToolDefinition } from './registry.js';
 // @ts-check
 
 /** @typedef {import('../../types/boundaries.d.ts').ToolArgs} ToolArgs */

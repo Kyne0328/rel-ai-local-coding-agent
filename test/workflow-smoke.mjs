@@ -52,7 +52,7 @@ let taskId = '';
 function taskCall(id, name, args) {
   client.call(id, name, {
     ...args,
-    ...(taskId && name !== 'relai_begin_work' ? { work_id: taskId } : {})
+    ...(taskId && !(name === 'relai_work' && args.action === 'begin') ? { work_id: taskId } : {})
   });
 }
 
@@ -61,12 +61,12 @@ try {
   const discovery = await client.waitFor(1);
   if (!discovery.result?.supportedVersions?.includes(MCP_VERSION)) throw new Error('MCP discovery failed.');
 
-  taskCall(2, 'relai_begin_work', { workspace: 'smoke' });
+  taskCall(2, 'relai_work', { action: 'begin', workspace: 'smoke' });
   const startedTask = structuredContentOf(await client.waitFor(2));
   taskId = startedTask.work_id;
   if (!taskId || startedTask.identity !== 'work_session') throw new Error('Work-session bootstrap failed.');
 
-  taskCall(3, 'relai_repo_snapshot', { workspace: 'smoke', maxEntries: 100 });
+  taskCall(3, 'relai_snapshot', { workspace: 'smoke', maxEntries: 100 });
   const snapshot = structuredContentOf(await client.waitFor(3));
   if (!snapshot.files.includes('README.md')) throw new Error('Snapshot missing README.md.');
   for (const mode of ['exact-replace', 'direct-write', 'staged-write', 'apply-update', 'workspace-tidy']) {
@@ -78,7 +78,7 @@ try {
   const read = structuredContentOf(await client.waitFor(4));
   if (!read.items[0].content.includes('# Smoke')) throw new Error('Read failed.');
 
-  taskCall(30, 'relai_code_inspect', { workspace: 'smoke', action: 'symbol', symbol: 'smokeValue' });
+  taskCall(30, 'relai_inspect', { workspace: 'smoke', action: 'symbol', symbol: 'smokeValue' });
   const codeInspect = structuredContentOf(await client.waitFor(30));
   if (!codeInspect.ok || codeInspect.index?.freshness !== 'current' || !codeInspect.definitions?.some(item => item.path === 'src/helper.js')) {
     throw new Error(`Code intelligence dispatch failed: ${JSON.stringify(codeInspect)}`);
@@ -140,35 +140,36 @@ try {
   }
 
   fs.writeFileSync(path.join(workspace, 'session-artifact.txt'), 'temporary\n');
-  taskCall(10, 'relai_status', { workspace: 'smoke' });
+  taskCall(10, 'relai_work', { action: 'status', workspace: 'smoke' });
   const status = structuredContentOf(await client.waitFor(10));
   if (!status.workspace?.repository?.sessionChangedFiles?.includes('session-artifact.txt')) throw new Error('Session ownership missing untracked artifact.');
 
-  taskCall(11, 'relai_tidy_plan', { workspace: 'smoke' });
+  taskCall(11, 'relai_changes', { action: 'tidy_plan', workspace: 'smoke' });
   const plan = structuredContentOf(await client.waitFor(11));
   if (!plan.candidates.some(item => item.path === 'session-artifact.txt')) throw new Error('Tidy plan missed session artifact.');
-  taskCall(12, 'relai_tidy_run', { workspace: 'smoke', planId: plan.planId });
+  taskCall(12, 'relai_changes', { action: 'tidy_run', workspace: 'smoke', planId: plan.planId });
   const tidied = structuredContentOf(await client.waitFor(12));
   if (!tidied.changedFiles.includes('session-artifact.txt')) throw new Error('Tidy run failed.');
 
-  taskCall(13, 'relai_run_checks', { workspace: 'smoke', level: 'standard' });
+  taskCall(13, 'relai_validate', { action: 'checks', workspace: 'smoke', level: 'standard' });
   const checks = structuredContentOf(await client.waitFor(13));
   if (!checks.ok || !checks.checks.includes('npm run check')) throw new Error('Validation failed.');
 
-  taskCall(14, 'relai_diff', { workspace: 'smoke' });
+  taskCall(14, 'relai_changes', { action: 'diff', workspace: 'smoke' });
   const diff = structuredContentOf(await client.waitFor(14));
   if (!diff.diff.includes('Updated by exact replacement')) throw new Error('Diff missing README change.');
   if (!diff.diff.includes('smoke updated')) throw new Error('Diff missing source change.');
 
-  taskCall(15, 'relai_restore_paths', { workspace: 'smoke', paths: ['README.md', 'src/index.js', 'obsolete.md'] });
+  taskCall(15, 'relai_changes', { action: 'restore', workspace: 'smoke', paths: ['README.md', 'src/index.js', 'obsolete.md'] });
   const restored = structuredContentOf(await client.waitFor(15));
   if (!restored.ok) throw new Error('Restore failed.');
 
-  taskCall(16, 'relai_diff', { workspace: 'smoke' });
+  taskCall(16, 'relai_changes', { action: 'diff', workspace: 'smoke' });
   const clean = structuredContentOf(await client.waitFor(16));
   if (clean.diff.trim()) throw new Error('Workspace diff should be clean after restore.');
 
-  taskCall(31, 'relai_run_checks', {
+  taskCall(31, 'relai_validate', {
+    action: 'checks',
     workspace: 'smoke',
     level: 'standard',
     complete: true,

@@ -23,7 +23,7 @@ try {
   assert.ok(discovery.result?.supportedVersions?.includes(MCP_VERSION));
 
   let requestId = 10;
-  for (const removed of ['relai_apply_bundle', 'relai_package_snapshot', 'relai_apply_update', 'relai_clear_files', 'relai_feature_probe', 'relai_git_fetch', 'relai_session_summary']) {
+  for (const removed of ['relai_begin_work', 'relai_status', 'relai_run_checks', 'relai_apply_bundle', 'relai_package_snapshot', 'relai_apply_update', 'relai_clear_files', 'relai_feature_probe', 'relai_git_fetch', 'relai_session_summary']) {
     client.call(requestId, removed, { workspace: 'repo' });
     const response = await client.waitFor(requestId);
     assert.equal(response.error?.code, -32602);
@@ -31,7 +31,7 @@ try {
     requestId += 1;
   }
 
-  client.call(requestId, 'relai_status', { workspace: 'repo' });
+  client.call(requestId, 'relai_work', { action: 'status', workspace: 'repo' });
   const status = await client.waitFor(requestId);
   assert.equal(status.result.isError, false);
   const payload = structuredContentOf(status);
@@ -39,11 +39,11 @@ try {
   assert.equal(Object.hasOwn(payload.toolGroups || {}, 'internal'), false);
   requestId += 1;
 
-  client.call(requestId, 'relai_begin_work', { workspace: 'repo' });
+  client.call(requestId, 'relai_work', { action: 'begin', workspace: 'repo' });
   const task = structuredContentOf(await client.waitFor(requestId));
   requestId += 1;
 
-  client.call(requestId, 'relai_run_checks', { workspace: 'repo', work_id: task.work_id, check: 'node -e "process.exit(1)"' });
+  client.call(requestId, 'relai_validate', { action: 'checks', workspace: 'repo', work_id: task.work_id, check: 'node -e "process.exit(1)"' });
   const failedCheck = await client.waitFor(requestId);
   assert.equal(failedCheck.result.isError, true, 'returned ok:false tool results must set MCP isError');
   assert.equal(failedCheck.result.structuredContent.ok, false, 'structured failure payload must be preserved');

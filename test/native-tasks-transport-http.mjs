@@ -182,8 +182,8 @@ try {
 
 async function startLogicalTask(session, title) {
   const response = await session.request('tools/call', {
-    name: 'relai_begin_work',
-    arguments: { workspace: 'repo', title }
+    name: 'relai_work',
+    arguments: { action: 'begin', workspace: 'repo', title }
   });
   assert.equal(response.response.status, 200, JSON.stringify(response.body));
   assert.equal(response.body.error, undefined);

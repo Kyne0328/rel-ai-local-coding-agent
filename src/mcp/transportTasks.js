@@ -56,7 +56,7 @@ async function handleTransportTaskRequest(config, message, options = {}) {
   if (method !== 'tools/call' || message.id == null) return null;
 
   const name = String(message.params?.name || '');
-  const definition = getToolDefinition(name);
+  const definition = getToolDefinition(name, config, message.params?.arguments || {});
   if (!shouldInterceptTool(definition, message.params?.arguments)) return null;
 
   const validated = await validateToolArguments(config, name, message.params?.arguments);
@@ -225,7 +225,7 @@ async function executeToolResult(config, name, args, options = {}) {
     args,
     context: transportToolContext(options),
     requestStateCodec: createRelaiRequestStateCodec(config, options.principal),
-    validateOutput: output => validateToolOutput(config, name, output)
+    validateOutput: output => validateToolOutput(config, name, args || {}, output)
   });
 }
 
@@ -301,7 +301,7 @@ async function awaitCleanup(execution) {
 
 function boundedArguments(name, args, bounds) {
   const value = { ...args };
-  if (['relai_exec', 'relai_diagnostics_run', 'relai_run_checks'].includes(name)) {
+  if (['relai_exec', 'relai_validate', 'relai_diagnostics_run', 'relai_run_checks'].includes(name)) {
     value.timeoutMs = Math.min(Number(args.timeoutMs) || bounds.maxDurationMs, bounds.maxDurationMs);
   }
   if (name === 'relai_exec') {

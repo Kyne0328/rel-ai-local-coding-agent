@@ -11,9 +11,10 @@ import { allWorkspaceAliases, resolveWorkspace } from './config.js';
 import { buildToolManifest } from './mcp/toolManifest.js';
 
 const PROTOCOL_VERSION = MCP_PROTOCOL_VERSION;
-function runtimeMetadata() {
-  const surface = getToolSurfaceManifest();
-  const manifest = buildToolManifest({});
+function runtimeMetadata(config = {}) {
+  const manifestConfig = { toolProfile: config?.toolProfile };
+  const surface = getToolSurfaceManifest(manifestConfig);
+  const manifest = buildToolManifest(manifestConfig);
   return normalizeMetadata({
     source: 'runtime',
     applicationVersion: getVersion(),
@@ -142,7 +143,7 @@ function assessRuntimeCompatibility(runtime, repository, options = {}) {
 }
 
 function runtimeCompatibility(config, options = {}) {
-  const runtime = options.runtime || runtimeMetadata();
+  const runtime = options.runtime || runtimeMetadata(config);
   const repository = options.repository === undefined
     ? repositoryMetadata(config, options.workspace)
     : options.repository;

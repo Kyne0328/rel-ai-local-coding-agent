@@ -46,14 +46,14 @@ function createToolSleepBlocker(powerSaveBlocker) {
 
   let blockerId = null;
 
-  function update(activeConnectorCalls) {
-    if (Number(activeConnectorCalls) > 0) start();
+  function update(activeWorkCount) {
+    if (Number(activeWorkCount) > 0) start();
     else stop();
   }
 
   function start() {
     if (blockerId !== null && powerSaveBlocker.isStarted(blockerId)) return blockerId;
-    blockerId = powerSaveBlocker.start('prevent-app-suspension');
+    blockerId = powerSaveBlocker.start('prevent-display-sleep');
     return blockerId;
   }
 
@@ -86,14 +86,26 @@ function createTaskActivityRuntime(options) {
   let notificationsEnabled = true;
 
   const unsubscribe = toolActivity.onToolActivity(handleActivity);
-  blocker.update(toolActivity.getToolActivity?.().activeConnectorCalls || 0);
+  syncBlocker();
   emitStatus();
 
   function handleActivity(event) {
-    blocker.update(event.activeConnectorCalls);
+    syncBlocker();
     if (event.phase === 'finished' && event.ok === false) showFailureNotification(event);
     if (event.phase === 'completed' && event.task?.completionKnown === true) showCompletionNotification(event.task);
     emitStatus();
+  }
+
+  function syncBlocker() {
+    const activity = toolActivity.getToolActivity?.() || {};
+    const activeCalls = Number(Object.hasOwn(activity, 'activeConnectorCalls')
+      ? activity.activeConnectorCalls
+      : activity.activeCalls || 0);
+    const reportedTaskCount = Number(activity.activeTaskCount);
+    const activeTasks = Number.isFinite(reportedTaskCount)
+      ? reportedTaskCount
+      : Array.isArray(activity.tasks) ? activity.tasks.length : 0;
+    blocker.update(Math.max(activeCalls, activeTasks));
   }
 
   function showNativeNotification(content) {
@@ -148,6 +160,7 @@ function createTaskActivityRuntime(options) {
       return { ok: false, error: 'Cannot clear session history while a Rel.AI tool call is running.' };
     }
     toolActivity.resetToolActivity?.();
+    syncBlocker();
     emitStatus();
     return { ok: true };
   }
