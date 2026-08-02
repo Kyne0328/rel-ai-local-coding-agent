@@ -7,6 +7,7 @@ function createDesktopSettingsManager(options = {}) {
     getApprovalRequired = () => false,
     getNotificationsEnabled = () => true,
     setNotificationsEnabled = () => true,
+    getCloudRelayStatus = () => null,
     restartDesktop
   } = options;
   if (typeof readGuiConfig !== 'function') throw new TypeError('readGuiConfig is required.');
@@ -29,7 +30,8 @@ function createDesktopSettingsManager(options = {}) {
       ngrokAuthtoken: '',
       ngrokAuthtokenConfigured: Boolean(String(config.ngrokAuthtoken || '').trim()),
       approvalRequired: getApprovalRequired() === true,
-      notificationsEnabled: getNotificationsEnabled() !== false
+      notificationsEnabled: getNotificationsEnabled() !== false,
+      cloudRelay: getCloudRelayStatus()
     };
   }
 

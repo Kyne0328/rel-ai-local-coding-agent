@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage, powerSaveBlocker, Notification, dialog, screen, protocol } from 'electron';
+import { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage, powerSaveBlocker, Notification, dialog, screen, protocol, safeStorage } from 'electron';
 import electronUpdater from 'electron-updater';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,9 +21,8 @@ import { createAppUpdater } from './app-updater.js';
 import { createDesktopLifecycleManager } from './desktop-lifecycle.js';
 import { STARTUP_BACKGROUND_COLOR } from './startup-background.js';
 import { removeControllerRuntimeMarker, writeControllerRuntimeMarker } from './controller-runtime.js';
-import * as managedNgrok from './managed-ngrok.js';
+import { createCloudRelayRuntime } from './cloud-relay-runtime.js'; import * as managedNgrok from './managed-ngrok.js';
 import { hasExistingConfig, readGuiConfig, buildMcpUrl, normalizeNgrokDomain, normalizeNgrokAuthtoken, normalizePort } from './launcher-utils.js';
-
 const { autoUpdater } = electronUpdater;
 const electronRoot = path.dirname(fileURLToPath(import.meta.url));
 const preloadPath = path.join(electronRoot, 'preload.cjs');
@@ -50,6 +49,8 @@ let lifecycleToken = 0, isQuitting = false, appUpdater = null;
 const desktopStatusModel = createDesktopStatusModel({ version: app.getVersion(), deriveConnectionState, formatError });
 const diagnosticFiles = createDiagnosticFiles({ app, shell, sanitizeDiagnosticValue: diagnosticsModule.sanitizeDiagnosticValue }); let currentStatus = desktopStatusModel.initial(); const runtimeLogs = createRuntimeLogBuffer({ filePath: () => diagnosticFiles.serviceLogPath() });
 const approvalTokenManager = createApprovalTokenManager({ readGuiConfig, saveLauncherConfig, generateToken: connection.generateToken, oauthProvider, restartDesktop: () => launchConfiguredDesktop({ restart: true }) });
+const cloudRelay = createCloudRelayRuntime({ app, safeStorage, baseUrl: process.env.REL_AI_CLOUD_URL,
+  onStatusChange: relayStatus => setStatus({ cloudRelay: relayStatus }), onLog: (message, options) => runtimeLogs.append(message, options) });
 const recoveryWindowManager = createRecoveryWindowManager({
   BrowserWindow,
   preloadPath,
@@ -103,6 +104,7 @@ const desktopSettings = createDesktopSettingsManager({ readGuiConfig, saveLaunch
   getApprovalRequired: () => approvalTokenManager.status().required,
   getNotificationsEnabled: toolActivityRuntime.getNotificationsEnabled,
   setNotificationsEnabled: toolActivityRuntime.setNotificationsEnabled,
+  getCloudRelayStatus: cloudRelay.getStatus,
   restartDesktop: () => launchConfiguredDesktop({ restart: true }) });
 const desktopLifecycle = createDesktopLifecycleManager({ app,
   onLog: (message, options) => runtimeLogs.append(message, options), errorCodes: ERROR_CODES });
@@ -124,7 +126,7 @@ if (!gotLock) {
 
   app.whenReady().then(async () => {
     writeControllerRuntimeMarker(app);
-    installLocalProtocol(protocol, RENDERER_ROOT);
+    installLocalProtocol(protocol, RENDERER_ROOT); cloudRelay.initialize();
     const lifecycleStatus = desktopLifecycle.start();
     desktopTray.setup();
     appUpdater.start();
@@ -140,7 +142,7 @@ app.on('before-quit', () => {
   void stopAllManagedProcesses(runtimeConfig).catch(() => {});
   void shutdownTelemetry().catch(() => {});
   desktopLifecycle.markCleanShutdown();
-  appUpdater?.stop();
+  appUpdater?.stop(); cloudRelay.stop();
   toolActivityRuntime.stop();
   dashboardWindowManager.close();
   recoveryWindowManager.close();
@@ -305,7 +307,8 @@ async function startServer() {
       return currentStatus;
     }
 
-    setStatus({ serverRunning: true, tunnelStatus: 'connecting', mcpUrl: '', authenticationRequired: approvalTokenManager.status().required, error: '', errorCode: '', localUrl: `http://127.0.0.1:${actualPort}` });
+    const localUrl = `http://127.0.0.1:${actualPort}`; setStatus({ serverRunning: true, tunnelStatus: 'connecting', mcpUrl: '', authenticationRequired: approvalTokenManager.status().required, error: '', errorCode: '', localUrl });
+    void cloudRelay.start({ localUrl, token: guiConfig.token }).catch(error => runtimeLogs.append(`Rel.AI Cloud startup failed: ${formatError(error)}`, { source: 'cloud-relay', level: 'warning' }));
 
     const tunnelLog = chunk => {
       const entry = runtimeLogs.append(chunk, { source: 'ngrok' }); if (entry) recoveryWindowManager.sendLog(entry);
@@ -362,7 +365,7 @@ async function startServer() {
   return startPromise;
 }
 
-function stopServer(options = {}) {
+function stopServer(options = {}) { cloudRelay.stop();
   try { void stopAllManagedProcesses(configModule.readConfig()).catch(() => {}); } catch {}
   if (tunnelProcess) {
     killProcess(tunnelProcess);
@@ -382,7 +385,7 @@ function stopServer(options = {}) {
 
   if (!options.preserveDashboard) dashboardWindowManager.close();
   dashboardSessions.clearDashboardSessions();
-  currentStatus = desktopStatusModel.initial();
+  currentStatus = desktopStatusModel.normalize({ ...desktopStatusModel.initial(), cloudRelay: cloudRelay.getStatus() });
   if (!options.silent) pushStatus();
   else desktopTray.update();
   return currentStatus;
@@ -479,6 +482,7 @@ registerIpcHandlers({
   getDesktopSettings: desktopSettings.get,
   saveDesktopSettings: desktopSettings.save,
   replaceApprovalToken: approvalTokenManager.replace,
+  createCloudPairingCode: cloudRelay.createPairingCode, reconnectCloudRelay: cloudRelay.reconnect, resetCloudRelay: cloudRelay.resetRegistration,
   getUpdateStatus: appUpdater.getStatus,
   checkForUpdates: appUpdater.checkForUpdates,
   downloadUpdate: appUpdater.downloadUpdate,
