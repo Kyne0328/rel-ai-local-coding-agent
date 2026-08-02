@@ -260,6 +260,33 @@ try {
     'terminal_conflict'
   );
 
+  const rejectedResume = activeTask('input-resume-failure-test', {
+    resume: async () => {
+      throw new Error('resume handler failed with token=private-value');
+    }
+  });
+  requestNativeTaskInput(config, rejectedResume.taskId, {
+    approval: {
+      responseSchema: {
+        type: 'object',
+        required: ['approved'],
+        additionalProperties: false,
+        properties: { approved: { type: 'boolean' } }
+      }
+    }
+  }, { principal: owner });
+  updateNativeTaskInputs(
+    config,
+    rejectedResume.taskId,
+    { approval: { approved: true } },
+    { principal: owner }
+  );
+  await new Promise(resolve => setImmediate(resolve));
+  const rejectedResumeState = getNativeTask(config, rejectedResume.taskId, { principal: owner });
+  assert.equal(rejectedResumeState.status, 'failed');
+  assert.equal(rejectedResumeState.statusMessage, 'Task failed while resuming after client input.');
+  assert.equal(rejectedResumeState.error.message, 'Task execution failed.');
+
   const cancelController = new AbortController();
   const cancellable = activeTask('cancellation-ack-test', { controller: cancelController });
   assert.equal(nativeTaskSignal(cancellable.taskId)?.aborted, false);

@@ -36,7 +36,9 @@ function createDesktopTray(deps) {
       },
       {
         label: status.serverRunning ? 'Stop Service' : 'Start Service',
-        click: () => status.serverRunning ? stopServer() : void startServer().catch(onError)
+        click: () => status.serverRunning
+          ? void Promise.resolve(stopServer()).catch(onError)
+          : void startServer().catch(onError)
       },
       { type: 'separator' },
       updateMenuItem(),

@@ -63,7 +63,13 @@ async function waitForHealth() {
 }
 
 function form(value) {
-  return new URLSearchParams(Object.entries(value).filter(([, item]) => item != null).map(([key, item]) => [key, String(item)])).toString();
+  const params = new URLSearchParams();
+  for (const [key, item] of Object.entries(value)) {
+    if (item == null) continue;
+    const values = Array.isArray(item) ? item : [item];
+    for (const entry of values) params.append(key, String(entry));
+  }
+  return params.toString();
 }
 
 async function postForm(pathname, value, manual = false) {
@@ -101,7 +107,12 @@ async function authorize(client, pair, scope, state) {
   const pageHtml = await page.text();
   assert.match(pageHtml, /Approve connection/);
   assert.match(pageHtml, /href="\/public\/oauth\.css"/);
-  const approved = await postForm('/authorize', { ...values, dashboard_token: approvalToken }, true);
+  assert.doesNotMatch(pageHtml, /name="workspace"/, 'the consent page must not offer per-repository selection');
+  assert.doesNotMatch(pageHtml, /name="capability"/, 'the consent page must not offer per-capability selection');
+  const approved = await postForm('/authorize', {
+    ...values,
+    dashboard_token: approvalToken
+  }, true);
   assert.equal(approved.status, 302);
   const location = new URL(approved.headers.get('location'));
   assert.equal(location.searchParams.get('state'), state);
@@ -159,7 +170,7 @@ try {
   assert.equal(legacyRefresh.status, 400);
   assert.equal((await legacyRefresh.json()).error, 'invalid_grant');
   const resetLegacyStore = JSON.parse(fs.readFileSync(path.join(stateDir, 'oauth-store.json'), 'utf8'));
-  assert.equal(resetLegacyStore.version, 6);
+  assert.equal(resetLegacyStore.version, 7);
   assert.deepEqual(Object.keys(resetLegacyStore.clients), [legacyClientId]);
   assert.equal(resetLegacyStore.clients[legacyClientId].legacy_registration, true);
   assert.equal(resetLegacyStore.clients[legacyClientId].issuer, '');
@@ -271,7 +282,7 @@ try {
   assert.equal(reused.status, 400);
 
   const storedOAuth = JSON.parse(fs.readFileSync(path.join(stateDir, 'oauth-store.json'), 'utf8'));
-  assert.equal(storedOAuth.version, 6);
+  assert.equal(storedOAuth.version, 7);
   const storedText = JSON.stringify(storedOAuth);
   assert.equal(storedText.includes(stepUp.body.access_token), false);
   assert.equal(storedText.includes(stepUp.body.refresh_token), false);
@@ -305,7 +316,10 @@ try {
     Object.keys(JSON.parse(fs.readFileSync(path.join(stateDir, 'oauth-store.json'), 'utf8')).clients).sort(),
     [legacyClientId, unrelatedClient.client_id].sort()
   );
-  const recoveredApproval = await postForm('/authorize', { ...recoveryValues, dashboard_token: approvalToken }, true);
+  const recoveredApproval = await postForm('/authorize', {
+    ...recoveryValues,
+    dashboard_token: approvalToken
+  }, true);
   assert.equal(recoveredApproval.status, 302);
   const recoveredStore = JSON.parse(fs.readFileSync(path.join(stateDir, 'oauth-store.json'), 'utf8'));
   assert.deepEqual(Object.keys(recoveredStore.clients).sort(), [client.client_id, legacyClientId, unrelatedClient.client_id].sort());

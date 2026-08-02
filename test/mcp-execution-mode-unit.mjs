@@ -9,6 +9,7 @@ import {
   MISSING_TASKS_CAPABILITY_CODE,
   TASK_EXECUTION_MODE,
   TASKS_EXTENSION_ID,
+  TASKS_EXTENSION_REVISION,
   clientSupportsNativeTasks,
   createMissingTasksCapabilityError,
   negotiateTasksCapability
@@ -24,7 +25,7 @@ import {
   selectExecutionMode
 } from '../src/mcp/executionMode.js';
 
-const tasksCapability = { extensions: { [TASKS_EXTENSION_ID]: {} } };
+const tasksCapability = { extensions: { [TASKS_EXTENSION_ID]: { revision: TASKS_EXTENSION_REVISION } } };
 
 assert.equal(MISSING_TASKS_CAPABILITY_CODE, ProtocolErrorCode.MissingRequiredClientCapability);
 assert.equal(MISSING_TASKS_CAPABILITY_CODE, -32021);
@@ -32,7 +33,7 @@ const missingCapabilityError = createMissingTasksCapabilityError();
 assert.ok(missingCapabilityError instanceof MissingRequiredClientCapabilityError);
 assert.equal(missingCapabilityError.code, -32021);
 assert.deepEqual(missingCapabilityError.data, {
-  requiredCapabilities: { extensions: { [TASKS_EXTENSION_ID]: {} } }
+  requiredCapabilities: { extensions: { [TASKS_EXTENSION_ID]: { revision: TASKS_EXTENSION_REVISION } } }
 });
 
 assert.deepEqual(negotiateTasksCapability(tasksCapability), {

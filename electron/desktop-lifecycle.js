@@ -3,6 +3,9 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
+import { importResourceModule } from './resource-path.js';
+
+const { readJsonFile, writeJsonAtomic } = await importResourceModule('src/durableState.js');
 
 function createDesktopLifecycleManager(options = {}) {
   const {
@@ -122,13 +125,13 @@ function createDesktopLifecycleManager(options = {}) {
   }
 
   function readState() {
-    try { return JSON.parse(fs.readFileSync(statePath, 'utf8')); } catch { return {}; }
+    return readJsonFile(statePath, { backup: true, fallback: {} });
   }
 
   function writeState(value) {
     try {
       fs.mkdirSync(path.dirname(statePath), { recursive: true });
-      fs.writeFileSync(statePath, `${JSON.stringify(value, null, 2)}\n`);
+      writeJsonAtomic(statePath, value, { mode: 0o600, backup: true });
     } catch (error) {
       onLog(`Desktop lifecycle state could not be saved: ${cleanText(error?.message || error, 240)}`, {
         source: 'desktop-lifecycle',

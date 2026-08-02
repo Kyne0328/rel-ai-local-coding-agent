@@ -65,6 +65,9 @@ function startHttpServer(options = {}) {
   if (!token && !allowNoAuth) {
     throw new Error("REL_AI_MCP_TOKEN is required for the HTTP server. Set a strong token, or set REL_AI_MCP_ALLOW_NO_AUTH=1 for local-only testing.");
   }
+  if (allowNoAuth && !isLoopbackHost(host)) {
+    throw new Error('REL_AI_MCP_ALLOW_NO_AUTH is permitted only on a loopback bind.');
+  }
 
   const server = http.createServer(async (req, res) => {
     try {
@@ -76,12 +79,21 @@ function startHttpServer(options = {}) {
     }
   });
 
+  let shutdownPromise = Promise.resolve();
   server.on('close', () => {
-    void shutdownMcpTransport().catch(() => {});
-    void mcpConnectionManager.shutdown('http_server_closed').catch(() => {});
-    void stopAllManagedProcesses(runtimeConfig).catch(() => {});
-    void shutdownTelemetry().catch(() => {});
+    shutdownPromise = Promise.allSettled([
+      shutdownMcpTransport(),
+      mcpConnectionManager.shutdown('http_server_closed'),
+      stopAllManagedProcesses(runtimeConfig),
+      shutdownTelemetry()
+    ]);
   });
+  server.waitForShutdown = () => shutdownPromise;
+
+  server.requestTimeout = 30_000;
+  server.headersTimeout = 15_000;
+  server.keepAliveTimeout = 5_000;
+  server.maxHeadersCount = 100;
 
   server.on("clientError", (_error, socket) => {
     socket.end("HTTP/1.1 400 Bad Request\r\n\r\n");
@@ -257,6 +269,10 @@ const POST_ROUTES = {
   "/api/processes/stop": { auth: authDashboard, handler: handleApiProcessStop },
   "/api/mcp/recovery": { auth: authDashboard, handler: handleMcpRecovery }
 };
+
+function isLoopbackHost(host) {
+  return ['127.0.0.1', 'localhost', '::1', '[::1]'].includes(String(host || '').toLowerCase());
+}
 
 function errorCodeForRequest(req) {
   const path = String(req?.url || '').split('?')[0];

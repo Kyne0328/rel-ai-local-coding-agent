@@ -8,17 +8,26 @@ import {
 import { toNodeHandler, toWebRequest } from '@modelcontextprotocol/node';
 import { readConfig } from '../config.js';
 import { mcpConnectionManager } from '../mcp/connectionManager.js';
-import { LEGACY_LIFECYCLE_METHODS, MCP_PROTOCOL_VERSION, TASK_METHODS } from '../mcp/protocol.js';
+import {
+  LEGACY_LIFECYCLE_METHODS,
+  MCP_PROTOCOL_VERSION,
+  TASK_METHODS,
+  validateJsonRpcRequestEnvelope
+} from '../mcp/protocol.js';
 import { createHttpTaskPrincipal } from '../mcp/principal.js';
 import { buildToolManifest } from '../mcp/toolManifest.js';
 import { handleTransportTaskRequest } from '../mcp/transportTasks.js';
 import { createRelaiMcpServer } from '../mcpServer.js';
 import { runSpan } from '../telemetry.js';
-import { isMcpAuthorized, oauthAuthorization, resolveBaseUrl, unauthorizedMcp } from './auth.js';
+import { resolveBaseUrl } from './auth.js';
+import { mcpAuthorization, unauthorizedMcp } from './mcpAuth.js';
 import { readJsonBody, readRawBody, sendJson } from './io.js';
 
 let coreHandler = null;
 let coreNodeHandler = null;
+const activePrincipalRequests = new Map();
+const MAX_CONCURRENT_REQUESTS_PER_PRINCIPAL = 8;
+const DEFAULT_MCP_BODY_LIMIT = 2 * 1024 * 1024;
 
 function getCoreNodeHandler() {
   if (coreNodeHandler) return coreNodeHandler;
@@ -56,7 +65,8 @@ async function handleMcpDelete(ctx) {
 
 async function handleMcpStreamable(ctx) {
   const baseUrl = resolveBaseUrl(ctx.options);
-  if (!isMcpAuthorized(ctx.req, ctx.options)) {
+  const authorizationResult = mcpAuthorization(ctx.req, ctx.options);
+  if (!authorizationResult) {
     mcpConnectionManager.noteAuthenticationFailure('invalid_or_missing_bearer');
     unauthorizedMcp(ctx.res, baseUrl, ctx.req);
     return;
@@ -69,7 +79,7 @@ async function handleMcpStreamable(ctx) {
 
   let message;
   try {
-    const raw = await readRawBody(ctx.req, ctx.options.maxBodyBytes);
+    const raw = await readRawBody(ctx.req, Math.min(ctx.options.maxBodyBytes, DEFAULT_MCP_BODY_LIMIT));
     message = raw.trim() ? JSON.parse(raw) : null;
   } catch (error) {
     if (error instanceof SyntaxError) {
@@ -79,10 +89,9 @@ async function handleMcpStreamable(ctx) {
     throw error;
   }
 
-  const authorization = oauthAuthorization(ctx.req, ctx.options);
-  const principalId = authorization?.clientId || (ctx.options.allowNoAuth ? 'local-no-auth' : 'static-bearer');
-  const authMode = authorization ? 'oauth' : ctx.options.allowNoAuth ? 'local_no_auth' : 'static_bearer';
-  const authInfo = { ...(authorization || { clientId: principalId, scopes: ['mcp'] }), authMode };
+  const authMode = authorizationResult.authMode;
+  const authInfo = { ...authorizationResult.authInfo, authMode };
+  const principalId = authInfo.clientId;
   const principal = createHttpTaskPrincipal(authInfo, authMode);
   ctx.req.auth = authInfo;
   const config = readConfig();
@@ -97,6 +106,11 @@ async function handleMcpStreamable(ctx) {
   const legacy = await isLegacyHttpRequest(ctx.req, message);
   const params = objectValue(message?.params);
   const meta = legacy ? {} : objectValue(params._meta);
+  const releasePrincipalRequest = acquirePrincipalRequest(principalId);
+  if (!releasePrincipalRequest) {
+    sendMcpProtocolError(ctx.res, 429, -32023, 'Too many concurrent MCP requests for this client.', message?.id, { retryable: true });
+    return;
+  }
   const requestId = mcpConnectionManager.beginRequest({
     principal: principalId,
     method: message?.method,
@@ -172,12 +186,29 @@ async function handleMcpStreamable(ctx) {
   } catch (error) {
     finishRequest(false);
     throw error;
+  } finally {
+    releasePrincipalRequest();
   }
+}
+
+function acquirePrincipalRequest(principalId) {
+  const key = String(principalId || 'anonymous');
+  const active = Number(activePrincipalRequests.get(key) || 0);
+  if (active >= MAX_CONCURRENT_REQUESTS_PER_PRINCIPAL) return null;
+  activePrincipalRequests.set(key, active + 1);
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    const remaining = Number(activePrincipalRequests.get(key) || 1) - 1;
+    if (remaining > 0) activePrincipalRequests.set(key, remaining);
+    else activePrincipalRequests.delete(key);
+  };
 }
 
 async function handleUnsupportedHttpMethod(ctx) {
   const baseUrl = resolveBaseUrl(ctx.options);
-  if (!isMcpAuthorized(ctx.req, ctx.options)) {
+  if (!mcpAuthorization(ctx.req, ctx.options)) {
     unauthorizedMcp(ctx.res, baseUrl, ctx.req);
     return;
   }
@@ -201,12 +232,8 @@ function handleMcpConnectionState(ctx) {
 }
 
 function validateMcpRequestHeaders(headers = {}, message) {
-  if (!message || Array.isArray(message) || typeof message !== 'object') {
-    return rejection(400, -32600, 'One JSON-RPC request object is required; batches are not supported.');
-  }
-  if (message.jsonrpc !== '2.0' || typeof message.method !== 'string' || !message.method) {
-    return rejection(400, -32600, 'A valid JSON-RPC 2.0 MCP request or notification is required.');
-  }
+  const envelope = validateJsonRpcRequestEnvelope(message);
+  if (!envelope.ok) return rejection(400, envelope.code, envelope.error, envelope.data);
   if (headerValue(headers, 'mcp-session-id')) {
     return rejection(400, -32600, 'Mcp-Session-Id is not supported by MCP 2026-07-28.');
   }

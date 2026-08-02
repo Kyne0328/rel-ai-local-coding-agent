@@ -1,6 +1,7 @@
 import { safeLogAudit } from '../audit.js';
 import { readConfig, resolveWorkspace, resolveWorkspaceInput } from '../config.js';
 import { principalFingerprint, principalForContext } from '../mcp/principal.js';
+import { assertAuthorizedToolCall } from '../mcp/authorizationPolicy.js';
 import { clearSessionPolicy } from '../policyResolver.js';
 import { assertRuntimeCompatibility } from '../runtimeCompatibility.js';
 import { readTaskIntegrity } from '../taskIntegrity.js';
@@ -54,6 +55,11 @@ async function callTool(name, args = {}, context = {}) {
     }
     workspaceResolution = resolveConfiguredWorkspaceArgument(config, effectiveArgs?.workspace);
     if (workspaceResolution?.alias) effectiveArgs = { ...effectiveArgs, workspace: workspaceResolution.alias };
+    assertAuthorizedToolCall({
+      principal: effectivePrincipal,
+      operationName,
+      workspace: workspaceResolution?.alias || effectiveArgs?.workspace || knownTask?.workspace || ''
+    });
     if (knownTask) {
       assertKnownTask(config, requestedTaskId, effectiveArgs?.workspace, operationName, effectivePrincipal);
       if (!readTaskIntegrity(config, requestedTaskId, effectiveArgs?.workspace)) {

@@ -192,6 +192,7 @@ const largeSnapshot = compactForConnector('relai_repo_snapshot', {
 }, {});
 assert.equal(largeSnapshot.truncated, true);
 assert.ok(largeSnapshot.omittedFiles > 0);
+assert.equal(typeof largeSnapshot.returnedFileCount, 'number');
 assert.ok(Buffer.byteLength(JSON.stringify(largeSnapshot)) < 16000);
 console.log('6. repo snapshot compacted: OK');
 

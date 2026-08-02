@@ -11,6 +11,7 @@ import {
   TRACESTATE_META_KEY
 } from '@modelcontextprotocol/server';
 import { getStateDir } from '../statePaths.js';
+import { writeTextAtomic } from '../durableState.js';
 import { MCP_PROTOCOL_VERSION } from './protocol.js';
 import { principalIdentity } from './principal.js';
 
@@ -34,7 +35,7 @@ function toolContext(context, options = {}) {
     clientVersion: String(client.version || ''),
     clientCapabilities: capabilities,
     requestHeaders,
-    principal: principalIdentity(options.principal || context?.http?.authInfo),
+    principal: options.principal || context?.http?.authInfo || principalIdentity(options.principal || context?.http?.authInfo),
     signal: options.signal || context?.http?.req?.signal,
     mcp: {
       envelope,
@@ -73,11 +74,11 @@ function requestStateKey(config) {
   const file = path.join(getStateDir(config), 'request-state.key');
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   try {
-    const existing = fs.readFileSync(file);
-    if (existing.length >= 32) return existing;
+    const existing = fs.readFileSync(file, 'utf8').trim();
+    if (Buffer.byteLength(existing, 'utf8') >= 32) return existing;
   } catch {}
-  const generated = crypto.randomBytes(32);
-  fs.writeFileSync(file, generated, { mode: 0o600 });
+  const generated = crypto.randomBytes(32).toString('base64url');
+  writeTextAtomic(file, `${generated}\n`, { mode: 0o600, backup: true });
   return generated;
 }
 

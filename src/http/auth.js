@@ -1,8 +1,7 @@
 import * as connection from "../connectionProfile.js";
 import * as oauth from "../oauthProvider.js";
-import { isAuthorized, timingSafeEqual, sendJson } from "./io.js";
+import { isAuthorized, timingSafeEqual } from "./io.js";
 import * as dashboardSessions from "./dashboardSessions.js";
-import { ERROR_CODES, errorPayload } from "../desktopUxContracts.js";
 
 // The active process is authoritative. Persisted profile state is only a fallback.
 function resolveBaseUrl(options = {}) {
@@ -44,42 +43,6 @@ function canonicalOptional(value) {
   try { return oauth.canonicalIssuer(value); } catch { return ''; }
 }
 
-function bearerToken(req) {
-  const header = req?.headers?.authorization || "";
-  if (!/^Bearer\s+/i.test(header)) return "";
-  return header.slice(7).trim();
-}
-
-// An OAuth access token issued by our /token endpoint is a valid bearer for /mcp.
-function oauthAuthorization(req, options) {
-  const token = bearerToken(req);
-  if (!token) return null;
-  return oauth.validateAccessToken(token, resolveBaseUrl(options));
-}
-
-function isOAuthAuthorized(req, options) {
-  return Boolean(oauthAuthorization(req, options));
-}
-
-// MCP access is granted by either the static REL_AI_MCP_TOKEN bearer (local/API
-// clients) or an OAuth-issued access token (the ChatGPT OAuth connector). There is
-// no unauthenticated path.
-function isMcpAuthorized(req, options) {
-  return isAuthorized(req, options) || isOAuthAuthorized(req, options);
-}
-
-function unauthorizedMcp(res, baseUrl, req) {
-  if (res.headersSent) return;
-  res.setHeader("WWW-Authenticate", oauth.wwwAuthenticateHeader(baseUrl, "invalid_token"));
-  const code = bearerToken(req)
-    ? ERROR_CODES.APPROVAL_TOKEN_REJECTED
-    : ERROR_CODES.APPROVAL_TOKEN_REQUIRED;
-  sendJson(res, 401, errorPayload(
-    code,
-    "Authorization required. Add this server in ChatGPT with Authentication: OAuth, or send a bearer token."
-  ));
-}
-
 function hasDashboardQueryToken(parsed, options) {
   if (!options.token) return false;
   const supplied = parsed.searchParams.get("token");
@@ -112,4 +75,4 @@ function oauthErrorPage(message) {
   return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Cannot authorize</title><link rel="stylesheet" href="/public/oauth.css"></head><body class="oauth-page oauth-error-page"><main class="oauth-card oauth-error-card"><h2>Cannot authorize this connection</h2><p>' + safe + '</p></main></body></html>';
 }
 
-export { resolveBaseUrl, resolveBaseUrlDetails, isOAuthAuthorized, oauthAuthorization, bearerToken, isMcpAuthorized, unauthorizedMcp, oauthErrorPage, isDashboardAuthorized, resolveRequireHttpToken };
+export { resolveBaseUrl, resolveBaseUrlDetails, oauthErrorPage, isDashboardAuthorized, resolveRequireHttpToken };

@@ -1,11 +1,12 @@
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
 import { safeReadJson } from "./safety.js";
+import { writeJsonAtomic, writeTextAtomic } from './durableState.js';
+import { defaultStateDir } from './stateLayout.js';
 
 function stateDir() {
-  return process.env.REL_AI_MCP_STATE_DIR || path.join(os.homedir(), ".rel-ai-mcp");
+  return process.env.REL_AI_MCP_STATE_DIR || defaultStateDir();
 }
 
 function getEnvPath() {
@@ -58,7 +59,7 @@ function writeLaunchEnv(values) {
       .filter(([, value]) => value !== undefined && value !== null && String(value) !== "")
       .map(([key, value]) => `${key}=${JSON.stringify(String(value))}`)
   ];
-  fs.writeFileSync(getEnvPath(), `${lines.join("\n")}\n`, { mode: 0o600 });
+  writeTextAtomic(getEnvPath(), `${lines.join("\n")}\n`, { mode: 0o600, backup: true });
   return merged;
 }
 
@@ -76,7 +77,7 @@ function writeConnectionProfile(profile) {
     ...profile,
     updatedAt: new Date().toISOString()
   };
-  fs.writeFileSync(getConnectionProfilePath(), `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+  writeJsonAtomic(getConnectionProfilePath(), next, { mode: 0o600, backup: true });
   return next;
 }
 

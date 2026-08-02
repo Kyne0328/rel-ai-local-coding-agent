@@ -3,6 +3,7 @@ import { readConfig } from '../config.js';
 import { runSpan } from '../telemetry.js';
 import { oauthErrorPage, resolveBaseUrl } from './auth.js';
 import { readFormOrJsonBody, sendHtml, sendJson } from './io.js';
+import { consumeRequestBudget } from './requestBudget.js';
 import {
   MCP_PROTOCOL_VERSION,
   expectedMcpName,
@@ -31,11 +32,12 @@ async function handleOauthMetadata(ctx) {
 }
 
 async function handleRegister(ctx) {
+  if (!enforceBudget(ctx, 'oauth-register', { limit: 30, windowMs: 10 * 60 * 1000 })) return;
   const baseUrl = resolveBaseUrl(ctx.options);
   await runSpan(readConfig(), 'relai.oauth.register', { 'oauth.issuer': baseUrl }, async () => {
-    const body = await readFormOrJsonBody(ctx.req, ctx.options.maxBodyBytes);
+    const body = await readFormOrJsonBody(ctx.req, Math.min(ctx.options.maxBodyBytes, oauth.DCR_LIMITS.metadataBytes));
     const result = oauth.registerClient(body, baseUrl);
-    sendJson(ctx.res, result.error ? 400 : 201, result);
+    sendJson(ctx.res, result.error ? Number(result.httpStatus || 400) : 201, result);
   }, { carrier: ctx.req.headers });
 }
 
@@ -60,9 +62,10 @@ async function handleAuthorizeGet(ctx) {
 }
 
 async function handleAuthorizePost(ctx) {
+  if (!enforceBudget(ctx, 'oauth-authorize', { limit: 20, windowMs: 10 * 60 * 1000 })) return;
   const baseUrl = resolveBaseUrl(ctx.options);
   await runSpan(readConfig(), 'relai.oauth.authorize', { 'oauth.issuer': baseUrl, 'oauth.phase': 'approval' }, async () => {
-    const body = await readFormOrJsonBody(ctx.req, ctx.options.maxBodyBytes);
+    const body = await readFormOrJsonBody(ctx.req, Math.min(ctx.options.maxBodyBytes, 64 * 1024));
     const check = oauth.validateAuthorizationRequest(body, { issuer: baseUrl });
     if (!check.ok) {
       if (check.redirectError && check.redirectUri) {
@@ -78,7 +81,7 @@ async function handleAuthorizePost(ctx) {
       }));
       return;
     }
-    const code = oauth.issueAuthorizationCode(check.request, baseUrl);
+    const code = oauth.issueAuthorizationCode({ ...check.request, authorizationPolicy: oauth.authorizationPolicyFromConsent() }, baseUrl);
     if (typeof ctx.options.onOAuthAuthorized === 'function') {
       try { ctx.options.onOAuthAuthorized(); } catch (error) { debug('OAuth authorization callback', error); }
     }
@@ -100,9 +103,10 @@ function redirectAuthorizationError(ctx, check, baseUrl) {
 }
 
 async function handleToken(ctx) {
+  if (!enforceBudget(ctx, 'oauth-token', { limit: 60, windowMs: 10 * 60 * 1000 })) return;
   const baseUrl = resolveBaseUrl(ctx.options);
   await runSpan(readConfig(), 'relai.oauth.token', { 'oauth.issuer': baseUrl }, async () => {
-    const body = await readFormOrJsonBody(ctx.req, ctx.options.maxBodyBytes);
+    const body = await readFormOrJsonBody(ctx.req, Math.min(ctx.options.maxBodyBytes, 64 * 1024));
     const result = oauth.exchangeToken(body, baseUrl);
     sendJson(ctx.res, result.status, result.body);
   }, { carrier: ctx.req.headers });
@@ -116,6 +120,14 @@ function oauthWellKnownPaths(baseUrl) {
     authorizationServer: `/.well-known/oauth-authorization-server${issuerPath}`,
     openidConfiguration: `${issuerPath}/.well-known/openid-configuration`
   };
+}
+
+function enforceBudget(ctx, name, options) {
+  const budget = consumeRequestBudget(ctx.req, name, options);
+  if (budget.ok) return true;
+  ctx.res.setHeader('Retry-After', String(budget.retryAfterSeconds));
+  sendJson(ctx.res, 429, { error: 'temporarily_unavailable', error_description: 'Request rate limit exceeded.' });
+  return false;
 }
 
 function debug(context, error) {

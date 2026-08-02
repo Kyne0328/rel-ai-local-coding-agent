@@ -79,7 +79,11 @@ async function readFormOrJsonBody(req, maxBytes) {
   }
   if (contentType.includes("application/x-www-form-urlencoded")) {
     const obj = {};
-    for (const [key, value] of new URLSearchParams(raw)) obj[key] = value;
+    for (const [key, value] of new URLSearchParams(raw)) {
+      if (!Object.hasOwn(obj, key)) obj[key] = value;
+      else if (Array.isArray(obj[key])) obj[key].push(value);
+      else obj[key] = [obj[key], value];
+    }
     if (Object.keys(obj).length) return obj;
   }
   if (raw.trim().startsWith("{")) {
@@ -180,7 +184,15 @@ function sendSse(res, event, data, options = {}) {
 
 function sendHtml(res, status, html, headers = {}) {
   if (res.headersSent) return;
-  res.writeHead(status, { "Content-Type": "text/html; charset=utf-8", ...headers });
+  res.writeHead(status, {
+    "Content-Type": "text/html; charset=utf-8",
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": "default-src 'none'; style-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+    "Referrer-Policy": "no-referrer",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    ...headers
+  });
   res.end(html);
 }
 

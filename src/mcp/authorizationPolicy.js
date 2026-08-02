@@ -1,0 +1,156 @@
+import * as crypto from 'node:crypto';
+
+const AUTHORIZATION_POLICY_VERSION = 1;
+const CAPABILITIES = Object.freeze({
+  REPOSITORY_READ: 'repository:read',
+  REPOSITORY_WRITE: 'repository:write',
+  COMMAND_EXECUTE: 'command:execute',
+  PROCESS_MANAGE: 'process:manage',
+  GIT_PUBLISH: 'git:publish'
+});
+const ALL_CAPABILITIES = Object.freeze(Object.values(CAPABILITIES));
+const READ_OPERATIONS = new Set([
+  'relai_begin_work', 'relai_repo_snapshot', 'relai_read', 'relai_search', 'relai_code_inspect',
+  'relai_semantic_search', 'relai_process_read', 'relai_process_list', 'relai_worktree_list',
+  'relai_tidy_plan', 'relai_http_probe', 'relai_diff', 'relai_status', 'relai_git_draft_pr',
+  'relai_cancel_work', 'relai_finish_work'
+]);
+const WRITE_OPERATIONS = new Set([
+  'relai_edit', 'relai_restore_paths', 'relai_reset_workspace', 'relai_tidy_run',
+  'relai_worktree_create', 'relai_worktree_remove', 'relai_git_commit'
+]);
+const COMMAND_OPERATIONS = new Set(['relai_exec', 'relai_diagnostics_run', 'relai_run_checks']);
+const PROCESS_OPERATIONS = new Set(['relai_process_start', 'relai_process_write', 'relai_process_stop']);
+const PUBLISH_OPERATIONS = new Set(['relai_git_push']);
+
+class AuthorizationDeniedError extends Error {
+  constructor(message, details = {}) {
+    super(message);
+    this.name = 'AuthorizationDeniedError';
+    this.code = 'AUTHORIZATION_DENIED';
+    this.retryable = false;
+    this.details = details;
+  }
+}
+
+function createLocalAdminPolicy() {
+  return Object.freeze({
+    version: AUTHORIZATION_POLICY_VERSION,
+    kind: 'local_admin',
+    capabilities: [...ALL_CAPABILITIES],
+    workspaces: ['*']
+  });
+}
+
+function createConsentPolicy(options = {}) {
+  const available = new Set((options.availableWorkspaces || []).map(cleanWorkspace).filter(Boolean));
+  const capabilities = unique(options.capabilities).filter(value => ALL_CAPABILITIES.includes(value));
+  const workspaces = unique(options.workspaces).map(cleanWorkspace).filter(value => value === '*' || available.size === 0 || available.has(value));
+  if (capabilities.length === 0) throw new AuthorizationDeniedError('Select at least one Rel.AI capability.', { reason: 'capability_required' });
+  if (workspaces.length === 0) throw new AuthorizationDeniedError('Select at least one configured workspace.', { reason: 'workspace_required' });
+  return Object.freeze({
+    version: AUTHORIZATION_POLICY_VERSION,
+    kind: 'client_grant',
+    capabilities: capabilities.sort(),
+    workspaces: workspaces.sort()
+  });
+}
+
+function normalizeAuthorizationPolicy(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError('Authorization policy must be an object.');
+  if (Number(value.version) !== AUTHORIZATION_POLICY_VERSION) throw new TypeError('Unsupported authorization policy version.');
+  if (!['local_admin', 'client_grant'].includes(value.kind)) throw new TypeError('Unsupported authorization policy kind.');
+  const capabilities = unique(value.capabilities).filter(item => ALL_CAPABILITIES.includes(item));
+  const workspaces = unique(value.workspaces).map(cleanWorkspace).filter(Boolean);
+  if (capabilities.length === 0 || workspaces.length === 0) throw new TypeError('Authorization policy is incomplete.');
+  return Object.freeze({
+    version: AUTHORIZATION_POLICY_VERSION,
+    kind: value.kind,
+    capabilities: capabilities.sort(),
+    workspaces: workspaces.sort()
+  });
+}
+
+function requiredCapability(operationName) {
+  const name = String(operationName || '');
+  if (READ_OPERATIONS.has(name)) return CAPABILITIES.REPOSITORY_READ;
+  if (WRITE_OPERATIONS.has(name)) return CAPABILITIES.REPOSITORY_WRITE;
+  if (COMMAND_OPERATIONS.has(name)) return CAPABILITIES.COMMAND_EXECUTE;
+  if (PROCESS_OPERATIONS.has(name)) return CAPABILITIES.PROCESS_MANAGE;
+  if (PUBLISH_OPERATIONS.has(name)) return CAPABILITIES.GIT_PUBLISH;
+  return '';
+}
+
+function assertAuthorizedToolCall(options = {}) {
+  const principal = options.principal;
+  if (principal === 'local:trusted' || isTrustedLocalPrincipal(principal)) return createLocalAdminPolicy();
+  if (!principal || principal === 'connector:anonymous') {
+    throw denied(options, 'Authenticated client authorization is required.');
+  }
+  const policyValue = typeof principal === 'object' && !Array.isArray(principal)
+    ? principal.authorizationPolicy
+    : null;
+  let policy;
+  try { policy = normalizeAuthorizationPolicy(policyValue); }
+  catch { throw denied(options, 'The authenticated client has no valid Rel.AI authorization grant.'); }
+  const capability = requiredCapability(options.operationName);
+  if (!capability) {
+    throw denied(options, 'The requested operation is not classified by the authorization policy.', {
+      reason: 'unclassified_operation'
+    });
+  }
+  if (!policy.capabilities.includes(capability)) {
+    throw denied(options, `The client grant does not permit ${capability}.`, { capability });
+  }
+  const workspace = cleanWorkspace(options.workspace);
+  if (workspace && !policy.workspaces.includes('*') && !policy.workspaces.includes(workspace)) {
+    throw denied(options, `The client grant does not permit workspace '${workspace}'.`, { workspace });
+  }
+  return policy;
+}
+
+function isTrustedLocalPrincipal(principal) {
+  return Boolean(
+    principal
+    && typeof principal === 'object'
+    && !Array.isArray(principal)
+    && principal.authMode === 'local_session'
+    && /^stdio:[A-Za-z0-9_-]{16,160}$/.test(String(principal.clientId || ''))
+  );
+}
+
+function denied(options, message, details = {}) {
+  return new AuthorizationDeniedError(message, {
+    operation: String(options.operationName || ''),
+    workspace: cleanWorkspace(options.workspace),
+    ...details
+  });
+}
+
+function authorizationPolicyFingerprint(policy) {
+  const normalized = normalizeAuthorizationPolicy(policy);
+  return crypto.createHash('sha256').update(JSON.stringify(normalized)).digest('base64url');
+}
+
+function unique(value) {
+  const values = Array.isArray(value) ? value : value == null ? [] : [value];
+  return [...new Set(values.map(item => String(item || '').trim()).filter(Boolean))];
+}
+
+function cleanWorkspace(value) {
+  return String(value || '').trim().slice(0, 200);
+}
+
+export {
+  ALL_CAPABILITIES,
+  AUTHORIZATION_POLICY_VERSION,
+  AuthorizationDeniedError,
+  CAPABILITIES,
+  assertAuthorizedToolCall,
+  authorizationPolicyFingerprint,
+  createConsentPolicy,
+  createLocalAdminPolicy,
+  isTrustedLocalPrincipal,
+  normalizeAuthorizationPolicy,
+  requiredCapability
+};

@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { spawn } from 'node:child_process';
 import { combineAbortSignals } from './abortSignals.js';
+import { readJsonFile, writeJsonAtomic } from './durableState.js';
 import { resolveCommandCwd, normalizeCommandEnv, resolveShell, redactCommandForAudit } from './bridge/exec.js';
 import { acknowledgeNativeTaskCancellation } from './mcp/nativeTaskService.js';
 import { operationTaskSignal } from './operationTasks.js';
@@ -561,15 +562,7 @@ function requireProcess(config, processId) {
 function persistMetadata(config, record) {
   const directory = processDirectory(config, record.processId);
   const target = path.join(directory, 'metadata.json');
-  const temporary = `${target}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;
-  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-  try {
-    fs.writeFileSync(temporary, `${JSON.stringify(metadataRecord(record), null, 2)}\n`, { mode: 0o600 });
-    fs.renameSync(temporary, target);
-  } catch (error) {
-    try { fs.rmSync(temporary, { force: true }); } catch {}
-    throw error;
-  }
+  writeJsonAtomic(target, metadataRecord(record), { mode: 0o600, backup: true });
 }
 
 function metadataRecord(record) {
@@ -652,7 +645,7 @@ function handlePersistenceFailure(config, record, error) {
 function readMetadata(config, processId) {
   try {
     const directory = processDirectory(config, processId);
-    const metadata = JSON.parse(fs.readFileSync(path.join(directory, 'metadata.json'), 'utf8'));
+    const metadata = readJsonFile(path.join(directory, 'metadata.json'), { backup: true });
     if (!metadata || metadata.processId !== processId) return null;
     const stdoutPath = path.join(directory, 'stdout.log');
     const stderrPath = path.join(directory, 'stderr.log');

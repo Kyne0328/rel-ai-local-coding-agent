@@ -35,7 +35,8 @@ const fail = 'node -e "process.exit(1)"';
 const slow = 'node -e "setTimeout(() => process.exit(0), 5000)"';
 
 try {
-  const { callTool } = await import('../src/tools.js');
+  const { callTool: rawCallTool } = await import('../src/tools.js');
+  const callTool = (name, args, context = {}) => rawCallTool(name, args, { principal: 'local:trusted', ...context });
   const { getToolActivity, onToolActivity, resetToolActivity } = await import('../src/toolActivity.js');
   const { readTaskHistorySession } = await import('../src/taskHistoryStore.js');
   const config = { stateDir, auditLogPath: path.join(stateDir, 'audit.jsonl') };

@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 import { validatePlugin } from '../scripts/validate-plugin.mjs';
 import { getPublicToolSchemas } from '../src/tools/schema.js';
+import { TASKS_EXTENSION_REVISION } from '../src/mcp/protocol.js';
 import { startMcpClient, structuredContentOf } from './helpers/mcp-client.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -89,7 +90,10 @@ try {
     client.initialize(1);
     const discovery = await client.waitFor(1);
     assert.equal(discovery.result?.capabilities?.tools != null, true, 'installed MCP server must advertise tools');
-    assert.deepEqual(discovery.result?.capabilities?.extensions?.['io.modelcontextprotocol/tasks'], {});
+    assert.deepEqual(
+      discovery.result?.capabilities?.extensions?.['io.modelcontextprotocol/tasks'],
+      { revision: TASKS_EXTENSION_REVISION }
+    );
 
     client.send(2, 'tools/list');
     const listed = await client.waitFor(2);

@@ -23,8 +23,9 @@ fs.writeFileSync(configPath, JSON.stringify({
 }, null, 2));
 process.env.REL_AI_MCP_CONFIG = configPath;
 
-const { callTool } = await import('../src/tools.js');
+const { callTool: rawCallTool } = await import('../src/tools.js');
 const { toolResult } = await import('../src/mcpServer.js');
+const callTool = (name, args, context = {}) => rawCallTool(name, args, { principal: 'local:trusted', ...context });
 
 try {
   const task = await callTool('relai_work', { action: 'begin',

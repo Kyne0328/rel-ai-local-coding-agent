@@ -26,7 +26,9 @@ import {
   TASK_METHODS,
   createInvalidTasksCapabilityError,
   createMissingTasksCapabilityError,
-  negotiateTasksCapability
+  negotiateTasksCapability,
+  validateJsonRpcRequestEnvelope,
+  validJsonRpcId
 } from './protocol.js';
 import {
   completeOperationTask,
@@ -45,7 +47,9 @@ import { MCP_SERVER_INFO } from '../mcpServer.js';
 const TRANSPORT_CLEANUP_GRACE_MS = 5000;
 
 async function handleTransportTaskRequest(config, message, options = {}) {
-  if (!isModernRequest(message)) return null;
+  if (!isTransportTaskRequestCandidate(config, message)) return null;
+  const envelope = validateJsonRpcRequestEnvelope(message);
+  if (!envelope.ok) return errorResponse(null, envelope.code, envelope.error, envelope.data);
   const method = String(message.method || '');
   const capabilities = clientCapabilities(message);
 
@@ -105,6 +109,22 @@ function shouldInterceptTool(definition, args = {}) {
   return definition?.behavior?.executionClass === 'native_task_eligible'
     && definition?.behavior?.longRunning === true
     && !approvalRequirement(definition.name, args || {});
+}
+
+function isTransportTaskRequestCandidate(config, message) {
+  if (!isModernRequest(message)) return false;
+  const method = String(message?.method || '');
+  if (TASK_METHODS.includes(method)) return true;
+  if (method !== 'tools/call') return false;
+  const name = String(message?.params?.name || '');
+  try {
+    const definition = getToolDefinition(name, config, message?.params?.arguments || {});
+    return shouldInterceptTool(definition, message?.params?.arguments);
+  } catch {
+    // Invalid tool arguments belong to the SDK's normal schema-validation path.
+    // Interception must never terminate the transport while probing eligibility.
+    return false;
+  }
 }
 
 function synchronousEstimate(name, args, capabilities, bounds, options = {}) {
@@ -322,7 +342,7 @@ function transportToolContext(options) {
     clientVersion: String(client.version || ''),
     clientCapabilities: options.capabilities || {},
     requestHeaders: options.requestHeaders || {},
-    principal: principalIdentity(options.principal),
+    principal: options.principal || principalIdentity(options.principal),
     signal: options.signal,
     nativeTaskId: options.nativeTaskId,
     mcp: {
@@ -388,6 +408,7 @@ function errorFromPolicy(id, error) {
 
 function successResponse(id, result) {
   if (id == null) return notificationHandled();
+  if (!validJsonRpcId(id)) return errorResponse(null, -32600, 'JSON-RPC id must be a string or finite number when present.');
   return {
     status: 200,
     body: {
@@ -471,6 +492,12 @@ function createTaskAwareStdioTransport(options = {}) {
         controller.abort(new Error('MCP request cancelled by the client.'));
         return;
       }
+      wrapper.onmessage?.(message);
+      return;
+    }
+    if (!isTransportTaskRequestCandidate(options.config, message)) {
+      wrapper.onmessage?.(message);
+      return;
     }
     const controller = message?.id == null ? null : new AbortController();
     if (controller) pending.set(message.id, controller);
@@ -505,5 +532,6 @@ export {
   TRANSPORT_CLEANUP_GRACE_MS,
   createTaskAwareStdioTransport,
   handleTransportTaskRequest,
+  isTransportTaskRequestCandidate,
   runBoundedExecution
 };

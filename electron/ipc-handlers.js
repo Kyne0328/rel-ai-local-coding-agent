@@ -62,7 +62,7 @@ function registerIpcHandlers(deps) {
   ipcMain.on('desktop:stop-service', event => {
     if (!isSenderWindow(event, getDashboardWindow)) return;
     setImmediate(() => {
-      try { stopServer(); } catch (error) { logIpcFailure(error); }
+      Promise.resolve(stopServer()).catch(logIpcFailure);
     });
   });
   ipcMain.handle('notifications:get-enabled', event => windowOnly(event, getFallbackWindow, 'Notification preferences', () => ({ ok: true, enabled: getNotificationsEnabled() })));

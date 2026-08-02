@@ -69,7 +69,7 @@ try {
   assert.equal(genuinelyUnknown.storeError, undefined);
 
   directory = useState('truncated');
-  fs.writeFileSync(storeFile(directory), '{"version":6');
+  fs.writeFileSync(storeFile(directory), '{"version":7');
   const truncated = provider.validateAuthorizationRequest({}, { issuer });
   assert.equal(truncated.error, 'server_error');
   assert.equal(truncated.storeError.code, 'OAUTH_STORE_TRUNCATED');
@@ -89,7 +89,7 @@ try {
   assert.equal(unknownAfterReset.error, 'invalid_client');
 
   directory = useState('malformed');
-  fs.writeFileSync(storeFile(directory), '{"version":6,}');
+  fs.writeFileSync(storeFile(directory), '{"version":7,}');
   const malformed = provider.validateAuthorizationRequest({}, { issuer });
   assert.equal(malformed.error, 'server_error');
   assert.equal(malformed.storeError.code, 'OAUTH_STORE_MALFORMED');
@@ -99,13 +99,13 @@ try {
   provider.writeOAuthStore(backupStore);
   fs.copyFileSync(storeFile(directory), `${storeFile(directory)}.bak`);
   fs.writeFileSync(storeFile(directory), '{');
-  assert.equal(provider.readOAuthStore().version, 6);
-  assert.equal(JSON.parse(fs.readFileSync(storeFile(directory), 'utf8')).version, 6);
+  assert.equal(provider.readOAuthStore().version, 7);
+  assert.equal(JSON.parse(fs.readFileSync(storeFile(directory), 'utf8')).version, 7);
 
   directory = useState('interrupted');
   const interrupted = provider.createEmptyOAuthStore();
   fs.writeFileSync(`${storeFile(directory)}.123.valid.tmp`, `${JSON.stringify(interrupted)}\n`);
-  assert.equal(provider.readOAuthStore().version, 6);
+  assert.equal(provider.readOAuthStore().version, 7);
   assert.ok(fs.existsSync(storeFile(directory)));
 
   directory = useState('migration');
@@ -168,7 +168,7 @@ try {
   await Promise.all(Array.from({ length: 8 }, (_, index) => runChildRegistration(directory, index)));
   const concurrentStore = provider.readOAuthStore();
   assert.equal(Object.keys(concurrentStore.clients).length, 8);
-  assert.equal(JSON.parse(fs.readFileSync(storeFile(directory), 'utf8')).version, 6);
+  assert.equal(JSON.parse(fs.readFileSync(storeFile(directory), 'utf8')).version, 7);
 
   directory = useState('reregistration');
   const first = provider.registerClient(validRegistrationBody({ client_name: 'First' }), issuer);

@@ -17,9 +17,10 @@ fs.writeFileSync(configPath, JSON.stringify({
 process.env.REL_AI_MCP_CONFIG = configPath;
 process.env.REL_AI_MCP_MAX_TOOL_RESULT_BYTES = '1200';
 
-const { callTool } = await import('../src/tools.js');
+const { callTool: rawCallTool } = await import('../src/tools.js');
 const { serializeToolError } = await import('../src/tools/errors.js');
 const { toolResult } = await import('../src/mcpServer.js');
+const callTool = (name, args, context = {}) => rawCallTool(name, args, { principal: 'local:trusted', ...context });
 
 let requestId = 0;
 async function invoke(name, args, context = {}) {

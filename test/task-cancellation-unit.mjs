@@ -60,7 +60,8 @@ fs.writeFileSync(configPath, JSON.stringify({
 process.env.REL_AI_MCP_CONFIG = configPath;
 
 try {
-  const { callTool } = await import('../src/tools.js');
+  const { callTool: rawCallTool } = await import('../src/tools.js');
+  const callTool = (name, args, context = {}) => rawCallTool(name, args, { principal: 'local:trusted', ...context });
   const { readTaskHistorySession } = await import('../src/taskHistoryStore.js');
   const { readAudit } = await import('../src/audit.js');
   const { resetToolActivity } = await import('../src/toolActivity.js');

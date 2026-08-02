@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startMcpClient } from './helpers/mcp-client.mjs';
+import { TASKS_EXTENSION_REVISION } from '../src/mcp/protocol.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-deferred-operation-cutover-'));
@@ -48,7 +49,10 @@ async function call(name, args) {
 try {
   client.initialize(++requestId);
   const discovery = await client.waitFor(requestId);
-  assert.deepEqual(discovery.result.capabilities.extensions?.['io.modelcontextprotocol/tasks'], {});
+  assert.deepEqual(
+    discovery.result.capabilities.extensions?.['io.modelcontextprotocol/tasks'],
+    { revision: TASKS_EXTENSION_REVISION }
+  );
 
   client.send(++requestId, 'tools/list');
   const listed = await client.waitFor(requestId);

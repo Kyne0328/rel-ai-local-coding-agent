@@ -119,13 +119,16 @@ function createAppUpdater(options = {}) {
     }
     emit({ state: 'installing', error: '', errorCode: '' });
     log(`Restarting to install Rel.AI MCP ${status.availableVersion || 'update'}.`);
-    onBeforeInstall();
+    let preparation;
+    try {
+      preparation = Promise.resolve(onBeforeInstall());
+    } catch (error) {
+      preparation = Promise.reject(error);
+    }
     setTimer(() => {
-      try {
+      preparation.then(() => {
         autoUpdater.quitAndInstall(false, true);
-      } catch (error) {
-        handleError(error);
-      }
+      }).catch(handleError);
     }, 50);
     return { ok: true, installing: true, status: snapshot() };
   }

@@ -1,4 +1,5 @@
 import { getStateDir } from './statePaths.js';
+import { readJsonFile, writeJsonAtomic } from './durableState.js';
 
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
@@ -66,9 +67,7 @@ function writeSession(directory, session) {
   const sanitized = sanitizeTaskRecord(session);
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
   const target = sessionPath(directory, sanitized.id);
-  const temporary = `${target}.${process.pid}.tmp`;
-  fs.writeFileSync(temporary, JSON.stringify(sanitized), { mode: 0o600 });
-  fs.renameSync(temporary, target);
+  writeJsonAtomic(target, sanitized, { mode: 0o600, spacing: 0 });
   parsedCache.delete(target);
 }
 
@@ -144,11 +143,7 @@ function sessionPath(directory, id) {
 }
 
 function safeReadJson(file) {
-  try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch {
-    return null;
-  }
+  return readJsonFile(file, { fallback: null });
 }
 
 function resetTaskHistoryCaches() {

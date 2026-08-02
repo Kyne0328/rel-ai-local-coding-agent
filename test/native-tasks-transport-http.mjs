@@ -8,7 +8,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { TASKS_EXTENSION_ID } from '../src/mcp/protocol.js';
+import { createLocalAdminPolicy } from '../src/mcp/authorizationPolicy.js';
+import { TASKS_EXTENSION_ID, TASKS_EXTENSION_REVISION } from '../src/mcp/protocol.js';
 import { createHttpMcpSession, postMcp } from './helpers/http-mcp.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -19,7 +20,7 @@ fs.writeFileSync(path.join(workspaceDir, 'README.md'), '# Transport test workspa
 const configPath = path.join(stateDir, 'config.json');
 const tokenA = 'relai-http-native-token-a';
 const tokenB = 'relai-http-native-token-b';
-const tasksCapabilities = { extensions: { [TASKS_EXTENSION_ID]: {} } };
+const tasksCapabilities = { extensions: { [TASKS_EXTENSION_ID]: { revision: TASKS_EXTENSION_REVISION } } };
 const port = await freePort();
 const base = `http://127.0.0.1:${port}`;
 
@@ -234,7 +235,7 @@ function writeOAuthStore() {
     [secretKey(tokenB)]: oauthGrant('http-client-b', now)
   };
   fs.writeFileSync(path.join(stateDir, 'oauth-store.json'), `${JSON.stringify({
-    version: 6,
+    version: 7,
     clients,
     codes: {},
     accessTokens,
@@ -267,6 +268,7 @@ function oauthGrant(clientId, now) {
     clientId,
     scope: 'mcp',
     resource: `${base}/mcp`,
+    authorizationPolicy: createLocalAdminPolicy(),
     issuedAt: now,
     expiresAt: now + 60 * 60 * 1000
   };

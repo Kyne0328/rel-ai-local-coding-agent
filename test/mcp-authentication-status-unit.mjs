@@ -9,6 +9,7 @@ process.env.REL_AI_MCP_STATE_DIR = stateRoot;
 
 try {
   const oauth = await import('../src/oauthProvider.js');
+  const { createLocalAdminPolicy } = await import('../src/mcp/authorizationPolicy.js');
   const { readMcpAuthenticationStatus } = await import('../src/mcp/authenticationStatus.js');
   const now = Date.now();
 
@@ -64,6 +65,7 @@ try {
     clientId,
     scope: 'mcp',
     resource: `${issuer}/mcp`,
+    authorizationPolicy: createLocalAdminPolicy(),
     issuedAt: now,
     expiresAt: now + 60_000
   };
