@@ -1,44 +1,38 @@
-import { getCompactToolDefinitions } from './compactRegistry.js';
-import { resolveToolProfile } from './profile.js';
-import { CORE_TOOL_NAMES, TOOL_NAMES, definitionFor, definitionsFor } from './profileRegistry.js';
+import { getCompactToolDefinition, getCompactToolDefinitions } from './compactRegistry.js';
 import { schemaFromDefinition, withWorkspaceAliases } from './schemaBuilder.js';
 import { getToolGroups, getToolMetadata, getToolSurfaceManifest } from './surface.js';
 
-const toolSchemas = getCompactToolDefinitions().map(schemaFromDefinition);
+const toolDefinitions = getCompactToolDefinitions();
+const TOOL_NAMES = Object.freeze(toolDefinitions.map(definition => definition.name));
+const toolSchemas = toolDefinitions.map(schemaFromDefinition);
 const publicToolSchemas = toolSchemas.map(({ outputSchema: _outputSchema, ...schema }) => schema);
 
 function getToolSchemas(config = {}) {
-  return withWorkspaceAliases(definitionsFor(config).map(schemaFromDefinition), config);
+  return withWorkspaceAliases(toolDefinitions.map(schemaFromDefinition), config);
 }
 
 function getPublicToolSchemas(config = {}) {
   return getToolSchemas(config).map(({ outputSchema: _outputSchema, ...schema }) => schema);
 }
 
-function getToolDefinition(name, config = {}) {
-  return definitionFor(name, config);
+function getToolDefinition(name) {
+  return getCompactToolDefinition(name);
 }
 
-function getToolDefinitions(config = {}) {
-  return definitionsFor(config);
+function getToolDefinitions() {
+  return toolDefinitions;
 }
 
-function getToolNames(config = {}) {
-  return definitionsFor(config).map(definition => definition.name);
+function getToolNames() {
+  return TOOL_NAMES;
 }
 
-function isToolCallable(name, config = {}) {
-  return Boolean(definitionFor(name, config));
-}
-
-function configForProfile(profile) {
-  return { toolProfile: resolveToolProfile(profile) };
+function isToolCallable(name) {
+  return Boolean(getCompactToolDefinition(name));
 }
 
 export {
-  CORE_TOOL_NAMES,
   TOOL_NAMES,
-  configForProfile,
   getPublicToolSchemas,
   getToolDefinition,
   getToolDefinitions,

@@ -3,7 +3,7 @@
 import { MAX_BATCH_EDITS } from '../editLimits.js';
 import { getToolDefinition as operationDefinition } from './registry.js';
 
-const TOOL_SURFACE_VERSION = 31;
+const TOOL_SURFACE_VERSION = 32;
 const STRING = Object.freeze({ type: 'string' });
 const WORKSPACE = Object.freeze({ type: 'string' });
 const ACTION = values => ({ type: 'string', enum: values });

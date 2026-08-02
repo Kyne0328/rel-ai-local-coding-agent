@@ -2,7 +2,6 @@ import * as worktreeManager from './worktreeManager.js';
 import { telemetryStatus } from './telemetry.js';
 import { detectVerifyChecks } from './bridge/checkDetection.js';
 import { getToolNames } from './tools/schema.js';
-import { resolveToolProfile } from './tools/profile.js';
 import { assertSafeWorkspaceRoot } from './workspaceSafety.js';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -48,7 +47,6 @@ function makeDefaultConfig() {
     auditLogPath: "",
     maxOutputBytes: 2 * 1024 * 1024,
     toolMode: "chatgpt_local_repo",
-    toolProfile: "compact",
     trustedLocalAgent: true,
     trustedBudgetMultiplier: 2,
     productUx: {
@@ -162,7 +160,6 @@ function mergeConfigBase(base, input) {
     stateDir: input.stateDir ?? base.stateDir,
     auditLogPath: input.auditLogPath ?? base.auditLogPath,
     maxOutputBytes: input.maxOutputBytes ?? base.maxOutputBytes,
-    toolProfile: input.toolProfile ?? base.toolProfile,
     trustedBudgetMultiplier: input.trustedBudgetMultiplier ?? base.trustedBudgetMultiplier,
     productUx: { ...base.productUx, ...objectOrEmpty(input.productUx) },
     release: { ...base.release, ...objectOrEmpty(input.release) },
@@ -183,7 +180,6 @@ function normalizeCorePaths(next, base) {
 
 function normalizeTrustedMode(next, input) {
   next.toolMode = "chatgpt_local_repo";
-  next.toolProfile = resolveToolProfile(input.toolProfile ?? next.toolProfile);
   next.trustedLocalAgent = true;
   next.trustedBudgetMultiplier = normalizeTrustedBudgetMultiplier(input.trustedBudgetMultiplier);
 }
@@ -473,7 +469,6 @@ function publicConfigSummary(config) {
     auditLogPath: config.auditLogPath,
     maxOutputBytes: config.maxOutputBytes,
     toolMode: "chatgpt_local_repo",
-    toolProfile: config.toolProfile,
     trustedLocalAgent: true,
     patch: normalizePatchConfig(config.patch),
     localRepoBridge: {

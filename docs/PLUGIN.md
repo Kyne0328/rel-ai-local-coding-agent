@@ -52,7 +52,7 @@ The npm package remains private and is used as a deterministic build artifact; i
 
 ## Context behavior
 
-Bundling skills with the connector does not itself reduce MCP discovery cost. The default `compact` profile exposes the complete 12-tool surface, while `core` exposes seven high-frequency tools for token-sensitive workflows. These are the only supported profiles. Skill trigger metadata remains small, and detailed procedures load only after a matching skill is selected.
+Bundling skills with the connector does not itself reduce MCP discovery cost. Rel.AI exposes one complete 12-tool capability surface with no selectable profiles. Skill trigger metadata remains small, and detailed procedures load only after a matching skill is selected.
 
 Direct HTTP and stdio clients remain usable without loading skills. Server-side workspace ownership, approvals, command limits, Task negotiation, and destructive safeguards remain authoritative.
 

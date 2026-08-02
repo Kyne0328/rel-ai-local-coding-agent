@@ -40,6 +40,7 @@ const strict = normalizeConfig({
 });
 assert.deepEqual(strict.patch, { backup: true, requireCleanGit: false, maxUpdateBytes: 16384 });
 for (const key of ['workflow', 'flow', 'cautionZone', 'maxIndexFiles']) assert.equal(Object.hasOwn(strict, key), false);
+assert.equal(Object.hasOwn(normalizeConfig({ toolProfile: 'core' }), 'toolProfile'), false, 'removed toolProfile configuration must be discarded');
 assert.equal(Object.hasOwn(strict.patch, 'maxPatchBytes'), false);
 assert.equal(Object.hasOwn(strict.workspaces.repo, 'fastTask'), false);
 assert.equal(strict.workspaces.repo.context.snapshotMaxFiles, 44);

@@ -6,18 +6,16 @@ import { connectorInstructions } from '../src/mcpServer.js';
 import { getToolDefinitions } from '../src/tools.js';
 import { resolveToolOperation } from '../src/tools/dispatch.js';
 import {
-  CORE_TOOL_NAMES, TOOL_NAMES, getPublicToolSchemas,
+  TOOL_NAMES, getPublicToolSchemas,
   getToolDefinitions as getDefinitionMetadata, getToolGroups, getToolMetadata,
   getToolSchemas, getToolSurfaceManifest
 } from '../src/tools/schema.js';
 
-const compactConfig = { toolProfile: 'compact', workspaces: {} };
-const coreConfig = { toolProfile: 'core', workspaces: {} };
-const expectedCompact = [
+const config = { workspaces: {} };
+const expectedTools = [
   'relai_work', 'relai_snapshot', 'relai_read', 'relai_search', 'relai_inspect', 'relai_edit',
   'relai_exec', 'relai_process', 'relai_worktree', 'relai_validate', 'relai_changes', 'relai_publish'
 ];
-const expectedCore = ['relai_work', 'relai_read', 'relai_search', 'relai_inspect', 'relai_edit', 'relai_exec', 'relai_validate'];
 const removedDirectNames = [
   'relai_begin_work', 'relai_repo_snapshot', 'relai_code_inspect', 'relai_process_start',
   'relai_process_read', 'relai_process_write', 'relai_process_stop', 'relai_process_list',
@@ -25,44 +23,41 @@ const removedDirectNames = [
   'relai_diff', 'relai_status', 'relai_finish_work'
 ];
 
-assert.deepEqual(TOOL_NAMES, expectedCompact);
-assert.deepEqual(CORE_TOOL_NAMES, expectedCore);
-assert.deepEqual(getDefinitionMetadata(compactConfig).map(item => item.name), expectedCompact);
-assert.deepEqual(getDefinitionMetadata(coreConfig).map(item => item.name), expectedCore);
-assert.equal(getToolDefinitions(compactConfig).length, 12);
-assert.equal(getToolDefinitions(coreConfig).length, 7);
+assert.deepEqual(TOOL_NAMES, expectedTools);
+assert.deepEqual(getDefinitionMetadata(config).map(item => item.name), expectedTools);
+assert.equal(getToolDefinitions(config).length, 12);
 
-const compactSchemas = getToolSchemas(compactConfig);
-const compactPublic = getPublicToolSchemas(compactConfig);
-const corePublic = getPublicToolSchemas(coreConfig);
-const compactBytes = bytes(compactPublic);
-const coreBytes = bytes(corePublic);
-assert.ok(compactBytes < 29_000, `compact discovery schema is ${compactBytes} bytes`);
-assert.ok(coreBytes < 17_000, `core discovery schema is ${coreBytes} bytes`);
-assert.ok(coreBytes < compactBytes);
-assert.ok(Buffer.byteLength(JSON.stringify(connectorInstructions(compactConfig)), 'utf8') < 512);
+const schemas = getToolSchemas(config);
+const publicSchemas = getPublicToolSchemas(config);
+const schemaBytes = bytes(publicSchemas);
+assert.ok(schemaBytes < 29_000, `unified discovery schema is ${schemaBytes} bytes`);
+assert.deepEqual(
+  getPublicToolSchemas({ toolProfile: 'core', workspaces: {} }),
+  publicSchemas,
+  'stale profile configuration must not change discovery'
+);
+assert.ok(Buffer.byteLength(JSON.stringify(connectorInstructions(config)), 'utf8') < 512);
 
-const compactManifest = getToolSurfaceManifest(compactConfig);
-assert.equal(compactManifest.schemaVersion, 4);
-assert.equal(compactManifest.toolSurfaceVersion, 31);
-assert.equal(compactManifest.profile, 'compact');
-assert.equal(compactManifest.toolCount, 12);
-assert.deepEqual(compactManifest.tools.map(item => item.name), expectedCompact);
-assert.deepEqual(compactManifest.deprecations, []);
-assert.deepEqual(compactManifest.compatibilityAliases, {});
-assert.equal(Object.hasOwn(compactManifest, 'migration'), false);
-assert.deepEqual(getToolSurfaceManifest(coreConfig).tools.map(item => item.name), expectedCore);
+const manifest = getToolSurfaceManifest(config);
+assert.equal(manifest.schemaVersion, 5);
+assert.equal(manifest.toolSurfaceVersion, 32);
+assert.equal(Object.hasOwn(manifest, 'profile'), false);
+assert.equal(manifest.toolCount, 12);
+assert.deepEqual(manifest.tools.map(item => item.name), expectedTools);
+assert.deepEqual(manifest.deprecations, []);
+assert.deepEqual(manifest.compatibilityAliases, {});
+assert.equal(Object.hasOwn(manifest, 'migration'), false);
 
-for (const schema of compactSchemas) {
+for (const schema of schemas) {
   assert.equal(ToolSchema.safeParse(schema).success, true, `${schema.name} must satisfy ToolSchema`);
-  assert.equal(Object.hasOwn(compactPublic.find(item => item.name === schema.name), 'outputSchema'), false);
+  assert.equal(Object.hasOwn(publicSchemas.find(item => item.name === schema.name), 'outputSchema'), false);
 }
 for (const removed of removedDirectNames) {
   assert.equal(resolveToolOperation(removed, {}), null, `${removed} must not resolve as a public tool`);
-  assert.equal(compactPublic.some(tool => tool.name === removed), false, `${removed} must not be discovered`);
+  assert.equal(publicSchemas.some(tool => tool.name === removed), false, `${removed} must not be discovered`);
 }
 
-const schemaByName = new Map(compactSchemas.map(schema => [schema.name, schema]));
+const schemaByName = new Map(schemas.map(schema => [schema.name, schema]));
 assert.deepEqual(schemaByName.get('relai_work').inputSchema.properties.action.enum, ['begin', 'status', 'finish', 'cancel']);
 assert.deepEqual(schemaByName.get('relai_process').inputSchema.properties.action.enum, ['start', 'read', 'write', 'stop', 'list']);
 assert.ok(schemaByName.get('relai_process').inputSchema.properties.kind.enum.includes('service'));
@@ -91,7 +86,7 @@ assert.throws(() => resolveToolOperation('relai_process', { action: 'read', work
 assert.equal(resolveToolOperation('relai_validate', { action: 'checks', work_id: 'work' }).operationName, 'relai_run_checks');
 assert.equal(resolveToolOperation('relai_validate', { action: 'http', work_id: 'work', route: '/health' }).operationName, 'relai_http_probe');
 
-const metadata = getToolMetadata(compactConfig);
+const metadata = getToolMetadata(config);
 const validateMetadata = metadata.find(item => item.name === 'relai_validate');
 assert.equal(validateMetadata.taskSupport, 'optional');
 assert.equal(validateMetadata.actions.find(item => item.action === 'checks').taskSupport, 'optional');
@@ -101,14 +96,11 @@ assert.ok(validateMetadata.actions.find(item => item.action === 'http').fields.i
 const processMetadata = metadata.find(item => item.name === 'relai_process');
 assert.ok(processMetadata.actions.find(item => item.action === 'start').required.includes('kind'));
 assert.ok(processMetadata.actions.find(item => item.action === 'start').required.includes('purpose'));
-const groups = getToolGroups(compactConfig);
+const groups = getToolGroups(config);
 assert.ok(groups.git.includes('relai_publish'));
 assert.ok(groups.cleanup.includes('relai_changes'));
-for (const removedProfile of ['legacy', 'full', 'compact,legacy']) {
-  assert.throws(() => getToolSchemas({ toolProfile: removedProfile, workspaces: {} }), /Removed profiles|Invalid Rel\.AI tool profile/);
-}
 
-console.log(`Hard-cutover tool profiles and action contracts passed: compact ${compactBytes}, core ${coreBytes} bytes.`);
+console.log(`Unified tool surface and action contracts passed: ${schemaBytes} bytes.`);
 
 function bytes(tools) { return Buffer.byteLength(JSON.stringify({ tools }), 'utf8'); }
 async function valid(name, value) {

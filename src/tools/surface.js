@@ -1,12 +1,12 @@
-import { TOOL_SURFACE_VERSION } from './compactRegistry.js';
+import { TOOL_SURFACE_VERSION, getCompactToolDefinitions } from './compactRegistry.js';
 import { COMPACT_OPERATIONS } from './dispatch.js';
-import { profileFromConfig } from './profile.js';
-import { definitionsFor } from './profileRegistry.js';
 import { getToolDefinition as getOperationDefinition } from './registry.js';
 import { schemaFromDefinition } from './schemaBuilder.js';
 
-function getToolMetadata(config = {}) {
-  return definitionsFor(config).map(definition => {
+const definitions = getCompactToolDefinitions();
+
+function getToolMetadata() {
+  return definitions.map(definition => {
     const actions = actionMetadata(definition);
     return {
       name: definition.name,
@@ -29,8 +29,8 @@ function getToolMetadata(config = {}) {
   });
 }
 
-function getToolSurfaceManifest(config = {}) {
-  const tools = definitionsFor(config).map(definition => {
+function getToolSurfaceManifest() {
+  const tools = definitions.map(definition => {
     const actions = actionMetadata(definition);
     return {
       name: definition.name,
@@ -44,9 +44,8 @@ function getToolSurfaceManifest(config = {}) {
     };
   });
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     toolSurfaceVersion: TOOL_SURFACE_VERSION,
-    profile: profileFromConfig(config),
     toolCount: tools.length,
     tools,
     deprecations: [],
@@ -84,8 +83,7 @@ function aggregateTaskSupport(definition, actions) {
     : definition.execution?.taskSupport || 'forbidden';
 }
 
-function getToolGroups(config = {}) {
-  const definitions = definitionsFor(config);
+function getToolGroups() {
   const groups = { workspace: definitions.map(definition => definition.name), git: [], audit: [], cleanup: [] };
   for (const definition of definitions) {
     for (const group of definition.groups || []) {

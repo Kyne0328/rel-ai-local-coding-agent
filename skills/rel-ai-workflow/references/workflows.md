@@ -33,9 +33,6 @@ Use `relai_changes` action `diff` for status and patch review. Use `relai_publis
 
 Use returned error codes, recovery data, and current status. Re-read files after hash or stale-content conflicts. Stop or inspect managed processes before retrying lifecycle operations. Do not substitute reset for a focused restore. Cancel the exact work session when abandoning partial progress; start a new work session for a different objective.
 
-## Tool profiles
+## Public tool surface
 
-- `compact` is the default complete 12-tool surface.
-- `core` exposes seven high-frequency repository tools for token-sensitive work.
-
-These are the only supported profiles. Old direct tool names and removed profile aliases are rejected. Restart and reconnect after changing the profile so the host refreshes discovery. Exact action contracts and action-level execution metadata are available through `relai://server/tool-surface`.
+Rel.AI always exposes the complete 12-tool capability surface. There is no profile switch or reduced mode. Old direct tool names remain rejected. Exact action contracts and action-level execution metadata are available through `relai://server/tool-surface`.
