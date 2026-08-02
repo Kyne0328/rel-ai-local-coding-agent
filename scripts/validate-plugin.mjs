@@ -6,12 +6,12 @@ const ALLOWED_MANIFEST_FIELDS = new Set([
   'name', 'version', 'description', 'author', 'homepage', 'repository', 'license', 'keywords',
   'skills', 'mcpServers', 'interface'
 ]);
+const BANNED_SKILL_COMMANDS = /\b(?:curl|wget|Invoke-WebRequest|Start-BitsTransfer|git\s+clone)\b/i;
 
 function validatePlugin(root, options = {}) {
   const errors = [];
   const packageJson = readJson(path.join(root, 'package.json'), errors, 'package.json');
-  const manifestPath = path.join(root, '.codex-plugin', 'plugin.json');
-  const manifest = readJson(manifestPath, errors, '.codex-plugin/plugin.json');
+  const manifest = readJson(path.join(root, '.codex-plugin', 'plugin.json'), errors, '.codex-plugin/plugin.json');
   const mcp = readJson(path.join(root, '.mcp.json'), errors, '.mcp.json');
 
   for (const field of Object.keys(manifest || {})) {
@@ -32,7 +32,20 @@ function validatePlugin(root, options = {}) {
 
   validateRelativePath(root, manifest?.skills, 'skills', errors, true);
   validateRelativePath(root, manifest?.mcpServers, 'mcpServers', errors, false);
+  const servers = validateMcpConfig(root, mcp, errors);
+  const skills = validateSkills(root, manifest?.skills, errors);
 
+  if (errors.length) throw new Error(`Plugin validation failed:\n- ${errors.join('\n- ')}`);
+  return {
+    ok: true,
+    name: manifest.name,
+    version: manifest.version,
+    mcpServer: Object.keys(servers)[0],
+    skills
+  };
+}
+
+function validateMcpConfig(root, mcp, errors) {
   const servers = mcp?.mcpServers;
   if (!servers || typeof servers !== 'object' || Array.isArray(servers) || Object.keys(servers).length !== 1) {
     errors.push('.mcp.json must define exactly one mcpServers entry.');
@@ -47,31 +60,55 @@ function validatePlugin(root, options = {}) {
     const entry = String(server?.args?.[0] || '');
     if (entry.startsWith('./') && !fs.existsSync(path.join(root, entry))) errors.push(`MCP entrypoint does not exist: ${entry}`);
   }
+  return servers || {};
+}
 
-  const skillRoot = path.join(root, 'skills', 'rel-ai-workflow');
-  const skill = readText(path.join(skillRoot, 'SKILL.md'), errors, 'skills/rel-ai-workflow/SKILL.md');
-  const frontmatter = skill.match(/^---\n([\s\S]*?)\n---\n/);
-  if (!frontmatter) errors.push('SKILL.md requires YAML frontmatter.');
-  else {
+function validateSkills(root, skillsPath, errors) {
+  const relative = typeof skillsPath === 'string' ? skillsPath : './skills/';
+  const skillRoot = path.resolve(root, relative);
+  if (!fs.existsSync(path.join(skillRoot, 'PROVENANCE.md'))) errors.push('Skill package is missing skills/PROVENANCE.md.');
+  const directories = fs.existsSync(skillRoot)
+    ? fs.readdirSync(skillRoot, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name).sort()
+    : [];
+  const skills = [];
+  for (const directory of directories) {
+    const rootForSkill = path.join(skillRoot, directory);
+    const skillPath = path.join(rootForSkill, 'SKILL.md');
+    if (!fs.existsSync(skillPath)) continue;
+    const label = `skills/${directory}/SKILL.md`;
+    const source = readText(skillPath, errors, label);
+    const frontmatter = source.match(/^---\n([\s\S]*?)\n---\n/);
+    if (!frontmatter) {
+      errors.push(`${label} requires YAML frontmatter.`);
+      continue;
+    }
     const fields = [...frontmatter[1].matchAll(/^([A-Za-z0-9_-]+):/gm)].map(match => match[1]);
-    if (!fields.includes('name') || !fields.includes('description')) errors.push('SKILL.md frontmatter requires name and description.');
-    if (fields.some(field => !['name', 'description'].includes(field))) errors.push('SKILL.md frontmatter may contain only name and description.');
+    if (!fields.includes('name') || !fields.includes('description')) errors.push(`${label} frontmatter requires name and description.`);
+    if (fields.some(field => !['name', 'description'].includes(field))) errors.push(`${label} frontmatter may contain only name and description.`);
+    const name = frontmatter[1].match(/^name:\s*(.+)$/m)?.[1]?.trim() || '';
+    const description = frontmatter[1].match(/^description:\s*(.+)$/m)?.[1]?.trim() || '';
+    if (name !== directory) errors.push(`${label} name must equal its directory.`);
+    if (description.length < 40 || description.length > 500) errors.push(`${label} description must be 40-500 characters.`);
+    const agentPath = path.join(rootForSkill, 'agents', 'openai.yaml');
+    const agent = readText(agentPath, errors, `skills/${directory}/agents/openai.yaml`);
+    for (const field of ['display_name:', 'short_description:', 'default_prompt:']) {
+      if (!agent.includes(field)) errors.push(`skills/${directory}/agents/openai.yaml is missing ${field.slice(0, -1)}.`);
+    }
+    if (!agent.includes(`$${directory}`)) errors.push(`skills/${directory}/agents/openai.yaml default_prompt must reference $${directory}.`);
+    if (fs.existsSync(path.join(rootForSkill, 'scripts'))) errors.push(`${label} may not ship executable scripts in the initial skill set.`);
+    if (BANNED_SKILL_COMMANDS.test(source) || BANNED_SKILL_COMMANDS.test(agent)) {
+      errors.push(`${label} contains a prohibited remote-download command.`);
+    }
+    skills.push(name);
   }
-  for (const relative of ['agents/openai.yaml', 'references/workflows.md', 'references/safety.md']) {
-    if (!fs.existsSync(path.join(skillRoot, relative))) errors.push(`Skill package is missing ${relative}.`);
+  if (!skills.includes('rel-ai-workflow')) errors.push('Skill package must include rel-ai-workflow.');
+  const workflowRoot = path.join(skillRoot, 'rel-ai-workflow');
+  const workflow = readText(path.join(workflowRoot, 'SKILL.md'), errors, 'skills/rel-ai-workflow/SKILL.md');
+  for (const relativeReference of ['references/workflows.md', 'references/safety.md']) {
+    if (!fs.existsSync(path.join(workflowRoot, relativeReference))) errors.push(`Core skill is missing ${relativeReference}.`);
+    if (!workflow.includes(relativeReference)) errors.push(`Core SKILL.md must link ${relativeReference}.`);
   }
-  if (!skill.includes('references/workflows.md') || !skill.includes('references/safety.md')) {
-    errors.push('SKILL.md must link both reference files.');
-  }
-
-  if (errors.length) throw new Error(`Plugin validation failed:\n- ${errors.join('\n- ')}`);
-  return {
-    ok: true,
-    name: manifest.name,
-    version: manifest.version,
-    mcpServer: Object.keys(servers)[0],
-    skill: 'rel-ai-workflow'
-  };
+  return skills.sort();
 }
 
 function validateRelativePath(root, value, field, errors, directory) {
@@ -80,7 +117,7 @@ function validateRelativePath(root, value, field, errors, directory) {
     return;
   }
   const target = path.resolve(root, value);
-  if (!target.startsWith(path.resolve(root) + path.sep) && target !== path.resolve(root)) {
+  if (!target.startsWith(`${path.resolve(root)}${path.sep}`) && target !== path.resolve(root)) {
     errors.push(`Plugin ${field} escapes the plugin root.`);
     return;
   }

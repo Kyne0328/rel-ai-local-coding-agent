@@ -45,14 +45,15 @@ try {
     principal: { issuer: 'https://issuer.example', clientId: 'client-a', subject: 'user-b', authMode: 'oauth', scopes: ['mcp'] }
   };
 
-  const started = await callTool('relai_begin_work', {
+  const started = await callTool('relai_work', { action: 'begin',
     workspace: 'repo',
     title: 'Principal ownership',
     bootstrap: 'none'
   }, owner);
   assert.ok(started.work_id);
   assert.equal(started.identity, 'work_session');
-  assert.deepEqual(started.workspaceBinding, { alias: 'repo' });
+  assert.equal(started.workspace, 'repo');
+  assert.equal(started.workspaceBinding, undefined, 'compact begin omits a duplicate workspace binding');
 
   const continued = await callTool('relai_read', {
     work_id: started.work_id,

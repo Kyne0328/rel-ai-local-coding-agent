@@ -22,13 +22,34 @@ async function handleOpenFolder(ctx) {
 }
 
 async function handleWorkspaceChecks(ctx) {
+  let workId = '';
   try {
     const payload = await readJsonBody(ctx.req, ctx.options.maxBodyBytes);
     const workspace = String(payload.workspace || '').trim();
     if (!workspace) throw new Error('workspace is required');
-    const result = await callTool('relai_run_checks', { workspace }, { publicHttpOnly: false });
+    const started = await callTool('relai_work', {
+      action: 'begin',
+      workspace,
+      title: `Validate ${workspace}`,
+      objective: 'Run the configured repository validation from the desktop dashboard.',
+      bootstrap: 'none'
+    }, { publicHttpOnly: false });
+    workId = started.work_id;
+    const result = await callTool('relai_validate', {
+      action: 'checks',
+      work_id: workId,
+      complete: true,
+      summary: `Dashboard validation completed for ${workspace}.`
+    }, { publicHttpOnly: false });
     sendJson(ctx.res, 200, result, ctx.ae);
   } catch (error) {
+    if (workId) {
+      try {
+        await callTool('relai_work', {
+          action: 'cancel', work_id: workId, reason: 'Dashboard validation could not complete.'
+        }, { publicHttpOnly: false });
+      } catch {}
+    }
     sendJson(ctx.res, 200, { ok: false, error: error instanceof Error ? error.message : String(error) }, ctx.ae);
   }
 }

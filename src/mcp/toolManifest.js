@@ -36,7 +36,9 @@ function buildToolManifest(config = {}) {
 function executionMetadata(surfaceTool) {
   return {
     executionClass: String(surfaceTool?.executionClass || 'bounded_synchronous'),
-    taskSupport: String(surfaceTool?.taskSupport || 'forbidden')
+    taskSupport: String(surfaceTool?.taskSupport || 'forbidden'),
+    ...(Array.isArray(surfaceTool?.executionClasses) ? { executionClasses: [...surfaceTool.executionClasses] } : {}),
+    ...(Array.isArray(surfaceTool?.actions) ? { actions: canonicalValue(surfaceTool.actions) } : {})
   };
 }
 

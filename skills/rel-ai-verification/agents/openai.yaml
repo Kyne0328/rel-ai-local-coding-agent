@@ -1,0 +1,4 @@
+interface:
+  display_name: "Rel.AI Verification"
+  short_description: "Evidence before completion"
+  default_prompt: "Use $rel-ai-verification to execute the checks and review needed to prove the repository work is complete."

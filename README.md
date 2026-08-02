@@ -26,7 +26,7 @@ Tool use is intentionally small but flexible. ChatGPT should skip stages it does
 relai_work begin -> relai_search / relai_inspect -> relai_read -> relai_edit -> relai_validate checks (complete:true + summary)
 ```
 
-No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. First-party application code is ESM-only except for one sandbox-required Electron preload boundary. Rel.AI targets MCP `2026-07-28` through the stable MCP SDK v2 and exposes a default compact profile of 12 tools over stdio and OAuth-protected stateless HTTP. A transitional 30-tool legacy profile is available only through explicit configuration. Modern clients use `server/discover` with per-request protocol, client, and capability metadata; HTTP also accepts ChatGPT's SDK-supported stateless initialize flow. Neither mode creates transport-session identity.
+No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. First-party application code is ESM-only except for one sandbox-required Electron preload boundary. Rel.AI targets MCP `2026-07-28` through the stable MCP SDK v2. The default `compact` profile exposes the complete 12-tool surface, while the token-sensitive `core` profile exposes seven high-frequency tools. These are the only supported profiles; the former 30-tool direct surface and redundant profile aliases were removed in a hard cutover. Modern clients use `server/discover` with per-request protocol, client, and capability metadata; HTTP also accepts ChatGPT's SDK-supported stateless initialize flow. Neither mode creates transport-session identity.
 
 Logical coding work is isolated by an opaque workspace-bound `work_id`, persistent commands by `processId`, native asynchronous work by MCP Task IDs, worktrees by dynamic workspace alias, and resumable approvals by signed `requestState`. After task creation, task-scoped tools require `work_id` and resolve the bound workspace automatically; an optional `workspace` argument acts only as an ownership assertion.
 
@@ -207,9 +207,9 @@ The important design choice: ChatGPT does the thinking, but the local bridge kee
 
 ### Unified plugin
 
-The repository and packaged npm artifact include one versioned `rel-ai` plugin containing both the MCP connector and the `rel-ai-workflow` skill. Install, update, or remove the plugin as one unit in a compatible host. The connector and skill remain separate internal files. See [docs/PLUGIN.md](docs/PLUGIN.md) for the package layout and artifact verification.
+The repository and packaged npm artifact include one versioned `rel-ai` plugin containing the MCP connector, the core `rel-ai-workflow` skill, and focused first-party investigation, debugging, verification, and persistent-development-process skills. Install, update, or remove the plugin as one unit in a compatible host. Connector and skills remain separate internal files. See [docs/PLUGIN.md](docs/PLUGIN.md) for the package layout, provenance policy, and artifact verification.
 
-Bundling the connector and skill does not itself reduce MCP discovery context. The default 12-tool compact profile and the sub-512-byte global instructions provide that reduction. Direct HTTP and stdio clients remain fully usable without loading the skill.
+Bundling the connector and skills does not itself reduce MCP discovery context. Tool profiles and the sub-512-byte global instructions provide that reduction. Detailed skill procedures load only when selected, and direct HTTP and stdio clients remain fully usable without loading a skill.
 
 ### Windows desktop app
 
@@ -224,7 +224,7 @@ The one thing it cannot create for you is an ngrok account. Before first launch,
 
 The setup wizard asks for both on first run, stores them locally, and starts the server and tunnel for you. Every launch after that goes straight to the dashboard.
 
-The app lives in the system tray. Closing a window leaves it running; quit it from the tray menu.
+The app lives in the system tray. Closing a window leaves it running; quit it from the tray menu. When one or more work sessions are explicitly completed while the app is not open, the Windows taskbar icon shows a numbered completion overlay. Opening or focusing any Rel.AI window clears the indicator.
 
 Installed Windows builds check for application updates once per day. Downloads and restart-to-install are always explicit from **Settings > General** or the tray, and restart is blocked while a Rel.AI tool call is active. Portable builds update manually from the Releases page.
 
@@ -251,7 +251,7 @@ See [docs/ONE_CLICK_SETUP.md](docs/ONE_CLICK_SETUP.md) for the full setup walkth
 
 **Open dashboard** shows the full dashboard inside a secured Electron window. The same dashboard is also reachable in a normal browser at the local `/dashboard` route; Electron is the default host, not a separate implementation. The desktop host exchanges a single-use bootstrap code for an HttpOnly local session cookie, so the long-lived approval token is never stored in the embedded renderer or left in its URL.
 
-The dashboard includes grouped **Sessions**, managed **Processes** with recent output and stop controls, lower-level **Activity**, workspace-scoped filtering, operational Git and validation state, actionable diagnostics, live/reconnecting status, and persistent desktop window and route state. Work is grouped by explicit logical `work_id`, not by MCP connection, repository, or assumed ChatGPT conversation identity. Multiple tasks may share one client connection while retaining independent activity and completion state. A task is marked completed only after an explicit completion signal: either `relai_validate` action `checks` with `complete:true` and `summary`, or `relai_work` action `finish` after a post-validation read-only review. Otherwise inactivity closes it as cancelled without claiming the overall request finished.
+The dashboard includes grouped **Sessions**, managed **Processes** with recent output and stop controls, lower-level **Activity**, workspace-scoped filtering, operational Git and validation state, actionable diagnostics, live/reconnecting status, and persistent desktop window and route state. Work is grouped by explicit logical `work_id`, not by MCP connection, repository, or assumed ChatGPT conversation identity. Multiple tasks may share one client connection while retaining independent activity and completion state. A task is marked completed only after an explicit completion signal: either `relai_validate` action `checks` with `complete:true` and `summary`, or `relai_work` action `finish` after a post-validation read-only review. Otherwise inactivity closes it as cancelled without claiming the overall request finished. Explicit completions increment the Windows taskbar overlay only while the desktop app is not being viewed; opening or focusing the app acknowledges and clears the count.
 
 ---
 
@@ -275,9 +275,10 @@ Then:
 npm run electron:dev         # run the desktop app from source
 npm run electron:dist        # build the Windows installer into dist/
 npm run audit:production     # production dependency security gate
-npm run validate:plugin      # validate plugin, MCP, and skill manifests
-npm run measure:tool-surface # enforce tool, schema, instruction, result, and call budgets
-npm run test:plugin          # verify install and removal from the built npm artifact
+npm run validate:plugin      # validate plugin, MCP, skill metadata, and provenance
+npm run test:skills          # verify modular skill ownership and trigger contracts
+npm run test:tool-budgets    # enforce tool, instruction, result, and skill budgets
+npm run test:plugin          # verify extracted runtime parity, calls, and removal
 npm test                     # full suite
 npm run knip                 # full unused files, dependencies, and exports audit
 npm run knip:production      # production-only dead-code audit
@@ -302,15 +303,15 @@ The default compact profile exposes 12 capability-oriented tools through MCP SDK
 | `relai_inspect` | `symbol`, `references`, `related`, `impact`, `trace`, `diagnostics`. |
 | `relai_edit` | Exact replacement, full-file, patch, batch, environment, and staged edits. |
 | `relai_exec` | One bounded one-shot workspace command. |
-| `relai_process` | Managed process `start`, `read`, `write`, `stop`, `list`. |
+| `relai_process` | Persistent service, watcher, or interactive process `start`, `read`, `write`, `stop`, `list`; start requires `kind` and `purpose`, and list is active-only by default. |
 | `relai_worktree` | Managed worktree `create`, `list`, `remove`. |
 | `relai_validate` | Validation `checks`, structured `diagnostics`, and local `http` probes. |
 | `relai_changes` | `diff`, `restore`, `reset`, `tidy_plan`, `tidy_run`. |
 | `relai_publish` | `commit`, `push`, and local `draft_pr` generation. |
 
-The compact profile is understandable and safe without the bundled skill. The skill adds workflow guidance only in hosts that support and load plugin skills. Packaging the skill with the connector does not itself reduce MCP discovery cost; the smaller schemas and global instructions provide the direct savings.
+The public surface is understandable and safe without packaged skills. Skills add progressively disclosed workflow guidance only in hosts that support and load them; server-side ownership, approvals, limits, Task negotiation, and destructive safeguards remain authoritative.
 
-Set `"toolProfile": "legacy"` only for migration or compatibility testing. Compact and legacy profiles are mutually exclusive, and the legacy registry remains transitional. See [docs/TOOL_PROFILE_MIGRATION.md](docs/TOOL_PROFILE_MIGRATION.md) for every mapping and [docs/PLUGIN.md](docs/PLUGIN.md) for plugin packaging and verification.
+Omit `toolProfile` or use `"compact"` for the default complete surface. Use `"core"` for the seven-tool token-sensitive surface. These are the only accepted values; removed profiles and old direct tool names fail closed. Exact action fields and action-level execution metadata are available through `relai://server/tool-surface`. See [docs/TOOL_PROFILES.md](docs/TOOL_PROFILES.md) and [docs/PLUGIN.md](docs/PLUGIN.md).
 
 ---
 
@@ -340,7 +341,7 @@ The runtime roadmap is in [docs/CHATGPT_CODING_RUNTIME_ROADMAP.md](docs/CHATGPT_
 
 A repository work session (`work_id`) groups one objective across multiple Rel.AI tool calls. A native MCP Task (`taskId`) represents one asynchronous MCP operation. A managed process (`processId`) represents one operating-system process and may continue after its startup task completes.
 
-Both HTTP and stdio advertise native Tasks support. A native task handle is returned only when the current request advertises `io.modelcontextprotocol/tasks`; otherwise eligible work uses bounded synchronous execution. Rel.AI cannot force ChatGPT or another client to advertise the capability. Persistent commands always use `relai_process` actions, and a completed startup task does not stop its running process.
+Both HTTP and stdio advertise native Tasks support. A native task handle is returned only when the current request advertises `io.modelcontextprotocol/tasks`; otherwise eligible work uses bounded synchronous execution. Rel.AI does not silently turn a long one-shot command into a managed process or asynchronous job. Persistent services, watchers, and interactive programs use `relai_process`; one-shot tests, builds, checks, and release gates use `relai_exec` or `relai_validate`. A completed process-startup Task does not stop its running process.
 
 See [docs/NATIVE_TASKS_RELEASE_GATE.md](docs/NATIVE_TASKS_RELEASE_GATE.md) for the capability matrix, diagnostics, lifecycle rules, and release gate.
 
@@ -358,7 +359,7 @@ A nonzero command exit is returned normally with `ok:false`, preserving compiler
 
 `relai_exec` does not count as final validation, even when it runs a test command. After the last relevant mutation, use `relai_validate` action `checks`. Pass `complete:true` with `summary` on the final validation to close atomically, or validate without completion when a read-only review must follow.
 
-Persistent processes use `relai_process`; isolated branches use `relai_worktree`; and `relai_validate` action `checks` performs change-aware validation planning internally. These handles are explicit and survive the stateless protocol boundary.
+Persistent services, watchers, and interactive programs use `relai_process` with an explicit `kind` and `purpose`; isolated branches use `relai_worktree`; and `relai_validate` action `checks` performs change-aware validation planning internally. Process listing returns active records by default, while `includeTerminal:true` exposes recent history. Process reads support `metadataRevision` so repeated polling can omit unchanged metadata. These handles are explicit and survive the stateless protocol boundary.
 
 `relai_validate` action `checks` can run explicit validation checks inside configured workspaces:
 
@@ -398,11 +399,12 @@ Use this guide together with the `writeGuidance` returned by `relai_snapshot` an
 | Multi-file patch-shaped change | `relai_edit` with `updateText` |
 | Several edits in one approval | `relai_edit` with `edits: [...]` |
 | Tidy session-created files | `relai_changes` action `tidy_plan`, then `tidy_run` |
-| Install dependencies, run migrations, or invoke repository tooling | `relai_exec`; use `relai_process` when the command must remain interactive or persistent |
-| Run work that may exceed bounded synchronous execution | Call the normal eligible tool. Hosts advertising `io.modelcontextprotocol/tasks` may receive a native Task and use MCP `tasks/get`, `tasks/update`, and `tasks/cancel`; persistent commands still use `relai_process`. |
+| Install dependencies, run migrations, tests, builds, linters, release gates, or other one-shot tooling | `relai_exec` or `relai_validate`; never use a managed process for work expected to terminate with one result |
+| Run work that may exceed bounded synchronous execution | Call the normal eligible one-shot tool. Hosts advertising `io.modelcontextprotocol/tasks` may receive a native Task and use MCP `tasks/get`, `tasks/update`, and `tasks/cancel`; without Tasks, the bounded call fails rather than becoming a fake persistent service. |
 | Validate and finish atomically | `relai_validate` action `checks` with the task's `work_id`, `complete:true`, and `summary` |
 | Finish after a post-validation read-only review | `relai_work` action `finish` with the same `work_id` after the final successful validation and review |
-| Probe a local HTTP route | `relai_validate` action `http` |
+| Start a persistent service, watcher, or interactive program | `relai_process` action `start` with `kind` and `purpose`; use byte offsets and `metadataRevision` for incremental reads |
+| Probe a local HTTP route | `relai_validate` action `http`; this action is bounded synchronous and is not native-Task eligible |
 | Run a declared UI/browser validation script | `relai_validate` action `checks` with the exact package script command |
 | Read workspace and repository state | `relai_work` action `status` |
 | Review file changes | `relai_changes` action `diff` |

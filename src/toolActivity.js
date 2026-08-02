@@ -211,7 +211,9 @@ function createToolActivityTracker(options = {}) {
           : (completionActivity.status === 'blocked' ? 'blocked' : 'succeeded');
       const blockedResult = current.activity.status === 'blocked';
       const validationStatus = String(current.activity?.metadata?.validationStatus || '');
-      const recoverableValidationFailure = current.tool === 'relai_run_checks' && ['failed', 'not_run'].includes(validationStatus);
+      const validationTool = current.tool === 'relai_run_checks'
+        || current.activity?.metadata?.internalOperation === 'relai_run_checks';
+      const recoverableValidationFailure = validationTool && ['failed', 'not_run'].includes(validationStatus);
       if (!terminalBeforeFinish && result.ok === false && !blockedResult && !recoverableValidationFailure) task.failures += 1;
       if (!terminalBeforeFinish) task.lastOutcome = blockedResult ? 'blocked' : result.ok === false ? 'failed' : 'succeeded';
       current.activity.completedAt = new Date(finishedAt).toISOString();

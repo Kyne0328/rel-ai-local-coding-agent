@@ -80,6 +80,7 @@ function createTaskActivityRuntime(options) {
     iconPath = '',
     isReady = () => true,
     onNotificationClick = () => {},
+    onTaskCompleted = () => {},
     onStatusChange = () => {}
   } = options;
   const blocker = createToolSleepBlocker(powerSaveBlocker);
@@ -92,7 +93,10 @@ function createTaskActivityRuntime(options) {
   function handleActivity(event) {
     syncBlocker();
     if (event.phase === 'finished' && event.ok === false) showFailureNotification(event);
-    if (event.phase === 'completed' && event.task?.completionKnown === true) showCompletionNotification(event.task);
+    if (event.phase === 'completed' && event.task?.completionKnown === true) {
+      showCompletionNotification(event.task);
+      onTaskCompleted(event.task);
+    }
     emitStatus();
   }
 

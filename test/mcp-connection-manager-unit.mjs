@@ -9,10 +9,10 @@ import { runtimeMetadata } from '../src/runtimeCompatibility.js';
 
 const neutralManifest = buildToolManifest({});
 assert.equal(neutralManifest.version, buildToolManifest({}).version, 'neutral manifest must be deterministic');
-assert.notEqual(
+assert.equal(
   neutralManifest.version,
   buildToolManifest({ workspaces: { repo: { path: process.cwd() } } }).version,
-  'live manifests must detect client-visible workspace alias schema changes'
+  'workspace aliases must not churn the stable tool manifest'
 );
 assert.equal(runtimeMetadata().manifestHash, neutralManifest.version, 'release compatibility must use the configuration-neutral manifest');
 

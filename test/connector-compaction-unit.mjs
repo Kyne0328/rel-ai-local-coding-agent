@@ -74,7 +74,7 @@ console.log('3. policy sentence: OK');
 const checksCompact = compactForConnector('relai_run_checks', {
   ok: true, workspace: 'app', level: 'standard',
   checks: ['npm run check'], commands: ['npm run check'],
-  results: [{ command: 'npm run check', ok: true }],
+  results: [{ command: 'npm run check', ok: true, exitCode: 0, durationMs: 50, stdout: 'success noise', stderr: '', stdoutBytes: 13, stderrBytes: 0 }],
   validationLevel: 'focused', validationLevelReason: 'single source file',
   changedFiles: ['x.js'], policy: { trusted: true, sessionActive: false, baselineDirty: [], source: 'default' }
 }, {});
@@ -83,6 +83,13 @@ assert.equal(checksCompact.validationLevel, undefined, 'internal telemetry dropp
 assert.equal(checksCompact.changedFiles, undefined, 'changedFiles telemetry dropped');
 assert.equal(checksCompact.policy, undefined, 'default policy dropped');
 assert.deepEqual(checksCompact.checks, ['npm run check']);
+assert.equal(checksCompact.results[0].stdout, undefined, 'successful check output must be omitted');
+assert.equal(checksCompact.results[0].durationMs, 50);
+const failedChecksCompact = compactForConnector('relai_run_checks', {
+  ok: false,
+  results: [{ command: 'npm test', ok: false, exitCode: 1, stderr: 'failure details', stderrBytes: 15 }]
+}, {});
+assert.equal(failedChecksCompact.results[0].stderr, 'failure details', 'failed check diagnostics must remain actionable');
 const completedChecksCompact = compactForConnector('relai_run_checks', {
   ok: true, workspace: 'app', level: 'standard', checks: ['npm test'], results: [{ command: 'npm test', ok: true }],
   validated: true, validationStatus: 'passed', completionKnown: true, endReason: 'explicit_completion',
@@ -122,6 +129,30 @@ assert.equal(execCompact.exitCode, 2);
 assert.equal(execCompact.stderr, 'test failed');
 assert.deepEqual(execCompact.changedFiles, ['package-lock.json']);
 assert.deepEqual(execCompact.environmentKeys, ['CI']);
+const execSuccessCompact = compactForConnector('relai_exec', {
+  ok: true,
+  workspace: 'app',
+  command: 'node --check src/index.js',
+  cwd: '.',
+  shell: 'PowerShell 7',
+  exitCode: 0,
+  durationMs: 40,
+  stdout: '',
+  stderr: '',
+  stdoutBytes: 0,
+  stderrBytes: 0,
+  stdoutTruncated: false,
+  stderrTruncated: false,
+  timedOut: false,
+  changedFiles: [],
+  changedFilesTruncated: false,
+  mutationTracking: 'git'
+}, {});
+assert.equal(execSuccessCompact.cwd, undefined);
+assert.equal(execSuccessCompact.shell, undefined);
+assert.equal(execSuccessCompact.stdout, undefined);
+assert.equal(execSuccessCompact.changedFiles, undefined);
+assert.ok(Buffer.byteLength(JSON.stringify(execSuccessCompact)) < 1000);
 console.log('5. relai_exec compacted: OK');
 
 const snapshotCompact = compactForConnector('relai_repo_snapshot', {
@@ -153,6 +184,15 @@ assert.deepEqual(snapshotCompact.projectInstructions, { sources: ['REL_AI.md'], 
 assert.equal(snapshotCompact.skipped, undefined, 'skipped entry list dropped on connector');
 assert.equal(snapshotCompact.skippedCount, 1, 'skipped list replaced by a count');
 assert.deepEqual(snapshotCompact.git, { branch: 'main', aheadBehind: { ahead: 0, behind: 0 }, dirtyFiles: 1, changedFiles: ['src/app.js'] }, 'git summary passes through compaction');
+const largeSnapshot = compactForConnector('relai_repo_snapshot', {
+  ok: true,
+  workspace: 'app',
+  fileCount: 2000,
+  files: Array.from({ length: 2000 }, (_, index) => `src/generated/path-${String(index).padStart(4, '0')}.js`)
+}, {});
+assert.equal(largeSnapshot.truncated, true);
+assert.ok(largeSnapshot.omittedFiles > 0);
+assert.ok(Buffer.byteLength(JSON.stringify(largeSnapshot)) < 16000);
 console.log('6. repo snapshot compacted: OK');
 
 const readCompact = compactForConnector('relai_read', {
@@ -179,5 +219,42 @@ const fullRead = compactForConnector('relai_read', {
 assert.equal(fullRead.items[0].cacheHit, undefined, 'cache metadata stays hidden in full guidance mode');
 assert.deepEqual(fullRead.items[0].writeGuidance, { recommendedMode: 'exact-replace' });
 console.log('7. relai_read compacted: OK');
+
+const processList = compactForConnector('relai_process_list', {
+  ok: true,
+  count: 1,
+  processes: [{
+    ok: true,
+    processId: 'proc_example',
+    pid: 100,
+    workspace: 'app',
+    workspaceId: 'app',
+    label: 'Development server',
+    kind: 'service',
+    purpose: 'Serve the frontend.',
+    commandSummary: 'npm run dev',
+    cwd: '.',
+    status: 'running',
+    lifecycle: 'persistent',
+    metadataRevision: 'revision12345678',
+    startedAt: '2026-08-02T00:00:00.000Z',
+    stdoutBytes: 10,
+    stderrBytes: 0,
+    environmentKeys: []
+  }]
+}, {});
+assert.equal(processList.processes[0].commandSummary, undefined);
+assert.equal(processList.processes[0].workspaceId, undefined);
+assert.equal(processList.processes[0].kind, 'service');
+const processDelta = compactForConnector('relai_process_read', {
+  ok: true,
+  processId: 'proc_example',
+  status: 'running',
+  metadataRevision: 'revision12345678',
+  stdout: { text: '', nextOffset: 10 },
+  stderr: { text: '', nextOffset: 0 }
+}, {});
+assert.ok(Buffer.byteLength(JSON.stringify(processDelta)) < 500);
+console.log('8. process results compacted: OK');
 
 console.log('connector compaction unit tests passed.');

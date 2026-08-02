@@ -67,7 +67,7 @@ function buildDashboardPayload(config, options = {}, requireHttpToken = false) {
     auditTail,
     tasks,
     workspaceStates,
-    managedProcesses: listManagedProcesses(config, { limit: 200 }).processes
+    managedProcesses: listManagedProcesses(config, { limit: 200, activeOnly: true }).processes
   };
 }
 

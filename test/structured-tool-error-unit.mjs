@@ -33,7 +33,7 @@ async function invoke(name, args, context = {}) {
 }
 
 try {
-  const initialTaskResponse = await invoke('relai_begin_work', { workspace: 'repo', bootstrap: 'none' });
+  const initialTaskResponse = await invoke('relai_work', { action: 'begin', workspace: 'repo', bootstrap: 'none' });
   const initialTaskId = initialTaskResponse.structuredContent.work_id;
   const response = await invoke('relai_read', { work_id: initialTaskId, paths: ['.env'], guidanceMode: 'none' });
 
@@ -44,7 +44,7 @@ try {
   assert.match(readPayload.skipped[0].reason, /blocked sensitive path/);
   assert.doesNotMatch(JSON.stringify(readPayload), /not-returned/);
 
-  const dotWorkspaceResponse = await invoke('relai_begin_work', { workspace: '.' }, { publicHttpOnly: true });
+  const dotWorkspaceResponse = await invoke('relai_work', { action: 'begin', workspace: '.' }, { publicHttpOnly: true });
   assert.equal(dotWorkspaceResponse.isError, true);
   const dotWorkspace = dotWorkspaceResponse.structuredContent;
   assert.equal(dotWorkspace.errorCode, 'WORKSPACE_AMBIGUOUS_RELATIVE_INPUT');
@@ -54,19 +54,20 @@ try {
   assert.deepEqual(dotWorkspace.errorDetails.configuredWorkspaceAliases, ['repo']);
   assert.match(dotWorkspace.error, /configured workspace alias/);
 
-  const directPathResponse = await invoke('relai_begin_work', { workspace: workspaceRoot, bootstrap: 'none' }, { publicHttpOnly: true });
+  const directPathResponse = await invoke('relai_work', { action: 'begin', workspace: workspaceRoot, bootstrap: 'none' }, { publicHttpOnly: true });
   assert.equal(directPathResponse.isError, false);
   assert.equal(directPathResponse.structuredContent.workspace, 'repo');
   const taskId = directPathResponse.structuredContent.work_id;
 
   const unknownPath = path.join(tmp, 'unknown-repo');
   fs.mkdirSync(unknownPath);
-  const unknownPathResponse = await invoke('relai_begin_work', { workspace: unknownPath }, { publicHttpOnly: true });
+  const unknownPathResponse = await invoke('relai_work', { action: 'begin', workspace: unknownPath }, { publicHttpOnly: true });
   assert.equal(unknownPathResponse.isError, true);
   assert.equal(unknownPathResponse.structuredContent.errorCode, 'WORKSPACE_PATH_NOT_CONFIGURED');
 
-  const omittedWorkspaceResponse = await invoke('relai_begin_work', {}, { publicHttpOnly: true });
-  assert.equal(omittedWorkspaceResponse.structuredContent.errorCode, 'WORKSPACE_INPUT_OMITTED');
+  const omittedWorkspaceResponse = await invoke('relai_work', { action: 'begin' }, { publicHttpOnly: true });
+  assert.equal(omittedWorkspaceResponse.isError, true);
+  assert.match(omittedWorkspaceResponse.structuredContent.error, /Missing required field 'workspace'/);
 
   const writeResponse = await invoke('relai_edit', { workspace: 'repo', work_id: taskId, path: '.env', content: 'API_KEY=replacement\n' }, { publicHttpOnly: true });
 
@@ -83,7 +84,7 @@ try {
   assert.ok(payload.errorDetails.allowedAlternatives.some((item) => item.includes('.env.example')));
   assert.doesNotMatch(JSON.stringify(payload), /replacement|not-returned/);
 
-  const largeFailureResponse = await invoke('relai_run_checks', {
+  const largeFailureResponse = await invoke('relai_validate', { action: 'checks',
     workspace: 'repo',
     work_id: taskId,
     check: `node -e "process.stderr.write('failure-detail-'.repeat(800));process.exit(1)"`

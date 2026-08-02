@@ -294,20 +294,20 @@ try {
   const callEvents = [];
   const stopListening = onToolActivity(event => callEvents.push(event));
 
-  await callTool('relai_status', {}, { publicHttpOnly: true });
+  await callTool('relai_work', { action: 'status' }, { publicHttpOnly: true });
   assert.deepEqual(callEvents.slice(0, 2).map(event => [event.phase, event.tool, event.activeConnectorCalls]), [
-    ['started', 'relai_status', 1],
-    ['finished', 'relai_status', 0]
+    ['started', 'relai_work', 1],
+    ['finished', 'relai_work', 0]
   ]);
   assert.equal(callEvents[0].taskId, '');
   assert.equal(callEvents[1].taskId, '');
   assert.equal(getToolActivity().activeTaskCount, 0, 'taskless status calls must not create logical sessions');
 
   callEvents.length = 0;
-  await callTool('relai_status', {}, { publicHttpOnly: false });
+  await callTool('relai_work', { action: 'status' }, { publicHttpOnly: false });
   assert.deepEqual(callEvents.map(event => [event.phase, event.tool, event.activeConnectorCalls]), [
-    ['started', 'relai_status', 0],
-    ['finished', 'relai_status', 0]
+    ['started', 'relai_work', 0],
+    ['finished', 'relai_work', 0]
   ], 'stdio/local calls must be grouped without activating the connector sleep blocker');
   assert.equal(callEvents[0].taskId, '');
   assert.equal(callEvents[1].taskId, '');

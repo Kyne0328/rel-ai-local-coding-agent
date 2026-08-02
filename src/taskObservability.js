@@ -14,7 +14,7 @@ const ALLOWED_METADATA_KEYS = new Set([
   'checkCount', 'passedCount', 'failedCount', 'skippedCount', 'exitCode', 'durationMs', 'stdoutBytes', 'stderrBytes',
   'stdoutTruncated', 'stderrTruncated', 'timedOut', 'commit', 'branch', 'remote', 'processId', 'pid', 'status',
   'affectedItemCount', 'warningCount', 'retryable', 'errorCode', 'cacheHit', 'operationTaskId', 'progress',
-  'currentCheck', 'currentIndex', 'resultStatus', 'failedCheck', 'cancelled'
+  'currentCheck', 'currentIndex', 'resultStatus', 'failedCheck', 'cancelled', 'internalOperation', 'publicAction'
 ]);
 
 function deriveTaskTitle(details = {}) {

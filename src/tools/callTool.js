@@ -12,7 +12,7 @@ import { compactForConnector } from './connector.js';
 import { enhanceToolError } from './errors.js';
 import { executeToolCall } from './execution.js';
 import { describeToolOperation } from './operation.js';
-import { getLegacyExecutableToolDefinition, resolveExecutableToolCall } from './runtimeRegistry.js';
+import { resolveExecutableToolCall } from './runtimeRegistry.js';
 import { getToolNames, isToolCallable } from './schema.js';
 import { applyCautionAudit, buildExtraAudit, invalidateSessionCacheForCall } from './session.js';
 import { assertKnownTask, taskAuditContext, withTaskIdentity } from './task.js';
@@ -32,10 +32,8 @@ async function callTool(name, args = {}, context = {}) {
   let activityResult = { ok: true };
   let sessionStart;
   try {
-    const publicCallable = isToolCallable(name, config);
-    const internalLegacy = getLegacyExecutableToolDefinition(name);
-    if (!publicCallable && !internalLegacy) {
-      throw new Error(`Unknown tool '${name}'. Available tools: ${getToolNames(config).join(', ')}. Restart or reconnect if discovery is stale.`);
+    if (!isToolCallable(name, config)) {
+      throw new Error(`Unknown tool '${name}'. Available tools: ${getToolNames(config).join(', ')}. Removed direct operation names are not callable; restart or reconnect if discovery is stale.`);
     }
     const resolved = resolveExecutableToolCall(name, publicArgs, config);
     if (!resolved) throw new Error(`Unknown tool '${name}'.`);
@@ -100,7 +98,7 @@ async function callTool(name, args = {}, context = {}) {
     activityResult.activity = buildToolActivityDetails(operationName, effectiveArgs || {}, value, valueOk ? null : activityResult.error, {
       operation: finishActivity?.operation,
       phase: 'complete',
-      metadata: { ...extraAudit, publicTool: name, action: resolved.action || undefined }
+      metadata: { ...extraAudit, internalOperation: operationName, publicAction: resolved.action || undefined }
     });
     applyCautionAudit(extraAudit, operationName, effectiveArgs || {}, value, config);
     invalidateSessionCacheForCall(config, operationName, effectiveArgs || {});

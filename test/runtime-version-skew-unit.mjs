@@ -11,13 +11,15 @@ const {
 
 const current = runtimeMetadata();
 assert.equal(current.applicationVersion, '0.23.0');
-assert.equal(current.toolSurfaceVersion, 29);
+assert.equal(current.toolSurfaceVersion, 31);
 assert.equal(current.toolCount, 12);
 assert.match(current.manifestHash, /^[A-Za-z0-9_-]{24}$/);
 
-const legacy = runtimeMetadata({ toolProfile: 'legacy' });
-assert.equal(legacy.toolCount, 30);
-assert.notEqual(legacy.manifestHash, current.manifestHash);
+const core = runtimeMetadata({ toolProfile: 'core' });
+assert.equal(core.toolCount, 7);
+assert.notEqual(core.manifestHash, current.manifestHash);
+assert.throws(() => runtimeMetadata({ toolProfile: 'legacy' }), /Removed profiles|Invalid Rel\.AI tool profile/);
+assert.throws(() => runtimeMetadata({ toolProfile: 'full' }), /Removed profiles|Invalid Rel\.AI tool profile/);
 const configured = runtimeMetadata({
   toolProfile: 'compact',
   workspaces: { repo: { path: process.cwd() }, another: { path: os.tmpdir() } }

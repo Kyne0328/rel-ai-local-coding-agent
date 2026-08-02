@@ -33,7 +33,10 @@ const forbidden = [
   'isPreparedWorkflow',
   'maxBundleBytes',
   'clearMissingDefault',
-  'removedLegacyWorkflows'
+  'removedLegacyWorkflows',
+  'LEGACY_TO_COMPACT',
+  'LEGACY_TOOL_NAMES',
+  'getLegacyExecutableToolDefinition'
 ];
 
 function collectFiles(directory) {

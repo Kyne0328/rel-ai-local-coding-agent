@@ -1,49 +1,87 @@
 import { TOOL_SURFACE_VERSION } from './compactRegistry.js';
-import { LEGACY_TO_COMPACT } from './dispatch.js';
-import { TOOL_PROFILE, profileFromConfig } from './profile.js';
+import { COMPACT_OPERATIONS } from './dispatch.js';
+import { profileFromConfig } from './profile.js';
 import { definitionsFor } from './profileRegistry.js';
+import { getToolDefinition as getOperationDefinition } from './registry.js';
 import { schemaFromDefinition } from './schemaBuilder.js';
 
 function getToolMetadata(config = {}) {
-  return definitionsFor(config).map(definition => ({
-    name: definition.name,
-    title: definition.title || definition.name,
-    displayName: definition.name.replace(/^relai_/, '').replaceAll('_', ' '),
-    description: definition.description || '',
-    category: definition.dashboard?.category || 'Workspace tools',
-    requiredProfile: definition.dashboard?.requiredProfile || 'workspace',
-    requiresApproval: definition.dashboard?.requiresApproval === true,
-    state: definition.lifecycle?.state || 'active',
-    replacements: definition.lifecycle?.replacements || (definition.lifecycle?.replacement ? [definition.lifecycle.replacement] : []),
-    parameters: Object.keys(schemaFromDefinition(definition).inputSchema.properties || {}),
-    outputFields: Object.keys(definition.outputSchema?.properties || {}),
-    longRunning: definition.behavior?.longRunning === true,
-    taskScope: definition.behavior?.taskScope || 'required',
-    executionClass: definition.behavior?.executionClass || 'bounded_synchronous',
-    taskSupport: definition.execution?.taskSupport || 'forbidden'
-  }));
+  return definitionsFor(config).map(definition => {
+    const actions = actionMetadata(definition);
+    return {
+      name: definition.name,
+      title: definition.title || definition.name,
+      displayName: definition.name.replace(/^relai_/, '').replaceAll('_', ' '),
+      description: definition.description || '',
+      category: definition.dashboard?.category || 'Workspace tools',
+      requiredProfile: definition.dashboard?.requiredProfile || 'workspace',
+      requiresApproval: definition.dashboard?.requiresApproval === true,
+      state: 'active',
+      replacements: [],
+      parameters: Object.keys(schemaFromDefinition(definition).inputSchema.properties || {}),
+      outputFields: Object.keys(definition.outputSchema?.properties || {}),
+      longRunning: definition.behavior?.longRunning === true,
+      taskScope: definition.behavior?.taskScope || 'required',
+      executionClass: definition.behavior?.executionClass || 'bounded_synchronous',
+      taskSupport: aggregateTaskSupport(definition, actions),
+      ...(actions.length ? { actions } : {})
+    };
+  });
 }
 
 function getToolSurfaceManifest(config = {}) {
-  const profile = profileFromConfig(config);
-  const tools = definitionsFor(config).map(definition => ({
-    name: definition.name,
-    state: definition.lifecycle?.state || 'active',
-    executionClass: definition.behavior?.executionClass || 'bounded_synchronous',
-    taskSupport: definition.execution?.taskSupport || 'forbidden'
-  }));
+  const tools = definitionsFor(config).map(definition => {
+    const actions = actionMetadata(definition);
+    return {
+      name: definition.name,
+      state: 'active',
+      executionClass: definition.behavior?.executionClass || 'bounded_synchronous',
+      taskSupport: aggregateTaskSupport(definition, actions),
+      ...(actions.length ? {
+        executionClasses: [...new Set(actions.map(action => action.executionClass))],
+        actions
+      } : {})
+    };
+  });
   return {
-    schemaVersion: 2,
+    schemaVersion: 4,
     toolSurfaceVersion: TOOL_SURFACE_VERSION,
-    profile,
+    profile: profileFromConfig(config),
     toolCount: tools.length,
     tools,
-    deprecations: profile === TOOL_PROFILE.LEGACY
-      ? tools.map(tool => ({ ...tool, state: 'deprecated', note: 'Transitional migration profile.' }))
-      : [],
-    compatibilityAliases: {},
-    migration: profile === TOOL_PROFILE.COMPACT ? LEGACY_TO_COMPACT : {}
+    deprecations: [],
+    compatibilityAliases: {}
   };
+}
+
+function actionMetadata(definition) {
+  const contracts = Array.isArray(definition.actionContracts) ? definition.actionContracts : [];
+  const mappings = COMPACT_OPERATIONS[definition.name] || {};
+  return contracts.map(contract => {
+    const mapping = mappings[contract.action];
+    const operation = mapping?.tool || '';
+    const executable = getOperationDefinition(operation);
+    const taskScoped = executable?.behavior?.taskScope === 'required';
+    const required = [...contract.required];
+    if (taskScoped && !required.includes('work_id')) required.push('work_id');
+    return {
+      action: contract.action,
+      operation,
+      fields: [...contract.fields],
+      required: required.sort(),
+      executionClass: executable?.behavior?.executionClass || 'bounded_synchronous',
+      taskSupport: executable?.execution?.taskSupport || 'forbidden',
+      taskScope: executable?.behavior?.taskScope || 'required',
+      concurrencyScope: executable?.behavior?.concurrencyScope || 'task',
+      annotations: executable?.annotations || definition.annotations || {}
+    };
+  });
+}
+
+function aggregateTaskSupport(definition, actions) {
+  return actions.some(action => action.taskSupport === 'optional')
+    ? 'optional'
+    : definition.execution?.taskSupport || 'forbidden';
 }
 
 function getToolGroups(config = {}) {
