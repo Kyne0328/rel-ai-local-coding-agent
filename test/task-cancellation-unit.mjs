@@ -66,9 +66,9 @@ try {
   const { resetToolActivity } = await import('../src/toolActivity.js');
   resetToolActivity();
   const context = { publicHttpOnly: true, requestId: 'cancel-test' };
-  const started = await callTool('relai_begin_work', { workspace: 'app', title: 'Cancelable task' }, context);
+  const started = await callTool('relai_work', { action: 'begin', workspace: 'app', title: 'Cancelable task' }, context);
   assert.equal(started.status, 'planning');
-  const result = await callTool('relai_cancel_work', {
+  const result = await callTool('relai_work', { action: 'cancel',
     workspace: 'app',
     work_id: started.work_id,
     reason: 'User stopped this work.'
@@ -86,7 +86,7 @@ try {
   assert.ok(persisted.endedAt);
   assert.equal(persisted.progress.percentage === 100, false, 'cancelled work must not be fabricated as complete');
 
-  const duplicate = await callTool('relai_cancel_work', {
+  const duplicate = await callTool('relai_work', { action: 'cancel',
     workspace: 'app', work_id: started.work_id, reason: 'Retry'
   }, context);
   assert.equal(duplicate.duplicate, true);
@@ -95,7 +95,7 @@ try {
     error => error?.code === 'INVALID_TASK_STATE'
   );
   await assert.rejects(
-    () => callTool('relai_cancel_work', { workspace: 'app', work_id: 'unknown-task', reason: 'Wrong target' }, context),
+    () => callTool('relai_work', { action: 'cancel', workspace: 'app', work_id: 'unknown-task', reason: 'Wrong target' }, context),
     error => error?.code === 'TASK_NOT_FOUND'
   );
   const audit = readAudit({ stateDir, auditLogPath: path.join(stateDir, 'audit.jsonl') }, { limit: 100 });

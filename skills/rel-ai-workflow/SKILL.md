@@ -1,39 +1,43 @@
 ---
 name: rel-ai-workflow
-description: Use Rel.AI for production repository work that requires local inspection, bounded reads or searches, guarded edits, commands, validation, change review, worktrees, managed processes, or Git publishing. Trigger when a compatible Rel.AI MCP connector is available and the task affects a configured local codebase.
+description: Use Rel.AI for production work in a configured local repository: inspect code, make guarded edits, run bounded commands, validate behavior, review changes, manage explicit persistent programs, or publish Git work. Trigger only when the request requires repository access or local execution through Rel.AI.
 ---
 
 # Rel.AI Workflow
 
-Use Rel.AI when the requested work requires access to a configured local repository or a bounded local development process.
+This is the routing and work-session ownership skill. Specialized Rel.AI skills may refine a procedure, but they must reuse this skill's active `work_id` and must not open another work session for the same objective.
 
 ## Standard workflow
 
-1. Call `relai_work` with `action: "begin"` once for each independent objective. Retain the returned `work_id`.
-2. Use the bootstrap first. Add `relai_snapshot`, `relai_search`, `relai_inspect`, or `relai_read` only when the needed evidence is missing.
+1. Call `relai_work` with `action: "begin"` exactly once for each independent objective. Retain the returned `work_id`.
+2. Use the bootstrap before requesting more repository context.
 3. Inspect affected files and impact before editing. Preserve existing user changes.
-4. Apply repository changes through `relai_edit`. Use `relai_exec` only for bounded one-shot commands.
-5. Run relevant checks through `relai_validate` with `action: "checks"`. Never claim unexecuted validation.
-6. Review with `relai_changes` action `diff` when risk or scope warrants it.
-7. Complete atomically with validation `complete: true` and a summary, or call `relai_work` action `finish` after a final read-only review.
+4. Apply repository changes through `relai_edit`.
+5. Use `relai_exec` for bounded one-shot commands and `relai_validate` for checks, diagnostics, or HTTP probes.
+6. Use `relai_process` only for a service, watcher, or interactive program. Process start requires an explicit `kind` and `purpose`. Tests, builds, linters, source checks, and release gates are one-shot commands, not managed processes.
+7. Review material changes with `relai_changes` action `diff`.
+8. Complete only after actual validation, using validation `complete: true` or `relai_work` action `finish`. Cancel abandoned work explicitly.
 
-## Tool selection
+## Tool profiles
 
-- Work lifecycle and status: `relai_work`
-- Repository overview: `relai_snapshot`
-- Bounded content: `relai_read`
-- Text or semantic discovery: `relai_search`
-- Symbols, references, dependencies, impact, and traces: `relai_inspect`
-- File mutations: `relai_edit`
-- One-shot commands: `relai_exec`
-- Persistent or interactive commands: `relai_process`
-- Isolated branches: `relai_worktree`
-- Checks, diagnostics, and HTTP probes: `relai_validate`
-- Diff, restore, reset, and tidy: `relai_changes`
-- Commit, push, and pull-request drafting: `relai_publish`
+- `compact`: the default complete 12-tool workflow surface.
+- `core`: seven high-frequency repository tools for token-sensitive workflows. Persistent processes, snapshots, recovery, worktrees, and publishing are unavailable.
+
+These are the only supported profiles. Removed direct-operation profiles and aliases fail closed; use the consolidated tools and actions.
+
+Use the `relai://server/tool-surface` resource when exact action fields, execution classes, or native Task eligibility are needed. Do not copy complete tool schemas into skill instructions.
+
+## Coordination
+
+- `rel-ai-investigation` handles evidence gathering and read-only audits.
+- `rel-ai-debugging` handles reproducible defects and failure isolation.
+- `rel-ai-verification` handles completion evidence and release readiness.
+- `rel-ai-dev-process` handles persistent services, watchers, and interactive programs.
+- Safety and server-enforced approval rules override every workflow skill.
+- Tools enforce policy and bounds; skills only orchestrate the workflow.
 
 ## Definition of done
 
 The requested behavior is implemented, relevant validation has actually passed, changed files are known, safeguards were not bypassed, and the work session is explicitly completed or cancelled.
 
-Load [references/workflows.md](references/workflows.md) for managed processes, worktrees, recovery, publishing, or legacy migration. Load [references/safety.md](references/safety.md) before destructive, approval-gated, sensitive, or externally visible actions.
+Load [references/workflows.md](references/workflows.md) for process, worktree, recovery, publishing, or migration details. Load [references/safety.md](references/safety.md) before destructive, approval-gated, sensitive, or externally visible actions.

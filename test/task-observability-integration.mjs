@@ -29,7 +29,7 @@ try {
 
   const context = { publicHttpOnly: true, requestId: 'request-1', serverInstanceId: 'server-1', transportType: 'streamable-http' };
 
-  const started = await callTool('relai_begin_work', {
+  const started = await callTool('relai_work', { action: 'begin',
     workspace: 'repo',
     title: 'Inspect session activity model',
     objective: 'Verify canonical task and activity persistence.'
@@ -44,7 +44,7 @@ try {
   }, { ...context, requestId: 'request-2' });
   assert.equal(read.ok, true);
 
-  await callTool('relai_finish_work', {
+  await callTool('relai_work', { action: 'finish',
     workspace: 'repo',
     work_id: started.work_id,
     summary: 'Inspected and verified session activity persistence.'

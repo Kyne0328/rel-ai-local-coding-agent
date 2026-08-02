@@ -27,7 +27,7 @@ const { callTool } = await import('../src/tools.js');
 const { toolResult } = await import('../src/mcpServer.js');
 
 try {
-  const task = await callTool('relai_begin_work', {
+  const task = await callTool('relai_work', { action: 'begin',
     workspace: 'repo',
     bootstrap: 'none'
   }, { publicHttpOnly: true, requestId: 1, transportType: 'test' });

@@ -98,6 +98,7 @@ assert.equal(electronPkg.build.files.includes('installed-smoke.js'), false, 'ele
 assert.equal(electronPkg.build.files.includes('window-smoke.js'), false, 'electron build must not ship renderer smoke entry points');
 assert.equal(electronPkg.build.files.includes('smoke-evidence.js'), false, 'electron build must not ship release-evidence test support');
 assert.ok(electronPkg.build.files.includes('tool-sleep-blocker.js'), 'electron build must include tool-call sleep prevention');
+assert.ok(electronPkg.build.files.includes('taskbar-completion-badge.js'), 'electron build must include the Windows taskbar completion indicator');
 assert.ok(electronPkg.build.files.includes('dashboard-window.js'), 'electron build must include the secured dashboard host');
 assert.ok(electronPkg.build.files.includes('dashboard-window-bounds.js'), 'electron build must include bounded dashboard window-state handling');
 assert.ok(electronPkg.build.files.includes('window-chrome.js'), 'electron build must include platform-specific dashboard window chrome policy');
@@ -131,6 +132,7 @@ assert.deepEqual(ngrokResource.filter, ['manifest.json', 'win32/**'], 'electron 
 
 const electronMain = fs.readFileSync(path.join(root, 'electron', 'main.js'), 'utf8');
 const toolSleepBlocker = fs.readFileSync(path.join(root, 'electron', 'tool-sleep-blocker.js'), 'utf8');
+const taskbarCompletionBadge = fs.readFileSync(path.join(root, 'electron', 'taskbar-completion-badge.js'), 'utf8');
 assert.doesNotMatch(electronMain, /--installed-smoke|--window-smoke|runInstalledSmoke|runWindowSmoke|smokeWindowRoles|getSmokeWindowRole/, 'production Electron main must not expose destructive smoke entry points');
 const desktopTray = fs.readFileSync(path.join(root, 'electron', 'desktop-tray.js'), 'utf8');
 const dashboardPreload = fs.readFileSync(path.join(root, 'electron', 'preload.cjs'), 'utf8');
@@ -160,6 +162,11 @@ assert.match(electronMain, /powerSaveBlocker/, 'Electron main must use the nativ
 assert.match(toolSleepBlocker, /prevent-display-sleep/, 'active work sessions must prevent the computer and display from sleeping');
 assert.doesNotMatch(toolSleepBlocker, /prevent-app-suspension/, 'app-only suspension blocking is insufficient for keeping the computer awake');
 assert.match(electronMain, /createTaskActivityRuntime/, 'Electron main must bind connector activity to sleep prevention, live status, and completion alerts');
+assert.match(electronMain, /createTaskbarCompletionBadge/, 'Electron main must create the completion taskbar indicator');
+assert.match(electronMain, /onTaskCompleted: task => taskbarCompletionBadge\.markCompleted\(task\)/, 'explicit completion must increment the taskbar indicator');
+assert.match(electronMain, /browser-window-focus.*taskbarCompletionBadge\.clear/s, 'opening or focusing the app must clear the taskbar indicator');
+assert.match(taskbarCompletionBadge, /setOverlayIcon/, 'Windows completion count must use the taskbar overlay API');
+assert.match(taskbarCompletionBadge, /seenTaskIds/, 'duplicate completion events must not increment the taskbar indicator');
 assert.match(electronMain, /toolActivityRuntime\.stop\(\)/, 'tool activity runtime must stop during application shutdown');
 assert.match(electronMain, /setNotificationsEnabled: toolActivityRuntime\.setNotificationsEnabled/, 'the desktop notification toggle must control task alerts');
 assert.match(electronMain, /openDashboardWindow\('#settings'\)/, 'normal settings must deep-link the secured dashboard General settings route');

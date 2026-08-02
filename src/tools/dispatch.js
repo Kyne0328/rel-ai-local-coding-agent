@@ -1,4 +1,4 @@
-import { getToolDefinition as getLegacyToolDefinition } from './registry.js';
+import { getToolDefinition as getOperationDefinition } from './registry.js';
 
 const COMPACT_TOOL_NAMES = Object.freeze([
   'relai_work',
@@ -69,15 +69,10 @@ const COMPACT_OPERATIONS = Object.freeze({
   })
 });
 
-const LEGACY_TO_COMPACT = Object.freeze(buildLegacyMigrationMap());
-
 function resolveToolOperation(name, args = {}) {
   const publicName = String(name || '');
   const compact = COMPACT_OPERATIONS[publicName];
-  if (!compact) {
-    const definition = getLegacyToolDefinition(publicName);
-    return definition ? { publicName, operationName: publicName, operationArgs: args || {}, definition, compact: false } : null;
-  }
+  if (!compact) return null;
 
   const action = Object.hasOwn(compact, 'default') ? 'default' : String(args.action || '').trim();
   const operation = compact[action];
@@ -85,8 +80,8 @@ function resolveToolOperation(name, args = {}) {
     const choices = Object.keys(compact).filter(value => value !== 'default');
     throw new Error(`Unsupported action '${action || '(missing)'}' for ${publicName}. Supported actions: ${choices.join(', ')}.`);
   }
-  const definition = getLegacyToolDefinition(operation.tool);
-  if (!definition) throw new Error(`Compact operation ${publicName}:${action} targets unknown internal tool '${operation.tool}'.`);
+  const definition = getOperationDefinition(operation.tool);
+  if (!definition) throw new Error(`Public operation ${publicName}:${action} targets unknown internal operation '${operation.tool}'.`);
   let operationArgs = { ...(args || {}) };
   if (!operation.keepAction) delete operationArgs.action;
   operationArgs = normalizeCompactOperationArguments(publicName, action, definition, operationArgs);
@@ -103,16 +98,12 @@ function resolveToolOperation(name, args = {}) {
 function normalizeCompactOperationArguments(publicName, action, definition, args) {
   const allowed = new Set([...Object.keys(definition.inputSchema?.properties || {}), 'work_id', '_operationTaskId']);
   const unsupported = Object.keys(args).filter(field => !allowed.has(field));
-  const unionFields = new Set(['work_id']);
-  for (const operation of Object.values(COMPACT_OPERATIONS[publicName] || {})) {
-    const operationDefinition = getLegacyToolDefinition(operation.tool);
-    for (const field of Object.keys(operationDefinition?.inputSchema?.properties || {})) unionFields.add(field);
+  if (unsupported.length) {
+    throw new Error(`Unsupported field '${unsupported[0]}' for ${publicName} action ${action}.`);
   }
-  for (const field of unsupported) {
-    if (!unionFields.has(field)) throw new Error(`Unsupported field '${field}' for ${publicName} action ${action}.`);
-    delete args[field];
+  if (definition.name === 'relai_begin_work' && Object.hasOwn(args, 'work_id')) {
+    throw new Error(`Unsupported field 'work_id' for ${publicName} action ${action}.`);
   }
-  if (definition.name === 'relai_begin_work') delete args.work_id;
   const taskScoped = definition.behavior?.taskScope === 'required';
   const required = (definition.inputSchema?.required || []).filter(field => !(taskScoped && field === 'workspace'));
   for (const field of required) {
@@ -123,22 +114,4 @@ function normalizeCompactOperationArguments(publicName, action, definition, args
   return args;
 }
 
-function buildLegacyMigrationMap() {
-  const mapping = {};
-  for (const [compactTool, actions] of Object.entries(COMPACT_OPERATIONS)) {
-    for (const [action, operation] of Object.entries(actions)) {
-      mapping[operation.tool] = Object.freeze({
-        tool: compactTool,
-        ...(action === 'default' ? {} : { action })
-      });
-    }
-  }
-  return mapping;
-}
-
-export {
-  COMPACT_OPERATIONS,
-  COMPACT_TOOL_NAMES,
-  LEGACY_TO_COMPACT,
-  resolveToolOperation
-};
+export { COMPACT_OPERATIONS, COMPACT_TOOL_NAMES, resolveToolOperation };

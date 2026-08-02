@@ -62,8 +62,8 @@ const TOOL_DEFINITION_VALUES = [
   {
     name: "relai_process_start",
     title: "Start Managed Process",
-    description: "Start a persistent development process with stable identity, bounded persistent logs, interactive stdin, and workspace/task attribution.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"command":{"type":"string","minLength":1,"maxLength":20000},"cwd":{"type":"string"},"env":{"type":"object","additionalProperties":{"type":"string"}},"label":{"type":"string","maxLength":120},"startupWaitMs":{"type":"number","minimum":0,"maximum":30000},"maxLogBytes":{"type":"number","minimum":65536,"maximum":268435456}},"required":["workspace","command"],"additionalProperties":false},
+    description: "Start a persistent service, watcher, or interactive program with stable identity, bounded persistent logs, interactive stdin, and workspace/task attribution. One-shot tests, builds, checks, and release gates must use relai_exec or relai_run_checks instead.",
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"command":{"type":"string","minLength":1,"maxLength":20000},"cwd":{"type":"string"},"env":{"type":"object","additionalProperties":{"type":"string"}},"label":{"type":"string","maxLength":120},"kind":{"type":"string","enum":["service","watcher","interactive"]},"purpose":{"type":"string","minLength":1,"maxLength":300},"startupWaitMs":{"type":"number","minimum":0,"maximum":30000},"maxLogBytes":{"type":"number","minimum":65536,"maximum":268435456}},"required":["workspace","command","kind","purpose"],"additionalProperties":false},
     handlerName: 'processStart',
     behavior: {"audit":"exec","cache":"workspace"},
   },
@@ -71,7 +71,7 @@ const TOOL_DEFINITION_VALUES = [
     name: "relai_process_read",
     title: "Read Managed Process",
     description: "Read process state and new stdout/stderr ranges using independent byte cursors.",
-    inputSchema: {"type":"object","properties":{"processId":{"type":"string","minLength":1,"maxLength":200},"stdoutOffset":{"type":"number","minimum":0},"stderrOffset":{"type":"number","minimum":0},"maxBytes":{"type":"number","minimum":1000,"maximum":1048576}},"required":["processId"],"additionalProperties":false},
+    inputSchema: {"type":"object","properties":{"processId":{"type":"string","minLength":1,"maxLength":200},"stdoutOffset":{"type":"number","minimum":0},"stderrOffset":{"type":"number","minimum":0},"maxBytes":{"type":"number","minimum":1000,"maximum":1048576},"includeMetadata":{"type":"boolean"},"metadataRevision":{"type":"string","minLength":1,"maxLength":100}},"required":["processId"],"additionalProperties":false},
     handlerName: 'processRead',
   },
   {
@@ -93,8 +93,8 @@ const TOOL_DEFINITION_VALUES = [
   {
     name: "relai_process_list",
     title: "List Managed Processes",
-    description: "List active and recently exited managed processes, optionally filtered by workspace or status.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"status":{"type":"string","enum":["starting","running","stopping","exited","failed","stopped","orphaned"]},"limit":{"type":"number","minimum":1,"maximum":500}},"required":[],"additionalProperties":false},
+    description: "List active managed processes by default. Set includeTerminal:true to include recent exited, failed, or stopped records.",
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"status":{"type":"string","enum":["starting","running","stopping","exited","failed","stopped","orphaned"]},"activeOnly":{"type":"boolean"},"includeTerminal":{"type":"boolean"},"limit":{"type":"number","minimum":1,"maximum":500}},"required":[],"additionalProperties":false},
     handlerName: 'processList',
   },
   {

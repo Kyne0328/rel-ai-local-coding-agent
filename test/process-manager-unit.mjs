@@ -67,6 +67,8 @@ try {
     startupWaitMs: 100,
     maxLogBytes: 65536,
     label: 'persistent-managed-test',
+    kind: 'service',
+    purpose: 'Exercise persistent process lifecycle behavior.',
     _operationTaskId: startupTask.taskId
   }, ownerStart);
   createdProcessIds.push(started.processId);
@@ -74,6 +76,9 @@ try {
   assert.match(started.processId, /^proc_[A-Za-z0-9_-]{20,160}$/);
   assert.equal(started.workspaceId, 'app');
   assert.equal(started.lifecycle, 'persistent');
+  assert.equal(started.kind, 'service');
+  assert.match(started.purpose, /persistent process lifecycle/);
+  assert.match(started.metadataRevision, /^[A-Za-z0-9_-]{16}$/);
   assert.equal(started.originatingTaskId, startupTask.taskId);
   assert.equal(started.workSessionId, ownerStart.taskId);
   assert.equal(started.readiness.verified, true);
@@ -81,6 +86,14 @@ try {
 
   const first = await waitForProcess(started.processId, ownerStart, snapshot => snapshot.stdout.text.includes('READY'));
   assert.match(first.stdout.text, /READY/);
+  const deltaOnly = readManagedProcess(config, {
+    processId: started.processId,
+    stdoutOffset: first.stdout.nextOffset,
+    stderrOffset: first.stderr.nextOffset,
+    metadataRevision: first.metadataRevision
+  }, ownerLater);
+  assert.equal(deltaOnly.label, undefined);
+  assert.equal(deltaOnly.metadataRevision, first.metadataRevision);
   assert.equal(first.stdout.invalidUtf8, true);
   assert.ok(first.stdout.base64.length > 0);
 
@@ -165,6 +178,10 @@ try {
   assert.equal(duplicateStop.status, stopped.status);
   assert.equal(duplicateStop.endedAt, stopped.endedAt);
   assert.equal(duplicateStop.duplicate, true);
+  const activeAfterStop = listManagedProcesses(config, { workspace: 'app' }, ownerLater);
+  assert.equal(activeAfterStop.processes.some(item => item.processId === started.processId), false);
+  const historyAfterStop = listManagedProcesses(config, { workspace: 'app', includeTerminal: true }, ownerLater);
+  assert.equal(historyAfterStop.processes.some(item => item.processId === started.processId), true);
 
   const cancellationController = new AbortController();
   const cancellationTask = createNativeTask(config, {
@@ -178,6 +195,8 @@ try {
     command: nodeCommand(persistentScript),
     startupWaitMs: 3000,
     label: 'cancel-during-startup',
+    kind: 'service',
+    purpose: 'Exercise startup cancellation.',
     _operationTaskId: cancellationTask.taskId
   }, { taskId: 'work-session-cancel', principal: 'client-a', workspace: 'app' });
   setTimeout(() => cancelNativeTask(config, cancellationTask.taskId, { principal: 'client-a' }), 100);
@@ -194,7 +213,9 @@ try {
     startManagedProcess(workspace, config, {
       command: nodeCommand(exitScript),
       startupWaitMs: 500,
-      label: 'startup-failure'
+      label: 'startup-failure',
+      kind: 'service',
+      purpose: 'Exercise startup failure cleanup.'
     }, ownerLater),
     /exited during startup|Could not start managed process/i
   );

@@ -1,0 +1,12 @@
+[
+  {"prompt":"Audit the current repository architecture and prove how task routing works.","skills":["rel-ai-workflow","rel-ai-investigation"],"firstTool":"relai_work"},
+  {"prompt":"Investigate whether the packaged plugin contains its runtime dependencies.","skills":["rel-ai-workflow","rel-ai-investigation"],"firstTool":"relai_work"},
+  {"prompt":"Fix the failing OAuth regression and verify the failing test.","skills":["rel-ai-workflow","rel-ai-debugging","rel-ai-verification"],"firstTool":"relai_work"},
+  {"prompt":"The app crashes during startup. Reproduce and repair it.","skills":["rel-ai-workflow","rel-ai-debugging"],"firstTool":"relai_work"},
+  {"prompt":"Run the final release readiness checks and confirm this is complete.","skills":["rel-ai-workflow","rel-ai-verification"],"firstTool":"relai_work"},
+  {"prompt":"Start the frontend development server and keep it running while I test it.","skills":["rel-ai-workflow","rel-ai-dev-process"],"firstTool":"relai_work"},
+  {"prompt":"Run npm test and report the result.","skills":["rel-ai-workflow","rel-ai-verification"],"firstTool":"relai_work","forbiddenTool":"relai_process"},
+  {"prompt":"Explain recursion without reading any repository.","skills":[],"firstTool":null},
+  {"prompt":"Draft a birthday message.","skills":[],"firstTool":null},
+  {"prompt":"Discuss possible app ideas without inspecting or changing files.","skills":[],"firstTool":null}
+]

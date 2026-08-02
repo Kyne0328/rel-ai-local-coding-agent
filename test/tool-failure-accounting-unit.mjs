@@ -29,7 +29,7 @@ try {
 
   resetToolActivity();
   const context = { publicHttpOnly: true };
-  const task = await callTool('relai_begin_work', { workspace: 'app' }, context);
+  const task = await callTool('relai_work', { action: 'begin', workspace: 'app' }, context);
   const result = await callTool('relai_exec', {
     workspace: 'app', work_id: task.work_id, command: 'node -e "process.exit(1)"'
   }, context);

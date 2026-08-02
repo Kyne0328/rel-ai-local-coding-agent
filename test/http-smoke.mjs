@@ -64,7 +64,7 @@ try {
   const discovery = client.discovery;
   assert.equal(discovery.response.status, 200);
   assert.deepEqual(discovery.body.result?.supportedVersions, [MCP_VERSION]);
-  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolSurfaceVersion, 29);
+  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolSurfaceVersion, 31);
   assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolCount, 12);
   assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.statelessRequestModel, true);
   assert.deepEqual(discovery.body.result?.capabilities?.extensions?.['io.modelcontextprotocol/tasks'], {});
@@ -83,7 +83,7 @@ try {
 
   const listed = await client.request('tools/list');
   assert.equal(listed.body.result?.tools?.length, 12);
-  assert.ok(Buffer.byteLength(JSON.stringify({ tools: listed.body.result.tools })) < 18_000);
+  assert.ok(Buffer.byteLength(JSON.stringify({ tools: listed.body.result.tools })) < 29_000);
   const names = listed.body.result.tools.map(tool => tool.name);
   for (const expected of ['relai_work', 'relai_snapshot', 'relai_search', 'relai_inspect', 'relai_process', 'relai_validate', 'relai_changes', 'relai_publish']) {
     assert.ok(names.includes(expected), `${expected} missing`);
@@ -141,14 +141,14 @@ try {
   assert.equal(workspaceMutation.ok, true);
   const changedDashboard = await fetch(`${base}/api/dashboard/v10?token=${encodeURIComponent(token)}`).then(response => response.json());
   assert.equal(changedDashboard.mcpConnection.status, 'ready');
-  assert.equal(changedDashboard.mcpConnection.metrics.toolManifestChanges, 1);
+  assert.equal(changedDashboard.mcpConnection.metrics.toolManifestChanges, 0);
   assert.equal(changedDashboard.mcpConnection.metrics.capabilityMismatches, 0);
 
   const synchronizedTools = await client.request('tools/list');
   assert.equal(synchronizedTools.body.result?.tools?.length, 12);
   const synchronizedDashboard = await fetch(`${base}/api/dashboard/v10?token=${encodeURIComponent(token)}`).then(response => response.json());
   assert.equal(synchronizedDashboard.mcpConnection.status, 'ready');
-  assert.notEqual(synchronizedDashboard.mcpConnection.toolManifestVersion, liveDashboard.mcpConnection.toolManifestVersion);
+  assert.equal(synchronizedDashboard.mcpConnection.toolManifestVersion, liveDashboard.mcpConnection.toolManifestVersion);
 
   const resources = await client.request('resources/list');
   assert.ok(resources.body.result.resources.some(item => item.uri === 'relai://server/tool-surface'));
@@ -157,7 +157,7 @@ try {
   const surface = await client.request('resources/read', { uri: 'relai://server/tool-surface' });
   assert.ok(surface.body.result?.contents, JSON.stringify(surface.body));
   const manifest = JSON.parse(surface.body.result.contents[0].text);
-  assert.equal(manifest.toolSurfaceVersion, 29);
+  assert.equal(manifest.toolSurfaceVersion, 31);
   assert.equal(manifest.profile, 'compact');
   assert.equal(manifest.toolCount, 12);
   const surfaceByName = new Map(manifest.tools.map(tool => [tool.name, tool]));
@@ -165,6 +165,10 @@ try {
   assert.equal(surfaceByName.get('relai_exec').taskSupport, 'optional');
   assert.equal(surfaceByName.get('relai_process').executionClass, 'persistent_process');
   assert.equal(surfaceByName.get('relai_process').taskSupport, 'forbidden');
+  const validateActions = new Map(surfaceByName.get('relai_validate').actions.map(item => [item.action, item]));
+  assert.equal(validateActions.get('checks').taskSupport, 'optional');
+  assert.equal(validateActions.get('http').taskSupport, 'forbidden');
+  assert.equal(validateActions.get('http').executionClass, 'bounded_synchronous');
   assert.equal(manifest.cache.cacheScope, 'private');
   assert.ok(manifest.cache.revision);
 

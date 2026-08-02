@@ -9,6 +9,7 @@ const timers = new Map();
 const notifications = [];
 const statuses = [];
 let clicked = 0;
+const completedIndicators = [];
 const startedBlockers = new Set();
 let nextBlocker = 1;
 
@@ -50,6 +51,7 @@ const runtime = createTaskActivityRuntime({
   iconPath: 'C:\\RelAI\\icon.png',
   isReady: () => true,
   onNotificationClick: () => { clicked += 1; },
+  onTaskCompleted: task => completedIndicators.push(structuredClone(task)),
   onStatusChange: status => statuses.push(structuredClone(status))
 });
 
@@ -158,6 +160,8 @@ assert.match(notifications[1].options.body, /Workspace: repo\./);
 assert.match(notifications[1].options.body, /Final standard checks passed\./);
 assert.doesNotMatch(notifications[1].options.body, /completion reported|ChatGPT explicitly/i);
 assert.equal(notifications[1].options.icon, 'C:\\RelAI\\icon.png');
+assert.equal(completedIndicators.length, 1);
+assert.equal(completedIndicators[0].taskId, completedTask);
 
 runtime.setNotificationsEnabled(false);
 const mutedTask = startTask('repo', 'conversation-d');

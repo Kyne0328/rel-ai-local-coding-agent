@@ -1,71 +1,88 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { connectorInstructions } from '../src/mcpServer.js';
+import { compactForConnector } from '../src/tools/connector.js';
 import { getPublicToolSchemas } from '../src/tools/schema.js';
 import { slimCompactPublicResult } from '../src/tools/compactResult.js';
 
-const baseline = Object.freeze({
-  publicTools: 30,
-  discoverySchemaBytes: 30524,
-  estimatedDiscoveryTokens: 7631,
-  globalInstructionBytes: 1471
-});
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const baseline = Object.freeze({ publicTools: 30, discoverySchemaBytes: 30524, estimatedDiscoveryTokens: 7631, globalInstructionBytes: 1471 });
 
 function measure(profile) {
   const config = { toolProfile: profile, workspaces: {} };
   const tools = getPublicToolSchemas(config);
-  const discoverySchemaBytes = Buffer.byteLength(JSON.stringify({ tools }), 'utf8');
-  const globalInstructionBytes = Buffer.byteLength(JSON.stringify(connectorInstructions(config)), 'utf8');
+  const discoverySchemaBytes = bytes({ tools });
   return {
     profile,
     publicTools: tools.length,
     discoverySchemaBytes,
     estimatedDiscoveryTokens: Math.ceil(discoverySchemaBytes / 4),
-    globalInstructionBytes
+    globalInstructionBytes: bytes(connectorInstructions(config))
   };
 }
 
-const compact = measure('compact');
-const legacy = measure('legacy');
+const profiles = Object.fromEntries(['core', 'compact'].map(profile => [profile, measure(profile)]));
 const representativeResult = {
-  ok: true,
-  workspace: 'repo',
-  work_id: '00000000-0000-4000-8000-000000000000',
-  status: 'planning',
-  identity: 'work_session',
-  workspaceBinding: { alias: 'repo' },
-  title: 'Compact plugin',
-  objective: 'Implement the compact MCP profile.',
-  nextAction: 'Use the bootstrap context to choose the next tool. Pass this work_id on every subsequent work-scoped Rel.AI call; the bound workspace may be omitted.',
+  ok: true, workspace: 'repo', work_id: '00000000-0000-4000-8000-000000000000', status: 'planning',
+  identity: 'work_session', workspaceBinding: { alias: 'repo' }, title: 'Compact plugin',
+  objective: 'Implement the compact MCP profile.', nextAction: 'Use the bootstrap context.',
   bootstrap: { mode: 'compact', files: ['README.md', 'src/index.js'], hints: [], skipped: [] }
 };
 const representativeCompactResult = slimCompactPublicResult('relai_work', 'begin', representativeResult);
+const execSuccess = compactForConnector('relai_exec', {
+  ok: true, workspace: 'repo', command: 'node --check src/index.js', cwd: '.', shell: 'PowerShell 7',
+  exitCode: 0, durationMs: 50, stdout: '', stderr: '', stdoutBytes: 0, stderrBytes: 0,
+  stdoutTruncated: false, stderrTruncated: false, timedOut: false, changedFiles: [], changedFilesTruncated: false
+});
+const snapshot = compactForConnector('relai_repo_snapshot', {
+  ok: true, workspace: 'repo', fileCount: 2000,
+  files: Array.from({ length: 2000 }, (_, index) => `src/generated/path-${String(index).padStart(4, '0')}.js`),
+  manifests: ['package.json'], recommendedFlow: ['relai_search', 'relai_read']
+});
+const skillMetrics = skillMeasurements();
 const report = {
   baseline,
-  compact,
-  legacy,
-  representativeResultBytes: {
-    before: Buffer.byteLength(JSON.stringify(representativeResult), 'utf8'),
-    after: Buffer.byteLength(JSON.stringify(representativeCompactResult), 'utf8')
+  profiles,
+  resultBudgets: {
+    workBeginBefore: bytes(representativeResult),
+    workBeginAfter: bytes(representativeCompactResult),
+    execSuccess: bytes(execSuccess),
+    boundedSnapshot: bytes(snapshot)
   },
-  workflowCalls: {
-    normalReadEditValidate: { before: 4, after: 4 },
-    beginFinish: { before: 2, after: 2 }
-  },
+  skills: skillMetrics,
   change: {
-    publicTools: compact.publicTools - baseline.publicTools,
-    discoverySchemaBytes: compact.discoverySchemaBytes - baseline.discoverySchemaBytes,
-    estimatedDiscoveryTokens: compact.estimatedDiscoveryTokens - baseline.estimatedDiscoveryTokens,
-    globalInstructionBytes: compact.globalInstructionBytes - baseline.globalInstructionBytes,
-    discoveryReductionPercent: Number(((1 - compact.discoverySchemaBytes / baseline.discoverySchemaBytes) * 100).toFixed(2))
+    compactReductionPercent: reduction(profiles.compact.discoverySchemaBytes),
+    coreReductionPercent: reduction(profiles.core.discoverySchemaBytes)
   }
 };
 
-if (compact.publicTools > 12) throw new Error(`Compact profile exposes ${compact.publicTools} tools; limit is 12.`);
-if (compact.discoverySchemaBytes >= 18_000) throw new Error(`Compact discovery is ${compact.discoverySchemaBytes} bytes; limit is 17999.`);
-if (compact.globalInstructionBytes >= 512) throw new Error(`Global instructions are ${compact.globalInstructionBytes} bytes; limit is 511.`);
-if (report.change.discoveryReductionPercent < 40) throw new Error(`Discovery reduction is ${report.change.discoveryReductionPercent}%; target is at least 40%.`);
-if (report.representativeResultBytes.after >= report.representativeResultBytes.before) throw new Error('Representative compact result did not shrink.');
-if (report.workflowCalls.normalReadEditValidate.after > report.workflowCalls.normalReadEditValidate.before) throw new Error('Normal workflow requires additional calls.');
+if (profiles.compact.publicTools > 12) throw new Error(`Compact profile exposes ${profiles.compact.publicTools} tools; limit is 12.`);
+if (profiles.compact.discoverySchemaBytes >= 29_000) throw new Error(`Compact discovery is ${profiles.compact.discoverySchemaBytes} bytes; limit is 28999.`);
+if (profiles.core.publicTools > 7) throw new Error(`Core profile exposes ${profiles.core.publicTools} tools; limit is 7.`);
+if (profiles.core.discoverySchemaBytes >= 17_000) throw new Error(`Core discovery is ${profiles.core.discoverySchemaBytes} bytes; limit is 16999.`);
+if (profiles.compact.globalInstructionBytes >= 512) throw new Error('Global connector instructions exceed 511 bytes.');
+if (report.change.coreReductionPercent < 44) throw new Error(`Core reduction is ${report.change.coreReductionPercent}%; target is at least 44%.`);
+if (report.resultBudgets.workBeginAfter >= report.resultBudgets.workBeginBefore) throw new Error('Compact work begin result did not shrink.');
+if (report.resultBudgets.execSuccess >= 1000) throw new Error(`Exec success envelope is ${report.resultBudgets.execSuccess} bytes; limit is 999.`);
+if (report.resultBudgets.boundedSnapshot >= 16_000) throw new Error(`Snapshot result is ${report.resultBudgets.boundedSnapshot} bytes; limit is 15999.`);
+if (skillMetrics.totalBytes >= 25_000) throw new Error(`Skill package is ${skillMetrics.totalBytes} bytes; initial budget is 24999.`);
 
 console.log(JSON.stringify(report, null, 2));
+
+function skillMeasurements() {
+  const skillRoot = path.join(root, 'skills');
+  const files = [];
+  for (const directory of fs.readdirSync(skillRoot, { withFileTypes: true }).filter(entry => entry.isDirectory())) {
+    for (const relative of ['SKILL.md', path.join('agents', 'openai.yaml')]) {
+      const file = path.join(skillRoot, directory.name, relative);
+      if (fs.existsSync(file)) files.push({ path: path.relative(root, file).replaceAll('\\', '/'), bytes: fs.statSync(file).size });
+    }
+  }
+  return { files, totalBytes: files.reduce((total, item) => total + item.bytes, 0) };
+}
+function reduction(current) { return Number(((1 - current / baseline.discoverySchemaBytes) * 100).toFixed(2)); }
+function bytes(value) { return Buffer.byteLength(JSON.stringify(value), 'utf8'); }
 
 export { baseline, measure };

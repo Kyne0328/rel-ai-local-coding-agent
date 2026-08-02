@@ -43,6 +43,13 @@ async function startManagedProcess(workspace, config, args = {}, context = {}) {
   const command = String(args.command || '').trim();
   if (!command) throw new Error('relai_process_start requires command.');
   if (command.length > 20000) throw new Error('relai_process_start command must be 20000 characters or fewer.');
+  const kind = String(args.kind || '').trim().toLowerCase();
+  if (!['service', 'watcher', 'interactive'].includes(kind)) {
+    throw new Error('relai_process_start requires kind: service, watcher, or interactive. Use relai_exec or relai_run_checks for one-shot commands.');
+  }
+  const purpose = String(args.purpose || '').trim();
+  if (!purpose) throw new Error('relai_process_start requires a persistent-process purpose.');
+  if (purpose.length > 300) throw new Error('relai_process_start purpose must be 300 characters or fewer.');
   const cwd = resolveCommandCwd(workspace, args.cwd);
   const env = normalizeCommandEnv(args.env);
   const shell = resolveShell();
@@ -62,6 +69,8 @@ async function startManagedProcess(workspace, config, args = {}, context = {}) {
     workSessionId,
     principalKey: principalKeyForContext(context),
     lifecycle: 'persistent',
+    kind,
+    purpose,
     command,
     commandSummary: redactCommandForAudit(command),
     label: String(args.label || '').trim().slice(0, 120) || redactCommandForAudit(command),
@@ -285,11 +294,23 @@ function readManagedProcess(config, args = {}, context = {}) {
   const record = requireProcess(config, args.processId);
   assertProcessAccess(config, record, args, context);
   const maxBytes = clampNumber(args.maxBytes, 1000, 1024 * 1024, 65536);
-  return {
-    ...processSnapshot(record),
+  const revision = processMetadataRevision(record);
+  const includeMetadata = args.includeMetadata !== false
+    && String(args.metadataRevision || '') !== revision;
+  const output = {
     stdout: readLogRange(record, 'stdout', args.stdoutOffset, maxBytes),
     stderr: readLogRange(record, 'stderr', args.stderrOffset, maxBytes)
   };
+  if (!includeMetadata) {
+    return {
+      ok: !['failed', 'orphaned'].includes(record.status),
+      processId: record.processId,
+      status: record.status,
+      metadataRevision: revision,
+      ...output
+    };
+  }
+  return { ...processSnapshot(record), ...output };
 }
 
 function writeManagedProcess(config, args = {}, context = {}) {
@@ -360,10 +381,15 @@ function listManagedProcesses(config, args = {}, context = {}) {
   const requestedWorkspace = resolveCallerWorkspace(config, args, context);
   assertRequestedWorkspaceBoundary(config, args, context, requestedWorkspace);
   const status = String(args.status || '').trim();
+  const explicitTerminalStatus = TERMINAL_STATUSES.has(status);
+  const includeTerminal = args.includeTerminal === true || explicitTerminalStatus;
+  const activeOnly = args.activeOnly !== false && !includeTerminal;
   const items = [...processes.values()]
     .filter(item => canAccessProcess(config, item, args, context))
     .filter(item => !requestedWorkspace || workspaceMatches(item, requestedWorkspace))
     .filter(item => !status || item.status === status)
+    .filter(item => !activeOnly || ACTIVE_STATUSES.has(item.status) || item.status === 'orphaned')
+    .filter(item => includeTerminal || !TERMINAL_STATUSES.has(item.status))
     .sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt))
     .slice(0, clampNumber(args.limit, 1, 500, 100))
     .map(item => processSnapshot(item));
@@ -474,9 +500,12 @@ function processSnapshot(record, options = {}) {
     workspace: record.workspaceId,
     workspaceId: record.workspaceId,
     label: record.label,
+    kind: record.kind || 'service',
+    purpose: record.purpose || '',
     commandSummary: record.commandSummary,
     cwd: record.cwd,
     status: record.status,
+    metadataRevision: processMetadataRevision(record),
     lifecycle: record.lifecycle || 'persistent',
     originatingTaskId: record.originatingTaskId || null,
     workSessionId: record.workSessionId || null,
@@ -496,6 +525,17 @@ function processSnapshot(record, options = {}) {
     result.stderrTail = readLogTail(record, 'stderr', options.tailBytes || 8192);
   }
   return result;
+}
+
+function processMetadataRevision(record) {
+  return crypto.createHash('sha256').update(JSON.stringify([
+    record.status,
+    record.pid || null,
+    record.endedAt || '',
+    record.exitCode,
+    record.signal || '',
+    record.error || ''
+  ])).digest('base64url').slice(0, 16);
 }
 
 function finishRecord(config, record, fields) {
@@ -543,6 +583,8 @@ function metadataRecord(record) {
     workSessionId: record.workSessionId || '',
     principalKey: record.principalKey || '',
     lifecycle: record.lifecycle || 'persistent',
+    kind: record.kind || 'service',
+    purpose: record.purpose || '',
     commandSummary: record.commandSummary,
     label: record.label,
     cwd: record.cwd,
@@ -628,6 +670,8 @@ function readMetadata(config, processId) {
       workSessionId: String(metadata.workSessionId || metadata.logicalTaskId || ''),
       principalKey: String(metadata.principalKey || ''),
       lifecycle: String(metadata.lifecycle || 'persistent'),
+      kind: ['service', 'watcher', 'interactive'].includes(String(metadata.kind || '')) ? String(metadata.kind) : 'service',
+      purpose: String(metadata.purpose || ''),
       commandSummary: String(metadata.commandSummary || ''),
       label: String(metadata.label || metadata.commandSummary || processId),
       cwd: String(metadata.cwd || '.'),

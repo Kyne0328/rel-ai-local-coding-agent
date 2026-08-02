@@ -1,0 +1,4 @@
+interface:
+  display_name: "Rel.AI Investigation"
+  short_description: "Evidence-based repository audits"
+  default_prompt: "Use $rel-ai-investigation to trace and verify how the configured repository works without unnecessary changes."

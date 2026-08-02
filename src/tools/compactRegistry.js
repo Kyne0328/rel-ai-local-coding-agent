@@ -1,9 +1,9 @@
 // @ts-check
 
 import { MAX_BATCH_EDITS } from '../editLimits.js';
-import { getToolDefinition as legacyDefinition } from './registry.js';
+import { getToolDefinition as operationDefinition } from './registry.js';
 
-const TOOL_SURFACE_VERSION = 29;
+const TOOL_SURFACE_VERSION = 31;
 const STRING = Object.freeze({ type: 'string' });
 const WORKSPACE = Object.freeze({ type: 'string' });
 const ACTION = values => ({ type: 'string', enum: values });
@@ -35,10 +35,10 @@ const COMPACT_DEFINITION_VALUES = [
       },
       required: ['action'],
       oneOf: [
-        branch('begin', ['workspace']),
-        branch('status'),
-        branch('finish', ['work_id', 'summary']),
-        branch('cancel', ['work_id'])
+        branch('begin', ['workspace'], ['work_id', 'summary', 'reason', 'maxBytes']),
+        branch('status', [], ['title', 'objective', 'bootstrap', 'instructionPath', 'summary', 'reason']),
+        branch('finish', ['work_id', 'summary'], ['title', 'objective', 'bootstrap', 'instructionPath', 'maxBytes', 'reason']),
+        branch('cancel', ['work_id'], ['title', 'objective', 'bootstrap', 'instructionPath', 'maxBytes', 'summary'])
       ],
       additionalProperties: false
     },
@@ -46,8 +46,8 @@ const COMPACT_DEFINITION_VALUES = [
     behavior: { taskScope: 'optional', executionClass: 'always_immediate' },
     dashboard: { category: 'Workflow' }
   }),
-  cloneLegacy('relai_repo_snapshot', 'relai_snapshot', 'Repository Snapshot', 'Map repository context.'),
-  cloneLegacy('relai_read', 'relai_read', 'Read Repository', 'Read files, ranges, or directories.'),
+  cloneOperation('relai_repo_snapshot', 'relai_snapshot', 'Repository Snapshot', 'Map repository context.'),
+  cloneOperation('relai_read', 'relai_read', 'Read Repository', 'Read files, ranges, or directories.'),
   define({
     name: 'relai_search',
     title: 'Search Repository',
@@ -101,13 +101,25 @@ const COMPACT_DEFINITION_VALUES = [
         maxFiles: { type: 'number', minimum: 1, maximum: 20000 }
       },
       required: ['action'],
+      oneOf: [
+        branch('symbol', ['symbol'], ['query', 'paths', 'maxDepth']),
+        branch('references', ['symbol'], ['query', 'paths', 'maxDepth']),
+        branch('related', [], ['paths', 'maxDepth'], {}, {
+          anyOf: [{ required: ['query'] }, { required: ['symbol'] }]
+        }),
+        branch('impact', [], ['query'], {}, {
+          anyOf: [{ required: ['symbol'] }, { required: ['paths'] }]
+        }),
+        branch('trace', ['symbol'], ['query', 'paths']),
+        branch('diagnostics', [], ['symbol', 'query', 'paths', 'maxResults', 'maxDepth'])
+      ],
       additionalProperties: false
     },
     annotations: annotations(true, false, true, false),
     groups: ['audit']
   }),
-  cloneLegacy('relai_edit', 'relai_edit', 'Edit Repository', `Apply up to ${MAX_BATCH_EDITS} bounded repository edits.`),
-  cloneLegacy('relai_exec', 'relai_exec', 'Run Command', 'Run a bounded command.'),
+  cloneOperation('relai_edit', 'relai_edit', 'Edit Repository', `Apply up to ${MAX_BATCH_EDITS} bounded repository edits.`),
+  cloneOperation('relai_exec', 'relai_exec', 'Run Command', 'Run a bounded command.'),
   define({
     name: 'relai_process',
     title: 'Manage Process',
@@ -121,24 +133,30 @@ const COMPACT_DEFINITION_VALUES = [
         cwd: STRING,
         env: { type: 'object', additionalProperties: STRING },
         label: { type: 'string', maxLength: 120 },
+        kind: { type: 'string', enum: ['service', 'watcher', 'interactive'] },
+        purpose: { type: 'string', minLength: 1, maxLength: 300 },
         startupWaitMs: { type: 'number', minimum: 0, maximum: 30000 },
         maxLogBytes: { type: 'number', minimum: 65536, maximum: 268435456 },
         processId: { type: 'string', minLength: 1, maxLength: 200 },
         stdoutOffset: { type: 'number', minimum: 0 },
         stderrOffset: { type: 'number', minimum: 0 },
         maxBytes: { type: 'number', minimum: 1000, maximum: 1048576 },
+        includeMetadata: { type: 'boolean' },
+        metadataRevision: { type: 'string', minLength: 1, maxLength: 100 },
         input: { type: 'string', maxLength: 1048576 },
         graceMs: { type: 'number', minimum: 0, maximum: 30000 },
         status: { type: 'string', enum: ['starting', 'running', 'stopping', 'exited', 'failed', 'stopped', 'orphaned'] },
+        activeOnly: { type: 'boolean' },
+        includeTerminal: { type: 'boolean' },
         limit: { type: 'number', minimum: 1, maximum: 500 }
       },
       required: ['action'],
       oneOf: [
-        branch('start', ['command'], ['processId', 'stdoutOffset', 'stderrOffset', 'maxBytes', 'input', 'graceMs', 'status', 'limit']),
-        branch('read', ['processId'], ['command', 'cwd', 'env', 'label', 'startupWaitMs', 'maxLogBytes', 'input', 'graceMs', 'status', 'limit']),
-        branch('write', ['processId', 'input'], ['command', 'cwd', 'env', 'label', 'startupWaitMs', 'maxLogBytes', 'stdoutOffset', 'stderrOffset', 'maxBytes', 'graceMs', 'status', 'limit']),
-        branch('stop', ['processId'], ['command', 'cwd', 'env', 'label', 'startupWaitMs', 'maxLogBytes', 'stdoutOffset', 'stderrOffset', 'maxBytes', 'input', 'status', 'limit']),
-        branch('list', [], ['command', 'cwd', 'env', 'label', 'startupWaitMs', 'maxLogBytes', 'processId', 'stdoutOffset', 'stderrOffset', 'maxBytes', 'input', 'graceMs'])
+        branch('start', ['command', 'kind', 'purpose'], ['processId', 'stdoutOffset', 'stderrOffset', 'maxBytes', 'includeMetadata', 'metadataRevision', 'input', 'graceMs', 'status', 'activeOnly', 'includeTerminal', 'limit']),
+        branch('read', ['processId'], ['command', 'cwd', 'env', 'label', 'kind', 'purpose', 'startupWaitMs', 'maxLogBytes', 'input', 'graceMs', 'status', 'activeOnly', 'includeTerminal', 'limit']),
+        branch('write', ['processId', 'input'], ['command', 'cwd', 'env', 'label', 'kind', 'purpose', 'startupWaitMs', 'maxLogBytes', 'stdoutOffset', 'stderrOffset', 'maxBytes', 'includeMetadata', 'metadataRevision', 'graceMs', 'status', 'activeOnly', 'includeTerminal', 'limit']),
+        branch('stop', ['processId'], ['command', 'cwd', 'env', 'label', 'kind', 'purpose', 'startupWaitMs', 'maxLogBytes', 'stdoutOffset', 'stderrOffset', 'maxBytes', 'includeMetadata', 'metadataRevision', 'input', 'status', 'activeOnly', 'includeTerminal', 'limit']),
+        branch('list', [], ['command', 'cwd', 'env', 'label', 'kind', 'purpose', 'startupWaitMs', 'maxLogBytes', 'processId', 'stdoutOffset', 'stderrOffset', 'maxBytes', 'includeMetadata', 'metadataRevision', 'input', 'graceMs'])
       ],
       additionalProperties: false
     },
@@ -203,6 +221,7 @@ const COMPACT_DEFINITION_VALUES = [
       additionalProperties: false
     },
     annotations: annotations(false, true, false, true),
+    execution: { taskSupport: 'optional' },
     behavior: { longRunning: true, executionClass: 'native_task_eligible' }
   }),
   define({
@@ -275,7 +294,7 @@ const COMPACT_DEFINITION_VALUES = [
       oneOf: [
         branch('commit', ['message'], ['remote', 'branch', 'setUpstream', 'base', 'head', 'title', 'body']),
         branch('push', [], ['message', 'addAll', 'sensitiveAuthorization', 'paths', 'maxBytes', 'base', 'head', 'title', 'body']),
-        branch('draft_pr', [], ['message', 'dryRun', 'addAll', 'sensitiveAuthorization', 'paths', 'maxBytes', 'timeoutMs', 'remote', 'setUpstream'])
+        branch('draft_pr', [], ['message', 'dryRun', 'addAll', 'sensitiveAuthorization', 'paths', 'maxBytes', 'timeoutMs', 'remote', 'branch', 'setUpstream'])
       ],
       additionalProperties: false
     },
@@ -287,16 +306,41 @@ const COMPACT_DEFINITION_VALUES = [
 const COMPACT_TOOL_DEFINITIONS = Object.freeze(COMPACT_DEFINITION_VALUES);
 const COMPACT_BY_NAME = new Map(COMPACT_TOOL_DEFINITIONS.map(definition => [definition.name, definition]));
 
-function branch(action, required = [], _irrelevant = [], properties = {}) {
+function branch(action, required = [], irrelevant = [], properties = {}, extra = {}) {
   return {
     properties: { action: { const: action }, ...properties },
-    required: ['action', ...required]
+    required: ['action', ...required],
+    ...(irrelevant.length ? { xIrrelevant: irrelevant } : {}),
+    ...extra
   };
 }
 
-function cloneLegacy(sourceName, name, title, description) {
-  const source = legacyDefinition(sourceName);
-  if (!source) throw new Error(`Missing legacy tool definition: ${sourceName}`);
+function constrainActionProperties(inputSchema) {
+  if (!Array.isArray(inputSchema?.oneOf)) return { inputSchema, actionContracts: [] };
+  const actionBranches = inputSchema.oneOf.every(item => item?.properties?.action?.const);
+  if (!actionBranches) return { inputSchema, actionContracts: [] };
+  const candidateFields = new Set(Object.keys(inputSchema.properties || {}));
+  candidateFields.add('work_id');
+  const actionContracts = inputSchema.oneOf.map(item => {
+    const irrelevant = item.xIrrelevant || [];
+    return Object.freeze({
+      action: String(item.properties.action.const),
+      required: Object.freeze([...(item.required || []).filter(field => field !== 'action')]),
+      fields: Object.freeze([...candidateFields].filter(field => field !== 'action' && !irrelevant.includes(field)).sort())
+    });
+  });
+  return {
+    inputSchema: {
+      ...inputSchema,
+      oneOf: inputSchema.oneOf.map(({ xIrrelevant: _xIrrelevant, ...item }) => item)
+    },
+    actionContracts
+  };
+}
+
+function cloneOperation(sourceName, name, title, description) {
+  const source = operationDefinition(sourceName);
+  if (!source) throw new Error(`Missing internal operation definition: ${sourceName}`);
   return define({
     ...source,
     name,
@@ -321,9 +365,12 @@ function define(value) {
     outputSchema = RESULT_SCHEMA,
     ...definition
   } = value;
+  const constrained = constrainActionProperties(definition.inputSchema);
   return Object.freeze({
     handlerName: 'compactDispatch',
     ...definition,
+    inputSchema: Object.freeze(constrained.inputSchema),
+    actionContracts: Object.freeze(constrained.actionContracts),
     behavior: Object.freeze({
       audit: '', cache: '', startsSession: false, deferStagedSession: false, sessionWrite: false,
       summary: '', longRunning: false, taskScope: 'required', concurrencyScope: 'task', executionClass: 'bounded_synchronous',

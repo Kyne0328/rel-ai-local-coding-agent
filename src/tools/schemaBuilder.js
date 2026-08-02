@@ -22,35 +22,66 @@ function schemaFromDefinition(definition) {
     .filter(key => !stripped.includes(key))
     .filter(key => !(taskScoped && key === 'workspace'));
   if (taskScoped && !required.includes('work_id')) required.push('work_id');
+  const branches = Array.isArray(definition.inputSchema?.oneOf)
+    ? definition.inputSchema.oneOf.map(branch => workAwareBranch(branch, { taskScoped, taskAware }))
+    : undefined;
+  const inputSchema = strictActionSchema({
+    ...definition.inputSchema,
+    properties,
+    required,
+    ...(branches ? { oneOf: branches } : {})
+  }, definition.actionContracts || []);
   return {
     name: definition.name,
     title: definition.title,
     description: definition.description,
-    inputSchema: { ...definition.inputSchema, properties, required },
+    inputSchema,
     outputSchema: definition.outputSchema,
     annotations: definition.annotations
   };
 }
 
-function withWorkspaceAliases(schemas, config) {
-  const aliases = Object.keys(config?.workspaces || {}).sort((left, right) => left.localeCompare(right));
-  if (aliases.length === 0) return schemas;
-  return schemas.map(schema => {
-    if (schema.name !== 'relai_work' || !schema.inputSchema?.properties?.workspace) return schema;
-    return {
-      ...schema,
-      inputSchema: {
-        ...schema.inputSchema,
-        properties: {
-          ...schema.inputSchema.properties,
-          workspace: {
-            ...schema.inputSchema.properties.workspace,
-            description: `Configured alias or registered path. Aliases: ${aliases.join(', ')}.`
-          }
-        }
-      }
-    };
-  });
+function workAwareBranch(branch, { taskScoped, taskAware }) {
+  const action = String(branch?.properties?.action?.const || '');
+  const includeWorkId = taskScoped || (taskAware && action !== 'begin');
+  if (!includeWorkId) return branch;
+  const required = [...(branch.required || [])];
+  if (taskScoped && !required.includes('work_id')) required.push('work_id');
+  return {
+    ...branch,
+    properties: { ...(branch.properties || {}), work_id: WORK_ID_SCHEMA },
+    required
+  };
+}
+
+function strictActionSchema(schema, contracts) {
+  if (!Array.isArray(schema.oneOf) || !contracts.length) return schema;
+  const properties = schema.properties || {};
+  const actionNames = contracts.map(contract => contract.action);
+  const fields = [...new Set(contracts.flatMap(contract => contract.fields))].filter(field => properties[field]);
+  const groups = new Map();
+  for (const field of fields) {
+    const allowed = contracts.filter(contract => contract.fields.includes(field)).map(contract => contract.action).sort();
+    if (allowed.length === actionNames.length) continue;
+    const key = allowed.join('|');
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(field);
+  }
+  const allOf = [...(schema.allOf || [])];
+  for (const [key, groupedFields] of groups) {
+    const trigger = groupedFields.length === 1
+      ? { required: groupedFields }
+      : { anyOf: groupedFields.sort().map(field => ({ required: [field] })) };
+    allOf.push({
+      if: trigger,
+      then: { properties: { action: { enum: key.split('|') } } }
+    });
+  }
+  return { ...schema, ...(allOf.length ? { allOf } : {}) };
+}
+
+function withWorkspaceAliases(schemas, _config) {
+  return schemas;
 }
 
 export { schemaFromDefinition, withWorkspaceAliases };

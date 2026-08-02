@@ -1,6 +1,6 @@
 import { getCompactToolDefinitions } from './compactRegistry.js';
 import { resolveToolProfile } from './profile.js';
-import { LEGACY_TOOL_NAMES, TOOL_NAMES, definitionFor, definitionsFor } from './profileRegistry.js';
+import { CORE_TOOL_NAMES, TOOL_NAMES, definitionFor, definitionsFor } from './profileRegistry.js';
 import { schemaFromDefinition, withWorkspaceAliases } from './schemaBuilder.js';
 import { getToolGroups, getToolMetadata, getToolSurfaceManifest } from './surface.js';
 
@@ -36,7 +36,7 @@ function configForProfile(profile) {
 }
 
 export {
-  LEGACY_TOOL_NAMES,
+  CORE_TOOL_NAMES,
   TOOL_NAMES,
   configForProfile,
   getPublicToolSchemas,

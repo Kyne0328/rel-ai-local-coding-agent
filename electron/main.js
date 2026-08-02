@@ -9,6 +9,7 @@ import { localWindowWebPreferences, secureLocalWindow } from './window-security.
 import { installLocalProtocol, localRendererUrl, registerLocalScheme } from './local-protocol.js';
 import { registerIpcHandlers } from './ipc-handlers.js';
 import { createTaskActivityRuntime } from './tool-sleep-blocker.js';
+import { createTaskbarCompletionBadge } from './taskbar-completion-badge.js';
 import { createDashboardWindowManager } from './dashboard-window.js';
 import { createDesktopTray } from './desktop-tray.js';
 import { createDesktopStatusModel } from './desktop-status.js';
@@ -69,7 +70,11 @@ const dashboardWindowManager = createDashboardWindowManager({
     recoveryWindowManager.show();
   }
 });
-const desktopTray = createDesktopTray({
+const taskbarCompletionBadge = createTaskbarCompletionBadge({
+  nativeImage, platform: process.platform,
+  getWindow: () => dashboardWindowManager.getWindow() || BrowserWindow.getAllWindows().find(win => !win.isDestroyed()) || null,
+  isApplicationOpen: () => BrowserWindow.getAllWindows().some(win => !win.isDestroyed() && win.isVisible() && win.isFocused())
+}); const desktopTray = createDesktopTray({
   Tray,
   Menu,
   nativeImage,
@@ -90,12 +95,9 @@ const desktopTray = createDesktopTray({
   onError: error => setStatus({ error: formatError(error), errorCode: ERROR_CODES.UNKNOWN })
 });
 const toolActivityRuntime = createTaskActivityRuntime({
-  toolActivity,
-  powerSaveBlocker,
-  Notification,
-  iconPath: APP_ICON_PATH,
-  isReady: () => app.isReady(),
-  onNotificationClick: focusActiveWindow,
+  toolActivity, powerSaveBlocker, Notification, iconPath: APP_ICON_PATH,
+  isReady: () => app.isReady(), onNotificationClick: focusActiveWindow,
+  onTaskCompleted: task => taskbarCompletionBadge.markCompleted(task),
   onStatusChange: taskActivity => setStatus({ taskActivity })
 });
 const desktopSettings = createDesktopSettingsManager({ readGuiConfig, saveLauncherConfig,
@@ -112,6 +114,8 @@ const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
+  app.on('browser-window-created', (_event, win) => taskbarCompletionBadge.apply(win));
+  app.on('browser-window-focus', () => taskbarCompletionBadge.clear());
   app.on('second-instance', () => {
     if (wizardWindow && !wizardWindow.isDestroyed()) {
       wizardWindow.show();
@@ -216,6 +220,7 @@ function openRecoverySetup() {
 }
 
 function focusActiveWindow() {
+  taskbarCompletionBadge.clear();
   const dashboardWindow = dashboardWindowManager.getWindow();
   if (dashboardWindow) {
     dashboardWindow.show();
@@ -397,7 +402,7 @@ function buildDashboardConnection() {
 }
 
 async function showDashboardWindow(routeHash = '') {
-  await dashboardWindowManager.open(routeHash);
+  await dashboardWindowManager.open(routeHash); taskbarCompletionBadge.clear();
   recoveryWindowManager.hide();
 }
 

@@ -77,7 +77,7 @@ try {
   const listedTools = await client.waitFor(requestId);
   assert.equal(listedTools.result.tools.length, activeToolCount);
   const listedStartTask = listedTools.result.tools.find(tool => tool.name === 'relai_work');
-  assert.match(listedStartTask.inputSchema.properties.workspace.description, /Aliases: appA, appB/);
+  assert.equal(listedStartTask.inputSchema.properties.workspace.description, undefined, 'workspace aliases belong in bootstrap/status, not discovery');
 
   const startA = await rpc('relai_work', { action: 'begin', workspace: 'appA', objective: 'Validate task A.', bootstrap: 'compact' });
   const startB = await rpc('relai_work', { action: 'begin', workspace: 'appB', objective: 'Validate task B.', bootstrap: 'compact' });
