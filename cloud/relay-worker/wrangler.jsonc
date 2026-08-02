@@ -4,6 +4,9 @@
   "main": "src/index.js",
   "compatibility_date": "2026-08-01",
   "workers_dev": true,
+  "vars": {
+    "PUBLIC_BASE_URL": "https://rel-ai-cloud.kynskie13.workers.dev"
+  },
   "durable_objects": {
     "bindings": [
       {
