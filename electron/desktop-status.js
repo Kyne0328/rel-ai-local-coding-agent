@@ -12,11 +12,6 @@ function createDesktopStatusModel({ version = '', deriveConnectionState, formatE
     error: '',
     errorCode: '',
     localUrl: '',
-    cloudRelay: {
-      state: 'stopped', baseUrl: '', mcpUrl: '', registered: false, connected: false,
-      deviceId: '', pairingCode: '', pairingExpiresAt: '', lastConnectedAt: '',
-      reconnectAttempt: 0, lastError: '', updatedAt: ''
-    },
     version,
     taskActivity: { state: 'idle', activeCalls: 0, activeTaskCount: 0, tasks: [], workspace: '', tool: '', startedAt: null, lastTask: null }
   };

@@ -68,9 +68,6 @@
       "desktop-settings.js",
       "desktop-lifecycle.js",
       "controller-runtime.js",
-      "cloud-relay-state.js",
-      "cloud-relay-client.js",
-      "cloud-relay-runtime.js",
       "renderer/**",
       "build/icon.png",
       "!**/*.map"

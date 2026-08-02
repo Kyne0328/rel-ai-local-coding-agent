@@ -112,9 +112,9 @@ assert.ok(electronPkg.build.files.includes('app-updater-state.js'), 'electron bu
 assert.ok(electronPkg.build.files.includes('desktop-settings.js'), 'electron build must include extracted desktop settings ownership');
 assert.ok(electronPkg.build.files.includes('desktop-lifecycle.js'), 'electron build must include desktop lifecycle state and startup ownership');
 assert.ok(electronPkg.build.files.includes('controller-runtime.js'), 'electron build must include the active-controller runtime marker');
-assert.ok(electronPkg.build.files.includes('cloud-relay-state.js'), 'electron build must include protected cloud credential persistence');
-assert.ok(electronPkg.build.files.includes('cloud-relay-client.js'), 'electron build must include the outbound cloud relay client');
-assert.ok(electronPkg.build.files.includes('cloud-relay-runtime.js'), 'electron build must include cloud relay lifecycle orchestration');
+for (const relayFile of ['cloud-relay-state.js', 'cloud-relay-client.js', 'cloud-relay-runtime.js']) {
+  assert.equal(electronPkg.build.files.includes(relayFile), false, `electron build must not include removed relay module ${relayFile}`);
+}
 assert.ok(electronPkg.build.files.includes('window-security.js'), 'electron build must include local renderer isolation policy');
 assert.ok(electronPkg.build.files.includes('local-protocol.js'), 'electron build must include the restricted local renderer protocol');
 assert.ok(electronPkg.build.files.includes('ipc-security.js'), 'electron build must include IPC sender policy');
@@ -170,11 +170,8 @@ for (const channel of ['desktop:window:get-state', 'desktop:window:minimize', 'd
 }
 assert.match(dashboardPreload, /desktop:settings:save/, 'desktop settings must be saved through constrained Electron IPC');
 assert.match(dashboardPreload, /desktop:approval-token:replace/, 'approval-token replacement must use its own constrained IPC action');
-assert.match(dashboardPreload, /desktop:cloud:create-pairing-code/, 'cloud pairing must use constrained dashboard IPC');
-assert.match(dashboardPreload, /desktop:cloud:reconnect/, 'cloud reconnect must use constrained dashboard IPC');
-assert.match(electronMain, /createCloudRelayRuntime/, 'Electron main must delegate Rel.AI Cloud lifecycle ownership');
-assert.match(electronMain, /cloudRelay\.start\(\{ localUrl, token: guiConfig\.token \}\)/, 'the cloud relay must authenticate only to the live local service');
-assert.match(electronMain, /cloudRelay\.stop\(\)/, 'the cloud relay must close when the local service or app stops');
+assert.doesNotMatch(dashboardPreload, /desktop:cloud:/, 'removed cloud relay IPC must not be exposed');
+assert.doesNotMatch(electronMain, /CloudRelay|cloudRelay|REL_AI_CLOUD/, 'Electron main must use only the managed ngrok connection path');
 assert.match(electronMain, /onStatusChange: taskActivity => setStatus\(\{ taskActivity \}\)/, 'tool activity must be pushed into desktop surfaces');
 assert.match(electronMain, /createApprovalTokenManager/, 'Electron main must delegate token rotation to the secured approval-token manager');
 assert.match(electronMain, /onOAuthAuthorized: \(\) => setStatus\(\{ authenticationRequired: false/, 'successful ChatGPT approval must clear the desktop reapproval state');
