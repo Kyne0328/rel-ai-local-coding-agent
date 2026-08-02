@@ -131,7 +131,7 @@ function cloudRelayPanel(container) {
   if (relay.pairingCode) cloud.body.appendChild(pairingCodeBox(relay));
   const milestone = document.createElement('p');
   milestone.className = 'muted';
-  milestone.textContent = 'The relay is operational. The next cloud milestone adds ChatGPT OAuth so this pairing code is consumed during app authorization.';
+  milestone.textContent = 'When ChatGPT opens the Rel.AI authorization page, enter this single-use pairing code to bind that ChatGPT connection to this desktop.';
   cloud.body.appendChild(milestone);
   return cloud;
 }

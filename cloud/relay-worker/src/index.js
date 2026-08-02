@@ -1,3 +1,4 @@
+/* global WebSocketPair */
 import { DurableObject } from 'cloudflare:workers';
 import {
   HttpError,
@@ -22,10 +23,10 @@ import {
   tokenFromDeviceProtocol,
   verifyEd25519Jwk
 } from './security.js';
+import { authorizeMcpRequest, handleOAuthRoute } from './oauth.js';
 
 const REGISTRATION_TTL_MS = 10 * 60 * 1000;
 const PAIRING_TTL_MS = 10 * 60 * 1000;
-const RELAY_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const CONNECTION_TICKET_TTL_MS = 60 * 1000;
 const JSON_BODY_LIMIT = 32 * 1024;
 
@@ -46,9 +47,11 @@ export default {
 async function route(request, env) {
   const url = new URL(request.url);
   const routeKey = `${request.method.toUpperCase()} ${url.pathname}`;
+  const oauthResponse = await handleOAuthRoute(request, env);
+  if (oauthResponse) return oauthResponse;
 
   if (routeKey === 'GET /health') {
-    return json({ ok: true, service: 'rel-ai-cloud', version: '0.1.0' });
+    return json({ ok: true, service: 'rel-ai-cloud', version: '0.2.0' });
   }
   if (routeKey === 'POST /v1/devices/register/challenge') {
     return createRegistrationChallenge(request, env);
@@ -61,9 +64,6 @@ async function route(request, env) {
   }
   if (routeKey === 'POST /v1/devices/connection-ticket') {
     return createConnectionTicket(request, env);
-  }
-  if (routeKey === 'POST /v1/pairings/claim') {
-    return claimPairingCode(request, env);
   }
   if (routeKey === 'GET /v1/devices/connect') {
     return connectDevice(request, env);
@@ -182,46 +182,6 @@ async function createConnectionTicket(request, env) {
   }, 201);
 }
 
-async function claimPairingCode(request, env) {
-  const body = await readJson(request, JSON_BODY_LIMIT);
-  const normalizedCode = normalizePairingCode(body.pairing_code);
-  if (!/^[A-Z2-9]{8}$/.test(normalizedCode)) {
-    throw new HttpError(400, 'INVALID_PAIRING_CODE', 'pairing_code must contain eight supported characters.');
-  }
-  const codeHash = await sha256Base64Url(normalizedCode);
-  const now = Date.now();
-  const claimed = await env.DB.prepare(
-    `UPDATE pairing_codes
-        SET claimed_at = ?
-      WHERE code_hash = ?
-        AND claimed_at IS NULL
-        AND expires_at > ?
-        AND EXISTS (
-          SELECT 1 FROM devices
-           WHERE devices.device_id = pairing_codes.device_id
-             AND devices.status = 'active'
-        )
-      RETURNING device_id`
-  ).bind(now, codeHash, now).first();
-  if (!claimed) {
-    throw new HttpError(400, 'PAIRING_CODE_EXPIRED', 'The pairing code is invalid, expired, or already used.');
-  }
-
-  const accessToken = `relai_cloud_${randomBase64Url(32)}`;
-  const tokenHash = await sha256Base64Url(accessToken);
-  await env.DB.prepare(
-    'INSERT INTO relay_access_tokens (token_hash, device_id, created_at, expires_at, revoked_at) VALUES (?, ?, ?, ?, NULL)'
-  ).bind(tokenHash, claimed.device_id, now, now + RELAY_TOKEN_TTL_MS).run();
-
-  return json({
-    ok: true,
-    access_token: accessToken,
-    token_type: 'Bearer',
-    expires_in: Math.floor(RELAY_TOKEN_TTL_MS / 1000),
-    device_id: String(claimed.device_id)
-  }, 201);
-}
-
 async function connectDevice(request, env) {
   if (request.headers.get('upgrade')?.toLowerCase() !== 'websocket') {
     throw new HttpError(426, 'WEBSOCKET_REQUIRED', 'This endpoint requires a WebSocket upgrade.');
@@ -267,24 +227,9 @@ async function connectDevice(request, env) {
 }
 
 async function relayMcpRequest(request, env) {
-  const token = bearerToken(request);
-  if (!token) {
-    return errorJson('ACCESS_TOKEN_REQUIRED', 'Authorization: Bearer <token> is required.', 401, {}, {
-      'www-authenticate': 'Bearer realm="rel-ai-cloud"'
-    });
-  }
-  const tokenHash = await sha256Base64Url(token);
-  const row = await env.DB.prepare(
-    `SELECT relay_access_tokens.device_id, relay_access_tokens.expires_at
-       FROM relay_access_tokens
-       JOIN devices ON devices.device_id = relay_access_tokens.device_id
-      WHERE relay_access_tokens.token_hash = ?
-        AND relay_access_tokens.revoked_at IS NULL
-        AND devices.status = 'active'`
-  ).bind(tokenHash).first();
-  if (!row || Number(row.expires_at) <= Date.now()) {
-    throw new HttpError(401, 'INVALID_ACCESS_TOKEN', 'The relay access token is invalid or expired.');
-  }
+  const authorization = await authorizeMcpRequest(request, env);
+  if (authorization.response) return authorization.response;
+  const row = authorization.token;
 
   const body = await readBodyBytes(request, MAX_RELAY_BODY_BYTES);
   const relayRequest = new Request('https://relay.internal/relay', {
