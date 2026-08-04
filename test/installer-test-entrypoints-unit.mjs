@@ -58,10 +58,17 @@ assert.doesNotMatch(testRunner, /scripts\/installed-app-smoke|electron-builder|i
 assert.equal(fs.existsSync(path.join(root, 'scripts', 'installed-app-smoke.mjs')), false,
   'the host-destructive installed-app harness must remain removed');
 
+assert.equal(electronPackage.scripts?.postinstall, 'node node_modules/electron/install.js',
+  'clean Electron installs must always provision the pinned runtime binary');
+assert.equal(electronPackage.devDependencies.electron, '43.2.0',
+  'Electron runtime provisioning must remain pinned to the package version under test');
+
 assert.match(ci, /Build unpacked Windows application/);
 assert.match(ci, /Verify packaged application layout/);
+assert.match(ci, /Verify Electron test binary/);
 assert.doesNotMatch(ci, /test:installed|REL_AI_SMOKE_INSTALLER|uninstall|Setup.*\.exe/i);
 assert.match(release, /Verify packaged application layout/);
+assert.match(release, /Verify Electron test binary/);
 assert.doesNotMatch(release, /test:installed|REL_AI_SMOKE_INSTALLER|release-evidence-check|uninstall/i);
 
 assert.equal(electronPackage.build.appId, 'com.relai.mcp');
