@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "capturedAt": "2026-08-01",
+  "capturedAt": "2026-08-05",
   "platform": "win32",
   "architecture": "x64",
   "electronVersion": "43.2.0",
@@ -15,6 +15,6 @@
     "packagedDependencyBytes": 1107187,
     "localesBytes": 566095,
     "ngrokBytes": 33273672,
-    "dashboardCssBytes": 137539
+    "dashboardCssBytes": 143433
   }
 }
