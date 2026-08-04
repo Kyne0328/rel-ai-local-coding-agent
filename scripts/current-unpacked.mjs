@@ -61,7 +61,9 @@ function assertPackageDirectory(directory, markerPath) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  console.log(resolveCurrentUnpacked());
+  console.log(resolveCurrentUnpacked(defaultRoot, {
+    allowBuildCheck: process.argv.includes('--allow-build-check')
+  }));
 }
 
 export { resolveCurrentUnpacked, resolveCurrentUnpackedFromDist };
