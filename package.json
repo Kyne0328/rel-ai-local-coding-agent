@@ -88,7 +88,7 @@
     "test:connector-acceptance": "node scripts/packaged-connector-acceptance.mjs",
     "test:native-tasks-release-gate": "node scripts/native-tasks-release-gate.mjs",
     "test:http-auth": "node test/http-auth-smoke.mjs",
-    "test:oauth": "node test/oauth-smoke.mjs",
+    "test:oauth": "node test/oauth-smoke.mjs && node test/oauth-public-url-smoke.mjs && node test/oauth-provider-security-unit.mjs",
     "test:safety-paths": "node test/safety-paths.mjs",
     "test:dashboard-wording": "node test/dashboard-wording-smoke.mjs",
     "test:workflow-config": "node test/workflow-config-normalization.mjs",

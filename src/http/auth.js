@@ -46,7 +46,7 @@ function canonicalOptional(value) {
 function hasDashboardQueryToken(parsed, options) {
   if (!options.token) return false;
   const supplied = parsed.searchParams.get("token");
-  return supplied != null && timingSafeEqual(supplied, options.token);
+  return supplied != null && timingSafeEqual(String(supplied).trim(), String(options.token).trim());
 }
 
 function isDashboardAuthorized(req, parsed, options, res) {

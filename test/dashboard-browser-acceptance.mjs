@@ -107,6 +107,10 @@ try {
     assert.equal(scenario.keyboardAdvanced, true, `${scenario.name} traps keyboard focus`);
     assert.ok(scenario.statusText.length > 0, `${scenario.name} conveys status only by color`);
     assert.equal(scenario.longContentContained, true, `${scenario.name} allows long content to widen a task row`);
+    assert.equal(scenario.activityHorizontalOverflow, false, `${scenario.name} requires horizontal Activity scrolling`);
+    assert.equal(scenario.activityMessageVisible, true, `${scenario.name} hides the Activity message at scroll position zero`);
+    assert.ok(scenario.activityMessageText.length > 0, `${scenario.name} renders an empty Activity message`);
+    assert.equal(scenario.activityScrollLeft, 0, `${scenario.name} moved Activity away from its initial position`);
     assert.equal(scenario.reducedMotion, true);
     assert.equal(scenario.forcedColorsSupported, true, `${scenario.name} Chromium build lacks forced-color-adjust support`);
     assert.ok(Number.isFinite(scenario.devicePixelRatio) && scenario.devicePixelRatio >= 1);

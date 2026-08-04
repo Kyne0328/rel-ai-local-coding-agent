@@ -4,8 +4,8 @@ import { ERROR_CODES, errorPayload } from "../desktopUxContracts.js";
 
 function isAuthorized(req, options) {
   if (!options.token && options.allowNoAuth) return true;
-  const header = req.headers.authorization || "";
-  const expected = `Bearer ${options.token}`;
+  const header = String(req.headers.authorization || "").trim();
+  const expected = `Bearer ${String(options.token || "").trim()}`;
   return timingSafeEqual(header, expected);
 }
 
@@ -187,7 +187,7 @@ function sendHtml(res, status, html, headers = {}) {
   res.writeHead(status, {
     "Content-Type": "text/html; charset=utf-8",
     "Cache-Control": "no-store",
-    "Content-Security-Policy": "default-src 'none'; style-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+    "Content-Security-Policy": "default-src 'none'; style-src 'self'; form-action 'self' https://chatgpt.com; frame-ancestors 'none'; base-uri 'none'",
     "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",

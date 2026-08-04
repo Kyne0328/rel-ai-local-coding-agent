@@ -109,6 +109,7 @@ async function callTool(name, args = {}, context = {}) {
     applyCautionAudit(extraAudit, operationName, effectiveArgs || {}, value, config);
     invalidateSessionCacheForCall(config, operationName, effectiveArgs || {});
     safeLogAudit(config, {
+      ...activityResult.activity,
       ...taskAuditContext(context, finishActivity, requestedTaskId, operationName, valueOk, value),
       tool: operationName,
       publicTool: name,
@@ -145,6 +146,7 @@ async function callTool(name, args = {}, context = {}) {
     };
     if (finishActivity?.taskId || requestedTaskId) enhanced.taskId = finishActivity?.taskId || requestedTaskId;
     if (!/^TASK_INTEGRITY_/.test(String(enhanced.code || ''))) safeLogAudit(config, {
+      ...activityResult.activity,
       ...taskAuditContext(context, finishActivity, requestedTaskId, operationName, false),
       tool: operationName,
       publicTool: name,

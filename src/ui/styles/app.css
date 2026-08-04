@@ -438,12 +438,17 @@
   .data-table tbody tr:hover td { background: color-mix(in srgb, var(--ui-surface-secondary) 62%, transparent); }
   .table-virtual-sentinel-cell { height: 1px; padding: 4px; }
   .activity-table { min-width: 100%; }
-  .activity-col-time { width: 9%; }
-  .activity-col-tool { width: 21%; }
-  .activity-col-workspace { width: 17%; }
-  .activity-col-status { width: 10%; }
+  .activity-col-time { width: 104px; }
   .activity-col-message { width: auto; }
+  .activity-col-tool { width: 19%; }
+  .activity-col-workspace { width: 15%; }
+  .activity-col-status { width: 104px; }
   .activity-col-action { width: 64px; }
+  .activity-message-cell { @apply min-w-0; }
+  .activity-message-copy { @apply block truncate; }
+  .activity-message-mobile-meta { @apply hidden min-w-0 items-center gap-2; }
+  .activity-message-mobile-meta code { @apply truncate text-[10px]; color: var(--ui-text-secondary); }
+  .activity-message-mobile-time { @apply whitespace-nowrap text-[10px]; color: var(--ui-text-tertiary); }
   .activity-row-button { @apply size-8 min-h-8 px-0 text-base; }
   .activity-requested-row td { background: var(--ui-status-info-background); }
   .clickable-row { @apply cursor-pointer; }
@@ -451,6 +456,7 @@
   .truncate { @apply overflow-hidden text-ellipsis whitespace-nowrap; }
   .small { @apply text-[11px]; }
 
+  .workspace-focus-label { @apply max-w-48 truncate rounded-lg px-2.5 py-2 text-[11px] font-semibold; color: var(--ui-action-primary); background: var(--ui-status-info-background); border: 1px solid color-mix(in srgb, var(--ui-action-primary) 34%, transparent); }
   .workspace-toolbar button[data-add-workspace], .workspace-empty-state button[data-add-workspace] {
     border-color: color-mix(in srgb, var(--ui-action-primary) 72%, transparent) !important;
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--ui-action-primary) 18%, transparent);
@@ -1106,7 +1112,22 @@
   .activity-toolbar > * { @apply min-w-0; }
   .activity-search, .segment-group, .activity-filter-summary { grid-column: 1 / -1; }
   .activity-clear-filters, .activity-freeze { grid-row: auto; }
-  .activity-table { min-width: 760px; }
+  .activity-table { min-width: 0; }
+  .activity-table .activity-col-tool,
+  .activity-table .activity-col-workspace,
+  .activity-table .activity-col-status,
+  .activity-table th:nth-child(3),
+  .activity-table th:nth-child(4),
+  .activity-table th:nth-child(5),
+  .activity-table td:nth-child(3),
+  .activity-table td:nth-child(4),
+  .activity-table td:nth-child(5) { display: none; }
+  .activity-col-time { width: 92px; }
+  .activity-col-action { width: 52px; }
+  .activity-message-mobile-meta { @apply flex; }
+  .activity-message-mobile-meta .status-pill { @apply min-h-6 px-2 text-[10px]; }
+  .activity-message-cell { @apply py-2; }
+  .activity-message-copy { @apply mt-1; }
   .data-table th, .data-table td { @apply px-3; }
 }
 
@@ -1158,6 +1179,13 @@
 
 @media (max-width: 240px) {
   .main { padding: 6px 6px calc(190px + env(safe-area-inset-bottom)); }
+  .activity-table .activity-col-time,
+  .activity-table .activity-col-action,
+  .activity-table th:nth-child(1),
+  .activity-table th:nth-child(6),
+  .activity-table td:nth-child(1),
+  .activity-table td:nth-child(6) { display: none; }
+  .activity-message-mobile-meta { flex-wrap: wrap; }
   .mobile-nav { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .page-subtitle, #lastUpdated, .sessions-toolbar > p, .sessions-page .summary-metrics { display: none; }
   .topbar { gap: 6px; margin-bottom: 6px; }

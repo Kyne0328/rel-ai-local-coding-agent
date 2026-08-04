@@ -3,18 +3,20 @@ import { esc, metricHtml, statusClass } from '../../utils.js';
 import { getWorkspaceFilter } from '../../router.js';
 import { workspaceDetailsHtml, branchSummary } from './details.js';
 import { recentWorkspaceAliases } from './recents.js';
-import { workspaceMenuHtml } from '../../components/workspace-menu.js';
 
 function buildWorkspaces(data) {
   const config = data.config || {};
   const health = data.health || {};
   const workspaceFilter = getWorkspaceFilter();
   const allWorkspaces = Array.isArray(config.workspaces) ? config.workspaces : [];
-  const workspaces = workspaceFilter
-    ? allWorkspaces.filter(workspace => workspace.alias === workspaceFilter)
+  const selectedWorkspace = workspaceFilter
+    ? allWorkspaces.find(workspace => workspace.alias === workspaceFilter)
+    : null;
+  const workspaces = selectedWorkspace
+    ? [selectedWorkspace, ...allWorkspaces.filter(workspace => workspace !== selectedWorkspace)]
     : allWorkspaces;
   const healthByAlias = new Map((Array.isArray(health.workspaces) ? health.workspaces : []).map(item => [item.alias, item]));
-  const findings = actionableFindings(health, workspaceFilter);
+  const findings = actionableFindings(health);
   const views = workspaces.map(workspace => workspaceCardView(workspace, healthByAlias.get(workspace.alias)));
   const availableCount = views.filter(view => view.available).length;
   const validationReady = views.filter(view => view.validationCommands.length > 0).length;
@@ -26,8 +28,8 @@ function buildWorkspaces(data) {
     <div class="feature-toolbar workspace-toolbar">
       <p>Common status and actions stay visible. Git, policy, and safety details remain available when needed.</p>
       <div class="section-head-actions">
-        ${workspaceMenuHtml(allWorkspaces, workspaceFilter, { id: 'workspacesWorkspaceMenu' })}
-        <span class="feature-count">${workspaceCountLabel(workspaces.length, allWorkspaces.length, Boolean(workspaceFilter))}</span>
+        ${workspaceFilter ? `<span class="workspace-focus-label" title="Focused workspace: ${esc(workspaceFilter)}">Focused: ${esc(workspaceFilter)}</span><a class="buttonlike secondary compact-button" href="#workspaces">Clear focus</a>` : ''}
+        <span class="feature-count">${allWorkspaces.length} configured</span>
         <button class="primary" type="button" data-add-workspace>Add workspace</button>
       </div>
     </div>`;
@@ -36,7 +38,7 @@ function buildWorkspaces(data) {
   if (!workspaceFilter && recent.length) root.appendChild(recentWorkspaces(recent));
 
   if (!workspaces.length) {
-    root.appendChild(emptyWorkspaceState(workspaceFilter));
+    root.appendChild(emptyWorkspaceState());
     return root;
   }
 
@@ -57,11 +59,6 @@ function buildWorkspaces(data) {
   return root;
 }
 
-function workspaceCountLabel(shown, total, filtered) {
-  if (!filtered) return `${total} configured`;
-  return `${shown} shown · ${total} configured`;
-}
-
 function recentWorkspaces(aliases) {
   const section = document.createElement('section');
   section.className = 'workspace-recents';
@@ -70,13 +67,9 @@ function recentWorkspaces(aliases) {
   return section;
 }
 
-function emptyWorkspaceState(workspaceFilter) {
+function emptyWorkspaceState() {
   const empty = document.createElement('section');
   empty.className = 'workspace-empty-state';
-  if (workspaceFilter) {
-    empty.innerHTML = '<strong>Workspace not found</strong><p>The selected workspace no longer exists or is hidden by the current filter.</p><a class="buttonlike secondary" href="#workspaces">Show all workspaces</a>';
-    return empty;
-  }
   empty.innerHTML = `
     <div class="workspace-empty-mark" aria-hidden="true">+</div>
     <strong>Add your first workspace</strong>
@@ -199,7 +192,7 @@ function workspacePrimaryActions(view) {
     ? `<button class="secondary" type="button" data-open-folder="${view.aliasAttr}">Open folder</button>`
     : '';
   return `
-    <button type="button" data-edit-workspace="${view.aliasAttr}">Workspace settings</button>
+    <button type="button" data-edit-workspace="${view.aliasAttr}">Edit workspace</button>
     <button class="secondary" type="button" data-run-validation="${view.aliasAttr}" ${view.validationCommands.length ? '' : 'disabled'}>Run validation</button>
     ${openFolder}`;
 }
@@ -225,10 +218,9 @@ function findingRow(finding) {
   return `<a class="list-item finding-link" href="#settings/diagnostics">${inner}<div class="item-time">${pillHtml(finding.severity || 'info')}</div></a>`;
 }
 
-function actionableFindings(health, workspaceFilter = '') {
+function actionableFindings(health) {
   return (Array.isArray(health.findings) ? health.findings : [])
-    .filter(finding => finding.severity !== 'info')
-    .filter(finding => !workspaceFilter || !finding.workspace || finding.workspace === workspaceFilter);
+    .filter(finding => finding.severity !== 'info');
 }
 
 export { buildWorkspaces };

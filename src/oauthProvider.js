@@ -151,11 +151,13 @@ function parseStoreText(text, target, options = {}) {
     for (const key of STORE_MAPS) store[key] = nullProtoMap(store[key]);
     for (const key of ['codes', 'accessTokens', 'refreshTokens']) store[key] = migrateSecretMap(store[key]);
     store.registrationAttempts = normalizeRegistrationAttempts(store.registrationAttempts);
+    const repairedLegacyGrants = repairLegacyGrantRecords(store);
     if (requiresAuthorizationReset(parsed, store)) {
       const reset = resetAuthorizationStore(parsed, store);
       writeStore(reset);
       return reset;
     }
+    if (repairedLegacyGrants) writeStore(store);
   } catch (error) {
     if (error instanceof OAuthStoreError) throw error;
     throw new OAuthStoreError('OAUTH_STORE_MIGRATION_FAILED', 'OAuth registration state could not be migrated safely.', {
@@ -313,6 +315,30 @@ function normalizeRegistrationAttempts(value) {
   return attempts;
 }
 
+function repairLegacyGrantRecords(store) {
+  let changed = false;
+  for (const collectionName of ['codes', 'accessTokens', 'refreshTokens']) {
+    for (const entry of Object.values(store[collectionName] || {})) {
+      if (!entry || typeof entry !== 'object') continue;
+      const client = store.clients?.[entry.clientId];
+      if (!validStoredClient(client) || client.legacy_registration === true) continue;
+      let expectedResource;
+      try { expectedResource = resourceForIssuer(client.issuer); }
+      catch { continue; }
+      if (entry.resource !== expectedResource) continue;
+      if (entry.issuer == null || entry.issuer === '') {
+        entry.issuer = client.issuer;
+        changed = true;
+      }
+      if (entry.authorizationPolicy == null) {
+        entry.authorizationPolicy = createLocalAdminPolicy();
+        changed = true;
+      }
+    }
+  }
+  return changed;
+}
+
 function requiresAuthorizationReset(parsed, store) {
   const hasAuthorizationState = STORE_MAPS.some(key => Object.keys(store[key] || {}).length > 0);
   if (!hasAuthorizationState) return false;
@@ -417,7 +443,6 @@ function validStoredGrant(entry, store, options = {}) {
       && typeof entry.codeChallenge === 'string'
       && entry.codeChallenge.length > 0;
   }
-  if (options.refreshToken && !scopeSet(entry.scope).has(OFFLINE_SCOPE)) return false;
   return true;
 }
 
@@ -639,8 +664,7 @@ function authorizationServerMetadata(baseUrl) {
     code_challenge_methods_supported: ['S256'],
     token_endpoint_auth_methods_supported: ['none'],
     scopes_supported: SUPPORTED_SCOPES,
-    application_types_supported: ['native', 'web'],
-    authorization_response_iss_parameter_supported: true
+    application_types_supported: ['native', 'web']
   };
 }
 
@@ -894,7 +918,8 @@ function issueTokens(store, { issuer, clientId, scope, resource, authorizationPo
     scope,
     resource
   };
-  if (issueRefresh && scopeSet(scope).has(OFFLINE_SCOPE)) {
+  // ChatGPT requests scope=mcp and still expects a refresh token for persistent access.
+  if (issueRefresh) {
     const refreshToken = randomId('relai_rt_', 32);
     store.refreshTokens[secretKey(refreshToken)] = {
       issuer,
@@ -1053,7 +1078,7 @@ function authorizationPolicyFromConsent() {
   return createLocalAdminPolicy();
 }
 
-function renderLoginPage(request, baseUrl, options = {}) {
+function renderLoginPage(request, _baseUrl, options = {}) {
   const hidden = {
     client_id: request.clientId,
     redirect_uri: request.redirectUri,
@@ -1064,15 +1089,32 @@ function renderLoginPage(request, baseUrl, options = {}) {
     resource: request.resource,
     scope: request.scope
   };
-  const hiddenInputs = Object.entries(hidden).map(([key, value]) => `<input type="hidden" name="${escapeHtml(key)}" value="${escapeHtml(value)}">`).join('\n      ');
+  const hiddenInputs = Object.entries(hidden)
+    .map(([key, value]) => `<input type="hidden" name="${escapeHtml(key)}" value="${escapeHtml(value)}">`)
+    .join('\n      ');
   const errorHtml = options.error ? `<div class="oauth-error">${escapeHtml(options.error)}</div>` : '';
-  const redirect = new URL(request.redirectUri);
-  const verifiedChatGpt = redirect.protocol === 'https:' && redirect.hostname.toLowerCase() === 'chatgpt.com';
-  const identity = verifiedChatGpt ? 'Verified ChatGPT redirect' : 'Unverified OAuth client';
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Authorize Rel.AI MCP</title>
-<link rel="stylesheet" href="/public/oauth.css"></head>
-<body class="oauth-page"><form class="oauth-card" method="POST" action="${escapeHtml(canonicalIssuer(baseUrl))}/authorize"><h1>Authorize Rel.AI MCP</h1><p>${escapeHtml(identity)} is requesting repository access.</p>${errorHtml}<label for="dashboard_token">Approval token</label><input id="dashboard_token" name="dashboard_token" type="password" autocomplete="off" autofocus required>${hiddenInputs}<button type="submit">Approve connection</button><div class="oauth-client">Client name: ${escapeHtml(request.clientName || request.clientId)}<br>Redirect host: ${escapeHtml(redirect.hostname)}<br>OAuth scopes: ${escapeHtml(request.scope)}</div></form></body></html>`;
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Authorize Rel.AI MCP</title>
+<link rel="stylesheet" href="/public/oauth.css">
+</head>
+<body class="oauth-page">
+  <form class="oauth-card" method="POST" action="/authorize">
+    <h1>Authorize ChatGPT</h1>
+    <p>Connect ChatGPT to your local Rel.AI MCP workspaces. Enter the approval token from the Rel.AI desktop app.</p>
+    <p class="oauth-client">In Rel.AI, open <strong>Settings &gt; Connection</strong>. Below the connection controls, find <strong>Approval token</strong>, select <strong>Show</strong>, then <strong>Copy token</strong> and paste it here. Replacing the token revokes existing ChatGPT access, but the MCP endpoint and ChatGPT app stay the same.</p>
+    ${errorHtml}
+    <label for="dashboard_token">Approval token</label>
+    <input id="dashboard_token" name="dashboard_token" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" autofocus required>
+    ${hiddenInputs}
+    <button type="submit">Approve connection</button>
+    <div class="oauth-client">Requesting client: ${escapeHtml(request.clientName || request.clientId)}</div>
+  </form>
+</body>
+</html>`;
 }
 
 function escapeHtml(value) {
@@ -1081,7 +1123,9 @@ function escapeHtml(value) {
 
 function verifyLogin(submittedToken, serverToken) {
   if (!serverToken) return true;
-  return timingSafeEqual(submittedToken, serverToken);
+  const submitted = String(submittedToken == null ? '' : submittedToken).trim();
+  const expected = String(serverToken).trim();
+  return timingSafeEqual(submitted, expected);
 }
 
 export { protectedResourceMetadata, authorizationServerMetadata, wwwAuthenticateHeader, registerClient, validateAuthorizationRequest, issueAuthorizationCode, buildRedirectUrl, exchangeToken, validateAccessToken, authorizationPolicyFromConsent, renderLoginPage, verifyLogin, authorizationStatus, revokeAuthorizations, canonicalIssuer, resourceForIssuer, normalizeScope, SCOPE, OFFLINE_SCOPE, SUPPORTED_SCOPES, secretKey, DCR_LIMITS, OAuthStoreError, emptyStore as createEmptyOAuthStore, readStore as readOAuthStore, writeStore as writeOAuthStore, pruneStore, evaluateRegistrationLimits, oauthStoreRecoveryStatus, resetOAuthStoreAfterCorruption };
