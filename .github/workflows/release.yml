@@ -6,6 +6,9 @@ on:
       - main
     paths:
       - package.json
+      - package-lock.json
+      - electron/package.json
+      - electron/package-lock.json
       - .github/workflows/release.yml
   workflow_dispatch:
 
@@ -39,7 +42,7 @@ jobs:
             package-lock.json
             electron/package-lock.json
 
-      - name: Detect package version change
+      - name: Resolve release version
         id: version
         shell: pwsh
         run: |
@@ -50,40 +53,14 @@ jobs:
             throw 'package.json does not contain a version.'
           }
 
-          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
-            "changed=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-            "version=$currentVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-            Write-Host "Manual release requested for current package version $currentVersion."
-            exit 0
-          }
-
-          $beforeSha = '${{ github.event.before }}'
-          if (-not $beforeSha -or $beforeSha -match '^0+$') {
-            throw 'The previous commit could not be determined; refusing to publish a release.'
-          }
-
-          $previousPackageJson = git show "$($beforeSha):package.json"
-          if ($LASTEXITCODE -ne 0 -or -not $previousPackageJson) {
-            throw "Could not read package.json from previous commit $beforeSha."
-          }
-
-          $previousVersion = ($previousPackageJson | ConvertFrom-Json).version
-          if ($previousVersion -eq $currentVersion) {
-            $changedFiles = @(git diff --name-only $beforeSha $env:GITHUB_SHA)
-            if ($LASTEXITCODE -ne 0) {
-              throw "Could not inspect files changed since $beforeSha."
-            }
-            if ($changedFiles -notcontains '.github/workflows/release.yml') {
-              "changed=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-              Write-Host "package.json changed, but its version remains $currentVersion. No release will be published."
-              exit 0
-            }
-            Write-Host "Release workflow changed while package version remains $currentVersion. Retrying the unpublished version."
-          }
-
           "changed=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "version=$currentVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          Write-Host "Version changed from $previousVersion to $currentVersion."
+
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            Write-Host "Manual release requested for current package version $currentVersion."
+          } else {
+            Write-Host "Release-triggering files changed for package version $currentVersion. The preflight step will decide whether this version is still unpublished."
+          }
 
       - name: Refuse an existing tag or release
         if: steps.version.outputs.changed == 'true'
