@@ -24,6 +24,10 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm ci
         working-directory: electron
+      - name: Install Electron test binary
+        run: node electron/node_modules/electron/install.js
+      - name: Verify Electron test binary
+        run: test -x electron/node_modules/electron/dist/electron
       - run: npm run verify:color-tokens
       - run: npm run audit:production
       - run: npm run test:native-tasks-release-gate
