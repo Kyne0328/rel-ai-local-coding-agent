@@ -59,7 +59,7 @@ jobs:
           if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
             Write-Host "Manual release requested for current package version $currentVersion."
           } else {
-            Write-Host "Release-triggering files changed for package version $currentVersion. The preflight step will decide whether this version is still unpublished."
+            Write-Host "Release workflow changed while package version remains $currentVersion, or another release-triggering file changed. The preflight step will decide whether this version is still unpublished."
           }
 
       - name: Refuse an existing tag or release
