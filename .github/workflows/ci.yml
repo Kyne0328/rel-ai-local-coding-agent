@@ -22,12 +22,12 @@ jobs:
             package-lock.json
             electron/package-lock.json
       - run: npm ci --ignore-scripts
-      - run: npm ci --ignore-scripts
+      - run: npm ci
         working-directory: electron
       - run: npm run verify:color-tokens
       - run: npm run audit:production
       - run: npm run test:native-tasks-release-gate
-      - run: npm run test:all
+      - run: xvfb-run --auto-servernum npm run test:all
 
   packaged-app:
     runs-on: windows-latest
@@ -59,9 +59,14 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $packageDirectory = (node scripts/current-unpacked.mjs).Trim()
-          if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $packageDirectory -PathType Container)) {
-            throw 'Could not resolve the promoted unpacked application.'
+          $packageDirectory = node scripts/current-unpacked.mjs --allow-build-check
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Could not resolve the unpacked application produced by electron:build.'
+          }
+          $packageDirectory = [string]$packageDirectory
+          $packageDirectory = $packageDirectory.Trim()
+          if (-not $packageDirectory -or -not (Test-Path -LiteralPath $packageDirectory -PathType Container)) {
+            throw 'Resolved unpacked application path is missing or invalid.'
           }
           "path=$packageDirectory" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
       - name: Verify packaged application layout
