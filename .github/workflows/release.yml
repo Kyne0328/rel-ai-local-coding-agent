@@ -136,6 +136,19 @@ jobs:
         run: npm ci
         working-directory: electron
 
+      - name: Install Electron test binary
+        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
+        run: node electron/node_modules/electron/install.js
+
+      - name: Verify Electron test binary
+        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
+        shell: pwsh
+        run: |
+          $electronBinary = 'electron/node_modules/electron/dist/electron.exe'
+          if (-not (Test-Path -LiteralPath $electronBinary -PathType Leaf)) {
+            throw "Electron test binary is missing after installation: $electronBinary"
+          }
+
       - name: Audit production dependencies
         if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         run: npm run audit:production
@@ -187,9 +200,14 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $packageDirectory = (node scripts/current-unpacked.mjs).Trim()
-          if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $packageDirectory -PathType Container)) {
+          $packageDirectory = node scripts/current-unpacked.mjs
+          if ($LASTEXITCODE -ne 0) {
             throw 'Could not resolve the current unpacked application.'
+          }
+          $packageDirectory = [string]$packageDirectory
+          $packageDirectory = $packageDirectory.Trim()
+          if (-not $packageDirectory -or -not (Test-Path -LiteralPath $packageDirectory -PathType Container)) {
+            throw 'Resolved current unpacked application path is missing or invalid.'
           }
           "path=$packageDirectory" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
