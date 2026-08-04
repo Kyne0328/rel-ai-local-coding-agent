@@ -7,6 +7,17 @@ import { fileURLToPath } from 'node:url';
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(testDir, '..');
+const electronBinary = path.join(
+  root,
+  'electron',
+  'node_modules',
+  'electron',
+  'dist',
+  process.platform === 'win32' ? 'electron.exe' : 'electron'
+);
+const electronInstaller = path.join(root, 'electron', 'node_modules', 'electron', 'install.js');
+
+ensureElectronBinary();
 
 // Not tests: the syntax checker runs via `npm run check`, and this file is the runner.
 const NOT_TESTS = new Set(['check-js.mjs', 'run-tests.mjs']);
@@ -38,4 +49,25 @@ console.log(`\n${files.length - failures.length}/${files.length} test files pass
 if (failures.length) {
   console.error(`Failed: ${failures.join(', ')}`);
   process.exit(1);
+}
+
+function ensureElectronBinary() {
+  if (fs.existsSync(electronBinary)) return;
+  if (!fs.existsSync(electronInstaller)) {
+    console.error(`Electron installer is missing at ${electronInstaller}. Run npm ci in electron/.`);
+    process.exit(1);
+  }
+
+  console.log('Electron test binary is missing; installing the pinned Electron runtime.');
+  const result = spawnSync(process.execPath, [electronInstaller], {
+    cwd: root,
+    encoding: 'utf8',
+    timeout: 5 * 60 * 1000
+  });
+  if (result.status !== 0 || !fs.existsSync(electronBinary)) {
+    if (result.stdout) console.error(result.stdout.trim());
+    if (result.stderr) console.error(result.stderr.trim());
+    console.error(`Electron test binary could not be installed at ${electronBinary}.`);
+    process.exit(1);
+  }
 }
