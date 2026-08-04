@@ -72,10 +72,10 @@ function form(value) {
   return params.toString();
 }
 
-async function postForm(pathname, value, manual = false) {
+async function postForm(pathname, value, manual = false, headers = {}) {
   return fetch(`${base}${pathname}`, {
     method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    headers: { 'content-type': 'application/x-www-form-urlencoded', ...headers },
     body: form(value),
     redirect: manual ? 'manual' : 'follow'
   });
@@ -104,9 +104,23 @@ async function authorize(client, pair, scope, state) {
   };
   const page = await fetch(`${base}/authorize?${new URLSearchParams(values)}`);
   assert.equal(page.status, 200);
+  const contentSecurityPolicy = page.headers.get('content-security-policy') || '';
+  assert.match(contentSecurityPolicy, /form-action 'self' https:\/\/chatgpt\.com(?:;|\s)/, 'the approval page must permit its OAuth redirect back to ChatGPT');
+  assert.doesNotMatch(contentSecurityPolicy, /form-action 'self';/, 'a self-only form policy blocks Chromium from following the cross-origin OAuth redirect');
   const pageHtml = await page.text();
+  assert.match(pageHtml, /<h1>Authorize ChatGPT<\/h1>/);
+  assert.match(pageHtml, /Connect ChatGPT to your local Rel\.AI MCP workspaces\. Enter the approval token from the Rel\.AI desktop app\./);
+  assert.match(pageHtml, /Settings &gt; Connection/);
+  assert.match(pageHtml, /Below the connection controls, find <strong>Approval token<\/strong>, select <strong>Show<\/strong>, then <strong>Copy token<\/strong> and paste it here\./);
+  assert.match(pageHtml, /Replacing the token revokes existing ChatGPT access, but the MCP endpoint and ChatGPT app stay the same\./);
   assert.match(pageHtml, /Approve connection/);
+  assert.match(pageHtml, /Requesting client: ChatGPT/);
+  assert.doesNotMatch(pageHtml, /Verified ChatGPT redirect|Unverified OAuth client|Redirect host:|OAuth scopes:/);
   assert.match(pageHtml, /href="\/public\/oauth\.css"/);
+  assert.match(pageHtml, /<form[^>]*action="\/authorize"/, 'the consent form must post back to the current public origin');
+  assert.doesNotMatch(pageHtml, /action="https?:/i, 'the consent form must not use an absolute cross-origin action');
+  assert.match(pageHtml, /autocapitalize="none"/);
+  assert.match(pageHtml, /spellcheck="false"/);
   assert.doesNotMatch(pageHtml, /name="workspace"/, 'the consent page must not offer per-repository selection');
   assert.doesNotMatch(pageHtml, /name="capability"/, 'the consent page must not offer per-capability selection');
   const approved = await postForm('/authorize', {
@@ -116,7 +130,7 @@ async function authorize(client, pair, scope, state) {
   assert.equal(approved.status, 302);
   const location = new URL(approved.headers.get('location'));
   assert.equal(location.searchParams.get('state'), state);
-  assert.equal(location.searchParams.get('iss'), base);
+  assert.deepEqual([...location.searchParams.keys()].sort(), ['code', 'state']);
   assert.ok(location.searchParams.get('code'));
   return location.searchParams.get('code');
 }
@@ -160,7 +174,7 @@ try {
   assert.equal(metadata.issuer, base);
   assert.ok(metadata.application_types_supported.includes('web'));
   assert.ok(metadata.grant_types_supported.includes('refresh_token'));
-  assert.equal(metadata.authorization_response_iss_parameter_supported, true);
+  assert.equal(Object.hasOwn(metadata, 'authorization_response_iss_parameter_supported'), false);
 
   const legacyRefresh = await postForm('/token', {
     grant_type: 'refresh_token',
@@ -176,6 +190,11 @@ try {
   assert.equal(resetLegacyStore.clients[legacyClientId].issuer, '');
   assert.deepEqual(Object.keys(resetLegacyStore.refreshTokens), []);
   assert.ok(Number(resetLegacyStore.approvalRequiredAt) > 0);
+
+  const oauthProvider = await import('../src/oauthProvider.js');
+  assert.equal(oauthProvider.verifyLogin(`  ${approvalToken}\r\n`, approvalToken), true, 'surrounding clipboard whitespace must not reject the approval token');
+  assert.equal(oauthProvider.verifyLogin(`${approvalToken}x`, approvalToken), false, 'a changed approval token must still be rejected');
+  assert.equal(oauthProvider.verifyLogin('oauth smoke approval token', approvalToken), false, 'internal token changes must not be normalized');
 
   const legacyPair = pkcePair();
   const legacyCode = await authorize({ client_id: legacyClientId }, legacyPair, 'mcp offline_access', 'legacy-reconnect');
@@ -201,7 +220,7 @@ try {
   const first = await exchange(client, firstCode, firstPair.verifier);
   assert.equal(first.response.status, 200);
   assert.ok(first.body.access_token);
-  assert.equal(first.body.refresh_token, undefined);
+  assert.ok(first.body.refresh_token, 'ChatGPT scope=mcp grants must include a refresh token');
   assert.equal(first.body.scope, 'mcp');
 
   const stepUpPair = pkcePair();
@@ -289,7 +308,8 @@ try {
   assert.ok(Object.keys(storedOAuth.accessTokens).every(key => /^sha256:[a-f0-9]{64}$/.test(key)));
   assert.ok(Object.keys(storedOAuth.refreshTokens).every(key => /^sha256:[a-f0-9]{64}$/.test(key)));
 
-  const wrongIssuerProvider = await import('../src/oauthProvider.js');  const wrongIssuer = wrongIssuerProvider.validateAuthorizationRequest({
+  const wrongIssuerProvider = oauthProvider;
+  const wrongIssuer = wrongIssuerProvider.validateAuthorizationRequest({
     response_type: 'code', client_id: client.client_id, redirect_uri: redirectUri,
     code_challenge: 'abc', code_challenge_method: 'S256'
   }, { issuer: 'https://different.example.test' });
@@ -325,6 +345,36 @@ try {
   assert.deepEqual(Object.keys(recoveredStore.clients).sort(), [client.client_id, legacyClientId, unrelatedClient.client_id].sort());
   assert.equal(recoveredStore.clients[client.client_id].issuer, base);
   assert.equal(recoveredStore.clients[unrelatedClient.client_id].issuer, base);
+
+  const limitedPair = pkcePair();
+  const limitedValues = {
+    response_type: 'code', client_id: unrelatedClient.client_id, redirect_uri: redirectUri,
+    code_challenge: limitedPair.challenge, code_challenge_method: 'S256',
+    resource: `${base}/mcp`, scope: 'mcp', state: 'rate-limit'
+  };
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const rejected = await postForm('/authorize', {
+      ...limitedValues,
+      dashboard_token: 'wrong-token'
+    }, true, { 'x-forwarded-for': '198.51.100.24' });
+    assert.equal(rejected.status, 401);
+  }
+  const limited = await postForm('/authorize', {
+    ...limitedValues,
+    dashboard_token: 'wrong-token'
+  }, true, { 'x-forwarded-for': '198.51.100.24' });
+  assert.equal(limited.status, 429);
+  assert.ok(Number(limited.headers.get('retry-after')) >= 1);
+  assert.match(await limited.text(), /Too many incorrect approval tokens/);
+  assert.match(limited.headers.get('content-type') || '', /^text\/html/);
+
+  const validAfterLockout = await postForm('/authorize', {
+    ...limitedValues,
+    dashboard_token: approvalToken
+  }, true, { 'x-forwarded-for': '198.51.100.24' });
+  assert.equal(validAfterLockout.status, 302, 'a correct approval token must not be blocked by the failed-token budget');
+  assert.ok(new URL(validAfterLockout.headers.get('location')).searchParams.get('code'));
+
   assert.throws(() => wrongIssuerProvider.canonicalIssuer('http://public.example.test'), /must use HTTPS/);
   assert.equal(wrongIssuerProvider.canonicalIssuer('http://127.0.0.1:3333/'), 'http://127.0.0.1:3333');
 } finally {

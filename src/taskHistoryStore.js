@@ -335,11 +335,13 @@ function historicalTitle(session) {
 
 function compactEvent(event) {
   const keep = [
-    'id', 'eventId', 'ts', 'pid', 'taskId', 'operationId', 'requestId', 'serverInstanceId',
-    'transportType', 'clientName', 'clientVersion', 'taskIdentityVersion', 'taskIdExplicit',
-    'taskHistoryEligible', 'duplicateRequest', 'eventType', 'tool', 'operation', 'workspace',
-    'ok', 'ms', 'changedFiles', 'taskOwnedChangedFiles', 'externalChangedFiles', 'validationStatus',
-    'validationFingerprint', 'taskMutationGeneration', 'taskValidatedMutationGeneration', 'taskWorkspaceGeneration',
+    'id', 'eventId', 'ts', 'timestamp', 'startedAt', 'completedAt', 'durationMs', 'pid', 'taskId',
+    'operationId', 'requestId', 'serverInstanceId', 'transportType', 'clientName', 'clientVersion',
+    'taskIdentityVersion', 'taskIdExplicit', 'taskHistoryEligible', 'duplicateRequest', 'eventType',
+    'category', 'action', 'status', 'title', 'summary', 'currentStage', 'currentActivity', 'tool',
+    'operation', 'workspace', 'target', 'result', 'metadata', 'progress', 'ok', 'ms', 'changedFiles',
+    'taskOwnedChangedFiles', 'externalChangedFiles', 'validationStatus', 'validationFingerprint',
+    'taskMutationGeneration', 'taskValidatedMutationGeneration', 'taskWorkspaceGeneration',
     'completionKnown', 'endReason', 'completionSource', 'taskSummary', 'message', 'error', 'path'
   ];
   const compact = Object.fromEntries(keep.filter(key => event[key] !== undefined).map(key => [key, event[key]]));

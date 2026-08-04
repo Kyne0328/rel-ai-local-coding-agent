@@ -127,6 +127,49 @@ try {
     }
   }
 
+  directory = useState('v22-grants');
+  const legacyClientId = 'relai_client_v22_compatibility_test';
+  const legacyNow = Date.now();
+  const legacyStore = provider.createEmptyOAuthStore();
+  legacyStore.clients[legacyClientId] = {
+    client_id: legacyClientId,
+    issuer,
+    application_type: 'web',
+    redirect_uris: [redirectUri],
+    client_name: 'ChatGPT',
+    grant_types: ['authorization_code', 'refresh_token'],
+    response_types: ['code'],
+    token_endpoint_auth_method: 'none',
+    registered_scope: 'mcp',
+    granted_scope: 'mcp',
+    created_at: legacyNow,
+    last_used_at: legacyNow
+  };
+  legacyStore.accessTokens['v22-access-token'] = {
+    clientId: legacyClientId,
+    scope: 'mcp',
+    resource: `${issuer}/mcp`,
+    issuedAt: legacyNow,
+    expiresAt: legacyNow + 60_000
+  };
+  legacyStore.refreshTokens['v22-refresh-token'] = {
+    clientId: legacyClientId,
+    scope: 'mcp',
+    resource: `${issuer}/mcp`,
+    issuedAt: legacyNow,
+    expiresAt: legacyNow + 60_000
+  };
+  fs.writeFileSync(storeFile(directory), `${JSON.stringify(legacyStore, null, 2)}\n`);
+  const repairedLegacyStore = provider.readOAuthStore();
+  const repairedAccess = Object.values(repairedLegacyStore.accessTokens)[0];
+  const repairedRefresh = Object.values(repairedLegacyStore.refreshTokens)[0];
+  assert.equal(repairedLegacyStore.approvalRequiredAt, null);
+  assert.equal(repairedAccess.issuer, issuer);
+  assert.equal(repairedRefresh.issuer, issuer);
+  assert.equal(repairedAccess.authorizationPolicy.kind, 'local_admin');
+  assert.equal(repairedRefresh.authorizationPolicy.kind, 'local_admin');
+  assert.ok(provider.validateAccessToken('v22-access-token', issuer));
+
   directory = useState('metadata-limit');
   const metadataLimit = provider.registerClient(validRegistrationBody({ client_name: 'x'.repeat(provider.DCR_LIMITS.metadataBytes) }), issuer);
   assert.equal(metadataLimit.error, 'invalid_client_metadata');

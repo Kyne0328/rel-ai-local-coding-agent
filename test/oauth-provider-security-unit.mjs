@@ -76,7 +76,7 @@ try {
   }, issuer);
   assert.equal(firstExchange.status, 200);
   assert.ok(firstExchange.body.access_token);
-  assert.equal(firstExchange.body.refresh_token, undefined);
+  assert.ok(firstExchange.body.refresh_token);
   assert.equal(firstExchange.body.scope, 'mcp');
 
   const replay = oauth.exchangeToken({

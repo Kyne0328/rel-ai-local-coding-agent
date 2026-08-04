@@ -16,6 +16,7 @@ let _mountToken = 0;
 let _requestedEventId = '';
 let _requestedEventRoute = '';
 let _openedRequestedEvent = false;
+let _loadError = '';
 
 export function mountActivity(container) {
   const token = ++_mountToken;
@@ -35,6 +36,7 @@ export function mountActivity(container) {
   _filterState.timeRange = ['15m', '1h', '24h', '7d', 'all'].includes(requestedRange) ? requestedRange : '1h';
   _virtualizer?.destroy();
   _virtualizer = null;
+  _loadError = '';
   container.innerHTML = '';
   container.appendChild(buildActivity());
   loadLogs(token);
@@ -42,12 +44,7 @@ export function mountActivity(container) {
 
 export function mergeEntries(entries) {
   if (_paused || !Array.isArray(entries) || entries.length === 0) return;
-  const byKey = new Map(_allEntries.map(entry => [entryKey(entry), entry]));
-  for (const entry of entries) {
-    if (!entry || typeof entry !== 'object') continue;
-    byKey.set(entryKey(entry), entry);
-  }
-  _allEntries = sortEntries([...byKey.values()]).slice(0, 1000);
+  _allEntries = mergeEntryLists(_allEntries, entries);
   updateFilterOptions();
   renderFilteredTable();
   maybeOpenRequestedEvent();
@@ -99,7 +96,7 @@ function buildActivity() {
       button.setAttribute('aria-pressed', 'true');
       _filterState.timeRange = range.toLowerCase();
       syncFilterRoute();
-      renderFilteredTable();
+      renderFilteredTable({ resetHorizontalScroll: true });
     };
     timeRange.appendChild(button);
   }
@@ -172,7 +169,7 @@ function buildActivity() {
   const tableCard = document.createElement('div');
   tableCard.id = '__activity-table-wrap';
   tableCard.className = 'card activity-event-card';
-  tableCard.innerHTML = '<div class="card-head"><h3>Event log</h3><span class="section-action" id="__activity-count">Loading…</span></div><div class="card-body"><div class="table-wrap"><table class="data-table activity-table"><caption class="sr-only">Audit activity log</caption><colgroup><col class="activity-col-time"><col class="activity-col-tool"><col class="activity-col-workspace"><col class="activity-col-status"><col class="activity-col-message"><col class="activity-col-action"></colgroup><thead><tr><th scope="col">Time</th><th scope="col">Tool</th><th scope="col">Workspace</th><th scope="col">Status</th><th scope="col">Message</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody id="__activity-tbody"></tbody></table></div></div>';
+  tableCard.innerHTML = '<div class="card-head"><h3>Event log</h3><span class="section-action" id="__activity-count">Loading…</span></div><div class="card-body"><div class="table-wrap"><table class="data-table activity-table"><caption class="sr-only">Audit activity log</caption><colgroup><col class="activity-col-time"><col class="activity-col-message"><col class="activity-col-tool"><col class="activity-col-workspace"><col class="activity-col-status"><col class="activity-col-action"></colgroup><thead><tr><th scope="col">Time</th><th scope="col">Message</th><th scope="col">Tool</th><th scope="col">Workspace</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody id="__activity-tbody"></tbody></table></div></div>';
   root.append(toolbar, tableCard);
   return root;
 }
@@ -188,13 +185,20 @@ function createFilterSelect(id, allLabel, onChange) {
 }
 
 async function loadLogs(token) {
-  const data = await fetchJson('/api/logs?limit=500');
-  if (token !== _mountToken) return;
-  const fallbackEntries = data && Array.isArray(data.entries) ? data.entries : [];
-  _allEntries = sortEntries(Array.isArray(data) ? data : fallbackEntries);
-  updateFilterOptions();
-  renderFilteredTable();
-  maybeOpenRequestedEvent();
+  try {
+    const data = await fetchJson('/api/logs?limit=500');
+    if (token !== _mountToken) return;
+    const fallbackEntries = data && Array.isArray(data.entries) ? data.entries : [];
+    _allEntries = mergeEntryLists(Array.isArray(data) ? data : fallbackEntries, _allEntries);
+    _loadError = '';
+    updateFilterOptions();
+    renderFilteredTable();
+    maybeOpenRequestedEvent();
+  } catch (error) {
+    if (token !== _mountToken) return;
+    _loadError = error instanceof Error ? error.message : String(error);
+    renderFilteredTable();
+  }
 }
 
 function updateFilterOptions() {
@@ -216,9 +220,13 @@ function replaceDynamicOptions(id, values, allLabel, selected) {
   select.value = selected || '';
 }
 
-function renderFilteredTable() {
+function renderFilteredTable(options = {}) {
   const filtered = applyFilters(_allEntries);
   renderTable(filtered);
+  if (options.resetHorizontalScroll === true) {
+    const tableWrap = document.querySelector('#__activity-table-wrap .table-wrap');
+    if (tableWrap) tableWrap.scrollLeft = 0;
+  }
   const clearButton = document.getElementById('__activity-clear-filters');
   if (clearButton) clearButton.hidden = !hasActiveFilters();
   const summary = document.getElementById('__activity-filter-summary');
@@ -230,9 +238,11 @@ function renderFilteredTable() {
     _filterState.status && (_filterState.status === 'ok' ? 'successful only' : 'failed only'),
     _filterState.task && `task ${_filterState.task.slice(0, 8)}`
   ].filter(Boolean);
-  summary.textContent = active.length
-    ? `Showing ${filtered.length} of ${_allEntries.length} events · ${active.join(' · ')}`
-    : `Showing ${filtered.length} events from the selected time range.`;
+  summary.textContent = _loadError
+    ? `${filtered.length} live event${filtered.length === 1 ? '' : 's'} shown · stored history could not be loaded.`
+    : active.length
+      ? `Showing ${filtered.length} of ${_allEntries.length} events · ${active.join(' · ')}`
+      : `Showing ${filtered.length} events from the selected time range.`;
 }
 
 function syncFilterRoute() {
@@ -268,7 +278,7 @@ function applyFilters(entries) {
     }
     if (_filterState.search) {
       const query = _filterState.search.toLowerCase();
-      const haystack = [entry.tool, entry.type, entry.title, entry.operation, entry.summary, entry.message, entry.error?.message || entry.error, entry.path, entry.resourceUri, entry.workspace, entry.category, entry.status]
+      const haystack = [entry.tool, entry.type, entry.title, entry.operation, activityMessage(entry), entry.path, entry.resourceUri, entry.workspace, entry.category, entry.status]
         .filter(Boolean).join(' ').toLowerCase();
       if (!haystack.includes(query)) return false;
     }
@@ -284,9 +294,14 @@ function renderTable(entries) {
   const body = document.getElementById('__activity-tbody');
   const count = document.getElementById('__activity-count');
   if (!body) return;
-  if (count) count.textContent = `${entries.length} event${entries.length === 1 ? '' : 's'}`;
+  if (count) count.textContent = _loadError
+    ? (entries.length ? `${entries.length} live event${entries.length === 1 ? '' : 's'} · history unavailable` : 'History unavailable')
+    : `${entries.length} event${entries.length === 1 ? '' : 's'}`;
   if (!entries.length) {
-    body.innerHTML = '<tr><td colspan="6"><div class="empty">No activity matches these filters.</div></td></tr>';
+    const emptyMessage = _loadError
+      ? 'Activity history could not be loaded. Live events will appear here when available.'
+      : 'No activity matches these filters.';
+    body.innerHTML = `<tr><td colspan="6"><div class="empty">${esc(emptyMessage)}</div></td></tr>`;
     _virtualizer?.destroy();
     _virtualizer = null;
     return;
@@ -297,16 +312,21 @@ function renderTable(entries) {
   }
   _virtualizer = virtualizeTable(body, entries, entry => {
     const status = entry.status || (entryFailed(entry) ? 'failed' : 'succeeded');
-    const message = entry.summary || entry.message || entry.result?.outcome || entry.error?.message || entry.error || entry.path || '';
+    const message = activityMessage(entry);
+    const timestamp = activityTime(entry);
+    const absoluteTime = timestamp && Number.isFinite(Date.parse(timestamp)) ? new Date(timestamp).toLocaleString() : 'Time unavailable';
     const row = document.createElement('tr');
     row.className = 'clickable-row';
     if (_requestedEventId && activityEventId(entry) === _requestedEventId) row.classList.add('activity-requested-row');
     row.innerHTML = `
-      <td class="nowrap small" data-clock-relative="${esc(entry.timestamp || entry.ts || entry.at || entry.createdAt || '')}">${esc(timeAgo(entry.timestamp || entry.ts || entry.at || entry.createdAt))}</td>
+      <td class="nowrap small" title="${esc(absoluteTime)}" data-clock-relative="${esc(timestamp)}">${esc(timeAgo(timestamp) || '—')}</td>
+      <td class="activity-message-cell">
+        <span class="activity-message-mobile-meta">${pillHtml(status)}<code>${esc(entry.tool || entry.type || 'activity')}</code><span class="activity-message-mobile-time" data-clock-relative="${esc(timestamp)}">${esc(timeAgo(timestamp) || '—')}</span></span>
+        <span class="activity-message-copy"><strong>${esc(entry.title || entry.operation || '')}</strong>${entry.title || entry.operation ? ' · ' : ''}${esc(message)}</span>
+      </td>
       <td class="truncate mono" title="${esc(entry.title || entry.operation || '')}">${esc(entry.tool || entry.type || 'activity')}</td>
       <td class="truncate">${esc(entry.workspace || '—')}</td>
       <td>${pillHtml(status)}</td>
-      <td class="truncate"><strong>${esc(entry.title || entry.operation || '')}</strong>${entry.title || entry.operation ? ' · ' : ''}${esc(message)}</td>
       <td><button class="secondary activity-row-button" type="button" aria-label="Open ${esc(entry.tool || entry.type || 'activity')} event details">›</button></td>`;
     row.onclick = () => openDetail(entry);
     row.querySelector('.activity-row-button')?.addEventListener('click', event => {
@@ -409,8 +429,35 @@ export function sortEntries(entries) {
   return [...(Array.isArray(entries) ? entries : [])].sort((left, right) => activityTimestamp(right) - activityTimestamp(left));
 }
 
+function mergeEntryLists(current, incoming) {
+  const byKey = new Map((Array.isArray(current) ? current : []).map(entry => [entryKey(entry), entry]));
+  for (const entry of Array.isArray(incoming) ? incoming : []) {
+    if (!entry || typeof entry !== 'object') continue;
+    const key = entryKey(entry);
+    byKey.set(key, byKey.has(key) ? { ...byKey.get(key), ...entry } : entry);
+  }
+  return sortEntries([...byKey.values()]).slice(0, 1000);
+}
+
+function activityTime(entry) {
+  return entry?.timestamp || entry?.ts || entry?.at || entry?.createdAt || '';
+}
+
+function activityMessage(entry) {
+  return entry?.summary
+    || entry?.message
+    || entry?.currentActivity
+    || entry?.result?.outcome
+    || entry?.error?.message
+    || entry?.error
+    || entry?.path
+    || entry?.title
+    || entry?.operation
+    || 'No additional details recorded.';
+}
+
 function activityTimestamp(entry) {
-  const timestamp = Date.parse(entry?.timestamp || entry?.ts || entry?.at || entry?.createdAt || '');
+  const timestamp = Date.parse(activityTime(entry));
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
 

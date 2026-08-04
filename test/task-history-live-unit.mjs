@@ -127,6 +127,33 @@ try {
   assert.equal(session.status, 'completed', 'a stale running update must not regress a terminal task');
   assert.equal(session.progress.mode, 'complete');
   assert.equal(session.progress.percentage, 100);
+
+  recordTaskHistoryEvent(config, {
+    id: 'audit-rich',
+    ts: '2026-07-28T10:01:00.000Z',
+    taskId: 'task-audit-only',
+    taskIdentityVersion: 2,
+    taskIdExplicit: true,
+    taskHistoryEligible: true,
+    operationId: 'operation-rich',
+    tool: 'relai_search',
+    workspace: 'repo',
+    operation: 'Search repository',
+    category: 'tool',
+    action: 'search',
+    status: 'succeeded',
+    title: 'Search repository',
+    summary: 'Found 3 matching references.',
+    result: { outcome: 'Found 3 matches', affectedItemCount: 3 },
+    metadata: { matchCount: 3 },
+    ok: true,
+    ms: 25
+  });
+  const auditOnly = readTaskHistorySession(config, 'task-audit-only');
+  assert.equal(auditOnly.events[0].title, 'Search repository');
+  assert.equal(auditOnly.events[0].summary, 'Found 3 matching references.');
+  assert.equal(auditOnly.events[0].result.outcome, 'Found 3 matches');
+  assert.equal(auditOnly.events[0].metadata.matchCount, 3);
 } finally {
   fs.rmSync(sandbox, { recursive: true, force: true });
 }

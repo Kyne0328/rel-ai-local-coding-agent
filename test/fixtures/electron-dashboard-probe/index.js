@@ -168,6 +168,24 @@ app.whenReady().then(async () => {
         forcedColorsSupported: CSS.supports('forced-color-adjust', 'none')
       };
     })()`);
+    await win.webContents.executeJavaScript(`location.hash = '#activity'`);
+    await waitFor(win, `document.querySelector('.activity-message-cell')`);
+    const activityMeasurement = await win.webContents.executeJavaScript(`(() => {
+      const wrap = document.querySelector('#__activity-table-wrap .table-wrap');
+      if (wrap) wrap.scrollLeft = 0;
+      const cell = document.querySelector('.activity-message-cell');
+      const rect = cell?.getBoundingClientRect();
+      const wrapRect = wrap?.getBoundingClientRect();
+      return {
+        activityHorizontalOverflow: Boolean(wrap && wrap.scrollWidth > wrap.clientWidth + 1),
+        activityMessageVisible: Boolean(rect && wrapRect && rect.width > 0 && rect.right > wrapRect.left && rect.left < wrapRect.right && getComputedStyle(cell).display !== 'none'),
+        activityMessageText: cell?.textContent.trim() || '',
+        activityScrollLeft: wrap?.scrollLeft || 0
+      };
+    })()`);
+    Object.assign(measurement, activityMeasurement);
+    await win.webContents.executeJavaScript(`location.hash = '#tasks'`);
+    await waitFor(win, `document.querySelectorAll('.task-row').length >= 9`);
     measurement.name = scenario.name;
     measurement.zoomFactor = scenario.zoom;
     measurement.windowWidth = scenario.width;
