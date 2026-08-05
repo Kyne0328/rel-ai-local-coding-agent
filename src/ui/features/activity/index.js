@@ -7,6 +7,7 @@ import { esc, timeAgo } from '../../utils.js';
 import { getRouteParams, getWorkspaceFilter, navigate, replaceRouteParams, setWorkspaceFilter } from '../../router.js';
 import { activityEventId } from '../../activity-event.js';
 import { copyText } from '../../clipboard.js';
+import { eventTimestampMs, eventTimestampValue } from '../../../taskEvents.js';
 
 let _allEntries = [];
 let _paused = false;
@@ -273,8 +274,8 @@ function applyFilters(entries) {
   const rangeMs = ranges[_filterState.timeRange];
   return sortEntries(entries).filter(entry => {
     if (rangeMs) {
-      const timestamp = Date.parse(String(entry.timestamp || entry.ts || entry.at || entry.createdAt || ''));
-      if (!Number.isFinite(timestamp) || now - timestamp > rangeMs) return false;
+      const timestamp = eventTimestampMs(entry);
+      if (!timestamp || now - timestamp > rangeMs) return false;
     }
     if (_filterState.search) {
       const query = _filterState.search.toLowerCase();
@@ -313,8 +314,8 @@ function renderTable(entries) {
   _virtualizer = virtualizeTable(body, entries, entry => {
     const status = entry.status || (entryFailed(entry) ? 'failed' : 'succeeded');
     const message = activityMessage(entry);
-    const timestamp = activityTime(entry);
-    const absoluteTime = timestamp && Number.isFinite(Date.parse(timestamp)) ? new Date(timestamp).toLocaleString() : 'Time unavailable';
+    const timestamp = eventTimestampValue(entry);
+    const absoluteTime = eventTimestampMs(entry) ? new Date(timestamp).toLocaleString() : 'Time unavailable';
     const row = document.createElement('tr');
     row.className = 'clickable-row';
     if (_requestedEventId && activityEventId(entry) === _requestedEventId) row.classList.add('activity-requested-row');
@@ -353,7 +354,7 @@ function openDetail(entry) {
   const head = document.createElement('div');
   head.className = 'activity-detail-head';
   const displayStatus = entry.status || (entryFailed(entry) ? 'failed' : 'succeeded');
-  const eventTime = entry.timestamp || entry.ts || entry.at || entry.createdAt || '';
+  const eventTime = eventTimestampValue(entry);
   head.innerHTML = `<div>${pillHtml(displayStatus)}</div><span class="muted">${esc(new Date(eventTime).toLocaleString())}</span>`;
   content.appendChild(head);
 
@@ -426,7 +427,7 @@ function detailPre(text) {
 }
 
 export function sortEntries(entries) {
-  return [...(Array.isArray(entries) ? entries : [])].sort((left, right) => activityTimestamp(right) - activityTimestamp(left));
+  return [...(Array.isArray(entries) ? entries : [])].sort((left, right) => eventTimestampMs(right) - eventTimestampMs(left));
 }
 
 function mergeEntryLists(current, incoming) {
@@ -437,10 +438,6 @@ function mergeEntryLists(current, incoming) {
     byKey.set(key, byKey.has(key) ? { ...byKey.get(key), ...entry } : entry);
   }
   return sortEntries([...byKey.values()]).slice(0, 1000);
-}
-
-function activityTime(entry) {
-  return entry?.timestamp || entry?.ts || entry?.at || entry?.createdAt || '';
 }
 
 function activityMessage(entry) {
@@ -454,11 +451,6 @@ function activityMessage(entry) {
     || entry?.title
     || entry?.operation
     || 'No additional details recorded.';
-}
-
-function activityTimestamp(entry) {
-  const timestamp = Date.parse(activityTime(entry));
-  return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
 function entryFailed(entry) {

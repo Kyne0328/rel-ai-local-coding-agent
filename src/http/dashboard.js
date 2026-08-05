@@ -22,6 +22,11 @@ import { mcpConnectionManager } from '../mcp/connectionManager.js';
 import { buildToolManifest } from '../mcp/toolManifest.js';
 import { readMcpAuthenticationStatus } from '../mcp/authenticationStatus.js';
 
+const DASHBOARD_SHARED_MODULES = Object.freeze({
+  '/public/taskEvents.js': Object.freeze(['src', 'taskEvents.js']),
+  '/public/taskState.js': Object.freeze(['src', 'taskState.js'])
+});
+
 const PRIMARY_NAV_ITEMS = [
   { id: "home", label: "Overview", icon: '<path d="M3 3h8v8H3zM13 3h8v5h-8zM13 10h8v11h-8zM3 13h8v8H3z" />' },
   { id: "tasks", label: "Sessions", icon: '<path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5" />' },
@@ -66,7 +71,9 @@ function handleStaticAsset(ctx) {
   const safePath = ctx.parsed.pathname.replaceAll("\\", "/");
   if (safePath.includes("..")) { ctx.res.writeHead(400); ctx.res.end("Bad path"); return; }
   let filePath;
-  if (safePath.startsWith("/ui/")) {
+  if (Object.hasOwn(DASHBOARD_SHARED_MODULES, safePath)) {
+    filePath = resolvePackagePath(...DASHBOARD_SHARED_MODULES[safePath]);
+  } else if (safePath.startsWith("/ui/")) {
     filePath = resolvePackagePath('src', 'ui', safePath.slice(4));
   } else if (safePath.startsWith("/public/ui/")) {
     filePath = resolvePackagePath('src', 'ui', safePath.slice(11));

@@ -58,6 +58,24 @@ function terminalTaskTimestamp(value = {}) {
   return timestampMs(terminalTaskTimestampValue(value));
 }
 
+function eventIdentityFields(event = {}, options = {}) {
+  if (options.preferId === true && event.id != null && String(event.id)) {
+    return ['persisted', String(event.id)];
+  }
+  return [
+    event.ts || event.at || event.createdAt || '',
+    event.tool || event.type || '',
+    event.workspace || '',
+    event.taskId || '',
+    event.operationId || '',
+    event.sessionId || '',
+    event.path || event.filePath || '',
+    event.operation || event.message || event.error || '',
+    event.ms ?? '',
+    event.ok === false ? 'error' : 'ok'
+  ];
+}
+
 function eventIdentityKey(event = {}, index = 0, options = {}) {
   if (event.eventId) return String(event.eventId);
   if (options.preferId === true && event.id) return String(event.id);
@@ -83,6 +101,7 @@ function eventTime(value) {
 export {
   clamp,
   cleanTaskId,
+  eventIdentityFields,
   eventIdentityKey,
   eventTime,
   eventTimestampMs,
