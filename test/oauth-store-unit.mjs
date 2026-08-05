@@ -170,6 +170,17 @@ try {
   assert.equal(repairedRefresh.authorizationPolicy.kind, 'local_admin');
   assert.ok(provider.validateAccessToken('v22-access-token', issuer));
 
+  directory = useState('application-type-default');
+  const defaultApplicationType = provider.registerClient({
+    client_name: 'ChatGPT without application_type',
+    redirect_uris: [redirectUri],
+    scope: 'mcp'
+  }, issuer);
+  assert.equal(defaultApplicationType.application_type, 'web');
+  const invalidApplicationType = provider.registerClient(validRegistrationBody({ application_type: 'desktop' }), issuer);
+  assert.equal(invalidApplicationType.error, 'invalid_client_metadata');
+  assert.match(invalidApplicationType.error_description, /when provided/);
+
   directory = useState('metadata-limit');
   const metadataLimit = provider.registerClient(validRegistrationBody({ client_name: 'x'.repeat(provider.DCR_LIMITS.metadataBytes) }), issuer);
   assert.equal(metadataLimit.error, 'invalid_client_metadata');

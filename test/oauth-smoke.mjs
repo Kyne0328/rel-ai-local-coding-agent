@@ -90,10 +90,12 @@ async function register(scope = 'mcp') {
   const response = await fetch(`${base}/register`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ application_type: 'web', client_name: 'ChatGPT OAuth Test', redirect_uris: [redirectUri], scope })
+    body: JSON.stringify({ client_name: 'ChatGPT OAuth Test', redirect_uris: [redirectUri], scope })
   });
   assert.equal(response.status, 201);
-  return response.json();
+  const client = await response.json();
+  assert.equal(client.application_type, 'web');
+  return client;
 }
 
 async function authorize(client, pair, scope, state) {
