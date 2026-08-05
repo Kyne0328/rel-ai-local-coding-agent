@@ -58,8 +58,9 @@ function terminalTaskTimestamp(value = {}) {
   return timestampMs(terminalTaskTimestampValue(value));
 }
 
-function eventIdentityKey(event = {}, index = 0) {
+function eventIdentityKey(event = {}, index = 0, options = {}) {
   if (event.eventId) return String(event.eventId);
+  if (options.preferId === true && event.id) return String(event.id);
   if (event.operationId) return String(event.operationId);
   return [
     eventTimestampValue(event),
