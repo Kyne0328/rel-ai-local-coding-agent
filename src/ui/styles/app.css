@@ -169,7 +169,7 @@
   .window-titlebar-button svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.1; vector-effect: non-scaling-stroke; }
 
   :root[data-window-chrome="custom"] body { overflow: hidden; }
-  :root[data-window-chrome="custom"] .skip-link { top: calc(var(--window-titlebar-height) + 12px); }
+  :root[data-window-chrome="custom"] .skip-link:focus { top: calc(var(--window-titlebar-height) + 12px); }
   :root[data-window-chrome="custom"] .app-shell {
     height: calc(100dvh - var(--window-titlebar-height));
     min-height: 0;

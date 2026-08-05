@@ -137,6 +137,8 @@ assert.match(shellCss, /@media \(forced-colors: active\)/);
 assert.match(shellCss, /\.window-titlebar[\s\S]*-webkit-app-region: drag/);
 assert.match(shellCss, /\.window-titlebar-controls[\s\S]*-webkit-app-region: no-drag/);
 assert.match(shellCss, /\.window-titlebar-button:focus-visible/);
+assert.match(shellCss, /:root\[data-window-chrome="custom"\] \.skip-link:focus \{ top: calc\(var\(--window-titlebar-height\) \+ 12px\); \}/);
+assert.doesNotMatch(shellCss, /:root\[data-window-chrome="custom"\] \.skip-link \{ top: calc\(var\(--window-titlebar-height\) \+ 12px\); \}/);
 assert.match(shellCss, /scrollbar-width: thin/);
 assert.match(shellCss, /::-webkit-scrollbar-thumb[\s\S]*min-height: 32px/);
 assert.match(shellCss, /scrollbar-gutter: stable/);
