@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 2,
+  "capturedAt": "2026-08-05",
+  "platform": "linux",
+  "architecture": "x64",
+  "electronVersion": "43.2.0",
+  "policy": "strict",
+  "tolerancePercent": 3,
+  "provisional": true,
+  "notes": "Initial Linux policy gates deterministic packaged components. Add measured AppImage, DEB, unpacked, and resources totals after the first successful Ubuntu release build.",
+  "metrics": {
+    "appAsarBytes": 1668963,
+    "packagedDependencyBytes": 1107187,
+    "localesBytes": 566095,
+    "ngrokBytes": 32903330,
+    "dashboardCssBytes": 143433
+  }
+}

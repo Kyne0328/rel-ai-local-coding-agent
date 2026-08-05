@@ -5,6 +5,7 @@ import * as path from 'node:path';
 
 const LOCAL_SCHEME = 'relai-app';
 const LOCAL_HOST = 'renderer';
+const installedProtocols = new WeakSet();
 const CONTENT_TYPES = Object.freeze({
   '.css': 'text/css; charset=utf-8',
   '.html': 'text/html; charset=utf-8',
@@ -26,6 +27,10 @@ function registerLocalScheme(protocol) {
 }
 
 function installLocalProtocol(protocol, rendererRoot) {
+  if (!protocol || typeof protocol.handle !== 'function') {
+    throw new TypeError('An Electron protocol handler is required.');
+  }
+  if (installedProtocols.has(protocol)) return false;
   const root = path.resolve(rendererRoot);
   protocol.handle(LOCAL_SCHEME, request => {
     const target = resolveLocalRendererPath(request.url, root);
@@ -44,6 +49,8 @@ function installLocalProtocol(protocol, rendererRoot) {
       return new Response('Not found', { status: 404 });
     }
   });
+  installedProtocols.add(protocol);
+  return true;
 }
 
 function localRendererUrl(fileName, query = {}) {

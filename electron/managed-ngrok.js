@@ -97,9 +97,10 @@ function writeNgrokConfig(authtoken) {
   return configPath;
 }
 
-async function prepareManagedNgrok({ authtoken } = {}) {
+async function prepareManagedNgrok({ authtoken, onLog = () => {} } = {}) {
   const ensured = ensureManagedNgrok();
   const configPath = writeNgrokConfig(authtoken);
+  onLog(`[rel-ai-mcp:ngrok] Prepared ${ensured.copied ? 'bundled' : 'verified'} ngrok binary.`);
   return {
     ok: true,
     path: ensured.path,
@@ -160,9 +161,12 @@ function startManagedNgrokTunnel({ domain, port, timeoutMs = 30000, onLog = () =
     `https://${safeDomain}`,
     '--config',
     ngrokConfigPath(),
-    '--log=stdout'
+    '--log=stdout',
+    '--log-format=logfmt',
+    '--log-level=info'
   ];
 
+  onLog(`[rel-ai-mcp:ngrok] Starting managed tunnel for https://${safeDomain} -> http://127.0.0.1:${safePort}.`, MANAGED_NGROK_LABEL);
   const MAX_BUFFER_SIZE = 1048576;
 
   return new Promise(resolve => {
@@ -209,7 +213,7 @@ function startManagedNgrokTunnel({ domain, port, timeoutMs = 30000, onLog = () =
 function previewManagedNgrokCommand(domain, port) {
   const safeDomain = sanitizeDomain(domain || '<domain>');
   const safePort = sanitizePort(port);
-  return `managed ngrok http --url=https://${safeDomain} http://127.0.0.1:${safePort} --config ${ngrokConfigPath()} --log=stdout`;
+  return `managed ngrok http --url=https://${safeDomain} http://127.0.0.1:${safePort} --config ${ngrokConfigPath()} --log=stdout --log-format=logfmt --log-level=info`;
 }
 
 export {

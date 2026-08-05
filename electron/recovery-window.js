@@ -8,6 +8,7 @@ function createRecoveryWindowManager({
   preloadPath,
   rendererUrl,
   limits,
+  installProtocol = () => {},
   isQuitting = () => false,
   onReady = () => {},
   onSecurityError = () => {}
@@ -27,8 +28,11 @@ function createRecoveryWindowManager({
       title: 'Rel.AI MCP Recovery',
       autoHideMenuBar: true
     });
+    installProtocol(window.webContents.session.protocol);
     secureLocalWindow(window, { allowedUrl: rendererUrl, onError: onSecurityError });
-    window.loadURL(rendererUrl);
+    void window.loadURL(rendererUrl).catch(error => {
+      onSecurityError(new Error(`Recovery renderer failed to load: ${error instanceof Error ? error.message : String(error)}`));
+    });
     window.webContents.on('did-finish-load', onReady);
     window.on('close', event => {
       if (isQuitting()) return;

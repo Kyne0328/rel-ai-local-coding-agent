@@ -7,8 +7,8 @@ on:
     paths:
       - package.json
       - package-lock.json
-      - electron/package.json
-      - electron/package-lock.json
+      - electron/**
+      - scripts/**
       - .github/workflows/release.yml
   workflow_dispatch:
 
@@ -22,17 +22,70 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
-    name: Test, build, and publish Windows release
-    runs-on: windows-latest
-    timeout-minutes: 60
-
+  preflight:
+    name: Resolve unpublished version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      publish: ${{ steps.preflight.outputs.publish }}
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
+      - name: Resolve release version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Refuse an existing tag or release
+        id: preflight
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/$VERSION" >/dev/null 2>&1; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "Tag $VERSION already exists. Nothing will be republished."
+            exit 0
+          fi
+          api_base="${GITHUB_API_URL:-https://api.github.com}"
+          release_url="$api_base/repos/$GITHUB_REPOSITORY/releases/tags/$VERSION"
+          http_status="$(curl --silent --show-error --output release-response.json --write-out '%{http_code}' \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "$release_url")"
+          case "$http_status" in
+            200)
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              echo "GitHub release $VERSION already exists. Nothing will be republished."
+              ;;
+            404)
+              echo "publish=true" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              cat release-response.json >&2 || true
+              echo "Could not determine whether GitHub release $VERSION exists. GitHub API returned HTTP $http_status." >&2
+              exit 1
+              ;;
+          esac
 
+  windows:
+    name: Build Windows release
+    needs: preflight
+    if: needs.preflight.outputs.publish == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Set up Node.js
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
         with:
@@ -41,160 +94,60 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             electron/package-lock.json
-
-      - name: Resolve release version
-        id: version
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-
-          $currentVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
-          if (-not $currentVersion) {
-            throw 'package.json does not contain a version.'
-          }
-
-          "changed=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "version=$currentVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-
-          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
-            Write-Host "Manual release requested for current package version $currentVersion."
-          } else {
-            Write-Host "Release workflow changed while package version remains $currentVersion, or another release-triggering file changed. The preflight step will decide whether this version is still unpublished."
-          }
-
-      - name: Refuse an existing tag or release
-        if: steps.version.outputs.changed == 'true'
-        id: preflight
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-
-          $existingTag = git ls-remote --tags origin "refs/tags/$env:VERSION"
-          if ($LASTEXITCODE -ne 0) {
-            throw 'Could not check the remote tags.'
-          }
-          if ($existingTag) {
-            "publish=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-            Write-Host "Tag $env:VERSION already exists. Nothing will be republished."
-            exit 0
-          }
-
-          $apiBase = if ($env:GITHUB_API_URL) { $env:GITHUB_API_URL.TrimEnd('/') } else { 'https://api.github.com' }
-          $encodedVersion = [Uri]::EscapeDataString($env:VERSION)
-          $releaseUri = "$apiBase/repos/$env:GITHUB_REPOSITORY/releases/tags/$encodedVersion"
-          $headers = @{
-            Authorization = "Bearer $env:GH_TOKEN"
-            Accept = 'application/vnd.github+json'
-            'X-GitHub-Api-Version' = '2022-11-28'
-          }
-          $response = Invoke-WebRequest -Uri $releaseUri -Headers $headers -Method Get -SkipHttpErrorCheck
-          $releaseStatus = [int]$response.StatusCode
-
-          if ($releaseStatus -eq 200) {
-            "publish=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-            Write-Host "GitHub release $env:VERSION already exists. Nothing will be republished."
-            exit 0
-          }
-          if ($releaseStatus -ne 404) {
-            throw "Could not check whether GitHub release $env:VERSION already exists. GitHub API returned HTTP $releaseStatus."
-          }
-          "publish=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          Write-Host "No existing tag or GitHub release was found for $env:VERSION."
-
       - name: Install project dependencies
-        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         run: npm ci --ignore-scripts
-
       - name: Install Electron dependencies
-        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         run: npm ci
         working-directory: electron
-
       - name: Install Electron test binary
-        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         run: node electron/node_modules/electron/install.js
-
       - name: Verify Electron test binary
-        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         shell: pwsh
         run: |
           $electronBinary = 'electron/node_modules/electron/dist/electron.exe'
           if (-not (Test-Path -LiteralPath $electronBinary -PathType Leaf)) {
             throw "Electron test binary is missing after installation: $electronBinary"
           }
-
       - name: Audit production dependencies
-        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         run: npm run audit:production
-
       - name: Audit packaging dependencies
-        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         run: npm run audit:packaging
-
       - name: Fetch bundled ngrok seed binary
-        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         shell: pwsh
         env:
           NGROK_PLATFORMS: win32
         run: pwsh scripts/fetch-ngrok.ps1
-
       - name: Verify generated color assets
-        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         run: npm run verify:color-tokens
-
       - name: Run native Tasks release gate
-        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         run: npm run test:native-tasks-release-gate
-
       - name: Run tests
-        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         run: npm test
-
       - name: Enforce observability performance budgets
-        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         run: npm run benchmark:observability
-
       - name: Verify responsive and accessible dashboard behavior
-        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         run: npm run test:observability-browser
-
       - name: Reverify generated color assets before packaging
-        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         run: npm run verify:color-tokens
-
-      - name: Build Windows executables
-        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
-        run: npm run electron:dist
+      - name: Build Windows release
+        run: npm run electron:dist:windows
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-
       - name: Resolve current unpacked application
-        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         id: unpacked
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $packageDirectory = node scripts/current-unpacked.mjs
-          if ($LASTEXITCODE -ne 0) {
-            throw 'Could not resolve the current unpacked application.'
-          }
-          $packageDirectory = [string]$packageDirectory
+          $packageDirectory = [string](node scripts/current-unpacked.mjs --platform win32)
           $packageDirectory = $packageDirectory.Trim()
           if (-not $packageDirectory -or -not (Test-Path -LiteralPath $packageDirectory -PathType Container)) {
-            throw 'Resolved current unpacked application path is missing or invalid.'
+            throw 'Resolved current Windows unpacked application path is missing or invalid.'
           }
           "path=$packageDirectory" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-
       - name: Verify hardened Electron fuses
-        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         shell: pwsh
-        run: npm run verify:fuses -- '${{ steps.unpacked.outputs.path }}/Rel.AI MCP.exe'
-
+        run: npm run verify:fuses -- --platform win32 '${{ steps.unpacked.outputs.path }}/Rel.AI MCP.exe'
       - name: Verify bundled ngrok provenance
-        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -216,133 +169,209 @@ jobs:
           if (-not $ngrokSignature.SignerCertificate.Issuer.Contains([string]$ngrokSpec.authenticode.issuer, [System.StringComparison]::OrdinalIgnoreCase)) {
             throw "Packaged ngrok certificate issuer mismatch: $($ngrokSignature.SignerCertificate.Issuer)."
           }
-
-      - name: Generate CycloneDX SBOM
-        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
-        run: npm run generate:sbom
-
-      - name: Report Electron package size
-        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
-        run: npm run electron:size -- --json dist/electron-size-report.json
-
-      - name: Upload Electron package-size report
-        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: electron-package-size-${{ steps.version.outputs.version }}
-          path: dist/electron-size-report.json
-          if-no-files-found: error
-          retention-days: 30
-
       - name: Verify packaged application layout
-        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         shell: pwsh
-        run: npm run verify:packaged -- --dir '${{ steps.unpacked.outputs.path }}'
-
+        run: npm run verify:packaged -- --platform win32 --dir '${{ steps.unpacked.outputs.path }}'
       - name: Verify packaged OAuth and MCP connector flow
-        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         shell: pwsh
         run: npm run test:connector-acceptance -- --dir '${{ steps.unpacked.outputs.path }}'
+      - name: Generate CycloneDX SBOM
+        run: npm run generate:sbom
+      - name: Report Electron package size
+        run: npm run electron:size:windows -- --json dist/electron-size-report.json
+      - name: Upload Windows release bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-release-${{ needs.preflight.outputs.version }}
+          path: |
+            dist/Rel.AI-MCP-Setup-${{ needs.preflight.outputs.version }}.exe
+            dist/Rel.AI-MCP-Portable-${{ needs.preflight.outputs.version }}.exe
+            dist/Rel.AI-MCP-Setup-${{ needs.preflight.outputs.version }}.exe.blockmap
+            dist/latest.yml
+            dist/sbom.cdx.json
+            dist/electron-size-report.json
+          if-no-files-found: error
+          retention-days: 7
 
-      - name: Prepare release assets and notes
-        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
-        id: notes
-        shell: pwsh
+  linux:
+    name: Build Linux release
+    needs: preflight
+    if: needs.preflight.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            electron/package-lock.json
+      - name: Install project dependencies
+        run: npm ci --ignore-scripts
+      - name: Install Electron dependencies
+        run: npm ci
+        working-directory: electron
+      - name: Install Electron test binary
+        run: node electron/node_modules/electron/install.js
+      - name: Verify Electron test binary
+        run: test -x electron/node_modules/electron/dist/electron
+      - name: Fetch bundled ngrok seed binary
         env:
-          VERSION: ${{ steps.version.outputs.version }}
+          NGROK_PLATFORMS: linux
+        run: bash scripts/fetch-ngrok.sh
+      - name: Verify generated color assets
+        run: npm run verify:color-tokens
+      - name: Run Electron platform regression tests
         run: |
-          $ErrorActionPreference = 'Stop'
+          node test/electron-platform-unit.mjs
+          node test/current-unpacked-unit.mjs
+          node test/app-updater-unit.mjs
+          node test/installer-test-entrypoints-unit.mjs
+      - name: Build Linux release
+        run: npm run electron:dist:linux
+      - name: Resolve current unpacked application
+        id: unpacked
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_directory="$(node scripts/current-unpacked.mjs --platform linux)"
+          test -n "$package_directory"
+          test -d "$package_directory"
+          echo "path=$package_directory" >> "$GITHUB_OUTPUT"
+      - name: Verify hardened Electron fuses
+        run: npm run verify:fuses -- --platform linux '${{ steps.unpacked.outputs.path }}/rel-ai-mcp'
+      - name: Verify packaged application layout
+        run: npm run verify:packaged -- --platform linux --dir '${{ steps.unpacked.outputs.path }}'
+      - name: Verify packaged OAuth and MCP connector flow
+        run: npm run test:connector-acceptance -- --dir '${{ steps.unpacked.outputs.path }}'
+      - name: Smoke-test Linux desktop startup under Xvfb
+        shell: bash
+        env:
+          PACKAGE_DIRECTORY: ${{ steps.unpacked.outputs.path }}
+        run: |
+          set -euo pipefail
+          state_directory="$RUNNER_TEMP/relai-linux-release-smoke"
+          mkdir -p "$state_directory"
+          set +e
+          REL_AI_MCP_STATE_DIR="$state_directory" timeout --signal=TERM --kill-after=5s 15s \
+            xvfb-run --auto-servernum "$PACKAGE_DIRECTORY/rel-ai-mcp" --background
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
+            exit "$status"
+          fi
+      - name: Report Electron package size
+        run: npm run electron:size:linux -- --json dist/electron-size-report-linux.json
+      - name: Upload Linux release bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: linux-release-${{ needs.preflight.outputs.version }}
+          path: |
+            dist/Rel.AI-MCP-${{ needs.preflight.outputs.version }}-linux-x64.AppImage
+            dist/Rel.AI-MCP-${{ needs.preflight.outputs.version }}-linux-x64.deb
+            dist/latest-linux.yml
+            dist/electron-size-report-linux.json
+          if-no-files-found: error
+          retention-days: 7
 
-          $dist = (Resolve-Path dist).Path
-          $assetNames = @(
-            "Rel.AI-MCP-Setup-$env:VERSION.exe",
-            "Rel.AI-MCP-Portable-$env:VERSION.exe",
-            "Rel.AI-MCP-Setup-$env:VERSION.exe.blockmap",
-            'latest.yml',
-            'sbom.cdx.json',
-            'electron-size-report.json'
-          )
-          $hashInputs = foreach ($assetName in $assetNames) {
-            $assetPath = Join-Path $dist $assetName
-            if (-not (Test-Path -LiteralPath $assetPath -PathType Leaf)) {
-              throw "Required release asset is missing under its exact basename: $assetName"
-            }
-            Get-Item -LiteralPath $assetPath
-          }
-          npm run prepare:release-assets
-          if ($LASTEXITCODE -ne 0) {
-            throw 'Release assets could not be prepared under the exact updater contract.'
-          }
-
-          $changelog = Get-Content CHANGELOG.md -Raw
-          $escapedVersion = [regex]::Escape($env:VERSION)
-          $pattern = "(?ms)^##\s+\[$escapedVersion\]\s+(?:—|-)\s+\d{4}-\d{2}-\d{2}\s*\r?\n(.*?)(?=^##\s+\[|\z)"
-          $match = [regex]::Match($changelog, $pattern)
-
-          if ($match.Success -and $match.Groups[1].Value.Trim()) {
-            $match.Groups[1].Value.Trim() | Set-Content -Path release-notes.md -Encoding utf8
-            "found=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-            Write-Host "Using CHANGELOG.md notes for $env:VERSION."
-          } else {
-            "found=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-            Write-Host "No matching changelog section found. GitHub will generate the release notes."
-          }
-
+  publish:
+    name: Publish combined release
+    needs:
+      - preflight
+      - windows
+      - linux
+    if: needs.preflight.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install release tooling dependencies
+        run: npm ci --ignore-scripts
+      - name: Download Windows release bundle
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: windows-release-${{ needs.preflight.outputs.version }}
+          path: dist
+      - name: Download Linux release bundle
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: linux-release-${{ needs.preflight.outputs.version }}
+          path: dist
+      - name: Prepare release assets
+        run: npm run prepare:release-assets
+      - name: Prepare release notes
+        id: notes
+        shell: bash
+        env:
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const version = process.env.VERSION;
+          const changelog = fs.readFileSync('CHANGELOG.md', 'utf8');
+          const escaped = version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const pattern = new RegExp(`(?:^|\\n)##\\s+\\[${escaped}\\]\\s+(?:—|-)\\s+\\d{4}-\\d{2}-\\d{2}\\s*\\r?\\n([\\s\\S]*?)(?=\\r?\\n##\\s+\\[|$)`);
+          const match = changelog.match(pattern);
+          if (match?.[1]?.trim()) fs.writeFileSync('release-notes.md', `${match[1].trim()}\n`);
+          NODE
+          if [ -s release-notes.md ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Attest release artifact provenance
-        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
         with:
           subject-path: |
             dist/*.exe
             dist/*.blockmap
+            dist/*.AppImage
+            dist/*.deb
             dist/latest.yml
+            dist/latest-linux.yml
             dist/SHA256SUMS.txt
-
+            dist/electron-size-report*.json
       - name: Attest release SBOM
-        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
         uses: actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34 # v3.0.0
         with:
-          subject-path: dist/*.exe
+          subject-path: |
+            dist/*.exe
+            dist/*.AppImage
+            dist/*.deb
           sbom-path: dist/sbom.cdx.json
-
       - name: Publish GitHub release
-        if: steps.version.outputs.changed == 'true' && steps.preflight.outputs.publish == 'true'
-        shell: pwsh
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.preflight.outputs.version }}
           CHANGELOG_NOTES_FOUND: ${{ steps.notes.outputs.found }}
         run: |
-          $ErrorActionPreference = 'Stop'
-
-          $dist = (Resolve-Path dist).Path
-          $assetNames = @(Get-Content -LiteralPath (Join-Path $dist 'release-assets.txt') | Where-Object { $_.Trim() })
-          $assets = @($assetNames | ForEach-Object {
-            $assetPath = Join-Path $dist $_
-            if (-not (Test-Path -LiteralPath $assetPath -PathType Leaf)) {
-              throw "Prepared release asset is missing: $_"
-            }
-            $assetPath
-          })
-          if ($assets.Count -eq 0) {
-            throw 'No release assets were prepared.'
-          }
-
-          $arguments = @(
-            'release', 'create', $env:VERSION
-          ) + $assets + @(
-            '--repo', $env:GITHUB_REPOSITORY,
-            '--target', $env:GITHUB_SHA,
-            '--title', "Rel.AI MCP $env:VERSION"
-          )
-
-          if ($env:CHANGELOG_NOTES_FOUND -eq 'true') {
-            $arguments += @('--notes-file', 'release-notes.md')
-          } else {
-            $arguments += '--generate-notes'
-          }
-
-          & gh @arguments
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to publish GitHub release $env:VERSION."
-          }
+          set -euo pipefail
+          mapfile -t asset_names < <(sed '/^[[:space:]]*$/d' dist/release-assets.txt)
+          if [ "${#asset_names[@]}" -eq 0 ]; then
+            echo 'No release assets were prepared.' >&2
+            exit 1
+          fi
+          assets=()
+          for name in "${asset_names[@]}"; do
+            test -f "dist/$name"
+            assets+=("dist/$name")
+          done
+          arguments=(release create "$VERSION" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Rel.AI MCP $VERSION")
+          if [ "$CHANGELOG_NOTES_FOUND" = 'true' ]; then
+            arguments+=(--notes-file release-notes.md)
+          else
+            arguments+=(--generate-notes)
+          fi
+          gh "${arguments[@]}"

@@ -22,7 +22,8 @@ function parseArguments(argv) {
     directory: path.resolve(root, valueAfter('--dir', 'dist')),
     assetList: path.resolve(root, valueAfter('--asset-list', 'dist/release-assets.txt')),
     metadata: valueAfter('--metadata', 'latest.yml'),
-    checksums: valueAfter('--checksums', 'SHA256SUMS.txt')
+    checksums: valueAfter('--checksums', 'SHA256SUMS.txt'),
+    requireBlockmaps: !argv.includes('--no-blockmaps')
   };
 }
 
@@ -44,9 +45,11 @@ function verifyUpdaterArtifacts(options) {
     if (!constantTimeEqual(actualSha512, reference.sha512)) {
       throw new Error(`SHA-512 mismatch for ${reference.basename}.`);
     }
-    const blockmap = `${reference.basename}.blockmap`;
-    assertListed(assets, blockmap, 'Updater blockmap');
-    requireFile(path.join(options.directory, blockmap), 'Updater blockmap');
+    if (options.requireBlockmaps !== false) {
+      const blockmap = `${reference.basename}.blockmap`;
+      assertListed(assets, blockmap, 'Updater blockmap');
+      requireFile(path.join(options.directory, blockmap), 'Updater blockmap');
+    }
     const expectedSha256 = checksums.get(reference.basename);
     if (!expectedSha256) throw new Error(`SHA256SUMS.txt does not include ${reference.basename}.`);
     const actualSha256 = hashFile(artifactPath, 'sha256', 'hex');

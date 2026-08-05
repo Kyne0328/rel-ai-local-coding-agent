@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { compareMetrics, parseArguments } from '../scripts/electron-package-size.mjs';
 
-assert.deepEqual(parseArguments(['--dir', 'dist', '--strict']), {
+assert.deepEqual(parseArguments(['--dir', 'dist', '--platform', 'linux', '--strict']), {
   distDir: 'dist',
+  platform: 'linux',
   baselinePath: '',
   jsonPath: '',
   strict: true

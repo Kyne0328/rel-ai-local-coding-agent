@@ -127,9 +127,15 @@ assert.equal(electronPkg.devDependencies['@electron/fuses'], '2.1.3');
 assert.equal(electronPkg.build.afterPack, 'build/after-pack.js');
 assert.equal(electronPkg.build.publish[0].provider, 'github');
 assert.equal(electronPkg.build.publish[0].repo, 'rel-ai-mcp');
-const ngrokResource = electronPkg.build.extraResources.find((item) => item.from === '../vendor/ngrok');
-assert.ok(ngrokResource, 'electron build must bundle ngrok seed binaries');
-assert.deepEqual(ngrokResource.filter, ['manifest.json', 'win32/**'], 'electron build must bundle the ngrok provenance manifest with the Windows seed');
+const windowsNgrokResource = electronPkg.build.win.extraResources.find((item) => item.from === '../vendor/ngrok');
+const linuxNgrokResource = electronPkg.build.linux.extraResources.find((item) => item.from === '../vendor/ngrok');
+assert.ok(windowsNgrokResource, 'Windows packaging must bundle the ngrok seed binary');
+assert.ok(linuxNgrokResource, 'Linux packaging must bundle the ngrok seed binary');
+assert.deepEqual(windowsNgrokResource.filter, ['manifest.json', 'win32/**'], 'Windows packaging must bundle only the Windows ngrok seed');
+assert.deepEqual(linuxNgrokResource.filter, ['manifest.json', 'linux/**'], 'Linux packaging must bundle only the Linux ngrok seed');
+assert.deepEqual(electronPkg.build.linux.target, ['AppImage', 'deb']);
+assert.equal(electronPkg.build.linux.executableName, 'rel-ai-mcp');
+assert.equal(electronPkg.build.linux.artifactName, 'Rel.AI-MCP-${version}-linux-${arch}.${ext}');
 
 const electronMain = fs.readFileSync(path.join(root, 'electron', 'main.js'), 'utf8');
 const toolSleepBlocker = fs.readFileSync(path.join(root, 'electron', 'tool-sleep-blocker.js'), 'utf8');

@@ -34,11 +34,19 @@ function createUpdateStateStore({ app, onLog = () => {} }) {
 
 function detectUpdateSupport({ app, platform, env }) {
   if (!app.isPackaged) return { supported: false, reason: 'Updates are available only in an installed Rel.AI MCP build.' };
-  if (platform !== 'win32') return { supported: false, reason: 'Automatic updates are currently available only for the installed Windows app.' };
-  if (env.PORTABLE_EXECUTABLE_DIR || env.PORTABLE_EXECUTABLE_FILE) {
-    return { supported: false, reason: 'Portable builds must be updated manually from the GitHub Releases page.' };
+  if (platform === 'win32') {
+    if (env.PORTABLE_EXECUTABLE_DIR || env.PORTABLE_EXECUTABLE_FILE) {
+      return { supported: false, reason: 'Portable builds must be updated manually from the GitHub Releases page.' };
+    }
+    return { supported: true, reason: '' };
   }
-  return { supported: true, reason: '' };
+  if (platform === 'linux') {
+    if (!env.APPIMAGE) {
+      return { supported: false, reason: 'Automatic updates are available for the Linux AppImage. DEB installations must be updated manually.' };
+    }
+    return { supported: true, reason: '' };
+  }
+  return { supported: false, reason: 'Automatic updates are not available for this operating system.' };
 }
 
 function normalizeStatus(value) {

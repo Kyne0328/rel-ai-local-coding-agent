@@ -23,5 +23,8 @@ function resolveExecutable(context) {
   if (context.electronPlatformName === 'darwin') {
     return path.join(context.appOutDir, `${productName}.app`, 'Contents', 'MacOS', productName);
   }
-  return path.join(context.appOutDir, `${productName}${context.electronPlatformName === 'win32' ? '.exe' : ''}`);
+  if (context.electronPlatformName === 'linux') {
+    return path.join(context.appOutDir, context.packager.executableName);
+  }
+  return path.join(context.appOutDir, `${productName}.exe`);
 }

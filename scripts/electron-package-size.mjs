@@ -3,6 +3,7 @@ import path from 'node:path';
 import * as asar from '@electron/asar';
 import { fileURLToPath } from 'node:url';
 import { resolveCurrentUnpackedFromDist } from './current-unpacked.mjs';
+import { electronPlatformSpec, normalizeElectronPlatform } from './electron-platform.mjs';
 import { releaseArtifactNames } from './release-artifacts.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -29,6 +30,7 @@ function parseArguments(input) {
   };
   return {
     distDir: valueAfter('--dir', 'dist'),
+    platform: normalizeElectronPlatform(valueAfter('--platform', process.platform)),
     baselinePath: valueAfter('--baseline', ''),
     jsonPath: valueAfter('--json', ''),
     strict: input.includes('--strict')
@@ -39,10 +41,12 @@ function buildPackageSizeReport(options) {
   const distDir = path.resolve(root, options.distDir);
   const packageJson = readJson(path.join(root, 'package.json'));
   const version = String(packageJson.version || '').trim();
-  const unpackedDir = resolveCurrentUnpackedFromDist(distDir);
+  const platform = normalizeElectronPlatform(options.platform || process.platform);
+  const spec = electronPlatformSpec(platform);
+  const unpackedDir = resolveCurrentUnpackedFromDist(distDir, { platform });
   const resourcesDir = path.join(unpackedDir, 'resources');
   const asarPath = path.join(resourcesDir, 'app.asar');
-  requireDirectory(unpackedDir, 'Packaged win-unpacked directory');
+  requireDirectory(unpackedDir, `Packaged ${spec.unpackedDirectory} directory`);
   requireDirectory(resourcesDir, 'Packaged resources directory');
   requireFile(asarPath, 'Packaged app.asar');
 
@@ -50,10 +54,9 @@ function buildPackageSizeReport(options) {
     .filter(entry => entry.isFile())
     .map(entry => path.join(distDir, entry.name));
   const canonical = releaseArtifactNames(version);
-  const installerPath = findArtifact(topLevelFiles, canonical.installer);
-  const portablePath = findArtifact(topLevelFiles, canonical.portable);
-  requireFile(installerPath, 'NSIS installer');
-  requireFile(portablePath, 'Portable executable');
+  const artifactMetrics = platform === 'win32'
+    ? windowsArtifactMetrics(topLevelFiles, canonical)
+    : linuxArtifactMetrics(topLevelFiles, canonical);
 
   const localeDir = path.join(unpackedDir, 'locales');
   const localeFiles = listFiles(localeDir);
@@ -61,14 +64,13 @@ function buildPackageSizeReport(options) {
   const asar = inspectAsar(asarPath);
   const allUnpackedFiles = listFiles(unpackedDir);
   const metrics = {
-    installerBytes: fileSize(installerPath),
-    portableBytes: fileSize(portablePath),
+    ...artifactMetrics,
     unpackedBytes: sumFileSizes(allUnpackedFiles),
     resourcesBytes: sumFileSizes(listFiles(resourcesDir)),
     appAsarBytes: fileSize(asarPath),
     packagedDependencyBytes: asar.nodeModulesBytes,
     localesBytes: sumFileSizes(localeFiles),
-    ngrokBytes: fileSize(path.join(resourcesDir, 'bin', 'ngrok', 'win32', 'ngrok.exe')),
+    ngrokBytes: fileSize(path.join(resourcesDir, 'bin', 'ngrok', spec.ngrokDirectory, spec.ngrokFile)),
     dashboardCssBytes: fileSize(path.join(resourcesDir, 'public', 'dashboard.css'))
   };
   const content = {
@@ -85,6 +87,9 @@ function buildPackageSizeReport(options) {
   };
 
   const baseline = options.baselinePath ? readBaseline(path.resolve(root, options.baselinePath)) : null;
+  if (baseline?.platform && normalizeElectronPlatform(baseline.platform) !== platform) {
+    throw new Error(`Package-size baseline targets ${baseline.platform}, not ${platform}.`);
+  }
   const comparison = compareMetrics(metrics, baseline);
   const violations = [];
   if (content.localeCount !== 1 || content.locales[0] !== 'en-US.pak') {
@@ -104,8 +109,10 @@ function buildPackageSizeReport(options) {
     schemaVersion: 2,
     generatedAt: new Date().toISOString(),
     version,
-    platform: process.platform,
-    architecture: process.arch,
+    platform,
+    architecture: 'x64',
+    buildHostPlatform: process.platform,
+    buildHostArchitecture: process.arch,
     distDir: relativeTo(root, distDir),
     unpackedDir: relativeTo(root, unpackedDir),
     metrics,
@@ -197,6 +204,28 @@ function printReport(report) {
   } else {
     console.log('Package-size checks passed within the strict budget.');
   }
+}
+
+function windowsArtifactMetrics(files, canonical) {
+  const installerPath = findArtifact(files, canonical.installer);
+  const portablePath = findArtifact(files, canonical.portable);
+  requireFile(installerPath, 'NSIS installer');
+  requireFile(portablePath, 'Portable executable');
+  return {
+    installerBytes: fileSize(installerPath),
+    portableBytes: fileSize(portablePath)
+  };
+}
+
+function linuxArtifactMetrics(files, canonical) {
+  const appImagePath = findArtifact(files, canonical.linuxAppImage);
+  const debPath = findArtifact(files, canonical.linuxDeb);
+  requireFile(appImagePath, 'Linux AppImage');
+  requireFile(debPath, 'Linux DEB package');
+  return {
+    appImageBytes: fileSize(appImagePath),
+    debBytes: fileSize(debPath)
+  };
 }
 
 function findArtifact(files, exactName) {

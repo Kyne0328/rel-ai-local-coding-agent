@@ -33,7 +33,7 @@ jobs:
       - run: npm run test:native-tasks-release-gate
       - run: xvfb-run --auto-servernum npm run test:all
 
-  packaged-app:
+  packaged-windows:
     runs-on: windows-latest
     timeout-minutes: 35
     name: packaged Windows application
@@ -57,15 +57,15 @@ jobs:
       - name: Verify generated color assets
         run: npm run verify:color-tokens
       - name: Build unpacked Windows application
-        run: npm run electron:build
+        run: npm run electron:build:windows
       - name: Resolve current unpacked application
         id: unpacked
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $packageDirectory = node scripts/current-unpacked.mjs --allow-build-check
+          $packageDirectory = node scripts/current-unpacked.mjs --platform win32 --allow-build-check
           if ($LASTEXITCODE -ne 0) {
-            throw 'Could not resolve the unpacked application produced by electron:build.'
+            throw 'Could not resolve the unpacked application produced by electron:build:windows.'
           }
           $packageDirectory = [string]$packageDirectory
           $packageDirectory = $packageDirectory.Trim()
@@ -75,10 +75,70 @@ jobs:
           "path=$packageDirectory" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
       - name: Verify packaged application layout
         shell: pwsh
-        run: npm run verify:packaged -- --dir '${{ steps.unpacked.outputs.path }}'
+        run: npm run verify:packaged -- --platform win32 --dir '${{ steps.unpacked.outputs.path }}'
       - name: Verify hardened Electron fuses
         shell: pwsh
-        run: node electron/scripts/verify-fuses.js '${{ steps.unpacked.outputs.path }}/Rel.AI MCP.exe'
+        run: npm run verify:fuses -- --platform win32 '${{ steps.unpacked.outputs.path }}/Rel.AI MCP.exe'
       - name: Verify packaged OAuth and MCP connector flow
         shell: pwsh
         run: npm run test:connector-acceptance -- --dir '${{ steps.unpacked.outputs.path }}'
+
+  packaged-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    name: packaged Linux application
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            electron/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm ci
+        working-directory: electron
+      - name: Install Electron test binary
+        run: node electron/node_modules/electron/install.js
+      - name: Verify Electron test binary
+        run: test -x electron/node_modules/electron/dist/electron
+      - name: Fetch bundled ngrok seed binary
+        env:
+          NGROK_PLATFORMS: linux
+        run: bash scripts/fetch-ngrok.sh
+      - name: Verify generated color assets
+        run: npm run verify:color-tokens
+      - name: Build unpacked Linux application
+        run: npm run electron:build:linux
+      - name: Resolve current unpacked application
+        id: unpacked
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_directory="$(node scripts/current-unpacked.mjs --platform linux --allow-build-check)"
+          test -n "$package_directory"
+          test -d "$package_directory"
+          echo "path=$package_directory" >> "$GITHUB_OUTPUT"
+      - name: Verify packaged application layout
+        run: npm run verify:packaged -- --platform linux --dir '${{ steps.unpacked.outputs.path }}'
+      - name: Verify hardened Electron fuses
+        run: npm run verify:fuses -- --platform linux '${{ steps.unpacked.outputs.path }}/rel-ai-mcp'
+      - name: Verify packaged OAuth and MCP connector flow
+        run: npm run test:connector-acceptance -- --dir '${{ steps.unpacked.outputs.path }}'
+      - name: Smoke-test Linux desktop startup under Xvfb
+        shell: bash
+        env:
+          PACKAGE_DIRECTORY: ${{ steps.unpacked.outputs.path }}
+        run: |
+          set -euo pipefail
+          state_directory="$RUNNER_TEMP/relai-linux-smoke"
+          mkdir -p "$state_directory"
+          set +e
+          REL_AI_MCP_STATE_DIR="$state_directory" timeout --signal=TERM --kill-after=5s 15s \
+            xvfb-run --auto-servernum "$PACKAGE_DIRECTORY/rel-ai-mcp" --background
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ] && [ "$status" -ne 124 ]; then
+            exit "$status"
+          fi
