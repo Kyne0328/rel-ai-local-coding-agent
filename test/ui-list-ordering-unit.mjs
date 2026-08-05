@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 
-import { orderToolsForCatalog } from '../src/ui/features/tools/index.js';
+import { orderToolsForCatalog, toolCapabilities } from '../src/ui/features/tools/index.js';
+import { getToolMetadata } from '../src/tools/surface.js';
 import { orderChangedFiles, orderSessionsForDisplay } from '../src/ui/features/sessions/index.js';
 import { orderWorkspacesAlphabetically } from '../src/ui/components/workspace-menu.js';
 import { buildAttention, orderOverviewTasks, orderOverviewWorkspaces } from '../src/ui/features/home/index.js';
@@ -30,6 +31,32 @@ assert.deepEqual(orderedTools.map(tool => tool.name), [
   'relai_reset_workspace',
   'relai_restore_paths'
 ]);
+
+const consolidatedToolMetadata = getToolMetadata();
+const consolidatedToolCapabilities = Object.fromEntries(
+  consolidatedToolMetadata.map(tool => [tool.name, toolCapabilities(tool)])
+);
+assert.deepEqual(consolidatedToolCapabilities, {
+  relai_work: ['inspect'],
+  relai_snapshot: ['inspect'],
+  relai_read: ['inspect'],
+  relai_search: ['inspect'],
+  relai_inspect: ['inspect'],
+  relai_edit: ['edit'],
+  relai_exec: ['inspect'],
+  relai_process: ['inspect'],
+  relai_worktree: ['git'],
+  relai_validate: ['validate'],
+  relai_changes: ['validate', 'recover'],
+  relai_publish: ['git']
+});
+assert.deepEqual(
+  Object.fromEntries(['inspect', 'edit', 'validate', 'git', 'recover'].map(capability => [
+    capability,
+    consolidatedToolMetadata.filter(tool => toolCapabilities(tool).includes(capability)).length
+  ])),
+  { inspect: 7, edit: 1, validate: 2, git: 2, recover: 1 }
+);
 
 const sessions = [
   { id: 'older', endedAt: '2026-07-25T10:00:00.000Z' },

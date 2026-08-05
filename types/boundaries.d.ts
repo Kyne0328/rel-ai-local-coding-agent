@@ -58,10 +58,13 @@ export interface ToolBehavior {
   executionClass: ToolExecutionClass;
 }
 
+export type ToolCapability = 'inspect' | 'edit' | 'validate' | 'git' | 'recover';
+
 export interface ToolDashboardMetadata {
   category: string;
   requiredProfile: 'workspace';
   requiresApproval: boolean;
+  capabilities?: readonly ToolCapability[];
 }
 
 export interface ToolLifecycleMetadata {

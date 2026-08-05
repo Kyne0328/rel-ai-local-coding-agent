@@ -11,6 +11,7 @@ const CAPABILITIES = [
   { id: 'recover', label: 'Recover' }
 ];
 const CAPABILITY_ORDER = new Map(CAPABILITIES.slice(1).map((item, index) => [item.id, index]));
+const CAPABILITY_IDS = new Set(CAPABILITIES.slice(1).map(item => item.id));
 
 let _mounted = 0;
 let _tools = [];
@@ -103,15 +104,15 @@ function updateFilterCounts(container) {
     const label = definition?.label || capabilityId;
     const total = capabilityId === 'all'
       ? _tools.length
-      : _tools.filter(tool => toolCapability(tool.name) === capabilityId).length;
+      : _tools.filter(tool => toolCapabilities(tool).includes(capabilityId)).length;
     button.textContent = `${label} ${total}`;
     button.setAttribute('aria-label', `${label}: ${total} tools`);
   }
 }
 
 function matchesFilters(tool) {
-  const capability = toolCapability(tool.name);
-  if (_capability !== 'all' && capability !== _capability) return false;
+  const capabilities = toolCapabilities(tool);
+  if (_capability !== 'all' && !capabilities.includes(_capability)) return false;
   if (!_search) return true;
   const searchable = [tool.name, tool.title, tool.displayName, tool.description, ...(tool.parameters || [])]
     .filter(Boolean)
@@ -122,13 +123,13 @@ function matchesFilters(tool) {
 
 function toolCard(tool) {
   const card = document.createElement('article');
-  const capability = toolCapability(tool.name);
+  const capabilities = toolCapabilities(tool);
   const parameters = Array.isArray(tool.parameters) ? tool.parameters : [];
   const compatibility = tool?.state === 'deprecated' || tool?.category === 'Compatibility';
-  card.className = `tool-card capability-${capability}${compatibility ? ' compatibility' : ''}`;
+  card.className = `tool-card ${capabilities.map(capability => `capability-${capability}`).join(' ')}${compatibility ? ' compatibility' : ''}`;
   card.innerHTML = `
     <div class="tool-card-head">
-      <span class="tool-capability">${esc(compatibility ? 'Compatibility' : capabilityLabel(capability))}</span>
+      <span class="tool-capability">${esc(compatibility ? 'Compatibility' : capabilities.map(capabilityLabel).join(' · '))}</span>
       <span class="tool-parameter-count">${parameters.length} parameter${parameters.length === 1 ? '' : 's'}</span>
     </div>
     <div class="tool-card-title">
@@ -169,14 +170,26 @@ function lifecycleRank(tool) {
 }
 
 function capabilityRank(tool) {
-  return CAPABILITY_ORDER.get(toolCapability(tool?.name)) ?? CAPABILITY_ORDER.size;
+  return CAPABILITY_ORDER.get(toolCapability(tool)) ?? CAPABILITY_ORDER.size;
 }
 
 function toolSortLabel(tool) {
   return String(tool?.title || tool?.displayName || tool?.name || '');
 }
 
-function toolCapability(name) {
+export function toolCapabilities(tool) {
+  const explicit = Array.isArray(tool?.capabilities)
+    ? tool.capabilities.filter(capability => CAPABILITY_IDS.has(capability))
+    : [];
+  if (explicit.length) return [...new Set(explicit)];
+  return [legacyToolCapability(tool?.name)];
+}
+
+function toolCapability(tool) {
+  return toolCapabilities(tool)[0] || 'inspect';
+}
+
+function legacyToolCapability(name) {
   const value = String(name || '');
   if (value.startsWith('relai_git_')) return 'git';
   if (/restore|reset|tidy/.test(value)) return 'recover';

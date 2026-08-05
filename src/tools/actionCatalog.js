@@ -463,7 +463,7 @@ const PUBLIC_DEFINITION_VALUES = [
     annotations: annotations(true, false, true, false),
     groups: ['audit']
   }),
-  cloneOperation('relai_edit', 'relai_edit', 'Edit Repository', `Apply up to ${MAX_BATCH_EDITS} bounded repository edits.`),
+  cloneOperation('relai_edit', 'relai_edit', 'Edit Repository', `Apply up to ${MAX_BATCH_EDITS} bounded repository edits.`, { dashboard: { capabilities: ['edit'] } }),
   cloneOperation('relai_exec', 'relai_exec', 'Run Command', 'Run a bounded command.'),
   define({
     name: 'relai_process',
@@ -532,6 +532,7 @@ const PUBLIC_DEFINITION_VALUES = [
       additionalProperties: false
     },
     annotations: annotations(false, true, false, false),
+    dashboard: { capabilities: ['git'] },
     groups: ['git']
   }),
   define({
@@ -567,7 +568,8 @@ const PUBLIC_DEFINITION_VALUES = [
     },
     annotations: annotations(false, true, false, true),
     execution: { taskSupport: 'optional' },
-    behavior: { longRunning: true, executionClass: 'native_task_eligible' }
+    behavior: { longRunning: true, executionClass: 'native_task_eligible' },
+    dashboard: { capabilities: ['validate'] }
   }),
   define({
     name: 'relai_changes',
@@ -600,6 +602,7 @@ const PUBLIC_DEFINITION_VALUES = [
       additionalProperties: false
     },
     annotations: annotations(false, true, false, false),
+    dashboard: { capabilities: ['validate', 'recover'] },
     groups: ['audit', 'cleanup']
   }),
   define({
@@ -644,6 +647,7 @@ const PUBLIC_DEFINITION_VALUES = [
       additionalProperties: false
     },
     annotations: annotations(false, false, false, true),
+    dashboard: { capabilities: ['git'] },
     groups: ['git']
   })
 ];
@@ -683,11 +687,12 @@ function constrainActionProperties(inputSchema) {
   };
 }
 
-function cloneOperation(sourceName, name, title, description) {
+function cloneOperation(sourceName, name, title, description, overrides = {}) {
   const source = getOperationDefinition(sourceName);
   if (!source) throw new Error(`Missing internal operation definition: ${sourceName}`);
   return define({
     ...source,
+    ...overrides,
     name,
     title,
     description,
@@ -711,6 +716,13 @@ function define(value) {
     ...definition
   } = value;
   const constrained = constrainActionProperties(definition.inputSchema);
+  const dashboardMetadata = {
+    category: 'Workspace tools',
+    requiredProfile: 'workspace',
+    requiresApproval: false,
+    capabilities: ['inspect'],
+    ...(dashboard || {})
+  };
   return Object.freeze({
     handlerName: 'compactDispatch',
     ...definition,
@@ -721,7 +733,10 @@ function define(value) {
       summary: '', longRunning: false, taskScope: 'required', concurrencyScope: 'task', executionClass: 'bounded_synchronous',
       ...(behavior || {})
     }),
-    dashboard: Object.freeze({ category: 'Workspace tools', requiredProfile: 'workspace', requiresApproval: false, ...(dashboard || {}) }),
+    dashboard: Object.freeze({
+      ...dashboardMetadata,
+      capabilities: Object.freeze([...dashboardMetadata.capabilities])
+    }),
     connectorStrip: Object.freeze([...connectorStrip]),
     groups: Object.freeze([...groups]),
     annotations: Object.freeze(toolAnnotations || annotations(false, false, false, false)),
