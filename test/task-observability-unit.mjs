@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { buildToolActivityDetails, createActivityEvent, deriveTaskTitle, determinateProgress, normalizeTaskProgress, sanitizeActivityMetadata } from "../src/taskObservability.js";
+import { buildToolActivityDetails, createActivityEvent, deriveTaskTitle, determinateProgress, incompleteProgress, normalizeTaskProgress, sanitizeActivityMetadata } from '../src/taskObservability.js';
 
 assert.equal(deriveTaskTitle({ title: 'Audit dashboard activity model' }), 'Audit dashboard activity model');
 assert.equal(deriveTaskTitle({ title: 'Inspect token=super-secret dashboard' }), 'Inspect token=[redacted] dashboard');
@@ -55,6 +55,23 @@ assert.deepEqual(determinateProgress(4, 7, 'plan', '4 of 7 planned steps'), {
 assert.equal(normalizeTaskProgress({ mode: 'determinate', completedUnits: 2, totalUnits: 5 }, 'failed').percentage, 40);
 assert.deepEqual(normalizeTaskProgress({ mode: 'determinate', completedUnits: 2, totalUnits: 5 }, 'completed'), {
   mode: 'complete', percentage: 100, label: 'Complete'
+});
+assert.deepEqual(incompleteProgress({
+  mode: 'determinate',
+  completedUnits: 5,
+  totalUnits: 5,
+  percentage: 100
+}, 'validation_failed', 'Fix issues and revalidate'), {
+  mode: 'determinate',
+  completedUnits: 5,
+  totalUnits: 5,
+  percentage: 99,
+  source: 'tool',
+  label: 'Fix issues and revalidate'
+});
+assert.deepEqual(incompleteProgress({ mode: 'indeterminate', label: 'Checking' }, 'blocked', 'Action required'), {
+  mode: 'indeterminate',
+  label: 'Action required'
 });
 
 const event = createActivityEvent({

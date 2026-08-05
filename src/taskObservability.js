@@ -154,6 +154,18 @@ function completeProgress(label = 'Complete') {
   return { mode: 'complete', percentage: 100, label: cleanText(label, 120) || 'Complete' };
 }
 
+function incompleteProgress(progress, status, label = '') {
+  const normalized = normalizeTaskProgress(progress, status);
+  if (normalized.mode !== 'determinate') {
+    return label ? { ...normalized, label: cleanText(label, 120) } : normalized;
+  }
+  return {
+    ...normalized,
+    percentage: Math.min(99, Number(normalized.percentage || 0)),
+    ...(label ? { label: cleanText(label, 120) } : {})
+  };
+}
+
 function normalizeTaskProgress(progress, status) {
   if (status === 'completed') return completeProgress(progress?.label || 'Complete');
   if (progress?.mode === 'determinate') {
@@ -558,6 +570,7 @@ export {
   createActivityEvent,
   deriveTaskTitle,
   determinateProgress,
+  incompleteProgress,
   normalizeActivityError,
   normalizeTaskProgress,
   sanitizeActivityMetadata,

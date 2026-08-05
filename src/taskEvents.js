@@ -31,9 +31,66 @@ function clamp(value, min, max) {
   return Math.min(Math.max(number, min), max);
 }
 
-function eventTime(value) {
-  const timestamp = Date.parse(value?.endedAt || value?.completedAt || value?.ts || value?.startedAt || '');
-  return Number.isFinite(timestamp) ? timestamp : 0;
+function timestampMs(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const parsed = Date.parse(String(value || ''));
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
-export { clamp, cleanTaskId, eventTime, isCurrentTaskEvent, operationForTool, unique };
+function isoTimestamp(value) {
+  const timestamp = timestampMs(value);
+  return timestamp ? new Date(timestamp).toISOString() : '';
+}
+
+function eventTimestampValue(value = {}) {
+  return value.timestamp || value.ts || value.at || value.createdAt || value.startedAt || '';
+}
+
+function eventTimestampMs(value = {}) {
+  return timestampMs(eventTimestampValue(value));
+}
+
+function terminalTaskTimestampValue(value = {}) {
+  return value.endedAt || value.completedAt || value.lastActivityAt || value.updatedAt || value.startedAt || value.createdAt || '';
+}
+
+function terminalTaskTimestamp(value = {}) {
+  return timestampMs(terminalTaskTimestampValue(value));
+}
+
+function eventIdentityKey(event = {}, index = 0) {
+  if (event.eventId) return String(event.eventId);
+  if (event.operationId) return String(event.operationId);
+  return [
+    eventTimestampValue(event),
+    event.tool?.name || event.tool || event.type || '',
+    event.workspace || '',
+    event.taskId || '',
+    event.sessionId || '',
+    event.path || event.filePath || '',
+    event.operation || event.title || event.message || event.error?.message || event.error || '',
+    event.durationMs ?? event.ms ?? '',
+    event.ok === false ? 'error' : 'ok',
+    index
+  ].join('|');
+}
+
+function eventTime(value) {
+  return timestampMs(value?.endedAt || value?.completedAt || value?.ts || value?.startedAt || '');
+}
+
+export {
+  clamp,
+  cleanTaskId,
+  eventIdentityKey,
+  eventTime,
+  eventTimestampMs,
+  eventTimestampValue,
+  isCurrentTaskEvent,
+  isoTimestamp,
+  operationForTool,
+  terminalTaskTimestamp,
+  terminalTaskTimestampValue,
+  timestampMs,
+  unique
+};
