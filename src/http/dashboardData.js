@@ -7,6 +7,7 @@ import { deriveConnectionState } from '../desktopUxContracts.js';
 import { getApplicationMetadata } from '../appMetadata.js';
 import { readTaskHistory } from '../taskHistoryStore.js';
 import { buildSafeActivityProjection, sanitizeActivityEventRecord, sanitizeTaskRecord } from '../taskObservability.js';
+import { eventIdentityKey, eventTimestampMs, eventTimestampValue } from '../taskEvents.js';
 import { buildWorkspaceStates } from '../workspaceState.js';
 import { runtimeCompatibility } from '../runtimeCompatibility.js';
 import { mcpConnectionManager } from '../mcp/connectionManager.js';
@@ -76,7 +77,7 @@ function mergeDashboardActivity(auditTail, tasks, limit) {
   const positions = new Map();
   const add = (entry) => {
     if (!entry || typeof entry !== 'object') return;
-    const key = entry.eventId || entry.id || entry.operationId || `${entry.ts || entry.timestamp || ''}:${entry.tool || ''}:${entry.taskId || ''}`;
+    const key = eventIdentityKey(entry, entries.length, { preferId: true });
     const normalized = normalizeDashboardActivity(entry);
     if (positions.has(key)) entries[positions.get(key)] = { ...entries[positions.get(key)], ...normalized };
     else {
@@ -93,7 +94,7 @@ function mergeDashboardActivity(auditTail, tasks, limit) {
       sessionId: event.sessionId || task.id
     });
   }
-  entries.sort((left, right) => Date.parse(left.ts || 0) - Date.parse(right.ts || 0));
+  entries.sort((left, right) => eventTimestampMs(left) - eventTimestampMs(right));
   return { ...(auditTail || {}), entries: entries.slice(-Math.max(1, Number(limit || 100))) };
 }
 
@@ -106,7 +107,7 @@ function normalizeDashboardActivity(entry) {
     ...entry,
     id: entry.eventId || entry.id || entry.operationId,
     eventId: entry.eventId || entry.id || entry.operationId,
-    ts: entry.timestamp || entry.ts || entry.at || entry.createdAt,
+    ts: eventTimestampValue(entry),
     tool: toolName || entry.type || 'activity',
     operation: entry.title || entry.tool?.operation || entry.operation,
     message: entry.summary || entry.message || entry.result?.outcome || entry.error?.message || entry.error,
