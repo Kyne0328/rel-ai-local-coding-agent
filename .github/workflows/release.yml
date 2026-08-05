@@ -255,7 +255,11 @@ jobs:
         run: |
           set -euo pipefail
           state_directory="$RUNNER_TEMP/relai-linux-release-smoke"
+          sandbox_helper="$PACKAGE_DIRECTORY/chrome-sandbox"
           mkdir -p "$state_directory"
+          sudo chown root:root "$sandbox_helper"
+          sudo chmod 4755 "$sandbox_helper"
+          test "$(stat -c '%u:%g:%a' "$sandbox_helper")" = '0:0:4755'
           set +e
           REL_AI_MCP_STATE_DIR="$state_directory" timeout --signal=TERM --kill-after=5s 15s \
             xvfb-run --auto-servernum "$PACKAGE_DIRECTORY/rel-ai-mcp" --background

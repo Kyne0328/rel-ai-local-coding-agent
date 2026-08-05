@@ -95,7 +95,12 @@ function verifyPackageContracts() {
   const electronPackage = readJson('electron/package.json');
   assert.equal(rootPackage.productName, 'Rel.AI MCP');
   assert.deepEqual(rootPackage.author, { name: 'Kyne', url: 'https://github.com/Kyne0328' });
-  assert.deepEqual(electronPackage.author, { name: 'Kyne', url: 'https://github.com/Kyne0328' });
+  assert.deepEqual(electronPackage.author, {
+    name: 'Kyne',
+    email: 'Kyne0328@users.noreply.github.com',
+    url: 'https://github.com/Kyne0328'
+  });
+  assert.equal(electronPackage.homepage, 'https://github.com/Kyne0328/rel-ai-mcp');
   assert.equal(electronPackage.dependencies['electron-updater'], '6.8.9');
   assert.equal(electronPackage.devDependencies.electron, '43.2.0');
   assert.equal(electronPackage.devDependencies['electron-builder'], '26.15.3');
@@ -113,8 +118,10 @@ function verifyPackageContracts() {
   assert.deepEqual(electronPackage.build.electronLanguages, ['en-US']);
   assert.deepEqual(electronPackage.build.win.target, ['nsis', 'portable']);
   assert.deepEqual(electronPackage.build.linux.target, ['AppImage', 'deb']);
+  assert.equal(electronPackage.build.linux.maintainer, 'Kyne <Kyne0328@users.noreply.github.com>');
   assert.equal(electronPackage.build.linux.executableName, 'rel-ai-mcp');
-  assert.equal(electronPackage.build.linux.artifactName, 'Rel.AI-MCP-${version}-linux-${arch}.${ext}');
+  assert.equal(electronPackage.build.appImage.artifactName, 'Rel.AI-MCP-${version}-linux-x64.${ext}');
+  assert.equal(electronPackage.build.deb.artifactName, 'Rel.AI-MCP-${version}-linux-x64.${ext}');
   assert.deepEqual(
     electronPackage.build.win.extraResources.find(resource => resource.to === 'bin/ngrok')?.filter,
     ['manifest.json', 'win32/**']
@@ -184,6 +191,9 @@ function verifyWorkflowContracts() {
     /npm run verify:fuses -- --platform win32/,
     /npm run verify:fuses -- --platform linux/,
     /Smoke-test Linux desktop startup under Xvfb/,
+    /sudo chown root:root "\$sandbox_helper"/,
+    /sudo chmod 4755 "\$sandbox_helper"/,
+    /stat -c '%u:%g:%a'/,
     /xvfb-run --auto-servernum/,
     /Rel\.AI-MCP-Setup-\$\{\{ needs\.preflight\.outputs\.version \}\}\.exe/,
     /Rel\.AI-MCP-Portable-\$\{\{ needs\.preflight\.outputs\.version \}\}\.exe/,

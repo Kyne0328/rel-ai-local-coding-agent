@@ -134,8 +134,10 @@ assert.ok(linuxNgrokResource, 'Linux packaging must bundle the ngrok seed binary
 assert.deepEqual(windowsNgrokResource.filter, ['manifest.json', 'win32/**'], 'Windows packaging must bundle only the Windows ngrok seed');
 assert.deepEqual(linuxNgrokResource.filter, ['manifest.json', 'linux/**'], 'Linux packaging must bundle only the Linux ngrok seed');
 assert.deepEqual(electronPkg.build.linux.target, ['AppImage', 'deb']);
+assert.equal(electronPkg.build.linux.maintainer, 'Kyne <Kyne0328@users.noreply.github.com>');
 assert.equal(electronPkg.build.linux.executableName, 'rel-ai-mcp');
-assert.equal(electronPkg.build.linux.artifactName, 'Rel.AI-MCP-${version}-linux-${arch}.${ext}');
+assert.equal(electronPkg.build.appImage.artifactName, 'Rel.AI-MCP-${version}-linux-x64.${ext}');
+assert.equal(electronPkg.build.deb.artifactName, 'Rel.AI-MCP-${version}-linux-x64.${ext}');
 
 const electronMain = fs.readFileSync(path.join(root, 'electron', 'main.js'), 'utf8');
 const toolSleepBlocker = fs.readFileSync(path.join(root, 'electron', 'tool-sleep-blocker.js'), 'utf8');
