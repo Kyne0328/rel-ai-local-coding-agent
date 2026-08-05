@@ -4,14 +4,12 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { createDiagnosticFiles, fileTimestamp } from "../electron/diagnostic-files.js";
-import { sanitizeDiagnosticValue } from "../src/diagnostics.js";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-diagnostic-files-'));
 let opened = '';
 const files = createDiagnosticFiles({
   app: { getPath: name => name === 'userData' ? root : '' },
   shell: { openPath: async target => { opened = target; return ''; } },
-  sanitizeDiagnosticValue,
   now: () => new Date('2026-07-25T07:30:45.123Z')
 });
 
