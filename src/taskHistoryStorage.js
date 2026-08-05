@@ -64,8 +64,11 @@ function readSession(directory, id) {
 function normalizeStoredSession(session) {
   const sanitized = sanitizeTaskRecord(session);
   if (!sanitized) return sanitized;
+  const resultSummary = sanitized.resultSummary
+    || (sanitized.status === 'completed' ? sanitized.summary || '' : '');
   return {
     ...sanitized,
+    ...(resultSummary ? { resultSummary } : {}),
     progress: normalizeTaskProgress(sanitized.progress, sanitized.status)
   };
 }

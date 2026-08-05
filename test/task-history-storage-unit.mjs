@@ -27,13 +27,15 @@ try {
   writeSession(directory, {
     id: completedId,
     status: 'completed',
+    summary: 'Completed work.',
     progress: { mode: 'indeterminate', label: 'Waiting for the next task step' }
   });
   const completed = readSession(directory, completedId);
   assert.equal(completed?.progress?.mode, 'complete');
   assert.equal(completed?.progress?.percentage, 100);
+  assert.equal(completed?.resultSummary, 'Completed work.');
 
-  console.log('Task-history listings refresh externally rewritten files and normalize terminal progress.');
+  console.log('Task-history listings refresh externally rewritten files and normalize completed task state.');
 } finally {
   resetTaskHistoryCaches();
   fs.rmSync(directory, { recursive: true, force: true });
