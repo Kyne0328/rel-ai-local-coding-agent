@@ -212,7 +212,9 @@ try {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ redirect_uris: [redirectUri] })
   });
   assert.equal(missingApplicationType.status, 201);
-  assert.equal((await missingApplicationType.json()).application_type, 'web');
+  const defaultedClient = await missingApplicationType.json();
+  assert.ok(defaultedClient.client_id);
+  assert.equal(defaultedClient.application_type, 'web');
 
   const client = await register('mcp');
   assert.equal(client.application_type, 'web');
@@ -337,7 +339,7 @@ try {
   assert.equal(recoveryPage.status, 200);
   assert.deepEqual(
     Object.keys(JSON.parse(fs.readFileSync(path.join(stateDir, 'oauth-store.json'), 'utf8')).clients).sort(),
-    [legacyClientId, unrelatedClient.client_id].sort()
+    [legacyClientId, defaultedClient.client_id, unrelatedClient.client_id].sort()
   );
   const recoveredApproval = await postForm('/authorize', {
     ...recoveryValues,
