@@ -847,7 +847,7 @@ function taskError(code, message, details = {}) {
   error.allowedAlternatives = Array.isArray(details.allowedAlternatives)
     ? details.allowedAlternatives.map(String).filter(Boolean)
     : [
-        'Call relai_begin_work once for each independent task.',
+        'Call relai_work with action "begin" once for each independent task.',
         'Pass the returned work_id on every subsequent task-scoped tool call.'
       ];
   if (Number.isFinite(details.candidateCount)) error.candidateCount = Number(details.candidateCount);

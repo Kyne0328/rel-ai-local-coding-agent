@@ -378,7 +378,7 @@ async function relaiGitCommit(workspace, config, args = {}) {
       addAll,
       paths,
       ...(authorization.metadata ? { sensitiveAuthorization: authorization.metadata } : {}),
-      status: statusBefore
+      statusBefore
     };
   }
   const indexTree = await runProcess("git", ["write-tree"], { cwd: workspace.path, timeout: 60000 }, config);

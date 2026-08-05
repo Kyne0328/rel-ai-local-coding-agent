@@ -59,7 +59,7 @@ async function repoSnapshot(workspace, config, args = {}) {
     truncated: tree.truncated,
     hints: projectHints(Object.keys(manifests)),
     ...(git ? { git } : {}),
-    recommendedFlow: ["Use the minimum tool calls needed", "relai_search when the code location is unknown; adaptive context is included by default", "relai_read only when a wider range or complete file is needed before editing", "relai_edit { runChecks: true, returnDiff: true } when practical", "On final validation use relai_run_checks { complete: true, summary }; use relai_finish_work only after post-validation read-only review"],
+    recommendedFlow: ["Use the minimum tool calls needed", "relai_search when the code location is unknown; adaptive context is included by default", "relai_read only when a wider range or complete file is needed before editing", "relai_edit { runChecks: true, returnDiff: true } when practical", "On final validation use relai_validate { action: 'checks', complete: true, summary }; use relai_work { action: 'finish' } only after post-validation read-only review"],
     writeGuidance: workspaceWriteGuidance(),
     operationJournal: summarizeOperations(config, workspace, args.journalLimit || 10)
   };

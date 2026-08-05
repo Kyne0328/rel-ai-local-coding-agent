@@ -4,7 +4,7 @@
 
 This document defines the implementation path from the current Rel.AI MCP repository bridge to a broader local coding runtime for ChatGPT.
 
-Phases 1, 2, 3, 4A, and 4B are included in the 0.23.0 build. Phase 4C remains deferred as a generic optional task ledger, and Phase 5 remains deferred as a separate model-worker layer. The runtime also includes native MCP Tasks interoperability on HTTP, semantic search, structured diagnostics, change-aware validation plans, output schemas, OAuth hardening, OpenTelemetry, and revision-aware resource caching.
+Phases 1, 2, 3, 4A, and 4B are included in the 0.24.0 build. Phase 4C remains deferred as a generic optional task ledger, and Phase 5 remains deferred as a separate model-worker layer. The runtime also includes native MCP Tasks interoperability on HTTP, semantic search, structured diagnostics, change-aware validation plans, output schemas, OAuth hardening, OpenTelemetry, and revision-aware resource caching.
 
 The target is not to reproduce Claude Code's user interface. The target is to remove the practical runtime limitations that matter during complex coding work:
 
@@ -62,7 +62,7 @@ Implemented.
 - Kept generated/cache exclusions and `.relaiignore` handling.
 - Confirmed that snapshot limits and `includeRoots` do not restrict direct reads or text search.
 - Made repository overview and search optional when the relevant path is already known.
-- Added `relai_code_inspect` with a fingerprint-invalidated live index for symbol definitions, references and calls, structurally related files, reverse-import impact, affected tests, and diagnostic-command readiness.
+- Added `relai_inspect` with a fingerprint-invalidated live index for symbol definitions, references and calls, structurally related files, reverse-import impact, affected tests, and diagnostic-command readiness.
 - Kept the index bounded and non-persistent so path, size, or modification-time changes invalidate cached analysis instead of leaving stale background state.
 - Preserved final structured validation and explicit completion requirements.
 - Added backward-compatible migration from:
@@ -91,7 +91,7 @@ Implemented.
 
 ### Runtime rule
 
-The snapshot is an initial map, not an access boundary. ChatGPT may call `relai_search`, `relai_semantic_search`, `relai_code_inspect`, and `relai_read` for any relevant non-sensitive path inside the configured workspace, whether or not the path appeared in the snapshot. Code intelligence remains best-effort lexical, hashed-vector, and import-graph analysis; it does not claim compiler-accurate language-server semantics or transmit repository content to an external embedding service.
+The snapshot is an initial map, not an access boundary. ChatGPT may call `relai_search`, `relai_semantic_search`, `relai_inspect`, and `relai_read` for any relevant non-sensitive path inside the configured workspace, whether or not the path appeared in the snapshot. Code intelligence remains best-effort lexical, hashed-vector, and import-graph analysis; it does not claim compiler-accurate language-server semantics or transmit repository content to an external embedding service.
 
 ---
 
@@ -247,13 +247,13 @@ Add a cache behavior such as `workspace` or handle `relai_exec` explicitly in `i
 
 ## Validation separation
 
-`relai_exec` must never satisfy the structured final-validation requirement used by either atomic `relai_run_checks` completion or standalone `relai_finish_work`.
+`relai_exec` must never satisfy the structured final-validation requirement used by either atomic `relai_validate { action: "checks" }` completion or standalone `relai_work { action: "finish" }`.
 
 Examples:
 
 - `relai_exec { command: "npm test" }` is command output only.
-- `relai_run_checks { level: "standard" }` records structured validation.
-- Completion remains valid only after structured `relai_run_checks`; the final checks may close atomically with `complete:true` and `summary`, or standalone `relai_finish_work` may close after read-only review.
+- `relai_validate { action: "checks" } { level: "standard" }` records structured validation.
+- Completion remains valid only after structured `relai_validate { action: "checks" }`; the final checks may close atomically with `complete:true` and `summary`, or standalone `relai_work { action: "finish" }` may close after read-only review.
 
 This separation preserves reliable completion semantics without restricting command execution.
 
@@ -312,7 +312,7 @@ and receive accurate exit status, bounded output, timeout behavior, audit histor
 
 ## Status
 
-Implemented in 0.23.0 and included in the public tool surface.
+Implemented in 0.24.0 and included in the public tool surface.
 
 ## Objective
 
@@ -576,7 +576,7 @@ Implemented.
 - Caps the combined connector payload at 64 KiB with UTF-8-safe truncation and source/byte metadata.
 - Rejects symbolic links, non-files, workspace escapes, and binary-looking instruction files.
 - Caches results by real workspace path, target directory, payload limit, modification time, size, and mode.
-- Exposes full instructions through the compact `relai_begin_work` bootstrap, `relai_repo_snapshot`, and `relai://workspace/<alias>/inspect`.
+- Exposes full instructions through the compact `relai_work { action: "begin" }` bootstrap, `relai_snapshot`, and `relai://workspace/<alias>/inspect`.
 - Keeps instruction content out of dashboard/config summaries while showing configured source paths.
 - Leaves both supported files available through explicit `relai_read` calls when full content is needed.
 - Treats instruction content as guidance only; Rel.AI never executes it automatically.
@@ -600,7 +600,7 @@ Recommended behavior:
 - return source paths and truncation metadata;
 - reject binary-looking instruction files;
 - never execute content from instruction files automatically;
-- include instructions in task bootstrap, `relai_repo_snapshot`, and `relai://workspace/<alias>/inspect`;
+- include instructions in task bootstrap, `relai_snapshot`, and `relai://workspace/<alias>/inspect`;
 - allow direct reads for the full files when truncated.
 
 ### Caching
@@ -633,7 +633,7 @@ Cache by target path, selected instruction paths, modification time, and size. I
 
 ### Status
 
-Implemented in 0.23.0 and included in the public tool surface.
+Implemented in 0.24.0 and included in the public tool surface.
 
 ### Objective
 
@@ -807,7 +807,7 @@ skipped
 - associate a plan with the current task scope when available;
 - show progress in Sessions and the workspace dashboard;
 - include the active plan in status summaries;
-- do not let plan completion substitute for an explicit validated completion signal (`relai_run_checks` with `complete:true` or standalone `relai_finish_work`);
+- do not let plan completion substitute for an explicit validated completion signal (`relai_validate { action: "checks" }` with `complete:true` or standalone `relai_work { action: "finish" }`);
 - do not require a plan before edits or commands.
 
 ### Tests
@@ -928,11 +928,11 @@ Recommended tool sets:
 ### Read-only worker
 
 ```text
-relai_repo_snapshot
+relai_snapshot
 relai_search
 relai_read
-relai_status with workspace
-relai_diff
+relai_work { action: "status" } with workspace
+relai_changes { action: "diff" }
 relai_exec, when command-side inspection is required
 ```
 
@@ -1083,7 +1083,7 @@ Do not create hidden public tools or a second registry.
 
 ## Validation and completion
 
-Every explicit completion path must continue to require structured final validation. Atomic completion belongs on `relai_run_checks`; standalone `relai_finish_work` remains for post-validation read-only review.
+Every explicit completion path must continue to require structured final validation. Atomic completion belongs on `relai_validate { action: "checks" }`; standalone `relai_work { action: "finish" }` remains for post-validation read-only review.
 
 These actions do not independently satisfy completion:
 
@@ -1092,7 +1092,7 @@ These actions do not independently satisfy completion:
 - all task-plan steps marked complete;
 - a worker reporting success.
 
-The final controlling ChatGPT session must run or receive a recognized `relai_run_checks` result after the last relevant mutation.
+The final controlling ChatGPT session must run or receive a recognized `relai_validate { action: "checks" }` result after the last relevant mutation.
 
 ## Testing order
 
@@ -1116,13 +1116,13 @@ Recommended releases:
 | --- | --- | --- |
 | Phase 1 | Context policy and flexible file discovery | Implemented |
 | Phase 2 | `relai_exec` one-shot commands | Implemented |
-| Phase 3 | Managed persistent processes and dashboard | Implemented in 0.23.0 |
+| Phase 3 | Managed persistent processes and dashboard | Implemented in 0.24.0 |
 | Phase 4A | Project instruction files | Implemented |
-| Phase 4B | Managed Git worktrees | Implemented in 0.23.0 |
+| Phase 4B | Managed Git worktrees | Implemented in 0.24.0 |
 | Phase 4C | Optional generic task ledger | Deferred |
 | Phase 5 preview | Disabled-by-default independent workers | Deferred |
 
-The 0.23.0 hard cutover combines several mature runtime boundaries behind one explicit 33-tool surface. Future lifecycle additions should still receive focused regression coverage and independent ownership boundaries.
+The 0.24.0 consolidation keeps these mature runtime boundaries behind one explicit 12-tool public surface with catalog-derived actions. Future lifecycle additions should still receive focused regression coverage and independent ownership boundaries.
 
 ---
 

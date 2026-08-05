@@ -48,7 +48,7 @@ function workspaceWriteGuidance() {
         ]
       },
       'workspace-tidy': {
-        tools: ['relai_tidy_plan', 'relai_tidy_run'],
+        tools: ['relai_changes', 'relai_changes'],
         when: ['generated session artifacts should be tidied through a bounded plan']
       }
     },
@@ -66,10 +66,10 @@ function workspaceWriteGuidance() {
       stagedWriteAppend: "relai_edit { workspace, stage: 'append', writeId, content }",
       stagedWriteCommit: "relai_edit { workspace, stage: 'commit', writeId }",
       applyUpdate: 'relai_edit { workspace, updateText, runChecks: true, returnDiff: true }',
-      workspaceTidyPlan: "relai_tidy_plan { workspace, mode: 'session_untracked' }",
-      workspaceTidyRun: 'relai_tidy_run { workspace, planId }'
+      workspaceTidyPlan: "relai_changes { workspace, mode: 'session_untracked' }",
+      workspaceTidyRun: 'relai_changes { workspace, planId }'
     },
-    next: 'Choose the edit tool by task shape and file size, then run relai_run_checks and relai_diff.'
+    next: 'Choose the edit tool by task shape and file size, then run relai_validate with action "checks" and relai_changes with action "diff".'
   };
 }
 
@@ -116,7 +116,7 @@ function fileWriteGuidance(relativePath, text) {
         tool: 'relai_edit',
         reason: 'Use relai_edit with updateText (or edits: [...]) when the change spans multiple files.'
       },
-      next: 'Use relai_edit with exact current text for localized changes or staged content for unavoidable whole-file replacement. Use relai_tidy_plan and relai_tidy_run for session-owned untracked artifacts.'
+      next: 'Use relai_edit with exact current text for localized changes or staged content for unavoidable whole-file replacement. Use relai_changes and relai_changes for session-owned untracked artifacts.'
     };
   }
   return {

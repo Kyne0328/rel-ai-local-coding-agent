@@ -1,8 +1,8 @@
 # Release status
 
-## 0.23.0 ESM hard cutover
+## 0.24.0 consolidated runtime
 
-Version `0.23.0` remains unreleased. The consolidated `main` candidate now contains the reconciled runtime-hardening, work-session observability, release, ESM, strict modern MCP `2026-07-28`, stateless ChatGPT HTTP compatibility, and native-task storage work. Aggregate source, dashboard, packaging, dependency, updater, protocol, and benchmark validation passes; publication still requires the protected signed build and disposable-machine lifecycle checks.
+Version `0.24.0` is the current release candidate. The consolidated `main` candidate now contains the reconciled runtime-hardening, work-session observability, release, ESM, strict modern MCP `2026-07-28`, stateless ChatGPT HTTP compatibility, and native-task storage work. Aggregate source, dashboard, packaging, dependency, updater, protocol, and benchmark validation passes; publication still requires the protected signed build and disposable-machine lifecycle checks.
 
 ### Implemented
 
@@ -18,13 +18,13 @@ Version `0.23.0` remains unreleased. The consolidated `main` candidate now conta
 
 ### Automated gates passed
 
-- JavaScript syntax, ESLint, TypeScript boundaries, production and dependency Knip models, release consistency, and the complete 166-file aggregate test suite pass.
+- JavaScript syntax, ESLint, TypeScript boundaries, production and dependency Knip models, release consistency, and the curated release-critical regression suite pass.
 - Real Electron Chromium dashboard acceptance across 640px, 320 CSS-pixel, 375 CSS-pixel, and 400% zoom scenarios; temporary screenshots are reviewed during the test and removed.
 - Root and Electron production dependency audits: zero advisories; production Knip covers shipped root, dashboard, and Electron runtime entries.
 - Windows x64 unpacked build, NSIS installer, portable executable, blockmap, and update metadata generation.
 - Packaged layout, ESM runtime, OAuth/MCP connector, task attribution, validation, completion, reconnect rejection, and removed-route acceptance.
 - Electron fuse-policy verification.
-- Strict 0.23.0 package-size baseline with exact canonical filenames, a 3% tolerance, one locale, zero source maps, zero source CSS, and zero packaged TypeScript files.
+- Strict platform-specific package-size baselines with exact canonical filenames, a 3% tolerance, one locale, zero source maps, zero source CSS, and zero packaged TypeScript files.
 - Executable observability benchmark: 18/18 backend and Electron renderer metrics passed, with incomplete runs failing closed.
 - Exact updater artifact verification binds `latest.yml` SHA-512 metadata and `SHA256SUMS.txt` to the published installer basename and bytes.
 - CycloneDX SBOM generation.

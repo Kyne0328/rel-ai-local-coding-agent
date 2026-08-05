@@ -39,7 +39,7 @@ assert.equal(
   sanitizeCompletionSummary('Updated the tokenizer and documented the authorization flow.'),
   'Updated the tokenizer and documented the authorization flow.'
 );
-assert.equal(sanitizeDisplayText('safe=value and version=0.23.0', 200), 'safe=value and version=0.23.0');
+assert.equal(sanitizeDisplayText('safe=value and version=0.24.0', 200), 'safe=value and version=0.24.0');
 assert.throws(() => sanitizeCompletionSummary({ summary: 'not a primitive' }), /string/);
 assert.throws(() => sanitizeCompletionSummary('   '), /required/);
 const long = sanitizeCompletionSummary(`${'a'.repeat(2500)} password=secret-at-tail`, 2000);

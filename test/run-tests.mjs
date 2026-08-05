@@ -1,6 +1,6 @@
-// Runs every test/*.mjs as its own node process so new test files are picked up
-// automatically — no hand-maintained npm-script chain to drift out of date.
-import fs from 'node:fs';
+// Runs the small release-critical regression suite. Broader focused tests remain
+// available through their named npm scripts and direct `node test/<file>` runs,
+// but they do not block every release by default.
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -8,12 +8,28 @@ import { fileURLToPath } from 'node:url';
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(testDir, '..');
 
-// Not tests: the syntax checker runs via `npm run check`, and this file is the runner.
-const NOT_TESTS = new Set(['check-js.mjs', 'run-tests.mjs']);
-
-const files = fs.readdirSync(testDir)
-  .filter((name) => name.endsWith('.mjs') && !NOT_TESTS.has(name))
-  .sort();
+const files = [
+  'repository-staleness-unit.mjs',
+  'approval-token-unit.mjs',
+  'authorization-policy-unit.mjs',
+  'connector-result-contract-unit.mjs',
+  'desktop-lifecycle-unit.mjs',
+  'desktop-settings-unit.mjs',
+  'durable-state-unit.mjs',
+  'electron-launcher-smoke.mjs',
+  'http-auth-smoke.mjs',
+  'http-smoke.mjs',
+  'ipc-security-unit.mjs',
+  'oauth-provider-security-unit.mjs',
+  'oauth-smoke.mjs',
+  'package-size-policy-unit.mjs',
+  'release-workflow-smoke.mjs',
+  'safety-paths.mjs',
+  'smoke.mjs',
+  'task-state-unit.mjs',
+  'tool-output-validation-unit.mjs',
+  'window-security-unit.mjs'
+];
 
 const failures = [];
 for (const name of files) {

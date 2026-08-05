@@ -13,7 +13,7 @@ npm run audit:packaging
 npm run benchmark:observability
 ```
 
-`test:all` builds the dashboard CSS, performs JavaScript checks, runs ESLint with zero warnings, type-checks module boundaries, verifies release consistency, and executes every test file. CI and release packaging use Node.js 24.
+`test:all` builds the dashboard CSS, performs JavaScript checks, runs ESLint with zero warnings, type-checks module boundaries, verifies release consistency, and executes the curated release-critical regression suite. CI and release packaging use Node.js 24.
 
 When working through Rel.AI itself, use:
 
@@ -83,7 +83,7 @@ See `docs/RELEASE_NOTES_0.22.0.md` for the 0.22.0 notice.
 Use the release helper so all version surfaces move together:
 
 ```bash
-npm run release:bump -- 0.22.0 --date 2026-07-27 --no-changelog
+npm run release:bump -- <next-version> --date <YYYY-MM-DD> --no-changelog
 ```
 
 Then add the dated changelog section and run:

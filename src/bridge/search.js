@@ -56,7 +56,7 @@ async function relaiSearch(workspace, _config, args = {}) {
       } : {}),
       next: result.matches.length
         ? "Read only the relevant ranges with relai_read { paths, startLine, endLine }."
-        : "No matches. Try a shorter pattern, ignoreCase:true, or relai_repo_snapshot for the file list."
+        : "No matches. Try a shorter pattern, ignoreCase:true, or relai_snapshot for the file list."
     };
   }
   return {
@@ -71,7 +71,7 @@ async function relaiSearch(workspace, _config, args = {}) {
       ? searchPlan.requestedMode === "auto"
         ? "Adaptive context is included for prioritized matches. Use relai_read only when a wider range or complete file is needed."
         : "Context is included. Use relai_read only when a wider range or complete file is needed."
-      : "No matches. Try a shorter pattern, ignoreCase:true, or relai_repo_snapshot for the file list."
+      : "No matches. Try a shorter pattern, ignoreCase:true, or relai_snapshot for the file list."
   };
 }
 

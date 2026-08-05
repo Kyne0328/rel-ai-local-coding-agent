@@ -1,41 +1,41 @@
-npm notice run rel-ai-mcp@0.23.2 test
+npm notice run rel-ai-mcp@0.24.0 test
 npm notice run npm run test:all
-npm notice run rel-ai-mcp@0.23.2 test:all
+npm notice run rel-ai-mcp@0.24.0 test:all
 npm notice run npm run verify:color-tokens && npm run build:css && npm run verify:generated && npm run check && npm run lint && npm run typecheck && npm run knip:dependencies && node scripts/release-check.mjs && node test/run-tests.mjs
-npm notice run rel-ai-mcp@0.23.2 verify:color-tokens
+npm notice run rel-ai-mcp@0.24.0 verify:color-tokens
 npm notice run node scripts/generate-color-tokens.mjs --check
-npm notice run rel-ai-mcp@0.23.2 build:css
+npm notice run rel-ai-mcp@0.24.0 build:css
 npm notice run npm run generate:color-tokens && npx @tailwindcss/cli -i ./src/ui/styles/app.css -o ./public/dashboard.css --minify
-npm notice run rel-ai-mcp@0.23.2 generate:color-tokens
+npm notice run rel-ai-mcp@0.24.0 generate:color-tokens
 npm notice run node scripts/generate-color-tokens.mjs
 Generated src/ui/styles/color-tokens.css
 Generated electron/renderer/color-tokens.css
 Generated public/oauth.css
 Generated docs/color-system-reference.svg
-npm notice run rel-ai-mcp@0.23.2 npx
+npm notice run rel-ai-mcp@0.24.0 npx
 npm notice run tailwindcss -i ./src/ui/styles/app.css -o ./public/dashboard.css --minify
 Γëê tailwindcss v4.3.3
 
 Done in 94ms
-npm notice run rel-ai-mcp@0.23.2 verify:generated
+npm notice run rel-ai-mcp@0.24.0 verify:generated
 npm notice run node scripts/check-generated.mjs
-npm notice run rel-ai-mcp@0.23.2 generate:color-tokens
+npm notice run rel-ai-mcp@0.24.0 generate:color-tokens
 npm notice run node scripts/generate-color-tokens.mjs
 Generated src/ui/styles/color-tokens.css
 Generated electron/renderer/color-tokens.css
 Generated public/oauth.css
 Generated docs/color-system-reference.svg
 Generated assets are current.
-npm notice run rel-ai-mcp@0.23.2 check
+npm notice run rel-ai-mcp@0.24.0 check
 npm notice run node test/check-js.mjs
 Checked 447 JavaScript files.
-npm notice run rel-ai-mcp@0.23.2 lint
+npm notice run rel-ai-mcp@0.24.0 lint
 npm notice run eslint src electron test scripts bin --max-warnings=0
-npm notice run rel-ai-mcp@0.23.2 typecheck
+npm notice run rel-ai-mcp@0.24.0 typecheck
 npm notice run tsc -p tsconfig.boundaries.json
-npm notice run rel-ai-mcp@0.23.2 knip:dependencies
+npm notice run rel-ai-mcp@0.24.0 knip:dependencies
 npm notice run knip --dependencies --treat-config-hints-as-errors
-Release consistency check passed for 0.23.2.
+Release consistency check passed for 0.24.0.
 PASS accessibility-responsive-smoke.mjs (0.0s)
 PASS active-controller-guard-unit.mjs (0.0s)
 PASS activity-event-unit.mjs (0.0s)

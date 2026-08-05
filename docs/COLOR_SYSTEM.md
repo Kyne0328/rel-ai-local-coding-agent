@@ -48,7 +48,7 @@ Components consume intent-based custom properties:
 - `--ui-status-*-foreground`, `-background`, and `-border` for operational state;
 - `--ui-overlay-*`, `--ui-shadow-*`, and Electron decorative tokens for presentation effects.
 
-The 0.23.0 hard cutover removes legacy aliases such as `--blue`, `--text-dim`, and `--line-soft`. All authored UI code uses semantic roles directly.
+The 0.24.0 hard cutover removes legacy aliases such as `--blue`, `--text-dim`, and `--line-soft`. All authored UI code uses semantic roles directly.
 
 ### Component tokens
 

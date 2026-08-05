@@ -231,7 +231,7 @@ function impactAnalysis(workspace, index, symbol, definitions, references, args,
     affectedTests: [...new Set(affectedTests)].slice(0, maxResults),
     importEdges: importEdges.slice(0, maxResults),
     truncated: impactedPaths.length > maxResults || importEdges.length > maxResults || references.truncated,
-    next: affectedTests.length ? 'Run the listed tests or relai_run_checks at the appropriate level before completion.' : 'No directly connected test file was identified; use diagnostics to review available validation commands.'
+    next: affectedTests.length ? 'Run the listed tests or relai_validate with action "checks" at the appropriate level before completion.' : 'No directly connected test file was identified; use diagnostics to review available validation commands.'
   };
 }
 
@@ -302,7 +302,7 @@ function diagnosticReadiness(workspace, index) {
     },
     configuredTestCommands: Object.entries(workspace.testCommands || {}).map(([key, command]) => ({ key, command })),
     diagnosticsExecuted: false,
-    next: diagnosticCommands.length ? 'Run relai_run_checks with level quick, standard, or release to execute diagnostics.' : 'No dedicated language diagnostic command was detected; configure a check, lint, typecheck, analyze, vet, or clippy command.'
+    next: diagnosticCommands.length ? 'Run relai_validate with action "checks" and level quick, standard, or release to execute diagnostics.' : 'No dedicated language diagnostic command was detected; configure a check, lint, typecheck, analyze, vet, or clippy command.'
   };
 }
 
