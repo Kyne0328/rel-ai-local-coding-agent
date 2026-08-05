@@ -2,7 +2,7 @@ import { setToken, getToken, fetchJson, postJson, invalidateCache, DASHBOARD_DAT
 import { init as initStore, get as getStore } from './ui/store.js';
 import { initRouter, currentSection, currentRoutePath, getRouteParams, replaceRouteParams, rerender } from './ui/router.js';
 import { initEvents, startSSE } from './ui/events.js';
-import { mountHome } from './ui/features/home/index.js';
+import { mountHome, updateHomeLiveState } from './ui/features/home/index.js';
 import { initUiPreferences } from './ui/preferences.js';
 import { connectionLayerViews, connectionSummary, withConnectionState } from './ui/connection-state.js';
 import { initCommandPalette } from './ui/command-palette.js';
@@ -235,19 +235,60 @@ async function liveOnEvent(data) {
   initStore(hydrated);
   updateShell(hydrated);
   if (!_routerReady) activateRouter();
-  if (currentSection() === 'activity') {
-    await import('./ui/features/activity/index.js').then(module => module.mergeEntries(hydrated.auditTail?.entries || [])).catch(debugError);
-  } else {
-    await renderViewIfChanged(hydrated);
+  await syncLiveView(hydrated);
+}
+
+async function syncLiveView(data) {
+  let updated = false;
+  try {
+    updated = await updateLiveView(data);
+  } catch (error) {
+    debugError(error);
   }
+  if (!updated) return renderViewIfChanged(data);
+  _renderFingerprint = viewFingerprint(data);
+  return true;
+}
+
+async function updateLiveView(data) {
+  const root = ensureRouteRoot();
+  if (!root) return false;
+  switch (currentSection()) {
+    case 'home':
+      return updateHomeLiveState(root, data);
+    case 'activity': {
+      const module = await import('./ui/features/activity/index.js');
+      module.mergeEntries(data.auditTail?.entries || []);
+      return true;
+    }
+    case 'tasks': {
+      const module = await import('./ui/features/sessions/index.js');
+      return module.updateTaskSessions(root, data);
+    }
+    case 'processes': {
+      const module = await import('./ui/features/processes/index.js');
+      return module.updateProcessesLiveState(root, data);
+    }
+    case 'settings':
+      if (currentRoutePath() !== 'settings/connection') return false;
+      break;
+    case 'connection':
+    case 'connector':
+      break;
+    default:
+      return false;
+  }
+  const module = await import('./ui/features/settings/connector.js');
+  return module.updateConnectorLiveState(root, data);
 }
 
 function liveStateChange(detail) {
   _liveState = detail.state || 'connecting';
   if (detail.lastEventAt) _lastEventAt = detail.lastEventAt;
-  initStore(withConnectionState(getStore(), _liveState));
+  const data = withConnectionState(getStore(), _liveState);
+  initStore(data);
   renderConnectionStatus();
-  if (_routerReady && currentRoutePath() === 'settings/connection') void renderViewIfChanged(getStore());
+  if (_routerReady && ['settings/connection', 'connection', 'connector'].includes(currentRoutePath())) void syncLiveView(data);
 }
 
 function updateShell(data) {

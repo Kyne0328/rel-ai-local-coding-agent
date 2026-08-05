@@ -64,6 +64,27 @@ app.whenReady().then(async () => {
     };
   })()`);
 
+  await waitFor(win, `document.getElementById('lastUpdated')?.textContent.trim() !== 'Updated just now'`, 10_000);
+  const liveToolBefore = await win.webContents.executeJavaScript(`(() => {
+    window.__relaiProbeSessionsPage = document.querySelector('.sessions-page');
+    return {
+      routeReady: Boolean(window.__relaiProbeSessionsPage),
+      updated: document.getElementById('lastUpdated')?.textContent.trim() || ''
+    };
+  })()`);
+  fs.writeFileSync(outputPath, JSON.stringify({ stage: 'dashboard_ready', liveToolBefore }, null, 2));
+  await waitFor(win, `document.getElementById('lastUpdated')?.textContent.trim() === 'Updated just now'`, 10_000);
+  const liveToolUpdate = await win.webContents.executeJavaScript(`(() => {
+    const current = document.querySelector('.sessions-page');
+    const updated = document.getElementById('lastUpdated')?.textContent.trim() || '';
+    return {
+      received: updated === 'Updated just now' && updated !== ${JSON.stringify(liveToolBefore.updated)},
+      beforeUpdated: ${JSON.stringify(liveToolBefore.updated)},
+      afterUpdated: updated,
+      sameRouteNode: Boolean(current && current === window.__relaiProbeSessionsPage)
+    };
+  })()`);
+
   await win.webContents.executeJavaScript(`document.querySelector('.task-row')?.click()`);
   await waitFor(win, `document.querySelector('.session-detail-drawer .session-detail')`);
   const taskInteraction = await win.webContents.executeJavaScript(`(() => {
@@ -200,6 +221,7 @@ app.whenReady().then(async () => {
 
   const result = {
     initial,
+    liveToolUpdate,
     taskInteraction,
     activityInteraction,
     keyboard: { beforeFocus, afterFocus },

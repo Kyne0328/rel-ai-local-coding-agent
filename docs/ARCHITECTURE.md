@@ -16,7 +16,7 @@ Composition roots construct resource owners. Pure validation, mapping, formattin
 
 ## Canonical tool and action catalog
 
-`src/tools/actionCatalog.js` is the single owner of action-level metadata for the public MCP surface:
+`src/tools/actionDefinitions.js` owns the immutable internal and public tool definitions. `src/tools/actionCatalog.js` is the single owner of action mapping, authorization capability, approval policy, catalog construction, and operation resolution for the public MCP surface:
 
 - 12 public tools;
 - 35 public actions;

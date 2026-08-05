@@ -8,6 +8,9 @@ import path from 'node:path';
 
 import { normalizePatchConfig, makeDefaultPatchConfig, normalizeConfig, ensureConfig, invalidateConfigCache } from "../src/config.js";
 
+const exampleConfig = JSON.parse(fs.readFileSync(path.resolve('examples/config.example.json'), 'utf8'));
+assert.equal(exampleConfig.auditLogPath, '', 'the portable example must not mix Windows and Unix path syntax');
+
 assert.deepEqual(makeDefaultPatchConfig(), {
   backup: true,
   requireCleanGit: false,

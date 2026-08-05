@@ -516,7 +516,7 @@ assert.match(activity, /<th scope="col" class="activity-status-column">Status<\/
 assert.match(activity, /<td class="activity-status-column">\$\{pillHtml\(status\)\}<\/td>[\s\S]*<td class="activity-message-column activity-message-cell">/);
 assert.match(activity, /activity-message-mobile-meta/);
 assert.match(activity, /activity-message-mobile-time/);
-assert.match(dashboardJs, /module\.mergeEntries\(hydrated\.auditTail\?\.entries \|\| \[\]\)/);
+assert.match(dashboardJs, /module\.mergeEntries\(data\.auditTail\?\.entries \|\| \[\]\)/);
 assert.match(dashboardJs, /mountTasks/);
 assert.doesNotMatch(dashboardJs, /getWorkspaceFilter|supportsWorkspaceScope|select\.hidden = !supportsWorkspaceScope/);
 assert.match(dashboardJs, /withConnectionState/);

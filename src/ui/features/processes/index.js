@@ -40,6 +40,21 @@ export function mountProcesses(container, data = {}) {
   container.appendChild(root);
 }
 
+export function updateProcessesLiveState(container, data = {}) {
+  const current = container.querySelector('.processes-page');
+  if (!current) return false;
+  const detached = document.createElement('div');
+  mountProcesses(detached, data);
+  const next = detached.querySelector('.processes-page');
+  const currentCount = current.querySelector('.feature-count');
+  const nextCount = next?.querySelector('.feature-count');
+  if (currentCount && nextCount && currentCount.textContent !== nextCount.textContent) currentCount.textContent = nextCount.textContent;
+  const currentList = current.querySelector('[data-process-list]');
+  const nextList = next?.querySelector('[data-process-list]');
+  if (currentList && nextList && !currentList.isEqualNode(nextList)) currentList.replaceWith(nextList);
+  return true;
+}
+
 function processRow(process, nativeTasks) {
   const article = document.createElement('article');
   const state = processStateView(process, nativeTasks);

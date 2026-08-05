@@ -10,6 +10,33 @@ export function mountHome(container, data) {
   container.appendChild(buildOverview(data || {}));
 }
 
+export function updateHomeLiveState(container, data = {}) {
+  const current = container.querySelector('.section');
+  if (!current) return false;
+  const next = buildOverview(data);
+  syncHomeRegion(current, next, '[data-home-live-activity]', '[data-home-live-connection]');
+  syncHomeRegion(current, next, '[data-home-live-connection]', '.layout-grid');
+  syncHomeRegion(current, next, '[data-home-live-attention]', '.layout-grid');
+  syncHomeRegion(current, next, '[data-home-live-sessions]');
+  return true;
+}
+
+function syncHomeRegion(current, next, selector, beforeSelector = '') {
+  const currentNode = current.querySelector(selector);
+  const nextNode = next.querySelector(selector);
+  if (currentNode && nextNode) {
+    if (!currentNode.isEqualNode(nextNode)) currentNode.replaceWith(nextNode);
+    return;
+  }
+  if (currentNode) {
+    currentNode.remove();
+    return;
+  }
+  if (!nextNode) return;
+  const before = beforeSelector ? current.querySelector(beforeSelector) : null;
+  current.insertBefore(nextNode, before);
+}
+
 function buildOverview(data) {
   const config = data.config || {};
   const health = data.health || {};
@@ -85,6 +112,7 @@ function resolveBridgeState({ endpoint, workspaces, findings, connectionState })
 
 function connectionHero(state, endpoint, workspaces) {
   const hero = document.createElement('section');
+  hero.dataset.homeLiveConnection = '';
   const hasWorkspaces = workspaces.length > 0;
   let primaryAction = '<a class="buttonlike primary" href="#settings/connection">Set up connection</a>';
   let secondaryAction = '<a class="buttonlike secondary" href="#workspaces">Manage workspaces</a>';
@@ -116,6 +144,7 @@ function taskActivityCard(activity = {}, persistedTask = null) {
   const task = active ? primaryActiveTask(activeTasks) : persistedTask || activity.lastTask;
   if (!task) return null;
   const card = document.createElement('section');
+  card.dataset.homeLiveActivity = '';
   if (active) renderObservedSessionCard(card, activity, activeTasks, task);
   else renderInactiveSessionCard(card, task);
   return card;
@@ -245,6 +274,7 @@ export function buildAttention(workspaces, findings, endpoint) {
 
 function attentionCard(items) {
   const card = document.createElement('section');
+  card.dataset.homeLiveAttention = '';
   card.className = 'card attention-card';
   card.innerHTML = '<div class="card-head"><h3>Needs attention</h3><span class="section-action">recommended next actions</span></div>';
   const body = document.createElement('div');
@@ -278,6 +308,7 @@ function workspaceSummaryCard(workspaces) {
 
 function recentTasksCard(tasks) {
   const card = document.createElement('section');
+  card.dataset.homeLiveSessions = '';
   card.className = 'card';
   card.innerHTML = `<div class="card-head"><h3>Latest work sessions</h3><a class="section-action" href="${routeHref('tasks')}">Open session history</a></div>`;
   const body = document.createElement('div');

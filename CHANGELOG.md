@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.24.0] — 2026-08-05
+
+### Simplified tool and runtime architecture
+- **Use one canonical 12-tool action catalog.** Keep public schemas, operation definitions, execution, output validation, dashboard metadata, and capability classification aligned through one catalog boundary, while keeping `relai_edit` as the only repository file-change tool.
+- **Remove unnecessary forwarding and duplicate dispatch layers.** Replace parallel registries, wrapper factories, operation-task handlers, and redundant server adapters with direct module boundaries that are easier to inspect and maintain.
+- **Keep protocol compatibility isolated.** Route legacy MCP request handling through a bounded adapter while preserving the current stateless MCP lifecycle, authorization policy, and native Tasks behavior.
+- **Simplify the Electron runtime composition.** Group IPC registration by trusted surface, colocate dashboard window controls, replace unnecessary desktop status and settings factories, and direct-import diagnostic sanitization.
+
+### Task state, progress, and durable recovery
+- **Normalize one task status vocabulary across runtime, history, and UI projections.** Centralize live task progress, terminal-state handling, durable history normalization, dashboard activity data, and browser session rendering so the same work is not interpreted differently by each layer.
+- **Persist worktree and connection-generation registries atomically.** Use the shared durable-state path with backups and recovery behavior so restarts do not silently lose managed worktrees or authorization-generation state.
+- **Narrow native task execution to the actual eligible operations.** Remove the broader operation-task compatibility layer and keep cancellation, telemetry, and bounded synchronous fallback aligned with the canonical action catalog.
+
+### Desktop notifications and application updates
+- **Add persistent notification categories.** Users can independently control task-completion, error, connection/service, and application-update alerts under one master switch that preserves category choices while disabled.
+- **Centralize native notifications in the Electron main process.** Task results, service state changes, connection readiness, authorization requirements, update availability, downloaded updates, and update failures now use one category-aware service instead of duplicate renderer notification paths.
+- **Repair unread completion badges across Windows and Linux.** Windows now renders a supported PNG taskbar overlay, Linux uses the application badge count, duplicate completions do not inflate the counter, and focusing or opening the app clears unread work reliably.
+- **Show an update-available modal in the desktop dashboard.** Users can download immediately, postpone until a later application launch, or ignore only the currently offered version while still receiving future-version notices.
+
+### Dashboard stability and usability
+- **Update live dashboard regions without remounting the active route.** Tool-call snapshots refresh only the affected Home, Tasks, Processes, Activity, or Connection content, reducing full-screen flicker and preserving unrelated controls and connection setup content.
+- **Keep event messages visible beside status.** The Activity table retains the Message column in desktop layouts and preserves its mobile metadata presentation.
+- **Classify consolidated tools by their real capabilities.** The Tools page can distinguish inspect, edit, validate, Git, and recovery actions even when several capabilities belong to one consolidated tool.
+- **Hide the custom-titlebar skip link until keyboard focus.** Remove the clipped rounded shape that could appear above the Rel.AI MCP title while retaining accessible skip navigation.
+
+### Documentation, configuration, and regression coverage
+- **Document the simplified architecture and protocol boundaries.** Add the canonical runtime map, dependency rules, persistence ownership, public tool contract, and legacy-adapter policy to the repository documentation.
+- **Refresh the example configuration for the current schema.** Include current budgets, product UX, release readiness, patch safety, workspace validation, and environment options.
+- **Add architecture and UI contract coverage.** New tests lock action-catalog parity, IPC channels, persistence, task projections, live dashboard rendering, desktop notification preferences, update-modal eligibility, and removed-layer boundaries.
+
+Bump root/electron/plugin/status UI/lockfiles/release manifest to 0.24.0.
+
 ## [0.23.2] — 2026-08-05
 
 ### Linux release and connector reliability
