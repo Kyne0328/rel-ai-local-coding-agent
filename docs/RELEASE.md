@@ -3,7 +3,7 @@
 ## Pre-release verification
 
 - [ ] `npm run test:native-tasks-release-gate` passes the HTTP/stdio capability matrix, lifecycle, security, bounds, process-separation, public-surface, dashboard, and ChatGPT-fallback checks
-- [ ] `npm run test:all` passes
+- [ ] `npm run test:all` passes the curated release-critical regression suite
 - [ ] `npm run electron:build` produces the unpacked Windows application
 - [ ] `node scripts/current-unpacked.mjs` resolves the promoted unpacked application and `npm run verify:packaged -- --dir <resolved-directory>` passes without launching or installing Electron
 - [ ] `npm run verify:fuses -- "<resolved-directory>/Rel.AI MCP.exe"` passes for the exact executable in the resolved unpacked directory; the verifier refuses to select a build implicitly
@@ -28,13 +28,13 @@
 
 ## Supported platforms
 
-The shipped product is a self-contained Windows desktop app; end users install nothing else.
+The shipped product provides self-contained Windows and Linux desktop packages; end users install nothing else.
 
-Building from source requires Node.js 24 LTS and npm 11. The packaging and automated release configuration target Windows x64 only.
+Building from source requires Node.js 24 LTS and npm 11. The packaging and automated release configuration target Windows x64 and Linux x64.
 
 ## Publishing
 
-Releases are published automatically. Pushing a version bump to `main` triggers `.github/workflows/release.yml`, which authenticates the pinned ngrok seed, runs the native Tasks release gate and full tests, production analysis, production audit, expiry-bound packaging audit, executable observability benchmark, and strict package-size gate, builds unsigned Windows artifacts with certificate auto-discovery disabled, resolves the promoted unpacked directory, verifies Electron fuses, ngrok provenance and its upstream Authenticode signature, the package layout, and the packaged OAuth/MCP flow, validates the exact updater artifact contract, creates a CycloneDX SBOM and `SHA256SUMS.txt`, attests provenance and the SBOM, and creates the GitHub release from the matching `CHANGELOG.md` section.
+Releases are published automatically. Pushing a version bump to `main` triggers `.github/workflows/release.yml`, which authenticates the pinned ngrok seed, runs the native Tasks gate and curated release-critical regression suite, production analysis, production audit, expiry-bound packaging audit, executable observability benchmark, and strict package-size gate, builds unsigned Windows artifacts with certificate auto-discovery disabled, resolves the promoted unpacked directory, verifies Electron fuses, ngrok provenance and its upstream Authenticode signature, the package layout, and the packaged OAuth/MCP flow, validates the exact updater artifact contract, creates a CycloneDX SBOM and `SHA256SUMS.txt`, attests provenance and the SBOM, and creates the GitHub release from the matching `CHANGELOG.md` section.
 
 Installed-app behavior and the logged-in ChatGPT UI remain manual release checks on a disposable machine. The packaged Node backend may be launched by `test:connector-acceptance`; the release workflow must never install, launch, or uninstall the Electron application on the runner or on a developer workstation. See [USABILITY_ACCEPTANCE.md](USABILITY_ACCEPTANCE.md) for the exact boundary.
 

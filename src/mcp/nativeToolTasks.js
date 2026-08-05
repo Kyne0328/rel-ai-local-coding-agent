@@ -8,10 +8,10 @@ import {
 
 const TOOL_TASK_TTL_MS = 24 * 60 * 60 * 1000;
 
-// Compatibility policy: Rel.AI 0.23.2 stops writing internal.compatibilityOperation.
+// Compatibility policy: Rel.AI 0.24.0 stops writing internal.compatibilityOperation.
 // Native Task schema v1 continues accepting that unknown internal field on old records.
 // Tool tasks expire after at most 24 hours, so no compatibility-specific handling is
-// required after the first release published at least 24 hours after 0.23.2.
+// required after the first release published at least 24 hours after 0.24.0.
 function createNativeToolTask(config, options = {}) {
   const controller = new AbortController();
   return createNativeTask(config, {

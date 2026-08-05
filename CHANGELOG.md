@@ -28,6 +28,9 @@
 ### Documentation, configuration, and regression coverage
 - **Document the simplified architecture and protocol boundaries.** Add the canonical runtime map, dependency rules, persistence ownership, public tool contract, and legacy-adapter policy to the repository documentation.
 - **Refresh the example configuration for the current schema.** Include current budgets, product UX, release readiness, patch safety, workspace validation, and environment options.
+- **Keep release validation focused on critical regressions.** Replace the automatic every-test-file release gate with a curated suite covering authentication, authorization, connector contracts, durable state, desktop lifecycle, OAuth, packaging policy, safety boundaries, task state, and runtime security; focused tests remain available without blocking every release.
+- **Repair consolidated Git publish result validation.** Align commit, push, and pull-request draft output contracts with their actual runtime payloads so valid dry runs and publish operations are not rejected after Git completes.
+- **Prevent stale public contracts from returning.** Refresh active connection, workflow, release-gate, roadmap, and status documentation for the 12 consolidated tools; derive test action counts from the catalog; and add a release-critical guard against removed operation names and obsolete current-release claims.
 - **Add architecture and UI contract coverage.** New tests lock action-catalog parity, IPC channels, persistence, task projections, live dashboard rendering, desktop notification preferences, update-modal eligibility, and removed-layer boundaries.
 
 Bump root/electron/plugin/status UI/lockfiles/release manifest to 0.24.0.

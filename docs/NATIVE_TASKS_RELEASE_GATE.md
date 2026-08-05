@@ -25,7 +25,7 @@ Native MCP Task                               Bounded direct execution
                  Optional managed OS process
 ```
 
-A **repository work session** is the opaque `work_id` created by `relai_begin_work`; it groups one repository objective across multiple tool calls and is bound to the authenticated principal and configured workspace. A **native MCP Task** is a protocol object for one asynchronous MCP operation. A **managed process** is one operating-system process with its own `processId`, logs, ownership, and stop lifecycle.
+A **repository work session** is the opaque `work_id` created by `relai_work` with `action:"begin"`; it groups one repository objective across multiple tool calls and is bound to the authenticated principal and configured workspace. A **native MCP Task** is a protocol object for one asynchronous MCP operation. A **managed process** is one operating-system process with its own `processId`, logs, ownership, and stop lifecycle.
 
 ## Capability and transport matrix
 
@@ -94,7 +94,7 @@ The source gate covers:
 - principal-bound repository work-session isolation;
 - HTTP and stdio parity;
 - persistent-process independence;
-- the 30-tool public surface;
+- the canonical 12-tool public surface and its catalog-derived action contracts;
 - dashboard terminal-state behavior.
 
 Critical regressions include:

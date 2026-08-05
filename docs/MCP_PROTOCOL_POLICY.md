@@ -27,7 +27,7 @@ Rel.AI MCP targets protocol version `2026-07-28` through exact-pinned `@modelcon
 - Native MCP Tasks advertisement and routing on HTTP and stdio through the `io.modelcontextprotocol/tasks` extension.
 - Direct completion for clearly bounded operations, native tasks for long or indeterminate eligible work, and bounded synchronous fallback when the client does not advertise Tasks.
 
-Transport connections deliver requests but do not retain negotiation or work-session identity. They never select, merge, or complete repository work. Work remains owned by the authenticated principal and the opaque `work_id` returned from `relai_begin_work`.
+Transport connections deliver requests but do not retain negotiation or work-session identity. They never select, merge, or complete repository work. Work remains owned by the authenticated principal and the opaque `work_id` returned from `relai_work` with `action:"begin"`.
 
 The SDK classifies the request era before dispatch. Modern requests pass Rel.AI's strict header and `_meta` validation. ChatGPT-compatible requests use the SDK's stateless legacy transport and the same tool registry, OAuth identity, workspace policy, and principal-bound work-session enforcement. Compatibility is not a protocol session and does not translate or infer repository work identity.
 

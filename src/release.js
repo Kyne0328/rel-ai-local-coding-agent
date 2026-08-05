@@ -79,7 +79,7 @@ async function workspacePreflight(config, args = {}) {
   const status = summarizeCommand(statusResult);
   checks.push({ name: "git_status", ok: statusResult.exitCode === 0, dirty: Boolean(statusResult.stdout?.trim()), status });
   if (statusResult.stdout?.trim() && args.requireClean !== false) {
-    findings.push(finding("warning", "dirty_worktree", "Workspace has uncommitted changes. Review relai_diff before editing."));
+    findings.push(finding("warning", "dirty_worktree", "Workspace has uncommitted changes. Review relai_changes with action 'diff' before editing."));
   }
 
   const commandKeys = Object.keys(workspace.commands || {});
@@ -214,7 +214,7 @@ function nextActions(findings) {
     if (item.code === "missing_http_token_env") actions.push("Set REL_AI_MCP_TOKEN: it is the dashboard credential AND the secret ChatGPT uses to approve the OAuth sign-in. Add the /mcp URL in ChatGPT with Authentication: OAuth.");
     else if (item.code === "no_workspaces") actions.push("Run npm run workspace:add -- <alias> <absolute-project-path>.");
     else if (item.code === "no_validation_commands") actions.push("Add a validation command with npm run testcmd:add -- <alias> <key> <command...>.");
-    else if (item.code === "dirty_worktree") actions.push("Commit/stash local changes or review relai_diff before further edits.");
+    else if (item.code === "dirty_worktree") actions.push("Commit/stash local changes or review relai_changes with action 'diff' before further edits.");
     else if (item.code === "trusted_local_agent_disabled") actions.push("Use the default trusted local bridge mode for ChatGPT repo work.");
     else if (item.code?.includes("gitattributes")) actions.push("Run relai-mcp-config doctor --fix <workspace-path> to add .gitattributes/.editorconfig.");
   }

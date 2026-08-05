@@ -1,59 +1,41 @@
 # Connecting to ChatGPT
 
-Rel.AI MCP exposes 30 callable workspace tools through MCP SDK v2 over stdio and the OAuth-protected Streamable HTTP endpoint at `POST /mcp`.
+Rel.AI MCP exposes one 12-tool capability surface through MCP SDK v2 over stdio and the OAuth-protected Streamable HTTP endpoint at `POST /mcp`.
 
-- `relai_begin_work`
-- `relai_repo_snapshot`
-- `relai_read`
-- `relai_search`
-- `relai_code_inspect`
-- `relai_exec`
-- `relai_process_start`
-- `relai_process_read`
-- `relai_process_write`
-- `relai_process_stop`
-- `relai_process_list`
-- `relai_worktree_create`
-- `relai_worktree_list`
-- `relai_worktree_remove`
-- `relai_semantic_search`
-- `relai_diagnostics_run`
-- `relai_tidy_plan`
-- `relai_tidy_run`
-- `relai_run_checks`
-- `relai_http_probe`
-- `relai_diff`
-- `relai_restore_paths`
-- `relai_reset_workspace`
-- `relai_status`
-- `relai_git_commit`
-- `relai_git_push`
-- `relai_git_draft_pr`
-- `relai_edit`
-- `relai_cancel_work`
-- `relai_finish_work`
+- `relai_work`: begin, status, finish, or cancel a repository work session
+- `relai_snapshot`: map repository context
+- `relai_read`: read files, ranges, or directories
+- `relai_search`: run text or semantic search
+- `relai_inspect`: inspect symbols, references, relationships, traces, or impact
+- `relai_exec`: run one bounded command
+- `relai_process`: start, read, write, stop, or list managed processes
+- `relai_worktree`: create, list, or remove managed worktrees
+- `relai_validate`: run checks, diagnostics, or HTTP probes
+- `relai_changes`: review diffs, restore/reset paths, or manage tidy plans
+- `relai_publish`: commit, push, or draft pull-request text
+- `relai_edit`: apply repository edits
 
-Use `relai_begin_work` once for each independent repository objective. It returns compact repository and instruction bootstrap context plus a principal-bound `work_id`. Every later work-scoped call requires that ID and resolves the bound workspace automatically; pass `workspace` only as an explicit ownership assertion. Use `relai_repo_snapshot` only when the bootstrap needs refreshing, `relai_search` for raw text and contextual location, `relai_code_inspect` for symbol/reference/impact relationships and affected-test discovery, `relai_read` for source beyond returned ranges, and `relai_edit` for all file changes. Search defaults to adaptive `mode:"auto"`: focused searches receive broader context, while noisy searches receive smaller prioritized ranges.
+Use `relai_work` with `action:"begin"` once for each independent repository objective. It returns compact repository and instruction bootstrap context plus a principal-bound `work_id`. Every later work-scoped call requires that ID and resolves the bound workspace automatically; pass `workspace` only as an explicit ownership assertion. Use `relai_snapshot` only when the bootstrap needs refreshing, `relai_search` for raw text and contextual location, `relai_inspect` for symbol/reference/impact relationships and affected-test discovery, `relai_read` for source beyond returned ranges, and `relai_edit` for all file changes. Search defaults to adaptive `mode:"auto"`: focused searches receive broader context, while noisy searches receive smaller prioritized ranges.
 
 Use `relai_exec` for one-shot project commands such as dependency installation, migrations, compilers, and repository utilities. It returns exit status, bounded output, timeout state, and detected file changes. It does not replace structured final validation.
 
-Completion is explicit, never inferred from a passing test run. Prefer `relai_run_checks` with `complete:true` and `summary` on the final standard or release validation; this closes the work session atomically only when all selected checks pass. When a read-only diff or status review follows validation, omit `complete` and call `relai_finish_work` once after the review.
+Completion is explicit, never inferred from a passing test run. Prefer `relai_validate` with `action:"checks"` with `complete:true` and `summary` on the final standard or release validation; this closes the work session atomically only when all selected checks pass. When a read-only diff or status review follows validation, omit `complete` and call `relai_work` with `action:"finish"` once after the review.
 
-`relai_run_checks` performs change-aware validation planning internally when no explicit check is supplied. Pass an exact package script command through `check` when a named UI or browser validation script is required.
+`relai_validate` with `action:"checks"` performs change-aware validation planning internally when no explicit check is supplied. Pass an exact package script command through `check` when a named UI or browser validation script is required.
 
-Use `relai_http_probe` for local routes such as `/health` or `/dashboard`; it rejects absolute and protocol-relative URLs.
+Use `relai_validate` with `action:"http"` for local routes such as `/health` or `/dashboard`; it rejects absolute and protocol-relative URLs.
 
-Use `relai_restore_paths` to restore specific tracked paths without touching untracked or unrelated files. Use `relai_reset_workspace` only for repository-wide recovery: `confirmation:"RESET"` resets tracked changes, while untracked cleanup additionally requires `removeUntracked:true` and `confirmation:"RESET_AND_CLEAN"`.
+Use `relai_changes` with `action:"restore"` to restore specific tracked paths without touching untracked or unrelated files. Use `relai_changes` with `action:"reset"` only for repository-wide recovery: `confirmation:"RESET"` resets tracked changes, while untracked cleanup additionally requires `removeUntracked:true` and `confirmation:"RESET_AND_CLEAN"`.
 
-Use `relai_status` with a workspace alias for command configuration, work-session policy, branch, ahead/behind counts, ownership-split changes, and untracked-file state. Repository details are nested under `workspace.repository`.
+Use `relai_work` with `action:"status"` with a workspace alias for command configuration, work-session policy, branch, ahead/behind counts, ownership-split changes, and untracked-file state. Repository details are nested under `workspace.repository`.
 
-Use `relai_git_draft_pr` to prepare local pull-request title/body text from a base/head Git diff. It does not call GitHub, GitLab, or another hosting provider; it does not create a pull request, push a branch, or modify the repository.
+Use `relai_publish` with `action:"draft_pr"` to prepare local pull-request title/body text from a base/head Git diff. It does not call GitHub, GitLab, or another hosting provider; it does not create a pull request, push a branch, or modify the repository.
 
 Work bootstrap and repository snapshots automatically include guidance from `REL_AI.md`, `.relai/instructions.md`, and applicable hierarchical `AGENTS.override.md` / `AGENTS.md` files. `REL_AI.md` has highest precedence; nearer target-directory agent instructions override parent agent instructions. The combined connector payload is capped at 64 KiB and reports its sources and truncation state; use `relai_read` on a named file when complete text is needed. Instruction text is never executed automatically.
 
 Persistent process management, managed worktrees, native MCP Tasks interoperability, and work-session history are available through the current surface. Managed worktrees use isolated aliases and preserve branches by default; removal refuses dirty worktrees and active processes unless the required explicit approval is supplied.
 
-Tracked-file deletion is handled through a structured `Delete File` patch sent to `relai_edit`. Session-owned untracked artifacts are removed only through `relai_tidy_plan` followed by `relai_tidy_run`.
+Tracked-file deletion is handled through a structured `Delete File` patch sent to `relai_edit`. Session-owned untracked artifacts are removed only through `relai_changes` with `action:"tidy_plan"` followed by `relai_changes` with `action:"tidy_run"`.
 
 ## MCP protocol requirement
 
@@ -71,7 +53,7 @@ ChatGPT requires a public HTTPS endpoint, which the bundled ngrok agent provides
 
 The packaged desktop app opens the dashboard in a secured Electron window by default. The same local `/dashboard` route remains accessible in a normal browser when needed; both hosts use the same dashboard code and server APIs. Electron uses a single-use bootstrap exchange and an HttpOnly local session cookie instead of exposing the permanent approval token to the embedded renderer.
 
-Use **Work sessions** for repository objectives and **Activity** for individual tool calls. Each independent objective begins with `relai_begin_work`, and only its explicit `work_id` can select that work session afterward. Connection changes, reasoning gaps, workspace names, and ChatGPT conversation metadata are never used to merge or recover work sessions.
+Use **Work sessions** for repository objectives and **Activity** for individual tool calls. Each independent objective begins with `relai_work` with `action:"begin"`, and only its explicit `work_id` can select that work session afterward. Connection changes, reasoning gaps, workspace names, and ChatGPT conversation metadata are never used to merge or recover work sessions.
 
 ## Adding the connector in ChatGPT
 

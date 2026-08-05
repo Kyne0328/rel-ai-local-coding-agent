@@ -1,21 +1,21 @@
 # Rel.AI MCP Task Isolation Architecture
 
 **Originally investigated:** 2026-07-26  
-**Current architecture:** 0.23.0 MCP `2026-07-28` stateless HTTP
+**Current architecture:** 0.24.0 MCP `2026-07-28` stateless HTTP
 
 ## Summary
 
-Rel.AI uses one explicit opaque `work_id` as the canonical identity of a logical coding task. The task ID is created by `relai_begin_work` and must be supplied to every later task-scoped call.
+Rel.AI uses one explicit opaque `work_id` as the canonical identity of a logical coding task. The task ID is created by `relai_work { action: "begin" }` and must be supplied to every later task-scoped call.
 
 ```text
-relai_begin_work(workspace)
+relai_work { action: "begin" }(workspace)
 -> work_id
 
-relai_read / relai_edit / relai_run_checks / ...
+relai_read / relai_edit / relai_validate { action: "checks" } / ...
 -> same work_id
 
-relai_run_checks complete:true
-or relai_finish_work
+relai_validate { action: "checks" } complete:true
+or relai_work { action: "finish" }
 -> exact work_id only
 ```
 
@@ -58,7 +58,7 @@ Dashboard live updates remain a separate authenticated `/events` stream and are 
 
 Rules:
 
-1. Every independent objective starts with `relai_begin_work`.
+1. Every independent objective starts with `relai_work { action: "begin" }`.
 2. Every task-scoped call supplies the returned `work_id`.
 3. Missing IDs fail with `TASK_ID_REQUIRED`; Rel.AI does not choose the newest task or infer one from a workspace or connection.
 4. Unknown IDs fail with `TASK_NOT_FOUND`.
@@ -106,7 +106,7 @@ A worktree alias identifies a repository resource, not a logical task. Multiple 
 
 ## Persistence and hard-cutover policy
 
-0.23.0 is current-version-only. Rel.AI does not migrate or recover old MCP sessions, transport-derived task scopes, compatibility aliases, removed routes, old OAuth registrations, or obsolete configuration behavior.
+0.24.0 is current-version-only. Rel.AI does not migrate or recover old MCP sessions, transport-derived task scopes, compatibility aliases, removed routes, old OAuth registrations, or obsolete configuration behavior.
 
 Task history accepts only explicit current-version events with a nonempty `taskId` and current identity metadata. Audit logs remain activity records but are not stitched into logical tasks by PID, timestamp, connection, conversation header, workspace, validation alias, or removed tool name.
 
@@ -126,8 +126,8 @@ active
 
 Completion may be signaled by:
 
-- `relai_run_checks` with `complete:true` and a nonempty `summary`; or
-- `relai_finish_work` after the final validation and any read-only review.
+- `relai_validate { action: "checks" }` with `complete:true` and a nonempty `summary`; or
+- `relai_work { action: "finish" }` after the final validation and any read-only review.
 
 A successful arbitrary command, a running process, a completed deferred operation, a validation plan, or a worktree operation does not independently satisfy completion.
 
@@ -155,7 +155,7 @@ OAuth is the ChatGPT connector authorization layer and remains independent from 
 7. replacing the approval token revokes grants and registrations;
 8. each logical task is still selected only through its explicit `work_id`.
 
-There is no previous-client recovery path in 0.23.0. An issuer change or approval-token replacement requires registration and approval again.
+There is no previous-client recovery path in 0.24.0. An issuer change or approval-token replacement requires registration and approval again.
 
 ## Validation coverage
 

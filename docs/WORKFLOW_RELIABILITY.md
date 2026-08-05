@@ -1,20 +1,20 @@
 # Workflow reliability
 
-Rel.AI MCP exposes 30 callable tools. The sequence is flexible: use only the stages the work requires.
+Rel.AI MCP exposes 12 consolidated public tools. The sequence is flexible: use only the stages the work requires.
 
 ```text
-1. Identify: relai_begin_work once per independent repository objective
-2. Inspect:  relai_repo_snapshot when an overview is useful
+1. Identify: relai_work action=begin once per independent repository objective
+2. Inspect:  relai_snapshot when an overview is useful
 3. Locate:   relai_search when raw text or source context is needed
-4. Trace:    relai_code_inspect for symbols, callers, impact, and affected tests
+4. Trace:    relai_inspect for symbols, callers, impact, and affected tests
 5. Read:     relai_read for relevant files or line ranges
 6. Develop:  relai_exec for one-shot project commands when needed
 7. Change:   relai_edit
-8. Validate + finish atomically: relai_run_checks with complete:true and summary
-9. Alternative post-validation review: relai_run_checks -> relai_status / relai_diff -> relai_finish_work
-10. Recover: relai_restore_paths / relai_reset_workspace / relai_tidy_plan + relai_tidy_run
-11. Publish: relai_git_commit -> relai_git_push
-12. Prepare review text when useful: relai_git_draft_pr
+8. Validate + finish atomically: relai_validate action=checks with complete:true and summary
+9. Alternative post-validation review: relai_validate action=checks -> relai_work action=status / relai_changes action=diff -> relai_work action=finish
+10. Recover: relai_changes actions restore, reset, tidy_plan, and tidy_run
+11. Publish: relai_publish action=commit -> relai_publish action=push
+12. Prepare review text when useful: relai_publish action=draft_pr
 ```
 
 The compact work bootstrap and any refreshed snapshot are bounded repository maps, not access boundaries. Search and direct reads can continue anywhere inside the work-session-bound workspace. When `projectInstructions` is present, apply its sources in the returned precedence order: `REL_AI.md` overrides `.relai/instructions.md`, and the nearest applicable `AGENTS.override.md` or `AGENTS.md` overrides parent-directory guidance. Read a named file directly if the combined 64 KiB payload is truncated. The server does not execute instruction content, generate helper scripts, expose hidden tool tiers, or route around the registered workspace tools.
@@ -23,29 +23,29 @@ The compact work bootstrap and any refreshed snapshot are bounded repository map
 
 | Situation | Use |
 | --- | --- |
-| Start an independent repository objective | `relai_begin_work`; reuse its `work_id` on subsequent calls |
-| Repository overview | `relai_repo_snapshot` |
+| Start an independent repository objective | `relai_work` with `action:"begin"`; reuse its `work_id` on subsequent calls |
+| Repository overview | `relai_snapshot` |
 | Repository-specific architecture and workflow rules | `projectInstructions` from the bootstrap or snapshot; direct `relai_read` when truncated |
 | Locate code with surrounding source | `relai_search`; adaptive auto mode is the default |
-| Symbol definitions, references, calls, reverse-import impact, and affected tests | `relai_code_inspect` |
+| Symbol definitions, references, calls, reverse-import impact, and affected tests | `relai_inspect` |
 | Focused file content | `relai_read` |
 | Small localized edit | `relai_edit` with `oldText` and `newText` |
 | Complete file replacement | `relai_edit` with `content` |
 | Multi-file patch or tracked-file deletion | `relai_edit` with `updateText` |
 | Several edits in one request | `relai_edit` with `edits` |
-| Session-owned untracked cleanup | `relai_tidy_plan` then `relai_tidy_run` |
+| Session-owned untracked cleanup | `relai_changes` with `action:"tidy_plan"` then `relai_changes` with `action:"tidy_run"` |
 | Dependency installation, migrations, compilers, and repository utilities | `relai_exec` |
-| Change-aware validation | `relai_run_checks`; planning is internal when no exact check is supplied |
-| Exact package script or UI/browser validation | `relai_run_checks` with `check:"npm run <script>"` |
-| Final validation and atomic finish | `relai_run_checks` with `complete:true` and `summary` |
-| Finish after post-validation read-only review | `relai_finish_work` |
-| Local HTTP route validation | `relai_http_probe` |
-| Workspace, branch, ownership, and untracked state | `relai_status` with `workspace` |
-| File-level review | `relai_diff` |
-| Restore listed tracked paths only | `relai_restore_paths` |
-| Reset all tracked workspace changes | `relai_reset_workspace` with `confirmation:"RESET"` |
-| Reset tracked changes and remove all untracked files | `relai_reset_workspace` with `removeUntracked:true` and `confirmation:"RESET_AND_CLEAN"` |
-| Prepare local pull-request text | `relai_git_draft_pr` |
+| Change-aware validation | `relai_validate` with `action:"checks"`; planning is internal when no exact check is supplied |
+| Exact package script or UI/browser validation | `relai_validate` with `action:"checks"` with `check:"npm run <script>"` |
+| Final validation and atomic finish | `relai_validate` with `action:"checks"` with `complete:true` and `summary` |
+| Finish after post-validation read-only review | `relai_work` with `action:"finish"` |
+| Local HTTP route validation | `relai_validate` with `action:"http"` |
+| Workspace, branch, ownership, and untracked state | `relai_work` with `action:"status"` with `workspace` |
+| File-level review | `relai_changes` with `action:"diff"` |
+| Restore listed tracked paths only | `relai_changes` with `action:"restore"` |
+| Reset all tracked workspace changes | `relai_changes` with `action:"reset"` with `confirmation:"RESET"` |
+| Reset tracked changes and remove all untracked files | `relai_changes` with `action:"reset"` with `removeUntracked:true` and `confirmation:"RESET_AND_CLEAN"` |
+| Prepare local pull-request text | `relai_publish` with `action:"draft_pr"` |
 
 `relai_search` defaults to adaptive auto mode. It prioritizes files using query-to-path relevance and bounded match density. Explicit compact mode preserves path/line output; explicit context mode applies caller-controlled limits. Context results merge overlaps by default, include SHA-256 file hashes, and report separate match and context truncation.
 
@@ -65,7 +65,7 @@ Native MCP Tasks own one asynchronous request. They do not replace the work sess
 
 ## Validation behavior
 
-`relai_run_checks` exposes `level` presets:
+`relai_validate` with `action:"checks"` exposes `level` presets:
 
 | Level | Meaning |
 | --- | --- |
@@ -75,7 +75,7 @@ Native MCP Tasks own one asynchronous request. They do not replace the work sess
 
 When no explicit check is supplied, Rel.AI creates a short-lived, content-bound validation plan internally from current changes, import impact, affected tests, and repository checks. The caller does not need a separate planning tool.
 
-Completion is never inferred from validation alone. Passing `complete:true` with a non-empty `summary` explicitly closes the work session in the same final validation call. When read-only review must happen afterward, run checks without completion and then call `relai_finish_work`. `relai_exec` is a development command runner; a command such as `npm test` does not establish final validation by itself.
+Completion is never inferred from validation alone. Passing `complete:true` with a non-empty `summary` explicitly closes the work session in the same final validation call. When read-only review must happen afterward, run checks without completion and then call `relai_work` with `action:"finish"`. `relai_exec` is a development command runner; a command such as `npm test` does not establish final validation by itself.
 
 ## MCP execution modes
 
@@ -104,4 +104,4 @@ Tracked files are deleted through structured patch operations:
 *** End Patch
 ```
 
-Untracked files are not accepted as arbitrary deletion arguments. `relai_tidy_plan` selects current-session candidates, and `relai_tidy_run` verifies the plan ID, expiry, workspace, ownership, file shape, and content hash before deletion.
+Untracked files are not accepted as arbitrary deletion arguments. `relai_changes` with `action:"tidy_plan"` selects current-session candidates, and `relai_changes` with `action:"tidy_run"` verifies the plan ID, expiry, workspace, ownership, file shape, and content hash before deletion.

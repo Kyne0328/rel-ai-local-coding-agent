@@ -53,7 +53,7 @@ const OPERATION_DEFINITION_VALUES = [
   {
     name: "relai_exec",
     title: "Run Workspace Command",
-    description: "Run a one-shot development command inside a configured workspace and return exit status, bounded stdout and stderr, timing, and detected file changes. cwd is workspace-relative. A successful result does not replace final relai_run_checks validation.",
+    description: "Run a one-shot development command inside a configured workspace and return exit status, bounded stdout and stderr, timing, and detected file changes. cwd is workspace-relative. A successful result does not replace final relai_validate action 'checks' validation.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"command":{"type":"string","minLength":1,"maxLength":20000},"cwd":{"type":"string"},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000},"env":{"type":"object","additionalProperties":{"type":"string"}},"maxOutputBytes":{"type":"number","minimum":1000,"maximum":16777216}},"required":["workspace","command"],"additionalProperties":false},
     handlerName: 'exec',
     behavior: {"audit":"exec","cache":"workspace","longRunning":true},
@@ -61,7 +61,7 @@ const OPERATION_DEFINITION_VALUES = [
   {
     name: "relai_process_start",
     title: "Start Managed Process",
-    description: "Start a persistent service, watcher, or interactive program with stable identity, bounded persistent logs, interactive stdin, and workspace/task attribution. One-shot tests, builds, checks, and release gates must use relai_exec or relai_run_checks instead.",
+    description: "Start a persistent service, watcher, or interactive program with stable identity, bounded persistent logs, interactive stdin, and workspace/task attribution. One-shot tests, builds, checks, and release gates must use relai_exec or relai_validate with action 'checks' instead.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"command":{"type":"string","minLength":1,"maxLength":20000},"cwd":{"type":"string"},"env":{"type":"object","additionalProperties":{"type":"string"}},"label":{"type":"string","maxLength":120},"kind":{"type":"string","enum":["service","watcher","interactive"]},"purpose":{"type":"string","minLength":1,"maxLength":300},"startupWaitMs":{"type":"number","minimum":0,"maximum":30000},"maxLogBytes":{"type":"number","minimum":65536,"maximum":268435456}},"required":["workspace","command","kind","purpose"],"additionalProperties":false},
     handlerName: 'processStart',
     behavior: {"audit":"exec","cache":"workspace"},
@@ -158,7 +158,7 @@ const OPERATION_DEFINITION_VALUES = [
   {
     name: "relai_run_checks",
     title: "Workspace Checks",
-    description: "Run workspace validation checks (tests, linters, analyzers, build). Use level quick, standard, or release. Output is bounded to each step's tail where failures appear; pass fullOutput:true for a larger tail. On the final validation, pass complete:true with summary to explicitly validate and close the task atomically. Otherwise use relai_finish_work after any final read-only review.",
+    description: "Run workspace validation checks (tests, linters, analyzers, build). Use level quick, standard, or release. Output is bounded to each step's tail where failures appear; pass fullOutput:true for a larger tail. On the final validation, pass complete:true with summary to explicitly validate and close the task atomically. Otherwise use relai_work with action 'finish' after any final read-only review.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"level":{"type":"string","enum":["quick","standard","release"]},"check":{"type":"string","minLength":1,"maxLength":20000},"checks":{"type":"array","items":{"type":"string","minLength":1,"maxLength":20000},"minItems":1,"maxItems":50},"checksText":{"type":"string","minLength":1,"maxLength":100000},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000},"stopOnFailure":{"type":"boolean"},"fullOutput":{"type":"boolean"},"complete":{"type":"boolean"},"summary":{"type":"string","minLength":1,"maxLength":2000}},"required":["workspace"],"oneOf":[{"required":["check"],"not":{"anyOf":[{"required":["checks"]},{"required":["checksText"]},{"required":["level"]}]}},{"required":["checks"],"not":{"anyOf":[{"required":["check"]},{"required":["checksText"]},{"required":["level"]}]}},{"required":["checksText"],"not":{"anyOf":[{"required":["check"]},{"required":["checks"]},{"required":["level"]}]}},{"required":["level"],"not":{"anyOf":[{"required":["check"]},{"required":["checks"]},{"required":["checksText"]}]}},{"not":{"anyOf":[{"required":["check"]},{"required":["checks"]},{"required":["checksText"]},{"required":["level"]}]}}],"additionalProperties":false},
     handlerName: 'runChecks',
     behavior: {"audit":"checks","summary":"checks","longRunning":true},
@@ -252,7 +252,7 @@ const OPERATION_DEFINITION_VALUES = [
   {
     name: "relai_finish_work",
     title: "Report Task Completion",
-    description: "Explicitly close the task identified by work_id after its final read-only review. Use this when the final relai_run_checks call did not pass complete:true with summary. Validation and mutation checks are restricted to that exact logical task; Rel.AI never falls back to another task in the workspace.",
+    description: "Explicitly close the task identified by work_id after its final read-only review. Use this when the final relai_validate action 'checks' call did not pass complete:true with summary. Validation and mutation checks are restricted to that exact logical task; Rel.AI never falls back to another task in the workspace.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"summary":{"type":"string","minLength":1,"maxLength":2000}},"required":["workspace","summary"],"additionalProperties":false},
     handlerName: 'completeTask',
     behavior: {"audit":"completion","summary":"completion"},

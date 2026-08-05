@@ -52,12 +52,12 @@ function assertKnownTask(config, taskId, workspace, toolName, principal) {
     activeTaskIds
   });
   if (!session) {
-    throw taskError('TASK_NOT_FOUND', 'The supplied work_id is unknown or expired. Start a new work session with relai_begin_work.');
+    throw taskError('TASK_NOT_FOUND', 'The supplied work_id is unknown or expired. Start a new work session with relai_work action "begin".');
   }
   const expectedPrincipal = String(session.principalFingerprint || '');
   const actualPrincipal = principalFingerprint(principal || 'anonymous');
   if (!expectedPrincipal || !safeEqual(expectedPrincipal, actualPrincipal)) {
-    throw taskError('TASK_NOT_FOUND', 'The supplied work_id is unknown or expired. Start a new work session with relai_begin_work.');
+    throw taskError('TASK_NOT_FOUND', 'The supplied work_id is unknown or expired. Start a new work session with relai_work action "begin".');
   }
   if (session.status === 'cancelled' && toolName === 'relai_cancel_work') return session;
   if (session.status === 'completed' && toolName === 'relai_finish_work') return session;

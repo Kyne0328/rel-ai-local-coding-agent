@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { getToolActionCatalog } from '../src/tools/actionCatalog.js';
 import { validateToolOutput } from '../src/tools/outputValidation.js';
 
-for (const entry of getToolActionCatalog()) {
+const actionCatalog = getToolActionCatalog();
+
+for (const entry of actionCatalog) {
   const args = entry.action === 'default' ? {} : { action: entry.action };
   if (entry.behavior.taskScope === 'required') args.work_id = 'work_output';
   Object.assign(args, requiredArgs(entry));
@@ -23,6 +25,37 @@ await assert.doesNotReject(() => validateToolOutput({}, 'relai_exec', {
   durationMs: 1
 }));
 
+await assert.doesNotReject(() => validateToolOutput({}, 'relai_publish', {
+  action: 'commit',
+  work_id: 'work_output',
+  message: 'Validate output',
+  dryRun: true
+}, {
+  ok: true,
+  workspace: 'repo',
+  work_id: 'work_output',
+  dryRun: true,
+  message: 'Validate output',
+  addAll: false,
+  paths: ['CHANGELOG.md'],
+  statusBefore: { branch: 'main' }
+}));
+
+await assert.doesNotReject(() => validateToolOutput({}, 'relai_publish', {
+  action: 'push',
+  work_id: 'work_output',
+  dryRun: true
+}, {
+  ok: true,
+  workspace: 'repo',
+  work_id: 'work_output',
+  remote: 'origin',
+  branch: 'main',
+  dryRun: true,
+  setUpstream: false,
+  push: { exitCode: 0 }
+}));
+
 await assert.rejects(() => validateToolOutput({}, 'relai_publish', {
   action: 'push',
   work_id: 'work_output'
@@ -33,7 +66,7 @@ await assert.rejects(() => validateToolOutput({}, 'relai_publish', {
   unexpected: true
 }), /Unexpected fields: unexpected/);
 
-console.log('Catalog-backed output validation passed for all 35 actions.');
+console.log(`Catalog-backed output validation passed for all ${actionCatalog.length} actions.`);
 
 function requiredArgs(entry) {
   const key = `${entry.publicTool}:${entry.action}`;

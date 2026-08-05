@@ -46,7 +46,7 @@ async function startManagedProcess(workspace, config, args = {}, context = {}) {
   if (command.length > 20000) throw new Error('relai_process_start command must be 20000 characters or fewer.');
   const kind = String(args.kind || '').trim().toLowerCase();
   if (!['service', 'watcher', 'interactive'].includes(kind)) {
-    throw new Error('relai_process_start requires kind: service, watcher, or interactive. Use relai_exec or relai_run_checks for one-shot commands.');
+    throw new Error('relai_process_start requires kind: service, watcher, or interactive. Use relai_exec or relai_validate with action "checks" for one-shot commands.');
   }
   const purpose = String(args.purpose || '').trim();
   if (!purpose) throw new Error('relai_process_start requires a persistent-process purpose.');

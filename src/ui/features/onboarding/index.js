@@ -272,7 +272,7 @@ function _renderStep(step, content, nextBtn, skipBtn, backBtn) {
     nextBtn.onclick = submitWorkspace;
   } else if (step === 2) {
     nextBtn.textContent = 'Continue';
-    content.innerHTML = '<h3 class="onboarding-heading">How to ask for work</h3><p class="onboarding-description">Tell ChatGPT which workspace alias to use, then ask for the smallest useful first step. For new repos, start with status and snapshot before requesting edits.</p><div class="empty onboarding-example"><strong class="onboarding-example-title">Good first prompt</strong><br><code>Use Rel.AI MCP on workspace "myapp". Call relai_status with this workspace and relai_repo_snapshot. Do not modify files yet.</code></div>';
+    content.innerHTML = '<h3 class="onboarding-heading">How to ask for work</h3><p class="onboarding-description">Tell ChatGPT which workspace alias to use, then ask for the smallest useful first step. For new repos, start with status and snapshot before requesting edits.</p><div class="empty onboarding-example"><strong class="onboarding-example-title">Good first prompt</strong><br><code>Use Rel.AI MCP on workspace "myapp". Call relai_work with action "status" for this workspace and relai_snapshot. Do not modify files yet.</code></div>';
     nextBtn.onclick = async () => {
       _step++;
       _showStep();

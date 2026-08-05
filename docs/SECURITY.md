@@ -51,7 +51,7 @@ Set `REL_AI_MCP_ALLOW_NO_AUTH=1` only for local testing on a trusted machine.
 - Exact replacement can use the SHA-256 returned by `relai_read`; stale hashes fail closed.
 - Git push is restricted to workspace `allowedRemotes`.
 - Git commit requires exact path-scoped authorization for sensitive staged files.
-- `relai_diff` with `redactSensitive:true` omits raw sensitive hunks. Environment-file summaries disclose only added, removed, changed key names, malformed line numbers, and status metadata; other sensitive files disclose path and status only.
+- `relai_changes` with `action:"diff"` and `redactSensitive:true` omits raw sensitive hunks. Environment-file summaries disclose only added, removed, changed key names, malformed line numbers, and status metadata; other sensitive files disclose path and status only.
 - Automatic session baselines distinguish current-session changes from a worktree that was already dirty.
 - Untracked cleanup requires a short-lived tidy plan and revalidates file ownership, file type, and hash before deletion.
 - Patch-shaped edits can require a clean worktree and can create a tracked-change backup before application.
@@ -98,13 +98,13 @@ Rel.AI MCP is a trusted local coding bridge, not a sandbox.
 ## Tool workflow
 
 ```text
-inspect:  relai_repo_snapshot -> relai_read
+inspect:  relai_snapshot -> relai_read
 change:   relai_edit
-validate: relai_run_checks
-review:   relai_diff / relai_status with workspace
-recover:  relai_restore_paths / relai_reset_workspace / relai_tidy_plan + relai_tidy_run
-publish:  relai_git_commit -> relai_git_push
-review text: relai_git_draft_pr
+validate: relai_validate action=checks
+review:   relai_changes action=diff / relai_work action=status with workspace
+recover:  relai_changes actions restore, reset, tidy_plan, and tidy_run
+publish:  relai_publish action=commit -> relai_publish action=push
+review text: relai_publish action=draft_pr
 ```
 
 Keep workspace aliases pointed only at repositories you trust ChatGPT to inspect, execute, and modify.

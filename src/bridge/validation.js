@@ -36,7 +36,7 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
     validationPlan = readValidationPlan(config, args.planId, workspace);
     const current = await createValidationFingerprint(workspace, config);
     if (!validationPlan.workspaceFingerprint || validationPlan.workspaceFingerprint !== current.fingerprint) {
-      throw new Error('Validation plan is stale because relevant workspace content changed. Run relai_run_checks again to generate a current internal plan.');
+      throw new Error('Validation plan is stale because relevant workspace content changed. Run relai_validate with action "checks" again to generate a current internal plan.');
     }
     planSelection = String(args.planLevel || args.level || validationPlan.recommended || 'focused').toLowerCase();
     const plannedChecks = validationPlan.checks?.[planSelection];
@@ -156,7 +156,7 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
   });
 
   const nextAction = ok
-    ? 'Completion is not automatic. If the work session is finished, call relai_finish_work once; on future final validations, pass complete:true with summary to validate and close the session atomically.'
+    ? 'Completion is not automatic. If the work session is finished, call relai_work with action "finish" once; on future final validations, pass complete:true with summary to validate and close the session atomically.'
     : cancelled
       ? 'The validation was cancelled. Review partial results before starting a new task or rerunning validation.'
       : 'Fix the failing validation before reporting task completion.';

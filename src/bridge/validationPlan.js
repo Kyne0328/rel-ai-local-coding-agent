@@ -63,7 +63,7 @@ async function createValidationPlan(workspace, config, args = {}) {
   const planId = `vplan_${crypto.randomBytes(18).toString('base64url')}`;
   const signature = signPlan(config, planId, payload);
   writePlan(config, planId, { ...payload, planId, signature });
-  return { ok: true, ...payload, planId, signature, use: 'Pass planId to relai_run_checks to execute the content-bound selected plan.' };
+  return { ok: true, ...payload, planId, signature, use: 'Pass planId to relai_validate with action "checks" to execute the content-bound selected plan.' };
 }
 
 async function createValidationFingerprint(workspace, config, suppliedStatus = null) {

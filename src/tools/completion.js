@@ -39,11 +39,11 @@ async function completeTask(config, args = {}) {
   if (mutationGeneration > 0 && authority.hasPassedValidation === true && validatedMutationGeneration !== mutationGeneration) {
     throw taskError(
       'TASK_REVALIDATION_REQUIRED',
-      'Work-session completion is paused because code changed after the last passed validation. Run relai_run_checks with complete:true, summary, and the same work_id to validate and close the work session atomically.',
+      'Work-session completion is paused because code changed after the last passed validation. Run relai_validate with action "checks" with complete:true, summary, and the same work_id to validate and close the work session atomically.',
       {
         retryable: true,
         allowedAlternatives: [
-          'Run relai_run_checks with complete:true, summary, and the same work_id.',
+          'Run relai_validate with action "checks" with complete:true, summary, and the same work_id.',
           'Cancel the task only when the remaining changes should not be completed.'
         ]
       }
@@ -53,11 +53,11 @@ async function completeTask(config, args = {}) {
   if (mutationGeneration > 0 && authority.validationResult !== 'passed') {
     throw taskError(
       'TASK_VALIDATION_REQUIRED',
-      'Work-session completion is paused because no successful final validation is recorded for this exact work_id. Run relai_run_checks with complete:true, summary, and the same work_id to validate and close the work session atomically.',
+      'Work-session completion is paused because no successful final validation is recorded for this exact work_id. Run relai_validate with action "checks" with complete:true, summary, and the same work_id to validate and close the work session atomically.',
       {
         retryable: true,
         allowedAlternatives: [
-          'Run relai_run_checks with complete:true, summary, and the same work_id.',
+          'Run relai_validate with action "checks" with complete:true, summary, and the same work_id.',
           'Cancel the task only when the unvalidated changes should not be completed.'
         ]
       }
@@ -74,7 +74,7 @@ async function completeTask(config, args = {}) {
         {
           retryable: true,
           allowedAlternatives: [
-            'Run relai_run_checks with complete:true, summary, and this work_id against the current workspace state.',
+            'Run relai_validate with action "checks" with complete:true, summary, and this work_id against the current workspace state.',
             'Cancel this task only when it should not be completed against the shared workspace.'
           ]
         }
@@ -92,7 +92,7 @@ async function completeTask(config, args = {}) {
           {
             retryable: true,
             allowedAlternatives: [
-              'Run relai_run_checks with complete:true, summary, and the same work_id.',
+              'Run relai_validate with action "checks" with complete:true, summary, and the same work_id.',
               'Cancel the task only when the changed workspace should not be completed.'
             ]
           }

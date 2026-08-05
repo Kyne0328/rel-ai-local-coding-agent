@@ -38,7 +38,7 @@ Before publishing a release, test installation on a disposable Windows VM or ano
 
 - **Installer and uninstall:** install the exact NSIS candidate, complete first-run setup, close it normally, uninstall it, and confirm only expected application files are removed.
 - **Real ngrok publication:** clean first run must publish the configured permanent domain from a real ngrok account and remain externally reachable.
-- **ChatGPT OAuth:** a real ChatGPT app must discover the OAuth endpoints, complete approval, and successfully call `relai_status`.
+- **ChatGPT OAuth:** a real ChatGPT app must discover the OAuth endpoints, complete approval, and successfully call `relai_work { action: "status" }`.
 - **Live approval-token rotation:** the existing ChatGPT app must lose its current grants, request approval again, and reconnect with the replacement token without changing the MCP URL.
 - **Update from a previous published release:** the previous installed release must discover, download, verify, and install the candidate through the production GitHub Releases feed.
 - **Color and theme review:** inspect dashboard Overview, Workspaces, Sessions, Activity, Tools, Settings, Diagnostics, setup, recovery, and OAuth states in light and dark themes. Verify default, hover, focus, active, selected, disabled, loading, success, warning, danger, disconnected, and empty states at desktop and narrow viewport sizes.

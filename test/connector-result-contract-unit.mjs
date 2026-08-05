@@ -10,11 +10,11 @@ const cases = [
     title: 'Contract work', objective: 'Characterize results.'
   }),
   fixture('relai_work:status', 'relai_work', 'status', 'relai_status', 'work_status', {
-    ok: true, version: '0.23.2', runtime: 'node', tools: ['relai_read'],
+    ok: true, version: '0.24.0', runtime: 'node', tools: ['relai_read'],
     toolSurface: { schemaVersion: 5, toolSurfaceVersion: 32, toolCount: 12, tools: [{ name: 'relai_read' }], deprecations: [], compatibilityAliases: {} },
     workspaceCount: 1, workspaceAliases: ['repo']
   }, {
-    ok: true, version: '0.23.2', runtime: 'node', toolSurface: { schemaVersion: 5, toolSurfaceVersion: 32, toolCount: 12 },
+    ok: true, version: '0.24.0', runtime: 'node', toolSurface: { schemaVersion: 5, toolSurfaceVersion: 32, toolCount: 12 },
     workspaceCount: 1, workspaceAliases: ['repo'], work_id: 'work_status'
   }),
   fixture('relai_read', 'relai_read', '', 'relai_read', 'work_read', {
