@@ -205,17 +205,27 @@ function collectArtifactFiles(sourceDirectory, destinationDirectory, names) {
 function promoteReleaseOutput({ stagingRoot, destinationRoot, spec, requiredArtifacts }) {
   const prepackaged = path.join(stagingRoot, spec.unpackedDirectory);
   assertPrepackagedApp(prepackaged, spec);
-  const artifactEntries = fs.readdirSync(stagingRoot, { withFileTypes: true })
+  const stagingFileEntries = fs.readdirSync(stagingRoot, { withFileTypes: true })
     .filter(entry => entry.isFile());
+  const ignoredDiagnostics = stagingFileEntries
+    .map(entry => entry.name)
+    .filter(isBuilderDiagnosticArtifact);
+  if (ignoredDiagnostics.length > 0) {
+    console.log(`[electron-package] Ignored electron-builder diagnostics: ${ignoredDiagnostics.join(', ')}.`);
+  }
+  const artifactEntries = stagingFileEntries
+    .filter(entry => requiredArtifacts.includes(entry.name));
   const artifactNames = new Set(artifactEntries.map(entry => entry.name));
   for (const required of requiredArtifacts) {
     if (!artifactNames.has(required)) {
       throw new Error(`Release staging is missing the canonical ${spec.platform} artifact ${required}.`);
     }
   }
-  const unexpected = artifactEntries
+  const unexpected = stagingFileEntries
     .map(entry => entry.name)
-    .filter(name => isPlatformReleaseArtifact(name, spec.platform) && !requiredArtifacts.includes(name));
+    .filter(name => isPlatformReleaseArtifact(name, spec.platform)
+      && !isBuilderDiagnosticArtifact(name)
+      && !requiredArtifacts.includes(name));
   if (unexpected.length > 0) {
     throw new Error(`Release staging contains unexpected ${spec.platform} artifacts: ${unexpected.join(', ')}.`);
   }
@@ -284,11 +294,15 @@ function removeObsoleteReleaseArtifacts(directory, incomingNames, platform) {
   }
 }
 
+function isBuilderDiagnosticArtifact(name) {
+  return /^builder-(?:debug|effective-config)\.ya?ml$/i.test(name);
+}
+
 function isPlatformReleaseArtifact(name, platform) {
   if (platform === 'win32') {
-    return /(?:\.exe|\.exe\.blockmap|^latest\.ya?ml$|^builder-(?:debug|effective-config)\.ya?ml$)/i.test(name);
+    return /(?:\.exe|\.exe\.blockmap|^latest\.ya?ml$)/i.test(name) || isBuilderDiagnosticArtifact(name);
   }
-  return /(?:\.AppImage|\.deb|^latest-linux\.ya?ml$|^builder-(?:debug|effective-config)\.ya?ml$)/i.test(name);
+  return /(?:\.AppImage|\.deb|^latest-linux\.ya?ml$)/i.test(name) || isBuilderDiagnosticArtifact(name);
 }
 
 function promoteFile(source, destination) {
