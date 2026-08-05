@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.23.1] — 2026-08-05
+
+### Desktop recovery and tunnel reliability
+- **Restore setup and recovery renderer loading.** Register the restricted `relai-app://` protocol on each custom Electron session before loading its window, and surface renderer load failures in runtime diagnostics instead of leaving a blank recovery window.
+- **Make managed ngrok startup diagnostics deterministic.** Request logfmt info output explicitly, record preparation and startup events, and keep the displayed launch command aligned with the actual managed process.
+
+### Cross-platform desktop releases
+- **Add Linux desktop packages.** Build and verify x64 AppImage and DEB artifacts with the platform-specific bundled ngrok binary, executable checks, package-size policy, updater metadata, and AppImage update support.
+- **Publish one combined Windows and Linux release.** Split release builds by operating system, verify each packaged application independently, combine the artifacts for checksums, attestations, and GitHub publication, and expand CI coverage for both platforms.
+
+Bump root/electron/status UI/lockfiles to 0.23.1.
+
 ## [0.23.0] — 2026-07-28
 
 ### Standards-compliant MCP lifecycle and recovery

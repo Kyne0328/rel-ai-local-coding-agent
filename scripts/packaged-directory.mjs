@@ -16,8 +16,8 @@ function parsePackagedDirectoryArgument(argv) {
 
 function resolvePackagedDirectory(root, argv, options = {}) {
   const requested = parsePackagedDirectoryArgument(argv);
-  if (!requested) return resolveCurrentUnpacked(root, { allowBuildCheck: true });
   const platform = options.platform || process.platform;
+  if (!requested) return resolveCurrentUnpacked(root, { allowBuildCheck: true, platform });
   const cwd = options.cwd || process.cwd();
   return platform === 'win32' ? path.win32.resolve(cwd, requested) : path.resolve(cwd, requested);
 }

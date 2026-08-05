@@ -40,6 +40,7 @@ try {
 
   writeFixture({ includeBlockmap: false });
   assert.throws(() => verifyUpdaterArtifacts(options), /blockmap is missing/i);
+  assert.deepEqual(verifyUpdaterArtifacts({ ...options, requireBlockmaps: false }).referencedArtifacts, [installer]);
 
   writeFixture({ includeChecksum: false });
   assert.throws(() => verifyUpdaterArtifacts(options), /does not include/);
@@ -47,9 +48,11 @@ try {
   writeFixture();
   fs.writeFileSync(path.join(root, 'sbom.cdx.json'), '{}\n');
   fs.writeFileSync(path.join(root, 'electron-size-report.json'), '{}\n');
+  fs.writeFileSync(path.join(root, 'electron-size-report-linux.json'), '{}\n');
   const invalidated = invalidateDerivedReleaseEvidence(root, '9.8.7').sort();
   assert.deepEqual(invalidated, [
     'SHA256SUMS.txt',
+    'electron-size-report-linux.json',
     'electron-size-report.json',
     'release-assets.txt',
     'sbom.cdx.json'

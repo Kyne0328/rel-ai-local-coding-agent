@@ -58,7 +58,7 @@ function normalizeNgrokDomain(value) {
 function buildTunnelCommand(domain, port) {
   const safeDomain = normalizeNgrokDomain(domain);
   const safePort = normalizePort(port);
-  return `managed ngrok http --url=https://${safeDomain} http://127.0.0.1:${safePort} --config <Rel.AI ngrok.yml> --log=stdout`;
+  return `managed ngrok http --url=https://${safeDomain} http://127.0.0.1:${safePort} --config <Rel.AI ngrok.yml> --log=stdout --log-format=logfmt --log-level=info`;
 }
 
 // ChatGPT connects to the plain /mcp endpoint with Authentication: OAuth. The

@@ -14,16 +14,20 @@ function releaseArtifactNames(version) {
     portable: `Rel.AI-MCP-Portable-${normalizedVersion}.exe`,
     blockmap: `${installer}.blockmap`,
     metadata: 'latest.yml',
+    linuxAppImage: `Rel.AI-MCP-${normalizedVersion}-linux-x64.AppImage`,
+    linuxDeb: `Rel.AI-MCP-${normalizedVersion}-linux-x64.deb`,
+    linuxMetadata: 'latest-linux.yml',
     checksums: 'SHA256SUMS.txt',
     sbom: 'sbom.cdx.json',
-    sizeReport: 'electron-size-report.json'
+    sizeReport: 'electron-size-report.json',
+    linuxSizeReport: 'electron-size-report-linux.json'
   };
 }
 
 function invalidateDerivedReleaseEvidence(directory, version) {
   const names = releaseArtifactNames(version);
   const removed = [];
-  for (const name of [names.checksums, names.sbom, names.sizeReport, 'release-assets.txt']) {
+  for (const name of [names.checksums, names.sbom, names.sizeReport, names.linuxSizeReport, 'release-assets.txt']) {
     const file = path.join(directory, name);
     if (!fs.existsSync(file)) continue;
     fs.rmSync(file, { force: true, maxRetries: 5, retryDelay: 200 });

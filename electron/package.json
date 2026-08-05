@@ -1,6 +1,7 @@
 {
   "name": "rel-ai-mcp-launcher",
-  "version": "0.23.0",
+  "desktopName": "com.relai.mcp.desktop",
+  "version": "0.23.1",
   "private": true,
   "type": "module",
   "description": "Desktop launcher and dashboard host for Rel.AI MCP.",
@@ -134,14 +135,6 @@
       {
         "from": "../CHANGELOG.md",
         "to": "CHANGELOG.md"
-      },
-      {
-        "from": "../vendor/ngrok",
-        "to": "bin/ngrok",
-        "filter": [
-          "manifest.json",
-          "win32/**"
-        ]
       }
     ],
     "win": {
@@ -149,7 +142,56 @@
         "nsis",
         "portable"
       ],
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "extraResources": [
+        {
+          "from": "../vendor/ngrok",
+          "to": "bin/ngrok",
+          "filter": [
+            "manifest.json",
+            "win32/**"
+          ]
+        }
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "build/icon.png",
+      "category": "Development",
+      "synopsis": "Local ChatGPT repository bridge",
+      "description": "Rel.AI MCP connects ChatGPT to approved local development workspaces through a secured desktop-managed MCP service.",
+      "vendor": "Kyne",
+      "executableName": "rel-ai-mcp",
+      "syncDesktopName": true,
+      "artifactName": "Rel.AI-MCP-${version}-linux-${arch}.${ext}",
+      "desktop": {
+        "entry": {
+          "Name": "Rel.AI MCP",
+          "Comment": "Connect ChatGPT to approved local development workspaces",
+          "Categories": "Development;Utility;",
+          "Keywords": "ChatGPT;MCP;development;repository;",
+          "StartupWMClass": "com.relai.mcp",
+          "Terminal": false,
+          "Type": "Application"
+        }
+      },
+      "extraResources": [
+        {
+          "from": "../vendor/ngrok",
+          "to": "bin/ngrok",
+          "filter": [
+            "manifest.json",
+            "linux/**"
+          ]
+        }
+      ]
+    },
+    "deb": {
+      "packageCategory": "devel",
+      "priority": "optional"
     },
     "nsis": {
       "artifactName": "Rel.AI-MCP-Setup-${version}.${ext}",

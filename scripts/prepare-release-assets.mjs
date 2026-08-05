@@ -15,8 +15,12 @@ function prepareReleaseAssets(directory = path.join(root, 'dist')) {
     names.portable,
     names.blockmap,
     names.metadata,
+    names.linuxAppImage,
+    names.linuxDeb,
+    names.linuxMetadata,
     names.sbom,
-    names.sizeReport
+    names.sizeReport,
+    names.linuxSizeReport
   ];
   for (const name of assets) requireFile(path.join(directory, name), `Required release asset ${name}`);
 
@@ -29,13 +33,21 @@ function prepareReleaseAssets(directory = path.join(root, 'dist')) {
   const assetList = path.join(directory, 'release-assets.txt');
   fs.writeFileSync(assetList, `${listed.join('\n')}\n`, 'utf8');
 
-  const verification = verifyUpdaterArtifacts({
+  const windowsVerification = verifyUpdaterArtifacts({
     directory,
     assetList,
     metadata: names.metadata,
-    checksums: names.checksums
+    checksums: names.checksums,
+    requireBlockmaps: true
   });
-  return { version, assets: listed, verification };
+  const linuxVerification = verifyUpdaterArtifacts({
+    directory,
+    assetList,
+    metadata: names.linuxMetadata,
+    checksums: names.checksums,
+    requireBlockmaps: false
+  });
+  return { version, assets: listed, verification: { windows: windowsVerification, linux: linuxVerification } };
 }
 
 function requireFile(file, label) {
@@ -47,7 +59,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const directoryIndex = process.argv.indexOf('--dir');
     const directory = directoryIndex >= 0 ? path.resolve(root, String(process.argv[directoryIndex + 1] || '')) : path.join(root, 'dist');
     const result = prepareReleaseAssets(directory);
-    console.log(`Prepared and verified ${result.assets.length} release assets for ${result.version}.`);
+    console.log(`Prepared and verified ${result.assets.length} Windows and Linux release assets for ${result.version}.`);
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;

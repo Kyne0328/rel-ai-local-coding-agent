@@ -54,7 +54,9 @@ const approvalTokenManager = createApprovalTokenManager({ readGuiConfig, saveLau
 const recoveryWindowManager = createRecoveryWindowManager({
   BrowserWindow,
   preloadPath,
-  rendererUrl: localRendererUrl('status.html'),  limits: WINDOW_SIZE_LIMITS.status,
+  rendererUrl: localRendererUrl('status.html'),
+  limits: WINDOW_SIZE_LIMITS.status,
+  installProtocol: sessionProtocol => installLocalProtocol(sessionProtocol, RENDERER_ROOT),
   isQuitting: () => isQuitting,
   onReady: pushStatus,
   onSecurityError: error => runtimeLogs.append(error.message, { level: 'warning', source: 'electron-security' })
@@ -180,8 +182,11 @@ function createWizardWindow(options = {}) {
     title: wizardRecoveryMode ? 'Rel.AI MCP - Connection Recovery' : 'Rel.AI MCP - Setup',
     autoHideMenuBar: true
   });
+  installLocalProtocol(wizardWindow.webContents.session.protocol, RENDERER_ROOT);
   secureLocalWindow(wizardWindow, { allowedUrl: wizardRendererUrl, onError: error => runtimeLogs.append(error.message, { level: 'warning', source: 'electron-security' }) });
-  wizardWindow.loadURL(wizardRendererUrl);
+  void wizardWindow.loadURL(wizardRendererUrl).catch(error => {
+    runtimeLogs.append(`Setup renderer failed to load: ${formatError(error)}`, { level: 'error', source: 'electron-renderer' });
+  });
   wizardWindow.webContents.on('did-finish-load', () => {
     fitWindowToContent(wizardWindow, { type: 'wizard' });
   });
