@@ -22,7 +22,18 @@ try {
 
   assert.equal(listSessions(directory, 10)[0]?.summary, 'after!');
   assert.equal(readSession(directory, id)?.summary, 'after!');
-  console.log('Task-history listings refresh externally rewritten session files.');
+
+  const completedId = 'completed-task';
+  writeSession(directory, {
+    id: completedId,
+    status: 'completed',
+    progress: { mode: 'indeterminate', label: 'Waiting for the next task step' }
+  });
+  const completed = readSession(directory, completedId);
+  assert.equal(completed?.progress?.mode, 'complete');
+  assert.equal(completed?.progress?.percentage, 100);
+
+  console.log('Task-history listings refresh externally rewritten files and normalize terminal progress.');
 } finally {
   resetTaskHistoryCaches();
   fs.rmSync(directory, { recursive: true, force: true });

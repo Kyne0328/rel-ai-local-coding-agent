@@ -63,17 +63,18 @@ assert.equal(unavailable.schemaSensitiveOperationsBlocked, false);
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-runtime-skew-'));
 try {
-  fs.writeFileSync(path.join(temp, 'package.json'), JSON.stringify({ name: 'rel-ai-mcp', version: '0.24.0' }));
+  const repositoryVersion = '999.0.0';
+  fs.writeFileSync(path.join(temp, 'package.json'), JSON.stringify({ name: 'rel-ai-mcp', version: repositoryVersion }));
   fs.writeFileSync(path.join(temp, 'release-manifest.json'), JSON.stringify({
-    schemaVersion: 1,
-    applicationVersion: '0.24.0',
+    schemaVersion: current.schemaVersion,
+    applicationVersion: repositoryVersion,
     protocolVersion: current.protocolVersion,
-    toolSurfaceVersion: 24,
-    toolCount: 33,
+    toolSurfaceVersion: current.toolSurfaceVersion + 1,
+    toolCount: current.toolCount,
     manifestHash: 'new-surface'
   }));
   const repository = readRepositoryMetadata(temp, 'repo');
-  assert.equal(repository.applicationVersion, '0.24.0');
+  assert.equal(repository.applicationVersion, repositoryVersion);
   assert.equal(repository.workspace, 'repo');
   const config = { workspaces: { repo: { path: temp } } };
   const editCompatibility = assertRuntimeCompatibility(
