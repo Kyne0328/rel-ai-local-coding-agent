@@ -682,9 +682,11 @@ function registerClient(body = {}, baseUrl) {
   const issuer = canonicalIssuer(baseUrl);
   const metadataBytes = Buffer.byteLength(JSON.stringify(body || {}));
   if (metadataBytes > DCR_LIMITS.metadataBytes) return dcrError('Registration metadata exceeds the maximum accepted size.', 'metadata_size', DCR_LIMITS.metadataBytes);
-  const applicationType = String(body.application_type || '').trim();
+  const applicationType = body.application_type == null
+    ? 'web'
+    : String(body.application_type).trim();
   if (!['native', 'web'].includes(applicationType)) {
-    return { error: 'invalid_client_metadata', error_description: 'application_type must be native or web.' };
+    return { error: 'invalid_client_metadata', error_description: 'application_type must be native or web when provided.' };
   }
   const redirectUris = Array.isArray(body.redirect_uris) ? body.redirect_uris.map(String).filter(Boolean) : [];
   if (redirectUris.length === 0) return { error: 'invalid_redirect_uri', error_description: 'At least one redirect_uri is required.' };

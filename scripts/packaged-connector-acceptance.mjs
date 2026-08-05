@@ -107,13 +107,13 @@ try {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       client_name: 'Packaged ChatGPT Acceptance',
-      application_type: 'web',
       redirect_uris: [redirectUri]
     })
   });
   assert.equal(registration.status, 201);
   const client = await registration.json();
   assert.ok(client.client_id);
+  assert.equal(client.application_type, 'web');
 
   const pkce = pkcePair();
   const code = await authorize(client.client_id, pkce.challenge);

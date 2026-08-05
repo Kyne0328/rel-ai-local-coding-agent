@@ -270,8 +270,8 @@ input:focus { border-color: var(--ui-action-primary); box-shadow: 0 0 0 3px var(
 .status-details summary span { transition: transform var(--dur) var(--ease); }
 .status-details[open] summary span { transform: rotate(180deg); }
 
-.wizard-page { display: grid; place-items: center; }
-.wizard { width: min(500px, 100%); }
+.wizard-page { display: block; overflow-y: auto; }
+.wizard { width: min(500px, 100%); margin: 0 auto; }
 .setup-card { overflow: hidden; }
 .card-top { padding: var(--space-4); border-bottom: 1px solid var(--ui-border-default); }
 .progress-wrap { padding: 14px var(--space-4) 0; }

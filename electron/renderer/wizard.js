@@ -20,9 +20,10 @@ function requestWindowFit() {
   window.requestAnimationFrame(() => {
     const wizard = document.querySelector('.wizard');
     if (!wizard || typeof window.electronAPI?.fitWindowToContent !== 'function') return;
+    const bounds = wizard.getBoundingClientRect();
     window.electronAPI.fitWindowToContent({
-      width: Math.ceil(wizard.getBoundingClientRect().width),
-      height: Math.ceil(document.documentElement.scrollHeight)
+      width: Math.ceil(bounds.width),
+      height: Math.ceil(bounds.height)
     });
   });
 }
