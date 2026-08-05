@@ -76,15 +76,11 @@ function createTaskActivityRuntime(options) {
   const {
     toolActivity,
     powerSaveBlocker,
-    Notification,
-    iconPath = '',
-    isReady = () => true,
-    onNotificationClick = () => {},
+    notify = () => false,
     onTaskCompleted = () => {},
     onStatusChange = () => {}
   } = options;
   const blocker = createToolSleepBlocker(powerSaveBlocker);
-  let notificationsEnabled = true;
 
   const unsubscribe = toolActivity.onToolActivity(handleActivity);
   syncBlocker();
@@ -92,9 +88,9 @@ function createTaskActivityRuntime(options) {
 
   function handleActivity(event) {
     syncBlocker();
-    if (event.phase === 'finished' && event.ok === false) showFailureNotification(event);
+    if (event.phase === 'finished' && event.ok === false) notify('errors', buildFailureNotification(event));
     if (event.phase === 'completed' && event.task?.completionKnown === true) {
-      showCompletionNotification(event.task);
+      notify('taskCompleted', buildCompletionNotification(event.task));
       onTaskCompleted(event.task);
     }
     emitStatus();
@@ -110,24 +106,6 @@ function createTaskActivityRuntime(options) {
       ? reportedTaskCount
       : Array.isArray(activity.tasks) ? activity.tasks.length : 0;
     blocker.update(Math.max(activeCalls, activeTasks));
-  }
-
-  function showNativeNotification(content) {
-    if (!notificationsEnabled || !isReady()) return;
-    if (typeof Notification?.isSupported === 'function' && !Notification.isSupported()) return;
-    const options = { ...content, silent: false };
-    if (iconPath) options.icon = iconPath;
-    const notification = new Notification(options);
-    if (typeof notification.on === 'function') notification.on('click', onNotificationClick);
-    notification.show();
-  }
-
-  function showFailureNotification(event) {
-    showNativeNotification(buildFailureNotification(event));
-  }
-
-  function showCompletionNotification(task) {
-    showNativeNotification(buildCompletionNotification(task));
   }
 
   function currentStatus() {
@@ -153,11 +131,6 @@ function createTaskActivityRuntime(options) {
     onStatusChange(currentStatus());
   }
 
-  function setNotificationsEnabled(value) {
-    notificationsEnabled = Boolean(value);
-    return notificationsEnabled;
-  }
-
   function resetHistory() {
     const activity = toolActivity.getToolActivity?.() || {};
     if (Number(activity.activeCalls || 0) > 0) {
@@ -176,8 +149,6 @@ function createTaskActivityRuntime(options) {
 
   return {
     getStatus: currentStatus,
-    getNotificationsEnabled: () => notificationsEnabled,
-    setNotificationsEnabled,
     resetHistory,
     stop
   };

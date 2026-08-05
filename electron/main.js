@@ -20,6 +20,7 @@ import { createDiagnosticFiles } from './diagnostic-files.js';
 import { readDesktopSettings, saveDesktopSettings } from './desktop-settings.js';
 import { createAppUpdater } from './app-updater.js';
 import { createDesktopLifecycleManager } from './desktop-lifecycle.js';
+import { createDesktopNotifications } from './desktop-notifications.js';
 import { closeHttpServer, createShutdownCoordinator } from './shutdown-coordinator.js';
 import { STARTUP_BACKGROUND_COLOR } from './startup-background.js';
 import { removeControllerRuntimeMarker, writeControllerRuntimeMarker } from './controller-runtime.js';
@@ -48,6 +49,10 @@ const { shutdownTelemetry } = await importResourceModule('src/telemetry.js');let
 let httpServer = null, tunnelProcess = null, startPromise = null;
 let lifecycleToken = 0, isQuitting = false, appUpdater = null;
 const diagnosticFiles = createDiagnosticFiles({ app, shell }); let currentStatus = initialDesktopStatus(app.getVersion()); const runtimeLogs = createRuntimeLogBuffer({ filePath: () => diagnosticFiles.serviceLogPath() });
+const desktopNotifications = createDesktopNotifications({
+  app, Notification, iconPath: APP_ICON_PATH, isReady: () => app.isReady(), onNotificationClick: focusActiveWindow,
+  onLog: (message, options) => runtimeLogs.append(message, options)
+});
 const approvalTokenManager = createApprovalTokenManager({ readGuiConfig, saveLauncherConfig, generateToken: connection.generateToken, oauthProvider, restartDesktop: () => launchConfiguredDesktop({ restart: true }) });
 const recoveryWindowManager = createRecoveryWindowManager({
   BrowserWindow,
@@ -97,8 +102,9 @@ const taskbarCompletionBadge = createTaskbarCompletionBadge({
   onError: error => setStatus({ error: formatError(error), errorCode: ERROR_CODES.UNKNOWN })
 });
 const toolActivityRuntime = createTaskActivityRuntime({
-  toolActivity, powerSaveBlocker, Notification, iconPath: APP_ICON_PATH,
-  isReady: () => app.isReady(), onNotificationClick: focusActiveWindow,
+  toolActivity,
+  powerSaveBlocker,
+  notify: desktopNotifications.show,
   onTaskCompleted: task => taskbarCompletionBadge.markCompleted(task),
   onStatusChange: taskActivity => setStatus({ taskActivity })
 });
@@ -211,13 +217,13 @@ function closeWizard(options = {}) {
 function currentDesktopSettings() {
   return readDesktopSettings({
     approvalRequired: approvalTokenManager.status().required,
-    notificationsEnabled: toolActivityRuntime.getNotificationsEnabled()
+    notificationsEnabled: desktopNotifications.getPreferences().enabled
   });
 }
 
 function updateDesktopSettings(settings) {
   return saveDesktopSettings(settings, {
-    setNotificationsEnabled: toolActivityRuntime.setNotificationsEnabled,
+    setNotificationsEnabled: desktopNotifications.setEnabled,
     restartDesktop: () => launchConfiguredDesktop({ restart: true })
   });
 }
@@ -252,11 +258,11 @@ function pushStatus() {
   desktopTray.update();
 }
 
-function pushUpdateStatus(status) { dashboardWindowManager.getWindow()?.webContents.send('desktop:update-status', status); desktopTray.update(); }
+function pushUpdateStatus(status) { desktopNotifications.handleUpdateStatus(status); dashboardWindowManager.getWindow()?.webContents.send('desktop:update-status', status); desktopTray.update(); }
 
 function setStatus(next) {
   const previous = currentStatus;
-  currentStatus = normalizeDesktopStatus({ ...currentStatus, ...next }); runtimeLogs.recordStatusTransition(previous, currentStatus); pushStatus();
+  currentStatus = normalizeDesktopStatus({ ...currentStatus, ...next }); desktopNotifications.handleDesktopStatusChange(previous, currentStatus); runtimeLogs.recordStatusTransition(previous, currentStatus); pushStatus();
 }
 
 async function startServer() {
@@ -392,7 +398,9 @@ async function stopServer(options = {}) {
 
   if (!options.preserveDashboard) dashboardWindowManager.close();
   dashboardSessions.clearDashboardSessions();
+  const previousStatus = currentStatus;
   currentStatus = initialDesktopStatus(app.getVersion());
+  if (!options.silent) desktopNotifications.handleDesktopStatusChange(previousStatus, currentStatus);
   if (!options.silent) pushStatus();
   else desktopTray.update();
   return {
@@ -500,8 +508,10 @@ registerIpcHandlers({
   getLifecycleStatus: desktopLifecycle.getStatus,
   setLaunchAtLogin: desktopLifecycle.setLaunchAtLogin,
   getCurrentStatus: () => currentStatus,
-  getNotificationsEnabled: toolActivityRuntime.getNotificationsEnabled,
-  setNotificationsEnabled: toolActivityRuntime.setNotificationsEnabled,
+  getNotificationsEnabled: () => desktopNotifications.getPreferences().enabled,
+  setNotificationsEnabled: desktopNotifications.setEnabled,
+  getNotificationPreferences: desktopNotifications.getPreferences,
+  updateNotificationPreferences: desktopNotifications.updatePreferences,
   exportDiagnosticState: diagnosticFiles.exportReport, openDiagnosticsFolder: diagnosticFiles.openFolder,
   fitWindowToContent
 });

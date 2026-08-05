@@ -181,7 +181,8 @@ assert.match(taskbarCompletionBadge, /createFromBuffer/, 'Windows overlays must 
 assert.doesNotMatch(taskbarCompletionBadge, /createFromDataURL/, 'Windows overlays must not rely on unsupported SVG data URLs');
 assert.match(taskbarCompletionBadge, /seenTaskIds/, 'duplicate completion events must not increment the taskbar indicator');
 assert.match(electronMain, /toolActivityRuntime\.stop\(\)/, 'tool activity runtime must stop during application shutdown');
-assert.match(electronMain, /setNotificationsEnabled: toolActivityRuntime\.setNotificationsEnabled/, 'the desktop notification toggle must control task alerts');
+assert.match(electronMain, /setNotificationsEnabled: desktopNotifications\.setEnabled/, 'the legacy desktop notification toggle must control the centralized master preference');
+assert.match(electronMain, /notify: desktopNotifications\.show/, 'task alerts must use the centralized category-aware notification service');
 assert.match(electronMain, /openDashboardWindow\('#settings'\)/, 'normal settings must deep-link the secured dashboard General settings route');
 assert.match(dashboardPreload, /desktop:settings:get/, 'desktop settings must be read through constrained Electron IPC');
 for (const channel of ['desktop:window:get-state', 'desktop:window:minimize', 'desktop:window:toggle-maximize', 'desktop:window:close']) {

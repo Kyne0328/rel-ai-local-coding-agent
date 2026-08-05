@@ -15,8 +15,8 @@ async function loadAndRender(container) {
     typeof desktop?.getLifecycleStatus === 'function'
       ? desktop.getLifecycleStatus().catch(() => null)
       : Promise.resolve(null),
-    typeof desktop?.getNotificationsEnabled === 'function'
-      ? desktop.getNotificationsEnabled().catch(() => null)
+    typeof desktop?.getNotificationPreferences === 'function'
+      ? desktop.getNotificationPreferences().catch(() => null)
       : Promise.resolve(null)
   ]);
 
@@ -29,7 +29,7 @@ async function loadAndRender(container) {
   const appearance = panel('Appearance');
   renderAppearanceSettings(appearance.body);
   container.appendChild(appearance.el);
-  container.appendChild(desktopNotificationsPanel(notifications?.enabled).el);
+  container.appendChild(desktopNotificationsPanel(notifications?.preferences).el);
   container.appendChild(desktopStartupPanel(lifecycle).el);
   container.appendChild(applicationUpdatesPanel().el);
 }
