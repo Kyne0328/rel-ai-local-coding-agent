@@ -4,7 +4,7 @@ import { runProcess, summarizeCommand } from '../process.js';
 import { detectVerifyChecks } from './checkDetection.js';
 import { clampNumber } from './limits.js';
 import { runSpan } from '../telemetry.js';
-import { operationTaskSignal } from '../operationTasks.js';
+import { nativeToolTaskSignal } from '../mcp/nativeToolTasks.js';
 import { combineAbortSignals } from '../abortSignals.js';
 import { getCurrentTaskAbortSignal, updateCurrentToolActivity } from '../toolActivity.js';
 import { sanitizeDisplayText } from '../taskObservability.js';
@@ -18,7 +18,7 @@ async function relaiDiagnosticsRun(workspace, config, args = {}, context = {}) {
   const diagnostics = [];
   const signal = combineAbortSignals(
     getCurrentTaskAbortSignal(),
-    args._operationTaskId ? operationTaskSignal(config, args._operationTaskId) : undefined,
+    args._operationTaskId ? nativeToolTaskSignal(args._operationTaskId) : undefined,
     context.signal
   );
   publishDiagnosticsProgress(commands, results, '', 0, 'pending');

@@ -5,14 +5,14 @@ import path from 'node:path';
 
 import {
   acknowledgeNativeTaskCancellation,
+  cancelNativeTask,
   getNativeTask
 } from '../src/mcp/nativeTaskService.js';
 import {
-  cancelOperationTask,
-  completeOperationTask,
-  createOperationTask,
-  operationTaskSignal
-} from '../src/operationTasks.js';
+  completeNativeToolTask,
+  createNativeToolTask,
+  nativeToolTaskSignal
+} from '../src/mcp/nativeToolTasks.js';
 import { runProcess } from '../src/process.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-process-cancellation-'));
@@ -49,7 +49,7 @@ setInterval(() => {}, 1000);
 `);
 
 try {
-  const finiteTask = createOperationTask(config, {
+  const finiteTask = createNativeToolTask(config, {
     method: 'tools/call',
     name: 'relai_exec',
     logicalTaskId: 'work-finite',
@@ -58,19 +58,19 @@ try {
   });
   const finite = await runProcess(process.execPath, [finiteScript, finiteTask.taskId], {
     cwd: root,
-    signal: operationTaskSignal(config, finiteTask.taskId),
+    signal: nativeToolTaskSignal(finiteTask.taskId),
     maxOutputBytes: 65536
   }, config);
   assert.equal(finite.exitCode, 0);
   assert.equal(finite.stdout, `TASK:${finiteTask.taskId}`);
-  const finiteCompleted = completeOperationTask(config, finiteTask.taskId, {
+  const finiteCompleted = completeNativeToolTask(config, finiteTask.taskId, {
     exitCode: finite.exitCode,
     stdout: finite.stdout
   });
   assert.equal(finiteCompleted.status, 'completed');
   assert.equal(finiteCompleted.result.exitCode, 0);
 
-  const gracefulTask = createOperationTask(config, {
+  const gracefulTask = createNativeToolTask(config, {
     method: 'tools/call',
     name: 'relai_exec',
     logicalTaskId: 'work-graceful',
@@ -79,12 +79,12 @@ try {
   });
   const gracefulPromise = runProcess(process.execPath, [gracefulScript], {
     cwd: root,
-    signal: operationTaskSignal(config, gracefulTask.taskId),
+    signal: nativeToolTaskSignal(gracefulTask.taskId),
     terminationGraceMs: 1000,
     forceWaitMs: 2000,
     maxOutputBytes: 65536
   }, config);
-  setTimeout(() => cancelOperationTask(config, gracefulTask.taskId), 200);
+  setTimeout(() => cancelNativeTask(config, gracefulTask.taskId), 200);
   const graceful = await gracefulPromise;
   assert.equal(graceful.cancelled, true);
   assert.equal(graceful.terminationConfirmed, true);
@@ -94,7 +94,7 @@ try {
   assert.equal(getNativeTask(config, gracefulTask.taskId).status, 'cancelled');
   if (process.platform !== 'win32') assert.match(graceful.stderr, /GRACEFUL/);
 
-  const forcedTask = createOperationTask(config, {
+  const forcedTask = createNativeToolTask(config, {
     method: 'tools/call',
     name: 'relai_exec',
     logicalTaskId: 'work-forced',
@@ -103,12 +103,12 @@ try {
   });
   const forcedPromise = runProcess(process.execPath, [stubbornScript], {
     cwd: root,
-    signal: operationTaskSignal(config, forcedTask.taskId),
+    signal: nativeToolTaskSignal(forcedTask.taskId),
     terminationGraceMs: 100,
     forceWaitMs: 2000,
     maxOutputBytes: 65536
   }, config);
-  setTimeout(() => cancelOperationTask(config, forcedTask.taskId), 200);
+  setTimeout(() => cancelNativeTask(config, forcedTask.taskId), 200);
   const forced = await forcedPromise;
   assert.equal(forced.cancelled, true);
   assert.equal(forced.terminationConfirmed, true);
@@ -121,7 +121,7 @@ try {
   acknowledgeNativeTaskCancellation(config, forcedTask.taskId, { executionStopped: true });
   assert.equal(getNativeTask(config, forcedTask.taskId).status, 'cancelled');
 
-  const treeTask = createOperationTask(config, {
+  const treeTask = createNativeToolTask(config, {
     method: 'tools/call',
     name: 'relai_exec',
     logicalTaskId: 'work-tree',
@@ -130,12 +130,12 @@ try {
   });
   const treePromise = runProcess(process.execPath, [treeScript, stubbornScript], {
     cwd: root,
-    signal: operationTaskSignal(config, treeTask.taskId),
+    signal: nativeToolTaskSignal(treeTask.taskId),
     terminationGraceMs: 100,
     forceWaitMs: 3000,
     maxOutputBytes: 65536
   }, config);
-  setTimeout(() => cancelOperationTask(config, treeTask.taskId), 300);
+  setTimeout(() => cancelNativeTask(config, treeTask.taskId), 300);
   const treeResult = await treePromise;
   assert.equal(treeResult.cancelled, true);
   assert.equal(treeResult.terminationConfirmed, true);
@@ -145,17 +145,17 @@ try {
   acknowledgeNativeTaskCancellation(config, treeTask.taskId, { executionStopped: true });
   assert.equal(getNativeTask(config, treeTask.taskId).status, 'cancelled');
 
-  const alreadyCancelledTask = createOperationTask(config, {
+  const alreadyCancelledTask = createNativeToolTask(config, {
     method: 'tools/call',
     name: 'relai_exec',
     logicalTaskId: 'work-pre-cancelled',
     workspace: 'app',
     principal: 'client-a'
   });
-  cancelOperationTask(config, alreadyCancelledTask.taskId);
+  cancelNativeTask(config, alreadyCancelledTask.taskId);
   const preCancelled = await runProcess(process.execPath, [stubbornScript], {
     cwd: root,
-    signal: operationTaskSignal(config, alreadyCancelledTask.taskId),
+    signal: nativeToolTaskSignal(alreadyCancelledTask.taskId),
     terminationGraceMs: 0,
     forceWaitMs: 2000,
     maxOutputBytes: 65536

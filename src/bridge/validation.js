@@ -9,7 +9,7 @@ import { combineAbortSignals } from '../abortSignals.js';
 import { finalizeValidationResult, normalizeCompletionSummary } from '../tools/completion.js';
 import { createValidationFingerprint, createValidationPlan, readValidationPlan } from './validationPlan.js';
 import { runSpan } from '../telemetry.js';
-import { operationTaskSignal } from '../operationTasks.js';
+import { nativeToolTaskSignal } from '../mcp/nativeToolTasks.js';
 import { hasRequestedChecks, normalizeVerifyChecks } from './validationChecks.js';
 import {
   boundCheckOutput,
@@ -96,7 +96,7 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
   const results = [];
   const signal = combineAbortSignals(
     getCurrentTaskAbortSignal(),
-    args._operationTaskId ? operationTaskSignal(config, args._operationTaskId) : undefined,
+    args._operationTaskId ? nativeToolTaskSignal(args._operationTaskId) : undefined,
     context.signal
   );
 

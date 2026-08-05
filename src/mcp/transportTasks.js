@@ -31,11 +31,11 @@ import {
   validJsonRpcId
 } from './protocol.js';
 import {
-  completeOperationTask,
-  createOperationTask,
-  failOperationTask,
-  operationTaskSignal
-} from '../operationTasks.js';
+  completeNativeToolTask,
+  createNativeToolTask,
+  failNativeToolTask,
+  nativeToolTaskSignal
+} from './nativeToolTasks.js';
 import { approvalRequirement } from './approval.js';
 import { createRelaiRequestStateCodec } from './context.js';
 import { invokeRelaiTool } from './toolInvocation.js';
@@ -80,7 +80,7 @@ async function handleTransportTaskRequest(config, message, options = {}) {
   if (!selection.ok) return errorFromPolicy(message.id, selection.error);
 
   if (selection.mode === TASK_EXECUTION_MODE.NATIVE_TASKS) {
-    return createNativeToolTask(config, message, validated.value, {
+    return startNativeToolExecution(config, message, validated.value, {
       ...options,
       capabilities,
       bounds: selection.bounds,
@@ -189,9 +189,9 @@ function handleTaskProtocolRequest(config, message, principal, capabilities) {
   }
 }
 
-function createNativeToolTask(config, message, args, options) {
+function startNativeToolExecution(config, message, args, options) {
   const name = String(message.params?.name || '');
-  const operation = createOperationTask(config, {
+  const operation = createNativeToolTask(config, {
     principal: options.principal,
     method: 'tools/call',
     name,
@@ -200,7 +200,7 @@ function createNativeToolTask(config, message, args, options) {
     message: `${name} is running as a native MCP task.`
   });
   const taskId = operation.taskId;
-  const signal = operationTaskSignal(config, taskId);
+  const signal = nativeToolTaskSignal(taskId);
   queueMicrotask(() => {
     void executeToolResult(config, name, {
       ...args,
@@ -219,7 +219,7 @@ function createNativeToolTask(config, message, args, options) {
         });
         return;
       }
-      completeOperationTask(config, taskId, result);
+      completeNativeToolTask(config, taskId, result);
     }).catch(error => {
       if (signal?.aborted) {
         acknowledgeNativeTaskCancellation(config, taskId, {
@@ -229,7 +229,7 @@ function createNativeToolTask(config, message, args, options) {
         });
         return;
       }
-      failOperationTask(config, taskId, error);
+      failNativeToolTask(config, taskId, error);
     });
   });
   return successResponse(message.id, {
