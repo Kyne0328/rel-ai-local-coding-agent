@@ -39,7 +39,6 @@ const connection = await importResourceModule('src/connectionProfile.js');
 const toolActivity = await importResourceModule('src/toolActivity.js');
 const dashboardSessions = await importResourceModule('src/http/dashboardSessions.js');
 const configModule = await importResourceModule('src/config.js');
-const diagnosticsModule = await importResourceModule('src/diagnostics.js');
 const { ERROR_CODES } = await importResourceModule('src/desktopUxContracts.js');
 const oauthProvider = await importResourceModule('src/oauthProvider.js');
 const { startHttpServer } = await importResourceModule('src/httpServer.js');
@@ -48,7 +47,7 @@ const { stopAllManagedProcesses } = await importResourceModule('src/processManag
 const { shutdownTelemetry } = await importResourceModule('src/telemetry.js');let wizardWindow = null, wizardRecoveryMode = false, wizardReturnToFallback = false;
 let httpServer = null, tunnelProcess = null, startPromise = null;
 let lifecycleToken = 0, isQuitting = false, appUpdater = null;
-const diagnosticFiles = createDiagnosticFiles({ app, shell, sanitizeDiagnosticValue: diagnosticsModule.sanitizeDiagnosticValue }); let currentStatus = initialDesktopStatus(app.getVersion()); const runtimeLogs = createRuntimeLogBuffer({ filePath: () => diagnosticFiles.serviceLogPath() });
+const diagnosticFiles = createDiagnosticFiles({ app, shell }); let currentStatus = initialDesktopStatus(app.getVersion()); const runtimeLogs = createRuntimeLogBuffer({ filePath: () => diagnosticFiles.serviceLogPath() });
 const approvalTokenManager = createApprovalTokenManager({ readGuiConfig, saveLauncherConfig, generateToken: connection.generateToken, oauthProvider, restartDesktop: () => launchConfiguredDesktop({ restart: true }) });
 const recoveryWindowManager = createRecoveryWindowManager({
   BrowserWindow,

@@ -1,12 +1,12 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { importResourceModule } from './resource-path.js';
 
+const { sanitizeDiagnosticValue } = await importResourceModule('src/diagnostics.js');
 
-import * as fs from "node:fs";
-import * as path from "node:path";
-
-function createDiagnosticFiles({ app, shell, sanitizeDiagnosticValue, now = () => new Date() } = {}) {
+function createDiagnosticFiles({ app, shell, now = () => new Date() } = {}) {
   if (!app || typeof app.getPath !== 'function') throw new Error('Electron app path access is required.');
   if (!shell || typeof shell.openPath !== 'function') throw new Error('Electron shell access is required.');
-  if (typeof sanitizeDiagnosticValue !== 'function') throw new Error('Diagnostic sanitization is required.');
 
   function directory() {
     return path.join(app.getPath('userData'), 'diagnostics');
