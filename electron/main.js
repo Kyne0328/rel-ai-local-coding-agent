@@ -17,7 +17,7 @@ import { createApprovalTokenManager } from './approval-token.js';
 import { createRecoveryWindowManager } from './recovery-window.js';
 import { createRuntimeLogBuffer } from './runtime-log-buffer.js';
 import { createDiagnosticFiles } from './diagnostic-files.js';
-import { createDesktopSettingsManager } from './desktop-settings.js';
+import { readDesktopSettings, saveDesktopSettings } from './desktop-settings.js';
 import { createAppUpdater } from './app-updater.js';
 import { createDesktopLifecycleManager } from './desktop-lifecycle.js';
 import { closeHttpServer, createShutdownCoordinator } from './shutdown-coordinator.js';
@@ -102,11 +102,6 @@ const toolActivityRuntime = createTaskActivityRuntime({
   onTaskCompleted: task => taskbarCompletionBadge.markCompleted(task),
   onStatusChange: taskActivity => setStatus({ taskActivity })
 });
-const desktopSettings = createDesktopSettingsManager({ readGuiConfig, saveLauncherConfig,
-  getApprovalRequired: () => approvalTokenManager.status().required,
-  getNotificationsEnabled: toolActivityRuntime.getNotificationsEnabled,
-  setNotificationsEnabled: toolActivityRuntime.setNotificationsEnabled,
-  restartDesktop: () => launchConfiguredDesktop({ restart: true }) });
 const desktopLifecycle = createDesktopLifecycleManager({ app,
   onLog: (message, options) => runtimeLogs.append(message, options), errorCodes: ERROR_CODES });
 appUpdater = createAppUpdater({ app, autoUpdater, getTaskActivity: toolActivityRuntime.getStatus,
@@ -213,8 +208,22 @@ function closeWizard(options = {}) {
   }
 }
 
+function currentDesktopSettings() {
+  return readDesktopSettings({
+    approvalRequired: approvalTokenManager.status().required,
+    notificationsEnabled: toolActivityRuntime.getNotificationsEnabled()
+  });
+}
+
+function updateDesktopSettings(settings) {
+  return saveDesktopSettings(settings, {
+    setNotificationsEnabled: toolActivityRuntime.setNotificationsEnabled,
+    restartDesktop: () => launchConfiguredDesktop({ restart: true })
+  });
+}
+
 function getRecoveryConfig() {
-  const settings = desktopSettings.get(), token = settings.approvalToken || connection.generateToken(32);
+  const settings = currentDesktopSettings(), token = settings.approvalToken || connection.generateToken(32);
   return { ok: true, port: settings.port, token, ngrokDomain: settings.ngrokDomain, ngrokAuthtoken: settings.ngrokAuthtoken };
 }
 
@@ -481,8 +490,8 @@ registerIpcHandlers({
   launchConfiguredDesktop,
   openSettingsWindow,
   openDashboardWindow,
-  getDesktopSettings: desktopSettings.get,
-  saveDesktopSettings: desktopSettings.save,
+  getDesktopSettings: currentDesktopSettings,
+  saveDesktopSettings: updateDesktopSettings,
   replaceApprovalToken: approvalTokenManager.replace,
   getUpdateStatus: appUpdater.getStatus,
   checkForUpdates: appUpdater.checkForUpdates,
