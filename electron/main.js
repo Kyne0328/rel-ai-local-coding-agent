@@ -72,6 +72,7 @@ const dashboardWindowManager = createDashboardWindowManager({
   }
 });
 const taskbarCompletionBadge = createTaskbarCompletionBadge({
+  app,
   nativeImage, platform: process.platform,
   getWindow: () => dashboardWindowManager.getWindow() || BrowserWindow.getAllWindows().find(win => !win.isDestroyed()) || null,
   isApplicationOpen: () => BrowserWindow.getAllWindows().some(win => !win.isDestroyed() && win.isVisible() && win.isFocused())
