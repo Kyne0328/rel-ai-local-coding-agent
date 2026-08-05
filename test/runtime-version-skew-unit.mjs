@@ -41,7 +41,7 @@ assert.equal(repositoryAhead.activeTasksPreventRestart, true);
 assert.match(repositoryAhead.message, /tools remain available/i);
 
 const runtimeAhead = assessRuntimeCompatibility(
-  { ...current, applicationVersion: '0.24.0', packageVersion: '0.24.0' },
+  { ...current, applicationVersion: '999.0.0', packageVersion: '999.0.0' },
   { ...current, source: 'repository' }
 );
 assert.equal(runtimeAhead.status, 'runtime_newer');

@@ -88,7 +88,7 @@ function parseJsonFile(file, validate) {
   try {
     text = fs.readFileSync(file, 'utf8');
   } catch (error) {
-    if (error?.code === 'ENOENT') return { ok: false, missing: true, reason: 'missing', error };
+    if (['ENOENT', 'ENOTDIR'].includes(error?.code)) return { ok: false, missing: true, reason: 'missing', error };
     return { ok: false, missing: false, reason: 'read_failed', error };
   }
   try {
