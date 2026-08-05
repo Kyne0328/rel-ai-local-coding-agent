@@ -2,6 +2,7 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getStateDir } from '../statePaths.js';
+import { isTerminalNativeTaskStatus } from '../taskState.js';
 import { normalizePrincipalKey, principalFingerprint } from './principal.js';
 
 const DEFAULT_TASK_TTL_MS = 24 * 60 * 60 * 1000;
@@ -18,7 +19,6 @@ const MAX_LOCK_WAIT_MS = 5000;
 const STALE_LOCK_MS = 30_000;
 const TASK_ID_PATTERN = /^task_[A-Za-z0-9_-]{32,160}$/;
 const INPUT_KEY_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
-const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
 const VALID_STATUSES = new Set(['working', 'input_required', 'completed', 'failed', 'cancelled']);
 const TASK_TRANSITIONS = Object.freeze({
   working: new Set(['working', 'input_required', 'completed', 'failed', 'cancelled']),
@@ -144,7 +144,7 @@ function updateNativeTask(config, taskId, patch = {}, options = {}) {
     assertActiveTask(task);
     if (patch.status != null) {
       const nextStatus = normalizeStatus(patch.status);
-      if (TERMINAL_STATUSES.has(nextStatus)) {
+      if (isTerminalNativeTaskStatus(nextStatus)) {
         throw new NativeTaskRequestError('Terminal states require a dedicated completion, failure, or cancellation operation.');
       }
       assertTaskTransition(task.status, nextStatus);
@@ -299,7 +299,7 @@ function cancelNativeTask(config, taskId, options = {}) {
     const task = requireTaskUnlocked(config, taskId, options);
     reconcileTaskUnlocked(config, task, options.now);
     if (task.status === 'cancelled') return detailedTask(task);
-    if (TERMINAL_STATUSES.has(task.status)) {
+    if (isTerminalNativeTaskStatus(task.status)) {
       throw terminalConflict(task.status, 'cancelled');
     }
     if (!task.cancelRequested) {
@@ -414,7 +414,7 @@ function pruneNativeTasks(config, options = {}) {
 function transitionTerminal(config, taskId, status, payload, options = {}) {
   return withTaskLock(config, taskId, () => {
     const task = requireTaskUnlocked(config, taskId, options);
-    if (TERMINAL_STATUSES.has(task.status)) {
+    if (isTerminalNativeTaskStatus(task.status)) {
       if (task.status === status && sameTerminalOutcome(task, status, payload)) return detailedTask(task);
       throw terminalConflict(task.status, status);
     }
@@ -476,7 +476,7 @@ function requireTaskUnlocked(config, taskId, options = {}) {
 }
 
 function reconcileTaskUnlocked(config, task, nowSource) {
-  if (TERMINAL_STATUSES.has(task.status) || task.status === 'input_required') return task;
+  if (isTerminalNativeTaskStatus(task.status) || task.status === 'input_required') return task;
   if (executors.has(task.taskId)) return task;
   const nowMs = nowValue(nowSource);
   if (task.cancelRequested) {
@@ -829,7 +829,7 @@ function assertTaskTransition(current, next) {
 }
 
 function assertActiveTask(task) {
-  if (TERMINAL_STATUSES.has(task.status)) throw terminalConflict(task.status, task.status);
+  if (isTerminalNativeTaskStatus(task.status)) throw terminalConflict(task.status, task.status);
 }
 
 function normalizeRestartPolicy(value) {

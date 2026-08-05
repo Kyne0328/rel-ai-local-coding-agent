@@ -1,12 +1,19 @@
 import assert from 'node:assert/strict';
 const {
   CANONICAL_TASK_STATUSES,
+  NATIVE_TASK_STATUSES,
   TASK_TRANSITIONS,
   assertTaskStatusTransition,
   canTransitionTaskStatus,
+  internalStatusToDashboardStatus,
   isCanonicalTaskStatus,
+  isNativeTaskStatus,
+  isTerminalDashboardTaskStatus,
+  isTerminalNativeTaskStatus,
   isTerminalTaskStatus,
-  normalizeHistoricalTaskStatus
+  nativeStatusToInternalStatus,
+  normalizeHistoricalTaskStatus,
+  normalizeLiveTaskStatus
 } = await import('../src/taskState.js');
 
 assert.deepEqual(CANONICAL_TASK_STATUSES, [
@@ -14,6 +21,23 @@ assert.deepEqual(CANONICAL_TASK_STATUSES, [
   'validation_failed', 'completed', 'failed', 'cancelled'
 ]);
 for (const status of CANONICAL_TASK_STATUSES) assert.equal(isCanonicalTaskStatus(status), true, status);
+assert.deepEqual(NATIVE_TASK_STATUSES, ['working', 'input_required', 'completed', 'failed', 'cancelled']);
+for (const status of NATIVE_TASK_STATUSES) assert.equal(isNativeTaskStatus(status), true, status);
+assert.equal(isNativeTaskStatus('running'), false, 'internal and native protocol status vocabularies remain distinct');
+assert.equal(nativeStatusToInternalStatus('working'), 'running');
+assert.equal(nativeStatusToInternalStatus('input_required'), 'blocked');
+assert.equal(nativeStatusToInternalStatus('completed'), 'completed');
+assert.equal(nativeStatusToInternalStatus('unknown'), '');
+assert.equal(isTerminalNativeTaskStatus('completed'), true);
+assert.equal(isTerminalNativeTaskStatus('working'), false);
+assert.equal(isTerminalNativeTaskStatus('unknown'), false);
+assert.equal(normalizeLiveTaskStatus('blocked', {}, { blockedMeansApproval: true }), 'waiting_for_approval');
+assert.equal(normalizeLiveTaskStatus('blocked'), 'blocked');
+assert.equal(normalizeLiveTaskStatus('working'), 'running');
+assert.equal(internalStatusToDashboardStatus('completed_with_warnings'), 'completed');
+assert.equal(internalStatusToDashboardStatus('inactive', { failures: 1 }), 'failed');
+assert.equal(isTerminalDashboardTaskStatus('expired'), true);
+assert.equal(isTerminalDashboardTaskStatus('running'), false);
 for (const status of ['completed', 'failed', 'cancelled']) assert.equal(isTerminalTaskStatus(status), true, status);
 assert.equal(isCanonicalTaskStatus('completed_with_warnings'), false, 'legacy warning status is not canonical');
 for (const status of ['queued', 'planning', 'running', 'waiting_for_approval', 'blocked', 'validating', 'validation_failed']) assert.equal(isTerminalTaskStatus(status), false, status);

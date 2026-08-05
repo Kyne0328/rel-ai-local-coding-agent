@@ -1,6 +1,7 @@
 
 import { clamp, isCurrentTaskEvent, operationForTool, unique } from './taskEvents.js';
 import { sanitizeTaskRecord } from './taskObservability.js';
+import { normalizeLiveTaskStatus } from './taskState.js';
 function buildTaskHistory(entries = [], activity = {}, options = {}) {
   const limit = clamp(options.limit || 100, 1, 500);
   const groups = groupTaskEntries(entries);
@@ -47,7 +48,7 @@ function summarizeTask(taskId, events, activeTask) {
     sessionId: taskId,
     title: activeTask?.title || titleFromEvents(ordered),
     objective: activeTask?.objective || '',
-    status: activeTask?.status || (activeTask ? normalizeActiveState(activeTask.state) : completionEvent ? 'completed' : failures ? 'failed' : 'cancelled'),
+    status: activeTask?.status || (activeTask ? normalizeLiveTaskStatus(activeTask.state, activeTask) : completionEvent ? 'completed' : failures ? 'failed' : 'cancelled'),
     progress: activeTask?.progress || (completionEvent ? { mode: 'complete', percentage: 100, label: 'Complete' } : { mode: 'indeterminate', label: 'Progress unavailable' }),
     currentStage: activeTask?.currentStage || '',
     currentActivity: activeTask?.currentActivity || activeTask?.operation || last.operation || '',
@@ -88,7 +89,7 @@ function activeTaskFromActivity(activity) {
     sessionId: activity.sessionId || taskId,
     title: activity.title || operationForTool(activity.lastTool || activity.tool) || 'Rel.AI workspace task',
     objective: activity.objective || '',
-    status: activity.status || normalizeActiveState(activity.state),
+    status: activity.status || normalizeLiveTaskStatus(activity.state, activity),
     progress: activity.progress || { mode: 'indeterminate', label: 'Progress unavailable' },
     currentStage: activity.currentStage || '',
     currentActivity: activity.currentActivity || activity.operation || activity.lastOperation || '',
@@ -120,11 +121,6 @@ function activeTaskFromActivity(activity) {
   };
 }
 
-function normalizeActiveState(state) {
-  if (state === 'working') return 'running';
-  if (state === 'waiting') return 'planning';
-  return 'planning';
-}
 
 function titleFromEvents(events) {
   const operation = [...events].reverse().find(event => event.operation)?.operation;
