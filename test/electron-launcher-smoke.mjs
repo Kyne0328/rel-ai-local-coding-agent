@@ -172,9 +172,13 @@ assert.match(toolSleepBlocker, /prevent-display-sleep/, 'active work sessions mu
 assert.doesNotMatch(toolSleepBlocker, /prevent-app-suspension/, 'app-only suspension blocking is insufficient for keeping the computer awake');
 assert.match(electronMain, /createTaskActivityRuntime/, 'Electron main must bind connector activity to sleep prevention, live status, and completion alerts');
 assert.match(electronMain, /createTaskbarCompletionBadge/, 'Electron main must create the completion taskbar indicator');
+assert.match(electronMain, /createTaskbarCompletionBadge\(\{\s*app,\s*nativeImage/s, 'Electron main must provide the app badge API for Linux and macOS launchers');
 assert.match(electronMain, /onTaskCompleted: task => taskbarCompletionBadge\.markCompleted\(task\)/, 'explicit completion must increment the taskbar indicator');
 assert.match(electronMain, /browser-window-focus.*taskbarCompletionBadge\.clear/s, 'opening or focusing the app must clear the taskbar indicator');
 assert.match(taskbarCompletionBadge, /setOverlayIcon/, 'Windows completion count must use the taskbar overlay API');
+assert.match(taskbarCompletionBadge, /setBadgeCount/, 'Linux and macOS completion counts must use the application badge API');
+assert.match(taskbarCompletionBadge, /createFromBuffer/, 'Windows overlays must use a decodable PNG buffer');
+assert.doesNotMatch(taskbarCompletionBadge, /createFromDataURL/, 'Windows overlays must not rely on unsupported SVG data URLs');
 assert.match(taskbarCompletionBadge, /seenTaskIds/, 'duplicate completion events must not increment the taskbar indicator');
 assert.match(electronMain, /toolActivityRuntime\.stop\(\)/, 'tool activity runtime must stop during application shutdown');
 assert.match(electronMain, /setNotificationsEnabled: toolActivityRuntime\.setNotificationsEnabled/, 'the desktop notification toggle must control task alerts');
