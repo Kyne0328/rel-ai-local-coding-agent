@@ -1,8 +1,8 @@
-import { getCompactToolDefinition, getCompactToolDefinitions } from './compactRegistry.js';
+import { getCatalogToolDefinition, getCatalogToolDefinitions } from './actionCatalog.js';
 import { schemaFromDefinition } from './schemaBuilder.js';
 import { getToolGroups, getToolMetadata, getToolSurfaceManifest } from './surface.js';
 
-const toolDefinitions = getCompactToolDefinitions();
+const toolDefinitions = getCatalogToolDefinitions();
 const TOOL_NAMES = Object.freeze(toolDefinitions.map(definition => definition.name));
 const toolSchemas = toolDefinitions.map(schemaFromDefinition);
 const publicToolSchemas = toolSchemas.map(({ outputSchema: _outputSchema, ...schema }) => schema);
@@ -16,7 +16,7 @@ function getPublicToolSchemas() {
 }
 
 function getToolDefinition(name) {
-  return getCompactToolDefinition(name);
+  return getCatalogToolDefinition(name);
 }
 
 function getToolDefinitions() {
@@ -28,7 +28,7 @@ function getToolNames() {
 }
 
 function isToolCallable(name) {
-  return Boolean(getCompactToolDefinition(name));
+  return Boolean(getCatalogToolDefinition(name));
 }
 
 export {
