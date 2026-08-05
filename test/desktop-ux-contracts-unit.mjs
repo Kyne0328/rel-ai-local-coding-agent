@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 import { TERMINOLOGY, ERROR_CODES, ERROR_GUIDANCE, CONNECTION_STATE_VALUES, deriveConnectionState, errorGuidance, errorPayload } from "../src/desktopUxContracts.js";
-import { createDesktopStatusModel } from "../electron/desktop-status.js";
+import { desktopStatusFailure, initialDesktopStatus, normalizeDesktopStatus } from "../electron/desktop-status.js";
 const connectionUi = await import('../src/ui/connection-state.js');
 
 assert.deepEqual(TERMINOLOGY, {
@@ -130,17 +130,14 @@ assert.deepEqual(
   }
 );
 
-const desktopStatusModel = createDesktopStatusModel({
-  version: 'test',
-  deriveConnectionState,
-  formatError: error => error instanceof Error ? error.message : String(error)
-});
-const initialDesktopStatus = desktopStatusModel.initial();
-assert.equal(initialDesktopStatus.version, 'test');
-assert.equal(initialDesktopStatus.connectionState.localService.status, 'stopped');
-const failedDesktopStatus = desktopStatusModel.normalize({
-  ...initialDesktopStatus,
-  ...desktopStatusModel.failure(ERROR_CODES.PUBLIC_ENDPOINT_FAILED, new Error('Endpoint failed.'), {
+const initialStatus = initialDesktopStatus('test');
+const secondInitialStatus = initialDesktopStatus('test');
+assert.equal(initialStatus.version, 'test');
+assert.equal(initialStatus.connectionState.localService.status, 'stopped');
+assert.notEqual(initialStatus.taskActivity.tasks, secondInitialStatus.taskActivity.tasks, 'initial status must return a fresh task list');
+const failedDesktopStatus = normalizeDesktopStatus({
+  ...initialStatus,
+  ...desktopStatusFailure(ERROR_CODES.PUBLIC_ENDPOINT_FAILED, new Error('Endpoint failed.'), {
     serverRunning: true,
     tunnelStatus: 'failed'
   })
@@ -198,6 +195,7 @@ const workspaceActions = fs.readFileSync(path.join(root, 'src', 'ui', 'features'
 const settingsAdvanced = fs.readFileSync(path.join(root, 'src', 'ui', 'features', 'settings', 'advanced.js'), 'utf8');
 const settingsToolsValidation = fs.readFileSync(path.join(root, 'src', 'ui', 'features', 'settings', 'tools-validation.js'), 'utf8');
 const desktopConnection = fs.readFileSync(path.join(root, 'src', 'ui', 'features', 'settings', 'desktop-connection.js'), 'utf8');
+const desktopStatus = fs.readFileSync(path.join(root, 'electron', 'desktop-status.js'), 'utf8');
 const desktopSettings = fs.readFileSync(path.join(root, 'electron', 'desktop-settings.js'), 'utf8');
 const approvalToken = fs.readFileSync(path.join(root, 'electron', 'approval-token.js'), 'utf8');
 const appUpdaterState = fs.readFileSync(path.join(root, 'electron', 'app-updater-state.js'), 'utf8');
@@ -442,7 +440,8 @@ for (const surface of baseline.electronSurfaces.filter(item => item.renderer.end
 }
 for (const screenshot of baseline.screenshots) assert.equal(fs.existsSync(path.join(root, screenshot)), true, `missing baseline screenshot: ${screenshot}`);
 
-assert.match(electronMain, /deriveConnectionState/);
+assert.match(desktopStatus, /deriveConnectionState/);
+assert.doesNotMatch(electronMain, /createDesktopStatusModel|desktopStatusModel/);
 assert.match(electronMain, /errorCode/);
 assert.match(electronMain, /createRuntimeLogBuffer/);
 assert.match(httpServer, /\/api\/diagnostics/);

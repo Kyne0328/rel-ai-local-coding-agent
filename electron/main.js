@@ -12,7 +12,7 @@ import { createTaskActivityRuntime } from './tool-sleep-blocker.js';
 import { createTaskbarCompletionBadge } from './taskbar-completion-badge.js';
 import { createDashboardWindowManager } from './dashboard-window.js';
 import { createDesktopTray } from './desktop-tray.js';
-import { createDesktopStatusModel } from './desktop-status.js';
+import { desktopStatusFailure, initialDesktopStatus, normalizeDesktopStatus } from './desktop-status.js';
 import { createApprovalTokenManager } from './approval-token.js';
 import { createRecoveryWindowManager } from './recovery-window.js';
 import { createRuntimeLogBuffer } from './runtime-log-buffer.js';
@@ -40,7 +40,7 @@ const toolActivity = await importResourceModule('src/toolActivity.js');
 const dashboardSessions = await importResourceModule('src/http/dashboardSessions.js');
 const configModule = await importResourceModule('src/config.js');
 const diagnosticsModule = await importResourceModule('src/diagnostics.js');
-const { ERROR_CODES, deriveConnectionState } = await importResourceModule('src/desktopUxContracts.js');
+const { ERROR_CODES } = await importResourceModule('src/desktopUxContracts.js');
 const oauthProvider = await importResourceModule('src/oauthProvider.js');
 const { startHttpServer } = await importResourceModule('src/httpServer.js');
 const { terminateProcessTree } = await importResourceModule('src/process.js');
@@ -48,8 +48,7 @@ const { stopAllManagedProcesses } = await importResourceModule('src/processManag
 const { shutdownTelemetry } = await importResourceModule('src/telemetry.js');let wizardWindow = null, wizardRecoveryMode = false, wizardReturnToFallback = false;
 let httpServer = null, tunnelProcess = null, startPromise = null;
 let lifecycleToken = 0, isQuitting = false, appUpdater = null;
-const desktopStatusModel = createDesktopStatusModel({ version: app.getVersion(), deriveConnectionState, formatError });
-const diagnosticFiles = createDiagnosticFiles({ app, shell, sanitizeDiagnosticValue: diagnosticsModule.sanitizeDiagnosticValue }); let currentStatus = desktopStatusModel.initial(); const runtimeLogs = createRuntimeLogBuffer({ filePath: () => diagnosticFiles.serviceLogPath() });
+const diagnosticFiles = createDiagnosticFiles({ app, shell, sanitizeDiagnosticValue: diagnosticsModule.sanitizeDiagnosticValue }); let currentStatus = initialDesktopStatus(app.getVersion()); const runtimeLogs = createRuntimeLogBuffer({ filePath: () => diagnosticFiles.serviceLogPath() });
 const approvalTokenManager = createApprovalTokenManager({ readGuiConfig, saveLauncherConfig, generateToken: connection.generateToken, oauthProvider, restartDesktop: () => launchConfiguredDesktop({ restart: true }) });
 const recoveryWindowManager = createRecoveryWindowManager({
   BrowserWindow,
@@ -248,7 +247,7 @@ function pushUpdateStatus(status) { dashboardWindowManager.getWindow()?.webConte
 
 function setStatus(next) {
   const previous = currentStatus;
-  currentStatus = desktopStatusModel.normalize({ ...currentStatus, ...next }); runtimeLogs.recordStatusTransition(previous, currentStatus); pushStatus();
+  currentStatus = normalizeDesktopStatus({ ...currentStatus, ...next }); runtimeLogs.recordStatusTransition(previous, currentStatus); pushStatus();
 }
 
 async function startServer() {
@@ -271,14 +270,14 @@ async function startServer() {
         connection.writeLaunchEnv({ REL_AI_MCP_TOKEN: guiConfig.token });
       }
     } catch (error) {
-      setStatus(desktopStatusModel.failure(ERROR_CODES.CONFIGURATION_INVALID, error, { serverRunning: false, tunnelStatus: 'failed', mcpUrl: '' }));
+      setStatus(desktopStatusFailure(ERROR_CODES.CONFIGURATION_INVALID, error, { serverRunning: false, tunnelStatus: 'failed', mcpUrl: '' }));
       startPromise = null;
       return currentStatus;
     }
 
     const available = await isPortAvailable(guiConfig.port);
     if (!available) {
-      setStatus(desktopStatusModel.failure(ERROR_CODES.LOCAL_PORT_IN_USE, `Port ${guiConfig.port} is already in use.`, { serverRunning: false, tunnelStatus: 'failed', mcpUrl: '' }));
+      setStatus(desktopStatusFailure(ERROR_CODES.LOCAL_PORT_IN_USE, `Port ${guiConfig.port} is already in use.`, { serverRunning: false, tunnelStatus: 'failed', mcpUrl: '' }));
       startPromise = null;
       return currentStatus;
     }
@@ -303,7 +302,7 @@ async function startServer() {
       });
     } catch (error) {
       httpServer = null;
-      setStatus(desktopStatusModel.failure(ERROR_CODES.LOCAL_SERVICE_START_FAILED, error, { serverRunning: false, tunnelStatus: 'failed', mcpUrl: '' }));
+      setStatus(desktopStatusFailure(ERROR_CODES.LOCAL_SERVICE_START_FAILED, error, { serverRunning: false, tunnelStatus: 'failed', mcpUrl: '' }));
       startPromise = null;
       return currentStatus;
     }
@@ -320,7 +319,7 @@ async function startServer() {
         onLog: tunnelLog
       });
     } catch (error) {
-      setStatus(desktopStatusModel.failure(ERROR_CODES.PUBLIC_ENDPOINT_FAILED, error, { serverRunning: true, tunnelStatus: 'failed', mcpUrl: '' }));
+      setStatus(desktopStatusFailure(ERROR_CODES.PUBLIC_ENDPOINT_FAILED, error, { serverRunning: true, tunnelStatus: 'failed', mcpUrl: '' }));
       startPromise = null;
       return currentStatus;
     }
@@ -355,7 +354,7 @@ async function startServer() {
       });
       setStatus({ serverRunning: true, tunnelStatus: 'running', mcpUrl, authenticationRequired: approvalTokenManager.status().required, error: '', errorCode: '' });
     } else {
-      setStatus(desktopStatusModel.failure(ERROR_CODES.PUBLIC_ENDPOINT_FAILED, result.error || 'Tunnel failed before publishing a public URL.', { serverRunning: true, tunnelStatus: 'failed', mcpUrl: '' }));
+      setStatus(desktopStatusFailure(ERROR_CODES.PUBLIC_ENDPOINT_FAILED, result.error || 'Tunnel failed before publishing a public URL.', { serverRunning: true, tunnelStatus: 'failed', mcpUrl: '' }));
     }
 
     startPromise = null;
@@ -384,7 +383,7 @@ async function stopServer(options = {}) {
 
   if (!options.preserveDashboard) dashboardWindowManager.close();
   dashboardSessions.clearDashboardSessions();
-  currentStatus = desktopStatusModel.initial();
+  currentStatus = initialDesktopStatus(app.getVersion());
   if (!options.silent) pushStatus();
   else desktopTray.update();
   return {
@@ -422,7 +421,7 @@ async function openDashboardWindow(routeHash = '') {
     await showDashboardWindow(routeHash);
     return { ok: true };
   } catch (error) {
-    setStatus(desktopStatusModel.failure(ERROR_CODES.DASHBOARD_UNAVAILABLE, `Dashboard failed to open: ${formatError(error)}`));
+    setStatus(desktopStatusFailure(ERROR_CODES.DASHBOARD_UNAVAILABLE, `Dashboard failed to open: ${formatError(error)}`));
     recoveryWindowManager.show();
     throw error;
   }
@@ -444,7 +443,7 @@ async function launchConfiguredDesktop(options = {}) {
     return status;
   } catch (error) {
     if (currentStatus.errorCode !== ERROR_CODES.DASHBOARD_UNAVAILABLE) {
-      setStatus(desktopStatusModel.failure(ERROR_CODES.LOCAL_SERVICE_START_FAILED, error, { serverRunning: false, tunnelStatus: 'failed' }));
+      setStatus(desktopStatusFailure(ERROR_CODES.LOCAL_SERVICE_START_FAILED, error, { serverRunning: false, tunnelStatus: 'failed' }));
     }
     recoveryWindowManager.show();
     return currentStatus;
