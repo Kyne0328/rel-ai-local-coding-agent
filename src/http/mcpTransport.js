@@ -127,16 +127,7 @@ async function handleMcpStreamable(ctx) {
 
   try {
     if (legacy) {
-      const manifest = buildToolManifest(config);
-      await mcpConnectionManager.observeManifest(manifest, message?.method);
-      await runSpan(config, 'relai.mcp.request', {
-        'mcp.protocol.version': String(params.protocolVersion || headerValue(ctx.req.headers, 'mcp-protocol-version') || 'legacy'),
-        'mcp.method': String(message?.method || ''),
-        'oauth.client_id': principalId
-      }, async () => {
-        await getCoreNodeHandler()(ctx.req, ctx.res, message);
-        finishRequest(ctx.res.statusCode < 400);
-      }, { carrier: ctx.req.headers });
+      await handleLegacyMcpRequest(ctx, message, { config, params, principalId, finishRequest });
       return;
     }
 
@@ -154,13 +145,13 @@ async function handleMcpStreamable(ctx) {
       return;
     }
 
-    const manifest = buildToolManifest(config);
-    await mcpConnectionManager.observeManifest(manifest, message.method);
+    await observeRequestManifest(config, message.method);
 
-    await runSpan(config, 'relai.mcp.request', {
-      'mcp.protocol.version': MCP_PROTOCOL_VERSION,
-      'mcp.method': message.method,
-      'oauth.client_id': principalId
+    await runMcpRequestSpan(config, {
+      protocolVersion: MCP_PROTOCOL_VERSION,
+      method: message.method,
+      principalId,
+      headers: ctx.req.headers
     }, async () => {
       const requestAbort = createHttpRequestAbortScope(ctx.req, ctx.res);
       try {
@@ -182,13 +173,38 @@ async function handleMcpStreamable(ctx) {
       } finally {
         requestAbort.dispose();
       }
-    }, { carrier: ctx.req.headers });
+    });
   } catch (error) {
     finishRequest(false);
     throw error;
   } finally {
     releasePrincipalRequest();
   }
+}
+
+async function handleLegacyMcpRequest(ctx, message, { config, params, principalId, finishRequest }) {
+  await observeRequestManifest(config, message?.method);
+  await runMcpRequestSpan(config, {
+    protocolVersion: String(params.protocolVersion || headerValue(ctx.req.headers, 'mcp-protocol-version') || 'legacy'),
+    method: String(message?.method || ''),
+    principalId,
+    headers: ctx.req.headers
+  }, async () => {
+    await getCoreNodeHandler()(ctx.req, ctx.res, message);
+    finishRequest(ctx.res.statusCode < 400);
+  });
+}
+
+async function observeRequestManifest(config, method) {
+  await mcpConnectionManager.observeManifest(buildToolManifest(config), method);
+}
+
+function runMcpRequestSpan(config, details, callback) {
+  return runSpan(config, 'relai.mcp.request', {
+    'mcp.protocol.version': String(details.protocolVersion || ''),
+    'mcp.method': String(details.method || ''),
+    'oauth.client_id': String(details.principalId || '')
+  }, callback, { carrier: details.headers });
 }
 
 function acquirePrincipalRequest(principalId) {
