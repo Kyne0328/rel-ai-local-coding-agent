@@ -15,6 +15,7 @@ function getToolMetadata() {
       category: definition.dashboard?.category || 'Workspace tools',
       requiredProfile: definition.dashboard?.requiredProfile || 'workspace',
       requiresApproval: definition.dashboard?.requiresApproval === true,
+      capabilities: [...(definition.dashboard?.capabilities || ['inspect'])],
       state: 'active',
       replacements: [],
       parameters: Object.keys(schemaFromDefinition(definition).inputSchema.properties || {}),
