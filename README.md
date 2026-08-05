@@ -16,6 +16,8 @@ Rel.AI MCP is the successor to my original Rel.AI project. The first version pro
 
 The goal is simple: I want the reasoning power of ChatGPT on the web, but I still want my repo to stay local, controlled, visible, and reversible.
 
+The current production ownership and compatibility boundaries are documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ```text
 ChatGPT asks -> Rel.AI MCP inspects, changes, validates, and reviews locally -> I inspect the diff -> I keep or restore it
 ```

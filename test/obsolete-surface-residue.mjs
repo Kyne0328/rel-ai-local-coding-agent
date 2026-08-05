@@ -41,7 +41,8 @@ const forbidden = [
   'CORE_TOOL_NAMES',
   'profileFromConfig',
   'resolveToolProfile',
-  'profileRegistry'
+  'profileRegistry',
+  'operationTasks'
 ];
 
 function collectFiles(directory) {
