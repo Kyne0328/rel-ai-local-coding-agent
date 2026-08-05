@@ -6,6 +6,7 @@ import {
   completeProgress,
   createActivityEvent,
   deriveTaskTitle,
+  incompleteProgress,
   normalizeTaskProgress,
   sanitizeActivityEventRecord,
   sanitizeActivityMetadata,
@@ -235,11 +236,7 @@ function createToolActivityTracker(options = {}) {
         if (recoverableValidationFailure) {
           task.status = 'validation_failed';
           task.currentStage = 'Validation failed';
-          task.progress = normalizeTaskProgress({
-            ...task.progress,
-            percentage: Math.min(99, Number(task.progress?.percentage ?? 99)),
-            label: 'Fix issues and revalidate'
-          }, task.status);
+          task.progress = incompleteProgress(task.progress, task.status, 'Fix issues and revalidate');
         } else if (current.activity.status === 'blocked') {
           const blockedCode = String(current.activity?.error?.code || current.activity?.metadata?.errorCode || '');
           const validationRequired = /VALIDATION_REQUIRED|TASK_PERSISTENCE_CONFLICT/.test(blockedCode);
