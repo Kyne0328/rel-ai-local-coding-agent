@@ -8,7 +8,7 @@ import { localWindowWebPreferences } from './window-security.js';
 import { STARTUP_BACKGROUND_COLOR } from './startup-background.js';
 
 const dashboardPreloadPath = fileURLToPath(new URL('./preload.cjs', import.meta.url));
-import { createDashboardWindowChromeController, dashboardWindowChrome } from "./window-chrome.js";
+import { dashboardWindowChrome, dashboardWindowChromeState } from "./window-chrome.js";
 
 function createDashboardWindowManager(deps) {
   const {
@@ -23,7 +23,6 @@ function createDashboardWindowManager(deps) {
   let dashboardWindow = null;
   let dashboardOrigin = '';
   let persistTimer = null;
-  const windowChrome = createDashboardWindowChromeController({ getWindow, platform });
 
   async function open(routeHash = '') {
     const connection = await getConnection();
@@ -60,10 +59,10 @@ function createDashboardWindowManager(deps) {
     });
     secureSession(dashboardWindow.webContents.session);
     configureNavigation(dashboardWindow);
-    dashboardWindow.once('ready-to-show', () => { dashboardWindow?.show(); windowChrome.sendState(); });
+    dashboardWindow.once('ready-to-show', () => { dashboardWindow?.show(); sendWindowState(); });
     dashboardWindow.on('resize', schedulePersist);
     dashboardWindow.on('move', schedulePersist);
-    windowChrome.bind(dashboardWindow);
+    bindWindowState(dashboardWindow);
     dashboardWindow.on('close', event => {
       persistBounds();
       if (isQuitting()) return;
@@ -171,6 +170,46 @@ function createDashboardWindowManager(deps) {
     catch { return restoreDashboardBounds(null, screen); }
   }
 
+  function getState() {
+    return dashboardWindowChromeState(getWindow(), platform);
+  }
+
+  function requireWindow() {
+    const win = getWindow();
+    if (!win) throw new Error('Dashboard window is not available.');
+    return win;
+  }
+
+  function sendWindowState() {
+    const win = getWindow();
+    if (win && typeof win.webContents?.send === 'function') {
+      win.webContents.send('desktop:window-state', getState());
+    }
+  }
+
+  function bindWindowState(win) {
+    for (const name of ['show', 'minimize', 'restore', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) {
+      win.on(name, sendWindowState);
+    }
+  }
+
+  function minimize() {
+    requireWindow().minimize();
+    return getState();
+  }
+
+  function toggleMaximize() {
+    const win = requireWindow();
+    if (win.isMaximized()) win.unmaximize();
+    else win.maximize();
+    return getState();
+  }
+
+  function requestClose() {
+    requireWindow().close();
+    return { ok: true };
+  }
+
   function close() {
     persistBounds();
     if (dashboardWindow && !dashboardWindow.isDestroyed()) dashboardWindow.destroy();
@@ -181,9 +220,7 @@ function createDashboardWindowManager(deps) {
     return dashboardWindow && !dashboardWindow.isDestroyed() ? dashboardWindow : null;
   }
 
-  return { open, close, getWindow, pickFolder, openFolder,
-    getState: windowChrome.getState, minimize: windowChrome.minimize,
-    toggleMaximize: windowChrome.toggleMaximize, requestClose: windowChrome.requestClose };
+  return { open, close, getWindow, pickFolder, openFolder, getState, minimize, toggleMaximize, requestClose };
 }
 
 function validateConnection(connection) {

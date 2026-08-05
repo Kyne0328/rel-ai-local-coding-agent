@@ -12,6 +12,7 @@ const dashboardServer = read('src/http/dashboard.js');
 const dashboardShellChrome = read('src/http/dashboardShellChrome.js');
 const dashboardMarkup = dashboardServer + dashboardShellChrome;
 const windowChromePolicy = read('electron/window-chrome.js');
+const dashboardWindowPolicy = read('electron/dashboard-window.js');
 const windowChromeUi = read('src/ui/window-chrome.js');
 
 function tokenValue(source, name) {
@@ -206,8 +207,9 @@ assert.match(windowChromePolicy, /frame: false/);
 assert.match(windowChromePolicy, /thickFrame: true/);
 assert.match(windowChromePolicy, /titleBarStyle: 'hiddenInset'/);
 assert.match(windowChromePolicy, /customTitleBar: false/);
-assert.match(windowChromePolicy, /desktop:window-state/);
-assert.match(windowChromePolicy, /'maximize', 'unmaximize'/);
+assert.match(dashboardWindowPolicy, /desktop:window-state/);
+assert.match(dashboardWindowPolicy, /'maximize', 'unmaximize'/);
+assert.doesNotMatch(windowChromePolicy, /createDashboardWindowChromeController/);
 assert.match(windowChromeUi, /Restore window/);
 assert.match(windowChromeUi, /data-window-icon="restore"/);
 for (const channel of ['desktop:window:get-state', 'desktop:window:minimize', 'desktop:window:toggle-maximize', 'desktop:window:close']) {

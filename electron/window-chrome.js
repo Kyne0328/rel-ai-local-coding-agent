@@ -1,5 +1,3 @@
-
-
 function dashboardWindowChrome(platform = process.platform) {
   if (platform === 'win32') {
     return Object.freeze({
@@ -46,48 +44,6 @@ function dashboardWindowChromeState(win, platform = process.platform) {
   };
 }
 
-function createDashboardWindowChromeController({ getWindow, platform = process.platform }) {
-  function getState() {
-    return dashboardWindowChromeState(getWindow(), platform);
-  }
-
-  function requireWindow() {
-    const win = getWindow();
-    if (!win) throw new Error('Dashboard window is not available.');
-    return win;
-  }
-
-  function sendState() {
-    const win = getWindow();
-    if (win && typeof win.webContents?.send === 'function') win.webContents.send('desktop:window-state', getState());
-  }
-
-  function bind(win) {
-    for (const name of ['show', 'minimize', 'restore', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) {
-      win.on(name, sendState);
-    }
-  }
-
-  function minimize() {
-    requireWindow().minimize();
-    return getState();
-  }
-
-  function toggleMaximize() {
-    const win = requireWindow();
-    if (win.isMaximized()) win.unmaximize();
-    else win.maximize();
-    return getState();
-  }
-
-  function requestClose() {
-    requireWindow().close();
-    return { ok: true };
-  }
-
-  return { bind, getState, minimize, toggleMaximize, requestClose, sendState };
-}
-
 function readWindowFlag(win, method) {
   try {
     return Boolean(win && typeof win[method] === 'function' && win[method]());
@@ -96,4 +52,4 @@ function readWindowFlag(win, method) {
   }
 }
 
-export { createDashboardWindowChromeController, dashboardWindowChrome, dashboardWindowChromeState };
+export { dashboardWindowChrome, dashboardWindowChromeState };
