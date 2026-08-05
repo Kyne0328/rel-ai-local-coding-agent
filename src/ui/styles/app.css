@@ -1116,12 +1116,9 @@
   .activity-table .activity-col-tool,
   .activity-table .activity-col-workspace,
   .activity-table .activity-col-status,
-  .activity-table th:nth-child(3),
-  .activity-table th:nth-child(4),
-  .activity-table th:nth-child(5),
-  .activity-table td:nth-child(3),
-  .activity-table td:nth-child(4),
-  .activity-table td:nth-child(5) { display: none; }
+  .activity-table .activity-tool-column,
+  .activity-table .activity-workspace-column,
+  .activity-table .activity-status-column { display: none; }
   .activity-col-time { width: 92px; }
   .activity-col-action { width: 52px; }
   .activity-message-mobile-meta { @apply flex; }
@@ -1181,10 +1178,8 @@
   .main { padding: 6px 6px calc(190px + env(safe-area-inset-bottom)); }
   .activity-table .activity-col-time,
   .activity-table .activity-col-action,
-  .activity-table th:nth-child(1),
-  .activity-table th:nth-child(6),
-  .activity-table td:nth-child(1),
-  .activity-table td:nth-child(6) { display: none; }
+  .activity-table .activity-time-column,
+  .activity-table .activity-action-column { display: none; }
   .activity-message-mobile-meta { flex-wrap: wrap; }
   .mobile-nav { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .page-subtitle, #lastUpdated, .sessions-toolbar > p, .sessions-page .summary-metrics { display: none; }
