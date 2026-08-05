@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { DurableStateError } from '../src/durableState.js';
 import { resolveConnectionGenerations } from '../src/mcp/connectionGenerations.js';
 import { readRegistry } from '../src/worktreeManager.js';
 
@@ -20,7 +21,18 @@ const generationOptions = {
 try {
   assert.deepEqual(readRegistry({ stateDir: worktreeState }), { worktrees: {} });
   fs.mkdirSync(path.dirname(registryFile), { recursive: true });
-  const validRegistry = { worktrees: { 'repo--feature': { alias: 'repo--feature', path: '/tmp/repo-feature' } } };
+  const validEntry = {
+    id: 'wt_contract',
+    alias: 'repo--feature',
+    sourceAlias: 'repo',
+    sourcePath: '/tmp/repo',
+    path: '/tmp/repo-feature',
+    branch: 'relai/feature',
+    base: 'main',
+    owningTaskId: 'task-contract',
+    createdAt: '2026-08-05T00:00:00.000Z'
+  };
+  const validRegistry = { worktrees: { 'repo--feature': validEntry } };
   fs.writeFileSync(registryFile, JSON.stringify(validRegistry), 'utf8');
   assert.deepEqual(readRegistry({ stateDir: worktreeState }), validRegistry);
 
@@ -29,14 +41,39 @@ try {
 
   fs.writeFileSync(registryFile, '{malformed', 'utf8');
   fs.writeFileSync(`${registryFile}.bak`, JSON.stringify(validRegistry), 'utf8');
-  assert.deepEqual(readRegistry({ stateDir: worktreeState }), { worktrees: {} }, 'current worktree state does not recover its backup');
+  assert.deepEqual(readRegistry({ stateDir: worktreeState }), validRegistry, 'malformed primary must recover its valid backup');
+  assert.deepEqual(JSON.parse(fs.readFileSync(registryFile, 'utf8')), validRegistry, 'backup recovery must restore the primary registry');
+
+  fs.writeFileSync(registryFile, '{malformed', 'utf8');
+  fs.writeFileSync(`${registryFile}.bak`, '{also-malformed', 'utf8');
+  assert.throws(
+    () => readRegistry({ stateDir: worktreeState }),
+    error => error instanceof DurableStateError
+      && error.code === 'DURABLE_STATE_READ_FAILED'
+      && error.details.path === path.resolve(registryFile)
+      && error.details.reason === 'malformed_json'
+      && error.details.backupAttempted === true
+      && error.details.backupReason === 'malformed_json'
+  );
 
   fs.writeFileSync(registryFile, JSON.stringify({ worktrees: [] }), 'utf8');
-  assert.deepEqual(readRegistry({ stateDir: worktreeState }), { worktrees: [] }, 'structural validation is not yet enforced');
+  fs.rmSync(`${registryFile}.bak`, { force: true });
+  assert.throws(
+    () => readRegistry({ stateDir: worktreeState }),
+    error => error instanceof DurableStateError
+      && error.details.reason === 'validation_failed'
+      && error.details.backupAttempted === true
+      && error.details.backupReason === 'missing'
+  );
 
   fs.rmSync(registryFile, { force: true });
   fs.mkdirSync(registryFile);
-  assert.deepEqual(readRegistry({ stateDir: worktreeState }), { worktrees: {} }, 'an unavailable primary is currently treated as empty');
+  assert.throws(
+    () => readRegistry({ stateDir: worktreeState }),
+    error => error instanceof DurableStateError
+      && error.details.reason === 'read_failed'
+      && error.details.backupAttempted === true
+  );
 
   const first = resolveConnectionGenerations({}, generationOptions);
   assert.deepEqual(first, { credentialGeneration: 1, configurationGeneration: 1 });

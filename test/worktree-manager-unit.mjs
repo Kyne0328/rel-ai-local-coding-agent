@@ -42,6 +42,8 @@ try {
   assert.equal(created.alias, 'app--feature');
   assert.equal(fs.existsSync(created.path), true);
   assert.equal(created.branch, 'relai/feature');
+  const registryFile = path.join(stateDir, 'worktrees', 'index.json');
+  if (process.platform !== 'win32') assert.equal(fs.statSync(registryFile).mode & 0o777, 0o600);
 
   const dynamic = resolveManagedWorktree(config, created.alias);
   assert.equal(dynamic.alias, created.alias);
@@ -68,6 +70,8 @@ try {
   assert.equal(removed.ok, true);
   assert.equal(removed.branchPreserved, true);
   assert.equal(fs.existsSync(created.path), false);
+  const backupRegistry = JSON.parse(fs.readFileSync(`${registryFile}.bak`, 'utf8'));
+  assert.equal(backupRegistry.worktrees[created.alias].id, created.id, 'atomic registry updates must preserve the previous valid registry as backup');
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }

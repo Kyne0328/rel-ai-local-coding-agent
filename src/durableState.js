@@ -55,9 +55,11 @@ function readJsonFile(target, options = {}) {
   if (primary.ok) return primary.value;
   if (primary.missing) return fallbackValue(options);
 
-  const backup = options.backup === true ? String(options.backupPath || `${file}.bak`) : '';
+  const backup = options.backup === true ? path.resolve(String(options.backupPath || `${file}.bak`)) : '';
+  let backupReason = '';
   if (backup) {
     const recovered = parseJsonFile(backup, options.validate);
+    backupReason = recovered.reason || '';
     if (recovered.ok) {
       if (options.restoreBackup !== false) {
         writeJsonAtomic(file, recovered.value, { mode: options.mode ?? 0o600 });
@@ -71,7 +73,12 @@ function readJsonFile(target, options = {}) {
   throw new DurableStateError(
     'DURABLE_STATE_READ_FAILED',
     `State file ${path.basename(file)} is unreadable or invalid.`,
-    { path: file, reason: primary.reason },
+    {
+      path: file,
+      reason: primary.reason,
+      backupAttempted: Boolean(backup),
+      ...(backup ? { backupPath: backup, backupReason } : {})
+    },
     primary.error ? { cause: primary.error } : undefined
   );
 }
