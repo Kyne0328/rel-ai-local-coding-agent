@@ -1,5 +1,16 @@
 # MCP Protocol Policy
 
+## Version boundary
+
+- Modern protocol: `2026-07-28`.
+- Legacy HTTP compatibility: `2025-11-25`.
+
+The legacy HTTP path exists because ChatGPT currently uses the SDK-supported stateless initialize lifecycle before ordinary tool and resource requests. It is isolated behind `handleLegacyMcpRequest`; authentication, principal construction, request budgets, accounting, manifest observation, telemetry, tool policy, and workspace ownership remain shared with the modern transport.
+
+Compatibility is protected by `test/chatgpt-local-compat-smoke.mjs`, while `test/mcp-stdio-legacy-rejection.mjs` verifies that stdio remains modern-only. Strict modern headers and envelopes are protected by `test/mcp-2026-header-unit.mjs`.
+
+**Removal condition:** remove the legacy adapter only after supported ChatGPT clients no longer send the `2025-11-25` stateless initialize flow and packaged connector acceptance proves the modern flow end to end. No calendar date is assigned without that product evidence.
+
 Rel.AI MCP targets protocol version `2026-07-28` through exact-pinned `@modelcontextprotocol/node` and `@modelcontextprotocol/server` version `2.0.0`. Its HTTP endpoint also serves the SDK-supported stateless `2025-11-25` initialize flow required by ChatGPT.
 
 ## Supported model
