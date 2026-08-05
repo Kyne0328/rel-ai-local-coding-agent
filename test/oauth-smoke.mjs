@@ -211,7 +211,8 @@ try {
   const missingApplicationType = await fetch(`${base}/register`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ redirect_uris: [redirectUri] })
   });
-  assert.equal(missingApplicationType.status, 400);
+  assert.equal(missingApplicationType.status, 201);
+  assert.equal((await missingApplicationType.json()).application_type, 'web');
 
   const client = await register('mcp');
   assert.equal(client.application_type, 'web');
