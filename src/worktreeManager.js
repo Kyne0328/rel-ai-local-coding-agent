@@ -3,6 +3,7 @@
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { readJsonFile, writeJsonAtomic } from './durableState.js';
 import { getStateDir } from './statePaths.js';
 import { runProcess, summarizeCommand } from "./process.js";
 import { activeProcessesForWorkspace } from "./processManager.js";
@@ -18,18 +19,33 @@ function managedRoot(config) {
 }
 
 function readRegistry(config) {
-  try {
-    const value = JSON.parse(fs.readFileSync(registryPath(config), 'utf8'));
-    return value && typeof value === 'object' ? value : { worktrees: {} };
-  } catch {
-    return { worktrees: {} };
-  }
+  return readJsonFile(registryPath(config), {
+    backup: true,
+    mode: 0o600,
+    validate: isWorktreeRegistry
+  }) || { worktrees: {} };
 }
 
 function writeRegistry(config, registry) {
-  const file = registryPath(config);
-  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-  fs.writeFileSync(file, `${JSON.stringify(registry, null, 2)}\n`, { mode: 0o600 });
+  if (!isWorktreeRegistry(registry)) throw new TypeError('Managed worktree registry is invalid.');
+  writeJsonAtomic(registryPath(config), registry, { backup: true, mode: 0o600 });
+}
+
+function isWorktreeRegistry(value) {
+  if (!isRecord(value) || !isRecord(value.worktrees)) return false;
+  return Object.entries(value.worktrees).every(([alias, entry]) => isWorktreeEntry(alias, entry));
+}
+
+function isWorktreeEntry(alias, entry) {
+  if (!isRecord(entry) || entry.alias !== alias) return false;
+  for (const key of ['id', 'alias', 'sourceAlias', 'sourcePath', 'path', 'branch', 'base', 'owningTaskId', 'createdAt']) {
+    if (typeof entry[key] !== 'string') return false;
+  }
+  return Boolean(entry.id && entry.alias && entry.sourceAlias && entry.sourcePath && entry.path && entry.branch && entry.base && entry.createdAt);
+}
+
+function isRecord(value) {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
 function safeName(value) {
