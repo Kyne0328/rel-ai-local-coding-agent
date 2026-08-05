@@ -4,14 +4,13 @@ import { readJsonFile, writeJsonAtomic } from './durableState.js';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { sanitizeTaskRecord } from './taskObservability.js';
+import { normalizeTaskProgress, sanitizeTaskRecord } from './taskObservability.js';
 const MAX_SESSIONS = 500;
 const HISTORY_FORMAT_MARKER = '.task-history-v3';
 const MAX_PARSED_CACHE_ENTRIES = 2 * MAX_SESSIONS;
 const parsedCache = new Map();
 
 function getTaskHistoryDir(config = {}) {
-
   return path.join(getStateDir(config), 'sessions');
 }
 
@@ -62,9 +61,18 @@ function readSession(directory, id) {
   return metadata ? readCachedSession(file, metadata.identity) : null;
 }
 
+function normalizeStoredSession(session) {
+  const sanitized = sanitizeTaskRecord(session);
+  if (!sanitized) return sanitized;
+  return {
+    ...sanitized,
+    progress: normalizeTaskProgress(sanitized.progress, sanitized.status)
+  };
+}
+
 function writeSession(directory, session) {
   if (!session?.id) return;
-  const sanitized = sanitizeTaskRecord(session);
+  const sanitized = normalizeStoredSession(session);
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
   const target = sessionPath(directory, sanitized.id);
   writeJsonAtomic(target, sanitized, { mode: 0o600, spacing: 0 });
@@ -102,7 +110,7 @@ function readCachedSession(file, identity) {
   const cached = parsedCache.get(file);
   if (cached?.identity === identity) return cached.session;
   const parsed = safeReadJson(file);
-  const session = parsed ? sanitizeTaskRecord(parsed) : null;
+  const session = parsed ? normalizeStoredSession(parsed) : null;
   if (session) {
     parsedCache.set(file, { identity, session });
     trimParsedCache();
