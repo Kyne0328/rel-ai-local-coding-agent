@@ -1,18 +1,7 @@
+import { eventIdentityFields } from '../taskEvents.js';
+
 export function activityEventId(entry = {}) {
-  const identity = entry.id != null && String(entry.id)
-    ? ['persisted', String(entry.id)]
-    : [
-        entry.ts || entry.at || entry.createdAt || '',
-        entry.tool || entry.type || '',
-        entry.workspace || '',
-        entry.taskId || '',
-        entry.operationId || '',
-        entry.sessionId || '',
-        entry.path || entry.filePath || '',
-        entry.operation || entry.message || entry.error || '',
-        entry.ms ?? '',
-        entry.ok === false ? 'error' : 'ok'
-      ];
+  const identity = eventIdentityFields(entry, { preferId: true });
   return `event:${fnv1a64(JSON.stringify(identity))}`;
 }
 

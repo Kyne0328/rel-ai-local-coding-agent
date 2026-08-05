@@ -7,6 +7,7 @@ import { getWorkspaceFilter, routeHref } from '../../router.js';
 import { activityEventId } from '../../activity-event.js';
 import { bindWorkspaceMenus, workspaceMenuHtml } from '../../components/workspace-menu.js';
 import { taskProgressHtml } from '../../components/task-progress.js';
+import { eventTimestampMs, eventTimestampValue, terminalTaskTimestamp, terminalTaskTimestampValue } from '../../../taskEvents.js';
 import {
   taskEntityView,
   workSessionStateView
@@ -141,7 +142,7 @@ function timingHtml(session, live) {
     const start = session.startedAt || session.createdAt || '';
     return `<span data-clock-elapsed-start="${esc(start)}">${esc(formatDuration(session.durationMs) || '0s')}</span>`;
   }
-  const end = session.endedAt || session.completedAt || '';
+  const end = terminalTaskTimestampValue(session);
   return `<span data-clock-relative="${esc(end)}">${esc(timeAgo(end) || 'now')}</span>`;
 }
 
@@ -241,7 +242,7 @@ export function orderSessionsForDisplay(sessions = []) {
   return [...(Array.isArray(sessions) ? sessions : [])].sort((left, right) => {
     const ongoingDifference = Number(isOngoingSession(right)) - Number(isOngoingSession(left));
     if (ongoingDifference) return ongoingDifference;
-    const timestampDifference = sessionTimestamp(right) - sessionTimestamp(left);
+    const timestampDifference = terminalTaskTimestamp(right) - terminalTaskTimestamp(left);
     if (timestampDifference) return timestampDifference;
     return sessionIdentifier(left).localeCompare(sessionIdentifier(right), 'en-US', { numeric: true, sensitivity: 'base' });
   });
@@ -262,17 +263,7 @@ export function orderChangedFiles(files = []) {
 }
 
 export function orderSessionEvents(events = []) {
-  return [...events].sort((left, right) => eventTimestamp(right) - eventTimestamp(left));
-}
-
-function sessionTimestamp(session) {
-  const timestamp = Date.parse(session?.endedAt || session?.completedAt || session?.lastActivityAt || session?.startedAt || '');
-  return Number.isFinite(timestamp) ? timestamp : 0;
-}
-
-function eventTimestamp(event) {
-  const timestamp = Date.parse(event?.timestamp || event?.ts || event?.at || event?.createdAt || '');
-  return Number.isFinite(timestamp) ? timestamp : 0;
+  return [...events].sort((left, right) => eventTimestampMs(right) - eventTimestampMs(left));
 }
 
 function sessionMeaning(status) {
@@ -318,7 +309,7 @@ function eventRow(event, session) {
     event: activityEventId(event),
     time: 'all'
   });
-  const timestamp = event.timestamp || event.ts || event.at || event.createdAt || '';
+  const timestamp = eventTimestampValue(event);
   const status = event.status || (event.ok === false ? 'failed' : 'succeeded');
   return `<a class="task-event task-event-link" data-task-event-link href="${esc(href)}" aria-label="Open ${esc(operation)} event in Activity"><span data-clock-relative="${esc(timestamp)}">${esc(timeAgo(timestamp))}</span><span class="task-event-copy"><code title="${esc(event.tool?.name || event.tool || '')}">${esc(operation)}</code>${event.summary ? `<small>${esc(event.summary)}</small>` : ''}</span>${pillHtml(status)}</a>`;
 }
