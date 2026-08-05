@@ -3,7 +3,7 @@ import { readConfig } from './config.js';
 import { createStdioTaskPrincipal } from './mcp/principal.js';
 import { createTaskAwareStdioTransport } from './mcp/transportTasks.js';
 import { createRelaiMcpServer, SERVER_INSTANCE_ID } from './mcpServer.js';
-import { pruneOperationTasks } from './operationTasks.js';
+import { pruneNativeToolTasks } from './mcp/nativeToolTasks.js';
 import { stopAllManagedProcesses, pruneManagedProcesses } from './processManager.js';
 import { initializeTelemetry, shutdownTelemetry } from './telemetry.js';
 
@@ -13,7 +13,7 @@ function main() {
   const transport = createTaskAwareStdioTransport({ config, principal });
   initializeTelemetry(config);
   pruneManagedProcesses(config);
-  pruneOperationTasks(config);
+  pruneNativeToolTasks(config);
   const cleanup = async () => {
     await stopAllManagedProcesses(config).catch(() => {});
     await shutdownTelemetry().catch(() => {});

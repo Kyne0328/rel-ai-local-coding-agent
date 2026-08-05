@@ -6,7 +6,7 @@ import { combineAbortSignals } from './abortSignals.js';
 import { readJsonFile, writeJsonAtomic } from './durableState.js';
 import { resolveCommandCwd, normalizeCommandEnv, resolveShell, redactCommandForAudit } from './bridge/exec.js';
 import { acknowledgeNativeTaskCancellation } from './mcp/nativeTaskService.js';
-import { operationTaskSignal } from './operationTasks.js';
+import { nativeToolTaskSignal } from './mcp/nativeToolTasks.js';
 import { isProcessTreeAlive, terminateProcessTree } from './process.js';
 import { makeProcessEnvironment } from './processEnvironment.js';
 import { getStateDir } from './statePaths.js';
@@ -133,7 +133,7 @@ async function startManagedProcess(workspace, config, args = {}, context = {}) {
     const startupSignal = combineAbortSignals(
       context.signal,
       getCurrentTaskAbortSignal(),
-      originatingTaskId ? safeOperationTaskSignal(config, originatingTaskId) : undefined
+      originatingTaskId ? safeNativeToolTaskSignal(originatingTaskId) : undefined
     );
     const initialState = observeInitialProcessState(child, startupSignal);
 
@@ -847,8 +847,8 @@ function processNeedsTermination(record) {
     && isProcessTreeAlive(record.pid);
 }
 
-function safeOperationTaskSignal(config, taskId) {
-  try { return operationTaskSignal(config, taskId); } catch { return undefined; }
+function safeNativeToolTaskSignal(taskId) {
+  try { return nativeToolTaskSignal(taskId); } catch { return undefined; }
 }
 
 function acknowledgeStartupTaskCancellation(config, taskId, processResult) {

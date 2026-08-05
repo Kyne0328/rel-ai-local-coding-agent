@@ -13,7 +13,7 @@ import { handleMcpGetDiagnostic, handleMcpStreamable, handleMcpDelete, handleMcp
 import { resolveBaseUrl } from "./http/auth.js";
 import { initializeTelemetry, shutdownTelemetry } from "./telemetry.js";
 import { stopAllManagedProcesses, pruneManagedProcesses } from "./processManager.js";
-import { pruneOperationTasks } from "./operationTasks.js";
+import { pruneNativeToolTasks } from './mcp/nativeToolTasks.js';
 import { ensureConfig, getConfigPath, readConfig } from './config.js';
 import { buildToolManifest } from './mcp/toolManifest.js';
 import { resolveConnectionGenerations } from './mcp/connectionGenerations.js';
@@ -61,7 +61,7 @@ function startHttpServer(options = {}) {
   });
   initializeTelemetry(runtimeConfig);
   pruneManagedProcesses(runtimeConfig);
-  pruneOperationTasks(runtimeConfig);
+  pruneNativeToolTasks(runtimeConfig);
 
   if (!token && !allowNoAuth) {
     throw new Error("REL_AI_MCP_TOKEN is required for the HTTP server. Set a strong token, or set REL_AI_MCP_ALLOW_NO_AUTH=1 for local-only testing.");

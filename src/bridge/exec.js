@@ -4,7 +4,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as childProcess from 'node:child_process';
 import { runProcess } from '../process.js';
-import { operationTaskSignal } from '../operationTasks.js';
+import { nativeToolTaskSignal } from '../mcp/nativeToolTasks.js';
 import { getCurrentTaskAbortSignal } from '../toolActivity.js';
 import { combineAbortSignals } from '../abortSignals.js';
 import { runSpan } from '../telemetry.js';
@@ -141,7 +141,7 @@ async function relaiExec(workspace, config, args = {}, context = {}) {
   const statusBefore = await readGitStatusMap(workspace, config);
   const signal = combineAbortSignals(
     getCurrentTaskAbortSignal(),
-    args._operationTaskId ? operationTaskSignal(config, args._operationTaskId) : undefined,
+    args._operationTaskId ? nativeToolTaskSignal(args._operationTaskId) : undefined,
     context.signal
   );
   const result = await runSpan(config, 'relai.process.exec', {
