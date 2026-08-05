@@ -347,7 +347,10 @@ try {
   }, true);
   assert.equal(recoveredApproval.status, 302);
   const recoveredStore = JSON.parse(fs.readFileSync(path.join(stateDir, 'oauth-store.json'), 'utf8'));
-  assert.deepEqual(Object.keys(recoveredStore.clients).sort(), [client.client_id, legacyClientId, unrelatedClient.client_id].sort());
+  assert.deepEqual(
+    Object.keys(recoveredStore.clients).sort(),
+    [client.client_id, legacyClientId, defaultedClient.client_id, unrelatedClient.client_id].sort()
+  );
   assert.equal(recoveredStore.clients[client.client_id].issuer, base);
   assert.equal(recoveredStore.clients[unrelatedClient.client_id].issuer, base);
 
