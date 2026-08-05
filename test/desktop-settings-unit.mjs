@@ -1,78 +1,96 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
-import { createDesktopSettingsManager } from "../electron/desktop-settings.js";
+const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-desktop-settings-'));
+const previousStateDir = process.env.REL_AI_MCP_STATE_DIR;
+const previousConfig = process.env.REL_AI_MCP_CONFIG;
+process.env.REL_AI_MCP_STATE_DIR = root;
+process.env.REL_AI_MCP_CONFIG = path.join(root, 'config.json');
 
-let config = {
-  port: 3333,
-  token: 'preserved-token',
-  ngrokDomain: 'example.ngrok-free.dev',
-  ngrokAuthtoken: 'account-key'
-};
+const { saveLauncherConfig } = await import('../electron/launcher-config.js');
+const { readGuiConfig } = await import('../electron/launcher-utils.js');
+const { readDesktopSettings, saveDesktopSettings } = await import('../electron/desktop-settings.js');
+
 let notificationsEnabled = true;
-const saved = [];
 let restarts = 0;
-const manager = createDesktopSettingsManager({
-  readGuiConfig: () => ({ ...config }),
-  saveLauncherConfig: value => {
-    saved.push({ ...value });
-    config = { ...value };
-  },
-  getApprovalRequired: () => true,
-  getNotificationsEnabled: () => notificationsEnabled,
-  setNotificationsEnabled: value => { notificationsEnabled = value; },
-  restartDesktop: async () => {
-    restarts += 1;
-    return { serverRunning: true };
-  }
-});
 
-assert.deepEqual(manager.get(), {
-  ok: true,
-  port: 3333,
-  approvalToken: 'preserved-token',
-  ngrokDomain: 'example.ngrok-free.dev',
-  ngrokAuthtoken: '',
-  ngrokAuthtokenConfigured: true,
-  approvalRequired: true,
-  notificationsEnabled: true
-});
+try {
+  saveLauncherConfig({
+    port: 3333,
+    token: 'preserved-token',
+    ngrokDomain: 'example.ngrok-free.dev',
+    ngrokAuthtoken: 'account-key'
+  });
 
-const preserveResult = await manager.save({
-  port: 4444,
-  approvalToken: 'must-not-be-used',
-  ngrokDomain: 'updated.ngrok-free.dev',
-  ngrokAuthtoken: '',
-  notificationsEnabled: false
-});
-assert.equal(preserveResult.ok, true);
-assert.deepEqual(saved.at(-1), {
-  port: 4444,
-  token: 'preserved-token',
-  ngrokDomain: 'updated.ngrok-free.dev',
-  ngrokAuthtoken: 'account-key'
-});
-assert.equal(notificationsEnabled, false);
+  assert.deepEqual(readDesktopSettings({ approvalRequired: true, notificationsEnabled }), {
+    ok: true,
+    port: 3333,
+    approvalToken: 'preserved-token',
+    ngrokDomain: 'example.ngrok-free.dev',
+    ngrokAuthtoken: '',
+    ngrokAuthtokenConfigured: true,
+    approvalRequired: true,
+    notificationsEnabled: true
+  });
 
-await manager.save({
-  port: 4555,
-  ngrokDomain: 'replacement.ngrok-free.dev',
-  ngrokAuthtoken: 'new-account-key'
-});
-assert.deepEqual(saved.at(-1), {
-  port: 4555,
-  token: 'preserved-token',
-  ngrokDomain: 'replacement.ngrok-free.dev',
-  ngrokAuthtoken: 'new-account-key'
-});
-assert.equal(restarts, 2);
-assert.equal(manager.get().ngrokAuthtoken, '');
-assert.equal(manager.get().ngrokAuthtokenConfigured, true);
+  const runtimeActions = {
+    setNotificationsEnabled(value) { notificationsEnabled = value; },
+    async restartDesktop() {
+      restarts += 1;
+      return { serverRunning: true };
+    }
+  };
 
-const failed = createDesktopSettingsManager({
-  readGuiConfig: () => ({ ...config }),
-  saveLauncherConfig: () => {},
-  restartDesktop: async () => ({ serverRunning: false, error: 'restart failed' })
-});
-await assert.rejects(() => failed.save({}), /restart failed/);
+  const preserveResult = await saveDesktopSettings({
+    port: 4444,
+    approvalToken: 'must-not-be-used',
+    ngrokDomain: 'updated.ngrok-free.dev',
+    ngrokAuthtoken: '',
+    notificationsEnabled: false
+  }, runtimeActions);
+  assert.equal(preserveResult.ok, true);
+  assert.deepEqual(readGuiConfig(), {
+    port: 4444,
+    ngrokDomain: 'updated.ngrok-free.dev',
+    token: 'preserved-token',
+    ngrokAuthtoken: 'account-key',
+    publicUrl: 'https://updated.ngrok-free.dev'
+  });
+  assert.equal(notificationsEnabled, false);
+
+  await saveDesktopSettings({
+    port: 4555,
+    ngrokDomain: 'replacement.ngrok-free.dev',
+    ngrokAuthtoken: 'new-account-key'
+  }, runtimeActions);
+  assert.deepEqual(readGuiConfig(), {
+    port: 4555,
+    ngrokDomain: 'replacement.ngrok-free.dev',
+    token: 'preserved-token',
+    ngrokAuthtoken: 'new-account-key',
+    publicUrl: 'https://replacement.ngrok-free.dev'
+  });
+  assert.equal(restarts, 2);
+  assert.equal(readDesktopSettings().ngrokAuthtoken, '');
+  assert.equal(readDesktopSettings().ngrokAuthtokenConfigured, true);
+
+  await assert.rejects(
+    () => saveDesktopSettings({
+      port: 4555,
+      ngrokDomain: 'replacement.ngrok-free.dev',
+      ngrokAuthtoken: ''
+    }, { restartDesktop: async () => ({ serverRunning: false, error: 'restart failed' }) }),
+    /restart failed/
+  );
+  await assert.rejects(() => saveDesktopSettings({}), /restartDesktop is required/);
+} finally {
+  if (previousStateDir === undefined) delete process.env.REL_AI_MCP_STATE_DIR;
+  else process.env.REL_AI_MCP_STATE_DIR = previousStateDir;
+  if (previousConfig === undefined) delete process.env.REL_AI_MCP_CONFIG;
+  else process.env.REL_AI_MCP_CONFIG = previousConfig;
+  fs.rmSync(root, { recursive: true, force: true });
+}
 
 console.log('Desktop settings unit tests passed.');
