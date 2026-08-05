@@ -100,6 +100,10 @@ function readConfig(options = {}) {
   const parsed = safeReadJson(configPath);
   if (!parsed) throw new Error(`Config file is corrupted or empty: ${configPath}. Fix or re-run: npm run init-config`);
   const config = normalizeConfig(parsed);
+  if (Number(parsed.version || 0) < config.version) {
+    writeJsonAtomic(configPath, config, { mode: 0o600, backup: true });
+    stat = fs.statSync(configPath, { bigint: true });
+  }
   configCache = { path: configPath, mtimeNs: stat.mtimeNs, size: stat.size, config };
   return config;
 }
@@ -126,7 +130,20 @@ function writeConfig(config, options = {}) {
 
 function ensureConfig() {
   const configPath = getConfigPath();
-  if (fs.existsSync(configPath)) return readConfig();
+  if (fs.existsSync(configPath)) {
+    try {
+      return readConfig();
+    } catch (error) {
+      if (!String(error?.message || '').startsWith('Config file is corrupted or empty:')) throw error;
+      const invalidPath = `${configPath}.invalid-${Date.now()}`;
+      try {
+        fs.renameSync(configPath, invalidPath);
+      } catch {
+        throw error;
+      }
+      return writeConfig(makeDefaultConfig(), { overwrite: false });
+    }
+  }
   try {
     return writeConfig(makeDefaultConfig(), { overwrite: false });
   } catch (error) {
