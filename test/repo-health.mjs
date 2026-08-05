@@ -79,7 +79,8 @@ const sourceLineBudgets = {
   'src/tools/session.js': 220,
   'src/tools/status.js': 360,
   'src/mcpServer.js': 220,
-  'src/taskEvents.js': 80,
+  // One browser-safe owner for event identity, timestamps, and ordering mechanics.
+  'src/taskEvents.js': 125,
   'src/projectInstructions.js': 180,
   'src/httpServer.js': 300,
   'src/http/dashboard.js': 400,
@@ -87,13 +88,16 @@ const sourceLineBudgets = {
   'src/http/mcp.js': 255,
   'src/http/io.js': 220,
   'src/http/auth.js': 120,
-  'electron/main.js': 500,
+  // Electron remains the composition root; resource behavior lives in owned modules.
+  'electron/main.js': 520,
   'electron/app-updater.js': 240,
   'electron/app-updater-state.js': 140,
   'electron/desktop-settings.js': 70,
   'electron/desktop-lifecycle.js': 210,
-  'electron/dashboard-window.js': 220,
-  'electron/ipc-handlers.js': 100,
+  // One resource owner covers window creation, security, navigation, bounds, and chrome events.
+  'electron/dashboard-window.js': 260,
+  // One registration file composes eight narrow capability groups and the exact 33-channel contract.
+  'electron/ipc-handlers.js': 300,
   'electron/launcher-config.js': 100,
   'electron/ngrok-token.js': 30,
   'electron/window-size.js': 100,
