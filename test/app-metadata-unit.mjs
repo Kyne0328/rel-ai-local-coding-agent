@@ -21,7 +21,12 @@ assert.deepEqual(getApplicationMetadata(), {
   license: 'MIT'
 });
 assert.deepEqual(rootPackage.author, { name: 'Kyne', url: 'https://github.com/Kyne0328' });
-assert.deepEqual(electronPackage.author, { name: 'Kyne', url: 'https://github.com/Kyne0328' });
+assert.deepEqual(electronPackage.author, {
+  name: 'Kyne',
+  email: 'Kyne0328@users.noreply.github.com',
+  url: 'https://github.com/Kyne0328'
+});
+assert.equal(electronPackage.homepage, 'https://github.com/Kyne0328/rel-ai-mcp');
 assert.equal(rootPackage.productName, 'Rel.AI MCP');
 assert.match(readme, /## Developer\s+Rel\.AI MCP is developed by \[Kyne\]\(https:\/\/github\.com\/Kyne0328\)\./);
 assert.doesNotMatch(JSON.stringify(electronPackage), /Kyne Anthony/);

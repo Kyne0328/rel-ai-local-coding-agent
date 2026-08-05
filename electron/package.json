@@ -5,8 +5,10 @@
   "private": true,
   "type": "module",
   "description": "Desktop launcher and dashboard host for Rel.AI MCP.",
+  "homepage": "https://github.com/Kyne0328/rel-ai-mcp",
   "author": {
     "name": "Kyne",
+    "email": "Kyne0328@users.noreply.github.com",
     "url": "https://github.com/Kyne0328"
   },
   "main": "main.js",
@@ -164,9 +166,9 @@
       "synopsis": "Local ChatGPT repository bridge",
       "description": "Rel.AI MCP connects ChatGPT to approved local development workspaces through a secured desktop-managed MCP service.",
       "vendor": "Kyne",
+      "maintainer": "Kyne <Kyne0328@users.noreply.github.com>",
       "executableName": "rel-ai-mcp",
       "syncDesktopName": true,
-      "artifactName": "Rel.AI-MCP-${version}-linux-${arch}.${ext}",
       "desktop": {
         "entry": {
           "Name": "Rel.AI MCP",
@@ -189,7 +191,11 @@
         }
       ]
     },
+    "appImage": {
+      "artifactName": "Rel.AI-MCP-${version}-linux-x64.${ext}"
+    },
     "deb": {
+      "artifactName": "Rel.AI-MCP-${version}-linux-x64.${ext}",
       "packageCategory": "devel",
       "priority": "optional"
     },

@@ -74,16 +74,26 @@ assert.equal(electronPackage.scripts?.postinstall, 'node node_modules/electron/i
 assert.equal(electronPackage.devDependencies.electron, '43.2.0',
   'Electron runtime provisioning must remain pinned to the package version under test');
 assert.deepEqual(electronPackage.build.linux.target, ['AppImage', 'deb']);
+assert.equal(electronPackage.homepage, 'https://github.com/Kyne0328/rel-ai-mcp');
+assert.equal(electronPackage.build.linux.maintainer, 'Kyne <Kyne0328@users.noreply.github.com>');
+assert.equal(electronPackage.build.appImage.artifactName, 'Rel.AI-MCP-${version}-linux-x64.${ext}');
+assert.equal(electronPackage.build.deb.artifactName, 'Rel.AI-MCP-${version}-linux-x64.${ext}');
 
 assert.match(ci, /Build unpacked Windows application/);
 assert.match(ci, /Build unpacked Linux application/);
 assert.match(ci, /Verify packaged application layout/);
 assert.match(ci, /Verify Electron test binary/);
+assert.match(ci, /sudo chown root:root "\$sandbox_helper"/);
+assert.match(ci, /sudo chmod 4755 "\$sandbox_helper"/);
+assert.doesNotMatch(ci, /--no-sandbox/);
 assert.doesNotMatch(ci, /test:installed|REL_AI_SMOKE_INSTALLER|uninstall|Setup.*\.exe/i);
 assert.match(release, /Build Windows release/);
 assert.match(release, /Build Linux release/);
 assert.match(release, /Verify packaged application layout/);
 assert.match(release, /Verify Electron test binary/);
+assert.match(release, /sudo chown root:root "\$sandbox_helper"/);
+assert.match(release, /sudo chmod 4755 "\$sandbox_helper"/);
+assert.doesNotMatch(release, /--no-sandbox/);
 assert.doesNotMatch(release, /test:installed|REL_AI_SMOKE_INSTALLER|release-evidence-check|uninstall/i);
 
 assert.equal(electronPackage.build.appId, 'com.relai.mcp');
