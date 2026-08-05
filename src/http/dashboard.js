@@ -22,10 +22,6 @@ import { mcpConnectionManager } from '../mcp/connectionManager.js';
 import { buildToolManifest } from '../mcp/toolManifest.js';
 import { readMcpAuthenticationStatus } from '../mcp/authenticationStatus.js';
 
-function buildToolMetadata() {
-  return getToolMetadata();
-}
-
 const PRIMARY_NAV_ITEMS = [
   { id: "home", label: "Overview", icon: '<path d="M3 3h8v8H3zM13 3h8v5h-8zM13 10h8v11h-8zM3 13h8v8H3z" />' },
   { id: "tasks", label: "Sessions", icon: '<path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5" />' },
@@ -105,7 +101,7 @@ function handleApiSettingsGet(ctx) {
 }
 
 function handleApiTools(ctx) {
-  try { sendJson(ctx.res, 200, buildToolMetadata(), ctx.ae); }
+  try { sendJson(ctx.res, 200, getToolMetadata(), ctx.ae); }
   catch (err) { sendJson(ctx.res, 500, errorPayload(ERROR_CODES.UNKNOWN, err.message), ctx.ae); }
 }
 

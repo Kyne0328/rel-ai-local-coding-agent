@@ -1,5 +1,5 @@
 import { getCompactToolDefinition, getCompactToolDefinitions } from './compactRegistry.js';
-import { schemaFromDefinition, withWorkspaceAliases } from './schemaBuilder.js';
+import { schemaFromDefinition } from './schemaBuilder.js';
 import { getToolGroups, getToolMetadata, getToolSurfaceManifest } from './surface.js';
 
 const toolDefinitions = getCompactToolDefinitions();
@@ -7,12 +7,12 @@ const TOOL_NAMES = Object.freeze(toolDefinitions.map(definition => definition.na
 const toolSchemas = toolDefinitions.map(schemaFromDefinition);
 const publicToolSchemas = toolSchemas.map(({ outputSchema: _outputSchema, ...schema }) => schema);
 
-function getToolSchemas(config = {}) {
-  return withWorkspaceAliases(toolDefinitions.map(schemaFromDefinition), config);
+function getToolSchemas() {
+  return toolDefinitions.map(schemaFromDefinition);
 }
 
-function getPublicToolSchemas(config = {}) {
-  return getToolSchemas(config).map(({ outputSchema: _outputSchema, ...schema }) => schema);
+function getPublicToolSchemas() {
+  return getToolSchemas().map(({ outputSchema: _outputSchema, ...schema }) => schema);
 }
 
 function getToolDefinition(name) {

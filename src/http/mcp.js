@@ -4,18 +4,6 @@ import { runSpan } from '../telemetry.js';
 import { oauthErrorPage, resolveBaseUrl } from './auth.js';
 import { readFormOrJsonBody, sendHtml, sendJson } from './io.js';
 import { consumeRequestBudget } from './requestBudget.js';
-import {
-  MCP_PROTOCOL_VERSION,
-  expectedMcpName,
-  handleMcpConnectionState,
-  handleMcpDelete,
-  handleMcpGetDiagnostic,
-  handleMcpRecovery,
-  handleMcpStreamable,
-  shutdownMcpTransport,
-  transportSecurityOptions,
-  validateMcpRequestHeaders
-} from './mcpTransport.js';
 
 function getMcpAccess(pathname) {
   return pathname === '/mcp' ? { kind: 'streamable-http' } : { kind: 'none' };
@@ -152,22 +140,12 @@ function debug(context, error) {
 }
 
 export {
-  MCP_PROTOCOL_VERSION,
-  expectedMcpName,
   getMcpAccess,
   handleAuthorizeGet,
   handleAuthorizePost,
-  handleMcpConnectionState,
-  handleMcpDelete,
-  handleMcpGetDiagnostic,
-  handleMcpRecovery,
-  handleMcpStreamable,
-  shutdownMcpTransport,
   handleOauthMetadata,
   handleOauthProtectedResource,
   handleRegister,
   handleToken,
-  oauthWellKnownPaths,
-  transportSecurityOptions,
-  validateMcpRequestHeaders
+  oauthWellKnownPaths
 };

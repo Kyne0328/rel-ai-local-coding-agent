@@ -1,8 +1,6 @@
 // @ts-check
 
 
-/** @typedef {import('../../types/boundaries.d.ts').ToolHandler} ToolHandler */
-
 import { resolveWorkspace } from '../config.js';
 import { repoSnapshot, relaiRead, workspaceTidyPlan, workspaceTidyRun, relaiVerify, relaiHttpProbe, relaiDiff, relaiRestorePaths, relaiResetWorkspace, relaiGitCommit, relaiGitPush, relaiGitDraftPr } from '../localRepoBridge.js';
 import { planEdit } from '../executionPlanner.js';
@@ -17,12 +15,6 @@ import { startManagedProcess, readManagedProcess, writeManagedProcess, stopManag
 import { createManagedWorktree, listManagedWorktrees, removeManagedWorktree } from '../worktreeManager.js';
 import { relaiSemanticSearch } from '../bridge/semanticSearch.js';
 import { relaiDiagnosticsRun } from '../bridge/diagnosticsRunner.js';
-/** @type {ToolHandler} */
-const statusHandler = (config, args, context) => relaiStatus(config, args, context);
-
-/** @type {ToolHandler} */
-const completeTaskHandler = (config, args) => completeTask(config, args);
-
 const startTaskHandler = inWorkspace(async (workspace, config, args) => {
   const task = startTask(workspace, args);
   const bootstrapMode = String(args.bootstrap || 'compact').toLowerCase();
@@ -62,13 +54,13 @@ const HANDLERS = Object.freeze({
   diff: inWorkspace((workspace, config, args) => relaiDiff(workspace, config, args)),
   restorePaths: inWorkspace((workspace, config, args) => relaiRestorePaths(workspace, config, args)),
   resetWorkspace: inWorkspace((workspace, config, args) => relaiResetWorkspace(workspace, config, args)),
-  status: statusHandler,
+  status: relaiStatus,
   gitCommit: inWorkspace((workspace, config, args) => relaiGitCommit(workspace, config, args)),
   gitPush: inWorkspace((workspace, config, args) => relaiGitPush(workspace, config, args)),
   gitDraftPr: inWorkspace((workspace, config, args) => relaiGitDraftPr(workspace, config, args)),
   edit: inWorkspace((workspace, config, args) => planEdit(workspace, config, args)),
-  cancelTask: (config, args) => cancelTask(config, args),
-  completeTask: completeTaskHandler
+  cancelTask,
+  completeTask
 });
 
 /**
