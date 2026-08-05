@@ -13,7 +13,7 @@ import {
   sanitizeDisplayText,
   sanitizeTaskRecord
 } from './taskObservability.js';
-import { isTerminalTaskStatus, normalizeHistoricalTaskStatus } from './taskState.js';
+import { isTerminalTaskStatus, normalizeLiveTaskStatus } from './taskState.js';
 const DEFAULT_TASK_IDLE_MS = 5 * 60_000;
 const activityContext = new AsyncLocalStorage();
 
@@ -169,7 +169,7 @@ function createToolActivityTracker(options = {}) {
       task.currentStage = sanitizeDisplayText(patch.currentStage || current.activity?.title || task.currentStage || 'Running tool', 500);
       task.currentActivity = sanitizeDisplayText(patch.currentActivity || current.activity?.summary || current.detail || task.currentActivity || '', 500);
       if (patch.status) {
-        const nextStatus = patch.status === 'blocked' ? 'waiting_for_approval' : normalizeHistoricalTaskStatus(patch.status, task);
+        const nextStatus = normalizeLiveTaskStatus(patch.status, task, { blockedMeansApproval: true });
         if (!isTerminalTaskStatus(task.status)) task.status = nextStatus;
       }
       if (patch.progress) task.progress = normalizeTaskProgress(patch.progress, task.status);

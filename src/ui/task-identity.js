@@ -1,7 +1,7 @@
+import { isNativeTaskStatus, isTerminalDashboardTaskStatus } from '../taskState.js';
+
 const TASKS_EXTENSION_ID = 'io.modelcontextprotocol/tasks';
-const NATIVE_TASK_TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
 const PROCESS_ACTIVE_STATUSES = new Set(['starting', 'running', 'stopping']);
-const WORK_SESSION_TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled', 'expired', 'inactive']);
 
 export const TASK_ENTITY_IDENTIFIERS = Object.freeze({
   logicalTask: Object.freeze({ label: 'Work session', field: 'work_id', purpose: 'Repository objective spanning multiple tool calls' }),
@@ -144,9 +144,7 @@ export function nativeTaskCollection(data = {}) {
 export function nativeTaskView(task = {}, processes = []) {
   const taskId = text(task.taskId || task.id);
   const rawStatus = normalize(task.status);
-  const status = ['working', 'input_required', 'completed', 'failed', 'cancelled'].includes(rawStatus)
-    ? rawStatus
-    : 'unknown';
+  const status = isNativeTaskStatus(rawStatus) ? rawStatus : 'unknown';
   const cancelRequested = task.cancelRequested === true || Boolean(task.cancellationRequestedAt);
   const cancellationConfirmed = status === 'cancelled' && Boolean(task.cancellationAcknowledgedAt);
   const statusView = nativeTaskStatusView(status, { cancelRequested, cancellationConfirmed });
@@ -258,7 +256,7 @@ export function workSessionStateView(value = {}) {
     expired: ['Expired', true, false, ''],
     inactive: ['Expired', true, false, '']
   };
-  const [label, terminal, active, pillClass] = states[status] || ['Unknown', WORK_SESSION_TERMINAL_STATUSES.has(status), false, ''];
+  const [label, terminal, active, pillClass] = states[status] || ['Unknown', isTerminalDashboardTaskStatus(status, value), false, ''];
   return { status: status || 'unknown', label, terminal, active, pillClass };
 }
 
@@ -421,8 +419,6 @@ function text(value) {
 }
 
 export {
-  NATIVE_TASK_TERMINAL_STATUSES,
   PROCESS_ACTIVE_STATUSES,
-  TASKS_EXTENSION_ID,
-  WORK_SESSION_TERMINAL_STATUSES
+  TASKS_EXTENSION_ID
 };
