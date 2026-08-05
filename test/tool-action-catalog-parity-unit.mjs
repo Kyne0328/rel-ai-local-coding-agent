@@ -60,7 +60,8 @@ for (const entry of catalog) {
   const args = sampleArgs(entry);
   assert.equal(getCatalogAction(entry.publicTool, args), entry);
   const executable = resolveExecutableToolCall(entry.publicTool, args, {});
-  assert.equal(entry.execute, executable.executionDefinition.handler);
+  assert.equal(entry.handlerName, executable.executionDefinition.handlerName);
+  assert.equal(typeof executable.executionDefinition.handler, 'function');
   assert.equal(entry.operationName, executable.operationName);
   assert.deepEqual(entry.annotations, executable.executionDefinition.annotations);
   assert.deepEqual(entry.behavior, executable.executionDefinition.behavior);

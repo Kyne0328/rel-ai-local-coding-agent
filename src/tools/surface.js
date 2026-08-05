@@ -1,13 +1,12 @@
-import { TOOL_SURFACE_VERSION, getCompactToolDefinitions } from './compactRegistry.js';
-import { COMPACT_OPERATIONS } from './dispatch.js';
-import { getToolDefinition as getOperationDefinition } from './registry.js';
+import { TOOL_SURFACE_VERSION, getCatalogTools } from './actionCatalog.js';
 import { schemaFromDefinition } from './schemaBuilder.js';
 
-const definitions = getCompactToolDefinitions();
+const tools = getCatalogTools();
 
 function getToolMetadata() {
-  return definitions.map(definition => {
-    const actions = actionMetadata(definition);
+  return tools.map(tool => {
+    const { definition } = tool;
+    const actions = actionMetadata(tool);
     return {
       name: definition.name,
       title: definition.title || definition.name,
@@ -30,8 +29,9 @@ function getToolMetadata() {
 }
 
 function getToolSurfaceManifest() {
-  const tools = definitions.map(definition => {
-    const actions = actionMetadata(definition);
+  const manifestTools = tools.map(tool => {
+    const { definition } = tool;
+    const actions = actionMetadata(tool);
     return {
       name: definition.name,
       state: 'active',
@@ -46,35 +46,27 @@ function getToolSurfaceManifest() {
   return {
     schemaVersion: 5,
     toolSurfaceVersion: TOOL_SURFACE_VERSION,
-    toolCount: tools.length,
-    tools,
+    toolCount: manifestTools.length,
+    tools: manifestTools,
     deprecations: [],
     compatibilityAliases: {}
   };
 }
 
-function actionMetadata(definition) {
-  const contracts = Array.isArray(definition.actionContracts) ? definition.actionContracts : [];
-  const mappings = COMPACT_OPERATIONS[definition.name] || {};
-  return contracts.map(contract => {
-    const mapping = mappings[contract.action];
-    const operation = mapping?.tool || '';
-    const executable = getOperationDefinition(operation);
-    const taskScoped = executable?.behavior?.taskScope === 'required';
-    const required = [...contract.required];
-    if (taskScoped && !required.includes('work_id')) required.push('work_id');
-    return {
-      action: contract.action,
-      operation,
-      fields: [...contract.fields],
-      required: required.sort(),
-      executionClass: executable?.behavior?.executionClass || 'bounded_synchronous',
-      taskSupport: executable?.execution?.taskSupport || 'forbidden',
-      taskScope: executable?.behavior?.taskScope || 'required',
-      concurrencyScope: executable?.behavior?.concurrencyScope || 'task',
-      annotations: executable?.annotations || definition.annotations || {}
-    };
-  });
+function actionMetadata(tool) {
+  return tool.actions
+    .filter(entry => entry.action !== 'default')
+    .map(entry => ({
+      action: entry.action,
+      operation: entry.operationName,
+      fields: [...entry.fields],
+      required: [...entry.required],
+      executionClass: entry.behavior?.executionClass || 'bounded_synchronous',
+      taskSupport: entry.execution?.taskSupport || 'forbidden',
+      taskScope: entry.behavior?.taskScope || 'required',
+      concurrencyScope: entry.behavior?.concurrencyScope || 'task',
+      annotations: entry.annotations || tool.definition.annotations || {}
+    }));
 }
 
 function aggregateTaskSupport(definition, actions) {
@@ -84,6 +76,7 @@ function aggregateTaskSupport(definition, actions) {
 }
 
 function getToolGroups() {
+  const definitions = tools.map(tool => tool.definition);
   const groups = { workspace: definitions.map(definition => definition.name), git: [], audit: [], cleanup: [] };
   for (const definition of definitions) {
     for (const group of definition.groups || []) {
