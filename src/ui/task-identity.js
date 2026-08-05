@@ -116,7 +116,6 @@ export function nativeTaskCollection(data = {}) {
     ['nativeTasks', data.nativeTasks],
     ['nativeTasks.tasks', data.nativeTasks?.tasks],
     ['mcpNativeTasks', data.mcpNativeTasks],
-    ['operationTasks', data.operationTasks],
     ['taskActivity.nativeTasks', data.taskActivity?.nativeTasks],
     ['mcpConnection.nativeTasks', data.mcpConnection?.nativeTasks],
     ['runtimeObservability.nativeTasks', data.runtimeObservability?.nativeTasks]
