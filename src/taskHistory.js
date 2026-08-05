@@ -1,6 +1,6 @@
 
-import { clamp, isCurrentTaskEvent, operationForTool, unique } from './taskEvents.js';
-import { sanitizeTaskRecord } from './taskObservability.js';
+import { clamp, eventIdentityKey, eventTimestampMs, isCurrentTaskEvent, operationForTool, terminalTaskTimestamp, timestampMs, unique } from './taskEvents.js';
+import { completeProgress, sanitizeTaskRecord } from './taskObservability.js';
 import { normalizeLiveTaskStatus } from './taskState.js';
 function buildTaskHistory(entries = [], activity = {}, options = {}) {
   const limit = clamp(options.limit || 100, 1, 500);
@@ -17,7 +17,7 @@ function buildTaskHistory(entries = [], activity = {}, options = {}) {
     if (taskId && !representedTaskIds.has(taskId)) tasks.push(activeTaskFromActivity(active));
   }
   return tasks
-    .sort((left, right) => Date.parse(right.endedAt || right.completedAt || right.startedAt || 0) - Date.parse(left.endedAt || left.completedAt || left.startedAt || 0))
+    .sort((left, right) => terminalTaskTimestamp(right) - terminalTaskTimestamp(left))
     .slice(0, limit)
     .map(sanitizeTaskRecord);
 }
@@ -30,11 +30,11 @@ function activityTasks(activity) {
 }
 
 function summarizeTask(taskId, events, activeTask) {
-  const ordered = [...events].sort((a, b) => Date.parse(a.ts || 0) - Date.parse(b.ts || 0));
+  const ordered = [...events].sort((a, b) => eventTimestampMs(a) - eventTimestampMs(b));
   const first = ordered[0] || {};
   const last = ordered.at(-1) || first;
-  const startedMs = Date.parse(first.ts || '') || Number(activeTask?.startedAt) || Date.now();
-  const endedMs = Math.max(...ordered.map(entry => (Date.parse(entry.ts || '') || startedMs) + Math.max(0, Number(entry.ms || 0))));
+  const startedMs = eventTimestampMs(first) || timestampMs(activeTask?.startedAt) || Date.now();
+  const endedMs = Math.max(...ordered.map(entry => (eventTimestampMs(entry) || startedMs) + Math.max(0, Number(entry.ms || 0))));
   const changedFiles = unique(ordered.flatMap(eventChangedFiles));
   const failures = Math.max(ordered.filter(entry => entry.ok === false).length, Number(activeTask?.failures || 0));
   const validation = validationSummary(ordered);
@@ -49,7 +49,7 @@ function summarizeTask(taskId, events, activeTask) {
     title: activeTask?.title || titleFromEvents(ordered),
     objective: activeTask?.objective || '',
     status: activeTask?.status || (activeTask ? normalizeLiveTaskStatus(activeTask.state, activeTask) : completionEvent ? 'completed' : failures ? 'failed' : 'cancelled'),
-    progress: activeTask?.progress || (completionEvent ? { mode: 'complete', percentage: 100, label: 'Complete' } : { mode: 'indeterminate', label: 'Progress unavailable' }),
+    progress: activeTask?.progress || (completionEvent ? completeProgress() : { mode: 'indeterminate', label: 'Progress unavailable' }),
     currentStage: activeTask?.currentStage || '',
     currentActivity: activeTask?.currentActivity || activeTask?.operation || last.operation || '',
     completionKnown: activeTask?.completionKnown === true || Boolean(completionEvent),
@@ -133,14 +133,14 @@ function mergeEvents(auditEvents, activityEvents) {
   const events = [];
   const ids = new Map();
   for (const event of [...auditEvents, ...(Array.isArray(activityEvents) ? activityEvents : [])]) {
-    const id = event?.eventId || event?.operationId || `${event?.ts || event?.timestamp || ''}:${event?.tool || ''}:${events.length}`;
+    const id = eventIdentityKey(event, events.length);
     if (ids.has(id)) events[ids.get(id)] = { ...events[ids.get(id)], ...event };
     else {
       ids.set(id, events.length);
       events.push(event);
     }
   }
-  return events.sort((left, right) => Number(left?.sequence || 0) - Number(right?.sequence || 0) || Date.parse(left?.timestamp || left?.ts || 0) - Date.parse(right?.timestamp || right?.ts || 0));
+  return events.sort((left, right) => Number(left?.sequence || 0) - Number(right?.sequence || 0) || eventTimestampMs(left) - eventTimestampMs(right));
 }
 
 function validationSummary(events) {

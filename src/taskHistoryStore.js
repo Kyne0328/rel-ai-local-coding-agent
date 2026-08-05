@@ -1,9 +1,9 @@
 
 import { buildTaskHistory } from './taskHistory.js';
 import { DEFAULT_TASK_IDLE_MS } from './toolActivity.js';
-import { normalizeTaskProgress, sanitizeActivityEventRecord, sanitizeDisplayText, sanitizeTaskRecord } from './taskObservability.js';
+import { completeProgress, normalizeTaskProgress, sanitizeActivityEventRecord, sanitizeDisplayText, sanitizeTaskRecord } from './taskObservability.js';
 import { isTerminalTaskStatus } from './taskState.js';
-import { clamp, cleanTaskId, eventTime, isCurrentTaskEvent, operationForTool, unique } from './taskEvents.js';
+import { clamp, cleanTaskId, eventIdentityKey, eventTime, eventTimestampMs, isoTimestamp, isCurrentTaskEvent, operationForTool, terminalTaskTimestamp, timestampMs, unique } from './taskEvents.js';
 import { MAX_SESSIONS, clearTaskHistory, ensureCurrentHistory, getTaskHistoryDir, listSessions, pruneSessions, readSession, removeSession, writeSession } from './taskHistoryStorage.js';
 const STORE_VERSION = 3;
 const MAX_SESSION_EVENTS = 200;
@@ -41,11 +41,11 @@ function recordTaskActivityEvent(config, activity = {}) {
   const existing = readSession(directory, taskId) || emptySession(taskId);
   const event = activity.activityEvent || null;
   const events = upsertActivityEvent(existing.events || [], event);
-  const startedAt = task?.startedAtIso || task?.createdAt || toIso(task?.startedAt) || existing.startedAt || null;
-  const updatedAt = task?.updatedAt || toIso(task?.lastActivityAt) || event?.timestamp || new Date().toISOString();
+  const startedAt = task?.startedAtIso || task?.createdAt || isoTimestamp(task?.startedAt) || existing.startedAt || null;
+  const updatedAt = task?.updatedAt || isoTimestamp(task?.lastActivityAt) || event?.timestamp || new Date().toISOString();
   const existingTerminal = isTerminalTaskStatus(existing?.status);
-  const existingUpdatedAt = Date.parse(existing?.updatedAt || existing?.completedAt || existing?.endedAt || '') || 0;
-  const incomingUpdatedAt = Date.parse(updatedAt || '') || 0;
+  const existingUpdatedAt = terminalTaskTimestamp(existing);
+  const incomingUpdatedAt = timestampMs(updatedAt);
   if (existingTerminal && existingUpdatedAt > incomingUpdatedAt) return publicSession(existing);
   const terminal = isTerminalTaskStatus(task?.status);
   const session = {
@@ -72,8 +72,8 @@ function recordTaskActivityEvent(config, activity = {}) {
     currentOperations: Array.isArray(task?.currentOperations) ? task.currentOperations : existing.currentOperations || [],
     startedAt,
     updatedAt,
-    endedAt: terminal ? (task?.completedAtIso || toIso(task?.completedAt || task?.endedAt) || updatedAt) : null,
-    completedAt: terminal ? (task?.completedAtIso || toIso(task?.completedAt || task?.endedAt) || updatedAt) : null,
+    endedAt: terminal ? (task?.completedAtIso || isoTimestamp(task?.completedAt || task?.endedAt) || updatedAt) : null,
+    completedAt: terminal ? (task?.completedAtIso || isoTimestamp(task?.completedAt || task?.endedAt) || updatedAt) : null,
     durationMs: Number(task?.durationMs || existing.durationMs || 0),
     completionKnown: task?.completionKnown === true || existing.completionKnown === true,
     resultSummary: task?.resultSummary || task?.summary || existing.resultSummary || '',
@@ -145,7 +145,7 @@ function readTaskHistory(config, activity = {}, options = {}) {
 }
 
 function applyEvent(session, event) {
-  const timestamp = Date.parse(event.ts || '') || Date.now();
+  const timestamp = timestampMs(event.ts) || Date.now();
   const ended = timestamp + Math.max(0, Number(event.ms || 0));
   const completion = event.ok !== false && (event.completionKnown === true || event.tool === 'relai_finish_work');
   const cancellation = event.ok !== false && event.tool === 'relai_cancel_work';
@@ -168,10 +168,10 @@ function applyEvent(session, event) {
     : event.tool === 'relai_run_checks'
       ? validationState(event)
       : session.validation || 'not_run';
-  const startedAt = session.startedAt && Date.parse(session.startedAt) <= timestamp
+  const startedAt = session.startedAt && timestampMs(session.startedAt) <= timestamp
     ? session.startedAt
     : new Date(timestamp).toISOString();
-  const lastActivityAt = new Date(Math.max(ended, Date.parse(session.endedAt || '') || 0)).toISOString();
+  const lastActivityAt = new Date(Math.max(ended, timestampMs(session.endedAt))).toISOString();
 
   const calls = Number(session.calls || 0) + (represented ? 0 : 1);
   const auditEvent = compactEvent(event);
@@ -217,7 +217,7 @@ function applyEvent(session, event) {
     startedAt,
     endedAt: terminal ? lastActivityAt : null,
     completedAt: terminal ? lastActivityAt : null,
-    durationMs: Math.max(0, Date.parse(lastActivityAt) - Date.parse(startedAt)),
+    durationMs: Math.max(0, timestampMs(lastActivityAt) - timestampMs(startedAt)),
     activeCalls: 0,
     lastTool: event.tool || session.lastTool || '',
     operation: event.operation || session.operation || operationForTool(event.tool),
@@ -277,16 +277,10 @@ function storedSessionActivityMs(session) {
   );
 }
 
-function timestampMs(value) {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  const parsed = Date.parse(String(value || ''));
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
 function overlayActiveSession(persisted, active) {
   const persistedTerminal = isTerminalTaskStatus(persisted?.status);
-  const persistedTime = Date.parse(persisted?.updatedAt || persisted?.completedAt || persisted?.endedAt || '') || 0;
-  const activeTime = Date.parse(active?.updatedAt || active?.lastActivityAt || active?.startedAt || '') || 0;
+  const persistedTime = terminalTaskTimestamp(persisted);
+  const activeTime = terminalTaskTimestamp(active);
   if (persistedTerminal && persistedTime >= activeTime) return persisted;
   return {
     ...persisted,
@@ -307,23 +301,18 @@ function overlayActiveSession(persisted, active) {
 function upsertActivityEvent(events, event) {
   if (!event?.eventId) return [...events].slice(-MAX_SESSION_EVENTS);
   const next = [...events];
-  const index = next.findIndex(item => item?.eventId === event.eventId);
+  const eventId = eventIdentityKey(event);
+  const index = next.findIndex(item => eventIdentityKey(item) === eventId);
   const sanitized = sanitizeActivityEventRecord(event);
   if (index >= 0) next[index] = { ...next[index], ...sanitized };
   else next.push(sanitized);
-  return next.sort((left, right) => Number(left?.sequence || 0) - Number(right?.sequence || 0) || eventTime(left) - eventTime(right)).slice(-MAX_SESSION_EVENTS);
+  return next.sort((left, right) => Number(left?.sequence || 0) - Number(right?.sequence || 0) || eventTimestampMs(left) - eventTimestampMs(right)).slice(-MAX_SESSION_EVENTS);
 }
 
 function mergeActivityEvents(persisted, active) {
   let merged = [...persisted];
   for (const event of active) merged = upsertActivityEvent(merged, event);
   return merged;
-}
-
-function toIso(value) {
-  if (value == null || value === '') return '';
-  const parsed = typeof value === 'number' ? value : Date.parse(value);
-  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : '';
 }
 
 function historicalTitle(session) {
@@ -361,7 +350,7 @@ function publicSession(session) {
     taskId: value.taskId || value.id,
     sessionId: value.sessionId || value.id,
     title: value.title || historicalTitle(value),
-    progress: value.progress || (value.status === 'completed' ? { mode: 'complete', percentage: 100, label: 'Complete' } : { mode: 'indeterminate', label: 'Progress unavailable' }),
+    progress: value.progress || (value.status === 'completed' ? completeProgress() : { mode: 'indeterminate', label: 'Progress unavailable' }),
     toolCallCount: Number(value.toolCallCount ?? value.calls ?? 0),
     successfulToolCallCount: Number(value.successfulToolCallCount ?? Math.max(0, Number(value.calls || 0) - Number(value.failures || 0))),
     failedToolCallCount: Number(value.failedToolCallCount ?? value.failures ?? 0),
