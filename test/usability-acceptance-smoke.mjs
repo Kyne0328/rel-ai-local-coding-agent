@@ -8,6 +8,7 @@ const read = relativePath => fs.readFileSync(path.join(root, relativePath), 'utf
 const rootPackage = JSON.parse(read('package.json'));
 const electronPackage = JSON.parse(read('electron/package.json'));
 const verifier = read('scripts/verify-packaged-app.mjs');
+const electronPlatform = read('scripts/electron-platform.mjs');
 const electronMain = read('electron/main.js');
 const ci = read('.github/workflows/ci.yml');
 const release = read('.github/workflows/release.yml');
@@ -36,13 +37,17 @@ for (const removedFile of ['installed-smoke.js', 'window-smoke.js', 'smoke-evide
 assert.doesNotMatch(electronMain, /--installed-smoke|--window-smoke|smokeWindowRoles|getSmokeWindowRole/);
 
 for (const required of [
-  'Rel.AI MCP.exe',
+  'spec.executableName',
   'resources/app.asar',
   'resources/src/httpServer.js',
   'resources/src/tools/registry.js',
   'resources/public/dashboard.js',
-  'resources/bin/ngrok/win32/ngrok.exe'
+  'spec.ngrokDirectory',
+  'spec.ngrokFile'
 ]) assert.ok(verifier.includes(required), `packaged verifier must check ${required}`);
+assert.match(electronPlatform, /executableName: 'Rel\.AI MCP\.exe'/);
+assert.match(electronPlatform, /ngrokDirectory: 'win32'/);
+assert.match(electronPlatform, /ngrokFile: 'ngrok\.exe'/);
 assert.doesNotMatch(verifier, /spawn|execFile|execSync|Start-Process|uninstall/i, 'packaged verification must remain read-only');
 
 assert.match(ci, /name: packaged Windows application/);
@@ -54,7 +59,8 @@ assert.doesNotMatch(ci, /test:installed|installed-app-usability-evidence|REL_AI_
 assert.match(release, /Verify packaged application layout/);
 assert.match(release, /Resolve current unpacked application/);
 assert.match(release, /node scripts\/current-unpacked\.mjs/);
-assert.match(release, /npm run verify:packaged -- --dir '\$\{\{ steps\.unpacked\.outputs\.path \}\}'/);
+assert.match(release, /npm run verify:packaged -- --platform win32 --dir '\$\{\{ steps\.unpacked\.outputs\.path \}\}'/);
+assert.match(release, /npm run verify:packaged -- --platform linux --dir '\$\{\{ steps\.unpacked\.outputs\.path \}\}'/);
 assert.match(release, /npm run test:connector-acceptance -- --dir '\$\{\{ steps\.unpacked\.outputs\.path \}\}'/);
 assert.doesNotMatch(release, /test:installed|REL_AI_SMOKE_INSTALLER|REL_AI_RELEASE_EVIDENCE_DIR|release-readiness\.json|release-usability-evidence\.zip/);
 

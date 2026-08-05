@@ -30,7 +30,7 @@ function createRecoveryWindowManager({
     });
     installProtocol(window.webContents.session.protocol);
     secureLocalWindow(window, { allowedUrl: rendererUrl, onError: onSecurityError });
-    void window.loadURL(rendererUrl).catch(error => {
+    void Promise.resolve(window.loadURL(rendererUrl)).catch(error => {
       onSecurityError(new Error(`Recovery renderer failed to load: ${error instanceof Error ? error.message : String(error)}`));
     });
     window.webContents.on('did-finish-load', onReady);
