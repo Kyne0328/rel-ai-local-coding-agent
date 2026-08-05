@@ -170,7 +170,7 @@ function buildActivity() {
   const tableCard = document.createElement('div');
   tableCard.id = '__activity-table-wrap';
   tableCard.className = 'card activity-event-card';
-  tableCard.innerHTML = '<div class="card-head"><h3>Event log</h3><span class="section-action" id="__activity-count">Loading…</span></div><div class="card-body"><div class="table-wrap"><table class="data-table activity-table"><caption class="sr-only">Audit activity log</caption><colgroup><col class="activity-col-time"><col class="activity-col-message"><col class="activity-col-tool"><col class="activity-col-workspace"><col class="activity-col-status"><col class="activity-col-action"></colgroup><thead><tr><th scope="col">Time</th><th scope="col">Message</th><th scope="col">Tool</th><th scope="col">Workspace</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody id="__activity-tbody"></tbody></table></div></div>';
+  tableCard.innerHTML = '<div class="card-head"><h3>Event log</h3><span class="section-action" id="__activity-count">Loading…</span></div><div class="card-body"><div class="table-wrap"><table class="data-table activity-table"><caption class="sr-only">Audit activity log</caption><colgroup><col class="activity-col-time"><col class="activity-col-tool"><col class="activity-col-workspace"><col class="activity-col-status"><col class="activity-col-message"><col class="activity-col-action"></colgroup><thead><tr><th scope="col" class="activity-time-column">Time</th><th scope="col" class="activity-tool-column">Tool</th><th scope="col" class="activity-workspace-column">Workspace</th><th scope="col" class="activity-status-column">Status</th><th scope="col" class="activity-message-column">Message</th><th scope="col" class="activity-action-column"><span class="sr-only">Actions</span></th></tr></thead><tbody id="__activity-tbody"></tbody></table></div></div>';
   root.append(toolbar, tableCard);
   return root;
 }
@@ -320,15 +320,15 @@ function renderTable(entries) {
     row.className = 'clickable-row';
     if (_requestedEventId && activityEventId(entry) === _requestedEventId) row.classList.add('activity-requested-row');
     row.innerHTML = `
-      <td class="nowrap small" title="${esc(absoluteTime)}" data-clock-relative="${esc(timestamp)}">${esc(timeAgo(timestamp) || '—')}</td>
-      <td class="activity-message-cell">
+      <td class="activity-time-column nowrap small" title="${esc(absoluteTime)}" data-clock-relative="${esc(timestamp)}">${esc(timeAgo(timestamp) || '—')}</td>
+      <td class="activity-tool-column truncate mono" title="${esc(entry.title || entry.operation || '')}">${esc(entry.tool || entry.type || 'activity')}</td>
+      <td class="activity-workspace-column truncate">${esc(entry.workspace || '—')}</td>
+      <td class="activity-status-column">${pillHtml(status)}</td>
+      <td class="activity-message-column activity-message-cell">
         <span class="activity-message-mobile-meta">${pillHtml(status)}<code>${esc(entry.tool || entry.type || 'activity')}</code><span class="activity-message-mobile-time" data-clock-relative="${esc(timestamp)}">${esc(timeAgo(timestamp) || '—')}</span></span>
         <span class="activity-message-copy"><strong>${esc(entry.title || entry.operation || '')}</strong>${entry.title || entry.operation ? ' · ' : ''}${esc(message)}</span>
       </td>
-      <td class="truncate mono" title="${esc(entry.title || entry.operation || '')}">${esc(entry.tool || entry.type || 'activity')}</td>
-      <td class="truncate">${esc(entry.workspace || '—')}</td>
-      <td>${pillHtml(status)}</td>
-      <td><button class="secondary activity-row-button" type="button" aria-label="Open ${esc(entry.tool || entry.type || 'activity')} event details">›</button></td>`;
+      <td class="activity-action-column"><button class="secondary activity-row-button" type="button" aria-label="Open ${esc(entry.tool || entry.type || 'activity')} event details">›</button></td>`;
     row.onclick = () => openDetail(entry);
     row.querySelector('.activity-row-button')?.addEventListener('click', event => {
       event.stopPropagation();
