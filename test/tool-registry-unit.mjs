@@ -4,7 +4,7 @@ import { fromJsonSchema } from '@modelcontextprotocol/server';
 
 import { connectorInstructions } from '../src/mcpServer.js';
 import { getToolDefinitions } from '../src/tools.js';
-import { resolveToolOperation } from '../src/tools/dispatch.js';
+import { resolveToolOperation } from '../src/tools/actionCatalog.js';
 import {
   TOOL_NAMES, getPublicToolSchemas,
   getToolDefinitions as getDefinitionMetadata, getToolGroups, getToolMetadata,

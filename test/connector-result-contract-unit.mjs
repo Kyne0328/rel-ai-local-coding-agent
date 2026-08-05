@@ -1,7 +1,5 @@
 import assert from 'node:assert/strict';
-import { compactForConnector } from '../src/tools/connector.js';
-import { slimCompactPublicResult } from '../src/tools/compactResult.js';
-import { withTaskIdentity } from '../src/tools/task.js';
+import { serializeConnectorResult } from '../src/tools/connector.js';
 
 const cases = [
   fixture('relai_work:begin', 'relai_work', 'begin', 'relai_begin_work', 'work_begin', {
@@ -69,9 +67,15 @@ const cases = [
 
 for (const item of cases) {
   const before = structuredClone(item.internal);
-  const connector = compactForConnector(item.operation, item.internal, item.args);
-  assert.deepEqual(item.internal, before, `${item.name} compaction mutated the internal result`);
-  const external = withTaskIdentity(slimCompactPublicResult(item.publicTool, item.action, connector), item.workId);
+  const external = serializeConnectorResult({
+    publicName: item.publicTool,
+    action: item.action,
+    operationName: item.operation,
+    value: item.internal,
+    args: item.args,
+    workId: item.workId
+  });
+  assert.deepEqual(item.internal, before, `${item.name} serialization mutated the internal result`);
   assert.deepEqual(external, item.expected, `${item.name} connector contract changed`);
 }
 console.log(`${cases.length} internal-to-connector result contracts passed.`);

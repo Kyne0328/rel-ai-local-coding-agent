@@ -8,8 +8,7 @@ import { readTaskIntegrity } from '../taskIntegrity.js';
 import { bindTaskHistoryActivityPersistence } from '../taskHistoryStore.js';
 import { buildToolActivityDetails } from '../taskObservability.js';
 import { beginConnectorToolCall, getToolActivity, normalizeTaskId, onToolActivity, taskError } from '../toolActivity.js';
-import { slimCompactPublicResult } from './compactResult.js';
-import { compactForConnector } from './connector.js';
+import { serializeConnectorResult } from './connector.js';
 import { enhanceToolError } from './errors.js';
 import { executeToolCall } from './execution.js';
 import { describeToolOperation } from './operation.js';
@@ -128,11 +127,18 @@ async function callTool(name, args = {}, context = {}) {
       ...extraAudit,
       ...(valueOk ? {} : { error: activityResult.error })
     }, { strictIntegrity: true });
-    const connectorValue = connector ? compactForConnector(operationName, value, effectiveArgs || {}) : value;
+    const workId = finishActivity?.taskId || requestedTaskId;
     const responseValue = connector && resolved.compact
-      ? slimCompactPublicResult(name, resolved.action, connectorValue)
-      : connectorValue;
-    return ok(withTaskIdentity(responseValue, finishActivity?.taskId || requestedTaskId));
+      ? serializeConnectorResult({
+        publicName: name,
+        action: resolved.action,
+        operationName,
+        value,
+        args: effectiveArgs || {},
+        workId
+      })
+      : withTaskIdentity(value, workId);
+    return ok(responseValue);
   } catch (error) {
     const enhanced = enhanceToolError(operationName, error);
     activityResult = {

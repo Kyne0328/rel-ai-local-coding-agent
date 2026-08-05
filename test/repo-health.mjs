@@ -71,7 +71,7 @@ const sourceLineBudgets = {
   'src/repo/gitStatus.js': 180,
   'src/bridge/writeGuidance.js': 180,
   'src/tools.js': 180,
-  'src/tools/registry.js': 520,
+  'src/tools/actionCatalog.js': 1100,
   'src/tools/schema.js': 120,
   'src/tools/handlers.js': 180,
   'src/tools/connector.js': 180,

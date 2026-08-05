@@ -8,7 +8,7 @@ const root = path.resolve(__dirname, '..');
 const scannedFiles = [
   'src/tools.js',
   'src/tools/schema.js',
-  'src/tools/registry.js',
+  'src/tools/actionCatalog.js',
   'src/httpServer.js',
   'src/resources.js',
   'README.md',

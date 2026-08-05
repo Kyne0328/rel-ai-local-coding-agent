@@ -1,3 +1,5 @@
+import { slimCompactPublicResult } from './compactResult.js';
+import { withTaskIdentity } from './task.js';
 import {
   boundedStringArray,
   compactCommandResult,
@@ -6,6 +8,12 @@ import {
   policySentence,
   pruneEmpty
 } from './connectorHelpers.js';
+
+function serializeConnectorResult({ publicName, action, operationName, value, args = {}, workId = '' }) {
+  const operationResult = compactForConnector(operationName, value, args);
+  const publicResult = slimCompactPublicResult(publicName, action, operationResult);
+  return withTaskIdentity(publicResult, workId);
+}
 
 function compactForConnector(name, value, args = {}) {
   if (!value || typeof value !== 'object') return value;
@@ -142,4 +150,4 @@ function compactForConnector(name, value, args = {}) {
   }
 }
 
-export { compactForConnector, policySentence };
+export { compactForConnector, policySentence, serializeConnectorResult };

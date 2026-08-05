@@ -1,5 +1,5 @@
 import { fromJsonSchema } from '@modelcontextprotocol/server';
-import { resolveToolOperation } from './dispatch.js';
+import { resolveToolOperation } from './actionCatalog.js';
 
 async function validateToolOutput(_config, name, args, output) {
   const resolution = resolveToolOperation(name, args || {});

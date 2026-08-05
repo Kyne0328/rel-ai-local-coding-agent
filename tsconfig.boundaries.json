@@ -18,7 +18,7 @@
   "files": [
     "types/node-lite.d.ts",
     "types/boundaries.d.ts",
-    "src/tools/registry.js",
+    "src/tools/actionCatalog.js",
     "src/tools/schema.js",
     "src/tools/handlers.js",
     "src/tools/session.js",

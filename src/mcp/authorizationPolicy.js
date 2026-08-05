@@ -1,4 +1,5 @@
 import * as crypto from 'node:crypto';
+import { getOperationCapability } from '../tools/actionCatalog.js';
 
 const AUTHORIZATION_POLICY_VERSION = 1;
 const CAPABILITIES = Object.freeze({
@@ -9,19 +10,6 @@ const CAPABILITIES = Object.freeze({
   GIT_PUBLISH: 'git:publish'
 });
 const ALL_CAPABILITIES = Object.freeze(Object.values(CAPABILITIES));
-const READ_OPERATIONS = new Set([
-  'relai_begin_work', 'relai_repo_snapshot', 'relai_read', 'relai_search', 'relai_code_inspect',
-  'relai_semantic_search', 'relai_process_read', 'relai_process_list', 'relai_worktree_list',
-  'relai_tidy_plan', 'relai_http_probe', 'relai_diff', 'relai_status', 'relai_git_draft_pr',
-  'relai_cancel_work', 'relai_finish_work'
-]);
-const WRITE_OPERATIONS = new Set([
-  'relai_edit', 'relai_restore_paths', 'relai_reset_workspace', 'relai_tidy_run',
-  'relai_worktree_create', 'relai_worktree_remove', 'relai_git_commit'
-]);
-const COMMAND_OPERATIONS = new Set(['relai_exec', 'relai_diagnostics_run', 'relai_run_checks']);
-const PROCESS_OPERATIONS = new Set(['relai_process_start', 'relai_process_write', 'relai_process_stop']);
-const PUBLISH_OPERATIONS = new Set(['relai_git_push']);
 
 class AuthorizationDeniedError extends Error {
   constructor(message, details = {}) {
@@ -72,13 +60,7 @@ function normalizeAuthorizationPolicy(value) {
 }
 
 function requiredCapability(operationName) {
-  const name = String(operationName || '');
-  if (READ_OPERATIONS.has(name)) return CAPABILITIES.REPOSITORY_READ;
-  if (WRITE_OPERATIONS.has(name)) return CAPABILITIES.REPOSITORY_WRITE;
-  if (COMMAND_OPERATIONS.has(name)) return CAPABILITIES.COMMAND_EXECUTE;
-  if (PROCESS_OPERATIONS.has(name)) return CAPABILITIES.PROCESS_MANAGE;
-  if (PUBLISH_OPERATIONS.has(name)) return CAPABILITIES.GIT_PUBLISH;
-  return '';
+  return getOperationCapability(operationName);
 }
 
 function assertAuthorizedToolCall(options = {}) {

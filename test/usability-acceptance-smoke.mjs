@@ -40,7 +40,7 @@ for (const required of [
   'spec.executableName',
   'resources/app.asar',
   'resources/src/httpServer.js',
-  'resources/src/tools/registry.js',
+  'resources/src/tools/actionCatalog.js',
   'resources/public/dashboard.js',
   'spec.ngrokDirectory',
   'spec.ngrokFile'
