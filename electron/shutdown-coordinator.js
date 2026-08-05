@@ -64,23 +64,6 @@ function createShutdownCoordinator(options = {}) {
   return { prepare, isPrepared };
 }
 
-function createDesktopShutdownCoordinator(options = {}) {
-  return createShutdownCoordinator({
-    stopService: options.stopService,
-    stopUpdater: options.stopUpdater,
-    stopActivity: options.stopActivity,
-    closeWindows() {
-      options.closeDashboard?.();
-      options.closeRecovery?.();
-      options.closeWizard?.();
-    },
-    removeRuntimeMarker: options.removeRuntimeMarker,
-    shutdownTelemetry: options.shutdownTelemetry,
-    markCleanShutdown: options.markCleanShutdown,
-    onLog: options.onLog
-  });
-}
-
 function closeHttpServer(server, options = {}) {
   if (!server) return Promise.resolve({ closed: true, forced: false });
   const timeoutMs = Number(options.timeoutMs || 2500);
@@ -128,4 +111,4 @@ function errorMessage(error) {
   return error instanceof Error ? error.message : String(error || 'Unknown error');
 }
 
-export { closeHttpServer, createDesktopShutdownCoordinator, createShutdownCoordinator };
+export { closeHttpServer, createShutdownCoordinator };

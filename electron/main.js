@@ -20,7 +20,7 @@ import { createDiagnosticFiles } from './diagnostic-files.js';
 import { createDesktopSettingsManager } from './desktop-settings.js';
 import { createAppUpdater } from './app-updater.js';
 import { createDesktopLifecycleManager } from './desktop-lifecycle.js';
-import { closeHttpServer, createDesktopShutdownCoordinator } from './shutdown-coordinator.js';
+import { closeHttpServer, createShutdownCoordinator } from './shutdown-coordinator.js';
 import { STARTUP_BACKGROUND_COLOR } from './startup-background.js';
 import { removeControllerRuntimeMarker, writeControllerRuntimeMarker } from './controller-runtime.js';
 import * as managedNgrok from './managed-ngrok.js';
@@ -114,13 +114,15 @@ appUpdater = createAppUpdater({ app, autoUpdater, getTaskActivity: toolActivityR
   onStatusChange: pushUpdateStatus, onLog: (message, options) => runtimeLogs.append(message, options),
   onBeforeInstall: () => shutdownCoordinator.prepare('update_install'),
   errorCodes: ERROR_CODES });
-const shutdownCoordinator = createDesktopShutdownCoordinator({
+const shutdownCoordinator = createShutdownCoordinator({
   stopService: () => stopServer({ silent: true }),
   stopUpdater: () => appUpdater?.stop(),
   stopActivity: () => toolActivityRuntime.stop(),
-  closeDashboard: () => dashboardWindowManager.close(),
-  closeRecovery: () => recoveryWindowManager.close(),
-  closeWizard: () => closeWizard({ returnToFallback: false }),
+  closeWindows() {
+    dashboardWindowManager.close();
+    recoveryWindowManager.close();
+    closeWizard({ returnToFallback: false });
+  },
   removeRuntimeMarker: removeControllerRuntimeMarker,
   shutdownTelemetry,
   markCleanShutdown: () => desktopLifecycle.markCleanShutdown(),

@@ -23,7 +23,7 @@ const MCP_SERVER_INFO = Object.freeze({
 
 function createRelaiMcpServer(options = {}) {
   const config = readConfig();
-  const definitions = runtimeToolSchemas(config);
+  const definitions = getPublicToolSchemas(config);
   const surface = getToolSurfaceManifest(config);
   const legacyCompatibility = options.legacyCompatibility === true;
   const requestStateCodec = createRelaiRequestStateCodec(config, options.principal);
@@ -102,10 +102,6 @@ function toolRegistration(definition) {
   };
 }
 
-function runtimeToolSchemas(config) {
-  return getPublicToolSchemas(config);
-}
-
 function connectorInstructions(_config = readConfig()) {
   return 'Start each objective with relai_work action begin and pass its work_id to later calls. Inspect relevant files before editing; use bounded reads and commands. Validate after changes. Never bypass approval, workspace, task, or destructive-operation safeguards. Report only checks actually run. Finish with relai_validate action checks complete:true, or relai_work action finish after review.';
 }
@@ -117,6 +113,5 @@ export {
   connectorInstructions,
   createRelaiMcpServer,
   MCP_SERVER_INFO,
-  runtimeToolSchemas,
   toolResult
 };

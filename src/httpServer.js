@@ -8,7 +8,8 @@ import { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handle
 import { handleApiHistoryReset } from "./http/dashboardHistory.js";
 import { handleApiDiagnostics, handleApiDiagnosticsReset } from "./http/dashboardDiagnostics.js";
 import { handleApiProcessStop } from "./http/dashboardProcesses.js";
-import { handleOauthProtectedResource, handleOauthMetadata, handleRegister, handleAuthorizeGet, handleAuthorizePost, handleToken, handleMcpGetDiagnostic, handleMcpStreamable, handleMcpDelete, handleMcpRecovery, handleMcpConnectionState, shutdownMcpTransport, getMcpAccess, oauthWellKnownPaths } from "./http/mcp.js";
+import { handleOauthProtectedResource, handleOauthMetadata, handleRegister, handleAuthorizeGet, handleAuthorizePost, handleToken, getMcpAccess, oauthWellKnownPaths } from "./http/mcp.js";
+import { handleMcpGetDiagnostic, handleMcpStreamable, handleMcpDelete, handleMcpRecovery, handleMcpConnectionState, shutdownMcpTransport } from "./http/mcpTransport.js";
 import { resolveBaseUrl } from "./http/auth.js";
 import { initializeTelemetry, shutdownTelemetry } from "./telemetry.js";
 import { stopAllManagedProcesses, pruneManagedProcesses } from "./processManager.js";

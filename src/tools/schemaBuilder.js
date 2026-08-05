@@ -80,8 +80,4 @@ function strictActionSchema(schema, contracts) {
   return { ...schema, ...(allOf.length ? { allOf } : {}) };
 }
 
-function withWorkspaceAliases(schemas, _config) {
-  return schemas;
-}
-
-export { schemaFromDefinition, withWorkspaceAliases };
+export { schemaFromDefinition };
