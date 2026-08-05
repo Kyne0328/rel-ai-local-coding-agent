@@ -1,10 +1,15 @@
 // @ts-check
 
 import { HANDLERS } from './handlers.js';
-import { getToolDefinitions as getOperationMetadata } from './registry.js';
-import { getToolDefinition as getPublicMetadata, getToolDefinitions as getPublicDefinitions } from './schema.js';
-import { resolveToolOperation } from './dispatch.js';
+import {
+  getCatalogToolDefinition as getPublicMetadata,
+  getCatalogToolDefinitions as getPublicDefinitions,
+  getOperationDefinitions as getOperationMetadata,
+  resolveToolOperation
+} from './actionCatalog.js';
 
+// Executable-only function map retained to avoid the handlers -> status -> schema -> catalog import cycle.
+// The catalog remains the sole owner of schemas, policy, and execution metadata.
 const OPERATION_EXECUTABLES = new Map(getOperationMetadata().map(metadata => {
   const handler = HANDLERS[metadata.handlerName];
   if (typeof handler !== 'function') {

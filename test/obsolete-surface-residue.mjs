@@ -83,7 +83,7 @@ const removedCompatibilityNames = [
   'relai_write', 'relai_replace', 'relai_browser',
   'relai_restore_changes', 'relai_git_status', 'relai_git_create_pr'
 ];
-for (const relativePath of ['src/tools/registry.js', 'src/tools/handlers.js', 'src/localRepoBridge.js']) {
+for (const relativePath of ['src/tools/actionCatalog.js', 'src/tools/handlers.js', 'src/localRepoBridge.js']) {
   const text = fs.readFileSync(path.join(root, relativePath), 'utf8');
   for (const name of removedCompatibilityNames) {
     assert.equal(text.includes(name), false, `${relativePath} still routes removed tool ${name}`);
@@ -101,7 +101,7 @@ const removedTaskSurfaceNames = [
 for (const relativePath of [
   'src/mcp/transportTasks.js',
   'src/tools/operation.js',
-  'src/tools/registry.js',
+  'src/tools/actionCatalog.js',
   'src/tools/handlers.js'
 ]) {
   const text = fs.readFileSync(path.join(root, relativePath), 'utf8');

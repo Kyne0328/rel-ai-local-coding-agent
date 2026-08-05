@@ -3,7 +3,7 @@
 import * as crypto from "node:crypto";
 import { inputRequired, acceptedContent } from "@modelcontextprotocol/server";
 import { toolResult } from "./results.js";
-import { resolveToolOperation } from "../tools/dispatch.js";
+import { catalogApprovalRequirement } from '../tools/actionCatalog.js';
 
 async function requireApprovalIfNeeded(name, args, context, codec) {
   const requirement = approvalRequirement(name, args);
@@ -33,14 +33,7 @@ async function requireApprovalIfNeeded(name, args, context, codec) {
 }
 
 function approvalRequirement(name, args) {
-  const resolution = resolveToolOperation(name, args || {});
-  const operationName = resolution?.operationName || name;
-  const operationArgs = resolution?.operationArgs || args || {};
-  if (operationName === 'relai_reset_workspace') return { message: `Discard workspace changes using ${operationArgs.removeUntracked ? 'RESET_AND_CLEAN' : 'RESET'}?` };
-  if (operationName === 'relai_worktree_remove') return { message: `Remove managed worktree ${operationArgs.alias || ''}${operationArgs.force ? ' with force' : ''}? The Git branch will be preserved.` };
-  if (operationName === 'relai_git_push') return { message: `Publish branch ${operationArgs.branch || '(current branch)'} to ${operationArgs.remote || 'origin'}?` };
-  if (operationName === 'relai_git_commit' && (operationArgs.addAll === true || operationArgs.sensitiveAuthorization)) return { message: `Create the requested Git commit${operationArgs.addAll ? ' including all current changes' : ''}?` };
-  return null;
+  return catalogApprovalRequirement(name, args || {});
 }
 
 function approvalDigest(name, args) {

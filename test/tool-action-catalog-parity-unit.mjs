@@ -8,10 +8,10 @@ import {
   getCatalogAction,
   getCatalogToolDefinitions,
   getCatalogTools,
-  getToolActionCatalog
+  getOperationDefinition,
+  getToolActionCatalog,
+  resolveToolOperation
 } from '../src/tools/actionCatalog.js';
-import { COMPACT_OPERATIONS } from '../src/tools/dispatch.js';
-import { getToolDefinition as getOperationDefinition } from '../src/tools/registry.js';
 import { resolveExecutableToolCall } from '../src/tools/runtimeRegistry.js';
 import { getToolDefinitions, getToolMetadata, getToolSchemas } from '../src/tools/schema.js';
 import { schemaFromDefinition } from '../src/tools/schemaBuilder.js';
@@ -37,11 +37,7 @@ assert.deepEqual(
 );
 
 for (const entry of catalog) {
-  const currentMapping = COMPACT_OPERATIONS[entry.publicTool]?.[entry.action];
-  assert.ok(currentMapping, `${entry.publicTool}:${entry.action} must exist in the current compact dispatch map`);
-  assert.equal(entry.operationName, currentMapping.tool);
-  assert.equal(entry.keepAction, currentMapping.keepAction === true);
-  assert.equal(ACTION_OPERATIONS[entry.publicTool][entry.action].operationName, currentMapping.tool);
+  assert.equal(ACTION_OPERATIONS[entry.publicTool][entry.action].operationName, entry.operationName);
 
   const operation = getOperationDefinition(entry.operationName);
   assert.ok(operation, `${entry.operationName} must exist in the current internal registry`);
@@ -59,6 +55,8 @@ for (const entry of catalog) {
 
   const args = sampleArgs(entry);
   assert.equal(getCatalogAction(entry.publicTool, args), entry);
+  const resolution = resolveToolOperation(entry.publicTool, args);
+  assert.equal(resolution.operationName, entry.operationName);
   const executable = resolveExecutableToolCall(entry.publicTool, args, {});
   assert.equal(entry.handlerName, executable.executionDefinition.handlerName);
   assert.equal(typeof executable.executionDefinition.handler, 'function');
@@ -87,7 +85,7 @@ for (const entry of catalog) {
 
 assert.equal(getCatalogAction('unknown', {}), null);
 assert.throws(() => getCatalogAction('relai_work', { action: 'unknown' }), /Unsupported action/);
-console.log('Canonical 12-tool, 35-action catalog parity passed without runtime cutover.');
+console.log('Canonical 12-tool, 35-action catalog execution and policy parity passed.');
 
 function sampleArgs(entry) {
   const key = `${entry.publicTool}:${entry.action}`;

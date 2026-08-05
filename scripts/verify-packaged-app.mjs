@@ -36,7 +36,7 @@ const requiredFiles = [
   'resources/app.asar',
   'resources/src/httpServer.js',
   'resources/public/oauth.css',
-  'resources/src/tools/registry.js',
+  'resources/src/tools/actionCatalog.js',
   'resources/src/config.js',
   'resources/src/mcpServer.js',
   'resources/node_modules/@modelcontextprotocol/server/package.json',

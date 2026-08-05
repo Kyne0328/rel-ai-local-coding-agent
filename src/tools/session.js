@@ -1,4 +1,4 @@
-import { getToolDefinition } from './registry.js';
+import { getOperationDefinition } from './actionCatalog.js';
 // @ts-check
 
 /** @typedef {import('../../types/boundaries.d.ts').ToolArgs} ToolArgs */
@@ -32,7 +32,7 @@ const AUDIT_ENRICHERS = Object.freeze({
 function buildExtraAudit(name, value, args) {
   /** @type {Record<string, unknown>} */
   const extra = {};
-  const auditKind = getToolDefinition(name)?.behavior?.audit || "";
+  const auditKind = getOperationDefinition(name)?.behavior?.audit || "";
   AUDIT_ENRICHERS[auditKind]?.(extra, value, args);
   enrichCommonAudit(extra, name, value);
   return extra;
@@ -127,7 +127,7 @@ function invalidateSessionCacheForCall(config, name, args) {
   try {
     const alias = args?.workspace;
     if (!alias) return;
-    const cacheMode = getToolDefinition(name)?.behavior?.cache || "";
+    const cacheMode = getOperationDefinition(name)?.behavior?.cache || "";
     if (!cacheMode) return;
     const workspace = resolveWorkspace(config, alias);
     const wsRoot = workspace?.path;
@@ -170,7 +170,7 @@ function invalidatePaths(alias, wsRoot, paths) {
 }
 
 function maybeStartSession(config, toolName, args, details = {}) {
-  const behavior = getToolDefinition(toolName)?.behavior;
+  const behavior = getOperationDefinition(toolName)?.behavior;
   if (behavior?.startsSession !== true || args?.dryRun === true) return { started: false, alias: '' };
   if (behavior.deferStagedSession === true && typeof args.stage === "string") {
     const stage = args.stage.trim().toLowerCase();
