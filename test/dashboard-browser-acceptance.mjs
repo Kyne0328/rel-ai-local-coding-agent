@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getTaskHistoryDir, writeSession } from '../src/taskHistoryStorage.js';
+import { createHttpMcpSession } from './helpers/http-mcp.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-browser-acceptance-'));
@@ -36,6 +37,7 @@ const server = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.
 let serverError = '';
 server.stderr.on('data', chunk => { serverError += chunk.toString('utf8'); });
 let child = null;
+let mcpSession = null;
 let closePromise = Promise.resolve([]);
 
 try {
@@ -64,6 +66,10 @@ try {
   child.stdout.on('data', chunk => { stdout += chunk.toString('utf8'); });
   child.stderr.on('data', chunk => { stderr += chunk.toString('utf8'); });
   closePromise = once(child, 'close').catch(() => []);
+  await waitForProbeStage(outputPath, 'dashboard_ready', 15_000);
+  mcpSession = await createHttpMcpSession(`http://127.0.0.1:${port}`, { token, clientName: 'dashboard-live-rendering-acceptance' });
+  const listed = await mcpSession.request('tools/list');
+  assert.equal(listed.response.status, 200, JSON.stringify(listed.body));
   const result = await waitForProbeResult(outputPath, 30_000).catch(async error => {
     if (child?.exitCode == null) child.kill('SIGKILL');
     const [code] = await Promise.race([
@@ -84,6 +90,8 @@ try {
   assert.equal(result.initial.unknownStatusCount, 0);
   assert.equal(result.initial.longTitleAccessible, true);
   assert.equal(result.initial.reducedMotion, true);
+  assert.equal(result.liveToolUpdate.received, true, JSON.stringify(result.liveToolUpdate));
+  assert.equal(result.liveToolUpdate.sameRouteNode, true, 'an MCP tool request must not remount the active dashboard route');
   assert.equal(result.taskInteraction.dialog, true);
   assert.ok(result.taskInteraction.detailText.length > 100);
   assert.equal(result.taskInteraction.workSessionId, true);
@@ -123,6 +131,7 @@ try {
   await closePromise;
   console.log(`Real Electron Chromium dashboard acceptance passed across ${result.responsive.length} viewport scenarios; temporary screenshots were reviewed and removed.`);
 } finally {
+  await mcpSession?.close().catch(() => {});
   if (child && child.exitCode == null) child.kill('SIGKILL');
   await closePromise.catch(() => {});
   server.kill('SIGKILL');
@@ -212,6 +221,27 @@ async function availablePort() {
   const selected = typeof address === 'object' && address ? address.port : 0;
   await new Promise((resolve, reject) => probe.close(error => error ? reject(error) : resolve()));
   return selected;
+}
+
+async function waitForProbeStage(file, expectedStage, timeoutMs) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (fs.existsSync(file) && fs.statSync(file).size > 0) {
+      try {
+        const result = JSON.parse(fs.readFileSync(file, 'utf8'));
+        if (result?.stage === expectedStage) return result;
+        if (result?.error) throw new Error(result.error);
+      } catch (error) {
+        if (error instanceof SyntaxError) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          continue;
+        }
+        throw error;
+      }
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  throw new Error(`Timed out waiting for probe stage ${expectedStage} at ${file}`);
 }
 
 async function waitForProbeResult(file, timeoutMs) {

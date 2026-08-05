@@ -1,6 +1,6 @@
 {
   "name": "rel-ai-mcp",
-  "version": "0.23.2",
+  "version": "0.24.0",
   "description": "Guarded local repository workflows through a compact Rel.AI MCP connector and workflow skill.",
   "author": {
     "name": "Kyne",

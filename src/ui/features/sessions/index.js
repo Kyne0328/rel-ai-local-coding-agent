@@ -68,6 +68,24 @@ export function mountTasks(container, data = {}) {
   bindCopyActions(root);
 }
 
+export function updateTaskSessions(container, data = {}) {
+  const current = container.querySelector('.sessions-page');
+  if (!current) return false;
+  const detached = document.createElement('div');
+  mountTasks(detached, data);
+  const next = detached.querySelector('.sessions-page');
+  const currentCount = current.querySelector('.feature-count');
+  const nextCount = next?.querySelector('.feature-count');
+  if (currentCount && nextCount && currentCount.textContent !== nextCount.textContent) currentCount.textContent = nextCount.textContent;
+  const currentMetrics = current.querySelector('.summary-metrics');
+  const nextMetrics = next?.querySelector('.summary-metrics');
+  if (currentMetrics && nextMetrics && !currentMetrics.isEqualNode(nextMetrics)) currentMetrics.replaceWith(nextMetrics);
+  const currentHistory = current.querySelector('.sessions-history-card');
+  const nextHistory = next?.querySelector('.sessions-history-card');
+  if (currentHistory && nextHistory && !currentHistory.isEqualNode(nextHistory)) currentHistory.replaceWith(nextHistory);
+  return true;
+}
+
 function bindCopyActions(root) {
   root.addEventListener('click', event => {
     const button = event.target.closest('[data-copy-value]');

@@ -8,6 +8,8 @@ import { mountDesktopConnection } from './desktop-connection.js';
 import { clientCapabilityViews } from '../../task-identity.js';
 import { esc as escapeHtml } from '../../utils.js';
 
+const connectorPayloads = new WeakMap();
+
 export function mountConnector(container) {
   container.innerHTML = '<div class="connection-loading">Loading connection details…</div>';
   return loadConnector(container).catch(error => {
@@ -23,6 +25,7 @@ async function loadConnector(container) {
     return;
   }
 
+  connectorPayloads.set(container, payload);
   const dashboardState = getStore();
   const mcpConnection = payload.mcpConnection || dashboardState.mcpConnection || {};
   const mcpAuthentication = payload.mcpAuthentication || dashboardState.mcpAuthentication || {};
@@ -39,6 +42,29 @@ async function loadConnector(container) {
   controls.className = 'connection-controls-section';
   container.appendChild(controls);
   await mountDesktopConnection(controls);
+}
+
+export function updateConnectorLiveState(container, dashboardState = {}) {
+  const content = container.querySelector('#__settings-content') || container;
+  const page = content.querySelector('.connection-page');
+  const payload = connectorPayloads.get(content);
+  if (!page || !payload) return false;
+  const mcpConnection = dashboardState.mcpConnection || payload.mcpConnection || {};
+  const mcpAuthentication = dashboardState.mcpAuthentication || payload.mcpAuthentication || {};
+  const state = connectionStateFor({ ...dashboardState, mcpConnection, mcpAuthentication });
+  replaceConnectorRegion(page, '.connection-summary-card', summaryCard(payload, state));
+  replaceConnectorRegion(page, '.connection-layer-section', layerGrid(state));
+  replaceConnectorRegion(page, '.connection-actions-bar', actionCard(state, mcpConnection));
+  const currentDetails = page.querySelector('.connector-technical-details');
+  const nextDetails = technicalDetailsCard(payload, mcpConnection, dashboardState);
+  nextDetails.open = currentDetails?.open === true;
+  replaceConnectorRegion(page, '.connector-technical-details', nextDetails);
+  return true;
+}
+
+function replaceConnectorRegion(page, selector, next) {
+  const current = page.querySelector(selector);
+  if (current && !current.isEqualNode(next)) current.replaceWith(next);
 }
 
 function summaryCard(payload, state) {
@@ -197,7 +223,7 @@ function setupCard(payload, state) {
 
 function technicalDetailsCard(payload, mcpConnection = {}, dashboardState = {}) {
   const details = document.createElement('details');
-  details.className = 'card connector-details';
+  details.className = 'card connector-details connector-technical-details';
   const dashboardNoToken = dashboardUrl(payload);
   const capability = clientCapabilityViews({ ...dashboardState, mcpConnection })[0];
   details.innerHTML = `

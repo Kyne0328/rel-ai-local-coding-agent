@@ -17,6 +17,16 @@ const sourceFiles = collectJavaScript(path.join(root, 'src'));
 const surfaceDeclarations = sourceFiles.filter(file => /const TOOL_SURFACE_VERSION\s*=/.test(fs.readFileSync(file, 'utf8')));
 assert.deepEqual(surfaceDeclarations.map(file => path.relative(root, file).replaceAll('\\', '/')), ['src/tools/actionCatalog.js']);
 
+const actionDefinitionsPath = path.join(root, 'src/tools/actionDefinitions.js');
+assert.equal(fs.existsSync(actionDefinitionsPath), true, 'immutable tool definitions must have a focused owner');
+const actionCatalogSource = read('src/tools/actionCatalog.js');
+const actionDefinitionsSource = read('src/tools/actionDefinitions.js');
+assert.equal(actionCatalogSource.split(/\r?\n/).length <= 400, true, 'action catalog resolution must remain bounded');
+assert.match(actionDefinitionsSource, /const OPERATION_DEFINITION_VALUES\s*=/);
+assert.match(actionDefinitionsSource, /const PUBLIC_DEFINITION_VALUES\s*=/);
+assert.doesNotMatch(actionCatalogSource, /const OPERATION_DEFINITION_VALUES\s*=/);
+assert.doesNotMatch(actionCatalogSource, /const PUBLIC_DEFINITION_VALUES\s*=/);
+
 for (const removed of [
   'src/tools/compactRegistry.js',
   'src/tools/registry.js',
