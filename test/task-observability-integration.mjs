@@ -7,6 +7,15 @@ import path from 'node:path';
 
 const callTool = (name, args, context = {}) => rawCallTool(name, args, { principal: 'local:trusted', ...context });
 
+async function readCompletedSession(config, taskId) {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const session = readTaskHistorySession(config, taskId);
+    if (session?.status === 'completed' && session.progress?.mode === 'complete') return session;
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+  return readTaskHistorySession(config, taskId);
+}
+
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-task-observability-integration-'));
 const workspacePath = path.join(sandbox, 'repo');
 const stateDir = path.join(sandbox, 'state');
@@ -27,8 +36,6 @@ const previousConfig = process.env.REL_AI_MCP_CONFIG;
 process.env.REL_AI_MCP_CONFIG = configPath;
 
 try {
-
-
   const context = { publicHttpOnly: true, requestId: 'request-1', serverInstanceId: 'server-1', transportType: 'streamable-http' };
 
   const started = await callTool('relai_work', { action: 'begin',
@@ -52,7 +59,8 @@ try {
     summary: 'Inspected and verified session activity persistence.'
   }, { ...context, requestId: 'request-3' });
 
-  const session = readTaskHistorySession({ stateDir, auditLogPath: path.join(stateDir, 'audit.jsonl') }, started.work_id);
+  const historyConfig = { stateDir, auditLogPath: path.join(stateDir, 'audit.jsonl') };
+  const session = await readCompletedSession(historyConfig, started.work_id);
   assert.equal(session.title, 'Inspect session activity model');
   assert.equal(session.objective, 'Verify canonical task and activity persistence.');
   assert.equal(session.status, 'completed');
