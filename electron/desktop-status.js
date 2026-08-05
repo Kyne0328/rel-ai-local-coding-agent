@@ -1,11 +1,9 @@
+import { importResourceModule } from './resource-path.js';
 
+const { deriveConnectionState } = await importResourceModule('src/desktopUxContracts.js');
 
-function createDesktopStatusModel({ version = '', deriveConnectionState, formatError } = {}) {
-  if (typeof deriveConnectionState !== 'function') throw new TypeError('deriveConnectionState is required.');
-  const format = typeof formatError === 'function'
-    ? formatError
-    : error => error instanceof Error ? error.message : String(error || 'Unknown error');
-  const base = {
+function initialDesktopStatus(version = '') {
+  return normalizeDesktopStatus({
     serverRunning: false,
     tunnelStatus: 'stopped',
     mcpUrl: '',
@@ -13,19 +11,33 @@ function createDesktopStatusModel({ version = '', deriveConnectionState, formatE
     errorCode: '',
     localUrl: '',
     version,
-    taskActivity: { state: 'idle', activeCalls: 0, activeTaskCount: 0, tasks: [], workspace: '', tool: '', startedAt: null, lastTask: null }
-  };
-  const normalize = status => ({ ...status, connectionState: deriveConnectionState(status) });
-  const failure = (errorCode, error, next = {}) => ({
-    ...next,
-    error: format(error),
-    errorCode
+    taskActivity: {
+      state: 'idle',
+      activeCalls: 0,
+      activeTaskCount: 0,
+      tasks: [],
+      workspace: '',
+      tool: '',
+      startedAt: null,
+      lastTask: null
+    }
   });
+}
+
+function normalizeDesktopStatus(status = {}) {
+  return { ...status, connectionState: deriveConnectionState(status) };
+}
+
+function desktopStatusFailure(errorCode, error, next = {}) {
   return {
-    initial: () => normalize({ ...base, taskActivity: { ...base.taskActivity, tasks: [] } }),
-    normalize,
-    failure
+    ...next,
+    error: formatDesktopError(error),
+    errorCode
   };
 }
 
-export { createDesktopStatusModel };
+function formatDesktopError(error) {
+  return error instanceof Error ? error.message : String(error || 'Unknown error');
+}
+
+export { desktopStatusFailure, initialDesktopStatus, normalizeDesktopStatus };
