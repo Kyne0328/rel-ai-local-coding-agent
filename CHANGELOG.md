@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.23.2] — 2026-08-05
+
+### Linux release and connector reliability
+- **Complete Linux release packaging.** Configure the Chromium SUID sandbox in CI, provide DEB maintainer metadata, use canonical x64 artifact names, and ignore electron-builder diagnostic YAML while promoting only the required AppImage, DEB, and updater metadata.
+- **Accept ChatGPT dynamic registration metadata.** Default an omitted OAuth `application_type` to `web` while continuing to reject unsupported explicit values.
+- **Keep setup controls reachable on Linux.** Make the setup wizard resizable and maximizable, enable vertical scrolling, and size it from actual wizard content instead of the viewport scroll height.
+- **Synchronize release contracts.** Keep plugin metadata, runtime assertions, cross-platform verification, and release-bump fixtures aligned with the application version and artifact workflow.
+
+Bump root/electron/plugin/status UI/lockfiles to 0.23.2.
+
 ## [0.23.1] — 2026-08-05
 
 ### Desktop recovery and tunnel reliability
