@@ -26,6 +26,7 @@ function copyFixture() {
     'package-lock.json',
     'CHANGELOG.md',
     'release-manifest.json',
+    '.codex-plugin/plugin.json',
     'electron/package.json',
     'electron/package-lock.json',
     'electron/renderer/status.html',
@@ -86,6 +87,7 @@ function verifyReleaseBump() {
   assert.equal(readJson('package-lock.json').packages[''].version, '0.99.0');
   assert.equal(readJson('electron/package.json').version, '0.99.0');
   assert.equal(readJson('electron/package-lock.json').packages[''].version, '0.99.0');
+  assert.equal(readJson('.codex-plugin/plugin.json').version, '0.99.0');
   assert.equal(readJson('release-manifest.json').applicationVersion, '0.99.0');
   assert.match(fs.readFileSync(changelogPath, 'utf8'), /^## \[0\.99\.0\] — 2099-01-02/m);
 }

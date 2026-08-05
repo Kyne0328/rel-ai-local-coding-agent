@@ -132,7 +132,8 @@ const files = [
   'package.json',
   'package-lock.json',
   path.join('electron', 'package.json'),
-  path.join('electron', 'package-lock.json')
+  path.join('electron', 'package-lock.json'),
+  path.join('.codex-plugin', 'plugin.json')
 ];
 
 for (const file of files) updateJsonVersion(file, version);
