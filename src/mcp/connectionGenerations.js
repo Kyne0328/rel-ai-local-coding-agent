@@ -1,6 +1,6 @@
 import * as crypto from 'node:crypto';
-import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { readJsonFile, writeJsonAtomic } from '../durableState.js';
 import { getStateDir } from '../statePaths.js';
 import { requestStateKey } from './context.js';
 import { stableJson } from './toolManifest.js';
@@ -41,19 +41,34 @@ function fingerprint(key, value) {
 }
 
 function readState(file) {
-  try {
-    const value = JSON.parse(fs.readFileSync(file, 'utf8'));
-    return value && typeof value === 'object' ? value : {};
-  } catch {
-    return {};
-  }
+  return readJsonFile(file, {
+    backup: true,
+    mode: 0o600,
+    validate: isConnectionGenerationState
+  }) || {};
 }
 
 function writeState(file, value) {
-  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-  const temporary = `${file}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;
-  fs.writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
-  fs.renameSync(temporary, file);
+  writeJsonAtomic(file, value, { backup: true, mode: 0o600 });
+}
+
+function isConnectionGenerationState(value) {
+  return Boolean(
+    value
+    && typeof value === 'object'
+    && !Array.isArray(value)
+    && value.version === 1
+    && Number.isInteger(value.credentialGeneration)
+    && value.credentialGeneration >= 1
+    && Number.isInteger(value.configurationGeneration)
+    && value.configurationGeneration >= 1
+    && typeof value.credentialFingerprint === 'string'
+    && value.credentialFingerprint
+    && typeof value.configurationFingerprint === 'string'
+    && value.configurationFingerprint
+    && typeof value.updatedAt === 'string'
+    && Number.isFinite(Date.parse(value.updatedAt))
+  );
 }
 
 function sameState(previous, next) {
