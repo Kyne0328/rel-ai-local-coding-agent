@@ -11,6 +11,7 @@ import { closeDrawer } from './ui/components/drawer.js';
 import { initWindowChrome } from './ui/window-chrome.js';
 import { createDashboardClock } from './ui/clock.js';
 import { createSnapshotGate } from './ui/snapshot-order.js';
+import { initUpdateAvailableModal } from './ui/update-available-modal.js';
 
 initUiPreferences();
 
@@ -22,6 +23,7 @@ const requestedPlatform = ['win32', 'darwin', 'linux', 'other'].includes(launchP
 document.documentElement.dataset.surface = surface;
 document.documentElement.dataset.windowChrome = requestedChrome;
 document.documentElement.dataset.platform = requestedPlatform;
+if (surface === 'desktop') initUpdateAvailableModal();
 const token = urlToken || sessionStorage.getItem('relai_dashboard_token') || '';
 if (token) setToken(token);
 cleanLaunchQuery();

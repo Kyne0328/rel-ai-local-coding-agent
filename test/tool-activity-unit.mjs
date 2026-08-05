@@ -263,10 +263,8 @@ const runtime = createTaskActivityRuntime({
     }
   },
   powerSaveBlocker: fakePowerSaveBlocker,
-  Notification: class { static isSupported() { return false; } },
-  isReady: () => true
+  notify: () => false
 });
-runtime.setNotificationsEnabled(false);
 runtimeStatus = { state: 'working', activeConnectorCalls: 1, activeTaskCount: 1, tasks: [{ id: 'task', state: 'working', activeCalls: 1 }] };
 boundListener({ phase: 'started', activeConnectorCalls: 1 });
 assert.equal(started.has(41), true);

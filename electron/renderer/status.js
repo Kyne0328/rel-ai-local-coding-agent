@@ -7,7 +7,6 @@ let currentStatus = {
   version: '',
   taskActivity: { state: 'idle', activeCalls: 0, activeTaskCount: 0, tasks: [], workspace: '', tool: '', operation: '', completionKnown: false, startedAt: null, lastTask: null }
 };
-let previousConnectionKey = '';
 let previousAnnouncementKey = '';
 let notificationsEnabled = localStorage.getItem('relai_status_notifications') !== 'off';
 let clockTimer = null;
@@ -119,7 +118,6 @@ function updateUI(status) {
   currentStatus = { ...currentStatus, ...(status || {}) };
   currentStatus.taskActivity = { ...currentStatus.taskActivity, ...(status?.taskActivity || {}) };
   const view = heroView(currentStatus);
-  notifyOnConnectionChange(connectionView(currentStatus));
 
   const badge = document.getElementById('statusBadge');
   badge.className = `status-badge ${view.key}`;
@@ -296,56 +294,23 @@ function formatDuration(milliseconds) {
   return seconds ? `${minutes}m ${seconds}s` : `${minutes}m`;
 }
 
-function notificationText(value, limit = 240) {
-  const text = String(value || '').replace(/\s+/g, ' ').trim();
-  if (text.length <= limit) return text;
-  return `${text.slice(0, Math.max(0, limit - 1)).trimEnd()}…`;
-}
-
-function notifyOnConnectionChange(view) {
-  const previous = previousConnectionKey;
-  previousConnectionKey = view.key;
-  if (!notificationsEnabled || previous === view.key) return;
-  if (view.key === 'ready') {
-    showDesktopNotification(
-      'Connection ready',
-      'The secure ChatGPT connection is active and configured workspaces are available.',
-      'relai-connection'
-    );
-  } else if (view.key === 'failed') {
-    const detail = notificationText(currentStatus.error, 150);
-    showDesktopNotification(
-      'Connection failed',
-      detail ? `Rel.AI could not publish the ChatGPT endpoint. ${detail}` : 'Rel.AI could not publish the ChatGPT endpoint. Open the app for details.',
-      'relai-connection'
-    );
-  }
-}
-
-async function showDesktopNotification(title, body, tag) {
-  if (typeof Notification !== 'function') return;
-  try {
-    let permission = Notification.permission;
-    if (permission === 'default') permission = await Notification.requestPermission();
-    if (permission === 'granted') {
-      new Notification(title, {
-        body: notificationText(body),
-        icon: 'relai-logo.png',
-        tag,
-        silent: false
-      });
-    }
-  } catch {
-    // Optional notifications must not affect connection handling.
-  }
-}
-
 function updateNotificationButton() {
   const button = document.getElementById('notificationToggleBtn');
   button.setAttribute('aria-checked', notificationsEnabled ? 'true' : 'false');
   button.setAttribute('aria-label', `Desktop notifications ${notificationsEnabled ? 'on' : 'off'}`);
   button.classList.toggle('enabled', notificationsEnabled);
   document.getElementById('notificationState').textContent = notificationsEnabled ? 'On' : 'Off';
+}
+
+async function loadNotificationPreference() {
+  try {
+    const result = await window.electronAPI.getNotificationsEnabled();
+    notificationsEnabled = result?.enabled !== false;
+    localStorage.setItem('relai_status_notifications', notificationsEnabled ? 'on' : 'off');
+    updateNotificationButton();
+  } catch {
+    // The fallback remains usable if the preference cannot be loaded.
+  }
 }
 
 async function syncNotificationPreference() {
@@ -518,4 +483,4 @@ window.electronAPI.onServerLog(receiveServerLog);
 initDisclosures();
 bindEvents();
 updateUI(currentStatus);
-runAsync(syncNotificationPreference());
+runAsync(loadNotificationPreference());

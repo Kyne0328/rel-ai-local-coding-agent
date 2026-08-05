@@ -8,22 +8,10 @@ let timerId = 0;
 const timers = new Map();
 const notifications = [];
 const statuses = [];
-let clicked = 0;
 const completedIndicators = [];
 const startedBlockers = new Set();
 let nextBlocker = 1;
 
-class FakeNotification {
-  static isSupported() { return true; }
-  constructor(options) {
-    this.options = options;
-    this.listeners = new Map();
-    notifications.push(this);
-  }
-  on(name, callback) { this.listeners.set(name, callback); }
-  show() { this.shown = true; }
-  click() { this.listeners.get('click')?.(); }
-}
 
 const tracker = createToolActivityTracker({
   idleMs: 60_000,
@@ -47,10 +35,10 @@ const runtime = createTaskActivityRuntime({
     isStarted(id) { return startedBlockers.has(id); },
     stop(id) { return startedBlockers.delete(id); }
   },
-  Notification: FakeNotification,
-  iconPath: 'C:\\RelAI\\icon.png',
-  isReady: () => true,
-  onNotificationClick: () => { clicked += 1; },
+  notify: (category, content) => {
+    notifications.push({ category, options: content });
+    return true;
+  },
   onTaskCompleted: task => completedIndicators.push(structuredClone(task)),
   onStatusChange: status => statuses.push(structuredClone(status))
 });
@@ -121,9 +109,7 @@ assert.equal(notifications.length, 1);
 assert.equal(notifications[0].options.title, 'Workspace action failed');
 assert.match(notifications[0].options.body, /Running validation 1\/2: npm run check failed in repo/);
 assert.match(notifications[0].options.body, /check failed/);
-assert.equal(notifications[0].options.icon, 'C:\\RelAI\\icon.png');
-notifications[0].click();
-assert.equal(clicked, 1);
+assert.equal(notifications[0].category, 'errors');
 
 nowValue = 152_000;
 for (const [id, timer] of [...timers]) {
@@ -159,21 +145,9 @@ assert.match(notifications[1].options.body, /Implemented and validated the reque
 assert.match(notifications[1].options.body, /Workspace: repo\./);
 assert.match(notifications[1].options.body, /Final standard checks passed\./);
 assert.doesNotMatch(notifications[1].options.body, /completion reported|ChatGPT explicitly/i);
-assert.equal(notifications[1].options.icon, 'C:\\RelAI\\icon.png');
+assert.equal(notifications[1].category, 'taskCompleted');
 assert.equal(completedIndicators.length, 1);
 assert.equal(completedIndicators[0].taskId, completedTask);
-
-runtime.setNotificationsEnabled(false);
-const mutedTask = startTask('repo', 'conversation-d');
-const finishMuted = tracker.beginConnectorToolCall({
-  tool: 'relai_diff',
-  operation: 'Reviewing repository changes',
-  workspace: 'repo',
-  scopeId: 'conversation-d',
-  taskId: mutedTask
-});
-finishMuted({ ok: false, error: 'diff failed' });
-assert.equal(notifications.length, 2, 'muted failed calls must not notify');
 
 assert.ok(statuses.some(status => status.activeTaskCount === 2 && status.activeCalls === 2));
 assert.ok(statuses.some(status => status.state === 'waiting'));

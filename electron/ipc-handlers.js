@@ -57,7 +57,9 @@ function registerIpcHandlers(deps) {
     getLifecycleStatus: deps.getLifecycleStatus,
     setLaunchAtLogin: deps.setLaunchAtLogin,
     getNotificationsEnabled: deps.getNotificationsEnabled,
-    setNotificationsEnabled: deps.setNotificationsEnabled
+    setNotificationsEnabled: deps.setNotificationsEnabled,
+    getNotificationPreferences: deps.getNotificationPreferences,
+    updateNotificationPreferences: deps.updateNotificationPreferences
   });
   registerUpdaterIpc({
     ipcMain: deps.ipcMain,
@@ -191,7 +193,9 @@ function registerDesktopSettingsIpc({
   getLifecycleStatus,
   setLaunchAtLogin,
   getNotificationsEnabled,
-  setNotificationsEnabled
+  setNotificationsEnabled,
+  getNotificationPreferences,
+  updateNotificationPreferences
 }) {
   ipcMain.handle('desktop:settings:get', event => dashboardOnly(event, getDesktopSettings));
   ipcMain.handle('desktop:settings:save', (event, settings) => dashboardOnly(event, () => saveDesktopSettings(settings)));
@@ -206,6 +210,14 @@ function registerDesktopSettingsIpc({
     ok: true,
     enabled: setNotificationsEnabled(enabled)
   })));
+  ipcMain.handle('desktop:notification-preferences:get', event => dashboardOnly(event, () => ({
+    ok: true,
+    preferences: getNotificationPreferences()
+  })));
+  ipcMain.handle('desktop:notification-preferences:set', (event, patch) => dashboardOnly(
+    event,
+    () => updateNotificationPreferences(patch)
+  ));
 }
 
 function registerUpdaterIpc({

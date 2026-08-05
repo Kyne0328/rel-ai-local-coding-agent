@@ -25,6 +25,8 @@ if (surface === 'dashboard') {
     setLaunchAtLogin: enabled => ipcRenderer.invoke('desktop:startup:set', enabled === true),
     getNotificationsEnabled: () => ipcRenderer.invoke('desktop:notifications:get'),
     setNotificationsEnabled: enabled => ipcRenderer.invoke('desktop:notifications:set', enabled === true),
+    getNotificationPreferences: () => ipcRenderer.invoke('desktop:notification-preferences:get'),
+    setNotificationPreferences: patch => ipcRenderer.invoke('desktop:notification-preferences:set', patch),
     exportDiagnosticState: report => ipcRenderer.invoke('desktop:diagnostics:export', report),
     openDiagnosticsFolder: () => ipcRenderer.invoke('desktop:diagnostics:open-folder'),
     restartService: () => ipcRenderer.send('desktop:restart-service'),

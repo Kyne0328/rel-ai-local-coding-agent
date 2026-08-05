@@ -27,6 +27,8 @@ const inventory = {
   'desktop:startup:set': spec('handle', ['dashboard'], 'reject', 'delegated'),
   'desktop:notifications:get': spec('handle', ['dashboard'], 'reject', 'none'),
   'desktop:notifications:set': spec('handle', ['dashboard'], 'reject', 'delegated'),
+  'desktop:notification-preferences:get': spec('handle', ['dashboard'], 'reject', 'none'),
+  'desktop:notification-preferences:set': spec('handle', ['dashboard'], 'reject', 'delegated'),
   'desktop:diagnostics:export': spec('handle', ['dashboard'], 'reject', 'delegated'),
   'desktop:diagnostics:open-folder': spec('handle', ['dashboard'], 'reject', 'none'),
   'notifications:get-enabled': spec('handle', ['fallback'], 'reject', 'none'),
@@ -78,6 +80,8 @@ registerIpcHandlers({
   getCurrentStatus: () => ({ ok: true }),
   getNotificationsEnabled: () => true,
   setNotificationsEnabled: value => value,
+  getNotificationPreferences: () => ({ enabled: true, applicationUpdates: true }),
+  updateNotificationPreferences: value => ({ ok: true, preferences: value }),
   getDashboardWindowState: () => ({ maximized: false }),
   minimizeDashboardWindow: () => ({ minimized: true }),
   toggleDashboardMaximize: () => ({ maximized: true }),
@@ -116,6 +120,7 @@ function argsFor(channel) {
     case 'desktop:approval-token:replace': return [{ reason: 'rotate' }];
     case 'desktop:startup:set':
     case 'desktop:notifications:set':
+    case 'desktop:notification-preferences:set':
     case 'notifications:set-enabled': return [true];
     case 'desktop:diagnostics:export': return [{ status: 'ready' }];
     case 'url:open-link': return ['https://dashboard.ngrok.com/get-started/setup/windows'];
