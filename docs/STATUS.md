@@ -1,8 +1,8 @@
 # Release status
 
-## 0.24.0 consolidated runtime
+## 0.24.1 consolidated runtime
 
-Version `0.24.0` is the current release candidate. The consolidated `main` candidate now contains the reconciled runtime-hardening, work-session observability, release, ESM, strict modern MCP `2026-07-28`, stateless ChatGPT HTTP compatibility, and native-task storage work. Aggregate source, dashboard, packaging, dependency, updater, protocol, and benchmark validation passes; publication still requires the protected signed build and disposable-machine lifecycle checks.
+Version `0.24.1` is the current release candidate. The consolidated `main` candidate now contains the reconciled runtime-hardening, work-session observability, release, ESM, strict modern MCP `2026-07-28`, stateless ChatGPT HTTP compatibility, and native-task storage work. Aggregate source, dashboard, packaging, dependency, updater, protocol, and benchmark validation passes; publication still requires the protected signed build and disposable-machine lifecycle checks.
 
 ### Implemented
 

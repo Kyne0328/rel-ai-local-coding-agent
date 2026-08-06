@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.24.0] — 2026-08-05
+## [0.24.1] — 2026-08-06
 
 ### Simplified tool and runtime architecture
 - **Use one canonical 12-tool action catalog.** Keep public schemas, operation definitions, execution, output validation, dashboard metadata, and capability classification aligned through one catalog boundary, while keeping `relai_edit` as the only repository file-change tool.
@@ -33,7 +33,7 @@
 - **Prevent stale public contracts from returning.** Refresh active connection, workflow, release-gate, roadmap, and status documentation for the 12 consolidated tools; derive test action counts from the catalog; and add a release-critical guard against removed operation names and obsolete current-release claims.
 - **Add architecture and UI contract coverage.** New tests lock action-catalog parity, IPC channels, persistence, task projections, live dashboard rendering, desktop notification preferences, update-modal eligibility, and removed-layer boundaries.
 
-Bump root/electron/plugin/status UI/lockfiles/release manifest to 0.24.0.
+Bump root/electron/plugin/status UI/lockfiles/release manifest to 0.24.1.
 
 ## [0.23.2] — 2026-08-05
 
