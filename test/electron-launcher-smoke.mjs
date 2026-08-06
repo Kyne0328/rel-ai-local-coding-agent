@@ -111,6 +111,7 @@ assert.ok(electronPkg.build.files.includes('runtime-log-buffer.js'), 'electron b
 assert.ok(electronPkg.build.files.includes('app-updater.js'), 'electron build must include the application updater');
 assert.ok(electronPkg.build.files.includes('app-updater-state.js'), 'electron build must include updater state persistence');
 assert.ok(electronPkg.build.files.includes('desktop-settings.js'), 'electron build must include extracted desktop settings ownership');
+assert.ok(electronPkg.build.files.includes('desktop-notifications.js'), 'electron build must include centralized desktop notification ownership');
 assert.ok(electronPkg.build.files.includes('desktop-lifecycle.js'), 'electron build must include desktop lifecycle state and startup ownership');
 assert.ok(electronPkg.build.files.includes('shutdown-coordinator.js'), 'electron build must include coordinated shutdown ownership');
 assert.ok(electronPkg.build.files.includes('controller-runtime.js'), 'electron build must include the active-controller runtime marker');
