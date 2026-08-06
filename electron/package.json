@@ -73,6 +73,7 @@
       "update-version.js",
       "ipc-security.js",
       "desktop-settings.js",
+      "desktop-notifications.js",
       "desktop-lifecycle.js",
       "shutdown-coordinator.js",
       "controller-runtime.js",
