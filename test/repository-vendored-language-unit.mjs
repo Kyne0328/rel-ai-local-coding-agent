@@ -33,7 +33,8 @@ const CASES = [
   {"path":"src/Main.hs","language":"haskell","source":"module Main where\nmain :: IO ()\nmain = putStrLn \"RelAI\"\n"},
   {"path":"src/math.jl","language":"julia","source":"function add(x, y)\n    x + y\nend\n"},
   {"path":"src/core.clj","language":"clojure","source":"(ns relai.core)\n(defn add [x y] (+ x y))\n"},
-  {"path":"src/Greeter.groovy","language":"groovy","source":"class Greeter { String hello(String name) { return name } }\n"}
+  {"path":"src/Greeter.groovy","language":"groovy","source":"class Greeter { String hello(String name) { return name } }\n"},
+  {"path":"lib/RelAI.pm","language":"perl","source":"use strict;\nsub add { my ($a, $b) = @_; return $a + $b; }\n1;\n"}
 ];
 
 for (const item of CASES) {

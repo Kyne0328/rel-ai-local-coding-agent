@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-const PARSER_VERSION = 17;
+const PARSER_VERSION = 18;
 const MAX_SEARCH_TERMS = 768;
 
 const LANGUAGE_PROFILES = Object.freeze([
@@ -55,6 +55,7 @@ const LANGUAGE_PROFILES = Object.freeze([
   profile('julia', 'tree-sitter-julia.wasm', [".jl"]),
   profile('clojure', 'tree-sitter-clojure.wasm', [".clj",".cljs",".cljc",".edn"]),
   profile('groovy', 'tree-sitter-groovy.wasm', [".groovy",".gradle"]),
+  profile('perl', 'tree-sitter-perl.wasm', [".pl",".pm",".t"]),
   profile('zig', 'tree-sitter-zig.wasm', ['.zig'])
 ]);
 
@@ -82,7 +83,8 @@ const VENDORED_WASM_BY_LANGUAGE = Object.freeze({
   haskell: 'vendor/tree-sitter/haskell/tree-sitter-haskell.wasm',
   julia: 'vendor/tree-sitter/julia/tree-sitter-julia.wasm',
   clojure: 'vendor/tree-sitter/clojure/tree-sitter-clojure.wasm',
-  groovy: 'vendor/tree-sitter/groovy/tree-sitter-groovy.wasm'
+  groovy: 'vendor/tree-sitter/groovy/tree-sitter-groovy.wasm',
+  perl: 'vendor/tree-sitter/perl/tree-sitter-perl.wasm'
 });
 
 function profile(language, wasm, extensions, basenames = [], resolver = null) {

@@ -119,6 +119,13 @@
       "bytes": 874913,
       "sha256": "1a17b99f92395ba47e76736cc8d55d6acf8341609409e519e03c77ad5b84d7d6",
       "grammarDependency": "tree-sitter-groovy@git+https://github.com/murtaza64/tree-sitter-groovy.git#deb0dcf8c4544f07564060f6e9b9f6e4b0bfc27d"
+    },
+    "perl": {
+      "file": "perl/tree-sitter-perl.wasm",
+      "sourcePath": "out/perl/tree-sitter-perl.wasm",
+      "bytes": 4131006,
+      "sha256": "6d86393a67b4bd49c2b87f7af84a408f7488446a45254f7363654df652b9461a",
+      "grammarDependency": "tree-sitter-perl@git+https://github.com/tree-sitter-perl/tree-sitter-perl.git#release"
     }
   }
 }
