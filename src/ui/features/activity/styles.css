@@ -23,6 +23,16 @@
 .activity-status-column { @apply whitespace-nowrap; }
 .activity-row-button { @apply size-8 min-h-8 px-0 text-base; }
 .activity-requested-row td { background: var(--ui-status-info-background); }
+.activity-skeleton-row { pointer-events: none; }
+.activity-skeleton { display: block; height: 10px; max-width: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--ui-surface-secondary), var(--ui-surface-raised), var(--ui-surface-secondary)); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
+.activity-skeleton-time { width: 52px; }
+.activity-skeleton-tool { width: 72%; }
+.activity-skeleton-workspace { width: 68%; }
+.activity-skeleton-status { width: 58px; height: 22px; }
+.activity-skeleton-message { width: 88%; }
+.activity-skeleton-message-short { width: 64%; }
+.activity-skeleton-action { width: 28px; height: 28px; margin-inline: auto; border-radius: 8px; }
+.activity-skeleton-row .activity-message-mobile-meta .activity-skeleton { flex: 0 0 auto; }
 .clickable-row { @apply cursor-pointer; }
 .clickable-row:focus-visible { outline: 2px solid var(--ui-focus-ring); outline-offset: -2px; }
 .activity-freeze.active { background: var(--ui-status-info-background); color: var(--ui-action-primary); }
