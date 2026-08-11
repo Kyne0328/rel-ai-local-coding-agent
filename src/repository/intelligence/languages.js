@@ -1,13 +1,13 @@
 import path from 'node:path';
 
-const PARSER_VERSION = 23;
+const PARSER_VERSION = 24;
 const MAX_SEARCH_TERMS = 768;
 
 const LANGUAGE_PROFILES = Object.freeze([
   profile('bash', 'tree-sitter-bash.wasm', ['.sh', '.bash', '.zsh'], ['.bashrc', '.zshrc']),
-  profile('c', 'tree-sitter-c.wasm', ['.c', '.h']),
+  profile('c', 'tree-sitter-c.wasm', ['.c', '.h'], [], 'c-family'),
   profile('csharp', 'tree-sitter-c_sharp.wasm', ['.cs'], [], 'csharp'),
-  profile('cpp', 'tree-sitter-cpp.wasm', ['.cpp', '.cc', '.cxx', '.hpp', '.hh', '.hxx', '.ipp', '.tpp']),
+  profile('cpp', 'tree-sitter-cpp.wasm', ['.cpp', '.cc', '.cxx', '.hpp', '.hh', '.hxx', '.ipp', '.tpp'], [], 'c-family'),
   profile('css', 'tree-sitter-css.wasm', ['.css']),
   profile('dart', 'tree-sitter-dart.wasm', ['.dart']),
   profile('elisp', 'tree-sitter-elisp.wasm', ['.el']),
