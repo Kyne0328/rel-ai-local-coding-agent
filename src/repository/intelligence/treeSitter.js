@@ -72,7 +72,7 @@ async function parseSourceFile({ relativePath, source }) {
       path: normalizedPath,
       language,
       parser: 'tree-sitter',
-      parseError: Boolean(tree.rootNode.hasError),
+      parseError: typeof tree.rootNode.hasError === 'function' ? tree.rootNode.hasError() : Boolean(tree.rootNode.hasError),
       symbols: facts.symbols,
       occurrences: facts.occurrences,
       imports,
