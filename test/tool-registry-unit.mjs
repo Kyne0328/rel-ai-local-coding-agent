@@ -39,8 +39,8 @@ assert.deepEqual(
 assert.ok(Buffer.byteLength(JSON.stringify(connectorInstructions(config)), 'utf8') < 512);
 
 const manifest = getToolSurfaceManifest(config);
-assert.equal(manifest.schemaVersion, 6);
-assert.equal(manifest.toolSurfaceVersion, 33);
+assert.equal(manifest.schemaVersion, 7);
+assert.equal(manifest.toolSurfaceVersion, 35);
 assert.equal(Object.hasOwn(manifest, 'profile'), false);
 assert.equal(manifest.toolCount, 12);
 assert.deepEqual(manifest.tools.map(item => item.name), expectedTools);
@@ -90,6 +90,12 @@ await invalid('relai_search', { action: 'semantic', work_id: 'work', query: 'nee
 await valid('relai_validate', { action: 'http', work_id: 'work', route: '/health', timeoutMs: 600000 });
 await invalid('relai_validate', { action: 'http', work_id: 'work', route: '/health', level: 'release' });
 await invalid('relai_validate', { action: 'http', work_id: 'work', route: '/health', timeoutMs: 600001 });
+await valid('relai_exec', { work_id: 'work', command: 'node -v' });
+await valid('relai_exec', { work_id: 'work', executable: 'node', argv: ['-v'] });
+await valid('relai_exec', { work_id: 'work', executable: 'node', argv: ['-'], input: 'process.stdout.write("ok")' });
+await invalid('relai_exec', { work_id: 'work' });
+await invalid('relai_exec', { work_id: 'work', command: 'node -v', executable: 'node' });
+await invalid('relai_exec', { work_id: 'work', command: 'node -v', argv: ['-v'] });
 await valid('relai_edit', { work_id: 'work', path: 'README.md', content: '# Replacement\n' });
 await valid('relai_edit', { work_id: 'work', path: 'README.md', oldText: 'before', newText: 'after' });
 await valid('relai_edit', { work_id: 'work', path: 'README.md', replacements: [{ oldText: 'before', newText: 'after' }] });
@@ -112,8 +118,8 @@ assert.equal(resolveToolOperation('relai_validate', { action: 'http', work_id: '
 
 const metadata = getToolMetadata(config);
 const validateMetadata = metadata.find(item => item.name === 'relai_validate');
-assert.equal(validateMetadata.taskSupport, 'optional');
-assert.equal(validateMetadata.actions.find(item => item.action === 'checks').taskSupport, 'optional');
+assert.equal(validateMetadata.taskSupport, 'forbidden');
+assert.equal(validateMetadata.actions.find(item => item.action === 'checks').taskSupport, 'forbidden');
 assert.equal(validateMetadata.actions.find(item => item.action === 'http').taskSupport, 'forbidden');
 assert.equal(validateMetadata.actions.find(item => item.action === 'http').executionClass, 'bounded_synchronous');
 assert.ok(validateMetadata.actions.find(item => item.action === 'http').fields.includes('route'));

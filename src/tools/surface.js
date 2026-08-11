@@ -45,7 +45,7 @@ function getToolSurfaceManifest() {
     };
   });
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     toolSurfaceVersion: TOOL_SURFACE_VERSION,
     toolCount: manifestTools.length,
     tools: manifestTools,

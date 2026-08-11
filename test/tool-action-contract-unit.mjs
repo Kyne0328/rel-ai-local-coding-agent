@@ -6,7 +6,7 @@ import { buildToolManifest, canonicalValue, stableJson } from '../src/mcp/toolMa
 import { resolveExecutableToolCall } from '../src/tools/runtimeRegistry.js';
 import { getToolDefinitions, getToolMetadata, getToolSurfaceManifest } from '../src/tools/schema.js';
 
-const EXPECTED_HASH = 'dd537d0bac5ff2e2e83d543aa84175b6d4c0a1167c0ac3c0114a3b3b5a531b28';
+const EXPECTED_HASH = '55b6c8c7c227b472dc3618b8cb29bcba2ade44e00ebc972e627f45f2f1bafa44';
 const rows = `
 relai_work|begin|relai_begin_work|startTask|repository:read|none|none|task|always_immediate|forbidden
 relai_work|status|relai_status|status|repository:read|none|optional|task|always_immediate|forbidden
@@ -22,8 +22,9 @@ relai_inspect|related|relai_code_inspect|codeInspect|repository:read|none|requir
 relai_inspect|impact|relai_code_inspect|codeInspect|repository:read|none|required|task|bounded_synchronous|forbidden
 relai_inspect|trace|relai_code_inspect|codeInspect|repository:read|none|required|task|bounded_synchronous|forbidden
 relai_inspect|diagnostics|relai_code_inspect|codeInspect|repository:read|none|required|task|bounded_synchronous|forbidden
+relai_inspect|architecture|relai_code_inspect|codeInspect|repository:read|none|required|task|bounded_synchronous|forbidden
 relai_edit|default|relai_edit|edit|repository:write|none|required|task|bounded_synchronous|forbidden
-relai_exec|default|relai_exec|exec|command:execute|none|required|task|native_task_eligible|optional
+relai_exec|default|relai_exec|exec|command:execute|none|required|task|bounded_synchronous|forbidden
 relai_process|start|relai_process_start|processStart|process:manage|none|required|task|persistent_process|forbidden
 relai_process|read|relai_process_read|processRead|repository:read|none|required|task|persistent_process|forbidden
 relai_process|write|relai_process_write|processWrite|process:manage|none|required|task|persistent_process|forbidden
@@ -32,8 +33,8 @@ relai_process|list|relai_process_list|processList|repository:read|none|required|
 relai_worktree|create|relai_worktree_create|worktreeCreate|repository:write|none|required|workspace|bounded_synchronous|forbidden
 relai_worktree|list|relai_worktree_list|worktreeList|repository:read|none|required|task|bounded_synchronous|forbidden
 relai_worktree|remove|relai_worktree_remove|worktreeRemove|repository:write|always|required|workspace|bounded_synchronous|forbidden
-relai_validate|checks|relai_run_checks|runChecks|command:execute|none|required|task|native_task_eligible|optional
-relai_validate|diagnostics|relai_diagnostics_run|diagnosticsRun|command:execute|none|required|task|native_task_eligible|optional
+relai_validate|checks|relai_run_checks|runChecks|command:execute|none|required|task|bounded_synchronous|forbidden
+relai_validate|diagnostics|relai_diagnostics_run|diagnosticsRun|command:execute|none|required|task|bounded_synchronous|forbidden
 relai_validate|http|relai_http_probe|httpProbe|repository:read|none|required|task|bounded_synchronous|forbidden
 relai_changes|diff|relai_diff|diff|repository:read|none|required|task|bounded_synchronous|forbidden
 relai_changes|restore|relai_restore_paths|restorePaths|repository:write|none|required|workspace|bounded_synchronous|forbidden
@@ -73,7 +74,7 @@ const manifestByName = new Map(getToolSurfaceManifest().tools.map(item => [item.
 const contract = definitions.map(definition => contractEntry(definition, metadataByName.get(definition.name)));
 const hash = crypto.createHash('sha256').update(stableJson(contract)).digest('hex');
 assert.equal(definitions.length, 12);
-assert.equal(rows.length, 35);
+assert.equal(rows.length, 36);
 assert.equal(hash, EXPECTED_HASH, 'public tool contract changed without an explicit baseline update');
 const editDefinition = definitions.find(definition => definition.name === "relai_edit");
 assert.ok(editDefinition, "relai_edit definition must exist");

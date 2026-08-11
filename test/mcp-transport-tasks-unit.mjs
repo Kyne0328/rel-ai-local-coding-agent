@@ -23,6 +23,7 @@ import {
 import {
   createTaskAwareStdioTransport,
   handleTransportTaskRequest,
+  isTransportTaskRequestCandidate,
   runBoundedExecution
 } from '../src/mcp/transportTasks.js';
 
@@ -82,6 +83,11 @@ async function waitForSent(transport, count) {
 }
 
 try {
+  const editTaskCandidate = request(99, 'tools/call', {
+    name: 'relai_edit',
+    arguments: { work_id: 'work-session', path: 'README.md', oldText: 'before', newText: 'after' }
+  }, tasksCapabilities);
+  assert.equal(isTransportTaskRequestCandidate(config, editTaskCandidate), false, 'relai_edit must remain an ordinary tools/call operation instead of host-managed native Tasks');
   const timeout = await runBoundedExecution(
     signal => signal.aborted
       ? Promise.resolve({ stopped: true })
@@ -114,48 +120,20 @@ try {
   assert.equal(abortedResult.error.code, -32800);
   assert.equal(abortedResult.error.reason, 'execution_aborted');
 
-  const boundedCall = request(100, 'tools/call', {
+  const execTaskCandidate = request(100, 'tools/call', {
     name: 'relai_exec',
     arguments: {
       work_id: 'work-session',
-      command: 'echo bounded fallback',
-      timeoutMs: 60_000,
+      command: 'echo ordinary execution',
+      timeoutMs: 90_000,
       maxOutputBytes: 60_000
     }
-  }, {});
-  const bounded = await handleTransportTaskRequest(config, boundedCall, {
+  }, tasksCapabilities);
+  assert.equal(isTransportTaskRequestCandidate(config, execTaskCandidate), false, 'relai_exec must not advertise automatic host-managed task execution');
+  assert.equal(await handleTransportTaskRequest(config, execTaskCandidate, {
     principal: owner,
-    transportType: 'streamable-http',
-    synchronousBounds: { maxDurationMs: 50, maxCapturedOutputBytes: 1024 },
-    executeToolResult: async (_config, name, args, _options) => {
-      assert.equal(name, 'relai_exec');
-      assert.equal(args.timeoutMs, 50);
-      assert.equal(args.maxOutputBytes, 1024);
-      return {
-        content: [{ type: 'text', text: 'bounded fallback completed' }],
-        structuredContent: { ok: true, mode: 'bounded_synchronous' },
-        isError: false
-      };
-    }
-  });
-  assert.equal(bounded.body.error, undefined);
-  assert.equal(bounded.body.result.resultType, undefined);
-  assert.equal(bounded.body.result.structuredContent.mode, 'bounded_synchronous');
-
-  const boundedTimeout = await handleTransportTaskRequest(config, {
-    ...boundedCall,
-    id: 101
-  }, {
-    principal: owner,
-    transportType: 'streamable-http',
-    synchronousBounds: { maxDurationMs: 20, maxCapturedOutputBytes: 1024 },
-    executeToolResult: async (_config, _name, _args, options) => new Promise(resolve => {
-      options.signal.addEventListener('abort', () => resolve({ stopped: true }), { once: true });
-    })
-  });
-  assert.equal(boundedTimeout.body.error.code, -32024);
-  assert.equal(boundedTimeout.body.error.data.reason, 'synchronous_timeout');
-
+    transportType: 'streamable-http'
+  }), null, 'ordinary tools/call must delegate to the normal SDK tool path');
   const req = new EventEmitter();
   const socket = new EventEmitter();
   req.socket = socket;

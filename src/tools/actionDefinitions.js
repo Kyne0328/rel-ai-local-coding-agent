@@ -53,8 +53,8 @@ const OPERATION_DEFINITION_VALUES = [
   {
     name: "relai_exec",
     title: "Run Workspace Command",
-    description: "Run a one-shot development command inside a configured workspace and return exit status, bounded stdout and stderr, timing, and detected file changes. cwd is workspace-relative. A successful result does not replace final relai_validate action 'checks' validation.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"command":{"type":"string","minLength":1,"maxLength":20000},"cwd":{"type":"string"},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000},"env":{"type":"object","additionalProperties":{"type":"string"}},"maxOutputBytes":{"type":"number","minimum":1000,"maximum":16777216}},"required":["workspace","command"],"additionalProperties":false},
+    description: "Run a one-shot development command inside a configured workspace. Use command for shell syntax, or executable + argv (+ optional input) for shell-free execution that preserves quotes, backticks, dollar signs, and multiline script text exactly. Returns exit status, bounded stdout and stderr, timing, and detected file changes. cwd is workspace-relative. A successful result does not replace final relai_validate checks validation.",
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"command":{"type":"string","minLength":1,"maxLength":20000},"executable":{"type":"string","minLength":1,"maxLength":1000},"argv":{"type":"array","items":{"type":"string","maxLength":20000},"maxItems":100},"input":{"type":"string","maxLength":1048576},"cwd":{"type":"string"},"timeoutMs":{"type":"number","minimum":1000,"maximum":86400000},"env":{"type":"object","additionalProperties":{"type":"string"}},"maxOutputBytes":{"type":"number","minimum":1000,"maximum":16777216}},"required":["workspace"],"oneOf":[{"required":["command"],"not":{"anyOf":[{"required":["executable"]},{"required":["argv"]},{"required":["input"]}]}},{"required":["executable"],"not":{"required":["command"]}}],"additionalProperties":false},
     handlerName: 'exec',
     behavior: {"audit":"exec","cache":"workspace","longRunning":true},
   },
@@ -278,9 +278,8 @@ const OPEN_WORLD_TOOLS = new Set([
   'relai_exec', 'relai_process_start', 'relai_process_write',
   'relai_diagnostics_run', 'relai_run_checks', 'relai_git_push'
 ]);
-const NATIVE_TASK_ELIGIBLE_TOOLS = new Set([
-  'relai_exec', 'relai_diagnostics_run', 'relai_run_checks'
-]);
+const NATIVE_TASK_ELIGIBLE_TOOLS = new Set();
+
 const PERSISTENT_PROCESS_TOOLS = new Set([
   'relai_process_start', 'relai_process_read', 'relai_process_write', 'relai_process_stop', 'relai_process_list'
 ]);
@@ -569,8 +568,7 @@ const PUBLIC_DEFINITION_VALUES = [
       additionalProperties: false
     },
     annotations: annotations(false, true, false, true),
-    execution: { taskSupport: 'optional' },
-    behavior: { longRunning: true, executionClass: 'native_task_eligible' },
+    behavior: { longRunning: true },
     dashboard: { capabilities: ['validate'] }
   }),
   define({

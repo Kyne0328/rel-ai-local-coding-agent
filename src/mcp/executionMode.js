@@ -14,6 +14,8 @@ const TASK_ELIGIBILITY = Object.freeze({
 });
 const TASK_ELIGIBILITY_VALUES = new Set(Object.values(TASK_ELIGIBILITY));
 const DEFAULT_SYNCHRONOUS_EXECUTION_BOUNDS = Object.freeze({
+  // This is a response-shaping budget for clients that support native Tasks.
+  // It must never shorten a tool's own timeout for clients that require synchronous fallback.
   maxDurationMs: 30_000,
   maxCapturedOutputBytes: 2 * 1024 * 1024
 });

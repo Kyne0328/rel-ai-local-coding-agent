@@ -3,14 +3,14 @@
   "disabledToolCount": 0,
   "externallyVisibleToolCount": 12,
   "filteredToolCount": 0,
-  "hash": "luqhYyWKdrvhSLDVqZi9YkEW_DkbrjVxAlVZ1150TuA",
+  "hash": "yysg7frl8QeCNGCCDaGk-B7T0RtS09ihCJUez1ncmE0",
   "instructions": "Start each objective with relai_work action begin and pass its work_id to later calls. Inspect relevant files before editing; use bounded reads and commands. Validate after changes. Never bypass approval, workspace, task, or destructive-operation safeguards. Report only checks actually run. Finish with relai_validate action checks complete:true, or relai_work action finish after review.",
-  "schemaVersion": 6,
+  "schemaVersion": 7,
   "serverInfo": {
     "name": "rel-ai-mcp",
     "version": "0.25.0"
   },
-  "toolSurfaceVersion": 33,
+  "toolSurfaceVersion": 35,
   "tools": [
     {
       "annotations": {
@@ -1329,7 +1329,7 @@
         "cache": "workspace",
         "concurrencyScope": "task",
         "deferStagedSession": false,
-        "executionClass": "native_task_eligible",
+        "executionClass": "bounded_synchronous",
         "longRunning": true,
         "sessionWrite": false,
         "startsSession": false,
@@ -1338,12 +1338,74 @@
       },
       "description": "Run a bounded command.",
       "execution": {
-        "executionClass": "native_task_eligible",
-        "taskSupport": "optional"
+        "executionClass": "bounded_synchronous",
+        "taskSupport": "forbidden"
       },
       "inputSchema": {
         "additionalProperties": false,
+        "oneOf": [
+          {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "executable"
+                  ]
+                },
+                {
+                  "required": [
+                    "argv"
+                  ]
+                },
+                {
+                  "required": [
+                    "input"
+                  ]
+                }
+              ]
+            },
+            "properties": {
+              "work_id": {
+                "description": "Opaque ID returned when a repository work session begins.",
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "command",
+              "work_id"
+            ]
+          },
+          {
+            "not": {
+              "required": [
+                "command"
+              ]
+            },
+            "properties": {
+              "work_id": {
+                "description": "Opaque ID returned when a repository work session begins.",
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "executable",
+              "work_id"
+            ]
+          }
+        ],
         "properties": {
+          "argv": {
+            "items": {
+              "maxLength": 20000,
+              "type": "string"
+            },
+            "maxItems": 100,
+            "type": "array"
+          },
           "command": {
             "maxLength": 20000,
             "minLength": 1,
@@ -1357,6 +1419,15 @@
               "type": "string"
             },
             "type": "object"
+          },
+          "executable": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "input": {
+            "maxLength": 1048576,
+            "type": "string"
           },
           "maxOutputBytes": {
             "maximum": 16777216,
@@ -1379,7 +1450,6 @@
           }
         },
         "required": [
-          "command",
           "work_id"
         ],
         "type": "object"
@@ -1742,6 +1812,29 @@
             ],
             "taskScope": "required",
             "taskSupport": "forbidden"
+          },
+          {
+            "action": "architecture",
+            "annotations": {
+              "destructiveHint": false,
+              "idempotentHint": true,
+              "openWorldHint": false,
+              "readOnlyHint": true
+            },
+            "concurrencyScope": "task",
+            "executionClass": "bounded_synchronous",
+            "fields": [
+              "maxFiles",
+              "maxResults",
+              "work_id",
+              "workspace"
+            ],
+            "operation": "relai_code_inspect",
+            "required": [
+              "work_id"
+            ],
+            "taskScope": "required",
+            "taskSupport": "forbidden"
           }
         ],
         "executionClass": "bounded_synchronous",
@@ -1755,17 +1848,29 @@
         "allOf": [
           {
             "if": {
-              "anyOf": [
-                {
-                  "required": [
-                    "maxResults"
-                  ]
-                },
-                {
-                  "required": [
-                    "symbol"
+              "required": [
+                "maxResults"
+              ]
+            },
+            "then": {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "architecture",
+                    "impact",
+                    "references",
+                    "related",
+                    "symbol",
+                    "trace"
                   ]
                 }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": [
+                "symbol"
               ]
             },
             "then": {
@@ -1961,6 +2066,23 @@
               "action",
               "work_id"
             ]
+          },
+          {
+            "properties": {
+              "action": {
+                "const": "architecture"
+              },
+              "work_id": {
+                "description": "Opaque ID returned when a repository work session begins.",
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "action",
+              "work_id"
+            ]
           }
         ],
         "properties": {
@@ -1971,7 +2093,8 @@
               "related",
               "impact",
               "trace",
-              "diagnostics"
+              "diagnostics",
+              "architecture"
             ],
             "type": "string"
           },
@@ -2037,6 +2160,10 @@
             },
             "type": "array"
           },
+          "architecture": {
+            "additionalProperties": true,
+            "type": "object"
+          },
           "callCount": {
             "type": "number"
           },
@@ -2049,6 +2176,13 @@
           },
           "check": {
             "type": "string"
+          },
+          "communities": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array"
           },
           "completionKnown": {
             "type": "boolean"
@@ -2102,6 +2236,13 @@
           "durationMs": {
             "type": "number"
           },
+          "entryPoints": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array"
+          },
           "error": {
             "additionalProperties": true,
             "type": [
@@ -2130,6 +2271,13 @@
                 "string",
                 "object"
               ]
+            },
+            "type": "array"
+          },
+          "hotspots": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
             },
             "type": "array"
           },
@@ -2181,6 +2329,13 @@
             },
             "type": "array"
           },
+          "layers": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array"
+          },
           "level": {
             "type": "string"
           },
@@ -2195,6 +2350,13 @@
           },
           "mode": {
             "type": "string"
+          },
+          "modules": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array"
           },
           "next": {
             "type": "string"
@@ -2247,6 +2409,10 @@
               "type": "object"
             },
             "type": "array"
+          },
+          "relationshipTypes": {
+            "additionalProperties": true,
+            "type": "object"
           },
           "results": {
             "items": {
@@ -4928,7 +5094,7 @@
         "cache": "",
         "concurrencyScope": "task",
         "deferStagedSession": false,
-        "executionClass": "native_task_eligible",
+        "executionClass": "bounded_synchronous",
         "longRunning": true,
         "sessionWrite": false,
         "startsSession": false,
@@ -4947,7 +5113,7 @@
               "readOnlyHint": false
             },
             "concurrencyScope": "task",
-            "executionClass": "native_task_eligible",
+            "executionClass": "bounded_synchronous",
             "fields": [
               "check",
               "checks",
@@ -4966,7 +5132,7 @@
               "work_id"
             ],
             "taskScope": "required",
-            "taskSupport": "optional"
+            "taskSupport": "forbidden"
           },
           {
             "action": "diagnostics",
@@ -4977,7 +5143,7 @@
               "readOnlyHint": false
             },
             "concurrencyScope": "task",
-            "executionClass": "native_task_eligible",
+            "executionClass": "bounded_synchronous",
             "fields": [
               "command",
               "commands",
@@ -4993,7 +5159,7 @@
               "work_id"
             ],
             "taskScope": "required",
-            "taskSupport": "optional"
+            "taskSupport": "forbidden"
           },
           {
             "action": "http",
@@ -5020,12 +5186,11 @@
             "taskSupport": "forbidden"
           }
         ],
-        "executionClass": "native_task_eligible",
+        "executionClass": "bounded_synchronous",
         "executionClasses": [
-          "native_task_eligible",
           "bounded_synchronous"
         ],
-        "taskSupport": "optional"
+        "taskSupport": "forbidden"
       },
       "inputSchema": {
         "additionalProperties": false,
@@ -6584,5 +6749,5 @@
       "title": "Manage Worktree"
     }
   ],
-  "version": "luqhYyWKdrvhSLDVqZi9YkEW"
+  "version": "yysg7frl8QeCNGCCDaGk-B7T"
 }

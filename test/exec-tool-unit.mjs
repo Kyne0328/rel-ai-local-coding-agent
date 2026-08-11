@@ -86,6 +86,9 @@ try {
   assert.ok(schema, 'relai_exec must be connector-visible');
   assert.ok(schema.inputSchema.properties.command, 'connector schema must retain command');
   assert.ok(schema.inputSchema.properties.cwd, 'connector schema must expose cwd');
+  assert.ok(schema.inputSchema.properties.executable, 'connector schema must expose executable direct mode');
+  assert.ok(schema.inputSchema.properties.argv, 'connector schema must expose direct argv');
+  assert.ok(schema.inputSchema.properties.input, 'connector schema must expose direct stdin input');
 
   const secret = 'exec-secret-value';
   const context = { publicHttpOnly: true };
@@ -104,6 +107,30 @@ try {
   assert.ok(success.stderrBytes > 0);
   assert.deepEqual(success.environmentKeys, ['API_TOKEN', 'RELAI_EXEC_TEST']);
   assert.equal(Object.hasOwn(success, 'commandSummary'), false, 'connector response must not duplicate the audit-only summary');
+
+  const literal = "backtick:` dollar:$ double:\"quoted\" newline\nsecond";
+  const directSource = [
+    "const chunks = [];",
+    "process.stdin.on('data', chunk => chunks.push(chunk));",
+    "process.stdin.on('end', () => process.stdout.write(Buffer.concat(chunks).toString('utf8')));"
+  ].join('\n');
+  const direct = await execCall({
+    executable: process.execPath,
+    argv: ['-e', directSource],
+    input: literal
+  });
+  assert.equal(direct.ok, true);
+  assert.equal(direct.shell, 'Direct process');
+  assert.equal(direct.stdout, literal);
+
+  await assert.rejects(
+    () => execCall({ command: 'echo shell', executable: process.execPath }),
+    /exactly one execution mode/i
+  );
+  await assert.rejects(
+    () => execCall({ executable: process.execPath, argv: ['ok', 42] }),
+    /argv|string/i
+  );
 
   const auditText = JSON.stringify(readAudit(readConfig(), { limit: 100 }).entries);
   assert.doesNotMatch(auditText, new RegExp(secret));
