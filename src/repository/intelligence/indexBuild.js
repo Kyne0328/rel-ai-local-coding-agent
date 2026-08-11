@@ -130,7 +130,7 @@ async function refreshRepositoryIndex(job, signal) {
     throwIfAborted(signal);
     db.exec('BEGIN IMMEDIATE');
     try {
-      resolveRelationships(db);
+      resolveRelationships(db, { workspaceRoot: workspace.path });
       finishGeneration(db, generationId, 'committed', processedFiles + skippedChangedFiles + deleted.length);
       db.exec('COMMIT');
     } catch (error) {

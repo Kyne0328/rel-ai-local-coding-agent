@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-const PARSER_VERSION = 27;
+const PARSER_VERSION = 28;
 const MAX_SEARCH_TERMS = 768;
 
 const LANGUAGE_PROFILES = Object.freeze([

@@ -20,8 +20,7 @@ const CASES = [
     "source": "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT);\n"
   },
   {"path":"scripts/example.ps1","language":"powershell","source":"function GetRelAI { Write-Output 1 }\n"},
-  {"path":"scripts/example.ps1","language":"powershell","source":"function GetRelAI { Write-Output 1 }\n"},
-  {"path":"README.md","language":"markdown","source":"# Rel.AI\n\nRepository intelligence.\n"},
+ {"path":"README.md","language":"markdown","source":"# Rel.AI\n\nRepository intelligence.\n"},
   {"path":"docs/page.mdx","language":"markdown","source":"# Rel.AI MDX\n\nStructured markdown content.\n"},
   {"path":"Dockerfile","language":"dockerfile","source":"FROM node:24-alpine\nWORKDIR /app\nCOPY . .\n"},
   {"path":"schema.graphql","language":"graphql","source":"type Query { hello: String! }\nquery Hello { hello }\n"},

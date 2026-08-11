@@ -1,96 +1,95 @@
-import { dedupeRelations, importBindingMap, nearestSymbolByOffset, relation, simpleName, splitTypeList } from './common.js';
+import { dedupeRelations, fieldNode, importBindingMap, namedChildren, nodeText, nodesOfTypes, relation, simpleName, symbolForNode } from './common.js';
+import { frameworkRelations } from './frameworks.js';
 
-const PROVIDER = 'resolver-python-v1';
-const CAPABILITIES = Object.freeze(['import-bindings', 'inheritance', 'constructor-types', 'imported-calls']);
+const PROVIDER = 'resolver-python-v2';
+const CAPABILITIES = Object.freeze(['ast-import-bindings', 'ast-inheritance', 'ast-constructor-types', 'ast-imported-calls', 'framework-http']);
 
-const pythonResolver = Object.freeze({
-  id: PROVIDER,
-  capabilities: CAPABILITIES,
-  enrich({ source, facts }) {
-    const text = String(source || '');
-    const imports = parseImports(text);
-    const bindings = importBindingMap(imports);
-    const symbols = facts.symbols || [];
-    return {
-      provider: PROVIDER,
-      capabilities: CAPABILITIES,
-      imports: imports.map(({ bindings: _bindings, ...item }) => ({ ...item, provider: PROVIDER, confidence: 0.96 })),
-      relations: dedupeRelations([
-        ...inheritanceRelations(text, symbols, bindings),
-        ...constructorRelations(text, symbols, bindings),
-        ...callRelations(text, symbols, bindings)
-      ])
-    };
-  }
-});
+const pythonResolver = Object.freeze({ id: PROVIDER, capabilities: CAPABILITIES, enrich({ root, facts, language }) {
+  const imports = parseImports(root);
+  const bindings = importBindingMap(imports);
+  const symbols = facts.symbols || [];
+  const relations = [
+    ...inheritanceRelations(root, symbols, bindings),
+    ...constructorRelations(root, symbols, bindings),
+    ...callRelations(root, symbols, bindings),
+    ...frameworkRelations(language, { root, symbols, provider: PROVIDER })
+  ];
+  return { provider: PROVIDER, capabilities: CAPABILITIES, imports: enrichImports(imports), relations: dedupeRelations(relations) };
+}});
 
-function parseImports(source) {
+function parseImports(root) {
   const imports = [];
-  for (const match of source.matchAll(/^\s*from\s+([.A-Za-z_][\w.]*)\s+import\s+([^\n#]+)/gm)) {
+  for (const node of nodesOfTypes(root, ['import_from_statement'])) {
+    const text = nodeText(node);
+    const match = text.match(/^from\s+([.A-Za-z_]\w*(?:\.\w+)*)\s+import\s+([\s\S]+)$/);
+    if (!match) continue;
     const specifier = pythonSpecifier(match[1]);
-    const bindings = match[2].replace(/[()]/g, '').split(',').map(part => binding(part)).filter(Boolean);
+    const bindings = match[2].replace(/[()]/g, '').split(',').map(binding).filter(Boolean);
     imports.push({ specifier, kind: 'from-import', bindings });
   }
-  for (const match of source.matchAll(/^\s*import\s+([^\n#]+)/gm)) {
-    for (const raw of match[1].split(',')) {
+  for (const node of nodesOfTypes(root, ['import_statement'])) {
+    const text = nodeText(node).replace(/^import\s+/, '');
+    for (const raw of text.split(',')) {
       const parts = raw.trim().split(/\s+as\s+/);
       const imported = parts[0]?.trim();
       if (!imported) continue;
-      const local = simpleName(parts[1] || imported);
-      imports.push({ specifier: pythonSpecifier(imported), kind: 'import', bindings: [{ local, imported: '*', kind: 'namespace' }] });
+      imports.push({ specifier: pythonSpecifier(imported), kind: 'import', bindings: [{ local: simpleName(parts[1] || imported), imported: '*', kind: 'namespace' }] });
     }
   }
   return imports;
 }
 
+function inheritanceRelations(root, symbols, bindings) {
+  const result = [];
+  for (const node of nodesOfTypes(root, ['class_definition'])) {
+    const ownerName = simpleName(nodeText(fieldNode(node, 'name')));
+    const owner = symbols.find(item => item.name === ownerName)?.qualifiedName || ownerName;
+    const bases = fieldNode(node, 'superclasses');
+    for (const base of namedChildren(bases)) {
+      if (base.type === 'keyword_argument') continue;
+      result.push(relation(PROVIDER, 'INHERITS', owner, nodeText(base), bindings, { confidence: 0.98 }));
+    }
+  }
+  return result;
+}
+
+function constructorRelations(root, symbols, bindings) {
+  const result = [];
+  for (const node of nodesOfTypes(root, ['assignment'])) {
+    const right = fieldNode(node, 'right');
+    if (right?.type !== 'call') continue;
+    const target = nodeText(fieldNode(right, 'function'));
+    if (!/^[A-Z]/.test(simpleName(target))) continue;
+    result.push(relation(PROVIDER, 'USES_TYPE', symbolForNode(node, symbols), target, bindings, { sourceName: simpleName(nodeText(fieldNode(node, 'left'))), confidence: 0.96 }));
+  }
+  return result;
+}
+
+function callRelations(root, symbols, bindings) {
+  const result = [];
+  for (const node of nodesOfTypes(root, ['call'])) {
+    const fn = fieldNode(node, 'function');
+    const text = nodeText(fn);
+    const direct = simpleName(text);
+    if (fn?.type === 'identifier' && bindings.has(direct)) result.push(relation(PROVIDER, 'CALLS', symbolForNode(node, symbols), direct, bindings, { confidence: 0.97 }));
+    if (fn?.type === 'attribute') {
+      const match = text.match(/^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$/);
+      const imported = match ? bindings.get(match[1]) : null;
+      if (match && imported?.imported === '*') result.push(relation(PROVIDER, 'CALLS', symbolForNode(node, symbols), match[2], new Map(), { moduleSpecifier: imported.specifier, targetQualifiedName: match[2], confidence: 0.96 }));
+    }
+  }
+  return result;
+}
+
 function binding(value) {
   const parts = String(value || '').trim().split(/\s+as\s+/);
-  const imported = simpleName(parts[0]);
-  const local = simpleName(parts[1] || parts[0]);
+  const imported = simpleName(parts[0]); const local = simpleName(parts[1] || parts[0]);
   return imported && local ? { local, imported, kind: 'named' } : null;
 }
-
 function pythonSpecifier(value) {
-  const raw = String(value || '').trim();
-  const dots = raw.match(/^\.+/)?.[0].length || 0;
-  const body = raw.slice(dots).replaceAll('.', '/');
-  if (!dots) return body;
-  const prefix = dots === 1 ? './' : '../'.repeat(dots - 1);
-  return `${prefix}${body}`.replace(/\/$/, '');
+  const raw = String(value || '').trim(); const dots = raw.match(/^\.+/)?.[0].length || 0; const body = raw.slice(dots).replaceAll('.', '/');
+  if (!dots) return body; return `${dots === 1 ? './' : '../'.repeat(dots - 1)}${body}`.replace(/\/$/, '');
 }
-
-function inheritanceRelations(source, symbols, bindings) {
-  const result = [];
-  for (const match of source.matchAll(/\bclass\s+([A-Za-z_]\w*)\s*\(([^)]*)\)\s*:/g)) {
-    const owner = symbols.find(item => item.name === match[1])?.qualifiedName || match[1];
-    for (const base of splitTypeList(match[2])) result.push(relation(PROVIDER, 'INHERITS', owner, base, bindings, { confidence: 0.97 }));
-  }
-  return result;
-}
-
-function constructorRelations(source, symbols, bindings) {
-  const result = [];
-  for (const match of source.matchAll(/\b([A-Za-z_]\w*)\s*=\s*([A-Z][A-Za-z0-9_]*)\s*\(/g)) {
-    const owner = nearestSymbolByOffset(source, symbols, match.index || 0);
-    result.push(relation(PROVIDER, 'USES_TYPE', owner, match[2], bindings, { sourceName: match[1], confidence: 0.94 }));
-  }
-  return result;
-}
-
-function callRelations(source, symbols, bindings) {
-  const result = [];
-  for (const match of source.matchAll(/\b([A-Za-z_]\w*)\s*\(/g)) {
-    if (!bindings.has(match[1])) continue;
-    const owner = nearestSymbolByOffset(source, symbols, match.index || 0);
-    result.push(relation(PROVIDER, 'CALLS', owner, match[1], bindings, { confidence: 0.95 }));
-  }
-  for (const match of source.matchAll(/\b([A-Za-z_]\w*)\.([A-Za-z_]\w*)\s*\(/g)) {
-    const imported = bindings.get(match[1]);
-    if (!imported || imported.imported !== '*') continue;
-    const owner = nearestSymbolByOffset(source, symbols, match.index || 0);
-    result.push(relation(PROVIDER, 'CALLS', owner, match[2], new Map(), { moduleSpecifier: imported.specifier, targetQualifiedName: match[2], confidence: 0.95 }));
-  }
-  return result;
-}
+function enrichImports(imports) { return imports.map(({ bindings: _bindings, ...item }) => ({ ...item, provider: PROVIDER, confidence: 0.97 })); }
 
 export { pythonResolver };
