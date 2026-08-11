@@ -4,6 +4,7 @@ import { discoverCommands } from '../../commandDiscovery.js';
 import { resolveSafePath } from '../../safety.js';
 import { detectVerifyChecks } from '../../bridge/checkDetection.js';
 import { clampNumber } from '../../bridge/limits.js';
+import { analyzeArchitecture } from './architecture.js';
 import { openIndexDatabase, repositoryIndexPath } from './database.js';
 import { reciprocalRankFusion } from './fusion.js';
 import { ensureRepositoryIndex } from './indexer.js';
@@ -17,14 +18,15 @@ const MAX_QUERY_CANDIDATES = 1000;
 
 async function queryCodeInspect(workspace, config, args = {}, options = {}) {
   const action = String(args.action || '').trim().toLowerCase();
-  if (!['symbol', 'references', 'related', 'impact', 'trace', 'diagnostics'].includes(action)) {
-    throw new Error('relai_code_inspect action must be one of: symbol, references, related, impact, trace, diagnostics.');
+  if (!['symbol', 'references', 'related', 'impact', 'trace', 'diagnostics', 'architecture'].includes(action)) {
+    throw new Error('relai_code_inspect action must be one of: symbol, references, related, impact, trace, diagnostics, architecture.');
   }
   const index = await ensureRepositoryIndex(workspace, config, { maxFiles: args.maxFiles, signal: options.signal });
   const maxResults = Math.floor(clampNumber(args.maxResults, 1, 1000, DEFAULT_MAX_RESULTS));
   const db = openIndexDatabase(repositoryIndexPath(config, workspace), { readonly: true });
   try {
     const base = { ok: true, workspace: workspace.alias, action, index };
+    if (action === 'architecture') return { ...base, ...analyzeArchitecture(db, { maxResults }) };
     if (action === 'diagnostics') return { ...base, ...diagnosticReadiness(workspace, db) };
     if (action === 'related') {
       const query = String(args.query || args.symbol || '').trim();

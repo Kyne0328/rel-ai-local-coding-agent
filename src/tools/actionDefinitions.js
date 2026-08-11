@@ -45,8 +45,8 @@ const OPERATION_DEFINITION_VALUES = [
   {
     name: "relai_code_inspect",
     title: "Code Intelligence",
-    description: "Read-only. Build a fingerprint-invalidated live code index and inspect recognized symbols, references and calls, structurally related files, reverse-import impact, affected tests, and available language-diagnostic commands. This is bounded lexical and import-graph analysis, not an embedding service or compiler language server.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"action":{"type":"string","enum":["symbol","references","related","impact","trace","diagnostics"]},"symbol":{"type":"string","minLength":1,"maxLength":256},"query":{"type":"string","minLength":1,"maxLength":1000},"paths":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":100},"maxResults":{"type":"number","minimum":1,"maximum":1000},"maxDepth":{"type":"number","minimum":1,"maximum":8},"maxFiles":{"type":"number","minimum":1,"maximum":20000}},"required":["workspace","action"],"additionalProperties":false},
+    description: "Read-only. Build a persistent local code index and inspect symbols, references, structural impact, affected tests, architecture boundaries, entry points, hotspots, dependency layers, graph communities, and available language diagnostics. This remains bounded local graph analysis, not an embedding service or resident compiler language server.",
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"action":{"type":"string","enum":["symbol","references","related","impact","trace","diagnostics","architecture"]},"symbol":{"type":"string","minLength":1,"maxLength":256},"query":{"type":"string","minLength":1,"maxLength":1000},"paths":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":100},"maxResults":{"type":"number","minimum":1,"maximum":1000},"maxDepth":{"type":"number","minimum":1,"maximum":8},"maxFiles":{"type":"number","minimum":1,"maximum":20000}},"required":["workspace","action"],"additionalProperties":false},
     handlerName: 'codeInspect',
     groups: ["audit"],
   },
@@ -436,7 +436,7 @@ const PUBLIC_DEFINITION_VALUES = [
       type: 'object',
       properties: {
         workspace: WORKSPACE,
-        action: ACTION(['symbol', 'references', 'related', 'impact', 'trace', 'diagnostics']),
+        action: ACTION(['symbol', 'references', 'related', 'impact', 'trace', 'diagnostics', 'architecture']),
         symbol: { type: 'string', minLength: 1, maxLength: 256 },
         query: { type: 'string', minLength: 1, maxLength: 1000 },
         paths: { type: 'array', items: STRING, minItems: 1, maxItems: 100 },
@@ -455,7 +455,8 @@ const PUBLIC_DEFINITION_VALUES = [
           anyOf: [{ required: ['symbol'] }, { required: ['paths'] }]
         }),
         branch('trace', ['symbol'], ['query', 'paths']),
-        branch('diagnostics', [], ['symbol', 'query', 'paths', 'maxResults', 'maxDepth'])
+        branch('diagnostics', [], ['symbol', 'query', 'paths', 'maxResults', 'maxDepth']),
+        branch('architecture', [], ['symbol', 'query', 'paths', 'maxDepth'])
       ],
       additionalProperties: false
     },
