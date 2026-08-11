@@ -112,6 +112,13 @@
       "bytes": 101206,
       "sha256": "f34287abec45df384781857435cbfa60587a3412a229da64d67352fb8bbb381c",
       "grammarDependency": "tree-sitter-clojure@git+https://github.com/sogaiu/tree-sitter-clojure.git#e43eff80d17cf34852dcd92ca5e6986d23a7040f"
+    },
+    "groovy": {
+      "file": "groovy/tree-sitter-groovy.wasm",
+      "sourcePath": "out/groovy/tree-sitter-groovy.wasm",
+      "bytes": 874913,
+      "sha256": "1a17b99f92395ba47e76736cc8d55d6acf8341609409e519e03c77ad5b84d7d6",
+      "grammarDependency": "tree-sitter-groovy@git+https://github.com/murtaza64/tree-sitter-groovy.git#deb0dcf8c4544f07564060f6e9b9f6e4b0bfc27d"
     }
   }
 }
