@@ -5,3 +5,5 @@ Rel.AI MCP was originally created and is maintained by Kyne (Kyne0328).
 Original project: https://github.com/Kyne0328/rel-ai-mcp
 
 This NOTICE contains attribution information for the Work under the Apache License, Version 2.0.
+
+Vendored Tree-sitter grammar WASM artifacts under vendor/tree-sitter are selected from tree-sitter-wasm 1.0.7. Generated grammar artifacts retain their respective upstream grammar licenses; checksums and source package metadata are recorded in vendor/tree-sitter/manifest.json.

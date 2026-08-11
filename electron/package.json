@@ -117,6 +117,14 @@
         ]
       },
       {
+        "from": "../vendor/tree-sitter",
+        "to": "vendor/tree-sitter",
+        "filter": [
+          "manifest.json",
+          "**/*.wasm"
+        ]
+      },
+      {
         "from": "../node_modules",
         "to": "node_modules",
         "filter": [

@@ -7,10 +7,13 @@ import { openIndexDatabase, repositoryIndexPath } from '../src/repository/intell
 import { enhancedResolverLanguages, languageCapabilities, languageForPath, structuralLanguages } from '../src/repository/intelligence/languages.js';
 import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
 
-assert.equal(structuralLanguages().length, 36);
+assert.equal(structuralLanguages().length, 38);
 assert.deepEqual(enhancedResolverLanguages().sort(), ['javascript', 'tsx', 'typescript']);
 assert.equal(languageForPath('src/app.ts'), 'typescript');
 assert.equal(languageForPath('src/module.py'), 'python');
+assert.equal(languageForPath('infra/main.hcl'), 'hcl');
+assert.equal(languageForPath('infra/main.tf'), 'terraform');
+assert.equal(languageForPath('infra/vars.tfvars'), 'terraform');
 assert.equal(languageForPath('src/tool.zig'), 'zig');
 assert.equal(languageForPath('Gemfile'), 'ruby');
 assert.equal(languageCapabilities('scala').resolution, 'structural');
@@ -35,18 +38,23 @@ export function persist() {
 }
 `);
 fs.writeFileSync(path.join(workspaceRoot, 'src', 'script.lua'), 'local function hello() return 1 end\n');
+fs.mkdirSync(path.join(workspaceRoot, 'infra'), { recursive: true });
+fs.writeFileSync(path.join(workspaceRoot, 'infra', 'config.hcl'), 'service = { name = "relai" }\n');
+fs.writeFileSync(path.join(workspaceRoot, 'infra', 'main.tf'), 'resource "null_resource" "example" {}\n');
 
 const workspace = { alias: 'language-test', path: workspaceRoot, context: {}, testCommands: {}, commands: {} };
 const config = { stateDir };
 
 try {
   const index = await repositoryIntelligence.ensure(workspace, config);
-  assert.equal(index.languageIntelligence.structuralLanguages, 36);
+  assert.equal(index.languageIntelligence.structuralLanguages, 38);
   assert.deepEqual(index.languageIntelligence.enhancedLanguages.sort(), ['javascript', 'tsx', 'typescript']);
   const db = openIndexDatabase(repositoryIndexPath(config, workspace), { readonly: true });
   try {
-    const languages = new Map(db.prepare('SELECT path, language FROM files').all().map(row => [String(row.path), String(row.language)]));
-    assert.equal(languages.get('src/script.lua'), 'lua');
+    const files = new Map(db.prepare('SELECT path, language, parser FROM files').all().map(row => [String(row.path), { language: String(row.language), parser: String(row.parser) }]));
+    assert.equal(files.get('src/script.lua').language, 'lua');
+    assert.deepEqual(files.get('infra/config.hcl'), { language: 'hcl', parser: 'tree-sitter' });
+    assert.deepEqual(files.get('infra/main.tf'), { language: 'terraform', parser: 'tree-sitter' });
     const edges = db.prepare("SELECT type, provider, target_name FROM edges WHERE provider='resolver-js-ts-v1' ORDER BY type, target_name").all();
     assert.ok(edges.some(edge => edge.type === 'INHERITS' && edge.target_name === 'BaseService'));
     assert.ok(edges.some(edge => edge.type === 'IMPLEMENTS' && edge.target_name === 'Persistable'));

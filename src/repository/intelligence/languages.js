@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-const PARSER_VERSION = 2;
+const PARSER_VERSION = 3;
 const MAX_SEARCH_TERMS = 768;
 
 const LANGUAGE_PROFILES = Object.freeze([
@@ -16,6 +16,7 @@ const LANGUAGE_PROFILES = Object.freeze([
   profile('embedded_template', 'tree-sitter-embedded_template.wasm', ['.erb']),
   profile('go', 'tree-sitter-go.wasm', ['.go']),
   profile('html', 'tree-sitter-html.wasm', ['.html', '.htm']),
+  profile('hcl', 'tree-sitter-hcl.wasm', ['.hcl']),
   profile('java', 'tree-sitter-java.wasm', ['.java']),
   profile('javascript', 'tree-sitter-javascript.wasm', ['.js', '.jsx', '.mjs', '.cjs'], [], 'javascript-typescript'),
   profile('json', 'tree-sitter-json.wasm', ['.json']),
@@ -32,6 +33,7 @@ const LANGUAGE_PROFILES = Object.freeze([
   profile('scala', 'tree-sitter-scala.wasm', ['.scala', '.sc']),
   profile('solidity', 'tree-sitter-solidity.wasm', ['.sol']),
   profile('swift', 'tree-sitter-swift.wasm', ['.swift']),
+  profile('terraform', 'tree-sitter-terraform.wasm', ['.tf', '.tfvars']),
   profile('systemrdl', 'tree-sitter-systemrdl.wasm', ['.rdl']),
   profile('tlaplus', 'tree-sitter-tlaplus.wasm', ['.tla']),
   profile('toml', 'tree-sitter-toml.wasm', ['.toml']),
@@ -50,6 +52,10 @@ for (const item of LANGUAGE_PROFILES) {
   for (const basename of item.basenames) BASENAME_LANGUAGE.set(basename, item.language);
 }
 const WASM_BY_LANGUAGE = Object.freeze(Object.fromEntries(LANGUAGE_PROFILES.map(item => [item.language, item.wasm])));
+const VENDORED_WASM_BY_LANGUAGE = Object.freeze({
+  hcl: 'vendor/tree-sitter/hcl/tree-sitter-hcl.wasm',
+  terraform: 'vendor/tree-sitter/terraform/tree-sitter-terraform.wasm'
+});
 
 function profile(language, wasm, extensions, basenames = [], resolver = null) {
   return Object.freeze({ language, wasm, extensions: Object.freeze([...extensions]), basenames: Object.freeze([...basenames]), resolver });
@@ -63,6 +69,14 @@ function languageForPath(relativePath) {
 
 function wasmForLanguage(language) {
   return WASM_BY_LANGUAGE[String(language || '').toLowerCase()] || null;
+}
+
+function parserForLanguage(language) {
+  const key = String(language || '').toLowerCase();
+  const vendored = VENDORED_WASM_BY_LANGUAGE[key];
+  if (vendored) return { path: vendored, provider: 'vendored-tree-sitter-wasm' };
+  const wasm = WASM_BY_LANGUAGE[key];
+  return wasm ? { path: `node_modules/tree-sitter-wasms/out/${wasm}`, provider: 'tree-sitter-wasms' } : null;
 }
 
 function languageProfile(language) {
@@ -117,5 +131,5 @@ function stripQuotes(value) {
 export {
   EXTENSION_LANGUAGE, LANGUAGE_PROFILES, MAX_SEARCH_TERMS, PARSER_VERSION, WASM_BY_LANGUAGE,
   enhancedResolverLanguages, isTestPath, languageCapabilities, languageForPath, languageProfile,
-  lexicalSearchText, queryTerms, simpleSymbol, structuralLanguages, stripQuotes, wasmForLanguage
+  lexicalSearchText, parserForLanguage, queryTerms, simpleSymbol, structuralLanguages, stripQuotes, wasmForLanguage
 };

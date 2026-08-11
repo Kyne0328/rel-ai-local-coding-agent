@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "sourcePackage": {
+    "name": "tree-sitter-wasm",
+    "version": "1.0.7",
+    "integrity": "sha512-CpQFRUsBOTEzbweigUn2OToMmt9wSkCYzysmc8D0ysbMjLrAo730Wdip8tTbUBe9giv81E7T5HB6WOFR05QLRw==",
+    "repository": "Crysthamus/tree-sitter-wasm"
+  },
+  "licenseNote": "Vendored grammar WASM files retain the licenses of their upstream grammar projects; source package metadata is recorded for reproducibility.",
+  "grammars": {
+    "hcl": {
+      "file": "hcl/tree-sitter-hcl.wasm",
+      "sourcePath": "out/hcl/tree-sitter-hcl.wasm",
+      "bytes": 92478,
+      "sha256": "86bb80cd151bd3ab1e44ed431a9c1874978db31519c62055efb50f028a1d0118",
+      "grammarDependency": "@tree-sitter-grammars/tree-sitter-hcl@^1.2.0"
+    },
+    "terraform": {
+      "file": "terraform/tree-sitter-terraform.wasm",
+      "sourcePath": "out/terraform/tree-sitter-terraform.wasm",
+      "bytes": 92484,
+      "sha256": "0d9ef3ae926acc0411bfecba9b34df4ea659061917b96455570a45a70824e890",
+      "grammarDependency": "@tree-sitter-grammars/tree-sitter-hcl@^1.2.0"
+    }
+  }
+}

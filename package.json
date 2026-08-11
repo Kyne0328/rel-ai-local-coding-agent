@@ -15,6 +15,7 @@
     "public/",
     "examples/",
     "types/",
+    "vendor/tree-sitter/",
     "README.md",
     "LICENSE",
     "NOTICE",

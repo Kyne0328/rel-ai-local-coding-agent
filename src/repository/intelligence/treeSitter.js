@@ -3,10 +3,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Parser from 'web-tree-sitter';
 
-import { languageForPath, lexicalSearchText, stripQuotes, wasmForLanguage } from './languages.js';
+import { languageForPath, lexicalSearchText, parserForLanguage, stripQuotes } from './languages.js';
 import { resolverForLanguage } from './resolvers/index.js';
 
-const WASM_ROOT = path.join(path.dirname(fileURLToPath(import.meta.resolve('tree-sitter-wasms/package.json'))), 'out');
+const RUNTIME_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const languageCache = new Map();
 let initPromise = null;
 
@@ -40,12 +40,12 @@ async function initTreeSitter() {
 
 async function loadLanguage(language) {
   const key = String(language || '').toLowerCase();
-  const wasmName = wasmForLanguage(key);
-  if (!wasmName) return null;
+  const parserAsset = parserForLanguage(key);
+  if (!parserAsset) return null;
   if (!languageCache.has(key)) {
     languageCache.set(key, (async () => {
       await initTreeSitter();
-      const wasmFile = path.join(WASM_ROOT, wasmName);
+      const wasmFile = path.join(RUNTIME_ROOT, parserAsset.path);
       if (!fs.existsSync(wasmFile)) return null;
       return Parser.Language.load(wasmFile);
     })().catch(() => null));
