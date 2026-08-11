@@ -29,11 +29,11 @@ export const SYSTEM_NAV_ITEMS = Object.freeze([
   route('processes', 'Processes', 'processes', 'Inspect managed processes and bounded output.', 'System'),
   route('diagnostics', 'Diagnostics', 'diagnostics', 'Review findings, service logs, export, and recovery controls.', 'System'),
   route('tools', 'Tools', 'tools', 'Browse the MCP tools available to ChatGPT.', 'System'),
-  route('usage', 'Usage', 'usage', 'Review exact Rel.AI Cloud request, byte, duration, device, tool, and workspace aggregates.', 'System')
+  route('usage', 'Analytics', 'usage', 'Review privacy-safe Rel.AI activity trends, outcomes, tools, devices, and workspace aggregates from Cloud or this device.', 'System')
 ]);
 
 export const APPLICATION_NAV_ITEMS = Object.freeze([
-  route('system', 'System', 'connection', 'Manage connection, runtime processes, diagnostics, tools, and usage.', 'Application'),
+  route('system', 'System', 'connection', 'Manage connection, runtime processes, diagnostics, tools, and analytics.', 'Application'),
   route('settings', 'Settings', 'settings', 'Configure preferences, skills, application behavior, and advanced safeguards.', 'Application')
 ]);
 
