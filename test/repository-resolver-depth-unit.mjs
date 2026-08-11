@@ -11,7 +11,8 @@ const CASES = [
     imports: ['./models', './util']
   },
   {"path":"src/AccountService.java","language":"java","provider":"resolver-java-v1","source":"import com.acme.BaseService;\nimport com.acme.Persistable;\nimport static com.acme.Util.saveRecord;\nclass AccountService extends BaseService implements Persistable {\n  void save() { BaseService service = new BaseService(); saveRecord(); }\n}\n","relations":[["INHERITS","BaseService"],["IMPLEMENTS","Persistable"],["USES_TYPE","BaseService"],["CALLS","saveRecord"]],"imports":["com/acme/BaseService","com/acme/Persistable","com/acme/Util"]},
-  {"path":"src/AccountService.cs","language":"csharp","provider":"resolver-csharp-v1","source":"using BaseService = Acme.BaseService;\nusing Persistable = Acme.Persistable;\nclass AccountService : BaseService, Persistable {\n  void Save() { var service = new BaseService(); BaseService.Create(); }\n}\n","relations":[["INHERITS","BaseService"],["IMPLEMENTS","Persistable"],["USES_TYPE","BaseService"],["CALLS","Create"]],"imports":["Acme/BaseService","Acme/Persistable"]}
+  {"path":"src/AccountService.cs","language":"csharp","provider":"resolver-csharp-v1","source":"using BaseService = Acme.BaseService;\nusing Persistable = Acme.Persistable;\nclass AccountService : BaseService, Persistable {\n  void Save() { var service = new BaseService(); BaseService.Create(); }\n}\n","relations":[["INHERITS","BaseService"],["IMPLEMENTS","Persistable"],["USES_TYPE","BaseService"],["CALLS","Create"]],"imports":["Acme/BaseService","Acme/Persistable"]},
+  {"path":"src/service.go","language":"go","provider":"resolver-go-v1","source":"package service\nimport (\n  base \"example.com/acme/base\"\n  util \"example.com/acme/util\"\n)\nfunc Save() {\n  var service base.Service\n  _ = service\n  base.NewService()\n  util.Save()\n}\n","relations":[["USES_TYPE","Service"],["CALLS","NewService"],["CALLS","Save"]],"imports":["example.com/acme/base","example.com/acme/util"]}
 ];
 
 for (const item of CASES) {
@@ -23,5 +24,5 @@ for (const item of CASES) {
   for (const specifier of item.imports) assert.ok(parsed.imports.some(entry => entry.specifier === specifier && entry.provider === item.provider), `${item.language} missing import ${specifier}`);
 }
 
-assert.deepEqual(enhancedResolverLanguages().sort(), ['csharp', 'java', 'javascript', 'python', 'tsx', 'typescript']);
+assert.deepEqual(enhancedResolverLanguages().sort(), ['csharp', 'go', 'java', 'javascript', 'python', 'tsx', 'typescript']);
 console.log('Repository Intelligence ecosystem resolver-depth tests passed.');
