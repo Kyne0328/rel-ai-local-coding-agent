@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 
-import { MAX_BADGE_COUNT, createBadgeImage, createTaskbarCompletionBadge } from '../electron/taskbar-completion-badge.js';
+import { MAX_BADGE_COUNT, badgeTextColor, createBadgeImage, createTaskbarCompletionBadge, normalizeBadgeColor } from '../electron/taskbar-completion-badge.js';
 
 const overlays = [];
 const images = [];
 const badgeBuffers = [];
+const badgeRepresentations = [];
 let legacyDataUrlCalls = 0;
 let applicationOpen = false;
 const win = {
@@ -26,7 +27,7 @@ const nativeImage = {
     const image = {
       buffer,
       isEmpty() { return false; },
-      resize(options) { this.resizeOptions = options; return this; }
+      addRepresentation(options) { badgeRepresentations.push(options); }
     };
     images.push(image);
     return image;
@@ -48,7 +49,9 @@ assert.equal(overlays.at(-1).image.isEmpty(), false, 'Windows must receive a dec
 assert.equal(legacyDataUrlCalls, 0, 'Electron badge overlays must use a supported PNG buffer, not an SVG data URL');
 assert.equal(badgeBuffers.length, 1);
 assert.deepEqual([...badgeBuffers[0].subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
-assert.deepEqual(images.at(-1).resizeOptions, { width: 16, height: 16, quality: 'best' });
+assert.equal(badgeRepresentations.length, 6, 'Windows badge must include high-DPI representations instead of stretching one 16px raster');
+assert.deepEqual(badgeRepresentations.map(item => item.scaleFactor), [1.25, 1.5, 1.75, 2, 2.5, 3]);
+assert.deepEqual(badgeRepresentations.map(item => item.buffer.readUInt32BE(16)), [20, 24, 28, 32, 40, 48]);
 
 badge.markCompleted({ taskId: 'task-1' });
 assert.equal(badge.getStatus().count, 1, 'duplicate completion must not increase unread count');
@@ -70,10 +73,23 @@ applicationOpen = false;
 for (let index = 4; index < 120; index += 1) badge.markCompleted({ taskId: `task-${index}` });
 assert.equal(badge.getStatus().count, MAX_BADGE_COUNT);
 assert.notEqual(Buffer.compare(badgeBuffers[0], badgeBuffers.at(-1)), 0, 'the capped count must still render its numeric badge');
+const rendersAtCap = badgeBuffers.length;
+badge.markCompleted({ taskId: 'task-over-cap' });
+assert.equal(badgeBuffers.length, rendersAtCap, 'additional completions at the 99 cap must not regenerate an identical overlay');
 
 const direct = createBadgeImage(nativeImage, 7);
 assert.ok(direct);
 assert.equal(direct.isEmpty(), false);
+
+assert.deepEqual(normalizeBadgeColor('5aa6ffff'), [90, 166, 255, 255], 'Electron RGBA accent colors must map directly into badge pixels');
+assert.deepEqual(normalizeBadgeColor('#1769c2'), [23, 105, 194, 255]);
+assert.deepEqual(normalizeBadgeColor('invalid'), [23, 105, 194, 255], 'invalid accent values must use the Rel.AI blue fallback');
+assert.deepEqual(badgeTextColor('#f0c000ff'), [0, 0, 0, 255], 'light accent colors need dark numerals');
+assert.deepEqual(badgeTextColor('#1769c2ff'), [255, 255, 255, 255], 'dark accent colors need white numerals');
+const bufferCountBeforeAccent = badgeBuffers.length;
+createBadgeImage(nativeImage, 7, '5aa6ffff');
+assert.ok(badgeBuffers.length > bufferCountBeforeAccent, 'custom system accent must render through the badge image path');
+assert.notEqual(Buffer.compare(badgeBuffers[bufferCountBeforeAccent - 1], badgeBuffers[bufferCountBeforeAccent]), 0, 'different badge colors must produce different PNGs');
 
 const linuxBadgeCounts = [];
 const linuxBadge = createTaskbarCompletionBadge({
