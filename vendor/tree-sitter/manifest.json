@@ -21,6 +21,13 @@
       "bytes": 92484,
       "sha256": "0d9ef3ae926acc0411bfecba9b34df4ea659061917b96455570a45a70824e890",
       "grammarDependency": "@tree-sitter-grammars/tree-sitter-hcl@^1.2.0"
+    },
+    "sql": {
+      "file": "sql/tree-sitter-sql.wasm",
+      "sourcePath": "out/sql/tree-sitter-sql.wasm",
+      "bytes": 2440500,
+      "sha256": "9b93a15dc3eade66df4347731f2687b939daf987c8382660d6118e863604ab09",
+      "grammarDependency": "@derekstride/tree-sitter-sql@^0.3.11"
     }
   }
 }

@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-const PARSER_VERSION = 3;
+const PARSER_VERSION = 4;
 const MAX_SEARCH_TERMS = 768;
 
 const LANGUAGE_PROFILES = Object.freeze([
@@ -41,6 +41,7 @@ const LANGUAGE_PROFILES = Object.freeze([
   profile('typescript', 'tree-sitter-typescript.wasm', ['.ts', '.mts', '.cts'], [], 'javascript-typescript'),
   profile('vue', 'tree-sitter-vue.wasm', ['.vue']),
   profile('yaml', 'tree-sitter-yaml.wasm', ['.yaml', '.yml']),
+  profile('sql', 'tree-sitter-sql.wasm', [".sql"]),
   profile('zig', 'tree-sitter-zig.wasm', ['.zig'])
 ]);
 
@@ -54,7 +55,8 @@ for (const item of LANGUAGE_PROFILES) {
 const WASM_BY_LANGUAGE = Object.freeze(Object.fromEntries(LANGUAGE_PROFILES.map(item => [item.language, item.wasm])));
 const VENDORED_WASM_BY_LANGUAGE = Object.freeze({
   hcl: 'vendor/tree-sitter/hcl/tree-sitter-hcl.wasm',
-  terraform: 'vendor/tree-sitter/terraform/tree-sitter-terraform.wasm'
+  terraform: 'vendor/tree-sitter/terraform/tree-sitter-terraform.wasm',
+  sql: 'vendor/tree-sitter/sql/tree-sitter-sql.wasm'
 });
 
 function profile(language, wasm, extensions, basenames = [], resolver = null) {

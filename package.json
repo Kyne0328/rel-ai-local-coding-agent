@@ -76,7 +76,7 @@
     "test:public-workflow": "node test/workflow-smoke.mjs",
     "test:connector-wording": "node test/connector-wording-smoke.mjs",
     "test:regressions": "node test/regression-fixes-smoke.mjs",
-    "test:repository-intelligence": "node test/repository-language-intelligence-unit.mjs && node test/repository-intelligence-worker-unit.mjs && node test/intelligence-runtime-unit.mjs",
+    "test:repository-intelligence": "node test/repository-language-intelligence-unit.mjs && node test/repository-vendored-language-unit.mjs && node test/repository-intelligence-worker-unit.mjs && node test/intelligence-runtime-unit.mjs",
     "electron:dev": "npm run verify:color-tokens && npm run build:css && cd electron && npx electron .",
     "electron:runtime": "node electron/node_modules/electron/install.js",
     "electron:build": "node scripts/electron-package.mjs --mode unpacked --platform win32",
