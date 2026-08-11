@@ -49,6 +49,13 @@
       "bytes": 51842,
       "sha256": "f64913d1fbaafae05ae443df972c8b21f12607ae28d194eaa6c6a8d63a81733e",
       "grammarDependency": "tree-sitter-dockerfile@git+https://github.com/camdencheek/tree-sitter-dockerfile.git#971acdd908568b4531b0ba28a445bf0bb720aba5"
+    },
+    "graphql": {
+      "file": "graphql/tree-sitter-graphql.wasm",
+      "sourcePath": "out/graphql/tree-sitter-graphql.wasm",
+      "bytes": 64059,
+      "sha256": "1213028ee76111be6d504781e735b0bbce327abd56709cce1fce400fccfe7c1a",
+      "grammarDependency": "tree-sitter-graphql@git+https://github.com/joowani/tree-sitter-graphql.git#df5b88d1d24dcfc02e64919d2d20491359abe4c8"
     }
   }
 }
