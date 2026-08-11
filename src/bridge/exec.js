@@ -12,6 +12,9 @@ import { isPathInside } from '../safety.js';
 import { INTERNAL_STATUS_MAX_BYTES, gitStatusArgs, statusMapFromOutput } from '../repo/gitStatus.js';
 const WHERE_EXE = String.raw`C:\Windows\System32\where.exe`;
 const MAX_CHANGED_FILES = 200;
+const MAX_DIRECT_ARGV_ITEMS = 100;
+const MAX_DIRECT_ARG_LENGTH = 20000;
+const MAX_DIRECT_INPUT_LENGTH = 1024 * 1024;
 /** @typedef {{ executable: string, label: string, args: (command: string) => string[] }} CommandHost */
 /** @type {CommandHost | null} */
 let cachedShell = null;
@@ -47,6 +50,29 @@ function normalizeCommandEnv(value) {
     env[key] = item;
   }
   return env;
+}
+
+function normalizeDirectArgv(value) {
+  if (value == null) return [];
+  if (!Array.isArray(value)) throw new Error('relai_exec argv must be an array of strings.');
+  if (value.length > MAX_DIRECT_ARGV_ITEMS) throw new Error('relai_exec argv supports at most 100 items.');
+  return value.map((item, index) => {
+    if (typeof item !== 'string') throw new Error(`relai_exec argv[${index}] must be a string.`);
+    if (item.length > MAX_DIRECT_ARG_LENGTH) throw new Error(`relai_exec argv[${index}] must be 20000 characters or fewer.`);
+    if (item.includes('\0')) throw new Error(`relai_exec argv[${index}] contains a null byte.`);
+    return item;
+  });
+}
+
+function normalizeDirectInput(value) {
+  if (value == null) return undefined;
+  if (typeof value !== 'string') throw new Error('relai_exec input must be a string.');
+  if (value.length > MAX_DIRECT_INPUT_LENGTH) throw new Error('relai_exec input must be 1048576 characters or fewer.');
+  return value;
+}
+
+function directCommandSummary(executable, argv) {
+  return [executable, ...argv].map(value => JSON.stringify(String(value))).join(' ');
 }
 
 function locateWindowsExecutable(name) {
@@ -150,14 +176,33 @@ function changedStatusFiles(before, after) {
 }
 
 async function relaiExec(workspace, config, args = {}, context = {}) {
-  const command = String(args.command || '').trim();
-  if (!command) throw new Error('relai_exec requires a non-empty command.');
+  const command = typeof args.command === 'string' ? args.command.trim() : '';
+  const executable = typeof args.executable === 'string' ? args.executable.trim() : '';
+  if (Boolean(command) === Boolean(executable)) {
+    throw new Error('relai_exec requires exactly one execution mode: command or executable.');
+  }
   if (command.length > 20000) throw new Error('relai_exec command must be 20000 characters or fewer.');
+  if (executable.length > 1000) throw new Error('relai_exec executable must be 1000 characters or fewer.');
+  if (executable.includes('\0')) throw new Error('relai_exec executable contains a null byte.');
+  if (command && (args.argv !== undefined || args.input !== undefined)) {
+    throw new Error('relai_exec argv and input are available only with executable direct mode.');
+  }
+  const argv = executable ? normalizeDirectArgv(args.argv) : [];
+  const input = executable ? normalizeDirectInput(args.input) : undefined;
+  const displayCommand = command || directCommandSummary(executable, argv);
   const cwd = resolveCommandCwd(workspace, args.cwd);
   const env = normalizeCommandEnv(args.env);
   const timeoutMs = clampNumber(args.timeoutMs, 1000, 86400000, 120000);
   const maxOutputBytes = clampNumber(args.maxOutputBytes, 1000, 16 * 1024 * 1024, config.maxOutputBytes || 2 * 1024 * 1024);
-  const shell = resolveShell();
+  let processExecutable = executable;
+  let processArgv = argv;
+  let executionLabel = 'Direct process';
+  if (command) {
+    const selectedShell = resolveShell();
+    processExecutable = selectedShell.executable;
+    processArgv = selectedShell.args(command);
+    executionLabel = selectedShell.label;
+  }
   const statusBefore = await readGitStatusMap(workspace, config);
   const signal = combineAbortSignals(
     getCurrentTaskAbortSignal(),
@@ -166,25 +211,35 @@ async function relaiExec(workspace, config, args = {}, context = {}) {
   );
   const result = await runSpan(config, 'relai.process.exec', {
     'relai.workspace': workspace.alias,
-    'relai.process.command': redactCommandForAudit(command),
+    'relai.process.command': redactCommandForAudit(displayCommand),
+    'relai.process.execution_mode': command ? 'shell' : 'direct',
     'relai.operation_task.id': String(args._operationTaskId || '')
-  }, () => runProcess(shell.executable, shell.args(command), {
-    cwd: cwd.absolutePath,
-    env,
-    timeout: timeoutMs,
-    maxOutputBytes,
-    signal
-  }, config));
-  if (result.spawnError) throw new Error(`Could not start ${shell.label}: ${result.error || 'unknown spawn error'}`);
+  }, () => runProcess(
+    processExecutable,
+    processArgv,
+    {
+      cwd: cwd.absolutePath,
+      env,
+      timeout: timeoutMs,
+      maxOutputBytes,
+      signal,
+      ...(input !== undefined ? { input } : {})
+    },
+    config
+  ));
+  if (result.spawnError) {
+    const host = command ? executionLabel : executable;
+    throw new Error(`Could not start ${host}: ${result.error || 'unknown spawn error'}`);
+  }
   const statusAfter = await readGitStatusMap(workspace, config);
   const changed = changedStatusFiles(statusBefore, statusAfter);
   return {
     ok: result.exitCode === 0,
     workspace: workspace.alias,
-    command,
-    commandSummary: redactCommandForAudit(command),
+    command: displayCommand,
+    commandSummary: redactCommandForAudit(displayCommand),
     cwd: cwd.relativePath,
-    shell: shell.label,
+    shell: executionLabel,
     exitCode: result.exitCode,
     durationMs: result.durationMs,
     stdout: result.stdout || '',
@@ -204,4 +259,12 @@ async function relaiExec(workspace, config, args = {}, context = {}) {
   };
 }
 
-export { relaiExec, resolveCommandCwd, normalizeCommandEnv, resolveShell,  redactCommandForAudit,   };
+export {
+  relaiExec,
+  resolveCommandCwd,
+  normalizeCommandEnv,
+  normalizeDirectArgv,
+  normalizeDirectInput,
+  resolveShell,
+  redactCommandForAudit
+};

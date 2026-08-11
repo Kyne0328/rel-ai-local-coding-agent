@@ -65,7 +65,7 @@ try {
   const discovery = client.discovery;
   assert.equal(discovery.response.status, 200);
   assert.deepEqual(discovery.body.result?.supportedVersions, [MCP_VERSION]);
-  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolSurfaceVersion, 33);
+  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolSurfaceVersion, 35);
   assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolCount, 12);
   assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.statelessRequestModel, true);
   assert.deepEqual(
@@ -163,16 +163,16 @@ try {
   const surface = await client.request('resources/read', { uri: 'relai://server/tool-surface' });
   assert.ok(surface.body.result?.contents, JSON.stringify(surface.body));
   const manifest = JSON.parse(surface.body.result.contents[0].text);
-  assert.equal(manifest.toolSurfaceVersion, 33);
+  assert.equal(manifest.toolSurfaceVersion, 35);
   assert.equal(Object.hasOwn(manifest, 'profile'), false);
   assert.equal(manifest.toolCount, 12);
   const surfaceByName = new Map(manifest.tools.map(tool => [tool.name, tool]));
-  assert.equal(surfaceByName.get('relai_exec').executionClass, 'native_task_eligible');
-  assert.equal(surfaceByName.get('relai_exec').taskSupport, 'optional');
+  assert.equal(surfaceByName.get('relai_exec').executionClass, 'bounded_synchronous');
+  assert.equal(surfaceByName.get('relai_exec').taskSupport, 'forbidden');
   assert.equal(surfaceByName.get('relai_process').executionClass, 'persistent_process');
   assert.equal(surfaceByName.get('relai_process').taskSupport, 'forbidden');
   const validateActions = new Map(surfaceByName.get('relai_validate').actions.map(item => [item.action, item]));
-  assert.equal(validateActions.get('checks').taskSupport, 'optional');
+  assert.equal(validateActions.get('checks').taskSupport, 'forbidden');
   assert.equal(validateActions.get('http').taskSupport, 'forbidden');
   assert.equal(validateActions.get('http').executionClass, 'bounded_synchronous');
   assert.equal(manifest.cache.cacheScope, 'private');

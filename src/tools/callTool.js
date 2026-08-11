@@ -291,7 +291,7 @@ function workflowCommandId(operationName, action, args = {}) {
     tool: operationName,
     action: action || args?.action || operationName,
     args: {
-      command: args?.command || '',
+      command: args?.command || (args?.executable ? [args.executable, ...(Array.isArray(args?.argv) ? args.argv : [])].join(' ') : ''),
       check: args?.check || '',
       checks: Array.isArray(args?.checks) ? args.checks.slice(0, 10) : [],
       cwd: args?.cwd || '.'

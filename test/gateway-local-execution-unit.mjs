@@ -116,6 +116,16 @@ try {
   assert.equal(readA.result?.isError, false);
   assert.match(JSON.stringify(readA.result), /base/);
   assert.equal(readA.result?.structuredContent?.ok, true, 'cloud-routed call must use connector/publicHttpOnly serialization');
+  const taskCapableGatewayEdit = payload(await routed(executeA, toolMessage(30, 'relai_edit', {
+    workspace: 'repo', work_id: workId, path: 'README.md', oldText: 'base', newText: 'gateway-edited', dryRun: true
+  }, {
+    _meta: meta({ extensions: { [TASKS_EXTENSION_ID]: { revision: TASKS_EXTENSION_REVISION } } })
+  }), { workspace: 'repo' }));
+  assert.equal(taskCapableGatewayEdit.error, undefined, JSON.stringify(taskCapableGatewayEdit));
+  assert.equal(taskCapableGatewayEdit.result?.resultType, undefined, 'gateway tools/call must not auto-materialize native MCP Tasks');
+  assert.equal(taskCapableGatewayEdit.result?.isError, false, JSON.stringify(taskCapableGatewayEdit.result));
+  assert.equal(taskCapableGatewayEdit.result?.structuredContent?.ok, true, JSON.stringify(taskCapableGatewayEdit.result));
+  assert.equal(fs.readFileSync(path.join(repo, 'README.md'), 'utf8'), 'base\n', 'dry-run gateway edit must not mutate the repository');
 
   const denied = payload(await routed(executeB, toolMessage(4, 'relai_read', {
     workspace: 'repo', work_id: workId, paths: ['README.md'], guidanceMode: 'none'

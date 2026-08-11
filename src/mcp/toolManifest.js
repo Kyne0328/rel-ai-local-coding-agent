@@ -2,7 +2,7 @@ import * as crypto from 'node:crypto';
 import { getPublicToolSchemas, getToolDefinitions, getToolSurfaceManifest } from '../tools/schema.js';
 import { PUBLIC_MCP_SERVER_INSTRUCTIONS } from './serverInstructions.js';
 
-const MCP_SCHEMA_VERSION = 6;
+const MCP_SCHEMA_VERSION = 7;
 
 function buildToolManifest(config = {}) {
   const surface = getToolSurfaceManifest(config);

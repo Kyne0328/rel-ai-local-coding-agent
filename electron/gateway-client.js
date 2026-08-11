@@ -13,6 +13,7 @@ import { createGatewayState } from './gateway-state.js';
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 30_000;
 const CONTROL_TIMEOUT_MS = 15_000;
+const MAX_COMPLETED_RESULT_REPLAYS = 256;
 
 function createGatewayClient({
   gatewayOrigin,
@@ -43,6 +44,7 @@ function createGatewayClient({
   const state = createGatewayState({ gatewayOrigin: origin });
   const pendingControls = new Map();
   const inFlight = new Map();
+  const completedResults = new Map();
   let started = false;
   let socket = null;
   let reconnectTimer = null;
@@ -76,6 +78,7 @@ function createGatewayClient({
     clearPairingTimer();
     for (const entry of inFlight.values()) entry.controller.abort();
     inFlight.clear();
+    completedResults.clear();
     rejectControls(new Error('Gateway client stopped.'));
     const currentSocket = socket;
     socket = null;
@@ -166,6 +169,7 @@ function createGatewayClient({
     reconnectAttempt = 0;
     for (const entry of inFlight.values()) entry.controller.abort();
     inFlight.clear();
+    completedResults.clear();
     rejectControls(new Error('This Rel.AI device was disconnected.'));
     const currentSocket = socket;
     socket = null;
@@ -225,8 +229,6 @@ function createGatewayClient({
     nextSocket.addEventListener('close', event => {
       if (nextSocket !== socket) return;
       socket = null;
-      for (const entry of inFlight.values()) entry.controller.abort();
-      inFlight.clear();
       rejectControls(new Error('Gateway connection closed.'));
       if (!started || suppressReconnect) return;
       update({ state: 'offline', error: event?.reason ? String(event.reason) : '' });
@@ -333,6 +335,8 @@ function createGatewayClient({
       capabilities: safeCapabilities(capabilities)
     });
     sendFrame(currentSocket, { type: 'workspaces', aliases: safeWorkspaces(getWorkspaces()) });
+    pruneCompletedResults();
+    flushCompletedResults(currentSocket);
   }
 
   function updateSynchronization(value = {}) {
@@ -347,10 +351,31 @@ function createGatewayClient({
   }
 
   async function handleRequestFrame(currentSocket, frame) {
+    pruneCompletedResults();
+    const existing = inFlight.get(frame.requestKey);
+    if (existing) {
+      if (existing.gatewayRequestId !== frame.gatewayRequestId) {
+        protocolFailure(currentSocket, 'Gateway reused a request key with a different request ID.');
+        return;
+      }
+      sendFrame(currentSocket, { type: 'accepted', gatewayRequestId: frame.gatewayRequestId, requestKey: frame.requestKey });
+      return;
+    }
+    const completed = completedResults.get(frame.requestKey);
+    if (completed) {
+      if (completed.gatewayRequestId !== frame.gatewayRequestId) {
+        protocolFailure(currentSocket, 'Gateway reused a completed request key with a different request ID.');
+        return;
+      }
+      sendFrame(currentSocket, { type: 'accepted', gatewayRequestId: frame.gatewayRequestId, requestKey: frame.requestKey });
+      sendCompletedResult(currentSocket, frame.requestKey, completed);
+      return;
+    }
+
     const controller = new AbortController();
     const startedAt = clock.now();
     update({ lastRequestAt: startedAt });
-    inFlight.set(frame.requestKey, { controller, gatewayRequestId: frame.gatewayRequestId });
+    inFlight.set(frame.requestKey, { controller, gatewayRequestId: frame.gatewayRequestId, startedAt });
     sendFrame(currentSocket, { type: 'accepted', gatewayRequestId: frame.gatewayRequestId, requestKey: frame.requestKey });
     let outcome;
     try {
@@ -365,20 +390,46 @@ function createGatewayClient({
       });
     } catch {
       outcome = { ok: false, error: { code: controller.signal.aborted ? 'CANCELLED' : 'LOCAL_EXECUTION_FAILED', message: controller.signal.aborted ? 'Cancelled.' : 'Local execution failed.' } };
-    } finally {
-      inFlight.delete(frame.requestKey);
     }
-    if (currentSocket !== socket || currentSocket.readyState === 3) return;
+    inFlight.delete(frame.requestKey);
     const normalized = normalizeExecutionOutcome(outcome, clock.now() - startedAt);
-    sendFrame(currentSocket, {
-      type: 'result',
-      gatewayRequestId: frame.gatewayRequestId,
-      requestKey: frame.requestKey,
-      ok: normalized.ok,
-      ...(normalized.payload !== undefined ? { payload: normalized.payload } : {}),
-      ...(normalized.error !== undefined ? { error: normalized.error } : {}),
-      durationMs: normalized.durationMs
-    });
+    completedResults.set(frame.requestKey, { gatewayRequestId: frame.gatewayRequestId, expiresAt: Number(frame.expiresAt || 0) || Number.MAX_SAFE_INTEGER, ...normalized });
+    pruneCompletedResults();
+    flushCompletedResults(socket);
+  }
+
+  function flushCompletedResults(target = socket) {
+    if (!target || target !== socket || target.readyState !== 1 || state.snapshot().state !== 'connected') return;
+    for (const [requestKey, entry] of completedResults.entries()) {
+      if (!sendCompletedResult(target, requestKey, entry)) return;
+    }
+  }
+
+  function sendCompletedResult(target, requestKey, entry) {
+    if (!target || target !== socket || target.readyState !== 1 || state.snapshot().state !== 'connected') return false;
+    try {
+      sendFrame(target, {
+        type: 'result',
+        gatewayRequestId: entry.gatewayRequestId,
+        requestKey,
+        ok: entry.ok,
+        ...(entry.payload !== undefined ? { payload: entry.payload } : {}),
+        ...(entry.error !== undefined ? { error: entry.error } : {}),
+        durationMs: entry.durationMs
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function pruneCompletedResults(now = clock.now()) {
+    for (const [requestKey, entry] of completedResults.entries()) {
+      if (Number(entry.expiresAt || 0) <= now) completedResults.delete(requestKey);
+    }
+    while (completedResults.size > MAX_COMPLETED_RESULT_REPLAYS) {
+      completedResults.delete(completedResults.keys().next().value);
+    }
   }
 
   function sendControl(type, fields, expectedType, project) {

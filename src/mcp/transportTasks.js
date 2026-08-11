@@ -58,6 +58,7 @@ async function handleTransportTaskRequest(config, message, options = {}) {
     return handleTaskProtocolRequest(config, message, options.principal, capabilities);
   }
   if (method !== 'tools/call' || message.id == null) return null;
+  if (options.transportType === 'gateway') return null;
 
   const name = String(message.params?.name || '');
   const definition = getToolDefinition(name, config, message.params?.arguments || {});
@@ -67,6 +68,7 @@ async function handleTransportTaskRequest(config, message, options = {}) {
   if (!validated.ok) return errorResponse(message.id, -32602, validated.error);
 
   const bounds = options.synchronousBounds || DEFAULT_SYNCHRONOUS_EXECUTION_BOUNDS;
+  const taskCapability = negotiateTasksCapability(capabilities);
   const estimate = synchronousEstimate(name, validated.value, capabilities, bounds, options);
   const selection = selectExecutionMode({
     clientCapabilities: capabilities,
@@ -91,6 +93,17 @@ async function handleTransportTaskRequest(config, message, options = {}) {
   const execute = typeof options.executeToolResult === 'function'
     ? options.executeToolResult
     : executeToolResult;
+  if (!taskCapability.supported) {
+    const value = await execute(config, name, validated.value, {
+      ...options,
+      capabilities,
+      signal: selection.signal,
+      requestId: message.id,
+      message
+    });
+    return successResponse(message.id, value);
+  }
+
   const bounded = await runBoundedExecution(
     signal => execute(config, name, boundedArguments(name, validated.value, selection.bounds), {
       ...options,
@@ -101,7 +114,7 @@ async function handleTransportTaskRequest(config, message, options = {}) {
     }),
     { bounds: selection.bounds, signal: selection.signal }
   );
-  if (!bounded.ok) return errorFromPolicy(message.id, bounded.error);
+  if (!bounded.ok) return toolExecutionErrorResponse(message.id, bounded.error);
   return successResponse(message.id, bounded.value);
 }
 
@@ -401,6 +414,25 @@ function abortedExecutionError() {
   error.retryable = true;
   error.data = { reason: 'execution_aborted' };
   return error;
+}
+
+function toolExecutionErrorResponse(id, error) {
+  const message = String(error?.message || 'Tool execution failed.');
+  const errorCode = executionErrorCode(error);
+  return successResponse(id, {
+    content: [{ type: 'text', text: message }],
+    isError: true,
+    structuredContent: { ok: false, error: message, errorCode }
+  });
+}
+
+function executionErrorCode(error) {
+  switch (String(error?.reason || '')) {
+    case 'synchronous_timeout': return 'SYNCHRONOUS_EXECUTION_TIMEOUT';
+    case 'synchronous_output_limit': return 'SYNCHRONOUS_OUTPUT_LIMIT';
+    case 'execution_aborted': return 'EXECUTION_ABORTED';
+    default: return String(error?.code || 'TOOL_EXECUTION_FAILED');
+  }
 }
 
 function errorFromPolicy(id, error) {

@@ -302,4 +302,59 @@ async function settle() { await Promise.resolve(); await Promise.resolve(); awai
   assert.equal(fetchImpl.calls[1].options.headers['X-RelAI-Pairing-Token'], 'poll_secret');
 }
 
+{
+  FakeSocket.reset();
+  const clock = createClock();
+  const identity = pairedIdentity();
+  let resolveRequest;
+  let requestSignal;
+  let requestCalls = 0;
+  const client = createGatewayClient({
+    gatewayOrigin: 'https://gateway.test', identity, WebSocketImpl: FakeSocket,
+    fetchImpl: createFetch(), clock,
+    onRequest: async request => {
+      requestCalls += 1;
+      requestSignal = request.signal;
+      return new Promise(resolve => { resolveRequest = resolve; });
+    }
+  });
+  await client.start();
+  const firstSocket = FakeSocket.instances[0];
+  firstSocket.open();
+  firstSocket.message({
+    type: 'authenticated', protocolVersion: GATEWAY_PROTOCOL_VERSION,
+    principalId: identity.snapshot().principalId, deviceId: identity.snapshot().deviceId
+  });
+  await settle();
+
+  firstSocket.message({
+    type: 'request', gatewayRequestId: 'gwreq_reconnect', requestKey: 'request_key_reconnect', workspace: 'repo',
+    expiresAt: clock.now() + 60_000,
+    message: { jsonrpc: '2.0', id: 77, method: 'resources/read', params: { uri: 'relai://server/help' } }
+  });
+  await settle();
+  assert.equal(requestCalls, 1);
+  assert.equal(requestSignal.aborted, false);
+
+  firstSocket.emit('close', { code: 1006, reason: 'temporary network loss', wasClean: false });
+  assert.equal(requestSignal.aborted, false, 'transient gateway disconnect must not cancel accepted local work');
+  resolveRequest({ ok: true, payload: { jsonrpc: '2.0', id: 77, result: { contents: [] } } });
+  await settle();
+  assert.equal(requestSignal.aborted, false);
+
+  await clock.advance(1000);
+  const secondSocket = FakeSocket.instances[1];
+  secondSocket.open();
+  secondSocket.message({
+    type: 'authenticated', protocolVersion: GATEWAY_PROTOCOL_VERSION,
+    principalId: identity.snapshot().principalId, deviceId: identity.snapshot().deviceId
+  });
+  await settle();
+  assert.equal(requestCalls, 1, 'reconnect must not re-execute an accepted operation');
+  assert.deepEqual(secondSocket.frames().at(-1), {
+    type: 'result', gatewayRequestId: 'gwreq_reconnect', requestKey: 'request_key_reconnect', ok: true,
+    payload: { jsonrpc: '2.0', id: 77, result: { contents: [] } }, durationMs: 0
+  });
+  await client.stop();
+}
 console.log('Gateway client unit tests passed.');

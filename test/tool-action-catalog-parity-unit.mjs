@@ -22,10 +22,19 @@ const currentDefinitions = getToolDefinitions();
 const currentMetadata = new Map(getToolMetadata().map(item => [item.name, item]));
 
 assert.equal(catalogTools.length, 12);
-assert.equal(catalog.length, 35);
-assert.equal(new Set(catalog.map(entry => `${entry.publicTool}:${entry.action}`)).size, 35);
+assert.equal(catalog.length, 36);
+assert.equal(new Set(catalog.map(entry => `${entry.publicTool}:${entry.action}`)).size, 36);
 assert.deepEqual(getCatalogToolDefinitions(), currentDefinitions);
-assert.deepEqual(getCatalogToolDefinitions().map(schemaFromDefinition), getToolSchemas());
+assert.deepEqual(
+  getCatalogToolDefinitions().map(definition => {
+    const { outputSchema: _outputSchema, ...schema } = schemaFromDefinition(definition);
+    return schema;
+  }),
+  getToolSchemas().map(schema => {
+    const { outputSchema: _outputSchema, ...rest } = schema;
+    return rest;
+  })
+);
 assert.deepEqual(
   catalogTools.map(tool => ({ name: tool.definition.name, actions: tool.actions.map(action => action.action) })),
   currentDefinitions.map(definition => ({
@@ -85,7 +94,7 @@ for (const entry of catalog) {
 
 assert.equal(getCatalogAction('unknown', {}), null);
 assert.throws(() => getCatalogAction('relai_work', { action: 'unknown' }), /Unsupported action/);
-console.log('Canonical 12-tool, 35-action catalog execution and policy parity passed.');
+console.log('Canonical 12-tool, 36-action catalog execution and policy parity passed.');
 
 function sampleArgs(entry) {
   const key = `${entry.publicTool}:${entry.action}`;

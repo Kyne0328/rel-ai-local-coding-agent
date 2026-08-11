@@ -24,6 +24,8 @@ fs.writeFileSync(path.join(workspaceDir, 'package.json'), `${JSON.stringify({
   private: true,
   type: 'module'
 }, null, 2)}\n`);
+fs.writeFileSync(path.join(workspaceDir, 'edit-target.txt'), 'before\n');
+
 const config = JSON.parse(fs.readFileSync(path.join(root, 'examples', 'config.example.json'), 'utf8'));
 config.stateDir = stateDir;
 config.auditLogPath = path.join(stateDir, 'audit.jsonl');
@@ -117,51 +119,43 @@ try {
   const logicalTaskId = started.body.result?.structuredContent?.work_id;
   assert.ok(logicalTaskId);
 
+  const editCreated = await callTool(client, 300, 'relai_edit', {
+    workspace: 'repo',
+    work_id: logicalTaskId,
+    path: 'edit-target.txt',
+    oldText: 'before',
+    newText: 'after'
+  });
+  assert.equal(editCreated.response.status, 200, JSON.stringify(editCreated.body));
+  assert.equal(editCreated.body.result?.resultType, 'complete', 'relai_edit must return a completed CallToolResult instead of a task handle');
+  assert.equal(editCreated.body.result?.taskId, undefined, 'relai_edit must not require task polling');
+  assert.equal(editCreated.body.result?.isError, false, JSON.stringify(editCreated.body));
+  assert.equal(editCreated.body.result?.structuredContent?.ok, true, JSON.stringify(editCreated.body));
+  assert.equal(fs.readFileSync(path.join(workspaceDir, 'edit-target.txt'), 'utf8'), 'after\n');
+  const postEditStatus = await callTool(client, 420, 'relai_work', { action: 'status', work_id: logicalTaskId }, {});
+  assert.equal(postEditStatus.response.status, 200, JSON.stringify(postEditStatus.body));
+  assert.equal(postEditStatus.body.result?.isError, false, JSON.stringify(postEditStatus.body));
+
   const fallback = await invokeEligible(client, 4, logicalTaskId, 50, {});
-  assert.equal(fallback.body.result?.resultType, undefined);
+  assert.notEqual(fallback.body.result?.resultType, 'task');
+  assert.equal(fallback.body.result?.taskId, undefined);
   assert.equal(fallback.body.result?.isError, false, JSON.stringify(fallback.body));
   assert.equal(fallback.body.result?.structuredContent?.exitCode, 0);
   assert.equal(fallback.body.result?.structuredContent?.work_id, logicalTaskId);
 
-  const created = await invokeEligible(client, 5, logicalTaskId, 1000);
-  assert.equal(created.response.status, 200, JSON.stringify(created.body));
-  assert.equal(created.body.result?.resultType, 'task');
-  assert.equal(created.body.result?.status, 'working');
-  assert.match(created.body.result?.taskId || '', /^task_[A-Za-z0-9_-]{32,160}$/);
-  assert.equal(created.body.result?.pollIntervalMs, 1000);
-  assert.equal(created.body.result?.task, undefined, 'task results must use the flat wire shape');
-  const taskId = created.body.result.taskId;
-
-  const working = await taskRequest(client, 6, 'tasks/get', taskId);
-  assert.equal(working.body.result?.resultType, 'complete');
-  assert.ok(['working', 'completed'].includes(working.body.result?.status), JSON.stringify(working.body));
-
-  const missingGetCapability = await taskRequest(client, 7, 'tasks/get', taskId, {}, {});
-  assert.equal(missingGetCapability.body.error?.code, MISSING_TASKS_CAPABILITY_CODE);
-
-  const completed = await waitForTaskStatus(client, taskId, 'completed', 20);
-  assert.equal(completed.body.result?.result?.isError, false, JSON.stringify(completed.body));
-  assert.equal(completed.body.result?.result?.structuredContent?.exitCode, 0);
-  assert.equal(completed.body.result?.result?.structuredContent?.work_id, logicalTaskId);
-  assert.equal(completed.body.result?.result?.structuredContent?.processId, undefined);
-
-  const immutableCancel = await taskRequest(client, 130, 'tasks/cancel', taskId);
-  assert.equal(immutableCancel.body.error?.code, -32602);
-  assert.equal(immutableCancel.body.error?.data?.reason, 'terminal_conflict');
-
-  const cancellable = await invokeEligible(client, 131, logicalTaskId, 5000);
-  assert.equal(cancellable.body.result?.resultType, 'task');
-  const cancellableId = cancellable.body.result.taskId;
-  const cancelAccepted = await taskRequest(client, 132, 'tasks/cancel', cancellableId);
-  assert.equal(cancelAccepted.body.result?.resultType, 'complete');
-  const cancelledState = await waitForTaskStatus(client, cancellableId, 'cancelled', 140);
-  assert.equal(cancelledState.body.result?.status, 'cancelled');
-
+  const taskCapableExec = await invokeEligible(client, 5, logicalTaskId, 1000);
+  assert.equal(taskCapableExec.response.status, 200, JSON.stringify(taskCapableExec.body));
+  assert.notEqual(taskCapableExec.body.result?.resultType, 'task', 'task-capable clients must still receive the final tool result');
+  assert.equal(taskCapableExec.body.result?.taskId, undefined, 'ordinary relai_exec calls must not require polling');
+  assert.equal(taskCapableExec.body.result?.isError, false, JSON.stringify(taskCapableExec.body));
+  assert.equal(taskCapableExec.body.result?.structuredContent?.exitCode, 0);
+  assert.equal(taskCapableExec.body.result?.structuredContent?.work_id, logicalTaskId);
   const invalid = await taskRequest(client, 250, 'tasks/get', 'task_invalid');
   assert.equal(invalid.body.error?.code, -32602);
   assert.match(invalid.body.error?.message || '', /not available to this client/);
 
-  const mismatchedHeader = await client.request('tasks/get', { taskId }, {
+  const protocolTaskId = 'task_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+  const mismatchedHeader = await client.request('tasks/get', { taskId: protocolTaskId }, {
     id: 251,
     name: 'task_wrong_header_name_12345678901234567890123456789012',
     capabilities: tasksCapability
@@ -169,7 +163,7 @@ try {
   assert.equal(mismatchedHeader.response.status, 400);
   assert.match(mismatchedHeader.body.error?.message || '', /does not match/);
 
-  const paramHeader = await client.request('tasks/get', { taskId }, {
+  const paramHeader = await client.request('tasks/get', { taskId: protocolTaskId }, {
     id: 252,
     capabilities: tasksCapability,
     extraHeaders: { 'mcp-param-extra': 'not-declared' }
@@ -199,7 +193,7 @@ try {
   fs.rmSync(stateDir, { recursive: true, force: true });
 }
 
-console.log('MCP 2026-07-28 selective native Tasks, synchronous fallback, lifecycle, and routing passed.');
+console.log('MCP 2026-07-28 synchronous tool execution and Tasks protocol routing passed.');
 
 function reservePort() {
   return new Promise((resolve, reject) => {
