@@ -11,5 +11,6 @@ contextBridge.exposeInMainWorld('relaiDesktop', {
   getStatus: async () => null,
   onGatewayStatus: noListener,
   getGatewayStatus: async () => ({ ok: true, connectionMode: 'cloud', gateway: { state: 'pairing_required', principalPaired: false } }),
-  getGatewayUsage: async () => { throw new Error('USAGE_IPC_SHOULD_NOT_RUN_WHILE_PAIRING_REQUIRED'); }
+  getGatewayUsage: async () => { throw new Error('USAGE_IPC_SHOULD_NOT_RUN_WHILE_PAIRING_REQUIRED'); },
+  getLocalUsage: async () => { throw new Error('LOCAL_USAGE_IPC_SHOULD_NOT_RUN_WHILE_CLOUD_PAIRING_REQUIRED'); }
 });
