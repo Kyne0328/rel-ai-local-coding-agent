@@ -16,7 +16,8 @@ const CASES = [
   {"path":"src/service.rs","language":"rust","provider":"resolver-rust-v1","source":"use crate::base::BaseService;\nuse crate::util::save_record;\ntrait Persistable { fn save(&self); }\nstruct AccountService;\nimpl Persistable for AccountService {\n  fn save(&self) {\n    let service = BaseService::new();\n    save_record();\n  }\n}\n","relations":[["IMPLEMENTS","Persistable"],["USES_TYPE","BaseService"],["CALLS","save_record"]],"imports":["base","util"]},
   {"path":"src/main.c","language":"c","provider":"resolver-c-family-v1","source":"#include \"dep.h\"\nint main(void) { return helper(); }\n","relations":[],"imports":["./dep.h"]},
   {"path":"src/account.cpp","language":"cpp","provider":"resolver-c-family-v1","source":"#include \"base.hpp\"\nclass AccountService : public BaseService, public Persistable {\n public:\n  void save() { auto* service = new BaseService(); BaseService::save(); }\n};\n","relations":[["INHERITS","BaseService"],["INHERITS","Persistable"],["USES_TYPE","BaseService"],["CALLS","save"]],"imports":["./base.hpp"]},
-  {"path":"src/AccountService.php","language":"php","provider":"resolver-php-v1","source":"<?php\nuse Acme\\BaseService;\nuse Acme\\Persistable;\nuse function Acme\\save_record;\nclass AccountService extends BaseService implements Persistable {\n public function save() { $service = new BaseService(); return save_record($service); }\n}\n","relations":[["INHERITS","BaseService"],["IMPLEMENTS","Persistable"],["USES_TYPE","BaseService"],["CALLS","save_record"]],"imports":["Acme/BaseService","Acme/Persistable","Acme"]}
+  {"path":"src/AccountService.php","language":"php","provider":"resolver-php-v1","source":"<?php\nuse Acme\\BaseService;\nuse Acme\\Persistable;\nuse function Acme\\save_record;\nclass AccountService extends BaseService implements Persistable {\n public function save() { $service = new BaseService(); return save_record($service); }\n}\n","relations":[["INHERITS","BaseService"],["IMPLEMENTS","Persistable"],["USES_TYPE","BaseService"],["CALLS","save_record"]],"imports":["Acme/BaseService","Acme/Persistable","Acme"]},
+  {"path":"src/AccountService.kt","language":"kotlin","provider":"resolver-kotlin-v1","source":"import com.acme.BaseService\nimport com.acme.Persistable\nimport com.acme.saveRecord\nclass AccountService : BaseService(), Persistable {\n    fun save() {\n        val service = BaseService()\n        saveRecord(service)\n    }\n}\n","relations":[["INHERITS","BaseService"],["IMPLEMENTS","Persistable"],["USES_TYPE","BaseService"],["CALLS","saveRecord"]],"imports":["com/acme/BaseService","com/acme/Persistable","com/acme/saveRecord"]}
 ];
 
 for (const item of CASES) {
@@ -28,5 +29,5 @@ for (const item of CASES) {
   for (const specifier of item.imports) assert.ok(parsed.imports.some(entry => entry.specifier === specifier && entry.provider === item.provider), `${item.language} missing import ${specifier}`);
 }
 
-assert.deepEqual(enhancedResolverLanguages().sort(), ['c', 'cpp', 'csharp', 'go', 'java', 'javascript', 'php', 'python', 'rust', 'tsx', 'typescript']);
+assert.deepEqual(enhancedResolverLanguages().sort(), ['c', 'cpp', 'csharp', 'go', 'java', 'javascript', 'kotlin', 'php', 'python', 'rust', 'tsx', 'typescript']);
 console.log('Repository Intelligence ecosystem resolver-depth tests passed.');
