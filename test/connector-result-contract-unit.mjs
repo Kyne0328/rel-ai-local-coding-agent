@@ -34,7 +34,7 @@ const cases = [
     durationMs: 120, stdout: 'running', stderr: 'failed', stdoutBytes: 7, stderrBytes: 6, stdoutTruncated: false,
     stderrTruncated: false, timedOut: false, environmentKeys: ['CI'], changedFiles: ['package-lock.json'], changedFilesTruncated: false, mutationTracking: 'git'
   }, {
-    ok: false, workspace: 'repo', command: 'npm test', exitCode: 1, durationMs: 120, stdout: 'running', stderr: 'failed', stdoutBytes: 7,
+    ok: false, workspace: 'repo', command: 'npm test', shell: 'PowerShell 7', exitCode: 1, durationMs: 120, stdout: 'running', stderr: 'failed', stdoutBytes: 7,
     stderrBytes: 6, environmentKeys: ['CI'], changedFiles: ['package-lock.json'], mutationTracking: 'git', work_id: 'work_exec'
   }),
   fixture('relai_process:read', 'relai_process', 'read', 'relai_process_read', 'work_process', {
