@@ -8,7 +8,8 @@ import { enhancedResolverLanguages, languageCapabilities, languageForPath, struc
 import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
 
 assert.equal(structuralLanguages().length, 53);
-assert.deepEqual(enhancedResolverLanguages().sort(), ['javascript', 'tsx', 'typescript']);
+const EXPECTED_ENHANCED = ['javascript', 'python', 'tsx', 'typescript'];
+assert.deepEqual(enhancedResolverLanguages().sort(), EXPECTED_ENHANCED);
 assert.equal(languageForPath('src/app.ts'), 'typescript');
 assert.equal(languageForPath('src/module.py'), 'python');
 assert.equal(languageForPath('infra/main.hcl'), 'hcl');
@@ -48,7 +49,7 @@ const config = { stateDir };
 try {
   const index = await repositoryIntelligence.ensure(workspace, config);
   assert.equal(index.languageIntelligence.structuralLanguages, 53);
-  assert.deepEqual(index.languageIntelligence.enhancedLanguages.sort(), ['javascript', 'tsx', 'typescript']);
+  assert.deepEqual(index.languageIntelligence.enhancedLanguages.sort(), EXPECTED_ENHANCED);
   const db = openIndexDatabase(repositoryIndexPath(config, workspace), { readonly: true });
   try {
     const files = new Map(db.prepare('SELECT path, language, parser FROM files').all().map(row => [String(row.path), { language: String(row.language), parser: String(row.parser) }]));

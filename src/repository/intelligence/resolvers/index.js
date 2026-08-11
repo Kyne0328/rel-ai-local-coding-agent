@@ -1,7 +1,9 @@
 import { javascriptTypeResolver } from './javascript.js';
+import { pythonResolver } from './python.js';
 
 const RESOLVERS = new Map([
   ['javascript', javascriptTypeResolver],
+  ['python', pythonResolver],
   ['typescript', javascriptTypeResolver],
   ['tsx', javascriptTypeResolver]
 ]);
