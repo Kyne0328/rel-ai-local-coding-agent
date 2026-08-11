@@ -3,6 +3,7 @@ import { esc, metricHtml, statusClass } from '../../utils.js';
 import { getWorkspaceFilter, routeHref } from '../../router.js';
 import { workspaceDetailsHtml, branchSummary } from './details.js';
 import { recentWorkspaceAliases } from './recents.js';
+import { hydrateWorkspaceAnalytics } from './analytics.js';
 
 function buildWorkspaces(data) {
   const config = data.config || {};
@@ -54,6 +55,7 @@ function buildWorkspaces(data) {
   grid.className = 'workspace-grid workspace-grid-detailed';
   grid.innerHTML = views.map(view => workspaceCard(view, showAutomaticValidation)).join('');
   root.appendChild(grid);
+  void hydrateWorkspaceAnalytics(grid, views.map(view => view.alias));
 
   if (findings.length) root.appendChild(healthFindingsCard(findings));
   return root;
@@ -91,6 +93,7 @@ function workspaceCard(view, showAutomaticValidation) {
       ${workspaceHealthHtml(view)}
       ${workspaceReadinessHtml(view)}
       ${workspaceActivityNotice(view)}
+      <section class="workspace-analytics-mini" data-workspace-analytics="${view.aliasAttr}" aria-label="${view.aliasAttr} analytics" hidden></section>
       <footer class="workspace-actions workspace-primary-actions">${workspacePrimaryActions(view)}</footer>
       ${workspaceDetailsHtml(view, showAutomaticValidation)}
     </article>`;
