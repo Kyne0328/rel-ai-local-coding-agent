@@ -98,6 +98,13 @@
       "bytes": 3805902,
       "sha256": "37a6b07b1a838d02ffb4f4c2a06863637a8efe48432d60a275f50f1d08f1092c",
       "grammarDependency": "tree-sitter-haskell@^0.23.1"
+    },
+    "julia": {
+      "file": "julia/tree-sitter-julia.wasm",
+      "sourcePath": "out/julia/tree-sitter-julia.wasm",
+      "bytes": 2668263,
+      "sha256": "f9d6aff11d7c53d80afe57deaf44bc87a6aef8f09a8b192c16d3722bc368b412",
+      "grammarDependency": "tree-sitter-julia@git+https://github.com/tree-sitter/tree-sitter-julia.git#e0f9dcd180fdcfcfa8d79a3531e11d99e79321d3"
     }
   }
 }
