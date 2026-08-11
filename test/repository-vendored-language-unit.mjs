@@ -20,7 +20,9 @@ const CASES = [
     "source": "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT);\n"
   },
   {"path":"scripts/example.ps1","language":"powershell","source":"function GetRelAI { Write-Output 1 }\n"},
-  {"path":"scripts/example.ps1","language":"powershell","source":"function GetRelAI { Write-Output 1 }\n"}
+  {"path":"scripts/example.ps1","language":"powershell","source":"function GetRelAI { Write-Output 1 }\n"},
+  {"path":"README.md","language":"markdown","source":"# Rel.AI\n\nRepository intelligence.\n"},
+  {"path":"docs/page.mdx","language":"markdown","source":"# Rel.AI MDX\n\nStructured markdown content.\n"}
 ];
 
 for (const item of CASES) {
