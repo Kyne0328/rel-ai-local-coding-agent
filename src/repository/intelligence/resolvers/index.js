@@ -1,8 +1,10 @@
 import { javaResolver } from './java.js';
+import { csharpResolver } from './csharp.js';
 import { javascriptTypeResolver } from './javascript.js';
 import { pythonResolver } from './python.js';
 
 const RESOLVERS = new Map([
+  ['csharp', csharpResolver],
   ['java', javaResolver],
   ['javascript', javascriptTypeResolver],
   ['python', pythonResolver],
