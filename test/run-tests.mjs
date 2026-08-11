@@ -39,6 +39,7 @@ const files = [
   'smoke.mjs',
   'task-state-unit.mjs',
   'task-integrity-unit.mjs',
+  'unborn-workspace-unit.mjs',
   'validation-task-scope-unit.mjs',
   'workflow-benchmark-contract-unit.mjs',
   'edit-run-checks-completion-unit.mjs',

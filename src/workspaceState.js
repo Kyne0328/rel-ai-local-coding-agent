@@ -75,6 +75,7 @@ function baseWorkspaceGitState(workspacePath) {
     exists,
     isGit,
     branch: null,
+    unborn: false,
     ahead: 0,
     behind: 0,
     dirty: false,
@@ -111,6 +112,7 @@ async function refreshWorkspaceGitState(cacheKey, cached, alias, workspace, conf
     if (status.exitCode === 0 && !status.stdoutTruncated) {
       const ownership = classifyStatusOwnership({ alias, path: workspacePath }, config, status.stdout || '');
       next.branch = ownership.branch;
+      next.unborn = ownership.unborn;
       next.ahead = ownership.aheadBehind?.ahead || 0;
       next.behind = ownership.aheadBehind?.behind || 0;
       next.changedFileCount = ownership.entries.length;

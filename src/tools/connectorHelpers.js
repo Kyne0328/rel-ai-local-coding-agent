@@ -23,6 +23,7 @@ function compactRepositoryState(value, { includeWorkspace = true } = {}) {
     workspace: includeWorkspace ? value.workspace : undefined,
     branch: value.branch,
     aheadBehind: value.aheadBehind,
+    unborn: value.unborn,
     status: value.status,
     changedFiles: value.changedFiles,
     untrackedFiles: value.untrackedFiles,
