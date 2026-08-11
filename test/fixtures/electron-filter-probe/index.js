@@ -73,8 +73,8 @@ app.whenReady().then(async () => {
     await win.webContents.executeJavaScript(`document.querySelector('#__activity-filter-bar [aria-label^="Remove Status filter"]')?.click()`);
     await waitFor(win, `!document.querySelector('#__activity-filter-bar [aria-label^="Remove Status filter"]') && !location.hash.includes('status=')`);
     await win.webContents.executeJavaScript(`location.hash = '#activity?task=acceptance-failed'`);
-    await waitFor(win, `document.querySelector('#__activity-filter-bar [aria-label^="Remove Task filter"]')`);
-    const taskChip = await win.webContents.executeJavaScript(`document.querySelector('#__activity-filter-bar [aria-label^="Remove Task filter"]')?.getAttribute('aria-label') || ''`);
+    await waitFor(win, `document.querySelector('#__activity-filter-bar [aria-label^="Remove Session filter"]')`);
+    const taskChip = await win.webContents.executeJavaScript(`document.querySelector('#__activity-filter-bar [aria-label^="Remove Session filter"]')?.getAttribute('aria-label') || ''`);
     await win.webContents.executeJavaScript(`document.querySelector('#__activity-filter-bar .filter-clear-button')?.click()`);
     await waitFor(win, `document.querySelectorAll('#__activity-filter-bar .filter-chip').length === 0 && !location.hash.includes('?')`);
 
@@ -185,7 +185,7 @@ app.whenReady().then(async () => {
     })()`);
 
     await win.webContents.executeJavaScript(`location.hash = '#settings'`);
-    await waitFor(win, `document.querySelectorAll('.settings-nav-button').length === 4 && document.querySelector('.appearance-preview')`);
+    await waitFor(win, `document.querySelectorAll('.settings-nav-button').length === 5 && document.querySelector('.appearance-preview')`);
     const settings = await win.webContents.executeJavaScript(`(async () => {
       const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       const order = [...document.querySelectorAll('.settings-nav-button')].map(button => button.textContent.trim());
@@ -324,17 +324,25 @@ app.whenReady().then(async () => {
       const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       window.relaiDesktop = {
         getGatewayStatus: async () => ({ connectionMode: 'direct' }),
-        getGatewayUsage: async () => ({ ok: true })
+        getGatewayUsage: async () => ({ ok: true }),
+        getLocalUsage: async month => ({
+          ok: true,
+          source: 'local',
+          month,
+          totals: { requests: 0, toolCalls: 0, successes: 0, failures: 0, requestBytes: 0, resultBytes: 0, executionMs: 0, activeDays: 0 },
+          tools: [], devices: [], workspaces: [], series: [], toolSeries: [], workspaceSeries: [], workspaceToolSeries: [],
+          failureCategories: [], workspaceFailureCategories: [], failureCategorySeries: [], workspaceFailureCategorySeries: []
+        })
       };
       location.hash = '#usage';
       const started = Date.now();
-      while (!document.querySelector('#__relai-modal-title') && Date.now() - started < 4000) await delay(50);
+      while (!document.querySelector('.usage-overview') && Date.now() - started < 4000) await delay(50);
       const result = {
-        modalTitle: document.querySelector('#__relai-modal-title')?.textContent || '',
-        modalMessage: document.querySelector('#__relai-modal-backdrop')?.textContent || '',
-        inlineUnavailable: Boolean(document.querySelector('[data-usage-unavailable]'))
+        overviewVisible: Boolean(document.querySelector('.usage-overview')),
+        localAggregate: /Local aggregate/.test(document.querySelector('[data-usage-content]')?.textContent || ''),
+        modalVisible: Boolean(document.querySelector('#__relai-modal-title')),
+        inlineUnavailable: Boolean(document.querySelector('.usage-unavailable'))
       };
-      document.getElementById('__relai-modal-backdrop')?.click();
       delete window.relaiDesktop;
       return result;
     })()`);
