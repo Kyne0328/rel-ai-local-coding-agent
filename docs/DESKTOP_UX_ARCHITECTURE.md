@@ -20,17 +20,17 @@ The dashboard is the routine application surface. The separate status window is 
 
 ## First-run wizard
 
-The Electron wizard owns initial Cloud pairing and explicit Advanced recovery/Direct fallback. It remains exactly three steps.
+The Electron wizard owns initial Cloud account sign-in and explicit Advanced legacy recovery/Direct fallback. It remains exactly three steps.
 
-### Step 1: Connect ChatGPT
+### Step 1: Sign in
 
-The normal path starts the local service plus outbound gateway client and shows a short-lived pairing code. It does not ask for a local port, ngrok credentials, or the Direct approval token. Advanced setup retains accountless recovery and Direct connection fields.
+The normal path opens browser-based Rel.AI account sign-in or account creation and approves this computer. It does not ask for a local port, ngrok credentials, a device pairing code, or the Direct approval token. Advanced setup retains legacy identity migration and Direct connection fields.
 
 ### Step 2: Secure this device
 
-After authenticated pairing, the user may explicitly reveal the recovery code or use an already paired desktop to create a one-time device-link code. Private device-key material never appears in renderer state or public setup copy.
+The desktop creates its own cryptographic device identity locally. The private key stays on this computer, while the Rel.AI account is the recovery path for adding replacement or additional account-based devices.
 
-### Step 3: Ready
+### Step 3: Connect ChatGPT
 
 The wizard confirms the Cloud/Direct connection mode, then opens the dashboard on the canonical **Connection** route. Public setup copy must not expose source-development files, commands, diagnostic URLs, private keys, recovery secrets, or pairing poll tokens.
 
@@ -136,7 +136,7 @@ Workspace validation display is not a global Settings concern. It is owned by Wo
 
 ## Shared ChatGPT guidance
 
-Connection guidance distinguishes the default Cloud flow from Advanced Direct recovery. Cloud setup uses the stable gateway endpoint, OAuth, and a short-lived pairing code. Direct setup uses the managed-ngrok endpoint and local approval-token OAuth. Tool refresh, OAuth reauthentication, and device update states must never be presented as interchangeable recovery actions.
+Connection guidance distinguishes the default Cloud flow from Advanced Direct recovery. Cloud setup uses the stable gateway endpoint, browser-based Rel.AI account sign-in, device approval, and OAuth. Direct setup uses the managed-ngrok endpoint and local approval-token OAuth. Tool refresh, OAuth reauthentication, and device update states must never be presented as interchangeable recovery actions.
 
 Both modes include the same safe first read-only request.
 

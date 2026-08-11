@@ -15,15 +15,14 @@ Ngrok credentials are needed only for **Advanced Direct connection**.
 ## Install and first run
 
 1. Install or launch the appropriate Rel.AI MCP desktop package.
-2. The first-run wizard opens the three-step Cloud flow: **Connect ChatGPT**, **Secure this device**, **Ready**.
-3. Choose **Connect ChatGPT**. Rel.AI starts its desktop connection and outbound gateway client, then displays a short-lived pairing code.
-4. In ChatGPT, use the surface for your plan: **Plus or Pro** — open **Plugins** from the sidebar or **Settings > Plugins**, add Rel.AI MCP, and choose **Connect**; **Business, Enterprise, or Edu** — open the Rel.AI app provided under workspace **Apps**. Use OAuth when prompted.
-5. Enter the desktop pairing code on the Rel.AI OAuth page.
-6. When the desktop confirms the pairing, continue to **Secure this device**.
-7. Reveal the recovery code explicitly and store it somewhere appropriate for your threat model.
-8. Finish setup and add a workspace from **Workspaces**.
+2. The first-run wizard opens the three-step Cloud flow: **Sign in**, **Secure device**, **Connect ChatGPT**.
+3. Choose **Sign in or create account**. Continue in your browser, sign in to Rel.AI or create an account, and approve this computer.
+4. Continue to **Secure this device**. Rel.AI creates a cryptographic device identity locally; its private key stays on this computer.
+5. Continue to **Connect ChatGPT**. For **Plus or Pro**, open **Plugins** from the sidebar or **Settings > Plugins**, add Rel.AI MCP, and choose **Connect**. For **Business, Enterprise, or Edu**, open the Rel.AI app provided under workspace **Apps**.
+6. When authorization opens, sign in with the same Rel.AI account. The normal account flow does not ask you to enter a desktop pairing code.
+7. Finish setup and add a workspace from **Workspaces**.
 
-The setup flow does not place pairing/recovery secrets in URLs or passive status payloads.
+Legacy identity migration and Direct connection remain under **Advanced setup and recovery** rather than the normal first-run path.
 
 ## What stays local
 
@@ -59,17 +58,17 @@ Use Rel.AI MCP on workspace "myapp". Call relai_work with action "begin", retain
 
 Each Cloud desktop owns a P-256 device key pair. Electron encrypts the private key with `safeStorage`; the gateway verifies the corresponding public identity during challenge authentication.
 
-### Recovery code
+### Account recovery and new computers
 
-The long-lived recovery secret identifies the same accountless principal. Reveal it only through the explicit recovery action and keep it separate from routine logs/config exports. On a replacement computer, choose the recovery action, enter the saved code, then complete the new short-lived OAuth pairing.
+For current account-based installations, your Rel.AI account is the recovery path for adding a replacement or additional computer. Each computer signs in independently and receives its own device identity.
 
-### One-time device link
+### Legacy identity migration
 
-If an existing paired desktop is available, create a one-time link code instead of revealing the long-lived recovery code. The gateway consumes that proof when it is used; reuse is rejected.
+Older accountless installations can migrate their existing Rel.AI identity from **Advanced setup and recovery** by using a legacy recovery code or a one-time device-link code from an already paired computer. Those mechanisms are migration tools, not the normal setup flow for new account-based devices.
 
 ### Lost device
 
-Open **Connection** on another paired desktop and revoke the lost/retired device. Revocation is separate from OAuth reauthentication and tool-schema refresh.
+Use your Rel.AI account/device management flow to revoke a lost or retired device. Revocation is separate from OAuth reauthentication and tool-schema refresh.
 
 ## Connection and Usage
 
@@ -96,7 +95,7 @@ Legacy configurations containing ngrok values migrate to Direct mode rather than
 
 ## Troubleshooting
 
-For Cloud pairing, use a fresh unexpired pairing code and keep the desktop running. A `device_update_required` state must be resolved by updating the desktop; a `tool_refresh_required` state is handled through the current ChatGPT app refresh/review flow, not by rotating the Direct token.
+For Cloud sign-in or authorization failures, keep the desktop running, retry the browser sign-in with the same Rel.AI account, and confirm the computer is approved. A `device_update_required` state must be resolved by updating the desktop; a `tool_refresh_required` state is handled through the current ChatGPT app refresh/review flow, not by rotating the Direct token.
 
 For Direct mode, confirm the configured port is free, the ngrok account key is valid, and the static domain is not already owned by another running agent.
 

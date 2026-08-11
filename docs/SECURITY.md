@@ -101,7 +101,7 @@ Set `REL_AI_MCP_ALLOW_NO_AUTH=1` only for local testing on a trusted machine.
 
 Rel.AI MCP is a trusted local coding bridge, not a sandbox.
 
-- Anyone who obtains the Direct `REL_AI_MCP_TOKEN` can authorize or call that Direct/local server; replace it if it leaks. Anyone who obtains a Cloud recovery code can attempt to recover that accountless principal, so store recovery material separately from routine logs/config exports and revoke unexpected devices.
+- Anyone who obtains the Direct `REL_AI_MCP_TOKEN` can authorize or call that Direct/local server; replace it if it leaks. Protect the Rel.AI account used for Cloud device approval and revoke unexpected or lost devices. Legacy recovery codes and one-time device-link proofs remain sensitive migration material for older accountless installations and should stay out of routine logs/config exports.
 - Validation commands execute code configured by the workspace. A malicious repository can cause system or data impact when tests, builds, or analyzers run. Child processes receive a minimal platform environment plus explicit configuration rather than the complete service environment.
 - ChatGPT can modify any non-sensitive file inside a configured workspace through the active tools.
 - Git push publishes to allowlisted remotes; review the diff before committing or pushing.
