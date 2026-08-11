@@ -6,7 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { realRootOf } from '../../safety.js';
 import { statePath } from '../../stateLayout.js';
 
-const INDEX_SCHEMA_VERSION = 1;
+const INDEX_SCHEMA_VERSION = 2;
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS index_meta(
@@ -82,6 +82,18 @@ CREATE TABLE IF NOT EXISTS edges(
   provider TEXT NOT NULL,
   confidence REAL NOT NULL
 ) STRICT;
+CREATE TABLE IF NOT EXISTS relation_hints(
+  id INTEGER PRIMARY KEY,
+  source_file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  source_qualified_name TEXT,
+  source_name TEXT,
+  target_qualified_name TEXT,
+  target_name TEXT,
+  module_specifier TEXT,
+  provider TEXT NOT NULL,
+  confidence REAL NOT NULL
+) STRICT;
 CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(
   path UNINDEXED,
   symbols,
@@ -95,6 +107,8 @@ CREATE INDEX IF NOT EXISTS occurrences_file_idx ON occurrences(file_id);
 CREATE INDEX IF NOT EXISTS imports_target_idx ON imports(target_file_id);
 CREATE INDEX IF NOT EXISTS edges_source_idx ON edges(source_symbol_id);
 CREATE INDEX IF NOT EXISTS edges_target_idx ON edges(target_symbol_id);
+CREATE INDEX IF NOT EXISTS relation_hints_file_idx ON relation_hints(source_file_id);
+CREATE INDEX IF NOT EXISTS relation_hints_target_idx ON relation_hints(target_name);
 CREATE INDEX IF NOT EXISTS files_generation_idx ON files(generation_id);
 `;
 
@@ -148,6 +162,7 @@ function ensureIndexSchema(db) {
 function resetSchema(db) {
   db.exec(`
     DROP TABLE IF EXISTS edges;
+    DROP TABLE IF EXISTS relation_hints;
     DROP TABLE IF EXISTS imports;
     DROP TABLE IF EXISTS occurrences;
     DROP TABLE IF EXISTS symbols;
@@ -198,6 +213,7 @@ function replaceFileFacts(db, generationId, candidate, parsed, parserVersion) {
   const fileId = Number(db.prepare('SELECT id FROM files WHERE path=?').get(candidate.path).id);
 
   db.prepare('DELETE FROM edges WHERE source_file_id=? OR target_file_id=?').run(fileId, fileId);
+  db.prepare('DELETE FROM relation_hints WHERE source_file_id=?').run(fileId);
   db.prepare('DELETE FROM occurrences WHERE file_id=?').run(fileId);
   db.prepare('DELETE FROM imports WHERE source_file_id=?').run(fileId);
   db.prepare('DELETE FROM symbols WHERE file_id=?').run(fileId);
@@ -229,7 +245,16 @@ function replaceFileFacts(db, generationId, candidate, parsed, parserVersion) {
     VALUES (?, ?, ?, NULL, NULL, ?, ?)
   `);
   for (const item of parsed.imports || []) {
-    insertImport.run(fileId, item.specifier, item.kind || 'import', 'tree-sitter', 0.82);
+    insertImport.run(fileId, item.specifier, item.kind || 'import', item.provider || 'tree-sitter', Number(item.confidence || 0.82));
+  }
+
+  const insertHint = db.prepare(`
+    INSERT INTO relation_hints(source_file_id, type, source_qualified_name, source_name, target_qualified_name, target_name, module_specifier, provider, confidence)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  for (const relation of parsed.relations || []) {
+    insertHint.run(fileId, relation.type, relation.sourceQualifiedName || null, relation.sourceName || null, relation.targetQualifiedName || null,
+      relation.targetName || null, relation.moduleSpecifier || null, relation.provider || parsed.resolver?.id || 'tree-sitter', Number(relation.confidence || 0.9));
   }
 
   const symbolsText = (parsed.symbols || []).map(item => `${item.name} ${item.qualifiedName}`).join(' ');
@@ -248,7 +273,7 @@ function deleteIndexedPath(db, relativePath) {
 
 function resolveRelationships(db) {
   db.prepare('UPDATE imports SET target_path=NULL, target_file_id=NULL').run();
-  db.prepare("DELETE FROM edges WHERE type IN ('IMPORTS','CALLS')").run();
+  db.prepare("DELETE FROM edges WHERE type IN ('IMPORTS','CALLS','INHERITS','IMPLEMENTS','USES_TYPE')").run();
   const files = db.prepare('SELECT id, path FROM files ORDER BY path').all().map(row => ({ id: Number(row.id), path: String(row.path) }));
   const pathToId = new Map(files.map(file => [file.path, file.id]));
   const fileById = new Map(files.map(file => [file.id, file]));
@@ -292,6 +317,46 @@ function resolveRelationships(db) {
     insertEdge.run(call.enclosing_symbol_id == null ? null : Number(call.enclosing_symbol_id), Number(target.id), sourceFileId, Number(target.file_id),
       'CALLS', String(call.name), 'tree-sitter', targets.length === 1 ? 0.84 : 0.7);
   }
+
+  resolveHintRelationships(db, { files, fileById, pathToId, suffixIndex, symbolsByName, insertEdge });
+}
+
+function resolveHintRelationships(db, context) {
+  const { fileById, pathToId, suffixIndex, symbolsByName, insertEdge } = context;
+  const symbolsByQualified = new Map();
+  for (const row of db.prepare('SELECT id, file_id, name, qualified_name FROM symbols').all()) {
+    const qualified = String(row.qualified_name);
+    if (!symbolsByQualified.has(qualified)) symbolsByQualified.set(qualified, []);
+    symbolsByQualified.get(qualified).push(row);
+  }
+  for (const hint of db.prepare('SELECT * FROM relation_hints ORDER BY id').all()) {
+    const sourceFileId = Number(hint.source_file_id);
+    const sourceFile = fileById.get(sourceFileId);
+    if (!sourceFile) continue;
+    const moduleSpecifier = hint.module_specifier == null ? '' : String(hint.module_specifier);
+    const targetPath = moduleSpecifier ? resolveImportPath(sourceFile.path, moduleSpecifier, pathToId, suffixIndex) : null;
+    const targetFileId = targetPath ? pathToId.get(targetPath) : null;
+    const sourceSymbol = hint.source_qualified_name == null ? null : chooseQualifiedSymbol(symbolsByQualified.get(String(hint.source_qualified_name)) || [], sourceFileId);
+    const targetQualified = hint.target_qualified_name == null ? '' : String(hint.target_qualified_name);
+    const targetName = hint.target_name == null ? '' : String(hint.target_name);
+    let targetSymbol = targetQualified ? chooseQualifiedSymbol(symbolsByQualified.get(targetQualified) || [], targetFileId) : null;
+    if (!targetSymbol && targetName) {
+      const candidates = symbolsByName.get(targetName) || [];
+      const scoped = targetFileId ? candidates.filter(item => Number(item.file_id) === Number(targetFileId)) : candidates;
+      if (scoped.length === 1) targetSymbol = scoped[0];
+    }
+    insertEdge.run(sourceSymbol ? Number(sourceSymbol.id) : null, targetSymbol ? Number(targetSymbol.id) : null, sourceFileId,
+      targetSymbol ? Number(targetSymbol.file_id) : (targetFileId || null), String(hint.type), targetName || null, String(hint.provider), Number(hint.confidence));
+  }
+}
+
+function chooseQualifiedSymbol(candidates, preferredFileId = null) {
+  if (!candidates.length) return null;
+  if (preferredFileId != null) {
+    const scoped = candidates.filter(item => Number(item.file_id) === Number(preferredFileId));
+    if (scoped.length === 1) return scoped[0];
+  }
+  return candidates.length === 1 ? candidates[0] : null;
 }
 
 function chooseCallTarget(sourceFileId, targets, importedIds = new Set()) {

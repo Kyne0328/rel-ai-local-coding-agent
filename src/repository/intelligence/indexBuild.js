@@ -16,7 +16,7 @@ import {
   replaceFileFacts,
   resolveRelationships
 } from './database.js';
-import { isTestPath, languageForPath, PARSER_VERSION } from './languages.js';
+import { enhancedResolverLanguages, isTestPath, languageForPath, PARSER_VERSION, structuralLanguages } from './languages.js';
 import { parseSourceFile } from './treeSitter.js';
 
 const DEFAULT_MAX_INDEX_FILES = 100000;
@@ -230,6 +230,7 @@ function indexMetadata(db, generation, workspace, scan, checkedAt, cacheHit, cha
     structuralFileCount: stats.structuralFileCount, symbolCount: stats.symbolCount, occurrenceCount: stats.occurrenceCount,
     changedPathCount, deletedPathCount, skippedChangedFiles, truncated: scan.truncated,
     providers: { structural: 'tree-sitter-wasm', graph: 'sqlite', lexical: 'sqlite-fts5', neural: false },
+    languageIntelligence: { structuralLanguages: structuralLanguages().length, enhancedLanguages: enhancedResolverLanguages() },
     policy: 'Persistent derived index with worker-isolated parsing, bounded incremental refresh, and periodic full reconciliation. Source remains authoritative.',
     workspace: workspace.alias
   };
