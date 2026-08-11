@@ -5,6 +5,7 @@ import { resolveSafePath } from '../../safety.js';
 import { detectVerifyChecks } from '../../bridge/checkDetection.js';
 import { clampNumber } from '../../bridge/limits.js';
 import { analyzeArchitecture } from './architecture.js';
+import { analyzeCrossWorkspace } from './crossWorkspace.js';
 import { openIndexDatabase, repositoryIndexPath } from './database.js';
 import { reciprocalRankFusion } from './fusion.js';
 import { ensureRepositoryIndex } from './indexer.js';
@@ -26,7 +27,15 @@ async function queryCodeInspect(workspace, config, args = {}, options = {}) {
   const db = openIndexDatabase(repositoryIndexPath(config, workspace), { readonly: true });
   try {
     const base = { ok: true, workspace: workspace.alias, action, index };
-    if (action === 'architecture') return { ...base, ...analyzeArchitecture(db, { maxResults }) };
+    if (action === 'architecture') {
+      const architecture = analyzeArchitecture(db, { maxResults });
+      const crossWorkspace = analyzeCrossWorkspace(workspace, config, db, { maxRelationships: Math.min(100, maxResults) });
+      return {
+        ...base,
+        ...architecture,
+        architecture: { ...architecture.architecture, crossWorkspace }
+      };
+    }
     if (action === 'diagnostics') return { ...base, ...diagnosticReadiness(workspace, db) };
     if (action === 'related') {
       const query = String(args.query || args.symbol || '').trim();
