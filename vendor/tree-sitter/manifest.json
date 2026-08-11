@@ -77,6 +77,13 @@
       "bytes": 29097,
       "sha256": "5de92bd77ff1d8aa2944668c2fc9fb4854daae14b46e7ec8045e8ef6efd66eb0",
       "grammarDependency": "tree-sitter-asm@git+https://github.com/RubixDev/tree-sitter-asm.git#839741fef4dab5128952334624905c82b40c7133"
+    },
+    "gdscript": {
+      "file": "gdscript/tree-sitter-gdscript.wasm",
+      "sourcePath": "out/gdscript/tree-sitter-gdscript.wasm",
+      "bytes": 292506,
+      "sha256": "a488c2cd22243aee8108bea33bed646cf871a045b156f1f1cb0138c542131fbc",
+      "grammarDependency": "tree-sitter-gdscript@^6.1.0"
     }
   }
 }

@@ -27,7 +27,8 @@ const CASES = [
   {"path":"schema.graphql","language":"graphql","source":"type Query { hello: String! }\nquery Hello { hello }\n"},
   {"path":"api/service.proto","language":"protobuf","source":"syntax = \"proto3\";\nmessage User { string name = 1; }\n"},
   {"path":"analysis/model.r","language":"r","source":"add <- function(x, y) { x + y }\n"},
-  {"path":"src/start.asm","language":"assembly","source":"mov eax, ebx\nret\n"}
+  {"path":"src/start.asm","language":"assembly","source":"mov eax, ebx\nret\n"},
+  {"path":"game/player.gd","language":"gdscript","source":"extends Node\nfunc _ready():\n    print(\"ready\")\n"}
 ];
 
 for (const item of CASES) {

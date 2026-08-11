@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-const PARSER_VERSION = 11;
+const PARSER_VERSION = 12;
 const MAX_SEARCH_TERMS = 768;
 
 const LANGUAGE_PROFILES = Object.freeze([
@@ -49,6 +49,7 @@ const LANGUAGE_PROFILES = Object.freeze([
   profile('protobuf', 'tree-sitter-proto.wasm', [".proto"]),
   profile('r', 'tree-sitter-r.wasm', [".r"]),
   profile('assembly', 'tree-sitter-asm.wasm', [".asm",".s"]),
+  profile('gdscript', 'tree-sitter-gdscript.wasm', [".gd"]),
   profile('zig', 'tree-sitter-zig.wasm', ['.zig'])
 ]);
 
@@ -70,7 +71,8 @@ const VENDORED_WASM_BY_LANGUAGE = Object.freeze({
   graphql: 'vendor/tree-sitter/graphql/tree-sitter-graphql.wasm',
   protobuf: 'vendor/tree-sitter/protobuf/tree-sitter-proto.wasm',
   r: 'vendor/tree-sitter/r/tree-sitter-r.wasm',
-  assembly: 'vendor/tree-sitter/assembly/tree-sitter-asm.wasm'
+  assembly: 'vendor/tree-sitter/assembly/tree-sitter-asm.wasm',
+  gdscript: 'vendor/tree-sitter/gdscript/tree-sitter-gdscript.wasm'
 });
 
 function profile(language, wasm, extensions, basenames = [], resolver = null) {
