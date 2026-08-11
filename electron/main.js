@@ -56,6 +56,7 @@ const oauthProvider = await importResourceModule('src/oauthProvider.js');
 const { startHttpServer } = await importResourceModule('src/httpServer.js');
 const { terminateProcessTree } = await importResourceModule('src/process.js');
 const { stopAllManagedProcesses } = await importResourceModule('src/processManager.js');
+const { readLocalUsageSnapshot } = await importResourceModule('src/localAnalytics.js');
 const { shutdownTelemetry } = await importResourceModule('src/telemetry.js');let wizardWindow = null, wizardRecoveryMode = false, wizardReturnToFallback = false;
 let httpServer = null, startPromise = null;
 let lifecycleToken = 0, isQuitting = false, appUpdater = null, updateSupportPolicy = null;
@@ -503,6 +504,10 @@ async function getGatewayUsage(month) {
   }
 }
 
+function getLocalUsage(month) {
+  return { ok: true, ...readLocalUsageSnapshot(configModule.readConfig(), month) };
+}
+
 function safeGatewayDevice(device = {}) {
   return {
     deviceId: String(device.deviceId || ''),
@@ -831,6 +836,7 @@ registerIpcHandlers({
   setGatewayMode,
   getGatewayRecovery,
   getGatewayUsage,
+  getLocalUsage,
   getDesktopSettings: currentDesktopSettings,
   saveDesktopSettings: updateDesktopSettings,
   replaceApprovalToken: approvalTokenManager.replace,

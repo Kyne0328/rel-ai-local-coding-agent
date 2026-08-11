@@ -59,6 +59,7 @@ export function normalizeUsageSnapshot(snapshot, requestedMonth = '') {
   const month = normalizeMonth(snapshot.month || requestedMonth);
   if (!month) throw new Error('Usage unavailable for the selected month.');
   return {
+    source: snapshot.source === 'local' ? 'local' : 'cloud',
     month,
     totals: normalizeTotals(snapshot.totals),
     tools: normalizeBreakdown(snapshot.tools, 'tool'),
@@ -107,6 +108,7 @@ export function analyticsRangeScope(models, bounds, { workspace = '', deviceId =
   const workspaces = workspace ? [] : groupRows(all.flatMap(model => model.workspaceSeries).filter(row => inRange(row.hour, bounds.start, bounds.end)), row => row.workspace || 'Unattributed', 'workspace');
   const points = bucketSeries(baseRows, bounds.start, bounds.end);
   return {
+    source: all.length && all.every(model => model.source === 'local') ? 'local' : 'cloud',
     kind: workspace ? 'workspace' : 'all',
     label: workspace || 'All workspaces',
     workspace,
@@ -148,7 +150,7 @@ export function workspaceOptions(models) {
 }
 
 function normalizeTotals(value) {
-  if (!value || typeof value !== 'object') throw new Error('Usage unavailable: monthly totals were not returned by the gateway.');
+  if (!value || typeof value !== 'object') throw new Error('Usage unavailable: monthly totals were not returned.');
   const result = {};
   for (const key of [...TOTAL_KEYS, 'activeDays']) result[key] = exactNumber(value[key], key);
   return result;

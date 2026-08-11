@@ -31,13 +31,17 @@ assert.doesNotMatch(dashboardData, /gatewayUsage|usageSnapshot|usageTotals|usage
 assert.match(dashboard, /case ['"]usage['"]:[\s\S]{0,160}payload = route/, 'Usage fingerprint must not depend on aggregate dashboard data');
 
 assert.match(preload, /getGatewayUsage: month => ipcRenderer\.invoke\(['"]desktop:gateway:usage['"], month\)/);
+assert.match(preload, /getLocalUsage: month => ipcRenderer\.invoke\(['"]desktop:analytics:local['"], month\)/);
 assert.match(ipc, /desktop:gateway:usage/);
+assert.match(ipc, /desktop:analytics:local/);
 assert.match(ipc, /Usage month must use YYYY-MM/);
 assert.match(electronMain, /GATEWAY_NOT_CONNECTED/, 'Electron main must return a structured unavailable result when Cloud disconnects during a usage request');
 assert.match(electronMain, /Rel\.AI Cloud is not connected\./, 'Electron main must not leak the raw remote-method gateway exception');
-assert.match(usageSource, /getGatewayUsage\(month\)/, 'Analytics must request only required YYYY-MM snapshots through Electron');
+assert.match(usageSource, /desktop\.getLocalUsage/);
+assert.match(usageSource, /desktop\.getGatewayUsage/);
+assert.match(usageSource, /usageReader=direct\?desktop\.getLocalUsage:desktop\.getGatewayUsage/, 'Analytics must select local aggregates in Direct mode and Cloud aggregates in Cloud mode');
 assert.match(usageSource, /pairing_required|pairing required/i, 'Usage must recognize the Cloud pairing-required state before requesting usage');
-assert.match(usageSource, /const availability=cloudUsageAvailability\(status\);[\s\S]{0,700}getGatewayUsage\(month\)/, 'Analytics must gate Cloud availability before requesting monthly snapshots');
+assert.match(usageSource, /if\(!direct\).*cloudUsageAvailability\(status\)/, 'Analytics must gate Cloud availability only for Cloud mode');
 assert.doesNotMatch(usageSource, /fetch\(|DASHBOARD_DATA_URL|auditTail|taskActivity/, 'Usage must not fabricate totals from local dashboard/activity data');
 
 for (const label of ['MCP requests', 'Tool calls', 'Successful', 'Failed', 'Data sent', 'Data returned', 'Execution time', 'Active days']) {
@@ -50,9 +54,8 @@ for (const breakdown of ['tools', 'devices', 'workspaces']) {
   assert.match(usageCombinedSource, new RegExp(`snapshot\\.${breakdown}|usage\\.${breakdown}|model\\.${breakdown}|${breakdown}`), `Analytics must render ${breakdown} breakdowns`);
 }
 assert.match(usageSource, /Usage unavailable|usage-unavailable/i);
-assert.match(usageSource, /openModal/, 'Direct-mode Usage unavailability must be presented as a modal');
-assert.match(usageSource, /Cloud transport analytics are unavailable while Direct connection mode is active\./);
-assert.doesNotMatch(usageSource, /connectionMode === ['"]direct['"]\) throw new Error/, 'Direct mode must not fall through the generic inline error renderer');
+assert.doesNotMatch(usageSource, /Cloud transport analytics are unavailable while Direct connection mode is active\./);
+assert.match(usageCombinedSource, /Local aggregate|privacy-safe aggregates|source === ['"]local['"]/, 'Direct mode must render local aggregate analytics instead of a Cloud-unavailable state');
 assert.match(usageSource, /Retry/);
 assert.match(usageSource, /data-usage-range/);
 assert.match(usageSource, /Last 24 hours|ANALYTICS_RANGES/);
@@ -88,6 +91,7 @@ assert.equal(legacyBreakdowns.tools[0].toolCalls, 2, 'legacy calls rows must nor
 assert.equal(legacyBreakdowns.devices[0].toolCalls, 2);
 assert.equal(legacyBreakdowns.workspaces[0].toolCalls, 2);
 assert.equal(currentUsageMonth(new Date('2026-08-08T00:00:00.000Z')), '2026-08');
+assert.equal(buildUsageModel({ ok: true, source: 'local', month: '2026-08', totals: { requests: 0, toolCalls: 0, successes: 0, failures: 0, requestBytes: 0, resultBytes: 0, executionMs: 0, activeDays: 0 }, tools: [], devices: [], workspaces: [] }, '2026-08').source, 'local');
 assert.throws(() => buildUsageModel({ ok: true, month: '2026-08', totals: { requests: -1 } }), /Usage unavailable|invalid requests/);
 const bounds = analyticsBounds('24h', { now: new Date('2026-08-08T12:00:00.000Z') });
 assert.equal(bounds.start.toISOString(), '2026-08-07T12:00:00.000Z');

@@ -2,13 +2,15 @@ import { analyticsBounds, analyticsMonths, analyticsRangeScope, normalizeUsageSn
 
 export function hydrateWorkspaceAnalytics(root, aliases, { desktop = globalThis.window?.relaiDesktop, now = new Date() } = {}) {
   const uniqueAliases = [...new Set((aliases || []).map(String).filter(Boolean))];
-  if (!root || !uniqueAliases.length || !desktop?.getGatewayUsage || !desktop?.getGatewayStatus) return Promise.resolve(false);
+  if (!root || !uniqueAliases.length || !desktop?.getGatewayUsage || !desktop?.getLocalUsage || !desktop?.getGatewayStatus) return Promise.resolve(false);
   return Promise.resolve().then(async () => {
     const status = await desktop.getGatewayStatus();
     const gateway = status?.gateway && typeof status.gateway === 'object' ? status.gateway : {};
-    if (status?.connectionMode === 'direct' || gateway.state !== 'connected' || gateway.principalPaired !== true) return false;
+    const direct = status?.connectionMode === 'direct';
+    if (!direct && (gateway.state !== 'connected' || gateway.principalPaired !== true)) return false;
+    const usageReader = direct ? desktop.getLocalUsage : desktop.getGatewayUsage;
     const bounds = analyticsBounds('24h', { now });
-    const models = await Promise.all(analyticsMonths(bounds).map(async month => normalizeUsageSnapshot(await desktop.getGatewayUsage(month), month)));
+    const models = await Promise.all(analyticsMonths(bounds).map(async month => normalizeUsageSnapshot(await usageReader(month), month)));
     if (!root.isConnected && typeof root.isConnected === 'boolean') return false;
     for (const alias of uniqueAliases) {
       const scope = analyticsRangeScope(models, bounds, { workspace: alias });
@@ -27,7 +29,7 @@ export function workspaceAnalyticsHtml(scope) {
   const successRate = Number(scope?.successRate || 0);
   const averageDuration = Number(scope?.averageDuration || 0);
   const values = Array.isArray(scope?.points) ? scope.points.map(point => Number(point.toolCalls || 0)) : [];
-  return `<div class="workspace-analytics-head"><span>Last 24 hours</span><small>Cloud analytics</small></div>
+  return `<div class="workspace-analytics-head"><span>Last 24 hours</span><small>${scope?.source === 'local' ? 'Local analytics' : 'Cloud analytics'}</small></div>
     <div class="workspace-analytics-metrics">
       ${miniMetric('Tool calls', formatInteger(toolCalls))}
       ${miniMetric('Success', completed ? formatPercent(successRate) : '—')}

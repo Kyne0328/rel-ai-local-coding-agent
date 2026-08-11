@@ -24,6 +24,7 @@ if (surface === 'dashboard') {
     setGatewayMode: mode => ipcRenderer.invoke('desktop:gateway:mode-set', { mode }),
     getGatewayRecovery: () => ipcRenderer.invoke('desktop:gateway:recovery-get'),
     getGatewayUsage: month => ipcRenderer.invoke('desktop:gateway:usage', month),
+    getLocalUsage: month => ipcRenderer.invoke('desktop:analytics:local', month),
     replaceApprovalToken: request => ipcRenderer.invoke('desktop:approval-token:replace', request),
     getUpdateStatus: () => ipcRenderer.invoke('desktop:update:get'),
     checkForUpdates: () => ipcRenderer.invoke('desktop:update:check'),

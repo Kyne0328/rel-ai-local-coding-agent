@@ -44,12 +44,12 @@ async function loadUsage(controls) {
   refreshButton.disabled=true;refreshButton.textContent='Loading…';content.setAttribute('aria-busy','true');content.innerHTML='<div class="usage-loading">Loading exact Rel.AI analytics…</div>';
   try {
     const desktop=window.relaiDesktop;
-    if(!desktop?.getGatewayUsage)throw new Error('Rel.AI Cloud analytics are available in the installed desktop app.');
+    if(!desktop?.getGatewayUsage||!desktop?.getLocalUsage)throw new Error('Rel.AI analytics are available in the installed desktop app.');
     const status=await desktop.getGatewayStatus?.();
-    if(status?.connectionMode==='direct'){if(!active(root,generation))return;renderDirectUsage(content);showDirectUsageModal();return;}
-    const availability=cloudUsageAvailability(status);
-    if(availability){if(!active(root,generation))return;renderCloudUsageBlocked(content,availability);showCloudUsageModal(availability);return;}
-    const models=await Promise.all(analyticsMonths(bounds).map(async month=>normalizeUsageSnapshot(await desktop.getGatewayUsage(month),month)));
+    const direct=status?.connectionMode==='direct';
+    if(!direct){const availability=cloudUsageAvailability(status);if(availability){if(!active(root,generation))return;renderCloudUsageBlocked(content,availability);showCloudUsageModal(availability);return;}}
+    const usageReader=direct?desktop.getLocalUsage:desktop.getGatewayUsage;
+    const models=await Promise.all(analyticsMonths(bounds).map(async month=>normalizeUsageSnapshot(await usageReader(month),month)));
     if(!active(root,generation))return;
     const params=getRouteParams();const workspace=getWorkspaceFilter();const deviceId=params.get('device')||'';
     syncWorkspaceControl(controls.workspaceSelect,models,workspace,deviceId);
@@ -78,8 +78,6 @@ function syncWorkspaceControl(select,models,workspace,deviceId){
 function encodeWorkspaceSelection(workspace,deviceId){return `${deviceId?'d':'a'}:${encodeURIComponent(deviceId||'')}:${encodeURIComponent(workspace||'')}`;}
 function decodeWorkspaceSelection(value){if(!value)return{workspace:'',deviceId:''};const[k,d='',w='']=String(value).split(':');try{return{workspace:decodeURIComponent(w),deviceId:k==='d'?decodeURIComponent(d):''};}catch{return{workspace:'',deviceId:''};}}
 
-function renderDirectUsage(content){content.innerHTML='<section class="usage-loading">Cloud transport analytics are available when this desktop uses the Cloud connection. Local analytics are kept separate from transport metrics.</section>';}
-function showDirectUsageModal(){const body=document.createElement('div');body.className='detail-stack';body.innerHTML='<p>Rel.AI Cloud transport analytics are unavailable while Direct connection mode is active.</p><div class="section-head-actions"><a class="buttonlike primary" href="#connection" data-usage-open-connection>Open Connection</a><button type="button" class="secondary" data-usage-modal-close>Close</button></div>';const modal=openModal({title:'Cloud analytics unavailable',content:body});body.querySelector('[data-usage-modal-close]')?.addEventListener('click',modal.close);body.querySelector('[data-usage-open-connection]')?.addEventListener('click',closeModal);}
 function cloudUsageAvailability(status){if(!status||status.connectionMode==='direct')return null;const gateway=status.gateway&&typeof status.gateway==='object'?status.gateway:{};const state=String(gateway.state||'offline');if(state==='pairing_required'||gateway.principalPaired!==true)return{kind:'pairing_required',message:'Pair this desktop with Rel.AI Cloud before viewing Cloud analytics.'};return state!=='connected'?{kind:state||'offline',message:'Rel.AI Cloud must be connected before analytics can be loaded.'}:null;}
 function cloudUsageAvailabilityFromError(error){const message=messageOf(error);return/gateway is not connected|rel\.ai cloud is not connected/i.test(message)?{kind:'offline',message:'Rel.AI Cloud must be connected before analytics can be loaded.'}:null;}
 function renderCloudUsageBlocked(content,availability){const pairing=availability.kind==='pairing_required';content.innerHTML=`<section class="usage-loading">${pairing?'Pair Rel.AI with ChatGPT to view Cloud analytics.':'Rel.AI Cloud analytics will be available when the Cloud connection is online.'}</section>`;}
