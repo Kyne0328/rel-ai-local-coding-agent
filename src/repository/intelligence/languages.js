@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-const PARSER_VERSION = 13;
+const PARSER_VERSION = 14;
 const MAX_SEARCH_TERMS = 768;
 
 const LANGUAGE_PROFILES = Object.freeze([
@@ -51,6 +51,7 @@ const LANGUAGE_PROFILES = Object.freeze([
   profile('assembly', 'tree-sitter-asm.wasm', [".asm",".s"]),
   profile('gdscript', 'tree-sitter-gdscript.wasm', [".gd"]),
   profile('nix', 'tree-sitter-nix.wasm', [".nix"]),
+  profile('haskell', 'tree-sitter-haskell.wasm', [".hs",".lhs"]),
   profile('zig', 'tree-sitter-zig.wasm', ['.zig'])
 ]);
 
@@ -74,7 +75,8 @@ const VENDORED_WASM_BY_LANGUAGE = Object.freeze({
   r: 'vendor/tree-sitter/r/tree-sitter-r.wasm',
   assembly: 'vendor/tree-sitter/assembly/tree-sitter-asm.wasm',
   gdscript: 'vendor/tree-sitter/gdscript/tree-sitter-gdscript.wasm',
-  nix: 'vendor/tree-sitter/nix/tree-sitter-nix.wasm'
+  nix: 'vendor/tree-sitter/nix/tree-sitter-nix.wasm',
+  haskell: 'vendor/tree-sitter/haskell/tree-sitter-haskell.wasm'
 });
 
 function profile(language, wasm, extensions, basenames = [], resolver = null) {
