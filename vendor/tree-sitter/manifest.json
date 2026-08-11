@@ -42,6 +42,13 @@
       "bytes": 420522,
       "sha256": "d0ecb98e8b22b63837ac1c3cc72491de33fd49c028b6160050aad588409dadf8",
       "grammarDependency": "@tree-sitter-grammars/tree-sitter-markdown@^0.3.2"
+    },
+    "dockerfile": {
+      "file": "dockerfile/tree-sitter-dockerfile.wasm",
+      "sourcePath": "out/dockerfile/tree-sitter-dockerfile.wasm",
+      "bytes": 51842,
+      "sha256": "f64913d1fbaafae05ae443df972c8b21f12607ae28d194eaa6c6a8d63a81733e",
+      "grammarDependency": "tree-sitter-dockerfile@git+https://github.com/camdencheek/tree-sitter-dockerfile.git#971acdd908568b4531b0ba28a445bf0bb720aba5"
     }
   }
 }

@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-const PARSER_VERSION = 6;
+const PARSER_VERSION = 7;
 const MAX_SEARCH_TERMS = 768;
 
 const LANGUAGE_PROFILES = Object.freeze([
@@ -44,6 +44,7 @@ const LANGUAGE_PROFILES = Object.freeze([
   profile('sql', 'tree-sitter-sql.wasm', [".sql"]),
   profile('powershell', 'tree-sitter-powershell.wasm', [".ps1",".psm1",".psd1"]),
   profile('markdown', 'tree-sitter-markdown.wasm', [".md",".markdown",".mdx"]),
+  profile('dockerfile', 'tree-sitter-dockerfile.wasm', [".dockerfile"], ["dockerfile"]),
   profile('zig', 'tree-sitter-zig.wasm', ['.zig'])
 ]);
 
@@ -60,7 +61,8 @@ const VENDORED_WASM_BY_LANGUAGE = Object.freeze({
   terraform: 'vendor/tree-sitter/terraform/tree-sitter-terraform.wasm',
   sql: 'vendor/tree-sitter/sql/tree-sitter-sql.wasm',
   powershell: 'vendor/tree-sitter/powershell/tree-sitter-powershell.wasm',
-  markdown: 'vendor/tree-sitter/markdown/tree-sitter-markdown.wasm'
+  markdown: 'vendor/tree-sitter/markdown/tree-sitter-markdown.wasm',
+  dockerfile: 'vendor/tree-sitter/dockerfile/tree-sitter-dockerfile.wasm'
 });
 
 function profile(language, wasm, extensions, basenames = [], resolver = null) {
