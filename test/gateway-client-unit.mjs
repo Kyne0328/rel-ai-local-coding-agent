@@ -203,7 +203,7 @@ async function settle() { await Promise.resolve(); await Promise.resolve(); awai
   const usageRequest = socket.frames().at(-1);
   assert.equal(usageRequest.type, 'usage_request');
   socket.message({ type: 'usage_result', requestId: usageRequest.requestId, month: '2026-08', totals: { requests: 1 }, tools: [], devices: [], workspaces: [] });
-  assert.deepEqual(await usagePromise, { month: '2026-08', totals: { requests: 1 }, tools: [], devices: [], workspaces: [] });
+  assert.deepEqual(await usagePromise, { month: '2026-08', totals: { requests: 1 }, tools: [], devices: [], workspaces: [], workspaceDimensions: [], workspaceTools: [], series: [], toolSeries: [], workspaceSeries: [], workspaceToolSeries: [] });
 
   const devicesPromise = client.listDevices();
   const devicesRequest = socket.frames().at(-1);

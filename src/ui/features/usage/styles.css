@@ -98,3 +98,65 @@
   .usage-outcome-legend, .usage-workspace-summary { grid-template-columns: minmax(0,1fr); }
   .usage-bar-row { grid-template-columns: minmax(88px,1fr) minmax(72px,1.3fr) auto; gap: 8px; }
 }
+
+
+/* Analytics visualizer */
+.usage-range-control { @apply grid min-w-[150px] gap-1 text-[11px] font-semibold; color: var(--ui-text-secondary); }
+.usage-range-control select { min-width: 150px; }
+.usage-custom-range { @apply flex items-end gap-2; }
+.usage-custom-range[hidden] { display: none; }
+.usage-custom-range label { @apply grid gap-1 text-[11px] font-semibold; color: var(--ui-text-secondary); }
+.usage-custom-range input { min-width: 132px; }
+.usage-series-note { @apply m-0 rounded-lg border px-3 py-2 text-[11px]; color: var(--ui-text-secondary); border-color: var(--ui-border-subtle); background: var(--ui-surface-secondary); }
+.usage-metrics { grid-template-columns: repeat(6,minmax(0,1fr)); }
+.usage-metric { min-height: 112px; padding-bottom: 8px; }
+.usage-metric:nth-child(4n), .usage-metric:nth-child(6n) { border-right: 1px solid var(--ui-border-default); }
+.usage-metric:nth-child(6n) { border-right: 0; }
+.usage-metric:nth-last-child(-n+6) { border-bottom: 0; }
+.usage-metric > i { display: none; }
+.usage-metric-value { @apply flex min-w-0 items-baseline justify-between gap-2; }
+.usage-metric-value strong { @apply min-w-0; }
+.usage-delta { @apply shrink-0 text-[10px] font-semibold; color: var(--ui-text-tertiary); }
+.usage-delta.good { color: var(--ui-status-success-foreground); }
+.usage-delta.bad { color: var(--ui-status-danger-foreground); }
+.usage-metric-detail { @apply block truncate; }
+.usage-sparkline { width: 100%; height: 28px; margin-top: auto; color: var(--ui-action-primary); }
+.usage-sparkline polyline { stroke: currentColor; stroke-width: 1.5; }
+.usage-sparkline.good { color: var(--ui-status-success-foreground); }
+.usage-sparkline.bad { color: var(--ui-status-danger-foreground); }
+.usage-sparkline-empty { display: block; height: 28px; }
+.usage-timeline-card { min-width: 0; }
+.usage-timeline-head { @apply items-start gap-4; }
+.usage-timeline-head p { @apply m-0 mt-1 text-[11px]; color: var(--ui-text-secondary); }
+.usage-chart-switch { @apply flex flex-wrap justify-end gap-1; }
+.usage-chart-switch button.active { border-color: var(--ui-action-primary); color: var(--ui-action-primary); background: var(--ui-action-secondary); }
+.usage-timeline-body { min-height: 190px; }
+.usage-timeline-svg { width: 100%; height: 180px; color: var(--ui-action-primary); }
+.usage-chart-line { stroke: currentColor; stroke-width: 2; }
+.usage-chart-axis { stroke: var(--ui-border-default); stroke-width: 1; }
+.usage-chart-empty { @apply grid min-h-[180px] place-items-center text-[11px]; color: var(--ui-text-tertiary); }
+@media (max-width: 1180px) {
+  .usage-metrics { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .usage-metric, .usage-metric:nth-child(4n), .usage-metric:nth-child(6n) { border-right: 1px solid var(--ui-border-default); border-bottom: 1px solid var(--ui-border-default); }
+  .usage-metric:nth-child(3n) { border-right: 0; }
+  .usage-metric:nth-last-child(-n+3) { border-bottom: 0; }
+}
+@media (max-width: 760px) {
+  .usage-range-control { @apply min-w-0 flex-1; }
+  .usage-range-control select { min-width: 0; width: 100%; }
+  .usage-custom-range { @apply w-full; }
+  .usage-custom-range label { @apply flex-1; }
+  .usage-custom-range input { min-width: 0; width: 100%; }
+  .usage-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .usage-metric, .usage-metric:nth-child(3n) { border-right: 1px solid var(--ui-border-default); border-bottom: 1px solid var(--ui-border-default); }
+  .usage-metric:nth-child(2n) { border-right: 0; }
+  .usage-metric:nth-last-child(-n+2) { border-bottom: 0; }
+  .usage-timeline-head { @apply flex-col; }
+  .usage-chart-switch { @apply justify-start; }
+}
+@media (max-width: 420px) {
+  .usage-custom-range { @apply grid; grid-template-columns: minmax(0,1fr); }
+  .usage-metrics { grid-template-columns: minmax(0,1fr); }
+  .usage-metric, .usage-metric:nth-child(2n), .usage-metric:nth-child(3n) { border-right: 0; border-bottom: 1px solid var(--ui-border-default); }
+  .usage-metric:last-child { border-bottom: 0; }
+}

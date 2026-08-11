@@ -15,9 +15,13 @@ const ipc = read('electron/ipc-handlers.js');
 const electronMain = read('electron/main.js');
 const systemSource = read('src/ui/features/system/index.js');
 const usageSource = read('src/ui/features/usage/index.js');
+const usageRenderSource = read('src/ui/features/usage/render.js');
+const usageRangeSource = read('src/ui/features/usage/range-model.js');
+const usageCombinedSource = `${usageSource}\n${usageRenderSource}\n${usageRangeSource}`;
 const css = read('src/ui/features/usage/styles.css');
 
 const { buildUsageModel, currentUsageMonth } = await import('../src/ui/features/usage/index.js');
+const { analyticsBounds, analyticsRangeScope } = await import('../src/ui/features/usage/range-model.js');
 
 assert.match(navigationCatalog, /route\(['"]usage['"], ['"]Usage['"]/);
 assert.match(routePolicy, /['"]usage['"]/);
@@ -31,26 +35,29 @@ assert.match(ipc, /desktop:gateway:usage/);
 assert.match(ipc, /Usage month must use YYYY-MM/);
 assert.match(electronMain, /GATEWAY_NOT_CONNECTED/, 'Electron main must return a structured unavailable result when Cloud disconnects during a usage request');
 assert.match(electronMain, /Rel\.AI Cloud is not connected\./, 'Electron main must not leak the raw remote-method gateway exception');
-assert.match(usageSource, /getGatewayUsage\(month\)/, 'Usage must request only the selected YYYY-MM through Electron');
+assert.match(usageSource, /getGatewayUsage\(month\)/, 'Analytics must request only required YYYY-MM snapshots through Electron');
 assert.match(usageSource, /pairing_required|pairing required/i, 'Usage must recognize the Cloud pairing-required state before requesting usage');
-assert.match(usageSource, /const availability = cloudUsageAvailability\(status\);[\s\S]{0,500}if \(availability\)[\s\S]{0,500}const usage = await desktop\.getGatewayUsage\(month\)/, 'Usage must return from the availability gate before invoking the usage IPC');
+assert.match(usageSource, /const availability=cloudUsageAvailability\(status\);[\s\S]{0,700}getGatewayUsage\(month\)/, 'Analytics must gate Cloud availability before requesting monthly snapshots');
 assert.doesNotMatch(usageSource, /fetch\(|DASHBOARD_DATA_URL|auditTail|taskActivity/, 'Usage must not fabricate totals from local dashboard/activity data');
 
 for (const label of ['MCP requests', 'Tool calls', 'Successful', 'Failed', 'Data sent', 'Data returned', 'Execution time', 'Active days']) {
-  assert.match(usageSource, new RegExp(label), `Usage must render exact metric label: ${label}`);
+  assert.match(usageCombinedSource, new RegExp(label), `Analytics must render exact metric label: ${label}`);
 }
 for (const field of ['requests', 'toolCalls', 'successes', 'failures', 'requestBytes', 'resultBytes', 'executionMs', 'activeDays']) {
-  assert.match(usageSource, new RegExp(`\\b${field}\\b`), `Usage must consume exact gateway total ${field}`);
+  assert.match(usageCombinedSource, new RegExp(`\\b${field}\\b`), `Analytics must consume exact gateway total ${field}`);
 }
 for (const breakdown of ['tools', 'devices', 'workspaces']) {
-  assert.match(usageSource, new RegExp(`snapshot\\.${breakdown}|usage\\.${breakdown}|model\\.${breakdown}`), `Usage must render ${breakdown} breakdowns`);
+  assert.match(usageCombinedSource, new RegExp(`snapshot\\.${breakdown}|usage\\.${breakdown}|model\\.${breakdown}|${breakdown}`), `Analytics must render ${breakdown} breakdowns`);
 }
 assert.match(usageSource, /Usage unavailable|usage-unavailable/i);
 assert.match(usageSource, /openModal/, 'Direct-mode Usage unavailability must be presented as a modal');
-assert.match(usageSource, /Rel\.AI Cloud usage is unavailable while Direct connection mode is active\./);
+assert.match(usageSource, /Cloud transport analytics are unavailable while Direct connection mode is active\./);
 assert.doesNotMatch(usageSource, /connectionMode === ['"]direct['"]\) throw new Error/, 'Direct mode must not fall through the generic inline error renderer');
 assert.match(usageSource, /Retry/);
-assert.match(usageSource, /type = ['"]month['"]|type=['"]month['"]/);
+assert.match(usageSource, /data-usage-range/);
+assert.match(usageSource, /Last 24 hours|ANALYTICS_RANGES/);
+assert.match(usageCombinedSource, /usage-sparkline/);
+assert.match(usageCombinedSource, /Activity over time/);
 assert.match(usageSource, /Refresh/);
 assert.doesNotMatch(usageSource, /Estimated Rel\.AI payload tokens|ChatGPT model tokens|billing token|context-window token/i, 'No token card should render because the gateway returns no estimate');
 assert.match(css, /\.usage-page\b/);
@@ -82,5 +89,19 @@ assert.equal(legacyBreakdowns.devices[0].toolCalls, 2);
 assert.equal(legacyBreakdowns.workspaces[0].toolCalls, 2);
 assert.equal(currentUsageMonth(new Date('2026-08-08T00:00:00.000Z')), '2026-08');
 assert.throws(() => buildUsageModel({ ok: true, month: '2026-08', totals: { requests: -1 } }), /Usage unavailable|invalid requests/);
+const bounds = analyticsBounds('24h', { now: new Date('2026-08-08T12:00:00.000Z') });
+assert.equal(bounds.start.toISOString(), '2026-08-07T12:00:00.000Z');
+const ranged = analyticsRangeScope([buildUsageModel({
+  ok: true,
+  month: '2026-08',
+  totals: { requests: 2, toolCalls: 2, successes: 1, failures: 0, requestBytes: 10, resultBytes: 20, executionMs: 100, activeDays: 1 },
+  tools: [], devices: [], workspaces: [],
+  series: [{ hour: '2026-08-08T10', requests: 2, toolCalls: 2, successes: 1, failures: 0, requestBytes: 10, resultBytes: 20, executionMs: 100 }],
+  toolSeries: [{ hour: '2026-08-08T10', tool: 'relai_read', toolCalls: 2, successes: 1, failures: 0, executionMs: 100 }],
+  workspaceSeries: [], workspaceToolSeries: []
+}, '2026-08')], bounds);
+assert.equal(ranged.toolCalls, 2);
+assert.equal(ranged.completed, 1);
+assert.equal(ranged.averageDuration, 100, 'average duration must divide by completed outcomes, not started tool calls');
 
 console.log('Usage lazy-route, exact-metric, authenticated-fetch, and privacy contracts passed.');
