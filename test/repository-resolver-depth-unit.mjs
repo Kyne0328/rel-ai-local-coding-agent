@@ -9,7 +9,8 @@ const CASES = [
     source: 'from .models import BaseService\nfrom .util import save_record\nclass AccountService(BaseService):\n    def save(self):\n        service = BaseService()\n        return save_record(service)\n',
     relations: [['INHERITS', 'BaseService'], ['USES_TYPE', 'BaseService'], ['CALLS', 'save_record']],
     imports: ['./models', './util']
-  }
+  },
+  {"path":"src/AccountService.java","language":"java","provider":"resolver-java-v1","source":"import com.acme.BaseService;\nimport com.acme.Persistable;\nimport static com.acme.Util.saveRecord;\nclass AccountService extends BaseService implements Persistable {\n  void save() { BaseService service = new BaseService(); saveRecord(); }\n}\n","relations":[["INHERITS","BaseService"],["IMPLEMENTS","Persistable"],["USES_TYPE","BaseService"],["CALLS","saveRecord"]],"imports":["com/acme/BaseService","com/acme/Persistable","com/acme/Util"]}
 ];
 
 for (const item of CASES) {
@@ -21,5 +22,5 @@ for (const item of CASES) {
   for (const specifier of item.imports) assert.ok(parsed.imports.some(entry => entry.specifier === specifier && entry.provider === item.provider), `${item.language} missing import ${specifier}`);
 }
 
-assert.deepEqual(enhancedResolverLanguages().sort(), ['javascript', 'python', 'tsx', 'typescript']);
+assert.deepEqual(enhancedResolverLanguages().sort(), ['java', 'javascript', 'python', 'tsx', 'typescript']);
 console.log('Repository Intelligence ecosystem resolver-depth tests passed.');

@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-const PARSER_VERSION = 19;
+const PARSER_VERSION = 20;
 const MAX_SEARCH_TERMS = 768;
 
 const LANGUAGE_PROFILES = Object.freeze([
@@ -17,7 +17,7 @@ const LANGUAGE_PROFILES = Object.freeze([
   profile('go', 'tree-sitter-go.wasm', ['.go']),
   profile('html', 'tree-sitter-html.wasm', ['.html', '.htm']),
   profile('hcl', 'tree-sitter-hcl.wasm', ['.hcl']),
-  profile('java', 'tree-sitter-java.wasm', ['.java']),
+  profile('java', 'tree-sitter-java.wasm', ['.java'], [], 'java'),
   profile('javascript', 'tree-sitter-javascript.wasm', ['.js', '.jsx', '.mjs', '.cjs'], [], 'javascript-typescript'),
   profile('json', 'tree-sitter-json.wasm', ['.json']),
   profile('kotlin', 'tree-sitter-kotlin.wasm', ['.kt', '.kts']),
