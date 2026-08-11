@@ -25,6 +25,7 @@ assert.doesNotMatch(cloud, /Cloudflare|ngrok account key|approval token/i, 'norm
 assert.doesNotMatch(cloud, /data-cloud-mode\s+data-cloud-mode=/, 'connection-mode buttons must carry exactly one valued data-cloud-mode attribute');
 assert.match(cloud, /data-cloud-mode="cloud"/, 'Cloud switch must send the cloud mode value');
 assert.match(cloud, /data-cloud-mode="direct"/, 'Direct switch must send the direct mode value');
+assert.match(cloud, /setGatewayMode\(mode\)[\s\S]{0,400}requestDashboardRefresh\(\{ structural: true \}\)/, 'provider switches must structurally refresh the Connection route');
 assert.match(cloud, /data-copy-pairing/, 'pairing codes must expose an accessible copy action');
 assert.match(cloud, /refreshDeviceRegion\(root, model\.gateway\)/, 'device refresh must update only the device region');
 assert.doesNotMatch(cloud, /data-cloud-refresh-devices[^\n]+loadCloudGateway/, 'device refresh must not remount the surrounding Settings page');

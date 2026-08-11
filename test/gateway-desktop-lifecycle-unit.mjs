@@ -213,6 +213,40 @@ try {
   const cancelledPendingStart = await pendingStart;
   assert.equal(cancelledPendingStart.cancelled, true, 'late direct startup completion must not reactivate a stopped runtime');
   assert.equal(cancelledPendingStart.process, null);
+
+  const restartChildren = [{ pid: 501 }, { pid: 502 }];
+  const restartResolvers = [];
+  const restartStops = [];
+  const restartRuntime = createPublicConnectionRuntime({
+    createGatewayConnection() { throw new Error('cloud should not be created'); },
+    async prepareDirect() {},
+    async startDirect(_config, { onProcess }) {
+      const child = restartChildren[restartResolvers.length];
+      onProcess(child);
+      return new Promise(resolve => restartResolvers.push({ child, resolve }));
+    },
+    async stopDirect(child) {
+      restartStops.push(child.pid);
+      return { exited: true, forced: false };
+    }
+  });
+  const staleStart = restartRuntime.start({ connectionMode: 'direct', port: 4666 });
+  await new Promise(resolve => setImmediate(resolve));
+  await restartRuntime.stop();
+  const currentStart = restartRuntime.start({ connectionMode: 'direct', port: 4777 });
+  await new Promise(resolve => setImmediate(resolve));
+  restartResolvers[0].resolve({ ok: false, process: restartChildren[0], error: 'stale tunnel failure' });
+  const staleResult = await staleStart;
+  assert.equal(staleResult.cancelled, true, 'an older direct failure must be classified as cancelled after restart');
+  assert.equal(restartRuntime.snapshot().mode, 'direct', 'an older direct failure must not clear the newer active mode');
+  assert.equal(restartRuntime.snapshot().directProcessOwned, true, 'an older direct completion must not release the newer tunnel process');
+  restartResolvers[1].resolve({ ok: true, process: restartChildren[1], publicUrl: 'https://current.ngrok-free.dev' });
+  const currentResult = await currentStart;
+  assert.equal(currentResult.cancelled, undefined);
+  assert.equal(currentResult.process, restartChildren[1]);
+  assert.ok(restartStops.includes(501), 'the stale tunnel process must be stopped without touching the newer process');
+  await restartRuntime.stop();
+  assert.ok(restartStops.includes(502), 'the current tunnel remains owned until the current runtime stops');
 } finally {
   if (previousStateDir === undefined) delete process.env.REL_AI_MCP_STATE_DIR;
   else process.env.REL_AI_MCP_STATE_DIR = previousStateDir;

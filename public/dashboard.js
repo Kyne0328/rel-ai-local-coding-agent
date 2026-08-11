@@ -399,6 +399,7 @@ function viewFingerprint(data = {}) {
   const config = data.config || {};
   const desktop = data.desktopStatus || {};
   const desktopState = {
+    connectionMode: desktop.connectionMode,
     serverRunning: desktop.serverRunning,
     starting: desktop.starting,
     tunnelStatus: desktop.tunnelStatus,

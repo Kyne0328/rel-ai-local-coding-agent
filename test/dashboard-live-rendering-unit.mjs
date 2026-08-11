@@ -10,6 +10,8 @@ const dashboard = read('public/dashboard.js');
 const api = read('src/ui/api.js');
 const system = read('src/ui/features/system/index.js');
 const connector = read('src/ui/features/settings/connector.js');
+const cloudGateway = read('src/ui/features/settings/cloud-gateway.js');
+const desktopConnection = read('src/ui/features/settings/desktop-connection.js');
 const home = read('src/ui/features/home/index.js');
 
 function functionSource(source, name) {
@@ -56,10 +58,10 @@ async function exerciseSyncLiveView(updateBehavior) {
   return { calls, result, fingerprint: context.testApi.readFingerprint() };
 }
 
-assert.match(dashboard, /module\.updateSystemLiveState\(root, 'connection', data\)/);
-assert.match(dashboard, /currentRoutePath\(\) === 'connection'/);
+assert.match(dashboard, /module\.updateSystemLiveState\(root, currentSection\(\), data\)/);
+assert.match(dashboard, /route === 'connection'/);
 assert.doesNotMatch(dashboard, /settings\/connection/);
-assert.match(system, /updateConnectorLiveState\(container, dashboardState\)/);
+assert.match(system, /updateConnectorLiveState\(content, dashboardState\)/);
 assert.match(connector, /export function updateConnectorLiveState/);
 assert.match(connector, /replaceRegion\(page, '\.connection-summary-card'/);
 assert.match(connector, /replaceRegion\(page, '\.connection-layer-disclosure'/);
@@ -82,7 +84,7 @@ assert.doesNotMatch(
 assert.equal(dashboard.includes('return updateHomeLiveState(root, data);'), true);
 assert.equal(dashboard.includes('module.updateTaskSessions(root, data)'), true);
 assert.equal(dashboard.includes('module.updateActivityLiveState(data)'), true, 'Activity live updates must receive the full dashboard snapshot for session correlation');
-assert.equal(dashboard.includes('module.updateProcessesLiveState(root, data)'), true);
+assert.equal(dashboard.includes('module.updateSystemLiveState(root, currentSection(), data)'), true);
 assert.match(dashboard, /function applyGatewayStatusSnapshot/);
 assert.doesNotMatch(
   functionSource(dashboard, 'applyGatewayStatusSnapshot'),
@@ -162,5 +164,8 @@ assert.match(refreshSource, /options\.render !== false[\s\S]*syncLiveView\(hydra
 
 assert.match(api, /export function requestDashboardRefresh\(options = \{\}\)/, 'dashboard refresh helper must accept refresh intent');
 assert.match(api, /structural: options\.structural === true/, 'dashboard refresh helper must default structural intent to false');
+assert.match(cloudGateway, /setGatewayMode\(mode\)[\s\S]{0,400}requestDashboardRefresh\(\{ structural: true \}\)/, 'Cloud/direct switching must structurally refresh provider-specific controls');
+assert.match(desktopConnection, /saveSettings\([\s\S]*requestDashboardRefresh\(\{ structural: true \}\)/, 'endpoint and ngrok credential changes must structurally refresh the Connection route');
+assert.match(functionSource(dashboard, 'viewFingerprint'), /connectionMode: desktop\.connectionMode/, 'connection mode must participate in structural refresh fingerprinting');
 
 console.log('Dashboard live rendering contracts passed.');
