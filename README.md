@@ -82,12 +82,12 @@ The repository remains the source of truth throughout the task. If the workspace
 
 ## Start using Rel.AI
 
-The normal path is designed around the desktop app and Rel.AI Cloud. You do not need a Rel.AI password account or an ngrok account for the default setup.
+The normal path is designed around the desktop app, a Rel.AI account, and Rel.AI Cloud. You do not need an ngrok account for the default setup.
 
 1. **Install Rel.AI MCP** from the [Releases page](https://github.com/Kyne0328/rel-ai-mcp/releases). Current desktop packaging targets Windows and Linux.
-2. **Open Rel.AI and connect ChatGPT.** The app shows the Cloud MCP address and a short-lived pairing code.
-3. **Add Rel.AI in ChatGPT and complete OAuth pairing.** On Plus or Pro, open **Plugins** from the sidebar or **Settings > Plugins** and add Rel.AI MCP there. On Business, Enterprise, or Edu, open the Rel.AI app provided under workspace **Apps**. Use the code shown by your desktop when the Rel.AI authorization page asks for it.
-4. **Secure the device.** Reveal and store the recovery code when you are ready to protect it.
+2. **Sign in to Rel.AI.** The first-run wizard opens your browser so you can sign in or create an account and approve this computer.
+3. **Secure the device.** Rel.AI creates a device identity locally; the private key stays on this computer.
+4. **Add Rel.AI in ChatGPT.** On Plus or Pro, open **Plugins** from the sidebar or **Settings > Plugins**, add Rel.AI MCP, and choose **Connect**. On Business, Enterprise, or Edu, open the Rel.AI app provided under workspace **Apps**. When authorization opens, sign in with the same Rel.AI account; the normal account flow does not ask for a device pairing code.
 5. **Add a workspace.** Pick a repository folder and give it a short alias such as `myapp`.
 6. **Use that alias in ChatGPT.** Rel.AI resolves the local repository from the configured workspace rather than accepting an arbitrary filesystem path from the Cloud.
 
@@ -171,9 +171,9 @@ Each paired desktop has its own local P-256 device identity. That lets Rel.AI su
 
 Rel.AI can:
 
-- pair another desktop to the same accountless principal;
-- create a one-time device-link code from an existing paired machine;
-- recover from a stored recovery code;
+- sign another desktop in to the same Rel.AI account while keeping a distinct device identity;
+- approve new account-based devices independently;
+- migrate an older accountless identity with legacy recovery or one-time link proof;
 - list and revoke paired devices;
 - keep device compatibility separate from OAuth reauthentication;
 - keep ChatGPT tool refresh separate from both.
@@ -237,10 +237,10 @@ Rel.AI Cloud is the default connection model. **Advanced Direct** preserves the 
 | --- | --- | --- |
 | Best fit | Normal setup and multi-device use | Personal tunnel control |
 | Public endpoint | Rel.AI Cloud MCP/OAuth gateway | Your managed ngrok HTTPS endpoint |
-| Rel.AI password account | Not required | Not required |
+| Rel.AI account | Required | Not required for the local Direct path |
 | ngrok account | Not required | Required |
-| Authorization | OAuth + short-lived pairing code | OAuth + local Direct approval token |
-| Device recovery | Built in | Direct configuration remains local |
+| Authorization | OAuth + Rel.AI account sign-in | OAuth + local Direct approval token |
+| Device recovery | Account-based device approval and revocation | Direct configuration remains local |
 | Repository execution | Selected desktop | Selected desktop |
 
 Switching modes does not move repository execution into the Cloud. Cloud and Direct configuration remain separate so one does not destroy the other.

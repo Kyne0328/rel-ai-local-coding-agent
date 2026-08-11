@@ -4,27 +4,22 @@ Rel.AI exposes one canonical 12-tool MCP surface. The normal desktop connection 
 
 ## Rel.AI Cloud — default
 
-1. Open **Connection** in Rel.AI MCP or choose **Connect ChatGPT** during first-run setup.
-2. Rel.AI starts the desktop connection and its outbound gateway connection, then shows a short-lived pairing code.
+1. Open Rel.AI MCP and sign in to your Rel.AI account. On first run, the wizard opens your browser so you can sign in or create an account and approve this computer.
+2. Continue through **Secure this device** so the computer has its own local device identity.
 3. In ChatGPT, use the connection path for your plan: **Plus or Pro** — open **Plugins** from the sidebar or **Settings > Plugins**, add Rel.AI MCP, and choose **Connect**; **Business, Enterprise, or Edu** — open the Rel.AI app provided under your workspace **Apps**. Enable Developer mode or obtain workspace approval when your plan/workspace requires it.
-4. When the Rel.AI OAuth page opens, enter the pairing code shown by the desktop.
+4. When Rel.AI authorization opens, sign in with the same Rel.AI account. The normal account flow does not ask for a desktop pairing code.
 5. Return to Rel.AI and wait for **Connected**.
 6. Add at least one local workspace before asking ChatGPT to inspect repository files.
 
-Cloud pairing does not require a separate Rel.AI username/password, an ngrok account, a connection port, or the Direct approval token.
+Cloud setup does not require an ngrok account, a connection port, or the Direct approval token.
 
 ## Device identity and recovery
 
-Initial Cloud pairing creates an accountless Rel.AI principal and a device identity. Each desktop generates a P-256 key pair; the private key is encrypted locally through Electron `safeStorage`, while the gateway receives only the public identity needed for challenge verification.
+Each account-based desktop has its own device identity. Each desktop generates a P-256 key pair; the private key is encrypted locally through Electron `safeStorage`, while the gateway receives only the public identity needed for challenge verification.
 
-Use **Connection** for the explicit recovery and device actions:
+Your Rel.AI account is the normal recovery path for adding another or replacement computer. Device management can list paired devices and revoke a lost or retired device. Older accountless installations can use **Advanced setup and recovery** to migrate an existing identity with a legacy recovery code or one-time device-link code.
 
-- reveal and securely store the recovery code;
-- create a short-lived, one-time device-link code from an already paired computer;
-- recover the same accountless principal on a replacement computer;
-- list paired devices and revoke a lost or retired device.
-
-Workspace folders remain computer-specific. Pairing another desktop does not upload or copy repository paths or files from the first computer.
+Workspace folders remain computer-specific. Signing another desktop in does not upload or copy repository paths or files from the first computer.
 
 ## Verify the connection safely
 
@@ -74,7 +69,7 @@ Native MCP Tasks are negotiated independently through `io.modelcontextprotocol/t
 
 ## Troubleshooting
 
-If Cloud pairing fails, create a fresh pairing code, keep the desktop running, and confirm the OAuth page is using the current code. If Rel.AI reports `device_update_required`, update the desktop first. If ChatGPT shows old tools while Rel.AI reports `tool_refresh_required`, refresh/review the existing app definition in ChatGPT rather than rotating credentials.
+If Cloud sign-in or authorization fails, keep the desktop running, retry the browser sign-in with the same Rel.AI account, and confirm the computer is approved. If Rel.AI reports `device_update_required`, update the desktop first. If ChatGPT shows old tools while Rel.AI reports `tool_refresh_required`, refresh/review the existing app definition in ChatGPT rather than rotating credentials.
 
 If a workspace cannot be found, confirm its alias under **Workspaces**, then retry a read-only `relai_work begin` + `relai_snapshot` request. Opening `/mcp` in a normal browser is not a connection test; MCP clients use `POST /mcp`.
 

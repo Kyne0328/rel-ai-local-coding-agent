@@ -39,7 +39,7 @@ npm run verify:packaged -- --dir C:\path\to\win-unpacked
 Before publishing a release, test installation on a disposable Windows VM or another machine that is not hosting active Rel.AI work. Record these checks manually:
 
 - **Installer and uninstall:** install the exact NSIS candidate, complete first-run setup, close it normally, uninstall it, and confirm only expected application files are removed.
-- **Real Rel.AI Cloud pairing:** against the intended deployed environment, a clean profile must create a short-lived pairing code, complete the real ChatGPT OAuth flow, reach Connected, and run a read-only workspace call.
+- **Real Rel.AI Cloud sign-in:** against the intended deployed environment, a clean profile must sign in or create a Rel.AI account, approve the computer, complete the real ChatGPT authorization flow with the same account, reach Connected, and run a read-only workspace call.
 - **ChatGPT schema/admin behavior:** confirm the real ChatGPT app sees the current tool snapshot and follow the current refresh/review/republication workflow after a schema change; automated `tools/list` observation cannot prove host-cache acceptance.
 - **Direct fallback:** publish the configured permanent ngrok domain from a real account, complete Direct approval-token OAuth, rotate the Direct token, and reconnect without changing the Direct MCP URL.
 - **Update from a previous published release:** the previous installed release must discover, download, verify, and install the candidate through the production GitHub Releases feed.
