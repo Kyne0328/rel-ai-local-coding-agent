@@ -1,0 +1,13 @@
+import { dedupeRelations, importBindingMap, nearestSymbolByOffset, relation, simpleName, splitTypeList } from './common.js';
+
+const PROVIDER = 'resolver-kotlin-v1';
+const CAPABILITIES = Object.freeze(['import-bindings', 'inheritance', 'interfaces', 'constructor-types', 'imported-calls']);
+const kotlinResolver = Object.freeze({ id:PROVIDER, capabilities:CAPABILITIES, enrich({source,facts}) {
+  const text=String(source||'');const imports=parseImports(text);const bindings=importBindingMap(imports);const symbols=facts.symbols||[];
+  return {provider:PROVIDER,capabilities:CAPABILITIES,imports:imports.map(({bindings:_bindings,...item})=>({...item,provider:PROVIDER,confidence:0.96})),relations:dedupeRelations([...classRelations(text,symbols,bindings),...constructorRelations(text,symbols,bindings),...callRelations(text,symbols,bindings)])};
+}});
+function parseImports(source){const result=[];for(const m of source.matchAll(/^\s*import\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+)(?:\s+as\s+([A-Za-z_]\w*))?/gm)){const parts=m[1].split('.');const imported=parts.at(-1);const local=m[2]||imported;result.push({specifier:m[1].replaceAll('.','/'),kind:'import',bindings:[{local,imported,kind:'named'}]});}return result;}
+function classRelations(source,symbols,bindings){const result=[];for(const m of source.matchAll(/\b(class|interface)\s+([A-Za-z_]\w*)[^:{]*:\s*([^\{]+)\{/g)){const owner=symbols.find(item=>item.name===m[2])?.qualifiedName||m[2];for(const raw of splitTypeList(m[3])){const hasConstructor=/\([^)]*\)/.test(raw);const target=raw.replace(/\([^)]*\)/g,'').trim();const type=m[1]==='interface'?'INHERITS':hasConstructor?'INHERITS':'IMPLEMENTS';result.push(relation(PROVIDER,type,owner,target,bindings,{confidence:0.96}));}}return result;}
+function constructorRelations(source,symbols,bindings){const result=[];for(const m of source.matchAll(/\b(?:val|var)\s+[A-Za-z_]\w*\s*=\s*([A-Z][A-Za-z0-9_]*)\s*\(/g))result.push(relation(PROVIDER,'USES_TYPE',nearestSymbolByOffset(source,symbols,m.index||0),m[1],bindings,{confidence:0.95}));return result;}
+function callRelations(source,symbols,bindings){const result=[];for(const m of source.matchAll(/\b([A-Za-z_]\w*)\s*\(/g)){const item=bindings.get(m[1]);if(item&&/^[a-z]/.test(m[1]))result.push(relation(PROVIDER,'CALLS',nearestSymbolByOffset(source,symbols,m.index||0),m[1],bindings,{confidence:0.95}));}for(const m of source.matchAll(/\b([A-Z][A-Za-z0-9_]*)\.([A-Za-z_]\w*)\s*\(/g)){const item=bindings.get(m[1]);if(item)result.push(relation(PROVIDER,'CALLS',nearestSymbolByOffset(source,symbols,m.index||0),m[2],new Map(),{moduleSpecifier:item.specifier,targetQualifiedName:simpleName(item.imported)+'.'+m[2],confidence:0.94}));}return result;}
+export { kotlinResolver };
