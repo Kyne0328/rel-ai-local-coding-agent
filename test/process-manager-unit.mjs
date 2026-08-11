@@ -6,12 +6,6 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
-  cancelNativeTask,
-  completeNativeTask,
-  createNativeTask,
-  getNativeTask
-} from '../src/mcp/nativeTaskService.js';
-import {
   listManagedProcesses,
   readManagedProcess,
   startManagedProcess,
@@ -54,22 +48,16 @@ setInterval(() => {}, 1000);
 fs.writeFileSync(exitScript, `process.stderr.write('startup failed\\n'); process.exit(7);\n`);
 
 try {
-  const startupController = new AbortController();
-  const startupTask = createNativeTask(config, {
-    principal: 'client-a',
-    method: 'tools/call',
-    name: 'relai_process_start',
-    logicalTaskId: ownerStart.taskId,
-    executor: { controller: startupController }
-  });
+  const initialInput = 'initial `$value "quoted"\n';
   const started = await startManagedProcess(workspace, config, {
-    command: nodeCommand(persistentScript),
+    executable: process.execPath,
+    argv: [persistentScript],
+    input: initialInput,
     startupWaitMs: 100,
     maxLogBytes: 65536,
     label: 'persistent-managed-test',
     kind: 'service',
-    purpose: 'Exercise persistent process lifecycle behavior.',
-    _operationTaskId: startupTask.taskId
+    purpose: 'Exercise persistent process lifecycle behavior.'
   }, ownerStart);
   createdProcessIds.push(started.processId);
 
@@ -79,13 +67,16 @@ try {
   assert.equal(started.kind, 'service');
   assert.match(started.purpose, /persistent process lifecycle/);
   assert.match(started.metadataRevision, /^[A-Za-z0-9_-]{16}$/);
-  assert.equal(started.originatingTaskId, startupTask.taskId);
+  assert.equal(started.originatingTaskId, null);
   assert.equal(started.workSessionId, ownerStart.taskId);
   assert.equal(started.readiness.verified, true);
   assert.equal(started.status, 'running');
 
-  const first = await waitForProcess(started.processId, ownerStart, snapshot => snapshot.stdout.text.includes('READY'));
+  const first = await waitForProcess(started.processId, ownerStart, snapshot =>
+    snapshot.stdout.text.includes('READY') && snapshot.stdout.text.includes(`ECHO:${initialInput}`)
+  );
   assert.match(first.stdout.text, /READY/);
+  assert.ok(first.stdout.text.includes(`ECHO:${initialInput}`), 'direct process input must preserve backticks, dollar signs, quotes, and newlines');
   const deltaOnly = readManagedProcess(config, {
     processId: started.processId,
     stdoutOffset: first.stdout.nextOffset,
@@ -97,22 +88,13 @@ try {
   assert.equal(first.stdout.invalidUtf8, true);
   assert.ok(first.stdout.base64.length > 0);
 
-  completeNativeTask(config, startupTask.taskId, {
-    ok: true,
-    processId: started.processId,
-    readiness: started.readiness
-  }, { principal: 'client-a' });
-  assert.throws(
-    () => cancelNativeTask(config, startupTask.taskId, { principal: 'client-a' }),
-    /terminal state completed/i
-  );
   await sleep(100);
-  const afterCompletedTaskCancellation = readManagedProcess(config, {
+  const afterStartupCall = readManagedProcess(config, {
     processId: started.processId,
     stdoutOffset: first.stdout.nextOffset,
     stderrOffset: 0
   }, ownerLater);
-  assert.equal(afterCompletedTaskCancellation.status, 'running');
+  assert.equal(afterStartupCall.status, 'running');
 
   assert.throws(
     () => readManagedProcess(config, { processId: started.processId }, otherPrincipal),
@@ -184,34 +166,32 @@ try {
   assert.equal(historyAfterStop.processes.some(item => item.processId === started.processId), true);
 
   const cancellationController = new AbortController();
-  const cancellationTask = createNativeTask(config, {
-    principal: 'client-a',
-    method: 'tools/call',
-    name: 'relai_process_start',
-    logicalTaskId: 'work-session-cancel',
-    executor: { controller: cancellationController }
-  });
   const cancelledStart = startManagedProcess(workspace, config, {
-    command: nodeCommand(persistentScript),
+    executable: process.execPath,
+    argv: [persistentScript],
     startupWaitMs: 3000,
     label: 'cancel-during-startup',
     kind: 'service',
-    purpose: 'Exercise startup cancellation.',
-    _operationTaskId: cancellationTask.taskId
-  }, { taskId: 'work-session-cancel', principal: 'client-a', workspace: 'app' });
-  setTimeout(() => cancelNativeTask(config, cancellationTask.taskId, { principal: 'client-a' }), 100);
+    purpose: 'Exercise startup cancellation.'
+  }, {
+    taskId: 'work-session-cancel',
+    principal: 'client-a',
+    workspace: 'app',
+    signal: cancellationController.signal
+  });
+  setTimeout(() => cancellationController.abort(), 100);
   await assert.rejects(
     cancelledStart,
     error => error?.code === 'TASK_CANCELLED' && error.cancelled === true
   );
-  assert.equal(getNativeTask(config, cancellationTask.taskId, { principal: 'client-a' }).status, 'cancelled');
   const afterStartupCancellation = listManagedProcesses(config, { workspace: 'app' }, ownerLater);
   assert.equal(afterStartupCancellation.processes.some(item => item.label === 'cancel-during-startup'
     && ['starting', 'running', 'stopping'].includes(item.status)), false);
 
   await assert.rejects(
     startManagedProcess(workspace, config, {
-      command: nodeCommand(exitScript),
+      executable: process.execPath,
+      argv: [exitScript],
       startupWaitMs: 500,
       label: 'startup-failure',
       kind: 'service',
@@ -308,17 +288,6 @@ async function waitForChildExit(child, timeoutMs) {
     once(child, 'close').then(() => true),
     sleep(timeoutMs).then(() => child.exitCode !== null || Boolean(child.signalCode))
   ]);
-}
-
-function nodeCommand(script, ...args) {
-  const pieces = [quote(process.execPath), quote(script), ...args.map(quote)];
-  return process.platform === 'win32' ? `& ${pieces.join(' ')}` : pieces.join(' ');
-}
-
-function quote(value) {
-  const text = String(value);
-  if (process.platform === 'win32') return `'${text.replaceAll("'", "''")}'`;
-  return `'${text.replaceAll("'", `'"'"'`)}'`;
 }
 
 function sleep(ms) {

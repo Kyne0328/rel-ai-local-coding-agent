@@ -6,7 +6,7 @@ import { buildToolManifest, canonicalValue, stableJson } from '../src/mcp/toolMa
 import { resolveExecutableToolCall } from '../src/tools/runtimeRegistry.js';
 import { getToolDefinitions, getToolMetadata, getToolSurfaceManifest } from '../src/tools/schema.js';
 
-const EXPECTED_HASH = 'c1c054a3d508f255573fc3d9ac68cb5d3275ecca3258875c310c111fe4fe40a1';
+const EXPECTED_HASH = 'f6d07f499ea9cf38b4472b349d868d86d22ba965e4205275520394024c825b23';
 const rows = `
 relai_work|begin|relai_begin_work|startTask|repository:read|none|none|task|always_immediate|forbidden
 relai_work|status|relai_status|status|repository:read|none|optional|task|always_immediate|forbidden

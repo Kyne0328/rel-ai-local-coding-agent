@@ -73,8 +73,13 @@ for (const removed of removedDirectNames) {
 
 const schemaByName = new Map(schemas.map(schema => [schema.name, schema]));
 assert.deepEqual(schemaByName.get('relai_work').inputSchema.properties.action.enum, ['begin', 'status', 'finish', 'cancel']);
-assert.deepEqual(schemaByName.get('relai_process').inputSchema.properties.action.enum, ['start', 'read', 'write', 'stop', 'list']);
-assert.ok(schemaByName.get('relai_process').inputSchema.properties.kind.enum.includes('service'));
+const processSchema = schemaByName.get('relai_process');
+assert.deepEqual(processSchema.inputSchema.properties.action.enum, ['start', 'read', 'write', 'stop', 'list']);
+assert.ok(processSchema.inputSchema.properties.kind.enum.includes('service'));
+assert.match(processSchema.description, /prefer executable \+ argv/i);
+assert.match(processSchema.inputSchema.properties.executable.description, /shell:false/i);
+assert.match(processSchema.inputSchema.properties.argv.description, /without shell parsing/i);
+assert.match(processSchema.inputSchema.properties.input.description, /without closing the persistent stdin stream/i);
 const editSchema = schemaByName.get('relai_edit');
 assert.equal(editSchema.inputSchema.oneOf, undefined, 'relai_edit must not expose a non-discriminated oneOf wrapper');
 assert.match(editSchema.description, /oldText\/newText/i);
@@ -85,7 +90,10 @@ await valid('relai_work', { action: 'begin', workspace: 'repo' });
 await invalid('relai_work', { action: 'begin' });
 await valid('relai_work', { action: 'finish', work_id: 'work', summary: 'Done.' });
 await invalid('relai_work', { action: 'finish', work_id: 'work' });
-await valid('relai_process', { action: 'start', work_id: 'work', command: 'npm run dev', kind: 'service', purpose: 'Run the development server.' });
+await valid('relai_process', { action: 'start', work_id: 'work', command: 'npm run dev', kind: 'service', purpose: 'Run the development server.', reuseExisting: true });
+await valid('relai_process', { action: 'start', work_id: 'work', executable: 'node', argv: ['server.js', '--port', '3000'], input: 'ready\n', kind: 'service', purpose: 'Run the development server directly.' });
+await invalid('relai_process', { action: 'start', work_id: 'work', command: 'npm run dev', executable: 'node', kind: 'service', purpose: 'Ambiguous execution mode.' });
+await invalid('relai_process', { action: 'start', work_id: 'work', argv: ['server.js'], kind: 'service', purpose: 'Missing executable.' });
 await invalid('relai_process', { action: 'start', work_id: 'work', command: 'npm test' });
 await valid('relai_process', { action: 'read', work_id: 'work', processId: 'p', includeMetadata: false });
 await invalid('relai_process', { action: 'read', work_id: 'work', processId: 'p', command: 'ignored' });

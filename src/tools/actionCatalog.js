@@ -8,7 +8,7 @@ import {
 } from './actionDefinitions.js';
 import { schemaFromDefinition } from './schemaBuilder.js';
 
-const TOOL_SURFACE_VERSION = 35;
+const TOOL_SURFACE_VERSION = 36;
 const ACTION_OPERATIONS = Object.freeze({
   relai_work: Object.freeze({
     begin: operation('relai_begin_work'),
