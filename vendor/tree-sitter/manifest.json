@@ -70,6 +70,13 @@
       "bytes": 490899,
       "sha256": "b11a872a88ad8a9ebc85607ef3fd4cabdf6cbead51421ec1492b4591b6854553",
       "grammarDependency": "@eagleoutice/tree-sitter-r@^1.1.2"
+    },
+    "assembly": {
+      "file": "assembly/tree-sitter-asm.wasm",
+      "sourcePath": "out/asm/tree-sitter-asm.wasm",
+      "bytes": 29097,
+      "sha256": "5de92bd77ff1d8aa2944668c2fc9fb4854daae14b46e7ec8045e8ef6efd66eb0",
+      "grammarDependency": "tree-sitter-asm@git+https://github.com/RubixDev/tree-sitter-asm.git#839741fef4dab5128952334624905c82b40c7133"
     }
   }
 }
