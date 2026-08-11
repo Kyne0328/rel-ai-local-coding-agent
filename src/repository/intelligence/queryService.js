@@ -8,6 +8,7 @@ import { analyzeArchitecture } from './architecture.js';
 import { analyzeCrossWorkspace } from './crossWorkspace.js';
 import { openIndexDatabase, repositoryIndexPath } from './database.js';
 import { reciprocalRankFusion } from './fusion.js';
+import { rankWithGraphDiffusion } from './graphDiffusion.js';
 import { ensureRepositoryIndex } from './indexer.js';
 import { queryTerms, simpleSymbol } from './languages.js';
 import { searchZoekt } from './zoekt.js';
@@ -87,22 +88,27 @@ async function querySemanticSearch(workspace, config, args = {}, options = {}) {
     const candidateLimit = Math.min(MAX_QUERY_CANDIDATES, maxResults * 20);
     const zoekt = searchZoekt(workspace, config, index, query, candidateLimit);
     const fallback = zoekt.available && zoekt.current ? [] : searchGitCandidates(workspace, queryTerms(query, 20), candidateLimit);
-    const related = relatedFiles(workspace, db, query, maxResults, args._workflowContext, {
+    const filters = {
       pathPrefix: String(args.pathPrefix || '').replaceAll('\\', '/').replace(/^\.\//, ''),
       language: String(args.language || '').toLowerCase()
-    }, [...zoekt.results, ...fallback]);
+    };
+    const related = relatedFiles(workspace, db, query, maxResults, args._workflowContext, filters, [...zoekt.results, ...fallback]);
+    const diffusionEnabled = options.graphDiffusion !== false;
+    const diffused = diffusionEnabled
+      ? diffuseRelatedFiles(workspace, db, query, related, filters, maxResults)
+      : { files: related.files, expandedCount: 0, truncated: false };
     return {
       ok: true,
       workspace: workspace.alias,
       query,
-      strategy: 'local-hybrid-' + related.strategy,
+      strategy: 'local-hybrid-' + related.strategy + (diffusionEnabled ? '-graph-diffusion' : ''),
       neuralEmbeddings: false,
       privacy: 'All parsing, graph indexing, and ranking run locally. No source text is sent to an external service.',
       fingerprint: index.fingerprint,
       cacheHit: index.cacheHit,
-      results: related.files,
-      resultCount: related.matchCount,
-      truncated: related.truncated
+      results: diffused.files,
+      resultCount: Math.max(related.matchCount, diffused.files.length),
+      truncated: related.truncated || diffused.truncated
     };
   } finally {
     db.close();
@@ -205,6 +211,63 @@ function relatedFiles(workspace, db, query, maxResults, workflowContext = {}, fi
   };
 }
 
+
+function diffuseRelatedFiles(workspace, db, query, related, filters, maxResults) {
+  const ranked = rankWithGraphDiffusion(db, related.files, {
+    query,
+    maxResults,
+    maxSeeds: Math.min(20, Math.max(8, maxResults)),
+    maxEdges: Math.min(4000, Math.max(500, maxResults * 200))
+  });
+  if (!ranked.results.length) return { files: related.files, expandedCount: 0, truncated: ranked.truncated };
+
+  const baselineByPath = new Map(related.files.map(item => [item.path, item]));
+  const files = [];
+  let expandedCount = 0;
+  for (const item of ranked.results) {
+    if (!filterRow(item, filters)) continue;
+    const baseline = baselineByPath.get(item.path);
+    if (baseline) {
+      files.push({ ...baseline, score: item.score });
+      continue;
+    }
+    expandedCount += 1;
+    files.push({
+      path: item.path,
+      language: item.language,
+      test: item.test,
+      score: item.score,
+      providers: ['graph-diffusion'],
+      reasons: item.reasons,
+      snippets: structuralSnippets(workspace, db, item.path, 3)
+    });
+    if (files.length >= maxResults) break;
+  }
+  return { files, expandedCount, truncated: ranked.truncated };
+}
+
+function structuralSnippets(workspace, db, relativePath, limit = 3) {
+  const lines = readSourceLines(workspace, relativePath);
+  if (!lines) return [];
+  const symbols = db.prepare(`
+    SELECT s.start_line
+    FROM symbols s JOIN files f ON f.id=s.file_id
+    WHERE f.path=?
+    ORDER BY s.start_line LIMIT ?
+  `).all(relativePath, Math.max(1, Math.min(10, limit)));
+  const snippets = [];
+  for (const symbol of symbols) {
+    const line = Number(symbol.start_line);
+    const text = String(lines[line - 1] || '').trim();
+    if (text) snippets.push({ line, text: text.slice(0, 500) });
+  }
+  if (snippets.length) return snippets.slice(0, limit);
+  for (let index = 0; index < lines.length && snippets.length < limit; index += 1) {
+    const text = String(lines[index] || '').trim();
+    if (text) snippets.push({ line: index + 1, text: text.slice(0, 500) });
+  }
+  return snippets;
+}
 
 function externalStrategy(candidates) {
   if (candidates.some(item => item.provider === 'zoekt')) return 'zoekt-fts5-tree-sitter-graph';
