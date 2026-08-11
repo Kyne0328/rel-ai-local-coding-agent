@@ -35,6 +35,13 @@
       "bytes": 1088467,
       "sha256": "796124137f0500e59713fd9dccda6812ff73d25f22e33430b1c5af6e132efa5e",
       "grammarDependency": "tree-sitter-powershell@^0.26.4"
+    },
+    "markdown": {
+      "file": "markdown/tree-sitter-markdown.wasm",
+      "sourcePath": "out/markdown/tree-sitter-markdown.wasm",
+      "bytes": 420522,
+      "sha256": "d0ecb98e8b22b63837ac1c3cc72491de33fd49c028b6160050aad588409dadf8",
+      "grammarDependency": "@tree-sitter-grammars/tree-sitter-markdown@^0.3.2"
     }
   }
 }
