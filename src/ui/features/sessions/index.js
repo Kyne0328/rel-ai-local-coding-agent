@@ -250,8 +250,11 @@ function sessionFacts(session, live) {
   const facts = [];
   const changed = Number(session.changedFileCount || session.changedFiles?.length || 0);
   const failures = Number(session.failedToolCallCount ?? session.failures ?? 0);
+  const completed = workSessionStateView(session).status === 'completed';
   if (changed > 0) facts.push(`${changed} file${changed === 1 ? '' : 's'} changed`);
-  if (failures > 0) facts.push(`${failures} failure${failures === 1 ? '' : 's'}`);
+  if (failures > 0) facts.push(completed
+    ? `${failures} recovered failed call${failures === 1 ? '' : 's'}`
+    : `${failures} failed call${failures === 1 ? '' : 's'}`);
   if (session.validation === 'failed' || session.status === 'validation_failed') facts.push('validation failed');
   if (session.status === 'waiting_for_approval') facts.push('approval required');
   if (session.status === 'blocked') facts.push('blocked');
@@ -341,14 +344,16 @@ function openSession(session) {
       ${statusPill(state.label, state.pillClass)}
     </header>
     ${live && session.progress ? taskProgressHtml(session.progress, session.status) : ''}
-    <div class="task-detail-current${sessionHasProblem(session) ? ' attention' : ''}"><strong>${esc(currentTitle)}</strong><span>${esc(currentCopy)}</span></div>
+    <div class="task-detail-current${sessionNeedsAttention(session) ? ' attention' : ''}"><strong>${esc(currentTitle)}</strong><span>${esc(currentCopy)}</span></div>
     <div class="task-detail-grid task-detail-facts">
       ${detail('Workspace', session.workspace || '—')}
       ${durationDetail(session, live)}
       ${detail('Tool calls', session.toolCallCount ?? session.calls ?? 0)}
       ${detail('Files changed', session.changedFileCount || session.changedFiles?.length || 0)}
     </div>
-    ${problemsSection(session)}
+    ${attentionSection(session)}
+    ${sessionActionSection(session)}
+    ${failureHistorySection(session)}
     ${currentOperations(session)}
     ${changedFilesSection(session.changedFiles || [])}
     ${toolEventsSection(session.events || [], session)}
@@ -367,22 +372,38 @@ function durationDetail(session, live) {
   return `<div><span>Duration</span><strong class="task-detail-clock" data-clock-elapsed-start="${esc(start)}">${esc(formatDuration(sessionDurationMs(session), { live: true }))}</strong></div>`;
 }
 
-function sessionHasProblem(session) {
-  return Number(session.failures || session.failedToolCallCount || 0) > 0
-    || session.validation === 'failed'
+function sessionNeedsAttention(session) {
+  if (workSessionStateView(session).status === 'completed') return false;
+  return session.validation === 'failed'
     || ['failed', 'validation_failed', 'blocked', 'attention'].includes(String(session.status || ''));
 }
 
-function problemsSection(session) {
-  if (!sessionHasProblem(session) && session.status !== 'cancelled' && session.status !== 'waiting_for_approval') return '';
+function attentionSection(session) {
+  if (!sessionNeedsAttention(session)) return '';
   const items = [];
   const failures = Number(session.failures || session.failedToolCallCount || 0);
-  if (failures) items.push(`${failures} failed tool call${failures === 1 ? '' : 's'}`);
+  if (failures) items.push(`${failures} tool call${failures === 1 ? '' : 's'} failed`);
   if (session.validation === 'failed' || session.status === 'validation_failed') items.push('Validation failed');
   if (session.status === 'blocked') items.push(session.endReason || 'Session is blocked');
-  if (session.status === 'waiting_for_approval') items.push('Approval is required before work can continue');
-  if (session.status === 'cancelled') items.push('Session was cancelled before completion');
+  if (session.status === 'failed' || session.status === 'attention') items.push(session.endReason || 'The work session ended with an unresolved failure');
   return `<section class="task-detail-section task-detail-problems"><h3>Needs attention</h3><ul>${items.map(item => `<li>${esc(item)}</li>`).join('')}</ul></section>`;
+}
+
+function sessionActionSection(session) {
+  if (session.status !== 'waiting_for_approval') return '';
+  return '<section class="task-detail-section task-detail-action"><h3>Action required</h3><p>Approval is required before work can continue.</p></section>';
+}
+
+function failureHistorySection(session) {
+  const failures = Number(session.failures || session.failedToolCallCount || 0);
+  if (!failures || sessionNeedsAttention(session)) return '';
+  const completed = workSessionStateView(session).status === 'completed';
+  const callLabel = `${failures} tool call${failures === 1 ? '' : 's'}`;
+  const title = completed ? 'Recovered during session' : 'Earlier failed calls';
+  const copy = completed
+    ? `${callLabel} failed earlier, but the work session later completed. The failures remain visible in Activity as history.`
+    : `${callLabel} failed earlier. They remain visible in Activity as history and do not override the session's current state.`;
+  return `<section class="task-detail-section task-detail-history"><h3>${esc(title)}</h3><p>${esc(copy)}</p></section>`;
 }
 
 function technicalDetailsSection(session, identities, state, operationValue) {
