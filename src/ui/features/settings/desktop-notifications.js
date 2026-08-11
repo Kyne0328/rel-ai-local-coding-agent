@@ -4,7 +4,7 @@ import { panel, field, toggleControl } from './shared.js';
 const DEFAULTS = {
   enabled: true,
   taskCompleted: true,
-  errors: true,
+  errors: false,
   connectionStatus: true,
   applicationUpdates: true,
   ignoredUpdateVersion: ''

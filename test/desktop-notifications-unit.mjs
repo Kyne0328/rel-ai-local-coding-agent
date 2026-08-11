@@ -54,6 +54,9 @@ const options = {
 };
 const service = createDesktopNotifications(options);
 assert.deepEqual(service.getPreferences(), DEFAULT_NOTIFICATION_PREFERENCES);
+assert.equal(service.getPreferences().errors, false);
+assert.equal(service.show('errors', { title: 'Workspace action failed', body: 'Failed.' }), false);
+assert.equal(shown.length, 0);
 
 assert.equal(service.show('taskCompleted', { title: 'Task completed', body: 'Done.' }), true);
 assert.equal(shown.length, 1);
