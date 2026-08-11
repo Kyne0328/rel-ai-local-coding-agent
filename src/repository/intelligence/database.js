@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { realRootOf } from '../../safety.js';
 import { statePath } from '../../stateLayout.js';
+import { createEcosystemResolver, supportsEcosystemResolution } from './ecosystemResolution.js';
 
 const INDEX_SCHEMA_VERSION = 2;
 
@@ -273,15 +274,19 @@ function deleteIndexedPath(db, relativePath) {
   return true;
 }
 
-function resolveRelationships(db) {
+function resolveRelationships(db, { workspaceRoot = null } = {}) {
   db.prepare('UPDATE imports SET target_path=NULL, target_file_id=NULL').run();
   db.prepare("DELETE FROM edges WHERE type IN ('IMPORTS','CALLS','INHERITS','IMPLEMENTS','USES_TYPE','TESTS','HANDLES','HTTP_CALLS','LISTENS_ON','EMITS')").run();
-  const files = db.prepare('SELECT id, path, is_test FROM files ORDER BY path').all().map(row => ({
-    id: Number(row.id), path: String(row.path), test: Number(row.is_test) === 1
+  const files = db.prepare('SELECT id, path, language, is_test FROM files ORDER BY path').all().map(row => ({
+    id: Number(row.id), path: String(row.path), language: String(row.language), test: Number(row.is_test) === 1
   }));
   const pathToId = new Map(files.map(file => [file.path, file.id]));
   const fileById = new Map(files.map(file => [file.id, file]));
   const suffixIndex = buildImportSuffixIndex(pathToId.keys());
+  const directoryIndex = buildUniqueDirectoryIndex(pathToId.keys());
+  const ecosystem = workspaceRoot && files.some(file => supportsEcosystemResolution(file.language))
+    ? createEcosystemResolver(workspaceRoot, pathToId.keys())
+    : null;
   const imports = db.prepare('SELECT source_file_id, specifier FROM imports').all();
   const updateImport = db.prepare('UPDATE imports SET target_path=?, target_file_id=? WHERE source_file_id=? AND specifier=?');
   const insertEdge = db.prepare(`
@@ -294,7 +299,7 @@ function resolveRelationships(db) {
     const sourceId = Number(item.source_file_id);
     const source = fileById.get(sourceId);
     if (!source) continue;
-    const targetPath = resolveImportPath(source.path, String(item.specifier), pathToId, suffixIndex);
+    const targetPath = resolveImportPath(source.path, String(item.specifier), pathToId, suffixIndex, directoryIndex, ecosystem, source.language);
     if (!targetPath) continue;
     const targetId = pathToId.get(targetPath);
     updateImport.run(targetPath, targetId, source.id, String(item.specifier));
@@ -330,11 +335,11 @@ function resolveRelationships(db) {
       'CALLS', String(call.name), 'tree-sitter', confidence);
   }
 
-  resolveHintRelationships(db, { files, fileById, pathToId, suffixIndex, symbolsByName, insertEdge });
+  resolveHintRelationships(db, { files, fileById, pathToId, suffixIndex, directoryIndex, symbolsByName, insertEdge, ecosystem });
 }
 
 function resolveHintRelationships(db, context) {
-  const { fileById, pathToId, suffixIndex, symbolsByName, insertEdge } = context;
+  const { fileById, pathToId, suffixIndex, directoryIndex, symbolsByName, insertEdge, ecosystem } = context;
   const symbolsByQualified = new Map();
   for (const row of db.prepare('SELECT id, file_id, name, qualified_name FROM symbols').all()) {
     const qualified = String(row.qualified_name);
@@ -355,7 +360,7 @@ function resolveHintRelationships(db, context) {
     const targetQualified = hint.target_qualified_name == null ? '' : String(hint.target_qualified_name);
     const targetName = hint.target_name == null ? '' : String(hint.target_name);
     const moduleSpecifier = hint.module_specifier == null ? '' : String(hint.module_specifier);
-    const moduleTargetPath = moduleSpecifier ? resolveImportPath(sourceFile.path, moduleSpecifier, pathToId, suffixIndex) : null;
+    const moduleTargetPath = moduleSpecifier ? resolveImportPath(sourceFile.path, moduleSpecifier, pathToId, suffixIndex, directoryIndex, ecosystem, sourceFile.language) : null;
     let targetFileId = moduleTargetPath ? pathToId.get(moduleTargetPath) : null;
     let targetSymbol = null;
 
@@ -411,22 +416,54 @@ function chooseCallTarget(sourceFileId, targets, importedIds = new Set()) {
   return imported.length === 1 ? imported[0] : null;
 }
 
-function resolveImportPath(sourcePath, specifier, pathToId, suffixIndex) {
+function resolveImportPath(sourcePath, specifier, pathToId, suffixIndex, directoryIndex = new Map(), ecosystem = null, language = null) {
   const clean = String(specifier || '').replaceAll('\\', '/').replace(/[{}*]/g, '').trim();
   if (!clean) return null;
-  const extensions = ['.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.py', '.go', '.rs', '.java', '.kt', '.cs', '.c', '.cpp', '.h', '.hpp', '.rb', '.php', '.vue', '.json'];
   if (clean.startsWith('.')) {
     const base = path.posix.normalize(path.posix.join(path.posix.dirname(sourcePath), clean));
-    const candidates = [base, ...extensions.map(ext => base + ext), ...extensions.map(ext => path.posix.join(base, `index${ext}`))];
-    return candidates.find(candidate => pathToId.has(candidate)) || null;
+    return resolveCandidateBase(base, pathToId, suffixIndex, directoryIndex);
+  }
+  const ecosystemCandidates = ecosystem?.candidates?.(language, sourcePath, clean) || [];
+  for (const base of ecosystemCandidates) {
+    const resolved = resolveCandidateBase(base, pathToId, suffixIndex, directoryIndex);
+    if (resolved) return resolved;
   }
   const normalized = clean.replace(/^@/, '').replaceAll('.', '/').replace(/^crate\//, '').replace(/^self\//, '').replace(/^\/+/, '');
-  const candidates = [normalized, stripKnownExtension(normalized), `${normalized}/index`];
+  const resolved = resolveCandidateBase(normalized, pathToId, suffixIndex, directoryIndex);
+  if (resolved) return resolved;
+  const leaf = stripKnownExtension(normalized).split('/').filter(Boolean).at(-1);
+  if (leaf) {
+    const leafMatch = suffixIndex.get(leaf);
+    if (typeof leafMatch === 'string') return leafMatch;
+  }
+  return null;
+}
+
+function resolveCandidateBase(value, pathToId, suffixIndex, directoryIndex = new Map()) {
+  const normalized = String(value || '').replaceAll('\\', '/').replace(/^\.\//, '').replace(/\/{2,}/g, '/').replace(/\/$/, '');
+  if (!normalized) return null;
+  const extensions = ['.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.py', '.go', '.rs', '.java', '.kt', '.cs', '.c', '.cpp', '.cc', '.cxx', '.h', '.hpp', '.hh', '.rb', '.php', '.vue', '.json'];
+  const base = stripKnownExtension(normalized);
+  const candidates = [normalized, base, ...extensions.map(ext => base + ext), ...extensions.map(ext => path.posix.join(base, `index${ext}`)), path.posix.join(base, '__init__.py')];
   for (const candidate of candidates) {
+    if (pathToId.has(candidate)) return candidate;
     const match = suffixIndex.get(candidate);
     if (typeof match === 'string') return match;
   }
+  const directoryMatch = directoryIndex.get(base);
+  if (typeof directoryMatch === 'string') return directoryMatch;
   return null;
+}
+
+function buildUniqueDirectoryIndex(paths) {
+  const index = new Map();
+  for (const filePath of paths) {
+    const dir = path.posix.dirname(String(filePath));
+    if (!dir || dir === '.') continue;
+    if (!index.has(dir)) index.set(dir, String(filePath));
+    else if (index.get(dir) !== filePath) index.set(dir, null);
+  }
+  return index;
 }
 
 function buildImportSuffixIndex(paths) {
@@ -449,7 +486,7 @@ function addUnambiguousSuffix(index, key, filePath) {
 }
 
 function stripKnownExtension(value) {
-  return String(value || '').replace(/\.(?:jsx?|mjs|cjs|tsx?|py|go|rs|java|kt|cs|c|cpp|h|hpp|rb|php|vue|json)$/i, '');
+  return String(value || '').replace(/\.(?:jsx?|mjs|cjs|tsx?|py|go|rs|java|kt|cs|c|cpp|cc|cxx|h|hpp|hh|rb|php|vue|json)$/i, '');
 }
 function indexStats(db) {
   const counts = db.prepare(`

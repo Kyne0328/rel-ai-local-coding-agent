@@ -1,38 +1,54 @@
-import { dedupeRelations, importBindingMap, nearestSymbolByOffset, relation, simpleName, splitTypeList } from './common.js';
+import { dedupeRelations, descendantsOfTypes, fieldNode, importBindingMap, namedChildren, nodeText, nodesOfTypes, relation, simpleName, symbolForNode } from './common.js';
+import { frameworkRelations } from './frameworks.js';
 
-const PROVIDER = 'resolver-java-v1';
-const CAPABILITIES = Object.freeze(['import-bindings', 'inheritance', 'interfaces', 'constructor-types', 'imported-calls']);
-const javaResolver = Object.freeze({ id: PROVIDER, capabilities: CAPABILITIES, enrich({ source, facts }) {
-  const text = String(source || ''); const imports = parseImports(text); const bindings = importBindingMap(imports); const symbols = facts.symbols || [];
-  return { provider: PROVIDER, capabilities: CAPABILITIES, imports: imports.map(({ bindings: _bindings, ...item }) => ({ ...item, provider: PROVIDER, confidence: 0.96 })), relations: dedupeRelations([...classRelations(text, symbols, bindings), ...constructorRelations(text, symbols, bindings), ...callRelations(text, symbols, bindings)]) };
+const PROVIDER = 'resolver-java-v2';
+const CAPABILITIES = Object.freeze(['ast-import-bindings', 'ast-inheritance', 'ast-interfaces', 'ast-constructor-types', 'ast-imported-calls', 'framework-http']);
+const javaResolver = Object.freeze({ id: PROVIDER, capabilities: CAPABILITIES, enrich({ root, facts, language }) {
+  const imports = parseImports(root); const bindings = importBindingMap(imports); const symbols = facts.symbols || [];
+  return { provider: PROVIDER, capabilities: CAPABILITIES, imports: enrichImports(imports), relations: dedupeRelations([
+    ...classRelations(root, symbols, bindings), ...constructorRelations(root, symbols, bindings), ...callRelations(root, symbols, bindings),
+    ...frameworkRelations(language, { root, symbols, provider: PROVIDER })
+  ]) };
 }});
-function parseImports(source) {
+
+function parseImports(root) {
   const result = [];
-  for (const match of source.matchAll(/^\s*import\s+(static\s+)?([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+)\s*;/gm)) {
-    const parts = match[2].split('.'); const imported = parts.pop(); const staticImport = Boolean(match[1]);
-    const owner = staticImport ? parts.pop() : imported; const specifier = [...parts, owner].join('/');
-    result.push({ specifier, kind: staticImport ? 'static-import' : 'import', bindings: [{ local: imported, imported, kind: staticImport ? 'static' : 'named' }] });
+  for (const node of nodesOfTypes(root, ['import_declaration'])) {
+    const text = nodeText(node); const staticImport = /^import\s+static\s+/.test(text);
+    const qualified = text.replace(/^import\s+/, '').replace(/^static\s+/, '').replace(/;$/, '').trim();
+    const parts = qualified.split('.'); const imported = parts.pop(); if (!imported) continue;
+    if (staticImport) {
+      const owner = parts.pop(); result.push({ specifier: [...parts, owner].join('/'), kind: 'static-import', bindings: [{ local: imported, imported, kind: 'static' }] });
+    } else result.push({ specifier: [...parts, imported].join('/'), kind: 'import', bindings: [{ local: imported, imported, kind: 'named' }] });
   }
   return result;
 }
-function classRelations(source, symbols, bindings) {
+
+function classRelations(root, symbols, bindings) {
   const result = [];
-  for (const match of source.matchAll(/\b(class|interface)\s+([A-Za-z_$][\w$]*)(?:\s+extends\s+([^{]+?))?(?:\s+implements\s+([^{]+?))?\s*\{/g)) {
-    const owner = symbols.find(item => item.name === match[2])?.qualifiedName || match[2];
-    for (const target of splitTypeList(match[3])) result.push(relation(PROVIDER, 'INHERITS', owner, target, bindings, { confidence: 0.97 }));
-    for (const target of splitTypeList(match[4])) result.push(relation(PROVIDER, 'IMPLEMENTS', owner, target, bindings, { confidence: 0.97 }));
+  for (const node of nodesOfTypes(root, ['class_declaration', 'interface_declaration'])) {
+    const name = simpleName(nodeText(fieldNode(node, 'name'))); const owner = symbols.find(item => item.name === name)?.qualifiedName || name;
+    const superclass = fieldNode(node, 'superclass');
+    for (const type of descendantsOfTypes(superclass, ['type_identifier'])) result.push(relation(PROVIDER, 'INHERITS', owner, nodeText(type), bindings, { confidence: 0.98 }));
+    const interfaces = fieldNode(node, 'interfaces');
+    const typeList = descendantsOfTypes(interfaces, ['type_list'])[0];
+    for (const type of namedChildren(typeList || interfaces)) result.push(relation(PROVIDER, node.type === 'interface_declaration' ? 'INHERITS' : 'IMPLEMENTS', owner, nodeText(type), bindings, { confidence: 0.98 }));
   }
   return result;
 }
-function constructorRelations(source, symbols, bindings) {
+
+function constructorRelations(root, symbols, bindings) {
+  return nodesOfTypes(root, ['object_creation_expression']).map(node => relation(PROVIDER, 'USES_TYPE', symbolForNode(node, symbols), nodeText(fieldNode(node, 'type')), bindings, { confidence: 0.97 }));
+}
+function callRelations(root, symbols, bindings) {
   const result = [];
-  for (const match of source.matchAll(/\bnew\s+([A-Z][A-Za-z0-9_$]*)\s*\(/g)) result.push(relation(PROVIDER, 'USES_TYPE', nearestSymbolByOffset(source, symbols, match.index || 0), match[1], bindings, { confidence: 0.95 }));
+  for (const node of nodesOfTypes(root, ['method_invocation'])) {
+    const name = simpleName(nodeText(fieldNode(node, 'name'))); const text = nodeText(node); const direct = bindings.get(name);
+    if (direct?.kind === 'static') result.push(relation(PROVIDER, 'CALLS', symbolForNode(node, symbols), name, bindings, { confidence: 0.97 }));
+    const receiver = text.match(/^([A-Z][A-Za-z0-9_$]*)\s*\./)?.[1]; const imported = receiver ? bindings.get(receiver) : null;
+    if (imported) result.push(relation(PROVIDER, 'CALLS', symbolForNode(node, symbols), name, new Map(), { moduleSpecifier: imported.specifier, targetQualifiedName: `${simpleName(imported.imported)}.${name}`, confidence: 0.96 }));
+  }
   return result;
 }
-function callRelations(source, symbols, bindings) {
-  const result = [];
-  for (const match of source.matchAll(/\b([A-Za-z_$][\w$]*)\s*\(/g)) { const item = bindings.get(match[1]); if (item?.kind === 'static') result.push(relation(PROVIDER, 'CALLS', nearestSymbolByOffset(source, symbols, match.index || 0), match[1], bindings, { confidence: 0.95 })); }
-  for (const match of source.matchAll(/\b([A-Z][A-Za-z0-9_$]*)\.([A-Za-z_$][\w$]*)\s*\(/g)) { const item = bindings.get(match[1]); if (item) result.push(relation(PROVIDER, 'CALLS', nearestSymbolByOffset(source, symbols, match.index || 0), match[2], new Map(), { moduleSpecifier: item.specifier, targetQualifiedName: simpleName(item.imported) + '.' + match[2], confidence: 0.94 })); }
-  return result;
-}
+function enrichImports(imports) { return imports.map(({ bindings: _bindings, ...item }) => ({ ...item, provider: PROVIDER, confidence: 0.97 })); }
 export { javaResolver };

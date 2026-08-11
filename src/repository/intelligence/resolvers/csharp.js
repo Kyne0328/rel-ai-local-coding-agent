@@ -1,25 +1,42 @@
-import { dedupeRelations, importBindingMap, nearestSymbolByOffset, relation, simpleName, splitTypeList } from './common.js';
+import { dedupeRelations, fieldNode, importBindingMap, namedChildren, nodeText, nodesOfTypes, relation, simpleName, symbolForNode } from './common.js';
+import { frameworkRelations } from './frameworks.js';
 
-const PROVIDER = 'resolver-csharp-v1';
-const CAPABILITIES = Object.freeze(['import-bindings', 'inheritance', 'interfaces', 'constructor-types', 'static-calls']);
-const csharpResolver = Object.freeze({ id: PROVIDER, capabilities: CAPABILITIES, enrich({ source, facts }) {
-  const text = String(source || ''); const imports = parseImports(text); const bindings = importBindingMap(imports); const symbols = facts.symbols || [];
-  return { provider: PROVIDER, capabilities: CAPABILITIES, imports: imports.map(({ bindings: _bindings, ...item }) => ({ ...item, provider: PROVIDER, confidence: 0.96 })), relations: dedupeRelations([...classRelations(text, symbols, bindings), ...constructorRelations(text, symbols, bindings), ...callRelations(text, symbols, bindings)]) };
+const PROVIDER = 'resolver-csharp-v2';
+const CAPABILITIES = Object.freeze(['ast-import-bindings', 'ast-inheritance', 'ast-interfaces', 'ast-constructor-types', 'ast-static-calls', 'framework-http']);
+const csharpResolver = Object.freeze({ id: PROVIDER, capabilities: CAPABILITIES, enrich({ root, facts, language }) {
+  const imports = parseImports(root); const bindings = importBindingMap(imports); const symbols = facts.symbols || [];
+  return { provider: PROVIDER, capabilities: CAPABILITIES, imports: enrichImports(imports), relations: dedupeRelations([
+    ...classRelations(root, symbols, bindings), ...constructorRelations(root, symbols, bindings), ...callRelations(root, symbols, bindings),
+    ...frameworkRelations(language, { root, symbols, provider: PROVIDER })
+  ]) };
 }});
-function parseImports(source) {
+function parseImports(root) {
   const result = [];
-  for (const match of source.matchAll(/^\s*using\s+([A-Za-z_]\w*)\s*=\s*([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+)\s*;/gm)) { const imported = simpleName(match[2]); result.push({ specifier: match[2].replaceAll('.', '/'), kind: 'using-alias', bindings: [{ local: match[1], imported, kind: 'named' }] }); }
-  for (const match of source.matchAll(/^\s*using\s+([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+)\s*;/gm)) result.push({ specifier: match[1].replaceAll('.', '/'), kind: 'using', bindings: [] });
-  return result;
-}
-function classRelations(source, symbols, bindings) {
-  const result = [];
-  for (const match of source.matchAll(/\b(class|interface)\s+([A-Za-z_]\w*)[^:{]*:\s*([^\{]+)\{/g)) {
-    const owner = symbols.find(item => item.name === match[2])?.qualifiedName || match[2]; const targets = splitTypeList(match[3]);
-    targets.forEach((target, index) => result.push(relation(PROVIDER, match[1] === 'interface' || index === 0 ? 'INHERITS' : 'IMPLEMENTS', owner, target, bindings, { confidence: 0.96 })));
+  for (const node of nodesOfTypes(root, ['using_directive'])) {
+    const text = nodeText(node).replace(/^using\s+/, '').replace(/;$/, '').trim(); const alias = text.match(/^([A-Za-z_]\w*)\s*=\s*(.+)$/);
+    if (alias) result.push({ specifier: alias[2].trim().replaceAll('.', '/'), kind: 'using-alias', bindings: [{ local: alias[1], imported: simpleName(alias[2]), kind: 'named' }] });
+    else result.push({ specifier: text.replaceAll('.', '/'), kind: 'using', bindings: [] });
   }
   return result;
 }
-function constructorRelations(source, symbols, bindings) { const result=[]; for(const match of source.matchAll(/\bnew\s+([A-Z][A-Za-z0-9_]*)\s*\(/g)) result.push(relation(PROVIDER,'USES_TYPE',nearestSymbolByOffset(source,symbols,match.index||0),match[1],bindings,{confidence:0.95})); return result; }
-function callRelations(source, symbols, bindings) { const result=[]; for(const match of source.matchAll(/\b([A-Z][A-Za-z0-9_]*)\.([A-Za-z_]\w*)\s*\(/g)){const item=bindings.get(match[1]);if(item)result.push(relation(PROVIDER,'CALLS',nearestSymbolByOffset(source,symbols,match.index||0),match[2],new Map(),{moduleSpecifier:item.specifier,targetQualifiedName:simpleName(item.imported)+'.'+match[2],confidence:0.94}));} return result; }
+function classRelations(root, symbols, bindings) {
+  const result = [];
+  for (const node of nodesOfTypes(root, ['class_declaration', 'interface_declaration'])) {
+    const name = simpleName(nodeText(fieldNode(node, 'name'))); const owner = symbols.find(item => item.name === name)?.qualifiedName || name;
+    const bases = fieldNode(node, 'bases') || namedChildren(node).find(child => child.type === 'base_list'); const types = namedChildren(bases);
+    for (let index = 0; index < types.length; index += 1) result.push(relation(PROVIDER, node.type === 'interface_declaration' || index === 0 ? 'INHERITS' : 'IMPLEMENTS', owner, nodeText(types[index]), bindings, { confidence: 0.97 }));
+  }
+  return result;
+}
+function constructorRelations(root, symbols, bindings) { return nodesOfTypes(root, ['object_creation_expression']).map(node => relation(PROVIDER, 'USES_TYPE', symbolForNode(node, symbols), nodeText(fieldNode(node, 'type')), bindings, { confidence: 0.97 })); }
+function callRelations(root, symbols, bindings) {
+  const result = [];
+  for (const node of nodesOfTypes(root, ['invocation_expression'])) {
+    const fn = fieldNode(node, 'function'); if (fn?.type !== 'member_access_expression') continue;
+    const text = nodeText(fn); const match = text.match(/^([A-Z][A-Za-z0-9_]*)\.([A-Za-z_]\w*)$/); const imported = match ? bindings.get(match[1]) : null;
+    if (match && imported) result.push(relation(PROVIDER, 'CALLS', symbolForNode(node, symbols), match[2], new Map(), { moduleSpecifier: imported.specifier, targetQualifiedName: `${simpleName(imported.imported)}.${match[2]}`, confidence: 0.96 }));
+  }
+  return result;
+}
+function enrichImports(imports) { return imports.map(({ bindings: _bindings, ...item }) => ({ ...item, provider: PROVIDER, confidence: 0.97 })); }
 export { csharpResolver };

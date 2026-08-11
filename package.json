@@ -76,7 +76,7 @@
     "test:public-workflow": "node test/workflow-smoke.mjs",
     "test:connector-wording": "node test/connector-wording-smoke.mjs",
     "test:regressions": "node test/regression-fixes-smoke.mjs",
-    "test:repository-intelligence": "node test/repository-language-intelligence-unit.mjs && node test/repository-vendored-language-unit.mjs && node test/repository-resolver-depth-unit.mjs && node test/repository-intelligence-worker-unit.mjs && node test/intelligence-runtime-unit.mjs",
+    "test:repository-intelligence": "node test/repository-language-intelligence-unit.mjs && node test/repository-vendored-language-unit.mjs && node test/repository-resolver-depth-unit.mjs && node test/repository-resolver-precision-unit.mjs && node test/repository-ecosystem-resolution-unit.mjs && node test/repository-ecosystem-graph-unit.mjs && node scripts/verify-tree-sitter-assets.mjs && node test/repository-intelligence-worker-unit.mjs && node test/intelligence-runtime-unit.mjs",
     "electron:dev": "npm run verify:color-tokens && npm run build:css && cd electron && npx electron .",
     "electron:runtime": "node electron/node_modules/electron/install.js",
     "electron:build": "node scripts/electron-package.mjs --mode unpacked --platform win32",
@@ -115,14 +115,16 @@
     "test:git-workflow": "node test/git-workflow-smoke.mjs",
     "test:staged-write": "node test/staged-write-fallback-unit.mjs",
     "test:colors": "npm run verify:color-tokens && node test/color-system-unit.mjs",
-    "test:all": "npm run verify:color-tokens && npm run build:css && npm run verify:generated && npm run check && npm run lint && npm run typecheck && npm run knip:dependencies && node scripts/release-check.mjs && node test/run-tests.mjs",
+    "test:all": "npm run verify:color-tokens && npm run build:css && npm run verify:generated && npm run verify:tree-sitter-assets && npm run check && npm run lint && npm run typecheck && npm run knip:dependencies && node scripts/release-check.mjs && node test/run-tests.mjs",
     "build:css": "npm run generate:color-tokens && npx @tailwindcss/cli -i ./src/ui/styles/app.css -o ./public/dashboard.css --minify",
     "watch:css": "npm run generate:color-tokens && npx @tailwindcss/cli -i ./src/ui/styles/app.css -o ./public/dashboard.css --watch",
     "gateway:acceptance": "node scripts/gateway-acceptance.mjs",
     "test:gateway-packaging": "node test/gateway-packaging-contract-unit.mjs",
     "test:custom-chrome-browser": "node test/electron-custom-chrome-browser.mjs",
     "fetch:zoekt": "pwsh scripts/fetch-zoekt.ps1",
-    "verify:zoekt": "node scripts/verify-zoekt-seed.mjs"
+    "verify:zoekt": "node scripts/verify-zoekt-seed.mjs",
+    "verify:tree-sitter-assets": "node scripts/verify-tree-sitter-assets.mjs",
+    "benchmark:repository-resolvers": "node scripts/repository-resolver-precision-benchmark.mjs --json"
   },
   "keywords": [
     "mcp",

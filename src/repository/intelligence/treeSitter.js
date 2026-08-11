@@ -12,8 +12,8 @@ let initPromise = null;
 
 const DEFINITION_TYPES = new Map([
   ['function_declaration', 'function'], ['function_definition', 'function'], ['function_item', 'function'],
-  ['method_definition', 'method'], ['method_declaration', 'method'], ['method_definition_item', 'method'],
-  ['class_declaration', 'class'], ['class_definition', 'class'], ['class_specifier', 'class'],
+  ['method_definition', 'method'], ['method_declaration', 'method'], ['method_definition_item', 'method'], ['method', 'method'], ['singleton_method', 'method'],
+  ['class_declaration', 'class'], ['class_definition', 'class'], ['class_specifier', 'class'], ['class', 'class'],
   ['interface_declaration', 'interface'], ['interface_definition', 'interface'],
   ['struct_item', 'struct'], ['struct_specifier', 'struct'], ['struct_declaration', 'struct'],
   ['enum_declaration', 'enum'], ['enum_specifier', 'enum'], ['enum_item', 'enum'],
