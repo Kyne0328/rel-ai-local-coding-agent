@@ -173,13 +173,12 @@ function verifyWorkflowContracts() {
   const packagingAuditIndex = workflow.indexOf('- name: Audit packaging dependencies');
   const windowsBuildIndex = workflow.indexOf('- name: Build Windows release');
   const fetchWindowsSeedIndex = workflow.indexOf('NGROK_PLATFORMS: win32');
-  const gatewayInstallIndex = workflow.indexOf('- name: Install gateway test dependencies');
   const testsIndex = workflow.indexOf('- name: Run tests');
 
   assert.ok(productionAuditIndex >= 0);
   assert.ok(packagingAuditIndex > productionAuditIndex);
   assert.ok(packagingAuditIndex < windowsBuildIndex);
-  assert.ok(gatewayInstallIndex >= 0 && gatewayInstallIndex < testsIndex);
+  assert.doesNotMatch(workflow, /Install gateway test dependencies|gateway\/package\.json/i, 'public release workflow must not depend on the private gateway workspace');
   assert.ok(fetchWindowsSeedIndex >= 0 && fetchWindowsSeedIndex < testsIndex && fetchWindowsSeedIndex < windowsBuildIndex);
 
   for (const pattern of [
