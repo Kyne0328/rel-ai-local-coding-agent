@@ -273,8 +273,10 @@ function deleteIndexedPath(db, relativePath) {
 
 function resolveRelationships(db) {
   db.prepare('UPDATE imports SET target_path=NULL, target_file_id=NULL').run();
-  db.prepare("DELETE FROM edges WHERE type IN ('IMPORTS','CALLS','INHERITS','IMPLEMENTS','USES_TYPE')").run();
-  const files = db.prepare('SELECT id, path FROM files ORDER BY path').all().map(row => ({ id: Number(row.id), path: String(row.path) }));
+  db.prepare("DELETE FROM edges WHERE type IN ('IMPORTS','CALLS','INHERITS','IMPLEMENTS','USES_TYPE','TESTS','HANDLES','HTTP_CALLS','LISTENS_ON','EMITS')").run();
+  const files = db.prepare('SELECT id, path, is_test FROM files ORDER BY path').all().map(row => ({
+    id: Number(row.id), path: String(row.path), test: Number(row.is_test) === 1
+  }));
   const pathToId = new Map(files.map(file => [file.path, file.id]));
   const fileById = new Map(files.map(file => [file.id, file]));
   const suffixIndex = buildImportSuffixIndex(pathToId.keys());
@@ -285,6 +287,7 @@ function resolveRelationships(db) {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const importedIdsBySource = new Map();
+  const testEdges = new Set();
   for (const item of imports) {
     const sourceId = Number(item.source_file_id);
     const source = fileById.get(sourceId);
@@ -294,6 +297,12 @@ function resolveRelationships(db) {
     const targetId = pathToId.get(targetPath);
     updateImport.run(targetPath, targetId, source.id, String(item.specifier));
     insertEdge.run(null, null, source.id, targetId, 'IMPORTS', null, 'tree-sitter', 0.82);
+    const targetFile = fileById.get(targetId);
+    const testEdgeKey = `${source.id}:${targetId}`;
+    if (source.test && targetFile && !targetFile.test && !testEdges.has(testEdgeKey)) {
+      insertEdge.run(null, null, source.id, targetId, 'TESTS', targetPath, 'graph-derived', 0.99);
+      testEdges.add(testEdgeKey);
+    }
     if (!importedIdsBySource.has(sourceId)) importedIdsBySource.set(sourceId, new Set());
     importedIdsBySource.get(sourceId).add(targetId);
   }
@@ -329,18 +338,39 @@ function resolveHintRelationships(db, context) {
     if (!symbolsByQualified.has(qualified)) symbolsByQualified.set(qualified, []);
     symbolsByQualified.get(qualified).push(row);
   }
-  for (const hint of db.prepare('SELECT * FROM relation_hints ORDER BY id').all()) {
+  const hints = db.prepare('SELECT * FROM relation_hints ORDER BY id').all();
+  const routeTargets = uniqueHintTargets(hints, 'HANDLES');
+  const eventTargets = uniqueHintTargets(hints, 'LISTENS_ON');
+
+  for (const hint of hints) {
     const sourceFileId = Number(hint.source_file_id);
     const sourceFile = fileById.get(sourceFileId);
     if (!sourceFile) continue;
-    const moduleSpecifier = hint.module_specifier == null ? '' : String(hint.module_specifier);
-    const targetPath = moduleSpecifier ? resolveImportPath(sourceFile.path, moduleSpecifier, pathToId, suffixIndex) : null;
-    const targetFileId = targetPath ? pathToId.get(targetPath) : null;
-    const sourceSymbol = hint.source_qualified_name == null ? null : chooseQualifiedSymbol(symbolsByQualified.get(String(hint.source_qualified_name)) || [], sourceFileId);
+    const sourceSymbol = hint.source_qualified_name == null
+      ? null
+      : chooseQualifiedSymbol(symbolsByQualified.get(String(hint.source_qualified_name)) || [], sourceFileId);
     const targetQualified = hint.target_qualified_name == null ? '' : String(hint.target_qualified_name);
     const targetName = hint.target_name == null ? '' : String(hint.target_name);
-    let targetSymbol = targetQualified ? chooseQualifiedSymbol(symbolsByQualified.get(targetQualified) || [], targetFileId) : null;
-    if (!targetSymbol && targetName) {
+    const moduleSpecifier = hint.module_specifier == null ? '' : String(hint.module_specifier);
+    const moduleTargetPath = moduleSpecifier ? resolveImportPath(sourceFile.path, moduleSpecifier, pathToId, suffixIndex) : null;
+    let targetFileId = moduleTargetPath ? pathToId.get(moduleTargetPath) : null;
+    let targetSymbol = null;
+
+    const linkedHint = hint.type === 'HTTP_CALLS'
+      ? routeTargets.get(targetName)
+      : hint.type === 'EMITS'
+        ? eventTargets.get(targetName)
+        : null;
+    if (linkedHint) {
+      targetFileId = Number(linkedHint.source_file_id);
+      const linkedQualified = linkedHint.source_qualified_name == null ? '' : String(linkedHint.source_qualified_name);
+      if (linkedQualified) targetSymbol = chooseQualifiedSymbol(symbolsByQualified.get(linkedQualified) || [], targetFileId);
+    }
+
+    if (!targetSymbol && targetQualified) {
+      targetSymbol = chooseQualifiedSymbol(symbolsByQualified.get(targetQualified) || [], targetFileId);
+    }
+    if (!targetSymbol && targetName && !['HTTP_CALLS', 'EMITS', 'HANDLES', 'LISTENS_ON'].includes(String(hint.type))) {
       const candidates = symbolsByName.get(targetName) || [];
       const scoped = targetFileId ? candidates.filter(item => Number(item.file_id) === Number(targetFileId)) : candidates;
       if (scoped.length === 1) targetSymbol = scoped[0];
@@ -348,6 +378,17 @@ function resolveHintRelationships(db, context) {
     insertEdge.run(sourceSymbol ? Number(sourceSymbol.id) : null, targetSymbol ? Number(targetSymbol.id) : null, sourceFileId,
       targetSymbol ? Number(targetSymbol.file_id) : (targetFileId || null), String(hint.type), targetName || null, String(hint.provider), Number(hint.confidence));
   }
+}
+
+function uniqueHintTargets(hints, type) {
+  const result = new Map();
+  for (const hint of hints) {
+    if (String(hint.type) !== type || hint.target_name == null) continue;
+    const key = String(hint.target_name);
+    if (!result.has(key)) result.set(key, hint);
+    else result.set(key, null);
+  }
+  return result;
 }
 
 function chooseQualifiedSymbol(candidates, preferredFileId = null) {
