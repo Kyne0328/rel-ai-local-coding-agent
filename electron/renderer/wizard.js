@@ -4,7 +4,6 @@ const state = {
   cloudConnected: false,
   pairing: null,
   statusTimer: null,
-  recoveryCode: '',
   direct: { port: 3333, ngrokAuthtoken: '', ngrokDomain: '' }
 };
 
@@ -38,8 +37,8 @@ function setCloudStatus(title, detail) {
 
 function displayPairing(pairing = {}) {
   state.pairing = pairing;
-  $('pairingPanel').hidden = false;
   const code = String(pairing.code || '');
+  $('pairingPanel').hidden = !code;
   $('pairingCode').textContent = code || '—';
   $('copyPairingBtn').disabled = !code;
   updatePairingExpiry();
@@ -56,9 +55,9 @@ function updatePairingExpiry() {
   }
   const remaining = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
   $('pairingExpiry').textContent = remaining > 60
-    ? `Pairing code expires in ${Math.ceil(remaining / 60)} minutes.`
-    : `Pairing code expires in ${remaining} seconds.`;
-  if (remaining === 0) setCloudStatus('Pairing code expired', 'Create a new short-lived code to continue.');
+    ? `Legacy pairing code expires in ${Math.ceil(remaining / 60)} minutes.`
+    : `Legacy pairing code expires in ${remaining} seconds.`;
+  if (remaining === 0) setCloudStatus('Sign-in expired', 'Start account sign-in again to continue.');
 }
 
 function startStatusPolling() {
@@ -76,15 +75,20 @@ async function refreshCloudStatus() {
   try {
     const response = await window.electronAPI.getCloudSetupStatus();
     const gateway = response?.gateway || {};
-    if (gateway.pairing?.code) displayPairing(gateway.pairing);
+    if (gateway.pairing) displayPairing(gateway.pairing);
     if (gateway.state === 'connected' && gateway.principalPaired) {
       state.cloudConnected = true;
       stopStatusPolling();
-      setCloudStatus('ChatGPT paired', 'This device is authenticated with Rel.AI Cloud.');
+      setCloudStatus('Rel.AI account connected', 'This computer is approved and securely linked to your Rel.AI account.');
       showStep(2);
       return;
     }
-    if (gateway.state === 'pairing') setCloudStatus('Waiting for ChatGPT approval', 'Plus or Pro: open Plugins in ChatGPT (sidebar or Settings → Plugins), add Rel.AI MCP, and connect it. Business, Enterprise, or Edu: open Rel.AI under workspace Apps. Then enter this code on the Rel.AI authorization page.');
+    if (gateway.state === 'pairing') {
+      const legacy = Boolean(gateway.pairing?.code);
+      setCloudStatus(legacy ? 'Waiting for legacy approval' : 'Waiting for account approval', legacy
+        ? 'Complete the legacy migration approval to adopt this existing identity into your account.'
+        : 'Finish signing in and approve this computer in the browser window Rel.AI opened.');
+    }
     else if (gateway.state === 'connecting' || gateway.state === 'authenticating') setCloudStatus('Connecting', 'Rel.AI is establishing the secure outbound device session.');
     else if (gateway.state === 'error') setCloudStatus('Cloud connection needs attention', gateway.error || 'Retry the connection.');
   } catch (error) {
@@ -92,20 +96,20 @@ async function refreshCloudStatus() {
   }
 }
 
-async function startCloudPairing() {
+async function startCloudEnrollment() {
   setError('cloudError');
   $('connectChatgptBtn').disabled = true;
-  $('connectChatgptBtn').textContent = 'Creating code…';
+  $('connectChatgptBtn').textContent = 'Opening browser…';
   try {
-    const result = await window.electronAPI.startCloudPairing();
-    displayPairing(result?.pairing || result || {});
-    setCloudStatus('Waiting for ChatGPT approval', 'Plus or Pro: open Plugins in ChatGPT (sidebar or Settings → Plugins), add Rel.AI MCP, and connect it. Business, Enterprise, or Edu: open Rel.AI under workspace Apps. Then enter this code on the Rel.AI authorization page.');
+    const result = await window.electronAPI.startCloudEnrollment();
+    displayPairing(result?.enrollment || result || {});
+    setCloudStatus('Waiting for account approval', 'Finish signing in and approve this computer in the browser window Rel.AI opened.');
     startStatusPolling();
   } catch (error) {
     setError('cloudError', messageOf(error));
   } finally {
     $('connectChatgptBtn').disabled = false;
-    $('connectChatgptBtn').textContent = 'Create pairing code';
+    $('connectChatgptBtn').textContent = 'Sign in or create account';
   }
 }
 
@@ -116,24 +120,7 @@ async function cancelCloudPairing() {
   $('pairingPanel').hidden = true;
   $('connectChatgptBtn').hidden = false;
   $('cancelPairingBtn').hidden = true;
-  setCloudStatus('Not connected yet', 'Create a short-lived pairing code to continue.');
-}
-
-async function showRecovery() {
-  setError('securityError');
-  $('showRecoveryBtn').disabled = true;
-  try {
-    const result = await window.electronAPI.getWizardRecoveryCode();
-    const recoveryCode = String(result?.recoveryCode || '');
-    if (!recoveryCode) throw new Error('No recovery code is available yet.');
-    state.recoveryCode = recoveryCode;
-    $('recoveryCodeValue').textContent = recoveryCode;
-    $('recoveryOutput').hidden = false;
-  } catch (error) {
-    setError('securityError', messageOf(error));
-  } finally {
-    $('showRecoveryBtn').disabled = false;
-  }
+  setCloudStatus('Account sign-in required', 'Continue in your browser to sign in or create a Rel.AI account, then approve this computer.');
 }
 
 async function recoverCloudIdentity() {
@@ -149,14 +136,14 @@ async function recoverCloudIdentity() {
     const result = await window.electronAPI.recoverCloudIdentity(recoveryCode);
     $('advancedSetup').open = false;
     showStep(1);
-    displayPairing(result?.pairing || result || {});
-    setCloudStatus('Recovery verified', 'Approve this short-lived pairing code in ChatGPT to finish linking the replacement device.');
+    displayPairing(result?.enrollment || result || {});
+    setCloudStatus('Legacy identity verified', 'Finish account sign-in in the browser to adopt the existing Rel.AI identity without reconnecting ChatGPT.');
     startStatusPolling();
   } catch (error) {
     setError('recoveryError', messageOf(error));
   } finally {
     $('recoverIdentityBtn').disabled = false;
-    $('recoverIdentityBtn').textContent = 'Recover identity';
+    $('recoverIdentityBtn').textContent = 'Migrate identity';
   }
 }
 
@@ -207,7 +194,7 @@ async function launchDirect() {
 }
 
 async function finishCloud() {
-  if (!state.cloudConnected) return setError('securityError', 'Finish ChatGPT pairing before continuing.');
+  if (!state.cloudConnected) return setError('securityError', 'Finish Rel.AI account sign-in before continuing.');
   $('finishCloudBtn').disabled = true;
   try {
     const result = await window.electronAPI.wizardDone({ connectionMode: 'cloud', restart: false });
@@ -246,7 +233,7 @@ async function loadExistingSettings() {
   } catch {}
 }
 
-$('connectChatgptBtn').addEventListener('click', startCloudPairing);
+$('connectChatgptBtn').addEventListener('click', startCloudEnrollment);
 $('cancelPairingBtn').addEventListener('click', cancelCloudPairing);
 $('copyPairingBtn').addEventListener('click', async () => {
   const code = String(state.pairing?.code || '');
@@ -265,13 +252,6 @@ $('copyPairingBtn').addEventListener('click', async () => {
     button.disabled = false;
     setTimeout(() => { label.textContent = 'Copy code'; }, 1200);
   }
-});
-$('showRecoveryBtn').addEventListener('click', showRecovery);
-$('copyRecoveryBtn').addEventListener('click', async () => {
-  if (!state.recoveryCode) return;
-  await window.electronAPI.copyText(state.recoveryCode);
-  $('copyRecoveryBtn').textContent = 'Copied';
-  setTimeout(() => { $('copyRecoveryBtn').textContent = 'Copy'; }, 1200);
 });
 $('continueSecurityBtn').addEventListener('click', () => showStep(3));
 $('backToPairingBtn').addEventListener('click', () => showStep(1));

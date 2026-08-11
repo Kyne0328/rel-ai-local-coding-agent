@@ -3,6 +3,9 @@ import { randomUUID } from 'node:crypto';
 import {
   GATEWAY_PROTOCOL_VERSION,
   MAX_GATEWAY_MESSAGE_BYTES,
+  formatDeviceLinkCode,
+  formatRecoveryCode,
+  parseDeviceLinkCode,
   parseRecoveryCode,
   validWorkspaceAlias,
   validateGatewayFrame
@@ -96,7 +99,8 @@ function createGatewayClient({
   async function beginPairing(options = {}) {
     const recoveryCode = String(options.recoveryCode || '').trim();
     const recovery = recoveryCode ? parseRecoveryCode(recoveryCode) : null;
-    if (recoveryCode && !recovery) throw new Error('Recovery code is invalid.');
+    const deviceLink = recoveryCode && !recovery ? parseDeviceLinkCode(recoveryCode) : null;
+    if (recoveryCode && !recovery && !deviceLink) throw new Error('Recovery or device-link code is invalid.');
     const current = await identity.open();
     clearPairingTimer();
     const response = await fetchGatewayJson(`${origin}/v1/pairings`, {
@@ -116,6 +120,7 @@ function createGatewayClient({
       throw new Error('Gateway pairing could not be started.');
     }
     pairingSession = {
+      kind: 'legacy',
       pairingId: String(response.pairingId),
       pollToken: String(response.pollToken),
       code: String(response.code),
@@ -129,6 +134,60 @@ function createGatewayClient({
     });
     schedulePairingPoll();
     return { pairingId: pairingSession.pairingId, code: pairingSession.code, expiresAt: pairingSession.expiresAt };
+  }
+
+  async function beginEnrollment(options = {}) {
+    const current = await identity.open();
+    clearPairingTimer();
+    let migrationCode = String(options.recoveryCode || '').trim();
+    if (migrationCode && !parseRecoveryCode(migrationCode) && !parseDeviceLinkCode(migrationCode)) {
+      throw new Error('Recovery or device-link code is invalid.');
+    }
+    if (!migrationCode && current.paired && current.principalId) {
+      const principal = identity.principalState();
+      if (principal.principalId === current.principalId && principal.recoverySecret) {
+        migrationCode = formatRecoveryCode(current.principalId, principal.recoverySecret);
+      } else if (socket?.readyState === 1 && state.snapshot().state === 'connected') {
+        const link = await createDeviceLink();
+        if (!link?.ok || !link.linkCode) throw new Error('Existing Rel.AI identity proof could not be created.');
+        migrationCode = formatDeviceLinkCode(current.principalId, link.linkCode);
+      } else {
+        throw new Error('Reconnect this existing Rel.AI device before signing in, or use its legacy recovery code.');
+      }
+    }
+    const response = await fetchGatewayJson(`${origin}/v1/device-enrollments`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        device: {
+          deviceId: current.deviceId,
+          publicJwk: current.publicJwk,
+          displayName: boundedLabel(displayName, 120),
+          appVersion: boundedLabel(appVersion, 80),
+          protocolVersion: GATEWAY_PROTOCOL_VERSION,
+          mcpProtocolVersion: boundedLabel(mcpProtocolVersion, 80),
+          capabilities: safeCapabilities(capabilities)
+        },
+        ...(migrationCode ? { recoveryCode: migrationCode } : {})
+      })
+    });
+    if (!response?.ok || !response.enrollmentId || !response.pollToken || !response.browserUrl) {
+      throw new Error('Rel.AI account enrollment could not be started.');
+    }
+    pairingSession = {
+      kind: 'account',
+      enrollmentId: String(response.enrollmentId),
+      pollToken: String(response.pollToken),
+      browserUrl: String(response.browserUrl),
+      expiresAt: Number(response.expiresAt || 0)
+    };
+    update({
+      state: 'pairing',
+      pairing: { enrollmentId: pairingSession.enrollmentId, browserUrl: pairingSession.browserUrl, expiresAt: pairingSession.expiresAt },
+      error: ''
+    });
+    schedulePairingPoll();
+    return { enrollmentId: pairingSession.enrollmentId, browserUrl: pairingSession.browserUrl, expiresAt: pairingSession.expiresAt };
   }
 
   function cancelPairing() {
@@ -514,37 +573,78 @@ function createGatewayClient({
 
   async function pollPairing() {
     if (!pairingSession || !started) return;
-    if (pairingSession.expiresAt && pairingSession.expiresAt <= clock.now()) {
+    const activeSession = pairingSession;
+    if (activeSession.expiresAt && activeSession.expiresAt <= clock.now()) {
       pairingSession = null;
-      update({ state: 'pairing_required', pairing: null, error: 'Pairing expired.' });
+      update({
+        state: 'pairing_required',
+        pairing: null,
+        error: activeSession.kind === 'account' ? 'Account sign-in expired.' : 'Pairing expired.'
+      });
       return;
     }
     try {
-      const result = await fetchGatewayJson(`${origin}/v1/pairings/${encodeURIComponent(pairingSession.pairingId)}`, {
-        headers: { 'X-RelAI-Pairing-Token': pairingSession.pollToken }
+      if (activeSession.kind === 'account') {
+        const result = await fetchGatewayJson(`${origin}/v1/device-enrollments/${encodeURIComponent(activeSession.enrollmentId)}`, {
+          headers: { 'X-RelAI-Enrollment-Token': activeSession.pollToken }
+        });
+        if (result.status === 'pending') {
+          schedulePairingPoll();
+          return;
+        }
+        if (result.status !== 'approved' || !result.principalId) {
+          throw new Error('Rel.AI account enrollment was not approved.');
+        }
+        const existing = identity.principalState();
+        const recoverySecret = existing.principalId === String(result.principalId)
+          ? String(existing.recoverySecret || '')
+          : '';
+        await completePrincipalPairing(String(result.principalId), recoverySecret);
+        return;
+      }
+
+      const result = await fetchGatewayJson(`${origin}/v1/pairings/${encodeURIComponent(activeSession.pairingId)}`, {
+        headers: { 'X-RelAI-Pairing-Token': activeSession.pollToken }
       });
       if (result.status === 'pending') {
         schedulePairingPoll();
         return;
       }
-      const recoverySecret = String(result.recoverySecret || pairingSession.recoverySecret || '');
-      if (result.status !== 'paired' || !result.principalId || !recoverySecret) {
-        throw new Error('Pairing completion did not include recoverable principal state.');
+      const existing = identity.principalState();
+      const principalId = String(result.principalId || '');
+      const recoverySecret = String(
+        result.recoverySecret ||
+        activeSession.recoverySecret ||
+        (existing.principalId === principalId ? existing.recoverySecret : '') ||
+        ''
+      );
+      if (result.status !== 'paired' || !principalId) {
+        throw new Error('Pairing completion did not include principal state.');
       }
-      await identity.setPrincipalState({ principalId: String(result.principalId), recoverySecret });
-      pairingSession = null;
-      update({
-        state: 'connecting',
-        pairing: null,
-        principalPaired: true,
-        principalId: identity.snapshot().principalId,
-        error: ''
-      });
-      connect();
+      await completePrincipalPairing(principalId, recoverySecret);
     } catch (error) {
+      if (pairingSession !== activeSession) return;
       update({ state: 'pairing', error: messageOf(error) });
       schedulePairingPoll();
     }
+  }
+
+  async function completePrincipalPairing(principalId, recoverySecret = '') {
+    await identity.setPrincipalState({ principalId, recoverySecret });
+    pairingSession = null;
+    const previousSocket = socket;
+    socket = null;
+    if (previousSocket) {
+      try { previousSocket.close(1000, 'Rel.AI identity updated.'); } catch {}
+    }
+    update({
+      state: 'connecting',
+      pairing: null,
+      principalPaired: true,
+      principalId: identity.snapshot().principalId,
+      error: ''
+    });
+    connect();
   }
 
   function clearPairingTimer() {
@@ -569,6 +669,7 @@ function createGatewayClient({
     stop,
     snapshot,
     beginPairing,
+    beginEnrollment,
     cancelPairing,
     requestUsage,
     listDevices,
