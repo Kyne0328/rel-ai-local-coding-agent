@@ -25,7 +25,8 @@ const CASES = [
   {"path":"docs/page.mdx","language":"markdown","source":"# Rel.AI MDX\n\nStructured markdown content.\n"},
   {"path":"Dockerfile","language":"dockerfile","source":"FROM node:24-alpine\nWORKDIR /app\nCOPY . .\n"},
   {"path":"schema.graphql","language":"graphql","source":"type Query { hello: String! }\nquery Hello { hello }\n"},
-  {"path":"api/service.proto","language":"protobuf","source":"syntax = \"proto3\";\nmessage User { string name = 1; }\n"}
+  {"path":"api/service.proto","language":"protobuf","source":"syntax = \"proto3\";\nmessage User { string name = 1; }\n"},
+  {"path":"analysis/model.r","language":"r","source":"add <- function(x, y) { x + y }\n"}
 ];
 
 for (const item of CASES) {
