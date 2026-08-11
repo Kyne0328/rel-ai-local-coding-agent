@@ -202,8 +202,8 @@ async function settle() { await Promise.resolve(); await Promise.resolve(); awai
   const usagePromise = client.requestUsage('2026-08');
   const usageRequest = socket.frames().at(-1);
   assert.equal(usageRequest.type, 'usage_request');
-  socket.message({ type: 'usage_result', requestId: usageRequest.requestId, month: '2026-08', totals: { requests: 1 }, tools: [], devices: [], workspaces: [] });
-  assert.deepEqual(await usagePromise, { month: '2026-08', totals: { requests: 1 }, tools: [], devices: [], workspaces: [], workspaceDimensions: [], workspaceTools: [], series: [], toolSeries: [], workspaceSeries: [], workspaceToolSeries: [] });
+  socket.message({ type: 'usage_result', requestId: usageRequest.requestId, month: '2026-08', totals: { requests: 1 }, tools: [], devices: [], workspaces: [], failureCategories: [{ category: 'policy', failures: 1 }], workspaceFailureCategories: [], failureCategorySeries: [{ hour: '2026-08-08T10', category: 'policy', failures: 1 }], workspaceFailureCategorySeries: [] });
+  assert.deepEqual(await usagePromise, { month: '2026-08', totals: { requests: 1 }, tools: [], devices: [], workspaces: [], workspaceDimensions: [], workspaceTools: [], series: [], toolSeries: [], workspaceSeries: [], workspaceToolSeries: [], failureCategories: [{ category: 'policy', failures: 1 }], workspaceFailureCategories: [], failureCategorySeries: [{ hour: '2026-08-08T10', category: 'policy', failures: 1 }], workspaceFailureCategorySeries: [] });
 
   const devicesPromise = client.listDevices();
   const devicesRequest = socket.frames().at(-1);

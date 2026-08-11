@@ -1,3 +1,5 @@
+import { normalizeFailureCategory } from '../../../analyticsFailureCategory.js';
+
 const RANGE_MS = Object.freeze({
   '1h': 60 * 60 * 1000,
   '24h': 24 * 60 * 60 * 1000,
@@ -70,7 +72,11 @@ export function normalizeUsageSnapshot(snapshot, requestedMonth = '') {
     series: normalizeSeries(snapshot.series, 'overall'),
     toolSeries: normalizeSeries(snapshot.toolSeries, 'tool'),
     workspaceSeries: normalizeSeries(snapshot.workspaceSeries, 'workspace'),
-    workspaceToolSeries: normalizeSeries(snapshot.workspaceToolSeries, 'workspaceTool')
+    workspaceToolSeries: normalizeSeries(snapshot.workspaceToolSeries, 'workspaceTool'),
+    failureCategories: normalizeFailureRows(snapshot.failureCategories),
+    workspaceFailureCategories: normalizeFailureRows(snapshot.workspaceFailureCategories, { workspace: true }),
+    failureCategorySeries: normalizeFailureRows(snapshot.failureCategorySeries, { series: true }),
+    workspaceFailureCategorySeries: normalizeFailureRows(snapshot.workspaceFailureCategorySeries, { workspace: true, series: true })
   };
 }
 
@@ -81,8 +87,10 @@ export function analyticsRangeScope(models, bounds, { workspace = '', deviceId =
   const baseRows = workspace ? workspaceRows : rows;
   let totals = sumRows(baseRows);
   let usedMonthlyFallback = false;
+  let fallbackModel = null;
   if (monthlyFallback && bounds.range === 'month') {
     const model = all.find(item => item.month === monthKey(bounds.end.getTime() - 1));
+    fallbackModel = model || null;
     if (model) {
       if (workspace) {
         const relevant = model.workspaceDimensions.filter(row => workspaceMatch(row, workspace, deviceId));
@@ -106,6 +114,16 @@ export function analyticsRangeScope(models, bounds, { workspace = '', deviceId =
   const deviceNames = new Map(all.flatMap(model => model.workspaceDimensions).map(row => [row.deviceId, row.displayName || row.deviceId]));
   const devices = workspace ? groupRows(workspaceRows, row => row.deviceId || '', 'device', row => deviceNames.get(row.deviceId) || row.displayName || row.deviceId || '') : [];
   const workspaces = workspace ? [] : groupRows(all.flatMap(model => model.workspaceSeries).filter(row => inRange(row.hour, bounds.start, bounds.end)), row => row.workspace || 'Unattributed', 'workspace');
+  const categoryRows = workspace
+    ? all.flatMap(model => model.workspaceFailureCategorySeries).filter(row => inRange(row.hour, bounds.start, bounds.end) && workspaceMatch(row, workspace, deviceId))
+    : all.flatMap(model => model.failureCategorySeries).filter(row => inRange(row.hour, bounds.start, bounds.end));
+  let failureCategories = groupFailureCategories(categoryRows);
+  if (usedMonthlyFallback && fallbackModel) {
+    const monthlyCategories = workspace
+      ? fallbackModel.workspaceFailureCategories.filter(row => workspaceMatch(row, workspace, deviceId))
+      : fallbackModel.failureCategories;
+    failureCategories = groupFailureCategories(monthlyCategories);
+  }
   const points = bucketSeries(baseRows, bounds.start, bounds.end);
   return {
     source: all.length && all.every(model => model.source === 'local') ? 'local' : 'cloud',
@@ -120,6 +138,7 @@ export function analyticsRangeScope(models, bounds, { workspace = '', deviceId =
     tools,
     devices,
     workspaces,
+    failureCategories,
     points,
     usedMonthlyFallback
   };
@@ -189,10 +208,29 @@ function normalizeSeries(value, kind) {
   })).filter(row => hourTime(row.hour) !== null);
 }
 
+function normalizeFailureRows(value, { workspace = false, series = false } = {}) {
+  if (!Array.isArray(value)) return [];
+  return value.map(item => ({
+    ...(series ? { hour: String(item?.hour || '') } : {}),
+    ...(workspace ? { deviceId: String(item?.deviceId || ''), workspace: String(item?.workspace || ''), workspaceKey: String(item?.workspaceKey || '') } : {}),
+    category: normalizeFailureCategory(item?.category),
+    failures: exactNumber(item?.failures ?? 0, 'failureCategory.failures')
+  })).filter(row => row.failures > 0 && (!series || hourTime(row.hour) !== null));
+}
+
 function sumRows(rows) {
   const totals = Object.fromEntries(TOTAL_KEYS.map(key => [key, 0]));
   for (const row of rows || []) for (const key of TOTAL_KEYS) totals[key] += Number(row[key] || 0);
   return totals;
+}
+
+function groupFailureCategories(rows) {
+  const grouped = new Map();
+  for (const row of rows || []) {
+    const category = normalizeFailureCategory(row?.category);
+    grouped.set(category, (grouped.get(category) || 0) + Number(row?.failures || 0));
+  }
+  return [...grouped.entries()].map(([category, failures]) => ({ category, failures })).filter(row => row.failures > 0).sort((a, b) => b.failures - a.failures || a.category.localeCompare(b.category));
 }
 
 function groupRows(rows, identity, kind, displayName = null) {

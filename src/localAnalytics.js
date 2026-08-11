@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import { statePath } from './stateLayout.js';
+import { failureCategoryFromCode, normalizeFailureCategory } from './analyticsFailureCategory.js';
 
 const SCHEMA_VERSION = 1;
 const MAX_FILE_BYTES = 4 * 1024 * 1024;
@@ -19,6 +20,7 @@ function recordLocalToolOutcome(config = {}, event = {}) {
     const durationMs = boundedDuration(event.durationMs);
     const success = event.ok === true ? 1 : 0;
     const failure = success ? 0 : 1;
+    const category = failure ? failureCategoryFromCode(event.errorCode) : '';
     const document = readDocument(config, month);
 
     incrementTotals(document.totals, success, failure, durationMs);
@@ -26,6 +28,10 @@ function recordLocalToolOutcome(config = {}, event = {}) {
     if (workspace) {
       incrementNamed(document.workspaces, 'workspace', workspace, success, failure, durationMs);
       incrementWorkspaceTool(document.workspaceTools, workspace, tool, success, failure, durationMs);
+    }
+    if (failure) {
+      incrementFailureCategory(document.failureCategories, category);
+      if (workspace) incrementWorkspaceFailureCategory(document.workspaceFailureCategories, workspace, category);
     }
 
     const hourly = findOrCreate(document.hours, row => row.hour === hour, () => ({
@@ -37,13 +43,19 @@ function recordLocalToolOutcome(config = {}, event = {}) {
       executionMs: 0,
       tools: [],
       workspaces: [],
-      workspaceTools: []
+      workspaceTools: [],
+      failureCategories: [],
+      workspaceFailureCategories: []
     }));
     incrementTotals(hourly, success, failure, durationMs);
     incrementNamed(hourly.tools, 'tool', tool, success, failure, durationMs);
     if (workspace) {
       incrementNamed(hourly.workspaces, 'workspace', workspace, success, failure, durationMs);
       incrementWorkspaceTool(hourly.workspaceTools, workspace, tool, success, failure, durationMs);
+    }
+    if (failure) {
+      incrementFailureCategory(hourly.failureCategories, category);
+      if (workspace) incrementWorkspaceFailureCategory(hourly.workspaceFailureCategories, workspace, category);
     }
     writeDocument(config, document);
     return true;
@@ -110,6 +122,23 @@ function readLocalUsageSnapshot(config = {}, requestedMonth = '') {
       workspaceKey: `${LOCAL_DEVICE_ID}::${item.workspace}`,
       tool: item.tool,
       ...aggregateDto(item)
+    }))),
+    failureCategories: document.failureCategories.map(item => ({ category: item.category, failures: number(item.failures) })),
+    workspaceFailureCategories: document.workspaceFailureCategories.map(item => ({
+      deviceId: LOCAL_DEVICE_ID,
+      workspace: item.workspace,
+      workspaceKey: `${LOCAL_DEVICE_ID}::${item.workspace}`,
+      category: item.category,
+      failures: number(item.failures)
+    })),
+    failureCategorySeries: document.hours.flatMap(row => row.failureCategories.map(item => ({ hour: row.hour, category: item.category, failures: number(item.failures) }))),
+    workspaceFailureCategorySeries: document.hours.flatMap(row => row.workspaceFailureCategories.map(item => ({
+      hour: row.hour,
+      deviceId: LOCAL_DEVICE_ID,
+      workspace: item.workspace,
+      workspaceKey: `${LOCAL_DEVICE_ID}::${item.workspace}`,
+      category: item.category,
+      failures: number(item.failures)
     })))
   };
 }
@@ -144,7 +173,7 @@ function analyticsPath(config, month) {
 }
 
 function emptyDocument(month) {
-  return { schemaVersion: SCHEMA_VERSION, month, totals: emptyAggregate(true), tools: [], workspaces: [], workspaceTools: [], hours: [] };
+  return { schemaVersion: SCHEMA_VERSION, month, totals: emptyAggregate(true), tools: [], workspaces: [], workspaceTools: [], failureCategories: [], workspaceFailureCategories: [], hours: [] };
 }
 
 function sanitizeDocument(value, month) {
@@ -153,12 +182,16 @@ function sanitizeDocument(value, month) {
   doc.tools = sanitizeNamedRows(value.tools, 'tool');
   doc.workspaces = sanitizeNamedRows(value.workspaces, 'workspace');
   doc.workspaceTools = sanitizeWorkspaceTools(value.workspaceTools);
+  doc.failureCategories = sanitizeFailureCategories(value.failureCategories);
+  doc.workspaceFailureCategories = sanitizeWorkspaceFailureCategories(value.workspaceFailureCategories);
   doc.hours = (Array.isArray(value.hours) ? value.hours : []).filter(row => /^\d{4}-\d{2}-\d{2}T\d{2}$/.test(String(row?.hour || ''))).slice(-744).map(row => ({
     hour: String(row.hour),
     ...sanitizeAggregate(row, true),
     tools: sanitizeNamedRows(row.tools, 'tool'),
     workspaces: sanitizeNamedRows(row.workspaces, 'workspace'),
-    workspaceTools: sanitizeWorkspaceTools(row.workspaceTools)
+    workspaceTools: sanitizeWorkspaceTools(row.workspaceTools),
+    failureCategories: sanitizeFailureCategories(row.failureCategories),
+    workspaceFailureCategories: sanitizeWorkspaceFailureCategories(row.workspaceFailureCategories)
   }));
   return doc;
 }
@@ -169,6 +202,12 @@ function sanitizeNamedRows(rows, field) {
 function sanitizeWorkspaceTools(rows) {
   return (Array.isArray(rows) ? rows : []).slice(0, 2048).map(row => ({ workspace: boundedLabel(row?.workspace, 160), tool: boundedLabel(row?.tool, 160), ...sanitizeAggregate(row) })).filter(row => row.workspace && row.tool);
 }
+function sanitizeFailureCategories(rows) {
+  return (Array.isArray(rows) ? rows : []).slice(0, 32).map(row => ({ category: normalizeFailureCategory(row?.category), failures: number(row?.failures) })).filter(row => row.failures > 0);
+}
+function sanitizeWorkspaceFailureCategories(rows) {
+  return (Array.isArray(rows) ? rows : []).slice(0, 512).map(row => ({ workspace: boundedLabel(row?.workspace, 160), category: normalizeFailureCategory(row?.category), failures: number(row?.failures) })).filter(row => row.workspace && row.failures > 0);
+}
 function sanitizeAggregate(row, includeRequests = false) {
   return { ...(includeRequests ? { requests: number(row?.requests) } : {}), toolCalls: number(row?.toolCalls), successes: number(row?.successes), failures: number(row?.failures), executionMs: number(row?.executionMs) };
 }
@@ -177,6 +216,8 @@ function emptyAggregate(includeRequests = false) { return { ...(includeRequests 
 function incrementTotals(row, success, failure, durationMs) { row.requests = number(row.requests) + 1; row.toolCalls = number(row.toolCalls) + 1; row.successes = number(row.successes) + success; row.failures = number(row.failures) + failure; row.executionMs = number(row.executionMs) + durationMs; }
 function incrementNamed(rows, field, value, success, failure, durationMs) { const row = findOrCreate(rows, item => item[field] === value, () => ({ [field]: value, ...emptyAggregate() })); incrementAggregate(row, success, failure, durationMs); }
 function incrementWorkspaceTool(rows, workspace, tool, success, failure, durationMs) { const row = findOrCreate(rows, item => item.workspace === workspace && item.tool === tool, () => ({ workspace, tool, ...emptyAggregate() })); incrementAggregate(row, success, failure, durationMs); }
+function incrementFailureCategory(rows, category) { const normalized = normalizeFailureCategory(category); const row = findOrCreate(rows, item => item.category === normalized, () => ({ category: normalized, failures: 0 })); row.failures = number(row.failures) + 1; }
+function incrementWorkspaceFailureCategory(rows, workspace, category) { const normalized = normalizeFailureCategory(category); const row = findOrCreate(rows, item => item.workspace === workspace && item.category === normalized, () => ({ workspace, category: normalized, failures: 0 })); row.failures = number(row.failures) + 1; }
 function incrementAggregate(row, success, failure, durationMs) { row.toolCalls = number(row.toolCalls) + 1; row.successes = number(row.successes) + success; row.failures = number(row.failures) + failure; row.executionMs = number(row.executionMs) + durationMs; }
 function findOrCreate(rows, predicate, create) { let row = rows.find(predicate); if (!row) { row = create(); rows.push(row); } return row; }
 function boundedDate(value) { const date = value instanceof Date ? value : new Date(value == null ? Date.now() : value); return Number.isFinite(date.getTime()) ? date : new Date(); }
