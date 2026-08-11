@@ -3,14 +3,14 @@
   "disabledToolCount": 0,
   "externallyVisibleToolCount": 12,
   "filteredToolCount": 0,
-  "hash": "CweNerNdbsH3HwXmXNYS95NRlW78E_dQXZJFQNUPB-s",
+  "hash": "atvjaOKIy3dL3-ELE_yKwl5rWD-rCZkCg83TrBibGaU",
   "instructions": "Start each objective with relai_work action begin and pass its work_id to later calls. Inspect relevant files before editing; use bounded reads and commands. Validate after changes. Never bypass approval, workspace, task, or destructive-operation safeguards. Report only checks actually run. Finish with relai_validate action checks complete:true, or relai_work action finish after review.",
   "schemaVersion": 7,
   "serverInfo": {
     "name": "rel-ai-mcp",
     "version": "0.25.0"
   },
-  "toolSurfaceVersion": 35,
+  "toolSurfaceVersion": 36,
   "tools": [
     {
       "annotations": {
@@ -2531,7 +2531,7 @@
         "summary": "",
         "taskScope": "required"
       },
-      "description": "Manage development processes.",
+      "description": "Manage persistent development services, watchers, and interactive programs. For start, prefer executable + argv (+ optional initial input) so arguments bypass PowerShell/cmd/bash reparsing; use command only when shell syntax such as pipes, redirection, expansion, or built-ins is deliberately required. Use relai_exec or relai_validate for one-shot tests, builds, and checks.",
       "execution": {
         "actions": [
           {
@@ -2545,20 +2545,23 @@
             "concurrencyScope": "task",
             "executionClass": "persistent_process",
             "fields": [
+              "argv",
               "command",
               "cwd",
               "env",
+              "executable",
+              "input",
               "kind",
               "label",
               "maxLogBytes",
               "purpose",
+              "reuseExisting",
               "startupWaitMs",
               "work_id",
               "workspace"
             ],
             "operation": "relai_process_start",
             "required": [
-              "command",
               "kind",
               "purpose",
               "work_id"
@@ -2683,6 +2686,11 @@
               "anyOf": [
                 {
                   "required": [
+                    "argv"
+                  ]
+                },
+                {
+                  "required": [
                     "command"
                   ]
                 },
@@ -2694,6 +2702,11 @@
                 {
                   "required": [
                     "env"
+                  ]
+                },
+                {
+                  "required": [
+                    "executable"
                   ]
                 },
                 {
@@ -2718,6 +2731,11 @@
                 },
                 {
                   "required": [
+                    "reuseExisting"
+                  ]
+                },
+                {
+                  "required": [
                     "startupWaitMs"
                   ]
                 }
@@ -2728,6 +2746,23 @@
                 "action": {
                   "enum": [
                     "start"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": [
+                "input"
+              ]
+            },
+            "then": {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "start",
+                    "write"
                   ]
                 }
               }
@@ -2794,22 +2829,6 @@
           {
             "if": {
               "required": [
-                "input"
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "write"
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "required": [
                 "graceMs"
               ]
             },
@@ -2861,6 +2880,42 @@
         ],
         "oneOf": [
           {
+            "oneOf": [
+              {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "executable"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "argv"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "input"
+                      ]
+                    }
+                  ]
+                },
+                "required": [
+                  "command"
+                ]
+              },
+              {
+                "not": {
+                  "required": [
+                    "command"
+                  ]
+                },
+                "required": [
+                  "executable"
+                ]
+              }
+            ],
             "properties": {
               "action": {
                 "const": "start"
@@ -2874,7 +2929,6 @@
             },
             "required": [
               "action",
-              "command",
               "kind",
               "purpose",
               "work_id"
@@ -2967,7 +3021,17 @@
           "activeOnly": {
             "type": "boolean"
           },
+          "argv": {
+            "description": "Literal arguments passed directly to executable without shell parsing.",
+            "items": {
+              "maxLength": 20000,
+              "type": "string"
+            },
+            "maxItems": 100,
+            "type": "array"
+          },
           "command": {
+            "description": "Shell command string for start. Use only when shell syntax is deliberately required.",
             "maxLength": 20000,
             "minLength": 1,
             "type": "string"
@@ -2981,6 +3045,12 @@
             },
             "type": "object"
           },
+          "executable": {
+            "description": "Executable to launch directly with shell:false. Preferred for persistent process startup.",
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          },
           "graceMs": {
             "maximum": 30000,
             "minimum": 0,
@@ -2993,6 +3063,7 @@
             "type": "boolean"
           },
           "input": {
+            "description": "For direct start, optional initial UTF-8 stdin written without closing the persistent stdin stream. For write, UTF-8 input sent to the running process.",
             "maxLength": 1048576,
             "type": "string"
           },
@@ -6758,5 +6829,5 @@
       "title": "Manage Worktree"
     }
   ],
-  "version": "CweNerNdbsH3HwXmXNYS95NR"
+  "version": "atvjaOKIy3dL3-ELE_yKwl5r"
 }

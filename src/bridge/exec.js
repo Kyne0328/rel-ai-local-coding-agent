@@ -52,27 +52,54 @@ function normalizeCommandEnv(value) {
   return env;
 }
 
-function normalizeDirectArgv(value) {
+function normalizeDirectArgv(value, operationName = 'relai_exec') {
   if (value == null) return [];
-  if (!Array.isArray(value)) throw new Error('relai_exec argv must be an array of strings.');
-  if (value.length > MAX_DIRECT_ARGV_ITEMS) throw new Error('relai_exec argv supports at most 100 items.');
+  if (!Array.isArray(value)) throw new Error(`${operationName} argv must be an array of strings.`);
+  if (value.length > MAX_DIRECT_ARGV_ITEMS) throw new Error(`${operationName} argv supports at most 100 items.`);
   return value.map((item, index) => {
-    if (typeof item !== 'string') throw new Error(`relai_exec argv[${index}] must be a string.`);
-    if (item.length > MAX_DIRECT_ARG_LENGTH) throw new Error(`relai_exec argv[${index}] must be 20000 characters or fewer.`);
-    if (item.includes('\0')) throw new Error(`relai_exec argv[${index}] contains a null byte.`);
+    if (typeof item !== 'string') throw new Error(`${operationName} argv[${index}] must be a string.`);
+    if (item.length > MAX_DIRECT_ARG_LENGTH) throw new Error(`${operationName} argv[${index}] must be 20000 characters or fewer.`);
+    if (item.includes('\0')) throw new Error(`${operationName} argv[${index}] contains a null byte.`);
     return item;
   });
 }
 
-function normalizeDirectInput(value) {
+function normalizeDirectInput(value, operationName = 'relai_exec') {
   if (value == null) return undefined;
-  if (typeof value !== 'string') throw new Error('relai_exec input must be a string.');
-  if (value.length > MAX_DIRECT_INPUT_LENGTH) throw new Error('relai_exec input must be 1048576 characters or fewer.');
+  if (typeof value !== 'string') throw new Error(`${operationName} input must be a string.`);
+  if (value.length > MAX_DIRECT_INPUT_LENGTH) throw new Error(`${operationName} input must be 1048576 characters or fewer.`);
   return value;
 }
 
 function directCommandSummary(executable, argv) {
   return [executable, ...argv].map(value => JSON.stringify(String(value))).join(' ');
+}
+
+function normalizeExecutionInvocation(args = {}, operationName = 'relai_exec') {
+  const command = typeof args.command === 'string' ? args.command.trim() : '';
+  const executable = typeof args.executable === 'string' ? args.executable.trim() : '';
+  if (Boolean(command) === Boolean(executable)) {
+    throw new Error(`${operationName} requires exactly one execution mode: command or executable.`);
+  }
+  if (command.length > 20000) throw new Error(`${operationName} command must be 20000 characters or fewer.`);
+  if (executable.length > 1000) throw new Error(`${operationName} executable must be 1000 characters or fewer.`);
+  if (executable.includes('\0')) throw new Error(`${operationName} executable contains a null byte.`);
+  if (command && (args.argv !== undefined || args.input !== undefined)) {
+    throw new Error(`${operationName} argv and input are available only with executable direct mode.`);
+  }
+  const argv = executable ? normalizeDirectArgv(args.argv, operationName) : [];
+  const input = executable ? normalizeDirectInput(args.input, operationName) : undefined;
+  const displayCommand = command || directCommandSummary(executable, argv);
+  let processExecutable = executable;
+  let processArgv = argv;
+  let executionLabel = 'Direct process';
+  if (command) {
+    const selectedShell = resolveShell();
+    processExecutable = selectedShell.executable;
+    processArgv = selectedShell.args(command);
+    executionLabel = selectedShell.label;
+  }
+  return { command, executable, argv, input, displayCommand, processExecutable, processArgv, executionLabel };
 }
 
 function locateWindowsExecutable(name) {
@@ -176,33 +203,19 @@ function changedStatusFiles(before, after) {
 }
 
 async function relaiExec(workspace, config, args = {}, context = {}) {
-  const command = typeof args.command === 'string' ? args.command.trim() : '';
-  const executable = typeof args.executable === 'string' ? args.executable.trim() : '';
-  if (Boolean(command) === Boolean(executable)) {
-    throw new Error('relai_exec requires exactly one execution mode: command or executable.');
-  }
-  if (command.length > 20000) throw new Error('relai_exec command must be 20000 characters or fewer.');
-  if (executable.length > 1000) throw new Error('relai_exec executable must be 1000 characters or fewer.');
-  if (executable.includes('\0')) throw new Error('relai_exec executable contains a null byte.');
-  if (command && (args.argv !== undefined || args.input !== undefined)) {
-    throw new Error('relai_exec argv and input are available only with executable direct mode.');
-  }
-  const argv = executable ? normalizeDirectArgv(args.argv) : [];
-  const input = executable ? normalizeDirectInput(args.input) : undefined;
-  const displayCommand = command || directCommandSummary(executable, argv);
+  const {
+    command,
+    executable,
+    input,
+    displayCommand,
+    processExecutable,
+    processArgv,
+    executionLabel
+  } = normalizeExecutionInvocation(args, 'relai_exec');
   const cwd = resolveCommandCwd(workspace, args.cwd);
   const env = normalizeCommandEnv(args.env);
   const timeoutMs = clampNumber(args.timeoutMs, 1000, 86400000, 120000);
   const maxOutputBytes = clampNumber(args.maxOutputBytes, 1000, 16 * 1024 * 1024, config.maxOutputBytes || 2 * 1024 * 1024);
-  let processExecutable = executable;
-  let processArgv = argv;
-  let executionLabel = 'Direct process';
-  if (command) {
-    const selectedShell = resolveShell();
-    processExecutable = selectedShell.executable;
-    processArgv = selectedShell.args(command);
-    executionLabel = selectedShell.label;
-  }
   const statusBefore = await readGitStatusMap(workspace, config);
   const signal = combineAbortSignals(
     getCurrentTaskAbortSignal(),
@@ -265,6 +278,7 @@ export {
   normalizeCommandEnv,
   normalizeDirectArgv,
   normalizeDirectInput,
+  normalizeExecutionInvocation,
   resolveShell,
   redactCommandForAudit
 };

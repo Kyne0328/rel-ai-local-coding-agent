@@ -61,8 +61,8 @@ const OPERATION_DEFINITION_VALUES = [
   {
     name: "relai_process_start",
     title: "Start Managed Process",
-    description: "Start a persistent service, watcher, or interactive program with stable identity, bounded persistent logs, interactive stdin, and workspace/task attribution. One-shot tests, builds, checks, and release gates must use relai_exec or relai_validate with action 'checks' instead.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"command":{"type":"string","minLength":1,"maxLength":20000},"cwd":{"type":"string"},"env":{"type":"object","additionalProperties":{"type":"string"}},"label":{"type":"string","maxLength":120},"kind":{"type":"string","enum":["service","watcher","interactive"]},"purpose":{"type":"string","minLength":1,"maxLength":300},"reuseExisting":{"type":"boolean"},"startupWaitMs":{"type":"number","minimum":0,"maximum":30000},"maxLogBytes":{"type":"number","minimum":65536,"maximum":268435456}},"required":["workspace","command","kind","purpose"],"additionalProperties":false},
+    description: "Start a persistent service, watcher, or interactive program with stable identity, bounded persistent logs, interactive stdin, and workspace/task attribution. Prefer executable + argv (+ optional initial input) for shell-free startup; use command only when shell syntax is deliberately required. One-shot tests, builds, checks, and release gates must use relai_exec or relai_validate with action 'checks' instead.",
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"command":{"type":"string","minLength":1,"maxLength":20000},"executable":{"type":"string","minLength":1,"maxLength":1000},"argv":{"type":"array","items":{"type":"string","maxLength":20000},"maxItems":100},"input":{"type":"string","maxLength":1048576},"cwd":{"type":"string"},"env":{"type":"object","additionalProperties":{"type":"string"}},"label":{"type":"string","maxLength":120},"kind":{"type":"string","enum":["service","watcher","interactive"]},"purpose":{"type":"string","minLength":1,"maxLength":300},"reuseExisting":{"type":"boolean"},"startupWaitMs":{"type":"number","minimum":0,"maximum":30000},"maxLogBytes":{"type":"number","minimum":65536,"maximum":268435456}},"required":["workspace","kind","purpose"],"oneOf":[{"required":["command"],"not":{"anyOf":[{"required":["executable"]},{"required":["argv"]},{"required":["input"]}]}},{"required":["executable"],"not":{"required":["command"]}}],"additionalProperties":false},
     handlerName: 'processStart',
     behavior: {"audit":"exec","cache":"workspace"},
   },
@@ -467,13 +467,15 @@ const PUBLIC_DEFINITION_VALUES = [
   define({
     name: 'relai_process',
     title: 'Manage Process',
-    description: 'Manage development processes.',
+    description: 'Manage persistent development services, watchers, and interactive programs. For start, prefer executable + argv (+ optional initial input) so arguments bypass PowerShell/cmd/bash reparsing; use command only when shell syntax such as pipes, redirection, expansion, or built-ins is deliberately required. Use relai_exec or relai_validate for one-shot tests, builds, and checks.',
     inputSchema: {
       type: 'object',
       properties: {
         workspace: WORKSPACE,
         action: ACTION(['start', 'read', 'write', 'stop', 'list']),
-        command: { type: 'string', minLength: 1, maxLength: 20000 },
+        command: { type: 'string', minLength: 1, maxLength: 20000, description: 'Shell command string for start. Use only when shell syntax is deliberately required.' },
+        executable: { type: 'string', minLength: 1, maxLength: 1000, description: 'Executable to launch directly with shell:false. Preferred for persistent process startup.' },
+        argv: { type: 'array', items: { type: 'string', maxLength: 20000 }, maxItems: 100, description: 'Literal arguments passed directly to executable without shell parsing.' },
         cwd: STRING,
         env: { type: 'object', additionalProperties: STRING },
         label: { type: 'string', maxLength: 120 },
@@ -488,7 +490,7 @@ const PUBLIC_DEFINITION_VALUES = [
         maxBytes: { type: 'number', minimum: 1000, maximum: 1048576 },
         includeMetadata: { type: 'boolean' },
         metadataRevision: { type: 'string', minLength: 1, maxLength: 100 },
-        input: { type: 'string', maxLength: 1048576 },
+        input: { type: 'string', maxLength: 1048576, description: 'For direct start, optional initial UTF-8 stdin written without closing the persistent stdin stream. For write, UTF-8 input sent to the running process.' },
         graceMs: { type: 'number', minimum: 0, maximum: 30000 },
         status: { type: 'string', enum: ['starting', 'running', 'stopping', 'exited', 'failed', 'stopped', 'orphaned'] },
         activeOnly: { type: 'boolean' },
@@ -497,11 +499,22 @@ const PUBLIC_DEFINITION_VALUES = [
       },
       required: ['action'],
       oneOf: [
-        branch('start', ['command', 'kind', 'purpose'], ['reuseExisting', 'processId', 'stdoutOffset', 'stderrOffset', 'maxBytes', 'includeMetadata', 'metadataRevision', 'input', 'graceMs', 'status', 'activeOnly', 'includeTerminal', 'limit']),
-        branch('read', ['processId'], ['command', 'cwd', 'env', 'label', 'kind', 'purpose', 'reuseExisting', 'startupWaitMs', 'maxLogBytes', 'input', 'graceMs', 'status', 'activeOnly', 'includeTerminal', 'limit']),
-        branch('write', ['processId', 'input'], ['command', 'cwd', 'env', 'label', 'kind', 'purpose', 'reuseExisting', 'startupWaitMs', 'maxLogBytes', 'stdoutOffset', 'stderrOffset', 'maxBytes', 'includeMetadata', 'metadataRevision', 'graceMs', 'status', 'activeOnly', 'includeTerminal', 'limit']),
-        branch('stop', ['processId'], ['command', 'cwd', 'env', 'label', 'kind', 'purpose', 'reuseExisting', 'startupWaitMs', 'maxLogBytes', 'stdoutOffset', 'stderrOffset', 'maxBytes', 'includeMetadata', 'metadataRevision', 'input', 'status', 'activeOnly', 'includeTerminal', 'limit']),
-        branch('list', [], ['command', 'cwd', 'env', 'label', 'kind', 'purpose', 'reuseExisting', 'startupWaitMs', 'maxLogBytes', 'processId', 'stdoutOffset', 'stderrOffset', 'maxBytes', 'includeMetadata', 'metadataRevision', 'input', 'graceMs'])
+        branch(
+          'start',
+          ['kind', 'purpose'],
+          ['processId', 'stdoutOffset', 'stderrOffset', 'maxBytes', 'includeMetadata', 'metadataRevision', 'graceMs', 'status', 'activeOnly', 'includeTerminal', 'limit'],
+          {},
+          {
+            oneOf: [
+              { required: ['command'], not: { anyOf: [{ required: ['executable'] }, { required: ['argv'] }, { required: ['input'] }] } },
+              { required: ['executable'], not: { required: ['command'] } }
+            ]
+          }
+        ),
+        branch('read', ['processId'], ['command', 'executable', 'argv', 'cwd', 'env', 'label', 'kind', 'purpose', 'reuseExisting', 'startupWaitMs', 'maxLogBytes', 'input', 'graceMs', 'status', 'activeOnly', 'includeTerminal', 'limit']),
+        branch('write', ['processId', 'input'], ['command', 'executable', 'argv', 'cwd', 'env', 'label', 'kind', 'purpose', 'reuseExisting', 'startupWaitMs', 'maxLogBytes', 'stdoutOffset', 'stderrOffset', 'maxBytes', 'includeMetadata', 'metadataRevision', 'graceMs', 'status', 'activeOnly', 'includeTerminal', 'limit']),
+        branch('stop', ['processId'], ['command', 'executable', 'argv', 'cwd', 'env', 'label', 'kind', 'purpose', 'reuseExisting', 'startupWaitMs', 'maxLogBytes', 'stdoutOffset', 'stderrOffset', 'maxBytes', 'includeMetadata', 'metadataRevision', 'input', 'status', 'activeOnly', 'includeTerminal', 'limit']),
+        branch('list', [], ['command', 'executable', 'argv', 'cwd', 'env', 'label', 'kind', 'purpose', 'reuseExisting', 'startupWaitMs', 'maxLogBytes', 'processId', 'stdoutOffset', 'stderrOffset', 'maxBytes', 'includeMetadata', 'metadataRevision', 'input', 'graceMs'])
       ],
       additionalProperties: false
     },

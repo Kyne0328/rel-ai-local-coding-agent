@@ -4,9 +4,7 @@ import * as path from 'node:path';
 import { spawn } from 'node:child_process';
 import { combineAbortSignals } from './abortSignals.js';
 import { readJsonFile, writeJsonAtomic } from './durableState.js';
-import { resolveCommandCwd, normalizeCommandEnv, resolveShell, redactCommandForAudit } from './bridge/exec.js';
-import { acknowledgeNativeTaskCancellation } from './mcp/nativeTaskService.js';
-import { nativeToolTaskSignal } from './mcp/nativeToolTasks.js';
+import { normalizeExecutionInvocation, resolveCommandCwd, normalizeCommandEnv, redactCommandForAudit } from './bridge/exec.js';
 import { isProcessTreeAlive, terminateProcessTree } from './process.js';
 import { makeProcessEnvironment } from './processEnvironment.js';
 import { getStateDir } from './statePaths.js';
@@ -41,9 +39,7 @@ function validateProcessId(processId) {
 }
 
 async function startManagedProcess(workspace, config, args = {}, context = {}) {
-  const command = String(args.command || '').trim();
-  if (!command) throw new Error('relai_process_start requires command.');
-  if (command.length > 20000) throw new Error('relai_process_start command must be 20000 characters or fewer.');
+  const invocation = normalizeExecutionInvocation(args, 'relai_process start');
   const kind = String(args.kind || '').trim().toLowerCase();
   if (!['service', 'watcher', 'interactive'].includes(kind)) {
     throw new Error('relai_process_start requires kind: service, watcher, or interactive. Use relai_exec or relai_validate with action "checks" for one-shot commands.');
@@ -53,16 +49,16 @@ async function startManagedProcess(workspace, config, args = {}, context = {}) {
   if (purpose.length > 300) throw new Error('relai_process_start purpose must be 300 characters or fewer.');
   const cwd = resolveCommandCwd(workspace, args.cwd);
   const env = normalizeCommandEnv(args.env);
-  const shell = resolveShell();
   const workSessionId = String(context.taskId || args.work_id || '').trim();
-  const originatingTaskId = String(args._operationTaskId || context.nativeTaskId || '').trim();
   const principalKey = principalKeyForContext(context);
   const environmentKeys = Object.keys(env).sort();
   const reuseFingerprint = managedProcessReuseFingerprint({
     workspaceId: workspace.alias,
     workSessionId,
     principalKey,
-    command,
+    executionMode: invocation.command ? 'shell' : 'direct',
+    command: invocation.displayCommand,
+    input: invocation.input || '',
     cwd: cwd.relativePath,
     kind,
     purpose,
@@ -94,16 +90,15 @@ async function startManagedProcess(workspace, config, args = {}, context = {}) {
     processId,
     workspaceId: workspace.alias,
     workspacePath: workspace.path,
-    originatingTaskId,
     workSessionId,
     principalKey,
     reuseFingerprint,
     lifecycle: 'persistent',
     kind,
     purpose,
-    command,
-    commandSummary: redactCommandForAudit(command),
-    label: String(args.label || '').trim().slice(0, 120) || redactCommandForAudit(command),
+    command: invocation.displayCommand,
+    commandSummary: redactCommandForAudit(invocation.displayCommand),
+    label: String(args.label || '').trim().slice(0, 120) || redactCommandForAudit(invocation.displayCommand),
     cwd: cwd.relativePath,
     status: 'starting',
     startedAt: new Date().toISOString(),
@@ -137,18 +132,18 @@ async function startManagedProcess(workspace, config, args = {}, context = {}) {
     'relai.process.id': processId,
     'relai.workspace': workspace.alias,
     'relai.process.command': record.commandSummary,
-    'relai.task.id': workSessionId,
-    'relai.native_task.id': originatingTaskId
+    'relai.task.id': workSessionId
   }, async () => {
     const childEnvironment = makeProcessEnvironment(env, { allow: config.processEnvironment?.allow });
     Object.assign(childEnvironment, traceContextEnvironment());
     let child;
     try {
-      child = spawn(shell.executable, shell.args(command), {
+      child = spawn(invocation.processExecutable, invocation.processArgv, {
         cwd: cwd.absolutePath,
         env: childEnvironment,
         detached: process.platform !== 'win32',
         windowsHide: true,
+        shell: false,
         stdio: ['pipe', 'pipe', 'pipe']
       });
     } catch (error) {
@@ -161,8 +156,7 @@ async function startManagedProcess(workspace, config, args = {}, context = {}) {
     processes.set(processId, record);
     const startupSignal = combineAbortSignals(
       context.signal,
-      getCurrentTaskAbortSignal(),
-      originatingTaskId ? safeNativeToolTaskSignal(originatingTaskId) : undefined
+      getCurrentTaskAbortSignal()
     );
     const initialState = observeInitialProcessState(child, startupSignal);
 
@@ -201,7 +195,6 @@ async function startManagedProcess(workspace, config, args = {}, context = {}) {
     const initial = await initialState;
     if (initial.type === 'aborted') {
       const stopped = await stopRecordInternal(config, record, { graceMs: DEFAULT_STOP_GRACE_MS });
-      acknowledgeStartupTaskCancellation(config, originatingTaskId, stopped);
       throw cancellationError('Managed process startup was cancelled before readiness was established.');
     }
     if (initial.type === 'error') {
@@ -213,11 +206,19 @@ async function startManagedProcess(workspace, config, args = {}, context = {}) {
       throw new Error(`Managed process exited during startup with code ${initial.code ?? -1}.`);
     }
 
+    if (invocation.input !== undefined) {
+      try {
+        await writeInitialProcessInput(record, invocation.input);
+      } catch (error) {
+        await cleanupFailedStartup(config, record);
+        throw new Error(`Could not send initial managed process input: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+      }
+    }
+
     const startupWaitMs = clampNumber(args.startupWaitMs, 0, 30000, DEFAULT_STARTUP_WAIT_MS);
     const startupResult = await waitDuringStartup(record, startupWaitMs, startupSignal);
     if (startupResult === 'aborted') {
       const stopped = await stopRecordInternal(config, record, { graceMs: DEFAULT_STOP_GRACE_MS });
-      acknowledgeStartupTaskCancellation(config, originatingTaskId, stopped);
       throw cancellationError('Managed process startup was cancelled.');
     }
     if (startupResult === 'closed') {
@@ -286,6 +287,19 @@ function waitDuringStartup(record, waitMs, signal) {
       signal?.removeEventListener?.('abort', onAbort);
       resolve(result);
     }
+  });
+}
+
+function writeInitialProcessInput(record, input) {
+  const stream = record.child?.stdin;
+  if (!stream || stream.destroyed || !['starting', 'running'].includes(record.status)) {
+    throw new Error(`Process ${record.processId} does not have writable stdin.`);
+  }
+  return new Promise((resolve, reject) => {
+    stream.write(input, error => {
+      if (error) reject(error);
+      else resolve();
+    });
   });
 }
 
@@ -486,12 +500,14 @@ function workSessionWorkspace(config, taskId) {
   return String(readTaskHistorySession(config, id)?.workspace || '').trim();
 }
 
-function managedProcessReuseFingerprint({ workspaceId = '', workSessionId = '', principalKey = '', command = '', cwd = '.', kind = '', purpose = '', environmentKeys = [] } = {}) {
+function managedProcessReuseFingerprint({ workspaceId = '', workSessionId = '', principalKey = '', executionMode = '', command = '', input = '', cwd = '.', kind = '', purpose = '', environmentKeys = [] } = {}) {
   return crypto.createHash('sha256').update(JSON.stringify([
     normalizeWorkspaceReference(workspaceId),
     String(workSessionId || '').trim(),
     String(principalKey || '').trim(),
+    String(executionMode || '').trim(),
     String(command || '').trim(),
+    String(input || ''),
     String(cwd || '.').trim().replaceAll('\\', '/'),
     String(kind || '').trim().toLowerCase(),
     String(purpose || '').trim(),
@@ -898,24 +914,6 @@ function processNeedsTermination(record) {
   return TERMINAL_STATUSES.has(record.status)
     && record.runtimeId === RUNTIME_ID
     && isProcessTreeAlive(record.pid);
-}
-
-function safeNativeToolTaskSignal(taskId) {
-  try { return nativeToolTaskSignal(taskId); } catch { return undefined; }
-}
-
-function acknowledgeStartupTaskCancellation(config, taskId, processResult) {
-  if (!taskId || !TERMINAL_STATUSES.has(processResult?.status)) return false;
-  try {
-    acknowledgeNativeTaskCancellation(config, taskId, {
-      executionStopped: true,
-      statusMessage: 'Managed process startup cancelled after process termination was confirmed.'
-    });
-    return true;
-  } catch (error) {
-    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] acknowledge startup task cancellation:', error);
-    return false;
-  }
 }
 
 function cancellationError(message) {
