@@ -20,6 +20,7 @@ import { getToolNames, isToolCallable } from './schema.js';
 import { applyCautionAudit, buildExtraAudit, invalidateSessionCacheForCall } from './session.js';
 import { assertKnownTask, taskAuditContext, withTaskIdentity } from './task.js';
 import { deterministicActionId } from '../workflow/contracts.js';
+import { recordLocalToolOutcome } from '../localAnalytics.js';
 import { buildWorkflowEvidenceReceipt } from '../workflow/evidence.js';
 import { buildWorkflowSnapshot } from '../workflow/runtime.js';
 
@@ -222,6 +223,12 @@ async function callTool(name, args = {}, context = {}) {
     }
     throw enhanced;
   } finally {
+    recordLocalToolOutcome(config, {
+      tool: name,
+      workspace: workspaceResolution?.alias || knownTask?.workspace || '',
+      ok: activityResult.ok === true,
+      durationMs: Date.now() - started
+    });
     finishActivity?.(activityResult);
   }
 }

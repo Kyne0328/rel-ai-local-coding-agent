@@ -37,7 +37,8 @@ const snapshot = {
 };
 const desktop = {
   getGatewayStatus: async () => ({ connectionMode: 'cloud', gateway: { state: 'connected', principalPaired: true } }),
-  getGatewayUsage: async () => snapshot
+  getGatewayUsage: async () => snapshot,
+  getLocalUsage: async () => { throw new Error('cloud hydration must not read local analytics'); }
 };
 assert.equal(await hydrateWorkspaceAnalytics(root, ['repo'], { desktop, now: new Date('2026-08-08T12:00:00.000Z') }), true);
 assert.equal(target.hidden, false);
@@ -45,12 +46,17 @@ assert.match(target.innerHTML, />1</);
 assert.match(target.innerHTML, /100\.0%/);
 assert.match(target.innerHTML, /50 ms/);
 
-const unavailableTarget = { innerHTML: '', hidden: true };
-const unavailableRoot = { isConnected: true, querySelector: () => unavailableTarget };
-assert.equal(await hydrateWorkspaceAnalytics(unavailableRoot, ['repo'], {
-  desktop: { getGatewayStatus: async () => ({ connectionMode: 'direct' }), getGatewayUsage: async () => { throw new Error('must not run'); } },
+const localTarget = { innerHTML: '', hidden: true };
+const localRoot = { isConnected: true, querySelector: () => localTarget };
+assert.equal(await hydrateWorkspaceAnalytics(localRoot, ['repo'], {
+  desktop: {
+    getGatewayStatus: async () => ({ connectionMode: 'direct' }),
+    getGatewayUsage: async () => { throw new Error('direct hydration must not read Cloud analytics'); },
+    getLocalUsage: async () => ({ ...snapshot, source: 'local', totals: { ...snapshot.totals, requestBytes: 0, resultBytes: 0 } })
+  },
   now: new Date('2026-08-08T12:00:00.000Z')
-}), false);
-assert.equal(unavailableTarget.hidden, true);
+}), true);
+assert.equal(localTarget.hidden, false);
+assert.match(localTarget.innerHTML, /Local analytics/);
 
 console.log('Workspace mini analytics hydration passed.');

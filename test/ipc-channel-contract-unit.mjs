@@ -32,6 +32,7 @@ const inventory = {
   'desktop:gateway:mode-set': spec('handle', ['dashboard'], 'reject', 'delegated'),
   'desktop:gateway:recovery-get': spec('handle', ['dashboard'], 'reject', 'explicit-secret-read'),
   'desktop:gateway:usage': spec('handle', ['dashboard'], 'reject', 'delegated'),
+  'desktop:analytics:local': spec('handle', ['dashboard'], 'reject', 'delegated'),
   'desktop:approval-token:replace': spec('handle', ['dashboard'], 'reject', 'delegated'),
   'desktop:update:get': spec('handle', ['dashboard'], 'reject', 'none'),
   'desktop:update:check': spec('handle', ['dashboard'], 'reject', 'none'),
@@ -98,6 +99,7 @@ registerIpcHandlers({
   setGatewayMode: value => ({ ok: true, value }),
   getGatewayRecovery: () => ({ ok: true, recoveryCode: 'recovery-code' }),
   getGatewayUsage: value => ({ ok: true, month: value }),
+  getLocalUsage: value => ({ ok: true, month: value, source: 'local' }),
   replaceApprovalToken: value => ({ ok: true, value }),
   getUpdateStatus: () => ({ state: 'idle' }),
   checkForUpdates: () => ({ ok: true }),
@@ -149,7 +151,8 @@ function argsFor(channel) {
     case 'desktop:gateway:pair': return [{ action: 'begin' }];
     case 'desktop:gateway:device-revoke': return [{ deviceId: '11111111-1111-4111-8111-111111111111' }];
     case 'desktop:gateway:mode-set': return [{ mode: 'cloud' }];
-    case 'desktop:gateway:usage': return ['2026-08'];
+    case 'desktop:gateway:usage':
+    case 'desktop:analytics:local': return ['2026-08'];
     case 'desktop:approval-token:replace': return [{ reason: 'rotate' }];
     case 'desktop:startup:set':
     case 'desktop:notifications:set':

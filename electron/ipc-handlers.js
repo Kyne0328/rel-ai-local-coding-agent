@@ -64,7 +64,8 @@ function registerIpcHandlers(deps) {
     revokeGatewayDevice: deps.revokeGatewayDevice,
     setGatewayMode: deps.setGatewayMode,
     getGatewayRecovery: deps.getGatewayRecovery,
-    getGatewayUsage: deps.getGatewayUsage
+    getGatewayUsage: deps.getGatewayUsage,
+    getLocalUsage: deps.getLocalUsage
   });
   registerDesktopSettingsIpc({
     ipcMain: deps.ipcMain,
@@ -224,7 +225,8 @@ function registerGatewayIpc({
   revokeGatewayDevice,
   setGatewayMode,
   getGatewayRecovery,
-  getGatewayUsage
+  getGatewayUsage,
+  getLocalUsage
 }) {
   ipcMain.handle('desktop:gateway:get', event => dashboardOnly(event, getGatewayStatus));
   ipcMain.handle('desktop:gateway:pair', event => dashboardOnly(event, beginGatewayPairing));
@@ -245,6 +247,11 @@ function registerGatewayIpc({
     const value = String(month || '').trim();
     if (value && !/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) throw new Error('Usage month must use YYYY-MM.');
     return getGatewayUsage(value);
+  }));
+  ipcMain.handle('desktop:analytics:local', (event, month) => dashboardOnly(event, () => {
+    const value = String(month || '').trim();
+    if (value && !/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) throw new Error('Usage month must use YYYY-MM.');
+    return getLocalUsage(value);
   }));
 }
 

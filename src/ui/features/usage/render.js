@@ -2,9 +2,14 @@ import { routeHref } from '../../router.js';
 import { deltaFor } from './range-model.js';
 
 export function renderUsage(content, { bounds, current, previous, allCurrent }) {
+  const local = current.source === 'local';
   const scopeCopy = current.kind === 'workspace'
-    ? `Showing exact tool activity attributed to ${current.label}${current.deviceId ? ' on the selected device' : ''}. Transport byte totals remain principal-wide and are not mixed into workspace cards.`
-    : 'Counts and byte totals are recorded by the Rel.AI gateway from authenticated MCP traffic. They do not represent ChatGPT model-token usage or billing.';
+    ? (local
+      ? `Showing device-local aggregate tool activity attributed to ${current.label}. No repository paths or tool result bodies are stored in analytics.`
+      : `Showing exact tool activity attributed to ${current.label}${current.deviceId ? ' on the selected device' : ''}. Transport byte totals remain principal-wide and are not mixed into workspace cards.`)
+    : (local
+      ? 'This view uses privacy-safe aggregates recorded on this device. Prompts, repository contents, paths, command output, and tool result bodies are not stored in analytics.'
+      : 'Counts and byte totals are recorded by the Rel.AI gateway from authenticated MCP traffic. They do not represent ChatGPT model-token usage or billing.');
   const fallback = current.usedMonthlyFallback && current.points.every(point => point.toolCalls === 0 && point.requests === 0)
     ? '<p class="usage-series-note">This month includes legacy monthly totals recorded before hourly trends were available. Trend lines begin with newly bucketed activity.</p>' : '';
   content.innerHTML = `
@@ -26,6 +31,14 @@ function analyticsMetrics(scope, previous) {
   const values = key => scope.points.map(point => pointMetric(point, key));
   const compare = (key, options = {}) => scope.usedMonthlyFallback ? null : deltaFor(scope, previous, key, options);
   const metric = (label, key, value, detail, options = {}) => ({ label, value, detail, delta: compare(key, options), values: values(options.sparkKey || key), tone: options.metricTone || '' });
+  if (scope.kind !== 'workspace' && scope.source === 'local') return [
+    metric('Tool calls', 'toolCalls', integer(scope.toolCalls), 'Completed local invocations', { neutral: true }),
+    metric('Successful', 'successes', integer(scope.successes), 'Completed successfully'),
+    metric('Success rate', 'successRate', percent(scope.successRate), `${integer(scope.completed)} completed outcomes`, { rate: true, sparkKey: 'successRate' }),
+    metric('Failed', 'failures', integer(scope.failures), scope.failures ? 'Needs attention' : 'No recorded failures', { inverse: true, metricTone: scope.failures ? 'bad' : 'good' }),
+    metric('Avg tool time', 'averageDuration', duration(scope.averageDuration), scope.completed ? 'Per completed tool call' : 'No completed outcomes', { inverse: true, sparkKey: 'averageDuration' }),
+    metric('Active days', 'activeDays', integer(scope.activeDays), 'UTC days with local activity', { neutral: true, sparkKey: 'toolCalls' })
+  ];
   if (scope.kind === 'workspace') return [
     metric('Tool calls', 'toolCalls', integer(scope.toolCalls), 'Exact invocations', { neutral: true }),
     metric('Successful', 'successes', integer(scope.successes), 'Completed successfully'),
@@ -85,7 +98,8 @@ function pointMetric(point,key) {
 }
 
 function transportFacts(scope, all) {
-  if(scope.kind==='workspace') return `<div class="usage-fact-strip">${fact('Workspace share',percent(all.toolCalls?scope.toolCalls/all.toolCalls*100:0),'of observed tool calls')}${fact('Completed outcomes',integer(scope.completed),'successes + failures')}${fact('Scope',scope.deviceId?'Workspace + device':'Workspace alias','no local path data')}</div>`;
+  if(scope.kind==='workspace') return `<div class="usage-fact-strip">${fact('Workspace share',percent(all.toolCalls?scope.toolCalls/all.toolCalls*100:0),'of observed tool calls')}${fact('Completed outcomes',integer(scope.completed),'successes + failures')}${fact('Source',scope.source==='local'?'This device':'Rel.AI Cloud',scope.source==='local'?'aggregate-only local data':'principal-wide Cloud data')}</div>`;
+  if(scope.source==='local') return `<div class="usage-fact-strip">${fact('Storage','Local aggregate','no prompts, paths, or result bodies')}${fact('Completed outcomes',integer(scope.completed),'duration denominator')}${fact('Scope','This device','Cloud transport bytes kept separate')}</div>`;
   return `<div class="usage-fact-strip">${fact('Data sent',bytes(scope.requestBytes),'authenticated MCP payload bytes')}${fact('Data returned',bytes(scope.resultBytes),'gateway response bytes')}${fact('Completed outcomes',integer(scope.completed),'duration denominator')}</div>`;
 }
 function fact(label,value,detail){return `<div><span>${esc(label)}</span><strong>${esc(value)}</strong><small>${esc(detail)}</small></div>`;}
