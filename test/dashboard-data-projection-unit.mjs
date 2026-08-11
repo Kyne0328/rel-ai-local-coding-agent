@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { mergeDashboardActivity } from '../src/http/dashboardData.js';
+import { mergeDashboardActivity, summarizeDashboardTask } from '../src/http/dashboardData.js';
 
 const merged = mergeDashboardActivity({
   entries: [
@@ -55,5 +55,14 @@ assert.equal(merged.entries[1].status, 'failed');
 assert.equal(merged.entries[1].workspace, 'repo');
 assert.equal(merged.entries[1].taskId, 'work-1');
 assert.equal(merged.entries[1].message, 'Validation failed.');
+
+const taskSummary = summarizeDashboardTask({
+  id: 'work-summary',
+  workspace: 'repo',
+  status: 'running',
+  events: [{ tool: 'relai_read', status: 'completed' }]
+});
+assert.equal(taskSummary.id, 'work-summary');
+assert.equal(Object.hasOwn(taskSummary, 'events'), false, 'dashboard task summaries must not carry retained event histories');
 
 console.log('Dashboard activity identity, timestamp, ordering, and safe projection passed.');

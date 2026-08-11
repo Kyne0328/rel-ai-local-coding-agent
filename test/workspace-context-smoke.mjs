@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process';
 
 import { normalizeConfig, makeDefaultContextConfig } from "../src/config.js";
 import { updateWorkspace } from "../src/configEditor.js";
-import { collectTextFiles } from "../src/safety.js";
+import { collectTextFiles, createCollectionPathFilter } from "../src/safety.js";
 import { repoSnapshot, relaiRead } from "../src/localRepoBridge.js";
 import { relaiSearch } from "../src/bridge/search.js";
 
@@ -26,6 +26,11 @@ fs.writeFileSync(path.join(repo, 'node_modules', 'noise.js'), `noise\n`);
 fs.writeFileSync(path.join(repo, '.relaiignore'), `tmp-cache/\n`);
 fs.mkdirSync(path.join(repo, 'tmp-cache'), { recursive: true });
 fs.writeFileSync(path.join(repo, 'tmp-cache', 'ignored.txt'), `ignored\n`);
+const shouldCollect = createCollectionPathFilter(repo, { excludePaths: ['.dart_tool'] });
+assert.equal(shouldCollect('src/app.js'), true);
+assert.equal(shouldCollect('node_modules/noise.js'), false);
+assert.equal(shouldCollect('.dart_tool/noise.txt'), false);
+assert.equal(shouldCollect('tmp-cache/ignored.txt'), false, 'watcher filtering must honor .relaiignore through the shared collection policy');
 execFileSync('git', ['init'], { cwd: repo, stdio: 'ignore' });
 
 assert.equal(makeDefaultContextConfig().snapshotMaxFiles, 3000);

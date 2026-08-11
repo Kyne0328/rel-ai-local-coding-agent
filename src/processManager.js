@@ -20,6 +20,8 @@ const DEFAULT_STARTUP_WAIT_MS = 750;
 const DEFAULT_STOP_GRACE_MS = 3000;
 const DEFAULT_FORCE_WAIT_MS = 2000;
 const METADATA_FLUSH_DELAY_MS = 50;
+const LOG_FLUSH_DELAY_MS = 10;
+const LOG_FLUSH_MAX_BYTES = 64 * 1024;
 const ACTIVE_STATUSES = new Set(['starting', 'running', 'stopping']);
 const TERMINAL_STATUSES = new Set(['exited', 'failed', 'stopped']);
 const processes = new Map();
@@ -115,6 +117,10 @@ async function startManagedProcess(workspace, config, args = {}, context = {}) {
     child: null,
     maxLogBytes: clampNumber(args.maxLogBytes, 65536, 256 * 1024 * 1024, DEFAULT_MAX_LOG_BYTES),
     persistTimer: null,
+    logBuffers: { stdout: [], stderr: [] },
+    logBufferBytes: { stdout: 0, stderr: 0 },
+    logFlushTimers: { stdout: null, stderr: null },
+    logWritePromises: { stdout: Promise.resolve(), stderr: Promise.resolve() },
     persistenceFailureHandled: false,
     discarded: false
   };
@@ -306,33 +312,81 @@ function writeInitialProcessInput(record, input) {
 function appendLog(config, record, stream, chunk) {
   if (record.discarded || record.persistenceFailureHandled) return;
   const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
-  const file = stream === 'stdout' ? record.stdoutPath : record.stderrPath;
-  try {
-    fs.appendFileSync(file, buffer);
-    record[`${stream}Bytes`] += buffer.length;
-    trimLog(record, stream);
-    scheduleMetadataPersist(config, record);
-  } catch (error) {
-    handlePersistenceFailure(config, record, error);
+  record.logBuffers[stream].push(buffer);
+  record.logBufferBytes[stream] += buffer.length;
+  if (record.logBufferBytes[stream] >= LOG_FLUSH_MAX_BYTES) {
+    flushLogBuffer(config, record, stream);
+    return;
   }
+  scheduleLogFlush(config, record, stream);
 }
 
-function trimLog(record, stream) {
+function scheduleLogFlush(config, record, stream) {
+  if (record.logFlushTimers[stream] || record.discarded || record.persistenceFailureHandled) return;
+  record.logFlushTimers[stream] = setTimeout(() => {
+    record.logFlushTimers[stream] = null;
+    flushLogBuffer(config, record, stream);
+  }, LOG_FLUSH_DELAY_MS);
+  record.logFlushTimers[stream].unref?.();
+}
+
+function flushLogBuffer(config, record, stream) {
+  clearScheduledLogFlush(record, stream);
+  const chunks = record.logBuffers[stream];
+  if (!chunks.length) return record.logWritePromises[stream];
+  const buffer = chunks.length === 1 ? chunks[0] : Buffer.concat(chunks, record.logBufferBytes[stream]);
+  record.logBuffers[stream] = [];
+  record.logBufferBytes[stream] = 0;
+  const file = stream === 'stdout' ? record.stdoutPath : record.stderrPath;
+  const totalKey = `${stream}Bytes`;
+  record.logWritePromises[stream] = record.logWritePromises[stream]
+    .then(async () => {
+      if (record.discarded) return;
+      await fs.promises.appendFile(file, buffer);
+      record[totalKey] += buffer.length;
+      await trimLog(record, stream);
+      scheduleMetadataPersist(config, record);
+    })
+    .catch(error => {
+      handlePersistenceFailure(config, record, error);
+    });
+  return record.logWritePromises[stream];
+}
+
+async function trimLog(record, stream) {
   const file = stream === 'stdout' ? record.stdoutPath : record.stderrPath;
   const totalKey = `${stream}Bytes`;
   const startKey = `${stream}StartOffset`;
-  const stat = fs.statSync(file);
+  const stat = await fs.promises.stat(file);
   if (stat.size <= record.maxLogBytes) return;
   const keep = Math.max(1, Math.floor(record.maxLogBytes * 0.75));
-  const fd = fs.openSync(file, 'r');
+  const buffer = Buffer.allocUnsafe(keep);
+  const handle = await fs.promises.open(file, 'r');
   try {
-    const buffer = Buffer.allocUnsafe(keep);
-    fs.readSync(fd, buffer, 0, keep, stat.size - keep);
-    fs.writeFileSync(file, buffer, { mode: 0o600 });
-    record[startKey] = Math.max(0, Number(record[totalKey] || 0) - keep);
+    await handle.read(buffer, 0, keep, stat.size - keep);
   } finally {
-    fs.closeSync(fd);
+    await handle.close();
   }
+  await fs.promises.writeFile(file, buffer, { mode: 0o600 });
+  record[startKey] = Math.max(0, Number(record[totalKey] || 0) - keep);
+}
+
+function clearScheduledLogFlush(record, stream) {
+  const timer = record.logFlushTimers?.[stream];
+  if (!timer) return;
+  clearTimeout(timer);
+  record.logFlushTimers[stream] = null;
+}
+
+function clearScheduledLogFlushes(record) {
+  clearScheduledLogFlush(record, 'stdout');
+  clearScheduledLogFlush(record, 'stderr');
+}
+
+async function drainLogWrites(config, record) {
+  flushLogBuffer(config, record, 'stdout');
+  flushLogBuffer(config, record, 'stderr');
+  await Promise.all([record.logWritePromises.stdout, record.logWritePromises.stderr]);
 }
 
 function readManagedProcess(config, args = {}, context = {}) {
@@ -396,6 +450,7 @@ async function stopRecordInternal(config, record, options = {}) {
         signal: record.signal || 'unobserved'
       });
     }
+    await drainLogWrites(config, record);
     return processSnapshot(record);
   }
 
@@ -417,6 +472,7 @@ async function stopRecordInternal(config, record, options = {}) {
       signal: outcome.forced ? 'SIGKILL' : 'SIGTERM'
     });
   }
+  await drainLogWrites(config, record);
   return processSnapshot(record);
 }
 
@@ -612,7 +668,9 @@ function finishRecord(config, record, fields) {
   clearScheduledPersist(record);
   Object.assign(record, fields, { endedAt: new Date().toISOString() });
   record.child = null;
-  if (!record.discarded) safePersistMetadata(config, record);
+  if (!record.discarded) {
+    void drainLogWrites(config, record).then(() => safePersistMetadata(config, record));
+  }
 }
 
 function requireProcess(config, processId) {
@@ -696,6 +754,7 @@ function handlePersistenceFailure(config, record, error) {
   if (record.persistenceFailureHandled) return;
   record.persistenceFailureHandled = true;
   clearScheduledPersist(record);
+  clearScheduledLogFlushes(record);
   record.error = `Managed process persistence failed: ${error instanceof Error ? error.message : String(error)}`;
   const target = record.child || record.pid;
   void terminateProcessTree(target, { graceMs: 0, forceWaitMs: DEFAULT_FORCE_WAIT_MS })
@@ -758,6 +817,10 @@ function readMetadata(config, processId) {
       child: null,
       maxLogBytes: clampNumber(metadata.maxLogBytes, 65536, 256 * 1024 * 1024, DEFAULT_MAX_LOG_BYTES),
       persistTimer: null,
+      logBuffers: { stdout: [], stderr: [] },
+      logBufferBytes: { stdout: 0, stderr: 0 },
+      logFlushTimers: { stdout: null, stderr: null },
+      logWritePromises: { stdout: Promise.resolve(), stderr: Promise.resolve() },
       persistenceFailureHandled: false,
       discarded: false
     };
@@ -895,7 +958,10 @@ function pruneManagedProcesses(config) {
 
 async function cleanupFailedStartup(config, record) {
   const target = record.child || record.pid;
-  if (!target) return { exited: true, forced: false };
+  if (!target) {
+    await drainLogWrites(config, record);
+    return { exited: true, forced: false };
+  }
   const outcome = await terminateProcessTree(target, {
     graceMs: 0,
     forceWaitMs: DEFAULT_FORCE_WAIT_MS
@@ -905,6 +971,7 @@ async function cleanupFailedStartup(config, record) {
     record.error = 'Managed process startup failed and descendant termination could not be confirmed.';
     safePersistMetadata(config, record);
   }
+  await drainLogWrites(config, record);
   return outcome;
 }
 

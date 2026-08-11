@@ -7,7 +7,7 @@ import { clearSessionPolicy } from '../policyResolver.js';
 import { assertRuntimeCompatibility } from '../runtimeCompatibility.js';
 import { readTaskIntegrity } from '../taskIntegrity.js';
 import { activeProcessesForWorkspace } from '../processManager.js';
-import { bindTaskHistoryActivityPersistence, readRecentWorkflowEvidence, recordWorkflowEvidence, recordWorkflowSnapshot } from '../taskHistoryStore.js';
+import { bindTaskHistoryActivityPersistence, readRecentWorkflowEvidence, recordWorkflowEvidence, recordWorkflowState } from '../taskHistoryStore.js';
 import { buildToolActivityDetails, workflowActivityMetadata } from '../taskObservability.js';
 import { beginConnectorToolCall, getToolActivity, normalizeTaskId, onToolActivity, taskError } from '../toolActivity.js';
 import { serializeConnectorResult } from './connector.js';
@@ -148,11 +148,11 @@ async function callTool(name, args = {}, context = {}) {
       ...extraAudit,
       ...(valueOk ? {} : { error: activityResult.error })
     }, { strictIntegrity: true });
-    if (workId && evidenceDraft && auditEntry) {
-      await persistWorkflowEvidence(config, effectiveArgs, operationName, resolved.action, value || {}, auditEntry, workId, evidenceDraft);
-    }
+    const workflowReceipt = workId && evidenceDraft && auditEntry
+      ? await persistWorkflowEvidence(config, effectiveArgs, operationName, resolved.action, value || {}, auditEntry, workId, evidenceDraft)
+      : null;
     const workflow = workId
-      ? await buildAndPersistWorkflow(config, effectiveArgs, operationName, value || {}, workId)
+      ? await buildAndPersistWorkflow(config, effectiveArgs, operationName, value || {}, workId, workflowReceipt)
       : null;
     if (workflow && activityResult.activity) {
       activityResult.activity.metadata = {
@@ -221,7 +221,7 @@ async function callTool(name, args = {}, context = {}) {
         errorCode: enhanced.code || undefined
       });
       if (failedWorkId && failedDraft && failedAuditEntry) {
-        await persistWorkflowEvidence(config, effectiveArgs, operationName, resolvedAction, failedValue, failedAuditEntry, failedWorkId, failedDraft);
+        await persistWorkflowEvidence(config, effectiveArgs, operationName, resolvedAction, failedValue, failedAuditEntry, failedWorkId, failedDraft, { persist: true });
       }
     }
     throw enhanced;
@@ -245,7 +245,7 @@ function analyticsErrorCodeFromValue(value) {
   return '';
 }
 
-async function persistWorkflowEvidence(config, args, operationName, action, value, auditEntry, workId, draft) {
+async function persistWorkflowEvidence(config, args, operationName, action, value, auditEntry, workId, draft, options = {}) {
   try {
     const workspace = resolveWorkspace(config, args?.workspace);
     let repositoryFingerprint = String(value?.validationFingerprint || draft?.repositoryFingerprint || '');
@@ -260,18 +260,21 @@ async function persistWorkflowEvidence(config, args, operationName, action, valu
       repositoryFingerprint,
       commandId: workflowCommandId(operationName, action, args)
     });
-    if (receipt) recordWorkflowEvidence(config, workId, receipt);
+    if (receipt && options.persist === true) recordWorkflowEvidence(config, workId, receipt);
+    return receipt;
   } catch (error) {
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] workflow evidence:', error);
+    return null;
   }
 }
 
-async function buildAndPersistWorkflow(config, args, operationName, value, workId) {
+async function buildAndPersistWorkflow(config, args, operationName, value, workId, receipt = null) {
   try {
     const workspace = resolveWorkspace(config, args?.workspace);
     const integrity = readTaskIntegrity(config, workId, workspace.alias);
     if (!integrity) return null;
     const recentEvidence = readRecentWorkflowEvidence(config, workId, 100);
+    if (receipt) recentEvidence.push(receipt);
     const processes = activeProcessesForWorkspace(config, workspace.alias).map(item => ({
       processId: item.processId,
       status: item.status,
@@ -290,7 +293,7 @@ async function buildAndPersistWorkflow(config, args, operationName, value, workI
       processes,
       operation: { kind: operationName === 'relai_run_checks' && args?.migration === true ? 'migration' : '' }
     });
-    recordWorkflowSnapshot(config, workId, workflow);
+    recordWorkflowState(config, workId, { receipt, workflow });
     return workflow;
   } catch (error) {
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] workflow snapshot:', error);

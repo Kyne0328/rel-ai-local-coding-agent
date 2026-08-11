@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Worker } from 'node:worker_threads';
 
-import { isPathInside, realRootOf } from '../../safety.js';
+import { collectOptionsFromWorkspace, createCollectionPathFilter, isPathInside, realRootOf } from '../../safety.js';
 import { repositoryIndexPath } from './database.js';
 import { DEFAULT_MAX_INDEX_FILES, MAX_INDEXED_FILE_BYTES, scanWorkspace } from './indexBuild.js';
 
@@ -313,12 +313,17 @@ function ensureWorkspaceWatcher(workspace, databaseFile, state) {
   if (state.watcher) return;
   const root = realRootOf(workspace.path);
   const indexRoot = path.dirname(databaseFile);
+  let shouldCollect = createCollectionPathFilter(root, collectOptionsFromWorkspace(workspace));
   try {
     state.watcher = fs.watch(root, { recursive: true, persistent: false }, (eventType, filename) => {
-      if (filename && shouldIgnoreWatchPath(root, indexRoot, String(filename))) return;
+      const normalized = normalizeWatchPath(filename);
+      if (normalized === '.relaiignore') {
+        shouldCollect = createCollectionPathFilter(root, collectOptionsFromWorkspace(workspace));
+      } else if (normalized && shouldIgnoreWatchPath(root, indexRoot, normalized, shouldCollect)) {
+        return;
+      }
       state.changeRevision += 1;
       state.dirty = true;
-      const normalized = normalizeWatchPath(filename);
       if (!normalized || eventType === 'rename' || normalized === '.relaiignore') {
         state.pendingPaths.clear();
         state.fullScanRequired = true;
@@ -343,10 +348,10 @@ function ensureWorkspaceWatcher(workspace, databaseFile, state) {
   }
 }
 
-function shouldIgnoreWatchPath(root, indexRoot, filename) {
+function shouldIgnoreWatchPath(root, indexRoot, filename, shouldCollect) {
   const normalized = normalizeWatchPath(filename);
   if (!normalized) return false;
-  if (/^(?:\.git|node_modules|dist|build|coverage|\.cache)(?:\/|$)/i.test(normalized)) return true;
+  if (typeof shouldCollect === 'function' && !shouldCollect(normalized)) return true;
   return isPathInside(path.resolve(root, normalized), indexRoot);
 }
 

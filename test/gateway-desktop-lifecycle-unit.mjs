@@ -184,6 +184,35 @@ try {
   const stoppedDirect = await runtime.stop();
   assert.equal(stoppedDirect.mode, 'direct');
   assert.equal(ngrokStopped, 1);
+
+  let resolvePendingDirect;
+  let pendingDirectStops = 0;
+  const pendingChild = { pid: 456 };
+  const pendingRuntime = createPublicConnectionRuntime({
+    createGatewayConnection() { throw new Error('cloud should not be created'); },
+    async prepareDirect() {},
+    async startDirect(_config, { onProcess }) {
+      onProcess(pendingChild);
+      return new Promise(resolve => {
+        resolvePendingDirect = () => resolve({ ok: true, process: pendingChild, publicUrl: 'https://pending.ngrok-free.dev' });
+      });
+    },
+    async stopDirect(child) {
+      assert.equal(child, pendingChild);
+      pendingDirectStops += 1;
+      return { exited: true, forced: false };
+    }
+  });
+  const pendingStart = pendingRuntime.start({ connectionMode: 'direct', port: 4555 });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(pendingRuntime.snapshot().directProcessOwned, true, 'direct process ownership must be registered before tunnel publication completes');
+  const pendingStop = await pendingRuntime.stop();
+  assert.equal(pendingStop.mode, 'direct');
+  assert.ok(pendingDirectStops >= 1, 'stopping during direct startup must terminate the owned tunnel process');
+  resolvePendingDirect();
+  const cancelledPendingStart = await pendingStart;
+  assert.equal(cancelledPendingStart.cancelled, true, 'late direct startup completion must not reactivate a stopped runtime');
+  assert.equal(cancelledPendingStart.process, null);
 } finally {
   if (previousStateDir === undefined) delete process.env.REL_AI_MCP_STATE_DIR;
   else process.env.REL_AI_MCP_STATE_DIR = previousStateDir;

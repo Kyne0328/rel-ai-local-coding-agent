@@ -1,3 +1,4 @@
+import { fetchJson } from '../../api.js';
 import { closeDrawer, openDrawer } from '../../components/drawer.js';
 import { copyText } from '../../clipboard.js';
 import { pillHtml } from '../../components/pill.js';
@@ -11,6 +12,7 @@ import { eventTimestampMs, eventTimestampValue, terminalTaskTimestamp, terminalT
 import { taskEntityView, workSessionStateView } from '../../task-identity.js';
 
 const SESSION_PAGE_SIZE = 50;
+const TASK_SESSION_URL = '/api/tasks/session';
 const DETAIL_FILE_PREVIEW = 12;
 const DETAIL_EVENT_PREVIEW = 8;
 const visibleCounts = new Map();
@@ -52,7 +54,7 @@ export function mountTasks(container, data = {}) {
     }
     const button = event.target.closest('[data-task-id]');
     if (!button) return;
-    openSession(_sessionsById.get(button.dataset.taskId));
+    void openSession(_sessionsById.get(button.dataset.taskId));
   });
   card.appendChild(body);
   root.appendChild(card);
@@ -109,7 +111,7 @@ function maybeOpenRequestedSession() {
   const session = _sessionsById.get(_requestedSessionId);
   if (!session) return;
   _openedRequestedSession = true;
-  openSession(session);
+  void openSession(session);
 }
 
 function sessionSummary(sessions) {
@@ -324,8 +326,9 @@ function publishLabel(session) {
   return '';
 }
 
-function openSession(session) {
+async function openSession(session) {
   if (!session) return;
+  session = await loadSessionDetail(session);
   const content = document.createElement('div');
   content.className = 'detail-stack session-detail';
   const identities = taskEntityView(session);
@@ -363,6 +366,18 @@ function openSession(session) {
   bindCopyActions(content);
   const id = sessionIdentifier(session);
   openDrawer({ title: session.title || `Work session ${id ? id.slice(0, 8) : 'unknown'}`, content, panelClass: 'session-detail-drawer' });
+}
+
+async function loadSessionDetail(session) {
+  const id = sessionIdentifier(session);
+  if (!id || Array.isArray(session.events)) return session;
+  try {
+    const response = await fetchJson(TASK_SESSION_URL + "?task=" + encodeURIComponent(id), { cache: 'no-store' });
+    return response?.ok !== false && response?.session ? response.session : session;
+  } catch (error) {
+    toast(error instanceof Error ? error.message : String(error), { variant: 'error' });
+    return session;
+  }
 }
 
 function durationDetail(session, live) {

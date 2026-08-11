@@ -17,6 +17,12 @@ const CODE_MUTATING_TOOLS = new Set([
   'relai_restore_paths',
   'relai_reset_workspace'
 ]);
+const REPOSITORY_RECONCILE_TOOLS = new Set([
+  'relai_run_checks',
+  'relai_git_commit',
+  'relai_finish_work',
+  'relai_cancel_work'
+]);
 
 class TaskIntegrityError extends Error {
   constructor(code, message, options = {}) {
@@ -125,10 +131,12 @@ function applyIntegrityEvent(authority, workspaceState, workspace, event) {
   }
   if (tool === 'relai_cancel_work' && event.ok !== false) authority.cancelledAt = timestamp;
 
-  authority.ambientChangedFiles = repositoryChangedFiles(workspace.path);
-  authority.externalChangedFiles = authority.ambientChangedFiles.filter(file =>
-    !authority.baseline.changedFiles.includes(file) && !authority.taskOwnedChangedFiles.includes(file)
-  );
+  if (mutation || REPOSITORY_RECONCILE_TOOLS.has(tool)) {
+    authority.ambientChangedFiles = repositoryChangedFiles(workspace.path);
+    authority.externalChangedFiles = authority.ambientChangedFiles.filter(file =>
+      !authority.baseline.changedFiles.includes(file) && !authority.taskOwnedChangedFiles.includes(file)
+    );
+  }
 
   return {
     taskMutationGeneration: authority.mutationGeneration,
