@@ -8,7 +8,7 @@ const rendered = renderCloudContract(manifest);
 assert.ok(rendered.endsWith('\n'), 'generated public cloud contract must end with a newline');
 const artifact = JSON.parse(rendered);
 assert.deepEqual(artifact.schemaVersion, canonicalValue(manifest).schemaVersion);
-assert.equal(artifact.schemaVersion, 6);
+assert.equal(artifact.schemaVersion, 7);
 assert.deepEqual(artifact.tools, canonicalValue(manifest).tools);
 assert.equal(artifact.hash, manifest.hash);
 assert.equal(artifact.version, manifest.version);
