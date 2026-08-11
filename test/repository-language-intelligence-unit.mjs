@@ -8,7 +8,7 @@ import { enhancedResolverLanguages, languageCapabilities, languageForPath, struc
 import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
 
 assert.equal(structuralLanguages().length, 53);
-const EXPECTED_ENHANCED = ['c', 'cpp', 'csharp', 'go', 'java', 'javascript', 'kotlin', 'php', 'python', 'rust', 'tsx', 'typescript'];
+const EXPECTED_ENHANCED = ['c', 'cpp', 'csharp', 'go', 'java', 'javascript', 'kotlin', 'php', 'python', 'ruby', 'rust', 'tsx', 'typescript'];
 assert.deepEqual(enhancedResolverLanguages().sort(), EXPECTED_ENHANCED);
 assert.equal(languageForPath('src/app.ts'), 'typescript');
 assert.equal(languageForPath('src/module.py'), 'python');
