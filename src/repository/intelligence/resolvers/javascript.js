@@ -1,5 +1,8 @@
 const PROVIDER = 'resolver-js-ts-v1';
-const CAPABILITIES = Object.freeze(['import-bindings', 're-exports', 'inheritance', 'interfaces', 'constructor-types', 'typed-member-calls']);
+const CAPABILITIES = Object.freeze([
+  'import-bindings', 're-exports', 'inheritance', 'interfaces', 'constructor-types', 'typed-member-calls',
+  'http-routes', 'http-calls', 'events'
+]);
 
 const javascriptTypeResolver = Object.freeze({
   id: PROVIDER,
@@ -8,10 +11,14 @@ const javascriptTypeResolver = Object.freeze({
     const text = String(source || '');
     const imports = parseImports(text);
     const bindings = importBindingMap(imports);
+    const symbols = facts.symbols || [];
     const relations = [
-      ...classRelations(text, facts.symbols || [], bindings),
-      ...typedUsageRelations(text, facts.symbols || [], bindings),
-      ...memberCallRelations(text, facts.symbols || [], bindings)
+      ...classRelations(text, symbols, bindings),
+      ...typedUsageRelations(text, symbols, bindings),
+      ...memberCallRelations(text, symbols, bindings),
+      ...httpRouteRelations(text, symbols),
+      ...httpCallRelations(text, symbols, bindings),
+      ...eventRelations(text, symbols)
     ];
     return { provider: PROVIDER, capabilities: CAPABILITIES, imports: imports.map(({ bindings: _bindings, ...item }) => ({ ...item, provider: PROVIDER, confidence: 0.96 })), relations: dedupe(relations) };
   }
@@ -115,6 +122,107 @@ function memberCallRelations(source, symbols, bindings) {
   return relations;
 }
 
+function httpRouteRelations(source, symbols) {
+  const relations = [];
+  const pattern = /\b([A-Za-z_$][\w$]*)\.(get|post|put|patch|delete|head|options)\s*\(\s*(['"`])([^'"`]+)\3\s*,\s*([A-Za-z_$][\w$]*)?/gi;
+  for (const match of source.matchAll(pattern)) {
+    const receiver = match[1];
+    if (!isRouteReceiver(receiver)) continue;
+    const routeKey = httpKey(match[2], match[4]);
+    if (!routeKey) continue;
+    const handlerName = match[5] || '';
+    const handler = handlerName ? symbols.find(item => item.name === handlerName && ['function', 'method'].includes(item.kind)) : null;
+    const owner = handler || nearestSymbolByOffset(source, symbols, match.index || 0);
+    relations.push({
+      type: 'HANDLES', sourceQualifiedName: owner?.qualifiedName || null, sourceName: handler?.name || null,
+      targetName: routeKey, targetQualifiedName: null, moduleSpecifier: null, provider: PROVIDER,
+      confidence: handler ? 0.98 : 0.91
+    });
+  }
+  return relations;
+}
+
+function httpCallRelations(source, symbols, bindings) {
+  const relations = [];
+  const fetchPattern = /\bfetch\s*\(\s*(['"`])([^'"`]+)\1/g;
+  for (const match of source.matchAll(fetchPattern)) {
+    const tail = source.slice((match.index || 0) + match[0].length, (match.index || 0) + match[0].length + 400);
+    const methodMatch = tail.match(/\bmethod\s*:\s*['"`](get|post|put|patch|delete|head|options)['"`]/i);
+    const routeKey = httpKey(methodMatch?.[1] || 'GET', match[2]);
+    if (!routeKey) continue;
+    const owner = nearestSymbolByOffset(source, symbols, match.index || 0);
+    relations.push(endpointRelation('HTTP_CALLS', owner, routeKey, 0.97));
+  }
+
+  const clientPattern = /\b([A-Za-z_$][\w$]*)\.(get|post|put|patch|delete|head|options)\s*\(\s*(['"`])([^'"`]+)\3/g;
+  for (const match of source.matchAll(clientPattern)) {
+    const receiver = match[1];
+    if (!isHttpClient(receiver, bindings)) continue;
+    const routeKey = httpKey(match[2], match[4]);
+    if (!routeKey) continue;
+    const owner = nearestSymbolByOffset(source, symbols, match.index || 0);
+    relations.push(endpointRelation('HTTP_CALLS', owner, routeKey, 0.96));
+  }
+  return relations;
+}
+
+function eventRelations(source, symbols) {
+  const relations = [];
+  const listenPattern = /\b([A-Za-z_$][\w$]*)\.(on|once|addEventListener)\s*\(\s*(['"`])([^'"`]+)\3\s*,\s*([A-Za-z_$][\w$]*)?/g;
+  for (const match of source.matchAll(listenPattern)) {
+    const handlerName = match[5] || '';
+    const handler = handlerName ? symbols.find(item => item.name === handlerName && ['function', 'method'].includes(item.kind)) : null;
+    const owner = handler || nearestSymbolByOffset(source, symbols, match.index || 0);
+    relations.push(endpointRelation('LISTENS_ON', owner, `event:${match[4]}`, handler ? 0.98 : 0.91, handler?.name || null));
+  }
+
+  const emitPattern = /\b([A-Za-z_$][\w$]*)\.(emit|publish|dispatch)\s*\(\s*(['"`])([^'"`]+)\3/g;
+  for (const match of source.matchAll(emitPattern)) {
+    const owner = nearestSymbolByOffset(source, symbols, match.index || 0);
+    relations.push(endpointRelation('EMITS', owner, `event:${match[4]}`, 0.96));
+  }
+  return relations;
+}
+
+function endpointRelation(type, owner, targetName, confidence, sourceName = null) {
+  return {
+    type, sourceQualifiedName: owner?.qualifiedName || null, sourceName,
+    targetName, targetQualifiedName: null, moduleSpecifier: null, provider: PROVIDER, confidence
+  };
+}
+
+function isRouteReceiver(value) {
+  return /^(?:app|router|server|fastify|api|route)$/i.test(String(value || ''));
+}
+
+function isHttpClient(value, bindings) {
+  const name = String(value || '');
+  if (/^(?:axios|ky|got|request|httpClient|apiClient)$/i.test(name)) return true;
+  const imported = bindings.get(name);
+  return Boolean(imported && /^(?:axios|ky|got|node-fetch|undici|superagent)(?:\/|$)/i.test(imported.specifier));
+}
+
+function httpKey(method, value) {
+  const raw = String(value || '').trim();
+  if (!raw || raw.includes('${')) return '';
+  const upperMethod = String(method || 'GET').toUpperCase();
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const parsed = new URL(raw);
+      return `${upperMethod} ${parsed.origin}${normalizeHttpPath(parsed.pathname)}`;
+    } catch {
+      return '';
+    }
+  }
+  const withoutQuery = raw.split(/[?#]/, 1)[0];
+  if (!withoutQuery.startsWith('/')) return '';
+  return `${upperMethod} ${normalizeHttpPath(withoutQuery)}`;
+}
+
+function normalizeHttpPath(value) {
+  const normalized = String(value || '/').replace(/\/{2,}/g, '/');
+  return normalized.length > 1 ? normalized.replace(/\/$/, '') : normalized;
+}
 function typeRelation(type, sourceQualifiedName, rawTarget, bindings, confidence, sourceName = null) {
   const target = resolveType(rawTarget, bindings);
   return { type, sourceQualifiedName, sourceName, targetName: target.name, targetQualifiedName: target.name, moduleSpecifier: target.moduleSpecifier, provider: PROVIDER, confidence };
