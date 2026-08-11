@@ -57,9 +57,9 @@ export function analyticsMonths(bounds) {
 }
 
 export function normalizeUsageSnapshot(snapshot, requestedMonth = '') {
-  if (!snapshot || typeof snapshot !== 'object' || snapshot.ok === false) throw new Error(String(snapshot?.error || 'Usage unavailable.'));
+  if (!snapshot || typeof snapshot !== 'object' || snapshot.ok === false) throw new Error(String(snapshot?.error || 'Analytics unavailable.'));
   const month = normalizeMonth(snapshot.month || requestedMonth);
-  if (!month) throw new Error('Usage unavailable for the selected month.');
+  if (!month) throw new Error('Analytics unavailable for the selected month.');
   return {
     source: snapshot.source === 'local' ? 'local' : 'cloud',
     month,
@@ -169,7 +169,7 @@ export function workspaceOptions(models) {
 }
 
 function normalizeTotals(value) {
-  if (!value || typeof value !== 'object') throw new Error('Usage unavailable: monthly totals were not returned.');
+  if (!value || typeof value !== 'object') throw new Error('Analytics unavailable: monthly totals were not returned.');
   const result = {};
   for (const key of [...TOTAL_KEYS, 'activeDays']) result[key] = exactNumber(value[key], key);
   return result;
@@ -313,6 +313,6 @@ function normalizeMonth(value) {
 
 function exactNumber(value, field) {
   const number = Number(value);
-  if (!Number.isFinite(number) || number < 0) throw new Error(`Usage unavailable: invalid ${field} value.`);
+  if (!Number.isFinite(number) || number < 0) throw new Error(`Analytics unavailable: invalid ${field} value.`);
   return number;
 }

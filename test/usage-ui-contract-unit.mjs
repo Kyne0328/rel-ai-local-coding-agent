@@ -35,7 +35,7 @@ assert.match(preload, /getGatewayUsage: month => ipcRenderer\.invoke\(['"]deskto
 assert.match(preload, /getLocalUsage: month => ipcRenderer\.invoke\(['"]desktop:analytics:local['"], month\)/);
 assert.match(ipc, /desktop:gateway:usage/);
 assert.match(ipc, /desktop:analytics:local/);
-assert.match(ipc, /Usage month must use YYYY-MM/);
+assert.match(ipc, /Analytics month must use YYYY-MM/);
 assert.match(electronMain, /GATEWAY_NOT_CONNECTED/, 'Electron main must return a structured unavailable result when Cloud disconnects during a usage request');
 assert.match(electronMain, /Rel\.AI Cloud is not connected\./, 'Electron main must not leak the raw remote-method gateway exception');
 assert.match(usageSource, /desktop\.getLocalUsage/);
@@ -54,7 +54,7 @@ for (const field of ['requests', 'toolCalls', 'successes', 'failures', 'requestB
 for (const breakdown of ['tools', 'devices', 'workspaces']) {
   assert.match(usageCombinedSource, new RegExp(`snapshot\\.${breakdown}|usage\\.${breakdown}|model\\.${breakdown}|${breakdown}`), `Analytics must render ${breakdown} breakdowns`);
 }
-assert.match(usageSource, /Usage unavailable|usage-unavailable/i);
+assert.match(usageSource, /Analytics unavailable|usage-unavailable/i);
 assert.doesNotMatch(usageSource, /Cloud transport analytics are unavailable while Direct connection mode is active\./);
 assert.match(usageCombinedSource, /Local aggregate|privacy-safe aggregates|source === ['"]local['"]/, 'Direct mode must render local aggregate analytics instead of a Cloud-unavailable state');
 assert.match(usageSource, /Retry/);
@@ -97,7 +97,7 @@ assert.equal(legacyBreakdowns.devices[0].toolCalls, 2);
 assert.equal(legacyBreakdowns.workspaces[0].toolCalls, 2);
 assert.equal(currentUsageMonth(new Date('2026-08-08T00:00:00.000Z')), '2026-08');
 assert.equal(buildUsageModel({ ok: true, source: 'local', month: '2026-08', totals: { requests: 0, toolCalls: 0, successes: 0, failures: 0, requestBytes: 0, resultBytes: 0, executionMs: 0, activeDays: 0 }, tools: [], devices: [], workspaces: [] }, '2026-08').source, 'local');
-assert.throws(() => buildUsageModel({ ok: true, month: '2026-08', totals: { requests: -1 } }), /Usage unavailable|invalid requests/);
+assert.throws(() => buildUsageModel({ ok: true, month: '2026-08', totals: { requests: -1 } }), /Analytics unavailable|invalid requests/);
 const bounds = analyticsBounds('24h', { now: new Date('2026-08-08T12:00:00.000Z') });
 assert.equal(bounds.start.toISOString(), '2026-08-07T12:00:00.000Z');
 const ranged = analyticsRangeScope([buildUsageModel({
@@ -114,5 +114,29 @@ assert.equal(ranged.toolCalls, 2);
 assert.equal(ranged.completed, 2);
 assert.equal(ranged.averageDuration, 50, 'average duration must divide by completed outcomes, not started tool calls');
 assert.deepEqual(ranged.failureCategories, [{ category: 'policy', failures: 1 }]);
+const scopedCategories = analyticsRangeScope([buildUsageModel({
+  ok: true,
+  month: '2026-08',
+  totals: { requests: 2, toolCalls: 2, successes: 0, failures: 2, requestBytes: 0, resultBytes: 0, executionMs: 20, activeDays: 1 },
+  tools: [], devices: [], workspaces: [],
+  series: [
+    { hour: '2026-08-08T10', requests: 2, toolCalls: 2, successes: 0, failures: 2, requestBytes: 0, resultBytes: 0, executionMs: 20 }
+  ],
+  toolSeries: [],
+  workspaceSeries: [
+    { hour: '2026-08-08T10', deviceId: 'device-a', workspace: 'repo-a', workspaceKey: 'device-a::repo-a', toolCalls: 1, successes: 0, failures: 1, executionMs: 10 },
+    { hour: '2026-08-08T10', deviceId: 'device-a', workspace: 'repo-b', workspaceKey: 'device-a::repo-b', toolCalls: 1, successes: 0, failures: 1, executionMs: 10 }
+  ],
+  workspaceToolSeries: [],
+  failureCategorySeries: [
+    { hour: '2026-08-08T10', category: 'policy', failures: 1 },
+    { hour: '2026-08-08T10', category: 'validation', failures: 1 }
+  ],
+  workspaceFailureCategorySeries: [
+    { hour: '2026-08-08T10', deviceId: 'device-a', workspace: 'repo-a', workspaceKey: 'device-a::repo-a', category: 'policy', failures: 1 },
+    { hour: '2026-08-08T10', deviceId: 'device-a', workspace: 'repo-b', workspaceKey: 'device-a::repo-b', category: 'validation', failures: 1 }
+  ]
+}, '2026-08')], bounds, { workspace: 'repo-a' });
+assert.deepEqual(scopedCategories.failureCategories, [{ category: 'policy', failures: 1 }], 'workspace analytics must not include failure categories from another workspace');
 
 console.log('Analytics lazy-route, exact-metric, authenticated-fetch, and privacy contracts passed.');
