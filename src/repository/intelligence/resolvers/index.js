@@ -3,10 +3,12 @@ import { csharpResolver } from './csharp.js';
 import { goResolver } from './go.js';
 import { rustResolver } from './rust.js';
 import { cFamilyResolver } from './cFamily.js';
+import { phpResolver } from './php.js';
 import { javascriptTypeResolver } from './javascript.js';
 import { pythonResolver } from './python.js';
 
 const RESOLVERS = new Map([
+  ['php', phpResolver],
   ['cpp', cFamilyResolver],
   ['c', cFamilyResolver],
   ['rust', rustResolver],
