@@ -34,7 +34,7 @@ app.whenReady().then(async () => {
     await waitFor(win, `document.documentElement.dataset.density === 'compact'`);
     const measurements = [];
     for (const route of ['usage', 'tools', 'tasks']) {
-      const expectedTitle = route === 'tasks' ? 'Sessions' : route[0].toUpperCase() + route.slice(1);
+      const expectedTitle = route === 'tasks' ? 'Sessions' : route === 'usage' ? 'Analytics' : route[0].toUpperCase() + route.slice(1);
       await win.webContents.executeJavaScript(`location.hash = '#${route}'`);
       await waitFor(win, `document.querySelector('#pageTitle')?.textContent.trim() === ${JSON.stringify(expectedTitle)} && document.querySelector('#routeRoot')?.children.length > 0`);
       if (route === 'tools') await waitFor(win, `document.querySelectorAll('.tool-card').length === 12`);
