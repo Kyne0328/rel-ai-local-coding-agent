@@ -23,7 +23,8 @@ const css = read('src/ui/features/usage/styles.css');
 const { buildUsageModel, currentUsageMonth } = await import('../src/ui/features/usage/index.js');
 const { analyticsBounds, analyticsRangeScope } = await import('../src/ui/features/usage/range-model.js');
 
-assert.match(navigationCatalog, /route\(['"]usage['"], ['"]Usage['"]/);
+assert.match(navigationCatalog, /route\(['"]usage['"], ['"]Analytics['"]/);
+assert.match(navigationCatalog, /Cloud or this device/, 'Analytics navigation copy must describe both Cloud and local aggregate sources');
 assert.match(routePolicy, /['"]usage['"]/);
 assert.match(dashboard, /usage: element => mountSystemRoute\(element, ['"]usage['"]\)/, 'Usage must route through the lazy System feature shell');
 assert.match(systemSource, /import \{ mountUsage \} from ['"]\.\.\/usage\/index\.js['"]/, 'System must mount the Usage analytics feature');
@@ -108,4 +109,4 @@ assert.equal(ranged.toolCalls, 2);
 assert.equal(ranged.completed, 1);
 assert.equal(ranged.averageDuration, 100, 'average duration must divide by completed outcomes, not started tool calls');
 
-console.log('Usage lazy-route, exact-metric, authenticated-fetch, and privacy contracts passed.');
+console.log('Analytics lazy-route, exact-metric, authenticated-fetch, and privacy contracts passed.');
