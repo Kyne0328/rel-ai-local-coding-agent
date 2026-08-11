@@ -105,6 +105,13 @@
       "bytes": 2668263,
       "sha256": "f9d6aff11d7c53d80afe57deaf44bc87a6aef8f09a8b192c16d3722bc368b412",
       "grammarDependency": "tree-sitter-julia@git+https://github.com/tree-sitter/tree-sitter-julia.git#e0f9dcd180fdcfcfa8d79a3531e11d99e79321d3"
+    },
+    "clojure": {
+      "file": "clojure/tree-sitter-clojure.wasm",
+      "sourcePath": "out/clojure/tree-sitter-clojure.wasm",
+      "bytes": 101206,
+      "sha256": "f34287abec45df384781857435cbfa60587a3412a229da64d67352fb8bbb381c",
+      "grammarDependency": "tree-sitter-clojure@git+https://github.com/sogaiu/tree-sitter-clojure.git#e43eff80d17cf34852dcd92ca5e6986d23a7040f"
     }
   }
 }
