@@ -110,6 +110,20 @@ function recordWorkflowEvidence(config, taskId, receipt) {
   return receipt;
 }
 
+function recordWorkflowState(config, taskId, { receipt = null, workflow = null } = {}) {
+  const id = cleanTaskId(taskId);
+  if (!id || (!receipt && !workflow)) return null;
+  ensureCurrentHistory(config);
+  const directory = getTaskHistoryDir(config);
+  const session = readSession(directory, id);
+  if (!session) return null;
+  const next = { ...session };
+  if (receipt && typeof receipt === 'object') next.workflowEvidence = [...(Array.isArray(session.workflowEvidence) ? session.workflowEvidence : []), receipt].slice(-100);
+  if (workflow && typeof workflow === 'object') next.workflow = JSON.parse(JSON.stringify(workflow));
+  writeSession(directory, next);
+  return workflow || receipt;
+}
+
 function readRecentWorkflowEvidence(config, taskId, limit = 50) {
   const id = cleanTaskId(taskId);
   if (!id) return [];
@@ -495,4 +509,4 @@ function isStoredSessionNoise(session, activeIds) {
   return Boolean(endedAt && Date.now() - endedAt > DEFAULT_TASK_IDLE_MS);
 }
 
-export { bindTaskHistoryActivityPersistence, clearTaskHistory, getTaskHistoryDir, readRecentWorkflowEvidence, readTaskHistory, readTaskHistorySession, readTaskHistorySessionRecord, recordTaskActivityEvent, recordTaskHistoryEvent, recordWorkflowEvidence, recordWorkflowSnapshot };
+export { bindTaskHistoryActivityPersistence, clearTaskHistory, getTaskHistoryDir, readRecentWorkflowEvidence, readTaskHistory, readTaskHistorySession, readTaskHistorySessionRecord, recordTaskActivityEvent, recordTaskHistoryEvent, recordWorkflowEvidence, recordWorkflowSnapshot, recordWorkflowState };

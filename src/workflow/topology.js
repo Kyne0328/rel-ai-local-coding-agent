@@ -4,16 +4,21 @@ import * as path from 'node:path';
 
 const MAX_DEPTH = 6;
 const MAX_MANIFESTS = 200;
+const CACHE_RECHECK_MS = 2_000;
 const MANIFEST_NAMES = new Set(['package.json', 'pubspec.yaml', 'go.mod', 'Cargo.toml', 'pyproject.toml', 'requirements.txt', 'Makefile']);
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', 'coverage', '.next', '.nuxt', '.turbo', '.cache', '.relai', '.rel-ai', 'state']);
 const cache = new Map();
 
 function discoverRepositoryTopology(rootPath) {
   const root = path.resolve(String(rootPath || '.'));
+  const cached = cache.get(root);
+  if (cached && Date.now() - cached.checkedAt < CACHE_RECHECK_MS) return structuredClone(cached.value);
   const manifests = collectManifests(root);
   const signature = manifests.map(item => `${item.relative}:${item.size}:${item.mtimeMs}`).join('|');
-  const cached = cache.get(root);
-  if (cached?.signature === signature) return structuredClone(cached.value);
+  if (cached?.signature === signature) {
+    cached.checkedAt = Date.now();
+    return structuredClone(cached.value);
+  }
   const packages = manifests.map(item => packageFromManifest(root, item)).filter(Boolean);
   const value = {
     version: 1,
@@ -22,7 +27,7 @@ function discoverRepositoryTopology(rootPath) {
     packages,
     fingerprint: crypto.createHash('sha256').update(signature).digest('hex')
   };
-  cache.set(root, { signature, value });
+  cache.set(root, { signature, value, checkedAt: Date.now() });
   if (cache.size > 32) cache.delete(cache.keys().next().value);
   return structuredClone(value);
 }

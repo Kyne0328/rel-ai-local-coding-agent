@@ -107,11 +107,12 @@ const publicConnectionRuntime = createPublicConnectionRuntime({
     authtoken: config.ngrokAuthtoken,
     onLog: chunk => publicConnectionLog('ngrok', chunk)
   }),
-  startDirect: config => managedNgrok.startManagedNgrokTunnel({
+  startDirect: (config, { onProcess } = {}) => managedNgrok.startManagedNgrokTunnel({
     domain: config.ngrokDomain,
     port: config.port,
     timeoutMs: 30000,
-    onLog: chunk => publicConnectionLog('ngrok', chunk)
+    onLog: chunk => publicConnectionLog('ngrok', chunk),
+    onProcess
   }),
   stopDirect: child => terminateProcessTree(child, { graceMs: 1000, forceWaitMs: 2000 }),
   onStatus: ({ mode, status }) => {
@@ -644,6 +645,12 @@ async function startServer() {
       localUrl
     });
 
+    if (guiConfig.connectionMode === 'direct') {
+      void completeDirectPublicStart(guiConfig, actualPort, runToken);
+      startPromise = null;
+      return currentStatus;
+    }
+
     let result;
     try {
       result = await publicConnectionRuntime.start({ ...guiConfig, port: actualPort });
@@ -698,6 +705,33 @@ async function startServer() {
   })();
 
   return startPromise;
+}
+
+async function completeDirectPublicStart(guiConfig, actualPort, runToken) {
+  let result;
+  try {
+    result = await publicConnectionRuntime.start({ ...guiConfig, port: actualPort });
+  } catch (error) {
+    if (runToken !== lifecycleToken) return;
+    setStatus(desktopStatusFailure(ERROR_CODES.PUBLIC_ENDPOINT_FAILED, error, {
+      serverRunning: true, connectionMode: 'direct', gateway: null, tunnelStatus: 'failed', mcpUrl: ''
+    }));
+    return;
+  }
+  if (runToken !== lifecycleToken || result.cancelled) return;
+  if (!result.ok) {
+    setStatus(desktopStatusFailure(ERROR_CODES.PUBLIC_ENDPOINT_FAILED, result.error || 'Tunnel failed before publishing a public URL.', {
+      serverRunning: true, connectionMode: 'direct', gateway: null, tunnelStatus: 'failed', mcpUrl: ''
+    }));
+    return;
+  }
+  const publicBaseUrl = `https://${guiConfig.ngrokDomain}`;
+  const mcpUrl = buildMcpUrl(publicBaseUrl);
+  connection.writeConnectionProfile({
+    host: '127.0.0.1', port: actualPort, connectionMode: 'direct', gatewayOrigin: guiConfig.gatewayOrigin,
+    publicUrl: publicBaseUrl, ngrokDomain: guiConfig.ngrokDomain, tunnelProvider: 'managed-ngrok', configPath: configModule.getConfigPath()
+  });
+  setStatus({ serverRunning: true, connectionMode: 'direct', gateway: null, tunnelStatus: 'running', mcpUrl, authenticationRequired: approvalTokenManager.status().required, error: '', errorCode: '' });
 }
 
 async function stopServer(options = {}) {

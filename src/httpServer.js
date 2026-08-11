@@ -4,7 +4,7 @@ import * as connection from "./connectionProfile.js";
 import { setBaseHeaders, sendJson, unauthorized } from "./http/io.js";
 import { ERROR_CODES, errorPayload } from "./desktopUxContracts.js";
 import { isDashboardAuthorized } from "./http/auth.js";
-import { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handleApiSettingsGet, handleApiTools, handleOnboardingStatus, handleConnection, handleDashboardV10, handleApiLogs, handleHealthMonitor, handleAliasDiagnostics, handleReleaseNotes, handleCautionSummary, handleReadiness, handleWorkspacePreflight, handleEvents, handleOnboardingComplete, handleApiSettingsPost, handleApiWorkspaces, handlePickFolder, handleOpenFolder, handleSkillsGet, handleSkillsPost, handleWorkspaceChecks } from "./http/dashboard.js";
+import { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handleApiSettingsGet, handleApiTools, handleOnboardingStatus, handleConnection, handleDashboardV10, handleTaskSession, handleApiLogs, handleHealthMonitor, handleAliasDiagnostics, handleReleaseNotes, handleCautionSummary, handleReadiness, handleWorkspacePreflight, handleEvents, handleOnboardingComplete, handleApiSettingsPost, handleApiWorkspaces, handlePickFolder, handleOpenFolder, handleSkillsGet, handleSkillsPost, handleWorkspaceChecks } from "./http/dashboard.js";
 import { handleApiHistoryReset } from "./http/dashboardHistory.js";
 import { handleApiDiagnostics, handleApiDiagnosticsReset } from "./http/dashboardDiagnostics.js";
 import { handleApiProcessStop } from "./http/dashboardProcesses.js";
@@ -238,6 +238,7 @@ const GET_ROUTES = {
   "/api/connection": { auth: authDashboard, handler: handleConnection },
   "/api/mcp/connection": { auth: authDashboard, handler: handleMcpConnectionState },
   "/api/dashboard/v10": { auth: authDashboard, handler: handleDashboardV10 },
+  "/api/tasks/session": { auth: authDashboard, handler: handleTaskSession },
   "/api/logs": { auth: authDashboard, handler: handleApiLogs },
   "/api/diagnostics": { auth: authDashboard, handler: handleApiDiagnostics },
   "/api/health-monitor": { auth: authDashboard, handler: handleHealthMonitor },

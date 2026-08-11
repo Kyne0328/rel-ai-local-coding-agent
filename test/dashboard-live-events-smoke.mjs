@@ -114,7 +114,7 @@ try {
   assert.equal(readyPayload.revision, initialSnapshot.snapshot.revision, 'matching embedded state must not require a duplicate full snapshot');
   assert.equal(initialSnapshot.desktopStatus?.tunnelStatus, 'connecting');
   assert.equal(initialSnapshot.connectionState?.localService?.status, 'running');
-  assert.equal(initialSnapshot.snapshot?.modelVersion, 3);
+  assert.equal(initialSnapshot.snapshot?.modelVersion, 4);
   assert.ok(initialSnapshot.snapshot?.streamId);
   assert.ok(initialSnapshot.snapshot?.sequence > 0);
 
@@ -138,6 +138,15 @@ try {
 
   const updated = await stream.nextDashboardEvent();
   assert.equal(updated.desktopStatus?.tunnelStatus, 'connecting');
+  assert.equal(updated.tasks?.some(task => Array.isArray(task.events)), false, 'live dashboard tasks must remain summary-only');
+  assert.equal(updated.taskActivity?.tasks?.some(task => Array.isArray(task.events)), false, 'live task activity must remain summary-only');
+  const sessionResponse = await fetch(`http://127.0.0.1:${address.port}/api/tasks/session?task=${encodeURIComponent(taskId)}`, {
+    headers: { cookie: dashboardCookie }
+  });
+  assert.equal(sessionResponse.status, 200, 'session history must remain available on demand');
+  const sessionPayload = await sessionResponse.json();
+  assert.equal(sessionPayload.ok, true);
+  assert.ok(Array.isArray(sessionPayload.session?.events), 'on-demand session history must include its event list');
   assert.equal(updated.connectionState?.localService?.status, 'running');
   assert.equal(updated.connectionState?.publicEndpoint?.status, 'connecting');
   assert.equal(updated.snapshot?.streamId, initialSnapshot.snapshot?.streamId);

@@ -422,6 +422,21 @@ function collectOptionsFromWorkspace(workspace, overrides = {}) {
   };
 }
 
+function createCollectionPathFilter(root, options = {}) {
+  const policy = buildCollectionPolicy(root, options);
+  return relativePath => {
+    let normalized = String(relativePath || "").replaceAll(WINDOWS_SEPARATOR, "/");
+    if (normalized.startsWith("./")) normalized = normalized.slice(2);
+    if (!normalized) return true;
+    const segments = normalized.split("/").filter(Boolean);
+    for (let index = 0; index < segments.length; index += 1) {
+      const prefix = segments.slice(0, index + 1).join("/");
+      if (shouldExcludeRelativePath(prefix, segments[index], policy)) return false;
+    }
+    return true;
+  };
+}
+
 function readRelaiIgnore(root) {
   try {
     const file = path.join(root, ".relaiignore");
@@ -552,7 +567,7 @@ function safeReadJson(file, fallback = null) {
   }
 }
 
-export { SECRET_PATH_PATTERNS,  clearRealRootCache, realRootOf, validateRelativePath, resolveSafePath, assertPathOperationAllowed, isPathInside, isSecretPath, classifySensitivePath, evaluateSensitiveContent, looksBinary, collectTextFiles, collectOptionsFromWorkspace, writeTextFileSafe, fileSha256, safeReadJson };
+export { SECRET_PATH_PATTERNS,  clearRealRootCache, realRootOf, validateRelativePath, resolveSafePath, assertPathOperationAllowed, isPathInside, isSecretPath, classifySensitivePath, evaluateSensitiveContent, looksBinary, collectTextFiles, collectOptionsFromWorkspace, createCollectionPathFilter, writeTextFileSafe, fileSha256, safeReadJson };
 
 function guardAgainstCollapsedFullFileWrite(absolutePath, relativePath, newText) {
   if (!fs.existsSync(absolutePath)) return;

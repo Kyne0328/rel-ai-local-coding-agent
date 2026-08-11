@@ -39,12 +39,32 @@ function createPublicConnectionRuntime({
     }
     if (mode !== 'direct') throw new Error('Connection mode must be cloud or direct.');
 
-    await prepareDirect(config);
-    const result = await startDirect(config);
-    if (!result?.ok) return { mode: 'direct', ...result, process: result?.process || null };
-    directProcess = result.process || null;
     activeMode = 'direct';
-    return { mode: 'direct', ...result, process: directProcess };
+    try {
+      await prepareDirect(config);
+      const result = await startDirect(config, {
+        onProcess(child) {
+          if (activeMode === 'direct') directProcess = child || null;
+          else if (child) void stopDirect(child).catch(() => {});
+        }
+      });
+      if (!result?.ok) {
+        if (activeMode === 'direct') activeMode = '';
+        directProcess = null;
+        return { mode: 'direct', ...result, process: result?.process || null };
+      }
+      if (activeMode !== 'direct') {
+        const child = result.process || directProcess;
+        if (child) await stopDirect(child).catch(() => {});
+        return { mode: 'direct', ...result, process: null, cancelled: true };
+      }
+      directProcess = result.process || directProcess || null;
+      return { mode: 'direct', ...result, process: directProcess };
+    } catch (error) {
+      if (activeMode === 'direct') activeMode = '';
+      directProcess = null;
+      throw error;
+    }
   }
 
   async function stop() {

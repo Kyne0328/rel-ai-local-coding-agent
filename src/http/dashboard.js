@@ -13,7 +13,7 @@ import { renderDashboardShellBootstrap, renderDashboardWindowTitlebar } from "./
 import { getOnboardingStatus, writeOnboardingState } from "../onboardingState.js";
 import { getVersion } from "../version.js";
 import { resolveRequireHttpToken } from "./auth.js";
-import { readTaskHistory } from "../taskHistoryStore.js";
+import { readTaskHistory, readTaskHistorySession } from "../taskHistoryStore.js";
 import { onToolActivity } from "../toolActivity.js";
 import { buildDashboardPayload, mergeDashboardActivity } from "./dashboardData.js";
 import { handleOpenFolder, handlePickFolder, handleSkillsGet, handleSkillsPost, handleWorkspaceChecks, workspacePathPreflight } from "./dashboardActions.js";
@@ -28,6 +28,18 @@ const DASHBOARD_SHARED_MODULES = Object.freeze({
   '/public/taskEvents.js': Object.freeze(['src', 'taskEvents.js']),
   '/public/taskState.js': Object.freeze(['src', 'taskState.js'])
 });
+const STATIC_ASSET_CACHE = new Map();
+
+function readCachedStaticAsset(filePath) {
+  const stat = fs.statSync(filePath);
+  const signature = `${stat.size}:${Math.trunc(stat.mtimeMs)}`;
+  const cached = STATIC_ASSET_CACHE.get(filePath);
+  if (cached?.signature === signature) return cached.content;
+  const content = fs.readFileSync(filePath);
+  STATIC_ASSET_CACHE.set(filePath, { signature, content });
+  if (STATIC_ASSET_CACHE.size > 128) STATIC_ASSET_CACHE.delete(STATIC_ASSET_CACHE.keys().next().value);
+  return content;
+}
 
 function renderDashboardNav(items) {
   return items.map((item) => `<a href="${item.href}" data-nav-id="${item.id}" aria-label="${item.label}" title="${item.label}"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">${item.icon}</svg><span class="nav-label">${item.label}</span></a>`).join("");
@@ -35,8 +47,8 @@ function renderDashboardNav(items) {
 
 async function handleFavicon(ctx) {
   try {
-    const content = fs.readFileSync(resolvePackagePath('public', 'assets', 'favicon.ico'));
-    ctx.res.writeHead(200, { "Content-Type": "image/x-icon", "Cache-Control": "no-cache" });
+    const content = readCachedStaticAsset(resolvePackagePath('public', 'assets', 'favicon.ico'));
+    ctx.res.writeHead(200, { "Content-Type": "image/x-icon", "Cache-Control": "private, max-age=60" });
     ctx.res.end(content);
   } catch { ctx.res.writeHead(404); ctx.res.end("Not found"); }
 }
@@ -70,10 +82,10 @@ function handleStaticAsset(ctx) {
     filePath = resolvePackagePath('public', safePath.slice(8));
   }
   try {
-    const content = fs.readFileSync(filePath);
+    const content = readCachedStaticAsset(filePath);
     const ct = contentTypeForStaticAsset(safePath);
     const charset = ct.startsWith("text/") || ct === "application/javascript" ? "; charset=utf-8" : "";
-    ctx.res.writeHead(200, { "Content-Type": ct + charset, "Cache-Control": "no-cache" });
+    ctx.res.writeHead(200, { "Content-Type": ct + charset, "Cache-Control": "private, max-age=60" });
     ctx.res.end(content);
   } catch { ctx.res.writeHead(404); ctx.res.end("Not found"); }
 }
@@ -364,6 +376,15 @@ ${renderDashboardWindowTitlebar()}
 </html>`;
 }
 
+const handleTaskSession = (ctx) => {
+  const config = readConfig();
+  const taskId = String(ctx.parsed.searchParams.get("task") || "").trim();
+  if (!taskId) { sendJson(ctx.res, 400, { ok: false, error: "task is required." }, ctx.ae); return; }
+  const session = readTaskHistorySession(config, taskId);
+  if (!session) { sendJson(ctx.res, 404, { ok: false, error: "Work session not found." }, ctx.ae); return; }
+  sendJson(ctx.res, 200, { ok: true, session }, ctx.ae);
+};
+
 const handleApiLogs = (ctx) => {
   const config = readConfig();
   const limit = Number(ctx.parsed.searchParams.get("limit") || 100);
@@ -379,4 +400,4 @@ const handleReadiness = (ctx) => sendJson(ctx.res, 200, release.releaseReadiness
 
 const configCache = { path: "", mtimeMs: -1, value: null };
 
-export { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handleApiSettingsGet, handleApiTools, handleOnboardingStatus, handleConnection, handleDashboardV10, handleApiLogs, handleHealthMonitor, handleAliasDiagnostics, handleReleaseNotes, handleCautionSummary, handleReadiness, handleWorkspacePreflight, handleEvents, handleOnboardingComplete, handleApiSettingsPost, handleApiWorkspaces, handlePickFolder, handleOpenFolder, handleSkillsGet, handleSkillsPost, handleWorkspaceChecks };
+export { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handleApiSettingsGet, handleApiTools, handleOnboardingStatus, handleConnection, handleDashboardV10, handleTaskSession, handleApiLogs, handleHealthMonitor, handleAliasDiagnostics, handleReleaseNotes, handleCautionSummary, handleReadiness, handleWorkspacePreflight, handleEvents, handleOnboardingComplete, handleApiSettingsPost, handleApiWorkspaces, handlePickFolder, handleOpenFolder, handleSkillsGet, handleSkillsPost, handleWorkspaceChecks };

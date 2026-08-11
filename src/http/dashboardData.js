@@ -35,8 +35,9 @@ function buildDashboardPayload(config, options = {}, requireHttpToken = false) {
   };
   const limit = Math.max(Number(options.limit || 100), 200);
   const base = productUx.dashboardData(config, { limit });
-  const tasks = readTaskHistory(config, taskActivity, { limit: 500 }).map(sanitizeTaskRecordForProjection);
-  const auditTail = mergeDashboardActivity(base.auditTail || { entries: [] }, tasks, limit);
+  const tasks = readTaskHistory(config, taskActivity, { limit: 500 }).map(summarizeDashboardTask);
+  const liveActivityTasks = Array.isArray(taskActivity.tasks) ? taskActivity.tasks : [];
+  const auditTail = mergeDashboardActivity(base.auditTail || { entries: [] }, liveActivityTasks, limit);
   const workspaceStates = buildWorkspaceStates(config, tasks, taskActivity);
   const runtimeState = runtimeCompatibility(config, { activeTaskCount: taskActivity.activeTaskCount });
   const mcpConnection = mcpConnectionManager.snapshot();
@@ -64,7 +65,7 @@ function buildDashboardPayload(config, options = {}, requireHttpToken = false) {
       sequence: ++dashboardSnapshotSequence,
       revision: String(options.snapshotRevision || ''),
       generatedAt: new Date().toISOString(),
-      modelVersion: 3
+      modelVersion: 4
     },
     auditTail,
     tasks,
@@ -136,12 +137,20 @@ function normalizeDashboardActivity(entry) {
   };
 }
 
+function summarizeDashboardTask(task) {
+  const projected = sanitizeTaskRecordForProjection(task);
+  if (!projected || typeof projected !== "object") return projected;
+  const summary = { ...projected };
+  delete summary.events;
+  return summary;
+}
+
 function sanitizeTaskActivity(activity = {}) {
   return {
     ...activity,
-    tasks: Array.isArray(activity.tasks) ? activity.tasks.map(sanitizeTaskRecordForProjection) : [],
-    lastTask: activity.lastTask ? sanitizeTaskRecordForProjection(activity.lastTask) : null
+    tasks: Array.isArray(activity.tasks) ? activity.tasks.map(summarizeDashboardTask) : [],
+    lastTask: activity.lastTask ? summarizeDashboardTask(activity.lastTask) : null
   };
 }
 
-export { buildDashboardPayload, mergeDashboardActivity };
+export { buildDashboardPayload, mergeDashboardActivity, summarizeDashboardTask };
