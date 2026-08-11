@@ -107,6 +107,8 @@ CREATE INDEX IF NOT EXISTS occurrences_file_idx ON occurrences(file_id);
 CREATE INDEX IF NOT EXISTS imports_target_idx ON imports(target_file_id);
 CREATE INDEX IF NOT EXISTS edges_source_idx ON edges(source_symbol_id);
 CREATE INDEX IF NOT EXISTS edges_target_idx ON edges(target_symbol_id);
+CREATE INDEX IF NOT EXISTS edges_source_file_type_target_idx ON edges(source_file_id, type, target_file_id);
+CREATE INDEX IF NOT EXISTS edges_target_file_type_source_idx ON edges(target_file_id, type, source_file_id);
 CREATE INDEX IF NOT EXISTS relation_hints_file_idx ON relation_hints(source_file_id);
 CREATE INDEX IF NOT EXISTS relation_hints_target_idx ON relation_hints(target_name);
 CREATE INDEX IF NOT EXISTS files_generation_idx ON files(generation_id);
@@ -323,8 +325,9 @@ function resolveRelationships(db) {
     const targets = symbolsByName.get(String(call.name)) || [];
     const target = chooseCallTarget(sourceFileId, targets, importedIdsBySource.get(sourceFileId));
     if (!target) continue;
+    const confidence = Number(target.file_id) === sourceFileId ? 0.88 : 0.84;
     insertEdge.run(call.enclosing_symbol_id == null ? null : Number(call.enclosing_symbol_id), Number(target.id), sourceFileId, Number(target.file_id),
-      'CALLS', String(call.name), 'tree-sitter', targets.length === 1 ? 0.84 : 0.7);
+      'CALLS', String(call.name), 'tree-sitter', confidence);
   }
 
   resolveHintRelationships(db, { files, fileById, pathToId, suffixIndex, symbolsByName, insertEdge });
@@ -402,7 +405,6 @@ function chooseQualifiedSymbol(candidates, preferredFileId = null) {
 
 function chooseCallTarget(sourceFileId, targets, importedIds = new Set()) {
   if (!targets.length) return null;
-  if (targets.length === 1) return targets[0];
   const sameFile = targets.filter(target => Number(target.file_id) === sourceFileId);
   if (sameFile.length === 1) return sameFile[0];
   const imported = targets.filter(target => importedIds.has(Number(target.file_id)));

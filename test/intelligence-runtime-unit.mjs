@@ -3,13 +3,15 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { relaiSemanticSearch } from "../src/bridge/semanticSearch.js";
-import { relaiDiagnosticsRun } from "../src/bridge/diagnosticsRunner.js";
-import { relaiCodeInspect } from "../src/bridge/codeIntelligence.js";
+import { relaiSemanticSearch } from '../src/bridge/semanticSearch.js';
+import { relaiDiagnosticsRun } from '../src/bridge/diagnosticsRunner.js';
+import { relaiCodeInspect } from '../src/bridge/codeIntelligence.js';
+import { openIndexDatabase, repositoryIndexPath } from '../src/repository/intelligence/database.js';
+import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-intelligence-'));
 const stateDir = path.join(root, 'state');
-fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+fs.mkdirSync(path.join(root, 'src', 'runtime'), { recursive: true });
 fs.mkdirSync(path.join(root, 'test'), { recursive: true });
 fs.writeFileSync(path.join(root, 'src', 'attendanceService.js'), `
 function calculateDailyAttendance(timeIn, shiftStart) {
@@ -22,14 +24,66 @@ fs.writeFileSync(path.join(root, 'test', 'attendance.test.js'), `
 const { calculateDailyAttendance } = require('../src/attendanceService');
 calculateDailyAttendance(9, 8);
 `);
-const workspace = { alias: 'app', path: root, testCommands: {}, commands: {} };
+
+fs.writeFileSync(path.join(root, 'src', 'orphanTarget.js'), `export function ghostCall() { return 'target'; }\n`);
+fs.writeFileSync(path.join(root, 'src', 'unrelated.js'), `export function unrelatedCaller() { return ghostCall(); }\n`);
+fs.writeFileSync(path.join(root, 'src', 'importedCaller.js'), `
+import { ghostCall } from './orphanTarget.js';
+export function importedCaller() { return ghostCall(); }
+`);
+fs.writeFileSync(path.join(root, 'src', 'socketObserver.js'), `
+import { scheduleResume } from './runtime/continuation.js';
+export function observeSocketFailure(error) {
+  // recover connection after socket failure
+  return scheduleResume(error);
+}
+`);
+fs.writeFileSync(path.join(root, 'src', 'runtime', 'continuation.js'), `export function scheduleResume(error) { return error ? 250 : 0; }\n`);
+fs.writeFileSync(path.join(root, 'src', 'recoveryGuide.js'), `export const recoveryGuide = 'recover connection after failure';\n`);
+fs.writeFileSync(path.join(root, 'src', 'socketStatus.js'), `export const socketStatus = 'socket connection failure';\n`);
+fs.writeFileSync(path.join(root, 'src', 'failureNotes.js'), `export const failureNotes = 'recover after socket failure';\n`);
+
+const workspace = { alias: 'app', path: root, context: {}, testCommands: {}, commands: {} };
 const config = { stateDir };
 
 try {
   const semantic = await relaiSemanticSearch(workspace, config, { query: 'calculate employee lateness attendance', maxResults: 5 });
   assert.equal(semantic.ok, true);
   assert.equal(semantic.privacy.includes('No source text'), true);
+  assert.equal(semantic.neuralEmbeddings, false);
+  assert.match(semantic.strategy, /graph-diffusion$/);
   assert.equal(semantic.results[0].path, 'src/attendanceService.js');
+
+  const hiddenSemantic = await relaiSemanticSearch(workspace, config, { query: 'recover connection after socket failure', maxResults: 5 });
+  const hiddenPaths = hiddenSemantic.results.map(item => item.path);
+  assert.equal(hiddenPaths[0], 'src/socketObserver.js');
+  assert.ok(hiddenPaths.slice(0, 3).every(item => item !== 'src/runtime/continuation.js'),
+    'graph diffusion must preserve the lexical top three');
+  const hiddenRank = hiddenPaths.indexOf('src/runtime/continuation.js') + 1;
+  assert.ok(hiddenRank >= 4 && hiddenRank <= 5, `hidden graph target should rank 4-5, got ${hiddenRank || 'missing'}`);
+  const hidden = hiddenSemantic.results.find(item => item.path === 'src/runtime/continuation.js');
+  assert.ok(hidden.providers.includes('graph-diffusion'));
+  assert.ok(hidden.snippets.some(item => item.text.includes('scheduleResume')));
+
+  const db = openIndexDatabase(repositoryIndexPath(config, workspace), { readonly: true });
+  try {
+    const indexes = new Set(db.prepare("PRAGMA index_list('edges')").all().map(row => String(row.name)));
+    assert.ok(indexes.has('edges_source_file_type_target_idx'));
+    assert.ok(indexes.has('edges_target_file_type_source_idx'));
+    const callEdges = db.prepare(`
+      SELECT source.path AS source_path, target.path AS target_path
+      FROM edges e
+      JOIN files source ON source.id=e.source_file_id
+      JOIN files target ON target.id=e.target_file_id
+      WHERE e.type='CALLS' AND e.target_name='ghostCall'
+      ORDER BY source.path
+    `).all();
+    assert.ok(callEdges.some(row => row.source_path === 'src/importedCaller.js' && row.target_path === 'src/orphanTarget.js'));
+    assert.equal(callEdges.some(row => row.source_path === 'src/unrelated.js' && row.target_path === 'src/orphanTarget.js'), false,
+      'unimported unique-name calls must not create cross-file CALLS edges');
+  } finally {
+    db.close();
+  }
 
   const trace = await relaiCodeInspect(workspace, config, { action: 'trace', symbol: 'calculateDailyAttendance', maxResults: 50 });
   assert.equal(trace.definitions[0].path, 'src/attendanceService.js');
@@ -46,7 +100,8 @@ try {
     message: 'Argument is invalid', source: 'typescript'
   });
 } finally {
+  repositoryIntelligence.shutdown();
   fs.rmSync(root, { recursive: true, force: true });
 }
 
-console.log('Semantic search, relationship trace, and normalized diagnostics tests passed.');
+console.log('Semantic graph diffusion, call precision, relationship trace, and normalized diagnostics tests passed.');
