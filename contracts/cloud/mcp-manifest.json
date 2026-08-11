@@ -3,8 +3,8 @@
   "disabledToolCount": 0,
   "externallyVisibleToolCount": 12,
   "filteredToolCount": 0,
-  "hash": "c1oHFnRfjIkIZRE3M-6T46zk_XHY5DoESxYxMDN_ohc",
-  "instructions": "Start each objective with relai_work action begin and pass its work_id to later calls. Inspect relevant files before editing; use bounded reads and commands. Validate after changes. On edit failure, follow recovery guidance and retry; report unavailable only after a separate availability check fails. Never bypass approval, workspace, task, or destructive-operation safeguards. Report only checks actually run.",
+  "hash": "Nj3ZBr2scwan0BTm96l4EY2MoHSdDmTR3Iz3claasqs",
+  "instructions": "Start each objective with relai_work action begin and pass its work_id to later calls. Inspect relevant files before editing; use bounded reads and commands. Validate after changes. On edit failure, follow recovery guidance and retry; report unavailable only after a separate availability check fails. Never bypass approval, workspace, task, or destructive-operation safeguards. Report only checks actually run. Finish with relai_work action finish after review.",
   "schemaVersion": 7,
   "serverInfo": {
     "name": "rel-ai-mcp",
@@ -6829,5 +6829,5 @@
       "title": "Manage Worktree"
     }
   ],
-  "version": "c1oHFnRfjIkIZRE3M-6T46zk"
+  "version": "Nj3ZBr2scwan0BTm96l4EY2M"
 }
