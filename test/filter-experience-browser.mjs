@@ -70,7 +70,7 @@ try {
   assert.match(result.activityApplied.route, /status=failed/);
   assert.match(result.activityApplied.summary, /events shown/);
   assert.equal(result.activityApplied.freezeExcluded, true);
-  assert.match(result.taskChip, /Remove Task filter/);
+  assert.match(result.taskChip, /Remove Session filter/);
   assert.deepEqual(result.escapeFocus, { closed: true, focusReturned: true });
   assert.equal(result.mobileDrawer.viewport <= 420, true);
   assert.equal(result.mobileDrawer.horizontalOverflow, false);
@@ -94,7 +94,7 @@ try {
   assert.equal(result.tools.capabilityRemoved, true);
   assert.equal(result.tools.searchCleared, true);
   assert.equal(result.tools.emptyState, true);
-  assert.deepEqual(result.settings.order, ['Preferences', 'Application', 'Advanced', 'About']);
+  assert.deepEqual(result.settings.order, ['Preferences', 'Skills', 'Application', 'Advanced', 'About']);
   assert.deepEqual(result.settings.themes.map(item => item.preference), ['dark', 'light', 'system']);
   assert.equal(result.settings.compact, 'compact');
   assert.equal(result.settings.comfortable, 'comfortable');
@@ -112,9 +112,12 @@ try {
   assert.ok(result.connection.primaryLabel.length > 0);
   assert.equal(result.connection.detailsDisclosure, true);
   assert.ok(['A', 'BUTTON'].includes(result.connection.primaryTag));
-  assert.ok(result.connection.navigationLabels.includes('Primary navigation'));
-  assert.equal(result.usage.modalTitle, 'Usage unavailable');
-  assert.match(result.usage.modalMessage, /Direct connection mode is active/);
+  assert.ok(result.connection.navigationLabels.includes('Work navigation'));
+  assert.ok(result.connection.navigationLabels.includes('Application navigation'));
+  assert.ok(result.connection.navigationLabels.includes('System navigation'));
+  assert.equal(result.usage.overviewVisible, true);
+  assert.equal(result.usage.localAggregate, true);
+  assert.equal(result.usage.modalVisible, false);
   assert.equal(result.usage.inlineUnavailable, false);
   assert.deepEqual(result.responsive.map(item => item.requestedWidth), [980, 760, 520, 420]);
   for (const viewport of result.responsive) {
