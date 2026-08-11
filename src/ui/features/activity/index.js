@@ -488,12 +488,14 @@ function renderTable(entries) {
       ? (entries.length ? `${entries.length} live event${entries.length === 1 ? '' : 's'} · history unavailable` : 'History unavailable')
       : `${entries.length} event${entries.length === 1 ? '' : 's'}`;
   if (!entries.length) {
-    const emptyMessage = _historyLoading
-      ? 'Loading activity history…'
-      : _loadError
+    if (_historyLoading) {
+      body.innerHTML = activityLoadingRows();
+    } else {
+      const emptyMessage = _loadError
         ? 'Activity history could not be loaded. Live events will appear here when available.'
         : 'No activity matches these filters.';
-    body.innerHTML = `<tr><td colspan="4"><div class="empty">${esc(emptyMessage)}</div></td></tr>`;
+      body.innerHTML = `<tr><td colspan="6"><div class="empty">${esc(emptyMessage)}</div></td></tr>`;
+    }
     _virtualizer?.destroy();
     _virtualizer = null;
     return true;
@@ -504,6 +506,25 @@ function renderTable(entries) {
   }
   _virtualizer = virtualizeTable(body, entries, renderActivityRow);
   return true;
+}
+
+function activityLoadingRows() {
+  return Array.from({ length: 6 }, (_, index) => `
+    <tr class="activity-skeleton-row" aria-hidden="true">
+      <td class="activity-time-column"><span class="activity-skeleton activity-skeleton-time"></span></td>
+      <td class="activity-tool-column"><span class="activity-skeleton activity-skeleton-tool"></span></td>
+      <td class="activity-workspace-column"><span class="activity-skeleton activity-skeleton-workspace"></span></td>
+      <td class="activity-status-column"><span class="activity-skeleton activity-skeleton-status"></span></td>
+      <td class="activity-message-column activity-message-cell">
+        <span class="activity-message-mobile-meta">
+          <span class="activity-skeleton activity-skeleton-status"></span>
+          <span class="activity-skeleton activity-skeleton-tool"></span>
+          <span class="activity-skeleton activity-skeleton-time"></span>
+        </span>
+        <span class="activity-skeleton activity-skeleton-message${index % 3 === 1 ? ' activity-skeleton-message-short' : ''}"></span>
+      </td>
+      <td class="activity-action-column"><span class="activity-skeleton activity-skeleton-action"></span></td>
+    </tr>`).join('');
 }
 
 function renderActivityRow(entry) {
