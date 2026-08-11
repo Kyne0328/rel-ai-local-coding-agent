@@ -35,6 +35,12 @@ app.whenReady().then(async () => {
     }
   });
   const failures = [];
+  win.webContents.session.webRequest.onCompleted({ urls: ['http://*/*'] }, details => {
+    if (details.statusCode >= 400) failures.push(`http:${details.statusCode}:${details.url}`);
+  });
+  win.webContents.session.webRequest.onErrorOccurred({ urls: ['http://*/*'] }, details => {
+    failures.push(`network:${details.error}:${details.url}`);
+  });
   const navigationCounts = { didStartNavigation: 0, didNavigate: 0, didFinishLoad: 0 };
   win.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
     if (isMainFrame && !isInPlace) navigationCounts.didStartNavigation += 1;
@@ -93,6 +99,9 @@ app.whenReady().then(async () => {
       sameRouteNode: Boolean(current && current === window.__relaiProbeSessionsPage)
     };
   })()`);
+
+  await win.webContents.executeJavaScript(`localStorage.setItem('relai_debug', '1')`);
+  const navigationInteractions = await exerciseNavigationControls(win, failures);
 
   const parsedTarget = new URL(targetUrl);
   const passiveMcpSession = await createHttpMcpSession(parsedTarget.origin, {
@@ -312,6 +321,7 @@ app.whenReady().then(async () => {
   const result = {
     initial,
     liveToolUpdate,
+    navigationInteractions,
     passiveRouteStability,
     taskInteraction,
     activityInteraction,
@@ -381,6 +391,42 @@ async function measurePassiveRouteStability(win, mcpSession, navigationCounts, r
       didFinishLoad: navigationCounts.didFinishLoad - beforeNavigation.didFinishLoad
     }
   };
+}
+
+async function exerciseNavigationControls(win, failures) {
+  const scenarios = [
+    { selector: '.nav a[data-nav-id="workspaces"]', hash: '#workspaces', ready: `document.querySelector('.workspace-validation-preferences')` },
+    { selector: '.application-nav a[data-nav-id="settings"]', hash: '#settings', ready: `document.querySelector('.settings-shell') && !document.querySelector('.settings-loading')` },
+    { selector: '.settings-nav-button[data-sub-page="skills"]', hash: '#settings/skills', ready: `document.querySelector('.skills-page') && !document.querySelector('.settings-loading')` },
+    { selector: '.settings-nav-button[data-sub-page="application"]', hash: '#settings/application', ready: `document.querySelector('.settings-shell') && !document.querySelector('.settings-loading')` },
+    { selector: '.settings-nav-button[data-sub-page="advanced"]', hash: '#settings/advanced', ready: `document.querySelector('.settings-shell') && !document.querySelector('.settings-loading')` },
+    { selector: '.settings-nav-button[data-sub-page="about"]', hash: '#settings/about', ready: `document.querySelector('.settings-shell') && !document.querySelector('.settings-loading')` }
+  ];
+  const results = [];
+  for (const scenario of scenarios) {
+    const hitTarget = await win.webContents.executeJavaScript(`(() => {
+      const control = document.querySelector(${JSON.stringify(scenario.selector)});
+      if (!control) return null;
+      control.scrollIntoView({ block: 'center', inline: 'center' });
+      const rect = control.getBoundingClientRect();
+      const x = Math.round(rect.left + rect.width / 2);
+      const y = Math.round(rect.top + rect.height / 2);
+      const hit = document.elementFromPoint(x, y);
+      return { x, y, tag: hit?.tagName || '', label: hit?.textContent?.trim() || '', ownsControl: Boolean(hit && (hit === control || control.contains(hit))) };
+    })()`);
+    if (!hitTarget) throw new Error(`Navigation control is missing: ${scenario.selector}`);
+    win.webContents.sendInputEvent({ type: 'mouseMove', x: hitTarget.x, y: hitTarget.y });
+    win.webContents.sendInputEvent({ type: 'mouseDown', x: hitTarget.x, y: hitTarget.y, button: 'left', clickCount: 1 });
+    win.webContents.sendInputEvent({ type: 'mouseUp', x: hitTarget.x, y: hitTarget.y, button: 'left', clickCount: 1 });
+    try {
+      await waitFor(win, `location.hash === ${JSON.stringify(scenario.hash)} && (${scenario.ready})`);
+    } catch (error) {
+      const state = await win.webContents.executeJavaScript(`({ hash: location.hash, title: document.title, pageTitle: document.getElementById('pageTitle')?.textContent || '', content: document.getElementById('routeRoot')?.textContent?.slice(0, 300) || '' })`);
+      throw new Error(`${error.message} hit=${JSON.stringify(hitTarget)} state=${JSON.stringify(state)} failures=${JSON.stringify(failures)}`, { cause: error });
+    }
+    results.push({ ...scenario, hitTarget, opened: true });
+  }
+  return results;
 }
 
 async function waitFor(win, expression, timeoutMs = 10000) {
