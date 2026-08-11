@@ -248,18 +248,18 @@ function sessionDescription(session, live, operation) {
 
 function sessionFacts(session, live) {
   const facts = [];
+  const toolCalls = Number(session.toolCallCount ?? session.calls ?? 0);
   const changed = Number(session.changedFileCount || session.changedFiles?.length || 0);
   const failures = Number(session.failedToolCallCount ?? session.failures ?? 0);
   const completed = workSessionStateView(session).status === 'completed';
-  if (changed > 0) facts.push(`${changed} file${changed === 1 ? '' : 's'} changed`);
+  facts.push(`${toolCalls} tool call${toolCalls === 1 ? '' : 's'}`);
+  facts.push(`${changed} file${changed === 1 ? '' : 's'} edited`);
   if (failures > 0) facts.push(completed
     ? `${failures} recovered failed call${failures === 1 ? '' : 's'}`
     : `${failures} failed call${failures === 1 ? '' : 's'}`);
   if (session.validation === 'failed' || session.status === 'validation_failed') facts.push('validation failed');
   if (session.status === 'waiting_for_approval') facts.push('approval required');
   if (session.status === 'blocked') facts.push('blocked');
-  const risk = String(session.workflow?.risk || '').toLowerCase();
-  if (['medium', 'high', 'critical'].includes(risk)) facts.push(`${risk} risk`);
   const publish = publishLabel(session);
   if (!live && publish) facts.push(publish.toLowerCase());
   return facts.join(' · ');
@@ -288,7 +288,6 @@ function sessionFingerprint(session) {
     session.pushed === true,
     session.committed === true,
     session.prDrafted === true,
-    session.workflow?.risk || '',
     terminalDuration
   ]);
 }
@@ -429,9 +428,8 @@ function technicalDetailsSection(session, identities, state, operationValue) {
 function workflowTechnicalHtml(session = {}) {
   const workflow = session.workflow;
   if (!workflow || typeof workflow !== 'object' || !workflow.stage) return '';
-  const risk = String(workflow.risk || '').trim();
   const next = workflow.recommendedAction || 'No additional advisory action is recorded.';
-  return `<div class="task-detail-workflow"><strong>Workflow ${esc(workflow.stage)}${risk ? ` · ${esc(risk)} risk` : ''}</strong><span>${esc(next)}</span></div>`;
+  return `<div class="task-detail-workflow"><strong>Workflow ${esc(workflow.stage)}</strong><span>${esc(next)}</span></div>`;
 }
 
 function changedFilesSection(files) {

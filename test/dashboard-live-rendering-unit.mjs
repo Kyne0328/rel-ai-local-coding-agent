@@ -124,6 +124,12 @@ assert.match(activity, /<th scope="col" class="activity-message-column">Message<
 assert.doesNotMatch(activity, /<th scope="col" class="activity-session-column">Session<\/th>/, 'Activity must not replace the original columns with Session');
 assert.match(activity, /routeHref\('tasks'/, 'Activity details must deep-link back to Sessions');
 assert.match(sessions, /data-session-fingerprint/, 'session rows must carry semantic fingerprints for keyed reconciliation');
+const sessionFactsSource = functionSource(sessions, 'sessionFacts');
+assert.match(sessionFactsSource, /toolCallCount/, 'session rows must show their tool-call count');
+assert.match(sessionFactsSource, /tool call/, 'session rows must label tool-call counts');
+assert.match(sessionFactsSource, /file.*edited/, 'session rows must show their edited-file count');
+assert.doesNotMatch(sessionFactsSource, /risk/, 'session row facts must not surface workflow risk labels');
+assert.doesNotMatch(functionSource(sessions, 'workflowTechnicalHtml'), /risk/, 'session details must not surface workflow risk labels');
 assert.doesNotMatch(functionSource(sessions, 'updateTaskSessions'), /mountTasks\(detached|sessions-history-card[^\n]*replaceWith/, 'session live updates must not rebuild or replace the complete history card');
 assert.match(processes, /export function updateProcessesLiveState/);
 assert.match(processes, /function syncProcessClockText/, 'Process live updates must neutralize clock-only text before equality checks');
