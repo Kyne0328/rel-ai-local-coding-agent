@@ -56,6 +56,22 @@ function taskCall(id, name, args) {
   });
 }
 
+function repositoryGraphFiles() {
+  const directory = path.join(stateDir, 'repository-intelligence');
+  if (!fs.existsSync(directory)) return [];
+  const found = [];
+  const stack = [directory];
+  while (stack.length) {
+    const current = stack.pop();
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const target = path.join(current, entry.name);
+      if (entry.isDirectory()) stack.push(target);
+      else if (entry.isFile() && entry.name === 'graph.db') found.push(target);
+    }
+  }
+  return found;
+}
+
 try {
   client.initialize(1);
   const discovery = await client.waitFor(1);
@@ -65,6 +81,7 @@ try {
   const startedTask = structuredContentOf(await client.waitFor(2));
   taskId = startedTask.work_id;
   if (!taskId || startedTask.identity !== 'work_session') throw new Error('Work-session bootstrap failed.');
+  if (repositoryGraphFiles().length) throw new Error('Work-session bootstrap must not build Repository Intelligence on a cold workspace.');
 
   taskCall(3, 'relai_snapshot', { workspace: 'smoke', maxEntries: 100 });
   const snapshot = structuredContentOf(await client.waitFor(3));
@@ -180,6 +197,16 @@ try {
     throw new Error(`Atomic workflow completion failed: ${JSON.stringify(completed)}`);
   }
   if (completed.summary !== 'Completed and validated the public workflow smoke task.') throw new Error('Atomic workflow completion lost its summary.');
+
+  taskId = '';
+  taskCall(32, 'relai_work', { action: 'begin', workspace: 'smoke' });
+  const graphBootstrapped = structuredContentOf(await client.waitFor(32));
+  taskId = graphBootstrapped.work_id;
+  if (!graphBootstrapped.bootstrap?.repositoryIntelligence?.available) throw new Error('Warm Repository Intelligence context was not included in work bootstrap.');
+  if (!graphBootstrapped.bootstrap.repositoryIntelligence.recommendedReadOrder?.length) throw new Error('Graph bootstrap did not include a targeted read order.');
+  taskCall(33, 'relai_work', { action: 'cancel', workspace: 'smoke', reason: 'Bootstrap regression verified.' });
+  const cancelled = structuredContentOf(await client.waitFor(33));
+  if (!cancelled.ok) throw new Error('Second smoke work session did not cancel cleanly.');
 
   console.log('Public tool workflow smoke test passed.');
 } finally {

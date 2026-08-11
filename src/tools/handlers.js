@@ -20,7 +20,6 @@ import { taskOwnedChangedFiles } from '../taskIntegrity.js';
 import { readRecentWorkflowEvidence, readTaskHistorySessionRecord } from '../taskHistoryStore.js';
 import { discoverRepositoryTopology, packageForPath } from '../workflow/topology.js';
 const startTaskHandler = inWorkspace(async (workspace, config, args) => {
-  scheduleIntelligenceWarmup(workspace, config);
   const task = startTask(workspace, args);
   const bootstrapMode = String(args.bootstrap || 'compact').toLowerCase();
   if (bootstrapMode === 'none') return task;
@@ -29,9 +28,12 @@ const startTaskHandler = inWorkspace(async (workspace, config, args) => {
     includeFiles: true,
     instructionPath: args.instructionPath
   });
+  const bootstrap = taskBootstrapFromSnapshot(snapshot, bootstrapMode);
+  const cachedIntelligence = repositoryIntelligence.cachedContext(workspace, config, { maxResults: 10 });
+  if (cachedIntelligence) bootstrap.repositoryIntelligence = cachedIntelligence;
   return {
     ...task,
-    bootstrap: taskBootstrapFromSnapshot(snapshot, bootstrapMode)
+    bootstrap
   };
 });
 
@@ -48,7 +50,10 @@ const HANDLERS = Object.freeze({
     return repoSnapshot(workspace, config, args);
   }),
   read: inWorkspace((workspace, config, args, context) => relaiRead(workspace, config, args, context)),
-  search: inWorkspace((workspace, config, args, context) => relaiSearch(workspace, config, withWorkflowTaskContext(config, workspace, args, context))),
+  search: inWorkspace((workspace, config, args, context) => {
+    scheduleIntelligenceWarmup(workspace, config);
+    return relaiSearch(workspace, config, withWorkflowTaskContext(config, workspace, args, context));
+  }),
   codeInspect: inWorkspace((workspace, config, args, context) => relaiCodeInspect(workspace, config, withWorkflowTaskContext(config, workspace, args, context), context)),
   exec: inWorkspace((workspace, config, args, context) => relaiExec(workspace, config, args, context)),
   processStart: inWorkspace((workspace, config, args, context) => startManagedProcess(workspace, config, args, context)),
@@ -112,11 +117,11 @@ function withTaskOwnedReviewContext(config, workspace, args, context = {}) {
   };
 }
 /**
- * @param {(workspace: any, config: unknown, args: Record<string, any>, context: { connector?: boolean, taskId?: string, requestHeaders?: Record<string, string> }) => any} handler
+ * @param {(workspace: any, config: Record<string, any>, args: Record<string, any>, context: { connector?: boolean, taskId?: string, requestHeaders?: Record<string, string> }) => any} handler
  */
 function inWorkspace(handler) {
   /**
-   * @param {unknown} config
+   * @param {Record<string, any>} config
    * @param {Record<string, any>} [args]
    * @param {{ connector?: boolean, taskId?: string, requestHeaders?: Record<string, string> }} [context]
    */
