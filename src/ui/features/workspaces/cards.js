@@ -1,6 +1,6 @@
 import { pillHtml } from '../../components/pill.js';
 import { esc, metricHtml, statusClass } from '../../utils.js';
-import { getWorkspaceFilter } from '../../router.js';
+import { getWorkspaceFilter, routeHref } from '../../router.js';
 import { workspaceDetailsHtml, branchSummary } from './details.js';
 import { recentWorkspaceAliases } from './recents.js';
 
@@ -195,6 +195,7 @@ function workspacePrimaryActions(view) {
     <button type="button" data-edit-workspace="${view.aliasAttr}">Edit workspace</button>
     <button class="secondary" type="button" data-run-validation="${view.aliasAttr}" ${view.validationCommands.length ? '' : 'disabled'}>Run validation</button>
     <button class="secondary" type="button" data-repository-details="${view.aliasAttr}">Repository details</button>
+    <a class="buttonlike secondary" href="${routeHref('usage', { workspace: view.alias })}">Analytics</a>
     ${openFolder}`;
 }
 
