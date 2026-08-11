@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-const PARSER_VERSION = 24;
+const PARSER_VERSION = 25;
 const MAX_SEARCH_TERMS = 768;
 
 const LANGUAGE_PROFILES = Object.freeze([
@@ -24,7 +24,7 @@ const LANGUAGE_PROFILES = Object.freeze([
   profile('lua', 'tree-sitter-lua.wasm', ['.lua']),
   profile('objc', 'tree-sitter-objc.wasm', ['.m', '.mm']),
   profile('ocaml', 'tree-sitter-ocaml.wasm', ['.ml', '.mli']),
-  profile('php', 'tree-sitter-php.wasm', ['.php', '.phtml']),
+  profile('php', 'tree-sitter-php.wasm', ['.php', '.phtml'], [], 'php'),
   profile('python', 'tree-sitter-python.wasm', ['.py', '.pyi'], [], 'python'),
   profile('ql', 'tree-sitter-ql.wasm', ['.ql', '.qll']),
   profile('rescript', 'tree-sitter-rescript.wasm', ['.res', '.resi']),
