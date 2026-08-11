@@ -73,7 +73,8 @@ function buildPackageSizeReport(options) {
     ngrokBytes: fileSize(path.join(resourcesDir, 'bin', 'ngrok', spec.ngrokDirectory, spec.ngrokFile)),
     zoektBytes: sumFileSizes(listFiles(path.join(resourcesDir, 'bin', 'zoekt', platform))),
     treeSitterBytes: sumFileSizes(listFiles(path.join(resourcesDir, 'node_modules', 'web-tree-sitter')))
-      + sumFileSizes(listFiles(path.join(resourcesDir, 'node_modules', 'tree-sitter-wasms'))),
+      + sumFileSizes(listFiles(path.join(resourcesDir, 'node_modules', 'tree-sitter-wasms')))
+      + sumFileSizes(listFiles(path.join(resourcesDir, 'vendor', 'tree-sitter'))),
     dashboardCssBytes: fileSize(path.join(resourcesDir, 'public', 'dashboard.css'))
   };
   const content = {

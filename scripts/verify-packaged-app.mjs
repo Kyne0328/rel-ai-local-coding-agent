@@ -33,6 +33,7 @@ if (browserSpecificSnapshotEnabled) {
 
 const ngrokRelativePath = `resources/bin/ngrok/${spec.ngrokDirectory}/${spec.ngrokFile}`;
 const sourceZoektManifest = JSON.parse(fs.readFileSync(path.join(root, 'vendor', 'zoekt', 'manifest.json'), 'utf8'));
+const sourceTreeSitterManifest = JSON.parse(fs.readFileSync(path.join(root, 'vendor', 'tree-sitter', 'manifest.json'), 'utf8'));
 const sourceZoektSpec = sourceZoektManifest.platforms?.[platform];
 assert.ok(sourceZoektSpec, `Zoekt provenance manifest does not support ${platform}.`);
 const zoektSearchRelativePath = `resources/bin/zoekt/${platform}/${sourceZoektSpec.search.file}`;
@@ -63,6 +64,7 @@ const requiredFiles = [
   'resources/node_modules/web-tree-sitter/tree-sitter.wasm',
   'resources/node_modules/tree-sitter-wasms/package.json',
   'resources/node_modules/tree-sitter-wasms/out/tree-sitter-javascript.wasm',
+  'resources/vendor/tree-sitter/manifest.json',
   'resources/bin/rel-ai-mcp-http.js',
   'resources/public/dashboard.js',
   'resources/package.json',
@@ -115,6 +117,20 @@ const packagedTreeSitterWasms = fs.readdirSync(path.join(packageDirectory, 'reso
   .filter(name => name.endsWith('.wasm'))
   .sort();
 assert.deepEqual(packagedTreeSitterWasms, rootTreeSitterWasms, 'Packaged application must include every Tree-sitter WASM grammar shipped by the root runtime dependency.');
+const packagedTreeSitterManifest = JSON.parse(fs.readFileSync(path.join(packageDirectory, 'resources', 'vendor', 'tree-sitter', 'manifest.json'), 'utf8'));
+assert.deepEqual(packagedTreeSitterManifest, sourceTreeSitterManifest, 'Packaged vendored Tree-sitter manifest must match the reviewed source manifest.');
+for (const grammar of Object.values(sourceTreeSitterManifest.grammars || {})) {
+  const sourceFile = path.join(root, 'vendor', 'tree-sitter', grammar.file);
+  const packagedFile = path.join(packageDirectory, 'resources', 'vendor', 'tree-sitter', grammar.file);
+  assert.ok(fs.existsSync(sourceFile), `Vendored Tree-sitter source grammar is missing: ${grammar.file}`);
+  assert.ok(fs.existsSync(packagedFile), `Packaged vendored Tree-sitter grammar is missing: ${grammar.file}`);
+  const sourceBytes = fs.readFileSync(sourceFile);
+  const packagedBytes = fs.readFileSync(packagedFile);
+  assert.equal(sourceBytes.length, Number(grammar.bytes), `Vendored Tree-sitter grammar size mismatch: ${grammar.file}`);
+  assert.equal(packagedBytes.length, Number(grammar.bytes), `Packaged vendored Tree-sitter grammar size mismatch: ${grammar.file}`);
+  assert.equal(crypto.createHash('sha256').update(sourceBytes).digest('hex'), grammar.sha256, `Vendored Tree-sitter grammar checksum mismatch: ${grammar.file}`);
+  assert.equal(crypto.createHash('sha256').update(packagedBytes).digest('hex'), grammar.sha256, `Packaged vendored Tree-sitter grammar checksum mismatch: ${grammar.file}`);
+}
 const ngrokManifest = JSON.parse(fs.readFileSync(path.join(packageDirectory, 'resources', 'bin', 'ngrok', 'manifest.json'), 'utf8'));
 const ngrokSpec = ngrokManifest.platforms[platform];
 assert.ok(ngrokSpec, `Packaged ngrok manifest does not support ${platform}.`);
