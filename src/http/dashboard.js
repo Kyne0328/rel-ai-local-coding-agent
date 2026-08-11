@@ -25,6 +25,7 @@ import { WORK_NAV_ITEMS, APPLICATION_NAV_ITEMS, MOBILE_NAV_ITEMS } from '../ui/n
 import { onWorkspaceStateChange, workspaceStateRevision } from '../workspaceState.js';
 
 const DASHBOARD_SHARED_MODULES = Object.freeze({
+  '/public/analyticsFailureCategory.js': Object.freeze(['src', 'analyticsFailureCategory.js']),
   '/public/taskEvents.js': Object.freeze(['src', 'taskEvents.js']),
   '/public/taskState.js': Object.freeze(['src', 'taskState.js'])
 });

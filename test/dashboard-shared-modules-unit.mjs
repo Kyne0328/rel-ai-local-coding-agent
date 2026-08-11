@@ -27,6 +27,7 @@ try {
   const baseUrl = `http://127.0.0.1:${address.port}`;
 
   for (const [pathname, expectedExport] of [
+    ['/public/analyticsFailureCategory.js', 'normalizeFailureCategory'],
     ['/public/taskState.js', 'isTerminalDashboardTaskStatus'],
     ['/public/taskEvents.js', 'eventTimestampMs']
   ]) {
