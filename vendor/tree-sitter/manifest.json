@@ -84,6 +84,13 @@
       "bytes": 292506,
       "sha256": "a488c2cd22243aee8108bea33bed646cf871a045b156f1f1cb0138c542131fbc",
       "grammarDependency": "tree-sitter-gdscript@^6.1.0"
+    },
+    "nix": {
+      "file": "nix/tree-sitter-nix.wasm",
+      "sourcePath": "out/nix/tree-sitter-nix.wasm",
+      "bytes": 81456,
+      "sha256": "8b957d1ff521edda5606a5b6008e58489acbb1b3a7cf7ee2d16b7f0016a3d56a",
+      "grammarDependency": "tree-sitter-nix@git+https://github.com/nix-community/tree-sitter-nix.git#69fbfb02896cdd27cb7ff3cd61f7f3f6bde4f017"
     }
   }
 }
