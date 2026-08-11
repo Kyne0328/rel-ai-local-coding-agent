@@ -1,24 +1,20 @@
 import * as crypto from 'node:crypto';
-import { getPublicToolSchemas, getToolSurfaceManifest } from '../tools/schema.js';
+import { getPublicToolSchemas, getToolDefinitions, getToolSurfaceManifest } from '../tools/schema.js';
+import { PUBLIC_MCP_SERVER_INSTRUCTIONS } from './serverInstructions.js';
+
+const MCP_SCHEMA_VERSION = 6;
 
 function buildToolManifest(config = {}) {
   const surface = getToolSurfaceManifest(config);
   const surfaceByName = new Map(surface.tools.map(tool => [tool.name, tool]));
+  const definitionByName = new Map(getToolDefinitions().map(definition => [definition.name, definition]));
   const tools = getPublicToolSchemas(config)
-    .map(tool => ({
-      ...executionMetadata(surfaceByName.get(tool.name)),
-      name: String(tool.name || ''),
-      title: String(tool.title || ''),
-      description: String(tool.description || ''),
-      inputSchema: canonicalValue(tool.inputSchema || {}),
-      annotations: canonicalValue(tool.annotations || {}),
-      enabled: true,
-      authorizationVisibility: 'authenticated'
-    }))
+    .map(tool => canonicalTool(tool, definitionByName.get(tool.name), surfaceByName.get(tool.name)))
     .sort((left, right) => left.name.localeCompare(right.name));
   const canonical = {
-    schemaVersion: 2,
+    schemaVersion: MCP_SCHEMA_VERSION,
     toolSurfaceVersion: Number(surface.toolSurfaceVersion || 0),
+    instructions: PUBLIC_MCP_SERVER_INSTRUCTIONS,
     tools
   };
   const hash = crypto.createHash('sha256').update(stableJson(canonical)).digest('base64url');
@@ -31,6 +27,19 @@ function buildToolManifest(config = {}) {
     filteredToolCount: 0,
     externallyVisibleToolCount: tools.length
   });
+}
+
+function canonicalTool(tool, definition, surfaceTool) {
+  return {
+    name: String(tool?.name || ''),
+    title: String(tool?.title || ''),
+    description: String(tool?.description || ''),
+    inputSchema: canonicalValue(tool?.inputSchema || {}),
+    outputSchema: canonicalValue(tool?.outputSchema || definition?.outputSchema || {}),
+    annotations: canonicalValue(tool?.annotations || {}),
+    execution: canonicalValue(executionMetadata(surfaceTool)),
+    behavior: canonicalValue(definition?.behavior || {})
+  };
 }
 
 function executionMetadata(surfaceTool) {
@@ -58,4 +67,4 @@ function stableJson(value) {
   return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
 }
 
-export { buildToolManifest, canonicalValue, stableJson };
+export { MCP_SCHEMA_VERSION, buildToolManifest, canonicalValue, stableJson };

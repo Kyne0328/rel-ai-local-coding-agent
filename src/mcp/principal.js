@@ -1,4 +1,5 @@
 import * as crypto from 'node:crypto';
+import { ALL_CAPABILITIES, createConsentPolicy } from './authorizationPolicy.js';
 
 const PRINCIPAL_FIELDS = Object.freeze([
   ['issuer', ['issuer']],
@@ -24,6 +25,28 @@ function createHttpTaskPrincipal(authInfo = {}, authMode = 'oauth') {
     resource: authInfo?.resource,
     scopes: authInfo?.scopes ?? authInfo?.scope
   }));
+}
+
+function createGatewayTaskPrincipal(gatewayOrigin, principalId) {
+  let origin;
+  try {
+    const url = new URL(String(gatewayOrigin || ''));
+    if (!['https:', 'http:'].includes(url.protocol)) throw new Error('unsupported protocol');
+    origin = url.origin;
+  } catch {
+    throw new TypeError('Gateway origin must be an absolute HTTP(S) origin.');
+  }
+  const subject = boundedText(principalId, 200);
+  if (!subject) throw new TypeError('Gateway principal ID is required.');
+  return createHttpTaskPrincipal({
+    issuer: origin,
+    clientId: 'rel-ai',
+    subject,
+    authorizationPolicy: createConsentPolicy({ capabilities: ALL_CAPABILITIES, workspaces: ['*'] }),
+    authMode: 'gateway',
+    resource: origin + '/mcp',
+    scopes: ['mcp']
+  }, 'gateway');
 }
 
 function createStdioTaskPrincipal() {
@@ -95,6 +118,7 @@ function canonicalJson(value) {
 
 export {
   createHttpTaskPrincipal,
+  createGatewayTaskPrincipal,
   createStdioTaskPrincipal,
   normalizePrincipalKey,
   principalFingerprint,

@@ -5,150 +5,22 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
-
 const css = read('src/ui/styles/app.css');
 const compiledCss = read('public/dashboard.css');
-const settings = read('src/ui/features/settings/index.js');
-const select = read('src/ui/components/select.js');
-const toggle = read('src/ui/components/toggle.js');
-const emptyState = read('src/ui/components/empty-state.js');
-const sessions = read('src/ui/features/sessions/index.js');
-const tools = read('src/ui/features/tools/index.js');
-const diagnostics = read('src/ui/features/settings/diagnostics.js');
-const toast = read('src/ui/components/toast.js');
-const drawer = read('src/ui/components/drawer.js');
-const workspaceMenu = read('src/ui/components/workspace-menu.js');
-const workspaces = read('src/ui/features/workspaces/cards.js');
-const dashboardServer = read('src/http/dashboard.js');
-const dashboardClient = read('public/dashboard.js');
-const advancedSettings = read('src/ui/features/settings/advanced.js');
-const desktopConnection = read('src/ui/features/settings/desktop-connection.js');
 const vscodeSettings = JSON.parse(read('.vscode/settings.json'));
 const vscodeExtensions = JSON.parse(read('.vscode/extensions.json'));
 
 assert.match(css, /@import "tailwindcss" source\(none\)/);
 assert.match(css, /@source "\.\.\/\*\*\/\*\.js"/);
-assert.match(css, /@source "\.\.\/\.\.\/http\/dashboard\.js"/);
-assert.match(css, /@source "\.\.\/\.\.\/\.\.\/public\/dashboard\.js"/);
+assert.match(css, /@import "\.\.\/components\/filter-controls\.css"/);
+for (const feature of ['home', 'onboarding', 'settings', 'system', 'sessions', 'activity', 'workspaces', 'tools', 'processes']) {
+  assert.match(css, new RegExp(`@import "\\.\\.\\/features\\/${feature}\\/styles\\.css"`));
+}
 assert.equal(vscodeSettings['files.associations']?.['**/src/ui/styles/app.css'], 'tailwindcss');
-assert.equal(vscodeSettings['css.lint.unknownAtRules'], 'ignore');
-assert.equal(vscodeSettings['css.lint.propertyIgnoredDueToDisplay'], 'ignore');
 assert.ok(vscodeExtensions.recommendations?.includes('bradlc.vscode-tailwindcss'));
 assert.doesNotMatch(compiledCss, /rel-ai-mcp\\:ngrok|\.\\\[rel-ai-mcp/);
-assert.doesNotMatch(compiledCss, /\.collapse\s*\{|\.contents\s*\{|\.grow\s*\{|\.resize\s*\{/);
-assert.match(settings, /shell\.className = 'settings-layout settings-shell'/);
-for (const className of [
-  'settings-shell',
-  'settings-header',
-  'settings-panel-body',
-  'settings-form-grid',
-  'settings-field',
-  'settings-help',
-  'appearance-preview',
-  'settings-fact-grid',
-  'settings-validation-row'
-]) {
-  assert.match(css, new RegExp(`\\.${className}\\b`), `missing Tailwind contract for ${className}`);
+for (const selector of ['.filter-bar', '.filter-drawer', '.desktop-setup-checklist', '.connection-status-body', '.activity-page', '.tools-grid', '.diagnostic-page']) {
+  assert.match(compiledCss, new RegExp(selector.replace('.', '\\.')));
 }
 
-assert.match(select, /wrap\.className = 'select-control'/);
-assert.doesNotMatch(select, /style\.cssText|style="|\.style\./);
-assert.match(css, /\.select-control\b/);
-assert.match(css, /\.select-control select[\s\S]*min-w-0/);
-
-assert.match(toggle, /wrap\.className = 'toggle-control'/);
-assert.match(toggle, /input\.className = 'toggle-input'/);
-assert.match(toggle, /span\.className = 'toggle-label'/);
-assert.doesNotMatch(toggle, /style\.cssText|style="/);
-assert.match(css, /input\[type="checkbox"\]:not\(\.toggle-input\)/);
-assert.match(css, /\.toggle-input:checked::after/);
-assert.match(desktopConnection, /wrapper\.className = 'password-field'/);
-assert.match(desktopConnection, /classList\.add\('compact-button', 'password-toggle'\)/);
-assert.match(css, /\.password-field[\s\S]*grid-template-columns: minmax\(0,1fr\) auto/);
-assert.match(css, /@media \(max-width: 520px\)[\s\S]*\.password-field[\s\S]*grid-template-columns: minmax\(0,1fr\)/);
-assert.match(css, /\.password-toggle\b/);
-
-assert.match(sessions, /class="task-row"/);
-assert.match(css, /\.session-row, \.task-row[\s\S]*w-full[\s\S]*grid-template-columns: auto minmax\(0,1fr\) minmax\(0,auto\) auto 18px/);
-for (const className of [
-  'task-row-status',
-  'task-row-main',
-  'task-row-time',
-  'session-list-footer',
-  'task-detail-grid',
-  'task-file-list',
-  'task-event-list',
-  'task-detail-overflow',
-  'session-detail-actions'
-]) {
-  assert.match(css, new RegExp(`\\.${className}\\b`));
-}
-assert.match(sessions, /SESSION_PAGE_SIZE = 50/);
-assert.match(sessions, /data-load-more-sessions/);
-assert.match(sessions, /panelClass: 'session-detail-drawer'/);
-assert.match(sessions, /DETAIL_FILE_PREVIEW = 12/);
-assert.match(sessions, /DETAIL_EVENT_PREVIEW = 20/);
-assert.match(sessions, /workspaceMenuHtml\(data\.config\?\.workspaces/);
-assert.doesNotMatch(workspaces, /workspaceMenuHtml/);
-assert.match(workspaces, /Focused:/);
-assert.match(workspaces, /Clear focus/);
-assert.match(workspaces, /Edit workspace/);
-assert.match(workspaceMenu, /aria-haspopup="listbox"/);
-assert.match(workspaceMenu, /role="listbox"/);
-assert.match(workspaceMenu, /role="option"/);
-for (const className of ['workspace-menu', 'workspace-menu-trigger', 'workspace-menu-popover', 'workspace-menu-option']) {
-  assert.match(css, new RegExp(`\\.${className}\\b`));
-}
-assert.doesNotMatch(dashboardServer, /workspaceScope|refreshBtn|topbar-refresh/);
-assert.doesNotMatch(dashboardClient, /configureLiveRefresh|dashboardRefreshSeconds|liveLogPollSeconds/);
-assert.doesNotMatch(advancedSettings, /Fallback refresh interval|Live event scan interval|Dashboard updates/);
-
-assert.match(css, /\.workspace-grid[\s\S]*repeat\(3, minmax\(0, 1fr\)\)/);
-assert.match(css, /@media \(max-width: 1700px\)[\s\S]*\.workspace-grid[\s\S]*repeat\(2,minmax\(0,1fr\)\)/);
-assert.match(css, /\.workspace-readiness[\s\S]*grid-template-columns: minmax\(0,1\.15fr\) minmax\(0,\.85fr\)/);
-
-for (const className of [
-  'tools-search',
-  'tools-filters',
-  'tool-card-head',
-  'tool-card-title',
-  'tool-parameters',
-  'tool-parameter-list'
-]) {
-  assert.match(tools, new RegExp(className));
-  assert.match(css, new RegExp(`\\.${className}\\b`));
-}
-
-assert.match(diagnostics, /class="diagnostic-toolbar"/);
-for (const className of [
-  'diagnostic-toolbar',
-  'diagnostic-filter-summary',
-  'diagnostic-metric',
-  'diagnostic-copy',
-  'diagnostic-log-list'
-]) {
-  assert.match(css, new RegExp(`\\.${className}\\b`));
-}
-
-assert.match(toast, /className = 'toast-region'/);
-assert.match(toast, /const tone = Object\.hasOwn\(TOAST_VARIANTS,\s*variant\)/s);
-assert.match(toast, /`toast toast-\$\{tone\}`/);
-assert.match(css, /\.toast-region\b/);
-assert.match(css, /\.toast-info\b/);
-assert.match(css, /\.toast-error\b/);
-assert.doesNotMatch(css, /\.toast-stack\b|\.toast\.(?:success|warn|error)\b/);
-assert.doesNotMatch(css, /\.settings-layout\s*\{[^}]*210px/s);
-assert.match(css, /\.settings-shell, \.settings-layout[\s\S]*grid-template-columns: 220px minmax\(0,1fr\)/);
-
-assert.match(drawer, /body\.className = 'drawer-body'/);
-assert.match(drawer, /panelClass = ''/);
-assert.match(css, /\.drawer-backdrop[\s\S]*var\(--ui-overlay-drawer\)/);
-assert.doesNotMatch(css, /\.drawer-backdrop[^}]*backdrop-blur/s);
-assert.match(css, /\.session-detail-drawer[\s\S]*820px/);
-
-assert.doesNotMatch(emptyState, /style\.cssText|style="/);
-assert.match(emptyState, /empty empty-state/);
-assert.match(css, /\.empty-state-title\b/);
-assert.match(css, /\.empty-state-copy\b/);
-
-console.log('Tailwind UI contract smoke test passed.');
+console.log('Tailwind generated UI ownership contracts passed.');

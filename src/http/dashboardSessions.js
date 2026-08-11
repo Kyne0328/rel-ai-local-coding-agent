@@ -76,4 +76,4 @@ function prune() {
   for (const [key, value] of sessions) if (value.expiresAt < now) sessions.delete(key);
 }
 
-export { COOKIE_NAME, createDashboardBootstrap, consumeDashboardBootstrap, validateDashboardSession, setDashboardSessionCookie, clearDashboardSessions };
+export {  createDashboardBootstrap, consumeDashboardBootstrap, validateDashboardSession, setDashboardSessionCookie, clearDashboardSessions };

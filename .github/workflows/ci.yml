@@ -33,6 +33,34 @@ jobs:
       - run: npm run test:native-tasks-release-gate
       - run: xvfb-run --auto-servernum npm run test:all
 
+  public-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    name: public cloud contract (node 24)
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Verify public Rel.AI Cloud contract artifact
+        run: npm run verify:cloud-contract
+      - name: Verify MCP schema evolution
+        shell: bash
+        env:
+          REL_AI_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          REL_AI_PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          base_ref="${REL_AI_PR_BASE_SHA:-${REL_AI_PUSH_BEFORE_SHA:-}}"
+          if [ -z "$base_ref" ] || [ "$base_ref" = "0000000000000000000000000000000000000000" ]; then
+            if git rev-parse HEAD^ >/dev/null 2>&1; then base_ref=HEAD^; else base_ref=HEAD; fi
+          fi
+          export REL_AI_SCHEMA_BASE_REF="$base_ref"
+          npm run verify:mcp-schema
   packaged-windows:
     runs-on: windows-latest
     timeout-minutes: 35
@@ -54,6 +82,11 @@ jobs:
         env:
           NGROK_PLATFORMS: win32
         run: pwsh scripts/fetch-ngrok.ps1
+      - name: Build bundled Zoekt binaries
+        shell: pwsh
+        env:
+          ZOEKT_PLATFORMS: win32
+        run: pwsh scripts/fetch-zoekt.ps1
       - name: Verify generated color assets
         run: npm run verify:color-tokens
       - name: Build unpacked Windows application
@@ -82,6 +115,9 @@ jobs:
       - name: Verify packaged OAuth and MCP connector flow
         shell: pwsh
         run: npm run test:connector-acceptance -- --dir '${{ steps.unpacked.outputs.path }}'
+      - name: Verify packaged Rel.AI Cloud gateway routing
+        shell: pwsh
+        run: npm run gateway:acceptance -- --platform win32 --dir '${{ steps.unpacked.outputs.path }}'
 
   packaged-linux:
     runs-on: ubuntu-latest
@@ -107,6 +143,10 @@ jobs:
         env:
           NGROK_PLATFORMS: linux
         run: bash scripts/fetch-ngrok.sh
+      - name: Build bundled Zoekt binaries
+        env:
+          ZOEKT_PLATFORMS: linux
+        run: bash scripts/fetch-zoekt.sh
       - name: Verify generated color assets
         run: npm run verify:color-tokens
       - name: Build unpacked Linux application
@@ -126,6 +166,8 @@ jobs:
         run: npm run verify:fuses -- --platform linux '${{ steps.unpacked.outputs.path }}/rel-ai-mcp'
       - name: Verify packaged OAuth and MCP connector flow
         run: npm run test:connector-acceptance -- --dir '${{ steps.unpacked.outputs.path }}'
+      - name: Verify packaged Rel.AI Cloud gateway routing
+        run: xvfb-run --auto-servernum npm run gateway:acceptance -- --platform linux --dir '${{ steps.unpacked.outputs.path }}'
       - name: Smoke-test Linux desktop startup under Xvfb
         shell: bash
         env:

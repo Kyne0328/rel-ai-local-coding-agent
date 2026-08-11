@@ -7,10 +7,12 @@ function readDesktopSettings(runtimeState = {}) {
     config = readGuiConfig();
   } catch (error) {
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] read gui config:', error);
-    config = { port: 3333, token: '', ngrokDomain: '', ngrokAuthtoken: '' };
+    config = { connectionMode: 'cloud', gatewayOrigin: '', port: 3333, token: '', ngrokDomain: '', ngrokAuthtoken: '' };
   }
   return {
     ok: true,
+    connectionMode: String(config.connectionMode || 'cloud'),
+    gatewayOrigin: String(config.gatewayOrigin || ''),
     port: Number(config.port || 3333),
     approvalToken: String(config.token || ''),
     ngrokDomain: String(config.ngrokDomain || ''),
@@ -28,9 +30,11 @@ async function saveDesktopSettings(settings = {}, runtimeActions = {}) {
   const current = readGuiConfig();
   const replacementAccountKey = String(settings.ngrokAuthtoken || '').trim();
   saveLauncherConfig({
-    port: settings.port,
+    connectionMode: settings.connectionMode || current.connectionMode,
+    gatewayOrigin: settings.gatewayOrigin || current.gatewayOrigin,
+    port: settings.port ?? current.port,
     token: current.token,
-    ngrokDomain: settings.ngrokDomain,
+    ngrokDomain: settings.ngrokDomain ?? current.ngrokDomain,
     ngrokAuthtoken: replacementAccountKey || current.ngrokAuthtoken
   });
   if (typeof settings.notificationsEnabled === 'boolean') {

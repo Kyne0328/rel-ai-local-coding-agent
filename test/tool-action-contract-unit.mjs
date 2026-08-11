@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { approvalRequirement } from '../src/mcp/approval.js';
 import { requiredCapability } from '../src/mcp/authorizationPolicy.js';
-import { canonicalValue, stableJson } from '../src/mcp/toolManifest.js';
+import { buildToolManifest, canonicalValue, stableJson } from '../src/mcp/toolManifest.js';
 import { resolveExecutableToolCall } from '../src/tools/runtimeRegistry.js';
 import { getToolDefinitions, getToolMetadata, getToolSurfaceManifest } from '../src/tools/schema.js';
 
-const EXPECTED_HASH = 'f1ce210b71001b71002f019ac147e4553ea49fc921e726d4299f2112d70a33bf';
+const EXPECTED_HASH = 'dd537d0bac5ff2e2e83d543aa84175b6d4c0a1167c0ac3c0114a3b3b5a531b28';
 const rows = `
 relai_work|begin|relai_begin_work|startTask|repository:read|none|none|task|always_immediate|forbidden
 relai_work|status|relai_status|status|repository:read|none|optional|task|always_immediate|forbidden
@@ -48,6 +48,24 @@ relai_publish|draft_pr|relai_git_draft_pr|gitDraftPr|repository:read|none|requir
   return { publicTool, action, operationName, handlerName, capability, approval, taskScope, concurrencyScope, executionClass, taskSupport };
 });
 
+const gatewayManifest = buildToolManifest({});
+const gatewayCanonical = {
+  schemaVersion: gatewayManifest.schemaVersion,
+  toolSurfaceVersion: gatewayManifest.toolSurfaceVersion,
+  instructions: gatewayManifest.instructions,
+  tools: gatewayManifest.tools
+};
+const gatewayHash = value => crypto.createHash('sha256').update(stableJson(value)).digest('base64url');
+assert.equal(gatewayManifest.hash, gatewayHash(gatewayCanonical), 'gateway manifest hash must cover the full canonical public contract');
+const instructionChanged = { ...gatewayCanonical, instructions: `${gatewayCanonical.instructions} changed` };
+assert.notEqual(gatewayHash(instructionChanged), gatewayManifest.hash, 'server instruction changes must change the gateway manifest hash');
+const firstTool = gatewayCanonical.tools[0];
+const outputChanged = {
+  ...gatewayCanonical,
+  tools: [{ ...firstTool, outputSchema: { ...firstTool.outputSchema, description: 'changed output contract' } }, ...gatewayCanonical.tools.slice(1)]
+};
+assert.notEqual(gatewayHash(outputChanged), gatewayManifest.hash, 'output schema changes must change the gateway manifest hash');
+
 const definitions = getToolDefinitions();
 const metadata = getToolMetadata();
 const metadataByName = new Map(metadata.map(item => [item.name, item]));
@@ -57,6 +75,9 @@ const hash = crypto.createHash('sha256').update(stableJson(contract)).digest('he
 assert.equal(definitions.length, 12);
 assert.equal(rows.length, 35);
 assert.equal(hash, EXPECTED_HASH, 'public tool contract changed without an explicit baseline update');
+const editDefinition = definitions.find(definition => definition.name === "relai_edit");
+assert.ok(editDefinition, "relai_edit definition must exist");
+assert.match(editDefinition.description, /one logical updateText patch/i, "large repository-wide changes should stay together instead of being split into repeated edit batches");
 
 const actualKeys = [];
 for (const expected of rows) {

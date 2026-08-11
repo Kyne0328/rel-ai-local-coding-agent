@@ -117,9 +117,29 @@ async function readGitStatusMap(workspace, config) {
     maxOutputBytes: INTERNAL_STATUS_MAX_BYTES
   }, config);
   if (result.exitCode !== 0 || result.stdoutTruncated) return null;
-  return statusMapFromOutput(result.stdout);
+  return statusMutationSnapshot(workspace, result.stdout);
 }
 
+function statusMutationSnapshot(workspace, statusOutput) {
+  const root = path.resolve(workspace.path);
+  const statuses = statusMapFromOutput(statusOutput);
+  return new Map([...statuses.entries()].map(([file, status]) => [
+    file,
+    `${status}\0${pathMetadataFingerprint(root, file)}`
+  ]));
+}
+
+function pathMetadataFingerprint(root, relativePath) {
+  const absolute = path.resolve(root, relativePath);
+  if (!isPathInside(absolute, root)) return 'outside';
+  try {
+    const stat = fs.lstatSync(absolute, { bigint: true });
+    return [stat.mode, stat.size, stat.mtimeNs, stat.ctimeNs, stat.ino].join(':');
+  } catch (error) {
+    const code = error && typeof error === 'object' && 'code' in error ? error.code : '';
+    return `missing:${String(code || '')}`;
+  }
+}
 function changedStatusFiles(before, after) {
   if (!before || !after) return { files: [], truncated: false };
   const all = new Set([...before.keys(), ...after.keys()]);
@@ -184,4 +204,4 @@ async function relaiExec(workspace, config, args = {}, context = {}) {
   };
 }
 
-export { relaiExec, resolveCommandCwd, normalizeCommandEnv, resolveShell, powershellCommand, redactCommandForAudit, statusMapFromOutput, changedStatusFiles };
+export { relaiExec, resolveCommandCwd, normalizeCommandEnv, resolveShell,  redactCommandForAudit,   };

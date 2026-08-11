@@ -10,6 +10,8 @@ const dashboardSource = fs.readFileSync(new URL('../src/http/dashboard.js', impo
 const eventClientSource = fs.readFileSync(new URL('../src/ui/events.js', import.meta.url), 'utf8');
 const dashboardClientSource = fs.readFileSync(new URL('../public/dashboard.js', import.meta.url), 'utf8');
 const connectionStateSource = fs.readFileSync(new URL('../src/ui/connection-state.js', import.meta.url), 'utf8');
+const workspaceStateSource = fs.readFileSync(new URL('../src/workspaceState.js', import.meta.url), 'utf8');
+const activitySource = fs.readFileSync(new URL('../src/ui/features/activity/index.js', import.meta.url), 'utf8');
 assert.match(dashboardSource, /: keepalive/, 'dashboard SSE must include a heartbeat for quiet connections');
 assert.match(eventClientSource, /addEventListener\('ready'/, 'the dashboard client must treat the server ready event as a live connection');
 assert.match(eventClientSource, /stopSSE\(\{ emit: false \}\)/, 'normal SSE restarts must not flash an offline state');
@@ -19,13 +21,23 @@ assert.doesNotMatch(eventClientSource, /emitState\('paused'\)/, 'background wind
 assert.doesNotMatch(eventClientSource, /visibilityState === 'hidden'/, 'background windows must not disconnect the live transport');
 assert.match(eventClientSource, /visibilityState !== 'visible'/, 'visibility recovery must reconnect only when the window becomes visible and the stream is absent');
 assert.match(eventClientSource, /new EventSource\(url, \{ withCredentials: true \}\)/, 'Electron EventSource requests must include the dashboard session cookie');
-assert.match(dashboardSource, /sendSnapshot\(true\)/, 'every new SSE connection must receive an immediate catch-up snapshot');
+assert.match(dashboardSource, /if \(!clientRevision \|\| clientRevision !== lastSignature\) sendSnapshot\(true\)/, 'SSE must skip the duplicate catch-up snapshot when the embedded page revision is already current');
+assert.match(eventClientSource, /params\.set\('revision', _snapshotRevision\)/, 'the live client must send its embedded snapshot revision when opening SSE');
 assert.match(dashboardSource, /payload\.snapshot\.streamId.*payload\.snapshot\.sequence/, 'SSE snapshots must expose a stable stream ID and monotonic sequence');
 assert.match(dashboardClientSource, /source: 'visibility-resume'/, 'returning to the dashboard must force a catch-up refresh');
 assert.match(dashboardSource, /onToolActivity\(scheduleSnapshot\)/, 'tool activity must schedule dashboard snapshots');
+assert.match(dashboardSource, /const DASHBOARD_SNAPSHOT_COALESCE_MS = 350;/, 'tool activity bursts must use a trailing human-scale reconciliation delay');
+assert.match(dashboardSource, /const DASHBOARD_SNAPSHOT_MAX_WAIT_MS = 1200;/, 'continuous activity must still receive bounded periodic reconciliation');
+assert.match(dashboardSource, /clearTimeout\(pendingSnapshot\)[\s\S]*DASHBOARD_SNAPSHOT_MAX_WAIT_MS[\s\S]*DASHBOARD_SNAPSHOT_COALESCE_MS/, 'snapshot scheduling must debounce bursts while enforcing a maximum wait');
+assert.match(dashboardSource, /onWorkspaceStateChange\(scheduleSnapshot\)/, 'asynchronous workspace Git refreshes must publish a follow-up snapshot');
 assert.doesNotMatch(dashboardSource, /setInterval\(\(\) => sendSnapshot/, 'dashboard updates must not depend on a polling timer');
 assert.doesNotMatch(dashboardClientSource, /configureLiveRefresh|dashboardRefreshSeconds|liveLogPollSeconds|_liveState = 'polling'/);
 assert.doesNotMatch(connectionStateSource, /polling:/);
+assert.doesNotMatch(workspaceStateSource, /spawnSync/, 'dashboard workspace state must never block the Electron main process with synchronous Git');
+assert.match(workspaceStateSource, /runProcess\('git'/, 'workspace Git refreshes must use the asynchronous process runner');
+assert.match(workspaceStateSource, /let refreshQueue = Promise\.resolve\(\)/, 'workspace Git probes must be serialized to avoid process bursts');
+assert.match(activitySource, /_liveSnapshotFingerprint/, 'Activity must remember the last audit snapshot before reconciling entries');
+assert.match(activitySource, /liveFingerprint === _liveSnapshotFingerprint \? false : mergeEntries/, 'unchanged audit snapshots must bypass Activity merge work');
 
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-dashboard-events-'));
 const previousConfigPath = process.env.REL_AI_MCP_CONFIG;
@@ -80,8 +92,13 @@ try {
   assert.equal(dashboardResponse.status, 200);
   const dashboardCookie = String(dashboardResponse.headers.get('set-cookie') || '').split(';')[0];
   assert.match(dashboardCookie, /^relai_dashboard_session=/, 'desktop bootstrap must issue a dashboard session cookie');
+  const dashboardHtml = await dashboardResponse.text();
+  const initialMatch = /<script type="application\/json" id="initialDashboardData"[^>]*>([\s\S]*?)<\/script>/.exec(dashboardHtml);
+  assert.ok(initialMatch, 'dashboard HTML must embed its initial snapshot');
+  const initialSnapshot = JSON.parse(initialMatch[1]);
+  assert.ok(initialSnapshot.snapshot?.revision, 'embedded dashboard state must include a source revision');
 
-  const response = await fetch(`http://127.0.0.1:${address.port}/events`, {
+  const response = await fetch(`http://127.0.0.1:${address.port}/events?revision=${encodeURIComponent(initialSnapshot.snapshot.revision)}`, {
     headers: { cookie: dashboardCookie },
     signal: controller.signal
   });
@@ -92,8 +109,9 @@ try {
   const stream = createEventReader(responseReader);
   const ready = await stream.nextEvent();
   assert.equal(ready.event, 'ready');
-  assert.equal(JSON.parse(ready.data).ok, true);
-  const initialSnapshot = await stream.nextDashboardEvent();
+  const readyPayload = JSON.parse(ready.data);
+  assert.equal(readyPayload.ok, true);
+  assert.equal(readyPayload.revision, initialSnapshot.snapshot.revision, 'matching embedded state must not require a duplicate full snapshot');
   assert.equal(initialSnapshot.desktopStatus?.tunnelStatus, 'connecting');
   assert.equal(initialSnapshot.connectionState?.localService?.status, 'running');
   assert.equal(initialSnapshot.snapshot?.modelVersion, 3);

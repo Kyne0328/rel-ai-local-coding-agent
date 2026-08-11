@@ -44,7 +44,7 @@ function patchSafeguardsPanel() {
   const safeguards = panel('Patch safeguards');
   safeguards.body.appendChild(settingsIntro(
     'Protected update defaults',
-    'These defaults apply only to relai_edit updateText patches, including staged patches when committed. Exact replacements, batch edits, and full-file writes are unaffected.'
+    'Rel.AI automatically keeps large updateText changes together and stages transport chunks when needed. These controls affect patch safety, not patch size.'
   ));
   safeguards.body.appendChild(field('Require clean git before patch', toggleControl(patch.requireCleanGit === true, value => {
     updatePatchSetting('requireCleanGit', value);
@@ -52,9 +52,6 @@ function patchSafeguardsPanel() {
   safeguards.body.appendChild(field('Create backup before patch', toggleControl(patch.backup !== false, value => {
     updatePatchSetting('backup', value);
   }, { enabled: 'Backup enabled', disabled: 'No automatic backup' }), 'Creates a non-destructive Git stash entry for existing tracked changes before applying a patch. Untracked files are not included.'));
-  safeguards.body.appendChild(field('Patch limit (MiB)', megabyteControl(patch.maxUpdateBytes || 2 * MIB, value => {
-    updatePatchSetting('maxUpdateBytes', value);
-  }, 50), 'Maximum UTF-8 size of the complete updateText patch. Staged chunks are checked when committed.'));
   return safeguards;
 }
 

@@ -14,7 +14,7 @@ function buildContextualSearch(workspace, matches, args = {}, metadata = {}) {
   const options = normalizeContextOptions(args);
   const groupedMatches = groupMatchesByFile(matches);
   const groups = metadata.prioritizeFiles
-    ? rankMatchGroups(groupedMatches, args.pattern)
+    ? rankMatchGroups(groupedMatches, args.pattern, metadata.workflowContext)
     : groupedMatches;
   const selectedGroups = groups.slice(0, options.maxFiles);
   const files = [];
@@ -33,7 +33,7 @@ function buildContextualSearch(workspace, matches, args = {}, metadata = {}) {
       break;
     }
     const group = selectedGroups[groupIndex];
-    const fileResult = readContextFile(workspace, group, options, remainingBytes);
+    const fileResult = readContextFile(workspace, group, options, remainingBytes, metadata.workflowContext);
     if (fileResult.skipped) {
       skipped.push(fileResult.skipped);
       continue;
@@ -105,7 +105,7 @@ function groupMatchesByFile(matches) {
   return [...groups.entries()].map(([path, fileMatches]) => ({ path, matches: fileMatches }));
 }
 
-function readContextFile(workspace, group, options, byteBudget) {
+function readContextFile(workspace, group, options, byteBudget, workflowContext = {}) {
   try {
     const safe = resolveSafePath(workspace.path, group.path, { operation: "read" });
     const stat = fs.statSync(safe.absolutePath);
@@ -115,7 +115,8 @@ function readContextFile(workspace, group, options, byteBudget) {
     const text = data.toString("utf8");
     const lines = splitLines(text);
     const matchLines = uniqueSortedLines(group.matches, lines.length);
-    const allRanges = buildRanges(matchLines, lines.length, options);
+    const sha256 = crypto.createHash("sha256").update(data).digest("hex");
+    const allRanges = buildRanges(matchLines, lines.length, options).filter(range => !rangeAlreadyRead(group.path, sha256, range, workflowContext));
     const selectedRanges = allRanges.slice(0, options.maxRangesPerFile);
     const ranges = [];
     let remainingBytes = byteBudget;
@@ -143,7 +144,7 @@ function readContextFile(workspace, group, options, byteBudget) {
     return {
       file: {
         path: safe.relativePath,
-        sha256: crypto.createHash("sha256").update(data).digest("hex"),
+        sha256,
         bytes: stat.size,
         lineCount: lines.length,
         matchCount: matchLines.length,
@@ -164,6 +165,15 @@ function readContextFile(workspace, group, options, byteBudget) {
   }
 }
 
+function rangeAlreadyRead(filePath, sha256, range, context = {}) {
+  const target = String(filePath || '').replaceAll('\\', '/');
+  return (context.readEvidence || []).some(item => {
+    if (String(item?.path || '').replaceAll('\\', '/') !== target || String(item?.sha256 || '') !== sha256) return false;
+    const startLine = Number(item.startLine || 1);
+    const endLine = Number(item.endLine || Number.MAX_SAFE_INTEGER);
+    return startLine <= range.startLine && endLine >= range.endLine;
+  });
+}
 function splitLines(text) {
   if (text === "") return [];
   return String(text).split(/\r\n|\n|\r/);

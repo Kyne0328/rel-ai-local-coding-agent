@@ -1,14 +1,14 @@
 {
   "name": "rel-ai-mcp",
-  "version": "0.24.1",
-  "description": "Guarded local repository workflows through a compact Rel.AI MCP connector and workflow skill.",
+  "version": "0.25.0",
+  "description": "Guarded local repository workflows through a compact Rel.AI MCP connector and bundled workflow skills.",
   "author": {
     "name": "Kyne",
     "url": "https://github.com/Kyne0328"
   },
   "homepage": "https://github.com/Kyne0328/rel-ai-mcp",
   "repository": "https://github.com/Kyne0328/rel-ai-mcp",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "keywords": [
     "mcp",
     "repository",

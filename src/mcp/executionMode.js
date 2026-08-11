@@ -171,6 +171,6 @@ export {
   TASK_ELIGIBILITY,
   UNSUPPORTED_EXECUTION_MODE,
   assessSynchronousExecution,
-  normalizeSynchronousExecutionBounds,
+
   selectExecutionMode
 };

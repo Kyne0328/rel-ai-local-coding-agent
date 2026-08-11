@@ -1,0 +1,56 @@
+@layer components {
+.skills-page { @apply grid min-w-0 gap-3; }
+.skills-header { @apply flex flex-col gap-1; }
+.skills-header h2 { @apply text-xl font-bold; }
+.skills-header p { @apply max-w-4xl text-[12px] leading-5; color: var(--ui-text-secondary); }
+.skill-section-intro { @apply grid gap-1 rounded-lg px-4 py-3; border: 1px solid var(--ui-border-default); border-left: 2px solid var(--ui-action-primary); background: var(--ui-surface-secondary); }
+.skill-section-intro strong { @apply text-[12px]; }
+.skill-section-intro span { @apply text-[11px] leading-5; color: var(--ui-text-secondary); }
+.skill-scope-tabs { @apply flex flex-wrap gap-2 rounded-xl p-2; background: var(--ui-surface-primary); border: 1px solid var(--ui-border-default); }
+.skill-scope-tab { @apply min-w-0; }
+.skill-scope-tab.active { background: var(--ui-status-info-background); border-color: color-mix(in srgb, var(--ui-action-primary) 42%, transparent); color: var(--ui-text-primary); }
+.skill-settings-body { @apply grid min-w-0 gap-3; }
+.skill-section-intro { @apply mt-0; }
+.skill-install-card .card-head { @apply items-start; }
+.skill-install-card .card-head p, .skill-workspace-head p { @apply mt-1 text-[11px] leading-5; color: var(--ui-text-secondary); }
+.skill-install-body { @apply grid gap-4; }
+.skill-github-form { @apply grid min-w-0 gap-2; }
+.skill-github-form > label { @apply text-[11px] font-semibold; }
+.skill-github-row { @apply grid min-w-0 gap-2; grid-template-columns: minmax(0,1fr) auto; }
+.skill-preview-host { @apply min-w-0; }
+.skill-preview-empty { @apply rounded-lg p-4 text-[11px]; color: var(--ui-text-secondary); background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-subtle); }
+.skill-preview-head { @apply flex min-w-0 items-center justify-between gap-3 border-b pb-3; border-color: var(--ui-border-subtle); }
+.skill-preview-head > div { @apply grid min-w-0 gap-1; }
+.skill-preview-head strong { @apply truncate text-[12px]; }
+.skill-preview-head span { @apply text-[10px]; color: var(--ui-text-tertiary); }
+.skill-select-all { @apply inline-flex shrink-0 items-center gap-2 text-[11px] font-semibold; }
+.skill-choice-list { @apply grid min-w-0 overflow-hidden rounded-lg; border: 1px solid var(--ui-border-default); }
+.skill-choice { @apply flex min-w-0 cursor-pointer items-start gap-3 border-b px-3 py-3 last:border-b-0; border-color: var(--ui-border-subtle); }
+.skill-choice:hover { background: color-mix(in srgb, var(--ui-surface-secondary) 68%, transparent); }
+.skill-choice > input { @apply mt-0.5; }
+.skill-choice > span { @apply grid min-w-0 gap-1; }
+.skill-choice strong { @apply text-[12px]; }
+.skill-choice small { @apply min-w-0 break-words text-[10px] leading-4; color: var(--ui-text-secondary); }
+.skill-preview-actions { @apply flex justify-end pt-3; }
+.skill-library-list { @apply grid min-w-0 overflow-hidden rounded-xl; background: var(--ui-surface-primary); border: 1px solid var(--ui-border-default); }
+.skill-library-row { @apply flex min-w-0 items-start justify-between gap-4 border-b p-4 last:border-b-0; border-color: var(--ui-border-subtle); }
+.skill-library-copy { @apply grid min-w-0 flex-1 gap-1.5; }
+.skill-library-title { @apply flex min-w-0 flex-wrap items-center gap-2; }
+.skill-library-title strong { @apply min-w-0 break-words text-[13px]; }
+.skill-library-title span { @apply rounded-full px-2 py-0.5 text-[9px] font-semibold; background: var(--ui-surface-secondary); color: var(--ui-text-secondary); border: 1px solid var(--ui-border-subtle); }
+.skill-library-copy p { @apply max-w-4xl text-[11px] leading-5; color: var(--ui-text-secondary); }
+.skill-library-copy code { @apply w-fit max-w-full break-all text-[10px]; color: var(--ui-text-tertiary); }
+.skill-workspace-head { @apply items-start; }
+.skill-workspace-head > div { @apply min-w-0; }
+.skill-workspace-head select { @apply w-auto min-w-48; }
+.skill-workspace-body { @apply grid gap-3; }
+}
+
+@media (max-width: 520px) {
+  .skill-scope-tabs { @apply grid; grid-template-columns: 1fr; }
+  .skill-scope-tab { @apply w-full; }
+  .skill-github-row { grid-template-columns: 1fr; }
+  .skill-library-row, .skill-preview-head, .skill-workspace-head { @apply flex-col items-stretch; }
+  .skill-library-row > button, .skill-preview-actions > button, .skill-workspace-head select { @apply w-full; }
+  .skill-select-all { @apply w-fit; }
+}

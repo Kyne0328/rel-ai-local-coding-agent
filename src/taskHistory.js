@@ -41,25 +41,28 @@ function summarizeTask(taskId, events, activeTask) {
   const completionEvent = [...ordered].reverse().find(entry =>
     entry.ok !== false && (entry.completionKnown === true || entry.tool === 'relai_finish_work')
   ) || null;
-  const endedAt = activeTask ? null : new Date(endedMs).toISOString();
+  const cancellationEvent = [...ordered].reverse().find(entry => entry.ok !== false && entry.tool === 'relai_cancel_work') || null;
+  const terminalFailure = [...ordered].reverse().find(entry => entry.endReason === 'terminal_failure' || entry.terminal === true) || null;
+  const terminal = Boolean(completionEvent || cancellationEvent || terminalFailure);
+  const endedAt = activeTask || !terminal ? null : new Date(endedMs).toISOString();
   return {
     id: taskId,
     taskId,
     sessionId: taskId,
     title: activeTask?.title || titleFromEvents(ordered),
     objective: activeTask?.objective || '',
-    status: activeTask?.status || (activeTask ? normalizeLiveTaskStatus(activeTask.state, activeTask) : completionEvent ? 'completed' : failures ? 'failed' : 'cancelled'),
+    status: activeTask?.status || (activeTask ? normalizeLiveTaskStatus(activeTask.state, activeTask) : completionEvent ? 'completed' : cancellationEvent ? 'cancelled' : terminalFailure ? 'failed' : 'inactive'),
     progress: activeTask?.progress || (completionEvent ? completeProgress() : { mode: 'indeterminate', label: 'Progress unavailable' }),
     currentStage: activeTask?.currentStage || '',
     currentActivity: activeTask?.currentActivity || activeTask?.operation || last.operation || '',
     completionKnown: activeTask?.completionKnown === true || Boolean(completionEvent),
-    endReason: activeTask ? null : completionEvent ? 'explicit_completion' : 'inactivity_window',
+    endReason: activeTask ? null : completionEvent ? 'explicit_completion' : cancellationEvent ? 'explicit_cancellation' : terminalFailure ? 'terminal_failure' : '',
     summary: activeTask?.summary || completionEvent?.taskSummary || '',
     workspace: activeTask?.workspace || ordered.find(entry => entry.workspace)?.workspace || '',
     startedAt: new Date(startedMs).toISOString(),
     endedAt,
     completedAt: endedAt,
-    durationMs: activeTask ? Math.max(0, Date.now() - startedMs) : Math.max(0, endedMs - startedMs),
+    durationMs: activeTask || !terminal ? Math.max(0, Date.now() - startedMs) : Math.max(0, endedMs - startedMs),
     calls: Math.max(ordered.length, Number(activeTask?.calls || 0)),
     toolCallCount: Math.max(ordered.length, Number(activeTask?.toolCallCount || activeTask?.calls || 0)),
     successfulToolCallCount: Number(activeTask?.successfulToolCallCount || Math.max(0, ordered.filter(entry => entry.ok !== false).length)),

@@ -1,3 +1,3 @@
-import { relaiHttpProbe, resolveLocalRouteTarget } from './httpProbe.js';
+import { relaiHttpProbe } from './httpProbe.js';
 
-export { relaiHttpProbe, resolveLocalRouteTarget };
+export { relaiHttpProbe,  };

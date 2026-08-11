@@ -7,22 +7,32 @@ import path from 'node:path';
 import { AUTO_CHECK_DELAY_MS, AUTO_CHECK_INTERVAL_MS, compareVersions, createAppUpdater, detectUpdateSupport, isStableVersion, normalizeStatus, parseStableVersion, progressPayload } from "../electron/app-updater.js";
 
 class FakeUpdater extends EventEmitter {
-  constructor() {
+  constructor({ checkFailures = [], downloadFailures = [] } = {}) {
     super();
     this.checkCalls = 0;
     this.downloadCalls = 0;
     this.installCalls = [];
+    this.checkFailures = [...checkFailures];
+    this.downloadFailures = [...downloadFailures];
   }
-  async checkForUpdates() { this.checkCalls += 1; }
-  async downloadUpdate() { this.downloadCalls += 1; }
+  async checkForUpdates() {
+    this.checkCalls += 1;
+    const error = this.checkFailures.shift();
+    if (error) { this.emit('error', error); throw error; }
+  }
+  async downloadUpdate() {
+    this.downloadCalls += 1;
+    const error = this.downloadFailures.shift();
+    if (error) { this.emit('error', error); throw error; }
+  }
   quitAndInstall(silent, forceRunAfter) { this.installCalls.push({ silent, forceRunAfter }); }
 }
 
 const roots = [];
-function createHarness({ currentVersion = '0.20.7', packaged = true, env = {}, activeCalls = 0 } = {}) {
+function createHarness({ currentVersion = '0.20.7', packaged = true, env = {}, activeCalls = 0, checkFailures = [], downloadFailures = [], currentCompatibility = null } = {}) {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-updater-'));
   roots.push(temp);
-  const fake = new FakeUpdater();
+  const fake = new FakeUpdater({ checkFailures, downloadFailures });
   const statuses = [];
   const logs = [];
   const timers = [];
@@ -47,7 +57,15 @@ function createHarness({ currentVersion = '0.20.7', packaged = true, env = {}, a
     getTaskActivity: () => ({ activeCalls: activity.activeCalls }),
     onStatusChange: status => statuses.push(status),
     onBeforeInstall: () => { beforeInstall += 1; },
+    retryDelay: async () => {},
     onLog: (message, options) => logs.push({ message, options }),
+    currentCompatibility: currentCompatibility || {
+      applicationVersion: currentVersion,
+      schemaVersion: 3,
+      manifestHash: 'hash-current',
+      deviceProtocolVersion: 1,
+      minimumCompatibleDeviceProtocol: 1
+    },
     errorCodes: {
       UPDATE_FAILED: 'update_failed',
       UPDATE_NOT_SUPPORTED: 'update_not_supported',
@@ -105,11 +123,34 @@ await checkPromise;
 assert.equal(valid.fake.checkCalls, 1);
 assert.equal(valid.timers.at(-1).delay, AUTO_CHECK_INTERVAL_MS);
 
-valid.fake.emit('update-available', { version: '0.21.0', releaseDate: '2026-07-26T00:00:00.000Z' });
+const transientNetworkError = () => Object.assign(new Error('net::ERR_HTTP2_SERVER_REFUSED_STREAM'), { code: 'ERR_HTTP2_SERVER_REFUSED_STREAM' });
+const transientCheck = createHarness({ checkFailures: [transientNetworkError(), transientNetworkError()] });
+transientCheck.updater.start();
+const transientCheckResult = await transientCheck.updater.checkForUpdates();
+assert.equal(transientCheckResult.ok, true, 'transient HTTP/2 stream refusals should recover inside one update action');
+assert.equal(transientCheck.fake.checkCalls, 3);
+assert.equal(transientCheck.logs.some(entry => entry.options.code === 'update_failed'), false, 'retrying a transient updater failure must not emit update_failed');
+assert.ok(transientCheck.logs.some(entry => entry.options.code === 'update_retry'), 'transient updater retries should remain diagnosable');
+
+const exhaustedCheck = createHarness({ checkFailures: [transientNetworkError(), transientNetworkError(), transientNetworkError()] });
+exhaustedCheck.updater.start();
+const exhaustedCheckResult = await exhaustedCheck.updater.checkForUpdates();
+assert.equal(exhaustedCheckResult.ok, false);
+assert.equal(exhaustedCheck.fake.checkCalls, 3, 'transient updater failures should use a bounded three-attempt policy');
+assert.equal(exhaustedCheck.logs.filter(entry => entry.options.code === 'update_failed').length, 1, 'exhausted retries should emit one terminal update failure');
+assert.equal(exhaustedCheck.updater.getStatus().state, 'error');
+
+const nonTransientCheck = createHarness({ checkFailures: [Object.assign(new Error('certificate rejected'), { code: 'ERR_CERT_AUTHORITY_INVALID' })] });
+nonTransientCheck.updater.start();
+assert.equal((await nonTransientCheck.updater.checkForUpdates()).ok, false);
+assert.equal(nonTransientCheck.fake.checkCalls, 1, 'non-transient updater failures must fail without retrying');
+
+valid.fake.emit('update-available', { version: '0.21.0', releaseDate: '2026-07-26T00:00:00.000Z', relai: { schemaVersion: 3, manifestHash: 'hash-current', deviceProtocolVersion: 1, minimumCompatibleDeviceProtocol: 1 } });
 assert.equal(valid.updater.getStatus().state, 'available');
 assert.equal(valid.updater.getStatus().availableVersion, '0.21.0');
 assert.equal(valid.updater.getStatus().canDownload, true);
-assert.equal(valid.updater.getStatus().integrityVerified, false);
+assert.deepEqual(valid.updater.getStatus().updateSynchronization, { status: 'current', toolRefreshRequired: false, deviceUpdateRequired: false });
+assert.equal(valid.updater.getStatus().availableCompatibility.schemaVersion, 3);
 
 const downloadPromise = valid.updater.downloadUpdate();
 assert.equal(valid.updater.getStatus().state, 'downloading');
@@ -119,6 +160,14 @@ valid.fake.emit('download-progress', { percent: 52.5, transferred: 525, total: 1
 assert.equal(valid.updater.getStatus().progress.percent, 52.5);
 valid.fake.emit('update-downloaded', { version: '0.21.0' });
 assert.equal(valid.updater.getStatus().state, 'downloaded');
+
+const transientDownload = createHarness({ downloadFailures: [transientNetworkError()] });
+transientDownload.updater.start();
+transientDownload.fake.emit('update-available', { version: '0.21.0' });
+const transientDownloadResult = await transientDownload.updater.downloadUpdate();
+assert.equal(transientDownloadResult.ok, true, 'transient download transport failures should retry without user intervention');
+assert.equal(transientDownload.fake.downloadCalls, 2);
+assert.equal(transientDownload.logs.some(entry => entry.options.code === 'update_failed'), false);
 assert.equal(valid.updater.getStatus().integrityVerified, true);
 assert.equal(valid.updater.getStatus().canInstall, true);
 
@@ -148,6 +197,28 @@ for (const candidate of ['bad-version', 'v0.21.0', '0.21.0-beta.1', '0.20.7', '0
   assert.equal(harness.updater.getStatus().canDownload, false, candidate);
   assert.equal(harness.updater.getStatus().integrityVerified, false, candidate);
 }
+
+const schemaChange = createHarness();
+schemaChange.updater.start();
+schemaChange.fake.emit('update-available', {
+  version: '0.21.0',
+  relai: { schemaVersion: 4, manifestHash: 'hash-next', deviceProtocolVersion: 1, minimumCompatibleDeviceProtocol: 1 }
+});
+assert.deepEqual(schemaChange.updater.getStatus().updateSynchronization, { status: 'tool_refresh_required', toolRefreshRequired: true, deviceUpdateRequired: false });
+
+const deviceChange = createHarness();
+deviceChange.updater.start();
+deviceChange.fake.emit('update-available', {
+  version: '0.21.0',
+  relai: { schemaVersion: 3, manifestHash: 'hash-current', deviceProtocolVersion: 2, minimumCompatibleDeviceProtocol: 2 }
+});
+assert.deepEqual(deviceChange.updater.getStatus().updateSynchronization, { status: 'device_update_required', toolRefreshRequired: false, deviceUpdateRequired: true });
+
+const metadataUnknown = createHarness();
+metadataUnknown.updater.start();
+metadataUnknown.fake.emit('update-available', { version: '0.21.0' });
+assert.equal(metadataUnknown.updater.getStatus().updateSynchronization, null, 'missing compatibility metadata must not invent a refresh warning');
+assert.equal(metadataUnknown.updater.getStatus().availableCompatibility, null);
 
 const invalidInstalled = createHarness({ currentVersion: 'development' });
 invalidInstalled.updater.start();

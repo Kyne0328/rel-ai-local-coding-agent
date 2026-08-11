@@ -107,7 +107,7 @@ try {
   assert.doesNotMatch(pageHtml, /action="https?:/i, 'the consent form must not use an absolute cross-origin action');
 
   const approved = await postForm('/authorize', { ...values, dashboard_token: approvalToken });
-  assert.equal(approved.status, 302);
+  assert.equal(approved.status, 303);
   const location = new URL(approved.headers.get('location'));
   assert.equal(location.searchParams.get('state'), 'public-oauth-state');
   assert.deepEqual([...location.searchParams.keys()].sort(), ['code', 'state']);

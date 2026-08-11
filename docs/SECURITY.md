@@ -2,20 +2,30 @@
 
 ## Authentication model
 
-Rel.AI MCP exposes one protected MCP endpoint at `POST /mcp`.
+Rel.AI supports two public ChatGPT connection modes over protected MCP endpoints.
 
-### ChatGPT connector: OAuth 2.1 with PKCE
+### Rel.AI Cloud: OAuth + device-bound pairing
 
-ChatGPT connects with **OAuth**. Rel.AI MCP acts as both authorization server and resource server:
+The normal desktop path uses Rel.AI Cloud. ChatGPT authenticates against the hosted service, and the desktop separately proves possession of its locally generated device identity before it can receive routed requests.
 
-- Unauthenticated `POST /mcp` returns `401` with a Bearer challenge pointing to `/.well-known/oauth-protected-resource`.
-- ChatGPT discovers the authorization server, dynamically registers a client, and uses the authorization-code flow with PKCE S256.
-- The `/authorize` page requires the current approval token (`REL_AI_MCP_TOKEN`) before issuing a short-lived, single-use authorization code.
-- Access tokens expire after one hour and can be renewed with rotating refresh tokens.
-- OAuth state is stored in the Rel.AI state directory with restricted file permissions.
-- When the same static MCP URL moves to another computer, an existing Rel.AI-issued client ID can be restored only through a fresh approval-token authorization. Recovery accepts only Rel.AI client-ID format, requires an HTTPS redirect URI, and does not import old access or refresh tokens.
-- Replacing the approval token revokes pending authorization codes plus all issued access and refresh tokens, while preserving registered ChatGPT clients so the existing app can be approved again.
-- A public ChatGPT connection must use HTTPS.
+- The private device key remains on the desktop and is protected with Electron `safeStorage`; only public identity material is registered remotely.
+- Pairing and recovery values are short-lived or user-controlled credentials and must be treated as secrets.
+- Revoked or unauthorized devices are not eligible for Cloud routing.
+- The public client sends workspace aliases rather than absolute local paths as routing identifiers.
+- Repository files, Git operations, commands, tests, builds, and managed processes remain on the selected desktop.
+- Knowing the public endpoint, client protocol, or application source does not grant hosted-service authorization.
+
+The hosted authorization, persistence, token lifecycle, routing, abuse controls, and deployment implementation are intentionally maintained outside this public repository.
+### Advanced Direct: local OAuth approval token
+
+Direct mode retains the original local OAuth server behind the managed HTTPS ngrok endpoint. In Direct mode only:
+
+- ChatGPT discovers the local authorization server and uses authorization-code + PKCE S256.
+- The local `/authorize` page requires the current approval token (`REL_AI_MCP_TOKEN`).
+- Replacing that approval token revokes current Direct OAuth authorization/access/refresh state while preserving the registered client where possible.
+- The public Direct endpoint must use HTTPS.
+
+Cloud pairing, Cloud OAuth grants, and Direct approval-token rotation are separate security domains; rotating the Direct approval token is not a Cloud reauthentication or tool-schema refresh operation.
 
 ### Local and automation clients: Bearer token
 
@@ -61,9 +71,10 @@ Set `REL_AI_MCP_ALLOW_NO_AUTH=1` only for local testing on a trusted machine.
 - The dashboard, setup wizard, and failure-recovery renderer use context isolation with Node integration disabled. The local setup and recovery windows additionally run in Chromium's sandbox with web security enabled.
 - Setup and recovery pages have a strict Content Security Policy and load through the restricted `relai-app://renderer` protocol rather than privileged `file://` URLs. Renderer permissions, downloads, attached webviews, popups, redirects, and navigation outside the configured renderer page are denied.
 - Every desktop IPC channel checks the sending `BrowserWindow`. Setup actions are accepted only from setup, failure-recovery actions only from the fallback window, and routine settings, lifecycle, updater, diagnostics, restart, and stop actions only from the secured dashboard.
-- Clipboard IPC accepts only known Rel.AI windows, removes NUL characters, and rejects payloads larger than 64 KiB. Setup external links require HTTPS and the exact `dashboard.ngrok.com` hostname.
-- The ngrok account key is write-only after initial entry. The renderer receives only `ngrokAuthtokenConfigured`; a blank save preserves the existing key and a nonblank save replaces it.
-- Approval-token replacement saves the replacement before revocation, rolls the old token back when OAuth revocation fails, and returns the new token with restart guidance when only the service restart fails.
+- Clipboard IPC accepts only known Rel.AI windows, removes NUL characters, and rejects payloads larger than 64 KiB. Advanced Direct setup external links require HTTPS and the exact `dashboard.ngrok.com` hostname.
+- Passive Cloud gateway status sent to renderers excludes principal ID, private JWK, recovery secret, pairing poll token, and OAuth bearer material. Recovery/link values cross IPC only through explicit sender-scoped actions.
+- The Direct ngrok account key remains write-only after initial entry. The renderer receives only whether one is configured; blank saves preserve it and nonblank saves replace it.
+- Direct approval-token replacement saves the replacement before revocation, rolls the old token back when revocation fails, and returns the new token with restart guidance when only the service restart fails.
 
 ## Application update boundary
 
@@ -90,7 +101,7 @@ Set `REL_AI_MCP_ALLOW_NO_AUTH=1` only for local testing on a trusted machine.
 
 Rel.AI MCP is a trusted local coding bridge, not a sandbox.
 
-- Anyone who obtains `REL_AI_MCP_TOKEN` can authorize or call the server. Use **Settings > Connection > Replace approval token** if it leaks; the operation revokes existing OAuth grants and restarts the connection.
+- Anyone who obtains the Direct `REL_AI_MCP_TOKEN` can authorize or call that Direct/local server; replace it if it leaks. Anyone who obtains a Cloud recovery code can attempt to recover that accountless principal, so store recovery material separately from routine logs/config exports and revoke unexpected devices.
 - Validation commands execute code configured by the workspace. A malicious repository can cause system or data impact when tests, builds, or analyzers run. Child processes receive a minimal platform environment plus explicit configuration rather than the complete service environment.
 - ChatGPT can modify any non-sensitive file inside a configured workspace through the active tools.
 - Git push publishes to allowlisted remotes; review the diff before committing or pushing.

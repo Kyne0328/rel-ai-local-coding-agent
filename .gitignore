@@ -15,3 +15,8 @@
 /vendor/ngrok/win32/ngrok.exe
 /vendor/ngrok/darwin/ngrok
 /vendor/ngrok/linux/ngrok
+# Zoekt binaries are built from pinned upstream source at build time; provenance is committed, binaries are not.
+/vendor/zoekt/win32/zoekt.exe
+/vendor/zoekt/win32/zoekt-index.exe
+/vendor/zoekt/linux/zoekt
+/vendor/zoekt/linux/zoekt-index

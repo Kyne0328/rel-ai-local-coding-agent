@@ -197,7 +197,7 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
       markUnsaved(form, false);
       closeModal();
       invalidateCache();
-      requestDashboardRefresh();
+      requestDashboardRefresh({ structural: true });
       if (isEdit && originalAlias !== alias) renameRecentWorkspace(originalAlias, alias);
       recordRecentWorkspace(alias);
       toast(result.message || `${isEdit ? 'Workspace updated' : 'Workspace added'}: ${alias}`, { variant: 'success' });

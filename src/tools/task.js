@@ -18,7 +18,7 @@ function startTask(workspace, args = {}) {
     workspaceBinding: { alias: workspace.alias },
     title: String(args.title || context.title || '').trim() || undefined,
     objective: String(args.objective || context.objective || '').trim() || undefined,
-    nextAction: 'Use the bootstrap context to choose the next tool. Pass this work_id on every subsequent work-scoped Rel.AI call; the bound workspace may be omitted.'
+    nextAction: 'Use the bootstrap context for the first action, then use each returned workflow recommendation as the default calibration. Pass this work_id on every work-scoped Rel.AI call; hard runtime errors remain authoritative.'
   };
 }
 
@@ -28,6 +28,7 @@ function taskBootstrapFromSnapshot(snapshot, mode = 'compact') {
     manifests: snapshot.manifests,
     discoveredCommands: snapshot.discoveredCommands,
     projectInstructions: snapshot.projectInstructions,
+    workspaceSkills: snapshot.workspaceSkills,
     fileCount: snapshot.fileCount,
     files: snapshot.files,
     truncated: snapshot.truncated,

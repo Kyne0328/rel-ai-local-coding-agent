@@ -19,6 +19,14 @@ const merged = mergeDashboardActivity({
       status: 'completed',
       summary: 'Repository read complete.',
       output: { secret: 'must-not-leak' }
+    },
+    {
+      id: 'persisted-event',
+      timestamp: '2026-08-05T10:00:01.500Z',
+      tool: 'relai_read',
+      status: 'completed',
+      summary: '   ',
+      message: ''
     }
   ]
 }, [{
@@ -36,7 +44,7 @@ const merged = mergeDashboardActivity({
 assert.equal(merged.entries.length, 2, 'persisted event IDs must merge lifecycle updates');
 assert.deepEqual(merged.entries.map(entry => entry.eventId), ['persisted-event', 'operation-2']);
 assert.deepEqual(merged.entries.map(entry => entry.ts), [
-  '2026-08-05T10:00:01.000Z',
+  '2026-08-05T10:00:01.500Z',
   '2026-08-05T10:00:02.000Z'
 ]);
 assert.equal(merged.entries[0].status, 'completed');

@@ -38,7 +38,7 @@ function makeDefaultPatchConfig() {
   return {
     backup: true,
     requireCleanGit: false,
-    maxUpdateBytes: 2 * 1024 * 1024
+    maxUpdateBytes: 50 * 1024 * 1024
   };
 }
 
@@ -255,6 +255,7 @@ function normalizeWorkspace(workspace) {
     defaultBaseBranch: workspace.defaultBaseBranch || "main",
     allowedRemotes: Array.isArray(workspace.allowedRemotes) ? workspace.allowedRemotes : ["origin"],
     repoSlug: workspace.repoSlug || "",
+    skills: normalizeStringList(workspace.skills),
     context: normalizeContextConfig(workspace.context),
     validationRules: workspace.validationRules && typeof workspace.validationRules === "object" ? workspace.validationRules : {}
   };
@@ -286,7 +287,7 @@ function normalizePatchConfig(value) {
   return {
     backup: current.backup == null ? base.backup : Boolean(current.backup),
     requireCleanGit: current.requireCleanGit == null ? base.requireCleanGit : Boolean(current.requireCleanGit),
-    maxUpdateBytes: clampNumber(current.maxUpdateBytes, 1024, 50 * 1024 * 1024, base.maxUpdateBytes)
+    maxUpdateBytes: base.maxUpdateBytes
   };
 }
 
@@ -443,6 +444,7 @@ function resolveWorkspace(config, alias) {
     defaultBaseBranch: entry.defaultBaseBranch || "main",
     allowedRemotes: entry.allowedRemotes || ["origin"],
     repoSlug: entry.repoSlug || "",
+    skills: normalizeStringList(entry.skills),
     context: normalizeContextConfig(entry.context),
     validationRules: entry.validationRules && typeof entry.validationRules === "object" ? entry.validationRules : {},
     ...(entry.managedWorktree ? {
@@ -521,6 +523,7 @@ function publicConfigSummary(config) {
         defaultBaseBranch: entry.defaultBaseBranch || "main",
         allowedRemotes: entry.allowedRemotes || ["origin"],
         repoSlug: entry.repoSlug || "",
+        skills: normalizeStringList(entry.skills),
         context: normalizeContextConfig(entry.context),
         discoveredCommands: discovered,
         validationCommands,
@@ -574,4 +577,5 @@ function clampNumber(value, min, max, fallback) {
   return Math.min(Math.max(Math.floor(n), min), max);
 }
 
-export { getConfigPath, makeDefaultConfig, makeDefaultContextConfig, normalizeContextConfig, makeDefaultPatchConfig, normalizePatchConfig, readConfig, invalidateConfigCache, ensureConfig, writeConfig, normalizeConfig, expandHome, resolveWorkspaceInput, normalizeWorkspacePathForComparison, resolveWorkspace, publicConfigSummary, allWorkspaceAliases, workspaceEntryForAlias };
+export { getConfigPath, makeDefaultConfig, makeDefaultContextConfig,  makeDefaultPatchConfig, normalizePatchConfig, readConfig, invalidateConfigCache, ensureConfig, writeConfig, normalizeConfig,  resolveWorkspaceInput, normalizeWorkspacePathForComparison, resolveWorkspace, publicConfigSummary, allWorkspaceAliases,  };
+

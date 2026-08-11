@@ -1,536 +1,328 @@
-# Rel.AI MCP
+<p align="center">
+  <img src="electron/build/icon.png" alt="Rel.AI MCP" width="112" />
+</p>
+
+<h1 align="center">Rel.AI MCP</h1>
+
+<p align="center">
+  <strong>Repository work you can see, bound, validate, and recover.</strong><br />
+  Rel.AI gives ChatGPT a real local development runtime without turning your computer into an open-ended agent box.
+</p>
+
+<p align="center">
+  Created and maintained by <a href="https://github.com/Kyne0328"><strong>Kyne</strong></a>.
+</p>
+
+<p align="center">
+  <a href="https://github.com/Kyne0328/rel-ai-mcp/releases"><strong>Download Rel.AI</strong></a>
+  · <a href="docs/ONE_CLICK_SETUP.md">Set up</a>
+  · <a href="docs/CONNECTING_TO_CHATGPT.md">Connect ChatGPT</a>
+  · <a href="docs/SECURITY.md">Security</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Kyne0328/rel-ai-mcp/actions/workflows/ci.yml"><img src="https://github.com/Kyne0328/rel-ai-mcp/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/Kyne0328/rel-ai-mcp/releases"><img src="https://img.shields.io/github/v/release/Kyne0328/rel-ai-mcp?display_name=tag&style=flat-square" alt="Latest release" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Kyne0328/rel-ai-mcp?style=flat-square" alt="Apache License 2.0" /></a>
+  <img src="https://img.shields.io/badge/desktop-Windows%20%7C%20Linux-informational?style=flat-square" alt="Windows and Linux" />
+  <img src="https://img.shields.io/badge/MCP-2026--07--28-7c3aed?style=flat-square" alt="MCP 2026-07-28" />
+</p>
+
+---
+
+Rel.AI MCP connects ChatGPT to **repositories you explicitly configure as local workspaces**. ChatGPT can inspect the current checkout, change files, run the project, validate the result, review the diff, and publish Git work when asked. Rel.AI owns the boundary around that work: which repository is available, which task owns a mutation, what evidence is current, what can be published, and what happens after an interruption.
+
+It is not a hosted coding VM and it is not a generic remote shell.
+
+**The repository stays on your computer. The work stays attributable. The result stays reviewable.**
+
+## The Rel.AI contract
+
+Rel.AI is built around four product rules rather than a collection of unrelated coding tools.
+
+| | Rel.AI rule | What it means in practice |
+| --- | --- | --- |
+| **01** | **Workspace is authority** | ChatGPT works only inside repository roots you configured. Paths, commands, Git state, checks, and processes resolve from that workspace instead of from arbitrary machine access. |
+| **02** | **Work session owns the task** | Each independent objective receives its own `work_id`. Mutations, validation, review, cancellation, recovery, and completion stay attached to that objective rather than to a chat tab or transport connection. |
+| **03** | **Evidence beats progress** | A successful command or a 100% UI indicator is not proof that the change is valid. Rel.AI tracks current validation evidence against the files the task actually changed. |
+| **04** | **Publishing is separate** | Editing code does not silently become committing or pushing code. Review, commit, push, and PR-draft work remain explicit Git actions with repository policy around them. |
+
+Those four rules are the reason Rel.AI behaves differently from a simple filesystem connector or unrestricted command bridge.
+
+## One task, end to end
 
 ```text
-██████╗ ███████╗██╗         █████╗ ██╗    ███╗   ███╗ ██████╗██████╗
-██╔══██╗██╔════╝██║        ██╔══██╗██║    ████╗ ████║██╔════╝██╔══██╗
-██████╔╝█████╗  ██║        ███████║██║    ██╔████╔██║██║     ██████╔╝
-██╔══██╗██╔══╝  ██║        ██╔══██║██║    ██║╚██╔╝██║██║     ██╔═══╝
-██║  ██║███████╗███████╗   ██║  ██║██║    ██║ ╚═╝ ██║╚██████╗██║
-╚═╝  ╚═╝╚══════╝╚══════╝   ╚═╝  ╚═╝╚═╝    ╚═╝     ╚═╝ ╚═════╝╚═╝
-
-        I made this because I did not have Codex — so ChatGPT became my coder,
-        and this local MCP bridge became the hands that can touch the repo.
+You describe the objective in ChatGPT
+                │
+                ▼
+      Rel.AI begins one work session
+                │
+                ▼
+      understand the repository
+   snapshot → search → code intelligence
+                │
+                ▼
+          change the workspace
+          edit → run → diagnose
+                │
+                ▼
+            prove the result
+       targeted checks → evidence
+                │
+                ▼
+             review the work
+        task diff → activity → status
+                │
+                ▼
+        publish only when requested
+          commit → push → PR draft
 ```
 
-Rel.AI MCP is the successor to my original Rel.AI project. The first version proved the idea: use ChatGPT web as the main reasoning engine, collect selected local workspace context, and apply the result locally. This version is the cleaner MCP/server version of that idea.
+The repository remains the source of truth throughout the task. If the workspace was already dirty, Rel.AI can distinguish pre-existing changes from task-owned mutations instead of pretending the task started from a clean checkout.
 
-The goal is simple: I want the reasoning power of ChatGPT on the web, but I still want my repo to stay local, controlled, visible, and reversible.
+## Start using Rel.AI
 
-The current production ownership and compatibility boundaries are documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+The normal path is designed around the desktop app and Rel.AI Cloud. You do not need a Rel.AI password account or an ngrok account for the default setup.
+
+1. **Install Rel.AI MCP** from the [Releases page](https://github.com/Kyne0328/rel-ai-mcp/releases). Current desktop packaging targets Windows and Linux.
+2. **Open Rel.AI and connect ChatGPT.** The app shows the Cloud MCP address and a short-lived pairing code.
+3. **Add Rel.AI in ChatGPT and complete OAuth pairing.** On Plus or Pro, open **Plugins** from the sidebar or **Settings > Plugins** and add Rel.AI MCP there. On Business, Enterprise, or Edu, open the Rel.AI app provided under workspace **Apps**. Use the code shown by your desktop when the Rel.AI authorization page asks for it.
+4. **Secure the device.** Reveal and store the recovery code when you are ready to protect it.
+5. **Add a workspace.** Pick a repository folder and give it a short alias such as `myapp`.
+6. **Use that alias in ChatGPT.** Rel.AI resolves the local repository from the configured workspace rather than accepting an arbitrary filesystem path from the Cloud.
+
+A useful first request is intentionally read-only:
 
 ```text
-ChatGPT asks -> Rel.AI MCP inspects, changes, validates, and reviews locally -> I inspect the diff -> I keep or restore it
+Use Rel.AI MCP on workspace "myapp". Start one work session, inspect the repository, and explain the relevant architecture before changing anything.
 ```
 
-Tool use is intentionally small but flexible. ChatGPT should skip stages it does not need. A common workflow is:
+Then move into a real implementation loop:
 
 ```text
-relai_work begin -> relai_search / relai_inspect -> relai_read -> relai_edit -> relai_validate checks (complete:true + summary)
+Use Rel.AI MCP on workspace "myapp". Implement this change, run the smallest validation that proves it, review the task diff, and do not push unless I ask.
 ```
 
-No generated Python edit scripts. No update-helper maze. No local-edit fallback loops. First-party application code is ESM-only except for one sandbox-required Electron preload boundary. Rel.AI targets MCP `2026-07-28` through the stable MCP SDK v2 and always exposes one complete 12-tool capability surface. The former expanded direct surface, reduced profiles, and redundant aliases were removed in a hard cutover. Modern clients use `server/discover` with per-request protocol, client, and capability metadata; HTTP also accepts ChatGPT's SDK-supported stateless initialize flow. Neither mode creates transport-session identity.
+See [One-click setup](docs/ONE_CLICK_SETUP.md) for the installed-app walkthrough and [Connecting to ChatGPT](docs/CONNECTING_TO_CHATGPT.md) for pairing, reconnects, recovery, and Advanced Direct.
 
-Logical coding work is isolated by an opaque workspace-bound `work_id`, persistent commands by `processId`, native asynchronous work by MCP Task IDs, worktrees by dynamic workspace alias, and resumable approvals by signed `requestState`. After task creation, task-scoped tools require `work_id` and resolve the bound workspace automatically; an optional `workspace` argument acts only as an ownership assertion.
+## What Rel.AI gives ChatGPT
 
-Rel.AI MCP still lightly nods to the original Rel.AI idea, but this README stands on its own: this is now a local MCP bridge for ChatGPT.
+### Repository intelligence before file dumping
 
-### Repository-specific instructions
+Rel.AI is designed to let ChatGPT discover a codebase progressively instead of reading large parts of the repository by default.
 
-Rel.AI automatically includes project guidance in task bootstrap and repository snapshots. It supports the existing root files:
+- **Repository snapshots** surface structure, manifests, detected checks, and project hints.
+- **Bounded reads** target files and line ranges instead of returning unlimited content.
+- **Text search** covers tracked and untracked workspace files.
+- **Code intelligence** follows symbols, references, calls, related files, imports, affected tests, and available diagnostics.
+- **Hybrid semantic search** combines lexical, path, symbol, and private local vector signals without sending source text to a hosted embedding service.
+
+The result is a local discovery layer that helps ChatGPT narrow the problem before it starts spending context on file contents.
+
+### One edit surface for real repository changes
+
+Rel.AI deliberately consolidates repository writes instead of exposing many overlapping mutation tools.
+
+It supports exact replacements, multiple replacements in one file, full-file writes, patch-shaped updates, large staged changes, workspace containment, symlink protection, and optional SHA-256 stale-write checks. Large migrations can stay one logical task instead of being fragmented purely because one request is too large.
+
+Managed Git worktrees are available when isolated parallel work is appropriate, while ordinary tasks continue to use the repository you configured.
+
+### Commands with ownership, not just stdout
+
+Rel.AI can execute one-shot project commands and own long-running local processes.
+
+One-shot execution returns bounded output, exit state, timing, and detected file changes. Managed processes have stable IDs, bounded persistent logs, interactive input when appropriate, workspace attribution, and controlled shutdown. This keeps development servers and watchers separate from one-off checks and builds.
+
+### Validation tied to the mutation that happened
+
+Rel.AI treats tests as evidence, not ceremony.
+
+Validation can be selected from the task-owned change scope, and fresh evidence can be reused when it still proves the current mutation generation. If a command changes files and then fails, the mutation is still recorded. If a command succeeds but does not satisfy final validation, Rel.AI does not call that task proven merely because the exit code was zero.
+
+### Git actions that remain deliberate
+
+Rel.AI can review task changes, commit scoped work, push to configured remotes, and prepare pull-request draft text. Publishing remains a separate decision from editing. Protected branches, sensitive staged paths, existing workspace state, and allowed remotes remain part of the repository policy rather than being left to a generic shell command.
+
+## Local execution is the point
+
+Rel.AI Cloud makes a local computer reachable to ChatGPT without moving the development environment into the Cloud.
 
 ```text
-REL_AI.md
-.relai/instructions.md
+                 public side                    local side
+
+ChatGPT ── OAuth / MCP ──► Rel.AI Cloud ──► paired desktop ──► workspace
+                           identity              device key       files
+                           routing               MCP runtime      Git
+                           coordination          processes        checks
+                           usage metadata        activity         builds
 ```
 
-It also discovers `AGENTS.override.md` or `AGENTS.md` from the workspace root down to the optional `instructionPath` supplied to `relai_work` action `begin`. In each directory, `AGENTS.override.md` replaces `AGENTS.md`; instructions nearer the target path override parent instructions. `REL_AI.md` remains highest precedence, followed by `.relai/instructions.md`.
+**Rel.AI Cloud routes work. Your desktop executes it.**
 
-Instruction content is returned with named headings and explicit source order. The combined connector payload is capped at 64 KiB; when truncated, ChatGPT can read a named source directly with `relai_read`. Binary-looking files, symbolic links, and paths that escape the workspace are rejected. The content is guidance only and is never executed automatically.
+Rel.AI Cloud authenticates and routes approved connections to paired desktops. Its hosted implementation, persistence model, production configuration, abuse controls, and deployment architecture are intentionally maintained outside this public repository. The desktop remains the authority for repository files, absolute paths, commands, Git operations, tests, builds, managed processes, and workspace configuration.
 
----
+The public repository contains only the client behavior and compatibility contract needed to connect safely to that service; knowing the endpoint or protocol does not grant hosted access.
 
-## What it does
+## One ChatGPT connection, more than one computer
 
-Rel.AI MCP lets ChatGPT work with configured local workspaces through a trusted local server.
+Rel.AI Cloud models computers as separate devices instead of assuming that one ChatGPT connection always points at one permanent machine.
 
-It can:
+Each paired desktop has its own local P-256 device identity. That lets Rel.AI support the real case where the same person works from a home PC, a school/work machine, or a replacement device without treating those machines as interchangeable execution environments.
 
-- snapshot a filtered repo tree
-- read selected files or small directory summaries
-- write full files, apply exact localized replacements, apply structured patches, and stage whole-file writes only when unavoidable
-- delete tracked files through structured patch operations
-- tidy session-owned untracked artifacts through an expiry-bound plan
-- run validation checks such as tests and analyzers
-- run one-shot development commands such as dependency installation, migrations, compilers, and repository utilities
-- start, read, write to, stop, and list persistent development processes with local logs
-- create and remove isolated Git worktrees with dynamic workspace aliases
-- search by exact text or private local hybrid semantic ranking
-- trace definitions, callers, importers, tests, UI surfaces, and registration paths
-- normalize compiler, analyzer, and linter diagnostics
-- create signed change-aware validation plans
-- load repository-specific guidance from hierarchical `AGENTS.md`, `REL_AI.md`, and `.relai/instructions.md`
-- inspect git diffs
-- run explicit git status, commit, push, and PR-draft flows
-- restore local changes
-- expose compact workspace readiness and status information
-- expose a local or public MCP URL for ChatGPT connectors
-- explicitly report coding-task completion after final validation
+Rel.AI can:
 
-It is built around the practical flow I kept needing:
+- pair another desktop to the same accountless principal;
+- create a one-time device-link code from an existing paired machine;
+- recover from a stored recovery code;
+- list and revoke paired devices;
+- keep device compatibility separate from OAuth reauthentication;
+- keep ChatGPT tool refresh separate from both.
 
-```text
-I describe the coding task
-ChatGPT reasons about it
-Rel.AI MCP gives it only the repo access it asks for
-ChatGPT edits through exact replacements or full-file writes
-Rel.AI MCP runs final validation
-ChatGPT reports completion through Rel.AI
-I inspect the result and session record
-```
+A reconnect restores transport. It does not rewrite repository history or pretend an interrupted mutation finished successfully.
 
----
+## When something goes wrong
 
-## Screenshots
+Rel.AI separates **connection recovery** from **work recovery**.
 
-### Home
+A Cloud WebSocket reconnect or a Direct/ngrok reconnect is allowed to restore connectivity. It is not allowed to restart unrelated managed developer processes just to make the connection look healthy, and it is not allowed to convert uncertain repository work into a successful task result.
 
-<p align="center">
-  <img src="docs/images/dashboard-home-section.png" alt="Rel.AI MCP dashboard home overview" width="900">
-</p>
+If the outcome of a mutation is uncertain, Rel.AI can preserve read access while blocking new mutations or completion until the work state is reconciled. Recovery avoids automatically replaying destructive Git operations such as resets, cleans, restores, or pushes.
 
-The home screen shows the current bridge health, configured workspaces, validation state, and recent activity.
+This distinction is central to the product: **being connected is not the same thing as being correct.**
 
-### Workspaces
+See [Workflow reliability](docs/WORKFLOW_RELIABILITY.md) and [Task observability](docs/TASK_OBSERVABILITY.md) for the full state model.
 
-<p align="center">
-  <img src="docs/images/dashboard-workspaces-section.png" alt="Rel.AI MCP workspace cards" width="900">
-</p>
+## The desktop is the control surface
 
-Workspace cards show repository state, automatic validation commands, protected branches, allowed remotes, recent activity, and focused workspace actions.
+Rel.AI's desktop app is where the local side of the system becomes visible to the user.
 
-### Activity
+It exposes the things that matter during real repository work:
 
-<p align="center">
-  <img src="docs/images/dashboard-activity-section.png" alt="Rel.AI MCP activity table" width="900">
-</p>
+- **Workspaces** — which repositories ChatGPT is allowed to use, plus repository and validation details.
+- **Sessions** — active and historical objectives with task status and completion state.
+- **Activity** — individual Rel.AI tool events and recorded results.
+- **Processes** — long-running development processes and bounded output.
+- **Skills** — built-in, installed, and workspace-enabled workflow instructions.
+- **Connection** — Cloud/Direct state, paired devices, authorization, recovery, and synchronization guidance.
+- **Usage** — Rel.AI-observed request, tool, byte, duration, device, and workspace aggregates.
+- **Diagnostics and settings** — application health, updates, notification preferences, recovery guidance, and advanced controls.
 
-The activity page is there because I got tired of guessing what the MCP server was doing. It shows recent tool calls, workspace, status, and expandable detail rows.
+Rel.AI records observable tool activity and results. It does not claim access to ChatGPT's private reasoning.
 
-### Tools
+## Security is repository-shaped
 
-<p align="center">
-  <img src="docs/images/dashboard-tools-section.png" alt="Rel.AI MCP bridge tools" width="900">
-</p>
+Rel.AI MCP is a **trusted local coding bridge, not a sandbox**. It assumes you deliberately gave ChatGPT authority over configured repositories and then constrains that authority at repository, task, process, Git, and desktop boundaries.
 
-The dashboard shows the current workspace tool surface for inspection, one-shot commands, editing, validation, explicit completion reporting, review, Git publishing, tidy, and restore.
+Important controls include:
 
-### Connection setup
+- **Workspace containment** — traversal, absolute-path injection, and symlink escape are blocked.
+- **Sensitive-path handling** — credential-bearing and secret-like content receives stricter operation-aware policy rather than unrestricted raw reads and writes.
+- **Bounded data movement** — reads, snapshots, diffs, process output, and request bodies have limits.
+- **Stale-write checks** — exact replacements can fail closed when the target changed underneath the task.
+- **Task ownership** — a repository objective is bound to a `work_id`, not inferred from a WebSocket, OAuth grant, ChatGPT thread, or managed process ID.
+- **Git boundaries** — pushes are limited to configured remotes and sensitive staged paths require narrower authorization.
+- **Device identity** — Electron protects the local Cloud private key with `safeStorage`; the gateway receives the public identity required for challenge verification.
+- **Renderer isolation** — privileged desktop actions cross constrained, sender-owned Electron IPC channels.
+- **Updater integrity** — release verification, checksums, package policy, and Electron fuses are part of the desktop security boundary.
 
-<p align="center">
-  <img src="docs/images/dashboard-connector-section.png" alt="Rel.AI MCP connector URL" width="900">
-</p>
+Only configure repositories you trust ChatGPT and Rel.AI to inspect, execute, and modify. Repository-defined tests, builds, linters, analyzers, and scripts are code execution and inherit the trust level of the repository itself.
 
-The Connection page shows the MCP URL for ChatGPT. It supports local URLs and public URLs from one-click tunnel setup.
+Read [Security](docs/SECURITY.md) for the detailed authentication, workspace, Electron, updater, and remaining trust boundaries.
 
-### Diagnostics
+## Cloud when you want convenience. Direct when you want the tunnel.
 
-<p align="center">
-  <img src="docs/images/dashboard-diagnostics-section.png" alt="Rel.AI MCP diagnostics cards" width="700">
-</p>
+Rel.AI Cloud is the default connection model. **Advanced Direct** preserves the personal managed-ngrok path for users who deliberately want it.
 
-Diagnostics are intentionally plain: health, readiness, and recent activity. No mystery panel, no fake magic.
+| | Rel.AI Cloud | Advanced Direct |
+| --- | --- | --- |
+| Best fit | Normal setup and multi-device use | Personal tunnel control |
+| Public endpoint | Rel.AI Cloud MCP/OAuth gateway | Your managed ngrok HTTPS endpoint |
+| Rel.AI password account | Not required | Not required |
+| ngrok account | Not required | Required |
+| Authorization | OAuth + short-lived pairing code | OAuth + local Direct approval token |
+| Device recovery | Built in | Direct configuration remains local |
+| Repository execution | Selected desktop | Selected desktop |
 
-<details>
-<summary>Full screenshots</summary>
+Switching modes does not move repository execution into the Cloud. Cloud and Direct configuration remain separate so one does not destroy the other.
 
-### Full home
+## Small public tool surface, broad workflow
 
-<p align="center">
-  <img src="docs/images/dashboard-home.png" alt="Rel.AI MCP full dashboard home" width="900">
-</p>
+The current release exposes **12 public MCP tools** through one canonical action catalog and targets MCP protocol `2026-07-28`.
 
-### Full workspaces
+The surface is intentionally consolidated. Rel.AI does not need a public tool for every internal operation when one coherent capability can own the contract. That keeps schemas, authorization, task behavior, output validation, dashboard metadata, and gateway generation aligned around a smaller interface while still supporting repository inspection, search, edits, execution, processes, validation, review, Git operations, recovery, and work-session lifecycle.
 
-<p align="center">
-  <img src="docs/images/dashboard-workspaces.png" alt="Rel.AI MCP full workspaces page" width="900">
-</p>
+See [MCP protocol policy](docs/MCP_PROTOCOL_POLICY.md) and [Architecture](docs/ARCHITECTURE.md) for the current protocol and ownership model.
 
-### Full activity
+## Skills extend behavior without bloating the connector
 
-<p align="center">
-  <img src="docs/images/dashboard-activity.png" alt="Rel.AI MCP full activity page" width="900">
-</p>
+Rel.AI supports built-in and installed skills for reusable debugging, planning, verification, investigation, and development workflows. Skills can be enabled per workspace so project-specific instructions remain scoped to the repositories that need them.
 
-### Full tools
+This keeps specialized workflow knowledge out of the public MCP tool count while still giving ChatGPT reusable operating guidance. Packaged desktop builds include the runtime skill assets required by the app.
 
-<p align="center">
-  <img src="docs/images/dashboard-tools.png" alt="Rel.AI MCP full tools page" width="900">
-</p>
+## Usage and privacy
 
-### Full settings
+The Usage view measures **Rel.AI-observed gateway activity**, not ChatGPT model tokens or ChatGPT billing. It can report request counts, tool calls, outcomes, bytes, execution duration, active days, devices, tools, and workspace aggregates for the selected month.
 
-<p align="center">
-  <img src="docs/images/dashboard-settings-general.png" alt="Rel.AI MCP full settings page" width="900">
-</p>
+Repository contents and command execution remain on the selected desktop. Keep pairing codes, recovery codes, OAuth credentials, Direct approval tokens, ngrok account keys, repository credentials, and other secrets out of public issues and unreviewed diagnostic exports.
 
-### Full connection
+## Build Rel.AI from source
 
-<p align="center">
-  <img src="docs/images/dashboard-connector.png" alt="Rel.AI MCP full connection page" width="900">
-</p>
+Rel.AI MCP currently uses **Node.js 24** and **npm 11**. The root runtime and Electron desktop maintain separate lockfiles.
 
-### Full diagnostics
-
-<p align="center">
-  <img src="docs/images/dashboard-diagnostics.png" alt="Rel.AI MCP full diagnostics page" width="900">
-</p>
-
-</details>
-
----
-
-## Why I made this
-
-I made this because I did not have Codex available as the workflow I wanted.
-
-I still wanted a Codex-like loop:
-
-```text
-understand the repo -> make the change -> run validation -> show the diff
-```
-
-But I wanted to drive it with ChatGPT web, especially the stronger reasoning models there. Copying files manually, uploading ZIPs, and pasting updates back into the project was too slow. The older Rel.AI project was my first answer to that problem. Rel.AI MCP is the next version: simpler, more direct, and built around MCP tools instead of an update-heavy browser/native-host flow.
-
-The important design choice: ChatGPT does the thinking, but the local bridge keeps the repo access explicit.
-
----
-
-## Install
-
-### Unified plugin
-
-The repository and packaged npm artifact include one versioned `rel-ai` plugin containing the MCP connector, the core `rel-ai-workflow` skill, and focused first-party investigation, debugging, verification, and persistent-development-process skills. Install, update, or remove the plugin as one unit in a compatible host. Connector and skills remain separate internal files. See [docs/PLUGIN.md](docs/PLUGIN.md) for the package layout, provenance policy, and artifact verification.
-
-Bundling the connector and skills does not itself reduce MCP discovery context. The consolidated 12-tool surface and sub-512-byte global instructions provide that reduction. Detailed skill procedures load only when selected, and direct HTTP and stdio clients remain fully usable without loading a skill.
-
-### Windows desktop app
-
-Rel.AI MCP is a self-contained Windows desktop app. Download the latest installer from the [Releases page](https://github.com/Kyne0328/rel-ai-mcp/releases) and run it. The standard setup wizard lets you install for the current user or for all users, review the destination folder, and click **Install**. Selecting **all users** requests Windows administrator approval when the installer is not already elevated. The Finish page includes an optional **Run Rel.AI MCP** checkbox, enabled by default.
-
-You do **not** need to install Node.js, npm, or ngrok. The app ships its own runtime and a pinned, upstream-signed ngrok agent. Agent upgrades arrive through signed Rel.AI application updates, so users still install only Rel.AI.
-
-The one thing it cannot create for you is an ngrok account. Before first launch, sign up at [ngrok.com](https://ngrok.com) (the free tier is enough) and grab two things:
-
-- your **authtoken**, from the ngrok dashboard
-- a **static domain**, from **Domains** in the same dashboard
-
-The setup wizard asks for both on first run, stores them locally, and starts the server and tunnel for you. Every launch after that goes straight to the dashboard.
-
-The app lives in the system tray. Closing a window leaves it running; quit it from the tray menu. When one or more work sessions are explicitly completed while the app is not open, the Windows taskbar icon shows a numbered completion overlay. Opening or focusing any Rel.AI window clears the indicator.
-
-Installed Windows builds check for application updates once per day. Downloads and restart-to-install are always explicit from **Settings > General** or the tray, and restart is blocked while a Rel.AI tool call is active. Portable builds update manually from the Releases page.
-
-The installed Windows app can also enable **Launch at sign-in** under **Settings > General**. Sign-in launches run in the background so the tray, local service, and public endpoint are ready without opening the dashboard; ordinary launches remain dashboard-first. Portable builds do not register Windows startup entries.
-
----
-
-## Connecting to ChatGPT
-
-1. Launch Rel.AI MCP and let the wizard finish. The tray icon turns active once the tunnel is up.
-2. Open the dashboard and go to the **Connection** page. It shows your MCP URL.
-3. In ChatGPT, go to **Settings > Apps > Create** and paste that URL.
-4. Set authentication to **OAuth**. ChatGPT opens a sign-in page — enter your Rel.AI approval token to approve.
-
-The approval token is under **Settings > Connection**. Replacing it requires typing `REPLACE`; Rel.AI revokes authorization codes, access tokens, and refresh tokens while preserving issuer-bound ChatGPT client registrations. The existing ChatGPT app can then reconnect and approve again with the new token.
-
-Because the domain is static, the connector keeps working across restarts. You configure it once.
-
-See [docs/ONE_CLICK_SETUP.md](docs/ONE_CLICK_SETUP.md) for the full setup walkthrough, [docs/CONNECTING_TO_CHATGPT.md](docs/CONNECTING_TO_CHATGPT.md) for connector troubleshooting, and [docs/ESM_ARCHITECTURE.md](docs/ESM_ARCHITECTURE.md) for module ownership and release constraints.
-
----
-
-## The dashboard
-
-**Open dashboard** shows the full dashboard inside a secured Electron window. The same dashboard is also reachable in a normal browser at the local `/dashboard` route; Electron is the default host, not a separate implementation. The desktop host exchanges a single-use bootstrap code for an HttpOnly local session cookie, so the long-lived approval token is never stored in the embedded renderer or left in its URL.
-
-The dashboard includes grouped **Sessions**, managed **Processes** with recent output and stop controls, lower-level **Activity**, workspace-scoped filtering, operational Git and validation state, actionable diagnostics, live/reconnecting status, and persistent desktop window and route state. Work is grouped by explicit logical `work_id`, not by MCP connection, repository, or assumed ChatGPT conversation identity. Multiple tasks may share one client connection while retaining independent activity and completion state. A task is marked completed only after an explicit completion signal: either `relai_validate` action `checks` with `complete:true` and `summary`, or `relai_work` action `finish` after a post-validation read-only review. Otherwise inactivity closes it as cancelled without claiming the overall request finished. Explicit completions increment the Windows taskbar overlay only while the desktop app is not being viewed; opening or focusing the app acknowledges and clears the count.
-
----
-
-## Building from source
-
-Only needed if you want to develop or package the app yourself. Requires the Node.js 24 LTS line and npm 11; CI and packaged-runtime validation use Node.js 24. The root and Electron packages are ESM, relative first-party imports use explicit extensions, and `electron/preload.cjs` is the only documented CommonJS boundary.
 ```bash
 npm ci --ignore-scripts
 npm ci --prefix electron
+npm run electron:dev
 ```
 
-The ngrok agent binaries are not committed to git, so fetch the seed before running or packaging:
+Development should use the smallest checks that prove the current change, then broaden validation when the risk warrants it:
 
 ```bash
-npm run fetch:ngrok          # Windows (pwsh); use scripts/fetch-ngrok.sh elsewhere
+npm run check
+npm run lint
+npm run typecheck
+npm test
 ```
 
-Then:
+The Electron desktop is the normal application composition root. Direct HTTP entry points exist for development, protocol testing, and packaged-runtime verification rather than as the installed-user setup path.
 
-```bash
-npm run electron:dev         # run the desktop app from source
-npm run electron:dist        # build the Windows installer into dist/
-npm run audit:production     # production dependency security gate
-npm run validate:plugin      # validate plugin, MCP, skill metadata, and provenance
-npm run test:skills          # verify modular skill ownership and trigger contracts
-npm run test:tool-budgets    # enforce tool, instruction, result, and skill budgets
-npm run test:plugin          # verify extracted runtime parity, calls, and removal
-npm test                     # full suite
-npm run knip                 # full unused files, dependencies, and exports audit
-npm run knip:production      # production-only dead-code audit
-```
+See [Development](docs/DEVELOPMENT.md) for source architecture, generated assets, validation, packaging, and release workflows.
 
-The normal test gate includes `npm run knip:dependencies` so dependency drift and invalid Knip configuration fail CI. The broader Knip reports remain explicit review commands because removing files or exports requires source-level verification.
+## Read deeper
 
-`electron:build` and `electron:dist` refuse to run when the ngrok seed is missing or differs from its reviewed provenance manifest. Windows verification requires the exact version, size, SHA-256, Authenticode publisher, and certificate issuer.
-
-Windows CI and the release workflow build from a clean output directory, verify the packaged layout and hardened Electron fuses, then exercise OAuth/PKCE and the MCP task lifecycle through the packaged Node backend. Production publication requires protected Windows signing credentials and `forceCodeSigning`, verifies the installer, portable app, unpacked app, and bundled ngrok component independently, then generates a CycloneDX SBOM and GitHub provenance attestations. Windows x64 is the only packaged target validated and published by the current automation. Installer, uninstall, first-run UI, real ngrok publication, antivirus-vendor review, logged-in ChatGPT app selection, live approval-token rotation, and update-from-prior-release behavior remain manual checks on a disposable Windows machine. See [docs/USABILITY_ACCEPTANCE.md](docs/USABILITY_ACCEPTANCE.md), [docs/INSTALLER_TEST_SAFETY.md](docs/INSTALLER_TEST_SAFETY.md), [docs/PACKAGING_SECURITY.md](docs/PACKAGING_SECURITY.md), and [docs/ANTIVIRUS_FALSE_POSITIVES.md](docs/ANTIVIRUS_FALSE_POSITIVES.md).
-
-## MCP tools
-
-Rel.AI exposes 12 capability-oriented tools through MCP SDK v2. Modern HTTP clients use MCP `2026-07-28`; the same endpoint also supports ChatGPT's SDK-compatible stateless initialize flow. Rel.AI does not use transport sessions as work identity. The server enforces workspace boundaries, `work_id` ownership, input bounds, cancellation, approvals, and destructive-operation protections whether or not the client loads the workflow skill.
-
-| Tool | Purpose and actions |
+| If you want to... | Read |
 | --- | --- |
-| `relai_work` | Work lifecycle: `begin`, `status`, `finish`, `cancel`. |
-| `relai_snapshot` | Bounded repository and workspace snapshot. |
-| `relai_read` | Bounded file, range, and directory reads. |
-| `relai_search` | `text` and private local `semantic` search. |
-| `relai_inspect` | `symbol`, `references`, `related`, `impact`, `trace`, `diagnostics`. |
-| `relai_edit` | Exact replacement, full-file, patch, batch, environment, and staged edits. |
-| `relai_exec` | One bounded one-shot workspace command. |
-| `relai_process` | Persistent service, watcher, or interactive process `start`, `read`, `write`, `stop`, `list`; start requires `kind` and `purpose`, and list is active-only by default. |
-| `relai_worktree` | Managed worktree `create`, `list`, `remove`. |
-| `relai_validate` | Validation `checks`, structured `diagnostics`, and local `http` probes. |
-| `relai_changes` | `diff`, `restore`, `reset`, `tidy_plan`, `tidy_run`. |
-| `relai_publish` | `commit`, `push`, and local `draft_pr` generation. |
+| install and pair the desktop app | [One-click setup](docs/ONE_CLICK_SETUP.md) |
+| understand reconnects, OAuth, tool refresh, or Direct mode | [Connecting to ChatGPT](docs/CONNECTING_TO_CHATGPT.md) |
+| understand who owns what at runtime | [Architecture](docs/ARCHITECTURE.md) |
+| inspect the desktop interaction model | [Desktop UX architecture](docs/DESKTOP_UX_ARCHITECTURE.md) |
+| audit authentication and local trust boundaries | [Security](docs/SECURITY.md) |
+| understand MCP lifecycle and compatibility | [MCP protocol policy](docs/MCP_PROTOCOL_POLICY.md) |
+| understand recovery and completion authority | [Workflow reliability](docs/WORKFLOW_RELIABILITY.md) |
+| understand sessions, activity, and observable evidence | [Task observability](docs/TASK_OBSERVABILITY.md) |
+| build, test, package, or release Rel.AI | [Development](docs/DEVELOPMENT.md) |
+| see what changed between releases | [Changelog](CHANGELOG.md) |
 
-The public surface is understandable and safe without packaged skills. Skills add progressively disclosed workflow guidance only in hosts that support and load them; server-side ownership, approvals, limits, Task negotiation, and destructive safeguards remain authoritative.
+## Contributing
 
-There is no `toolProfile` configuration option. Every installation exposes the same complete 12-tool surface; old direct tool names still fail closed. Exact action fields and action-level execution metadata are available through `relai://server/tool-surface`. See [docs/PLUGIN.md](docs/PLUGIN.md).
+Focused fixes, product improvements, documentation updates, and regression coverage are welcome.
 
----
+Keep changes scoped. Preserve the repository's security and compatibility boundaries. Prefer direct code and the smallest useful abstraction. Treat tests as risk controls rather than a reason to duplicate coverage. If a change affects runtime ownership, protocol behavior, security boundaries, or packaging, review the relevant architecture documentation before adding another layer.
 
-## Workspace context policy
+## Support
 
-Each workspace can define the size and shape of its initial repository map:
+For connection or repository-work problems:
 
-```json
-{
-  "context": {
-    "snapshotMaxFiles": 3000,
-    "includeRoots": [],
-    "excludePaths": [".git", "node_modules", "build", "dist", "coverage"]
-  }
-}
-```
+1. Check **Diagnostics** in the Rel.AI desktop app.
+2. Review [One-click setup](docs/ONE_CLICK_SETUP.md) and [Connecting to ChatGPT](docs/CONNECTING_TO_CHATGPT.md).
+3. If the problem is reproducible, [open a GitHub issue](https://github.com/Kyne0328/rel-ai-mcp/issues) with the smallest safe reproduction and sanitized diagnostics.
 
-Use `.relaiignore` in a repo to add repo-specific AI-context exclusions.
+Never include pairing codes, recovery codes, OAuth credentials, Direct approval tokens, ngrok account keys, repository secrets, or private keys in a public issue.
 
-The snapshot is only a structural map. It does not restrict `relai_search` or direct `relai_read` calls: ChatGPT may continue locating and reading any relevant non-sensitive file inside the configured workspace. The default map contains up to 3,000 files while generated and cache directories remain excluded.
+## License and attribution
 
-The runtime roadmap is in [docs/CHATGPT_CODING_RUNTIME_ROADMAP.md](docs/CHATGPT_CODING_RUNTIME_ROADMAP.md). The current build includes repository context, live and hybrid code intelligence, one-shot and persistent commands, project instructions, managed worktrees, native MCP Tasks interoperability on HTTP and stdio, signed validation plans, structured diagnostics, multi-round-trip approvals, resource caching, and optional OpenTelemetry export. Independent model workers remain deferred.
+Rel.AI MCP is created and maintained by [Kyne](https://github.com/Kyne0328).
 
----
+Copyright © 2026 Kyne. The current source tree is released under the [Apache License 2.0](LICENSE). Rel.AI also ships a [NOTICE](NOTICE) identifying Kyne (Kyne0328) as the original creator and linking to the original Rel.AI MCP project. Under Apache-2.0, applicable attribution notices from that NOTICE must be preserved in qualifying derivative distributions.
 
-## Work sessions, native Tasks, and managed processes
-
-A repository work session (`work_id`) groups one objective across multiple Rel.AI tool calls. A native MCP Task (`taskId`) represents one asynchronous MCP operation. A managed process (`processId`) represents one operating-system process and may continue after its startup task completes.
-
-Both HTTP and stdio advertise native Tasks support. A native task handle is returned only when the current request advertises `io.modelcontextprotocol/tasks`; otherwise eligible work uses bounded synchronous execution. Rel.AI does not silently turn a long one-shot command into a managed process or asynchronous job. Persistent services, watchers, and interactive programs use `relai_process`; one-shot tests, builds, checks, and release gates use `relai_exec` or `relai_validate`. A completed process-startup Task does not stop its running process.
-
-See [docs/NATIVE_TASKS_RELEASE_GATE.md](docs/NATIVE_TASKS_RELEASE_GATE.md) for the capability matrix, diagnostics, lifecycle rules, and release gate.
-
----
-
-## Validation check behavior
-
-Use `relai_exec` for development setup and tooling:
-
-```json
-{ "workspace": "myapp", "work_id": "<task-id>", "command": "npm install", "cwd": ".", "timeoutMs": 600000 }
-```
-
-A nonzero command exit is returned normally with `ok:false`, preserving compiler or test output. Command calls invalidate the workspace read cache and report files whose Git status changed. Environment values are never copied into audit records; only environment key names are retained.
-
-`relai_exec` does not count as final validation, even when it runs a test command. After the last relevant mutation, use `relai_validate` action `checks`. Pass `complete:true` with `summary` on the final validation to close atomically, or validate without completion when a read-only review must follow.
-
-Persistent services, watchers, and interactive programs use `relai_process` with an explicit `kind` and `purpose`; isolated branches use `relai_worktree`; and `relai_validate` action `checks` performs change-aware validation planning internally. Process listing returns active records by default, while `includeTerminal:true` exposes recent history. Process reads support `metadataRevision` so repeated polling can omit unchanged metadata. These handles are explicit and survive the stateless protocol boundary.
-
-`relai_validate` action `checks` can run explicit validation checks inside configured workspaces:
-
-```json
-{ "workspace": "jjclover", "work_id": "<task-id>", "checks": ["flutter analyze", "flutter test"] }
-```
-
-```json
-{ "workspace": "rel-ai-mcp", "work_id": "<task-id>", "checksText": "npm run check\nnpm run test:compat" }
-```
-
-If no check is provided, it auto-detects sensible validation checks for the workspace.
-
-Atomic final validation and completion:
-
-```json
-{ "workspace": "rel-ai-mcp", "work_id": "<task-id>", "level": "standard", "complete": true, "summary": "Implemented and validated the requested changes." }
-```
-
-`complete:true` is an explicit completion signal, not automatic behavior. It requires `summary` and closes the session only when every selected validation command passes. Validation depth is chosen with a `level` preset: `quick` (syntax / lightweight checks), `standard` (normal project validation, the default), or `release` (full release gate). `relai_edit` accepts the same `level` alongside `runChecks: true`.
-
----
-
-## Tool selection guide
-
-Use this guide together with the `writeGuidance` returned by `relai_snapshot` and `relai_read`.
-
-| Situation | Use |
-| --- | --- |
-| Start an independent objective | `relai_work` action `begin`; use its bootstrap, retain its workspace-bound `work_id`, and pass the ID on every later task-scoped call |
-| Need a refreshed repository overview | `relai_snapshot` with the same `work_id`; the bound workspace may be omitted |
-| Locate code by content | `relai_search`; default auto mode includes bounded prioritized source when useful. Use `mode:"compact"` for inventory-only output or `mode:"context"` for fixed caller-controlled context limits. |
-| Trace a symbol, callers, importers, impact, or affected tests | `relai_inspect` with the appropriate action |
-| Need focused file content | `relai_read`; add `startLine` / `endLine` for large files, or `ranges` for several files at once |
-| Small localized edit inside an existing file | `relai_edit` with `oldText`/`newText` |
-| Complete replacement of a file (any size) | `relai_edit` with `content` |
-| Multi-file patch-shaped change | `relai_edit` with `updateText` |
-| Several edits in one approval | `relai_edit` with `edits: [...]` |
-| Tidy session-created files | `relai_changes` action `tidy_plan`, then `tidy_run` |
-| Install dependencies, run migrations, tests, builds, linters, release gates, or other one-shot tooling | `relai_exec` or `relai_validate`; never use a managed process for work expected to terminate with one result |
-| Run work that may exceed bounded synchronous execution | Call the normal eligible one-shot tool. Hosts advertising `io.modelcontextprotocol/tasks` may receive a native Task and use MCP `tasks/get`, `tasks/update`, and `tasks/cancel`; without Tasks, the bounded call fails rather than becoming a fake persistent service. |
-| Validate and finish atomically | `relai_validate` action `checks` with the task's `work_id`, `complete:true`, and `summary` |
-| Finish after a post-validation read-only review | `relai_work` action `finish` with the same `work_id` after the final successful validation and review |
-| Start a persistent service, watcher, or interactive program | `relai_process` action `start` with `kind` and `purpose`; use byte offsets and `metadataRevision` for incremental reads |
-| Probe a local HTTP route | `relai_validate` action `http`; this action is bounded synchronous and is not native-Task eligible |
-| Run a declared UI/browser validation script | `relai_validate` action `checks` with the exact package script command |
-| Read workspace and repository state | `relai_work` action `status` |
-| Review file changes | `relai_changes` action `diff` |
-| Restore listed tracked paths only | `relai_changes` action `restore` |
-| Reset all tracked workspace changes | `relai_changes` action `reset` with `confirmation:"RESET"` |
-| Reset tracked changes and remove all untracked files | `relai_changes` action `reset` with `removeUntracked:true` and `confirmation:"RESET_AND_CLEAN"` |
-| Prepare local pull-request text | `relai_publish` action `draft_pr` |
-
-Common loop when every stage is useful:
-
-```text
-relai_work begin -> inspect -> read -> change -> relai_validate checks (same work_id, complete:true + summary)
-```
-
-Alternative when review must follow validation:
-
-```text
-relai_work begin -> inspect -> read -> change -> relai_validate checks -> relai_changes diff / relai_work status -> relai_work finish (same work_id throughout)
-```
-
-Adaptive search requires no mode field: `{ "work_id": "<task-id>", "pattern": "getDepartments" }`. Up to 20 matches use the focused tier, 21–100 use the moderate tier, and broader searches use smaller bounded context. Auto mode prioritizes files whose paths resemble the query and files with more retained matches. Results remain grouped by file, overlapping ranges are merged, and each contextual file includes a SHA-256 hash.
-
-Use `{ "mode": "compact" }` for the original path/line-only response. Use `{ "mode": "context", "contextBefore": 5, "contextAfter": 8, "maxBytes": 131072 }` when exact caller-controlled context is required. Supplying context options without a mode also retains explicit context behavior for compatibility. Use `groupByFile:false` for flat ranges or `mergeOverlaps:false` to retain one range per match.
-
-For large files, request only the relevant lines when possible, for example `{ "work_id": "<task-id>", "paths": ["src/server.js"], "startLine": 120, "endLine": 220 }`.
-
-`startLine`/`endLine` apply to every path in the batch. When several files need different windows, pass `ranges` instead of making one call per file:
-
-```json
-{
-  "workspace": "myapp",
-  "work_id": "<task-id>",
-  "paths": ["src/server.js", "src/routes.js"],
-  "ranges": [
-    { "path": "src/server.js", "startLine": 120, "endLine": 220 },
-    { "path": "src/routes.js", "startLine": 1, "endLine": 40 }
-  ]
-}
-```
-
-A path with no `ranges` entry falls back to the batch-wide `startLine`/`endLine`, or to the whole file when neither is set. Connector reads use compact guidance by default; pass `guidanceMode: "none"` when only content and metadata are needed.
-
-For large or interpolation-heavy files, prefer `relai_edit` with `oldText`/`newText` for focused edits. Use `content` only when the entire file genuinely needs replacement. For multi-file patch-shaped changes or tracked-file deletion, use `relai_edit` with `updateText`.
-
----
-
-## Full-file write behavior
-
-`relai_edit` accepts complete file content, exact replacements with optional `occurrence`, replacement arrays, patch-shaped `updateText`, and atomic edit batches. Use `relai_changes` actions `tidy_plan` and `tidy_run` to clean up session-created files.
-
-Small full-file write:
-
-```json
-{
-  "workspace": "myapp",
-  "work_id": "<task-id>",
-  "path": "src/example.ts",
-  "content": "export const ok = true;\n"
-}
-```
-
-Large complete-file write through the same tool:
-
-```json
-{ "workspace": "myapp", "work_id": "<task-id>", "stage": "start", "path": "src/big.ts", "content": "first chunk" }
-{ "workspace": "myapp", "work_id": "<task-id>", "stage": "append", "writeId": "...", "content": "next chunk" }
-{ "workspace": "myapp", "work_id": "<task-id>", "stage": "commit", "writeId": "..." }
-```
-
-Preferred localized edit inside a large or interpolation-heavy source file:
-
-```json
-{
-  "workspace": "myapp",
-  "work_id": "<task-id>",
-  "path": "lib/sms_handler_utils.dart",
-  "expectedSha256": "sha-from-relai-read",
-  "oldText": "exact current text block",
-  "newText": "exact replacement text block"
-}
-```
-
-Tracked-file deletion uses a structured patch through `relai_edit`:
-
-```text
-*** Begin Patch
-*** Delete File: docs/old-plan.md
-*** End Patch
-```
-
-Caller-selected untracked artifacts created during the current session are removed through `relai_changes` actions `tidy_plan` and `tidy_run`. Whole-workspace untracked cleanup exists only in `relai_changes` action `reset` and requires the literal `RESET_AND_CLEAN` confirmation.
-
-For long, large, or interpolation-heavy source files, use `relai_edit` with exact replacement fields for localized changes. Use `relai_edit` with `content` only when the whole file genuinely needs replacement; large content stages automatically, and explicit stage start/append/commit is available for transport chunking. If a multiline source file is accidentally collapsed into one long line, the edit is rejected instead of damaging formatting.
-
----
-
-## Compatibility test aliases
-
-The package keeps only active workflow test aliases:
-
-```bash
-npm run test:compat
-npm run test:public-workflow
-npm run test:connector-wording
-```
-
-`test:compat` confirms removed legacy tools stay rejected. `test:public-workflow` runs the current bridge workflow smoke test. `test:connector-wording` checks connector-facing wording so tool copy stays neutral and workflow-oriented. No CI screenshot belongs in the README; the README should show the product, not a failed run.
-
----
-
-## Design notes
-
-Rel.AI MCP is intentionally opinionated now.
-
-- One normal workflow is better than five fallback workflows that fail differently.
-- Full-file writes are easier to reason about than hidden mini-updates.
-- Verification should be visible and repeatable.
-- Public tunnel setup should be easy, but local-only should stay the default.
-- The dashboard should explain what is happening instead of hiding everything in logs.
-- Browser UI source is ESM-only; backend and Electron CommonJS may only decrease until the coordinated hard cutover described in [docs/ESM_MIGRATION.md](docs/ESM_MIGRATION.md).
-- Node.js 24, npm 11, exact Electron/MCP pins, and the two-lockfile install flow are defined in [docs/PACKAGE_MANAGEMENT.md](docs/PACKAGE_MANAGEMENT.md).
-
----
-
-## Developer
-
-Rel.AI MCP is developed by [Kyne](https://github.com/Kyne0328).
+Previously published Rel.AI releases remain governed by the license terms included with those releases.

@@ -1,8 +1,22 @@
 
 
-import { AUTO_CHECK_INTERVAL_MS, AUTO_CHECK_DELAY_MS, cleanText, createLogger, createUpdateStateStore, detectUpdateSupport, normalizeStatus, progressPayload } from "./app-updater-state.js";
+import { AUTO_CHECK_INTERVAL_MS, AUTO_CHECK_DELAY_MS, assessUpdateSynchronization, cleanText, createLogger, createUpdateStateStore, detectUpdateSupport, normalizeStatus, progressPayload, updateCompatibilityMetadata } from "./app-updater-state.js";
+import { importResourceModule } from './resource-path.js';
+
+const { runtimeMetadata } = await importResourceModule('src/runtimeCompatibility.js');
 import { bindUpdaterEvents } from "./app-updater-events.js";
 import { compareVersions, isStableVersion, parseStableVersion } from "./update-version.js";
+
+const UPDATE_RETRY_DELAYS_MS = Object.freeze([500, 1500]);
+const TRANSIENT_UPDATE_ERROR_CODES = Object.freeze([
+  'ERR_HTTP2_SERVER_REFUSED_STREAM',
+  'ERR_CONNECTION_RESET',
+  'ECONNRESET',
+  'EPIPE',
+  'ERR_TIMED_OUT',
+  'ETIMEDOUT',
+  'ERR_NETWORK_CHANGED'
+]);
 
 function createAppUpdater(options = {}) {
   const {
@@ -16,8 +30,10 @@ function createAppUpdater(options = {}) {
     getTaskActivity = () => ({}),
     onStatusChange = () => {},
     onBeforeInstall = () => {},
+    retryDelay = delay => new Promise(resolve => setTimer(resolve, delay)),
     onLog = () => {},
-    errorCodes = {}
+    errorCodes = {},
+    currentCompatibility = null
   } = options;
   if (!app || typeof app.getVersion !== 'function') throw new TypeError('Electron app is required.');
   if (!autoUpdater || typeof autoUpdater.on !== 'function') throw new TypeError('electron-updater autoUpdater is required.');
@@ -29,9 +45,11 @@ function createAppUpdater(options = {}) {
     blocked: errorCodes.UPDATE_INSTALL_BLOCKED || 'update_install_blocked'
   };
   const support = detectUpdateSupport({ app, platform, env });
+  const installedCompatibility = currentCompatibility || runtimeMetadata();
   const store = createUpdateStateStore({ app, onLog });
   const handlers = [];
   let autoCheckTimer = null;
+  let retryingOperation = '';
   let started = false;
   let status = normalizeStatus({
     state: support.supported ? 'idle' : 'unsupported',
@@ -57,9 +75,11 @@ function createAppUpdater(options = {}) {
       status: snapshot,
       emit,
       handleError,
+      handleEventError: handleUpdaterEventError,
       store,
       now,
-      log
+      log,
+      currentCompatibility: installedCompatibility
     });
     scheduleAutomaticCheck();
     emit({ state: 'idle' });
@@ -76,10 +96,10 @@ function createAppUpdater(options = {}) {
   async function checkForUpdates() {
     if (!support.supported) return failure(codes.unsupported, support.reason, false);
     if (isBusy()) return failure(codes.busy, 'An update action is already in progress.', false);
-    emit({ state: 'checking', error: '', errorCode: '', integrityVerified: false });
+    emit({ state: 'checking', error: '', errorCode: '', integrityVerified: false, availableCompatibility: null, updateSynchronization: null });
     log('Checking for application updates.');
     try {
-      await autoUpdater.checkForUpdates();
+      await runWithRetries('Update check', () => autoUpdater.checkForUpdates());
       store.writeLastCheck(now());
       scheduleAutomaticCheck();
       return { ok: true, status: snapshot() };
@@ -97,7 +117,7 @@ function createAppUpdater(options = {}) {
     emit({ state: 'downloading', progress: progressPayload({ percent: 0 }), error: '', errorCode: '', integrityVerified: false });
     log(`Downloading Rel.AI MCP ${status.availableVersion || 'update'}.`);
     try {
-      await autoUpdater.downloadUpdate();
+      await runWithRetries('Update download', () => autoUpdater.downloadUpdate());
       return { ok: true, status: snapshot() };
     } catch (error) {
       return handleError(error);
@@ -148,6 +168,29 @@ function createAppUpdater(options = {}) {
     autoCheckTimer?.unref?.();
   }
 
+  async function runWithRetries(label, action) {
+    retryingOperation = label;
+    try {
+      for (let attempt = 0; attempt <= UPDATE_RETRY_DELAYS_MS.length; attempt += 1) {
+        try {
+          return await action();
+        } catch (error) {
+          if (!isTransientUpdateError(error) || attempt >= UPDATE_RETRY_DELAYS_MS.length) throw error;
+          const delay = UPDATE_RETRY_DELAYS_MS[attempt];
+          log(`${label} hit a transient network error. Retrying in ${delay} ms (${attempt + 2}/${UPDATE_RETRY_DELAYS_MS.length + 1}).`, { level: 'warning', code: 'update_retry' });
+          await retryDelay(delay);
+        }
+      }
+    } finally {
+      retryingOperation = '';
+    }
+  }
+
+  function handleUpdaterEventError(error) {
+    if (retryingOperation && isTransientUpdateError(error)) return;
+    return handleError(error);
+  }
+
   function handleError(error) {
     const message = cleanText(error instanceof Error ? error.message : error, 600) || 'The application update failed.';
     log(message, { level: 'error', code: codes.failed });
@@ -179,4 +222,10 @@ function createAppUpdater(options = {}) {
   return { start, stop, getStatus: snapshot, checkForUpdates, downloadUpdate, installUpdate };
 }
 
-export { AUTO_CHECK_DELAY_MS, AUTO_CHECK_INTERVAL_MS, compareVersions, createAppUpdater, detectUpdateSupport, isStableVersion, normalizeStatus, parseStableVersion, progressPayload };
+function isTransientUpdateError(error) {
+  const code = cleanText(error?.code, 120).toUpperCase();
+  const message = cleanText(error instanceof Error ? error.message : error, 600).toUpperCase();
+  return TRANSIENT_UPDATE_ERROR_CODES.some(candidate => code.includes(candidate) || message.includes(candidate));
+}
+
+export { AUTO_CHECK_DELAY_MS, AUTO_CHECK_INTERVAL_MS, assessUpdateSynchronization, compareVersions, createAppUpdater, detectUpdateSupport, isStableVersion, normalizeStatus, parseStableVersion, progressPayload, updateCompatibilityMetadata };

@@ -1052,7 +1052,8 @@ function authorizationStatus() {
   };
 }
 
-function revokeAuthorizations() {
+/** @knipdynamic Intentional dynamic/cross-workspace module boundary. */
+export function revokeAuthorizations() {
   return withStoreLock(() => {
     const store = pruneStore(readStore());
     const revoked = {
@@ -1130,4 +1131,5 @@ function verifyLogin(submittedToken, serverToken) {
   return timingSafeEqual(submitted, expected);
 }
 
-export { protectedResourceMetadata, authorizationServerMetadata, wwwAuthenticateHeader, registerClient, validateAuthorizationRequest, issueAuthorizationCode, buildRedirectUrl, exchangeToken, validateAccessToken, authorizationPolicyFromConsent, renderLoginPage, verifyLogin, authorizationStatus, revokeAuthorizations, canonicalIssuer, resourceForIssuer, normalizeScope, SCOPE, OFFLINE_SCOPE, SUPPORTED_SCOPES, secretKey, DCR_LIMITS, OAuthStoreError, emptyStore as createEmptyOAuthStore, readStore as readOAuthStore, writeStore as writeOAuthStore, pruneStore, evaluateRegistrationLimits, oauthStoreRecoveryStatus, resetOAuthStoreAfterCorruption };
+export { protectedResourceMetadata, authorizationServerMetadata, wwwAuthenticateHeader, registerClient, validateAuthorizationRequest, issueAuthorizationCode, buildRedirectUrl, exchangeToken, validateAccessToken, authorizationPolicyFromConsent, renderLoginPage, verifyLogin, authorizationStatus,
+  canonicalIssuer,      secretKey, DCR_LIMITS,  emptyStore as createEmptyOAuthStore, readStore as readOAuthStore, writeStore as writeOAuthStore, pruneStore, evaluateRegistrationLimits, oauthStoreRecoveryStatus, resetOAuthStoreAfterCorruption };

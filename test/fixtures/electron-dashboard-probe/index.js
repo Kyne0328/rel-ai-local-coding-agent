@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHttpMcpSession } from '../../helpers/http-mcp.mjs';
 
 const targetUrl = process.env.RELAI_PROBE_TARGET_URL;
 const outputPath = process.env.RELAI_PROBE_OUTPUT_PATH;
@@ -34,6 +35,12 @@ app.whenReady().then(async () => {
     }
   });
   const failures = [];
+  const navigationCounts = { didStartNavigation: 0, didNavigate: 0, didFinishLoad: 0 };
+  win.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
+    if (isMainFrame && !isInPlace) navigationCounts.didStartNavigation += 1;
+  });
+  win.webContents.on('did-navigate', () => { navigationCounts.didNavigate += 1; });
+  win.webContents.on('did-finish-load', () => { navigationCounts.didFinishLoad += 1; });
   win.webContents.on('console-message', (_event, level, message) => {
     if (level >= 3) failures.push(`console:${message}`);
   });
@@ -45,7 +52,7 @@ app.whenReady().then(async () => {
     const rows = [...document.querySelectorAll('.task-row')];
     const progress = [...document.querySelectorAll('progress.task-progress-track')];
     const indeterminate = [...document.querySelectorAll('.task-progress.indeterminate')];
-    const terminalStatic = [...document.querySelectorAll('.task-progress.static.terminal')];
+    const terminalRows = rows.filter(row => ['acceptance-completed', 'acceptance-failed', 'acceptance-cancelled'].includes(row.dataset.taskId));
     return {
       title: document.title,
       rowCount: rows.length,
@@ -54,8 +61,10 @@ app.whenReady().then(async () => {
       determinateValid: progress.every(item => item.max === 100 && item.hasAttribute('value') && item.getAttribute('aria-label')),
       indeterminateCount: indeterminate.length,
       indeterminateValid: indeterminate.every(item => Boolean(item.getAttribute('aria-label')) && !item.hasAttribute('aria-valuenow') && item.querySelector('.task-progress-track')?.getAttribute('aria-hidden') === 'true'),
-      terminalStaticCount: terminalStatic.length,
-      terminalNoIndeterminate: terminalStatic.every(item => !item.classList.contains('indeterminate') && !item.querySelector('.task-progress-track')),
+      terminalRowCount: terminalRows.length,
+      terminalLiveClockCount: terminalRows.filter(row => row.querySelector('[data-clock-elapsed-start]')).length,
+      terminalDurationVisible: terminalRows.every(row => Boolean(row.querySelector('.task-row-time')?.textContent.trim())),
+      terminalNoProgress: terminalRows.every(row => !row.querySelector('.task-progress')),
       unknownStatusCount: rows.filter(row => /unknown/i.test(row.textContent)).length,
       longTitleAccessible: rows.some(row => row.textContent.includes('Extremely long task title') && (row.getAttribute('aria-label') || row.getAttribute('title') || row.textContent.length > 80)),
       reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
@@ -85,6 +94,25 @@ app.whenReady().then(async () => {
     };
   })()`);
 
+  const parsedTarget = new URL(targetUrl);
+  const passiveMcpSession = await createHttpMcpSession(parsedTarget.origin, {
+    token: parsedTarget.searchParams.get('token') || '',
+    clientName: 'dashboard-passive-route-probe'
+  });
+  const passiveRouteStability = [];
+  for (const route of [
+    { hash: 'settings', ready: `document.querySelector('.settings-shell') && !document.querySelector('.settings-loading')` },
+    { hash: 'diagnostics', ready: `document.querySelector('.diagnostic-page') && !document.querySelector('[data-copy-report]')?.disabled` },
+    { hash: 'workspaces', ready: `document.querySelector('.workspace-validation-preferences')` },
+    { hash: 'skills', ready: `document.querySelector('.skills-page') && !document.querySelector('.settings-loading')` },
+    { hash: 'tools', ready: `document.querySelector('.tools-section') && document.getElementById('toolsCount')?.textContent.trim() !== 'Loading…'` }
+  ]) {
+    passiveRouteStability.push(await measurePassiveRouteStability(win, passiveMcpSession, navigationCounts, route));
+  }
+  await passiveMcpSession.close();
+
+  await win.webContents.executeJavaScript(`location.hash = '#tasks'`);
+  await waitFor(win, `document.querySelectorAll('.task-row').length >= 9`);
   await win.webContents.executeJavaScript(`document.querySelector('.task-row')?.click()`);
   await waitFor(win, `document.querySelector('.session-detail-drawer .session-detail')`);
   const taskInteraction = await win.webContents.executeJavaScript(`(() => {
@@ -101,14 +129,76 @@ app.whenReady().then(async () => {
   await win.webContents.executeJavaScript(`document.querySelector('.session-detail-drawer .drawer-head button')?.click()`);
   await waitFor(win, `!document.querySelector('.session-detail-drawer')`);
 
+  await win.webContents.setZoomFactor(1);
+  win.setSize(1600, 900);
+  await delay(150);
   await win.webContents.executeJavaScript(`location.hash = '#activity'`);
-  await waitFor(win, `document.querySelectorAll('.activity-row-button').length > 0`);
+  await waitFor(win, `document.querySelector('.activity-table tbody .clickable-row')`);
+  const activityDesktopGeometry = await win.webContents.executeJavaScript(`(() => {
+    const table = document.querySelector('.activity-table');
+    const wrap = document.querySelector('#__activity-table-wrap .table-wrap');
+    const headers = [...document.querySelectorAll('.activity-table thead th')]
+      .filter(cell => getComputedStyle(cell).display !== 'none')
+      .map(cell => ({ text: cell.textContent.trim(), width: cell.getBoundingClientRect().width }));
+    const messageHeader = document.querySelector('.activity-table thead .activity-message-column');
+    const messageCell = document.querySelector('.activity-message-cell');
+    const headerRect = messageHeader?.getBoundingClientRect();
+    const cellRect = messageCell?.getBoundingClientRect();
+    const wrapRect = wrap?.getBoundingClientRect();
+    const visibleHeaderWidth = headers.reduce((sum, item) => sum + item.width, 0);
+    return {
+      viewportWidth: innerWidth,
+      tableWidth: table?.getBoundingClientRect().width || 0,
+      wrapWidth: wrapRect?.width || 0,
+      visibleHeaderWidth,
+      trailingWidthGap: Math.max(0, (wrapRect?.width || 0) - visibleHeaderWidth),
+      visibleHeaders: headers.map(item => item.text),
+      headerWidth: headerRect?.width || 0,
+      cellWidth: cellRect?.width || 0,
+      headerVisible: Boolean(messageHeader && getComputedStyle(messageHeader).display !== 'none' && headerRect && wrapRect && headerRect.width > 0 && headerRect.right > wrapRect.left && headerRect.left < wrapRect.right),
+      cellVisible: Boolean(messageCell && getComputedStyle(messageCell).display !== 'none' && cellRect && wrapRect && cellRect.width > 0 && cellRect.right > wrapRect.left && cellRect.left < wrapRect.right),
+      messageText: messageCell?.querySelector('.activity-message-copy')?.textContent.trim() || ''
+    };
+  })()`);
+  const activityLiveStability = await win.webContents.executeJavaScript(`(async () => {
+    const beforeNode = document.querySelector('.activity-message-copy');
+    const beforeText = beforeNode?.textContent.trim() || '';
+    const tbody = document.getElementById('__activity-tbody');
+    let childListMutations = 0;
+    const observer = new MutationObserver(records => {
+      childListMutations += records.filter(record => record.type === 'childList').length;
+    });
+    if (tbody) observer.observe(tbody, { childList: true, subtree: true });
+    for (let index = 0; index < 3; index += 1) {
+      window.dispatchEvent(new CustomEvent('relai:clock-tick', { detail: { now: Date.now() } }));
+    }
+    window.dispatchEvent(new CustomEvent('relai:dashboard-refresh'));
+    await new Promise(resolve => setTimeout(resolve, 750));
+    observer.disconnect();
+    const afterNode = document.querySelector('.activity-message-copy');
+    const pauseButton = document.getElementById('__activity-freeze');
+    pauseButton?.click();
+    const frozen = pauseButton?.getAttribute('aria-pressed') === 'true';
+    pauseButton?.click();
+    await new Promise(resolve => setTimeout(resolve, 750));
+    const resumed = pauseButton?.getAttribute('aria-pressed') === 'false';
+    return {
+      beforeText,
+      afterText: afterNode?.textContent.trim() || '',
+      sameMessageNode: Boolean(beforeNode && beforeNode === afterNode),
+      childListMutations,
+      messageCount: document.querySelectorAll('.activity-message-copy').length,
+      frozen,
+      resumed,
+      messageAfterResume: document.querySelector('.activity-message-copy')?.textContent.trim() || ''
+    };
+  })()`);
   const beforeFocus = await win.webContents.executeJavaScript(`document.activeElement?.tagName || ''`);
   win.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'TAB' });
   win.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'TAB' });
   await delay(50);
   const afterFocus = await win.webContents.executeJavaScript(`({tag: document.activeElement?.tagName || '', className: document.activeElement?.className || ''})`);
-  await win.webContents.executeJavaScript(`document.querySelector('.activity-row-button')?.click()`);
+  await win.webContents.executeJavaScript(`document.querySelector('.activity-table tbody .clickable-row')?.click()`);
   await waitFor(win, `document.querySelector('.drawer-panel .activity-detail-head')`);
   const activityInteraction = await win.webContents.executeJavaScript(`(() => {
     const detail = document.querySelector('.drawer-panel .activity-detail-head');
@@ -222,8 +312,11 @@ app.whenReady().then(async () => {
   const result = {
     initial,
     liveToolUpdate,
+    passiveRouteStability,
     taskInteraction,
     activityInteraction,
+    activityDesktopGeometry,
+    activityLiveStability,
     keyboard: { beforeFocus, afterFocus },
     clock: { before: clockBefore, after: clockAfter, changed: clockBefore !== clockAfter },
     responsive,
@@ -236,6 +329,59 @@ app.whenReady().then(async () => {
   fs.writeFileSync(outputPath, JSON.stringify({ error: error?.stack || String(error) }, null, 2));
   app.exit(1);
 });
+
+async function measurePassiveRouteStability(win, mcpSession, navigationCounts, route) {
+  await win.webContents.executeJavaScript(`location.hash = ${JSON.stringify(`#${route.hash}`)}`);
+  await waitFor(win, route.ready);
+  const beforeNavigation = { ...navigationCounts };
+  const captured = await win.webContents.executeJavaScript(`(() => {
+    const routeRoot = document.getElementById('routeRoot');
+    window.__relaiPassiveRouteNode = routeRoot?.firstElementChild || null;
+    window.__relaiPassiveLoadingSeen = false;
+    window.__relaiPassiveObserver?.disconnect();
+    const loadingPattern = /Loading (?:preferences|application settings|advanced settings|connection details|diagnostics|skills|tools)/i;
+    const containsLoading = node => {
+      if (!(node instanceof Element)) return false;
+      if (node.matches('.settings-loading,.connection-loading')) return true;
+      if (node.querySelector('.settings-loading,.connection-loading')) return true;
+      return loadingPattern.test(node.textContent || '');
+    };
+    window.__relaiPassiveObserver = new MutationObserver(records => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (containsLoading(node)) window.__relaiPassiveLoadingSeen = true;
+        }
+      }
+    });
+    if (routeRoot) window.__relaiPassiveObserver.observe(routeRoot, { childList: true, subtree: true });
+    return Boolean(window.__relaiPassiveRouteNode);
+  })()`);
+  if (!captured) throw new Error(`Passive route probe could not capture #${route.hash}.`);
+  const listed = await mcpSession.request('tools/list');
+  if (listed.response.status !== 200) throw new Error(`Passive route MCP request failed on #${route.hash}: ${listed.response.status}`);
+  await delay(500);
+  const dom = await win.webContents.executeJavaScript(`(() => {
+    const routeRoot = document.getElementById('routeRoot');
+    const current = routeRoot?.firstElementChild || null;
+    const result = {
+      sameRouteNode: Boolean(current && current === window.__relaiPassiveRouteNode),
+      loadingSeen: window.__relaiPassiveLoadingSeen === true,
+      routeText: current?.textContent?.slice(0, 160) || ''
+    };
+    window.__relaiPassiveObserver?.disconnect();
+    window.__relaiPassiveObserver = null;
+    return result;
+  })()`);
+  return {
+    route: route.hash,
+    ...dom,
+    mainFrameNavigationDelta: {
+      didStartNavigation: navigationCounts.didStartNavigation - beforeNavigation.didStartNavigation,
+      didNavigate: navigationCounts.didNavigate - beforeNavigation.didNavigate,
+      didFinishLoad: navigationCounts.didFinishLoad - beforeNavigation.didFinishLoad
+    }
+  };
+}
 
 async function waitFor(win, expression, timeoutMs = 10000) {
   const started = Date.now();

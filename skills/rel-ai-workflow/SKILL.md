@@ -1,40 +1,51 @@
 ---
 name: rel-ai-workflow
-description: Use Rel.AI for production work in a configured local repository: inspect code, make guarded edits, run bounded commands, validate behavior, review changes, manage explicit persistent programs, or publish Git work. Trigger only when the request requires repository access or local execution through Rel.AI.
+description: Use when a request requires repository access or local execution through Rel.AI.
 ---
 
 # Rel.AI Workflow
 
-This is the routing and work-session ownership skill. Specialized Rel.AI skills may refine a procedure, but they must reuse this skill's active `work_id` and must not open another work session for the same objective.
+This is the routing skill and the only work-session owner for a repository objective. Open one `work_id` and keep using it until that objective is completed or explicitly cancelled. Specialized Rel.AI skills reuse the same work session.
 
-## Standard workflow
+## Runtime-calibrated workflow
 
-1. Call `relai_work` with `action: "begin"` exactly once for each independent objective. Retain the returned `work_id`.
-2. Use the bootstrap before requesting more repository context.
-3. Inspect affected files and impact before editing. Preserve existing user changes.
-4. Apply repository changes through `relai_edit`.
-5. Use `relai_exec` for bounded one-shot commands and `relai_validate` for checks, diagnostics, or HTTP probes.
-6. Use `relai_process` only for a service, watcher, or interactive program. Process start requires an explicit `kind` and `purpose`. Tests, builds, linters, source checks, and release gates are one-shot commands, not managed processes.
-7. Review material changes with `relai_changes` action `diff`.
-8. Complete only after actual validation, using validation `complete: true` or `relai_work` action `finish`. Cancel abandoned work explicitly.
+Call `relai_work` with `action: "begin"` once. After each successful work-scoped call, treat `workflow.recommendedActions` as the runtime-calibrated default for what is useful next and `workflow.avoidActions` as a guard against redundant or over-broad work. Hard runtime errors, authorization, containment, task integrity, and completion gates remain authoritative.
 
-## Public tool surface
+Do not mechanically execute every possible stage. Choose the shortest path that proves the user's objective:
 
-Rel.AI always exposes the complete 12-tool capability surface. There is no profile switch and no reduced mode. Removed direct-operation tools and aliases fail closed; use the consolidated tools and actions.
+- Documentation: `begin -> targeted read -> edit -> task-owned review if useful -> finish`.
+- Bugfix: `begin -> reproduce/inspect -> coherent fix -> directly affected check -> task-owned review -> finish`.
+- Feature: `begin -> inspect/design only as needed -> implement coherent slice -> risk-matched checks -> review -> finish`.
+- Investigation: `begin -> search/inspect -> targeted evidence -> report/finish`; do not edit unless implementation is requested.
+- Release: `begin -> inspect release boundary -> focused regression proof -> release-required checks/build/package gates -> review -> finish`.
 
-Use the `relai://server/tool-surface` resource when exact action fields, execution classes, or native Task eligibility are needed. Do not copy complete tool schemas into skill instructions.
+If fresh evidence already proves a recommendation, use the next distinct recommendation instead of repeating the same read, check, review, or process start.
 
-## Coordination
+## Route only when needed
 
-- `rel-ai-investigation` handles evidence gathering and read-only audits.
-- `rel-ai-debugging` handles reproducible defects and failure isolation.
-- `rel-ai-verification` handles completion evidence and release readiness.
-- `rel-ai-dev-process` handles persistent services, watchers, and interactive programs.
-- Safety and server-enforced approval rules override every workflow skill.
-- Tools enforce policy and bounds; skills only orchestrate the workflow.
+- Simple localized change with a clear implementation path: stay in this workflow.
+- Non-trivial feature, refactor, migration, or dependent multi-stage work: use `rel-ai-planning`.
+- Architecture audit, feasibility study, dependency tracing, or evidence question: use `rel-ai-investigation`.
+- Reproducible error, crash, broken test, regression, or contract failure: use `rel-ai-debugging`.
+- Persistent service, watcher, preview runtime, or interactive CLI: use `rel-ai-dev-process`.
+- Completion proof, release readiness, or explicit final verification: use `rel-ai-verification`.
+
+Specialists return conclusions to this workflow instead of reopening the objective or repeating evidence that is still sufficient and current.
+
+## Tool shape
+
+Use `relai_edit` for repository changes. Use `relai_exec` for bounded one-shot commands and `relai_validate` for validation or HTTP probes. Use `relai_process` only for persistent services, watchers, previews, or interactive programs. Use `relai_changes` for task-owned review and widen to workspace scope only when the objective requires it.
+
+Rel.AI exposes the complete 12-tool capability surface. Use the `relai://server/tool-surface` resource when exact action fields, execution classes, or native Task eligibility are needed; do not copy full schemas into skill instructions.
+
+## Approved plan execution
+
+When the user has approved a multi-task plan, continue through ordinary task boundaries without asking for status confirmation. Update plan checkboxes only as completion conditions are actually satisfied. After each task, consolidate accumulated implementation where that reduces duplication or unnecessary layers.
+
+Stop mid-plan only for a genuine blocker, a material design change that invalidates the plan, a decision requiring user input, or an external/manual-only step the agent cannot perform.
 
 ## Definition of done
 
-The requested behavior is implemented, relevant validation has actually passed, changed files are known, safeguards were not bypassed, and the work session is explicitly completed or cancelled.
+Runtime policy remains authoritative. Done means the requested behavior is implemented, required risk-based evidence is current, material task-owned changes are understood, and the shared work session is explicitly completed or cancelled. Runtime workflow guidance calibrates the route; it never overrides hard safety or completion authority.
 
-Load [references/workflows.md](references/workflows.md) for process, worktree, recovery, publishing, or migration details. Load [references/safety.md](references/safety.md) before destructive, approval-gated, sensitive, or externally visible actions.
+Load [references/workflows.md](references/workflows.md) for uncommon worktree, publishing, recovery, migration, process, and plan-execution details.

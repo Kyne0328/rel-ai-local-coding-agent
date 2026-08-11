@@ -65,7 +65,8 @@ async function relaiSearch(workspace, _config, args = {}) {
       requestedMode: searchPlan.requestedMode,
       autoTier: searchPlan.autoTier,
       selectionStrategy: searchPlan.selectionStrategy,
-      prioritizeFiles: searchPlan.requestedMode === "auto"
+      prioritizeFiles: searchPlan.requestedMode === "auto",
+      workflowContext: args._workflowContext || {}
     }),
     next: result.matches.length
       ? searchPlan.requestedMode === "auto"

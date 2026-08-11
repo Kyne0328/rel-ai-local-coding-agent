@@ -1,4 +1,4 @@
-import { setToken, getToken, fetchJson, postJson, invalidateCache, DASHBOARD_DATA_URL } from './ui/api.js';
+import { setToken, getToken, fetchJson, invalidateCache, DASHBOARD_DATA_URL } from './ui/api.js';
 import { init as initStore, get as getStore } from './ui/store.js';
 import { initRouter, currentSection, currentRoutePath, getRouteParams, replaceRouteParams, rerender } from './ui/router.js';
 import { initEvents, startSSE } from './ui/events.js';
@@ -85,7 +85,12 @@ function ensureRouteRoot() {
 }
 
 async function boot() {
-  _dashboardClock = createDashboardClock({ onTick: renderLastEventTime }).start();
+  _dashboardClock = createDashboardClock({
+    onTick: currentTime => {
+      renderLastEventTime(currentTime);
+      window.dispatchEvent(new CustomEvent('relai:clock-tick', { detail: { now: currentTime } }));
+    }
+  }).start();
   window.addEventListener('pagehide', () => _dashboardClock?.stop(), { once: true });
   const initialPayload = readInitialPayload();
   const initial = initialPayload?.ok !== false ? withConnectionState(initialPayload || {}, _liveState) : initialPayload;
@@ -107,13 +112,16 @@ async function boot() {
     activateRouter(routeRoot);
     updateShell(initial);
   } else {
-    renderDashboardState('loading', 'Loading workspace state…', 'Rel.AI is checking the local service, configuration, and workspace status.');
+    renderDashboardState('loading', 'Loading workspace state…', 'Rel.AI is checking the connection service, configuration, and workspace status.');
   }
   if (initial?.ok === false || !initial) {
     const refreshed = await doRefresh({ source: 'boot', render: _routerReady });
     if (refreshed?.ok !== false && !_routerReady) activateRouter(routeRoot);
   }
-  window.addEventListener('relai:dashboard-refresh', () => doRefresh({ source: 'local-change', render: true }));
+  window.addEventListener('relai:dashboard-refresh', event => doRefresh({
+    source: 'local-change',
+    render: event.detail?.structural === true ? true : undefined
+  }));
   document.addEventListener('focusout', event => {
     if (event.target instanceof HTMLSelectElement) flushDeferredViewRender();
   }, true);
@@ -122,9 +130,9 @@ async function boot() {
   }, true);
   window.addEventListener('relai:dropdown-closed', flushDeferredViewRender);
   initEvents(liveOnEvent, liveStateChange);
-  startSSE(getToken);
+  startSSE(getToken, initial?.snapshot?.revision);
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') void doRefresh({ source: 'visibility-resume', render: true });
+    if (document.visibilityState === 'visible') void doRefresh({ source: 'visibility-resume' });
   });
   checkOnboarding();
 }
@@ -141,20 +149,23 @@ function getSections() {
     home: element => mountHome(element, getStore()),
     tasks: element => import('./ui/features/sessions/index.js').then(module => module.mountTasks(element, getStore())).catch(debugError),
     workspaces: element => import('./ui/features/workspaces/index.js').then(module => module.mountWorkspaces(element, getStore())).catch(debugError),
-    processes: element => import('./ui/features/processes/index.js').then(module => module.mountProcesses(element, getStore())).catch(debugError),
-    activity: element => import('./ui/features/activity/index.js').then(module => module.mountActivity(element)).catch(debugError),
-    tools: element => import('./ui/features/tools/index.js').then(module => module.mountTools(element)).catch(debugError),
-    reference: element => import('./ui/features/tools/index.js').then(module => module.mountTools(element)).catch(debugError),
+    activity: element => import('./ui/features/activity/index.js').then(module => module.mountActivity(element, getStore())).catch(debugError),
     settings: element => import('./ui/features/settings/index.js').then(module => module.mountSettings(element, settingsSubPage())).catch(debugError),
-    connection: element => import('./ui/features/settings/index.js').then(module => module.mountSettings(element, 'connection')).catch(debugError),
-    connector: element => import('./ui/features/settings/index.js').then(module => module.mountSettings(element, 'connection')).catch(debugError),
-    diagnostics: element => import('./ui/features/settings/index.js').then(module => module.mountSettings(element, 'diagnostics')).catch(debugError)
+    system: element => mountSystemRoute(element, 'connection'),
+    connection: element => mountSystemRoute(element, 'connection'),
+    processes: element => mountSystemRoute(element, 'processes'),
+    diagnostics: element => mountSystemRoute(element, 'diagnostics'),
+    tools: element => mountSystemRoute(element, 'tools'),
+    usage: element => mountSystemRoute(element, 'usage')
   });
+}
+function mountSystemRoute(element, pageId) {
+  return import('./ui/features/system/index.js').then(module => module.mountSystemPage(element, pageId)).catch(debugError);
 }
 
 function settingsSubPage() {
   const parts = currentRoutePath().split('/');
-  return parts[0] === 'settings' && parts[1] ? parts[1] : 'general';
+  return parts[0] === 'settings' && parts[1] ? parts[1] : 'preferences';
 }
 
 function initDesktopBridge() {
@@ -166,6 +177,25 @@ function initDesktopBridge() {
   void initWindowChrome(desktop).catch(debugError);
   desktop.onStatus(applyDesktopStatus);
   desktop.getStatus().then(applyDesktopStatus).catch(debugError);
+  if (desktop.onGatewayStatus) {
+    desktop.onGatewayStatus(applyGatewayStatusSnapshot);
+    desktop.getGatewayStatus?.().then(result => applyGatewayStatusSnapshot(result?.gateway)).catch(debugError);
+  }
+}
+
+function applyGatewayStatusSnapshot(gateway) {
+  if (!gateway || typeof gateway !== 'object') return false;
+  const current = getStore();
+  const data = {
+    ...current,
+    desktopStatus: { ...(current.desktopStatus || {}), gateway: { ...gateway } }
+  };
+  initStore(data);
+  const route = currentRoutePath();
+  if (_routerReady && (route === 'system' || route === 'connection')) {
+    void updateLiveView(data).catch(debugError);
+  }
+  return true;
 }
 
 function applyDesktopStatus(status) {
@@ -173,7 +203,7 @@ function applyDesktopStatus(status) {
   const data = withConnectionState({ ...getStore(), desktopStatus: status }, _liveState);
   initStore(data);
   updateShell(data);
-  if (_routerReady) void renderViewIfChanged(data);
+  if (_routerReady) void syncLiveView(data);
 }
 
 async function doRefresh(options = {}) {
@@ -195,7 +225,8 @@ async function performRefresh(options = {}) {
       initStore(hydrated);
       updateShell(hydrated);
       if (!_routerReady) activateRouter(ensureRouteRoot());
-      else if (options.render !== false) await renderViewIfChanged(hydrated);
+      else if (options.render === true) await renderViewIfChanged(hydrated);
+      else if (options.render !== false) await syncLiveView(hydrated);
       _lastEventAt = Date.now();
       return hydrated;
     }
@@ -209,7 +240,7 @@ async function performRefresh(options = {}) {
 }
 
 function renderRefreshFailure(data) {
-  const message = data?.error || 'The dashboard could not reach the local Rel.AI service.';
+  const message = data?.error || 'The dashboard could not reach the Rel.AI connection service.';
   _shellStatus = { label: data?.status === 401 ? 'Authentication failed' : 'Disconnected', tone: 'bad' };
   renderConnectionStatus();
   const updated = document.getElementById('lastUpdated');
@@ -225,7 +256,7 @@ function renderDashboardState(kind, title, description) {
     routeRoot.innerHTML = `<div class="dashboard-state" role="status" aria-live="polite" aria-busy="true"><div class="dashboard-state-card"><div class="loading-mark" aria-hidden="true"></div><h2>${escapeHtml(title)}</h2><p>${escapeHtml(description)}</p><div class="skeleton-grid" aria-hidden="true"><div class="skeleton-block"></div><div class="skeleton-block"></div><div class="skeleton-block"></div></div></div></div>`;
     return;
   }
-  routeRoot.innerHTML = `<div class="dashboard-state" role="alert"><div class="dashboard-state-card"><span class="status-pill bad">Connection error</span><h2>${escapeHtml(title)}</h2><p>${escapeHtml(description)}</p><div class="dashboard-state-actions"><button class="primary" type="button" data-dashboard-retry>Retry connection</button><a class="buttonlike secondary" href="#settings/diagnostics">Open diagnostics</a></div></div></div>`;
+  routeRoot.innerHTML = `<div class="dashboard-state" role="alert"><div class="dashboard-state-card"><span class="status-pill bad">Connection error</span><h2>${escapeHtml(title)}</h2><p>${escapeHtml(description)}</p><div class="dashboard-state-actions"><button class="primary" type="button" data-dashboard-retry>Retry connection</button><a class="buttonlike secondary" href="#diagnostics">Open diagnostics</a></div></div></div>`;
   routeRoot.querySelector('[data-dashboard-retry]')?.addEventListener('click', () => doRefresh({ source: 'retry', render: true }));
 }
 
@@ -245,7 +276,7 @@ async function syncLiveView(data) {
   } catch (error) {
     debugError(error);
   }
-  if (!updated) return renderViewIfChanged(data);
+  if (!updated) return false;
   _renderFingerprint = viewFingerprint(data);
   return true;
 }
@@ -258,28 +289,23 @@ async function updateLiveView(data) {
       return updateHomeLiveState(root, data);
     case 'activity': {
       const module = await import('./ui/features/activity/index.js');
-      module.mergeEntries(data.auditTail?.entries || []);
-      return true;
+      return module.updateActivityLiveState(data);
     }
     case 'tasks': {
       const module = await import('./ui/features/sessions/index.js');
       return module.updateTaskSessions(root, data);
     }
-    case 'processes': {
-      const module = await import('./ui/features/processes/index.js');
-      return module.updateProcessesLiveState(root, data);
-    }
-    case 'settings':
-      if (currentRoutePath() !== 'settings/connection') return false;
-      break;
+    case 'system':
     case 'connection':
-    case 'connector':
-      break;
+    case 'processes': {
+      const module = await import('./ui/features/system/index.js');
+      return module.updateSystemLiveState(root, currentSection(), data);
+    }
+    case 'usage':
+      return true;
     default:
       return false;
   }
-  const module = await import('./ui/features/settings/connector.js');
-  return module.updateConnectorLiveState(root, data);
 }
 
 function liveStateChange(detail) {
@@ -288,7 +314,7 @@ function liveStateChange(detail) {
   const data = withConnectionState(getStore(), _liveState);
   initStore(data);
   renderConnectionStatus();
-  if (_routerReady && ['settings/connection', 'connection', 'connector'].includes(currentRoutePath())) void syncLiveView(data);
+  if (_routerReady && ['system', 'connection'].includes(currentRoutePath())) void syncLiveView(data);
 }
 
 function updateShell(data) {
@@ -379,7 +405,16 @@ function viewFingerprint(data = {}) {
     mcpUrl: desktop.mcpUrl,
     authenticationRequired: desktop.authenticationRequired,
     errorCode: desktop.errorCode,
-    error: desktop.error
+    error: desktop.error,
+    gateway: desktop.gateway ? {
+      state: desktop.gateway.state,
+      schemaStatus: desktop.gateway.schemaStatus,
+      principalPaired: desktop.gateway.principalPaired,
+      deviceId: desktop.gateway.deviceId,
+      lastConnectedAt: desktop.gateway.lastConnectedAt,
+      reconnectAttempt: desktop.gateway.reconnectAttempt,
+      error: desktop.gateway.error
+    } : null
   };
   let payload;
   switch (currentSection()) {
@@ -399,9 +434,12 @@ function viewFingerprint(data = {}) {
     case 'reference':
       payload = [route, data.tools || []];
       break;
+    case 'usage':
+      payload = route;
+      break;
     case 'settings':
+    case 'system':
     case 'connection':
-    case 'connector':
     case 'diagnostics':
       payload = [route, data.application || {}, config, data.connectionState || {}, data.mcpAuthentication || {}, data.mcpConnection || {}, desktopState];
       break;
@@ -488,26 +526,10 @@ async function checkOnboarding() {
   try {
     const status = await fetchJson('/api/onboarding/status');
     const onboarding = await import('./ui/features/onboarding/index.js');
-    if (surface === 'desktop') {
-      if (status?.needsOnboarding) {
-        await postDesktopHandoffState();
-        onboarding.showDesktopHandoff();
-      } else if (status?.handoffPending) {
-        onboarding.showDesktopHandoff();
-      }
-      return;
-    }
-    if (status?.needsOnboarding) onboarding.openOnboarding();
+    const pending = onboarding.syncDesktopSetupState(status || {});
+    if (!pending) document.querySelector('[data-desktop-setup-checklist]')?.remove();
+    else if (_routerReady && currentSection() === 'home') await rerender({ preserveView: true });
   } catch (error) { debugError(error); }
-}
-
-async function postDesktopHandoffState() {
-  const response = await postJson('/api/onboarding/complete', {
-    skipped: true,
-    source: 'desktop-setup',
-    handoffPending: true
-  });
-  if (response?.ok !== true) throw new Error('Desktop setup handoff could not be saved.');
 }
 
 function debugError(error) {

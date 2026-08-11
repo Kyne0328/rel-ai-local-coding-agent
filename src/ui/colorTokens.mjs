@@ -47,11 +47,11 @@ export const COLOR_THEMES = Object.freeze({
   })
 });
 
-export function customPropertyName(key) {
+function customPropertyName(key) {
   return `--ui-${String(key).replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`)}`;
 }
 
-export function getTheme(name = 'dark') {
+function getTheme(name = 'dark') {
   if (!Object.hasOwn(COLOR_THEMES, name)) throw new Error(`Unknown color theme: ${name}`);
   return COLOR_THEMES[name];
 }

@@ -1,11 +1,16 @@
 import { fetchJson } from '../../api.js';
 import { EmptyState } from '../../components/empty-state.js';
+import { createFilterBar } from '../../components/filter-bar.js';
+import { filterRadioField, openFilterDrawer } from '../../components/filter-drawer.js';
 import { esc } from '../../utils.js';
 
 const CAPABILITIES = [
-  { id: 'all', label: 'All' },
+  { id: 'all', label: 'All capabilities' },
   { id: 'inspect', label: 'Inspect' },
   { id: 'edit', label: 'Edit' },
+  { id: 'execute', label: 'Execute' },
+  { id: 'workflow', label: 'Workflow' },
+  { id: 'review', label: 'Review' },
   { id: 'validate', label: 'Validate' },
   { id: 'git', label: 'Git' },
   { id: 'recover', label: 'Recover' }
@@ -27,45 +32,83 @@ export function mountTools(container) {
       <div class="section-head">
         <div>
           <h2>Tools</h2>
-          <p>Browse the Rel.AI tools available for inspection, editing, validation, Git publishing, recovery, and workspace administration.</p>
+          <p>Browse the Rel.AI capabilities available to ChatGPT for inspection, editing, validation, Git work, and recovery.</p>
         </div>
         <span class="section-action" id="toolsCount">Loading…</span>
       </div>
-      <div class="tools-toolbar">
-        <input class="tools-search" id="toolsSearch" type="search" placeholder="Search tools" aria-label="Search tools">
-        <div class="tools-filters" id="toolsFilters" role="group" aria-label="Filter tools by capability"></div>
-      </div>
+      <div id="toolsToolbar"></div>
       <div id="toolsBody" class="tools-grid"><div class="empty">Loading tools…</div></div>
     </div>`;
-  bindToolbar(container);
-  loadTools(container, mountId);
+  renderToolbar(container);
+  void loadTools(container, mountId);
 }
 
-function bindToolbar(container) {
-  const search = container.querySelector('#toolsSearch');
-  const filters = container.querySelector('#toolsFilters');
-  for (const capability of CAPABILITIES) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = `secondary tools-filter${capability.id === _capability ? ' active' : ''}`;
-    button.textContent = capability.label;
-    button.dataset.capability = capability.id;
-    button.setAttribute('aria-pressed', String(capability.id === _capability));
-    button.onclick = () => {
-      _capability = capability.id;
-      filters.querySelectorAll('button').forEach(item => {
-        const active = item === button;
-        item.classList.toggle('active', active);
-        item.setAttribute('aria-pressed', String(active));
-      });
+function renderToolbar(container) {
+  const host = container.querySelector('#toolsToolbar');
+  if (!host) return;
+  const filters = activeToolFilters();
+  const visible = _tools.filter(matchesFilters);
+  host.replaceChildren(createFilterBar({
+    search: {
+      label: 'Search tools',
+      placeholder: 'Search tools',
+      value: _search,
+      onInput: value => {
+        _search = value.trim().toLowerCase();
+        renderTools(container, { preserveToolbar: true });
+      }
+    },
+    filters,
+    onOpenFilters: () => openCapabilityFilters(container),
+    onClearAll: () => {
+      _search = '';
+      _capability = 'all';
       renderTools(container);
-    };
-    filters.appendChild(button);
-  }
-  search.addEventListener('input', () => {
-    _search = search.value.trim().toLowerCase();
-    renderTools(container);
+    },
+    summary: _tools.length ? `${visible.length} of ${_tools.length} tools shown` : 'Loading tool catalog…'
+  }));
+}
+
+function activeToolFilters() {
+  if (_capability === 'all') return [];
+  return [{
+    label: 'Capability',
+    value: capabilityLabel(_capability),
+    onRemove: () => {
+      _capability = 'all';
+      const container = document.querySelector('.tools-section')?.parentElement;
+      if (container) renderTools(container);
+    }
+  }];
+}
+
+function openCapabilityFilters(container) {
+  openFilterDrawer({
+    title: 'Tool filters',
+    value: { capability: _capability },
+    resetValue: { capability: 'all' },
+    renderFields(fields, draft) {
+      const options = CAPABILITIES.map(capability => ({
+        value: capability.id,
+        label: `${capability.label} (${capabilityCount(capability.id)})`
+      }));
+      fields.appendChild(filterRadioField({
+        label: 'Capability',
+        value: draft.capability,
+        options,
+        onChange: value => { draft.capability = value; }
+      }));
+    },
+    onApply(draft) {
+      _capability = CAPABILITY_IDS.has(draft.capability) ? draft.capability : 'all';
+      renderTools(container);
+    }
   });
+}
+
+function capabilityCount(capability) {
+  if (capability === 'all') return _tools.length;
+  return _tools.filter(tool => toolCapabilities(tool).includes(capability)).length;
 }
 
 async function loadTools(container, mountId) {
@@ -75,39 +118,24 @@ async function loadTools(container, mountId) {
   renderTools(container);
 }
 
-function renderTools(container) {
+function renderTools(container, { preserveToolbar = false } = {}) {
   const body = container.querySelector('#toolsBody');
   const count = container.querySelector('#toolsCount');
   if (!body) return;
   const visible = _tools.filter(matchesFilters);
   const filtered = _capability !== 'all' || Boolean(_search);
-  if (count) {
-    count.textContent = filtered
-      ? `Showing ${visible.length} of ${_tools.length} tools`
-      : `${_tools.length} Rel.AI tools`;
+  if (count) count.textContent = filtered ? `Showing ${visible.length} of ${_tools.length}` : `${_tools.length} Rel.AI tools`;
+  if (!preserveToolbar) renderToolbar(container);
+  else {
+    const summary = container.querySelector('#toolsToolbar .filter-summary');
+    if (summary) summary.textContent = `${visible.length} of ${_tools.length} tools shown`;
   }
-  updateFilterCounts(container);
   body.innerHTML = '';
   if (!visible.length) {
     body.appendChild(EmptyState({ title: 'No matching tools', description: 'Change the search or capability filter.' }));
     return;
   }
   for (const tool of visible) body.appendChild(toolCard(tool));
-}
-
-function updateFilterCounts(container) {
-  const filters = container.querySelector('#toolsFilters');
-  if (!filters) return;
-  for (const button of filters.querySelectorAll('button[data-capability]')) {
-    const capabilityId = button.dataset.capability || 'all';
-    const definition = CAPABILITIES.find(item => item.id === capabilityId);
-    const label = definition?.label || capabilityId;
-    const total = capabilityId === 'all'
-      ? _tools.length
-      : _tools.filter(tool => toolCapabilities(tool).includes(capabilityId)).length;
-    button.textContent = `${label} ${total}`;
-    button.setAttribute('aria-label', `${label}: ${total} tools`);
-  }
 }
 
 function matchesFilters(tool) {
@@ -191,9 +219,12 @@ function toolCapability(tool) {
 
 function legacyToolCapability(name) {
   const value = String(name || '');
-  if (value.startsWith('relai_git_')) return 'git';
+  if (value === 'relai_work') return 'workflow';
+  if (value === 'relai_exec' || value === 'relai_process') return 'execute';
+  if (value === 'relai_changes') return 'review';
+  if (value.startsWith('relai_git_') || value === 'relai_worktree' || value === 'relai_publish') return 'git';
   if (/restore|reset|tidy/.test(value)) return 'recover';
-  if (/run_checks|http_probe|ui_check|browser|diff/.test(value)) return 'validate';
+  if (/run_checks|http_probe|ui_check|browser/.test(value) || value === 'relai_validate') return 'validate';
   if (/edit|write|replace/.test(value)) return 'edit';
   return 'inspect';
 }

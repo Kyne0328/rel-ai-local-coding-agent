@@ -6,6 +6,7 @@ import { runButtonAction } from '../../action-state.js';
 import { getWorkspaceFilter, navigate, setWorkspaceFilter } from '../../router.js';
 import { recordRecentWorkspace, removeRecentWorkspace } from './recents.js';
 import { confirmAction } from '../../components/confirm-dialog.js';
+import { closeModal, openModal } from '../../components/modal.js';
 
 const WORKSPACE_CLICK_ACTIONS = [
   { selector: '[data-add-workspace]', handler: () => openWorkspaceForm({ mode: 'add' }) },
@@ -15,6 +16,7 @@ const WORKSPACE_CLICK_ACTIONS = [
   { selector: '[data-finding-remove]', handler: trigger => removeWorkspaceFlow(trigger.dataset.findingRemove || '') },
   { selector: '[data-clear-workspace]', handler: trigger => removeWorkspaceFlow(trigger.dataset.clearWorkspace || '') },
   { selector: '[data-run-validation]', handler: runValidationFromTrigger },
+  { selector: '[data-repository-details]', handler: openRepositoryDetails },
   { selector: '[data-open-folder]', handler: openFolderFromTrigger }
 ];
 
@@ -68,7 +70,18 @@ async function runValidationFromTrigger(trigger) {
   } else {
     toast(`Validation completed for ${alias}.`, { variant: 'success' });
   }
-  requestDashboardRefresh();
+  requestDashboardRefresh({ structural: true });
+}
+
+function openRepositoryDetails(trigger) {
+  const alias = trigger.dataset.repositoryDetails || '';
+  if (alias) recordRecentWorkspace(alias);
+  const card = trigger.closest?.('[data-workspace-card]');
+  const source = card?.querySelector?.('.workspace-details-body');
+  if (!source) return;
+  const content = source.cloneNode(true);
+  for (const link of content.querySelectorAll('a[href^="#"]')) link.addEventListener('click', closeModal);
+  openModal({ title: alias ? `Repository details · ${alias}` : 'Repository details', content });
 }
 
 async function openFolderFromTrigger(trigger) {
@@ -97,7 +110,7 @@ async function removeWorkspaceFlow(alias) {
     removeRecentWorkspace(alias);
     toast(`Workspace removed: ${alias}`, { variant: 'success' });
     if (getWorkspaceFilter() === alias) setWorkspaceFilter('');
-    else requestDashboardRefresh();
+    else requestDashboardRefresh({ structural: true });
   } else {
     toast(`Could not remove workspace: ${result?.error || 'unknown error'}`, { variant: 'error' });
   }

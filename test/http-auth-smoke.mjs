@@ -28,7 +28,7 @@ const child = spawn(process.execPath, [path.join(root, 'bin', 'rel-ai-mcp-http.j
     REL_AI_MCP_CONFIG: configPath,
     REL_AI_MCP_TOKEN: token,
     REL_AI_MCP_STATE_DIR: stateDir,
-    REL_AI_MCP_MAX_BODY_BYTES: String(1024 * 1024),
+    REL_AI_MCP_MAX_BODY_BYTES: String(10 * 1024 * 1024),
     REL_AI_MCP_DEBUG: '1'
   }
 });
@@ -206,16 +206,28 @@ try {
   assert.equal(registration.status, 201);
   assert.equal(registration.body.redirect_uris[0], uri);
 
-  const oversized = 'x'.repeat(2.5 * 1024 * 1024);
-  let oversizedStatus = 500;
+  const withinMcpEnvelope = "x".repeat(8 * 1024 * 1024);
+  let withinMcpEnvelopeStatus = 0;
   try {
-    oversizedStatus = (await fetch(`${base}/mcp`, {
-      method: 'POST',
-      headers: mcpHeaders('tools/list', { token, sessionId: session.sessionId, extra: { connection: 'close' } }),
-      body: mcpBody(7, 'tools/list', { pad: oversized })
+    withinMcpEnvelopeStatus = (await fetch(`${base}/mcp`, {
+      method: "POST",
+      headers: mcpHeaders("tools/list", { token, sessionId: session.sessionId }),
+      body: mcpBody(7, "tools/list", { pad: withinMcpEnvelope })
     })).status;
   } catch {}
-  assert.ok(oversizedStatus >= 400);
+  assert.notEqual(withinMcpEnvelopeStatus, 0, "an 8 MiB MCP request must reach protocol handling");
+  assert.notEqual(withinMcpEnvelopeStatus, 413, "an 8 MiB MCP request must stay below the MCP body ceiling");
+
+  const overMcpEnvelope = "x".repeat(11 * 1024 * 1024);
+  let overMcpEnvelopeStatus = 0;
+  try {
+    overMcpEnvelopeStatus = (await fetch(`${base}/mcp`, {
+      method: "POST",
+      headers: mcpHeaders("tools/list", { token, sessionId: session.sessionId, extra: { connection: "close" } }),
+      body: mcpBody(8, "tools/list", { pad: overMcpEnvelope })
+    })).status;
+  } catch {}
+  assert.ok([0, 413].includes(overMcpEnvelopeStatus), "an 11 MiB MCP request must be rejected at the body boundary, got " + overMcpEnvelopeStatus);
 } finally {
   if (session) await session.close().catch(() => {});
   child.kill('SIGKILL');

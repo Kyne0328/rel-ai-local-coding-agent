@@ -16,32 +16,21 @@ import { resolveRequireHttpToken } from "./auth.js";
 import { readTaskHistory } from "../taskHistoryStore.js";
 import { onToolActivity } from "../toolActivity.js";
 import { buildDashboardPayload, mergeDashboardActivity } from "./dashboardData.js";
-import { handleOpenFolder, handleWorkspaceChecks, handlePickFolder, workspacePathPreflight } from "./dashboardActions.js";
+import { handleOpenFolder, handlePickFolder, handleSkillsGet, handleSkillsPost, handleWorkspaceChecks, workspacePathPreflight } from "./dashboardActions.js";
 import { sendJson, sendHtml, sendSse, readJsonBody, contentTypeForStaticAsset, jsonForHtmlScript } from "./io.js";
 import { mcpConnectionManager } from '../mcp/connectionManager.js';
 import { buildToolManifest } from '../mcp/toolManifest.js';
 import { readMcpAuthenticationStatus } from '../mcp/authenticationStatus.js';
+import { WORK_NAV_ITEMS, APPLICATION_NAV_ITEMS, MOBILE_NAV_ITEMS } from '../ui/navigation-catalog.js';
+import { onWorkspaceStateChange, workspaceStateRevision } from '../workspaceState.js';
 
 const DASHBOARD_SHARED_MODULES = Object.freeze({
   '/public/taskEvents.js': Object.freeze(['src', 'taskEvents.js']),
   '/public/taskState.js': Object.freeze(['src', 'taskState.js'])
 });
 
-const PRIMARY_NAV_ITEMS = [
-  { id: "home", label: "Overview", icon: '<path d="M3 3h8v8H3zM13 3h8v5h-8zM13 10h8v11h-8zM3 13h8v8H3z" />' },
-  { id: "tasks", label: "Sessions", icon: '<path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5" />' },
-  { id: "workspaces", label: "Workspaces", icon: '<path d="M3 7.5V19a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7l-2-3H5a2 2 0 0 0-2 2v2.5Z" />' },
-  { id: "processes", label: "Processes", icon: '<rect x="3" y="4" width="18" height="16" rx="2" /><path d="m7 9 3 3-3 3M13 15h4" />' },
-  { id: "activity", label: "Activity", icon: '<path d="M3 12h4l2.3-6 4.2 12 2.3-6H21" />' },
-  { id: "settings", label: "Settings", icon: '<circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21h-4v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H3v-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6V3h4v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.1v4H21a1.7 1.7 0 0 0-1.6 1Z" />' }
-];
-const SECONDARY_NAV_ITEMS = [
-  { id: "tools", label: "Tools", icon: '<path d="m14.7 6.3 3-3a5 5 0 0 1-6.4 6.4l-6.8 6.8a2.1 2.1 0 0 0 3 3l6.8-6.8a5 5 0 0 1 6.4-6.4l-3 3-3-3Z" />' }
-];
-const MOBILE_NAV_ITEMS = [...PRIMARY_NAV_ITEMS, ...SECONDARY_NAV_ITEMS];
-
 function renderDashboardNav(items) {
-  return items.map((item) => `<a href="#${item.id}" aria-label="${item.label}"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">${item.icon}</svg><span class="nav-label">${item.label}</span></a>`).join("");
+  return items.map((item) => `<a href="${item.href}" aria-label="${item.label}"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">${item.icon}</svg><span class="nav-label">${item.label}</span></a>`).join("");
 }
 
 async function handleFavicon(ctx) {
@@ -205,6 +194,43 @@ function readConfigCached() {
   return value;
 }
 
+const DASHBOARD_SNAPSHOT_COALESCE_MS = 350;
+const DASHBOARD_SNAPSHOT_MAX_WAIT_MS = 1200;
+
+function statSignature(file) {
+  try {
+    if (!file) return '0:0';
+    const stat = fs.statSync(file);
+    return `${stat.mtimeMs}:${stat.size}`;
+  } catch {
+    return '0:0';
+  }
+}
+
+function dashboardSourceRevision(options = {}, configOverride = null) {
+  let config = configOverride;
+  try { config ||= readConfigCached(); } catch { config = null; }
+  const taskActivity = typeof options.getTaskActivity === 'function' ? options.getTaskActivity() : null;
+  const desktopStatus = typeof options.getDesktopStatus === 'function' ? options.getDesktopStatus() : null;
+  const signature = [
+    statSignature(getConfigPath()),
+    statSignature(config?.auditLogPath),
+    JSON.stringify(taskActivity),
+    JSON.stringify(desktopStatus),
+    String(mcpConnectionManager.snapshot().revision),
+    String(workspaceStateRevision())
+  ].join('|');
+  return crypto.createHash('sha256').update(signature).digest('base64url');
+}
+
+function requestedDashboardRevision(req) {
+  try {
+    return new URL(req?.url || '/events', 'http://127.0.0.1').searchParams.get('revision') || '';
+  } catch {
+    return '';
+  }
+}
+
 function openDashboardEvents(res, req, options) {
   res.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
@@ -212,64 +238,53 @@ function openDashboardEvents(res, req, options) {
     "Connection": "keep-alive",
     "X-Accel-Buffering": "no"
   });
-  const statSignature = (file) => {
-    try {
-      if (!file) return "0:0";
-      const stat = fs.statSync(file);
-      return `${stat.mtimeMs}:${stat.size}`;
-    } catch {
-      return "0:0";
-    }
-  };
-  const changeSignature = () => {
-    let config = null;
-    try { config = readConfigCached(); } catch { /* config may be unavailable; signature stays empty */ }
-    const taskActivity = typeof options.getTaskActivity === "function" ? options.getTaskActivity() : null;
-    const desktopStatus = typeof options.getDesktopStatus === "function" ? options.getDesktopStatus() : null;
-    return [
-      statSignature(getConfigPath()),
-      statSignature(config?.auditLogPath),
-      JSON.stringify(taskActivity),
-      JSON.stringify(desktopStatus),
-      String(mcpConnectionManager.snapshot().revision)
-    ].join("|");
-  };
-  let lastSignature = changeSignature();
+  let lastSignature = dashboardSourceRevision(options);
+  const clientRevision = requestedDashboardRevision(req);
   const sendSnapshot = (force = false) => {
     try {
-      const signature = changeSignature();
+      const signature = dashboardSourceRevision(options);
       if (!force && signature === lastSignature) return;
       lastSignature = signature;
       const config = readConfigCached();
-      const payload = buildDashboardPayload(config, { ...options, limit: 100 }, false);
-      sendSse(res, "dashboard", payload, { id: `${payload.snapshot.streamId}:${payload.snapshot.sequence}` });
+      const payload = buildDashboardPayload(config, { ...options, limit: 100, snapshotRevision: signature }, false);
+      sendSse(res, 'dashboard', payload, { id: `${payload.snapshot.streamId}:${payload.snapshot.sequence}` });
     } catch (error) {
-      sendSse(res, "error", errorPayload(
+      sendSse(res, 'error', errorPayload(
         ERROR_CODES.UNKNOWN,
         error instanceof Error ? error.message : String(error)
       ));
     }
   };
-  sendSse(res, "ready", { ok: true, generatedAt: new Date().toISOString() });
-  sendSnapshot(true);
+  sendSse(res, 'ready', { ok: true, generatedAt: new Date().toISOString(), revision: lastSignature });
+  if (!clientRevision || clientRevision !== lastSignature) sendSnapshot(true);
+
   let pendingSnapshot = null;
+  let pendingSince = 0;
   const scheduleSnapshot = () => {
-    if (pendingSnapshot || res.destroyed) return;
+    if (res.destroyed) return;
+    const now = Date.now();
+    if (!pendingSince) pendingSince = now;
+    if (pendingSnapshot) clearTimeout(pendingSnapshot);
+    const remaining = Math.max(0, DASHBOARD_SNAPSHOT_MAX_WAIT_MS - (now - pendingSince));
+    const delay = Math.min(DASHBOARD_SNAPSHOT_COALESCE_MS, remaining);
     pendingSnapshot = setTimeout(() => {
       pendingSnapshot = null;
+      pendingSince = 0;
       if (!res.destroyed) sendSnapshot(false);
-    }, 25);
+    }, delay);
     pendingSnapshot.unref?.();
   };
   const unsubscribe = onToolActivity(scheduleSnapshot);
   const unsubscribeConnection = mcpConnectionManager.onChange(scheduleSnapshot);
+  const unsubscribeWorkspace = onWorkspaceStateChange(scheduleSnapshot);
   const heartbeat = setInterval(() => {
     if (!res.destroyed) res.write(`: keepalive ${Date.now()}\n\n`);
   }, 15000);
   heartbeat.unref?.();
-  req.on("close", () => {
+  req.on('close', () => {
     unsubscribe();
     unsubscribeConnection();
+    unsubscribeWorkspace();
     if (pendingSnapshot) clearTimeout(pendingSnapshot);
     clearInterval(heartbeat);
   });
@@ -278,7 +293,8 @@ function openDashboardEvents(res, req, options) {
 function safeInitialDashboardData(options = {}) {
   try {
     const config = readConfig();
-    return buildDashboardPayload(config, { ...options, limit: 100 }, false);
+    const snapshotRevision = dashboardSourceRevision(options, config);
+    return buildDashboardPayload(config, { ...options, limit: 100, snapshotRevision }, false);
   } catch (error) {
     return errorPayload(
       ERROR_CODES.CONFIGURATION_INVALID,
@@ -307,8 +323,14 @@ ${renderDashboardWindowTitlebar()}
 <div class="app-shell">
   <aside class="sidebar">
     <div class="brand"><div class="logo"><img src="/public/assets/relai-logo.png" alt="Rel.AI logo"></div><div><strong>Rel.AI MCP</strong><span>workspace control</span></div></div>
-    <nav class="nav" aria-label="Primary navigation">${renderDashboardNav(PRIMARY_NAV_ITEMS)}</nav>
-    <nav class="secondary-nav" aria-label="Secondary navigation">${renderDashboardNav(SECONDARY_NAV_ITEMS)}</nav>
+    <div class="sidebar-group">
+      <div class="sidebar-group-label">Work</div>
+      <nav class="nav" aria-label="Work navigation">${renderDashboardNav(WORK_NAV_ITEMS)}</nav>
+    </div>
+    <div class="sidebar-group secondary-nav">
+      <div class="sidebar-group-label">Application</div>
+      <nav class="nav application-nav" aria-label="Application navigation">${renderDashboardNav(APPLICATION_NAV_ITEMS)}</nav>
+    </div>
     <div class="sidebar-note">This dashboard mirrors live MCP state.</div>
   </aside>
   <main id="main" class="main" tabindex="-1" aria-labelledby="pageTitle">
@@ -320,7 +342,7 @@ ${renderDashboardWindowTitlebar()}
       </div>
       <div class="top-controls">
         <button class="secondary command-trigger" id="commandPaletteBtn" type="button" aria-haspopup="dialog" aria-expanded="false" title="Open quick navigation"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg><span class="command-trigger-label">Quick navigation</span><kbd>Ctrl K</kbd></button>
-        <a class="status-pill warn connection-status-link" id="connectionStatus" href="#settings/connection" aria-label="Open Connection settings; current status Connecting">Connecting…</a>
+        <a class="status-pill warn connection-status-link" id="connectionStatus" href="#connection" aria-label="Open Connection settings; current status Connecting">Connecting…</a>
         <span class="section-action" id="lastUpdated"></span>
       </div>
     </header>
@@ -357,4 +379,4 @@ const handleReadiness = (ctx) => sendJson(ctx.res, 200, release.releaseReadiness
 
 const configCache = { path: "", mtimeMs: -1, value: null };
 
-export { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handleApiSettingsGet, handleApiTools, handleOnboardingStatus, handleConnection, handleDashboardV10, handleApiLogs, handleHealthMonitor, handleAliasDiagnostics, handleReleaseNotes, handleCautionSummary, handleReadiness, handleWorkspacePreflight, handleEvents, handleOnboardingComplete, handleApiSettingsPost, handleApiWorkspaces, handlePickFolder, handleOpenFolder, handleWorkspaceChecks };
+export { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handleApiSettingsGet, handleApiTools, handleOnboardingStatus, handleConnection, handleDashboardV10, handleApiLogs, handleHealthMonitor, handleAliasDiagnostics, handleReleaseNotes, handleCautionSummary, handleReadiness, handleWorkspacePreflight, handleEvents, handleOnboardingComplete, handleApiSettingsPost, handleApiWorkspaces, handlePickFolder, handleOpenFolder, handleSkillsGet, handleSkillsPost, handleWorkspaceChecks };

@@ -65,7 +65,7 @@ try {
   const discovery = client.discovery;
   assert.equal(discovery.response.status, 200);
   assert.deepEqual(discovery.body.result?.supportedVersions, [MCP_VERSION]);
-  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolSurfaceVersion, 32);
+  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolSurfaceVersion, 33);
   assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolCount, 12);
   assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.statelessRequestModel, true);
   assert.deepEqual(
@@ -87,7 +87,8 @@ try {
 
   const listed = await client.request('tools/list');
   assert.equal(listed.body.result?.tools?.length, 12);
-  assert.ok(Buffer.byteLength(JSON.stringify({ tools: listed.body.result.tools })) < 29_000);
+  const listedToolBytes = Buffer.byteLength(JSON.stringify({ tools: listed.body.result.tools }));
+  assert.ok(listedToolBytes < 65_536, `HTTP tools/list is ${listedToolBytes} bytes`);
   const names = listed.body.result.tools.map(tool => tool.name);
   for (const expected of ['relai_work', 'relai_snapshot', 'relai_search', 'relai_inspect', 'relai_process', 'relai_validate', 'relai_changes', 'relai_publish']) {
     assert.ok(names.includes(expected), `${expected} missing`);
@@ -97,16 +98,17 @@ try {
   }
   const inspect = listed.body.result.tools.find(tool => tool.name === 'relai_inspect');
   assert.ok(inspect.inputSchema.properties.action.enum.includes('trace'));
-  assert.equal(inspect.outputSchema, undefined);
+  assert.equal(inspect.outputSchema?.type, 'object');
   assert.equal(inspect.execution, undefined);
   const process = listed.body.result.tools.find(tool => tool.name === 'relai_process');
   assert.equal(process.execution, undefined);
+  assert.equal(process.outputSchema?.type, 'object');
   const checks = listed.body.result.tools.find(tool => tool.name === 'relai_validate');
   assert.equal(checks.execution, undefined);
+  assert.equal(checks.outputSchema?.type, 'object');
   assert.equal(checks.inputSchema.properties.planId, undefined);
   assert.equal(checks.inputSchema.properties.planLevel, undefined);
   assert.equal(checks.inputSchema.properties.defer, undefined);
-  assert.equal(checks.outputSchema, undefined);
 
   const status = await client.request('tools/call', {
     name: 'relai_work',
@@ -161,7 +163,7 @@ try {
   const surface = await client.request('resources/read', { uri: 'relai://server/tool-surface' });
   assert.ok(surface.body.result?.contents, JSON.stringify(surface.body));
   const manifest = JSON.parse(surface.body.result.contents[0].text);
-  assert.equal(manifest.toolSurfaceVersion, 32);
+  assert.equal(manifest.toolSurfaceVersion, 33);
   assert.equal(Object.hasOwn(manifest, 'profile'), false);
   assert.equal(manifest.toolCount, 12);
   const surfaceByName = new Map(manifest.tools.map(tool => [tool.name, tool]));

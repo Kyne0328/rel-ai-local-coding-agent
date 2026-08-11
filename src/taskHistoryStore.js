@@ -1,7 +1,7 @@
 
 import { buildTaskHistory } from './taskHistory.js';
 import { DEFAULT_TASK_IDLE_MS } from './toolActivity.js';
-import { completeProgress, normalizeTaskProgress, sanitizeActivityEventRecord, sanitizeDisplayText, sanitizeTaskRecord } from './taskObservability.js';
+import { completeProgress, normalizeTaskProgress, sanitizeActivityEventRecord, sanitizeDisplayText, sanitizeTaskRecord, sanitizeTaskRecordForProjection } from './taskObservability.js';
 import { isTerminalTaskStatus } from './taskState.js';
 import { clamp, cleanTaskId, eventIdentityKey, eventTime, eventTimestampMs, isoTimestamp, isCurrentTaskEvent, operationForTool, terminalTaskTimestamp, timestampMs, unique } from './taskEvents.js';
 import { MAX_SESSIONS, clearTaskHistory, ensureCurrentHistory, getTaskHistoryDir, listSessions, pruneSessions, readSession, removeSession, writeSession } from './taskHistoryStorage.js';
@@ -85,6 +85,43 @@ function recordTaskActivityEvent(config, activity = {}) {
   return publicSession(session);
 }
 
+function recordWorkflowSnapshot(config, taskId, workflow) {
+  const id = cleanTaskId(taskId);
+  if (!id || !workflow || typeof workflow !== 'object') return null;
+  ensureCurrentHistory(config);
+  const directory = getTaskHistoryDir(config);
+  const session = readSession(directory, id);
+  if (!session) return null;
+  const safe = JSON.parse(JSON.stringify(workflow));
+  const next = { ...session, workflow: safe };
+  writeSession(directory, next);
+  return safe;
+}
+function recordWorkflowEvidence(config, taskId, receipt) {
+  const id = cleanTaskId(taskId);
+  if (!id || !receipt || typeof receipt !== 'object') return null;
+  ensureCurrentHistory(config);
+  const directory = getTaskHistoryDir(config);
+  const session = readSession(directory, id);
+  if (!session) return null;
+  const evidence = [...(Array.isArray(session.workflowEvidence) ? session.workflowEvidence : []), receipt].slice(-100);
+  const next = { ...session, workflowEvidence: evidence };
+  writeSession(directory, next);
+  return receipt;
+}
+
+function readRecentWorkflowEvidence(config, taskId, limit = 50) {
+  const id = cleanTaskId(taskId);
+  if (!id) return [];
+  try {
+    ensureCurrentHistory(config);
+    const session = readSession(getTaskHistoryDir(config), id);
+    const evidence = Array.isArray(session?.workflowEvidence) ? session.workflowEvidence : [];
+    return evidence.slice(-clamp(limit, 1, 100)).map(item => ({ ...item }));
+  } catch {
+    return [];
+  }
+}
 function readTaskHistorySession(config, taskId) {
   const session = readTaskHistorySessionRecord(config, taskId);
   return session ? publicSession(session) : null;
@@ -115,7 +152,7 @@ function readTaskHistorySessionRecord(config, taskId, options = {}) {
 function readTaskHistory(config, activity = {}, options = {}) {
   const limit = clamp(options.limit || 100, 1, MAX_SESSIONS);
   const active = buildTaskHistory([], activity, { limit: MAX_SESSIONS });
-  const activeIds = new Set(active.map(session => session.id).filter(Boolean));
+  const activeIds = new Set(active.filter(session => session.status !== 'inactive').map(session => session.id).filter(Boolean));
   const directory = getTaskHistoryDir(config);
   let persisted = [];
   try {
@@ -136,6 +173,7 @@ function readTaskHistory(config, activity = {}, options = {}) {
   const byId = new Map(persisted.map(session => [session.id, session]));
   for (const task of active) {
     const existing = byId.get(task.id);
+    if (existing && task.status === 'inactive') continue;
     byId.set(task.id, existing ? overlayActiveSession(existing, task) : task);
   }
   return [...byId.values()]
@@ -227,34 +265,74 @@ function applyEvent(session, event) {
   };
 }
 
-function reconcileInactiveStoredSession(session, activeIds, timestamp = Date.now()) {
-  if (!session?.id || activeIds.has(session.id) || isTerminalTaskStatus(session.status)) return session;
-  const lastActivityMs = storedSessionActivityMs(session);
-  if (!lastActivityMs || timestamp - lastActivityMs < DEFAULT_TASK_IDLE_MS) return session;
-  const endedMs = lastActivityMs + DEFAULT_TASK_IDLE_MS;
-  const startedMs = timestampMs(session.startedAt || session.createdAt) || endedMs;
-  const unresolvedFailure = String(session.lastOutcome || '').toLowerCase() === 'failed';
-  const status = unresolvedFailure ? 'failed' : 'cancelled';
-  const terminalLabel = unresolvedFailure ? 'Failed after inactivity' : 'Cancelled after inactivity';
-  const endedAt = new Date(endedMs).toISOString();
+function hasExplicitCompletionEvidence(session = {}) {
+  if (session.completionKnown === true || String(session.endReason || '') === 'explicit_completion') return true;
+  return (Array.isArray(session.events) ? session.events : []).some(event => {
+    if (event?.completionKnown === true || String(event?.endReason || '') === 'explicit_completion') return true;
+    return event?.tool === 'relai_finish_work' && event?.ok !== false && !['failed', 'cancelled'].includes(String(event?.status || '').toLowerCase());
+  });
+}
+
+function hasWorkflowCompletionEvidence(session = {}) {
+  const workflow = session.workflow;
+  if (!workflow || String(workflow.stage || '') !== 'complete') return false;
+  const completion = workflow.completion;
+  if (!completion || completion.hardReady !== true) return false;
+  return !Array.isArray(completion.blockers) || completion.blockers.length === 0;
+}
+
+function recoverCompletedSession(session, options = {}) {
+  const completedMs = storedSessionActivityMs(session) || timestampMs(session?.updatedAt) || Date.now();
+  const completedAt = new Date(completedMs).toISOString();
   return {
     ...session,
     state: 'ended',
-    status,
-    progress: normalizeTaskProgress({ ...(session.progress || {}), label: terminalLabel }, status),
-    currentStage: terminalLabel,
-    completionKnown: false,
-    endReason: 'inactivity_window',
-    terminalReason: unresolvedFailure
-      ? 'Task became inactive after an unrecovered failure.'
-      : 'Task was cancelled after the inactivity window elapsed.',
+    status: 'completed',
+    completionKnown: true,
+    endReason: String(session.endReason || '') || options.endReason || 'explicit_completion',
+    completionSource: String(session.completionSource || '') || options.completionSource || '',
+    progress: completeProgress(session.progress?.label || 'Complete'),
+    currentStage: 'Completed',
     activeCalls: 0,
     currentOperations: [],
-    updatedAt: endedAt,
-    lastActivityAt: endedMs,
-    endedAt,
-    completedAt: endedAt,
-    durationMs: Math.max(0, endedMs - startedMs)
+    inactiveAt: null,
+    endedAt: session.endedAt || completedAt,
+    completedAt: session.completedAt || completedAt,
+    updatedAt: session.updatedAt || completedAt
+  };
+}
+
+function reconcileInactiveStoredSession(session, activeIds, timestamp = Date.now()) {
+  if (!session?.id || activeIds.has(session.id)) return session;
+  if (!isTerminalTaskStatus(session.status) && hasExplicitCompletionEvidence(session)) {
+    return recoverCompletedSession(session, { endReason: 'explicit_completion', completionSource: session.completionSource || 'relai_finish_work' });
+  }
+  if (!isTerminalTaskStatus(session.status) && hasWorkflowCompletionEvidence(session)) {
+    return recoverCompletedSession(session, { endReason: 'workflow_completion', completionSource: 'workflow' });
+  }
+  if (isTerminalTaskStatus(session.status) || session.status === 'inactive') return session;
+  const lastActivityMs = storedSessionActivityMs(session);
+  if (!lastActivityMs || timestamp - lastActivityMs < DEFAULT_TASK_IDLE_MS) return session;
+  const inactiveMs = lastActivityMs + DEFAULT_TASK_IDLE_MS;
+  const inactiveAt = new Date(inactiveMs).toISOString();
+  return {
+    ...session,
+    state: 'inactive',
+    status: 'inactive',
+    resumeStatus: session.resumeStatus || session.status,
+    progress: normalizeTaskProgress(session.progress || { mode: 'indeterminate', label: 'Ready to resume' }, 'inactive'),
+    currentStage: 'Inactive',
+    completionKnown: false,
+    endReason: '',
+    terminalReason: '',
+    activeCalls: 0,
+    currentOperations: [],
+    updatedAt: inactiveAt,
+    inactiveAt,
+    lastActivityAt: lastActivityMs,
+    endedAt: null,
+    completedAt: null,
+    cancelledAt: null
   };
 }
 
@@ -343,7 +421,7 @@ function compactEvent(event) {
 
 function publicSession(session) {
   if (!session || typeof session !== 'object') return session;
-  const { version, principalFingerprint, ...value } = sanitizeTaskRecord(session);
+  const { version, principalFingerprint, ...value } = sanitizeTaskRecordForProjection(session);
   const terminal = isTerminalTaskStatus(value.status);
   return {
     ...value,
@@ -354,8 +432,8 @@ function publicSession(session) {
     toolCallCount: Number(value.toolCallCount ?? value.calls ?? 0),
     successfulToolCallCount: Number(value.successfulToolCallCount ?? Math.max(0, Number(value.calls || 0) - Number(value.failures || 0))),
     failedToolCallCount: Number(value.failedToolCallCount ?? value.failures ?? 0),
-    activeCalls: terminal ? 0 : Number(value.activeCalls || 0),
-    currentOperations: terminal ? [] : Array.isArray(value.currentOperations) ? value.currentOperations : [],
+    activeCalls: terminal || value.status === 'inactive' ? 0 : Number(value.activeCalls || 0),
+    currentOperations: terminal || value.status === 'inactive' ? [] : Array.isArray(value.currentOperations) ? value.currentOperations : [],
     currentStage: value.currentStage || '',
     currentActivity: value.currentActivity || value.operation || ''
   };
@@ -369,12 +447,12 @@ function emptySession(id) {
     sessionId: id,
     title: 'Historical Rel.AI task',
     objective: '',
-    status: 'cancelled',
+    status: 'planning',
     progress: { mode: 'indeterminate', label: 'Progress unavailable' },
     currentStage: '',
     currentActivity: '',
     completionKnown: false,
-    endReason: 'inactivity_window',
+    endReason: '',
     summary: '',
     workspace: '',
     startedAt: null,
@@ -417,4 +495,4 @@ function isStoredSessionNoise(session, activeIds) {
   return Boolean(endedAt && Date.now() - endedAt > DEFAULT_TASK_IDLE_MS);
 }
 
-export { bindTaskHistoryActivityPersistence, clearTaskHistory, getTaskHistoryDir, readTaskHistory, readTaskHistorySession, readTaskHistorySessionRecord, recordTaskActivityEvent, recordTaskHistoryEvent };
+export { bindTaskHistoryActivityPersistence, clearTaskHistory, getTaskHistoryDir, readRecentWorkflowEvidence, readTaskHistory, readTaskHistorySession, readTaskHistorySessionRecord, recordTaskActivityEvent, recordTaskHistoryEvent, recordWorkflowEvidence, recordWorkflowSnapshot };

@@ -26,7 +26,7 @@ function buildWorkspaces(data) {
   root.className = 'section';
   root.innerHTML = `
     <div class="feature-toolbar workspace-toolbar">
-      <p>Common status and actions stay visible. Git, policy, and safety details remain available when needed.</p>
+      <p>Common status and actions stay visible. Open Repository details for branch, worktree, validation, policies, remotes, and history.</p>
       <div class="section-head-actions">
         ${workspaceFilter ? `<span class="workspace-focus-label" title="Focused workspace: ${esc(workspaceFilter)}">Focused: ${esc(workspaceFilter)}</span><a class="buttonlike secondary compact-button" href="#workspaces">Clear focus</a>` : ''}
         <span class="feature-count">${allWorkspaces.length} configured</span>
@@ -194,13 +194,14 @@ function workspacePrimaryActions(view) {
   return `
     <button type="button" data-edit-workspace="${view.aliasAttr}">Edit workspace</button>
     <button class="secondary" type="button" data-run-validation="${view.aliasAttr}" ${view.validationCommands.length ? '' : 'disabled'}>Run validation</button>
+    <button class="secondary" type="button" data-repository-details="${view.aliasAttr}">Repository details</button>
     ${openFolder}`;
 }
 
 function healthFindingsCard(findings) {
   const card = document.createElement('section');
   card.className = 'card';
-  card.innerHTML = '<div class="card-head"><h3>Needs attention</h3><a class="section-action" href="#settings/diagnostics">Open diagnostics</a></div>';
+  card.innerHTML = '<div class="card-head"><h3>Needs attention</h3><a class="section-action" href="#diagnostics">Open diagnostics</a></div>';
   const body = document.createElement('div');
   body.className = 'card-body list';
   body.innerHTML = findings.map(findingRow).join('');
@@ -215,7 +216,7 @@ function findingRow(finding) {
   if (actionable) {
     return `<div class="list-item finding-row">${inner}<div class="finding-actions"><button class="secondary" type="button" data-finding-repair="${esc(alias)}">Repair path</button><button class="secondary danger" type="button" data-finding-remove="${esc(alias)}">Remove</button></div></div>`;
   }
-  return `<a class="list-item finding-link" href="#settings/diagnostics">${inner}<div class="item-time">${pillHtml(finding.severity || 'info')}</div></a>`;
+  return `<a class="list-item finding-link" href="#diagnostics">${inner}<div class="item-time">${pillHtml(finding.severity || 'info')}</div></a>`;
 }
 
 function actionableFindings(health) {

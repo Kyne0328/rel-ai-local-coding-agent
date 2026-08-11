@@ -7,7 +7,6 @@ import { discoverProjectInstructionPaths } from './projectInstructionDiscovery.j
 
 const MAX_PROJECT_INSTRUCTION_BYTES = 64 * 1024;
 const LEGACY_PROJECT_INSTRUCTION_PATHS = Object.freeze(['REL_AI.md', '.relai/instructions.md']);
-const PROJECT_INSTRUCTION_PATHS = LEGACY_PROJECT_INSTRUCTION_PATHS;
 const instructionCache = new Map();
 
 function readProjectInstructions(workspace, options = {}) {
@@ -152,4 +151,4 @@ function resetProjectInstructionCacheForTests() {
   instructionCache.clear();
 }
 
-export { MAX_PROJECT_INSTRUCTION_BYTES, PROJECT_INSTRUCTION_PATHS, readProjectInstructions, summarizeProjectInstructions, resetProjectInstructionCacheForTests };
+export { MAX_PROJECT_INSTRUCTION_BYTES,  readProjectInstructions, summarizeProjectInstructions, resetProjectInstructionCacheForTests };

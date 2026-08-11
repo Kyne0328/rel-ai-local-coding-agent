@@ -183,4 +183,4 @@ function deduplicateDiagnostics(items) {
   });
 }
 
-export { relaiDiagnosticsRun, parseDiagnostics, parseDiagnosticLine, publishDiagnosticsProgress };
+export { relaiDiagnosticsRun,    };

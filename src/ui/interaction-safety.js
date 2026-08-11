@@ -16,7 +16,7 @@ export function markUnsaved(element, dirty) {
   element.dataset.unsavedChanges = dirty ? 'true' : 'false';
 }
 
-export function hasUnsavedChanges(root = globalThis.document) {
+function hasUnsavedChanges(root = globalThis.document) {
   if (isElement(root) && root.matches(UNSAVED_SELECTOR)) return true;
   return Boolean(root?.querySelector?.(UNSAVED_SELECTOR));
 }

@@ -1,31 +1,23 @@
 import { mountGeneral } from './general.js';
-import { mountConnector } from './connector.js';
-import { mountToolsValidation } from './tools-validation.js';
-import { mountDiagnostics } from './diagnostics.js';
+import { mountApplication } from './application.js';
 import { mountAdvanced } from './advanced.js';
 import { mountAbout } from './about.js';
+import { mountSkills } from '../skills/index.js';
+import { SETTINGS_NAV_ITEMS } from '../../navigation-catalog.js';
 import { navigate, routeHref } from '../../router.js';
-import { normalizeRouteKey } from '../../route-policy.js';
 
-const SUB_PAGES = [
-  { id: 'general', label: 'General', mount: mountGeneral },
-  { id: 'connection', label: 'Connection', mount: mountConnector },
-  { id: 'tools-validation', label: 'Tools & validation', mount: mountToolsValidation },
-  { id: 'diagnostics', label: 'Diagnostics', mount: mountDiagnostics },
-  { id: 'advanced', label: 'Advanced', mount: mountAdvanced },
-  { id: 'about', label: 'About', mount: mountAbout }
-];
-const LEGACY_REDIRECTS = {
-  connector: 'connection',
-  desktop: 'connection',
-  dashboard: 'advanced'
+const MOUNTS = {
+  preferences: mountGeneral,
+  skills: mountSkills,
+  application: mountApplication,
+  advanced: mountAdvanced,
+  about: mountAbout
 };
-let currentSubPage = 'general';
 
-export function mountSettings(container, subPageId = 'general') {
-  const resolved = LEGACY_REDIRECTS[subPageId] || subPageId;
-  if (SUB_PAGES.some(page => page.id === resolved)) currentSubPage = resolved;
-  normalizeLegacyRoute(subPageId, resolved);
+let currentSubPage = 'preferences';
+
+export function mountSettings(container, subPageId = 'preferences') {
+  currentSubPage = Object.hasOwn(MOUNTS, subPageId) ? subPageId : 'preferences';
   container.innerHTML = '';
 
   const shell = document.createElement('div');
@@ -37,45 +29,38 @@ export function mountSettings(container, subPageId = 'general') {
   content.id = '__settings-content';
   content.className = 'settings-content';
 
-  for (const page of SUB_PAGES) {
+  for (const item of SETTINGS_NAV_ITEMS) {
+    const pageId = item.id;
     const button = document.createElement('button');
-    const active = page.id === currentSubPage;
+    const active = pageId === currentSubPage;
     button.type = 'button';
     button.className = `secondary settings-nav-button${active ? ' active' : ''}`;
-    button.textContent = page.label;
-    button.dataset.subPage = page.id;
+    button.textContent = item.label;
+    button.dataset.subPage = pageId;
     if (active) button.setAttribute('aria-current', 'page');
-    button.onclick = () => openPage(page, rail, content);
+    button.onclick = () => openPage(pageId, rail, content);
     rail.appendChild(button);
   }
 
   shell.append(rail, content);
   container.appendChild(shell);
-  return (SUB_PAGES.find(page => page.id === currentSubPage) || SUB_PAGES[0]).mount(content);
+  return MOUNTS[currentSubPage](content);
 }
 
-function normalizeLegacyRoute(requested, resolved) {
-  if (requested === resolved) return;
-  const target = resolved === 'general' ? 'settings' : `settings/${resolved}`;
-  const routeKey = normalizeRouteKey(target);
-  history.replaceState(null, '', `${location.pathname}${location.search}#${routeKey}`);
-  try { localStorage.setItem('relai_dashboard_route', routeKey); } catch {}
-}
-
-function openPage(page, rail, content) {
-  const section = page.id === 'general' ? 'settings' : `settings/${page.id}`;
+function openPage(pageId, rail, content) {
+  const section = pageId === 'preferences' ? 'settings' : `settings/${pageId}`;
   const target = routeHref(section);
   if (location.hash !== target) {
     navigate(section);
     return;
   }
-  currentSubPage = page.id;
+  currentSubPage = pageId;
   rail.querySelectorAll('button').forEach(button => {
-    const active = button.dataset.subPage === page.id;
+    const active = button.dataset.subPage === pageId;
     button.classList.toggle('active', active);
     if (active) button.setAttribute('aria-current', 'page');
     else button.removeAttribute('aria-current');
   });
   content.innerHTML = '';
-  page.mount(content);
+  MOUNTS[pageId](content);
 }

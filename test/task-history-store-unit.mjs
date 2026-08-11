@@ -107,9 +107,52 @@ try {
     completedAt: '2026-07-25T00:01:00.000Z'
   });
 
+  const explicitCompletionAt = new Date(Date.now() - 9 * 60_000).toISOString();
+  writeSession(historyDir, {
+    id: 'inactive-explicit-completion', taskId: 'inactive-explicit-completion', sessionId: 'inactive-explicit-completion', version: 3,
+    title: 'Explicitly completed historical task', status: 'inactive', state: 'inactive', completionKnown: false,
+    workflow: { stage: 'complete', recommendedAction: 'Workflow complete' },
+    startedAt: new Date(Date.now() - 20 * 60_000).toISOString(), updatedAt: explicitCompletionAt, inactiveAt: explicitCompletionAt,
+    events: [{ eventId: 'inactive-explicit-completion-finish', taskId: 'inactive-explicit-completion', timestamp: explicitCompletionAt, tool: 'relai_finish_work', ok: true, completionKnown: true, endReason: 'explicit_completion', taskSummary: 'Finished explicitly.' }]
+  });
+  writeSession(historyDir, {
+    id: 'inactive-workflow-complete', taskId: 'inactive-workflow-complete', sessionId: 'inactive-workflow-complete', version: 3,
+    title: 'Workflow-confirmed completed task', status: 'inactive', state: 'inactive', completionKnown: false,
+    workflow: { stage: 'complete', completion: { hardReady: true, blockers: [], recommendations: [] } },
+    startedAt: new Date(Date.now() - 20 * 60_000).toISOString(), updatedAt: explicitCompletionAt, inactiveAt: explicitCompletionAt,
+    events: []
+  });
+  writeSession(historyDir, {
+    id: 'inactive-advisory-complete', taskId: 'inactive-advisory-complete', sessionId: 'inactive-advisory-complete', version: 3,
+    title: 'Advisory complete but still open', status: 'inactive', state: 'inactive', completionKnown: false,
+    workflow: { stage: 'complete', recommendedAction: 'Workflow complete' },
+    startedAt: new Date(Date.now() - 20 * 60_000).toISOString(), updatedAt: explicitCompletionAt, inactiveAt: explicitCompletionAt,
+    events: []
+  });
+
   sessions = readTaskHistory(config, { state: 'idle' }, { limit: 500 });
   assert.equal(sessions.some(session => session.id === 'legacy-event'), false);
   assert.equal(sessions.some(session => session.id === 'abandoned-start'), false);
+  const recoveredCompletion = sessions.find(session => session.id === 'inactive-explicit-completion');
+  assert.equal(recoveredCompletion.status, 'completed', 'explicit completion evidence must outrank a stale inactive projection');
+  assert.equal(recoveredCompletion.completionKnown, true, 'explicit completion evidence must be recovered instead of erased by inactivity');
+  assert.equal(recoveredCompletion.progress.mode, 'complete');
+  const workflowCompleted = sessions.find(session => session.id === 'inactive-workflow-complete');
+  assert.equal(workflowCompleted.status, 'completed', 'workflow hard-readiness must outrank stale inactivity after the session is no longer active');
+  assert.equal(workflowCompleted.completionKnown, true, 'workflow hard-readiness must become durable completion evidence');
+  assert.equal(workflowCompleted.endReason, 'workflow_completion');
+  assert.equal(sessions.find(session => session.id === 'inactive-advisory-complete').status, 'inactive', 'workflow stage alone without hard-readiness must not fabricate completion');
+  writeSession(historyDir, {
+    id: 'workflow-complete-with-inactive-tracker', taskId: 'workflow-complete-with-inactive-tracker', sessionId: 'workflow-complete-with-inactive-tracker', version: 3,
+    title: 'Workflow complete with stale tracker row', status: 'inactive', state: 'inactive', completionKnown: false,
+    workflow: { stage: 'complete', completion: { hardReady: true, blockers: [], recommendations: [] } },
+    startedAt: new Date(Date.now() - 20 * 60_000).toISOString(), updatedAt: explicitCompletionAt, inactiveAt: explicitCompletionAt,
+    events: []
+  });
+  const trackerInactive = readTaskHistory(config, { tasks: [{ id: 'workflow-complete-with-inactive-tracker', taskId: 'workflow-complete-with-inactive-tracker', status: 'inactive', state: 'inactive', activeCalls: 0, completionKnown: false, startedAt: new Date(Date.now() - 20 * 60_000).toISOString() }] }, { limit: 500 });
+  const trackerOverlayCompletion = trackerInactive.find(session => session.id === 'workflow-complete-with-inactive-tracker');
+  assert.equal(trackerOverlayCompletion.status, 'completed', 'an inactive tracker snapshot must not block persisted workflow completion recovery on first read');
+  assert.equal(trackerOverlayCompletion.completionKnown, true, 'inactive tracker snapshots must not overwrite recovered completion');
   const exact = sessions.find(session => session.id === 'exact-task');
   assert.equal(exact.calls, 2);
   assert.equal(exact.status, 'completed');
@@ -120,14 +163,15 @@ try {
   assert.deepEqual(atomic.changedFiles, ['src/atomic.js']);
   assert.equal(sessions.find(session => session.id === 'draft-task').prDrafted, true);
   const stalePlanning = sessions.find(session => session.id === 'stale-planning-session');
-  assert.equal(stalePlanning.status, 'cancelled', 'persisted nonterminal sessions must expire after the inactivity window');
-  assert.equal(stalePlanning.endReason, 'inactivity_window');
+  assert.equal(stalePlanning.status, 'inactive', 'persisted nonterminal sessions must become resumable after the inactivity window');
+  assert.equal(stalePlanning.resumeStatus, 'planning', 'inactivity must preserve the last meaningful resumable state');
+  assert.equal(stalePlanning.endReason || '', '');
   assert.equal(stalePlanning.activeCalls, 0);
   assert.deepEqual(stalePlanning.currentOperations, []);
-  assert.equal(stalePlanning.currentStage, 'Cancelled after inactivity');
-  assert.ok(stalePlanning.endedAt, 'reconciled sessions must receive a terminal timestamp');
-  assert.ok(stalePlanning.durationMs < 20 * 60_000, 'duration must stop at the inactivity deadline instead of growing forever');
-  assert.equal(readTaskHistorySessionRecord(config, 'stale-planning-session').status, 'cancelled', 'reconciliation must persist the repaired terminal state');
+  assert.equal(stalePlanning.currentStage, 'Inactive');
+  assert.equal(stalePlanning.endedAt == null, true, 'inactive sessions must not receive a terminal timestamp');
+  assert.ok(stalePlanning.inactiveAt, 'inactive sessions must retain the inactivity transition time');
+  assert.equal(readTaskHistorySessionRecord(config, 'stale-planning-session').status, 'inactive', 'reconciliation must persist the resumable inactive state');
   writeSession(historyDir, {
     id: 'stale-task-access',
     taskId: 'stale-task-access',
@@ -142,12 +186,9 @@ try {
     activeCalls: 0,
     principalFingerprint: principalFingerprint('anonymous')
   });
-  assert.throws(
-    () => assertKnownTask(config, 'stale-task-access', 'repo', 'relai_read', 'anonymous'),
-    error => error?.code === 'INVALID_TASK_STATE' && /already cancelled/i.test(error.message),
-    'task-scoped calls must not revive a persisted work session after its inactivity deadline'
-  );
-  assert.equal(readTaskHistorySessionRecord(config, 'stale-task-access').status, 'cancelled');
+  const resumable = assertKnownTask(config, 'stale-task-access', 'repo', 'relai_read', 'anonymous');
+  assert.equal(resumable.status, 'inactive', 'authorized same-workspace task access must accept a resumable inactive work session');
+  assert.equal(readTaskHistorySessionRecord(config, 'stale-task-access').status, 'inactive');
   const staleTerminal = sessions.find(session => session.id === 'terminal-with-stale-operation');
   assert.equal(staleTerminal.activeCalls, 0, 'terminal history must not expose stale active calls');
   assert.deepEqual(staleTerminal.currentOperations, [], 'terminal history must not expose stale running operations');

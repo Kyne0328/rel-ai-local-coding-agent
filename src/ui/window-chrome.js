@@ -21,7 +21,7 @@ export async function initWindowChrome(desktop) {
   return typeof removeListener === 'function' ? removeListener : () => {};
 }
 
-export function applyWindowState(state = {}) {
+function applyWindowState(state = {}) {
   const root = document.documentElement;
   const platform = SUPPORTED_PLATFORMS.has(state.platform) ? state.platform : 'other';
   const custom = state.customTitleBar === true;

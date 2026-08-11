@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { listPackage } from '@electron/asar';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { electronPlatformSpec, normalizeElectronPlatform } from './electron-platform.mjs';
@@ -31,6 +32,11 @@ if (browserSpecificSnapshotEnabled) {
 }
 
 const ngrokRelativePath = `resources/bin/ngrok/${spec.ngrokDirectory}/${spec.ngrokFile}`;
+const sourceZoektManifest = JSON.parse(fs.readFileSync(path.join(root, 'vendor', 'zoekt', 'manifest.json'), 'utf8'));
+const sourceZoektSpec = sourceZoektManifest.platforms?.[platform];
+assert.ok(sourceZoektSpec, `Zoekt provenance manifest does not support ${platform}.`);
+const zoektSearchRelativePath = `resources/bin/zoekt/${platform}/${sourceZoektSpec.search.file}`;
+const zoektIndexRelativePath = `resources/bin/zoekt/${platform}/${sourceZoektSpec.index.file}`;
 const requiredFiles = [
   spec.executableName,
   'resources/app.asar',
@@ -39,6 +45,8 @@ const requiredFiles = [
   'resources/src/tools/actionCatalog.js',
   'resources/src/config.js',
   'resources/src/mcpServer.js',
+  'resources/src/gateway/localExecution.js',
+  'resources/src/gateway/protocol.js',
   'resources/node_modules/@modelcontextprotocol/server/package.json',
   'resources/node_modules/@modelcontextprotocol/node/package.json',
   'resources/node_modules/@modelcontextprotocol/core/package.json',
@@ -50,12 +58,23 @@ const requiredFiles = [
   'resources/node_modules/@hono/node-server/package.json',
   'resources/node_modules/hono/package.json',
   'resources/node_modules/zod/package.json',
+  'resources/node_modules/web-tree-sitter/package.json',
+  'resources/node_modules/web-tree-sitter/tree-sitter.js',
+  'resources/node_modules/web-tree-sitter/tree-sitter.wasm',
+  'resources/node_modules/tree-sitter-wasms/package.json',
+  'resources/node_modules/tree-sitter-wasms/out/tree-sitter-javascript.wasm',
   'resources/bin/rel-ai-mcp-http.js',
   'resources/public/dashboard.js',
   'resources/package.json',
   'resources/CHANGELOG.md',
+  'resources/LICENSE',
+  'resources/NOTICE',
   'resources/bin/ngrok/manifest.json',
-  ngrokRelativePath
+  ngrokRelativePath,
+  'resources/bin/zoekt/manifest.json',
+  'resources/bin/zoekt/LICENSE',
+  zoektSearchRelativePath,
+  zoektIndexRelativePath
 ];
 
 for (const relativePath of requiredFiles) {
@@ -65,10 +84,12 @@ for (const relativePath of requiredFiles) {
   assert.ok(fs.statSync(file).size > 0, `Packaged application file is empty: ${relativePath}`);
 }
 assertExecutable(path.join(packageDirectory, ngrokRelativePath), platform);
+assertExecutable(path.join(packageDirectory, zoektSearchRelativePath), platform);
+assertExecutable(path.join(packageDirectory, zoektIndexRelativePath), platform);
 
 const asarPath = path.join(packageDirectory, 'resources', 'app.asar');
 const asarEntries = new Set(listPackage(asarPath).map(entry => entry.replaceAll('\\', '/').replace(/^\//, '')));
-for (const relativePath of ['preload.cjs', 'startup-background.js', 'renderer/app.css', 'renderer/color-tokens.css', 'renderer/status.html', 'renderer/wizard.html']) {
+for (const relativePath of ['preload.cjs', 'startup-background.js', 'gateway-client.js', 'gateway-device-identity.js', 'gateway-state.js', 'public-connection-runtime.js', 'renderer/app.css', 'renderer/color-tokens.css', 'renderer/status.html', 'renderer/wizard.html']) {
   assert.ok(asarEntries.has(relativePath), `Packaged ASAR is missing: ${relativePath}`);
 }
 
@@ -87,15 +108,48 @@ const packagedOpenTelemetryPackages = fs.readdirSync(packagedOpenTelemetryDirect
   .map(entry => entry.name)
   .sort();
 assert.deepEqual(packagedOpenTelemetryPackages, rootOpenTelemetryPackages, 'Packaged application must include the complete OpenTelemetry runtime dependency scope.');
+const rootTreeSitterWasms = fs.readdirSync(path.join(root, 'node_modules', 'tree-sitter-wasms', 'out'))
+  .filter(name => name.endsWith('.wasm'))
+  .sort();
+const packagedTreeSitterWasms = fs.readdirSync(path.join(packageDirectory, 'resources', 'node_modules', 'tree-sitter-wasms', 'out'))
+  .filter(name => name.endsWith('.wasm'))
+  .sort();
+assert.deepEqual(packagedTreeSitterWasms, rootTreeSitterWasms, 'Packaged application must include every Tree-sitter WASM grammar shipped by the root runtime dependency.');
 const ngrokManifest = JSON.parse(fs.readFileSync(path.join(packageDirectory, 'resources', 'bin', 'ngrok', 'manifest.json'), 'utf8'));
 const ngrokSpec = ngrokManifest.platforms[platform];
 assert.ok(ngrokSpec, `Packaged ngrok manifest does not support ${platform}.`);
 const packagedNgrok = fs.readFileSync(path.join(packageDirectory, ngrokRelativePath));
 assert.equal(packagedNgrok.length, ngrokSpec.size, 'Packaged ngrok size does not match the provenance manifest.');
 assert.equal(crypto.createHash('sha256').update(packagedNgrok).digest('hex'), ngrokSpec.sha256, 'Packaged ngrok SHA-256 does not match the provenance manifest.');
-assert.equal(fs.existsSync(path.join(packageDirectory, 'resources', 'src', 'ui', 'styles', 'app.css')), false, 'Compiled dashboard CSS must be packaged without the source Tailwind stylesheet.');
+const packagedZoektManifest = JSON.parse(fs.readFileSync(path.join(packageDirectory, 'resources', 'bin', 'zoekt', 'manifest.json'), 'utf8'));
+assert.deepEqual(packagedZoektManifest, sourceZoektManifest, 'Packaged Zoekt provenance manifest must match the reviewed source manifest.');
+for (const [key, relativePath] of [['search', zoektSearchRelativePath], ['index', zoektIndexRelativePath]]) {
+  const artifact = sourceZoektSpec[key];
+  const binaryPath = path.join(packageDirectory, relativePath);
+  const bytes = fs.readFileSync(binaryPath);
+  assert.equal(bytes.length, Number(artifact.size), `Packaged Zoekt ${key} size does not match provenance.`);
+  assert.equal(crypto.createHash('sha256').update(bytes).digest('hex'), artifact.sha256, `Packaged Zoekt ${key} SHA-256 does not match provenance.`);
+  const help = spawnSync(binaryPath, ['-h'], { encoding: 'utf8', windowsHide: true, timeout: 15_000 });
+  assert.equal(help.status, 0, `Packaged Zoekt ${key} binary must execute successfully.`);
+}
 const packagedTypeScript = collectFiles(path.join(packageDirectory, 'resources', 'node_modules')).filter(file => /\.(?:ts|cts|mts)$/i.test(file));
 assert.deepEqual(packagedTypeScript, [], 'Packaged runtime dependencies must exclude TypeScript sources and declarations.');
+
+const forbiddenGatewayRuntimePaths = [
+  'resources/gateway',
+  'resources/gateway/node_modules',
+  'resources/node_modules/wrangler',
+  'resources/node_modules/@cloudflare',
+  'resources/node_modules/miniflare'
+];
+for (const relativePath of forbiddenGatewayRuntimePaths) {
+  assert.equal(fs.existsSync(path.join(packageDirectory, relativePath)), false, `Packaged desktop must exclude gateway Worker/tooling path: ${relativePath}`);
+}
+const packagedFiles = collectFiles(packageDirectory);
+for (const sensitiveName of ['privateJwk', 'recoverySecret']) {
+  assert.equal(packagedFiles.some(file => file.toLowerCase().includes(sensitiveName.toLowerCase())), false, `Packaged desktop must not contain secret-state file names matching ${sensitiveName}.`);
+}
+assert.equal(fs.existsSync(path.join(packageDirectory, 'resources', '.env')), false, 'REL_AI_GATEWAY_ORIGIN and other runtime configuration must not be materialized in a packaged .env file.');
 
 function collectFiles(directory) {
   const files = [];

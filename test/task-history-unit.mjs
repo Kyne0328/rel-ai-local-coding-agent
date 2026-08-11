@@ -26,14 +26,14 @@ const entries = [
 const sessions = buildTaskHistory(entries, { state: 'idle' });
 assert.equal(sessions.length, 3);
 const inactive = sessions.find(session => session.id === 'task-1');
-assert.equal(inactive.status, 'cancelled');
+assert.equal(inactive.status, 'inactive');
 assert.ok(inactive.title);
 assert.equal(inactive.calls, 3);
 assert.deepEqual(inactive.changedFiles, ['src/a.js', 'test/a.test.js']);
 assert.equal(inactive.validation, 'passed');
 assert.equal(inactive.committed, true);
 const failed = sessions.find(session => session.id === 'task-2');
-assert.equal(failed.status, 'failed');
+assert.equal(failed.status, 'inactive', 'failed validation remains recoverable when the logical task becomes inactive');
 assert.equal(failed.validation, 'failed');
 const completed = sessions.find(session => session.id === 'task-3');
 assert.equal(completed.status, 'completed');
@@ -45,7 +45,7 @@ const strictIdentity = buildTaskHistory([
   event('completion-task', { ts: '2026-07-11T09:00:03.000Z', tool: 'relai_finish_work', completionKnown: true, relatedTaskIds: ['validation-task'], scopeId: 'old-transport-b' })
 ], { state: 'idle' });
 assert.equal(strictIdentity.length, 2, 'different explicit task IDs must never be reconciled');
-assert.equal(strictIdentity.find(item => item.id === 'validation-task').status, 'cancelled');
+assert.equal(strictIdentity.find(item => item.id === 'validation-task').status, 'inactive');
 assert.equal(strictIdentity.find(item => item.id === 'completion-task').status, 'completed');
 
 const ignoredLegacy = buildTaskHistory([

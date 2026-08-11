@@ -1,6 +1,8 @@
 import { discoverCommands } from '../commandDiscovery.js';
 import { normalizeCommandAlias } from '../commandNormalizer.js';
-import { detectVerifyChecks } from './checkDetection.js';
+import { buildCheckCatalog } from '../workflow/checkCatalog.js';
+import { discoverRepositoryTopology } from '../workflow/topology.js';
+import { detectVerifyCheckUnits } from './checkDetection.js';
 
 function hasRequestedChecks(args = {}) {
   return Boolean(args.verify || args.check || args.checks || args.checksText || args.command || args.commands || args.commandsText);
@@ -8,65 +10,65 @@ function hasRequestedChecks(args = {}) {
 
 function normalizeVerifyChecks(args, root, level) {
   const discovered = discoverCommands(root);
+  const catalog = buildCheckCatalog(discoverRepositoryTopology(root));
   const aliasNormalizations = { count: 0 };
-  const resolveAndTrack = makeResolver(discovered, aliasNormalizations);
-  const explicit = collectExplicitChecks(args, resolveAndTrack);
-  const candidates = explicit.length ? explicit : detectVerifyChecks(root, level);
-  const checks = [];
+  const explicit = collectExplicitChecks(args);
+  const candidates = explicit.length
+    ? explicit.map((raw, index) => resolveExplicitUnit(raw, index, discovered, catalog, aliasNormalizations))
+    : detectVerifyCheckUnits(root, level);
+  const checkUnits = [];
   const skippedChecks = [];
   const seen = new Set();
   for (const item of candidates) {
-    const command = String(item || '').trim();
+    if (!item) continue;
+    const command = String(item.command || '').trim();
+    const cwd = normalizeCwd(item.cwd);
     if (!command) {
       skippedChecks.push({ command: '', reason: 'empty' });
       continue;
     }
-    if (seen.has(command)) {
-      skippedChecks.push({ command, reason: 'duplicate' });
+    const identity = `${command}\u0000${cwd}`;
+    if (seen.has(identity)) {
+      skippedChecks.push({ command, cwd, reason: 'duplicate' });
       continue;
     }
-    seen.add(command);
-    checks.push(command);
+    seen.add(identity);
+    checkUnits.push({ ...item, cwd, command });
   }
-  return { checks, skippedChecks, aliasNormalizations: aliasNormalizations.count };
+  return { checks: checkUnits.map(item => item.command), checkUnits, skippedChecks, aliasNormalizations: aliasNormalizations.count };
 }
 
-function makeResolver(discovered, aliasNormalizations) {
-  return raw => {
-    const trimmed = String(raw || '').trim();
-    if (!trimmed) return trimmed;
-    const { command, normalized } = normalizeCommandAlias(trimmed, trimmed, discovered);
-    if (normalized) aliasNormalizations.count += 1;
-    return command;
-  };
+function resolveExplicitUnit(raw, index, discovered, catalog, aliasNormalizations) {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return null;
+  const exact = catalog.find(unit => unit.id === trimmed);
+  if (exact) {
+    aliasNormalizations.count += 1;
+    return exact;
+  }
+  const { command, normalized } = normalizeCommandAlias(trimmed, trimmed, discovered);
+  if (normalized) aliasNormalizations.count += 1;
+  const matching = catalog.filter(unit => unit.command === command);
+  if (matching.length === 1) return matching[0];
+  return { id: `explicit:${index}`, packageId: '', cwd: '.', command, kind: 'other', level: 'focused', estimatedCost: 'small', source: 'explicit', scopeKey: 'repository' };
 }
 
-function collectExplicitChecks(args, resolveAndTrack) {
+function collectExplicitChecks(args) {
   const explicit = [];
-  pushResolvedExplicit(explicit, args.check ?? args.command, resolveAndTrack);
-  pushResolvedCommands(explicit, args.checks ?? args.commands, resolveAndTrack);
-  pushResolvedCommandText(explicit, args.checksText ?? args.commandsText, resolveAndTrack);
+  pushExplicit(explicit, args.check ?? args.command);
+  pushCommands(explicit, args.checks ?? args.commands);
+  pushCommandText(explicit, args.checksText ?? args.commandsText);
   return explicit;
 }
-
-function pushResolvedExplicit(target, value, resolveAndTrack) {
-  if (typeof value === 'string' && value.trim()) target.push(resolveAndTrack(value));
-}
-
-function pushResolvedCommands(target, commands, resolveAndTrack) {
-  if (!Array.isArray(commands)) return;
-  for (const item of commands) {
-    const command = resolveAndTrack(String(item || ''));
-    if (command) target.push(command);
+function pushExplicit(target, value) { if (typeof value === 'string' && value.trim()) target.push(value.trim()); }
+function pushCommands(target, values) { if (Array.isArray(values)) for (const item of values) pushExplicit(target, item); }
+function pushCommandText(target, value) {
+  if (typeof value !== 'string' || !value.trim()) return;
+  for (const line of value.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#')) target.push(trimmed);
   }
 }
-
-function pushResolvedCommandText(target, commandsText, resolveAndTrack) {
-  if (typeof commandsText !== 'string' || !commandsText.trim()) return;
-  for (const line of commandsText.split(/\r?\n/)) {
-    const trimmedLine = line.trim();
-    if (trimmedLine && !trimmedLine.startsWith('#')) target.push(resolveAndTrack(trimmedLine));
-  }
-}
+function normalizeCwd(value) { const text = String(value || '.').trim().replaceAll('\\', '/').replace(/^\.\//, '').replace(/\/$/, ''); return text || '.'; }
 
 export { hasRequestedChecks, normalizeVerifyChecks };

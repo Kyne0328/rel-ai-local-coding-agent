@@ -2,15 +2,30 @@ const CANONICAL_PATHS = new Set([
   'home',
   'tasks',
   'workspaces',
-  'processes',
   'activity',
+  'system',
+  'connection',
+  'processes',
   'tools',
+  'diagnostics',
+  'usage',
   'settings',
-  'settings/connection',
-  'settings/tools-validation',
-  'settings/diagnostics',
+  'settings/skills',
+  'settings/application',
   'settings/advanced',
   'settings/about'
+]);
+
+const LEGACY_PATHS = new Map([
+  ['connector', 'connection'],
+  ['skills', 'settings/skills'],
+  ['settings/connection', 'connection'],
+  ['settings/connector', 'connection'],
+  ['settings/diagnostics', 'diagnostics'],
+  ['settings/general', 'settings'],
+  ['settings/preferences', 'settings'],
+  ['settings/dashboard', 'settings/advanced'],
+  ['settings/desktop', 'settings/application']
 ]);
 
 const ALLOWED_PARAMS = {
@@ -19,13 +34,13 @@ const ALLOWED_PARAMS = {
   workspaces: new Set(['workspace', 'focus']),
   processes: new Set(['workspace']),
   activity: new Set(['workspace', 'search', 'time', 'tool', 'status', 'task', 'event']),
-  'settings/diagnostics': new Set(['workspace'])
+  diagnostics: new Set(['workspace'])
 };
 
 const SENSITIVE_PARAM = /(?:token|secret|password|credential|bootstrap|authorization|auth|api[_-]?key|access[_-]?key|refresh[_-]?key)/i;
 const WORKSPACE_PATTERN = /^[A-Za-z0-9._-]{1,80}$/;
 const TIME_RANGES = new Set(['15m', '1h', '24h', '7d', 'all']);
-const STATUSES = new Set(['ok', 'error']);
+const STATUSES = new Set(['ok', 'error', 'running', 'succeeded', 'active', 'failed', 'blocked', 'cancelled', 'other']);
 
 export function normalizeRouteKey(value) {
   const raw = String(value || '').replace(/^#/, '');
@@ -47,6 +62,8 @@ export function routeAllowsParam(path, key) {
 }
 
 function resolvePath(path) {
+  const legacy = LEGACY_PATHS.get(path);
+  if (legacy) return { path: legacy, recognized: true };
   const recognized = CANONICAL_PATHS.has(path);
   return { path: recognized ? path : 'home', recognized };
 }

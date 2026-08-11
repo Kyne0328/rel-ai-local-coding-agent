@@ -18,7 +18,6 @@ function pruneEmpty(obj) {
 
 function compactRepositoryState(value, { includeWorkspace = true } = {}) {
   if (!value || typeof value !== 'object') return value;
-  const split = Array.isArray(value.baselineChangedFiles) && value.baselineChangedFiles.length > 0;
   return pruneEmpty({
     ok: value.ok,
     workspace: includeWorkspace ? value.workspace : undefined,
@@ -27,8 +26,11 @@ function compactRepositoryState(value, { includeWorkspace = true } = {}) {
     status: value.status,
     changedFiles: value.changedFiles,
     untrackedFiles: value.untrackedFiles,
-    sessionChangedFiles: split ? value.sessionChangedFiles : undefined,
-    baselineChangedFiles: split ? value.baselineChangedFiles : undefined,
+    sessionChangedFiles: value.sessionChangedFiles,
+    baselineChangedFiles: value.baselineChangedFiles,
+    untrackedSessionFiles: value.untrackedSessionFiles,
+    untrackedBaselineFiles: value.untrackedBaselineFiles,
+    baselineSource: value.baselineSource,
     stderr: value.stderr,
     deprecated: value.deprecated,
     deprecatedTool: value.deprecatedTool,

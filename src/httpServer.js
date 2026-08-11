@@ -4,7 +4,7 @@ import * as connection from "./connectionProfile.js";
 import { setBaseHeaders, sendJson, unauthorized } from "./http/io.js";
 import { ERROR_CODES, errorPayload } from "./desktopUxContracts.js";
 import { isDashboardAuthorized } from "./http/auth.js";
-import { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handleApiSettingsGet, handleApiTools, handleOnboardingStatus, handleConnection, handleDashboardV10, handleApiLogs, handleHealthMonitor, handleAliasDiagnostics, handleReleaseNotes, handleCautionSummary, handleReadiness, handleWorkspacePreflight, handleEvents, handleOnboardingComplete, handleApiSettingsPost, handleApiWorkspaces, handlePickFolder, handleOpenFolder, handleWorkspaceChecks } from "./http/dashboard.js";
+import { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handleApiSettingsGet, handleApiTools, handleOnboardingStatus, handleConnection, handleDashboardV10, handleApiLogs, handleHealthMonitor, handleAliasDiagnostics, handleReleaseNotes, handleCautionSummary, handleReadiness, handleWorkspacePreflight, handleEvents, handleOnboardingComplete, handleApiSettingsPost, handleApiWorkspaces, handlePickFolder, handleOpenFolder, handleSkillsGet, handleSkillsPost, handleWorkspaceChecks } from "./http/dashboard.js";
 import { handleApiHistoryReset } from "./http/dashboardHistory.js";
 import { handleApiDiagnostics, handleApiDiagnosticsReset } from "./http/dashboardDiagnostics.js";
 import { handleApiProcessStop } from "./http/dashboardProcesses.js";
@@ -45,6 +45,7 @@ function startHttpServer(options = {}) {
   const openFolder = typeof options.openFolder === "function" ? options.openFolder : null;
   const getTaskActivity = typeof options.getTaskActivity === "function" ? options.getTaskActivity : null;
   const getDesktopStatus = typeof options.getDesktopStatus === "function" ? options.getDesktopStatus : null;
+  const getRuntimeAccess = typeof options.getRuntimeAccess === "function" ? options.getRuntimeAccess : null;
   const resetTaskActivity = typeof options.resetTaskActivity === "function" ? options.resetTaskActivity : null;
   const getRuntimeLogs = typeof options.getRuntimeLogs === "function" ? options.getRuntimeLogs : null;
   const clearRuntimeLogs = typeof options.clearRuntimeLogs === "function" ? options.clearRuntimeLogs : null;
@@ -72,7 +73,7 @@ function startHttpServer(options = {}) {
 
   const server = http.createServer(async (req, res) => {
     try {
-      await routeRequest(req, res, { token, allowNoAuth, maxBodyBytes, host, port, publicUrl, pickFolder, openFolder, getTaskActivity, getDesktopStatus, resetTaskActivity, getRuntimeLogs, clearRuntimeLogs });
+      await routeRequest(req, res, { token, allowNoAuth, maxBodyBytes, host, port, publicUrl, pickFolder, openFolder, getTaskActivity, getDesktopStatus, getRuntimeAccess, resetTaskActivity, getRuntimeLogs, clearRuntimeLogs });
     } catch (error) {
       const status = Number(error?.status || 500);
       const code = error?.errorCode || errorCodeForRequest(req);
@@ -174,6 +175,7 @@ async function routeRequest(req, res, options) {
   if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
 
   const mcpAccess = getMcpAccess(parsed.pathname);
+  if (mcpAccess.kind !== 'none' && blockMcpForRuntimeAccess(res, ae, options.getRuntimeAccess)) return;
   const ctx = { req, res, options, parsed, ae, mcpAccess, p: parsed.pathname };
 
   if (req.method === "GET") {
@@ -185,6 +187,15 @@ async function routeRequest(req, res, options) {
   }
 
   sendJson(res, 404, NOT_FOUND_PAYLOAD, ae);
+}
+
+function blockMcpForRuntimeAccess(res, ae, getRuntimeAccess) {
+  if (typeof getRuntimeAccess !== 'function') return false;
+  let access;
+  try { access = getRuntimeAccess(); } catch { return false; }
+  if (access?.blocked !== true) return false;
+  sendJson(res, 426, errorPayload(access.errorCode || ERROR_CODES.UPDATE_REQUIRED, access.message || 'Update Rel.AI MCP before continuing MCP work.'), ae);
+  return true;
 }
 
 async function dispatchGet(ctx) {
@@ -221,6 +232,7 @@ const GET_ROUTES = {
   "/favicon.ico": { auth: authNone, handler: handleFavicon },
   "/health": { auth: authNone, handler: handleHealth },
   "/api/settings": { auth: authDashboard, handler: handleApiSettingsGet },
+  "/api/skills": { auth: authDashboard, handler: handleSkillsGet },
   "/api/tools": { auth: authDashboard, handler: handleApiTools },
   "/api/onboarding/status": { auth: authDashboard, handler: handleOnboardingStatus },
   "/api/connection": { auth: authDashboard, handler: handleConnection },
@@ -261,6 +273,7 @@ async function tryOAuthOrMcpPost(ctx) {
 const POST_ROUTES = {
   "/api/onboarding/complete": { auth: authDashboard, handler: handleOnboardingComplete },
   "/api/settings": { auth: authDashboard, handler: handleApiSettingsPost },
+  "/api/skills": { auth: authDashboard, handler: handleSkillsPost },
   "/api/workspaces": { auth: authDashboard, handler: handleApiWorkspaces },
   "/api/history/reset": { auth: authDashboard, handler: handleApiHistoryReset },
   "/api/diagnostics/reset": { auth: authDashboard, handler: handleApiDiagnosticsReset },

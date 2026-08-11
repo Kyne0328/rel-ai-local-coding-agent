@@ -60,16 +60,16 @@ function workspaceWriteGuidance() {
       'Use workspace-tidy plan/run for generated session artifacts.'
     ],
     examples: {
-      exactReplace: 'relai_edit { workspace, path, expectedSha256?, oldText, newText, occurrence? }',
-      directWrite: 'relai_edit { workspace, path, expectedSha256?, content }',
-      stagedWriteStart: "relai_edit { workspace, stage: 'start', path, expectedSha256?, content }",
-      stagedWriteAppend: "relai_edit { workspace, stage: 'append', writeId, content }",
-      stagedWriteCommit: "relai_edit { workspace, stage: 'commit', writeId }",
-      applyUpdate: 'relai_edit { workspace, updateText, runChecks: true, returnDiff: true }',
-      workspaceTidyPlan: "relai_changes { workspace, mode: 'session_untracked' }",
-      workspaceTidyRun: 'relai_changes { workspace, planId }'
+      exactReplace: 'relai_edit { work_id, path, expectedSha256?, oldText, newText, occurrence? }',
+      directWrite: 'relai_edit { work_id, path, expectedSha256?, content }',
+      stagedWriteStart: "relai_edit { work_id, stage: 'start', path, expectedSha256?, content }",
+      stagedWriteAppend: "relai_edit { work_id, stage: 'append', writeId, content }",
+      stagedWriteCommit: "relai_edit { work_id, stage: 'commit', writeId }",
+      applyUpdate: 'relai_edit { work_id, updateText, returnDiff: true }',
+      workspaceTidyPlan: "relai_changes { action: 'tidy_plan', work_id, mode: 'session_untracked' }",
+      workspaceTidyRun: "relai_changes { action: 'tidy_run', work_id, planId }"
     },
-    next: 'Choose the edit tool by task shape and file size, then run relai_validate with action "checks" and relai_changes with action "diff".'
+    next: 'Choose the edit shape by task and file size. Use workflow guidance to decide when validation is useful; runChecks remains explicit.'
   };
 }
 

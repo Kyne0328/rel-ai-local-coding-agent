@@ -36,6 +36,10 @@ try {
   if (!editTool.inputSchema?.properties?.content || !editTool.inputSchema?.properties?.replacements || !editTool.inputSchema?.properties?.edits) {
     throw new Error('relai_edit schema should expose content, replacement arrays, and batch edits');
   }
+  if (editTool.inputSchema.oneOf) throw new Error('relai_edit must not expose a non-discriminated oneOf wrapper');
+  if (!/oldText\/newText.*content for full-file replacement/i.test(editTool.description || '')) {
+    throw new Error('relai_edit must advertise its canonical exact and full-file forms');
+  }
   const readTool = list.result.tools.find(item => item.name === 'relai_read');
   if (!readTool.inputSchema?.properties?.startLine || !readTool.inputSchema?.properties?.endLine || !readTool.inputSchema?.properties?.guidanceMode) {
     throw new Error('relai_read schema should expose bounded line ranges and guidance mode');

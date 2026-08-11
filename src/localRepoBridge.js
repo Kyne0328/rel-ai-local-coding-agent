@@ -19,6 +19,7 @@ import { relaiResetWorkspace, relaiRestorePaths } from "./bridge/restore.js";
 import { workspaceTidyPlan, workspaceTidyRun as relaiWorkspaceTidyRun } from "./bridge/tidy.js";
 import { relaiApplyPatch, normalizeOpenAIPatchFormat } from "./bridge/patch.js";
 import { readProjectInstructions } from "./projectInstructions.js";
+import { resolveWorkspaceSkills } from "./skillLibrary.js";
 import { STAGED_WRITE_BYTE_THRESHOLD, STAGED_WRITE_LINE_THRESHOLD, workspaceWriteGuidance, analyzeFileShape, fileWriteGuidance } from "./bridge/writeGuidance.js";
 
 const DEFAULT_MAX_READ_BYTES = 1024 * 1024;
@@ -40,6 +41,7 @@ async function repoSnapshot(workspace, config, args = {}) {
   const manifests = readManifests(workspace.path);
   const discoveredCommands = discoverCommands(workspace.path);
   const projectInstructions = readProjectInstructions(workspace, { targetPath: args.instructionPath });
+  const workspaceSkills = resolveWorkspaceSkills(config, workspace);
   const git = await gitSummary;
   return {
     ok: true,
@@ -51,6 +53,7 @@ async function repoSnapshot(workspace, config, args = {}) {
     manifestContents: manifests,
     discoveredCommands,
     projectInstructions,
+    workspaceSkills,
     fileCount: tree.files.length,
     effectiveMaxEntries: maxEntries,
     budgetMultiplied: effectiveDefault !== configuredDefault,
@@ -59,7 +62,7 @@ async function repoSnapshot(workspace, config, args = {}) {
     truncated: tree.truncated,
     hints: projectHints(Object.keys(manifests)),
     ...(git ? { git } : {}),
-    recommendedFlow: ["Use the minimum tool calls needed", "relai_search when the code location is unknown; adaptive context is included by default", "relai_read only when a wider range or complete file is needed before editing", "relai_edit { runChecks: true, returnDiff: true } when practical", "On final validation use relai_validate { action: 'checks', complete: true, summary }; use relai_work { action: 'finish' } only after post-validation read-only review"],
+    recommendedFlow: ["Use the minimum tool calls needed", "relai_search when the code location is unknown; adaptive context is included by default", "relai_read only when a wider range or complete file is needed before editing", "relai_edit for coherent repository changes; keep runChecks explicit and follow returned workflow guidance for validation cadence", "Reuse exact fresh validation evidence; when required evidence and task-owned review are current, finish the same work_id once"],
     writeGuidance: workspaceWriteGuidance(),
     operationJournal: summarizeOperations(config, workspace, args.journalLimit || 10)
   };
@@ -292,7 +295,7 @@ function workspaceWrite(workspace, config, args = {}) {
 
 function handleWriteDirect(workspace, config, args) {
   const relativePath = String(args.path || "").trim();
-  if (!relativePath) throw new Error("Full-file edit requires path and content. Expected: { workspace, path, content }.");
+  if (!relativePath) throw new Error("Full-file edit requires path and content. Expected: { work_id, path, content }.");
   if (typeof args.content !== "string") throw new Error("Full-file edit requires content as a string containing the entire target file.");
   assertDirectWriteAllowed(relativePath, args.content);
   return performFullFileWrite(workspace, config, relativePath, args.content, {
@@ -320,7 +323,7 @@ function handleWriteStart(workspace, config, args) {
     ok: true, workspace: workspace.alias, path: safe.relativePath,
     operation: "stagedFullFileWrite:start", writeId, chunks: 1,
     bytes: Buffer.byteLength(args.content, "utf8"),
-    next: "Call relai_edit with { workspace, stage: 'append', writeId, content } for more chunks, then { workspace, stage: 'commit', writeId } to write the complete file."
+    next: "Call relai_edit with { work_id, stage: 'append', writeId, content } for more chunks, then { work_id, stage: 'commit', writeId } to write the complete file."
   };
 }
 
@@ -337,7 +340,7 @@ function handleWriteAppend(workspace, config, args) {
     ok: true, workspace: workspace.alias, path: payload.path,
     operation: "stagedFullFileWrite:append", writeId,
     chunks: payload.chunks.length, bytes: payload.bytes,
-    next: "Append more chunks or call relai_edit with { workspace, stage: 'commit', writeId }."
+    next: "Append more chunks or call relai_edit with { work_id, stage: 'commit', writeId }."
   };
 }
 

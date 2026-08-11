@@ -1,6 +1,5 @@
 'use strict';
 
-import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { MCP_PROTOCOL_VERSION } from './mcp/protocol.js';
@@ -9,6 +8,7 @@ import { getVersion } from './version.js';
 import { getToolSurfaceManifest } from './tools/schema.js';
 import { allWorkspaceAliases, resolveWorkspace } from './config.js';
 import { buildToolManifest } from './mcp/toolManifest.js';
+import { GATEWAY_PROTOCOL_VERSION, MINIMUM_GATEWAY_PROTOCOL_VERSION } from './gateway/protocol.js';
 
 const PROTOCOL_VERSION = MCP_PROTOCOL_VERSION;
 function runtimeMetadata() {
@@ -22,7 +22,9 @@ function runtimeMetadata() {
     toolSurfaceVersion: surface.toolSurfaceVersion,
     toolCount: manifest.activeToolCount,
     manifestHash: manifest.version,
-    schemaVersion: manifest.schemaVersion
+    schemaVersion: manifest.schemaVersion,
+    deviceProtocolVersion: GATEWAY_PROTOCOL_VERSION,
+    minimumCompatibleDeviceProtocol: MINIMUM_GATEWAY_PROTOCOL_VERSION
   });
 }
 
@@ -69,6 +71,8 @@ function readRepositoryMetadata(root, alias = '') {
       toolCount: release.toolCount,
       manifestHash: release.manifestHash,
       schemaVersion: release.schemaVersion,
+      deviceProtocolVersion: release.deviceProtocolVersion,
+      minimumCompatibleDeviceProtocol: release.minimumCompatibleDeviceProtocol,
       releaseManifestPath: releasePath
     });
   } catch {
@@ -100,6 +104,8 @@ function assessRuntimeCompatibility(runtime, repository, options = {}) {
   compareField(differences, 'toolCount', runtime.toolCount, repository.toolCount);
   compareField(differences, 'manifestHash', runtime.manifestHash, repository.manifestHash);
   compareField(differences, 'schemaVersion', runtime.schemaVersion, repository.schemaVersion);
+  compareField(differences, 'deviceProtocolVersion', runtime.deviceProtocolVersion, repository.deviceProtocolVersion);
+  compareField(differences, 'minimumCompatibleDeviceProtocol', runtime.minimumCompatibleDeviceProtocol, repository.minimumCompatibleDeviceProtocol);
 
   if (differences.length === 0) {
     return {
@@ -163,19 +169,6 @@ function assertRuntimeCompatibility(config, toolName, args = {}, options = {}) {
   });
 }
 
-function toolManifestHash(surface) {
-  const value = {
-    schemaVersion: Number(surface.schemaVersion || 0),
-    toolSurfaceVersion: Number(surface.toolSurfaceVersion || 0),
-    toolCount: Number(surface.toolCount || 0),
-    tools: (surface.tools || []).map(item => ({
-      name: String(item.name || ''),
-      state: String(item.state || 'active'),
-      replacement: String(item.replacement || '')
-    }))
-  };
-  return crypto.createHash('sha256').update(stableJson(value)).digest('base64url').slice(0, 24);
-}
 
 function normalizeMetadata(value) {
   return {
@@ -186,7 +179,9 @@ function normalizeMetadata(value) {
     toolSurfaceVersion: Number(value.toolSurfaceVersion || 0),
     toolCount: Number(value.toolCount || 0),
     manifestHash: String(value.manifestHash || ''),
-    schemaVersion: Number(value.schemaVersion || 0)
+    schemaVersion: Number(value.schemaVersion || 0),
+    deviceProtocolVersion: Number(value.deviceProtocolVersion || 0),
+    minimumCompatibleDeviceProtocol: Number(value.minimumCompatibleDeviceProtocol || 0)
   };
 }
 
@@ -213,10 +208,5 @@ function versionParts(value) {
   return match ? match.slice(1).map(Number) : [0, 0, 0];
 }
 
-function stableJson(value) {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
-  if (!value || typeof value !== 'object') return JSON.stringify(value);
-  return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
-}
 
-export { PROTOCOL_VERSION, assessRuntimeCompatibility, assertRuntimeCompatibility, readRepositoryMetadata, repositoryMetadata, runtimeCompatibility, runtimeMetadata, toolManifestHash };
+export {  assessRuntimeCompatibility, assertRuntimeCompatibility, readRepositoryMetadata,  runtimeCompatibility, runtimeMetadata,  };

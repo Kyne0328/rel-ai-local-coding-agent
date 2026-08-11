@@ -1,13 +1,17 @@
 import { pillHtml } from '../../components/pill.js';
 import { esc, formatDuration, timeAgo } from '../../utils.js';
 import { getWorkspaceFilter, routeHref } from '../../router.js';
-import { connectionStateFor, connectionSummary } from '../../connection-state.js';
+import { connectionStateFor, connectionSummary, isMcpAuthenticationReady } from '../../connection-state.js';
 import { taskProgressHtml } from '../../components/task-progress.js';
 import { workSessionStateView } from '../../task-identity.js';
+import { completeDesktopSetup, createDesktopSetupChecklist, desktopSetupItems } from '../onboarding/index.js';
+import { routeMetadata } from '../../navigation-catalog.js';
 
 export function mountHome(container, data) {
   container.innerHTML = '';
-  container.appendChild(buildOverview(data || {}));
+  const payload = data || {};
+  container.appendChild(buildOverview(payload));
+  void finalizeSetupChecklist(payload);
 }
 
 export function updateHomeLiveState(container, data = {}) {
@@ -25,6 +29,7 @@ function syncHomeRegion(current, next, selector, beforeSelector = '') {
   const currentNode = current.querySelector(selector);
   const nextNode = next.querySelector(selector);
   if (currentNode && nextNode) {
+    syncHomeClockText(currentNode, nextNode);
     if (!currentNode.isEqualNode(nextNode)) currentNode.replaceWith(nextNode);
     return;
   }
@@ -35,6 +40,25 @@ function syncHomeRegion(current, next, selector, beforeSelector = '') {
   if (!nextNode) return;
   const before = beforeSelector ? current.querySelector(beforeSelector) : null;
   current.insertBefore(nextNode, before);
+}
+
+function syncHomeClockText(currentNode, nextNode) {
+  const selector = '[data-clock-elapsed-start], [data-clock-relative]';
+  const currentClocks = [...currentNode.querySelectorAll(selector)];
+  const nextClocks = [...nextNode.querySelectorAll(selector)];
+  for (let index = 0; index < Math.min(currentClocks.length, nextClocks.length); index += 1) {
+    const currentClock = currentClocks[index];
+    const nextClock = nextClocks[index];
+    if (clockIdentity(currentClock) === clockIdentity(nextClock)) nextClock.textContent = currentClock.textContent;
+  }
+}
+
+function clockIdentity(node) {
+  return [
+    node.getAttribute('data-clock-elapsed-start') || '',
+    node.getAttribute('data-clock-elapsed-end') || '',
+    node.getAttribute('data-clock-relative') || ''
+  ].join('|');
 }
 
 function buildOverview(data) {
@@ -55,7 +79,9 @@ function buildOverview(data) {
   root.className = 'section';
   const taskCard = taskActivityCard(data.taskActivity, tasks[0]);
   if (taskCard) root.appendChild(taskCard);
-  root.appendChild(connectionHero(bridgeState, effectiveEndpoint, workspaces));
+  const setupChecklist = createDesktopSetupChecklist(desktopSetupState(data));
+  if (setupChecklist) root.appendChild(setupChecklist);
+  root.appendChild(connectionHero(bridgeState));
 
   const attention = buildAttention(workspaces, findings, effectiveEndpoint);
   if (attention.length) root.appendChild(attentionCard(attention));
@@ -68,7 +94,7 @@ function buildOverview(data) {
   return root;
 }
 
-function resolveBridgeState({ endpoint, workspaces, findings, connectionState }) {
+function resolveBridgeState({ findings, connectionState }) {
   const connection = connectionSummary(connectionState);
   if (connection.tone !== 'ok') {
     return {
@@ -78,28 +104,12 @@ function resolveBridgeState({ endpoint, workspaces, findings, connectionState })
       description: connection.message
     };
   }
-  if (!workspaces.length) {
-    return {
-      tone: 'warn',
-      kicker: 'Workspace setup',
-      title: 'Add a workspace to finish setup.',
-      description: 'Rel.AI is running, but ChatGPT needs at least one configured repository before it can inspect or change local code.'
-    };
-  }
-  if (!endpoint) {
-    return {
-      tone: 'warn',
-      kicker: 'Secure connection',
-      title: 'Publish the ChatGPT endpoint.',
-      description: 'Your repositories are configured. Finish connection setup so ChatGPT can reach this machine over HTTPS.'
-    };
-  }
   if (findings.length) {
     return {
       tone: 'bad',
       kicker: 'Needs attention',
       title: 'Rel.AI is connected, but diagnostics found a problem.',
-      description: 'The endpoint is available, but one or more workspace or configuration findings should be resolved before relying on automated changes.'
+      description: 'The secure endpoint is available, but one or more findings should be resolved before relying on automated changes.'
     };
   }
   return {
@@ -110,29 +120,17 @@ function resolveBridgeState({ endpoint, workspaces, findings, connectionState })
   };
 }
 
-function connectionHero(state, endpoint, workspaces) {
+function connectionHero(state) {
   const hero = document.createElement('section');
   hero.dataset.homeLiveConnection = '';
-  const hasWorkspaces = workspaces.length > 0;
-  let primaryAction = '<a class="buttonlike primary" href="#settings/connection">Set up connection</a>';
-  let secondaryAction = '<a class="buttonlike secondary" href="#workspaces">Manage workspaces</a>';
-  if (!hasWorkspaces) {
-    primaryAction = '<a class="buttonlike primary" href="#workspaces">Add workspace</a>';
-    secondaryAction = '<a class="buttonlike secondary" href="#settings/connection">Connection settings</a>';
-  } else if (endpoint) {
-    primaryAction = `<a class="buttonlike primary" href="${routeHref('tasks')}">Open work sessions</a>`;
-  }
-  hero.className = `overview-hero ${state.tone}`;
+  hero.className = `overview-hero overview-hero-compact ${state.tone}`;
   hero.innerHTML = `
     <div class="overview-copy">
       <div class="overview-kicker">${esc(state.kicker)}</div>
       <h2 class="overview-title">${esc(state.title)}</h2>
       <p class="overview-description">${esc(state.description)}</p>
-      <div class="overview-actions">
-        ${primaryAction}
-        ${secondaryAction}
-      </div>
-    </div>`;
+    </div>
+    <a class="buttonlike secondary compact-button" href="${routeMetadata('connection').href}">View connection</a>`;
   return hero;
 }
 
@@ -189,7 +187,7 @@ function renderObservedSessionCard(card, activity, activeTasks, task) {
     </div>
     <div class="task-overview-meta">
       <span>${activityLabel}</span>
-      <strong data-clock-elapsed-start="${esc(task.startedAtIso || task.createdAt || task.startedAt || '')}">${formatDuration(Date.now() - (Date.parse(task.startedAtIso || task.createdAt || '') || Number(task.startedAt || Date.now())))}</strong>
+      <strong data-clock-elapsed-start="${esc(task.startedAtIso || task.createdAt || task.startedAt || '')}">${formatDuration(Date.now() - (Date.parse(task.startedAtIso || task.createdAt || '') || Number(task.startedAt || Date.now())), { live: true })}</strong>
     </div>`;
 }
 
@@ -251,24 +249,18 @@ function taskAction(tool) {
   return 'Inspecting the workspace';
 }
 
-export function buildAttention(workspaces, findings, endpoint) {
+export function buildAttention(workspaces, findings, _endpoint) {
   const items = [];
-  if (!workspaces.length) {
-    items.push({ priority: 1, tone: 'warn', title: 'No workspaces configured', copy: 'Add the repository aliases ChatGPT should be allowed to use.', href: '#workspaces', cta: 'Add workspace' });
-  }
-  const missingValidation = workspaces.filter(ws => !hasValidation(ws));
+  const missingValidation = workspaces.filter(workspace => !hasValidation(workspace));
   if (missingValidation.length) {
-    items.push({ priority: 3, tone: 'warn', title: 'Validation is incomplete', copy: `${missingValidation.length} workspace${missingValidation.length === 1 ? '' : 's'} have no saved or detected check command.`, href: '#workspaces', cta: 'Review validation' });
-  }
-  if (!endpoint) {
-    items.push({ priority: 2, tone: 'warn', title: 'ChatGPT endpoint unavailable', copy: 'Configure the permanent HTTPS tunnel before creating the ChatGPT app.', href: '#settings/connection', cta: 'Open connection' });
+    items.push({ priority: 2, tone: 'warn', title: 'Validation is incomplete', copy: `${missingValidation.length} workspace${missingValidation.length === 1 ? '' : 's'} have no saved or detected check command.`, href: routeMetadata('workspaces').href, cta: 'Review validation' });
   }
   if (findings.length) {
-    items.push({ priority: 0, tone: 'bad', title: 'Diagnostics need review', copy: `${findings.length} actionable finding${findings.length === 1 ? '' : 's'} may affect workspace access or reliability.`, href: '#settings/diagnostics', cta: 'Open diagnostics' });
+    items.push({ priority: 0, tone: 'bad', title: 'Diagnostics need review', copy: `${findings.length} actionable finding${findings.length === 1 ? '' : 's'} may affect workspace access or reliability.`, href: routeMetadata('diagnostics').href, cta: 'Open diagnostics' });
   }
   return items
     .sort((left, right) => left.priority - right.priority || left.title.localeCompare(right.title, 'en-US', { sensitivity: 'base' }))
-    .slice(0, 3)
+    .slice(0, 2)
     .map(({ priority: _priority, ...item }) => item);
 }
 
@@ -292,7 +284,7 @@ function attentionCard(items) {
 function workspaceSummaryCard(workspaces) {
   const card = document.createElement('section');
   card.className = 'card';
-  card.innerHTML = `<div class="card-head"><h3>Workspaces</h3><a class="section-action" href="#workspaces">Manage</a></div>`;
+  card.innerHTML = `<div class="card-head"><h3>Workspaces</h3><a class="section-action" href="${routeMetadata('workspaces').href}">Manage</a></div>`;
   const body = document.createElement('div');
   body.className = 'card-body compact-workspace-list';
   body.innerHTML = workspaces.length
@@ -301,7 +293,7 @@ function workspaceSummaryCard(workspaces) {
         <div><strong>${esc(ws.alias || 'workspace')}</strong><div class="compact-workspace-path">${esc(ws.path || '')}</div></div>
         ${pillHtml(hasValidation(ws) ? 'ready' : 'not configured')}
       </div>`).join('')
-    : '<div class="empty">No workspaces configured. <a href="#workspaces">Add your first repository.</a></div>';
+    : `<div class="empty">No workspaces configured. <a href="${routeMetadata('workspaces').href}">Add your first repository.</a></div>`;
   card.appendChild(body);
   return card;
 }
@@ -369,4 +361,30 @@ export function orderOverviewWorkspaces(workspaces = []) {
 function overviewTimestamp(task) {
   const timestamp = Date.parse(task?.endedAt || task?.completedAt || task?.lastActivityAt || task?.startedAt || '');
   return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+
+function desktopSetupState(data = {}) {
+  const workspaces = Array.isArray(data.config?.workspaces) ? data.config.workspaces : [];
+  const state = connectionStateFor(data);
+  const mcpConnection = data.mcpConnection || state.mcpClient || {};
+  return {
+    hasWorkspace: workspaces.length > 0,
+    endpointReady: state.localService?.status === 'running' && state.publicEndpoint?.status === 'available',
+    chatgptReady: isMcpAuthenticationReady(state),
+    firstRequestObserved: hasObservedMcpRequest(mcpConnection) || Boolean(data.desktopStatus?.gateway?.lastRequestAt),
+    connectionMode: state.mode || data.desktopStatus?.connectionMode || 'direct',
+    workspaceAlias: workspaces[0]?.alias || 'myapp'
+  };
+}
+
+function hasObservedMcpRequest(connection = {}) {
+  if (connection.lastRequestAt || connection.lastSuccessfulRequestAt || connection.lastFailedRequestAt) return true;
+  if (Number(connection.activeRequestCount || 0) > 0) return true;
+  return ['active', 'recent', 'connected', 'request_failed', 'idle'].includes(String(connection.activityStatus || connection.status || ''));
+}
+
+async function finalizeSetupChecklist(data = {}) {
+  const items = desktopSetupItems(desktopSetupState(data));
+  if (!items.length) await completeDesktopSetup();
 }

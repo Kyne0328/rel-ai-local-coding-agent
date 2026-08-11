@@ -1,13 +1,10 @@
 import { pillHtml } from '../../components/pill.js';
 import { esc, timeAgo } from '../../utils.js';
 import { routeHref } from '../../router.js';
+import { workSessionStateView } from '../../task-identity.js';
 
 function workspaceDetailsHtml(view, showAutomaticValidation) {
-  return `<details class="workspace-details">
-    <summary class="workspace-details-summary">
-      <span><strong>Repository and safety details</strong><small>Branch state, validation commands, protected branches, remotes, and history links</small></span>
-      <span aria-hidden="true">›</span>
-    </summary>
+  return `<div class="workspace-details" hidden>
     <div class="workspace-details-body">
       ${workspaceOperationalHtml(view)}
       ${showAutomaticValidation ? workspaceValidationHtml(view) : ''}
@@ -18,7 +15,7 @@ function workspaceDetailsHtml(view, showAutomaticValidation) {
         <button class="secondary danger workspace-remove" type="button" data-clear-workspace="${view.aliasAttr}">Remove workspace</button>
       </div>
     </div>
-  </details>`;
+  </div>`;
 }
 
 function workspaceOperationalHtml(view) {
@@ -30,7 +27,7 @@ function workspaceOperationalHtml(view) {
     ? `${state.lastValidation.status} · ${timeAgo(state.lastValidation.completedAt)}`
     : 'Not run yet';
   const activity = state.lastTask
-    ? `${state.lastTask.status} · ${timeAgo(state.lastTask.completedAt || state.lastTask.startedAt)}`
+    ? `${workSessionStateView(state.lastTask).label.toLowerCase()} · ${timeAgo(state.lastTask.completedAt || state.lastTask.startedAt)}`
     : 'No task history';
   return `<div class="workspace-operational">
     ${operationalItem('Branch', branchSummary(state))}

@@ -5,6 +5,12 @@ const inventory = {
   'wizard:done': spec('handle', ['wizard'], 'reject', 'launcher-config'),
   'wizard:cancel': spec('handle', ['wizard'], 'reject', 'none'),
   'recovery:get-config': spec('handle', ['wizard'], 'reject', 'none'),
+  'wizard:cloud-pair': spec('handle', ['wizard'], 'reject', 'none'),
+  'wizard:cloud-status': spec('handle', ['wizard'], 'reject', 'none'),
+  'wizard:cloud-cancel': spec('handle', ['wizard'], 'reject', 'none'),
+  'wizard:cloud-recovery-get': spec('handle', ['wizard'], 'reject', 'explicit-secret-read'),
+  'wizard:cloud-link-create': spec('handle', ['wizard'], 'reject', 'explicit-secret-read'),
+  'wizard:cloud-recover': spec('handle', ['wizard'], 'reject', 'delegated'),
   'recovery:open-setup': spec('handle', ['fallback'], 'reject', 'none'),
   'server:start': spec('handle', ['fallback'], 'reject', 'none'),
   'server:stop': spec('handle', ['fallback'], 'reject', 'none'),
@@ -18,6 +24,14 @@ const inventory = {
   'desktop:open-settings': spec('handle', ['dashboard'], 'reject', 'none'),
   'desktop:settings:get': spec('handle', ['dashboard'], 'reject', 'none'),
   'desktop:settings:save': spec('handle', ['dashboard'], 'reject', 'delegated'),
+  'desktop:gateway:get': spec('handle', ['dashboard'], 'reject', 'none'),
+  'desktop:gateway:pair': spec('handle', ['dashboard'], 'reject', 'delegated'),
+  'desktop:gateway:pair-cancel': spec('handle', ['dashboard'], 'reject', 'none'),
+  'desktop:gateway:devices': spec('handle', ['dashboard'], 'reject', 'none'),
+  'desktop:gateway:device-revoke': spec('handle', ['dashboard'], 'reject', 'delegated'),
+  'desktop:gateway:mode-set': spec('handle', ['dashboard'], 'reject', 'delegated'),
+  'desktop:gateway:recovery-get': spec('handle', ['dashboard'], 'reject', 'explicit-secret-read'),
+  'desktop:gateway:usage': spec('handle', ['dashboard'], 'reject', 'delegated'),
   'desktop:approval-token:replace': spec('handle', ['dashboard'], 'reject', 'delegated'),
   'desktop:update:get': spec('handle', ['dashboard'], 'reject', 'none'),
   'desktop:update:check': spec('handle', ['dashboard'], 'reject', 'none'),
@@ -62,6 +76,12 @@ registerIpcHandlers({
   getDashboardWindow: () => windows.dashboard,
   closeWizard: value => calls.push(['closeWizard', value]),
   getRecoveryConfig: () => ({ ok: true, source: 'recovery' }),
+  startWizardCloudPairing: () => ({ ok: true, pairing: { code: 'AAAA-BBBB-CCCC' } }),
+  getWizardCloudStatus: () => ({ ok: true, connectionMode: 'cloud', gateway: { state: 'pairing' } }),
+  cancelWizardCloudPairing: () => ({ ok: true }),
+  getWizardRecoveryCode: () => ({ ok: true, recoveryCode: 'relai-recovery-v1.prn_x.secret' }),
+  createWizardDeviceLink: () => ({ ok: true, linkCode: 'relai-link-v1.prn_x.secret', expiresAt: 1234 }),
+  recoverWizardCloudIdentity: value => ({ ok: true, value }),
   openRecoverySetup: () => ({ ok: true }),
   startServer: () => ({ ok: true, started: true }),
   stopServer: () => { calls.push(['stop']); return { ok: true }; },
@@ -70,6 +90,14 @@ registerIpcHandlers({
   openDashboardWindow: () => ({ ok: true }),
   getDesktopSettings: () => ({ ok: true }),
   saveDesktopSettings: value => ({ ok: true, value }),
+  getGatewayStatus: () => ({ state: 'connected', deviceId: 'device-safe' }),
+  beginGatewayPairing: value => ({ ok: true, value }),
+  cancelGatewayPairing: () => ({ ok: true }),
+  listGatewayDevices: () => ({ ok: true, devices: [] }),
+  revokeGatewayDevice: value => ({ ok: true, value }),
+  setGatewayMode: value => ({ ok: true, value }),
+  getGatewayRecovery: () => ({ ok: true, recoveryCode: 'recovery-code' }),
+  getGatewayUsage: value => ({ ok: true, month: value }),
   replaceApprovalToken: value => ({ ok: true, value }),
   getUpdateStatus: () => ({ state: 'idle' }),
   checkForUpdates: () => ({ ok: true }),
@@ -115,8 +143,13 @@ function eventFor(window) { return { sender: { window } }; }
 function argsFor(channel) {
   switch (channel) {
     case 'wizard:done': return [{ port: 3333, restart: false }];
+    case 'wizard:cloud-recover': return ['relai-recovery-v1.prn_example.recovery'];
     case 'url:copy': return ['safe text'];
     case 'desktop:settings:save': return [{ notifications: true }];
+    case 'desktop:gateway:pair': return [{ action: 'begin' }];
+    case 'desktop:gateway:device-revoke': return [{ deviceId: '11111111-1111-4111-8111-111111111111' }];
+    case 'desktop:gateway:mode-set': return [{ mode: 'cloud' }];
+    case 'desktop:gateway:usage': return ['2026-08'];
     case 'desktop:approval-token:replace': return [{ reason: 'rotate' }];
     case 'desktop:startup:set':
     case 'desktop:notifications:set':

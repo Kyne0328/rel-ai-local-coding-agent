@@ -1,449 +1,178 @@
-// Onboarding wizard — 5-step modal carousel
-import { openModal, closeModal } from '../../components/modal.js';
-import { fetchJson, postJson } from '../../api.js';
-import { toast } from '../../components/toast.js';
+import { postJson } from '../../api.js';
 import { copyText } from '../../clipboard.js';
-import { runButtonAction } from '../../action-state.js';
-import { esc as escapeHtml } from '../../utils.js';
-import { deriveWorkspaceAlias, isValidWorkspaceAlias } from '../../workspace-input.js';
+import { toast } from '../../components/toast.js';
+import { routeMetadata } from '../../navigation-catalog.js';
+import { esc } from '../../utils.js';
+import { chatGptFirstPrompt } from '../settings/connection-guidance.js';
 
-let _step = 0;
-let _data = {};
-let _modal = null;
-let _wrapper = null;
+const DISMISSED_KEY = 'relai_desktop_setup_dismissed';
+let completionPersisted = false;
+let pendingPersisted = false;
 
-const STEPS = ['Welcome', 'Add workspace', 'Workspace access', 'Connect ChatGPT', 'Done'];
+export function desktopSetupSteps({
+  hasWorkspace = false,
+  endpointReady = false,
+  chatgptReady = false,
+  firstRequestObserved = false,
+  connectionMode = 'direct'
+} = {}) {
+  const cloud = connectionMode === 'cloud';
+  const requestUnlocked = hasWorkspace && endpointReady && chatgptReady;
+  return [
+    {
+      id: 'workspace',
+      title: 'Choose a workspace',
+      description: 'Add the local project folder ChatGPT is allowed to inspect and update.',
+      href: routeMetadata('workspaces').href,
+      action: hasWorkspace ? 'Workspace added' : 'Add workspace',
+      complete: hasWorkspace,
+      locked: false
+    },
+    {
+      id: 'connection',
+      title: cloud ? 'Connect this computer' : 'Make this computer reachable',
+      description: cloud
+        ? 'Rel.AI Cloud provides the secure path ChatGPT uses to reach this computer.'
+        : 'Configure the secure HTTPS endpoint ChatGPT uses to reach Rel.AI on this computer.',
+      href: routeMetadata('connection').href,
+      action: cloud ? 'Set up device connection' : 'Set up secure endpoint',
+      complete: endpointReady,
+      locked: !hasWorkspace
+    },
+    {
+      id: 'chatgpt',
+      title: 'Connect ChatGPT',
+      description: cloud
+        ? 'Plus or Pro: open Plugins in ChatGPT (sidebar or Settings → Plugins), add Rel.AI MCP, and choose Connect. Business, Enterprise, or Edu: use the Rel.AI app your workspace provides under Apps. Enter the pairing code from Connection when asked.'
+        : 'Create or reconnect the Rel.AI MCP app in ChatGPT, then approve it with the token shown in Connection.',
+      href: routeMetadata('connection').href,
+      action: 'Connect ChatGPT',
+      complete: chatgptReady,
+      locked: !hasWorkspace || !endpointReady
+    },
+    {
+      id: 'first-request',
+      title: 'Send your first Rel.AI request',
+      description: 'Open ChatGPT, select Rel.AI MCP, and send the safe request below. This confirms ChatGPT can actually reach your local workspace.',
+      action: 'Copy first request',
+      actionType: 'copy',
+      complete: requestUnlocked && firstRequestObserved,
+      locked: !requestUnlocked
+    }
+  ];
+}
 
-export function openOnboarding() {
-  removeDesktopHandoff();
-  _step = 0;
-  _data = {
-    workspaceAlias: '',
-    workspacePath: '',
-    workspaceCreated: false,
-    createdWorkspaceAlias: '',
-    createdWorkspacePath: '',
-    workspaceCheck: null,
-    aliasEdited: false
-  };
+export function desktopSetupItems(options = {}) {
+  return desktopSetupSteps(options).filter(item => !item.complete);
+}
 
-  _wrapper = document.createElement('div');
-  _wrapper.className = 'onboarding-shell';
+export function createDesktopSetupChecklist(options = {}) {
+  const steps = desktopSetupSteps(options);
+  const remaining = steps.filter(item => !item.complete);
+  if (!remaining.length || isDesktopSetupDismissed()) return null;
 
-  _modal = openModal({
-    title: 'Set up Rel.AI MCP',
-    content: _wrapper,
-    onClose: _onModalClose
+  const current = steps.find(item => !item.complete && !item.locked) || remaining[0];
+  const completedCount = steps.length - remaining.length;
+  const checklist = document.createElement('section');
+  checklist.className = 'card desktop-setup-checklist';
+  checklist.dataset.desktopSetupChecklist = '';
+  checklist.innerHTML = `
+    <div class="card-head desktop-setup-head">
+      <div>
+        <span class="desktop-setup-eyebrow">Getting started</span>
+        <h3>Get Rel.AI working with ChatGPT</h3>
+        <p>${completedCount} of ${steps.length} steps complete · follow the highlighted step next</p>
+      </div>
+      <button class="secondary compact-button" type="button" data-dismiss-setup>Dismiss guide</button>
+    </div>
+    <div class="desktop-setup-intro">Rel.AI works on this computer. ChatGPT can only use it after you allow a workspace, establish the secure connection, and authorize the Rel.AI app.</div>`;
+
+  const body = document.createElement('div');
+  body.className = 'card-body desktop-setup-items';
+  steps.forEach((item, index) => body.appendChild(renderSetupStep(item, index, current?.id, options.workspaceAlias)));
+  checklist.appendChild(body);
+
+  checklist.querySelector('[data-dismiss-setup]').addEventListener('click', async () => {
+    setDesktopSetupDismissed(true);
+    checklist.remove();
+    await persistDesktopSetup({ skipped: true, handoffPending: false, source: 'overview-checklist' });
+    toast('Getting started guide dismissed.', { variant: 'info' });
   });
-
-  _modal.backdrop.addEventListener('click', (e) => {
-    if (e.target === _modal.backdrop && _step < STEPS.length - 1) {
-      closeModal();
-      _onModalClose();
+  checklist.querySelector('[data-copy-first-request]')?.addEventListener('click', async event => {
+    const button = event.currentTarget;
+    try {
+      await copyText(chatGptFirstPrompt(options.workspaceAlias));
+      button.textContent = 'Copied';
+      toast('First Rel.AI request copied. Paste it into ChatGPT with Rel.AI MCP selected.', { variant: 'success' });
+      setTimeout(() => { if (button.isConnected) button.textContent = 'Copy first request'; }, 1400);
+    } catch {
+      toast('Clipboard access failed.', { variant: 'error' });
     }
   });
-
-  _showStep();
+  return checklist;
 }
 
-function _onModalClose() {
-  _modal = null;
-  _wrapper = null;
-  if (_step < STEPS.length - 1) _doSkip();
+function renderSetupStep(item, index, currentId, workspaceAlias) {
+  const row = document.createElement('div');
+  const current = item.id === currentId;
+  row.className = `desktop-setup-item${item.complete ? ' done' : ''}${current ? ' current' : ''}${item.locked ? ' locked' : ''}`;
+  const state = item.complete ? 'Done' : item.locked ? 'Waiting' : current ? 'Next' : 'Ready';
+  const action = renderSetupAction(item, current);
+  row.innerHTML = `
+    <span class="desktop-setup-index" aria-hidden="true">${item.complete ? '✓' : index + 1}</span>
+    <div class="desktop-setup-copy">
+      <div class="desktop-setup-title-row"><strong>${esc(item.title)}</strong><span class="desktop-setup-state">${state}</span></div>
+      <p>${esc(item.description)}</p>
+      ${item.id === 'first-request' && current ? `<div class="desktop-first-request"><span>Paste this into ChatGPT</span><code>${esc(chatGptFirstPrompt(workspaceAlias))}</code></div>` : ''}
+    </div>
+    ${action}`;
+  return row;
 }
 
-function _showStep() {
-  if (!_wrapper) return;
-  _wrapper.innerHTML = '';
-
-  const stepLabel = document.createElement('div');
-  stepLabel.className = 'onboarding-step-label';
-  stepLabel.textContent = `Step ${_step + 1} of ${STEPS.length}`;
-
-  const content = document.createElement('div');
-  content.className = 'onboarding-content';
-
-  const footer = document.createElement('div');
-  footer.className = 'onboarding-footer';
-
-  const navLeft = document.createElement('div');
-  navLeft.className = 'onboarding-footer-actions';
-
-  const backBtn = document.createElement('button');
-  backBtn.className = 'secondary onboarding-compact-action';
-  backBtn.textContent = 'Back';
-  backBtn.onclick = _back;
-  backBtn.hidden = !(_step > 0 && _step < STEPS.length - 1);
-
-  const skipBtn = document.createElement('button');
-  skipBtn.className = 'secondary onboarding-compact-action onboarding-skip-action';
-  skipBtn.textContent = 'Skip for now';
-  skipBtn.onclick = () => { if (_modal) _modal.close(); };
-  skipBtn.hidden = _step === STEPS.length - 1;
-
-  navLeft.appendChild(backBtn);
-  navLeft.appendChild(skipBtn);
-
-  const nextBtn = document.createElement('button');
-  nextBtn.textContent = _step === STEPS.length - 1 ? 'Done' : 'Continue';
-  nextBtn.onclick = () => _next(nextBtn);
-
-  footer.appendChild(navLeft);
-  footer.appendChild(nextBtn);
-
-  _wrapper.appendChild(stepLabel);
-  _wrapper.appendChild(content);
-  _wrapper.appendChild(footer);
-
-  _renderStep(_step, content, nextBtn, skipBtn, backBtn);
-
-  const focusable = _modal.dialog.querySelectorAll('button:not([disabled]),input:not([disabled])');
-  if (focusable[0]) focusable[0].focus();
+function renderSetupAction(item, current) {
+  if (item.complete || item.locked) return '';
+  if (item.actionType === 'copy') {
+    return `<button class="${current ? 'primary' : 'secondary'} compact-button" type="button" data-copy-first-request>${esc(item.action)}</button>`;
+  }
+  return `<a class="buttonlike ${current ? 'primary' : 'secondary'} compact-button" href="${esc(item.href)}">${esc(item.action)}</a>`;
 }
 
-function _renderStep(step, content, nextBtn, skipBtn, backBtn) {
-  if (step === 0) {
-    content.innerHTML = '<p class="onboarding-copy">Rel.AI MCP gives ChatGPT explicit tools for configured local workspaces: inspect the repo, read exact files, make focused edits, run checks, and review the diff.</p><p class="onboarding-copy">This setup gets one workspace and the ChatGPT app connection ready so your first request can be a safe read-only check.</p>';
-    _withConnection(content);
-    nextBtn.textContent = 'Start setup';
-  } else if (step === 1) {
-    nextBtn.textContent = _data.workspaceCreated ? 'Continue' : 'Add workspace';
-    content.innerHTML = '<h3 class="onboarding-heading">Add your first workspace</h3><p class="onboarding-description">A workspace is a local folder that Rel.AI can inspect, edit, validate, and review for ChatGPT.</p>';
+export async function completeDesktopSetup() {
+  setDesktopSetupDismissed(true);
+  if (completionPersisted) return null;
+  completionPersisted = true;
+  return persistDesktopSetup({ completed: true, handoffPending: false, source: 'overview-checklist' });
+}
 
-    const aliasInput = document.createElement('input');
-    aliasInput.type = 'text';
-    aliasInput.placeholder = 'Alias (short name, for example acme-web)';
-    aliasInput.className = 'onboarding-input';
-    aliasInput.value = _data.workspaceAlias || '';
+export function syncDesktopSetupState(status = {}) {
+  const pending = status.needsOnboarding === true || status.handoffPending === true;
+  setDesktopSetupDismissed(!pending);
+  if (pending) persistPendingSetup();
+  return pending;
+}
 
-    const pathInput = document.createElement('input');
-    pathInput.type = 'text';
-    pathInput.placeholder = 'Absolute folder path';
-    pathInput.className = 'onboarding-input';
-    pathInput.value = _data.workspacePath || '';
+function isDesktopSetupDismissed() {
+  try { return localStorage.getItem(DISMISSED_KEY) === '1'; } catch { return false; }
+}
 
-    const pathRow = document.createElement('div');
-    pathRow.className = 'ws-form-row';
+function setDesktopSetupDismissed(value) {
+  try {
+    if (value) localStorage.setItem(DISMISSED_KEY, '1');
+    else localStorage.removeItem(DISMISSED_KEY);
+  } catch {}
+}
 
-    const browseBtn = document.createElement('button');
-    browseBtn.type = 'button';
-    browseBtn.className = 'secondary';
-    browseBtn.textContent = 'Browse…';
-    pathRow.appendChild(pathInput);
-    pathRow.appendChild(browseBtn);
+function persistPendingSetup() {
+  if (pendingPersisted) return;
+  pendingPersisted = true;
+  void persistDesktopSetup({ completed: false, skipped: false, handoffPending: true, source: 'overview-checklist' })
+    .then(result => { if (!result) pendingPersisted = false; });
+}
 
-    const hint = document.createElement('div');
-    hint.className = 'onboarding-hint';
-    hint.textContent = 'Tip: the alias can be short. The folder path must be absolute.';
-
-    const validation = document.createElement('div');
-    validation.className = 'onboarding-validation';
-    validation.setAttribute('aria-live', 'polite');
-    validation.setAttribute('aria-atomic', 'true');
-    renderValidation(validation, _data.workspaceCheck);
-
-    const createdNote = document.createElement('div');
-    createdNote.className = 'empty onboarding-created-note';
-    createdNote.hidden = !_data.workspaceCreated;
-    if (_data.workspaceCreated) {
-      createdNote.textContent = `Workspace '${_data.createdWorkspaceAlias}' is already saved for this setup run.`;
-    }
-
-    let validTimer;
-    pathInput.addEventListener('input', () => {
-      _data.workspacePath = pathInput.value.trim();
-      const suggested = deriveWorkspaceAlias(_data.workspacePath);
-      if (!_data.aliasEdited) {
-        aliasInput.value = suggested;
-        _data.workspaceAlias = suggested;
-      }
-      _data.workspaceCheck = null;
-      renderValidation(validation, null);
-      clearTimeout(validTimer);
-      validTimer = setTimeout(async () => {
-        const p = pathInput.value.trim();
-        if (!p) return;
-        validation.className = 'onboarding-validation';
-        validation.textContent = 'Checking path…';
-        _data.workspaceCheck = await validateWorkspacePath(p);
-        renderValidation(validation, _data.workspaceCheck);
-      }, 350);
-    });
-
-    aliasInput.addEventListener('input', () => {
-      _data.workspaceAlias = aliasInput.value.trim();
-      _data.aliasEdited = true;
-    });
-
-    browseBtn.addEventListener('click', async () => {
-      clearTimeout(validTimer);
-      const res = await runButtonAction(browseBtn, {
-        idleText: 'Browse…',
-        loadingText: 'Opening folder picker…',
-        successText: 'Folder selected',
-        errorText: 'Browse failed'
-      }, () => postJson('/api/pick-folder', {}, { timeout: 0 }));
-      if (res?.unsupported) {
-        browseBtn.hidden = true;
-        toast('Browse needs the Rel.AI desktop launcher — type the path here instead.', { variant: 'info' });
-        return;
-      }
-      if (res?.canceled) return;
-      if (res?.ok && res.path) {
-        pathInput.value = res.path;
-        _data.workspacePath = res.path;
-        if (!_data.aliasEdited) {
-          const suggested = deriveWorkspaceAlias(res.path);
-          aliasInput.value = suggested;
-          _data.workspaceAlias = suggested;
-        }
-        _data.workspaceCheck = res;
-        renderValidation(validation, res);
-      } else if (res?.error) {
-        toast('Could not open folder picker: ' + res.error, { variant: 'error' });
-      }
-    });
-
-    const submitWorkspace = async () => {
-      const alias = aliasInput.value.trim();
-      const workspacePath = pathInput.value.trim();
-      _data.workspaceAlias = alias;
-      _data.workspacePath = workspacePath;
-
-      if (!alias || !workspacePath) {
-        toast('Enter both alias and folder path.', { variant: 'warn' });
-        return;
-      }
-      if (!isValidWorkspaceAlias(alias)) {
-        toast('Use letters, numbers, dots, dashes, or underscores for the alias.', { variant: 'warn' });
-        return;
-      }
-
-      const check = await validateWorkspacePath(workspacePath);
-      _data.workspaceCheck = check;
-      renderValidation(validation, check);
-      if (!check?.exists || !check?.isDirectory) {
-        toast('Choose an existing folder path.', { variant: 'error' });
-        return;
-      }
-
-      if (_data.workspaceCreated && _data.createdWorkspaceAlias === alias && _data.createdWorkspacePath === workspacePath) {
-        _step++;
-        _showStep();
-        return;
-      }
-
-      setBusy(nextBtn, true, 'Adding…');
-      const result = await postJson('/api/workspaces', {
-        action: 'upsert',
-        alias,
-        path: workspacePath,
-        protectedBranches: ['main', 'master'],
-        defaultBaseBranch: 'main',
-        allowedRemotes: ['origin']
-      });
-      setBusy(nextBtn, false, 'Continue');
-
-      if (result?.ok !== true) {
-        toast('Could not add workspace: ' + (result?.error || 'unknown error'), { variant: 'error' });
-        return;
-      }
-
-      _data.workspaceCreated = true;
-      _data.createdWorkspaceAlias = alias;
-      _data.createdWorkspacePath = workspacePath;
-      toast('Workspace added: ' + alias, { variant: 'success' });
-      _step++;
-      _showStep();
-    };
-
-    pathInput.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') submitWorkspace();
-    });
-    aliasInput.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') submitWorkspace();
-    });
-
-    content.appendChild(aliasInput);
-    content.appendChild(pathRow);
-    content.appendChild(hint);
-    content.appendChild(validation);
-    content.appendChild(createdNote);
-    nextBtn.onclick = submitWorkspace;
-  } else if (step === 2) {
-    nextBtn.textContent = 'Continue';
-    content.innerHTML = '<h3 class="onboarding-heading">How to ask for work</h3><p class="onboarding-description">Tell ChatGPT which workspace alias to use, then ask for the smallest useful first step. For new repos, start with status and snapshot before requesting edits.</p><div class="empty onboarding-example"><strong class="onboarding-example-title">Good first prompt</strong><br><code>Use Rel.AI MCP on workspace "myapp". Call relai_work with action "status" for this workspace and relai_snapshot. Do not modify files yet.</code></div>';
-    nextBtn.onclick = async () => {
-      _step++;
-      _showStep();
-    };
-  } else if (step === 3) {
-    nextBtn.textContent = 'Continue';
-    content.innerHTML = '<h3 class="onboarding-heading">Connect ChatGPT</h3><p class="onboarding-description">Create a ChatGPT app, paste the MCP endpoint below, choose OAuth, and approve with your approval token. After that, select the Rel.AI MCP app in any chat.</p>';
-    _withConnection(content, true);
-  } else if (step === 4) {
-    nextBtn.textContent = 'Done';
-    skipBtn.hidden = true;
-    backBtn.hidden = true;
-    const workspaceLine = _data.workspaceCreated
-      ? `Workspace <strong>${escapeHtml(_data.createdWorkspaceAlias)}</strong> is saved and ready.`
-      : 'You can add a workspace later from the Workspaces page.';
-    content.innerHTML = `<div class="onboarding-complete"><div class="onboarding-complete-mark" aria-hidden="true">✓</div><div class="onboarding-complete-title">Setup complete</div><div class="onboarding-complete-copy">${workspaceLine}<br>Select the Rel.AI MCP app in ChatGPT and ask for a read-only status check first.</div></div>`;
-    nextBtn.onclick = async () => {
-      await postJson('/api/onboarding/complete', { completed: true });
-      closeModal();
-      _modal = null;
-      _wrapper = null;
-      toast('Setup complete — you can start using Rel.AI MCP now.', { variant: 'success' });
-    };
+async function persistDesktopSetup(payload) {
+  try {
+    return await postJson('/api/onboarding/complete', payload);
+  } catch {
+    return null;
   }
 }
-
-async function _withConnection(content, showCopy = false) {
-  const conn = await fetchJson('/api/connection');
-  if (!conn) return;
-  if (showCopy && conn.chatgptMcpUrl) {
-    const urlBox = document.createElement('div');
-    urlBox.className = 'onboarding-endpoint-row';
-    const code = document.createElement('code');
-    code.className = 'onboarding-endpoint';
-    code.textContent = conn.chatgptMcpUrl;
-    const copyBtn = document.createElement('button');
-    copyBtn.className = 'secondary onboarding-copy-action';
-    copyBtn.textContent = 'Copy';
-    copyBtn.onclick = async () => {
-      try {
-        await copyText(conn.chatgptMcpUrl);
-        copyBtn.textContent = 'Copied';
-        setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1800);
-      } catch {
-        toast('Clipboard access failed.', { variant: 'error' });
-      }
-    };
-    urlBox.appendChild(code);
-    urlBox.appendChild(copyBtn);
-    content.appendChild(urlBox);
-    const appSteps = document.createElement('div');
-    appSteps.className = 'setup-steps';
-    appSteps.innerHTML = [
-      'ChatGPT Settings > Apps > Create (or Workspace Settings > Apps > Create for admins).',
-      'Paste this MCP endpoint and choose OAuth.',
-      'Approve with your Rel.AI approval token, then select the app in chat.'
-    ].map((step, index) => `<div class="step"><span class="step-num">${index + 1}</span><div>${escapeHtml(step)}</div></div>`).join('');
-    content.appendChild(appSteps);
-  }
-
-  const status = document.createElement('div');
-  status.className = `onboarding-connection-status ${conn.permanentUrlConfigured ? 'good' : 'warn'}`;
-  status.textContent = conn.permanentUrlConfigured
-    ? 'Permanent URL configured. This is the best setup for a stable ChatGPT connector.'
-    : 'No permanent public URL is configured yet. Local testing still works, but the ChatGPT connection may change unless you add a stable HTTPS URL.';
-  content.appendChild(status);
-
-  if (Array.isArray(conn.nextSteps) && conn.nextSteps.length) {
-    const steps = document.createElement('div');
-    steps.className = 'setup-steps';
-    steps.innerHTML = conn.nextSteps.slice(0, 2).map((step, index) => `<div class="step"><span class="step-num">${index + 1}</span><div>${escapeHtml(step)}</div></div>`).join('');
-    content.appendChild(steps);
-  }
-}
-
-async function _next(_nextBtn) {
-  _step++;
-  if (_step >= STEPS.length) _step = STEPS.length - 1;
-  _showStep();
-}
-
-function _back() {
-  _step = Math.max(0, _step - 1);
-  _showStep();
-}
-
-async function _doSkip() {
-  await postJson('/api/onboarding/complete', { completed: false, skipped: true });
-  _showSkipBanner();
-}
-
-export function showDesktopHandoff() {
-  if (document.getElementById('__desktop-setup-handoff')) return;
-  const banner = document.createElement('section');
-  banner.id = '__desktop-setup-handoff';
-  banner.className = 'connection-notice info desktop-setup-handoff';
-  banner.innerHTML = '<div><strong>Desktop setup is complete.</strong><br><span class="muted">Finish the two application steps below. Rel.AI will not reopen the browser onboarding wizard.</span></div>';
-
-  const actions = document.createElement('div');
-  actions.className = 'connection-actions';
-  const connection = document.createElement('a');
-  connection.className = 'buttonlike primary';
-  connection.href = '#settings/connection';
-  connection.textContent = 'Connect ChatGPT';
-  const workspaces = document.createElement('a');
-  workspaces.className = 'buttonlike secondary';
-  workspaces.href = '#workspaces';
-  workspaces.textContent = 'Add workspace';
-  const dismiss = document.createElement('button');
-  dismiss.className = 'secondary';
-  dismiss.type = 'button';
-  dismiss.textContent = 'Dismiss guide';
-  dismiss.addEventListener('click', async () => {
-    await postJson('/api/onboarding/complete', {
-      skipped: true,
-      source: 'desktop-setup',
-      handoffPending: false
-    });
-    removeDesktopHandoff();
-    toast('Desktop setup guide dismissed.', { variant: 'info' });
-  });
-  actions.append(connection, workspaces, dismiss);
-  banner.appendChild(actions);
-  document.getElementById('main')?.prepend(banner);
-}
-
-function removeDesktopHandoff() {
-  document.getElementById('__desktop-setup-handoff')?.remove();
-}
-
-function _showSkipBanner() {
-  const existing = document.getElementById('__onb-banner');
-  if (existing) return;
-  const banner = document.createElement('div');
-  banner.id = '__onb-banner';
-  banner.className = 'onboarding-resume-banner';
-  banner.innerHTML = '<span class="onboarding-resume-label">Setup not complete</span>';
-  const resumeBtn = document.createElement('button');
-  resumeBtn.className = 'secondary onboarding-compact-action';
-  resumeBtn.textContent = 'Resume setup';
-  resumeBtn.onclick = openOnboarding;
-  banner.appendChild(resumeBtn);
-  const main = document.getElementById('main');
-  if (main) main.prepend(banner);
-}
-
-async function validateWorkspacePath(workspacePath) {
-  if (!workspacePath) return null;
-  return fetchJson('/api/workspace/preflight?path=' + encodeURIComponent(workspacePath));
-}
-
-function renderValidation(el, result) {
-  if (!el) return;
-  el.className = 'onboarding-validation';
-  if (!result) {
-    el.textContent = '';
-    return;
-  }
-  if (result.exists && result.isDirectory) {
-    el.classList.add('success');
-    el.textContent = result.isGit ? 'Path looks good. Git repository found.' : 'Path exists and can be added as a workspace.';
-    return;
-  }
-  el.classList.add('error');
-  const finding = Array.isArray(result.findings) && result.findings.length ? result.findings[0].message : 'Folder not found.';
-  el.textContent = finding;
-}
-
-function setBusy(button, busy, label) {
-  if (!button) return;
-  button.disabled = busy;
-  button.textContent = label;
-}
-

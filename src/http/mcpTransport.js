@@ -27,7 +27,7 @@ let coreHandler = null;
 let coreNodeHandler = null;
 const activePrincipalRequests = new Map();
 const MAX_CONCURRENT_REQUESTS_PER_PRINCIPAL = 8;
-const DEFAULT_MCP_BODY_LIMIT = 2 * 1024 * 1024;
+const DEFAULT_MCP_BODY_LIMIT = 10 * 1024 * 1024;
 
 function getCoreNodeHandler() {
   if (coreNodeHandler) return coreNodeHandler;

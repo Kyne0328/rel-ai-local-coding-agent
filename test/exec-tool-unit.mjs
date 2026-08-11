@@ -57,6 +57,7 @@ git(['config', 'user.email', 'relai@example.test']);
 git(['config', 'user.name', 'RelAI Exec Test']);
 git(['add', '.']);
 git(['commit', '-m', 'initial']);
+fs.writeFileSync(path.join(workspace, 'pre-dirty.txt'), 'pre-existing dirty\n');
 
 fs.writeFileSync(configPath, JSON.stringify({
   version: 2,
@@ -158,6 +159,11 @@ try {
   assert.equal(timedOut.timedOut, true);
   assert.match(timedOut.error, /Timed out after 1000ms/);
 
+  const preDirtyMutation = await execCall({
+    command: nodeCommand(path.join(workspace, 'scripts', 'mutate.js'), 'pre-dirty.txt')
+  });
+  assert.equal(preDirtyMutation.ok, true);
+  assert.deepEqual(preDirtyMutation.changedFiles, ['pre-dirty.txt'], 'mutation tracking must detect content changes to an already-dirty file');
   const mutation = await execCall({
     command: nodeCommand(path.join(workspace, 'scripts', 'mutate.js'), 'generated.txt')
   });

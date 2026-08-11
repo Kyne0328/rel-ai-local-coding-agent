@@ -121,7 +121,7 @@ export async function openWorkspaceRepair({ workspace } = {}) {
     markUnsaved(form, false);
     closeModal();
     invalidateCache();
-    requestDashboardRefresh();
+    requestDashboardRefresh({ structural: true });
     recordRecentWorkspace(workspace.alias);
     toast(`Workspace path repaired: ${workspace.alias}`, { variant: 'success' });
     navigate('workspaces', { workspace: workspace.alias, focus: '1' });

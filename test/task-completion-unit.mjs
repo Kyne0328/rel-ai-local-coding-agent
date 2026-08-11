@@ -356,7 +356,7 @@ try {
     error => error?.code === 'TASK_REVALIDATION_REQUIRED' &&
       /completion is paused because code changed after/i.test(error.message) &&
       error.retryable === true &&
-      error.allowedAlternatives?.some(item => /relai_run_checks.*complete:true/i.test(item))
+      error.allowedAlternatives?.some(item => /relai_validate.*complete:true/i.test(item))
   );
   const revalidationStatus = getToolActivity();
   const revalidationTask = revalidationStatus.tasks.find(task => task.id === changedTaskId);

@@ -64,4 +64,4 @@ function summarizeOperations(config, workspace, limit = 10) {
   };
 }
 
-export { appendOperation, makeOperationId, readRecentOperations, summarizeOperations };
+export { appendOperation, makeOperationId,  summarizeOperations };

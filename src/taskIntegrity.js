@@ -74,6 +74,10 @@ function readTaskIntegrity(config, taskId, workspaceAlias = '') {
   }
 }
 
+function taskOwnedChangedFiles(config, taskId, workspaceAlias = '') {
+  const authority = readTaskIntegrity(config, taskId, workspaceAlias);
+  return Array.isArray(authority?.taskOwnedChangedFiles) ? [...authority.taskOwnedChangedFiles] : [];
+}
 function readWorkspaceIntegrity(config, workspaceAlias) {
   try {
     return readJson(workspaceFile(config, workspaceAlias)) || createWorkspaceState(workspaceAlias);
@@ -87,7 +91,7 @@ function applyIntegrityEvent(authority, workspaceState, workspace, event) {
   const tool = clean(event.tool);
   const timestamp = clean(event.ts) || new Date().toISOString();
   const changedFiles = exactChangedFiles(event);
-  const mutation = event.ok !== false && eventMutatedCode(event);
+  const mutation = eventMutatedCode(event) && (event.ok !== false || changedFiles.length > 0);
 
   authority.updatedAt = timestamp;
   authority.workspace = workspace.alias;
@@ -111,20 +115,8 @@ function applyIntegrityEvent(authority, workspaceState, workspace, event) {
     };
   }
 
-  if (tool === 'relai_run_checks') {
-    const validationStatus = clean(event.validationStatus);
-    authority.validationResult = validationStatus || (event.ok === false ? 'failed' : 'not_run');
-    authority.validationAt = timestamp;
-    authority.validationLevel = clean(event.validationLevel);
-    authority.validationFingerprint = clean(event.validationFingerprint);
-    if (authority.validationResult === 'passed') {
-      authority.hasPassedValidation = true;
-      authority.latestPassedValidationAt = timestamp;
-      authority.latestValidatedMutationGeneration = authority.mutationGeneration;
-      authority.validatedWorkspaceGeneration = workspaceState.generation;
-      authority.validatedRepositoryFingerprint = authority.validationFingerprint;
-      authority.conflictingExternalMutations = [];
-    }
+  if (tool === 'relai_run_checks' || (tool === 'relai_edit' && clean(event.validationStatus))) {
+    applyValidationState(authority, workspaceState, event, timestamp);
   }
 
   if (event.completionKnown === true || tool === 'relai_finish_work' && event.ok !== false) {
@@ -147,6 +139,20 @@ function applyIntegrityEvent(authority, workspaceState, workspace, event) {
   };
 }
 
+function applyValidationState(authority, workspaceState, event, timestamp) {
+  const validationStatus = clean(event.validationStatus);
+  authority.validationResult = validationStatus || (event.ok === false ? 'failed' : 'not_run');
+  authority.validationAt = timestamp;
+  authority.validationLevel = clean(event.validationLevel);
+  authority.validationFingerprint = clean(event.validationFingerprint);
+  if (authority.validationResult !== 'passed') return;
+  authority.hasPassedValidation = true;
+  authority.latestPassedValidationAt = timestamp;
+  authority.latestValidatedMutationGeneration = authority.mutationGeneration;
+  authority.validatedWorkspaceGeneration = workspaceState.generation;
+  authority.validatedRepositoryFingerprint = authority.validationFingerprint;
+  authority.conflictingExternalMutations = [];
+}
 function createAuthority(taskId, workspace, event) {
   const baseline = repositoryBaseline(workspace.path);
   const timestamp = clean(event.ts) || new Date().toISOString();
@@ -230,7 +236,7 @@ function gitText(root, args, trim = true) {
 function eventMutatedCode(event) {
   const tool = clean(event.tool);
   if (tool === 'relai_exec') {
-    return exactChangedFiles(event).length > 0 || clean(event.mutationTracking) !== 'git';
+    return exactChangedFiles(event).length > 0;
   }
   return CODE_MUTATING_TOOLS.has(tool);
 }
@@ -313,10 +319,11 @@ function unique(values) {
 }
 
 export {
-  CODE_MUTATING_TOOLS,
-  TaskIntegrityError,
-  eventMutatedCode,
+
+
+
   readTaskIntegrity,
+  taskOwnedChangedFiles,
   readWorkspaceIntegrity,
   recordTaskIntegrityEvent
 };

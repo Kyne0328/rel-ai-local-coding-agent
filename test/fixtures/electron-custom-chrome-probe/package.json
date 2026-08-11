@@ -1,0 +1,6 @@
+{
+  "name": "relai-electron-custom-chrome-probe",
+  "private": true,
+  "type": "module",
+  "main": "index.js"
+}

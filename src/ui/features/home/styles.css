@@ -1,0 +1,86 @@
+.overview-hero-compact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px 20px;
+}
+.overview-hero-compact .overview-copy { max-width: 760px; }
+.overview-hero-compact .overview-title { margin-top: 4px; font-size: clamp(22px, 3vw, 30px); }
+.overview-hero-compact .overview-description { margin-top: 6px; }
+@media (max-width: 640px) {
+  .overview-hero-compact { align-items: stretch; flex-direction: column; }
+  .overview-hero-compact > a { width: 100%; }
+}
+
+@layer components {
+.overview-grid { @apply grid gap-3; grid-template-columns: repeat(3, minmax(0,1fr)); }
+.overview-grid-two { grid-template-columns: repeat(2, minmax(0,1fr)); }
+.summary-metrics { @apply gap-0 overflow-hidden rounded-xl; background: var(--ui-surface-primary); border: 1px solid var(--ui-border-default); }
+.summary-metrics .metric { @apply rounded-none border-0 border-r p-4 last:border-r-0; border-color: var(--ui-border-default); }
+.metric-label { @apply text-[11px] font-semibold uppercase tracking-[.08em]; color: var(--ui-text-tertiary); }
+.metric-value { @apply mt-1 text-2xl font-extrabold; }
+.metric-sub { @apply mt-1 text-[11px]; color: var(--ui-text-secondary); }
+.metric.good .metric-value { color: var(--ui-status-success-foreground); }
+.metric.warn .metric-value { color: var(--ui-status-warning-foreground); }
+.metric.bad .metric-value { color: var(--ui-status-danger-foreground); }
+.layout-grid { @apply grid gap-3; grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
+
+.overview-hero {
+  @apply relative overflow-hidden rounded-2xl p-7;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--ui-surface-secondary) 88%, var(--ui-action-primary) 12%), var(--ui-surface-primary));
+  border: 1px solid var(--ui-border-default);
+}
+.overview-hero::after { content: ""; @apply pointer-events-none absolute -right-24 -top-28 size-72 rounded-full; background: color-mix(in srgb, var(--ui-action-primary) 12%, transparent); filter: blur(12px); }
+.overview-hero.good { border-color: color-mix(in srgb, var(--ui-status-success-foreground) 30%, var(--ui-border-default)); }
+.overview-hero.warn { border-color: color-mix(in srgb, var(--ui-status-warning-foreground) 30%, var(--ui-border-default)); }
+.overview-hero.bad { border-color: color-mix(in srgb, var(--ui-status-danger-foreground) 30%, var(--ui-border-default)); }
+.overview-copy { @apply relative z-10 max-w-4xl; }
+.overview-kicker { @apply mb-2 text-[11px] font-bold uppercase tracking-[.12em]; color: var(--ui-action-primary); }
+.overview-title { @apply max-w-4xl text-[clamp(28px,3vw,42px)] font-extrabold leading-[1.08]; }
+.overview-description { @apply mt-3 max-w-3xl text-[14px] leading-6; color: var(--ui-text-secondary); }
+.overview-actions { @apply mt-5 flex flex-wrap gap-2; }
+
+.task-overview { @apply grid items-center gap-4 p-4; grid-template-columns: 42px minmax(0,1fr) auto; }
+.task-overview-mark { @apply grid size-10 place-items-center rounded-xl text-lg font-bold; background: var(--ui-status-info-background); color: var(--ui-action-primary); border: 1px solid color-mix(in srgb, var(--ui-action-primary) 30%, transparent); }
+.task-overview-spinner {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid color-mix(in srgb, var(--ui-action-primary) 28%, transparent);
+  border-top-color: currentColor;
+  border-radius: 999px;
+  animation: spin .8s linear infinite;
+}
+.task-overview.attention .task-overview-mark { background: var(--ui-status-danger-background); color: var(--ui-status-danger-foreground); border-color: color-mix(in srgb, var(--ui-status-danger-foreground) 30%, transparent); }
+.task-overview-copy h3 { @apply text-[15px]; }
+.task-overview-copy p { @apply mt-1 text-[12px]; color: var(--ui-text-secondary); }
+.task-overview-meta { @apply flex flex-col items-end gap-1 text-[11px]; color: var(--ui-text-secondary); }
+.task-overview-meta strong { @apply text-[14px]; color: var(--ui-text-primary); }
+.attention-list { @apply p-0; }
+.attention-item { @apply grid min-h-16 items-center gap-3 border-b px-4 py-3 last:border-b-0; grid-template-columns: auto minmax(0,1fr) auto; border-color: var(--ui-border-subtle); }
+.attention-icon { @apply size-2 rounded-full; background: var(--ui-status-warning-foreground); }
+.attention-icon.bad { background: var(--ui-status-danger-foreground); }
+.attention-title { @apply text-[12px] font-semibold; }
+.attention-copy { @apply mt-0.5 text-[11px]; color: var(--ui-text-secondary); }
+.compact-workspace-list { @apply p-0; }
+.compact-workspace { @apply flex min-h-14 items-center justify-between gap-3 border-b px-4 py-3 last:border-b-0; border-color: var(--ui-border-subtle); }
+.compact-workspace-path { @apply mt-0.5 max-w-[520px] truncate text-[11px]; color: var(--ui-text-tertiary); }
+.activity-row { @apply grid min-h-12 items-center gap-3 border-b px-1 py-2 last:border-b-0; grid-template-columns: 72px minmax(0,1fr) auto; border-color: var(--ui-border-subtle); }
+.activity-time { @apply text-[11px]; color: var(--ui-text-tertiary); }
+.activity-name { @apply text-[12px]; }
+
+.overview-grid-compact { grid-template-columns: repeat(3,minmax(0,1fr)); }
+.attention-card { border-color: color-mix(in srgb, var(--ui-status-warning-foreground) 28%, var(--ui-border-default)); }
+.metric-meta { @apply mt-1 text-[11px] leading-4; color: var(--ui-text-secondary); }
+}
+
+@media (max-width: 760px) {
+  .overview-grid, .overview-grid-two { grid-template-columns: 1fr; }
+  .summary-metrics .metric { @apply border-b border-r-0 last:border-b-0; border-color: var(--ui-border-default); }
+  .overview-hero { @apply p-5; }
+  .task-overview { grid-template-columns: 38px minmax(0,1fr); }
+  .task-overview-meta { grid-column: 2; @apply flex-row items-center justify-start; }
+}
+
+@media (max-width: 520px) { .overview-title { font-size: 28px; } }

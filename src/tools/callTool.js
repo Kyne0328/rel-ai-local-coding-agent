@@ -1,21 +1,27 @@
 import { safeLogAudit } from '../audit.js';
+import { createValidationFingerprint } from '../bridge/validationPlan.js';
 import { readConfig, resolveWorkspace, resolveWorkspaceInput } from '../config.js';
 import { principalFingerprint, principalForContext } from '../mcp/principal.js';
 import { assertAuthorizedToolCall } from '../mcp/authorizationPolicy.js';
 import { clearSessionPolicy } from '../policyResolver.js';
 import { assertRuntimeCompatibility } from '../runtimeCompatibility.js';
 import { readTaskIntegrity } from '../taskIntegrity.js';
-import { bindTaskHistoryActivityPersistence } from '../taskHistoryStore.js';
-import { buildToolActivityDetails } from '../taskObservability.js';
+import { activeProcessesForWorkspace } from '../processManager.js';
+import { bindTaskHistoryActivityPersistence, readRecentWorkflowEvidence, recordWorkflowEvidence, recordWorkflowSnapshot } from '../taskHistoryStore.js';
+import { buildToolActivityDetails, workflowActivityMetadata } from '../taskObservability.js';
 import { beginConnectorToolCall, getToolActivity, normalizeTaskId, onToolActivity, taskError } from '../toolActivity.js';
 import { serializeConnectorResult } from './connector.js';
 import { enhanceToolError } from './errors.js';
 import { executeToolCall } from './execution.js';
+import { repositoryIntelligence } from '../repository/intelligence/service.js';
 import { describeToolOperation } from './operation.js';
 import { resolveExecutableToolCall } from './runtimeRegistry.js';
 import { getToolNames, isToolCallable } from './schema.js';
 import { applyCautionAudit, buildExtraAudit, invalidateSessionCacheForCall } from './session.js';
 import { assertKnownTask, taskAuditContext, withTaskIdentity } from './task.js';
+import { deterministicActionId } from '../workflow/contracts.js';
+import { buildWorkflowEvidenceReceipt } from '../workflow/evidence.js';
+import { buildWorkflowSnapshot } from '../workflow/runtime.js';
 
 bindTaskHistoryActivityPersistence(onToolActivity, readConfig);
 
@@ -31,6 +37,7 @@ async function callTool(name, args = {}, context = {}) {
   let finishActivity = null;
   let activityResult = { ok: true };
   let sessionStart;
+  let resolvedAction = '';
   try {
     if (!isToolCallable(name, config)) {
       throw new Error(`Unknown tool '${name}'. Available tools: ${getToolNames(config).join(', ')}. Removed direct operation names are not callable; restart or reconnect if discovery is stale.`);
@@ -39,6 +46,7 @@ async function callTool(name, args = {}, context = {}) {
     if (!resolved) throw new Error(`Unknown tool '${name}'.`);
     const definition = resolved.executionDefinition;
     operationName = resolved.operationName;
+    resolvedAction = resolved.action || '';
     effectiveArgs = resolved.operationArgs;
     const taskScope = definition?.behavior?.taskScope || 'required';
     const taskScoped = taskScope === 'required';
@@ -107,7 +115,17 @@ async function callTool(name, args = {}, context = {}) {
     });
     applyCautionAudit(extraAudit, operationName, effectiveArgs || {}, value, config);
     invalidateSessionCacheForCall(config, operationName, effectiveArgs || {});
-    safeLogAudit(config, {
+    signalRepositoryIntelligenceMutation(config, operationName, effectiveArgs || {}, value);
+    const workId = finishActivity?.taskId || requestedTaskId;
+    const evidenceDraft = workId ? buildWorkflowEvidenceReceipt({
+      tool: operationName,
+      args: { ...(effectiveArgs || {}), action: resolved.action || effectiveArgs?.action },
+      result: value || {},
+      auditEntry: {},
+      repositoryFingerprint: String(value?.validationFingerprint || ''),
+      commandId: workflowCommandId(operationName, resolved.action, effectiveArgs)
+    }) : null;
+    const auditEntry = safeLogAudit(config, {
       ...activityResult.activity,
       ...taskAuditContext(context, finishActivity, requestedTaskId, operationName, valueOk, value),
       tool: operationName,
@@ -127,17 +145,31 @@ async function callTool(name, args = {}, context = {}) {
       ...extraAudit,
       ...(valueOk ? {} : { error: activityResult.error })
     }, { strictIntegrity: true });
-    const workId = finishActivity?.taskId || requestedTaskId;
+    if (workId && evidenceDraft && auditEntry) {
+      await persistWorkflowEvidence(config, effectiveArgs, operationName, resolved.action, value || {}, auditEntry, workId, evidenceDraft);
+    }
+    const workflow = workId
+      ? await buildAndPersistWorkflow(config, effectiveArgs, operationName, value || {}, workId)
+      : null;
+    if (workflow && activityResult.activity) {
+      activityResult.activity.metadata = {
+        ...(activityResult.activity.metadata || {}),
+        ...workflowActivityMetadata(workflow)
+      };
+    }
+    const valueWithWorkflow = workflow && value && typeof value === 'object'
+      ? { ...value, workflow }
+      : value;
     const responseValue = connector && resolved.compact
       ? serializeConnectorResult({
         publicName: name,
         action: resolved.action,
         operationName,
-        value,
+        value: valueWithWorkflow,
         args: effectiveArgs || {},
         workId
       })
-      : withTaskIdentity(value, workId);
+      : withTaskIdentity(valueWithWorkflow, workId);
     return ok(responseValue);
   } catch (error) {
     const enhanced = enhanceToolError(operationName, error);
@@ -150,40 +182,140 @@ async function callTool(name, args = {}, context = {}) {
         metadata: { errorCode: enhanced.code, retryable: enhanced.retryable === true, publicTool: name }
       })
     };
-    if (finishActivity?.taskId || requestedTaskId) enhanced.taskId = finishActivity?.taskId || requestedTaskId;
-    if (!/^TASK_INTEGRITY_/.test(String(enhanced.code || ''))) safeLogAudit(config, {
-      ...activityResult.activity,
-      ...taskAuditContext(context, finishActivity, requestedTaskId, operationName, false),
+    const failedWorkId = finishActivity?.taskId || requestedTaskId;
+    if (failedWorkId) enhanced.taskId = failedWorkId;
+    const failedValue = { ok: false, errorCode: enhanced.code || '', commandSummary: effectiveArgs?.command || '' };
+    const failedDraft = failedWorkId ? buildWorkflowEvidenceReceipt({
       tool: operationName,
-      publicTool: name,
-      internalOperation: operationName === name ? undefined : operationName,
-      operation: finishActivity?.operation,
-      ok: false,
-      workspace: effectiveArgs?.workspace,
-      workspaceInput: publicArgs?.workspace == null ? '' : String(publicArgs.workspace),
-      workspaceInputSource: 'tool_argument',
-      workspaceMatchStatus: enhanced.workspaceMatchStatus || undefined,
-      workspaceResolutionFailure: enhanced.workspaceResolutionFailure || undefined,
-      configuredWorkspaceAliases: enhanced.configuredWorkspaceAliases || undefined,
-      protocolVersion: context?.protocolVersion || undefined,
-      clientName: context?.clientName || undefined,
-      clientVersion: context?.clientVersion || undefined,
-      ms: Date.now() - started,
-      error: enhanced.message,
-      errorCode: enhanced.code || undefined
-    });
+      args: { ...(effectiveArgs || {}), action: resolvedAction || effectiveArgs?.action },
+      result: failedValue,
+      auditEntry: {},
+      repositoryFingerprint: '',
+      commandId: workflowCommandId(operationName, resolvedAction, effectiveArgs)
+    }) : null;
+    if (!/^TASK_INTEGRITY_/.test(String(enhanced.code || ''))) {
+      const failedAuditEntry = safeLogAudit(config, {
+        ...activityResult.activity,
+        ...taskAuditContext(context, finishActivity, requestedTaskId, operationName, false),
+        tool: operationName,
+        publicTool: name,
+        internalOperation: operationName === name ? undefined : operationName,
+        action: resolvedAction || undefined,
+        operation: finishActivity?.operation,
+        ok: false,
+        workspace: effectiveArgs?.workspace,
+        workspaceInput: publicArgs?.workspace == null ? '' : String(publicArgs.workspace),
+        workspaceInputSource: 'tool_argument',
+        workspaceMatchStatus: enhanced.workspaceMatchStatus || undefined,
+        workspaceResolutionFailure: enhanced.workspaceResolutionFailure || undefined,
+        configuredWorkspaceAliases: enhanced.configuredWorkspaceAliases || undefined,
+        protocolVersion: context?.protocolVersion || undefined,
+        clientName: context?.clientName || undefined,
+        clientVersion: context?.clientVersion || undefined,
+        ms: Date.now() - started,
+        error: enhanced.message,
+        errorCode: enhanced.code || undefined
+      });
+      if (failedWorkId && failedDraft && failedAuditEntry) {
+        await persistWorkflowEvidence(config, effectiveArgs, operationName, resolvedAction, failedValue, failedAuditEntry, failedWorkId, failedDraft);
+      }
+    }
     throw enhanced;
   } finally {
     finishActivity?.(activityResult);
   }
 }
 
+async function persistWorkflowEvidence(config, args, operationName, action, value, auditEntry, workId, draft) {
+  try {
+    const workspace = resolveWorkspace(config, args?.workspace);
+    let repositoryFingerprint = String(value?.validationFingerprint || draft?.repositoryFingerprint || '');
+    if (draft?.kind === 'check' && !repositoryFingerprint) {
+      repositoryFingerprint = String((await createValidationFingerprint(workspace, config))?.fingerprint || '');
+    }
+    const receipt = buildWorkflowEvidenceReceipt({
+      tool: operationName,
+      args: { ...(args || {}), action: action || args?.action },
+      result: value || {},
+      auditEntry,
+      repositoryFingerprint,
+      commandId: workflowCommandId(operationName, action, args)
+    });
+    if (receipt) recordWorkflowEvidence(config, workId, receipt);
+  } catch (error) {
+    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] workflow evidence:', error);
+  }
+}
+
+async function buildAndPersistWorkflow(config, args, operationName, value, workId) {
+  try {
+    const workspace = resolveWorkspace(config, args?.workspace);
+    const integrity = readTaskIntegrity(config, workId, workspace.alias);
+    if (!integrity) return null;
+    const recentEvidence = readRecentWorkflowEvidence(config, workId, 100);
+    const processes = activeProcessesForWorkspace(config, workspace.alias).map(item => ({
+      processId: item.processId,
+      status: item.status,
+      workSessionId: item.workSessionId || '',
+      reused: value?.reused === true && value?.processId === item.processId,
+      matchesCurrent: Boolean(value?.processId && value.processId === item.processId && item.workSessionId === workId)
+    }));
+    const workflow = await buildWorkflowSnapshot({
+      workspace,
+      taskId: workId,
+      taskIntegrity: integrity,
+      recentEvidence,
+      currentResult: value,
+      impactedPaths: Array.isArray(value?.impactedPaths) ? value.impactedPaths : [],
+      affectedTests: Array.isArray(value?.affectedTests) ? value.affectedTests : [],
+      processes,
+      operation: { kind: operationName === 'relai_run_checks' && args?.migration === true ? 'migration' : '' }
+    });
+    recordWorkflowSnapshot(config, workId, workflow);
+    return workflow;
+  } catch (error) {
+    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] workflow snapshot:', error);
+    return null;
+  }
+}
+
+function workflowCommandId(operationName, action, args = {}) {
+  return deterministicActionId({
+    tool: operationName,
+    action: action || args?.action || operationName,
+    args: {
+      command: args?.command || '',
+      check: args?.check || '',
+      checks: Array.isArray(args?.checks) ? args.checks.slice(0, 10) : [],
+      cwd: args?.cwd || '.'
+    }
+  });
+}
 function resolveConfiguredWorkspaceArgument(config, input) {
   if (input == null || String(input).trim() === '') return null;
   const resolution = resolveWorkspaceInput(config, input);
   if (resolution.source === 'configured_path') return resolution;
   if (resolution.source === 'path_unavailable' || resolution.source === 'unmatched_path') resolveWorkspace(config, input);
   return resolution;
+}
+
+function signalRepositoryIntelligenceMutation(config, operationName, args, value) {
+  const alias = String(args?.workspace || value?.workspace || '').trim();
+  if (!alias || args?.dryRun === true) return;
+  const changedFiles = Array.isArray(value?.changedFiles)
+    ? [...new Set(value.changedFiles.map(item => String(item || '').trim().replaceAll('\\', '/')).filter(Boolean))]
+    : [];
+  const broadMutation = operationName === 'relai_reset_workspace' && value?.ok !== false;
+  const targetedMutation = changedFiles.length > 0
+    && ['relai_edit', 'relai_exec', 'relai_tidy_run'].includes(operationName);
+  const restoreMutation = operationName === 'relai_restore_paths' && value?.ok !== false
+    ? [...new Set((Array.isArray(args?.paths) ? args.paths : []).map(item => String(item || '').trim().replaceAll('\\', '/')).filter(Boolean))]
+    : [];
+  if (!broadMutation && !targetedMutation && !restoreMutation.length) return;
+  try {
+    const workspace = resolveWorkspace(config, alias);
+    repositoryIntelligence.noteMutation(workspace, config, broadMutation ? [] : (changedFiles.length ? changedFiles : restoreMutation));
+  } catch {}
 }
 
 function hasWorkspaceChanges(value) {

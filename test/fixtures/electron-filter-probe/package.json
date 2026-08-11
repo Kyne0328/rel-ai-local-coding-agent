@@ -1,0 +1,6 @@
+{
+  "name": "relai-electron-filter-probe",
+  "private": true,
+  "type": "module",
+  "main": "index.js"
+}

@@ -102,6 +102,10 @@ try {
   resetRepo();
   for (const file of ['a/1.js', 'a/2.js', 'a/3.js', 'b/1.js', 'b/2.js', 'b/3.js']) write(file, 'x');
   assert.equal(selectValidationLevel(repo, {}, null).level, 'broad');
+  const taskScoped = selectValidationLevel(repo, {}, null, ['src/task-owned.js']);
+  assert.equal(taskScoped.level, 'focused');
+  assert.equal(taskScoped.reason, 'single source file');
+  assert.deepEqual(taskScoped.changedFiles, ['src/task-owned.js']);
 } finally {
   fs.rmSync(repo, { recursive: true, force: true });
 }

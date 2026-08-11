@@ -1,0 +1,89 @@
+@layer components {
+.activity-page { @apply min-w-0; flex: 1 0 auto; }
+.activity-event-card { @apply flex min-w-0 flex-col; flex: 1 0 auto; }
+.activity-event-card .card-body { @apply p-0; flex: 1 0 auto; }
+.activity-event-card .table-wrap { width: 100%; min-width: 0; flex: 1 0 auto; overflow-x: auto; }
+
+.activity-table { width: 100%; min-width: 0; table-layout: fixed; }
+.activity-col-time { width: 9%; }
+.activity-col-tool { width: 19%; }
+.activity-col-workspace { width: 15%; }
+.activity-col-status { width: 11%; }
+.activity-col-message { width: 39%; }
+.activity-col-action { width: 7%; }
+.activity-time-column { @apply whitespace-nowrap; }
+.activity-tool-column, .activity-workspace-column, .activity-message-column { min-width: 0; overflow: hidden; }
+.activity-message-cell { @apply min-w-0; }
+.activity-message-copy { @apply block truncate; width: 100%; max-width: 100%; min-width: 12ch; color: var(--ui-text-primary); }
+.activity-message-title { @apply mt-0.5 block truncate text-[10px]; color: var(--ui-text-tertiary); }
+.activity-message-mobile-meta { display: none; min-width: 0; align-items: center; gap: 6px; }
+.activity-message-mobile-meta code { @apply min-w-0 truncate text-[10px]; color: var(--ui-text-secondary); }
+.activity-message-mobile-time { @apply whitespace-nowrap text-[10px]; color: var(--ui-text-tertiary); }
+.activity-message-mobile-meta .status-pill { @apply min-h-6 px-2 text-[10px]; }
+.activity-status-column { @apply whitespace-nowrap; }
+.activity-row-button { @apply size-8 min-h-8 px-0 text-base; }
+.activity-requested-row td { background: var(--ui-status-info-background); }
+.clickable-row { @apply cursor-pointer; }
+.clickable-row:focus-visible { outline: 2px solid var(--ui-focus-ring); outline-offset: -2px; }
+.activity-freeze.active { background: var(--ui-status-info-background); color: var(--ui-action-primary); }
+
+.activity-detail { @apply gap-4; }
+.activity-detail-head { @apply flex items-center justify-between gap-3; }
+.activity-detail-section { @apply grid gap-2; }
+.activity-detail-section > h3 { @apply text-[11px] font-bold; color: var(--ui-text-secondary); }
+.activity-detail-section > p { @apply m-0 text-[12px] leading-5; color: var(--ui-text-primary); }
+.activity-session-context { @apply rounded-lg p-3; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-subtle); }
+.activity-session-context > strong { @apply min-w-0 truncate text-[13px] font-semibold; }
+.activity-session-context > span { @apply text-[10px]; color: var(--ui-text-tertiary); }
+.activity-session-actions { @apply mt-1 flex flex-wrap gap-2; }
+.activity-detail-error { @apply rounded-lg p-3; background: var(--ui-status-danger-background); border: 1px solid var(--ui-status-danger-border); }
+.activity-detail-error > h3, .activity-detail-error > p { color: var(--ui-status-danger-foreground); }
+.activity-detail-technical { @apply border-t pt-3; border-color: var(--ui-border-default); }
+.activity-detail-technical > summary { @apply flex min-h-9 cursor-pointer items-center text-[11px] font-semibold; color: var(--ui-text-secondary); }
+.activity-detail-fields { @apply mt-2; }
+.activity-detail-raw { @apply mt-3 grid gap-1.5; }
+.activity-detail-raw h4 { @apply text-[10px] font-bold uppercase tracking-[.06em]; color: var(--ui-text-tertiary); }
+.activity-detail-technical > button { @apply mt-3; }
+}
+
+@media (max-width: 980px) {
+  .activity-table .activity-col-workspace,
+  .activity-table .activity-workspace-column { display: none; }
+  .activity-col-time { width: 12%; }
+  .activity-col-tool { width: 23%; }
+  .activity-col-status { width: 14%; }
+  .activity-col-message { width: 42%; }
+  .activity-col-action { width: 9%; }
+}
+@media (max-width: 760px) {
+  .activity-table { min-width: 0; }
+  .activity-table .activity-col-tool,
+  .activity-table .activity-col-workspace,
+  .activity-table .activity-col-status,
+  .activity-table .activity-tool-column,
+  .activity-table .activity-workspace-column,
+  .activity-table .activity-status-column { display: none; }
+  .activity-col-time { width: 16%; }
+  .activity-col-message { width: 68%; }
+  .activity-col-action { width: 16%; }
+  .activity-message-mobile-meta { display: flex; }
+  .activity-message-cell { @apply py-2; }
+  .activity-message-copy { @apply mt-1; }
+  .activity-page .data-table th, .activity-page .data-table td { @apply px-3; }
+}
+
+@media (max-width: 520px) {
+  .activity-page .data-table th, .activity-page .data-table td { @apply px-2; }
+  .activity-message-copy { font-size: 11px; }
+  .activity-session-actions { @apply grid; grid-template-columns: minmax(0,1fr); }
+}
+
+@media (max-width: 240px) {
+  .activity-table .activity-col-time,
+  .activity-table .activity-col-action,
+  .activity-table .activity-time-column,
+  .activity-table .activity-action-column { display: none; }
+  .activity-col-message { width: 100%; }
+  .activity-message-mobile-meta { flex-wrap: wrap; gap: 4px; }
+  .activity-page .data-table th, .activity-page .data-table td { padding-inline: 6px; }
+}

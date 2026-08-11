@@ -104,7 +104,6 @@ const attention = buildAttention(
 );
 assert.deepEqual(attention.map(item => item.title), [
   'Diagnostics need review',
-  'ChatGPT endpoint unavailable',
   'Validation is incomplete'
 ]);
 assert.equal(attention[0].tone, 'bad');

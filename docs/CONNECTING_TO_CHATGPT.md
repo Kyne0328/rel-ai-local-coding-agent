@@ -1,80 +1,81 @@
-# Connecting to ChatGPT
+# Connecting Rel.AI MCP to ChatGPT
 
-Rel.AI MCP exposes one 12-tool capability surface through MCP SDK v2 over stdio and the OAuth-protected Streamable HTTP endpoint at `POST /mcp`.
+Rel.AI exposes one canonical 12-tool MCP surface. The normal desktop connection is **Rel.AI Cloud**; **Direct** remains an Advanced fallback for users who deliberately want a personal ngrok endpoint. In both modes repository files, Git operations, commands, validation, builds, and managed processes execute on the selected local desktop.
 
-- `relai_work`: begin, status, finish, or cancel a repository work session
-- `relai_snapshot`: map repository context
-- `relai_read`: read files, ranges, or directories
-- `relai_search`: run text or semantic search
-- `relai_inspect`: inspect symbols, references, relationships, traces, or impact
-- `relai_exec`: run one bounded command
-- `relai_process`: start, read, write, stop, or list managed processes
-- `relai_worktree`: create, list, or remove managed worktrees
-- `relai_validate`: run checks, diagnostics, or HTTP probes
-- `relai_changes`: review diffs, restore/reset paths, or manage tidy plans
-- `relai_publish`: commit, push, or draft pull-request text
-- `relai_edit`: apply repository edits
+## Rel.AI Cloud — default
 
-Use `relai_work` with `action:"begin"` once for each independent repository objective. It returns compact repository and instruction bootstrap context plus a principal-bound `work_id`. Every later work-scoped call requires that ID and resolves the bound workspace automatically; pass `workspace` only as an explicit ownership assertion. Use `relai_snapshot` only when the bootstrap needs refreshing, `relai_search` for raw text and contextual location, `relai_inspect` for symbol/reference/impact relationships and affected-test discovery, `relai_read` for source beyond returned ranges, and `relai_edit` for all file changes. Search defaults to adaptive `mode:"auto"`: focused searches receive broader context, while noisy searches receive smaller prioritized ranges.
+1. Open **Connection** in Rel.AI MCP or choose **Connect ChatGPT** during first-run setup.
+2. Rel.AI starts the desktop connection and its outbound gateway connection, then shows a short-lived pairing code.
+3. In ChatGPT, use the connection path for your plan: **Plus or Pro** — open **Plugins** from the sidebar or **Settings > Plugins**, add Rel.AI MCP, and choose **Connect**; **Business, Enterprise, or Edu** — open the Rel.AI app provided under your workspace **Apps**. Enable Developer mode or obtain workspace approval when your plan/workspace requires it.
+4. When the Rel.AI OAuth page opens, enter the pairing code shown by the desktop.
+5. Return to Rel.AI and wait for **Connected**.
+6. Add at least one local workspace before asking ChatGPT to inspect repository files.
 
-Use `relai_exec` for one-shot project commands such as dependency installation, migrations, compilers, and repository utilities. It returns exit status, bounded output, timeout state, and detected file changes. It does not replace structured final validation.
+Cloud pairing does not require a separate Rel.AI username/password, an ngrok account, a connection port, or the Direct approval token.
 
-Completion is explicit, never inferred from a passing test run. Prefer `relai_validate` with `action:"checks"` with `complete:true` and `summary` on the final standard or release validation; this closes the work session atomically only when all selected checks pass. When a read-only diff or status review follows validation, omit `complete` and call `relai_work` with `action:"finish"` once after the review.
+## Device identity and recovery
 
-`relai_validate` with `action:"checks"` performs change-aware validation planning internally when no explicit check is supplied. Pass an exact package script command through `check` when a named UI or browser validation script is required.
+Initial Cloud pairing creates an accountless Rel.AI principal and a device identity. Each desktop generates a P-256 key pair; the private key is encrypted locally through Electron `safeStorage`, while the gateway receives only the public identity needed for challenge verification.
 
-Use `relai_validate` with `action:"http"` for local routes such as `/health` or `/dashboard`; it rejects absolute and protocol-relative URLs.
+Use **Connection** for the explicit recovery and device actions:
 
-Use `relai_changes` with `action:"restore"` to restore specific tracked paths without touching untracked or unrelated files. Use `relai_changes` with `action:"reset"` only for repository-wide recovery: `confirmation:"RESET"` resets tracked changes, while untracked cleanup additionally requires `removeUntracked:true` and `confirmation:"RESET_AND_CLEAN"`.
+- reveal and securely store the recovery code;
+- create a short-lived, one-time device-link code from an already paired computer;
+- recover the same accountless principal on a replacement computer;
+- list paired devices and revoke a lost or retired device.
 
-Use `relai_work` with `action:"status"` with a workspace alias for command configuration, work-session policy, branch, ahead/behind counts, ownership-split changes, and untracked-file state. Repository details are nested under `workspace.repository`.
+Workspace folders remain computer-specific. Pairing another desktop does not upload or copy repository paths or files from the first computer.
 
-Use `relai_publish` with `action:"draft_pr"` to prepare local pull-request title/body text from a base/head Git diff. It does not call GitHub, GitLab, or another hosting provider; it does not create a pull request, push a branch, or modify the repository.
+## Verify the connection safely
 
-Work bootstrap and repository snapshots automatically include guidance from `REL_AI.md`, `.relai/instructions.md`, and applicable hierarchical `AGENTS.override.md` / `AGENTS.md` files. `REL_AI.md` has highest precedence; nearer target-directory agent instructions override parent agent instructions. The combined connector payload is capped at 64 KiB and reports its sources and truncation state; use `relai_read` on a named file when complete text is needed. Instruction text is never executed automatically.
+Start with a read-only request:
 
-Persistent process management, managed worktrees, native MCP Tasks interoperability, and work-session history are available through the current surface. Managed worktrees use isolated aliases and preserve branches by default; removal refuses dirty worktrees and active processes unless the required explicit approval is supplied.
+```text
+Use Rel.AI MCP on workspace "myapp". Call relai_work with action "begin", retain the returned work_id, then call relai_snapshot with that work_id. Do not modify files yet.
+```
 
-Tracked-file deletion is handled through a structured `Delete File` patch sent to `relai_edit`. Session-owned untracked artifacts are removed only through `relai_changes` with `action:"tidy_plan"` followed by `relai_changes` with `action:"tidy_run"`.
+Each independent repository objective receives its own principal-bound `work_id`. Transport connections, ChatGPT conversation identity, device identity, and repository name do not replace that work-session boundary.
+
+## Tool refresh, reauthentication, and desktop updates
+
+These are independent states:
+
+- `tool_refresh_required`: the current OAuth grant has not observed the current Rel.AI tool manifest through `tools/list`. This is advisory for an otherwise compatible request.
+- `reauthentication_required`: OAuth authorization must be restored.
+- `device_update_required`: the selected desktop gateway protocol is incompatible; the gateway blocks forwarding until the desktop is updated.
+
+Rel.AI can prove which manifest it serves and when a grant requests that manifest. It cannot force ChatGPT to replace its host-side cached app definition or prove that an administrator/user accepted refreshed actions. Use the current ChatGPT app-management refresh/review flow when Rel.AI reports a stale tool snapshot.
+
+## Usage
+
+The top-level **Usage** page loads one UTC month on demand from Rel.AI Cloud. It shows exact gateway-observed request, tool-call, outcome, byte, duration, active-day, device, tool, and workspace aggregates. These values are not ChatGPT model-token or billing estimates.
+
+The gateway persists monthly aggregate usage. The current implementation does not define an automatic deletion/retention window for those aggregate rows.
+
+## Advanced: Direct connection
+
+Direct mode retains the managed-ngrok + local OAuth architecture:
+
+1. Open **Connection** and choose the Advanced Direct setup.
+2. Configure the desktop connection port, ngrok account key, and static ngrok domain.
+3. Rel.AI starts the same local MCP service plus the bundled managed ngrok agent.
+4. In ChatGPT, add the Direct MCP using the plan-appropriate surface: **Plugins** for Plus/Pro, or the workspace **Apps** surface for managed plans, then configure the Direct `/mcp` endpoint with OAuth.
+5. Approve the local Rel.AI authorization page with the Direct approval token.
+
+Legacy ngrok configurations migrate to Direct mode. Switching to Cloud preserves Direct settings so the fallback remains reversible.
+
+Replacing the Direct approval token revokes current Direct OAuth access/refresh state while preserving the registered app where possible. Reconnect the existing app with the replacement token; do not treat Direct token rotation as a Cloud schema refresh.
 
 ## MCP protocol requirement
 
-Rel.AI's modern protocol is MCP `2026-07-28`. Modern clients use `server/discover` and include matching protocol, client, and capability metadata on every request. The HTTP endpoint also accepts ChatGPT's SDK-supported stateless `2025-11-25` flow: `initialize`, `notifications/initialized`, and subsequent tool or resource requests are served without creating an HTTP transport session.
+Modern MCP behavior targets `2026-07-28`. HTTP also retains the SDK-supported stateless ChatGPT `2025-11-25` initialize flow. Rel.AI does not issue `MCP-Session-Id`; legacy `/sse`, `/messages`, JSON-RPC batches, removed tool aliases, and initialize-based stdio are not supported.
 
-Rel.AI never issues `MCP-Session-Id`. The former `/sse` and `/messages` routes, JSON-RPC batches, and removed tool aliases are not supported. Compatibility affects only protocol negotiation; OAuth authorization, principal-bound `work_id` ownership, workspace safety, and explicit completion rules are identical in both modes.
+Native MCP Tasks are negotiated independently through `io.modelcontextprotocol/tasks`. Clients without Tasks support receive bounded synchronous execution for eligible operations.
 
-Native MCP Tasks are negotiated independently through `io.modelcontextprotocol/tasks`. A capable client may receive either a direct result for a clearly bounded operation or a native task for long or indeterminate work. Clients that omit the capability receive bounded synchronous execution for eligible tools.
+## Troubleshooting
 
-## Starting the server
+If Cloud pairing fails, create a fresh pairing code, keep the desktop running, and confirm the OAuth page is using the current code. If Rel.AI reports `device_update_required`, update the desktop first. If ChatGPT shows old tools while Rel.AI reports `tool_refresh_required`, refresh/review the existing app definition in ChatGPT rather than rotating credentials.
 
-Launch the **Rel.AI MCP** desktop app. It starts the local server and the public tunnel together, using the ngrok authtoken and static domain entered in the setup wizard.
+If a workspace cannot be found, confirm its alias under **Workspaces**, then retry a read-only `relai_work begin` + `relai_snapshot` request. Opening `/mcp` in a normal browser is not a connection test; MCP clients use `POST /mcp`.
 
-ChatGPT requires a public HTTPS endpoint, which the bundled ngrok agent provides. Nothing has to be installed or started separately. See [ONE_CLICK_SETUP.md](ONE_CLICK_SETUP.md) for the full first-run walkthrough.
-
-The packaged desktop app opens the dashboard in a secured Electron window by default. The same local `/dashboard` route remains accessible in a normal browser when needed; both hosts use the same dashboard code and server APIs. Electron uses a single-use bootstrap exchange and an HttpOnly local session cookie instead of exposing the permanent approval token to the embedded renderer.
-
-Use **Work sessions** for repository objectives and **Activity** for individual tool calls. Each independent objective begins with `relai_work` with `action:"begin"`, and only its explicit `work_id` can select that work session afterward. Connection changes, reasoning gaps, workspace names, and ChatGPT conversation metadata are never used to merge or recover work sessions.
-
-## Adding the connector in ChatGPT
-
-1. Launch Rel.AI MCP and open the dashboard from the tray or main window.
-2. Copy the MCP URL ending in `/mcp`.
-3. In ChatGPT, open **Settings > Apps > Create**.
-4. Add the MCP URL and select **OAuth** authentication.
-5. When the Rel.AI authorization page opens, copy the current approval token from **Settings > Connection** and enter it.
-
-Example MCP URL:
-
-```text
-https://your-domain.example/mcp
-```
-
-ChatGPT discovers the OAuth endpoints through `/.well-known/oauth-protected-resource`. Opening `/mcp` in a browser displays only a diagnostic; MCP clients use `POST /mcp`.
-
-When you replace the approval token, Rel.AI revokes current ChatGPT access and refresh tokens. The existing ChatGPT app and MCP URL remain valid. Copy the new token, then in ChatGPT Web open **Settings > Apps > Enabled Apps** and select the existing **Rel.AI MCP** app. Choose **Connect** or **Reconnect** if shown; otherwise, select Rel.AI MCP in a new chat and ask ChatGPT to use it. Paste the token on the Rel.AI authorization page, approve access, and retry the request. Do not delete and recreate the app.
-
-## Tunnel requirement
-
-Use the bundled ngrok agent with a static domain. Do not expose plain HTTP to the public internet.
-
-Maintained by [@Kyne0328](https://github.com/Kyne0328).
+For Direct failures, verify the connection port is free, the ngrok account key is valid, and the configured static domain is available to the current agent.

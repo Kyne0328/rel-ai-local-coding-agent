@@ -82,7 +82,10 @@ async function handleAuthorizePost(ctx) {
       try { ctx.options.onOAuthAuthorized(); } catch (error) { debug('OAuth authorization callback', error); }
     }
     debug('OAuth approval', `client ${check.request.clientId} redirects to ${check.request.redirectUri}`);
-    ctx.res.writeHead(302, { Location: oauth.buildRedirectUrl(check.request.redirectUri, { code, state: check.request.state }) });
+    ctx.res.writeHead(303, {
+      Location: oauth.buildRedirectUrl(check.request.redirectUri, { code, state: check.request.state }),
+      'Cache-Control': 'no-store'
+    });
     ctx.res.end();
   }, { carrier: ctx.req.headers });
 }

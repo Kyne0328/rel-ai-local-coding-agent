@@ -512,9 +512,9 @@ function createToolActivityTracker(options = {}) {
     if (!task || task.activeCalls > 0) return;
     cancelCompletion(task);
     removeTask(task);
-    const endedAt = now();
-    const unresolvedFailure = task.lastOutcome === 'failed';
-    const status = unresolvedFailure ? 'failed' : 'cancelled';
+    const inactiveAt = now();
+    const resumeStatus = task.status;
+    const status = 'inactive';
     lastTask = sanitizeTaskRecord({
       taskId: task.id,
       sessionId: task.id,
@@ -522,10 +522,10 @@ function createToolActivityTracker(options = {}) {
       title: task.title,
       objective: task.objective,
       status,
+      resumeStatus,
       progress: normalizeTaskProgress(task.progress, status),
-      currentStage: unresolvedFailure ? 'Failed after inactivity' : 'Cancelled after inactivity',
+      currentStage: 'Inactive',
       currentActivity: task.currentActivity,
-      endReason: 'inactivity_window',
       calls: task.calls,
       toolCallCount: task.calls,
       successfulToolCallCount: task.successes,
@@ -540,15 +540,18 @@ function createToolActivityTracker(options = {}) {
       createdAt: new Date(task.createdAt).toISOString(),
       startedAt: task.startedAt,
       startedAtIso: new Date(task.startedAt).toISOString(),
-      updatedAt: new Date(endedAt).toISOString(),
-      endedAt,
-      completedAt: endedAt,
-      completedAtIso: new Date(endedAt).toISOString(),
-      durationMs: Math.max(0, endedAt - task.startedAt),
-      terminalReason: unresolvedFailure ? 'Task became inactive after an unrecovered failure.' : 'Task was cancelled after the inactivity window elapsed.',
+      updatedAt: new Date(inactiveAt).toISOString(),
+      lastActivityAt: task.lastActivityAt,
+      inactiveAt: new Date(inactiveAt).toISOString(),
+      endedAt: null,
+      completedAt: null,
+      cancelledAt: null,
+      durationMs: Math.max(0, inactiveAt - task.startedAt),
+      activeCalls: 0,
+      currentOperations: [],
       events: task.events.map(cloneActivityEvent)
     });
-    notify(status, task, { task: lastTask, endReason: lastTask.endReason });
+    notify('inactive', task, { task: lastTask });
   }
 
   function completeTask(taskId) {
@@ -880,7 +883,6 @@ function resolveIdleMs(value) {
 
 const defaultTracker = createToolActivityTracker();
 const beginConnectorToolCall = defaultTracker.beginConnectorToolCall;
-const cancelTask = defaultTracker.cancelTask;
 const onToolActivity = defaultTracker.onToolActivity;
 const getToolActivity = defaultTracker.getToolActivity;
 const resetToolActivity = defaultTracker.reset;
@@ -889,7 +891,7 @@ export {
   DEFAULT_TASK_IDLE_MS,
   createToolActivityTracker,
   beginConnectorToolCall,
-  cancelTask,
+
   onToolActivity,
   getToolActivity,
   resetToolActivity,  runWithToolActivity,

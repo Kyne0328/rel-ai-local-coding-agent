@@ -20,20 +20,13 @@ export function getToken() {
 // Full-page fallback reload that preserves the dashboard token and hash. Normal
 // dashboard mutations should prefer requestDashboardRefresh() so the page updates
 // in place without breaking live context.
-export function reloadWithToken() {
-  const params = new URLSearchParams();
-  const token = getToken();
-  const surface = new URLSearchParams(location.search).get('surface');
-  if (token) params.set('token', token);
-  if (surface) params.set('surface', surface);
-  const query = params.toString();
-  location.assign('/dashboard' + (query ? `?${query}` : '') + (location.hash || ''));
-}
 
-export function requestDashboardRefresh() {
+export function requestDashboardRefresh(options = {}) {
   invalidateCache();
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('relai:dashboard-refresh'));
+    window.dispatchEvent(new CustomEvent('relai:dashboard-refresh', {
+      detail: { structural: options.structural === true }
+    }));
   }
 }
 
@@ -83,8 +76,8 @@ function structuredRequestError(message, status = 0) {
     status,
     errorCode: 'dashboard_unavailable',
     title: 'Dashboard request failed',
-    error: String(message || 'The local dashboard did not respond.'),
-    recovery: { message: 'Refresh the dashboard. Restart the local service if the problem continues.', actionLabel: 'Open Connection', href: '#settings/connection', retryable: true }
+    error: String(message || 'The Rel.AI dashboard did not respond.'),
+    recovery: { message: 'Refresh the dashboard. Restart the connection service if the problem continues.', actionLabel: 'Open Connection', href: '#connection', retryable: true }
   };
 }
 

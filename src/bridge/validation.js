@@ -1,9 +1,12 @@
+import * as path from 'node:path';
 import { runProcess, summarizeCommand } from '../process.js';
-import { detectVerifyChecks } from './checkDetection.js';
 import { selectValidationLevel } from '../validationStrategy.js';
 import { resolvePolicy } from '../policyResolver.js';
 import { clampNumber } from './limits.js';
-import { getCurrentTaskAbortSignal, updateCurrentToolActivity } from '../toolActivity.js';
+import { getCurrentTaskAbortSignal, getCurrentToolActivityContext, updateCurrentToolActivity } from '../toolActivity.js';
+import { readTaskIntegrity, readWorkspaceIntegrity, taskOwnedChangedFiles } from '../taskIntegrity.js';
+import { readRecentWorkflowEvidence, recordWorkflowEvidence } from '../taskHistoryStore.js';
+import { buildWorkflowEvidenceReceipt, checkEvidenceReusable } from '../workflow/evidence.js';
 import { sanitizeDisplayText } from '../taskObservability.js';
 import { combineAbortSignals } from '../abortSignals.js';
 import { finalizeValidationResult, normalizeCompletionSummary } from '../tools/completion.js';
@@ -21,12 +24,18 @@ import {
 const CHECK_OUTPUT_TAIL_DEFAULT = 4000;
 const CHECK_OUTPUT_TAIL_FULL = 40000;
 async function relaiVerify(workspace, config, args = {}, context = {}) {
-  let effectiveArgs = args;
+  const currentTaskId = String(getCurrentToolActivityContext()?.taskId || context.taskId || args.work_id || '').trim();
+  const suppliedChangedFiles = Array.isArray(args.changedFiles)
+    ? [...new Set(args.changedFiles.map(file => String(file || '').trim()).filter(Boolean))]
+    : [];
+  const ownedChangedFiles = currentTaskId ? taskOwnedChangedFiles(config, currentTaskId, workspace.alias) : [];
+  const validationScope = suppliedChangedFiles.length ? suppliedChangedFiles : (ownedChangedFiles.length ? ownedChangedFiles : undefined);  let effectiveArgs = args;
   let validationPlan = null;
   let planSelection = '';
   if (!args.planId && !hasRequestedChecks(args)) {
     validationPlan = await createValidationPlan(workspace, config, {
-      release: String(args.level || '').toLowerCase() === 'release'
+      release: String(args.level || '').toLowerCase() === 'release',
+      ...(validationScope ? { changedFiles: validationScope } : {})
     });
     planSelection = String(args.planLevel || args.level || validationPlan.recommended || 'focused').toLowerCase();
     const plannedChecks = validationPlan.checks?.[planSelection];
@@ -48,8 +57,8 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
   const complete = args.complete === true;
   const completionSummary = complete ? normalizeCompletionSummary(args.summary) : '';
   const normalized = normalizeVerifyChecks(effectiveArgs, workspace.path, level);
-  const { checks, skippedChecks, aliasNormalizations } = normalized;
-  const { level: validationLevel, reason: validationLevelReason, changedFiles } = selectValidationLevel(workspace.path, workspace, args.validationLevel);
+  const { checks, checkUnits, skippedChecks, aliasNormalizations } = normalized;
+  const { level: validationLevel, reason: validationLevelReason, changedFiles } = selectValidationLevel(workspace.path, workspace, args.validationLevel, validationScope);
   const policy = resolvePolicy(workspace, config);
 
   if (checks.length === 0) {
@@ -94,6 +103,11 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
     : config;
   const tailChars = fullOutput ? CHECK_OUTPUT_TAIL_FULL : CHECK_OUTPUT_TAIL_DEFAULT;
   const results = [];
+  const currentFingerprint = await createValidationFingerprint(workspace, config);
+  const recentEvidence = currentTaskId ? readRecentWorkflowEvidence(config, currentTaskId, 100) : [];
+  const reusedChecks = [];
+  let executedUnits = 0;
+  let reusedUnits = 0;
   const signal = combineAbortSignals(
     getCurrentTaskAbortSignal(),
     args._operationTaskId ? nativeToolTaskSignal(args._operationTaskId) : undefined,
@@ -103,7 +117,22 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
   publishValidationProgress({ checks, skippedChecks, results, currentIndex: 0, resultStatus: 'pending' });
   for (let index = 0; index < checks.length; index += 1) {
     if (signal?.aborted) break;
-    const command = checks[index];
+    const unit = checkUnits[index] || { command: checks[index], cwd: '.' };
+    const command = unit.command;
+    const reusable = recentEvidence.find(receipt => checkEvidenceReusable(receipt, {
+      commandId: unit.id || `explicit:${index}`,
+      command,
+      cwd: unit.cwd || '.',
+      repositoryFingerprint: currentFingerprint.fingerprint
+    }));
+    if (reusable) {
+      const reusedSummary = { command, cwd: unit.cwd || '.', ok: true, reused: true };
+      results.push(reusedSummary);
+      reusedUnits += 1;
+      reusedChecks.push(unit.id || command);
+      publishValidationProgress({ checks, skippedChecks, results, currentCheck: sanitizeDisplayText(command, 300), currentIndex: index + 1, resultStatus: 'passed' });
+      continue;
+    }
     const displayCommand = sanitizeDisplayText(command, 300) || `Check ${index + 1}`;
     publishValidationProgress({
       checks,
@@ -120,14 +149,32 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
       'relai.validation.total': checks.length,
       'relai.validation.plan_id': String(args.planId || '')
     }, () => runProcess(command, [], {
-      cwd: workspace.path,
+      cwd: path.resolve(workspace.path, unit.cwd || '.'),
       shell: true,
       commandString: command,
       timeout: clampNumber(args.timeoutMs, 1000, 24 * 60 * 60 * 1000, 120000),
       signal
     }, runConfig));
     const summary = boundCheckOutput({ command, ...summarizeCommand(result) }, tailChars);
+    executedUnits += 1;
     results.push(summary);
+    if (summary.ok && currentTaskId) {
+      const authority = readTaskIntegrity(config, currentTaskId, workspace.alias);
+      const workspaceIntegrity = readWorkspaceIntegrity(config, workspace.alias);
+      const receipt = buildWorkflowEvidenceReceipt({
+        tool: 'relai_validate',
+        args: { command, cwd: unit.cwd || '.' },
+        result: { ok: true, exitCode: summary.exitCode, durationMs: summary.durationMs, validationStatus: 'passed' },
+        auditEntry: {
+          ts: new Date().toISOString(),
+          taskMutationGeneration: authority?.mutationGeneration || 0,
+          taskWorkspaceGeneration: workspaceIntegrity?.generation || 0
+        },
+        repositoryFingerprint: currentFingerprint.fingerprint,
+        commandId: unit.id || `explicit:${index}`
+      });
+      if (receipt) recordWorkflowEvidence(config, currentTaskId, receipt);
+    }
     const status = checkResultStatus(summary);
     publishValidationProgress({
       checks,
@@ -156,10 +203,10 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
   });
 
   const nextAction = ok
-    ? 'Completion is not automatic. If the work session is finished, call relai_work with action "finish" once; on future final validations, pass complete:true with summary to validate and close the session atomically.'
+    ? 'Validation is current for this work_id. Do not rerun unchanged checks; review task-owned changes if needed, then call relai_work with action "finish" once, or use complete:true on the validating call to close atomically.'
     : cancelled
-      ? 'The validation was cancelled. Review partial results before starting a new task or rerunning validation.'
-      : 'Fix the failing validation before reporting task completion.';
+      ? 'Validation was cancelled. Review the partial result and resume only the smallest still-relevant check.'
+      : 'Fix or diagnose the failing check, then rerun only the smallest relevant validation unless workflow guidance widens the boundary.';
   const validationFingerprint = (await createValidationFingerprint(workspace, config)).fingerprint;
   const validationResult = {
     ok,
@@ -179,6 +226,9 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
     validationFingerprint,
     cancelled,
     completedUnits: completedValidationUnits(results),
+    executedUnits,
+    reusedUnits,
+    reusedChecks,
     totalUnits: checks.length,
     ...(failedCheck ? { failedCheck } : {}),
     nextAction,
@@ -193,8 +243,8 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
 export {
   relaiVerify,
   hasRequestedChecks,
-  detectVerifyChecks,
-  normalizeVerifyChecks,
-  publishValidationProgress,
-  checkResultStatus
+
+
+
+
 };

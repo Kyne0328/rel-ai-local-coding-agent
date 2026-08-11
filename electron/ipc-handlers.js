@@ -15,6 +15,12 @@ function registerIpcHandlers(deps) {
     getWizardWindow: deps.getWizardWindow,
     closeWizard: deps.closeWizard,
     getRecoveryConfig: deps.getRecoveryConfig,
+    startWizardCloudPairing: deps.startWizardCloudPairing,
+    getWizardCloudStatus: deps.getWizardCloudStatus,
+    cancelWizardCloudPairing: deps.cancelWizardCloudPairing,
+    getWizardRecoveryCode: deps.getWizardRecoveryCode,
+    createWizardDeviceLink: deps.createWizardDeviceLink,
+    recoverWizardCloudIdentity: deps.recoverWizardCloudIdentity,
     saveLauncherConfig: deps.saveLauncherConfig,
     launchConfiguredDesktop: deps.launchConfiguredDesktop,
     shell: deps.shell
@@ -47,6 +53,18 @@ function registerIpcHandlers(deps) {
     toggleDashboardMaximize: deps.toggleDashboardMaximize,
     requestDashboardClose: deps.requestDashboardClose,
     openSettingsWindow: deps.openSettingsWindow
+  });
+  registerGatewayIpc({
+    ipcMain: deps.ipcMain,
+    dashboardOnly,
+    getGatewayStatus: deps.getGatewayStatus,
+    beginGatewayPairing: deps.beginGatewayPairing,
+    cancelGatewayPairing: deps.cancelGatewayPairing,
+    listGatewayDevices: deps.listGatewayDevices,
+    revokeGatewayDevice: deps.revokeGatewayDevice,
+    setGatewayMode: deps.setGatewayMode,
+    getGatewayRecovery: deps.getGatewayRecovery,
+    getGatewayUsage: deps.getGatewayUsage
   });
   registerDesktopSettingsIpc({
     ipcMain: deps.ipcMain,
@@ -94,6 +112,12 @@ function registerSetupIpc({
   getWizardWindow,
   closeWizard,
   getRecoveryConfig,
+  startWizardCloudPairing,
+  getWizardCloudStatus,
+  cancelWizardCloudPairing,
+  getWizardRecoveryCode,
+  createWizardDeviceLink,
+  recoverWizardCloudIdentity,
   saveLauncherConfig,
   launchConfiguredDesktop,
   shell
@@ -109,6 +133,12 @@ function registerSetupIpc({
     return { ok: true };
   }));
   ipcMain.handle('recovery:get-config', event => windowOnly(event, getWizardWindow, 'Recovery configuration', getRecoveryConfig));
+  ipcMain.handle('wizard:cloud-pair', event => windowOnly(event, getWizardWindow, 'Cloud pairing', startWizardCloudPairing));
+  ipcMain.handle('wizard:cloud-status', event => windowOnly(event, getWizardWindow, 'Cloud pairing status', getWizardCloudStatus));
+  ipcMain.handle('wizard:cloud-cancel', event => windowOnly(event, getWizardWindow, 'Cloud pairing cancellation', cancelWizardCloudPairing));
+  ipcMain.handle('wizard:cloud-recovery-get', event => windowOnly(event, getWizardWindow, 'Cloud recovery code', getWizardRecoveryCode));
+  ipcMain.handle('wizard:cloud-link-create', event => windowOnly(event, getWizardWindow, 'Cloud device link code', createWizardDeviceLink));
+  ipcMain.handle('wizard:cloud-recover', (event, recoveryCode) => windowOnly(event, getWizardWindow, 'Cloud identity recovery', () => recoverWizardCloudIdentity(recoveryCode))); 
   ipcMain.handle('url:open-link', (event, value) => windowOnly(event, getWizardWindow, 'External setup links', async () => {
     const target = String(value || '').trim();
     if (!isAllowedNgrokUrl(target)) throw new Error('Only approved ngrok setup links can be opened from the setup wizard.');
@@ -182,6 +212,40 @@ function registerDashboardWindowIpc({
   ipcMain.handle('desktop:window:toggle-maximize', event => dashboardOnly(event, toggleDashboardMaximize));
   ipcMain.handle('desktop:window:close', event => dashboardOnly(event, requestDashboardClose));
   ipcMain.handle('desktop:open-settings', event => dashboardOnly(event, openSettingsWindow));
+}
+
+function registerGatewayIpc({
+  ipcMain,
+  dashboardOnly,
+  getGatewayStatus,
+  beginGatewayPairing,
+  cancelGatewayPairing,
+  listGatewayDevices,
+  revokeGatewayDevice,
+  setGatewayMode,
+  getGatewayRecovery,
+  getGatewayUsage
+}) {
+  ipcMain.handle('desktop:gateway:get', event => dashboardOnly(event, getGatewayStatus));
+  ipcMain.handle('desktop:gateway:pair', event => dashboardOnly(event, beginGatewayPairing));
+  ipcMain.handle('desktop:gateway:pair-cancel', event => dashboardOnly(event, cancelGatewayPairing));
+  ipcMain.handle('desktop:gateway:devices', event => dashboardOnly(event, listGatewayDevices));
+  ipcMain.handle('desktop:gateway:device-revoke', (event, request = {}) => dashboardOnly(event, () => {
+    const deviceId = String(request.deviceId || '').trim();
+    if (!/^[0-9a-f-]{36}$/i.test(deviceId)) throw new Error('A valid gateway device ID is required.');
+    return revokeGatewayDevice(deviceId);
+  }));
+  ipcMain.handle('desktop:gateway:mode-set', (event, request = {}) => dashboardOnly(event, () => {
+    const mode = String(request.mode || '').trim();
+    if (!['cloud', 'direct'].includes(mode)) throw new Error('Gateway mode must be cloud or direct.');
+    return setGatewayMode(mode);
+  }));
+  ipcMain.handle('desktop:gateway:recovery-get', event => dashboardOnly(event, getGatewayRecovery));
+  ipcMain.handle('desktop:gateway:usage', (event, month) => dashboardOnly(event, () => {
+    const value = String(month || '').trim();
+    if (value && !/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) throw new Error('Usage month must use YYYY-MM.');
+    return getGatewayUsage(value);
+  }));
 }
 
 function registerDesktopSettingsIpc({

@@ -61,6 +61,35 @@ function titleForTool(tool, details = {}) {
   return titles[String(tool || '')] || '';
 }
 
+function projectWorkflowSummary(workflow) {
+  if (!workflow || typeof workflow !== 'object') return undefined;
+  const top = Array.isArray(workflow.recommendedActions) ? workflow.recommendedActions[0] : null;
+  const stage = cleanText(workflow.stage, 40);
+  const risk = cleanText(workflow.risk?.level || workflow.risk, 20);
+  const boundary = cleanText(workflow.boundary?.level || workflow.boundary, 30);
+  const recommendedAction = cleanText(top?.reason || top?.action || workflow.recommendedAction, 300);
+  if (!stage && !risk && !boundary && !recommendedAction) return undefined;
+  return {
+    stage,
+    risk,
+    boundary,
+    recommendedAction,
+    evidenceFresh: Math.max(0, Number(workflow.evidence?.fresh ?? workflow.evidenceFresh ?? 0) || 0),
+    evidenceStale: Math.max(0, Number(workflow.evidence?.stale ?? workflow.evidenceStale ?? 0) || 0),
+    repeatCount: Math.min(99, Math.max(0, Number(workflow.repeatCount || 0) || 0))
+  };
+}
+function workflowActivityMetadata(workflow) {
+  if (!workflow || typeof workflow !== 'object') return {};
+  const top = Array.isArray(workflow.recommendedActions) ? workflow.recommendedActions[0] : null;
+  return sanitizeActivityMetadata({
+    workflowStage: cleanText(workflow.stage, 40),
+    workflowRisk: cleanText(workflow.risk?.level, 20),
+    workflowBoundary: cleanText(workflow.boundary?.level, 30),
+    workflowNextAction: cleanText(top?.reason || top?.action, 300),
+    workflowRepeatCount: Math.min(99, Math.max(0, Number(workflow.repeatCount || 0)))
+  });
+}
 function buildToolActivityDetails(name, args = {}, value = null, error = null, options = {}) {
   const ok = error == null && value?.ok !== false;
   const category = categoryForTool(name, options);
@@ -173,9 +202,10 @@ function normalizeTaskProgress(progress, status) {
     if (Number.isFinite(Number(progress.percentage))) {
       normalized.percentage = Math.min(normalized.percentage, Math.max(0, Math.round(Number(progress.percentage))));
     }
-    if (['failed', 'cancelled'].includes(status) && normalized.percentage >= 100) normalized.percentage = 99;
+    if (['failed', 'cancelled', 'inactive'].includes(status) && normalized.percentage >= 100) normalized.percentage = 99;
     return normalized;
   }
+  if (progress?.mode === 'complete' && status === 'inactive') return { mode: 'indeterminate', label: cleanText(progress.label || 'Inactive', 120) };
   if (progress?.mode === 'complete' && !TERMINAL_STATUSES.has(status)) return completeProgress(progress.label);
   return { mode: 'indeterminate', ...(progress?.label ? { label: cleanText(progress.label, 120) } : {}) };
 }
@@ -497,7 +527,8 @@ function sanitizeTaskRecord(record) {
     errorSummary: MAX_SUMMARY_LENGTH,
     terminalReason: MAX_SUMMARY_LENGTH,
     cancellationInitiator: 80,
-    endReason: 120
+    endReason: 120,
+    resumeStatus: 80
   })) {
     if (value[key] != null) value[key] = sanitizeDisplayText(value[key], limit);
   }
@@ -507,6 +538,14 @@ function sanitizeTaskRecord(record) {
   return value;
 }
 
+function sanitizeTaskRecordForProjection(record) {
+  const value = sanitizeTaskRecord(record);
+  if (!value || typeof value !== 'object') return value;
+  const projected = { ...value };
+  delete projected.workflowEvidence;
+  if (projected.workflow) projected.workflow = projectWorkflowSummary(projected.workflow);
+  return projected;
+}
 function sanitizeStructuredValue(value, depth = 0) {
   if (depth > 5 || value == null) return undefined;
   if (typeof value === 'string') return sanitizeDisplayText(value, MAX_METADATA_STRING);
@@ -561,23 +600,25 @@ function isoTime(value) {
 }
 
 export {
-  TASK_MODEL_VERSION,
-  TERMINAL_STATUSES,
+
+
   buildSafeActivityProjection,
   buildToolActivityDetails,
-  cleanText,
+  workflowActivityMetadata,
+
   completeProgress,
   createActivityEvent,
   deriveTaskTitle,
   determinateProgress,
   incompleteProgress,
-  normalizeActivityError,
+
   normalizeTaskProgress,
   sanitizeActivityMetadata,
   sanitizeActivityEventRecord,
   sanitizeCompletionSummary,
   sanitizeDisplayText,
   sanitizeTaskRecord,
-  sanitizeUrl,
-  titleForTool
+  sanitizeTaskRecordForProjection,
+
+
 };

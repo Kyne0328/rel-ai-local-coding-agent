@@ -6,6 +6,7 @@ import { getToolSurfaceManifest } from "./tools.js";
 import { workspaceProfile, workspaceTree, workspaceInspect, workspaceList } from "./tools/status.js";
 import { packageMetadata as pkg } from './packageMetadata.js';
 import { MCP_PROTOCOL_VERSION } from './mcp/protocol.js';
+import { listSkillLibrary, readSkillResource } from './skillLibrary.js';
 
 const MIME_JSON = 'application/json';
 const MIME_MARKDOWN = 'text/markdown';
@@ -16,7 +17,8 @@ function listResources() {
     resource('relai://server/help', 'Rel.AI MCP Help', 'How ChatGPT should use this Rel.AI MCP server.', MIME_MARKDOWN),
     resource('relai://server/config', 'Rel.AI MCP Config Summary', 'Safe connector configuration summary without secrets.', MIME_JSON),
     resource('relai://server/tool-surface', 'Rel.AI MCP Tool Surface', 'Machine-readable current tool surface and output contracts.', MIME_JSON),
-    resource('relai://server/workspaces', 'Rel.AI MCP Workspaces', 'Configured and managed workspace aliases with safe metadata.', MIME_JSON)
+    resource('relai://server/workspaces', 'Rel.AI MCP Workspaces', 'Configured and managed workspace aliases with safe metadata.', MIME_JSON),
+    resource('relai://skills', 'Rel.AI Skill Library', 'Built-in and user-installed skills available to Rel.AI workspaces.', MIME_JSON)
   ];
   for (const alias of allWorkspaceAliases(config)) {
     resources.push(
@@ -40,6 +42,8 @@ function readResource(uri) {
   if (parsed.kind === 'server' && parsed.name === 'config') return contents(uri, MIME_JSON, publicConfigSummary(config), config);
   if (parsed.kind === 'server' && parsed.name === 'tool-surface') return contents(uri, MIME_JSON, getToolSurfaceManifest(config), config);
   if (parsed.kind === 'server' && parsed.name === 'workspaces') return contents(uri, MIME_JSON, workspaceList(config), config);
+  if (parsed.kind === 'skills') return contents(uri, MIME_JSON, listSkillLibrary(config), config);
+  if (parsed.kind === 'skill' && parsed.name === 'file') return contents(uri, 'text/plain', readSkillResource(config, parsed.skillId, parsed.path).text, config);
   if (parsed.kind === 'workspace') {
     const args = { workspace: parsed.workspace, maxEntries: 800 };
     if (parsed.name === 'inspect') return contents(uri, MIME_JSON, workspaceInspect(config, args), config);
@@ -55,6 +59,8 @@ function parseRelaiUri(uri) {
   const parts = text.slice('relai://'.length).split('/').map(part => decodeURIComponent(part));
   if (parts[0] === 'server') return { kind: 'server', name: parts[1] || '' };
   if (parts[0] === 'workspace') return { kind: 'workspace', workspace: parts[1] || '', name: parts[2] || '' };
+  if (parts[0] === 'skills') return { kind: 'skills' };
+  if (parts[0] === 'skill') return { kind: 'skill', skillId: parts[1] || '', name: parts[2] || '', path: parts[3] || '' };
   throw new Error(`Unsupported resource URI: ${text}`);
 }
 
@@ -74,6 +80,7 @@ function resourceCacheHint(uri) {
   if (text === 'relai://server/help' || text === 'relai://server/tool-surface') return { ttlMs: 60000, cacheScope: 'private' };
   if (text === 'relai://server/config' || text === 'relai://server/workspaces') return { ttlMs: 15000, cacheScope: 'private' };
   if (text.startsWith('relai://workspace/')) return { ttlMs: 5000, cacheScope: 'private' };
+  if (text === 'relai://skills' || text.startsWith('relai://skill/')) return { ttlMs: 5000, cacheScope: 'private' };
   return { ttlMs: 0, cacheScope: 'private' };
 }
 
@@ -83,6 +90,7 @@ function resourceRevision(config, uri) {
   hash.update('\0').update(String(uri || ''));
   hash.update('\0').update(stableJson(publicConfigSummary(config)));
   const parsed = parseRelaiUri(uri);
+  if (parsed.kind === 'skills' || parsed.kind === 'skill') hash.update('\0').update(stableJson(listSkillLibrary(config)));
   if (parsed.kind === 'workspace' && parsed.workspace) {
     try {
       const workspace = resolveWorkspace(config, parsed.workspace);
@@ -134,4 +142,4 @@ ${workspaces}
 `;
 }
 
-export { listResources, readResource, resourceCacheHint, resourceRevision };
+export { listResources, readResource, resourceCacheHint,  };

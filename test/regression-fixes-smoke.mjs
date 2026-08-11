@@ -43,12 +43,15 @@ function read(rel) {
   }), /Unsafe workspace path refused/);
 }
 
-// Connector next steps should not duplicate the hardcoded setup steps when payload.nextSteps
-// is absent; it should render only extra steps from the payload.
+// Shared ChatGPT guidance owns create and reconnect instructions.
 {
   const connector = read('src/ui/features/settings/connector.js');
-  assert.match(connector, /const extraSteps = Array\.isArray\(payload\.nextSteps\) \? payload\.nextSteps : \[\]/);
-  assert.doesNotMatch(connector, /Open ChatGPT settings and add an MCP server[\s\S]*steps\.slice\(0, 3\)/);
+  const guidance = read('src/ui/features/settings/connection-guidance.js');
+  assert.match(connector, /createChatGptSetupGuide/);
+  assert.match(connector, /connectionGuideMode/);
+  assert.match(guidance, /Plus or Pro.*Plugins/i);
+  assert.match(guidance, /Business, Enterprise, or Edu.*workspace Apps/i);
+  assert.match(guidance, /do not delete or recreate the app/i);
 }
 
 // Dashboard tool metadata stays internally consistent; workspace cards do not
@@ -66,10 +69,11 @@ function read(rel) {
 // Audit-fix smoke guards for docs, UI copy, and tunnel process safety.
 {
   assert.doesNotMatch(read('README.md'), /Settings -> Connector/);
-  assert.match(read('README.md'), /Settings > Apps > Create/);
+  assert.match(read('README.md'), /Plus or Pro[\s\S]*Plugins/i);
+  assert.match(read('README.md'), /Business, Enterprise, or Edu[\s\S]*workspace.*Apps/i);
   assert.doesNotMatch(read('docs/ONE_CLICK_SETUP.md'), /removed tools[^\n]*relai_apply_update/);
-  assert.match(read('electron/renderer/status.html'), /Public endpoint/);
-  assert.match(read('electron/renderer/status.js'), /Publishing tunnel/);
+  assert.match(read('electron/renderer/status.html'), /Secure endpoint|Public endpoint/);
+  assert.match(read('electron/renderer/status.js'), /Publishing (?:secure endpoint|tunnel)/);
   assert.doesNotMatch(read('electron/main.js'), /killOrphanedNgrok\(\)/);
 }
 

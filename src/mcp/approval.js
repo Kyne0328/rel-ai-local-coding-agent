@@ -52,4 +52,4 @@ function stableJson(value) {
   return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
 }
 
-export { requireApprovalIfNeeded, approvalRequirement, approvalDigest };
+export { requireApprovalIfNeeded, approvalRequirement,  };

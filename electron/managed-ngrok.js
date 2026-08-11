@@ -58,7 +58,8 @@ function fileSha256(file) {
   return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 }
 
-function synchronizeManagedBinary(source, target) {
+/** @knipdynamic Intentional dynamic/cross-workspace module boundary. */
+export function synchronizeManagedBinary(source, target) {
   const sourceSha256 = fileSha256(source);
   if (fs.existsSync(target) && fileSha256(target) === sourceSha256) {
     ensureExecutable(target);
@@ -85,7 +86,8 @@ function ensureManagedNgrok() {
   return synchronizeManagedBinary(source, managedNgrokPath());
 }
 
-function writeNgrokConfig(authtoken) {
+/** @knipdynamic Intentional dynamic/cross-workspace module boundary. */
+export function writeNgrokConfig(authtoken) {
   const token = normalizeNgrokAuthtoken(authtoken);
   const configPath = ngrokConfigPath();
   fs.mkdirSync(path.dirname(configPath), { recursive: true, mode: 0o700 });
@@ -111,7 +113,8 @@ async function prepareManagedNgrok({ authtoken, onLog = () => {} } = {}) {
   };
 }
 
-function extractPublicUrl(text, expectedDomain = '') {
+/** @knipdynamic Intentional dynamic/cross-workspace module boundary. */
+export function extractPublicUrl(text, expectedDomain = '') {
   const input = String(text || '');
   const pattern = new RegExp(URL_RE.source, 'ig');
   for (const match of input.matchAll(pattern)) {
@@ -124,7 +127,8 @@ function extractPublicUrl(text, expectedDomain = '') {
   return '';
 }
 
-function extractStartedTunnelUrl(text, expectedDomain = '') {
+/** @knipdynamic Intentional dynamic/cross-workspace module boundary. */
+export function extractStartedTunnelUrl(text, expectedDomain = '') {
   for (const line of String(text || '').split(/\r?\n/)) {
     if (!/\bstarted tunnel\b/i.test(line)) continue;
     const publicUrl = extractPublicUrl(line, expectedDomain);
@@ -210,24 +214,8 @@ function startManagedNgrokTunnel({ domain, port, timeoutMs = 30000, onLog = () =
   });
 }
 
-function previewManagedNgrokCommand(domain, port) {
-  const safeDomain = sanitizeDomain(domain || '<domain>');
-  const safePort = sanitizePort(port);
-  return `managed ngrok http --url=https://${safeDomain} http://127.0.0.1:${safePort} --config ${ngrokConfigPath()} --log=stdout --log-format=logfmt --log-level=info`;
-}
 
 export {
-  bundledNgrokPath,
-  ensureManagedNgrok,
-  extractPublicUrl,
-  extractStartedTunnelUrl,
-  fileSha256,
-  managedNgrokPath,
-  ngrokConfigPath,
-  normalizeNgrokAuthtoken,
   prepareManagedNgrok,
-  previewManagedNgrokCommand,
   startManagedNgrokTunnel,
-  synchronizeManagedBinary,
-  writeNgrokConfig
 };

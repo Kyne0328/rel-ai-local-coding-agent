@@ -1,9 +1,9 @@
 
 
-import { cleanText, isoNow, progressPayload } from "./app-updater-state.js";
+import { assessUpdateSynchronization, cleanText, isoNow, progressPayload, updateCompatibilityMetadata } from "./app-updater-state.js";
 import { compareVersions, isStableVersion } from "./update-version.js";
 
-function bindUpdaterEvents({ autoUpdater, handlers, status, emit, handleError, store, now, log }) {
+function bindUpdaterEvents({ autoUpdater, handlers, status, emit, handleError, handleEventError = handleError, store, now, log, currentCompatibility = {} }) {
   const bind = (eventName, handler) => {
     autoUpdater.on(eventName, handler);
     handlers.push([eventName, handler]);
@@ -20,9 +20,14 @@ function bindUpdaterEvents({ autoUpdater, handlers, status, emit, handleError, s
     if (compareVersions(availableVersion, status().currentVersion) <= 0) {
       return handleError(new Error(`Update metadata version ${availableVersion} is not newer than installed version ${status().currentVersion}.`));
     }
+    const availableCompatibility = updateCompatibilityMetadata(info, availableVersion);
+    const updateSynchronization = availableCompatibility
+      ? assessUpdateSynchronization(currentCompatibility, availableCompatibility)
+      : null;
     log(`Application update ${availableVersion} was found.`);
     emit({
       state: 'available', availableVersion,
+      availableCompatibility, updateSynchronization,
       releaseDate: cleanText(info?.releaseDate, 80),
       checkedAt: isoNow(now), downloadedAt: '', progress: null,
       integrityVerified: false, error: '', errorCode: ''
@@ -33,6 +38,7 @@ function bindUpdaterEvents({ autoUpdater, handlers, status, emit, handleError, s
     log('Rel.AI MCP is up to date.');
     emit({
       state: 'up_to_date', availableVersion: '', releaseDate: '',
+      availableCompatibility: null, updateSynchronization: null,
       checkedAt: isoNow(now), downloadedAt: '', progress: null,
       integrityVerified: false, error: '', errorCode: ''
     });
@@ -57,7 +63,7 @@ function bindUpdaterEvents({ autoUpdater, handlers, status, emit, handleError, s
     progress: null,
     integrityVerified: false
   }));
-  bind('error', handleError);
+  bind('error', handleEventError);
 }
 
 export { bindUpdaterEvents };

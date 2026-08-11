@@ -179,6 +179,9 @@ for (const status of ['blocked', 'validating', 'validation_failed', 'completed',
 assert.equal(workSessionStateView({ status: 'expired' }).terminal, true);
 assert.equal(workSessionStateView({ status: 'validating' }).active, true);
 assert.equal(workSessionStateView({ status: 'blocked' }).terminal, false);
+const inactiveProgress = taskProgressHtml({ mode: 'indeterminate', label: 'Waiting for the next task step' }, 'inactive');
+assert.match(inactiveProgress, /Inactive|Ready to resume/i);
+assert.doesNotMatch(inactiveProgress, /expired/i, 'resumable inactive sessions must not be presented as expired');
 
 const observableActiveSessions = activeTaskList({
   activeCalls: 9,
@@ -211,8 +214,9 @@ const sessionsSource = fs.readFileSync(path.join(root, 'src/ui/features/sessions
 const processesSource = fs.readFileSync(path.join(root, 'src/ui/features/processes/index.js'), 'utf8');
 const connectorSource = fs.readFileSync(path.join(root, 'src/ui/features/settings/connector.js'), 'utf8');
 const cssSource = fs.readFileSync(path.join(root, 'src/ui/styles/app.css'), 'utf8');
+const sessionCssSource = fs.readFileSync(path.join(root, 'src/ui/features/sessions/styles.css'), 'utf8');
 
-assert.match(sessionsSource, /Repository work sessions/);
+assert.match(sessionsSource, /Recent sessions/, 'Sessions surface must use the compact user-facing heading');
 assert.match(sessionsSource, /Work session ID/);
 assert.match(sessionsSource, /Process ID/);
 assert.match(sessionsSource, /aria-label="Copy \$\{esc\(label\)\}/);
@@ -229,7 +233,7 @@ assert.match(processesSource, /Output observed/);
 assert.match(connectorSource, /Native MCP Tasks/);
 assert.match(connectorSource, /Execution mode/);
 assert.doesNotMatch(cssSource, /\.native-task-row|\.runtime-activity-spinner|\.runtime-capability-row/);
-assert.match(cssSource, /\.task-progress\.static\.terminal\.cancelled[\s\S]*--ui-status-neutral-background/);
-assert.match(cssSource, /@media \(prefers-reduced-motion: reduce\)/);
+assert.match(sessionCssSource, /\.task-progress\.static\.terminal\.cancelled[\s\S]*--ui-status-neutral-background/);
+assert.match(sessionCssSource, /@media \(prefers-reduced-motion: reduce\)/);
 
 console.log('Dashboard capability, work-session, native-task, process, accessibility, and missing-field observability contracts passed.');

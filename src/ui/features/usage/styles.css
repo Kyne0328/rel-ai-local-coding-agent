@@ -1,0 +1,50 @@
+.usage-page { @apply grid gap-3; }
+.usage-toolbar { @apply items-start; }
+.usage-toolbar-controls { @apply flex flex-wrap items-end gap-2; }
+.usage-month-control { @apply grid gap-1 text-[11px] font-semibold; color: var(--ui-text-secondary); }
+.usage-month-control input { min-width: 154px; }
+.usage-content, .usage-overview { @apply grid gap-3; }
+.usage-loading { @apply rounded-xl border p-5 text-[12px]; color: var(--ui-text-secondary); border-color: var(--ui-border-default); background: var(--ui-surface-primary); }
+.usage-month-summary { @apply flex items-start justify-between gap-5 rounded-xl border p-4; border-color: var(--ui-border-default); background: var(--ui-surface-primary); }
+.usage-month-summary > div { @apply grid min-w-0 gap-1; }
+.usage-month-summary strong { @apply text-[17px]; }
+.usage-month-summary p { @apply m-0 max-w-[560px] text-[11px] leading-5; color: var(--ui-text-secondary); }
+.usage-metrics { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); border: 1px solid var(--ui-border-default); border-radius: var(--radius-lg); overflow: hidden; background: var(--ui-surface-primary); }
+.usage-metric { @apply grid min-w-0 gap-1 p-4; border-right: 1px solid var(--ui-border-default); border-bottom: 1px solid var(--ui-border-default); }
+.usage-metric:nth-child(4n) { border-right: 0; }
+.usage-metric:nth-last-child(-n+4) { border-bottom: 0; }
+.usage-metric span { @apply text-[10px] font-semibold uppercase tracking-[0.04em]; color: var(--ui-text-tertiary); }
+.usage-metric strong { @apply truncate text-[18px] font-extrabold; color: var(--ui-text-primary); }
+.usage-breakdown .card-head p { @apply m-0 mt-1 text-[11px]; color: var(--ui-text-secondary); }
+.usage-table-wrap { @apply w-full overflow-x-auto; }
+.usage-table { width: 100%; min-width: 680px; border-collapse: collapse; }
+.usage-table th, .usage-table td { @apply border-b px-3 py-2.5 text-left text-[11px]; border-color: var(--ui-border-subtle); }
+.usage-table thead th { @apply text-[10px] font-semibold uppercase tracking-[0.04em]; color: var(--ui-text-tertiary); }
+.usage-table tbody th { @apply max-w-[320px] truncate font-semibold; color: var(--ui-text-primary); }
+.usage-table td { color: var(--ui-text-secondary); }
+.usage-table tbody tr:last-child th, .usage-table tbody tr:last-child td { border-bottom: 0; }
+.usage-breakdown-empty { @apply rounded-lg border border-dashed px-4 py-5 text-center text-[11px]; color: var(--ui-text-tertiary); border-color: var(--ui-border-default); }
+.usage-unavailable { @apply grid gap-2 rounded-xl border p-5; border-color: var(--ui-border-default); background: var(--ui-surface-primary); }
+.usage-unavailable strong { @apply text-[14px]; }
+.usage-unavailable p { @apply m-0 text-[11px] leading-5; color: var(--ui-text-secondary); }
+.usage-unavailable button { @apply mt-1 justify-self-start; }
+@media (max-width: 760px) {
+  .usage-toolbar-controls { @apply w-full items-stretch; }
+  .usage-month-control { @apply min-w-0 flex-1; }
+  .usage-month-control input { min-width: 0; width: 100%; }
+  .usage-month-summary { @apply flex-col; }
+  .usage-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .usage-metric:nth-child(4n) { border-right: 1px solid var(--ui-border-default); }
+  .usage-metric:nth-child(2n) { border-right: 0; }
+  .usage-metric:nth-last-child(-n+4) { border-bottom: 1px solid var(--ui-border-default); }
+  .usage-metric:nth-last-child(-n+2) { border-bottom: 0; }
+  .usage-table { min-width: 620px; }
+}
+@media (max-width: 420px) {
+  .usage-toolbar-controls { @apply grid; grid-template-columns: minmax(0,1fr); }
+  .usage-toolbar-controls button { @apply w-full; }
+  .usage-metrics { grid-template-columns: minmax(0,1fr); }
+  .usage-metric, .usage-metric:nth-child(2n), .usage-metric:nth-child(4n) { border-right: 0; }
+  .usage-metric, .usage-metric:nth-last-child(-n+2), .usage-metric:nth-last-child(-n+4) { border-bottom: 1px solid var(--ui-border-default); }
+  .usage-metric:last-child { border-bottom: 0; }
+}

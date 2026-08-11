@@ -1,122 +1,109 @@
 <!doctype html>
-<html lang="en">
+<html>
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
-<title>Rel.AI MCP - Setup</title>
-<link rel="stylesheet" href="color-tokens.css">
-<link rel="stylesheet" href="app.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
+  <title>Rel.AI MCP Setup</title>
+  <link rel="stylesheet" href="./color-tokens.css" />
+  <link rel="stylesheet" href="./app.css" />
 </head>
-<body class="electron-page wizard-page">
-<div class="wizard">
-  <div class="app-card setup-card">
-    <div class="card-top brand-row">
-      <img class="brand-badge" src="relai-logo.png" alt="Rel.AI MCP">
-      <div>
-        <div class="brand-title" id="wizardBrandTitle">Rel.AI MCP Launcher</div>
-        <div class="brand-sub" id="wizardBrandSub">Secure connection setup</div>
+<body class="wizard-body">
+  <main class="wizard-shell" data-cloud-flow>
+    <header class="wizard-brand"><div class="wizard-logo">R</div><div><span>Rel.AI</span><small>MCP</small></div></header>
+    <nav class="wizard-progress" aria-label="Setup progress">
+      <div class="wizard-progress-item active" data-progress="1"><span>1</span><strong>Connect ChatGPT</strong></div>
+      <i></i>
+      <div class="wizard-progress-item" data-progress="2"><span>2</span><strong>Secure this device</strong></div>
+      <i></i>
+      <div class="wizard-progress-item" data-progress="3"><span>3</span><strong>Next steps</strong></div>
+    </nav>
+
+    <section class="wizard-step wizard-cloud-step" data-step="1">
+      <div class="wizard-cloud-hero">
+        <span class="wizard-eyebrow">Rel.AI Cloud</span>
+        <h1>Connect this computer to ChatGPT</h1>
+        <p>Rel.AI keeps repositories and development work on this computer. ChatGPT reaches it through the shared Rel.AI connection after you approve a short-lived pairing code.</p>
       </div>
-    </div>
-
-    <div class="progress-wrap" aria-label="Setup progress">
-      <ol class="progress progress-labeled">
-        <li class="progress-step" id="p1"><span>1</span><strong>Welcome</strong></li>
-        <li class="progress-step" id="p2"><span>2</span><strong>Local service</strong></li>
-        <li class="progress-step" id="p3"><span>3</span><strong>Secure connection</strong></li>
-        <li class="progress-step" id="p4"><span>4</span><strong>Launch</strong></li>
-      </ol>
-    </div>
-
-    <div class="content">
-      <section class="step active" id="step1" aria-labelledby="step1Title" aria-hidden="false">
-        <div class="eyebrow">Four-step setup</div>
-        <h1 id="step1Title" tabindex="-1">Connect ChatGPT to your local repositories.</h1>
-        <p class="subtitle">Rel.AI runs locally, publishes one secure HTTPS MCP endpoint through your ngrok account, and keeps that ChatGPT app URL stable.</p>
-        <div class="setup-principles" aria-label="What this setup provides">
-          <article class="setup-principle">
-            <span class="setup-principle-number" aria-hidden="true">01</span>
-            <div><strong>Local by default</strong><span>Your repositories remain on this computer.</span></div>
-          </article>
-          <article class="setup-principle">
-            <span class="setup-principle-number" aria-hidden="true">02</span>
-            <div><strong>Scoped access</strong><span>ChatGPT receives explicit workspace tools instead of unrestricted shell access.</span></div>
-          </article>
-          <article class="setup-principle">
-            <span class="setup-principle-number" aria-hidden="true">03</span>
-            <div><strong>Stable connection</strong><span>The permanent tunnel URL can be reused after restarts.</span></div>
-          </article>
+      <div class="wizard-cloud-card">
+        <div class="wizard-cloud-status" id="cloudStatus" aria-live="polite">
+          <strong>Not connected yet</strong>
+          <span>Create a short-lived pairing code, then connect Rel.AI from ChatGPT Plugins on Plus or Pro, or from your workspace Apps on managed plans.</span>
         </div>
-        <button class="primary setup-next" id="startWizardBtn" type="button">Start setup</button>
-      </section>
-
-      <section class="step" id="step2" aria-labelledby="step2Title" aria-hidden="true" hidden>
-        <div class="eyebrow">Step 2 of 4</div>
-        <h2 id="step2Title" tabindex="-1">Configure the local service.</h2>
-        <p class="subtitle">Choose the local port and keep the generated approval token private. The token protects the dashboard and approves ChatGPT OAuth access.</p>
-
-        <label for="portInput">Local service port</label>
-        <input type="number" id="portInput" value="3333" min="1024" max="65535" inputmode="numeric">
-        <div class="field-message" id="portHint" aria-live="polite"></div>
-
-        <div class="field-label">Approval token</div>
-        <output class="token-box mono" id="tokenBox" aria-live="polite" aria-label="Generated approval token"></output>
-        <div class="btn-row">
-          <button class="secondary" id="copyTokenBtn" type="button">Copy token</button>
-          <button class="secondary" id="regenTokenBtn" type="button">Generate a new token</button>
+        <div class="wizard-pairing-panel" id="pairingPanel" hidden>
+          <span class="field-caption">Short-lived pairing code</span>
+          <button class="wizard-pairing-copy" id="copyPairingBtn" type="button" aria-label="Copy pairing code" disabled>
+            <code id="pairingCode">—</code>
+            <span id="pairingCopyLabel">Copy code</span>
+          </button>
+          <span id="pairingExpiry">Waiting for pairing…</span>
         </div>
-        <p class="hint" id="tokenHint">Stored in <code>~/.rel-ai-mcp/.env</code>. ChatGPT will ask for this value when you approve the app.</p>
+        <div class="wizard-chatgpt-path"><strong>What happens next</strong><p>After the code appears, open ChatGPT on the web. On Plus or Pro, open Plugins from the sidebar or Settings → Plugins, add Rel.AI MCP, and choose Connect. On Business, Enterprise, or Edu, open the Rel.AI app provided under your workspace Apps. When the Rel.AI authorization page asks for a pairing code, enter the code from this screen.</p><span>If Rel.AI is unavailable, Developer mode or workspace approval may be required for your plan.</span></div>
+        <button class="primary wizard-main-action" id="connectChatgptBtn" type="button">Create pairing code</button>
+        <button class="secondary" id="cancelPairingBtn" type="button" hidden>Cancel pairing</button>
+      </div>
+      <p class="wizard-inline-error" id="cloudError" role="alert"></p>
+      <div class="wizard-actions"><button class="secondary" id="cancelWizardBtn" type="button">Cancel</button></div>
+    </section>
 
-        <div class="nav-row">
-          <button class="secondary" data-go="1" type="button">Back</button>
-          <button class="primary" id="continueLocalBtn" type="button">Continue</button>
+    <section class="wizard-step wizard-cloud-step" data-step="2" hidden>
+      <div class="wizard-cloud-hero">
+        <span class="wizard-eyebrow">Device security</span>
+        <h1>Secure this device</h1>
+        <p>Rel.AI generated a cryptographic device identity locally. The private key never leaves this computer, and the gateway stores only the public identity needed to verify this device.</p>
+      </div>
+      <div class="wizard-cloud-card wizard-security-card">
+        <div><strong>Save your recovery code</strong><p>Your recovery code can restore the same Rel.AI identity on a replacement computer. It is encrypted at rest on this device and is shown only when you explicitly request it.</p></div>
+        <button class="secondary" id="showRecoveryBtn" type="button">Show recovery code</button>
+        <div class="wizard-recovery-output" id="recoveryOutput" hidden>
+          <code id="recoveryCodeValue"></code>
+          <button class="secondary compact-button" id="copyRecoveryBtn" type="button">Copy</button>
         </div>
-      </section>
+      </div>
+      <p class="wizard-inline-error" id="securityError" role="alert"></p>
+      <div class="wizard-actions"><button class="secondary" id="backToPairingBtn" type="button">Back</button><button class="primary" id="continueSecurityBtn" type="button">Continue</button></div>
+    </section>
 
-      <section class="step" id="step3" aria-labelledby="step3Title" aria-hidden="true" hidden>
-        <div class="eyebrow">Step 3 of 4</div>
-        <h2 id="step3Title" tabindex="-1">Configure the secure connection.</h2>
-        <p class="subtitle">Use your ngrok account key and static domain. Rel.AI stores the key only in its private local configuration.</p>
+    <section class="wizard-step wizard-cloud-step" data-step="3" hidden>
+      <div class="wizard-cloud-hero wizard-ready-hero">
+        <span class="wizard-ready-mark">✓</span>
+        <h1>ChatGPT is connected to this computer</h1>
+        <p>Keep Rel.AI running while you use the shared Rel.AI app in ChatGPT. The dashboard will now guide you through choosing a local workspace and sending your first request.</p>
+      </div>
+      <div class="wizard-cloud-card wizard-ready-card"><strong>Continue in the dashboard</strong><span>Follow the Getting started guide. It shows exactly what remains and gives you a safe first Rel.AI request to paste into ChatGPT.</span></div>
+      <div class="wizard-actions"><button class="secondary" id="backToSecurityBtn" type="button">Back</button><button class="primary" id="finishCloudBtn" type="button">Continue to dashboard</button></div>
+    </section>
+  </main>
 
-        <div class="link-grid setup-resource-grid">
-          <button class="setup-link secondary" data-link="signup" type="button">Create or sign in to ngrok <span>Open dashboard</span></button>
-          <button class="setup-link secondary" data-link="authtoken" type="button">Find your account key <span>Open account key</span></button>
-          <button class="setup-link secondary" data-link="domains" type="button">Find your static domain <span>Open domains</span></button>
-        </div>
-
-        <label for="ngrokTokenInput">ngrok account key</label>
-        <div class="password-field">
-          <input type="password" id="ngrokTokenInput" placeholder="Paste your ngrok account key" autocomplete="off" spellcheck="false">
-          <button class="password-toggle secondary" id="toggleNgrokTokenBtn" type="button" aria-pressed="false">Show</button>
-        </div>
-        <div class="field-message" id="ngrokTokenMessage" aria-live="polite"></div>
-
-        <label for="domainInput">Permanent domain</label>
-        <input type="text" id="domainInput" placeholder="your-name.ngrok-free.dev" autocomplete="off" spellcheck="false">
-        <div class="field-message" id="domainMessage" aria-live="polite"></div>
-        <div class="hint">Connection preview <code id="ngrokCmdPreview">managed ngrok tunnel for &lt;domain&gt; on local port 3333</code></div>
-
-        <div class="nav-row">
-          <button class="secondary" data-go="2" type="button">Back</button>
-          <button class="primary" id="reviewSetupBtn" type="button" disabled>Review setup</button>
-        </div>
-      </section>
-
-      <section class="step" id="step4" aria-labelledby="step4Title" aria-hidden="true" hidden>
-        <div class="eyebrow">Step 4 of 4</div>
-        <h2 id="step4Title" tabindex="-1">Review and launch.</h2>
-        <p class="subtitle">Rel.AI will save the configuration, start the local MCP service, prepare the managed ngrok tunnel, and publish the ChatGPT endpoint.</p>
-        <div class="summary-box" id="summaryBox"></div>
-        <button class="primary btn-success" id="launchBtn" type="button">Launch Rel.AI MCP</button>
-        <p class="hint">After launch, copy the MCP endpoint into ChatGPT Apps, choose OAuth, and approve with your approval token.</p>
-        <div class="error" id="launchError" role="alert"></div>
-        <div class="nav-row launch-back-row">
-          <button class="secondary" data-go="3" type="button">Back and edit</button>
-        </div>
-      </section>
-    </div>
-  </div>
-</div>
-<script src="wizard.js"></script>
+  <aside class="wizard-advanced-shell">
+    <details id="advancedSetup" class="wizard-advanced-card">
+      <summary>Advanced setup and recovery</summary>
+      <div class="wizard-advanced-content">
+        <section class="wizard-advanced-section">
+          <div><span class="wizard-eyebrow">Recovery</span><h2>Recover existing Rel.AI identity</h2><p>Enter the recovery code exported from another paired Rel.AI device. The code is sent only through the secure Rel.AI pairing flow and is stored encrypted only after recovery succeeds.</p></div>
+          <label><span>Recovery code</span><input id="recoveryCodeInput" type="password" autocomplete="off" spellcheck="false" placeholder="relai-recovery-v1.…" /></label>
+          <button class="secondary" id="recoverIdentityBtn" type="button">Recover identity</button>
+          <div class="wizard-link-divider"><span>Already paired on this computer?</span></div>
+          <button class="secondary" id="createLinkCodeBtn" type="button">Create one-time link code</button>
+          <div class="wizard-recovery-output" id="linkCodeOutput" hidden>
+            <code id="linkCodeValue"></code>
+            <button class="secondary compact-button" id="copyLinkCodeBtn" type="button">Copy</button>
+          </div>
+          <span class="wizard-link-expiry" id="linkCodeExpiry"></span>
+          <p class="wizard-inline-error" id="recoveryError" role="alert"></p>
+        </section>
+        <section class="wizard-advanced-section wizard-direct-section">
+          <div><span class="wizard-eyebrow">Fallback</span><h2>Direct connection</h2><p>Use the existing managed ngrok path only when you deliberately need a personal Direct endpoint.</p></div>
+          <label><span>Connection port</span><input id="directPortInput" type="number" min="1024" max="65535" value="3333" /></label>
+          <label><span>ngrok account key</span><input id="directNgrokTokenInput" type="password" autocomplete="off" spellcheck="false" /></label>
+          <label><span>Static ngrok domain</span><input id="directDomainInput" type="text" autocomplete="off" spellcheck="false" placeholder="my-name.ngrok-free.dev" /></label>
+          <div class="wizard-advanced-links"><button class="link-button" data-external-url="https://dashboard.ngrok.com/get-started/your-authtoken" type="button">Find account key</button><button class="link-button" data-external-url="https://dashboard.ngrok.com/domains" type="button">Find static domain</button></div>
+          <button class="secondary" id="launchDirectBtn" type="button">Use Direct connection</button>
+          <p class="wizard-inline-error" id="directError" role="alert"></p>
+        </section>
+      </div>
+    </details>
+  </aside>
+  <script src="./wizard.js"></script>
 </body>
 </html>

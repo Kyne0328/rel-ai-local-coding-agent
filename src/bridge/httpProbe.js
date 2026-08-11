@@ -78,4 +78,4 @@ async function relaiHttpProbe(workspace, config, args = {}) {
   return probeHttpTarget(workspace, config, resolveLocalRouteTarget(route), args, { route });
 }
 
-export { probeHttpTarget, relaiHttpProbe, resolveLocalRouteTarget };
+export {  relaiHttpProbe,  };

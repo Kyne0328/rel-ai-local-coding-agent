@@ -408,7 +408,7 @@ async function authorize(clientId, challenge) {
     workspace: 'acceptance',
     dashboard_token: approvalToken
   }, true);
-  assert.equal(response.status, 302);
+  assert.equal(response.status, 303);
   const location = new URL(response.headers.get('location') || '');
   assert.equal(location.origin + location.pathname, redirectUri);
   assert.equal(location.searchParams.get('state'), state);

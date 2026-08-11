@@ -14,16 +14,17 @@ assert.equal(exampleConfig.auditLogPath, '', 'the portable example must not mix 
 assert.deepEqual(makeDefaultPatchConfig(), {
   backup: true,
   requireCleanGit: false,
-  maxUpdateBytes: 2 * 1024 * 1024
+  maxUpdateBytes: 50 * 1024 * 1024
 });
+assert.equal(Object.hasOwn(exampleConfig.patch || {}, 'maxUpdateBytes'), false, 'normal configuration should not expose a user-tuned patch size');
 
 assert.deepEqual(normalizePatchConfig(undefined), makeDefaultPatchConfig());
 assert.deepEqual(normalizePatchConfig({ backup: false, requireCleanGit: true, maxUpdateBytes: 4096 }), {
   backup: false,
   requireCleanGit: true,
-  maxUpdateBytes: 4096
+  maxUpdateBytes: 50 * 1024 * 1024
 });
-assert.equal(normalizePatchConfig({ maxUpdateBytes: 1 }).maxUpdateBytes, 1024);
+assert.equal(normalizePatchConfig({ maxUpdateBytes: 1 }).maxUpdateBytes, 50 * 1024 * 1024, 'legacy low patch limits must not throttle upgraded installations');
 assert.equal(normalizePatchConfig({ maxUpdateBytes: 100 * 1024 * 1024 }).maxUpdateBytes, 50 * 1024 * 1024);
 
 const strict = normalizeConfig({
@@ -41,7 +42,7 @@ const strict = normalizeConfig({
     }
   }
 });
-assert.deepEqual(strict.patch, { backup: true, requireCleanGit: false, maxUpdateBytes: 16384 });
+assert.deepEqual(strict.patch, { backup: true, requireCleanGit: false, maxUpdateBytes: 50 * 1024 * 1024 });
 for (const key of ['workflow', 'flow', 'cautionZone', 'maxIndexFiles']) assert.equal(Object.hasOwn(strict, key), false);
 assert.equal(Object.hasOwn(normalizeConfig({ toolProfile: 'core' }), 'toolProfile'), false, 'removed toolProfile configuration must be discarded');
 assert.equal(Object.hasOwn(strict.patch, 'maxPatchBytes'), false);

@@ -1,17 +1,20 @@
 ---
 name: rel-ai-debugging
-description: Diagnose and fix a reproducible defect in a configured repository by capturing the failure, isolating the responsible path, applying the smallest correct change, and proving the regression is resolved. Trigger for errors, broken tests, crashes, regressions, or behavior that differs from its contract. Do not trigger for feature brainstorming or unrelated code review.
+description: Use when repository behavior is reproducibly wrong, including errors, broken tests, crashes, regressions, or contract failures.
 ---
 
 # Rel.AI Debugging
 
 Reuse the active `work_id` opened by `rel-ai-workflow`. Do not call `relai_work` with `action: "begin"` when the same objective already has a work session.
+After each Rel.AI call, use runtime workflow guidance (`workflow.recommendedActions` and `workflow.avoidActions`) to calibrate the next repository action. The causal debugging method still owns root-cause judgment; runtime guidance owns whether more context, a focused check, review, or escalation is useful now.
 
-1. Capture the exact failing behavior with the smallest bounded reproduction.
-2. Trace the failure through searches, symbols, callers, state transitions, and tests.
-3. Distinguish root cause from downstream symptoms.
-4. Apply the smallest coherent fix through `relai_edit`.
-5. Run the targeted regression first, then the relevant broader checks.
-6. Review the diff for accidental behavior changes.
-7. Never claim success from static inspection alone when the failure is executable.
-8. Hand completion evidence to `rel-ai-verification` or finish through the core workflow.
+Use this causal sequence: `observable failure -> smallest reproduction -> causal path -> root cause -> coherent fix -> targeted regression -> broader checks only when the changed boundary requires them`.
+
+1. Capture the exact failing behavior with the smallest bounded reproduction that still demonstrates the defect.
+2. Trace callers, state transitions, ownership, data flow, and relevant tests until the causal path is plausible and evidence-backed.
+3. Separate the root cause from downstream symptoms. If several symptoms share one state, lifecycle, ownership, or architectural flaw, prefer one shared root-cause fix over independent patches.
+4. Make no speculative edits before the causal path is understood well enough to explain why the proposed change should fix the failure.
+5. Apply the smallest coherent fix through `relai_edit`. Do not bundle unrelated cleanup into the repair.
+6. Run the targeted regression first. Add broader checks only when the changed boundary creates additional meaningful risk.
+7. Never claim an executable defect is fixed from static inspection alone when bounded executable proof is available.
+8. Hand the reproduced failure, root cause, changed behavior, targeted regression, and touched boundaries to `rel-ai-verification` or back to `rel-ai-workflow`.

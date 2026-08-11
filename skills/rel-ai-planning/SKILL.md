@@ -1,0 +1,25 @@
+---
+name: rel-ai-planning
+description: Use when a repository feature, refactor, migration, or multi-stage change has non-trivial architecture, sequencing, dependencies, or durable tracking needs.
+---
+
+# Rel.AI Planning
+
+Reuse the active `work_id` opened by `rel-ai-workflow`. Do not call `relai_work` with `action: "begin"` when the same objective already has a work session.
+
+Use this skill only when architecture or sequencing is genuinely non-trivial. Do not trigger for small localized changes whose implementation path is already clear after targeted inspection.
+Planning defines architecture, dependencies, completion conditions, and meaningful risks; it does not prescribe a fixed tool ritual. During execution, runtime workflow guidance (`workflow.recommendedActions` and `workflow.avoidActions`) calibrates the exact next repository action for the current evidence and boundary.
+
+## Planning workflow
+
+1. Use the existing bootstrap and inspect the current implementation before designing a replacement.
+2. Choose the shortest coherent architecture that satisfies the current requirement. Reuse appropriate existing boundaries; do not add abstractions for hypothetical future needs.
+3. Define ordered tasks with explicit completion conditions, dependencies, and the validation needed to prove each meaningful risk.
+4. Keep small plans compact. Use a durable checkbox plan only when the work benefits from persistent multi-step tracking.
+5. For a durable plan, update checkboxes as completion conditions are met. After Task N, perform cumulative consolidation across Tasks 1..N: remove duplication, collapse unnecessary layers, and keep the combined implementation simpler than the sum of its steps.
+6. Separate repository-verifiable work from genuinely external or manual-only steps so execution does not stop for work the agent can complete itself.
+7. Hand execution back to `rel-ai-workflow` with the chosen architecture, task order, completion conditions, dependencies, validation expectations, and any unresolved decisions.
+
+## Replanning boundary
+
+Do not reopen planning for ordinary implementation details. Replan only when new evidence invalidates the architecture, task ordering, dependencies, or completion conditions.

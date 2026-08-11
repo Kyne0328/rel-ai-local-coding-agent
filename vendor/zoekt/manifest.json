@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "upstream": {
+    "repository": "https://github.com/sourcegraph/zoekt",
+    "commit": "c4d8f3537f7a67423835d8cf6b0e1d13e68e0b4c",
+    "license": "Apache-2.0",
+    "patchSet": "relai-windows-compat-v1"
+  },
+  "toolchain": {
+    "goVersion": "1.25.9",
+    "windowsAmd64": {
+      "url": "https://go.dev/dl/go1.25.9.windows-amd64.zip",
+      "sha256": "a7a710e225467b34e9e09fb432b829c86c9b2da5821ee5418f7eb2e8ae1a22cc"
+    },
+    "linuxAmd64": {
+      "url": "https://go.dev/dl/go1.25.9.linux-amd64.tar.gz",
+      "sha256": "00859d7bd6defe8bf84d9db9e57b9a4467b2887c18cd93ae7460e713db774bc1"
+    }
+  },
+  "platforms": {
+    "win32": {
+      "architecture": "amd64",
+      "search": {
+        "file": "zoekt.exe",
+        "size": 31396864,
+        "sha256": "b323f3c7db5938cb74f57943cfe1f668740fa81923fa04d95b018a17af9e836a"
+      },
+      "index": {
+        "file": "zoekt-index.exe",
+        "size": 21910528,
+        "sha256": "f7a7be0c5e3ba032857845599d2447d393aefc2ccd45e5d10f8efb68a328dc77"
+      }
+    },
+    "linux": {
+      "architecture": "amd64",
+      "search": {
+        "file": "zoekt",
+        "size": 30302356,
+        "sha256": "8b8e40de4418f20f2f9c77ee8650a13bdd2d95db13d54a69efc83839050e6af3"
+      },
+      "index": {
+        "file": "zoekt-index",
+        "size": 21016724,
+        "sha256": "46c28827eca5492b5db55b440ed567d5a962f80221084116da8538cbc56192a9"
+      }
+    }
+  }
+}

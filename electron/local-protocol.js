@@ -80,4 +80,4 @@ function resolveLocalRendererPath(target, rendererRoot) {
   }
 }
 
-export { LOCAL_SCHEME, installLocalProtocol, localRendererUrl, registerLocalScheme, resolveLocalRendererPath };
+export {  installLocalProtocol, localRendererUrl, registerLocalScheme, resolveLocalRendererPath };

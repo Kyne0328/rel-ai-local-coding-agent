@@ -21,7 +21,9 @@ function ensureStateDir() {
   fs.mkdirSync(stateDir(), { recursive: true, mode: 0o700 });
 }
 
-function generateToken(bytes = 32) {
+
+/** @knipdynamic Intentional dynamic/cross-workspace module boundary. */
+export function generateToken(bytes = 32) {
   return crypto.randomBytes(bytes).toString("base64url");
 }
 
@@ -48,7 +50,9 @@ function readLaunchEnv() {
   return parseEnvFile(fs.readFileSync(envPath, "utf8"));
 }
 
-function writeLaunchEnv(values) {
+
+/** @knipdynamic Intentional dynamic/cross-workspace module boundary. */
+export function writeLaunchEnv(values) {
   ensureStateDir();
   const current = readLaunchEnv();
   const merged = { ...current, ...values };
@@ -129,7 +133,7 @@ function connectionNextSteps(publicBaseUrl, baseForChatGPT, localUrl) {
   return [
     "Keep Rel.AI MCP running on this machine while ChatGPT uses the app.",
     `Keep your tunnel or reverse proxy routing ${baseForChatGPT} to ${localUrl}.`,
-    "In ChatGPT, create a custom app from Settings > Apps > Create. Admins can also use Workspace Settings > Apps > Create.",
+    "In ChatGPT, Plus or Pro users should add the MCP from Plugins (sidebar or Settings > Plugins). Business, Enterprise, and Edu workspaces can use their managed Rel.AI app under Workspace Settings > Apps.",
     "Paste the COPY THIS FOR CHATGPT URL as the MCP endpoint and choose OAuth.",
     "When ChatGPT opens the sign-in page, enter your Rel.AI approval token to approve the app. Retry the existing app after token replacement; the endpoint does not change.",
     "In a chat, select the Rel.AI MCP app, then ask it to inspect a workspace before making changes."
@@ -166,39 +170,14 @@ function buildConnectionSummary({ host = "127.0.0.1", port = 3333, publicUrl = "
   };
 }
 
-function printConnectionSummary(summary) {
-  const lines = [
-    "",
-    "Rel.AI MCP is ready.",
-    "",
-    `Local dashboard:        ${summary.dashboardUrl}`,
-    `Dashboard data check:   ${summary.dashboardDataUrl}`,
-    `COPY THIS FOR CHATGPT:  ${summary.chatgptMcpUrl || "waiting for HTTPS tunnel"}`,
-    `ChatGPT Auth:          OAuth (sign in with your approval token)`,
-    `Health URL:            ${summary.chatgptHealthUrl || "waiting for HTTPS tunnel"}`,
-    `Connection mode:       ${summary.tunnelMode || "cloud connection required"}`,
-    `Local/API MCP only:     ${summary.localBearerMcpUrl}`,
-    `Local/API Auth:         ${summary.authHeader}`,
-    `Token file:       ${summary.tokenFile}`,
-    `Profile file:     ${summary.profileFile}`,
-    "",
-    summary.permanentUrlConfigured
-      ? "Permanent URL: configured. Use the COPY THIS FOR CHATGPT URL above. You should not need to recreate the ChatGPT app unless that URL changes."
-      : "Permanent URL: not configured. ChatGPT requires HTTPS. Start a tunnel with --public, or set --public-url https://your-domain.example.com for a stable connector URL.",
-    "",
-    "Important:",
-    "  - Create or update a ChatGPT app only after the HTTPS /mcp URL is available.",
-    "  - Choose Authentication: OAuth, then enter your Rel.AI approval token when ChatGPT opens the sign-in page.",
-    "  - Select the Rel.AI MCP app in a chat before asking it to inspect a workspace.",
-    "  - Do not open /mcp in the browser as a dashboard. Use /dashboard instead.",
-    "  - If the dashboard says Connecting, open the Dashboard data check URL above.",
-    "  - OAuth requires the server to be reachable over HTTPS; localhost is invalid for ChatGPT.",
-    "",
-    "Next steps:",
-    ...summary.nextSteps.map((step, index) => `  ${index + 1}. ${step}`),
-    ""
-  ];
-  console.error(lines.join("\n"));
-}
 
-export { stateDir, getEnvPath, getConnectionProfilePath, generateToken, readLaunchEnv, writeLaunchEnv, readConnectionProfile, writeConnectionProfile, normalizePublicUrl, localBaseUrl, buildConnectionSummary, printConnectionSummary };
+export {
+  stateDir,
+  getConnectionProfilePath,
+  readLaunchEnv,
+  readConnectionProfile,
+  writeConnectionProfile,
+  normalizePublicUrl,
+  localBaseUrl,
+  buildConnectionSummary
+};

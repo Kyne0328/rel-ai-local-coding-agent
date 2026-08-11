@@ -85,14 +85,14 @@ function normalizeMode(value) {
   return mode;
 }
 
-function rankMatchGroups(groups, pattern) {
+function rankMatchGroups(groups, pattern, workflowContext = {}) {
   const tokens = pathSearchTokens(pattern);
   const combinedToken = tokens.join("");
   return groups
     .map((group, index) => ({
       group,
       index,
-      score: matchGroupScore(group, tokens, combinedToken)
+      score: matchGroupScore(group, tokens, combinedToken) + workflowPathBoost(group.path, workflowContext)
     }))
     .sort((left, right) => right.score - left.score
       || right.group.matches.length - left.group.matches.length
@@ -100,6 +100,21 @@ function rankMatchGroups(groups, pattern) {
     .map((entry) => entry.group);
 }
 
+function workflowPathBoost(filePath, context = {}) {
+  const target = normalizePath(filePath);
+  if (!target) return 0;
+  const taskOwned = new Set((context.taskOwnedPaths || []).map(normalizePath));
+  const impacted = new Set((context.impactedPaths || []).map(normalizePath));
+  const packagePaths = (context.packagePaths || []).map(normalizePath).filter(Boolean);
+  if (taskOwned.has(target)) return 2500;
+  if (impacted.has(target)) return 1200;
+  if (packagePaths.some(packagePath => target === packagePath || target.startsWith(`${packagePath}/`))) return 700;
+  return 0;
+}
+
+function normalizePath(value) {
+  return String(value || '').trim().replaceAll('\\', '/').replace(/^\.\//, '').replace(/\/$/, '');
+}
 function pathSearchTokens(pattern) {
   const expanded = String(pattern || "").replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
   return [...new Set(expanded.match(/[a-z0-9]+/g) || [])].filter((token) => token.length >= 2);

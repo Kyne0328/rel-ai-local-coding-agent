@@ -26,7 +26,7 @@ const workspace = { alias: 'app', path: root, testCommands: {}, commands: {} };
 const config = { stateDir };
 
 try {
-  const semantic = relaiSemanticSearch(workspace, config, { query: 'calculate employee lateness attendance', maxResults: 5 });
+  const semantic = await relaiSemanticSearch(workspace, config, { query: 'calculate employee lateness attendance', maxResults: 5 });
   assert.equal(semantic.ok, true);
   assert.equal(semantic.privacy.includes('No source text'), true);
   assert.equal(semantic.results[0].path, 'src/attendanceService.js');

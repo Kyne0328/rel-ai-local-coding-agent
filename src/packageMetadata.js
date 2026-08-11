@@ -10,4 +10,4 @@ function resolvePackagePath(...segments) {
   return path.join(packageRoot, ...segments);
 }
 
-export { packageMetadata, packageRoot, packageJsonPath, resolvePackagePath };
+export { packageMetadata, packageRoot,  resolvePackagePath };

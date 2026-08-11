@@ -64,7 +64,6 @@ const sourceLineBudgets = {
   'src/bridge/restore.js': 140,
   'src/bridge/searchContext.js': 330,
   'src/bridge/codeIntelligence.js': 430,
-  'src/bridge/codeIndex.js': 200,
   'src/bridge/tidy.js': 320,
   'src/bridge/validation.js': 240,
   'src/bridge/checkDetection.js': 140,

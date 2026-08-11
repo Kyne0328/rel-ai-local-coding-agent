@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { readTaskIntegrity, readWorkspaceIntegrity, recordTaskIntegrityEvent } from '../src/taskIntegrity.js';
+import * as taskIntegrity from '../src/taskIntegrity.js';
+const { readTaskIntegrity, readWorkspaceIntegrity, recordTaskIntegrityEvent } = taskIntegrity;
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-task-integrity-'));
 const workspacePath = path.join(root, 'workspace');
@@ -27,6 +28,10 @@ const config = {
 };
 const taskOne = 'task-one';
 const taskTwo = 'task-two';
+const failedMutationTask = 'failed-mutation-task';
+const embeddedValidationTask = 'embedded-validation-task';
+const failedPostCheckTask = 'failed-post-check-task';
+const unavailableTrackingTask = 'unavailable-tracking-task';
 const event = (taskId, tool, extra = {}) => ({
   taskId,
   workspace: 'app',
@@ -51,6 +56,9 @@ try {
   recordTaskIntegrityEvent(config, event(taskTwo, 'relai_begin_work'));
   recordTaskIntegrityEvent(config, event(taskTwo, 'relai_edit', { changedFiles: ['task-two.js'] }));
 
+  assert.equal(typeof taskIntegrity.taskOwnedChangedFiles, 'function', 'task integrity must expose exact task-owned changed files');
+  assert.deepEqual(taskIntegrity.taskOwnedChangedFiles(config, taskOne, 'app'), ['task-one.js']);
+
   const one = readTaskIntegrity(config, taskOne, 'app');
   const two = readTaskIntegrity(config, taskTwo, 'app');
   assert.deepEqual(one.taskOwnedChangedFiles, ['task-one.js']);
@@ -74,9 +82,54 @@ try {
   assert.equal(stale.validationResult, 'stale');
   assert.notEqual(stale.latestValidatedMutationGeneration, stale.mutationGeneration);
 
+  recordTaskIntegrityEvent(config, event(failedMutationTask, 'relai_begin_work'));
+  fs.writeFileSync(path.join(workspacePath, 'failed-command.js'), 'export const failed = true;\n');
+  recordTaskIntegrityEvent(config, event(failedMutationTask, 'relai_exec', {
+    ok: false,
+    changedFiles: ['failed-command.js'],
+    mutationTracking: 'git'
+  }));
+  const failedMutation = readTaskIntegrity(config, failedMutationTask, 'app');
+  assert.equal(failedMutation.mutationGeneration, 1, 'a failed command that changed files must still advance mutation authority');
+  assert.deepEqual(failedMutation.taskOwnedChangedFiles, ['failed-command.js']);
+
+  recordTaskIntegrityEvent(config, event(failedPostCheckTask, 'relai_begin_work'));
+  fs.writeFileSync(path.join(workspacePath, 'failed-post-check.js'), 'export const changed = true;\n');
+  recordTaskIntegrityEvent(config, event(failedPostCheckTask, 'relai_edit', {
+    ok: false,
+    changedFiles: ['failed-post-check.js'],
+    validationStatus: 'failed',
+    validationLevel: 'focused',
+    validationFingerprint: 'failed-post-check-fingerprint'
+  }));
+  const failedPostCheck = readTaskIntegrity(config, failedPostCheckTask, 'app');
+  assert.equal(failedPostCheck.mutationGeneration, 1, 'failed post-checks must preserve the edit mutation');
+  assert.deepEqual(failedPostCheck.taskOwnedChangedFiles, ['failed-post-check.js']);
+  assert.equal(failedPostCheck.validationResult, 'failed');
+  recordTaskIntegrityEvent(config, event(embeddedValidationTask, 'relai_begin_work'));
+  fs.writeFileSync(path.join(workspacePath, 'embedded.js'), 'export const embedded = true;\n');
+  recordTaskIntegrityEvent(config, event(embeddedValidationTask, 'relai_edit', {
+    changedFiles: ['embedded.js'],
+    validationStatus: 'passed',
+    validationLevel: 'focused',
+    validationFingerprint: 'embedded-fingerprint'
+  }));
+  const embedded = readTaskIntegrity(config, embeddedValidationTask, 'app');
+  assert.equal(embedded.validationResult, 'passed', 'passing embedded edit checks must establish validation authority');
+  assert.equal(embedded.latestValidatedMutationGeneration, embedded.mutationGeneration);
+  assert.equal(embedded.validatedRepositoryFingerprint, 'embedded-fingerprint');
+  recordTaskIntegrityEvent(config, event(unavailableTrackingTask, 'relai_begin_work'));
+  recordTaskIntegrityEvent(config, event(unavailableTrackingTask, 'relai_exec', {
+    changedFiles: [],
+    mutationTracking: 'unavailable'
+  }));
+  const unavailableTracking = readTaskIntegrity(config, unavailableTrackingTask, 'app');
+  assert.equal(unavailableTracking.mutationGeneration, 0, 'read-only exec must not become a mutation only because tracking is unavailable');
+  assert.deepEqual(unavailableTracking.taskOwnedChangedFiles, []);
+
   const workspaceState = readWorkspaceIntegrity(config, 'app');
-  assert.equal(workspaceState.generation, 3);
-  assert.equal(workspaceState.lastMutation.taskId, taskOne);
+  assert.equal(workspaceState.generation, 6);
+  assert.equal(workspaceState.lastMutation.taskId, embeddedValidationTask);
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }

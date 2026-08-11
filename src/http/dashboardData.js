@@ -6,7 +6,7 @@ import * as release from '../release.js';
 import { deriveConnectionState } from '../desktopUxContracts.js';
 import { getApplicationMetadata } from '../appMetadata.js';
 import { readTaskHistory } from '../taskHistoryStore.js';
-import { buildSafeActivityProjection, sanitizeActivityEventRecord, sanitizeTaskRecord } from '../taskObservability.js';
+import { buildSafeActivityProjection, sanitizeActivityEventRecord, sanitizeTaskRecordForProjection } from '../taskObservability.js';
 import { eventIdentityKey, eventTimestampMs, eventTimestampValue } from '../taskEvents.js';
 import { buildWorkspaceStates } from '../workspaceState.js';
 import { runtimeCompatibility } from '../runtimeCompatibility.js';
@@ -35,7 +35,7 @@ function buildDashboardPayload(config, options = {}, requireHttpToken = false) {
   };
   const limit = Math.max(Number(options.limit || 100), 200);
   const base = productUx.dashboardData(config, { limit });
-  const tasks = readTaskHistory(config, taskActivity, { limit: 500 });
+  const tasks = readTaskHistory(config, taskActivity, { limit: 500 }).map(sanitizeTaskRecordForProjection);
   const auditTail = mergeDashboardActivity(base.auditTail || { entries: [] }, tasks, limit);
   const workspaceStates = buildWorkspaceStates(config, tasks, taskActivity);
   const runtimeState = runtimeCompatibility(config, { activeTaskCount: taskActivity.activeTaskCount });
@@ -62,6 +62,7 @@ function buildDashboardPayload(config, options = {}, requireHttpToken = false) {
     snapshot: {
       streamId: DASHBOARD_STREAM_ID,
       sequence: ++dashboardSnapshotSequence,
+      revision: String(options.snapshotRevision || ''),
       generatedAt: new Date().toISOString(),
       modelVersion: 3
     },
@@ -79,7 +80,7 @@ function mergeDashboardActivity(auditTail, tasks, limit) {
     if (!entry || typeof entry !== 'object') return;
     const key = eventIdentityKey(entry, entries.length, { preferId: true });
     const normalized = normalizeDashboardActivity(entry);
-    if (positions.has(key)) entries[positions.get(key)] = { ...entries[positions.get(key)], ...normalized };
+    if (positions.has(key)) entries[positions.get(key)] = mergeDashboardActivityEntry(entries[positions.get(key)], normalized);
     else {
       positions.set(key, entries.length);
       entries.push(normalized);
@@ -96,6 +97,19 @@ function mergeDashboardActivity(auditTail, tasks, limit) {
   }
   entries.sort((left, right) => eventTimestampMs(left) - eventTimestampMs(right));
   return { ...(auditTail || {}), entries: entries.slice(-Math.max(1, Number(limit || 100))) };
+}
+
+function mergeDashboardActivityEntry(existing, incoming) {
+  const merged = { ...existing, ...incoming };
+  for (const key of ['summary', 'message', 'currentActivity', 'title', 'operation', 'path']) {
+    if (!displayText(incoming?.[key]) && displayText(existing?.[key])) merged[key] = existing[key];
+  }
+  merged.safeCopy = buildSafeActivityProjection(merged);
+  return merged;
+}
+
+function displayText(value) {
+  return typeof value === 'string' ? value.trim() : '';
 }
 
 function normalizeDashboardActivity(entry) {
@@ -125,8 +139,8 @@ function normalizeDashboardActivity(entry) {
 function sanitizeTaskActivity(activity = {}) {
   return {
     ...activity,
-    tasks: Array.isArray(activity.tasks) ? activity.tasks.map(sanitizeTaskRecord) : [],
-    lastTask: activity.lastTask ? sanitizeTaskRecord(activity.lastTask) : null
+    tasks: Array.isArray(activity.tasks) ? activity.tasks.map(sanitizeTaskRecordForProjection) : [],
+    lastTask: activity.lastTask ? sanitizeTaskRecordForProjection(activity.lastTask) : null
   };
 }
 

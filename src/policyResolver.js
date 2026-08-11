@@ -226,4 +226,4 @@ function resolvePolicy(workspace, config) {
   };
 }
 
-export { resolvePolicy, writeSessionPolicy, touchSessionPolicy, ensureSessionStarted, clearSessionPolicy, readSessionPolicy, readSessionPolicies, captureBaselineDirty, captureBaselineState, SESSION_IDLE_TTL_MS };
+export { resolvePolicy, writeSessionPolicy, touchSessionPolicy, ensureSessionStarted, clearSessionPolicy, readSessionPolicy,  captureBaselineDirty,  SESSION_IDLE_TTL_MS };

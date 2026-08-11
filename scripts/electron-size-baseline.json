@@ -1,20 +1,23 @@
 {
   "schemaVersion": 2,
-  "capturedAt": "2026-08-05",
+  "capturedAt": "2026-08-10",
   "platform": "win32",
   "architecture": "x64",
   "electronVersion": "43.2.0",
   "policy": "strict",
   "tolerancePercent": 3,
+  "notes": "Baseline refreshed from the measured 0.25.0 Windows release build after Repository Intelligence added pinned Zoekt and the complete Tree-sitter WASM runtime payload.",
   "metrics": {
-    "installerBytes": 111424956,
-    "portableBytes": 100029273,
-    "unpackedBytes": 363459639,
-    "resourcesBytes": 47575582,
-    "appAsarBytes": 1668963,
+    "installerBytes": 135564771,
+    "portableBytes": 120884288,
+    "unpackedBytes": 478902578,
+    "resourcesBytes": 163041049,
+    "appAsarBytes": 5753169,
     "packagedDependencyBytes": 1107187,
     "localesBytes": 566095,
     "ngrokBytes": 33273672,
-    "dashboardCssBytes": 143433
+    "zoektBytes": 53307392,
+    "treeSitterBytes": 52036637,
+    "dashboardCssBytes": 164176
   }
 }

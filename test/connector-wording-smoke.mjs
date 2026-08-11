@@ -38,7 +38,14 @@ const riskyPatterns = [
 
 const allowlist = [
   // Historical explanation in README is allowed only if not connector-facing copy.
-  { file: 'README.md', pattern: /did not have Codex/i }
+  { file: 'README.md', pattern: /did not have Codex/i },
+  // "Advanced" is the literal desktop settings label, not a connector risk tier.
+  { file: 'README.md', pattern: /Advanced connection settings/i },
+  { file: 'README.md', pattern: /Preferences, Application, Advanced, and About/i },
+  { file: 'README.md', pattern: /advanced port setting/i },
+  { file: 'README.md', pattern: /Advanced(?: fallback|\s*>\s*Direct| Direct)/i },
+  { file: 'docs/SECURITY.md', pattern: /Advanced Direct/i },
+  { file: 'docs/WORKFLOW_RELIABILITY.md', pattern: /cannot widen access or bypass a denial/i }
 ];
 
 const findings = [];

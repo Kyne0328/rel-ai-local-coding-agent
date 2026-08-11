@@ -15,7 +15,7 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-plugin-package-'));
 const packDir = path.join(temp, 'pack');
 const extractDir = path.join(temp, 'extract');
 const installDir = path.join(temp, 'installed', 'rel-ai-mcp');
-const expectedSkills = ['rel-ai-debugging', 'rel-ai-dev-process', 'rel-ai-investigation', 'rel-ai-verification', 'rel-ai-workflow'];
+const expectedSkills = ['rel-ai-debugging', 'rel-ai-dev-process', 'rel-ai-investigation', 'rel-ai-planning', 'rel-ai-verification', 'rel-ai-workflow'];
 fs.mkdirSync(packDir, { recursive: true });
 fs.mkdirSync(extractDir, { recursive: true });
 
