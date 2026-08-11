@@ -44,7 +44,13 @@ fs.writeFileSync(path.join(root, 'src', 'socketStatus.js'), `export const socket
 fs.writeFileSync(path.join(root, 'src', 'failureNotes.js'), `export const failureNotes = 'recover after socket failure';\n`);
 
 const workspace = { alias: 'app', path: root, context: {}, testCommands: {}, commands: {} };
-const config = { stateDir };
+const config = {
+  stateDir,
+  repositoryIntelligence: {
+    zoektSearchExecutable: path.join(root, 'missing-zoekt-search'),
+    zoektIndexExecutable: path.join(root, 'missing-zoekt-index')
+  }
+};
 
 try {
   const semantic = await relaiSemanticSearch(workspace, config, { query: 'calculate employee lateness attendance', maxResults: 5 });

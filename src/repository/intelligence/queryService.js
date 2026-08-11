@@ -285,14 +285,21 @@ function ftsCandidates(db, terms, limit, filters) {
   const suffix = clauses.length ? ` AND ${clauses.join(' AND ')}` : '';
   values.push(limit);
   return db.prepare(`
-    SELECT f.path, f.language, f.is_test, bm25(search_fts) AS rank
+    SELECT f.path, f.language, f.is_test, search_fts.terms AS indexed_terms, bm25(search_fts) AS rank
     FROM search_fts JOIN files f ON f.id=search_fts.rowid
     WHERE search_fts MATCH ?${suffix}
     ORDER BY rank, f.path LIMIT ?
   `).all(...values).map(row => ({
     path: String(row.path), language: String(row.language), test: Number(row.is_test) === 1,
-    provider: 'sqlite-fts5', reasons: ['lexical-fts5'], structuralScore: bm25Boost(row.rank)
+    provider: 'sqlite-fts5', reasons: ['lexical-fts5', `query-coverage:${ftsTermCoverage(row.indexed_terms, terms).toFixed(2)}`],
+    structuralScore: bm25Boost(row.rank) + ftsTermCoverage(row.indexed_terms, terms) * 0.08
   }));
+}
+
+function ftsTermCoverage(indexedTerms, queryTermList) {
+  if (!queryTermList.length) return 1;
+  const indexed = new Set(String(indexedTerms || '').split(/\s+/).filter(Boolean));
+  return queryTermList.filter(term => indexed.has(term)).length / queryTermList.length;
 }
 
 function symbolCandidates(db, terms, limit, filters) {
