@@ -18,7 +18,9 @@ const CASES = [
     "path": "db/schema.sql",
     "language": "sql",
     "source": "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT);\n"
-  }
+  },
+  {"path":"scripts/example.ps1","language":"powershell","source":"function GetRelAI { Write-Output 1 }\n"},
+  {"path":"scripts/example.ps1","language":"powershell","source":"function GetRelAI { Write-Output 1 }\n"}
 ];
 
 for (const item of CASES) {

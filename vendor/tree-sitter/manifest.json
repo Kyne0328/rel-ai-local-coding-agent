@@ -28,6 +28,13 @@
       "bytes": 2440500,
       "sha256": "9b93a15dc3eade66df4347731f2687b939daf987c8382660d6118e863604ab09",
       "grammarDependency": "@derekstride/tree-sitter-sql@^0.3.11"
+    },
+    "powershell": {
+      "file": "powershell/tree-sitter-powershell.wasm",
+      "sourcePath": "out/powershell/tree-sitter-powershell.wasm",
+      "bytes": 1088467,
+      "sha256": "796124137f0500e59713fd9dccda6812ff73d25f22e33430b1c5af6e132efa5e",
+      "grammarDependency": "tree-sitter-powershell@^0.26.4"
     }
   }
 }

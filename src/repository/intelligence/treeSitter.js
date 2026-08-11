@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import Parser from 'web-tree-sitter';
+import { Language, Parser } from 'web-tree-sitter';
 
 import { languageForPath, lexicalSearchText, parserForLanguage, stripQuotes } from './languages.js';
 import { resolverForLanguage } from './resolvers/index.js';
@@ -47,7 +47,7 @@ async function loadLanguage(language) {
       await initTreeSitter();
       const wasmFile = path.join(RUNTIME_ROOT, parserAsset.path);
       if (!fs.existsSync(wasmFile)) return null;
-      return Parser.Language.load(wasmFile);
+      return Language.load(wasmFile);
     })().catch(() => null));
   }
   return languageCache.get(key);

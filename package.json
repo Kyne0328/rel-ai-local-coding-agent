@@ -161,7 +161,7 @@
     "@opentelemetry/sdk-trace-node": "^2.10.0",
     "@opentelemetry/semantic-conventions": "^1.43.0",
     "tree-sitter-wasms": "^0.1.13",
-    "web-tree-sitter": "^0.20.8"
+    "web-tree-sitter": "^0.25.10"
   },
   "bundledDependencies": [
     "@modelcontextprotocol/server",
@@ -176,5 +176,15 @@
   "overrides": {
     "@hono/node-server": "2.0.12",
     "oxc-resolver": "11.24.2"
-  }
+  },
+  "bundleDependencies": [
+    "@modelcontextprotocol/server",
+    "@opentelemetry/api",
+    "@opentelemetry/exporter-trace-otlp-http",
+    "@opentelemetry/resources",
+    "@opentelemetry/sdk-trace-node",
+    "@opentelemetry/semantic-conventions",
+    "tree-sitter-wasms",
+    "web-tree-sitter"
+  ]
 }
