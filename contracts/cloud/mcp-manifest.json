@@ -3,7 +3,7 @@
   "disabledToolCount": 0,
   "externallyVisibleToolCount": 12,
   "filteredToolCount": 0,
-  "hash": "yysg7frl8QeCNGCCDaGk-B7T0RtS09ihCJUez1ncmE0",
+  "hash": "CweNerNdbsH3HwXmXNYS95NRlW78E_dQXZJFQNUPB-s",
   "instructions": "Start each objective with relai_work action begin and pass its work_id to later calls. Inspect relevant files before editing; use bounded reads and commands. Validate after changes. Never bypass approval, workspace, task, or destructive-operation safeguards. Report only checks actually run. Finish with relai_validate action checks complete:true, or relai_work action finish after review.",
   "schemaVersion": 7,
   "serverInfo": {
@@ -1336,13 +1336,14 @@
         "summary": "",
         "taskScope": "required"
       },
-      "description": "Run a bounded command.",
+      "description": "Run a one-shot workspace command. Prefer executable + argv (+ optional input) whenever shell features are not required. Use command only when the operation intentionally needs shell syntax such as pipes, redirection, environment expansion, or shell built-ins. Direct mode avoids PowerShell/cmd/bash reparsing and preserves quotes, backticks, dollar signs, JSON, and multiline script text exactly.",
       "execution": {
         "executionClass": "bounded_synchronous",
         "taskSupport": "forbidden"
       },
       "inputSchema": {
         "additionalProperties": false,
+        "description": "Choose exactly one execution mode. Prefer direct executable + argv mode by default; choose command only when shell parsing is deliberately needed.",
         "oneOf": [
           {
             "not": {
@@ -1399,6 +1400,7 @@
         ],
         "properties": {
           "argv": {
+            "description": "Literal argument array passed directly to executable without shell parsing. Keep each logical argument as its own item.",
             "items": {
               "maxLength": 20000,
               "type": "string"
@@ -1407,34 +1409,41 @@
             "type": "array"
           },
           "command": {
+            "description": "Shell command string. Use only when shell syntax is intentionally required. Do not embed JavaScript, Python, JSON, patches, or other quote-sensitive multiline scripts here when direct mode can run them.",
             "maxLength": 20000,
             "minLength": 1,
             "type": "string"
           },
           "cwd": {
+            "description": "Optional workspace-relative working directory.",
             "type": "string"
           },
           "env": {
             "additionalProperties": {
               "type": "string"
             },
+            "description": "Optional environment variables supplied directly to the child process.",
             "type": "object"
           },
           "executable": {
+            "description": "Executable to launch directly with shell:false, for example node, python, git, or an absolute executable path. Preferred for scripts and structured arguments.",
             "maxLength": 1000,
             "minLength": 1,
             "type": "string"
           },
           "input": {
+            "description": "Optional literal UTF-8 stdin for direct mode. Prefer this for multiline scripts or structured text so quotes, backticks, dollar signs, and newlines are preserved exactly.",
             "maxLength": 1048576,
             "type": "string"
           },
           "maxOutputBytes": {
+            "description": "Maximum captured stdout/stderr bytes before output is truncated.",
             "maximum": 16777216,
             "minimum": 1000,
             "type": "number"
           },
           "timeoutMs": {
+            "description": "Maximum operation runtime in milliseconds.",
             "maximum": 86400000,
             "minimum": 1000,
             "type": "number"
@@ -6749,5 +6758,5 @@
       "title": "Manage Worktree"
     }
   ],
-  "version": "yysg7frl8QeCNGCCDaGk-B7T"
+  "version": "CweNerNdbsH3HwXmXNYS95NR"
 }

@@ -59,6 +59,13 @@ for (const schema of schemas) {
 const publicSearchSchema = publicSchemas.find(item => item.name === 'relai_search')?.outputSchema;
 assert.equal(publicSearchSchema?.properties?.neuralEmbeddings?.type, 'boolean', 'semantic search output metadata must remain declared');
 assert.equal(publicSearchSchema?.properties?.originalBytes?.type, 'number', 'compacted tool results must remain valid against the public output schema');
+const publicExecSchema = publicSchemas.find(item => item.name === 'relai_exec');
+assert.match(publicExecSchema?.description || '', /Prefer executable \+ argv/i, 'ChatGPT discovery must prefer shell-free direct execution before trying a shell command');
+assert.match(publicExecSchema?.inputSchema?.description || '', /Prefer direct executable \+ argv mode by default/i);
+assert.match(publicExecSchema?.inputSchema?.properties?.command?.description || '', /Do not embed JavaScript, Python, JSON, patches/i);
+assert.match(publicExecSchema?.inputSchema?.properties?.executable?.description || '', /shell:false/i);
+assert.match(publicExecSchema?.inputSchema?.properties?.argv?.description || '', /without shell parsing/i);
+assert.match(publicExecSchema?.inputSchema?.properties?.input?.description || '', /multiline scripts or structured text/i);
 for (const removed of removedDirectNames) {
   assert.equal(resolveToolOperation(removed, {}), null, `${removed} must not resolve as a public tool`);
   assert.equal(publicSchemas.some(tool => tool.name === removed), false, `${removed} must not be discovered`);

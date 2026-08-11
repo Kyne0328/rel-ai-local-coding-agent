@@ -463,7 +463,7 @@ const PUBLIC_DEFINITION_VALUES = [
     groups: ['audit']
   }),
   clonePublicEditOperation(),
-  cloneOperation('relai_exec', 'relai_exec', 'Run Command', 'Run a bounded command.', { dashboard: { capabilities: ['execute'] } }),
+  clonePublicExecOperation(),
   define({
     name: 'relai_process',
     title: 'Manage Process',
@@ -701,6 +701,40 @@ function cloneOperation(sourceName, name, title, description, overrides = {}) {
   });
 }
 
+function clonePublicExecOperation() {
+  const source = getOperationDefinition('relai_exec');
+  if (!source) throw new Error('Missing internal operation definition: relai_exec');
+  return cloneOperation(
+    'relai_exec',
+    'relai_exec',
+    'Run Command',
+    'Run a one-shot workspace command. Prefer executable + argv (+ optional input) whenever shell features are not required. Use command only when the operation intentionally needs shell syntax such as pipes, redirection, environment expansion, or shell built-ins. Direct mode avoids PowerShell/cmd/bash reparsing and preserves quotes, backticks, dollar signs, JSON, and multiline script text exactly.',
+    {
+      inputSchema: publicExecInputSchema(source.inputSchema),
+      dashboard: { capabilities: ['execute'] }
+    }
+  );
+}
+
+function publicExecInputSchema(inputSchema) {
+  const properties = inputSchema.properties || {};
+  const describe = (name, description) => ({ ...properties[name], description });
+  return {
+    ...inputSchema,
+    description: 'Choose exactly one execution mode. Prefer direct executable + argv mode by default; choose command only when shell parsing is deliberately needed.',
+    properties: {
+      ...properties,
+      command: describe('command', 'Shell command string. Use only when shell syntax is intentionally required. Do not embed JavaScript, Python, JSON, patches, or other quote-sensitive multiline scripts here when direct mode can run them.'),
+      executable: describe('executable', 'Executable to launch directly with shell:false, for example node, python, git, or an absolute executable path. Preferred for scripts and structured arguments.'),
+      argv: describe('argv', 'Literal argument array passed directly to executable without shell parsing. Keep each logical argument as its own item.'),
+      input: describe('input', 'Optional literal UTF-8 stdin for direct mode. Prefer this for multiline scripts or structured text so quotes, backticks, dollar signs, and newlines are preserved exactly.'),
+      cwd: describe('cwd', 'Optional workspace-relative working directory.'),
+      env: describe('env', 'Optional environment variables supplied directly to the child process.'),
+      timeoutMs: describe('timeoutMs', 'Maximum operation runtime in milliseconds.'),
+      maxOutputBytes: describe('maxOutputBytes', 'Maximum captured stdout/stderr bytes before output is truncated.')
+    }
+  };
+}
 function clonePublicEditOperation() {
   const source = getOperationDefinition('relai_edit');
   if (!source) throw new Error('Missing internal operation definition: relai_edit');
