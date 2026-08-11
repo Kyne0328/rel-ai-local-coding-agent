@@ -41,8 +41,10 @@ const KNOWN_TEXT_EXTENSIONS = new Set([
   '.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs', '.dart', '.py', '.go', '.rs',
   '.java', '.kt', '.swift', '.cs', '.cpp', '.c', '.h', '.hpp', '.rb', '.php',
   '.css', '.scss', '.html', '.xml', '.yaml', '.yml', '.json', '.md', '.txt',
-  '.sql', '.sh', '.bat', '.ps1', '.toml', '.ini', '.cfg', '.conf', '.lock',
-  '.svg', '.csv', '.tsv', '.properties', '.gradle', '.vue', '.svelte'
+  '.sql', '.sh', '.bat', '.ps1', '.psm1', '.psd1', '.toml', '.ini', '.cfg', '.conf', '.lock',
+  '.hcl', '.tf', '.tfvars', '.markdown', '.mdx', '.dockerfile', '.graphql', '.gql', '.proto',
+  '.r', '.asm', '.s', '.gd', '.nix', '.hs', '.lhs', '.jl', '.clj', '.cljs', '.cljc', '.edn',
+  '.groovy', '.pl', '.pm', '.t', '.svg', '.csv', '.tsv', '.properties', '.gradle', '.vue', '.svelte'
 ]);
 
 const DEFAULT_EXCLUDED_PATHS = [
