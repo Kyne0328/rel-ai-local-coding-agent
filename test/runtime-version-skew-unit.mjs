@@ -12,7 +12,7 @@ const {
 const current = runtimeMetadata();
 const packageVersion = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 assert.equal(current.applicationVersion, packageVersion);
-assert.equal(current.toolSurfaceVersion, 35);
+assert.equal(current.toolSurfaceVersion, 36);
 assert.equal(current.toolCount, 12);
 assert.match(current.manifestHash, /^[A-Za-z0-9_-]{24}$/);
 assert.equal(current.schemaVersion, 7);

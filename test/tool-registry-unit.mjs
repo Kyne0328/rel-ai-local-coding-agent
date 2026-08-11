@@ -40,7 +40,7 @@ assert.ok(Buffer.byteLength(JSON.stringify(connectorInstructions(config)), 'utf8
 
 const manifest = getToolSurfaceManifest(config);
 assert.equal(manifest.schemaVersion, 7);
-assert.equal(manifest.toolSurfaceVersion, 35);
+assert.equal(manifest.toolSurfaceVersion, 36);
 assert.equal(Object.hasOwn(manifest, 'profile'), false);
 assert.equal(manifest.toolCount, 12);
 assert.deepEqual(manifest.tools.map(item => item.name), expectedTools);

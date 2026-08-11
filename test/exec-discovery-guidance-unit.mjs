@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const manifest = JSON.parse(fs.readFileSync('contracts/cloud/mcp-manifest.json', 'utf8'));
-assert.equal(manifest.toolSurfaceVersion, 35);
+assert.equal(manifest.toolSurfaceVersion, 36);
 const tool = manifest.tools.find(item => item.name === 'relai_exec');
 assert.ok(tool, 'relai_exec must remain present in the public cloud contract');
 assert.match(tool.description || '', /Prefer executable \+ argv/i);
