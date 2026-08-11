@@ -8,12 +8,14 @@ import {
   shutdownRepositoryIndexes
 } from './indexer.js';
 import { queryCodeInspect, querySemanticSearch } from './queryService.js';
+import { cachedRepositoryContext } from './contextPlanner.js';
 
 function createRepositoryIntelligenceService() {
   return Object.freeze({
     ensure: (workspace, config = {}, options = {}) => ensureRepositoryIndex(workspace, config, options),
     codeInspect: (workspace, config = {}, args = {}, options = {}) => queryCodeInspect(workspace, config, args, options),
     architecture: (workspace, config = {}, args = {}, options = {}) => queryCodeInspect(workspace, config, { ...args, action: 'architecture' }, options),
+    cachedContext: (workspace, config = {}, options = {}) => cachedRepositoryContext(workspace, config, options),
     semanticSearch: (workspace, config = {}, args = {}, options = {}) => querySemanticSearch(workspace, config, args, options),
     noteMutation: (workspace, config = {}, paths = []) => noteRepositoryMutation(workspace, config, paths),
     status: (workspace, config = {}) => repositoryIndexStatus(workspace, config),

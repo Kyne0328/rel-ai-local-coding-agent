@@ -7,6 +7,7 @@ import { isSecretPath } from '../safety.js';
 import { clampNumber } from './limits.js';
 import { buildContextualSearch } from './searchContext.js';
 import { resolveSearchPlan } from './searchPlanner.js';
+import { cachedSearchGraphContext } from '../repository/intelligence/contextPlanner.js';
 const DEFAULT_MAX_RESULTS = 200;
 const MAX_LINE_CHARS = 400;
 const SEARCH_TIMEOUT_MS = 15000;
@@ -15,7 +16,7 @@ const MAX_STDERR_BYTES = 64 * 1024;
 // Stream git grep output instead of buffering it through runProcess. Broad searches
 // can exceed the generic process-output cap; streaming preserves the earliest
 // matches while still counting every visible result with bounded memory use.
-async function relaiSearch(workspace, _config, args = {}) {
+async function relaiSearch(workspace, config, args = {}) {
   const pattern = String(args.pattern || "");
   if (!pattern.trim()) throw new Error("relai_search requires a non-empty pattern.");
   if (pattern.length > 1000) throw new Error("relai_search pattern must be 1000 characters or fewer.");
@@ -59,18 +60,28 @@ async function relaiSearch(workspace, _config, args = {}) {
         : "No matches. Try a shorter pattern, ignoreCase:true, or relai_snapshot for the file list."
     };
   }
+  const cachedGraph = searchPlan.requestedMode === "auto"
+    ? cachedSearchGraphContext(workspace, config, result.matches)
+    : null;
+  const graphPrioritized = cachedGraph?.freshness === 'current' && Boolean(cachedGraph?.rankedPaths?.length);
+  const workflowContext = {
+    ...(args._workflowContext || {}),
+    ...(graphPrioritized ? { graphPathScores: cachedGraph.pathScores } : {})
+  };
   return {
     ...baseResult,
     ...buildContextualSearch(workspace, result.matches, searchPlan.contextArgs, {
       requestedMode: searchPlan.requestedMode,
       autoTier: searchPlan.autoTier,
-      selectionStrategy: searchPlan.selectionStrategy,
+      selectionStrategy: graphPrioritized ? "path-match-density-and-graph" : searchPlan.selectionStrategy,
       prioritizeFiles: searchPlan.requestedMode === "auto",
-      workflowContext: args._workflowContext || {}
+      workflowContext
     }),
     next: result.matches.length
       ? searchPlan.requestedMode === "auto"
-        ? "Adaptive context is included for prioritized matches. Use relai_read only when a wider range or complete file is needed."
+        ? graphPrioritized
+          ? "Adaptive context is graph-prioritized using the cached structural index. Use relai_read only when a wider range or complete file is needed."
+          : "Adaptive context is included for prioritized matches. Use relai_read only when a wider range or complete file is needed."
         : "Context is included. Use relai_read only when a wider range or complete file is needed."
       : "No matches. Try a shorter pattern, ignoreCase:true, or relai_snapshot for the file list."
   };

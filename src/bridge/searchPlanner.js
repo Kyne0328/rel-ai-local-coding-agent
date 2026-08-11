@@ -106,10 +106,12 @@ function workflowPathBoost(filePath, context = {}) {
   const taskOwned = new Set((context.taskOwnedPaths || []).map(normalizePath));
   const impacted = new Set((context.impactedPaths || []).map(normalizePath));
   const packagePaths = (context.packagePaths || []).map(normalizePath).filter(Boolean);
-  if (taskOwned.has(target)) return 2500;
-  if (impacted.has(target)) return 1200;
-  if (packagePaths.some(packagePath => target === packagePath || target.startsWith(`${packagePath}/`))) return 700;
-  return 0;
+  const graphScore = Number(context.graphPathScores?.[target] || 0);
+  let boost = Number.isFinite(graphScore) ? Math.max(0, Math.min(500, graphScore)) : 0;
+  if (taskOwned.has(target)) boost += 2500;
+  if (impacted.has(target)) boost += 1200;
+  if (packagePaths.some(packagePath => target === packagePath || target.startsWith(`${packagePath}/`))) boost += 700;
+  return boost;
 }
 
 function normalizePath(value) {
