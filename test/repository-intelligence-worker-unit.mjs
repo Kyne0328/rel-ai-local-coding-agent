@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { repositoryIndexPath } from '../src/repository/intelligence/database.js';
+import { evictIdleRepositoryWorkers } from '../src/repository/intelligence/indexer.js';
 import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-repository-worker-'));
@@ -23,12 +24,23 @@ try {
   assert.equal(initial.runtimeStatus, 'ready');
   assert.ok(initial.sourceFileCount >= 2);
 
+  assert.equal(evictIdleRepositoryWorkers('test idle eviction'), 1);
+  const afterEvictionStatus = repositoryIntelligence.status(workspace, config);
+  assert.equal(afterEvictionStatus.status, 'ready');
+  assert.equal(afterEvictionStatus.active, false);
+  assert.equal(afterEvictionStatus.dirty, false);
+
   fs.writeFileSync(path.join(workspaceRoot, 'src', 'alpha.js'), 'export function alpha() { return 2; }\n');
   repositoryIntelligence.noteMutation(workspace, config, ['src/alpha.js']);
   const incremental = await repositoryIntelligence.ensure(workspace, config);
   assert.equal(incremental.scanMode, 'incremental');
   assert.equal(incremental.changedPathCount, 1);
   assert.equal(incremental.pendingRefresh, false);
+
+  assert.equal(evictIdleRepositoryWorkers('test second idle eviction'), 1);
+  const cached = await repositoryIntelligence.ensure(workspace, config);
+  assert.equal(cached.cacheHit, true);
+  assert.equal(evictIdleRepositoryWorkers('cache hit must not recreate worker'), 0);
 
   const status = repositoryIntelligence.status(workspace, config);
   assert.equal(status.status, 'ready');

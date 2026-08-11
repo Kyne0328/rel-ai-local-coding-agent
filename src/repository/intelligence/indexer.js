@@ -10,6 +10,7 @@ const RECONCILE_INTERVAL_MS = 30000;
 const MAX_INCREMENTAL_PATHS = 1000;
 const MAX_COALESCED_PASSES = 3;
 const WORKER_CANCEL_GRACE_MS = 250;
+const WORKER_IDLE_EVICT_MS = 60_000;
 const activeBuilds = new Map();
 const runtimeStates = new Map();
 const workerClients = new Map();
@@ -97,6 +98,18 @@ function cancelRepositoryIndex(workspace, config = {}, reason = 'Repository Inte
   return true;
 }
 
+function evictIdleRepositoryWorkers(reason = 'Repository Intelligence idle worker evicted.') {
+  const evictionError = reason instanceof Error ? reason : new Error(String(reason));
+  let evicted = 0;
+  for (const client of [...workerClients.values()]) {
+    if (!client.closed && client.isIdle()) {
+      client.terminate(evictionError);
+      evicted += 1;
+    }
+  }
+  return evicted;
+}
+
 function shutdownRepositoryIndexes() {
   const shutdownError = abortError('Repository Intelligence is shutting down.');
   for (const record of activeBuilds.values()) record.cancel(shutdownError.message);
@@ -178,10 +191,27 @@ function repositoryWorkerClient(databaseFile) {
   worker.unref();
   const pending = new Map();
   let nextJobId = 1;
+  let idleTimer = null;
+  const clearIdleTermination = () => {
+    if (!idleTimer) return;
+    clearTimeout(idleTimer);
+    idleTimer = null;
+  };
+  const scheduleIdleTermination = () => {
+    clearIdleTermination();
+    if (client.closed || pending.size > 0) return;
+    idleTimer = setTimeout(() => {
+      idleTimer = null;
+      if (!client.closed && pending.size === 0) client.terminate(new Error('Repository Intelligence worker idle timeout reached.'));
+    }, WORKER_IDLE_EVICT_MS);
+    idleTimer.unref?.();
+  };
   const client = {
     closed: false,
+    isIdle() { return pending.size === 0; },
     run(job) {
       if (client.closed) return failedExecution(new Error('Repository Intelligence worker is closed.'));
+      clearIdleTermination();
       const jobId = `index-${nextJobId++}`;
       let resolvePromise;
       let rejectPromise;
@@ -193,7 +223,7 @@ function repositoryWorkerClient(databaseFile) {
         worker.postMessage({ type: 'run', jobId, job });
       } catch (error) {
         pending.delete(jobId);
-        if (pending.size === 0) worker.unref();
+        if (pending.size === 0) { worker.unref(); scheduleIdleTermination(); }
         rejectPromise(error);
       }
       return {
@@ -213,6 +243,7 @@ function repositoryWorkerClient(databaseFile) {
     terminate(reason = new Error('Repository Intelligence worker terminated.')) {
       if (client.closed) return;
       client.closed = true;
+      clearIdleTermination();
       if (workerClients.get(databaseFile) === client) workerClients.delete(databaseFile);
       for (const entry of pending.values()) {
         if (entry.cancelTimer) clearTimeout(entry.cancelTimer);
@@ -230,7 +261,7 @@ function repositoryWorkerClient(databaseFile) {
     if (!entry) return;
     pending.delete(message.jobId);
     if (entry.cancelTimer) clearTimeout(entry.cancelTimer);
-    if (pending.size === 0) worker.unref();
+    if (pending.size === 0) { worker.unref(); scheduleIdleTermination(); }
     if (message.ok) entry.resolve(message.result);
     else entry.reject(workerError(message.error));
   });
@@ -401,7 +432,9 @@ function isoTime(value) {
 export {
   DEFAULT_MAX_INDEX_FILES,
   MAX_INDEXED_FILE_BYTES,
+  WORKER_IDLE_EVICT_MS,
   cancelRepositoryIndex,
+  evictIdleRepositoryWorkers,
   ensureRepositoryIndex,
   noteRepositoryMutation,
   rebuildRepositoryIndex,
