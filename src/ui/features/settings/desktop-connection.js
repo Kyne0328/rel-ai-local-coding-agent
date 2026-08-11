@@ -338,8 +338,7 @@ async function saveSettings(container, saveButton) {
     });
     markUnsaved(container, false);
     toast('Tunnel settings saved. The connection restarted.', { variant: 'success' });
-    requestDashboardRefresh();
-    await loadAndRender(container);
+    requestDashboardRefresh({ structural: true });
   } catch (error) {
     toast(messageOf(error), { variant: 'error' });
     saveButton.disabled = false;

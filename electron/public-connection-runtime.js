@@ -14,14 +14,25 @@ function createPublicConnectionRuntime({
   let activeMode = '';
   let gatewayConnection = null;
   let directProcess = null;
+  let lifecycleGeneration = 0;
+
+  function ownsGeneration(generation, mode) {
+    return lifecycleGeneration === generation && activeMode === mode;
+  }
 
   async function start(config = {}) {
     if (activeMode) throw new Error('Public connection runtime is already started.');
     const mode = String(config.connectionMode || '').trim();
+    const generation = ++lifecycleGeneration;
     if (mode === 'cloud') {
-      const connection = createGatewayConnection({
+      let connection = null;
+      connection = createGatewayConnection({
         config,
-        onStatus: status => onStatus({ mode: 'cloud', status })
+        onStatus: status => {
+          if (ownsGeneration(generation, 'cloud') && gatewayConnection === connection) {
+            onStatus({ mode: 'cloud', status });
+          }
+        }
       });
       if (!connection || typeof connection.start !== 'function' || typeof connection.stop !== 'function') {
         throw new TypeError('createGatewayConnection must return start/stop controls.');
@@ -30,44 +41,55 @@ function createPublicConnectionRuntime({
       activeMode = 'cloud';
       try {
         const status = await connection.start();
+        if (!ownsGeneration(generation, 'cloud') || gatewayConnection !== connection) {
+          await connection.stop().catch(() => {});
+          return { mode: 'cloud', status: null, process: null, cancelled: true };
+        }
         return { mode: 'cloud', status, process: null };
       } catch (error) {
-        gatewayConnection = null;
-        activeMode = '';
+        if (ownsGeneration(generation, 'cloud') && gatewayConnection === connection) {
+          gatewayConnection = null;
+          activeMode = '';
+        }
         throw error;
       }
     }
     if (mode !== 'direct') throw new Error('Connection mode must be cloud or direct.');
 
     activeMode = 'direct';
+    let ownedDirectProcess = null;
     try {
       await prepareDirect(config);
       const result = await startDirect(config, {
         onProcess(child) {
-          if (activeMode === 'direct') directProcess = child || null;
+          ownedDirectProcess = child || null;
+          if (ownsGeneration(generation, 'direct')) directProcess = ownedDirectProcess;
           else if (child) void stopDirect(child).catch(() => {});
         }
       });
-      if (!result?.ok) {
-        if (activeMode === 'direct') activeMode = '';
-        directProcess = null;
-        return { mode: 'direct', ...result, process: result?.process || null };
-      }
-      if (activeMode !== 'direct') {
-        const child = result.process || directProcess;
+      if (!ownsGeneration(generation, 'direct')) {
+        const child = result?.process || ownedDirectProcess;
         if (child) await stopDirect(child).catch(() => {});
         return { mode: 'direct', ...result, process: null, cancelled: true };
       }
-      directProcess = result.process || directProcess || null;
+      if (!result?.ok) {
+        activeMode = '';
+        directProcess = null;
+        return { mode: 'direct', ...result, process: result?.process || null };
+      }
+      directProcess = result.process || ownedDirectProcess || null;
       return { mode: 'direct', ...result, process: directProcess };
     } catch (error) {
-      if (activeMode === 'direct') activeMode = '';
-      directProcess = null;
+      if (ownsGeneration(generation, 'direct')) {
+        activeMode = '';
+        directProcess = null;
+      }
       throw error;
     }
   }
 
   async function stop() {
+    lifecycleGeneration += 1;
     const mode = activeMode;
     const ownedGateway = gatewayConnection;
     const ownedDirect = directProcess;
@@ -90,7 +112,8 @@ function createPublicConnectionRuntime({
     return {
       mode: activeMode,
       gatewayConnected: Boolean(gatewayConnection),
-      directProcessOwned: Boolean(directProcess)
+      directProcessOwned: Boolean(directProcess),
+      lifecycleGeneration
     };
   }
 

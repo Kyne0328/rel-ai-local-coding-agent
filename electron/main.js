@@ -613,7 +613,7 @@ async function startServer() {
   }
   if (startPromise) return startPromise;
   const runToken = ++lifecycleToken;
-  startPromise = (async () => {
+  const pendingStart = (async () => {
     let guiConfig;
     try {
       configModule.ensureConfig();
@@ -629,14 +629,12 @@ async function startServer() {
       }
     } catch (error) {
       setStatus(desktopStatusFailure(ERROR_CODES.CONFIGURATION_INVALID, error, { serverRunning: false, tunnelStatus: 'failed', mcpUrl: '' }));
-      startPromise = null;
       return currentStatus;
     }
 
     const available = await isPortAvailable(guiConfig.port);
     if (!available) {
       setStatus(desktopStatusFailure(ERROR_CODES.LOCAL_PORT_IN_USE, `Port ${guiConfig.port} is already in use.`, { serverRunning: false, tunnelStatus: 'failed', mcpUrl: '' }));
-      startPromise = null;
       return currentStatus;
     }
 
@@ -663,7 +661,6 @@ async function startServer() {
     } catch (error) {
       httpServer = null;
       setStatus(desktopStatusFailure(ERROR_CODES.LOCAL_SERVICE_START_FAILED, error, { serverRunning: false, tunnelStatus: 'failed', mcpUrl: '' }));
-      startPromise = null;
       return currentStatus;
     }
 
@@ -683,7 +680,6 @@ async function startServer() {
 
     if (guiConfig.connectionMode === 'direct') {
       void completeDirectPublicStart(guiConfig, actualPort, runToken);
-      startPromise = null;
       return currentStatus;
     }
 
@@ -691,19 +687,17 @@ async function startServer() {
     try {
       result = await publicConnectionRuntime.start({ ...guiConfig, port: actualPort });
     } catch (error) {
+      if (runToken !== lifecycleToken) return currentStatus;
       setStatus(desktopStatusFailure(ERROR_CODES.PUBLIC_ENDPOINT_FAILED, error, {
         serverRunning: true,
         connectionMode: guiConfig.connectionMode,
         tunnelStatus: 'failed',
         mcpUrl: guiConfig.connectionMode === 'cloud' ? initialMcpUrl : ''
       }));
-      startPromise = null;
       return currentStatus;
     }
 
     if (runToken !== lifecycleToken) {
-      await publicConnectionRuntime.stop().catch(() => {});
-      startPromise = null;
       return currentStatus;
     }
 
@@ -736,11 +730,14 @@ async function startServer() {
       setStatus(desktopStatusFailure(ERROR_CODES.PUBLIC_ENDPOINT_FAILED, result.error || 'Tunnel failed before publishing a public URL.', { serverRunning: true, connectionMode: 'direct', gateway: null, tunnelStatus: 'failed', mcpUrl: '' }));
     }
 
-    startPromise = null;
     return currentStatus;
   })();
-
-  return startPromise;
+  startPromise = pendingStart;
+  void pendingStart.then(
+    () => { if (startPromise === pendingStart) startPromise = null; },
+    () => { if (startPromise === pendingStart) startPromise = null; }
+  );
+  return pendingStart;
 }
 
 async function completeDirectPublicStart(guiConfig, actualPort, runToken) {
