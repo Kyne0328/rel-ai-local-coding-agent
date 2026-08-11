@@ -150,7 +150,11 @@ function createGatewayClient({
       series: frame.series || [],
       toolSeries: frame.toolSeries || [],
       workspaceSeries: frame.workspaceSeries || [],
-      workspaceToolSeries: frame.workspaceToolSeries || []
+      workspaceToolSeries: frame.workspaceToolSeries || [],
+      failureCategories: frame.failureCategories || [],
+      workspaceFailureCategories: frame.workspaceFailureCategories || [],
+      failureCategorySeries: frame.failureCategorySeries || [],
+      workspaceFailureCategorySeries: frame.workspaceFailureCategorySeries || []
     }));
   }
 

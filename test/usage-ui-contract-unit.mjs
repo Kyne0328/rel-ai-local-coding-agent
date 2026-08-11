@@ -62,6 +62,8 @@ assert.match(usageSource, /data-usage-range/);
 assert.match(usageSource, /Last 24 hours|ANALYTICS_RANGES/);
 assert.match(usageCombinedSource, /usage-sparkline/);
 assert.match(usageCombinedSource, /Activity over time/);
+assert.match(usageCombinedSource, /Failure categories/);
+assert.match(usageCombinedSource, /Raw error codes and messages are not stored in analytics/);
 assert.match(usageSource, /Refresh/);
 assert.doesNotMatch(usageSource, /Estimated Rel\.AI payload tokens|ChatGPT model tokens|billing token|context-window token/i, 'No token card should render because the gateway returns no estimate');
 assert.match(css, /\.usage-page\b/);
@@ -74,12 +76,14 @@ const model = buildUsageModel({
   totals: { requests: 8, toolCalls: 5, successes: 4, failures: 1, requestBytes: 1200, resultBytes: 3400, executionMs: 5600, activeDays: 2 },
   tools: [{ tool: 'relai_read', toolCalls: 3, successes: 3, failures: 0, executionMs: 900 }],
   devices: [{ deviceId: 'device-a', displayName: 'Laptop', toolCalls: 5, successes: 4, failures: 1, executionMs: 5600 }],
-  workspaces: [{ workspace: 'repo', toolCalls: 5, successes: 4, failures: 1, executionMs: 5600 }]
+  workspaces: [{ workspace: 'repo', toolCalls: 5, successes: 4, failures: 1, executionMs: 5600 }],
+  failureCategories: [{ category: 'SENSITIVE_PATH_RESTRICTED', failures: 1 }]
 }, '2026-08');
 assert.deepEqual(model.totals, { requests: 8, toolCalls: 5, successes: 4, failures: 1, requestBytes: 1200, resultBytes: 3400, executionMs: 5600, activeDays: 2 });
 assert.equal(model.tools[0].tool, 'relai_read');
 assert.equal(model.devices[0].displayName, 'Laptop');
 assert.equal(model.workspaces[0].workspace, 'repo');
+assert.deepEqual(model.failureCategories, [{ category: 'runtime', failures: 1 }], 'unknown/raw backend category strings must never become UI labels');
 const legacyBreakdowns = buildUsageModel({
   ok: true,
   month: '2026-08',
@@ -99,14 +103,16 @@ assert.equal(bounds.start.toISOString(), '2026-08-07T12:00:00.000Z');
 const ranged = analyticsRangeScope([buildUsageModel({
   ok: true,
   month: '2026-08',
-  totals: { requests: 2, toolCalls: 2, successes: 1, failures: 0, requestBytes: 10, resultBytes: 20, executionMs: 100, activeDays: 1 },
+  totals: { requests: 2, toolCalls: 2, successes: 1, failures: 1, requestBytes: 10, resultBytes: 20, executionMs: 100, activeDays: 1 },
   tools: [], devices: [], workspaces: [],
-  series: [{ hour: '2026-08-08T10', requests: 2, toolCalls: 2, successes: 1, failures: 0, requestBytes: 10, resultBytes: 20, executionMs: 100 }],
-  toolSeries: [{ hour: '2026-08-08T10', tool: 'relai_read', toolCalls: 2, successes: 1, failures: 0, executionMs: 100 }],
-  workspaceSeries: [], workspaceToolSeries: []
+  series: [{ hour: '2026-08-08T10', requests: 2, toolCalls: 2, successes: 1, failures: 1, requestBytes: 10, resultBytes: 20, executionMs: 100 }],
+  toolSeries: [{ hour: '2026-08-08T10', tool: 'relai_read', toolCalls: 2, successes: 1, failures: 1, executionMs: 100 }],
+  workspaceSeries: [], workspaceToolSeries: [],
+  failureCategorySeries: [{ hour: '2026-08-08T10', category: 'policy', failures: 1 }]
 }, '2026-08')], bounds);
 assert.equal(ranged.toolCalls, 2);
-assert.equal(ranged.completed, 1);
-assert.equal(ranged.averageDuration, 100, 'average duration must divide by completed outcomes, not started tool calls');
+assert.equal(ranged.completed, 2);
+assert.equal(ranged.averageDuration, 50, 'average duration must divide by completed outcomes, not started tool calls');
+assert.deepEqual(ranged.failureCategories, [{ category: 'policy', failures: 1 }]);
 
 console.log('Analytics lazy-route, exact-metric, authenticated-fetch, and privacy contracts passed.');

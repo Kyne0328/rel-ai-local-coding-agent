@@ -21,6 +21,7 @@ export function renderUsage(content, { bounds, current, previous, allCurrent }) 
     </section>
     ${timelineSection(current)}
     <div class="usage-visual-grid">${outcomesSection(current)}${activityBarsSection('Tool usage', current.kind === 'workspace' ? 'Tools used in this workspace during the selected range.' : 'Exact tool calls during the selected range.', current.tools, 'tool')}</div>
+    ${current.failures ? failureCategoriesSection(current.failureCategories) : ''}
     ${current.kind === 'workspace'
       ? `${breakdownSection('Devices', 'Devices that contributed activity to this workspace in the selected range.', current.devices, 'device')}${workspaceComparisonSection(allCurrent.workspaces, current.label)}`
       : activityBarsSection('Workspace activity', 'Workspace aliases with observed activity during the selected range.', current.workspaces, 'workspace')}`;
@@ -105,6 +106,25 @@ function transportFacts(scope, all) {
 function fact(label,value,detail){return `<div><span>${esc(label)}</span><strong>${esc(value)}</strong><small>${esc(detail)}</small></div>`;}
 function outcomesSection(scope){return `<section class="card usage-visual-card"><div class="card-head"><div><h3>Outcomes</h3><p>Terminal outcomes for completed tool calls.</p></div><strong class="usage-visual-value">${percent(scope.successRate)}</strong></div><div class="card-body usage-outcomes"><progress class="usage-outcome-progress" max="${Math.max(1,scope.completed)}" value="${scope.successes}">${percent(scope.successRate)}</progress><div class="usage-outcome-legend">${legend('Successful',scope.successes,'good')}${legend('Failed',scope.failures,'bad')}</div></div></section>`;}
 function legend(label,value,tone){return `<div class="${tone}"><span><i aria-hidden="true"></i>${esc(label)}</span><strong>${integer(value)}</strong></div>`;}
+
+function failureCategoriesSection(rows) {
+  const visible = [...(rows || [])].sort((a, b) => b.failures - a.failures).slice(0, 10);
+  const max = Math.max(1, ...visible.map(row => row.failures));
+  const body = visible.length
+    ? `<div class="usage-bar-list">${visible.map(row => failureCategoryRow(row, max)).join('')}</div>`
+    : '<div class="usage-breakdown-empty">Category detail is unavailable for older failures recorded before normalized categories were added.</div>';
+  return `<section class="card usage-breakdown usage-bar-card"><div class="card-head"><div><h3>Failure categories</h3><p>Normalized categories only. Raw error codes and messages are not stored in analytics.</p></div></div><div class="card-body">${body}</div></section>`;
+}
+
+function failureCategoryRow(row, max) {
+  const label = failureCategoryLabel(row?.category);
+  const failures = Math.max(0, Number(row?.failures || 0));
+  return `<div class="usage-bar-row"><span class="usage-bar-label" title="${esc(label)}">${esc(label)}</span><progress max="${max}" value="${failures}">${integer(failures)}</progress><strong>${integer(failures)}</strong></div>`;
+}
+
+function failureCategoryLabel(category) {
+  return ({ cancelled: 'Cancelled', timeout: 'Timeout', authorization: 'Authorization', capacity: 'Capacity', transport: 'Transport', policy: 'Policy / safety', workspace: 'Workspace / path', git: 'Git', process: 'Process / command', validation: 'Validation / input', runtime: 'Runtime' })[String(category || '').toLowerCase()] || 'Runtime';
+}
 
 function workspaceComparisonSection(rows, selected) {
   const current=rows.find(row=>row.workspace===selected)||{toolCalls:0}; const total=rows.reduce((sum,row)=>sum+row.toolCalls,0); const rank=rows.length?[...rows].sort((a,b)=>b.toolCalls-a.toolCalls).findIndex(row=>row.workspace===selected)+1:0;

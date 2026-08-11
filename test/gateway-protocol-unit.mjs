@@ -22,6 +22,8 @@ assert.equal(validateGatewayFrame({ type: 'devices_result', requestId: 'd1', dev
 assert.equal(validateGatewayFrame({ type: 'devices_result', requestId: 'd1', devices: [{ deviceId: 'dev', publicJwk: {} }] }).ok, false);
 assert.equal(validateGatewayFrame({ type: 'device_revoke', requestId: 'r1', deviceId: 'dev' }).ok, true);
 assert.equal(validateGatewayFrame({ type: 'device_revoke_result', requestId: 'r1', deviceId: 'dev', ok: true }).ok, true);
+assert.equal(validateGatewayFrame({ type: 'usage_result', requestId: 'u1', month: '2026-08', totals: {}, tools: [], devices: [], workspaces: [], failureCategories: [{ category: 'policy', failures: 1 }], workspaceFailureCategories: [], failureCategorySeries: [], workspaceFailureCategorySeries: [] }).ok, true);
+assert.equal(validateGatewayFrame({ type: 'usage_result', requestId: 'u1', month: '2026-08', totals: {}, tools: [], devices: [], workspaces: [], failureCategories: {} }).ok, false);
 
 assert.equal(validateGatewayFrame({ type: 'unknown' }).ok, false);
 assert.equal(validateGatewayFrame({ type: 'authenticate', principalId: 'p', deviceId: 'd', signature: 's', extra: true }).ok, false);

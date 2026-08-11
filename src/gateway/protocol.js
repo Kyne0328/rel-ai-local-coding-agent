@@ -50,7 +50,7 @@ const SECURITY_SENSITIVE_FIELDS = Object.freeze({
   workspaces: new Set(['type', 'aliases']),
   heartbeat: new Set(['type', 'ok']),
   usage_request: new Set(['type', 'requestId', 'month']),
-  usage_result: new Set(['type', 'requestId', 'month', 'totals', 'tools', 'devices', 'workspaces', 'workspaceDimensions', 'workspaceTools', 'series', 'toolSeries', 'workspaceSeries', 'workspaceToolSeries']),
+  usage_result: new Set(['type', 'requestId', 'month', 'totals', 'tools', 'devices', 'workspaces', 'workspaceDimensions', 'workspaceTools', 'series', 'toolSeries', 'workspaceSeries', 'workspaceToolSeries', 'failureCategories', 'workspaceFailureCategories', 'failureCategorySeries', 'workspaceFailureCategorySeries']),
   devices_request: new Set(['type', 'requestId']),
   devices_result: new Set(['type', 'requestId', 'devices']),
   device_revoke: new Set(['type', 'requestId', 'deviceId']),
@@ -388,7 +388,7 @@ function validateUsageResult(value) {
   for (const field of ['tools', 'devices', 'workspaces']) {
     if (!Array.isArray(value[field])) return invalidFrame(`Usage ${field} must be an array.`);
   }
-  for (const field of ['workspaceDimensions', 'workspaceTools', 'series', 'toolSeries', 'workspaceSeries', 'workspaceToolSeries']) {
+  for (const field of ['workspaceDimensions', 'workspaceTools', 'series', 'toolSeries', 'workspaceSeries', 'workspaceToolSeries', 'failureCategories', 'workspaceFailureCategories', 'failureCategorySeries', 'workspaceFailureCategorySeries']) {
     if (value[field] !== undefined && !Array.isArray(value[field])) return invalidFrame(`Usage ${field} must be an array when present.`);
   }
   return validFrame();

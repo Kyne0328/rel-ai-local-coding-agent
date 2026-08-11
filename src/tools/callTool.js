@@ -37,6 +37,7 @@ async function callTool(name, args = {}, context = {}) {
   let workspaceResolution, knownTask = null;
   let finishActivity = null;
   let activityResult = { ok: true };
+  let analyticsFailureCode = '';
   let sessionStart;
   let resolvedAction = '';
   try {
@@ -106,6 +107,7 @@ async function callTool(name, args = {}, context = {}) {
     const value = execution.value;
     sessionStart = execution.sessionStart;
     const valueOk = value?.ok !== false;
+    if (!valueOk) analyticsFailureCode = analyticsErrorCodeFromValue(value);
     activityResult = { ok: valueOk, ...(valueOk ? {} : { error: String(value?.error || value?.message || `${name} returned ok:false`) }) };
     if (sessionStart.started && !hasWorkspaceChanges(value)) clearSessionPolicy(config, sessionStart.alias, finishActivity?.taskId);
     const extraAudit = buildExtraAudit(operationName, value, effectiveArgs || {});
@@ -174,6 +176,7 @@ async function callTool(name, args = {}, context = {}) {
     return ok(responseValue);
   } catch (error) {
     const enhanced = enhanceToolError(operationName, error);
+    analyticsFailureCode = String(enhanced.code || '');
     activityResult = {
       ok: false,
       error: enhanced.message,
@@ -227,10 +230,19 @@ async function callTool(name, args = {}, context = {}) {
       tool: name,
       workspace: workspaceResolution?.alias || knownTask?.workspace || '',
       ok: activityResult.ok === true,
-      durationMs: Date.now() - started
+      durationMs: Date.now() - started,
+      errorCode: analyticsFailureCode
     });
     finishActivity?.(activityResult);
   }
+}
+
+function analyticsErrorCodeFromValue(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
+  if (typeof value.errorCode === 'string') return value.errorCode;
+  if (typeof value.code === 'string') return value.code;
+  if (value.error && typeof value.error === 'object' && typeof value.error.code === 'string') return value.error.code;
+  return '';
 }
 
 async function persistWorkflowEvidence(config, args, operationName, action, value, auditEntry, workId, draft) {
