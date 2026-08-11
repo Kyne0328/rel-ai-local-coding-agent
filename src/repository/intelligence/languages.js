@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-const PARSER_VERSION = 9;
+const PARSER_VERSION = 10;
 const MAX_SEARCH_TERMS = 768;
 
 const LANGUAGE_PROFILES = Object.freeze([
@@ -47,6 +47,7 @@ const LANGUAGE_PROFILES = Object.freeze([
   profile('dockerfile', 'tree-sitter-dockerfile.wasm', [".dockerfile"], ["dockerfile"]),
   profile('graphql', 'tree-sitter-graphql.wasm', [".graphql",".gql"]),
   profile('protobuf', 'tree-sitter-proto.wasm', [".proto"]),
+  profile('r', 'tree-sitter-r.wasm', [".r"]),
   profile('zig', 'tree-sitter-zig.wasm', ['.zig'])
 ]);
 
@@ -66,7 +67,8 @@ const VENDORED_WASM_BY_LANGUAGE = Object.freeze({
   markdown: 'vendor/tree-sitter/markdown/tree-sitter-markdown.wasm',
   dockerfile: 'vendor/tree-sitter/dockerfile/tree-sitter-dockerfile.wasm',
   graphql: 'vendor/tree-sitter/graphql/tree-sitter-graphql.wasm',
-  protobuf: 'vendor/tree-sitter/protobuf/tree-sitter-proto.wasm'
+  protobuf: 'vendor/tree-sitter/protobuf/tree-sitter-proto.wasm',
+  r: 'vendor/tree-sitter/r/tree-sitter-r.wasm'
 });
 
 function profile(language, wasm, extensions, basenames = [], resolver = null) {
