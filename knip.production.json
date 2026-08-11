@@ -18,7 +18,10 @@
         "./ui/*": [
           "src/ui/*"
         ]
-      }
+      },
+      "ignoreDependencies": [
+        "tree-sitter-wasms"
+      ]
     },
     "electron": {
       "entry": [

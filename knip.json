@@ -26,6 +26,9 @@
       },
       "ignoreBinaries": [
         "pwsh"
+      ],
+      "ignoreDependencies": [
+        "tree-sitter-wasms"
       ]
     },
     "electron": {
