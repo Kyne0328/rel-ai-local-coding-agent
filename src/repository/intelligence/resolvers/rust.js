@@ -1,0 +1,13 @@
+import { dedupeRelations, importBindingMap, nearestSymbolByOffset, relation, simpleName } from './common.js';
+
+const PROVIDER = 'resolver-rust-v1';
+const CAPABILITIES = Object.freeze(['use-bindings', 'trait-implementations', 'constructor-types', 'imported-calls']);
+const rustResolver = Object.freeze({ id: PROVIDER, capabilities: CAPABILITIES, enrich({ source, facts }) {
+  const text=String(source||'');const imports=parseImports(text);const bindings=importBindingMap(imports);const symbols=facts.symbols||[];
+  return {provider:PROVIDER,capabilities:CAPABILITIES,imports:imports.map(({bindings:_bindings,...item})=>({...item,provider:PROVIDER,confidence:0.96})),relations:dedupeRelations([...implRelations(text,bindings),...constructorRelations(text,symbols,bindings),...callRelations(text,symbols,bindings)])};
+}});
+function parseImports(source){const result=[];for(const m of source.matchAll(/^\s*use\s+([^;]+);/gm)){const clean=m[1].replace(/\s+as\s+.*$/,'').trim();if(/[{}*]/.test(clean))continue;const parts=clean.split('::').filter(Boolean);while(['crate','self','super'].includes(parts[0]))parts.shift();if(!parts.length)continue;const imported=parts.pop();const specifier=parts.join('/');const alias=m[1].match(/\s+as\s+([A-Za-z_]\w*)/)?.[1]||simpleName(imported);result.push({specifier:specifier||simpleName(imported),kind:'use',bindings:[{local:alias,imported:simpleName(imported),kind:'named'}]});}return result;}
+function implRelations(source,bindings){const result=[];for(const m of source.matchAll(/\bimpl\s+([A-Za-z_]\w*)\s+for\s+([A-Za-z_]\w*)/g))result.push(relation(PROVIDER,'IMPLEMENTS',m[2],m[1],bindings,{confidence:0.98}));return result;}
+function constructorRelations(source,symbols,bindings){const result=[];for(const m of source.matchAll(/\blet\s+[A-Za-z_]\w*[^=]*=\s*([A-Z][A-Za-z0-9_]*)::[A-Za-z_]\w*\s*\(/g))result.push(relation(PROVIDER,'USES_TYPE',nearestSymbolByOffset(source,symbols,m.index||0),m[1],bindings,{confidence:0.95}));return result;}
+function callRelations(source,symbols,bindings){const result=[];for(const m of source.matchAll(/\b([A-Za-z_]\w*)\s*\(/g)){if(bindings.has(m[1]))result.push(relation(PROVIDER,'CALLS',nearestSymbolByOffset(source,symbols,m.index||0),m[1],bindings,{confidence:0.95}));}for(const m of source.matchAll(/\b([A-Z][A-Za-z0-9_]*)::([A-Za-z_]\w*)\s*\(/g)){const item=bindings.get(m[1]);if(item)result.push(relation(PROVIDER,'CALLS',nearestSymbolByOffset(source,symbols,m.index||0),m[2],new Map(),{moduleSpecifier:item.specifier,targetQualifiedName:simpleName(item.imported)+'::'+m[2],confidence:0.94}));}return result;}
+export { rustResolver };
