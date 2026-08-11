@@ -47,6 +47,7 @@ function safeGatewayDesktopStatus(status = {}, gatewayOrigin = '') {
   const pairing = status.pairing && typeof status.pairing === 'object'
     ? {
         pairingId: String(status.pairing.pairingId || ''),
+        enrollmentId: String(status.pairing.enrollmentId || ''),
         code: String(status.pairing.code || ''),
         expiresAt: Number(status.pairing.expiresAt || 0) || null
       }

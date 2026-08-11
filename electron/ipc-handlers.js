@@ -15,6 +15,7 @@ function registerIpcHandlers(deps) {
     getWizardWindow: deps.getWizardWindow,
     closeWizard: deps.closeWizard,
     getRecoveryConfig: deps.getRecoveryConfig,
+    startWizardCloudEnrollment: deps.startWizardCloudEnrollment,
     startWizardCloudPairing: deps.startWizardCloudPairing,
     getWizardCloudStatus: deps.getWizardCloudStatus,
     cancelWizardCloudPairing: deps.cancelWizardCloudPairing,
@@ -58,7 +59,9 @@ function registerIpcHandlers(deps) {
     ipcMain: deps.ipcMain,
     dashboardOnly,
     getGatewayStatus: deps.getGatewayStatus,
+    beginGatewayEnrollment: deps.beginGatewayEnrollment,
     beginGatewayPairing: deps.beginGatewayPairing,
+    openGatewayAccount: deps.openGatewayAccount,
     cancelGatewayPairing: deps.cancelGatewayPairing,
     listGatewayDevices: deps.listGatewayDevices,
     revokeGatewayDevice: deps.revokeGatewayDevice,
@@ -113,6 +116,7 @@ function registerSetupIpc({
   getWizardWindow,
   closeWizard,
   getRecoveryConfig,
+  startWizardCloudEnrollment,
   startWizardCloudPairing,
   getWizardCloudStatus,
   cancelWizardCloudPairing,
@@ -134,6 +138,7 @@ function registerSetupIpc({
     return { ok: true };
   }));
   ipcMain.handle('recovery:get-config', event => windowOnly(event, getWizardWindow, 'Recovery configuration', getRecoveryConfig));
+  ipcMain.handle('wizard:cloud-enroll', event => windowOnly(event, getWizardWindow, 'Rel.AI account enrollment', startWizardCloudEnrollment));
   ipcMain.handle('wizard:cloud-pair', event => windowOnly(event, getWizardWindow, 'Cloud pairing', startWizardCloudPairing));
   ipcMain.handle('wizard:cloud-status', event => windowOnly(event, getWizardWindow, 'Cloud pairing status', getWizardCloudStatus));
   ipcMain.handle('wizard:cloud-cancel', event => windowOnly(event, getWizardWindow, 'Cloud pairing cancellation', cancelWizardCloudPairing));
@@ -219,7 +224,9 @@ function registerGatewayIpc({
   ipcMain,
   dashboardOnly,
   getGatewayStatus,
+  beginGatewayEnrollment,
   beginGatewayPairing,
+  openGatewayAccount,
   cancelGatewayPairing,
   listGatewayDevices,
   revokeGatewayDevice,
@@ -229,7 +236,9 @@ function registerGatewayIpc({
   getLocalUsage
 }) {
   ipcMain.handle('desktop:gateway:get', event => dashboardOnly(event, getGatewayStatus));
+  ipcMain.handle('desktop:gateway:enroll', event => dashboardOnly(event, beginGatewayEnrollment));
   ipcMain.handle('desktop:gateway:pair', event => dashboardOnly(event, beginGatewayPairing));
+  ipcMain.handle('desktop:gateway:account-open', event => dashboardOnly(event, openGatewayAccount));
   ipcMain.handle('desktop:gateway:pair-cancel', event => dashboardOnly(event, cancelGatewayPairing));
   ipcMain.handle('desktop:gateway:devices', event => dashboardOnly(event, listGatewayDevices));
   ipcMain.handle('desktop:gateway:device-revoke', (event, request = {}) => dashboardOnly(event, () => {

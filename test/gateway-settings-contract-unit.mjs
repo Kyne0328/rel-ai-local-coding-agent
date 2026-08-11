@@ -14,7 +14,7 @@ const main = read('electron/main.js');
 
 assert.match(cloud, /export (async )?function mountCloudGateway/);
 assert.match(cloud, /export function updateCloudGatewayLiveState/);
-for (const api of ['getGatewayStatus', 'beginGatewayPairing', 'cancelGatewayPairing', 'getGatewayDevices', 'revokeGatewayDevice', 'setGatewayMode', 'getGatewayRecovery']) {
+for (const api of ['getGatewayStatus', 'beginGatewayEnrollment', 'openGatewayAccount', 'cancelGatewayPairing', 'getGatewayDevices', 'revokeGatewayDevice', 'setGatewayMode', 'getGatewayRecovery']) {
   assert.equal(cloud.includes('relaiDesktop.' + api) || cloud.includes('desktop.' + api), true, 'cloud gateway UI must use ' + api);
   assert.match(preload, new RegExp(api), 'preload must expose ' + api);
 }

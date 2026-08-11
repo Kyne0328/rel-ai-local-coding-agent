@@ -12,10 +12,10 @@ const ipc = read('electron/ipc-handlers.js');
 const main = read('electron/main.js');
 const css = read('electron/renderer/app.css');
 
+assert.match(html, /<strong>Sign in<\/strong>/);
+assert.match(html, /<strong>Secure device<\/strong>/);
 assert.match(html, /<strong>Connect ChatGPT<\/strong>/);
-assert.match(html, /<strong>Secure this device<\/strong>/);
-assert.match(html, /<strong>Next steps<\/strong>/);
-assert.match(html, /Create pairing code/);
+assert.match(html, /Sign in or create account/);
 assert.match(html, /Plus or Pro[\s\S]*Plugins/i);
 assert.match(html, /Business, Enterprise, or Edu[\s\S]*workspace Apps/i);
 assert.doesNotMatch(html, /<strong>Welcome<\/strong>|<strong>Local service<\/strong>|<strong>Secure connection<\/strong>|<strong>Launch<\/strong>/);
@@ -28,28 +28,31 @@ for (const hiddenInfrastructure of ['Cloudflare', 'ngrok account key', 'Local se
   assert.equal(normalCloudHtml.includes(hiddenInfrastructure), false, 'normal Cloud onboarding must hide ' + hiddenInfrastructure);
 }
 
-for (const id of ['connectChatgptBtn', 'pairingCode', 'pairingExpiry', 'continueSecurityBtn', 'showRecoveryBtn', 'finishCloudBtn', 'advancedSetup', 'directPortInput', 'directNgrokTokenInput', 'directDomainInput', 'launchDirectBtn', 'recoveryCodeInput', 'recoverIdentityBtn', 'createLinkCodeBtn', 'linkCodeOutput', 'linkCodeValue']) {
+for (const id of ['connectChatgptBtn', 'pairingCode', 'pairingExpiry', 'continueSecurityBtn', 'finishCloudBtn', 'advancedSetup', 'directPortInput', 'directNgrokTokenInput', 'directDomainInput', 'launchDirectBtn', 'recoveryCodeInput', 'recoverIdentityBtn', 'createLinkCodeBtn', 'linkCodeOutput', 'linkCodeValue']) {
   assert.match(html, new RegExp('id=["\\\']' + id + '["\\\']'), 'wizard must expose ' + id);
 }
-assert.match(html, /short-lived pairing code/i);
+assert.match(html, /Rel\.AI account/i);
+assert.match(html, /legacy pairing code/i);
 assert.match(html, /Plus or Pro[\s\S]*Plugins/i, 'Plus and Pro onboarding must direct users to ChatGPT Plugins');
 assert.match(html, /Business, Enterprise, or Edu[\s\S]*workspace Apps/i, 'managed plans must retain workspace Apps guidance');
 assert.match(html, /private key[^<]*(?:never leaves|stays on) this (?:computer|device)/i);
 assert.match(html, /recovery code/i);
+assert.match(html, /account is the recovery path/i);
 assert.match(html, /Direct connection/i);
 assert.match(html, /ngrok account key/i, 'Advanced Direct flow must retain ngrok controls');
 
-for (const api of ['startCloudPairing', 'getCloudSetupStatus', 'cancelCloudPairing', 'getWizardRecoveryCode', 'createWizardDeviceLink', 'recoverCloudIdentity']) {
+for (const api of ['startCloudEnrollment', 'getCloudSetupStatus', 'cancelCloudPairing', 'createWizardDeviceLink', 'recoverCloudIdentity']) {
   assert.match(preload, new RegExp(api), 'wizard preload must expose ' + api);
   assert.match(js, new RegExp('electronAPI\\.' + api), 'wizard must use ' + api);
 }
-assert.match(ipc, /wizard:cloud-pair/);
+assert.match(preload, /getWizardRecoveryCode/, 'legacy recovery read remains available for backward compatibility');
+assert.match(ipc, /wizard:cloud-enroll/);
 assert.match(ipc, /wizard:cloud-status/);
 assert.match(ipc, /wizard:cloud-cancel/);
 assert.match(ipc, /wizard:cloud-recovery-get/);
 assert.match(ipc, /wizard:cloud-link-create/);
 assert.match(ipc, /wizard:cloud-recover/);
-assert.match(main, /startWizardCloudPairing/);
+assert.match(main, /startWizardCloudEnrollment/);
 assert.match(main, /recoverWizardCloudIdentity/);
 
 assert.match(js, /connectionMode:\s*['"]cloud['"]/);
@@ -65,7 +68,8 @@ assert.match(main, /showDashboardWindow\(''\)/, 'finished first-run setup must o
 assert.match(js, /pairing.*expires/i);
 assert.match(js, /setInterval|setTimeout/, 'wizard must refresh pairing expiry/status while visible');
 assert.match(js, /state\.cloudConnected/);
-assert.match(js, /showRecovery/);
+assert.match(js, /startCloudEnrollment/);
+assert.doesNotMatch(js, /showRecoveryBtn/);
 assert.doesNotMatch(js, /privateJwk|encryptedPrivateKey|privateKey/);
 
 assert.match(css, /\.wizard-cloud-/);

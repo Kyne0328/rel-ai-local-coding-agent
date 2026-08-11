@@ -1,5 +1,6 @@
 import { toast } from '../../components/toast.js';
 import { confirmAction } from '../../components/confirm-dialog.js';
+import { requestDashboardRefresh } from '../../api.js';
 import { esc as escapeHtml } from '../../utils.js';
 
 let removeCloudUpdateListener = null;
@@ -88,9 +89,9 @@ function bindActions(root, model) {
   const actions = root.querySelector('[data-cloud-actions]');
   if (!actions) return;
   actions.innerHTML = actionHtml(model.connectionMode, model.gateway);
-  actions.querySelector('[data-cloud-pair]')?.addEventListener('click', event => runButton(event.currentTarget, 'Creating pairing code…', async () => {
-    const result = await window.relaiDesktop.beginGatewayPairing();
-    toast('Pairing code created.', { variant: 'success' });
+  actions.querySelector('[data-cloud-enroll]')?.addEventListener('click', event => runButton(event.currentTarget, 'Opening browser…', async () => {
+    const result = await window.relaiDesktop.beginGatewayEnrollment();
+    toast('Rel.AI account sign-in opened in your browser.', { variant: 'success' });
     await loadCloudGateway(container, window.relaiDesktop);
     return result;
   }));
@@ -102,7 +103,9 @@ function bindActions(root, model) {
     const mode = event.currentTarget.dataset.cloudMode;
     await window.relaiDesktop.setGatewayMode(mode);
     toast(mode === 'cloud' ? 'Rel.AI Cloud enabled.' : 'Direct connection enabled.', { variant: 'success' });
+    requestDashboardRefresh({ structural: true });
   }));
+  actions.querySelector('[data-cloud-account]')?.addEventListener('click', event => runButton(event.currentTarget, 'Opening account…', async () => window.relaiDesktop.openGatewayAccount()));
   actions.querySelector('[data-cloud-recovery]')?.addEventListener('click', event => showRecovery(root, event.currentTarget));
   actions.querySelector('[data-cloud-refresh-devices]')?.addEventListener('click', event => runButton(event.currentTarget, 'Refreshing devices…', async () => {
     await refreshDeviceRegion(root, model.gateway);
@@ -166,9 +169,9 @@ function actionHtml(mode, gateway) {
     return '<div class="cloud-gateway-actions"><button type="button" class="secondary" data-cloud-pair-cancel>Cancel pairing</button></div>';
   }
   if (state === 'pairing_required' || state === 'offline' || state === 'error') {
-    return '<div class="cloud-gateway-actions"><button type="button" class="primary" data-cloud-pair>Create pairing code</button><details class="cloud-gateway-fallback"><summary>Advanced fallback</summary><button type="button" class="secondary compact-button" data-cloud-mode="direct">Use Direct connection</button></details></div>';
+    return '<div class="cloud-gateway-actions"><button type="button" class="primary" data-cloud-enroll>Sign in to Rel.AI</button><details class="cloud-gateway-fallback"><summary>Advanced fallback</summary><button type="button" class="secondary compact-button" data-cloud-mode="direct">Use Direct connection</button></details></div>';
   }
-  return '<div class="cloud-gateway-actions"><button type="button" class="secondary" data-cloud-refresh-devices>Refresh devices</button><button type="button" class="secondary" data-cloud-recovery>Show recovery code</button><details class="cloud-gateway-fallback"><summary>Advanced fallback</summary><button type="button" class="secondary compact-button" data-cloud-mode="direct">Use Direct connection</button></details></div>';
+  return '<div class="cloud-gateway-actions"><button type="button" class="secondary" data-cloud-account>Manage Rel.AI account</button><button type="button" class="secondary" data-cloud-refresh-devices>Refresh devices</button><details class="cloud-gateway-fallback"><summary>Legacy and Direct options</summary><button type="button" class="secondary compact-button" data-cloud-recovery>Show legacy recovery code</button><button type="button" class="secondary compact-button" data-cloud-mode="direct">Use Direct connection</button></details></div>';
 }
 
 function gatewayStatusHtml(mode, gateway) {
@@ -177,13 +180,14 @@ function gatewayStatusHtml(mode, gateway) {
   }
   const state = effectiveGatewayState(gateway);
   if (state === 'pairing_required') {
-    return '<div class="cloud-gateway-state"><strong>Connect ChatGPT</strong><p>Create a short-lived pairing code. Plus or Pro: open Plugins in ChatGPT (sidebar or Settings → Plugins), add Rel.AI MCP, and choose Connect. Business, Enterprise, or Edu: open the Rel.AI app provided by your workspace under Apps.</p></div>';
+    return '<div class="cloud-gateway-state"><strong>Sign in to Rel.AI</strong><p>Use your Rel.AI account to approve this computer. Adding another PC uses the same account and does not require access to an already connected device.</p></div>';
   }
   if (state === 'pairing') {
     const rawCode = String(gateway.pairing?.code || '');
-    const code = escapeHtml(rawCode || 'Waiting for code');
+    if (!rawCode) return `<div class="cloud-gateway-state cloud-pairing-state"><strong>Waiting for account approval</strong><p>${escapeHtml(expiryLabel(gateway.pairing?.expiresAt))}. Finish signing in and approve this computer in the Rel.AI browser window.</p></div>`;
+    const code = escapeHtml(rawCode);
     const expires = expiryLabel(gateway.pairing?.expiresAt);
-    return `<div class="cloud-gateway-state cloud-pairing-state"><span class="field-caption">Pairing code</span><button type="button" class="cloud-pairing-copy" data-copy-pairing aria-label="Copy pairing code ${code}" ${rawCode ? '' : 'disabled'}><code class="cloud-pairing-code">${code}</code><span>Copy code</span></button><p>${escapeHtml(expires)}. Plus or Pro: open Plugins in ChatGPT (sidebar or Settings → Plugins), add or open Rel.AI MCP, and choose Connect. Business, Enterprise, or Edu: open Rel.AI under your workspace Apps. Enter this code when the Rel.AI authorization page asks for a pairing code.</p></div>`;
+    return `<div class="cloud-gateway-state cloud-pairing-state"><span class="field-caption">Legacy pairing code</span><button type="button" class="cloud-pairing-copy" data-copy-pairing aria-label="Copy legacy pairing code ${code}"><code class="cloud-pairing-code">${code}</code><span>Copy code</span></button><p>${escapeHtml(expires)}. This code is only for legacy migration and recovery.</p></div>`;
   }
   if (state === 'tool_refresh_required') {
     return '<div class="cloud-gateway-state warn"><strong>ChatGPT tool refresh recommended</strong><p>The Rel.AI schema changed. Refresh the existing Rel.AI app tools in ChatGPT; do not reconnect credentials or recreate the app.</p></div>';
@@ -197,7 +201,7 @@ function gatewayStatusHtml(mode, gateway) {
   if (state === 'connected') {
     const device = gateway.deviceId ? `Device ${shortId(gateway.deviceId)}` : 'This device';
     const last = gateway.lastConnectedAt ? timeLabel(gateway.lastConnectedAt) : 'connected now';
-    return `<div class="cloud-gateway-state good"><strong>Rel.AI Cloud connected</strong><p>${escapeHtml(device)} · ${escapeHtml(last)}. ChatGPT requests are routed to paired devices without exposing local repository paths.</p></div>`;
+    return `<div class="cloud-gateway-state good"><strong>Rel.AI Cloud connected</strong><p>${escapeHtml(device)} · ${escapeHtml(last)}. This computer is linked to your Rel.AI account; add other PCs by installing Rel.AI and signing in with the same account.</p></div>`;
   }
   if (state === 'connecting' || state === 'authenticating') {
     return '<div class="cloud-gateway-state"><strong>Connecting to Rel.AI Cloud</strong><p>The local service stays available while the outbound device connection is restored.</p></div>';
@@ -211,7 +215,7 @@ function gatewayStatusHtml(mode, gateway) {
 function devicesHtml(devices, gateway) {
   if (!gateway.principalPaired) return '';
   if (!devices.length) return '<div class="cloud-device-section"><div class="field-caption">Paired devices</div><p class="muted">No device list is available yet.</p></div>';
-  return `<div class="cloud-device-section"><div class="cloud-device-heading"><div><span class="field-caption">Paired devices</span><p class="muted">Workspace routing uses device workspace aliases and explicit choices when more than one device is eligible.</p></div><span>${devices.length} device${devices.length === 1 ? '' : 's'}</span></div><div class="cloud-device-list">${devices.map(deviceHtml).join('')}</div></div>`;
+  return `<div class="cloud-device-section"><div class="cloud-device-heading"><div><span class="field-caption">Account devices</span><p class="muted">Every approved computer has its own device key. Use Manage Rel.AI account to revoke lost devices or choose routing preferences when workspace names overlap.</p></div><span>${devices.length} device${devices.length === 1 ? '' : 's'}</span></div><div class="cloud-device-list">${devices.map(deviceHtml).join('')}</div></div>`;
 }
 
 function deviceHtml(device) {
@@ -269,7 +273,7 @@ async function revokeDevice(container, button) {
     title: current ? 'Disconnect this device?' : 'Revoke device?',
     message: current ? 'Disconnect this computer from Rel.AI Cloud?' : `Revoke ${label}?`,
     detail: current
-      ? 'ChatGPT will lose access to this computer until you pair it again. Local workspaces and files will not be deleted.'
+      ? 'ChatGPT will lose access to this computer until you sign in and approve it again. Local workspaces and files will not be deleted.'
       : 'This device will lose access to the shared Rel.AI connection. Its local workspaces and files will not be deleted.',
     confirmLabel: current ? 'Disconnect device' : 'Revoke device',
     danger: true
@@ -295,7 +299,7 @@ async function showRecovery(root, button) {
       panel.dataset.cloudRecoveryPanel = '';
       root.querySelector('.cloud-gateway-stack')?.appendChild(panel);
     }
-    panel.innerHTML = '<strong>Recovery code</strong><p>Store this code somewhere private. It can recover your Rel.AI identity on a replacement computer.</p><div class="connection-endpoint-row"><code class="connector-endpoint" data-recovery-code></code><button type="button" class="secondary" data-copy-recovery>Copy code</button></div>';
+    panel.innerHTML = '<strong>Legacy recovery code</strong><p>This is retained only for migrating older Rel.AI identities. Account-based devices should add or replace computers by signing in to the same Rel.AI account.</p><div class="connection-endpoint-row"><code class="connector-endpoint" data-recovery-code></code><button type="button" class="secondary" data-copy-recovery>Copy code</button></div>';
     panel.querySelector('[data-recovery-code]').textContent = recoveryCode;
     panel.querySelector('[data-copy-recovery]').addEventListener('click', async () => {
       await window.relaiDesktop.copyText(recoveryCode);
@@ -322,12 +326,18 @@ async function runButton(button, loadingLabel, action) {
 }
 
 function hasGatewayBridge(desktop) {
-  return Boolean(desktop?.getGatewayStatus && desktop?.beginGatewayPairing && desktop?.cancelGatewayPairing && desktop?.getGatewayDevices && desktop?.revokeGatewayDevice && desktop?.setGatewayMode && desktop?.getGatewayRecovery);
+  return Boolean(desktop?.getGatewayStatus && desktop?.beginGatewayEnrollment && desktop?.openGatewayAccount && desktop?.cancelGatewayPairing && desktop?.getGatewayDevices && desktop?.revokeGatewayDevice && desktop?.setGatewayMode && desktop?.getGatewayRecovery);
 }
 
 function safeGateway(value = {}) {
   const pairing = value.pairing && typeof value.pairing === 'object'
-    ? { pairingId: String(value.pairing.pairingId || ''), code: String(value.pairing.code || ''), expiresAt: Number(value.pairing.expiresAt || 0) || null }
+    ? {
+        pairingId: String(value.pairing.pairingId || ''),
+        enrollmentId: String(value.pairing.enrollmentId || ''),
+        browserUrl: String(value.pairing.browserUrl || ''),
+        code: String(value.pairing.code || ''),
+        expiresAt: Number(value.pairing.expiresAt || 0) || null
+      }
     : null;
   return {
     state: String(value.state || 'offline'),

@@ -53,7 +53,7 @@ function createGatewayDeviceIdentityStore({
   async function setPrincipalState(value = {}) {
     requireLoaded(loaded);
     const principalId = boundedSecret(value.principalId, 'principalId', 200);
-    const recoverySecret = boundedSecret(value.recoverySecret, 'recoverySecret', 4096);
+    const recoverySecret = optionalSecret(value.recoverySecret, 'recoverySecret', 4096);
     const principalState = { principalId, recoverySecret };
     const encryptedPrincipalState = encryptJson(safeStorage, principalState);
     const disk = { ...loaded.disk, encryptedPrincipalState };
@@ -182,7 +182,7 @@ function validatePrincipalState(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Principal state is invalid.');
   return {
     principalId: boundedSecret(value.principalId, 'principalId', 200),
-    recoverySecret: boundedSecret(value.recoverySecret, 'recoverySecret', 4096)
+    recoverySecret: optionalSecret(value.recoverySecret, 'recoverySecret', 4096)
   };
 }
 
@@ -247,6 +247,12 @@ function ensureEncryptionAvailable(safeStorage) {
 
 function requireLoaded(loaded) {
   if (!loaded) throw new Error('Gateway device identity has not been opened.');
+}
+
+function optionalSecret(value, name, maxLength) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  return boundedSecret(text, name, maxLength);
 }
 
 function boundedSecret(value, name, maxLength) {

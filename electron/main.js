@@ -399,6 +399,37 @@ async function beginGatewayPairing(options = {}) {
   return { ok: true, pairing };
 }
 
+async function beginGatewayEnrollment(options = {}) {
+  const enrollment = await publicConnectionRuntime.gatewayCall('beginEnrollment', options);
+  await openGatewayBrowserPath(enrollment?.browserUrl, '/device');
+  return { ok: true, enrollment };
+}
+
+async function openGatewayAccount() {
+  const origin = gatewayBrowserOrigin();
+  const target = new URL('/account', origin);
+  await openGatewayBrowserPath(target.href, '/account');
+  return { ok: true };
+}
+
+function gatewayBrowserOrigin() {
+  const raw = String(readGuiConfig().gatewayOrigin || '').trim();
+  if (!raw) throw new Error('Rel.AI Cloud origin is unavailable.');
+  const origin = new URL(raw);
+  const localHttp = origin.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(origin.hostname);
+  if (origin.protocol !== 'https:' && !localHttp) throw new Error('Rel.AI Cloud browser links must use HTTPS.');
+  return origin;
+}
+
+async function openGatewayBrowserPath(value, expectedPath) {
+  const origin = gatewayBrowserOrigin();
+  const target = new URL(String(value || ''), origin);
+  if (target.origin !== origin.origin || target.pathname !== expectedPath) {
+    throw new Error('Rel.AI Cloud returned an unexpected browser link.');
+  }
+  await shell.openExternal(target.href);
+}
+
 function cancelGatewayPairing() {
   const status = publicConnectionRuntime.gatewayCall('cancelPairing');
   return { ok: true, gateway: safeGatewayDesktopStatus(status, readGuiConfig().gatewayOrigin) };
@@ -456,6 +487,11 @@ async function ensureWizardCloudRuntime() {
   return status;
 }
 
+async function startWizardCloudEnrollment(options = {}) {
+  await ensureWizardCloudRuntime();
+  return beginGatewayEnrollment(options);
+}
+
 async function startWizardCloudPairing(options = {}) {
   await ensureWizardCloudRuntime();
   return beginGatewayPairing(options);
@@ -464,7 +500,7 @@ async function startWizardCloudPairing(options = {}) {
 async function recoverWizardCloudIdentity(recoveryCode) {
   const code = String(recoveryCode || '').trim();
   if (!code || code.length > 8192) throw new Error('A valid Rel.AI recovery code is required.');
-  return startWizardCloudPairing({ recoveryCode: code });
+  return startWizardCloudEnrollment({ recoveryCode: code });
 }
 
 function getWizardCloudStatus() {
@@ -846,6 +882,7 @@ registerIpcHandlers({
   toggleDashboardMaximize: dashboardWindowManager.toggleMaximize,
   requestDashboardClose: dashboardWindowManager.requestClose,
   getRecoveryConfig,
+  startWizardCloudEnrollment,
   startWizardCloudPairing,
   getWizardCloudStatus,
   cancelWizardCloudPairing,
@@ -859,7 +896,9 @@ registerIpcHandlers({
   openSettingsWindow,
   openDashboardWindow,
   getGatewayStatus: gatewayStatusForDashboard,
+  beginGatewayEnrollment,
   beginGatewayPairing,
+  openGatewayAccount,
   cancelGatewayPairing,
   listGatewayDevices,
   revokeGatewayDevice,
