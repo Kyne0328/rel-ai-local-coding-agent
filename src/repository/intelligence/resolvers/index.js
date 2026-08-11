@@ -5,10 +5,12 @@ import { rustResolver } from './rust.js';
 import { cFamilyResolver } from './cFamily.js';
 import { phpResolver } from './php.js';
 import { kotlinResolver } from './kotlin.js';
+import { rubyResolver } from './ruby.js';
 import { javascriptTypeResolver } from './javascript.js';
 import { pythonResolver } from './python.js';
 
 const RESOLVERS = new Map([
+  ['ruby', rubyResolver],
   ['kotlin', kotlinResolver],
   ['php', phpResolver],
   ['cpp', cFamilyResolver],
