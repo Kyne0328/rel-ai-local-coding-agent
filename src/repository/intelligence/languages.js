@@ -1,49 +1,86 @@
 import path from 'node:path';
 
-const PARSER_VERSION = 1;
+const PARSER_VERSION = 2;
 const MAX_SEARCH_TERMS = 768;
 
-const EXTENSION_LANGUAGE = new Map([
-  ['.js', 'javascript'], ['.jsx', 'javascript'], ['.mjs', 'javascript'], ['.cjs', 'javascript'],
-  ['.ts', 'typescript'], ['.tsx', 'tsx'], ['.py', 'python'], ['.go', 'go'], ['.rs', 'rust'],
-  ['.dart', 'dart'], ['.java', 'java'], ['.kt', 'kotlin'], ['.kts', 'kotlin'], ['.swift', 'swift'],
-  ['.cs', 'csharp'], ['.c', 'c'], ['.h', 'c'], ['.cpp', 'cpp'], ['.cc', 'cpp'], ['.cxx', 'cpp'],
-  ['.hpp', 'cpp'], ['.hh', 'cpp'], ['.hxx', 'cpp'], ['.rb', 'ruby'], ['.php', 'php'],
-  ['.vue', 'vue'], ['.json', 'json'], ['.css', 'css'], ['.html', 'html'], ['.htm', 'html'],
-  ['.yaml', 'yaml'], ['.yml', 'yaml'], ['.toml', 'toml'], ['.sh', 'bash'], ['.bash', 'bash']
+const LANGUAGE_PROFILES = Object.freeze([
+  profile('bash', 'tree-sitter-bash.wasm', ['.sh', '.bash', '.zsh'], ['.bashrc', '.zshrc']),
+  profile('c', 'tree-sitter-c.wasm', ['.c', '.h']),
+  profile('csharp', 'tree-sitter-c_sharp.wasm', ['.cs']),
+  profile('cpp', 'tree-sitter-cpp.wasm', ['.cpp', '.cc', '.cxx', '.hpp', '.hh', '.hxx', '.ipp', '.tpp']),
+  profile('css', 'tree-sitter-css.wasm', ['.css']),
+  profile('dart', 'tree-sitter-dart.wasm', ['.dart']),
+  profile('elisp', 'tree-sitter-elisp.wasm', ['.el']),
+  profile('elixir', 'tree-sitter-elixir.wasm', ['.ex', '.exs']),
+  profile('elm', 'tree-sitter-elm.wasm', ['.elm']),
+  profile('embedded_template', 'tree-sitter-embedded_template.wasm', ['.erb']),
+  profile('go', 'tree-sitter-go.wasm', ['.go']),
+  profile('html', 'tree-sitter-html.wasm', ['.html', '.htm']),
+  profile('java', 'tree-sitter-java.wasm', ['.java']),
+  profile('javascript', 'tree-sitter-javascript.wasm', ['.js', '.jsx', '.mjs', '.cjs'], [], 'javascript-typescript'),
+  profile('json', 'tree-sitter-json.wasm', ['.json']),
+  profile('kotlin', 'tree-sitter-kotlin.wasm', ['.kt', '.kts']),
+  profile('lua', 'tree-sitter-lua.wasm', ['.lua']),
+  profile('objc', 'tree-sitter-objc.wasm', ['.m', '.mm']),
+  profile('ocaml', 'tree-sitter-ocaml.wasm', ['.ml', '.mli']),
+  profile('php', 'tree-sitter-php.wasm', ['.php', '.phtml']),
+  profile('python', 'tree-sitter-python.wasm', ['.py', '.pyi']),
+  profile('ql', 'tree-sitter-ql.wasm', ['.ql', '.qll']),
+  profile('rescript', 'tree-sitter-rescript.wasm', ['.res', '.resi']),
+  profile('ruby', 'tree-sitter-ruby.wasm', ['.rb', '.rake', '.gemspec'], ['gemfile', 'rakefile']),
+  profile('rust', 'tree-sitter-rust.wasm', ['.rs']),
+  profile('scala', 'tree-sitter-scala.wasm', ['.scala', '.sc']),
+  profile('solidity', 'tree-sitter-solidity.wasm', ['.sol']),
+  profile('swift', 'tree-sitter-swift.wasm', ['.swift']),
+  profile('systemrdl', 'tree-sitter-systemrdl.wasm', ['.rdl']),
+  profile('tlaplus', 'tree-sitter-tlaplus.wasm', ['.tla']),
+  profile('toml', 'tree-sitter-toml.wasm', ['.toml']),
+  profile('tsx', 'tree-sitter-tsx.wasm', ['.tsx'], [], 'javascript-typescript'),
+  profile('typescript', 'tree-sitter-typescript.wasm', ['.ts', '.mts', '.cts'], [], 'javascript-typescript'),
+  profile('vue', 'tree-sitter-vue.wasm', ['.vue']),
+  profile('yaml', 'tree-sitter-yaml.wasm', ['.yaml', '.yml']),
+  profile('zig', 'tree-sitter-zig.wasm', ['.zig'])
 ]);
 
-const WASM_BY_LANGUAGE = Object.freeze({
-  javascript: 'tree-sitter-javascript.wasm',
-  typescript: 'tree-sitter-typescript.wasm',
-  tsx: 'tree-sitter-tsx.wasm',
-  python: 'tree-sitter-python.wasm',
-  go: 'tree-sitter-go.wasm',
-  rust: 'tree-sitter-rust.wasm',
-  dart: 'tree-sitter-dart.wasm',
-  java: 'tree-sitter-java.wasm',
-  kotlin: 'tree-sitter-kotlin.wasm',
-  swift: 'tree-sitter-swift.wasm',
-  csharp: 'tree-sitter-c_sharp.wasm',
-  c: 'tree-sitter-c.wasm',
-  cpp: 'tree-sitter-cpp.wasm',
-  ruby: 'tree-sitter-ruby.wasm',
-  php: 'tree-sitter-php.wasm',
-  vue: 'tree-sitter-vue.wasm',
-  json: 'tree-sitter-json.wasm',
-  css: 'tree-sitter-css.wasm',
-  html: 'tree-sitter-html.wasm',
-  yaml: 'tree-sitter-yaml.wasm',
-  toml: 'tree-sitter-toml.wasm',
-  bash: 'tree-sitter-bash.wasm'
-});
+const PROFILE_BY_LANGUAGE = new Map(LANGUAGE_PROFILES.map(item => [item.language, item]));
+const EXTENSION_LANGUAGE = new Map();
+const BASENAME_LANGUAGE = new Map();
+for (const item of LANGUAGE_PROFILES) {
+  for (const extension of item.extensions) EXTENSION_LANGUAGE.set(extension, item.language);
+  for (const basename of item.basenames) BASENAME_LANGUAGE.set(basename, item.language);
+}
+const WASM_BY_LANGUAGE = Object.freeze(Object.fromEntries(LANGUAGE_PROFILES.map(item => [item.language, item.wasm])));
+
+function profile(language, wasm, extensions, basenames = [], resolver = null) {
+  return Object.freeze({ language, wasm, extensions: Object.freeze([...extensions]), basenames: Object.freeze([...basenames]), resolver });
+}
 
 function languageForPath(relativePath) {
-  return EXTENSION_LANGUAGE.get(path.extname(String(relativePath || '')).toLowerCase()) || 'text';
+  const normalized = String(relativePath || '').replaceAll('\\', '/').toLowerCase();
+  const basename = path.posix.basename(normalized);
+  return BASENAME_LANGUAGE.get(basename) || EXTENSION_LANGUAGE.get(path.posix.extname(basename)) || 'text';
 }
 
 function wasmForLanguage(language) {
   return WASM_BY_LANGUAGE[String(language || '').toLowerCase()] || null;
+}
+
+function languageProfile(language) {
+  return PROFILE_BY_LANGUAGE.get(String(language || '').toLowerCase()) || null;
+}
+
+function structuralLanguages() {
+  return LANGUAGE_PROFILES.map(item => item.language);
+}
+
+function enhancedResolverLanguages() {
+  return LANGUAGE_PROFILES.filter(item => item.resolver).map(item => item.language);
+}
+
+function languageCapabilities(language) {
+  const item = languageProfile(language);
+  if (!item) return { language: String(language || 'text'), structural: false, parser: null, resolver: null, resolution: 'lexical' };
+  return { language: item.language, structural: true, parser: item.wasm, resolver: item.resolver, resolution: item.resolver ? 'enhanced' : 'structural' };
 }
 
 function isTestPath(relativePath) {
@@ -57,11 +94,7 @@ function isTestPath(relativePath) {
 }
 
 function queryTerms(value, limit = 32) {
-  const expanded = String(value || '')
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .replace(/[_$]+/g, ' ')
-    .replace(/[^A-Za-z0-9]+/g, ' ')
-    .toLowerCase();
+  const expanded = String(value || '').replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_$]+/g, ' ').replace(/[^A-Za-z0-9]+/g, ' ').toLowerCase();
   return [...new Set(expanded.split(/\s+/).filter(term => term.length >= 2))].slice(0, limit);
 }
 
@@ -77,22 +110,12 @@ function simpleSymbol(symbol) {
 
 function stripQuotes(value) {
   const text = String(value || '').trim();
-  if (text.length >= 2 && ((text.startsWith('"') && text.endsWith('"')) || (text.startsWith("'") && text.endsWith("'")) || (text.startsWith('`') && text.endsWith('`')))) {
-    return text.slice(1, -1);
-  }
+  if (text.length >= 2 && ((text.startsWith('"') && text.endsWith('"')) || (text.startsWith("'") && text.endsWith("'")) || (text.startsWith('`') && text.endsWith('`')))) return text.slice(1, -1);
   return text;
 }
 
 export {
-  EXTENSION_LANGUAGE,
-  MAX_SEARCH_TERMS,
-  PARSER_VERSION,
-  WASM_BY_LANGUAGE,
-  isTestPath,
-  languageForPath,
-  lexicalSearchText,
-  queryTerms,
-  simpleSymbol,
-  stripQuotes,
-  wasmForLanguage
+  EXTENSION_LANGUAGE, LANGUAGE_PROFILES, MAX_SEARCH_TERMS, PARSER_VERSION, WASM_BY_LANGUAGE,
+  enhancedResolverLanguages, isTestPath, languageCapabilities, languageForPath, languageProfile,
+  lexicalSearchText, queryTerms, simpleSymbol, structuralLanguages, stripQuotes, wasmForLanguage
 };

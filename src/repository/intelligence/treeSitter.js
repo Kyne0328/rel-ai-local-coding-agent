@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import Parser from 'web-tree-sitter';
 
 import { languageForPath, lexicalSearchText, stripQuotes, wasmForLanguage } from './languages.js';
+import { resolverForLanguage } from './resolvers/index.js';
 
 const WASM_ROOT = path.join(path.dirname(fileURLToPath(import.meta.resolve('tree-sitter-wasms/package.json'))), 'out');
 const languageCache = new Map();
@@ -64,6 +65,9 @@ async function parseSourceFile({ relativePath, source }) {
     parser.setLanguage(grammar);
     const tree = parser.parse(text);
     const facts = extractFacts(tree.rootNode, language);
+    const resolver = resolverForLanguage(language);
+    const enrichment = resolver?.enrich({ root: tree.rootNode, source: text, relativePath: normalizedPath, language, facts }) || null;
+    const imports = dedupe([...(enrichment?.imports || []), ...(facts.imports || [])], item => `${item.kind}:${item.specifier}`);
     return {
       path: normalizedPath,
       language,
@@ -71,7 +75,9 @@ async function parseSourceFile({ relativePath, source }) {
       parseError: Boolean(tree.rootNode.hasError),
       symbols: facts.symbols,
       occurrences: facts.occurrences,
-      imports: facts.imports,
+      imports,
+      relations: enrichment?.relations || [],
+      resolver: enrichment ? { id: enrichment.provider, capabilities: enrichment.capabilities || [] } : null,
       searchText: lexicalSearchText(normalizedPath, text, facts.symbols)
     };
   } catch {
@@ -90,6 +96,8 @@ function lexicalOnlyResult(relativePath, language, source, parser = 'lexical') {
     symbols: [],
     occurrences: [],
     imports: [],
+    relations: [],
+    resolver: null,
     searchText: lexicalSearchText(relativePath, source, [])
   };
 }
