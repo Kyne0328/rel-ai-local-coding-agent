@@ -82,6 +82,7 @@ async function snapshotGitSummary(workspace, config) {
     return {
       branch: ownership.branch,
       aheadBehind: ownership.aheadBehind,
+      unborn: ownership.unborn,
       dirtyFiles: ownership.entries.length,
       ...(ownership.entries.length ? { changedFiles: ownership.entries.slice(0, 20).map((entry) => entry.path) } : {})
     };

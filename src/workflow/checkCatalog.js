@@ -33,16 +33,31 @@ function unit(pkg, id, command, kind, source) {
   };
 }
 
+const NON_VALIDATION_KINDS = new Set([
+  'migration', 'benchmark', 'service', 'release', 'setup', 'cleanup', 'generator', 'package'
+]);
+
 function classifyCheckKind(name, command = '') {
-  const token = `${name} ${command}`.toLowerCase();
+  const scriptName = String(name || '').toLowerCase();
+  const token = `${scriptName} ${command}`.toLowerCase();
+  // Operational and mutating npm scripts are never automatic validation.
+  // A test named test:release is still a test because exclusions key off the prefix.
+  if (/^benchmark(?::|$)/.test(scriptName)) return 'benchmark';
+  if (/^(?:watch|dev|start|serve)(?::|$)/.test(scriptName)) return 'service';
+  if (/^(?:release|publish|deploy)(?::|$)/.test(scriptName)) return 'release';
+  if (/^(?:fetch|install|postinstall|setup|init)(?::|$)/.test(scriptName)) return 'setup';
+  if (/^clean(?::|$)/.test(scriptName)) return 'cleanup';
+  if (/^(?:generate|prepare)(?::|$)/.test(scriptName)) return 'generator';
+  if (/^(?:dist|package|electron:dist)(?::|$)/.test(scriptName)) return 'package';
   if (/migrat|prisma\s+(?:migrate|db push)|sequelize.*db:migrate/.test(token)) return 'migration';
   if (/dead.?code|\bknip\b|unused/.test(token)) return 'dead_code';
   if (/security|audit|snyk|semgrep/.test(token)) return 'security';
   if (/type.?check|tsc(?:\s|$)/.test(token)) return 'typecheck';
   if (/lint/.test(token)) return 'lint';
   if (/format|prettier/.test(token)) return 'format';
+  if (/^check(?::|$)|^verify(?::|$)|^validate(?::|$)/.test(scriptName)) return 'verification';
   if (/build|compile|bundle/.test(token)) return 'build';
-  if (/test|spec/.test(token)) return 'test';
+  if (/test|spec|smoke|acceptance/.test(token)) return 'test';
   return 'other';
 }
 
@@ -50,7 +65,8 @@ function selectChecksForPackages(catalog, packageIds, options = {}) {
   const ids = new Set(packageIds || []);
   const allowedKinds = options.kinds ? new Set(options.kinds) : null;
   return (catalog || []).filter(item => ids.has(item.packageId))
-    .filter(item => item.kind !== 'migration')
+    .filter(item => !NON_VALIDATION_KINDS.has(item.kind))
+    .filter(item => item.kind !== 'other')
     .filter(item => !allowedKinds || allowedKinds.has(item.kind));
 }
 

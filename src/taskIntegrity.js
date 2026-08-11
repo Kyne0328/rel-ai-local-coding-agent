@@ -205,9 +205,12 @@ function createWorkspaceState(workspace) {
 }
 
 function repositoryBaseline(root) {
+  const branch = gitText(root, ['branch', '--show-current']);
+  const head = gitText(root, ['rev-parse', '--verify', 'HEAD']);
   return {
-    branch: gitText(root, ['branch', '--show-current']),
-    head: gitText(root, ['rev-parse', 'HEAD']),
+    branch,
+    head,
+    unborn: Boolean(branch && !head),
     changedFiles: repositoryChangedFiles(root)
   };
 }

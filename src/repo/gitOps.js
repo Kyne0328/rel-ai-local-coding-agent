@@ -107,6 +107,7 @@ function classifyStatusOwnership(workspace, config, statusOutput) {
     branchRaw: parsed.branchRaw,
     branch: parsed.branch,
     aheadBehind: parsed.aheadBehind,
+    unborn: parsed.unborn,
     hasSession,
     baselineSource,
     ...groups
@@ -147,6 +148,17 @@ async function makePatchBackup(workspace, config, operationId, label) {
   const status = await gitStatusShort(workspace, config);
   if (!status.trim()) return { type: "none", reason: "workspace clean" };
   const message = `rel-ai-mcp ${label} backup ${operationId}`;
+  const head = await runProcess("git", ["rev-parse", "--verify", "HEAD"], { cwd: workspace.path, timeout: 30000 }, config);
+  if (head.exitCode !== 0) {
+    const symbolicHead = await runProcess("git", ["symbolic-ref", "-q", "HEAD"], { cwd: workspace.path, timeout: 30000 }, config);
+    if (symbolicHead.exitCode === 0) {
+      return {
+        type: "unborn-worktree",
+        unborn: true,
+        reason: "Repository has no commits yet; Git stash backups are unavailable until the first commit."
+      };
+    }
+  }
   // Snapshot tracked changes WITHOUT disturbing the working tree: `stash create`
   // builds a stash commit but leaves the tree intact, then `stash store` records it
   // in the stash list for manual recovery. The previous `stash push --include-untracked`
@@ -321,6 +333,7 @@ async function workspaceGitStatus(workspace, config, args = {}) {
     workspace: workspace.alias,
     branch: ownership.branch,
     aheadBehind: ownership.aheadBehind,
+    unborn: ownership.unborn,
     status: truncateUtf8(formatGitStatus(ownership), maxBytes, "git status"),
     statusEntries: ownership.entries,
     changedFiles: ownership.entries.map((entry) => entry.path),

@@ -47,12 +47,47 @@ function detectVerifyCheckUnits(root, level) {
       return matched || { id: `legacy:root:${index}`, packageId: '', cwd: '.', command, kind: 'other', level: level === 'quick' ? 'focused' : 'standard', estimatedCost: 'small', source: 'legacy', scopeKey: 'repository' };
     });
   }
+  const rootUnits = detectVerifyChecks(root, level).map((command, index) => {
+    const matched = catalog.find(unit => unit.command === command && unit.cwd === '.');
+    return matched || { id: `legacy:root:${index}`, packageId: '', cwd: '.', command, kind: 'verification', level: level === 'quick' ? 'focused' : 'standard', estimatedCost: 'small', source: 'legacy', scopeKey: 'repository' };
+  });
+  const nested = minimalNestedChecks(catalog.filter(unit => unit.cwd !== '.'), level);
+  return [...rootUnits, ...nested];
+}
+
+function minimalNestedChecks(catalog, level) {
   const allowed = level === 'release'
-    ? new Set(['test', 'lint', 'typecheck', 'build', 'dead_code', 'security', 'other'])
+    ? new Set(['test', 'lint', 'typecheck', 'build', 'dead_code', 'security', 'verification'])
     : level === 'quick' || level === 'focused'
-      ? new Set(['test', 'lint', 'typecheck', 'format', 'other'])
-      : new Set(['test', 'lint', 'typecheck', 'build', 'other']);
-  return catalog.filter(unit => unit.kind !== 'migration' && allowed.has(unit.kind));
+      ? new Set(['lint', 'typecheck', 'format', 'verification'])
+      : new Set(['test', 'lint', 'typecheck', 'build', 'verification']);
+  const groups = new Map();
+  for (const unit of catalog) {
+    if (!allowed.has(unit.kind)) continue;
+    const key = `${unit.packageId}\u0000${unit.kind}`;
+    const items = groups.get(key) || [];
+    items.push(unit);
+    groups.set(key, items);
+  }
+  const selected = [];
+  for (const items of groups.values()) {
+    items.sort((left, right) => checkPreference(left, level) - checkPreference(right, level)
+      || left.command.length - right.command.length
+      || left.command.localeCompare(right.command));
+    selected.push(items[0]);
+  }
+  return selected;
+}
+
+function checkPreference(unit, level) {
+  const name = String(unit.id || '').slice(String(unit.packageId || '').length + 1).toLowerCase();
+  const preferred = level === 'release'
+    ? ['test:all', 'test', 'check', 'verify', 'lint', 'typecheck', 'build']
+    : level === 'quick' || level === 'focused'
+      ? ['check', 'verify', 'lint', 'typecheck', 'format']
+      : ['test', 'check', 'verify', 'lint', 'typecheck', 'build'];
+  const index = preferred.indexOf(name);
+  return index === -1 ? preferred.length + name.split(':').length : index;
 }
 
 function detectPackageJsonChecks(root, level, commands) {

@@ -23,6 +23,7 @@ function parsePorcelainV1Z(text) {
   let branchRaw = '';
   let branch = null;
   let aheadBehind = null;
+  let unborn = false;
 
   for (let index = 0; index < records.length; index += 1) {
     const record = records[index];
@@ -32,6 +33,7 @@ function parsePorcelainV1Z(text) {
       const parsed = parseStatusBranchLine(record);
       branch = parsed.branch;
       aheadBehind = parsed.aheadBehind;
+      unborn = parsed.unborn;
       continue;
     }
     if (record.length < 3) continue;
@@ -54,7 +56,7 @@ function parsePorcelainV1Z(text) {
     });
   }
 
-  return { branchRaw, branch, aheadBehind, entries };
+  return { branchRaw, branch, aheadBehind, unborn, entries };
 }
 
 function parseLegacyStatus(text) {
@@ -62,12 +64,14 @@ function parseLegacyStatus(text) {
   let branchRaw = '';
   let branch = null;
   let aheadBehind = null;
+  let unborn = false;
   for (const line of String(text || '').split(/\r?\n/).filter(Boolean)) {
     if (line.startsWith('## ')) {
       branchRaw = line;
       const parsed = parseStatusBranchLine(line);
       branch = parsed.branch;
       aheadBehind = parsed.aheadBehind;
+      unborn = parsed.unborn;
       continue;
     }
     if (line.length < 3) continue;
@@ -87,11 +91,20 @@ function parseLegacyStatus(text) {
       raw: line
     });
   }
-  return { branchRaw, branch, aheadBehind, entries };
+  return { branchRaw, branch, aheadBehind, unborn, entries };
 }
 
 function parseStatusBranchLine(line) {
   const text = String(line || '').replace(/^##\s+/, '').trim();
+  const unbornMatch = /^(?:No commits yet on|Initial commit on)\s+(.+)$/.exec(text);
+  if (unbornMatch) {
+    const branchPart = unbornMatch[1].split('...')[0].trim();
+    return {
+      branch: branchPart || null,
+      aheadBehind: null,
+      unborn: true
+    };
+  }
   const aheadMatch = /ahead (\d+)/.exec(text);
   const behindMatch = /behind (\d+)/.exec(text);
   const branchPart = text.split('...')[0].trim();
@@ -100,7 +113,8 @@ function parseStatusBranchLine(line) {
     aheadBehind: aheadMatch || behindMatch ? {
       ahead: aheadMatch ? Number(aheadMatch[1]) : 0,
       behind: behindMatch ? Number(behindMatch[1]) : 0
-    } : null
+    } : null,
+    unborn: false
   };
 }
 
