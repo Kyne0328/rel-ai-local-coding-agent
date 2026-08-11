@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-const PARSER_VERSION = 7;
+const PARSER_VERSION = 8;
 const MAX_SEARCH_TERMS = 768;
 
 const LANGUAGE_PROFILES = Object.freeze([
@@ -45,6 +45,7 @@ const LANGUAGE_PROFILES = Object.freeze([
   profile('powershell', 'tree-sitter-powershell.wasm', [".ps1",".psm1",".psd1"]),
   profile('markdown', 'tree-sitter-markdown.wasm', [".md",".markdown",".mdx"]),
   profile('dockerfile', 'tree-sitter-dockerfile.wasm', [".dockerfile"], ["dockerfile"]),
+  profile('graphql', 'tree-sitter-graphql.wasm', [".graphql",".gql"]),
   profile('zig', 'tree-sitter-zig.wasm', ['.zig'])
 ]);
 
@@ -62,7 +63,8 @@ const VENDORED_WASM_BY_LANGUAGE = Object.freeze({
   sql: 'vendor/tree-sitter/sql/tree-sitter-sql.wasm',
   powershell: 'vendor/tree-sitter/powershell/tree-sitter-powershell.wasm',
   markdown: 'vendor/tree-sitter/markdown/tree-sitter-markdown.wasm',
-  dockerfile: 'vendor/tree-sitter/dockerfile/tree-sitter-dockerfile.wasm'
+  dockerfile: 'vendor/tree-sitter/dockerfile/tree-sitter-dockerfile.wasm',
+  graphql: 'vendor/tree-sitter/graphql/tree-sitter-graphql.wasm'
 });
 
 function profile(language, wasm, extensions, basenames = [], resolver = null) {
