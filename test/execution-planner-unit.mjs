@@ -174,6 +174,8 @@ function makeTempRepo(filename = 'hello.js', content = 'module.exports = {};') {
     assert.equal(result.appliedCount, 0, 'batch: no edit should be applied after preflight failure');
     assert.equal(result.results.length, 2, 'batch: both preflight results present');
     assert.ok(result.results.some((r) => r.ok === false), 'batch: a failure is reported');
+    assert.match(result.error, /Atomic batch preflight failed.*No files were changed.*connector remains available/s, 'batch: preflight failure must preserve its cause and distinguish it from connector availability');
+    assert.match(result.next, /Re-read a\.js.*Do not treat this edit failure as a connector disconnect/s, 'batch: failure must provide a safe retry path');
     assert.equal(fs.readFileSync(path.join(dir, 'a.js'), 'utf8').replaceAll('\r\n', '\n'), 'let a = 1;\n', 'batch: failed preflight leaves original file unchanged');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -193,6 +195,7 @@ function makeTempRepo(filename = 'hello.js', content = 'module.exports = {};') {
     assert.equal(result.rollbackAtomic, true);
     assert.equal(result.rollback?.ok, true);
     assert.equal(result.appliedCount, 0);
+    assert.match(result.error, /Atomic batch application failed.*No files were changed.*connector remains available/s);
     assert.equal(fs.readFileSync(path.join(dir, 'a.js'), 'utf8').replaceAll('\r\n', '\n'), 'let a = 1;\n');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });

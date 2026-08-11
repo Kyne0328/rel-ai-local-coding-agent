@@ -286,6 +286,10 @@ async function _handleBatchEdits(workspace, config, args) {
   const compactResults = args.edits.length > BATCH_RESULT_COMPACT_THRESHOLD;
   const preflight = await preflightBatchEdits(workspace, config, args.edits, Boolean(args.dryRun));
   if (!preflight.ok || args.dryRun) {
+    const failure = preflight.ok ? null : batchFailureDetails(preflight.results, {
+      phase: 'preflight',
+      unchanged: true
+    });
     const out = {
       ok: preflight.ok,
       workspace: workspace.alias,
@@ -299,6 +303,7 @@ async function _handleBatchEdits(workspace, config, args) {
       replacementCount: metrics.replacementCount,
       snapshotBytes: metrics.snapshotBytes,
       ...(compactResults ? { resultDetailsCompacted: true } : {}),
+      ...(failure || {}),
       results: formatBatchResults(preflight.results, compactResults)
     };
     return attachPost(out, await runPostActions(workspace, config, args, out.changedFiles));
@@ -347,10 +352,30 @@ async function _handleBatchEdits(workspace, config, args) {
     changedFiles,
     ...(compactResults ? { resultDetailsCompacted: true } : {}),
     ...(rollback ? { rollback } : {}),
+    ...(!allOk ? batchFailureDetails(results, {
+      phase: 'application',
+      unchanged: rollback?.ok === true
+    }) : {}),
     preflight: formatBatchResults(preflight.results, compactResults),
     results: formatBatchResults(results, compactResults)
   };
   return attachPost(out, await runPostActions(workspace, config, args, out.changedFiles));
+}
+
+function batchFailureDetails(results, { phase, unchanged }) {
+  const failed = results.find(item => item?.ok === false) || {};
+  const failedPath = String(failed.path || '').trim();
+  const reason = String(failed.error || failed.message || 'one or more edits were rejected').trim();
+  const location = failedPath ? ` for ${failedPath}` : '';
+  const mutationState = unchanged
+    ? 'No files were changed by this atomic batch.'
+    : 'Rollback was incomplete; inspect the rollback details before retrying.';
+  return {
+    error: `Atomic batch ${phase} failed${location}: ${reason} ${mutationState} The Rel.AI connector remains available.`,
+    next: failedPath
+      ? `Re-read ${failedPath}, rebuild the failed edit from its current contents, and retry. Do not treat this edit failure as a connector disconnect.`
+      : 'Correct the failed edit input and retry. Do not treat this edit failure as a connector disconnect.'
+  };
 }
 
 function captureEditSnapshots(workspace, edits) {

@@ -1,10 +1,10 @@
 {
-  "schemaVersion": 6,
+  "schemaVersion": 7,
   "applicationVersion": "0.25.0",
   "protocolVersion": "2026-07-28",
-  "toolSurfaceVersion": 33,
+  "toolSurfaceVersion": 34,
   "toolCount": 12,
-  "manifestHash": "luqhYyWKdrvhSLDVqZi9YkEW",
+  "manifestHash": "FFNfEZyWlkWQi-f9UEKHXMAV",
   "deviceProtocolVersion": 1,
   "minimumCompatibleDeviceProtocol": 1
 }

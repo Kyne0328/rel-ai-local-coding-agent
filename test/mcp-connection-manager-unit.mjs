@@ -8,7 +8,7 @@ import { resolveConnectionGenerations } from '../src/mcp/connectionGenerations.j
 import { runtimeMetadata } from '../src/runtimeCompatibility.js';
 
 const neutralManifest = buildToolManifest({});
-assert.equal(neutralManifest.schemaVersion, 6, 'gateway-visible MCP contract must use schema version 6');
+assert.equal(neutralManifest.schemaVersion, 7, 'gateway-visible MCP contract must use schema version 7');
 assert.equal(typeof neutralManifest.instructions, 'string');
 assert.match(neutralManifest.instructions, /Start each objective/);
 assert.ok(neutralManifest.tools.every(tool => tool.outputSchema), 'every canonical tool must include its output schema');

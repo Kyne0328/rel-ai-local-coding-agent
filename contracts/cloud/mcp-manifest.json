@@ -3,8 +3,8 @@
   "disabledToolCount": 0,
   "externallyVisibleToolCount": 12,
   "filteredToolCount": 0,
-  "hash": "atvjaOKIy3dL3-ELE_yKwl5rWD-rCZkCg83TrBibGaU",
-  "instructions": "Start each objective with relai_work action begin and pass its work_id to later calls. Inspect relevant files before editing; use bounded reads and commands. Validate after changes. Never bypass approval, workspace, task, or destructive-operation safeguards. Report only checks actually run. Finish with relai_validate action checks complete:true, or relai_work action finish after review.",
+  "hash": "cG_KTvHW7dxRgOdxZP8a5PQSb6-GkrbtQtsDItYz5Ls",
+  "instructions": "Start each objective with relai_work action begin and pass its work_id to later calls. Inspect relevant files before editing; use bounded reads and commands. Validate after changes. A failed edit response does not mean the connector is unavailable: follow its recovery guidance, re-read current content when requested, and retry. Report the connector as unavailable only after a separate status or read call fails with an availability error. Never bypass approval, workspace, task, or destructive-operation safeguards. Report only checks actually run. Finish with relai_validate action checks complete:true, or relai_work action finish after review.",
   "schemaVersion": 7,
   "serverInfo": {
     "name": "rel-ai-mcp",
@@ -6829,5 +6829,5 @@
       "title": "Manage Worktree"
     }
   ],
-  "version": "atvjaOKIy3dL3-ELE_yKwl5r"
+  "version": "cG_KTvHW7dxRgOdxZP8a5PQS"
 }
