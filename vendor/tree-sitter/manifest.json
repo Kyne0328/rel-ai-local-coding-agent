@@ -91,6 +91,13 @@
       "bytes": 81456,
       "sha256": "8b957d1ff521edda5606a5b6008e58489acbb1b3a7cf7ee2d16b7f0016a3d56a",
       "grammarDependency": "tree-sitter-nix@git+https://github.com/nix-community/tree-sitter-nix.git#69fbfb02896cdd27cb7ff3cd61f7f3f6bde4f017"
+    },
+    "haskell": {
+      "file": "haskell/tree-sitter-haskell.wasm",
+      "sourcePath": "out/haskell/tree-sitter-haskell.wasm",
+      "bytes": 3805902,
+      "sha256": "37a6b07b1a838d02ffb4f4c2a06863637a8efe48432d60a275f50f1d08f1092c",
+      "grammarDependency": "tree-sitter-haskell@^0.23.1"
     }
   }
 }

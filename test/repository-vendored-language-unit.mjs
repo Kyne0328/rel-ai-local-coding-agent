@@ -29,7 +29,8 @@ const CASES = [
   {"path":"analysis/model.r","language":"r","source":"add <- function(x, y) { x + y }\n"},
   {"path":"src/start.asm","language":"assembly","source":"mov eax, ebx\nret\n"},
   {"path":"game/player.gd","language":"gdscript","source":"extends Node\nfunc _ready():\n    print(\"ready\")\n"},
-  {"path":"shell.nix","language":"nix","source":"{ pkgs ? import <nixpkgs> {} }: pkgs.mkShell { packages = [ pkgs.nodejs ]; }\n"}
+  {"path":"shell.nix","language":"nix","source":"{ pkgs ? import <nixpkgs> {} }: pkgs.mkShell { packages = [ pkgs.nodejs ]; }\n"},
+  {"path":"src/Main.hs","language":"haskell","source":"module Main where\nmain :: IO ()\nmain = putStrLn \"RelAI\"\n"}
 ];
 
 for (const item of CASES) {
