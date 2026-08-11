@@ -141,7 +141,13 @@ function createGatewayClient({
       totals: frame.totals,
       tools: frame.tools,
       devices: frame.devices,
-      workspaces: frame.workspaces
+      workspaces: frame.workspaces,
+      workspaceDimensions: frame.workspaceDimensions || [],
+      workspaceTools: frame.workspaceTools || [],
+      series: frame.series || [],
+      toolSeries: frame.toolSeries || [],
+      workspaceSeries: frame.workspaceSeries || [],
+      workspaceToolSeries: frame.workspaceToolSeries || []
     }));
   }
 

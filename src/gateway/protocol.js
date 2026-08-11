@@ -50,7 +50,7 @@ const SECURITY_SENSITIVE_FIELDS = Object.freeze({
   workspaces: new Set(['type', 'aliases']),
   heartbeat: new Set(['type', 'ok']),
   usage_request: new Set(['type', 'requestId', 'month']),
-  usage_result: new Set(['type', 'requestId', 'month', 'totals', 'tools', 'devices', 'workspaces']),
+  usage_result: new Set(['type', 'requestId', 'month', 'totals', 'tools', 'devices', 'workspaces', 'workspaceDimensions', 'workspaceTools', 'series', 'toolSeries', 'workspaceSeries', 'workspaceToolSeries']),
   devices_request: new Set(['type', 'requestId']),
   devices_result: new Set(['type', 'requestId', 'devices']),
   device_revoke: new Set(['type', 'requestId', 'deviceId']),
@@ -387,6 +387,9 @@ function validateUsageResult(value) {
   if (!isPlainObject(value.totals)) return invalidFrame('Usage totals must be an object.');
   for (const field of ['tools', 'devices', 'workspaces']) {
     if (!Array.isArray(value[field])) return invalidFrame(`Usage ${field} must be an array.`);
+  }
+  for (const field of ['workspaceDimensions', 'workspaceTools', 'series', 'toolSeries', 'workspaceSeries', 'workspaceToolSeries']) {
+    if (value[field] !== undefined && !Array.isArray(value[field])) return invalidFrame(`Usage ${field} must be an array when present.`);
   }
   return validFrame();
 }
