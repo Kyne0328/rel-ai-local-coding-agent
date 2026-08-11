@@ -200,7 +200,7 @@ async function startManagedProcess(workspace, config, args = {}, context = {}) {
 
     const initial = await initialState;
     if (initial.type === 'aborted') {
-      const stopped = await stopRecordInternal(config, record, { graceMs: DEFAULT_STOP_GRACE_MS });
+      await stopRecordInternal(config, record, { graceMs: DEFAULT_STOP_GRACE_MS });
       throw cancellationError('Managed process startup was cancelled before readiness was established.');
     }
     if (initial.type === 'error') {
@@ -224,7 +224,7 @@ async function startManagedProcess(workspace, config, args = {}, context = {}) {
     const startupWaitMs = clampNumber(args.startupWaitMs, 0, 30000, DEFAULT_STARTUP_WAIT_MS);
     const startupResult = await waitDuringStartup(record, startupWaitMs, startupSignal);
     if (startupResult === 'aborted') {
-      const stopped = await stopRecordInternal(config, record, { graceMs: DEFAULT_STOP_GRACE_MS });
+      await stopRecordInternal(config, record, { graceMs: DEFAULT_STOP_GRACE_MS });
       throw cancellationError('Managed process startup was cancelled.');
     }
     if (startupResult === 'closed') {
