@@ -38,6 +38,11 @@ function desktopStatusFailure(errorCode, error, next = {}) {
   };
 }
 
+function gatewayAuthorizationRequired(status = {}) {
+  const state = String(status.state || '');
+  return state === 'pairing_required' || state === 'pairing';
+}
+
 function safeGatewayDesktopStatus(status = {}, gatewayOrigin = '') {
   const pairing = status.pairing && typeof status.pairing === 'object'
     ? {
@@ -67,4 +72,4 @@ function formatDesktopError(error) {
   return error instanceof Error ? error.message : String(error || 'Unknown error');
 }
 
-export { desktopStatusFailure, initialDesktopStatus, normalizeDesktopStatus, safeGatewayDesktopStatus };
+export { desktopStatusFailure, gatewayAuthorizationRequired, initialDesktopStatus, normalizeDesktopStatus, safeGatewayDesktopStatus };

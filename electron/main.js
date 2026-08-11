@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage, powerSaveBlocker, Notification, dialog, screen, protocol, safeStorage } from 'electron';
+import { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage, powerSaveBlocker, Notification, dialog, screen, protocol, safeStorage, systemPreferences } from 'electron';
 import electronUpdater from 'electron-updater';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -13,7 +13,7 @@ import { createTaskActivityRuntime } from './tool-sleep-blocker.js';
 import { createTaskbarCompletionBadge } from './taskbar-completion-badge.js';
 import { createDashboardWindowManager } from './dashboard-window.js';
 import { createDesktopTray } from './desktop-tray.js';
-import { desktopStatusFailure, initialDesktopStatus, normalizeDesktopStatus, safeGatewayDesktopStatus } from './desktop-status.js';
+import { desktopStatusFailure, gatewayAuthorizationRequired, initialDesktopStatus, normalizeDesktopStatus, safeGatewayDesktopStatus } from './desktop-status.js';
 import { createApprovalTokenManager } from './approval-token.js';
 import { createRecoveryWindowManager } from './recovery-window.js';
 import { createRuntimeLogBuffer } from './runtime-log-buffer.js';
@@ -56,7 +56,6 @@ const oauthProvider = await importResourceModule('src/oauthProvider.js');
 const { startHttpServer } = await importResourceModule('src/httpServer.js');
 const { terminateProcessTree } = await importResourceModule('src/process.js');
 const { stopAllManagedProcesses } = await importResourceModule('src/processManager.js');
-const { readLocalUsageSnapshot } = await importResourceModule('src/localAnalytics.js');
 const { shutdownTelemetry } = await importResourceModule('src/telemetry.js');let wizardWindow = null, wizardRecoveryMode = false, wizardReturnToFallback = false;
 let httpServer = null, startPromise = null;
 let lifecycleToken = 0, isQuitting = false, appUpdater = null, updateSupportPolicy = null;
@@ -134,6 +133,7 @@ const dashboardWindowManager = createDashboardWindowManager({
 const taskbarCompletionBadge = createTaskbarCompletionBadge({
   app,
   nativeImage, platform: process.platform,
+  getBadgeColor: () => systemPreferences.getAccentColor(),
   getWindow: () => dashboardWindowManager.getWindow() || BrowserWindow.getAllWindows().find(win => !win.isDestroyed()) || null,
   isApplicationOpen: () => BrowserWindow.getAllWindows().some(win => !win.isDestroyed() && win.isVisible() && win.isFocused())
 }); const desktopTray = createDesktopTray({
@@ -504,10 +504,6 @@ async function getGatewayUsage(month) {
   }
 }
 
-function getLocalUsage(month) {
-  return { ok: true, ...readLocalUsageSnapshot(configModule.readConfig(), month) };
-}
-
 function safeGatewayDevice(device = {}) {
   return {
     deviceId: String(device.deviceId || ''),
@@ -567,7 +563,7 @@ function applyGatewayStatus(status = {}) {
     gateway,
     tunnelStatus: 'connecting',
     mcpUrl,
-    authenticationRequired: gateway.principalPaired !== true,
+    authenticationRequired: gatewayAuthorizationRequired(gateway),
     error: '',
     errorCode: ''
   }, { dashboard: false });
@@ -642,7 +638,7 @@ async function startServer() {
       gateway: guiConfig.connectionMode === 'cloud' ? safeGatewayDesktopStatus({ state: 'connecting', gatewayOrigin: guiConfig.gatewayOrigin }, guiConfig.gatewayOrigin) : null,
       tunnelStatus: 'connecting',
       mcpUrl: initialMcpUrl,
-      authenticationRequired: guiConfig.connectionMode === 'cloud' ? true : approvalTokenManager.status().required,
+      authenticationRequired: guiConfig.connectionMode === 'cloud' ? false : approvalTokenManager.status().required,
       error: '',
       errorCode: '',
       localUrl
@@ -836,7 +832,6 @@ registerIpcHandlers({
   setGatewayMode,
   getGatewayRecovery,
   getGatewayUsage,
-  getLocalUsage,
   getDesktopSettings: currentDesktopSettings,
   saveDesktopSettings: updateDesktopSettings,
   replaceApprovalToken: approvalTokenManager.replace,

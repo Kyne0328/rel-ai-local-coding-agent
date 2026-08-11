@@ -18,7 +18,7 @@ const {
   readGuiConfig
 } = await import('../electron/launcher-utils.js');
 const { normalizeWizardConfig, saveLauncherConfig } = await import('../electron/launcher-config.js');
-const { safeGatewayDesktopStatus } = await import('../electron/desktop-status.js');
+const { gatewayAuthorizationRequired, safeGatewayDesktopStatus } = await import('../electron/desktop-status.js');
 const { createPublicConnectionRuntime } = await import('../electron/public-connection-runtime.js');
 
 try {
@@ -110,6 +110,11 @@ try {
   assert.equal(safeStatus.pollToken, undefined);
   assert.equal(safeStatus.pairing.pollToken, undefined);
   assert.equal(safeStatus.pairing.code, 'ABCD-EFGH-JKLM');
+  assert.equal(gatewayAuthorizationRequired({ state: 'connecting', principalPaired: false }), false);
+  assert.equal(gatewayAuthorizationRequired({ state: 'authenticating', principalPaired: true }), false);
+  assert.equal(gatewayAuthorizationRequired({ state: 'connected', principalPaired: true }), false);
+  assert.equal(gatewayAuthorizationRequired({ state: 'pairing_required', principalPaired: false }), true);
+  assert.equal(gatewayAuthorizationRequired({ state: 'pairing', principalPaired: false }), true);
 
   fs.writeFileSync(path.join(stateDir, '.env'), [
     'REL_AI_MCP_PORT="4555"',

@@ -6,7 +6,7 @@ const { readJsonFile, writeJsonAtomic } = await importResourceModule('src/durabl
 const DEFAULT_NOTIFICATION_PREFERENCES = Object.freeze({
   enabled: true,
   taskCompleted: true,
-  errors: true,
+  errors: false,
   connectionStatus: true,
   applicationUpdates: true,
   ignoredUpdateVersion: ''
@@ -24,7 +24,7 @@ function normalizeNotificationPreferences(value, fallback = DEFAULT_NOTIFICATION
   return {
     enabled: booleanValue(source.enabled, booleanValue(base.enabled, true)),
     taskCompleted: booleanValue(source.taskCompleted, booleanValue(base.taskCompleted, true)),
-    errors: booleanValue(source.errors, booleanValue(base.errors, true)),
+    errors: booleanValue(source.errors, booleanValue(base.errors, false)),
     connectionStatus: booleanValue(source.connectionStatus, booleanValue(base.connectionStatus, true)),
     applicationUpdates: booleanValue(source.applicationUpdates, booleanValue(base.applicationUpdates, true)),
     ignoredUpdateVersion: cleanText(
