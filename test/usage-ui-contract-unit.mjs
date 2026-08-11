@@ -13,6 +13,7 @@ const routePolicy = read('src/ui/route-policy.js');
 const preload = read('electron/preload.cjs');
 const ipc = read('electron/ipc-handlers.js');
 const electronMain = read('electron/main.js');
+const systemSource = read('src/ui/features/system/index.js');
 const usageSource = read('src/ui/features/usage/index.js');
 const css = read('src/ui/features/usage/styles.css');
 
@@ -20,7 +21,8 @@ const { buildUsageModel, currentUsageMonth } = await import('../src/ui/features/
 
 assert.match(navigationCatalog, /route\(['"]usage['"], ['"]Usage['"]/);
 assert.match(routePolicy, /['"]usage['"]/);
-assert.match(dashboard, /usage: element => import\(['"]\.\/ui\/features\/usage\/index\.js['"]\)/, 'Usage must lazy-load only when routed');
+assert.match(dashboard, /usage: element => mountSystemRoute\(element, ['"]usage['"]\)/, 'Usage must route through the lazy System feature shell');
+assert.match(systemSource, /import \{ mountUsage \} from ['"]\.\.\/usage\/index\.js['"]/, 'System must mount the Usage analytics feature');
 assert.doesNotMatch(dashboardData, /gatewayUsage|usageSnapshot|usageTotals|usage_tool|usage_device|usage_workspace/, 'aggregate dashboard payload must not include Cloud usage');
 assert.match(dashboard, /case ['"]usage['"]:[\s\S]{0,160}payload = route/, 'Usage fingerprint must not depend on aggregate dashboard data');
 
@@ -67,6 +69,17 @@ assert.deepEqual(model.totals, { requests: 8, toolCalls: 5, successes: 4, failur
 assert.equal(model.tools[0].tool, 'relai_read');
 assert.equal(model.devices[0].displayName, 'Laptop');
 assert.equal(model.workspaces[0].workspace, 'repo');
+const legacyBreakdowns = buildUsageModel({
+  ok: true,
+  month: '2026-08',
+  totals: { requests: 2, toolCalls: 2, successes: 1, failures: 1, requestBytes: 10, resultBytes: 20, executionMs: 30, activeDays: 1 },
+  tools: [{ tool: 'relai_exec', calls: 2, successes: 1, failures: 1, executionMs: 30 }],
+  devices: [{ deviceId: 'legacy-device', calls: 2, successes: 1, failures: 1, executionMs: 30 }],
+  workspaces: [{ workspace: 'legacy-repo', calls: 2, successes: 1, failures: 1, executionMs: 30 }]
+}, '2026-08');
+assert.equal(legacyBreakdowns.tools[0].toolCalls, 2, 'legacy calls rows must normalize to toolCalls');
+assert.equal(legacyBreakdowns.devices[0].toolCalls, 2);
+assert.equal(legacyBreakdowns.workspaces[0].toolCalls, 2);
 assert.equal(currentUsageMonth(new Date('2026-08-08T00:00:00.000Z')), '2026-08');
 assert.throws(() => buildUsageModel({ ok: true, month: '2026-08', totals: { requests: -1 } }), /Usage unavailable|invalid requests/);
 
