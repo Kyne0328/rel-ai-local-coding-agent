@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 import { fileURLToPath } from 'node:url';
-import { MISSING_TASKS_CAPABILITY_CODE, TASKS_EXTENSION_REVISION } from '../src/mcp/protocol.js';
+import { TASKS_EXTENSION_REVISION } from '../src/mcp/protocol.js';
 import { createHttpMcpSession, postMcp } from './helpers/http-mcp.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -69,18 +69,6 @@ async function invokeEligible(client, id, logicalTaskId, durationMs, capabilitie
 
 async function taskRequest(client, id, method, taskId, extra = {}, capabilities = tasksCapability) {
   return client.request(method, { taskId, ...extra }, { id, name: taskId, capabilities });
-}
-
-async function waitForTaskStatus(client, taskId, expected, startId) {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    const response = await taskRequest(client, startId + attempt, 'tasks/get', taskId);
-    if (response.body.result?.status === expected) return response;
-    if (['completed', 'failed', 'cancelled'].includes(response.body.result?.status)) {
-      assert.equal(response.body.result.status, expected, JSON.stringify(response.body));
-    }
-    await new Promise(resolve => setTimeout(resolve, 50));
-  }
-  throw new Error(`Task ${taskId} did not reach ${expected}.`);
 }
 
 function sleepCommand(durationMs) {
