@@ -528,6 +528,15 @@
   .brand { @apply justify-center; }
   .brand > div:last-child, .nav-label, .sidebar-note, .sidebar-group-label { @apply hidden; }
   .nav a, .secondary-nav a { @apply justify-center px-2; }
+  .nav a:focus-visible, .secondary-nav a:focus-visible { @apply flex-col gap-1 py-2; }
+  .nav a:focus-visible .nav-label, .secondary-nav a:focus-visible .nav-label {
+    display: block;
+    max-width: 100%;
+    font-size: 9px;
+    line-height: 1.1;
+    text-align: center;
+    white-space: normal;
+  }
   .nav-icon { @apply size-5; }
   .topbar { @apply flex-col items-stretch gap-3; }
   .top-controls { @apply justify-start; }

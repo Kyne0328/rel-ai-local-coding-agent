@@ -30,7 +30,7 @@ const DASHBOARD_SHARED_MODULES = Object.freeze({
 });
 
 function renderDashboardNav(items) {
-  return items.map((item) => `<a href="${item.href}" aria-label="${item.label}"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">${item.icon}</svg><span class="nav-label">${item.label}</span></a>`).join("");
+  return items.map((item) => `<a href="${item.href}" data-nav-id="${item.id}" aria-label="${item.label}" title="${item.label}"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">${item.icon}</svg><span class="nav-label">${item.label}</span></a>`).join("");
 }
 
 async function handleFavicon(ctx) {

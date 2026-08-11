@@ -21,7 +21,7 @@ export const WORK_NAV_ITEMS = Object.freeze([
   route('home', 'Overview', 'home', 'Connection readiness, workspace state, and recent work sessions.', 'Work'),
   route('tasks', 'Sessions', 'tasks', 'Review active and completed repository work sessions.', 'Work'),
   route('workspaces', 'Workspaces', 'workspaces', 'Manage the repositories Rel.AI may inspect and update.', 'Work'),
-  route('activity', 'Activity', 'activity', 'Inspect individual Rel.AI tool calls and recorded output.', 'Work')
+  route('activity', 'Tool Activity', 'activity', 'Inspect individual Rel.AI tool calls and recorded output.', 'Work')
 ]);
 
 export const SYSTEM_NAV_ITEMS = Object.freeze([
@@ -33,12 +33,18 @@ export const SYSTEM_NAV_ITEMS = Object.freeze([
 ]);
 
 export const APPLICATION_NAV_ITEMS = Object.freeze([
-  route('system', 'System', 'system', 'Manage connection, runtime processes, diagnostics, tools, and usage.', 'Application'),
+  route('system', 'System', 'connection', 'Manage connection, runtime processes, diagnostics, tools, and usage.', 'Application'),
   route('settings', 'Settings', 'settings', 'Configure preferences, skills, application behavior, and advanced safeguards.', 'Application')
 ]);
 
 export const DESKTOP_NAV_ITEMS = Object.freeze([...WORK_NAV_ITEMS, ...APPLICATION_NAV_ITEMS]);
-export const MOBILE_NAV_ITEMS = Object.freeze([...WORK_NAV_ITEMS, APPLICATION_NAV_ITEMS[1]]);
+export const MOBILE_NAV_ITEMS = Object.freeze([
+  WORK_NAV_ITEMS[0],
+  WORK_NAV_ITEMS[1],
+  WORK_NAV_ITEMS[2],
+  APPLICATION_NAV_ITEMS[0],
+  APPLICATION_NAV_ITEMS[1]
+]);
 
 export const SETTINGS_NAV_ITEMS = Object.freeze([
   route('preferences', 'Preferences', 'settings', 'Control appearance, density, and desktop notifications.', 'Settings'),
