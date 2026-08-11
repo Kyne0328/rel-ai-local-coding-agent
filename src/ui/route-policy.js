@@ -3,7 +3,6 @@ const CANONICAL_PATHS = new Set([
   'tasks',
   'workspaces',
   'activity',
-  'system',
   'connection',
   'processes',
   'tools',
@@ -17,6 +16,7 @@ const CANONICAL_PATHS = new Set([
 ]);
 
 const LEGACY_PATHS = new Map([
+  ['system', 'connection'],
   ['connector', 'connection'],
   ['skills', 'settings/skills'],
   ['settings/connection', 'connection'],

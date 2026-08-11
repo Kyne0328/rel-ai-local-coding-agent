@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DESKTOP_NAV_ITEMS, MOBILE_NAV_ITEMS, SETTINGS_NAV_ITEMS } from '../src/ui/navigation-catalog.js';
 import { activityFilterTransition, mergeActivityEntries } from '../src/ui/features/activity/model.js';
+import { normalizeRouteKey } from '../src/ui/route-policy.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
@@ -13,9 +14,13 @@ const router = read('src/ui/router.js');
 const settings = read('src/ui/features/settings/index.js');
 
 assert.deepEqual(DESKTOP_NAV_ITEMS.map(item => item.id), ['home', 'tasks', 'workspaces', 'activity', 'system', 'settings']);
-assert.deepEqual(MOBILE_NAV_ITEMS.map(item => item.id), ['home', 'tasks', 'workspaces', 'activity', 'settings']);
+assert.deepEqual(MOBILE_NAV_ITEMS.map(item => item.id), ['home', 'tasks', 'workspaces', 'system', 'settings']);
+assert.equal(DESKTOP_NAV_ITEMS.find(item => item.id === 'activity')?.label, 'Tool Activity');
+assert.equal(DESKTOP_NAV_ITEMS.find(item => item.id === 'system')?.href, '#connection');
+assert.equal(normalizeRouteKey('system'), 'connection');
 assert.deepEqual(SETTINGS_NAV_ITEMS.map(item => item.id), ['preferences', 'skills', 'application', 'advanced', 'about']);
 assert.match(shell, /WORK_NAV_ITEMS, APPLICATION_NAV_ITEMS, MOBILE_NAV_ITEMS/);
+assert.match(shell, /aria-label="\$\{item\.label\}" title="\$\{item\.label\}"/);
 assert.doesNotMatch(shell, /const PRIMARY_NAV_ITEMS|const SECONDARY_NAV_ITEMS/);
 assert.match(router, /routeMetadata\(path\)/);
 assert.match(dashboard, /features\/system\/index\.js/);

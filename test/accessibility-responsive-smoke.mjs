@@ -9,12 +9,14 @@ const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const filterCss = read('src/ui/components/filter-controls.css');
 const appCss = read('src/ui/styles/app.css');
 
-assert.deepEqual(MOBILE_NAV_ITEMS.map(item => item.id), ['home', 'tasks', 'workspaces', 'activity', 'settings']);
+assert.deepEqual(MOBILE_NAV_ITEMS.map(item => item.id), ['home', 'tasks', 'workspaces', 'system', 'settings']);
+assert.equal(MOBILE_NAV_ITEMS.find(item => item.id === 'system')?.href, '#connection');
 assert.match(filterCss, /@media \(max-width: 760px\)/);
 assert.match(filterCss, /@media \(max-width: 520px\)/);
 assert.match(filterCss, /safe-area-inset-bottom/);
 assert.match(filterCss, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
 assert.match(appCss, /@import "\.\.\/components\/filter-controls\.css"/);
+assert.match(appCss, /\.nav a:focus-visible \.nav-label, \.secondary-nav a:focus-visible \.nav-label/);
 for (const feature of ['sessions', 'activity', 'workspaces', 'tools', 'processes']) {
   assert.match(appCss, new RegExp(`@import "\\.\\.\\/features\\/${feature}\\/styles\\.css"`));
 }

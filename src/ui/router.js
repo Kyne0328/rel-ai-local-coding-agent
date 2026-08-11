@@ -121,7 +121,7 @@ function _route() {
 function _updateNavActive(id) {
   document.querySelectorAll('.nav a, .mobile-nav a, .secondary-nav a').forEach(anchor => {
     const href = anchor.getAttribute('href') || '';
-    const target = href.replace(/^#/, '').split(/[/?]/)[0];
+    const target = anchor.dataset.navId || href.replace(/^#/, '').split(/[/?]/)[0];
     const active = target === desktopNavigationOwner(id);
     anchor.classList.toggle('active', active);
     if (active) anchor.setAttribute('aria-current', 'page');
