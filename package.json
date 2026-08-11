@@ -1,11 +1,11 @@
 {
   "name": "rel-ai-mcp",
   "productName": "Rel.AI MCP",
-  "version": "0.24.1",
+  "version": "0.25.0",
   "description": "Local ChatGPT repo bridge: one reliable workflow for snapshot, read, write, verify, diff, and reset configured local workspaces.",
   "private": true,
   "type": "module",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "files": [
     ".codex-plugin/",
     ".mcp.json",
@@ -17,6 +17,7 @@
     "types/",
     "README.md",
     "LICENSE",
+    "NOTICE",
     "release-manifest.json"
   ],
   "packageManager": "npm@11.9.0",
@@ -42,6 +43,9 @@
     "knip:dependencies": "knip --dependencies --treat-config-hints-as-errors",
     "knip:production": "knip --production --dependencies --config knip.production.json",
     "generate:color-tokens": "node scripts/generate-color-tokens.mjs",
+    "generate:cloud-contract": "node scripts/generate-cloud-contract.mjs",
+    "verify:cloud-contract": "node scripts/generate-cloud-contract.mjs --check",
+    "verify:mcp-schema": "node scripts/verify-cloud-contract.mjs",
     "verify:generated": "node scripts/check-generated.mjs",
     "verify:color-tokens": "node scripts/generate-color-tokens.mjs --check",
     "generate:sbom": "node scripts/generate-sbom.mjs",
@@ -71,6 +75,7 @@
     "test:public-workflow": "node test/workflow-smoke.mjs",
     "test:connector-wording": "node test/connector-wording-smoke.mjs",
     "test:regressions": "node test/regression-fixes-smoke.mjs",
+    "test:repository-intelligence": "node test/repository-intelligence-worker-unit.mjs && node test/intelligence-runtime-unit.mjs",
     "electron:dev": "npm run verify:color-tokens && npm run build:css && cd electron && npx electron .",
     "electron:runtime": "node electron/node_modules/electron/install.js",
     "electron:build": "node scripts/electron-package.mjs --mode unpacked --platform win32",
@@ -85,8 +90,13 @@
     "fetch:ngrok": "pwsh scripts/fetch-ngrok.ps1",
     "verify:ngrok": "node scripts/verify-ngrok-seed.mjs",
     "test:electron": "node test/electron-launcher-smoke.mjs",
+    "test:wizard-browser": "node test/electron-wizard-browser.mjs",
+    "test:filter-browser": "node test/filter-experience-browser.mjs",
+    "test:frontend-browser": "npm run test:wizard-browser && npm run test:filter-browser && npm run test:custom-chrome-browser && npm run test:observability-browser",
     "test:observability-browser": "node test/dashboard-browser-acceptance.mjs",
     "benchmark:observability": "node --expose-gc scripts/observability-benchmark.mjs",
+    "benchmark:workflow": "node scripts/benchmark-workflow-intelligence.mjs",
+    "benchmark:repository-index": "node scripts/repository-intelligence-benchmark.mjs --files 100000 --json",
     "benchmark:mcp-startup": "node test/mcp-startup-budget-unit.mjs",
     "verify:packaged": "node scripts/verify-packaged-wrapper.mjs",
     "verify:updater-artifacts": "node scripts/verify-updater-artifacts.mjs",
@@ -106,7 +116,12 @@
     "test:colors": "npm run verify:color-tokens && node test/color-system-unit.mjs",
     "test:all": "npm run verify:color-tokens && npm run build:css && npm run verify:generated && npm run check && npm run lint && npm run typecheck && npm run knip:dependencies && node scripts/release-check.mjs && node test/run-tests.mjs",
     "build:css": "npm run generate:color-tokens && npx @tailwindcss/cli -i ./src/ui/styles/app.css -o ./public/dashboard.css --minify",
-    "watch:css": "npm run generate:color-tokens && npx @tailwindcss/cli -i ./src/ui/styles/app.css -o ./public/dashboard.css --watch"
+    "watch:css": "npm run generate:color-tokens && npx @tailwindcss/cli -i ./src/ui/styles/app.css -o ./public/dashboard.css --watch",
+    "gateway:acceptance": "node scripts/gateway-acceptance.mjs",
+    "test:gateway-packaging": "node test/gateway-packaging-contract-unit.mjs",
+    "test:custom-chrome-browser": "node test/electron-custom-chrome-browser.mjs",
+    "fetch:zoekt": "pwsh scripts/fetch-zoekt.ps1",
+    "verify:zoekt": "node scripts/verify-zoekt-seed.mjs"
   },
   "keywords": [
     "mcp",
@@ -127,8 +142,8 @@
   },
   "devDependencies": {
     "@electron/asar": "^4.2.1",
-    "@modelcontextprotocol/core": "2.0.0",
     "@eslint/js": "^10.0.1",
+    "@modelcontextprotocol/core": "2.0.0",
     "@tailwindcss/cli": "^4.3.3",
     "eslint": "^10.8.0",
     "globals": "^17.8.0",
@@ -143,7 +158,9 @@
     "@opentelemetry/exporter-trace-otlp-http": "^0.221.0",
     "@opentelemetry/resources": "^2.10.0",
     "@opentelemetry/sdk-trace-node": "^2.10.0",
-    "@opentelemetry/semantic-conventions": "^1.43.0"
+    "@opentelemetry/semantic-conventions": "^1.43.0",
+    "tree-sitter-wasms": "^0.1.13",
+    "web-tree-sitter": "^0.20.8"
   },
   "bundledDependencies": [
     "@modelcontextprotocol/server",
@@ -151,9 +168,12 @@
     "@opentelemetry/exporter-trace-otlp-http",
     "@opentelemetry/resources",
     "@opentelemetry/sdk-trace-node",
-    "@opentelemetry/semantic-conventions"
+    "@opentelemetry/semantic-conventions",
+    "tree-sitter-wasms",
+    "web-tree-sitter"
   ],
   "overrides": {
-    "@hono/node-server": "2.0.12"
+    "@hono/node-server": "2.0.12",
+    "oxc-resolver": "11.24.2"
   }
 }

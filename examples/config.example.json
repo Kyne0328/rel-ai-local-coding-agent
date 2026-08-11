@@ -26,8 +26,7 @@
   },
   "patch": {
     "backup": true,
-    "requireCleanGit": false,
-    "maxUpdateBytes": 2097152
+    "requireCleanGit": false
   },
   "workspaces": {
     "myapp": {

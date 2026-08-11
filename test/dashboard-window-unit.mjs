@@ -36,6 +36,8 @@ class FakeWindow {
     this.minimized = false;
     this.fullScreen = false;
     this.events = new Map();
+    this.loadCount = 0;
+    this.executedScripts = [];
     this.bounds = { x: options.x, y: options.y, width: options.width, height: options.height };
     this.normalBounds = { ...this.bounds };
     this.webContents = {
@@ -46,11 +48,28 @@ class FakeWindow {
       sent: [],
       getURL: () => this.webContents.url,
       reload: () => { this.reloaded = true; },
+      executeJavaScript: async source => {
+        this.executedScripts.push(source);
+        const match = /location\.hash = (.+)$/.exec(source);
+        if (match && this.webContents.url) {
+          const target = new URL(this.webContents.url);
+          target.hash = JSON.parse(match[1]);
+          this.webContents.url = target.href;
+        }
+      },
       send: (channel, payload) => this.webContents.sent.push({ channel, payload })
     };
     windows.push(this);
   }
-  async loadURL(url) { this.webContents.url = url; }
+  async loadURL(url) {
+    this.loadCount += 1;
+    this.webContents.url = url;
+    if (this.nextLoadError) {
+      const error = this.nextLoadError;
+      this.nextLoadError = null;
+      throw error;
+    }
+  }
   once(name, listener) { this.events.set(name, listener); }
   on(name, listener) { this.events.set(name, listener); }
   show() { this.shown = true; this.hidden = false; }
@@ -139,10 +158,18 @@ try {
   assert.equal(await manager.pickFolder(), folderToOpen);
   assert.equal(await manager.openFolder(folderToOpen), path.resolve(folderToOpen));
   assert.deepEqual(openedPaths, [path.resolve(folderToOpen)]);
-  const reused = await manager.open('#settings/connection');
+  const initialLoadCount = win.loadCount;
+  win.webContents.url = 'http://127.0.0.1:3333/dashboard?surface=desktop#activity';
+  const reopenedVisibleRoute = await manager.open();
+  assert.equal(reopenedVisibleRoute, win);
+  assert.equal(win.loadCount, initialLoadCount, 'reopening an existing dashboard must not reload its active route');
+  assert.equal(win.webContents.url.endsWith('#activity'), true, 'reopening without a route must preserve the current route');
+  const reused = await manager.open('#connection');
   assert.equal(reused, win);
   assert.equal(windows.length, 1);
-  assert.equal(win.webContents.url.endsWith('#settings/connection'), true);
+  assert.equal(win.loadCount, initialLoadCount, 'same-document route changes must not reload the dashboard');
+  assert.equal(win.webContents.url.endsWith('#connection'), true);
+  assert.match(win.executedScripts.at(-1) || '', /location\.hash/);
   assert.deepEqual(manager.getState(), {
     platform: 'win32', customTitleBar: true, controls: 'custom',
     maximized: false, minimized: false, fullScreen: false
@@ -188,8 +215,8 @@ try {
   );
 
   assert.equal(validateConnection({ url: 'http://localhost:3333/dashboard' }).pathname, '/dashboard');
-  assert.equal(normalizeRouteHash('settings/connection'), '#settings/connection');
-  assert.throws(() => normalizeRouteHash('settings/connection?token=secret'), /Invalid dashboard route/);
+  assert.equal(normalizeRouteHash('connection'), '#connection');
+  assert.throws(() => normalizeRouteHash('connection?token=secret'), /Invalid dashboard route/);
   assert.throws(() => validateConnection({ url: 'https://example.com/dashboard' }), /local loopback/);
   assert.throws(() => validateConnection({ url: 'http://127.0.0.1:3333/health' }), /local loopback/);
 } finally {

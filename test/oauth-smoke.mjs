@@ -129,7 +129,7 @@ async function authorize(client, pair, scope, state) {
     ...values,
     dashboard_token: approvalToken
   }, true);
-  assert.equal(approved.status, 302);
+  assert.equal(approved.status, 303);
   const location = new URL(approved.headers.get('location'));
   assert.equal(location.searchParams.get('state'), state);
   assert.deepEqual([...location.searchParams.keys()].sort(), ['code', 'state']);
@@ -345,7 +345,7 @@ try {
     ...recoveryValues,
     dashboard_token: approvalToken
   }, true);
-  assert.equal(recoveredApproval.status, 302);
+  assert.equal(recoveredApproval.status, 303);
   const recoveredStore = JSON.parse(fs.readFileSync(path.join(stateDir, 'oauth-store.json'), 'utf8'));
   assert.deepEqual(
     Object.keys(recoveredStore.clients).sort(),
@@ -380,7 +380,7 @@ try {
     ...limitedValues,
     dashboard_token: approvalToken
   }, true, { 'x-forwarded-for': '198.51.100.24' });
-  assert.equal(validAfterLockout.status, 302, 'a correct approval token must not be blocked by the failed-token budget');
+  assert.equal(validAfterLockout.status, 303, 'a correct approval token must not be blocked by the failed-token budget');
   assert.ok(new URL(validAfterLockout.headers.get('location')).searchParams.get('code'));
 
   assert.throws(() => wrongIssuerProvider.canonicalIssuer('http://public.example.test'), /must use HTTPS/);

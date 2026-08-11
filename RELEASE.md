@@ -76,7 +76,7 @@ For 0.22.0 and later, release notes must state that the hard cutover:
 - requires explicit `work_id` on task-scoped calls;
 - packages MCP SDK runtime dependencies.
 
-See `docs/RELEASE_NOTES_0.22.0.md` for the 0.22.0 notice.
+Historical release-specific notices belong in `CHANGELOG.md`; do not add per-version release-note documents under `docs/`.
 
 ## 5. Version and changelog
 

@@ -1,5 +1,79 @@
 # Changelog
 
+## [0.25.0] — 2026-08-08
+
+### ChatGPT connection reliability
+- **Accept interoperable OAuth client registration.** Support and validate standard authorization-code, refresh-token, response-type, and public-client metadata while ignoring safe unknown Dynamic Client Registration fields.
+- **Complete authorization back in ChatGPT.** Return successful local and cloud authorization form submissions with a `303 See Other` callback while preserving the authorization code and OAuth state.
+- **Make pairing codes easy to copy.** Provide accessible copy actions with progress and success feedback in both the setup wizard and Connection settings.
+- **Keep Connection settings stable during device refresh.** Refresh only the device region instead of remounting and clearing the surrounding settings page.
+- **Make cloud devices understandable and removable.** Register new pairings with a machine-specific label, replace legacy generic app-name labels in the UI, and let the current device disconnect safely by revoking its gateway access, clearing local pairing state, and suppressing reconnect with revoked credentials.
+- **Keep the public gateway address out of private launch secrets.** Persist the non-secret cloud origin in the connection profile while retaining backward-compatible reads and explicit development overrides.
+
+### Heavy edit workflow
+- **Keep large repository migrations coherent.** Keep the 10 MiB Streamable HTTP request boundary, normalize complete `updateText` work to the 50 MiB internal ceiling, and route changes that do not fit one request through staged `updateText` instead of repeated smaller edit calls while preserving atomic structured-batch preflight, rollback, stale-write, and path-containment safeguards. Legacy low patch-size values no longer throttle upgraded installations, and patch sizing is no longer a normal user setting.
+- **Make `relai_edit` tolerant at the connector boundary without weakening repository safety.** Advertise one structural input object instead of a non-discriminated seven-branch wrapper, document every canonical edit form and `work_id`, and enforce exclusivity in the edit planner before any path is resolved or file is written. Ambiguous and incomplete calls now return one actionable retry contract instead of unrelated `oneOf` failures, while type, unknown-field, task, path, sensitive-content, stale-write, preflight, and rollback protections remain intact.
+
+### Repository Intelligence
+- **Hard-cut over code intelligence to a persistent local graph.** Replace the 32 MiB regex/in-memory index and hashed-vector pseudo-semantic search with lazy Tree-sitter WASM parsing, a per-workspace SQLite graph/FTS5 index, structural symbols/references/imports/calls, affected-test and impact traversal, reciprocal-rank fusion, recursive dirty tracking, and periodic reconciliation.
+- **Keep full-source retrieval lightweight.** Use Zoekt automatically when packaged/configured, indexing only Rel.AI-approved staged files; otherwise use bounded Git grep candidate discovery plus the persistent graph/FTS5 ranker. No neural embedding or reranking model is required.
+- **Ship Repository Intelligence reliably in desktop builds.** Package the complete `web-tree-sitter` and `tree-sitter-wasms` runtime payload, build pinned Sourcegraph Zoekt search/index binaries from reviewed source with SHA-256 provenance, carry the minimal Windows file-reader/umask compatibility layer, and verify both runtimes before and after Electron packaging.
+- **Advance the MCP contract to schema 6.** Keep protocol 2026-07-28 and the 12-tool public surface, advance tool surface 33 for the connector-compatible edit contract, and update semantic-search wording to describe the new non-neural engine.
+
+### Workflow execution reliability
+- **Advertise structured MCP output contracts to ChatGPT.** Publish strict `outputSchema` metadata for every direct and cloud tool from the canonical operation catalog, keep semantic-search and compacted-result fields declared, and reject cloud device responses that drift from the advertised structured output contract.
+- **Keep successful MCP results aligned with the closed public contracts.** Accept the intentional adaptive-search, semantic-search, truncated-snapshot, and managed-worktree metadata without weakening unknown-field rejection, and preserve task/baseline ownership metadata in compact review responses.
+- **Validate the task that actually changed.** Use exact work-session-owned paths to choose impact and validation scope while retaining repository-wide fingerprints for stale-content and cross-task conflict protection; embedded `relai_edit` checks reuse the edit's own changed files and can satisfy final validation without a duplicate check run.
+- **Track mutations correctly on dirty workspaces.** Record mutations even when a command or post-check returns failure after changing files, and fingerprint already-dirty paths with filesystem metadata so `relai_exec` detects content changes that leave the Git status code unchanged. Controlled benchmarks keep the added dirty-worktree overhead bounded while preserving the existing safety scans.
+- **Keep idempotent cancellation responses valid.** Accept both live millisecond timestamps and persisted ISO timestamps for cancellation lifecycle fields so reconnect or duplicate `relai_work cancel` calls do not fail closed output validation after the task is already cancelled.
+### Skills and packaged runtime reliability
+- **Promote Skills to a top-level Work page beside Workspaces.** Built-in, installed, and workspace-enabled skills are no longer hidden in Settings; old `settings/skills` links redirect to the canonical Skills route.
+- **Keep built-in skills present in installed Electron builds.** Package the runtime JavaScript from `src/` plus the required `bin/`, `public/`, and `skills/` runtime assets while keeping source Tailwind/build-only files out of Electron; packaged verification locks the required runtime resources and rejects hosted-service implementation/tooling leakage.
+- **Make GitHub skill cleanup resilient on Windows.** Temporary clone removal uses bounded retry behavior and cleanup failure cannot replace a successful skill preview or installation result.
+
+### Desktop runtime reliability
+- **Control supported desktop versions remotely.** Fetch a strict GitHub-hosted support policy with a `0.25.0` initial floor, cache only valid unexpired policy data, fail open on unavailable or stale policy, show grace-period/update-required UI through the existing updater modal, and block both direct MCP and cloud-gateway work only when a valid policy reaches required or emergency enforcement.
+- **Retry transient updater transport failures.** Update checks and downloads retry short-lived Electron/Chromium network errors such as `ERR_HTTP2_SERVER_REFUSED_STREAM` with bounded backoff and emit `update_failed` only after retries are exhausted or for a non-transient failure.
+- **Repair Windows launch-at-sign-in readback.** Read login-item state with the same executable path and `--background` argument used during registration so the toggle reflects the actual Windows startup entry.
+
+### Dashboard discoverability and connection layout
+- **Make Repository details visible from every workspace card.** A direct action opens and focuses branch/worktree, validation, protected-branch, remote, project-instruction, session, activity, and removal details instead of leaving them hidden behind hard-to-find disclosure copy.
+- **Align Connection layers with the shared disclosure layout.** Connection layers now use the same summary spacing and alignment contract as technical connection details while redundant competing layout rules are removed.
+
+### Activity history and live-update reliability
+- **Make passive dashboard state updates non-destructive.** MCP/SSE request snapshots, desktop-status pushes, visibility-resume refreshes, and ordinary dashboard refresh requests no longer fall back to route remounts; only explicit structural mutations can rebuild a route. Real Electron acceptance now verifies Settings, Diagnostics, Workspaces, Skills, and Tools retain DOM identity without loading flashes or main-frame navigation during MCP requests.
+- **Treat stored Activity history as an authoritative snapshot.** Navigating away, clearing history, or remounting the route no longer allows stale in-memory entries to reappear, while live events received during history loading are retained safely.
+- **Surface history-loading failures instead of showing a misleading empty list.** Structured `/api/logs` errors now render an explicit history-unavailable state while continuing to accept live events.
+- **Make Freeze live list lossless.** Incoming snapshots are buffered while frozen, applied on resume, and reconciled with a fresh stored-history read so Activity catches up without shifting rows while the user is reading.
+- **Skip unchanged live snapshots.** Activity fingerprints displayed content, preserves the current DOM when nothing changed, and keeps the virtualized row depth already reached instead of collapsing back to the first chunk.
+
+### Filtering, messages, and accessibility
+- **Use accurate status groups.** Succeeded, in-progress, failed, blocked, cancelled, and other events are filtered independently; legacy `ok` and `error` route values remain compatible without grouping blocked or cancelled work into failures.
+- **Age time-range filters automatically.** The shared dashboard clock now removes entries exactly when they leave the selected 15-minute, 1-hour, 24-hour, or 7-day window, even when no new backend snapshot arrives.
+- **Keep Activity messages consistently visible.** Empty lifecycle patches cannot erase useful text, the Message column receives readable space before optional columns, and event titles are secondary metadata rather than obscuring the primary message.
+- **Harden event details and row actions.** Invalid timestamps use a safe `Time unavailable` fallback, every event retains visible fallback text, and detail buttons have distinguishable accessible labels.
+
+### Regression coverage
+- **Add focused Activity model and controller tests.** Cover authoritative history replacement, structured failures, lossless merging, status semantics, time expiry, display fallbacks, no-op snapshots, and virtualized-row preservation.
+- **Expand real Electron dashboard acceptance.** Verify message-node stability during refresh and clock updates, freeze/resume behavior, non-empty messages, and responsive visibility across four viewport and zoom scenarios.
+
+
+### Rel.AI Cloud connection
+- **Add paired desktop routing while keeping coding execution local.** ChatGPT connects through Rel.AI Cloud, while repository files, absolute paths, commands, Git work, tests, builds, and managed processes remain on the selected computer.
+- **Add device-bound pairing and recovery.** Desktop devices prove possession of a locally protected identity, support short-lived pairing and recovery flows, and can be revoked without exposing local repository credentials.
+- **Make Cloud pairing the default desktop setup.** First run focuses on Connect ChatGPT, Secure this device, and Ready; managed-ngrok configuration remains available as the reversible Advanced Direct fallback.
+
+### Cloud synchronization and usage
+- **Keep authentication, tool refresh, and desktop compatibility separate.** The desktop reports actionable reauthentication, tool-refresh, and device-update states without treating one as proof of another.
+- **Add exact monthly Rel.AI Cloud usage.** The top-level Usage page shows Rel.AI-observed request/tool/outcome/byte/duration/activity aggregates and device/tool/workspace breakdowns without representing them as ChatGPT model-token accounting.
+- **Keep Cloud status updates local to Connection.** Reconnect/status changes update the affected Connection region without restarting the local server or remounting unrelated dashboard routes.
+
+### Public/private Cloud boundary
+- **Keep hosted implementation out of the desktop repository and package.** Public CI validates the client contract, protocol compatibility, packaging isolation, and packaged desktop behavior while hosted authorization, routing, persistence, deployment configuration, and server-only validation live outside this repository.
+- **Protect one-time device-link responses end to end.** Valid `device_link_result` responses settle through the correlated client control path instead of being rejected as unexpected frames.
+- **Apply the current Electron transitive security fix.** Keep `electron-updater` unchanged while updating its transitive `js-yaml` dependency from 4.3.0 to 4.3.1.
+Bump root/electron/plugin/status UI/lockfiles/release manifest to 0.25.0.
+
 ## [0.24.1] — 2026-08-06
 
 ### Simplified tool and runtime architecture
@@ -551,7 +625,6 @@ Bump root/electron/status UI/lockfiles to 0.20.7.
 - **Migrate existing configuration automatically.** Legacy workspace `fastTask.maxIndexFiles` and top-level `maxIndexFiles` values are accepted on read, converted to `context.snapshotMaxFiles`, and no longer written back.
 - **Make connector guidance task-shaped instead of rigid.** Repository overview and search calls are optional when the file location is already known, while final validation and explicit completion remain required.
 - **Add regression coverage for context migration, the 3,000-file default, snapshot scoping, and unrestricted on-demand search and direct reads.**
-- **Document the next runtime phases in `docs/CHATGPT_CODING_RUNTIME_ROADMAP.md`.** The roadmap specifies unrestricted one-shot commands, persistent interactive processes, project instructions, managed worktrees, optional task plans, and independent model workers with exact integration and test requirements.
 
 ### Portable ChatGPT connector identity
 - **Let an existing ChatGPT connector recover on another computer without deleting and recreating the app.** When the same static MCP URL moves to a fresh Rel.AI installation, the OAuth authorization page accepts the previously issued Rel.AI client ID as a recovery candidate and persists it only after successful dashboard-token approval.

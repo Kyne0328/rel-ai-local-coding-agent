@@ -35,6 +35,7 @@ function copyFixture() {
     'src/version.js',
     'scripts/release-check.mjs',
     'scripts/release-bump.mjs',
+    'scripts/check-generated.mjs',
     'scripts/electron-package.mjs',
     'scripts/electron-platform.mjs',
     'scripts/release-artifacts.mjs',
@@ -159,6 +160,11 @@ function verifyPackageContracts() {
   assert.doesNotMatch(wrapper, /npmCommand|npxCommand|npm\.cmd|npx\.cmd|shell:\s*true/i);
   assert.doesNotMatch(wrapper, /'--win',\s*'nsis',\s*'portable'/);
   assert.doesNotMatch(wrapper, /quitAndInstall|Setup.*\.exe|uninstall/i);
+
+  const generatedCheck = fs.readFileSync(path.join(tmp, 'scripts', 'check-generated.mjs'), 'utf8');
+  assert.match(generatedCheck, /public\/dashboard\.css/, 'generated asset verification must track public/dashboard.css');
+  assert.match(generatedCheck, /runNpm\(\['run', 'build:css'\]/, 'generated asset verification must rebuild dashboard CSS');
+  assert.match(generatedCheck, /dashboardCssBefore\.equals\(dashboardCssAfter\)/, 'generated asset verification must compare dashboard CSS before and after regeneration');
 }
 
 function verifyWorkflowContracts() {
@@ -167,11 +173,13 @@ function verifyWorkflowContracts() {
   const packagingAuditIndex = workflow.indexOf('- name: Audit packaging dependencies');
   const windowsBuildIndex = workflow.indexOf('- name: Build Windows release');
   const fetchWindowsSeedIndex = workflow.indexOf('NGROK_PLATFORMS: win32');
+  const gatewayInstallIndex = workflow.indexOf('- name: Install gateway test dependencies');
   const testsIndex = workflow.indexOf('- name: Run tests');
 
   assert.ok(productionAuditIndex >= 0);
   assert.ok(packagingAuditIndex > productionAuditIndex);
   assert.ok(packagingAuditIndex < windowsBuildIndex);
+  assert.ok(gatewayInstallIndex >= 0 && gatewayInstallIndex < testsIndex);
   assert.ok(fetchWindowsSeedIndex >= 0 && fetchWindowsSeedIndex < testsIndex && fetchWindowsSeedIndex < windowsBuildIndex);
 
   for (const pattern of [

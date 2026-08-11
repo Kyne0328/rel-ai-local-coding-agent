@@ -153,5 +153,5 @@ export {
   summarizeCommandForTelemetry,
   telemetrySampleRatio,
   traceContextEnvironment,
-  extractTraceContext
+
 };

@@ -26,6 +26,8 @@ try {
 
   assert.deepEqual(readDesktopSettings({ approvalRequired: true, notificationsEnabled }), {
     ok: true,
+    connectionMode: 'direct',
+    gatewayOrigin: 'https://rel-ai.kynemcp.workers.dev',
     port: 3333,
     approvalToken: 'preserved-token',
     ngrokDomain: 'example.ngrok-free.dev',
@@ -52,6 +54,8 @@ try {
   }, runtimeActions);
   assert.equal(preserveResult.ok, true);
   assert.deepEqual(readGuiConfig(), {
+    connectionMode: 'direct',
+    gatewayOrigin: 'https://rel-ai.kynemcp.workers.dev',
     port: 4444,
     ngrokDomain: 'updated.ngrok-free.dev',
     token: 'preserved-token',
@@ -66,6 +70,8 @@ try {
     ngrokAuthtoken: 'new-account-key'
   }, runtimeActions);
   assert.deepEqual(readGuiConfig(), {
+    connectionMode: 'direct',
+    gatewayOrigin: 'https://rel-ai.kynemcp.workers.dev',
     port: 4555,
     ngrokDomain: 'replacement.ngrok-free.dev',
     token: 'preserved-token',

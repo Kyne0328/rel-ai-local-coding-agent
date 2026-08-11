@@ -92,8 +92,9 @@ const inactive = runtime.getStatus();
 assert.equal(inactive.state, 'idle');
 assert.equal(inactive.activeTaskCount, 0);
 assert.equal(startedBlockers.size, 0, 'the sleep blocker must stop when no work session remains active');
-assert.equal(inactive.lastTask.status, 'cancelled');
-assert.equal(inactive.lastTask.endReason, 'inactivity_window');
+assert.equal(inactive.lastTask.status, 'inactive');
+assert.equal(inactive.lastTask.endReason || '', '');
+assert.ok(inactive.lastTask.inactiveAt);
 assert.equal(notifications.length, 0, 'inactivity must not generate a false task-completed notification');
 
 const failedTask = startTask('repo', 'conversation-c');
@@ -116,7 +117,7 @@ for (const [id, timer] of [...timers]) {
   timers.delete(id);
   timer.callback();
 }
-assert.equal(runtime.getStatus().lastTask.status, 'failed');
+assert.equal(runtime.getStatus().lastTask.status, 'inactive', 'a failed validation remains recoverable after the inactivity window');
 assert.equal(runtime.getStatus().lastTask.failures, 1);
 
 const completedTask = startTask('repo', 'conversation-completed');
@@ -151,7 +152,7 @@ assert.equal(completedIndicators[0].taskId, completedTask);
 
 assert.ok(statuses.some(status => status.activeTaskCount === 2 && status.activeCalls === 2));
 assert.ok(statuses.some(status => status.state === 'waiting'));
-assert.ok(statuses.some(status => status.lastTask?.status === 'cancelled'));
+assert.ok(statuses.some(status => status.lastTask?.status === 'inactive'));
 assert.ok(statuses.some(status => status.lastTask?.status === 'completed' && status.lastTask?.completionKnown === true));
 runtime.stop();
 

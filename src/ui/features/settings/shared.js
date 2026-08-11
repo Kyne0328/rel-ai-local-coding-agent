@@ -4,7 +4,7 @@ import { markUnsaved } from '../../interaction-safety.js';
 import { toast } from '../../components/toast.js';
 import { Toggle } from '../../components/toggle.js';
 import { Select } from '../../components/select.js';
-import { esc, titleize } from '../../utils.js';
+import { esc } from '../../utils.js';
 
 export async function loadSettingsConfig(container) {
   const payload = await fetchJson('/api/settings');
@@ -44,11 +44,6 @@ export function panel(title, body) {
   return { el: element, body: content };
 }
 
-export function formGrid() {
-  const element = document.createElement('div');
-  element.className = 'settings-form-grid';
-  return element;
-}
 
 export function field(label, control, help) {
   const wrapper = document.createElement('div');
@@ -95,21 +90,9 @@ export function numberControl(value, onChange, { min = 0, max = 1000000, step = 
   return element;
 }
 
-export function textAreaControl(value, onChange, rows = 4) {
-  const element = document.createElement('textarea');
-  element.className = 'settings-textarea-control';
-  element.rows = rows;
-  element.value = textAreaValue(value);
-  element.addEventListener('input', () => onChange(element.value));
-  return element;
-}
 
-function textAreaValue(value) {
-  if (Array.isArray(value)) return value.join('\n');
-  return String(value == null ? '' : value);
-}
 
-export function saveRow(onSave, onReload) {
+function saveRow(onSave, onReload) {
   const row = document.createElement('div');
   row.className = 'settings-save-row';
   const saveButton = document.createElement('button');
@@ -136,20 +119,4 @@ export function hiddenSaveRow(onSave, onReload) {
   row.hidden = true;
   markUnsaved(row, false);
   return row;
-}
-
-export function settingsTable(map = {}) {
-  const table = document.createElement('table');
-  table.className = 'data-table';
-  table.innerHTML = '<thead><tr><th>Setting</th><th>Value</th></tr></thead><tbody></tbody>';
-  const body = table.querySelector('tbody');
-  for (const [key, value] of Object.entries(map)) {
-    const row = document.createElement('tr');
-    row.innerHTML = `<td>${esc(titleize(key))}</td><td><code>${esc(Array.isArray(value) ? value.join(', ') : String(value))}</code></td>`;
-    body.appendChild(row);
-  }
-  const wrapper = document.createElement('div');
-  wrapper.className = 'table-wrap';
-  wrapper.appendChild(table);
-  return wrapper;
 }

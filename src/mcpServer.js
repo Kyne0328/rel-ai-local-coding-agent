@@ -1,6 +1,5 @@
 import { McpServer, fromJsonSchema } from '@modelcontextprotocol/server';
 import { readConfig } from './config.js';
-import { approvalDigest, approvalRequirement } from './mcp/approval.js';
 import { createRelaiRequestStateCodec, SERVER_INSTANCE_ID, toolContext } from './mcp/context.js';
 import {
   MCP_LEGACY_PROTOCOL_VERSIONS,
@@ -9,6 +8,7 @@ import {
   TASKS_EXTENSION_REVISION
 } from './mcp/protocol.js';
 import { toolResult } from './mcp/results.js';
+import { PUBLIC_MCP_SERVER_INSTRUCTIONS } from './mcp/serverInstructions.js';
 import { invokeRelaiTool } from './mcp/toolInvocation.js';
 import { validateToolOutput } from './tools/outputValidation.js';
 import { packageMetadata as pkg } from './packageMetadata.js';
@@ -98,18 +98,19 @@ function toolRegistration(definition) {
     title: definition.title,
     description: definition.description,
     inputSchema: fromJsonSchema(definition.inputSchema),
+    outputSchema: fromJsonSchema(definition.outputSchema),
     annotations: definition.annotations
   };
 }
 
 function connectorInstructions(_config = readConfig()) {
-  return 'Start each objective with relai_work action begin and pass its work_id to later calls. Inspect relevant files before editing; use bounded reads and commands. Validate after changes. Never bypass approval, workspace, task, or destructive-operation safeguards. Report only checks actually run. Finish with relai_validate action checks complete:true, or relai_work action finish after review.';
+  return PUBLIC_MCP_SERVER_INSTRUCTIONS;
 }
 
 export {
   SERVER_INSTANCE_ID,
-  approvalDigest,
-  approvalRequirement,
+
+
   connectorInstructions,
   createRelaiMcpServer,
   MCP_SERVER_INFO,

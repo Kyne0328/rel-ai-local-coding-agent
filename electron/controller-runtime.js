@@ -41,4 +41,4 @@ function removeControllerRuntimeMarker() {
   }
 }
 
-export { MARKER_FILE, controllerRuntimeMarkerPath, removeControllerRuntimeMarker, writeControllerRuntimeMarker };
+export {   removeControllerRuntimeMarker, writeControllerRuntimeMarker };

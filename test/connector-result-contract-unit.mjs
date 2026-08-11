@@ -22,7 +22,14 @@ const cases = [
   }, {
     ok: true, workspace: 'repo', items: [{ type: 'file', path: 'README.md', bytes: 12, content: '# Project\n' }], work_id: 'work_read'
   }, { guidanceMode: 'none' }),
-  fixture('relai_exec', 'relai_exec', '', 'relai_exec', 'work_exec', {
+  fixture('relai_snapshot', 'relai_snapshot', '', 'relai_repo_snapshot', 'work_snapshot', {
+    ok: true, workspace: 'repo', fileCount: 700, files: ['src/index.js', 'src/other.js'], skipped: [], truncated: false,
+    manifests: ['package.json'], discoveredCommands: {}, projectInstructions: {}, workspaceSkills: [], hints: [], git: {}, recommendedFlow: []
+  }, {
+    ok: true, workspace: 'repo', manifests: ['package.json'], discoveredCommands: {}, projectInstructions: {},
+    fileCount: 700, files: ['src/index.js', 'src/other.js'], returnedFileCount: 2, omittedFiles: 0, skippedCount: 0, truncated: false,
+    git: {}, work_id: 'work_snapshot'
+  }),  fixture('relai_exec', 'relai_exec', '', 'relai_exec', 'work_exec', {
     ok: false, workspace: 'repo', command: 'npm test', commandSummary: 'npm test', cwd: '.', shell: 'PowerShell 7', exitCode: 1,
     durationMs: 120, stdout: 'running', stderr: 'failed', stdoutBytes: 7, stderrBytes: 6, stdoutTruncated: false,
     stderrTruncated: false, timedOut: false, environmentKeys: ['CI'], changedFiles: ['package-lock.json'], changedFilesTruncated: false, mutationTracking: 'git'
@@ -51,11 +58,14 @@ const cases = [
     summary: 'Validated.', validationAt: '2026-08-05T00:00:00.000Z', changedFiles: ['src/index.js'], message: 'Validation passed.', work_id: 'work_checks'
   }),
   fixture('relai_changes:diff', 'relai_changes', 'diff', 'relai_diff', 'work_diff', {
-    ok: true, workspace: 'repo', branch: 'main', status: ' M src/index.js\n', changedFiles: ['src/index.js'], untrackedFiles: [],
-    statusEntries: [{ path: 'src/index.js' }], staged: false, path: 'src/index.js', diff: 'diff --git a/src/index.js b/src/index.js'
+    ok: true, workspace: 'repo', branch: 'main', status: ' M src/index.js\n M baseline.js\n', changedFiles: ['src/index.js', 'baseline.js'], untrackedFiles: [],
+    statusEntries: [{ path: 'src/index.js' }, { path: 'baseline.js' }], staged: false, path: 'src/index.js',
+    sessionChangedFiles: ['src/index.js'], baselineChangedFiles: ['baseline.js'], untrackedSessionFiles: ['new.js'], untrackedBaselineFiles: ['old.tmp'], baselineSource: 'session',
+    diff: 'diff --git a/src/index.js b/src/index.js'
   }, {
-    ok: true, workspace: 'repo', branch: 'main', status: ' M src/index.js\n', changedFiles: ['src/index.js'], staged: false,
-    path: 'src/index.js', diff: 'diff --git a/src/index.js b/src/index.js', work_id: 'work_diff'
+    ok: true, workspace: 'repo', branch: 'main', status: ' M src/index.js\n M baseline.js\n', changedFiles: ['src/index.js', 'baseline.js'], staged: false,
+    path: 'src/index.js', sessionChangedFiles: ['src/index.js'], baselineChangedFiles: ['baseline.js'], untrackedSessionFiles: ['new.js'], untrackedBaselineFiles: ['old.tmp'], baselineSource: 'session',
+    diff: 'diff --git a/src/index.js b/src/index.js', work_id: 'work_diff'
   }),
   fixture('relai_publish:commit', 'relai_publish', 'commit', 'relai_git_commit', 'work_commit', {
     ok: true, workspace: 'repo', commit: 'abc123', message: 'Committed.', changedFiles: []

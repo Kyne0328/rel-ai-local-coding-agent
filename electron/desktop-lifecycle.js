@@ -20,6 +20,7 @@ function createDesktopLifecycleManager(options = {}) {
   } = options;
   if (!app || typeof app.getVersion !== 'function') throw new TypeError('Electron app is required.');
   const statePath = path.join(safeUserDataPath(app), 'desktop-lifecycle.json');
+  const loginItemIdentity = { path: execPath, args: ['--background'] };
   const startupSupport = detectStartupSupport({ app, platform, env });
   const codes = {
     unsupported: errorCodes.STARTUP_SETTING_NOT_SUPPORTED || 'startup_setting_not_supported',
@@ -89,8 +90,7 @@ function createDesktopLifecycleManager(options = {}) {
       app.setLoginItemSettings({
         openAtLogin: enabled === true,
         openAsHidden: true,
-        path: execPath,
-        args: ['--background']
+        ...loginItemIdentity
       });
       status = { ...status, launchAtLogin: readLaunchAtLogin() };
       onLog(`Launch at sign-in ${status.launchAtLogin.enabled ? 'enabled' : 'disabled'}.`, { source: 'desktop-lifecycle' });
@@ -107,7 +107,7 @@ function createDesktopLifecycleManager(options = {}) {
       return { supported: false, enabled: false, openedAtLogin: false, reason: startupSupport.reason };
     }
     try {
-      const settings = app.getLoginItemSettings();
+      const settings = app.getLoginItemSettings(loginItemIdentity);
       return {
         supported: true,
         enabled: settings.openAtLogin === true,

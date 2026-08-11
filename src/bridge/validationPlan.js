@@ -5,7 +5,10 @@ import { execFileSync } from 'node:child_process';
 import { getStateDir } from '../statePaths.js';
 import { workspaceGitStatus } from '../repo/gitOps.js';
 import { relaiCodeInspect } from './codeIntelligence.js';
-import { detectVerifyChecks } from './checkDetection.js';
+import { detectVerifyCheckUnits, detectVerifyChecks } from './checkDetection.js';
+import { buildCheckCatalog } from '../workflow/checkCatalog.js';
+import { classifyWorkflowRisk } from '../workflow/risk.js';
+import { discoverRepositoryTopology, packageForPath } from '../workflow/topology.js';
 
 const PLAN_TTL_MS = 30 * 60 * 1000;
 const FINGERPRINT_VERSION = 1;
@@ -34,17 +37,26 @@ const VALIDATION_CONFIG_PATHS = Object.freeze([
 
 async function createValidationPlan(workspace, config, args = {}) {
   const status = await workspaceGitStatus(workspace, config, { maxBytes: 256 * 1024 });
-  const changedFiles = normalizePaths(status.changedFiles || []);
+  const changedFiles = Array.isArray(args.changedFiles)
+    ? normalizePaths(args.changedFiles)
+    : normalizePaths(status.changedFiles || []);
   let impact = { affectedTests: [], impactedPaths: [] };
   if (changedFiles.length) {
     try {
       impact = await relaiCodeInspect(workspace, config, { action: 'impact', paths: changedFiles, maxResults: 200, maxDepth: 3 });
     } catch {}
   }
-  const quick = detectVerifyChecks(workspace.path, 'quick');
-  const standard = detectVerifyChecks(workspace.path, 'standard');
-  const release = detectVerifyChecks(workspace.path, 'release');
-  const focused = deriveFocusedChecks(quick, standard, impact.affectedTests || [], workspace);
+  const topology = discoverRepositoryTopology(workspace.path);
+  const packageIds = [...new Set(changedFiles.map(file => packageForPath(topology, file)?.id).filter(Boolean))];
+  const quickUnits = detectVerifyCheckUnits(workspace.path, 'quick');
+  const standardUnits = detectVerifyCheckUnits(workspace.path, 'standard');
+  const releaseUnits = detectVerifyCheckUnits(workspace.path, 'release');
+  const packageScoped = units => packageIds.length ? units.filter(unit => packageIds.includes(unit.packageId) || !unit.packageId) : units;
+  const quick = packageScoped(quickUnits).map(checkReference);
+  const standard = packageScoped(standardUnits).map(checkReference);
+  const release = releaseUnits.map(checkReference);
+  const focused = deriveFocusedChecks(buildCheckCatalog(topology), quickUnits, packageIds, impact.affectedTests || [], workspace);
+  const classification = classifyWorkflowRisk({ changedFiles, packageIds, affectedTests: impact.affectedTests || [], impactedPaths: impact.impactedPaths || [] });
   const fingerprint = await createValidationFingerprint(workspace, config, status);
   const payload = {
     version: 2,
@@ -58,7 +70,7 @@ async function createValidationPlan(workspace, config, args = {}) {
     affectedTests: impact.affectedTests || [],
     impactedPaths: (impact.impactedPaths || []).slice(0, 200),
     checks: { focused, quick, standard, release },
-    recommended: args.release === true ? 'release' : (changedFiles.length > 25 ? 'standard' : 'focused')
+    recommended: args.release === true ? 'release' : recommendedPlanLevel(classification)
   };
   const planId = `vplan_${crypto.randomBytes(18).toString('base64url')}`;
   const signature = signPlan(config, planId, payload);
@@ -147,16 +159,37 @@ function gitDigest(root, args) {
   }
 }
 
-function deriveFocusedChecks(quick, standard, affectedTests, workspace) {
-  const checks = [...quick];
+function deriveFocusedChecks(catalog, quickUnits, packageIds, affectedTests, workspace) {
+  const direct = [];
   for (const testPath of affectedTests.slice(0, 20)) {
-    if (testPath.endsWith('.mjs') || testPath.endsWith('.js') || testPath.endsWith('.cjs')) checks.push(`node ${quotePath(testPath)}`);
+    if (/\.(?:mjs|cjs|js)$/i.test(testPath)) direct.push(`node ${quotePath(testPath)}`);
   }
-  if (!checks.length) checks.push(...standard.slice(0, 2));
-  for (const command of Object.values(workspace.testCommands || {})) {
-    if (affectedTests.some(test => String(command).includes(test))) checks.push(command);
-  }
-  return [...new Set(checks)];
+  if (direct.length) return [...new Set(direct)];
+  const scoped = [...catalog, ...(quickUnits || [])]
+    .filter(unit => !packageIds.length || !unit.packageId || packageIds.includes(unit.packageId))
+    .filter(unit => unit.kind !== 'migration')
+    .filter((unit, index, values) => values.findIndex(item => item.id === unit.id && item.cwd === unit.cwd && item.command === unit.command) === index)
+    .sort((a, b) => checkCost(a) - checkCost(b));
+  const preferred = scoped.find(unit => unit.kind === 'test')
+    || scoped.find(unit => ['typecheck', 'lint'].includes(unit.kind))
+    || scoped[0];
+  if (preferred) return [checkReference(preferred)];
+  return Object.values(workspace.testCommands || {}).slice(0, 1);
+}
+
+function checkReference(unit) {
+  return unit?.source === 'legacy' ? unit.command : (unit?.id || unit?.command || '');
+}
+function checkCost(unit) {
+  const cost = { small: 1, medium: 2, large: 3 };
+  return cost[unit?.estimatedCost] || 2;
+}
+
+function recommendedPlanLevel({ boundary, risk }) {
+  if (boundary.level === 'release') return 'release';
+  if (boundary.level === 'repository' || boundary.level === 'cross_package') return 'standard';
+  if (risk.level === 'high' && !boundary.affectedTests?.length) return 'standard';
+  return 'focused';
 }
 
 function quotePath(value) {
@@ -229,4 +262,4 @@ function stableJson(value) {
   return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
 }
 
-export { createValidationFingerprint, createValidationPlan, readValidationPlan, signPlan };
+export { createValidationFingerprint, createValidationPlan, readValidationPlan,  };

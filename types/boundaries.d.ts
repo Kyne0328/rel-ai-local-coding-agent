@@ -1,8 +1,42 @@
-export type ToolName = string;
+type ToolName = string;
 export type ToolGroup = 'git' | 'audit' | 'cleanup';
-export type AuditKind = '' | 'snapshot' | 'read' | 'path' | 'checks' | 'edit' | 'exec' | 'completion';
-export type CacheKind = '' | 'paths' | 'edit' | 'workspace';
-export type SummaryKind = '' | 'checks' | 'diff' | 'edit' | 'completion';
+type AuditKind = '' | 'snapshot' | 'read' | 'path' | 'checks' | 'edit' | 'exec' | 'completion';
+type CacheKind = '' | 'paths' | 'edit' | 'workspace';
+type SummaryKind = '' | 'checks' | 'diff' | 'edit' | 'completion';
+
+type WorkflowStage = 'understand' | 'investigate' | 'design' | 'implement' | 'verify' | 'review' | 'repair' | 'complete' | 'blocked';
+type WorkflowIntent = 'auto' | 'investigation' | 'bugfix' | 'feature' | 'refactor' | 'migration' | 'documentation' | 'review' | 'release';
+type WorkflowRiskLevel = 'low' | 'medium' | 'high' | 'critical';
+type WorkflowBoundaryLevel = 'file' | 'package' | 'cross_package' | 'repository' | 'release';
+
+interface WorkflowAction {
+  id: string;
+  priority: number;
+  tool: string;
+  action: string;
+  reason: string;
+  blocking: boolean;
+  estimatedCost: 'small' | 'medium' | 'large';
+  args: Record<string, unknown>;
+}
+
+interface WorkflowRisk { level: WorkflowRiskLevel; reasons: string[]; }
+interface WorkflowBoundary { level: WorkflowBoundaryLevel; packageIds: string[]; changedFiles: string[]; impactedPaths: string[]; affectedTests: string[]; }
+interface WorkflowEvidenceSummary { fresh: number; stale: number; reusable: number; lastMutationGeneration: number; lastValidatedMutationGeneration: number; }
+interface WorkflowCompletionReadiness { hardReady: boolean; blockers: string[]; recommendations: string[]; }
+interface WorkflowSnapshot {
+  version: 1;
+  stage: WorkflowStage;
+  intent: WorkflowIntent;
+  confidence: 'low' | 'medium' | 'high';
+  boundary: WorkflowBoundary;
+  risk: WorkflowRisk;
+  evidence: WorkflowEvidenceSummary;
+  recommendedActions: WorkflowAction[];
+  avoidActions: Array<{ action: string; reason: string }>;
+  completion: WorkflowCompletionReadiness;
+  repeatCount?: number;
+}
 
 export interface JsonSchema {
   type?: string | string[];
@@ -25,27 +59,27 @@ export interface JsonSchema {
   pattern?: string;
 }
 
-export interface ObjectJsonSchema extends JsonSchema {
+interface ObjectJsonSchema extends JsonSchema {
   type: 'object';
   properties: Record<string, JsonSchema>;
   required: string[];
   additionalProperties: false;
 }
 
-export interface ToolAnnotations {
+interface ToolAnnotations {
   readOnlyHint: boolean;
   destructiveHint: boolean;
   idempotentHint: boolean;
   openWorldHint: boolean;
 }
 
-export type ToolExecutionClass = 'always_immediate' | 'bounded_synchronous' | 'native_task_eligible' | 'persistent_process';
+type ToolExecutionClass = 'always_immediate' | 'bounded_synchronous' | 'native_task_eligible' | 'persistent_process';
 
-export interface ToolExecution {
+interface ToolExecution {
   taskSupport: 'required' | 'optional' | 'forbidden';
 }
 
-export interface ToolBehavior {
+interface ToolBehavior {
   audit: AuditKind;
   cache: CacheKind;
   startsSession: boolean;
@@ -58,16 +92,16 @@ export interface ToolBehavior {
   executionClass: ToolExecutionClass;
 }
 
-export type ToolCapability = 'inspect' | 'edit' | 'validate' | 'git' | 'recover';
+type ToolCapability = 'inspect' | 'edit' | 'validate' | 'git' | 'recover';
 
-export interface ToolDashboardMetadata {
+interface ToolDashboardMetadata {
   category: string;
   requiredProfile: 'workspace';
   requiresApproval: boolean;
   capabilities?: readonly ToolCapability[];
 }
 
-export interface ToolLifecycleMetadata {
+interface ToolLifecycleMetadata {
   state: 'active' | 'deprecated';
   replacement?: ToolName;
   replacements?: ToolName[];
@@ -97,9 +131,6 @@ export interface ToolDefinitionMetadata {
   }>;
 }
 
-export interface ToolDefinition extends ToolDefinitionMetadata {
-  handler: ToolHandler;
-}
 
 export interface ToolSchema {
   name: ToolName;
@@ -212,15 +243,13 @@ export interface ToolResult extends Record<string, unknown> {
   returnedRangeCount?: number;
   returnedBytes?: number;
   contextTruncated?: boolean;
+  workflow?: WorkflowSnapshot;
 }
 
-export type AppConfig = Record<string, unknown> & {
-  workspaces?: Record<string, unknown>;
-};
-
-export type ToolHandler = (config: AppConfig, args: ToolArgs, context?: { connector?: boolean; taskId?: string; requestHeaders?: Record<string, string>; mcp?: Record<string, unknown> }) => unknown | Promise<unknown>;
 
 export interface LauncherConfigInput {
+  connectionMode?: 'cloud' | 'direct';
+  gatewayOrigin?: string;
   port?: number | string;
   ngrokDomain?: string;
   domain?: string;
@@ -230,6 +259,8 @@ export interface LauncherConfigInput {
 }
 
 export interface LauncherConfig {
+  connectionMode: 'cloud' | 'direct';
+  gatewayOrigin: string;
   port: number;
   ngrokDomain: string;
   ngrokAuthtoken: string;
@@ -326,3 +357,66 @@ export interface ApprovalTokenReplacementResult {
   authorization: OAuthAuthorizationStatus;
   status: Record<string, unknown>;
 }
+
+export type GatewayIdempotency = 'read_only' | 'mutating';
+export type GatewayFrameType =
+  | 'challenge'
+  | 'authenticate'
+  | 'authenticated'
+  | 'capabilities'
+  | 'workspaces'
+  | 'request'
+  | 'accepted'
+  | 'result'
+  | 'cancel'
+  | 'heartbeat'
+  | 'usage_request'
+  | 'usage_result'
+  | 'device_link_request'
+  | 'device_link_result'
+  | 'error';
+
+export type GatewayErrorCode =
+  | 'DEVICE_OFFLINE'
+  | 'DEVICE_UPDATE_REQUIRED'
+  | 'WORKSPACE_NOT_AVAILABLE'
+  | 'DEVICE_SELECTION_REQUIRED'
+  | 'PAIRING_REQUIRED'
+  | 'PAIRING_EXPIRED'
+  | 'REQUEST_TIMEOUT'
+  | 'DEVICE_RESPONSE_INVALID'
+  | 'RATE_LIMITED'
+  | 'AMBIGUOUS_RESULT'
+  | 'RESULT_UNAVAILABLE';
+
+export interface GatewayValidationResult {
+  ok: boolean;
+  error?: string;
+}
+
+export interface GatewayRequestClassification {
+  ok: boolean;
+  method?: string;
+  toolName?: string;
+  idempotency?: GatewayIdempotency;
+  idempotent?: boolean;
+  destructive?: boolean;
+  reason?: string;
+}
+
+export interface GatewayDeviceCompatibility {
+  protocolVersion?: number;
+  mcpProtocolVersion?: string;
+}
+
+export interface GatewayCompatibilityResult {
+  ok: boolean;
+  code?: GatewayErrorCode;
+  reason?: string;
+  protocolVersion?: number;
+  mcpProtocolVersion?: string;
+  minimumProtocolVersion?: number;
+  currentProtocolVersion?: number;
+  expectedMcpProtocolVersion?: string;
+}
+

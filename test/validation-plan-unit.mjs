@@ -21,19 +21,25 @@ fs.writeFileSync(path.join(root, 'test', 'app.test.js'), "require('../src/app')(
 git('add', '.');
 git('commit', '-m', 'fixture');
 fs.writeFileSync(path.join(root, 'src', 'app.js'), 'module.exports = () => 2;\n');
+for (let index = 0; index < 30; index += 1) {
+  const ambient = path.join(root, 'ambient', `file-${index}.txt`);
+  fs.mkdirSync(path.dirname(ambient), { recursive: true });
+  fs.writeFileSync(ambient, `ambient-${index}\n`);
+}
 const workspace = { alias: 'app', path: root, testCommands: {}, commands: {} };
 const config = { stateDir };
 
 try {
-  const plan = await createValidationPlan(workspace, config, {});
+  const plan = await createValidationPlan(workspace, config, { changedFiles: ['src/app.js'] });
   assert.equal(plan.ok, true);
   assert.match(plan.planId, /^vplan_/);
-  assert.ok(plan.changedFiles.includes('src/app.js'));
+  assert.deepEqual(plan.changedFiles, ['src/app.js']);
+  assert.equal(plan.recommended, 'focused');
   assert.ok(plan.checks.quick.length > 0);
   const loaded = readValidationPlan(config, plan.planId, workspace);
   assert.equal(loaded.signature, plan.signature);
 
-  fs.writeFileSync(path.join(root, 'src', 'app.js'), 'module.exports = () => 3;\n');
+  fs.writeFileSync(path.join(root, 'ambient', 'file-0.txt'), 'external change\n');
   await assert.rejects(
     () => relaiVerify(workspace, config, { planId: plan.planId, planLevel: 'quick' }),
     /stale because relevant workspace content changed/i

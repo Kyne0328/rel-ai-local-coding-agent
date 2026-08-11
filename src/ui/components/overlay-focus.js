@@ -29,7 +29,7 @@ export function activateOverlay({ backdrop, panel, opener, onEscape }) {
   };
 }
 
-export function focusFirst(panel) {
+function focusFirst(panel) {
   const first = focusableElements(panel)[0];
   (first || panel).focus({ preventScroll: true });
 }

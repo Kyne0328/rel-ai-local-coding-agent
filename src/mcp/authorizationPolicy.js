@@ -1,4 +1,3 @@
-import * as crypto from 'node:crypto';
 import { getOperationCapability } from '../tools/actionCatalog.js';
 
 const AUTHORIZATION_POLICY_VERSION = 1;
@@ -109,10 +108,6 @@ function denied(options, message, details = {}) {
   });
 }
 
-function authorizationPolicyFingerprint(policy) {
-  const normalized = normalizeAuthorizationPolicy(policy);
-  return crypto.createHash('sha256').update(JSON.stringify(normalized)).digest('base64url');
-}
 
 function unique(value) {
   const values = Array.isArray(value) ? value : value == null ? [] : [value];
@@ -125,11 +120,11 @@ function cleanWorkspace(value) {
 
 export {
   ALL_CAPABILITIES,
-  AUTHORIZATION_POLICY_VERSION,
-  AuthorizationDeniedError,
+
+
   CAPABILITIES,
   assertAuthorizedToolCall,
-  authorizationPolicyFingerprint,
+
   createConsentPolicy,
   createLocalAdminPolicy,
   isTrustedLocalPrincipal,

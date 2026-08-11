@@ -51,8 +51,30 @@ export function updateProcessesLiveState(container, data = {}) {
   if (currentCount && nextCount && currentCount.textContent !== nextCount.textContent) currentCount.textContent = nextCount.textContent;
   const currentList = current.querySelector('[data-process-list]');
   const nextList = next?.querySelector('[data-process-list]');
-  if (currentList && nextList && !currentList.isEqualNode(nextList)) currentList.replaceWith(nextList);
+  if (currentList && nextList) {
+    syncProcessClockText(currentList, nextList);
+    if (!currentList.isEqualNode(nextList)) currentList.replaceWith(nextList);
+  }
   return true;
+}
+
+function syncProcessClockText(currentList, nextList) {
+  const selector = '[data-clock-elapsed-start], [data-clock-relative]';
+  const currentClocks = [...currentList.querySelectorAll(selector)];
+  const nextClocks = [...nextList.querySelectorAll(selector)];
+  for (let index = 0; index < Math.min(currentClocks.length, nextClocks.length); index += 1) {
+    const currentClock = currentClocks[index];
+    const nextClock = nextClocks[index];
+    if (processClockIdentity(currentClock) === processClockIdentity(nextClock)) nextClock.textContent = currentClock.textContent;
+  }
+}
+
+function processClockIdentity(node) {
+  return [
+    node.getAttribute('data-clock-elapsed-start') || '',
+    node.getAttribute('data-clock-elapsed-end') || '',
+    node.getAttribute('data-clock-relative') || ''
+  ].join('|');
 }
 
 function processRow(process, nativeTasks) {
@@ -143,7 +165,7 @@ function durationFor(process, active) {
   const start = Date.parse(process.startedAt || '');
   const parsedEnd = Date.parse(process.endedAt || '');
   const end = Number.isFinite(parsedEnd) ? parsedEnd : Date.now();
-  if (Number.isFinite(start)) return active ? formatDuration(Date.now() - start) : `${formatDuration(end - start)}${process.endedAt ? ` · ${timeAgo(process.endedAt)}` : ''}`;
+  if (Number.isFinite(start)) return active ? formatDuration(Date.now() - start, { live: true }) : `${formatDuration(end - start)}${process.endedAt ? ` · ${timeAgo(process.endedAt)}` : ''}`;
   return process.endedAt ? timeAgo(process.endedAt) : 'unavailable';
 }
 

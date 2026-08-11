@@ -8,13 +8,17 @@ import { createDesktopLifecycleManager, detectStartupSupport } from "../electron
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-lifecycle-'));
 let loginEnabled = false;
 let loginSettings = null;
+let loginReadSettings = null;
 let clock = 0;
 const logs = [];
 const app = {
   isPackaged: true,
   getVersion: () => '0.21.0',
   getPath: () => stateDir,
-  getLoginItemSettings: () => ({ openAtLogin: loginEnabled }),
+  getLoginItemSettings: settings => {
+    loginReadSettings = settings ? { ...settings, args: [...(settings.args || [])] } : settings;
+    return { openAtLogin: loginEnabled };
+  },
   setLoginItemSettings: settings => {
     loginSettings = { ...settings };
     loginEnabled = settings.openAtLogin === true;
@@ -36,6 +40,7 @@ assert.equal(firstStatus.launchAtLogin.supported, true);
 assert.equal(firstStatus.launchAtLogin.enabled, false);
 assert.equal(first.setLaunchAtLogin(true).ok, true);
 assert.equal(first.getStatus().launchAtLogin.enabled, true);
+assert.deepEqual(loginReadSettings, { path: process.execPath, args: ['--background'] }, 'login-item readback must identify the same executable and background args used during registration');
 assert.deepEqual(loginSettings, {
   openAtLogin: true,
   openAsHidden: true,

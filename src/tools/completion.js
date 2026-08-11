@@ -1,7 +1,7 @@
 import { resolveWorkspace } from '../config.js';
 import { clearSessionPolicy, resolvePolicy } from '../policyResolver.js';
 import { readTaskHistorySession } from '../taskHistoryStore.js';
-import { readTaskIntegrity, readWorkspaceIntegrity, CODE_MUTATING_TOOLS, eventMutatedCode } from '../taskIntegrity.js';
+import { readTaskIntegrity, readWorkspaceIntegrity } from '../taskIntegrity.js';
 import { createValidationFingerprint } from '../bridge/validationPlan.js';
 import { sanitizeCompletionSummary } from '../taskObservability.js';
 import { getCurrentToolActivityContext, requestCurrentTaskCompletion, taskError, normalizeTaskId } from '../toolActivity.js';
@@ -230,4 +230,4 @@ function unique(values) {
   return [...new Set(values)];
 }
 
-export { completeTask, finalizeValidatedTask, finalizeValidationResult, normalizeCompletionSummary, CODE_MUTATING_TOOLS, eventMutatedCode };
+export { completeTask,  finalizeValidationResult, normalizeCompletionSummary,   };

@@ -9,6 +9,8 @@ on:
       - package-lock.json
       - electron/**
       - scripts/**
+      - vendor/zoekt/**
+      - src/repository/intelligence/**
       - .github/workflows/release.yml
   workflow_dispatch:
 
@@ -117,6 +119,11 @@ jobs:
         env:
           NGROK_PLATFORMS: win32
         run: pwsh scripts/fetch-ngrok.ps1
+      - name: Build bundled Zoekt binaries
+        shell: pwsh
+        env:
+          ZOEKT_PLATFORMS: win32
+        run: pwsh scripts/fetch-zoekt.ps1
       - name: Verify generated color assets
         run: npm run verify:color-tokens
       - name: Run native Tasks release gate
@@ -223,6 +230,10 @@ jobs:
         env:
           NGROK_PLATFORMS: linux
         run: bash scripts/fetch-ngrok.sh
+      - name: Build bundled Zoekt binaries
+        env:
+          ZOEKT_PLATFORMS: linux
+        run: bash scripts/fetch-zoekt.sh
       - name: Verify generated color assets
         run: npm run verify:color-tokens
       - name: Run Electron platform regression tests

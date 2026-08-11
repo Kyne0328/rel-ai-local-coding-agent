@@ -1,7 +1,7 @@
 {
   "name": "rel-ai-mcp-launcher",
   "desktopName": "com.relai.mcp.desktop",
-  "version": "0.24.1",
+  "version": "0.25.0",
   "private": true,
   "type": "module",
   "description": "Desktop launcher and dashboard host for Rel.AI MCP.",
@@ -11,6 +11,7 @@
     "email": "Kyne0328@users.noreply.github.com",
     "url": "https://github.com/Kyne0328"
   },
+  "license": "Apache-2.0",
   "main": "main.js",
   "engines": {
     "node": ">=24.0.0 <25",
@@ -71,12 +72,17 @@
       "app-updater-events.js",
       "app-updater-state.js",
       "update-version.js",
+      "update-support-policy.js",
       "ipc-security.js",
       "desktop-settings.js",
       "desktop-notifications.js",
       "desktop-lifecycle.js",
       "shutdown-coordinator.js",
       "controller-runtime.js",
+      "gateway-state.js",
+      "gateway-client.js",
+      "public-connection-runtime.js",
+      "gateway-device-identity.js",
       "renderer/**",
       "build/icon.png",
       "!**/*.map"
@@ -93,12 +99,19 @@
         "from": "../bin",
         "to": "bin",
         "filter": [
-          "**/*.js"
+          "**/*"
         ]
       },
       {
         "from": "../public",
         "to": "public",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../skills",
+        "to": "skills",
         "filter": [
           "**/*"
         ]
@@ -114,6 +127,8 @@
           "@hono/node-server/**",
           "hono/**",
           "zod/**",
+          "web-tree-sitter/**",
+          "tree-sitter-wasms/**",
           "!**/*.map",
           "!@modelcontextprotocol/*/src/**",
           "!@opentelemetry/*/src/**",
@@ -138,6 +153,14 @@
       {
         "from": "../CHANGELOG.md",
         "to": "CHANGELOG.md"
+      },
+      {
+        "from": "../LICENSE",
+        "to": "LICENSE"
+      },
+      {
+        "from": "../NOTICE",
+        "to": "NOTICE"
       }
     ],
     "win": {
@@ -152,6 +175,15 @@
           "to": "bin/ngrok",
           "filter": [
             "manifest.json",
+            "win32/**"
+          ]
+        },
+        {
+          "from": "../vendor/zoekt",
+          "to": "bin/zoekt",
+          "filter": [
+            "manifest.json",
+            "LICENSE",
             "win32/**"
           ]
         }
@@ -187,6 +219,15 @@
           "to": "bin/ngrok",
           "filter": [
             "manifest.json",
+            "linux/**"
+          ]
+        },
+        {
+          "from": "../vendor/zoekt",
+          "to": "bin/zoekt",
+          "filter": [
+            "manifest.json",
+            "LICENSE",
             "linux/**"
           ]
         }

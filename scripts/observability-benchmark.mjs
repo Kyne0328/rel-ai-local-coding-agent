@@ -8,6 +8,7 @@ import { createToolActivityTracker } from '../src/toolActivity.js';
 import { recordTaskActivityEvent, readTaskHistory } from '../src/taskHistoryStore.js';
 import { buildDashboardPayload } from '../src/http/dashboardData.js';
 import { sanitizeDisplayText } from '../src/taskObservability.js';
+import { createDashboardClock } from '../src/ui/clock.js';
 
 const outputArg = process.argv.find(arg => arg.startsWith('--output='));
 const outputPath = path.resolve(outputArg ? outputArg.slice('--output='.length) : 'dist/observability-benchmark.json');
@@ -23,6 +24,8 @@ fs.mkdirSync(workspacePath, { recursive: true });
 fs.writeFileSync(path.join(workspacePath, 'package.json'), JSON.stringify({ name: 'benchmark-fixture', version: '1.0.0' }));
 fs.mkdirSync(config.stateDir, { recursive: true });
 fs.writeFileSync(config.auditLogPath, '');
+
+const DASHBOARD_SNAPSHOT_COALESCE_MS = 100;
 
 const metrics = [];
 const tracker = createToolActivityTracker({ idleMs: 60_000 });
@@ -46,7 +49,7 @@ const unsubscribe = tracker.onToolActivity(event => {
     publicationTimer = setTimeout(() => {
       pendingPublication = false;
       snapshotPublications += 1;
-    }, 25);
+    }, DASHBOARD_SNAPSHOT_COALESCE_MS);
   }
 });
 
@@ -69,11 +72,11 @@ try {
     finish.update({ currentStage: 'Reading benchmark data', currentActivity: `Read ${index + 1} of 100` });
     finish({ ok: true, activity: { summary: `Read benchmark file ${index}` } });
   }
-  await delay(60);
+  await delay(DASHBOARD_SNAPSHOT_COALESCE_MS + 20);
   const afterStorage = directoryBytes(historyDirectory);
   addMetric('activity_events_per_100_tool_calls', '100 serial task-scoped tool calls with one progress update each', null, activityEvents - eventBaseline, 0, 305, '<=');
   addMetric('persistence_writes_per_100_tool_calls', 'same workload; atomic history temp writes', null, persistenceWrites - writeBaseline, 0, 305, '<=');
-  addMetric('snapshot_publications_per_100_tool_calls', '25 ms canonical snapshot coalescer under serial burst', null, snapshotPublications - publicationBaseline, 0, 5, '<=');
+  addMetric('snapshot_publications_per_100_tool_calls', '100 ms canonical snapshot coalescer under serial burst', null, snapshotPublications - publicationBaseline, 0, 5, '<=');
   addMetric('queue_wait_events_per_100_tool_calls', 'serial uncontended workspace workload', null, 0, 0, 0, '<=');
   addMetric('task_history_storage_growth_bytes', '100 task-scoped calls', null, afterStorage - beforeStorage, 0, 2 * 1024 * 1024, '<=');
 
@@ -83,7 +86,7 @@ try {
     const finish = tracker.beginConnectorToolCall({ tool: 'relai_read', workspace: 'app', taskId, operation: `Event ${index}` });
     finish({ ok: true });
   }
-  await delay(60);
+  await delay(DASHBOARD_SNAPSHOT_COALESCE_MS + 20);
   global.gc?.();
   const heapAfter = process.memoryUsage().heapUsed;
   addMetric('memory_after_1000_events_bytes', 'heap used after an additional 1,000 tool calls in one bounded task timeline', null, heapAfter, 0, 256 * 1024 * 1024, '<=');
@@ -114,12 +117,15 @@ try {
   const reconnectMs = median(reconnectSamples);
   addMetric('reconnect_snapshot_latency_ms', `warm canonical dashboard snapshot with ${tasks.length} task session(s); median of 5`, null, round(reconnectMs), round(range(reconnectSamples)), 150, '<=');
 
-  const quietClockUpdates = 60;
-  addMetric('quiet_clock_direct_node_updates_60s', '60 direct clock-node updates; no dashboard tree replacement', null, quietClockUpdates, 0, 60, '<=');
+  const clockBenchmark = runDashboardClockBenchmark();
+  addMetric('clock_document_queries_during_60_ticks', 'production dashboard clock with 2 live durations and 50 historical relative timestamps', null, clockBenchmark.documentQueriesDuringTicks, 0, 0, '<=');
+  addMetric('clock_live_node_updates_60s', 'production dashboard clock updating only 2 live session durations for 60 ticks', null, clockBenchmark.liveNodeUpdates, 0, 120, '<=');
   const renderer = runRendererBenchmark();
   if (renderer.ok) {
-    addMetric('quiet_full_dashboard_renders_60s', 'executed hidden Electron renderer workload with 60 direct clock updates', null, renderer.result.quietFullRenders, 0, 0, '<=');
-    addMetric('full_renders_during_100_progress_updates', 'executed 100 progress text updates in Electron', null, renderer.result.progressFullRenders, round(renderer.result.progressLatencyMs), 0, '<=');
+    addMetric('quiet_full_dashboard_renders_60s', 'executed hidden Electron renderer workload with 52 session rows and 60 live clock ticks', null, renderer.result.quietFullRenders, 0, 0, '<=');
+    addMetric('quiet_clock_node_updates_60s', '2 open sessions receive 60 second-level updates while 50 completed sessions stay static', null, renderer.result.quietClockNodeUpdates, 0, 120, '<=');
+    addMetric('full_renders_during_100_progress_updates', 'executed 100 progress updates on one session row', null, renderer.result.progressFullRenders, round(renderer.result.progressLatencyMs), 0, '<=');
+    addMetric('session_row_replacements_during_100_progress_updates', '100 progress updates preserve the keyed session row node', null, renderer.result.sessionRowReplacementsDuringProgress, 0, 0, '<=');
     addMetric('timeline_200_event_render_ms', 'executed creation and attachment of a 200-event timeline in Electron', null, round(renderer.result.timelineRenderMs), 0, 200, '<=');
     addMetric('logical_task_switch_memory_delta_bytes', 'executed 40 logical-task panel switches in Electron with precise memory information', null, renderer.result.logicalTaskSwitchMemoryDeltaBytes, 0, 16 * 1024 * 1024, '<=');
     addMetric('hidden_tab_timer_elapsed_ms', 'executed a 100 ms timer in a hidden Electron BrowserWindow', null, round(renderer.result.hiddenTimerElapsedMs), 0, 1500, '<=');
@@ -127,7 +133,9 @@ try {
   } else {
     for (const [metric, threshold] of [
       ['quiet_full_dashboard_renders_60s', 0],
+      ['quiet_clock_node_updates_60s', 120],
       ['full_renders_during_100_progress_updates', 0],
+      ['session_row_replacements_during_100_progress_updates', 0],
       ['timeline_200_event_render_ms', 200],
       ['logical_task_switch_memory_delta_bytes', 16 * 1024 * 1024],
       ['hidden_tab_timer_elapsed_ms', 1500],
@@ -173,6 +181,62 @@ function addMetric(metric, workload, baseline, result, variance, threshold, comp
   metrics.push({ metric, workload, baseline, result, variance, threshold, comparator, status, note });
 }
 
+function runDashboardClockBenchmark() {
+  class ClockNode {
+    constructor(attributes = {}) {
+      this.attributes = new Map(Object.entries(attributes));
+      this._textContent = '';
+      this.isConnected = true;
+      this.updates = 0;
+    }
+    hasAttribute(name) { return this.attributes.has(name); }
+    getAttribute(name) { return this.attributes.get(name) ?? null; }
+    get textContent() { return this._textContent; }
+    set textContent(value) {
+      const next = String(value);
+      if (next === this._textContent) return;
+      this._textContent = next;
+      this.updates += 1;
+    }
+  }
+
+  const startedAt = Date.parse('2026-08-08T12:00:00.000Z');
+  let currentTime = startedAt;
+  const liveNodes = [
+    new ClockNode({ 'data-clock-elapsed-start': String(startedAt) }),
+    new ClockNode({ 'data-clock-elapsed-start': String(startedAt - 30_000) })
+  ];
+  const relativeNodes = Array.from({ length: 50 }, (_, index) => new ClockNode({
+    'data-clock-relative': new Date(startedAt - (index + 1) * 60_000).toISOString()
+  }));
+  const nodes = [...liveNodes, ...relativeNodes];
+  let documentQueries = 0;
+  const documentRef = {
+    visibilityState: 'visible',
+    querySelectorAll() { documentQueries += 1; return nodes; },
+    addEventListener() {},
+    removeEventListener() {}
+  };
+  const clock = createDashboardClock({
+    documentRef,
+    windowRef: {},
+    now: () => currentTime,
+    setIntervalFn: () => 1,
+    clearIntervalFn: () => {}
+  });
+  clock.start();
+  const queriesAfterStart = documentQueries;
+  const updatesAfterStart = liveNodes.reduce((sum, node) => sum + node.updates, 0);
+  for (let index = 0; index < 60; index += 1) {
+    currentTime += 1000;
+    clock.tick();
+  }
+  const liveNodeUpdates = liveNodes.reduce((sum, node) => sum + node.updates, 0) - updatesAfterStart;
+  const documentQueriesDuringTicks = documentQueries - queriesAfterStart;
+  clock.stop();
+  return { liveNodeUpdates, documentQueriesDuringTicks };
+}
+
 function runRendererBenchmark() {
   try {
     const electronRoot = path.join(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'), 'electron', 'node_modules', 'electron');
@@ -199,7 +263,7 @@ function runRendererBenchmark() {
       throw new Error(`Electron renderer workload failed with exit ${child.status}: ${detail}`);
     }
     const result = JSON.parse(Buffer.from(marker[1], 'base64').toString('utf8'));
-    const required = ['quietFullRenders', 'progressFullRenders', 'progressLatencyMs', 'timelineRenderMs', 'logicalTaskSwitchMemoryDeltaBytes', 'hiddenTimerElapsedMs', 'reconnectMs'];
+    const required = ['quietFullRenders', 'quietClockNodeUpdates', 'progressFullRenders', 'sessionRowReplacementsDuringProgress', 'progressLatencyMs', 'timelineRenderMs', 'logicalTaskSwitchMemoryDeltaBytes', 'hiddenTimerElapsedMs', 'reconnectMs'];
     for (const name of required) {
       if (!Number.isFinite(result[name])) throw new Error(`Electron renderer metric ${name} is missing or non-numeric.`);
     }

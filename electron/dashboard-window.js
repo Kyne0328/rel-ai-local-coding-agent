@@ -27,16 +27,35 @@ function createDashboardWindowManager(deps) {
   async function open(routeHash = '') {
     const connection = await getConnection();
     const target = validateConnection(connection);
-    if (routeHash) target.hash = normalizeRouteHash(routeHash);
+    const requestedHash = routeHash ? normalizeRouteHash(routeHash) : '';
+    if (requestedHash) target.hash = requestedHash;
     dashboardOrigin = target.origin;
     const win = getOrCreateWindow();
     const current = safeUrl(win.webContents.getURL());
-    if (!current || current.origin !== target.origin || current.pathname !== target.pathname || current.hash !== target.hash) {
-      await win.loadURL(target.href);
+    const sameDashboard = Boolean(current && current.origin === target.origin && current.pathname === target.pathname);
+    if (!sameDashboard) {
+      try {
+        await win.loadURL(target.href);
+      } catch (error) {
+        if (!isAbortedNavigationError(error)) throw error;
+      }
+    } else if (requestedHash && current.hash !== requestedHash) {
+      await navigateDashboardHash(win, requestedHash);
     }
     win.show();
     win.focus();
     return win;
+  }
+
+  async function navigateDashboardHash(win, hash) {
+    if (typeof win.webContents.executeJavaScript === 'function') {
+      await win.webContents.executeJavaScript(`location.hash = ${JSON.stringify(hash)}`);
+      return;
+    }
+    const current = safeUrl(win.webContents.getURL());
+    if (!current) return;
+    current.hash = hash;
+    await win.loadURL(current.href);
   }
 
   function getOrCreateWindow() {
@@ -98,6 +117,14 @@ function createDashboardWindowManager(deps) {
       event.preventDefault();
       win.webContents.reload();
     });
+  }
+
+  function isAbortedNavigationError(error) {
+    const message = String(error?.message || error || '');
+    return error?.code === 'ERR_ABORTED'
+      || Number(error?.code) === -3
+      || Number(error?.errno) === -3
+      || /\bERR_ABORTED\b/i.test(message);
   }
 
   function openExternal(target) {

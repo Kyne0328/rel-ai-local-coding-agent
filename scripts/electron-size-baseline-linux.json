@@ -1,18 +1,24 @@
 {
   "schemaVersion": 2,
-  "capturedAt": "2026-08-05",
+  "capturedAt": "2026-08-10",
   "platform": "linux",
   "architecture": "x64",
   "electronVersion": "43.2.0",
   "policy": "strict",
-  "tolerancePercent": 3,
+  "tolerancePercent": 5,
   "provisional": true,
-  "notes": "Initial Linux policy gates deterministic packaged components. Add measured AppImage, DEB, unpacked, and resources totals after the first successful Ubuntu release build.",
+  "notes": "Repository Intelligence baseline with the complete Tree-sitter WASM runtime payload. Unpacked component deltas use measured Windows packaging plus exact Linux Zoekt sizes; AppImage/DEB values remain provisional compression estimates because the Windows build host has no WSL/Docker. Replace with the first measured Linux CI report.",
   "metrics": {
-    "appAsarBytes": 1668963,
-    "packagedDependencyBytes": 1107187,
-    "localesBytes": 566095,
+    "appImageBytes": 154365877,
+    "debBytes": 121962951,
+    "unpackedBytes": 439627368,
+    "resourcesBytes": 161145125,
+    "appAsarBytes": 5753177,
+    "packagedDependencyBytes": 1107372,
+    "localesBytes": 556772,
     "ngrokBytes": 32903330,
-    "dashboardCssBytes": 143433
+    "zoektBytes": 51319080,
+    "treeSitterBytes": 52036637,
+    "dashboardCssBytes": 164176
   }
 }

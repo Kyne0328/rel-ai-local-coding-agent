@@ -22,6 +22,14 @@ try {
   const discovery = await client.waitFor(1);
   assert.ok(discovery.result?.supportedVersions?.includes(MCP_VERSION));
 
+  client.send(2, 'tools/list');
+  const listed = await client.waitFor(2);
+  assert.equal(listed.result?.tools?.length, activeToolCount);
+  assert.ok(listed.result.tools.every(tool => tool.outputSchema), 'direct MCP discovery must advertise outputSchema for every tool');
+  const searchTool = listed.result.tools.find(tool => tool.name === 'relai_search');
+  assert.equal(searchTool.outputSchema.additionalProperties, false);
+  assert.equal(searchTool.outputSchema.properties.neuralEmbeddings.type, 'boolean');
+
   let requestId = 10;
   for (const removed of ['relai_begin_work', 'relai_status', 'relai_run_checks', 'relai_apply_bundle', 'relai_package_snapshot', 'relai_apply_update', 'relai_clear_files', 'relai_feature_probe', 'relai_git_fetch', 'relai_session_summary']) {
     client.call(requestId, removed, { workspace: 'repo' });

@@ -195,7 +195,7 @@ ASAR unpack rules are not required because there are no native Node modules. The
 - Real Electron Chromium dashboard acceptance
 - Packaged OAuth/MCP connector acceptance against the directory resolved from `dist/current-unpacked.json`
 - Electron fuse-policy verification against the final executable
-- Root and Electron production dependency audits: zero advisories
+- Production dependency audit gate: no high-severity findings; Electron currently reports zero production advisories, while root moderate findings remain below the configured blocking threshold
 - Strict package-size baseline comparison
 - CycloneDX SBOM generation
 

@@ -1,5 +1,6 @@
 import { closeModal, openModal } from './components/modal.js';
 import { routeHref } from './router.js';
+import { navigationCommands } from './navigation-catalog.js';
 import { hasActiveOverlay } from './interaction-safety.js';
 import { esc as escapeHtml } from './utils.js';
 
@@ -22,7 +23,7 @@ export function initCommandPalette(options = {}) {
   updateShortcutLabel();
 }
 
-export function openCommandPalette() {
+function openCommandPalette() {
   if (hasActiveOverlay()) return;
   const commands = buildCommands(readData() || {});
   const content = document.createElement('div');
@@ -102,29 +103,18 @@ export function openCommandPalette() {
 }
 
 function buildCommands(data) {
-  const desktop = document.documentElement.dataset.surface === 'desktop';
-  const commands = [
-    routeCommand('overview', 'Overview', 'Open connection readiness and recent work.', '#home', 'Page'),
-    routeCommand('sessions', 'Sessions', 'Open grouped Rel.AI work sessions.', '#tasks', 'Page'),
-    routeCommand('workspaces', 'Workspaces', 'Manage repositories available to ChatGPT.', '#workspaces', 'Page'),
-    routeCommand('activity', 'Activity', 'Inspect individual Rel.AI tool events.', '#activity', 'Page'),
-    routeCommand('tools', 'Tools', 'Browse available Rel.AI capabilities.', '#tools', 'Page'),
-    routeCommand('settings-general', 'Settings · General', 'Appearance, notifications, startup, and application updates.', '#settings', 'Settings'),
-    routeCommand('settings-connection', 'Settings · Connection', 'Connection status, endpoint credentials, and approval token.', '#settings/connection', 'Settings'),
-    routeCommand('settings-tools-validation', 'Settings · Tools & validation', 'Tool availability and workspace validation presentation.', '#settings/tools-validation', 'Settings'),
-    routeCommand('settings-diagnostics', 'Settings · Diagnostics', 'Errors, reports, service logs, and reset controls.', '#settings/diagnostics', 'Settings'),
-    routeCommand('settings-advanced', 'Settings · Advanced', 'Patch safeguards and resource limits.', '#settings/advanced', 'Settings'),
-    routeCommand('settings-about', 'Settings · About', 'Application version, developer, repository, and license.', '#settings/about', 'Settings'),
-    actionCommand('add-workspace', 'Add workspace', 'Choose another local project folder for ChatGPT.', 'Action', async () => {
-      closePalette();
-      const module = await import('./features/workspaces/form.js');
-      module.openWorkspaceForm({ mode: 'add' });
-    })
-  ];
-  if (!desktop) {
-    const connectionCommand = commands.find(command => command.id === 'settings-connection');
-    if (connectionCommand) connectionCommand.description = 'Connection status and installed-app guidance.';
-  }
+  const commands = navigationCommands().map(item => routeCommand(
+    item.path.replaceAll('/', '-'),
+    item.group === 'Settings' ? `Settings · ${item.label}` : item.label,
+    item.description,
+    item.href,
+    item.group
+  ));
+  commands.push(actionCommand('add-workspace', 'Add workspace', 'Choose another project folder for ChatGPT.', 'Action', async () => {
+    closePalette();
+    const module = await import('./features/workspaces/form.js');
+    module.openWorkspaceForm({ mode: 'add' });
+  }));
 
   for (const workspace of data?.config?.workspaces || []) {
     const alias = String(workspace.alias || '').trim();
@@ -134,8 +124,7 @@ function buildCommands(data) {
       `Workspace · ${alias}`,
       workspace.path || 'Open workspace readiness and actions.',
       routeHref('workspaces', { workspace: alias, focus: '1' }),
-      'Workspace',
-      [alias, workspace.path]
+      'Workspace'
     ));
   }
   return commands.map(command => ({

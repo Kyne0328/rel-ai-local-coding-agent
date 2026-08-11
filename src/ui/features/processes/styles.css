@@ -1,0 +1,55 @@
+@layer components {
+/* Managed process runtime */
+.processes-card .card-head p { margin: .35rem 0 0; color: var(--ui-text-secondary); }
+.process-row { padding: 1rem 1.1rem; border-top: 1px solid var(--ui-border-subtle); }
+.process-row:first-child { border-top: 0; }
+.process-row.active { box-shadow: inset 3px 0 0 var(--ui-action-primary); }
+.process-row-head, .process-title-line, .process-actions, .process-meta { display: flex; align-items: center; gap: .65rem; }
+.process-row-head { justify-content: space-between; align-items: flex-start; }
+.process-identity { min-width: 0; }
+.process-title-line strong { overflow-wrap: anywhere; }
+.process-identity > code { display: block; margin-top: .35rem; color: var(--ui-text-secondary); font-size: .74rem; }
+.process-actions { flex: 0 0 auto; }
+.process-elapsed { color: var(--ui-text-secondary); font-size: .82rem; }
+.process-meta { flex-wrap: wrap; margin-top: .75rem; color: var(--ui-text-secondary); font-size: .8rem; }
+.process-meta span + span::before { content: '·'; margin-right: .65rem; }
+.process-output { margin-top: .8rem; }
+.process-output summary { cursor: pointer; color: var(--ui-text-secondary); font-size: .82rem; }
+.process-output-block { margin-top: .65rem; }
+.process-output-block > span { display: block; margin-bottom: .25rem; color: var(--ui-text-secondary); font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; }
+.process-output-block pre { max-height: 14rem; overflow: auto; margin: 0; padding: .75rem; border: 1px solid var(--ui-border-subtle); border-radius: .55rem; background: var(--ui-surface-secondary); white-space: pre-wrap; word-break: break-word; font-size: .76rem; }
+@media (max-width: 720px) {
+.process-row-head { gap: .8rem; }
+.process-actions { flex-direction: column; align-items: flex-end; }
+.process-meta span { width: 100%; }
+.process-meta span + span::before { content: none; }
+}
+
+.processes-card .card-head p { margin: .35rem 0 0; color: var(--ui-text-secondary); font-size: .75rem; }
+
+.process-detail-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 1px; margin-top: .8rem; overflow: hidden; border: 1px solid var(--ui-border-subtle); border-radius: .55rem; background: var(--ui-border-subtle); }
+.process-detail-grid > div { display: grid; min-width: 0; gap: .25rem; padding: .7rem; background: var(--ui-surface-primary); }
+.process-detail-grid span, .process-command-summary > span { color: var(--ui-text-tertiary); font-size: .63rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.process-detail-grid strong { overflow-wrap: anywhere; font-size: .75rem; }
+.task-row-id { display: flex; align-items: center; gap: .4rem; font-size: .68rem !important; }
+.task-row-id code { color: var(--ui-text-primary); }
+.task-detail-identifier { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: .5rem; }
+
+.process-elapsed, .process-stop-state { color: var(--ui-text-secondary); font-size: .76rem; }
+.process-relationship { margin-top: .8rem; }
+.process-command-summary { display: grid; gap: .35rem; margin-top: .8rem; }
+.process-command-summary code { overflow-wrap: anywhere; padding: .65rem .75rem; border: 1px solid var(--ui-border-subtle); border-radius: .55rem; background: var(--ui-surface-secondary); font-size: .72rem; }
+.process-independent, .process-recovery { margin-top: .8rem; }
+.process-output-empty { margin-top: .65rem; padding: .75rem; border: 1px dashed var(--ui-border-default); border-radius: .55rem; color: var(--ui-text-secondary); font-size: .72rem; line-height: 1.5; }
+@media (max-width: 980px) {
+  .process-detail-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (max-width: 720px) {
+  .process-row-head { flex-direction: column; gap: .8rem; }
+  .process-actions { width: 100%; align-items: center; flex-direction: row; justify-content: space-between; }
+  .process-detail-grid { grid-template-columns: minmax(0,1fr); }
+  .runtime-relationship { align-items: flex-start; }
+  .runtime-relationship > span { width: 100%; }
+  .runtime-relationship > span[aria-hidden="true"] { display: none; }
+}
+}

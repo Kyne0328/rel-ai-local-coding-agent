@@ -162,12 +162,12 @@ nowValue = 91_000;
 for (const { callback } of [...timers.values()]) callback();
 timers.clear();
 assert.equal(tracker.getToolActivity().state, 'idle');
-const inactive = trackerEvents.filter(event => event.phase === 'cancelled' && event.endReason === 'inactivity_window').map(event => event.task);
+const inactive = trackerEvents.filter(event => event.phase === 'inactive').map(event => event.task);
 assert.equal(inactive.length, 2);
 assert.equal(inactive.find(task => task.taskId === finishRead.taskId)?.calls, 2);
 assert.equal(inactive.find(task => task.taskId === finishChecks.taskId)?.calls, 1);
-assert.equal(inactive.every(task => task.status === 'cancelled' && task.endReason === 'inactivity_window'), true);
-assert.equal(inactive.every(task => task.endedAt && task.title && ['determinate', 'indeterminate'].includes(task.progress?.mode)), true);
+assert.equal(inactive.every(task => task.status === 'inactive' && !task.endReason), true);
+assert.equal(inactive.every(task => !task.endedAt && task.inactiveAt && task.title && ['determinate', 'indeterminate'].includes(task.progress?.mode)), true);
 
 const reconnectTracker = createToolActivityTracker({ idleMs: 60_000 });
 const startedTask = reconnectTracker.beginConnectorToolCall({ tool: 'relai_begin_work', workspace: 'repo', scopeId: 'transport-a', createTask: true });

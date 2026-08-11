@@ -14,6 +14,85 @@ for (const entry of actionCatalog) {
   }));
 }
 
+await assert.doesNotReject(() => validateToolOutput({}, 'relai_search', {
+  action: 'text',
+  work_id: 'work_output',
+  pattern: 'needle'
+}, {
+  ok: true,
+  workspace: 'repo',
+  work_id: 'work_output',
+  pattern: 'needle',
+  mode: 'auto',
+  effectiveMode: 'context',
+  autoTier: 'focused',
+  selectionStrategy: 'path-and-match-density',
+  matchCount: 1,
+  files: []
+}));
+
+await assert.doesNotReject(() => validateToolOutput({}, 'relai_search', {
+  action: 'semantic',
+  work_id: 'work_output',
+  query: 'needle'
+}, {
+  ok: true,
+  workspace: 'repo',
+  work_id: 'work_output',
+  query: 'needle',
+  strategy: 'hybrid',
+  neuralEmbeddings: true,
+  results: [],
+  resultCount: 0,
+  truncated: false
+}));
+
+await assert.doesNotReject(() => validateToolOutput({}, 'relai_snapshot', {
+  work_id: 'work_output'
+}, {
+  ok: true,
+  workspace: 'repo',
+  work_id: 'work_output',
+  fileCount: 700,
+  files: ['src/index.js'],
+  returnedFileCount: 1,
+  omittedFiles: 699,
+  truncated: true,
+  next: 'Use relai_search or targeted relai_read calls for omitted repository paths.'
+}));
+
+await assert.doesNotReject(() => validateToolOutput({}, 'relai_worktree', {
+  action: 'create',
+  work_id: 'work_output',
+  name: 'feature'
+}, {
+  ok: true,
+  work_id: 'work_output',
+  id: 'wt_123',
+  alias: 'repo--feature',
+  sourceAlias: 'repo',
+  sourcePath: 'C:/repo',
+  path: 'C:/state/worktrees/repo/feature',
+  branch: 'relai/feature',
+  base: 'main',
+  owningTaskId: 'work_output',
+  createdAt: '2026-08-08T00:00:00.000Z',
+  git: { exitCode: 0 }
+}));
+await assert.doesNotReject(() => validateToolOutput({}, 'relai_work', {
+  action: 'cancel',
+  work_id: 'work_output'
+}, {
+  ok: true,
+  work_id: 'work_output',
+  status: 'cancelled',
+  duplicate: true,
+  endReason: 'explicit_cancellation',
+  terminalReason: 'Work session cancelled.',
+  endedAt: '2026-08-08T00:00:00.000Z',
+  cancelledAt: '2026-08-08T00:00:00.000Z',
+  progress: { mode: 'indeterminate', label: 'Cancelled' }
+}));
 await assert.doesNotReject(() => validateToolOutput({}, 'relai_exec', {
   work_id: 'work_output',
   command: 'npm test'

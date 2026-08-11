@@ -1,37 +1,28 @@
 import { header, panel, field, selectControl } from './shared.js';
 import { getUiPreferences, setDensityPreference, setThemePreference } from '../../preferences.js';
-import { applicationUpdatesPanel } from './desktop-updates.js';
-import { desktopStartupPanel } from './desktop-startup.js';
 import { desktopNotificationsPanel } from './desktop-notifications.js';
 
 export function mountGeneral(container) {
-  container.innerHTML = '<div class="settings-loading">Loading general settings…</div>';
+  container.innerHTML = '<div class="settings-loading">Loading preferences…</div>';
   return loadAndRender(container);
 }
 
 async function loadAndRender(container) {
   const desktop = window.relaiDesktop;
-  const [lifecycle, notifications] = await Promise.all([
-    typeof desktop?.getLifecycleStatus === 'function'
-      ? desktop.getLifecycleStatus().catch(() => null)
-      : Promise.resolve(null),
-    typeof desktop?.getNotificationPreferences === 'function'
-      ? desktop.getNotificationPreferences().catch(() => null)
-      : Promise.resolve(null)
-  ]);
+  const notifications = typeof desktop?.getNotificationPreferences === 'function'
+    ? await desktop.getNotificationPreferences().catch(() => null)
+    : null;
 
   container.innerHTML = '';
   container.appendChild(header(
-    'General',
-    'Control appearance, desktop behavior, notifications, and application updates.'
+    'Preferences',
+    'Control appearance, interface density, and desktop notifications.'
   ));
 
   const appearance = panel('Appearance');
   renderAppearanceSettings(appearance.body);
   container.appendChild(appearance.el);
   container.appendChild(desktopNotificationsPanel(notifications?.preferences).el);
-  container.appendChild(desktopStartupPanel(lifecycle).el);
-  container.appendChild(applicationUpdatesPanel().el);
 }
 
 function renderAppearanceSettings(body) {

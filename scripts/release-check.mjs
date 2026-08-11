@@ -118,13 +118,16 @@ if (!fs.existsSync(releaseManifestPath)) {
   expectEqual(releaseManifest.applicationVersion, version, 'release-manifest.json applicationVersion');
   expectEqual(releaseManifest.protocolVersion, '2026-07-28', 'release-manifest.json protocolVersion');
   expect(Number.isInteger(releaseManifest.toolCount) && releaseManifest.toolCount > 0, 'release-manifest.json toolCount must be a positive integer');
+  expect(Number.isInteger(releaseManifest.deviceProtocolVersion) && releaseManifest.deviceProtocolVersion > 0, 'release-manifest.json deviceProtocolVersion must be a positive integer');
+  expect(Number.isInteger(releaseManifest.minimumCompatibleDeviceProtocol) && releaseManifest.minimumCompatibleDeviceProtocol > 0, 'release-manifest.json minimumCompatibleDeviceProtocol must be a positive integer');
+  expect(releaseManifest.minimumCompatibleDeviceProtocol <= releaseManifest.deviceProtocolVersion, 'minimumCompatibleDeviceProtocol cannot exceed deviceProtocolVersion');
   expect(/^[A-Za-z0-9_-]{24}$/.test(String(releaseManifest.manifestHash || '')), 'release-manifest.json manifestHash must be a 24-character base64url digest');
 
   const runtimeMetadataPath = rel('src', 'runtimeCompatibility.js');
   if (fs.existsSync(runtimeMetadataPath)) {
     const { runtimeMetadata } = await import(`${pathToFileURL(runtimeMetadataPath).href}?releaseCheck=${Date.now()}`);
     const runtime = runtimeMetadata();
-    for (const field of ['applicationVersion', 'protocolVersion', 'toolSurfaceVersion', 'toolCount', 'manifestHash', 'schemaVersion']) {
+    for (const field of ['applicationVersion', 'protocolVersion', 'toolSurfaceVersion', 'toolCount', 'manifestHash', 'schemaVersion', 'deviceProtocolVersion', 'minimumCompatibleDeviceProtocol']) {
       expectEqual(releaseManifest[field], runtime[field], `release-manifest.json ${field}`);
     }
   }

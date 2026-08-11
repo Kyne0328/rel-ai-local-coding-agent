@@ -1,0 +1,4 @@
+interface:
+  display_name: "Rel.AI Planning"
+  short_description: "Architecture-aware implementation planning"
+  default_prompt: "Use $rel-ai-planning to turn non-trivial repository work into the shortest execution-ready plan, then hand execution back to $rel-ai-workflow."

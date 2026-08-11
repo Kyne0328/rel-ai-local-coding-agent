@@ -2,52 +2,21 @@ const STRING = { type: 'string' };
 const STRING_NULL = { type: ['string', 'null'] };
 const NUMBER = { type: 'number' };
 const NUMBER_NULL = { type: ['number', 'null'] };
+const TIMESTAMP_NULL = { type: ['string', 'number', 'null'] };
 const BOOLEAN = { type: 'boolean' };
 const OBJECT = { type: 'object', additionalProperties: true };
 const ARRAY = { type: 'array', items: OBJECT };
 const STRING_ARRAY = { type: 'array', items: STRING };
-const TASK_STATUS = { type: 'string', enum: ['working', 'input_required', 'completed', 'failed', 'cancelled'] };
-const TASK_DETAILS_PROPERTIES = Object.freeze({
-  taskId: STRING,
-  status: TASK_STATUS,
-  statusMessage: STRING,
-  createdAt: STRING,
-  lastUpdatedAt: STRING,
-  ttlMs: NUMBER_NULL,
-  pollIntervalMs: NUMBER,
-  inputRequests: OBJECT,
-  result: OBJECT,
-  error: OBJECT
-});
-const TASK_DETAILS_REQUIRED = ['taskId', 'status', 'createdAt', 'lastUpdatedAt', 'ttlMs'];
-const NATIVE_TASK_WIRE_RESULT_SCHEMA = Object.freeze({
-  oneOf: [
-    {
-      type: 'object',
-      properties: { resultType: { const: 'task' }, ...TASK_DETAILS_PROPERTIES, _meta: OBJECT },
-      required: ['resultType', ...TASK_DETAILS_REQUIRED],
-      additionalProperties: false
-    },
-    {
-      type: 'object',
-      properties: { resultType: { const: 'complete' }, ...TASK_DETAILS_PROPERTIES, _meta: OBJECT },
-      required: ['resultType', ...TASK_DETAILS_REQUIRED],
-      additionalProperties: false
-    },
-    {
-      type: 'object',
-      properties: { resultType: { const: 'complete' }, _meta: OBJECT },
-      required: ['resultType'],
-      additionalProperties: false
-    }
-  ]
-});
 
 const FIELD_SCHEMAS = Object.freeze({
   ok: BOOLEAN,
   version: STRING,
   workspace: { type: ['string', 'object', 'null'], additionalProperties: true },
   workspaceId: STRING,
+  id: STRING,
+  sourcePath: STRING,
+  owningTaskId: STRING,
+  createdAt: STRING,
   root: STRING,
   toolMode: STRING,
   trustedLocalAgent: BOOLEAN,
@@ -66,6 +35,11 @@ const FIELD_SCHEMAS = Object.freeze({
   status: STRING,
   staged: BOOLEAN,
   redactSensitive: BOOLEAN,
+  reviewScope: STRING,
+  reviewedScope: STRING,
+  reviewHash: STRING,
+  reviewedFiles: STRING_ARRAY,
+  excludedWorkspaceFiles: STRING_ARRAY,
   aheadBehind: { type: ['object', 'null'], additionalProperties: true },
   statusEntries: ARRAY,
   sessionChangedFiles: STRING_ARRAY,
@@ -108,8 +82,24 @@ const FIELD_SCHEMAS = Object.freeze({
   changedFiles: STRING_ARRAY,
   dryRun: BOOLEAN,
   addAll: BOOLEAN,
+  add: OBJECT,
+  commit: OBJECT,
+  push: OBJECT,
   setUpstream: BOOLEAN,
   remote: STRING,
+  sensitiveAuthorization: OBJECT,
+  statusBefore: OBJECT,
+  statusAfter: OBJECT,
+  secretStagedFiles: STRING_ARRAY,
+  unauthorizedSecretPaths: STRING_ARRAY,
+  indexRestored: BOOLEAN,
+  head: STRING,
+  body: STRING,
+  changedFileCount: NUMBER,
+  emptyDiff: BOOLEAN,
+  draftOnly: BOOLEAN,
+  remoteChanged: BOOLEAN,
+  warning: STRING,
   operationId: STRING,
   changed: BOOLEAN,
   oldSha256: STRING_NULL,
@@ -117,6 +107,7 @@ const FIELD_SCHEMAS = Object.freeze({
   replacements: ARRAY,
   verified: BOOLEAN,
   bytes: NUMBER,
+  originalBytes: NUMBER,
   plannerPath: STRING,
   plannerReason: STRING,
   result: OBJECT,
@@ -145,6 +136,7 @@ const FIELD_SCHEMAS = Object.freeze({
   checks: { type: ['object', 'array'], additionalProperties: true, items: STRING },
   skippedChecks: ARRAY,
   projectInstructions: OBJECT,
+  workspaceSkills: ARRAY,
   repository: OBJECT,
   runtime: OBJECT,
   repositoryRuntime: OBJECT,
@@ -162,11 +154,15 @@ const FIELD_SCHEMAS = Object.freeze({
   completionSource: STRING,
   endReason: STRING,
   terminalReason: STRING,
-  cancelledAt: NUMBER_NULL,
+  cancelledAt: TIMESTAMP_NULL,
   progress: OBJECT,
   duplicate: BOOLEAN,
+  reused: BOOLEAN,
   count: NUMBER,
   completedUnits: NUMBER,
+  executedUnits: NUMBER,
+  reusedUnits: NUMBER,
+  reusedChecks: STRING_ARRAY,
   totalUnits: NUMBER,
   resultCount: NUMBER,
   diagnosticCount: NUMBER,
@@ -206,7 +202,7 @@ const FIELD_SCHEMAS = Object.freeze({
   originatingTaskId: STRING_NULL,
   workSessionId: STRING_NULL,
   startedAt: STRING,
-  endedAt: { type: ['string', 'number', 'null'] },
+  endedAt: TIMESTAMP_NULL,
   stdoutRetainedFromOffset: NUMBER,
   stderrRetainedFromOffset: NUMBER,
   stdoutTail: STRING,
@@ -235,6 +231,7 @@ const FIELD_SCHEMAS = Object.freeze({
   diagnosticsExecuted: BOOLEAN,
   next: STRING,
   semanticEmbeddings: BOOLEAN,
+  neuralEmbeddings: BOOLEAN,
   pattern: STRING,
   glob: STRING,
   fixed: BOOLEAN,
@@ -289,6 +286,9 @@ const FIELD_SCHEMAS = Object.freeze({
   responseBytes: NUMBER,
   title: STRING,
   mode: STRING,
+  effectiveMode: STRING,
+  autoTier: STRING,
+  selectionStrategy: STRING,
   check: STRING,
   availableChecks: STRING_ARRAY,
   plan: OBJECT,
@@ -308,31 +308,32 @@ const FIELD_SCHEMAS = Object.freeze({
   refreshTokens: NUMBER,
   registeredClients: NUMBER,
   aliasNormalizations: NUMBER,
-  policy: OBJECT
+  policy: OBJECT,
+  workflow: OBJECT
 });
 
 const TOOL_FIELDS = Object.freeze({
   relai_begin_work: ['ok', 'workspace', 'work_id', 'status', 'identity', 'title', 'objective', 'workspaceBinding', 'bootstrap', 'nextAction'],
-  relai_repo_snapshot: ['ok', 'workspace', 'work_id', 'root', 'toolMode', 'trustedLocalAgent', 'manifests', 'manifestContents', 'discoveredCommands', 'projectInstructions', 'fileCount', 'effectiveMaxEntries', 'budgetMultiplied', 'files', 'returnedFileCount', 'omittedFiles', 'skipped', 'skippedCount', 'truncated', 'hints', 'git', 'recommendedFlow', 'writeGuidance', 'operationJournal', 'repository', 'changedFiles'],
+  relai_repo_snapshot: ['ok', 'workspace', 'work_id', 'root', 'toolMode', 'trustedLocalAgent', 'manifests', 'manifestContents', 'discoveredCommands', 'projectInstructions', 'workspaceSkills', 'fileCount', 'effectiveMaxEntries', 'budgetMultiplied', 'files', 'returnedFileCount', 'omittedFiles', 'skipped', 'skippedCount', 'truncated', 'hints', 'git', 'recommendedFlow', 'writeGuidance', 'operationJournal', 'repository', 'changedFiles', 'next'],
   relai_read: ['ok', 'workspace', 'work_id', 'items', 'skipped', 'truncated'],
-  relai_search: ['ok', 'workspace', 'work_id', 'pattern', 'glob', 'fixed', 'ignoreCase', 'matches', 'matchCount', 'mode', 'contextBefore', 'contextAfter', 'groupByFile', 'mergeOverlaps', 'maxFiles', 'maxRangesPerFile', 'maxRangeLines', 'files', 'results', 'resultCount', 'returnedFileCount', 'returnedRangeCount', 'contextMatchCount', 'returnedBytes', 'maxBytes', 'omittedFiles', 'omittedRanges', 'truncated', 'contextTruncated', 'next'],
+  relai_search: ['ok', 'workspace', 'work_id', 'pattern', 'glob', 'fixed', 'ignoreCase', 'matches', 'matchCount', 'mode', 'effectiveMode', 'autoTier', 'selectionStrategy', 'contextBefore', 'contextAfter', 'groupByFile', 'mergeOverlaps', 'maxFiles', 'maxRangesPerFile', 'maxRangeLines', 'files', 'results', 'resultCount', 'returnedFileCount', 'returnedRangeCount', 'contextMatchCount', 'returnedBytes', 'maxBytes', 'omittedFiles', 'omittedRanges', 'truncated', 'contextTruncated', 'next'],
   relai_code_inspect: ['ok', 'workspace', 'work_id', 'action', 'index', 'query', 'strategy', 'semanticEmbeddings', 'files', 'matchCount', 'symbol', 'definitions', 'definitionCount', 'references', 'items', 'referenceCount', 'callCount', 'calls', 'seeds', 'maxDepth', 'impactedPaths', 'impactedPathCount', 'affectedTests', 'importEdges', 'definitionPaths', 'directCallers', 'importers', 'indirectImpact', 'relatedSymbols', 'uiSurfaces', 'registrationSurfaces', 'recommendedReadOrder', 'languages', 'diagnosticCommands', 'validationCommands', 'configuredTestCommands', 'diagnosticsExecuted', 'summary', 'truncated', 'next'],
   relai_exec: ['ok', 'workspace', 'work_id', 'command', 'commandSummary', 'cwd', 'shell', 'durationMs', 'exitCode', 'stdout', 'stderr', 'stdoutBytes', 'stderrBytes', 'stdoutTruncated', 'stderrTruncated', 'timedOut', 'cancelled', 'terminationConfirmed', 'forcedTermination', 'signal', 'error', 'environmentKeys', 'changedFiles', 'changedFilesTruncated', 'mutationTracking'],
-  relai_process_start: ['ok', 'work_id', 'processId', 'pid', 'workspace', 'workspaceId', 'label', 'kind', 'purpose', 'metadataRevision', 'commandSummary', 'cwd', 'status', 'lifecycle', 'originatingTaskId', 'workSessionId', 'startedAt', 'endedAt', 'exitCode', 'signal', 'stdoutBytes', 'stderrBytes', 'stdoutRetainedFromOffset', 'stderrRetainedFromOffset', 'environmentKeys', 'stdoutTail', 'stderrTail', 'readiness', 'error'],
-  relai_process_read: ['ok', 'work_id', 'processId', 'pid', 'workspace', 'workspaceId', 'label', 'kind', 'purpose', 'metadataRevision', 'commandSummary', 'cwd', 'status', 'lifecycle', 'originatingTaskId', 'workSessionId', 'startedAt', 'endedAt', 'exitCode', 'signal', 'stdoutBytes', 'stderrBytes', 'stdoutRetainedFromOffset', 'stderrRetainedFromOffset', 'environmentKeys', 'stdout', 'stderr', 'error'],
+  relai_process_start: ['ok', 'work_id', 'processId', 'pid', 'workspace', 'workspaceId', 'label', 'kind', 'purpose', 'metadataRevision', 'commandSummary', 'cwd', 'status', 'reused', 'readiness', 'lifecycle', 'originatingTaskId', 'workSessionId', 'startedAt', 'endedAt', 'exitCode', 'signal', 'stdoutBytes', 'stderrBytes', 'stdoutRetainedFromOffset', 'stderrRetainedFromOffset', 'environmentKeys', 'stdoutTail', 'stderrTail', 'readiness', 'error'],
+  relai_process_read: ['ok', 'work_id', 'processId', 'pid', 'workspace', 'workspaceId', 'label', 'kind', 'purpose', 'metadataRevision', 'commandSummary', 'cwd', 'status', 'reused', 'readiness', 'lifecycle', 'originatingTaskId', 'workSessionId', 'startedAt', 'endedAt', 'exitCode', 'signal', 'stdoutBytes', 'stderrBytes', 'stdoutRetainedFromOffset', 'stderrRetainedFromOffset', 'environmentKeys', 'stdout', 'stderr', 'error'],
   relai_process_write: ['ok', 'work_id', 'processId', 'acceptedBytes', 'status'],
-  relai_process_stop: ['ok', 'work_id', 'processId', 'pid', 'workspace', 'workspaceId', 'label', 'kind', 'purpose', 'metadataRevision', 'commandSummary', 'cwd', 'status', 'lifecycle', 'originatingTaskId', 'workSessionId', 'startedAt', 'endedAt', 'exitCode', 'signal', 'stdoutBytes', 'stderrBytes', 'stdoutRetainedFromOffset', 'stderrRetainedFromOffset', 'environmentKeys', 'stdoutTail', 'stderrTail', 'duplicate', 'error'],
+  relai_process_stop: ['ok', 'work_id', 'processId', 'pid', 'workspace', 'workspaceId', 'label', 'kind', 'purpose', 'metadataRevision', 'commandSummary', 'cwd', 'status', 'reused', 'readiness', 'lifecycle', 'originatingTaskId', 'workSessionId', 'startedAt', 'endedAt', 'exitCode', 'signal', 'stdoutBytes', 'stderrBytes', 'stdoutRetainedFromOffset', 'stderrRetainedFromOffset', 'environmentKeys', 'stdoutTail', 'stderrTail', 'duplicate', 'error'],
   relai_process_list: ['ok', 'work_id', 'processes', 'count'],
-  relai_worktree_create: ['ok', 'work_id', 'alias', 'sourceAlias', 'path', 'branch', 'base', 'startedAt', 'git'],
+  relai_worktree_create: ['ok', 'work_id', 'id', 'alias', 'sourceAlias', 'sourcePath', 'path', 'branch', 'base', 'owningTaskId', 'createdAt', 'startedAt', 'git'],
   relai_worktree_list: ['ok', 'work_id', 'worktrees', 'count'],
   relai_worktree_remove: ['ok', 'work_id', 'alias', 'removedPath', 'branchPreserved', 'git'],
-  relai_semantic_search: ['ok', 'workspace', 'work_id', 'query', 'strategy', 'privacy', 'fingerprint', 'cacheHit', 'results', 'resultCount', 'truncated'],
+  relai_semantic_search: ['ok', 'workspace', 'work_id', 'query', 'strategy', 'privacy', 'fingerprint', 'cacheHit', 'neuralEmbeddings', 'results', 'resultCount', 'truncated'],
   relai_diagnostics_run: ['ok', 'workspace', 'work_id', 'commands', 'results', 'diagnostics', 'diagnosticCount', 'completedUnits', 'totalUnits', 'cancelled', 'truncated', 'message'],
   relai_tidy_plan: ['ok', 'workspace', 'work_id', 'operation', 'mode', 'planId', 'expiresAt', 'ttlSeconds', 'candidateCount', 'skippedCount', 'candidates', 'skipped', 'reason', 'message', 'next'],
   relai_tidy_run: ['ok', 'workspace', 'work_id', 'operation', 'planId', 'changed', 'changedFiles', 'appliedCount', 'applied', 'refused', 'message'],
-  relai_run_checks: ['ok', 'workspace', 'work_id', 'duplicate', 'level', 'checks', 'commands', 'results', 'skippedChecks', 'completedUnits', 'totalUnits', 'failedCheck', 'cancelled', 'summary', 'validated', 'validationStatus', 'validationLevel', 'validationLevelReason', 'validationFingerprint', 'validationAt', 'completionKnown', 'completionSource', 'endReason', 'planId', 'planSelection', 'planCreatedAt', 'fullOutput', 'changedFiles', 'aliasNormalizations', 'policy', 'message', 'nextAction'],
+  relai_run_checks: ['ok', 'workspace', 'work_id', 'duplicate', 'level', 'checks', 'commands', 'results', 'skippedChecks', 'completedUnits', 'executedUnits', 'reusedUnits', 'reusedChecks', 'totalUnits', 'failedCheck', 'cancelled', 'summary', 'validated', 'validationStatus', 'validationLevel', 'validationLevelReason', 'validationFingerprint', 'validationAt', 'completionKnown', 'completionSource', 'endReason', 'planId', 'planSelection', 'planCreatedAt', 'fullOutput', 'changedFiles', 'aliasNormalizations', 'policy', 'message', 'nextAction'],
   relai_http_probe: ['ok', 'workspace', 'work_id', 'route', 'reachable', 'statusCode', 'finalUrl', 'responseBytes', 'title', 'error'],
-  relai_diff: ['ok', 'workspace', 'work_id', 'staged', 'redactSensitive', 'path', 'status', 'branch', 'aheadBehind', 'statusEntries', 'sessionChangedFiles', 'baselineChangedFiles', 'untrackedSessionFiles', 'untrackedBaselineFiles', 'baselineSource', 'diff', 'sensitiveReview', 'sensitiveValuesReturned', 'exitCode', 'stderr'],
+  relai_diff: ['ok', 'workspace', 'work_id', 'staged', 'redactSensitive', 'path', 'reviewScope', 'reviewedScope', 'reviewHash', 'reviewedFiles', 'excludedWorkspaceFiles', 'status', 'branch', 'aheadBehind', 'statusEntries', 'sessionChangedFiles', 'baselineChangedFiles', 'untrackedSessionFiles', 'untrackedBaselineFiles', 'baselineSource', 'diff', 'sensitiveReview', 'sensitiveValuesReturned', 'exitCode', 'stderr'],
   relai_restore_paths: ['ok', 'workspace', 'work_id', 'mode', 'paths', 'command', 'commandSummary', 'cwd', 'shell', 'durationMs', 'exitCode', 'stdout', 'stderr', 'stdoutBytes', 'stderrBytes', 'stdoutTruncated', 'stderrTruncated', 'timedOut', 'cancelled', 'terminationConfirmed', 'forcedTermination', 'signal', 'error'],
   relai_reset_workspace: ['ok', 'workspace', 'work_id', 'mode', 'removeUntracked', 'reset', 'clean'],
   relai_status: ['ok', 'version', 'workspace', 'work_id', 'workspaceAliases', 'workspaceCount', 'toolSurface', 'tools', 'toolGroups', 'scripts', 'ci', 'runtime', 'repositoryRuntime', 'runtimeCompatibility', 'repository', 'readiness', 'state'],
@@ -358,9 +359,18 @@ const SUCCESS_REQUIRED_FIELDS = Object.freeze({
 });
 
 const CLOSED_SUCCESS_TOOLS = new Set(Object.keys(TOOL_FIELDS));
+const COMPACT_RESULT_FIELDS = Object.freeze([
+  'ok', 'truncated', 'originalBytes', 'workspace', 'work_id', 'processId', 'status', 'duplicate',
+  'mode', 'check', 'exitCode', 'durationMs', 'diagnosticCount', 'validationStatus', 'completionKnown',
+  'message', 'error', 'errorCode', 'level', 'summary', 'nextAction', 'stdout', 'stderr', 'results'
+]);
 
 function outputSchemaFor(name) {
-  const fields = TOOL_FIELDS[name] || ['ok', 'workspace', 'work_id', 'message', 'error', 'errorCode', 'nextAction'];
+  const fields = [...new Set([
+    ...(TOOL_FIELDS[name] || ['ok', 'workspace', 'work_id', 'message', 'error', 'errorCode', 'nextAction']),
+    ...COMPACT_RESULT_FIELDS,
+    'workflow'
+  ])];
   const properties = Object.fromEntries(fields.map(field => [field, FIELD_SCHEMAS[field] || OBJECT]));
   const successRequired = ['ok', ...(SUCCESS_REQUIRED_FIELDS[name] || [])];
   return {
@@ -396,8 +406,8 @@ function outputSchemaFor(name) {
 
 export {
   outputSchemaFor,
-  TOOL_FIELDS,
-  FIELD_SCHEMAS,
-  SUCCESS_REQUIRED_FIELDS,
-  NATIVE_TASK_WIRE_RESULT_SCHEMA
+
+
+
+
 };

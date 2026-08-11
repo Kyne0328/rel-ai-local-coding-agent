@@ -15,37 +15,77 @@ app.whenReady().then(async () => {
     }
   });
   try {
-    await window.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent('<!doctype html><html><body><main id="app"></main><span id="clock"></span></body></html>'));
+    await window.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent('<!doctype html><html><body><main id="app"></main></body></html>'));
     const result = await window.webContents.executeJavaScript(`(async () => {
       const app = document.getElementById('app');
-      const clock = document.getElementById('clock');
       let fullRenders = 0;
-      const observer = new MutationObserver(records => {
+      const routeObserver = new MutationObserver(records => {
         for (const record of records) {
-          if (record.target === document.body && record.type === 'childList') fullRenders += 1;
+          if (record.target === app && record.type === 'childList') fullRenders += 1;
         }
       });
-      observer.observe(document.body, { childList: true, subtree: false });
+      routeObserver.observe(app, { childList: true, subtree: false });
 
-      for (let index = 0; index < 60; index += 1) clock.textContent = String(index);
+      const sessions = document.createElement('section');
+      sessions.className = 'session-list';
+      const sessionRows = [];
+      const liveClocks = [];
+      for (let index = 0; index < 52; index += 1) {
+        const row = document.createElement('article');
+        row.className = 'session-row';
+        row.dataset.taskId = 'task-' + index;
+        row.dataset.sessionFingerprint = 'stable-' + index;
+        const title = document.createElement('strong');
+        title.textContent = index < 2 ? 'Open work session ' + index : 'Completed work session ' + index;
+        const progress = document.createElement('output');
+        progress.className = 'session-progress';
+        progress.textContent = '0';
+        const time = document.createElement('span');
+        time.className = 'session-time';
+        time.textContent = index < 2 ? '0s' : (index + 1) + 'm';
+        if (index < 2) liveClocks.push(time);
+        row.append(title, progress, time);
+        sessions.append(row);
+        sessionRows.push(row);
+      }
+      app.replaceChildren(sessions);
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      fullRenders = 0;
+
+      let quietClockNodeUpdates = 0;
+      for (let tick = 1; tick <= 60; tick += 1) {
+        for (const clock of liveClocks) {
+          clock.textContent = tick + 's';
+          quietClockNodeUpdates += 1;
+        }
+      }
       await new Promise(resolve => requestAnimationFrame(resolve));
       const quietFullRenders = fullRenders;
 
-      const progress = document.createElement('output');
-      app.replaceChildren(progress);
+      let sessionRowReplacementsDuringProgress = 0;
+      const sessionObserver = new MutationObserver(records => {
+        for (const record of records) {
+          for (const node of record.removedNodes) {
+            if (node.nodeType === Node.ELEMENT_NODE && node.matches?.('.session-row')) sessionRowReplacementsDuringProgress += 1;
+          }
+        }
+      });
+      sessionObserver.observe(sessions, { childList: true, subtree: false });
       fullRenders = 0;
+      const progress = sessionRows[0].querySelector('.session-progress');
       const progressStart = performance.now();
       for (let index = 0; index < 100; index += 1) progress.textContent = String(index + 1);
       const progressLatencyMs = performance.now() - progressStart;
       await new Promise(resolve => requestAnimationFrame(resolve));
       const progressFullRenders = fullRenders;
+      sessionObserver.disconnect();
 
       const timelineStart = performance.now();
       const timeline = document.createElement('ol');
       const fragment = document.createDocumentFragment();
       for (let index = 0; index < 200; index += 1) {
         const row = document.createElement('li');
-        row.textContent = 'Tool activity ' + index + ' completed with validation metadata and a long logical task identifier.';
+        row.textContent = 'Tool activity ' + index + ' completed with validation metadata and a work-session identity.';
         fragment.append(row);
       }
       timeline.append(fragment);
@@ -55,13 +95,13 @@ app.whenReady().then(async () => {
       const heapBefore = performance.memory?.usedJSHeapSize || 0;
       for (let task = 0; task < 40; task += 1) {
         const panel = document.createElement('section');
-        const fragment = document.createDocumentFragment();
+        const panelFragment = document.createDocumentFragment();
         for (let index = 0; index < 100; index += 1) {
           const row = document.createElement('div');
           row.textContent = 'Logical task ' + task + ' event ' + index;
-          fragment.append(row);
+          panelFragment.append(row);
         }
-        panel.append(fragment);
+        panel.append(panelFragment);
         app.replaceChildren(panel);
       }
       const heapAfter = performance.memory?.usedJSHeapSize || heapBefore;
@@ -80,10 +120,12 @@ app.whenReady().then(async () => {
       }
       app.replaceChildren(snapshot);
       const reconnectMs = performance.now() - reconnectStart;
-      observer.disconnect();
+      routeObserver.disconnect();
       return {
         quietFullRenders,
+        quietClockNodeUpdates,
         progressFullRenders,
+        sessionRowReplacementsDuringProgress,
         progressLatencyMs,
         timelineRenderMs,
         logicalTaskSwitchMemoryDeltaBytes: Math.max(0, heapAfter - heapBefore),

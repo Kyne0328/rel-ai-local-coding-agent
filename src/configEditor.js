@@ -185,6 +185,7 @@ function _handleUpsertWorkspace(alias, payload, next) {
     defaultBaseBranch: String(source.defaultBaseBranch || currentWorkspace.defaultBaseBranch || "main"),
     allowedRemotes: parseList(source.allowedRemotes, currentWorkspace.allowedRemotes || ["origin"]),
     repoSlug: String(source.repoSlug || currentWorkspace.repoSlug || ""),
+    skills: parseList(source.skills, currentWorkspace.skills || []),
     context: parseContext(source.context, currentWorkspace.context),
     testCommands: parseCommandMap(source.testCommands, currentWorkspace.testCommands || {}),
     commands: parseCommandMap(source.commands, currentWorkspace.commands || {})

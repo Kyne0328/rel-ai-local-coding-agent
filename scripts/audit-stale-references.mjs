@@ -19,8 +19,7 @@ const PUBLIC_GUIDANCE_FILES = [
 ];
 
 const IMMUTABLE_HISTORY = new Set([
-  'CHANGELOG.md',
-  'docs/RELEASE_NOTES_0.22.0.md'
+  'CHANGELOG.md'
 ]);
 
 const TARGETED_RUNTIME_GUIDANCE = new Set([

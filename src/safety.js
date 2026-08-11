@@ -550,7 +550,7 @@ function safeReadJson(file, fallback = null) {
   }
 }
 
-export { SECRET_PATH_PATTERNS, DEFAULT_EXCLUDED_NAMES, clearRealRootCache, realRootOf, validateRelativePath, resolveSafePath, assertPathOperationAllowed, isPathInside, isSecretPath, classifySensitivePath, evaluateSensitiveContent, looksBinary, collectTextFiles, collectOptionsFromWorkspace, writeTextFileSafe, fileSha256, safeReadJson };
+export { SECRET_PATH_PATTERNS,  clearRealRootCache, realRootOf, validateRelativePath, resolveSafePath, assertPathOperationAllowed, isPathInside, isSecretPath, classifySensitivePath, evaluateSensitiveContent, looksBinary, collectTextFiles, collectOptionsFromWorkspace, writeTextFileSafe, fileSha256, safeReadJson };
 
 function guardAgainstCollapsedFullFileWrite(absolutePath, relativePath, newText) {
   if (!fs.existsSync(absolutePath)) return;

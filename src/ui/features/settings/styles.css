@@ -1,0 +1,136 @@
+.settings-shell { min-width: 0; }
+.settings-rail { align-content: start; }
+.settings-nav-button { text-align: left; }
+.settings-nav-button.active { color: var(--ui-action-primary); background: var(--ui-status-info-background); }
+.settings-loading { padding: 24px; color: var(--ui-text-secondary); }
+.workspace-validation-preference-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+.workspace-validation-preference-row p { margin-top: 4px; color: var(--ui-text-secondary); font-size: 11px; line-height: 1.5; }
+.connection-advanced-settings { margin-top: 14px; border: 1px solid var(--ui-border-default); border-radius: var(--radius-md); }
+.connection-advanced-settings > summary { cursor: pointer; padding: 12px 14px; font-weight: 700; }
+.connection-advanced-settings[open] > summary { border-bottom: 1px solid var(--ui-border-default); }
+@media (max-width: 640px) {
+  .workspace-validation-preference-row { flex-direction: column; }
+}
+
+@layer components {
+.settings-rail { @apply flex flex-col gap-1 rounded-xl p-2; background: var(--ui-surface-primary); border: 1px solid var(--ui-border-default); }
+.settings-nav-button { @apply min-w-[118px] justify-start border-transparent bg-transparent; color: var(--ui-text-secondary); }
+.settings-nav-button.active { background: var(--ui-status-info-background); border-color: color-mix(in srgb, var(--ui-action-primary) 36%, transparent); color: var(--ui-text-primary); }
+.settings-content { @apply flex min-w-0 flex-col gap-3; }
+.settings-panel-intro { @apply rounded-xl border-l-2 px-4 py-3; background: var(--ui-surface-primary); border: 1px solid var(--ui-border-default); border-left-color: var(--ui-action-primary); }
+.settings-panel-intro h2 { @apply text-lg; }
+.settings-panel-intro p { @apply mt-1 text-[12px]; color: var(--ui-text-secondary); }
+.settings-grid { @apply grid gap-3; grid-template-columns: repeat(2,minmax(0,1fr)); }
+.settings-save-row { @apply sticky bottom-3 z-10 flex items-center justify-between gap-3 rounded-xl px-4 py-3; background: color-mix(in srgb, var(--ui-surface-primary) 94%, transparent); border: 1px solid var(--ui-border-default); box-shadow: var(--ui-shadow-window); backdrop-filter: blur(16px); }
+.settings-save-actions { @apply flex gap-2; }
+.setting-row { @apply flex min-h-14 items-center justify-between gap-4 border-b py-3 last:border-b-0; border-color: var(--ui-border-subtle); }
+.setting-row-copy { @apply min-w-0; }
+.setting-row-copy strong { @apply block text-[12px]; }
+.setting-row-copy span { @apply mt-1 block text-[11px]; color: var(--ui-text-secondary); }
+.toggle { @apply relative h-6 w-11 shrink-0 cursor-pointer rounded-full; background: var(--ui-surface-raised); border: 1px solid var(--ui-border-default); }
+.toggle::after { content: ""; @apply absolute left-1 top-1 size-4 rounded-full transition-transform; background: var(--ui-text-secondary); }
+.toggle[aria-checked="true"] { background: var(--ui-status-info-background); border-color: var(--ui-action-primary); }
+.toggle[aria-checked="true"]::after { transform: translateX(20px); background: var(--ui-action-primary); }
+
+.settings-shell, .settings-layout { @apply grid min-w-0 items-start gap-4; grid-template-columns: 220px minmax(0,1fr); }
+.settings-rail { position: sticky; top: 92px; }
+.settings-nav-button { @apply w-full text-left; }
+.settings-loading, .connection-loading { @apply py-3 text-[12px]; color: var(--ui-text-secondary); }
+.settings-header { @apply flex flex-col gap-1; }
+.settings-header h3 { @apply text-[16px] font-bold; }
+.settings-header p { @apply max-w-4xl text-[12px] leading-5; color: var(--ui-text-secondary); }
+.settings-panel-body { @apply grid gap-4; }
+.about-product { @apply flex min-w-0 items-center gap-4 rounded-xl p-4; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-default); }
+.about-product img { @apply size-12 shrink-0 object-contain; }
+.about-product div { @apply min-w-0; }
+.about-product h2 { @apply text-[16px] font-bold; }
+.about-product p { @apply mt-1 text-[11px]; color: var(--ui-text-secondary); }
+.about-detail-row { @apply flex-wrap; }
+.about-detail-value { @apply min-w-0 max-w-full text-right text-[12px]; overflow-wrap: anywhere; }
+.settings-external-link { color: var(--ui-action-primary); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.settings-external-link:hover { color: var(--ui-text-primary); }
+.settings-form-grid { @apply grid max-w-5xl gap-4; grid-template-columns: repeat(auto-fit,minmax(280px,1fr)); }
+.settings-field { @apply grid min-w-0 gap-1.5; }
+.settings-field > label { @apply text-[12px] font-semibold; }
+.settings-help { @apply m-0 text-[11px] leading-5; color: var(--ui-text-secondary); }
+.settings-number-control { @apply max-w-[180px]; }
+.settings-textarea-control { @apply min-h-24 w-full; }
+.password-field { @apply grid min-w-0 gap-2; grid-template-columns: minmax(0,1fr) auto; }
+.password-field > input { @apply min-w-0; }
+.password-toggle { @apply min-w-16; }
+.settings-save-row { @apply justify-end; }
+.settings-summary { @apply p-4 text-left text-[12px] leading-6; }
+.settings-warning { background: var(--ui-status-info-background); border-color: color-mix(in srgb, var(--ui-action-primary) 34%, transparent); }
+.settings-history-copy { @apply flex flex-col gap-1.5; }
+.settings-history-copy span { @apply max-w-3xl text-[11px] leading-5; color: var(--ui-text-secondary); }
+.settings-history-panel { border-color: color-mix(in srgb, var(--ui-status-danger-foreground) 24%, var(--ui-border-default)); }
+.settings-panel-intro { @apply grid gap-1 rounded-lg px-4 py-3; border: 1px solid var(--ui-border-default); border-left: 2px solid var(--ui-action-primary); background: var(--ui-surface-secondary); }
+.settings-panel-intro strong { @apply text-[12px]; }
+.settings-panel-intro span { @apply text-[11px] leading-5; color: var(--ui-text-secondary); }
+.settings-fact-grid { @apply grid overflow-hidden rounded-xl; grid-template-columns: repeat(3,minmax(0,1fr)); background: var(--ui-surface-primary); border: 1px solid var(--ui-border-default); }
+.settings-fact-grid > div { @apply grid min-w-0 gap-1 border-r p-4 last:border-r-0; border-color: var(--ui-border-default); }
+.settings-fact-grid span { @apply text-[10px] font-bold uppercase tracking-[.08em]; color: var(--ui-text-tertiary); }
+.settings-fact-grid strong { @apply text-xl; }
+.settings-fact-grid small { @apply text-[11px] leading-4; color: var(--ui-text-secondary); }
+.settings-validation-list { @apply grid overflow-hidden rounded-lg; border: 1px solid var(--ui-border-default); }
+.settings-validation-row { @apply flex min-w-0 items-center justify-between gap-3 border-b px-3 py-3 last:border-b-0; border-color: var(--ui-border-subtle); }
+.settings-validation-row > div { @apply grid min-w-0 gap-0.5; }
+.settings-validation-row > div span { @apply truncate text-[11px]; color: var(--ui-text-secondary); }
+.settings-advanced { @apply max-w-5xl; }
+
+.appearance-preview { @apply grid gap-3 rounded-xl p-3; grid-template-columns: repeat(2,minmax(0,1fr)); background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-default); }
+.appearance-swatch { @apply min-h-16 rounded-lg p-3; background: var(--ui-surface-primary); border: 1px solid var(--ui-border-default); }
+.appearance-swatch strong { @apply block text-[12px]; }
+.appearance-swatch span { @apply mt-1 block text-[11px]; color: var(--ui-text-secondary); }
+
+.application-update-panel .settings-panel-body { @apply gap-3; }
+.application-update-summary { @apply flex items-center justify-between gap-4; }
+.application-update-summary > div { @apply grid min-w-0 gap-1; }
+.application-update-label { @apply text-[10px] font-bold uppercase tracking-[.08em]; color: var(--ui-text-tertiary); }
+.application-update-summary strong { @apply text-lg; }
+.application-update-copy { @apply m-0 max-w-3xl text-[11px] leading-5; color: var(--ui-text-secondary); }
+.application-update-actions { @apply mt-1 flex flex-wrap gap-2; }
+.application-update-progress { @apply grid gap-1.5; }
+.application-update-progress progress { @apply h-2.5 w-full max-w-2xl; accent-color: var(--ui-action-primary); }
+.application-update-progress span { @apply text-[10px]; color: var(--ui-text-secondary); }
+.application-update-code { @apply w-fit rounded-md px-2 py-1 text-[10px]; background: var(--ui-surface-secondary); color: var(--ui-text-secondary); }
+.desktop-lifecycle-facts { @apply grid overflow-hidden rounded-xl; grid-template-columns: repeat(3,minmax(0,1fr)); border: 1px solid var(--ui-border-default); }
+.desktop-lifecycle-facts > div { @apply grid min-w-0 gap-1 border-r px-3 py-3 last:border-r-0; border-color: var(--ui-border-default); }
+.desktop-lifecycle-facts span { @apply text-[10px] font-bold uppercase tracking-[.08em]; color: var(--ui-text-tertiary); }
+.desktop-lifecycle-facts strong { @apply break-words text-[12px]; }
+.desktop-lifecycle-notice p { @apply mt-1; }
+
+.approval-token-settings { @apply gap-4; }
+.approval-token-intro { @apply m-0 max-w-3xl text-[12px] leading-5; color: var(--ui-text-secondary); }
+.approval-token-box { @apply grid gap-3; }
+.approval-token-value { @apply flex items-center break-words; letter-spacing: .04em; }
+.approval-token-replacement-copy { @apply grid gap-2; }
+.approval-token-replacement-copy p, .approval-token-success p, .connection-auth-recovery p { @apply m-0; }
+.approval-token-replacement-copy ul, .approval-token-success ol, .connection-auth-recovery ol { @apply ml-5 grid gap-1.5 pl-0 text-[11px] leading-5; }
+.approval-token-confirmation { @apply max-w-md; }
+.approval-token-confirmation input { text-transform: uppercase; letter-spacing: .08em; }
+.approval-token-success { @apply grid gap-3; }
+.approval-required-notice { @apply max-w-4xl; }
+}
+
+@media (max-width: 980px) { .settings-grid { grid-template-columns: 1fr; } }
+
+@media (max-width: 980px) {
+  .settings-layout, .settings-shell { grid-template-columns: 1fr; }
+  .settings-rail { @apply static grid overflow-visible; grid-template-columns: repeat(auto-fit,minmax(140px,1fr)); }
+  .settings-nav-button { @apply min-w-0 w-full; }
+}
+
+@media (max-width: 520px) {
+  .appearance-preview, .settings-fact-grid, .desktop-lifecycle-facts { grid-template-columns: 1fr; }
+  .settings-fact-grid > div, .desktop-lifecycle-facts > div { @apply border-b border-r-0 last:border-b-0; border-color: var(--ui-border-default); }
+  .settings-validation-row, .application-update-summary { @apply flex-col items-start; }
+  .about-detail-value { @apply w-full text-left; }
+  .settings-save-row { @apply flex-col items-stretch; }
+  .settings-save-actions { @apply justify-end; }
+}

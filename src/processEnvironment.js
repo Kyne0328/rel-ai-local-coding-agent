@@ -88,4 +88,4 @@ function isValidEnvironmentKey(key) {
   return Boolean(key) && !key.includes('=') && !key.includes('\0');
 }
 
-export { SAFE_INHERITED_KEYS, makeProcessEnvironment, normalizeAllowedKeys };
+export {  makeProcessEnvironment, normalizeAllowedKeys };

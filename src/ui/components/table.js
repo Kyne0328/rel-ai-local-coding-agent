@@ -1,62 +1,9 @@
 // Table with a sticky header and incremental row rendering.
-function renderHeader(columns) {
-  const thead = document.createElement('thead');
-  const row = document.createElement('tr');
-  for (const col of columns) {
-    const th = document.createElement('th');
-    th.setAttribute('scope', 'col');
-    th.textContent = col.label;
-    if (col.className) th.className = col.className;
-    row.appendChild(th);
-  }
-  thead.appendChild(row);
-  return thead;
-}
 
-function renderEmptyRow(columns, emptyMessage) {
-  const td = document.createElement('td');
-  td.colSpan = columns.length;
-  td.innerHTML = `<div class="empty">${emptyMessage}</div>`;
-  const row = document.createElement('tr');
-  row.appendChild(td);
-  return row;
-}
 
-function renderCell(row, col) {
-  const td = document.createElement('td');
-  if (col.className) td.className = col.className;
-  if (col.render) td.appendChild(col.render(row));
-  else td.textContent = row[col.key] != null ? String(row[col.key]) : '';
-  return td;
-}
 
-function renderDataRow(row, columns) {
-  const rowEl = document.createElement('tr');
-  for (const col of columns) rowEl.appendChild(renderCell(row, col));
-  return rowEl;
-}
 
-function renderBody(columns, rows, emptyMessage) {
-  const tbody = document.createElement('tbody');
-  if (!rows || rows.length === 0) {
-    tbody.appendChild(renderEmptyRow(columns, emptyMessage));
-    return tbody;
-  }
-  for (const row of rows) tbody.appendChild(renderDataRow(row, columns));
-  return tbody;
-}
 
-export function Table({ columns, rows, emptyMessage = 'No data.' } = {}) {
-  const wrap = document.createElement('div');
-  wrap.className = 'table-wrap';
-
-  const table = document.createElement('table');
-  table.className = 'data-table';
-  table.appendChild(renderHeader(columns));
-  table.appendChild(renderBody(columns, rows, emptyMessage));
-  wrap.appendChild(table);
-  return wrap;
-}
 
 function makeSentinel(observer) {
   const sentinel = document.createElement('tr');
@@ -94,11 +41,12 @@ function attachSentinel(tbody, observer, state) {
 }
 
 function resetVirtualRows(tbody, observer, state, renderRow, rows) {
+  const targetRendered = Math.min(rows.length, Math.max(state.chunkSize, state.rendered));
   clearSentinel(observer, state);
   state.rows = rows;
   state.rendered = 0;
   tbody.innerHTML = '';
-  renderChunk(tbody, state, renderRow);
+  while (state.rendered < targetRendered) renderChunk(tbody, state, renderRow);
   attachSentinel(tbody, observer, state);
 }
 

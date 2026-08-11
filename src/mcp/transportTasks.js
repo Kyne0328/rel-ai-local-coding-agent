@@ -244,7 +244,8 @@ async function executeToolResult(config, name, args, options = {}) {
     name,
     args,
     context: transportToolContext(options),
-    requestStateCodec: createRelaiRequestStateCodec(config, options.principal),
+    approvalContext: options.approvalContext,
+    requestStateCodec: options.requestStateCodec || createRelaiRequestStateCodec(config, options.principal),
     validateOutput: output => validateToolOutput(config, name, args || {}, output)
   });
 }
@@ -334,7 +335,7 @@ function transportToolContext(options) {
   const meta = objectValue(options.envelope);
   const client = objectValue(meta[CLIENT_INFO_META_KEY]);
   return {
-    publicHttpOnly: options.transportType === 'streamable-http',
+    publicHttpOnly: options.publicHttpOnly === true || options.transportType === 'streamable-http',
     requestId: options.requestId,
     transportType: String(options.transportType || 'stdio'),
     protocolVersion: String(options.protocolVersion || MCP_PROTOCOL_VERSION),
@@ -349,7 +350,7 @@ function transportToolContext(options) {
       envelope: meta,
       method: 'tools/call',
       authInfo: options.authInfo || null,
-      inputResponses: null
+      inputResponses: options.inputResponses ?? null
     }
   };
 }
@@ -529,9 +530,10 @@ function createTaskAwareStdioTransport(options = {}) {
 }
 
 export {
-  TRANSPORT_CLEANUP_GRACE_MS,
   createTaskAwareStdioTransport,
+  executeToolResult as executeTransportToolResult,
   handleTransportTaskRequest,
   isTransportTaskRequestCandidate,
-  runBoundedExecution
+  runBoundedExecution,
+  validateToolArguments as validateTransportToolArguments
 };

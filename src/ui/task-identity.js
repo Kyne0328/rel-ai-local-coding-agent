@@ -1,7 +1,6 @@
 import { isNativeTaskStatus, isTerminalDashboardTaskStatus } from '../taskState.js';
 
 const TASKS_EXTENSION_ID = 'io.modelcontextprotocol/tasks';
-const PROCESS_ACTIVE_STATUSES = new Set(['starting', 'running', 'stopping']);
 
 export const TASK_ENTITY_IDENTIFIERS = Object.freeze({
   logicalTask: Object.freeze({ label: 'Work session', field: 'work_id', purpose: 'Repository objective spanning multiple tool calls' }),
@@ -42,7 +41,7 @@ export function clientCapabilityViews(data = {}) {
   return views.slice(0, 8);
 }
 
-export function clientCapabilityView(value = {}) {
+function clientCapabilityView(value = {}) {
   const support = observedTasksSupport(value);
   const explicitMode = executionMode(value.executionMode || value.taskExecutionMode || value.clientTasksCapability?.mode || value.mode);
   const mode = explicitMode !== 'unknown'
@@ -253,10 +252,16 @@ export function workSessionStateView(value = {}) {
     attention: ['Failed', true, false, 'bad'],
     cancelled: ['Cancelled', true, false, ''],
     expired: ['Expired', true, false, ''],
-    inactive: ['Expired', true, false, '']
+    inactive: ['Inactive', false, false, '']
   };
-  const [label, terminal, active, pillClass] = states[status] || ['Unknown', isTerminalDashboardTaskStatus(status, value), false, ''];
-  return { status: status || 'unknown', label, terminal, active, pillClass };
+  const inactiveContext = status === 'inactive' && typeof value === 'object'
+    ? normalize(value.resumeStatus || (value.validation === 'failed' ? 'validation_failed' : ''))
+    : '';
+  const contextualInactive = ['validation_failed', 'blocked', 'waiting_for_approval'].includes(inactiveContext)
+    ? states[inactiveContext]
+    : null;
+  const [label, terminal, active, pillClass] = contextualInactive || states[status] || ['Unknown', isTerminalDashboardTaskStatus(status, value), false, ''];
+  return { status: status || 'unknown', label, terminal: status === 'inactive' ? false : terminal, active: status === 'inactive' ? false : active, pillClass }; 
 }
 
 export function processStateView(process = {}, nativeTasks = []) {
@@ -417,7 +422,4 @@ function text(value) {
   return String(value ?? '').trim();
 }
 
-export {
-  PROCESS_ACTIVE_STATUSES,
-  TASKS_EXTENSION_ID
-};
+;

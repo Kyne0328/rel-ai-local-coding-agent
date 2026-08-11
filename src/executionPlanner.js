@@ -8,6 +8,8 @@ import { makeOperationId, appendOperation } from "./journal.js";
 import { resolveSafePath } from "./safety.js";
 import { runEnvOperation } from "./envOperations.js";
 import { MAX_BATCH_EDITS, MAX_BATCH_REPLACEMENTS, MAX_BATCH_INPUT_BYTES, MAX_BATCH_SNAPSHOT_BYTES, BATCH_RESULT_COMPACT_THRESHOLD } from "./editLimits.js";
+import { classifyWorkflowRisk } from "./workflow/risk.js";
+import { discoverRepositoryTopology, packageForPath } from "./workflow/topology.js";
 
 const STAGED_CHUNK_BYTES = 12000;
 
@@ -81,7 +83,7 @@ function validateBatchEdits(workspace, edits) {
     throw new TypeError('relai_edit edits must contain at least one structured edit.');
   }
   if (edits.length > MAX_BATCH_EDITS) {
-    throw new Error(`relai_edit accepts at most ${MAX_BATCH_EDITS} structured batch edits. Use updateText or a staged patch for larger changes.`);
+    throw new Error(`relai_edit accepts at most ${MAX_BATCH_EDITS} structured batch edits. Keep a larger repository-wide change together as one updateText patch; if one request is too large, stage updateText chunks and commit once.`);
   }
 
   let serialized;
@@ -95,7 +97,7 @@ function validateBatchEdits(workspace, edits) {
   }
   const inputBytes = Buffer.byteLength(serialized, 'utf8');
   if (inputBytes > MAX_BATCH_INPUT_BYTES) {
-    throw new Error(`relai_edit structured batch input is ${inputBytes} bytes; max is ${MAX_BATCH_INPUT_BYTES}. Use updateText or a staged patch for larger payloads.`);
+    throw new Error(`relai_edit structured batch input is ${inputBytes} bytes; max is ${MAX_BATCH_INPUT_BYTES}. Keep a repository-wide change together as updateText; if one request is too large, stage updateText chunks and commit once.`);
   }
 
   let replacementCount = 0;
@@ -162,13 +164,34 @@ async function preflightBatchEdits(workspace, config, edits, dryRun) {
   return { ok: allOk, results, dryRun };
 }
 
+function postActionRecommendation(workspace, changedFiles = []) {
+  const files = [...new Set((changedFiles || []).map(value => String(value || '').trim().replaceAll('\\', '/')).filter(Boolean))];
+  if (!files.length) return { runChecks: false, returnDiff: false, reason: 'No changed files were reported.' };
+  let packageIds = [];
+  try {
+    const topology = discoverRepositoryTopology(workspace.path);
+    packageIds = [...new Set(files.map(file => packageForPath(topology, file)?.id).filter(Boolean))];
+  } catch {}
+  const { boundary, risk } = classifyWorkflowRisk({ changedFiles: files, packageIds });
+  const runChecks = risk.level !== 'low';
+  return {
+    runChecks,
+    returnDiff: true,
+    reason: runChecks
+      ? `${boundary.level} boundary with ${risk.level} risk; validate at a meaningful implementation boundary.`
+      : `${boundary.level} boundary with ${risk.level} risk; review the diff without routine validation unless repository policy requires it.`
+  };
+}
 // Optional post-actions: validate and/or return a diff in the SAME call, so a
 // change-verify-review loop costs one approval instead of three.
-async function runPostActions(workspace, config, args) {
+async function runPostActions(workspace, config, args, changedFiles = []) {
   const post = {};
   if (args.runChecks === true && !args.dryRun) {
     try {
-      post.checks = await relaiVerify(workspace, config, { level: args.level });
+      post.checks = await relaiVerify(workspace, config, {
+        level: args.level,
+        ...(Array.isArray(changedFiles) && changedFiles.length ? { changedFiles } : {})
+      });
     } catch (error) {
       post.checks = { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
@@ -215,7 +238,7 @@ async function handleStagedEdit(workspace, config, args) {
       chunks: [args.updateText], createdAt: new Date().toISOString()
     });
     return { ok: true, workspace: workspace.alias, operation: 'stagedPatch:start', writeId, chunks: 1,
-      next: "Call relai_edit { stage:'append', writeId, updateText } for more chunks, then { stage:'commit', writeId }." };
+      next: "Call relai_edit { work_id, stage:'append', writeId, updateText } for more chunks, then { work_id, stage:'commit', writeId }." };
   }
 
   if (stage === 'append') {
@@ -242,7 +265,7 @@ async function handleStagedEdit(workspace, config, args) {
     if (payload.kind !== 'patch') {
       const result = workspaceWrite(workspace, config, { ...args, writeId });
       const out = { ...result, plannerPath: 'write:staged', plannerReason: `staged full-file write ${stage}` };
-      return stage === 'commit' ? attachPost(out, await runPostActions(workspace, config, args)) : out;
+      return stage === 'commit' ? attachPost(out, await runPostActions(workspace, config, args, out.changedFiles)) : out;
     }
     if (stage === 'abort') {
       const existed = clearStagedPayload(config, workspace, writeId);
@@ -252,7 +275,7 @@ async function handleStagedEdit(workspace, config, args) {
     const result = await relaiApplyPatch(workspace, config, { ...args, patch, returnDiff: false });
     if (!args.dryRun) clearStagedPayload(config, workspace, writeId);
     const out = { ...result, operation: 'stagedPatch:commit', writeId, plannerPath: 'apply-update:staged' };
-    return attachPost(out, await runPostActions(workspace, config, args));
+    return attachPost(out, await runPostActions(workspace, config, args, out.changedFiles));
   }
 
   throw new Error("relai_edit stage must be one of: start, append, commit, abort.");
@@ -278,7 +301,7 @@ async function _handleBatchEdits(workspace, config, args) {
       ...(compactResults ? { resultDetailsCompacted: true } : {}),
       results: formatBatchResults(preflight.results, compactResults)
     };
-    return attachPost(out, await runPostActions(workspace, config, args));
+    return attachPost(out, await runPostActions(workspace, config, args, out.changedFiles));
   }
 
   const snapshotCapture = captureEditSnapshots(workspace, args.edits);
@@ -327,7 +350,7 @@ async function _handleBatchEdits(workspace, config, args) {
     preflight: formatBatchResults(preflight.results, compactResults),
     results: formatBatchResults(results, compactResults)
   };
-  return attachPost(out, await runPostActions(workspace, config, args));
+  return attachPost(out, await runPostActions(workspace, config, args, out.changedFiles));
 }
 
 function captureEditSnapshots(workspace, edits) {
@@ -406,7 +429,7 @@ function singlePlannerReason(hasReplacement, plannerPath) {
 async function _handleUpdateTextEdit(workspace, config, args) {
   const result = await relaiApplyPatch(workspace, config, { ...args, patch: args.updateText, returnDiff: false });
   const out = { ...result, plannerPath: 'apply-update', plannerReason: 'updateText provided — routing to patch-shaped apply-update' };
-  return attachPost(out, await runPostActions(workspace, config, args));
+  return attachPost(out, await runPostActions(workspace, config, args, out.changedFiles));
 }
 
 async function _handleSingleEdit(workspace, config, args) {
@@ -433,13 +456,14 @@ async function _handleSingleEdit(workspace, config, args) {
     expectedSha256: args.expectedSha256
   }, args.dryRun);
   single.plannerReason = singlePlannerReason(hasReplacement, single.plannerPath);
-  return attachPost(single, await runPostActions(workspace, config, args));
+  return attachPost(single, await runPostActions(workspace, config, args, single.changedFiles));
 }
 
 async function planEdit(workspace, config, args) {
+  assertSupportedEditForm(args);
   if (typeof args.envAction === 'string' && args.envAction.trim()) {
     const result = runEnvOperation(workspace, config, args);
-    return attachPost(result, await runPostActions(workspace, config, { ...args, returnDiff: false }));
+    return attachPost(result, await runPostActions(workspace, config, { ...args, returnDiff: false }, result.changedFiles));
   }
   if (typeof args.stage === 'string' && args.stage.trim()) return handleStagedEdit(workspace, config, args);
   if (Array.isArray(args.edits) && args.edits.length > 0) return _handleBatchEdits(workspace, config, args);
@@ -447,4 +471,74 @@ async function planEdit(workspace, config, args) {
   return _handleSingleEdit(workspace, config, args);
 }
 
-export { planEdit };
+const EDIT_FORM_GUIDANCE = 'Use exactly one form: { path, content } for a complete file, { path, oldText, newText } or { path, replacements } for exact replacement, { updateText } for a patch, { edits } for an atomic batch, { envAction, ... } for secret-safe environment work, or { stage, ... } for chunked content/updateText.';
+
+function assertSupportedEditForm(args = {}) {
+  const has = (field) => Object.hasOwn(args, field);
+  const hasEnv = typeof args.envAction === 'string' && args.envAction.trim().length > 0;
+  const hasStage = typeof args.stage === 'string' && args.stage.trim().length > 0;
+  const hasBatch = has('edits');
+  const hasPatch = has('updateText');
+  const hasContent = has('content');
+  const hasExact = ['oldText', 'newText', 'replacements', 'occurrence'].some(has);
+
+  if (hasEnv) {
+    if (hasStage || hasBatch || hasPatch || hasContent || hasExact || has('writeId')) {
+      throw new Error(`relai_edit envAction cannot be combined with another edit form. ${EDIT_FORM_GUIDANCE}`);
+    }
+    return;
+  }
+
+  if (hasStage) {
+    if (hasBatch || hasExact || has('envAction')) {
+      throw new Error(`relai_edit staged operations cannot be combined with exact, batch, or environment fields. ${EDIT_FORM_GUIDANCE}`);
+    }
+    const stage = String(args.stage).trim().toLowerCase();
+    const chunkCount = Number(hasPatch) + Number(hasContent);
+    if ((stage === 'start' || stage === 'append') && chunkCount !== 1) {
+      throw new Error(`relai_edit stage='${stage}' requires exactly one of content or updateText.`);
+    }
+    if ((stage === 'commit' || stage === 'abort') && chunkCount !== 0) {
+      throw new Error(`relai_edit stage='${stage}' does not accept content or updateText; pass only writeId or path to identify the staged edit.`);
+    }
+    if (stage === 'start' && hasContent && !String(args.path || '').trim()) {
+      throw new Error("relai_edit stage='start' requires path when staging complete-file content.");
+    }
+    return;
+  }
+
+  if (has('envAction')) {
+    throw new Error(`relai_edit envAction must be a non-empty supported action. ${EDIT_FORM_GUIDANCE}`);
+  }
+  if (has('writeId')) {
+    throw new Error(`relai_edit writeId is valid only with stage. ${EDIT_FORM_GUIDANCE}`);
+  }
+
+  const selected = [hasBatch, hasPatch, hasContent, hasExact].filter(Boolean).length;
+  if (selected > 1) {
+    throw new Error(`relai_edit received ambiguous, conflicting primary edit forms. ${EDIT_FORM_GUIDANCE}`);
+  }
+  if (selected === 0) {
+    throw new Error(`relai_edit received no primary edit forms and must provide one of them. ${EDIT_FORM_GUIDANCE}`);
+  }
+  if (hasBatch || hasPatch) return;
+  if (!String(args.path || '').trim()) {
+    throw new Error(`relai_edit path is required for complete content and exact replacement forms. ${EDIT_FORM_GUIDANCE}`);
+  }
+  if (hasContent) return;
+
+  const hasOldText = has('oldText');
+  const hasNewText = has('newText');
+  const hasReplacements = has('replacements');
+  if (hasReplacements && (hasOldText || hasNewText || has('occurrence'))) {
+    throw new Error('relai_edit exact replacement accepts oldText+newText+occurrence OR replacements:[...], not both.');
+  }
+  if (!hasReplacements && (!hasOldText || !hasNewText)) {
+    throw new Error('relai_edit exact replacement requires both oldText and newText.');
+  }
+  if (hasOldText && (typeof args.oldText !== 'string' || args.oldText.length === 0)) {
+    throw new Error('relai_edit oldText must be a non-empty string. Use content for a complete file replacement.');
+  }
+}
+
+export { planEdit, postActionRecommendation };

@@ -1,4 +1,4 @@
-export const WORKSPACE_ALIAS_PATTERN = /^[A-Za-z0-9._-]{1,80}$/;
+const WORKSPACE_ALIAS_PATTERN = /^[A-Za-z0-9._-]{1,80}$/;
 
 export function deriveWorkspaceAlias(workspacePath) {
   const leaf = trimTrailingPathSeparators(workspacePath).split(/[\\/]/).filter(Boolean).at(-1) || '';

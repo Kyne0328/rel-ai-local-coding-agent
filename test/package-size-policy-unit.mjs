@@ -23,4 +23,16 @@ const overBudget = compareMetrics(
 assert.equal(overBudget[0].exceedsTolerance, true);
 assert.ok(overBudget[0].deltaPercent > 3);
 
+const gatewayRuntimeWithinBudget = compareMetrics(
+  { appAsarBytes: 103, resourcesBytes: 206 },
+  { tolerancePercent: 3, metrics: { appAsarBytes: 100, resourcesBytes: 200 } }
+);
+assert.deepEqual(gatewayRuntimeWithinBudget.map(item => item.exceedsTolerance), [false, false]);
+
+const gatewayRuntimeOverBudget = compareMetrics(
+  { appAsarBytes: 104, resourcesBytes: 208 },
+  { tolerancePercent: 3, metrics: { appAsarBytes: 100, resourcesBytes: 200 } }
+);
+assert.deepEqual(gatewayRuntimeOverBudget.map(item => item.exceedsTolerance), [true, true]);
+
 console.log('Package-size policy is strict and fails measurements above the documented tolerance.');

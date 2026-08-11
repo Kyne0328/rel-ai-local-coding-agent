@@ -51,6 +51,15 @@ function enrichCommonAudit(extra, name, value) {
 function enrichEditAudit(extra, value, args) {
   assignTruthy(extra, "plannerPath", value?.plannerPath);
   assignTruthy(extra, "plannerReason", value?.plannerReason);
+  const checks = value?.checks && typeof value.checks === 'object' && !Array.isArray(value.checks)
+    ? value.checks
+    : null;
+  if (checks) {
+    assignTruthy(extra, "validationStatus", checks.validationStatus);
+    assignTruthy(extra, "validationLevel", checks.validationLevel);
+    assignTruthy(extra, "validationLevelReason", checks.validationLevelReason);
+    assignTruthy(extra, "validationFingerprint", checks.validationFingerprint);
+  }
   addAuditPath(extra, args?.path);
 }
 

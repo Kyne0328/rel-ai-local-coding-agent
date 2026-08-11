@@ -170,7 +170,7 @@ function diagnosticFinding(value) {
     title: sanitizeText(value.title || 'Diagnostic finding', 240),
     impact: sanitizeText(value.impact || '', 1000),
     recommendation: sanitizeText(value.recommendation || '', 1000),
-    action: value.action || { label: 'Open Diagnostics', href: '#settings/diagnostics' },
+    action: value.action || { label: 'Open Diagnostics', href: '#diagnostics' },
     context: sanitizeDiagnosticValue(value.context || []),
     details: sanitizeDiagnosticValue(value.details || {})
   };
@@ -263,7 +263,7 @@ function recommendationForHealth(finding, code) {
 
 function actionFromGuidance(code) {
   const guidance = errorGuidance(code);
-  return { label: guidance.actionLabel, href: guidance.href || '#settings/diagnostics' };
+  return { label: guidance.actionLabel, href: guidance.href || '#diagnostics' };
 }
 
 function normalizedSeverity(value) {
@@ -305,4 +305,4 @@ function humanize(value) {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-export { sanitizeText, sanitizeDiagnosticValue, buildDiagnosticReport, formatDiagnosticReport };
+export { sanitizeText, sanitizeDiagnosticValue, buildDiagnosticReport,  };

@@ -128,4 +128,4 @@ function redactEvent(value) {
   return out;
 }
 
-export { getAuditPath, logAudit, safeLogAudit, readAudit, clearAuditHistory };
+export { getAuditPath,  safeLogAudit, readAudit, clearAuditHistory };

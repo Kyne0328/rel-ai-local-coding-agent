@@ -46,9 +46,6 @@ function toolContext(context, options = {}) {
   };
 }
 
-function clientName(context) {
-  return String(context?.mcpReq?.envelope?.[CLIENT_INFO_META_KEY]?.name || '');
-}
 
 function httpHeaders(request) {
   const result = {};
@@ -86,4 +83,4 @@ function objectValue(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 }
 
-export { SERVER_INSTANCE_ID, clientName, createRelaiRequestStateCodec, requestStateKey, toolContext };
+export { SERVER_INSTANCE_ID,  createRelaiRequestStateCodec, requestStateKey, toolContext };

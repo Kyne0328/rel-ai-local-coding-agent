@@ -4,7 +4,7 @@ function messageFor(error) {
   return 'The action failed.';
 }
 
-export function setButtonState(button, state, text) {
+function setButtonState(button, state, text) {
   if (!button) return;
   if (state === 'idle') delete button.dataset.state;
   else button.dataset.state = state;

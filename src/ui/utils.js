@@ -19,15 +19,7 @@ export function metricHtml(label, value, meta, type) {
   return `<div class="metric ${esc(type || '')}"><div class="metric-label">${esc(label)}</div><div class="metric-value">${esc(value)}</div><div class="metric-meta">${esc(meta || '')}</div></div>`;
 }
 
-export function listItemHtml(title, sub, time, state) {
-  const c = statusClass(state || 'ok');
-  return `<div class="list-item"><span class="dot ${c === 'ok' ? '' : c}"></span><div><div class="item-title">${esc(title)}</div><div class="item-sub">${esc(sub || '')}</div></div><div class="item-time">${esc(time || '')}</div></div>`;
-}
 
-export function short(v, head = 10, tail = 5, max = 20) {
-  const s = String(v || '');
-  return s.length > max ? s.slice(0, head) + '…' + s.slice(-tail) : s;
-}
 
 export function timeAgo(v, now = Date.now()) {
   const ts = Date.parse(String(v || ''));
@@ -39,14 +31,29 @@ export function timeAgo(v, now = Date.now()) {
   return h < 24 ? h + 'h ago' : Math.floor(h / 24) + 'd ago';
 }
 
-export function formatDuration(milliseconds) {
+export function formatDuration(milliseconds, options = {}) {
   const seconds = Math.max(0, Math.round(Number(milliseconds || 0) / 1000));
+  if (options.historical) {
+    if (seconds <= 0) return '0m';
+    if (seconds < 60) return '<1m';
+    const minutes = Math.floor(seconds / 60);
+    const days = Math.floor(minutes / (24 * 60));
+    const remainderAfterDays = minutes % (24 * 60);
+    const hours = Math.floor(remainderAfterDays / 60);
+    const remainderMinutes = remainderAfterDays % 60;
+    if (days) return `${days}d${hours ? ` ${hours}h` : ''}${remainderMinutes ? ` ${remainderMinutes}m` : ''}`;
+    if (hours) return `${hours}h${remainderMinutes ? ` ${remainderMinutes}m` : ''}`;
+    return `${minutes}m`;
+  }
   if (seconds < 60) return `${seconds}s`;
   const minutes = Math.floor(seconds / 60);
-  const remainder = seconds % 60;
-  return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
-}
-
-export function titleize(v) {
-  return String(v || '').replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  const remainderSeconds = seconds % 60;
+  if (minutes < 60) {
+    return options.live && remainderSeconds ? `${minutes}m ${remainderSeconds}s` : `${minutes}m`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const remainderMinutes = minutes % 60;
+  const minuteText = remainderMinutes ? ` ${remainderMinutes}m` : '';
+  const secondText = options.live && remainderSeconds ? ` ${remainderSeconds}s` : '';
+  return `${hours}h${minuteText}${secondText}`;
 }

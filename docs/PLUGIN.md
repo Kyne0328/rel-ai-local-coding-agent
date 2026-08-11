@@ -1,6 +1,6 @@
 # Rel.AI Plugin
 
-The distributable package contains the Rel.AI MCP connector and five first-party workflow skills as one versioned plugin unit. Connector implementation, skill instructions, metadata, references, and provenance remain separate internal files.
+The distributable package contains the Rel.AI MCP connector and six first-party workflow skills as one versioned plugin unit. Connector implementation, built-in skill instructions, metadata, references, and provenance remain separate internal files.
 
 ## Structure
 
@@ -8,29 +8,40 @@ The distributable package contains the Rel.AI MCP connector and five first-party
 .codex-plugin/plugin.json
 .mcp.json
 skills/
-├── PROVENANCE.md
-├── rel-ai-workflow/
-│   ├── SKILL.md
-│   ├── agents/openai.yaml
-│   └── references/
-├── rel-ai-investigation/
-│   ├── SKILL.md
-│   └── agents/openai.yaml
-├── rel-ai-debugging/
-│   ├── SKILL.md
-│   └── agents/openai.yaml
-├── rel-ai-verification/
-│   ├── SKILL.md
-│   └── agents/openai.yaml
-└── rel-ai-dev-process/
-    ├── SKILL.md
-    └── agents/openai.yaml
+|-- PROVENANCE.md
+|-- rel-ai-workflow/
+|   |-- SKILL.md
+|   |-- agents/openai.yaml
+|   `-- references/
+|-- rel-ai-planning/
+|   |-- SKILL.md
+|   `-- agents/openai.yaml
+|-- rel-ai-investigation/
+|   |-- SKILL.md
+|   `-- agents/openai.yaml
+|-- rel-ai-debugging/
+|   |-- SKILL.md
+|   `-- agents/openai.yaml
+|-- rel-ai-verification/
+|   |-- SKILL.md
+|   `-- agents/openai.yaml
+`-- rel-ai-dev-process/
+    |-- SKILL.md
+    `-- agents/openai.yaml
 bin/rel-ai-mcp.js
 src/
 package.json
 ```
 
-`rel-ai-workflow` owns the work session. Specialized skills reuse its `work_id` and refine investigation, debugging, verification, or persistent-process procedure. They do not duplicate MCP schemas or weaken server policy.
+`rel-ai-workflow` is the only work-session owner. The other built-in skills reuse its `work_id` and provide narrow specialist reasoning:
+
+- `rel-ai-planning` - architecture-aware planning, sequencing, completion conditions, and cumulative consolidation for non-trivial implementation work.
+- `rel-ai-investigation` - minimum-evidence repository audits, feasibility analysis, dependency tracing, and verified conclusions.
+- `rel-ai-debugging` - reproducible failure isolation, causal tracing, root-cause repair, and targeted regression proof.
+- `rel-ai-verification` - risk-based completion evidence using the smallest meaningful non-overlapping checks for the changed boundary.
+- `rel-ai-dev-process` - persistent development servers, watchers, preview runtimes, and interactive programs.
+
+The built-in set is Rel.AI's development-methodology layer. Framework, language, database, deployment, UI/UX, security-domain, and other specialist expertise belongs in user-installed skills rather than an ever-growing built-in catalog.
 
 ## Build and verify
 
@@ -44,18 +55,24 @@ npm run test:plugin
 
 `npm run test:plugin` creates the real `npm pack` artifact, extracts it, validates every packaged skill and dependency, installs it temporarily, starts the extracted MCP server, verifies source/package `tools/list` parity, performs a repository read, executes consolidated validation and process-list calls with one `work_id`, and removes the complete installation.
 
-## Install, update, and remove
+## Built-in and user-installed skills
 
-Install the unpacked plugin directory or extracted package through a compatible host. The manifest points to the bundled `.mcp.json` and `skills/` directory, so connector and skills are installed, updated, and removed together. Do not copy the MCP or skills separately.
+Built-in skills ship with the Rel.AI plugin and update with the application/plugin version. `skills/PROVENANCE.md` records their first-party ownership and design influences, while plugin validation checks their packaged structure and declared metadata.
 
-The npm package remains private and is used as a deterministic build artifact; it is not presented as a public npm installation command.
+The desktop application also owns a separate user-managed skill library under the Rel.AI state directory. In **Settings > Skills**, users can add a public GitHub repository, preview every detected `SKILL.md` or `skill.md`, choose **Select all** or individual skills, and install only the selected packages.
 
-## Context behavior
+The desktop skill library has three scopes:
 
-Bundling skills with the connector does not itself reduce MCP discovery cost. Rel.AI exposes one complete 12-tool capability surface with no selectable profiles. Skill trigger metadata remains small, and detailed procedures load only after a matching skill is selected.
+- **Built-in** - skills shipped with Rel.AI.
+- **Installed** - skills added by the user from GitHub and stored centrally by Rel.AI.
+- **Workspace enabled** - the built-in or installed skill IDs selected for a configured workspace.
 
-Direct HTTP and stdio clients remain usable without loading skills. Server-side workspace ownership, approvals, command limits, Task negotiation, and destructive safeguards remain authoritative.
+One installed skill may be enabled for multiple workspaces. Enabling a skill does not copy it into the project repository; workspace configuration stores the selected skill IDs and Rel.AI resolves them from the central library. Reinstalling the same GitHub skill refreshes its central copy. Automatic skill updates and private-GitHub authentication are not part of the first implementation.
 
-## Supply-chain policy
+## Runtime context behavior
 
-The initial skill set contains no executable skill scripts, remote downloads, silent updates, hooks, or telemetry. `skills/PROVENANCE.md` records first-party ownership and design influences. Plugin validation rejects missing provenance, undeclared skill metadata, executable skill script directories, and common remote-download commands.
+Bundling or installing skills does not change the public MCP tool surface. Rel.AI continues to expose one complete 12-tool capability surface.
+
+For a workspace, the repository snapshot and work-session bootstrap include the `SKILL.md` content of the skills enabled for that workspace. Supporting files stay progressively available through MCP resources using `relai://skill/<skill-id>/file/<relative-path>`, so references, scripts, and data files do not have to be copied into the repository or loaded into every bootstrap response.
+
+Direct HTTP and stdio clients remain usable without enabling workspace skills.

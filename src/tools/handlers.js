@@ -14,8 +14,13 @@ import { startTask, taskBootstrapFromSnapshot } from './task.js';
 import { startManagedProcess, readManagedProcess, writeManagedProcess, stopManagedProcess, listManagedProcesses } from '../processManager.js';
 import { createManagedWorktree, listManagedWorktrees, removeManagedWorktree } from '../worktreeManager.js';
 import { relaiSemanticSearch } from '../bridge/semanticSearch.js';
+import { repositoryIntelligence } from '../repository/intelligence/service.js';
 import { relaiDiagnosticsRun } from '../bridge/diagnosticsRunner.js';
+import { taskOwnedChangedFiles } from '../taskIntegrity.js';
+import { readRecentWorkflowEvidence, readTaskHistorySessionRecord } from '../taskHistoryStore.js';
+import { discoverRepositoryTopology, packageForPath } from '../workflow/topology.js';
 const startTaskHandler = inWorkspace(async (workspace, config, args) => {
+  scheduleIntelligenceWarmup(workspace, config);
   const task = startTask(workspace, args);
   const bootstrapMode = String(args.bootstrap || 'compact').toLowerCase();
   if (bootstrapMode === 'none') return task;
@@ -30,12 +35,21 @@ const startTaskHandler = inWorkspace(async (workspace, config, args) => {
   };
 });
 
+function scheduleIntelligenceWarmup(workspace, config) {
+  void Promise.resolve()
+    .then(() => repositoryIntelligence.ensure(workspace, config))
+    .catch(() => {});
+}
+
 const HANDLERS = Object.freeze({
   startTask: startTaskHandler,
-  repoSnapshot: inWorkspace((workspace, config, args) => repoSnapshot(workspace, config, args)),
+  repoSnapshot: inWorkspace((workspace, config, args) => {
+    scheduleIntelligenceWarmup(workspace, config);
+    return repoSnapshot(workspace, config, args);
+  }),
   read: inWorkspace((workspace, config, args, context) => relaiRead(workspace, config, args, context)),
-  search: inWorkspace((workspace, config, args) => relaiSearch(workspace, config, args)),
-  codeInspect: inWorkspace((workspace, config, args) => relaiCodeInspect(workspace, config, args)),
+  search: inWorkspace((workspace, config, args, context) => relaiSearch(workspace, config, withWorkflowTaskContext(config, workspace, args, context))),
+  codeInspect: inWorkspace((workspace, config, args, context) => relaiCodeInspect(workspace, config, withWorkflowTaskContext(config, workspace, args, context), context)),
   exec: inWorkspace((workspace, config, args, context) => relaiExec(workspace, config, args, context)),
   processStart: inWorkspace((workspace, config, args, context) => startManagedProcess(workspace, config, args, context)),
   processRead: (config, args, context) => readManagedProcess(config, args, context),
@@ -45,13 +59,13 @@ const HANDLERS = Object.freeze({
   worktreeCreate: inWorkspace((workspace, config, args, context) => createManagedWorktree(workspace, config, args, context)),
   worktreeList: (config, args, context) => listManagedWorktrees(config, args, context),
   worktreeRemove: inWorkspace((workspace, config, args, context) => removeManagedWorktree(workspace, config, args, context)),
-  semanticSearch: inWorkspace((workspace, config, args) => relaiSemanticSearch(workspace, config, args)),
+  semanticSearch: inWorkspace((workspace, config, args, context) => relaiSemanticSearch(workspace, config, args, context)),
   diagnosticsRun: inWorkspace((workspace, config, args, context) => relaiDiagnosticsRun(workspace, config, args, context)),
   tidyPlan: inWorkspace((workspace, config, args) => workspaceTidyPlan(workspace, config, args)),
   tidyRun: inWorkspace((workspace, config, args) => workspaceTidyRun(workspace, config, args)),
   runChecks: inWorkspace((workspace, config, args, context) => relaiVerify(workspace, config, mapCheckArgs(args), context)),
   httpProbe: inWorkspace((workspace, config, args) => relaiHttpProbe(workspace, config, args)),
-  diff: inWorkspace((workspace, config, args) => relaiDiff(workspace, config, args)),
+  diff: inWorkspace((workspace, config, args, context) => relaiDiff(workspace, config, withTaskOwnedReviewContext(config, workspace, args, context))),
   restorePaths: inWorkspace((workspace, config, args) => relaiRestorePaths(workspace, config, args)),
   resetWorkspace: inWorkspace((workspace, config, args) => relaiResetWorkspace(workspace, config, args)),
   status: relaiStatus,
@@ -63,6 +77,40 @@ const HANDLERS = Object.freeze({
   completeTask
 });
 
+function withWorkflowTaskContext(config, workspace, args, context = {}) {
+  const taskId = String(context.taskId || args.work_id || '').trim();
+  if (!taskId) return args;
+  let owned = [];
+  let packagePaths = [];
+  let impactedPaths = [];
+  let readEvidence = [];
+  try {
+    owned = taskOwnedChangedFiles(config, taskId, workspace.alias);
+    const topology = discoverRepositoryTopology(workspace.path);
+    packagePaths = [...new Set(owned.map(file => packageForPath(topology, file)?.path).filter(value => value && value !== '.'))];
+  } catch {}
+  try {
+    const session = readTaskHistorySessionRecord(config, taskId, { reconcileInactive: false });
+    impactedPaths = Array.isArray(session?.workflow?.boundary?.impactedPaths)
+      ? session.workflow.boundary.impactedPaths
+      : Array.isArray(session?.workflow?.impactedPaths) ? session.workflow.impactedPaths : [];
+  } catch {}
+  try {
+    readEvidence = readRecentWorkflowEvidence(config, taskId, 30)
+      .flatMap(receipt => Array.isArray(receipt?.metadata?.reads) ? receipt.metadata.reads : [])
+      .slice(-100);
+  } catch {}
+  return { ...args, _workflowContext: { taskOwnedPaths: owned, packagePaths, impactedPaths, readEvidence } };
+}
+
+function withTaskOwnedReviewContext(config, workspace, args, context = {}) {
+  const taskId = String(context.taskId || args.work_id || '').trim();
+  if (!taskId) return args;
+  return {
+    ...args,
+    _taskOwnedPaths: taskOwnedChangedFiles(config, taskId, workspace.alias)
+  };
+}
 /**
  * @param {(workspace: any, config: unknown, args: Record<string, any>, context: { connector?: boolean, taskId?: string, requestHeaders?: Record<string, string> }) => any} handler
  */

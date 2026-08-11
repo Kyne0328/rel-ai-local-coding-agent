@@ -11,7 +11,10 @@ assert.doesNotMatch(benchmark, /'blocked'.*Renderer benchmark|hardcoded/i);
 assert.match(benchmark, /REL_AI_RENDERER_BENCHMARK_RESULT/);
 assert.match(benchmark, /status:\s*'incomplete'|forcedStatus.*incomplete|incomplete/);
 assert.match(benchmark, /process\.exitCode = 1/);
-for (const workload of ['quietFullRenders', 'progressFullRenders', 'timelineRenderMs', 'logicalTaskSwitchMemoryDeltaBytes', 'hiddenTimerElapsedMs', 'reconnectMs']) {
+assert.match(benchmark, /runDashboardClockBenchmark/, 'benchmark must execute the production dashboard clock against a realistic session workload');
+assert.match(benchmark, /const DASHBOARD_SNAPSHOT_COALESCE_MS = 100;/, 'benchmark publication simulation must match the dashboard 100 ms coalescer');
+assert.match(benchmark, /quietClockNodeUpdates.*sessionRowReplacementsDuringProgress/, 'renderer result validation must require the new clock and keyed-session metrics');
+for (const workload of ['quietFullRenders', 'quietClockNodeUpdates', 'progressFullRenders', 'sessionRowReplacementsDuringProgress', 'timelineRenderMs', 'logicalTaskSwitchMemoryDeltaBytes', 'hiddenTimerElapsedMs', 'reconnectMs']) {
   assert.ok(fixture.includes(workload), `Electron benchmark fixture must execute ${workload}`);
 }
 

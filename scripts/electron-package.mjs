@@ -6,9 +6,11 @@ import { fileURLToPath } from 'node:url';
 import { assertSafeControllerOperation } from './active-controller-guard.mjs';
 import { electronPlatformSpec, normalizeElectronPlatform } from './electron-platform.mjs';
 import { invalidateDerivedReleaseEvidence, releaseArtifactNames } from './release-artifacts.mjs';
+import { writeWindowsUpdaterConfig } from './electron-updater-config.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const electronRoot = path.join(root, 'electron');
+const electronManifest = JSON.parse(fs.readFileSync(path.join(electronRoot, 'package.json'), 'utf8'));
 const RELEASE_ARCHIVE_COMPRESSION_LEVEL = '5';
 const options = parseArgs(process.argv.slice(2));
 const mode = options.mode;
@@ -25,6 +27,7 @@ assertSafeBuilderArgs(options.builderArgs);
 
 const generateColorTokens = path.join(root, 'scripts', 'generate-color-tokens.mjs');
 const verifyNgrok = path.join(root, 'scripts', 'verify-ngrok-seed.mjs');
+const verifyZoekt = path.join(root, 'scripts', 'verify-zoekt-seed.mjs');
 const tailwindCli = packageBin(path.join(root, 'node_modules', '@tailwindcss', 'cli'), 'tailwindcss');
 const electronBuilderCli = packageBin(path.join(electronRoot, 'node_modules', 'electron-builder'), 'electron-builder');
 const platformEnvironment = { ...process.env, REL_AI_TARGET_PLATFORM: platform };
@@ -39,6 +42,7 @@ runNode('dashboard CSS build', tailwindCli, [
   '--minify'
 ]);
 runNode('ngrok seed verification', verifyNgrok, [], { env: platformEnvironment });
+runNode('Zoekt seed verification', verifyZoekt, [], { env: platformEnvironment });
 
 if (mode === 'unpacked') {
   runNode(`Electron ${platform} unpacked packaging`, electronBuilderCli, [
@@ -49,6 +53,11 @@ if (mode === 'unpacked') {
     '--publish', 'never',
     ...options.builderArgs
   ], { cwd: electronRoot, env: platformEnvironment });
+  if (platformSpec.platform === 'win32') {
+    const unpackedDirectory = path.join(target, platformSpec.unpackedDirectory);
+    writeWindowsUpdaterConfig({ appDirectory: unpackedDirectory, manifest: electronManifest });
+    assertWindowsUpdaterConfig(unpackedDirectory);
+  }
 } else {
   await packageRelease(electronBuilderCli, options.builderArgs, platformSpec);
 }
@@ -89,6 +98,8 @@ async function packageWindowsRelease(electronBuilder, builderArgs, spec) {
     fs.mkdirSync(targetRoot, { recursive: true });
     fs.cpSync(prepackaged, portablePrepackaged, { recursive: true, force: true, dereference: true });
     assertPrepackagedApp(portablePrepackaged, spec);
+    writeWindowsUpdaterConfig({ appDirectory: prepackaged, manifest: electronManifest });
+    assertWindowsUpdaterConfig(prepackaged);
     console.log(`[electron-package] Isolated portable working copy prepared in ${formatDuration(Date.now() - cloneStartedAt)}.`);
 
     const artifactStartedAt = Date.now();
@@ -367,6 +378,13 @@ function assertPrepackagedApp(directory, spec) {
   }
   if (!fs.existsSync(resources) || !fs.statSync(resources).isDirectory()) {
     throw new Error(`Release staging did not produce ${resources}.`);
+  }
+}
+
+function assertWindowsUpdaterConfig(directory) {
+  const updateConfig = path.join(directory, 'resources', 'app-update.yml');
+  if (!fs.existsSync(updateConfig) || !fs.statSync(updateConfig).isFile()) {
+    throw new Error(`Windows package staging is missing ${updateConfig}.`);
   }
 }
 

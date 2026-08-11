@@ -110,47 +110,8 @@ function checkStaleFile(findings, name, file, staleHours) {
   }
 }
 
-function cleanupPreview(config, args = {}) {
-  return cleanupPlan(config, false, args);
-}
 
-function cleanupRun(config, args = {}) {
-  if (args.confirm !== true) throw new Error("cleanupRun requires confirm=true.");
-  return cleanupPlan(config, true, args);
-}
 
-function cleanupPlan(config, apply, args = {}) {
-  const stateDir = getStateDir(config);
-  const olderThanHours = clampNumber(args.olderThanHours || config.productUx?.cleanupOlderThanHours || 168, 1, 24 * 365);
-  const includeAudit = args.includeAudit === true;
-  const targets = [];
-  if (includeAudit) collectOldJson(targets, path.dirname(config.auditLogPath), olderThanHours, [path.basename(config.auditLogPath)]);
-  // Stale staged-write/patch payload dirs (interrupted edits) and old per-workspace
-  // operation journals — these accumulate during normal use and nothing else clears them.
-  collectOldDirs(targets, path.join(stateDir, "fast"), olderThanHours, /^payload-/);
-  collectOldJson(targets, path.join(stateDir, "operation-journal"), olderThanHours, [".jsonl"]);
-  const limited = targets.slice(0, clampNumber(args.maxClears || 500, 1, 5000));
-  const cleared = [];
-  if (apply) {
-    for (const file of limited) {
-      try {
-        fs.rmSync(file.path, { recursive: file.type === "dir", force: true });
-        cleared.push(file);
-      } catch (error) {
-        file.error = error instanceof Error ? error.message : String(error);
-      }
-    }
-  }
-  return {
-    ok: true,
-    dryRun: !apply,
-    olderThanHours,
-    totalCandidates: targets.length,
-    candidates: limited,
-    cleared,
-    message: apply ? `Cleared ${cleared.length} file(s).` : "Preview only. Re-run with confirm=true to clear candidates."
-  };
-}
 
 async function doctorFix(config, args = {}) {
   const fixes = [];
@@ -368,34 +329,9 @@ function checkFile(findings, name, file, optional) {
   if (!fs.existsSync(file) && !optional) findings.push({ severity: "error", code: `${name}_missing`, message: `${name} file does not exist: ${file}` });
 }
 
-function collectOldJson(targets, dir, olderThanHours, suffixes) {
-  if (!dir || !fs.existsSync(dir)) return;
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) collectOldJson(targets, full, olderThanHours, suffixes);
-    else if (suffixes.some((suffix) => entry.name.endsWith(suffix) || entry.name === suffix)) {
-      const stat = fs.statSync(full);
-      if (Date.now() - stat.mtimeMs > olderThanHours * 3600000) targets.push({ path: full, type: "file", size: stat.size, modifiedAt: stat.mtime.toISOString() });
-    }
-  }
-}
 
 // Recursively find directories whose name matches `namePattern` and whose mtime is
 // older than the cutoff (e.g. abandoned staged-edit payload dirs).
-function collectOldDirs(targets, root, olderThanHours, namePattern) {
-  if (!root || !fs.existsSync(root)) return;
-  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const full = path.join(root, entry.name);
-    if (namePattern.test(entry.name)) {
-      const stat = fs.statSync(full);
-      if (Date.now() - stat.mtimeMs > olderThanHours * 3600000) targets.push({ path: full, type: "dir", modifiedAt: stat.mtime.toISOString() });
-    } else {
-      collectOldDirs(targets, full, olderThanHours, namePattern);
-    }
-  }
-}
 
 function walkState(root, current, files, maxFiles, maxFileBytes) {
   if (!fs.existsSync(current) || files.length >= maxFiles) return;
@@ -495,4 +431,4 @@ function aliasConsistencyCheck(config) {
   return { ok: results.every(r => r.ok), generatedAt: new Date().toISOString(), workspaces: results };
 }
 
-export { dashboardData, liveLogTail, healthMonitor, aliasConsistencyCheck, cautionSummary, cleanupPreview, cleanupRun, doctorFix, setupWizard, importOriginalRelAiConfig, stateExport, stateImport };
+export { dashboardData, liveLogTail, healthMonitor, aliasConsistencyCheck, cautionSummary,   doctorFix, setupWizard, importOriginalRelAiConfig, stateExport, stateImport };

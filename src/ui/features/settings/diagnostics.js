@@ -2,6 +2,8 @@ import { fetchJson, postJson, requestDashboardRefresh } from '../../api.js';
 import { copyText } from '../../clipboard.js';
 import { runButtonAction } from '../../action-state.js';
 import { toast } from '../../components/toast.js';
+import { createFilterBar } from '../../components/filter-bar.js';
+import { filterSelectField, openFilterDrawer } from '../../components/filter-drawer.js';
 import { openModal, closeModal } from '../../components/modal.js';
 import { confirmAction } from '../../components/confirm-dialog.js';
 import { esc, timeAgo } from '../../utils.js';
@@ -13,12 +15,14 @@ let currentContainer = null;
 let liveTailTimer = 0;
 let liveTailLoading = false;
 let liveTailEnabled = false;
-const filters = { search: '', severity: 'all', source: 'all' };
+const filters = { search: '', scope: 'all', severity: 'all', source: 'all' };
+let availableSources = [];
 
 export function mountDiagnostics(container) {
   stopLiveTail();
   currentContainer = container;
   filters.search = '';
+  filters.scope = 'all';
   filters.severity = 'all';
   filters.source = 'all';
   container.innerHTML = `
@@ -31,32 +35,11 @@ export function mountDiagnostics(container) {
           <button class="secondary" type="button" data-open-diagnostics-folder>Open diagnostics folder</button>
         </div>
       </div>
-      <div class="diagnostic-toolbar" aria-label="Diagnostic filters">
-        <label class="diagnostic-search-control">
-          <span>Search diagnostics</span>
-          <input type="search" data-diagnostic-search placeholder="Error code, source, message, or workspace" autocomplete="off">
-        </label>
-        <label class="diagnostic-filter-control">
-          <span>Severity</span>
-          <select data-diagnostic-severity>
-            <option value="all">All severities</option>
-            <option value="error">Blocking</option>
-            <option value="warning">Warnings</option>
-            <option value="info">Recommendations</option>
-          </select>
-        </label>
-        <label class="diagnostic-filter-control">
-          <span>Source</span>
-          <select data-diagnostic-source><option value="all">All sources</option></select>
-        </label>
-        <button class="secondary diagnostic-live-tail" type="button" data-live-tail aria-pressed="false">Live tail off</button>
-        <span class="diagnostic-filter-summary" data-diagnostic-filter-summary aria-live="polite"></span>
-      </div>
+      <div id="diagnosticFilterHost"></div>
       <div id="diagnosticSummary" class="diagnostic-summary"><div class="empty">Loading diagnostics…</div></div>
     </div>`;
   bindHeaderActions(container);
-  bindFilters(container);
-  bindLiveTail(container);
+  renderDiagnosticFilterBar(container);
   return loadDiagnostics(container);
 }
 
@@ -79,7 +62,7 @@ async function loadDiagnostics(container, options = {}) {
     return;
   }
   currentReport = report;
-  updateSourceOptions(container, report);
+  updateSourceOptions(report);
   renderCurrentReport(container);
   setReportActionsEnabled(container, true);
   scrollLogTails(container);
@@ -91,8 +74,10 @@ function renderCurrentReport(container) {
   const view = filteredDiagnosticView(currentReport);
   root.innerHTML = renderReport(currentReport, view);
   bindMaintenance(root, container);
-  const summary = container.querySelector('[data-diagnostic-filter-summary]');
+  const summary = container.querySelector('#diagnosticFilterHost .filter-summary');
   if (summary) summary.textContent = filterSummary(view);
+  const clear = container.querySelector('#diagnosticFilterHost .filter-clear-button');
+  if (clear) clear.hidden = !hasDiagnosticFilters();
 }
 
 function bindHeaderActions(container) {
@@ -136,31 +121,144 @@ function bindHeaderActions(container) {
   };
 }
 
-function bindFilters(container) {
-  const search = container.querySelector('[data-diagnostic-search]');
-  const severity = container.querySelector('[data-diagnostic-severity]');
-  const source = container.querySelector('[data-diagnostic-source]');
-  search.addEventListener('input', () => {
-    filters.search = search.value.trim().toLowerCase();
-    renderCurrentReport(container);
+function renderDiagnosticFilterBar(container) {
+  const host = container.querySelector('#diagnosticFilterHost');
+  if (!host) return;
+  const action = document.createElement('button');
+  action.type = 'button';
+  action.className = `secondary diagnostic-live-tail${liveTailEnabled ? ' active' : ''}`;
+  action.dataset.liveTail = '';
+  action.textContent = liveTailEnabled ? 'Live tail on' : 'Live tail off';
+  action.setAttribute('aria-pressed', String(liveTailEnabled));
+  action.addEventListener('click', () => {
+    if (liveTailEnabled) stopLiveTail();
+    else startLiveTail(container);
+    renderDiagnosticFilterBar(container);
   });
-  severity.addEventListener('change', () => {
-    filters.severity = severity.value;
-    renderCurrentReport(container);
-  });
-  source.addEventListener('change', () => {
-    filters.source = source.value;
-    renderCurrentReport(container);
+
+  let searchTimer;
+  const view = currentReport ? filteredDiagnosticView(currentReport) : null;
+  host.replaceChildren(createFilterBar({
+    search: {
+      label: 'Search diagnostics',
+      placeholder: 'Search code, source, message, or workspace',
+      value: filters.search,
+      onInput: value => {
+        window.clearTimeout(searchTimer);
+        searchTimer = window.setTimeout(() => {
+          filters.search = value.trim().toLowerCase();
+          renderCurrentReport(container);
+        }, 120);
+      }
+    },
+    filters: activeDiagnosticFilters(container),
+    onOpenFilters: () => openDiagnosticFilters(container),
+    onClearAll: () => {
+      filters.search = '';
+      filters.scope = 'all';
+      filters.severity = 'all';
+      filters.source = 'all';
+      renderDiagnosticFilterBar(container);
+      renderCurrentReport(container);
+    },
+    summary: view ? filterSummary(view) : 'Loading diagnostics…',
+    action
+  }));
+}
+
+function activeDiagnosticFilters(container) {
+  const active = [];
+  const add = (key, label, value, display) => {
+    if (!value) return;
+    active.push({
+      label,
+      value: display || value,
+      onRemove: () => {
+        filters[key] = 'all';
+        if (key === 'scope' && filters.scope === 'findings') filters.source = 'all';
+        renderDiagnosticFilterBar(container);
+        renderCurrentReport(container);
+      }
+    });
+  };
+  if (filters.scope !== 'all') add('scope', 'Scope', filters.scope, scopeLabel(filters.scope));
+  if (filters.severity !== 'all') add('severity', 'Severity', filters.severity, severityLabel(filters.severity));
+  if (filters.source !== 'all') add('source', 'Source', filters.source);
+  return active;
+}
+
+function openDiagnosticFilters(container) {
+  openFilterDrawer({
+    title: 'Diagnostic filters',
+    value: { scope: filters.scope, severity: filters.severity, source: filters.source },
+    resetValue: { scope: 'all', severity: 'all', source: 'all' },
+    renderFields(fields, draft) {
+      const sourceField = filterSelectField({
+        label: 'Source',
+        value: draft.source,
+        options: [{ value: 'all', label: 'All sources' }, ...availableSources.map(source => ({ value: source, label: source }))],
+        disabled: draft.scope === 'findings',
+        help: draft.scope === 'findings' ? 'Source applies to service and failed activity logs.' : '',
+        onChange: value => { draft.source = value; }
+      });
+      const scopeField = filterSelectField({
+        label: 'Scope',
+        value: draft.scope,
+        options: [
+          { value: 'all', label: 'Everything' },
+          { value: 'findings', label: 'Findings' },
+          { value: 'service', label: 'Service log' },
+          { value: 'failed', label: 'Failed activity' }
+        ],
+        onChange: value => {
+          draft.scope = value;
+          const select = sourceField.querySelector('select');
+          const disabled = value === 'findings';
+          select.disabled = disabled;
+          if (disabled) {
+            draft.source = 'all';
+            select.value = 'all';
+          }
+          const help = sourceField.querySelector('small');
+          if (help) help.textContent = disabled ? 'Source applies to service and failed activity logs.' : '';
+        }
+      });
+      fields.append(
+        scopeField,
+        filterSelectField({
+          label: 'Severity',
+          value: draft.severity,
+          options: [
+            { value: 'all', label: 'All severities' },
+            { value: 'error', label: 'Blocking' },
+            { value: 'warning', label: 'Warnings' },
+            { value: 'info', label: 'Recommendations' }
+          ],
+          onChange: value => { draft.severity = value; }
+        }),
+        sourceField
+      );
+    },
+    onApply(draft) {
+      filters.scope = draft.scope || 'all';
+      filters.severity = draft.severity || 'all';
+      filters.source = filters.scope === 'findings' ? 'all' : draft.source || 'all';
+      renderDiagnosticFilterBar(container);
+      renderCurrentReport(container);
+    }
   });
 }
 
-function bindLiveTail(container) {
-  const button = container.querySelector('[data-live-tail]');
-  button.onclick = () => {
-    if (liveTailEnabled) stopLiveTail();
-    else startLiveTail(container);
-    updateLiveTailButton(container);
-  };
+function hasDiagnosticFilters() {
+  return Boolean(filters.search || filters.scope !== 'all' || filters.severity !== 'all' || filters.source !== 'all');
+}
+
+function scopeLabel(value) {
+  return { findings: 'Findings', service: 'Service log', failed: 'Failed activity' }[value] || 'Everything';
+}
+
+function severityLabel(value) {
+  return { error: 'Blocking', warning: 'Warnings', info: 'Recommendations' }[value] || value;
 }
 
 function startLiveTail(container) {
@@ -180,7 +278,7 @@ function stopLiveTail() {
 
 async function refreshLiveTail() {
   if (liveTailLoading) return;
-  if (!currentContainer || !document.contains(currentContainer) || !location.hash.startsWith('#settings/diagnostics')) {
+  if (!currentContainer || !document.contains(currentContainer) || !location.hash.startsWith('#diagnostics')) {
     stopLiveTail();
     return;
   }
@@ -200,23 +298,12 @@ function updateLiveTailButton(container) {
   button.classList.toggle('active', liveTailEnabled);
 }
 
-function updateSourceOptions(container, report) {
-  const select = container.querySelector('[data-diagnostic-source]');
-  if (!select) return;
+function updateSourceOptions(report) {
   const sources = new Set();
   for (const entry of report.logs?.runtime?.entries || []) sources.add(String(entry.source || 'desktop'));
   for (const entry of report.logs?.failedActivity || []) sources.add(String(entry.tool || 'activity'));
-  const available = [...sources].filter(Boolean).sort((left, right) => left.localeCompare(right));
-  select.replaceChildren(optionElement('all', 'All sources'), ...available.map(source => optionElement(source, source)));
-  if (!available.includes(filters.source)) filters.source = 'all';
-  select.value = filters.source;
-}
-
-function optionElement(value, label) {
-  const option = document.createElement('option');
-  option.value = value;
-  option.textContent = label;
-  return option;
+  availableSources = [...sources].filter(Boolean).sort((left, right) => left.localeCompare(right));
+  if (!availableSources.includes(filters.source)) filters.source = 'all';
 }
 
 function setReportActionsEnabled(container, enabled) {
@@ -299,9 +386,12 @@ function openFullResetDialog(container) {
 }
 
 function filteredDiagnosticView(report) {
-  const findings = (report.findings || []).filter(matchesFinding);
-  const runtime = (report.logs?.runtime?.entries || []).filter(entry => matchesLog(entry, 'runtime'));
-  const failed = (report.logs?.failedActivity || []).filter(entry => matchesLog(entry, 'failed'));
+  const showFindings = filters.scope === 'all' || filters.scope === 'findings';
+  const showService = filters.scope === 'all' || filters.scope === 'service';
+  const showFailed = filters.scope === 'all' || filters.scope === 'failed';
+  const findings = showFindings ? (report.findings || []).filter(matchesFinding) : [];
+  const runtime = showService ? (report.logs?.runtime?.entries || []).filter(entry => matchesLog(entry, 'runtime')) : [];
+  const failed = showFailed ? (report.logs?.failedActivity || []).filter(entry => matchesLog(entry, 'failed')) : [];
   return {
     findings,
     runtime,
@@ -477,9 +567,9 @@ function downloadDiagnosticState(report) {
 
 function unavailableHtml(report) {
   const title = report?.title || 'Diagnostics unavailable';
-  const message = report?.error || 'The local service did not return a diagnostic report.';
-  const recovery = report?.recovery?.message || 'Refresh the dashboard or restart the local service.';
-  const href = report?.recovery?.href || '#settings/connection';
+  const message = report?.error || 'The Rel.AI connection service did not return a diagnostic report.';
+  const recovery = report?.recovery?.message || 'Refresh the dashboard or restart the Rel.AI connection.';
+  const href = report?.recovery?.href || '#connection';
   return `<div class="diagnostic-clear diagnostic-unavailable">
     <strong>${esc(title)}</strong><span>${esc(message)}</span><small>${esc(recovery)}</small>
     <a class="buttonlike secondary" href="${esc(href)}">${esc(report?.recovery?.actionLabel || 'Open Connection')}</a>

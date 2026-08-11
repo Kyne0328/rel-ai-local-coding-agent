@@ -115,4 +115,4 @@ function statusDotClass(value) {
   return DOT_CLASSES[statusTone(value)];
 }
 
-export { EXACT_STATUS_TONES, normalizeStatus, statusDotClass, statusPillClass, statusTone };
+export {   statusDotClass, statusPillClass, statusTone };

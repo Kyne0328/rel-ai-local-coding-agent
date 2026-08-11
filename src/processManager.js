@@ -54,12 +54,40 @@ async function startManagedProcess(workspace, config, args = {}, context = {}) {
   const cwd = resolveCommandCwd(workspace, args.cwd);
   const env = normalizeCommandEnv(args.env);
   const shell = resolveShell();
+  const workSessionId = String(context.taskId || args.work_id || '').trim();
+  const originatingTaskId = String(args._operationTaskId || context.nativeTaskId || '').trim();
+  const principalKey = principalKeyForContext(context);
+  const environmentKeys = Object.keys(env).sort();
+  const reuseFingerprint = managedProcessReuseFingerprint({
+    workspaceId: workspace.alias,
+    workSessionId,
+    principalKey,
+    command,
+    cwd: cwd.relativePath,
+    kind,
+    purpose,
+    environmentKeys
+  });
+  hydrateProcessMetadata(config);
+  const reusable = args.reuseExisting === false ? null : findReusableManagedProcess(reuseFingerprint);
+  if (reusable) {
+    return {
+      ...processSnapshot(reusable, { includeTail: true, tailBytes: 8192 }),
+      reused: true,
+      readiness: {
+        verified: reusable.status === 'running',
+        observedAt: new Date().toISOString(),
+        waitedMs: 0,
+        status: reusable.status,
+        stdoutBytes: reusable.stdoutBytes,
+        stderrBytes: reusable.stderrBytes
+      }
+    };
+  }
   const processId = `proc_${crypto.randomBytes(24).toString('base64url')}`;
   const directory = processDirectory(config, processId);
   const stdoutPath = path.join(directory, 'stdout.log');
   const stderrPath = path.join(directory, 'stderr.log');
-  const workSessionId = String(context.taskId || args.work_id || '').trim();
-  const originatingTaskId = String(args._operationTaskId || context.nativeTaskId || '').trim();
   const record = {
     schemaVersion: PROCESS_SCHEMA_VERSION,
     runtimeId: RUNTIME_ID,
@@ -68,7 +96,8 @@ async function startManagedProcess(workspace, config, args = {}, context = {}) {
     workspacePath: workspace.path,
     originatingTaskId,
     workSessionId,
-    principalKey: principalKeyForContext(context),
+    principalKey,
+    reuseFingerprint,
     lifecycle: 'persistent',
     kind,
     purpose,
@@ -87,7 +116,7 @@ async function startManagedProcess(workspace, config, args = {}, context = {}) {
     stderrStartOffset: 0,
     stdoutPath,
     stderrPath,
-    environmentKeys: Object.keys(env).sort(),
+    environmentKeys,
     child: null,
     maxLogBytes: clampNumber(args.maxLogBytes, 65536, 256 * 1024 * 1024, DEFAULT_MAX_LOG_BYTES),
     persistTimer: null,
@@ -198,6 +227,7 @@ async function startManagedProcess(workspace, config, args = {}, context = {}) {
 
     return {
       ...processSnapshot(record, { includeTail: true, tailBytes: 8192 }),
+      reused: false,
       readiness: {
         verified: record.status === 'running',
         observedAt: new Date().toISOString(),
@@ -456,6 +486,28 @@ function workSessionWorkspace(config, taskId) {
   return String(readTaskHistorySession(config, id)?.workspace || '').trim();
 }
 
+function managedProcessReuseFingerprint({ workspaceId = '', workSessionId = '', principalKey = '', command = '', cwd = '.', kind = '', purpose = '', environmentKeys = [] } = {}) {
+  return crypto.createHash('sha256').update(JSON.stringify([
+    normalizeWorkspaceReference(workspaceId),
+    String(workSessionId || '').trim(),
+    String(principalKey || '').trim(),
+    String(command || '').trim(),
+    String(cwd || '.').trim().replaceAll('\\', '/'),
+    String(kind || '').trim().toLowerCase(),
+    String(purpose || '').trim(),
+    [...new Set((environmentKeys || []).map(value => String(value || '').trim()).filter(Boolean))].sort()
+  ])).digest('base64url');
+}
+
+function findReusableManagedProcess(reuseFingerprint) {
+  if (!reuseFingerprint) return null;
+  return [...processes.values()].find(record =>
+    record.reuseFingerprint === reuseFingerprint
+    && ['starting', 'running'].includes(record.status)
+    && record.lifecycle === 'persistent'
+    && !record.discarded
+  ) || null;
+}
 function principalKeyForContext(context = {}) {
   const authInfo = context.mcp?.authInfo || context.authInfo || {};
   const authExtra = authInfo?.extra && typeof authInfo.extra === 'object' ? authInfo.extra : {};
@@ -575,6 +627,7 @@ function metadataRecord(record) {
     originatingTaskId: record.originatingTaskId || '',
     workSessionId: record.workSessionId || '',
     principalKey: record.principalKey || '',
+    reuseFingerprint: record.reuseFingerprint || '',
     lifecycle: record.lifecycle || 'persistent',
     kind: record.kind || 'service',
     purpose: record.purpose || '',

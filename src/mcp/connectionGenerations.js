@@ -78,4 +78,4 @@ function sameState(previous, next) {
     && previous.configurationFingerprint === next.configurationFingerprint;
 }
 
-export { resolveConnectionGenerations, fingerprint, nextGeneration };
+export { resolveConnectionGenerations,   };

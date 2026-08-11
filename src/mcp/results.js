@@ -133,4 +133,4 @@ function tailText(value, maxChars) {
   return value.length <= maxChars ? value : `[kept last ${maxChars} chars]\n${value.slice(-maxChars)}`;
 }
 
-export { conciseToolResultText, toolResult };
+export {  toolResult };

@@ -8,6 +8,11 @@ import { resolveConnectionGenerations } from '../src/mcp/connectionGenerations.j
 import { runtimeMetadata } from '../src/runtimeCompatibility.js';
 
 const neutralManifest = buildToolManifest({});
+assert.equal(neutralManifest.schemaVersion, 6, 'gateway-visible MCP contract must use schema version 6');
+assert.equal(typeof neutralManifest.instructions, 'string');
+assert.match(neutralManifest.instructions, /Start each objective/);
+assert.ok(neutralManifest.tools.every(tool => tool.outputSchema), 'every canonical tool must include its output schema');
+assert.equal(neutralManifest.version, neutralManifest.hash.slice(0, 24), 'short manifest version must derive from the full digest');
 assert.equal(neutralManifest.version, buildToolManifest({}).version, 'neutral manifest must be deterministic');
 assert.equal(
   neutralManifest.version,
@@ -122,7 +127,7 @@ assert.equal(manager.snapshot().lastAuthMode, 'oauth');
 const changedManifest = { ...neutralManifest, version: 'changed-manifest', hash: 'changed-manifest-hash' };
 assert.equal(await manager.observeManifest(changedManifest, 'tools/call'), true);
 assert.equal(manager.snapshot().status, 'ready');
-assert.equal(manager.snapshot().toolManifestVersion, changedManifest.version);
+assert.equal(manager.snapshot().toolManifestVersion, changedManifest.version, 'Direct mode must continue sourcing schema state from its locally observed manifest.');
 assert.equal(manager.snapshot().metrics.toolManifestChanges, 1);
 assert.equal(await manager.observeManifest(changedManifest, 'tools/list'), false);
 

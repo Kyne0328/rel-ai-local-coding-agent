@@ -70,7 +70,7 @@ try {
   mcpSession = await createHttpMcpSession(`http://127.0.0.1:${port}`, { token, clientName: 'dashboard-live-rendering-acceptance' });
   const listed = await mcpSession.request('tools/list');
   assert.equal(listed.response.status, 200, JSON.stringify(listed.body));
-  const result = await waitForProbeResult(outputPath, 30_000).catch(async error => {
+  const result = await waitForProbeResult(outputPath, 45_000).catch(async error => {
     if (child?.exitCode == null) child.kill('SIGKILL');
     const [code] = await Promise.race([
       closePromise,
@@ -85,13 +85,21 @@ try {
   }
   assert.equal(result.initial.determinateValid, true);
   assert.equal(result.initial.indeterminateValid, true);
-  assert.ok(result.initial.terminalStaticCount >= 2, JSON.stringify(result.initial));
-  assert.equal(result.initial.terminalNoIndeterminate, true);
+  assert.equal(result.initial.terminalRowCount, 3, JSON.stringify(result.initial));
+  assert.equal(result.initial.terminalLiveClockCount, 0, 'terminal sessions must not register second-level live clocks');
+  assert.equal(result.initial.terminalDurationVisible, true, 'terminal sessions must retain a compact static duration');
+  assert.equal(result.initial.terminalNoProgress, true, 'terminal rows must not spend space on completed progress widgets');
   assert.equal(result.initial.unknownStatusCount, 0);
   assert.equal(result.initial.longTitleAccessible, true);
   assert.equal(result.initial.reducedMotion, true);
   assert.equal(result.liveToolUpdate.received, true, JSON.stringify(result.liveToolUpdate));
   assert.equal(result.liveToolUpdate.sameRouteNode, true, 'an MCP tool request must not remount the active dashboard route');
+  assert.deepEqual(result.passiveRouteStability.map(item => item.route), ['settings', 'diagnostics', 'workspaces', 'skills', 'tools']);
+  for (const route of result.passiveRouteStability) {
+    assert.equal(route.sameRouteNode, true, `MCP activity remounted #${route.route}: ${JSON.stringify(route)}`);
+    assert.equal(route.loadingSeen, false, `MCP activity exposed a loading placeholder on #${route.route}: ${JSON.stringify(route)}`);
+    assert.deepEqual(route.mainFrameNavigationDelta, { didStartNavigation: 0, didNavigate: 0, didFinishLoad: 0 }, `MCP activity navigated the main frame on #${route.route}`);
+  }
   assert.equal(result.taskInteraction.dialog, true);
   assert.ok(result.taskInteraction.detailText.length > 100);
   assert.equal(result.taskInteraction.workSessionId, true);
@@ -100,6 +108,23 @@ try {
   assert.equal(result.activityInteraction.expanded, true);
   assert.equal(result.activityInteraction.copyButton, true);
   assert.equal(result.activityInteraction.errorWrapped, true);
+  assert.deepEqual(result.activityDesktopGeometry.visibleHeaders, ['Time', 'Tool', 'Workspace', 'Status', 'Message', 'Actions'], JSON.stringify(result.activityDesktopGeometry));
+  assert.equal(result.activityDesktopGeometry.headerVisible, true, JSON.stringify(result.activityDesktopGeometry));
+  assert.equal(result.activityDesktopGeometry.cellVisible, true, JSON.stringify(result.activityDesktopGeometry));
+  assert.ok(result.activityDesktopGeometry.headerWidth >= 240, JSON.stringify(result.activityDesktopGeometry));
+  assert.ok(result.activityDesktopGeometry.cellWidth >= 240, JSON.stringify(result.activityDesktopGeometry));
+  assert.ok(result.activityDesktopGeometry.messageText.length > 0, JSON.stringify(result.activityDesktopGeometry));
+  assert.ok(Math.abs(result.activityDesktopGeometry.tableWidth - result.activityDesktopGeometry.wrapWidth) <= 1, JSON.stringify(result.activityDesktopGeometry));
+  assert.ok(Math.abs(result.activityDesktopGeometry.visibleHeaderWidth - result.activityDesktopGeometry.wrapWidth) <= 1, JSON.stringify(result.activityDesktopGeometry));
+  assert.ok(result.activityDesktopGeometry.trailingWidthGap <= 1, JSON.stringify(result.activityDesktopGeometry));
+  assert.ok(result.activityLiveStability.beforeText.length > 0, JSON.stringify(result.activityLiveStability));
+  assert.equal(result.activityLiveStability.afterText, result.activityLiveStability.beforeText, JSON.stringify(result.activityLiveStability));
+  assert.equal(result.activityLiveStability.sameMessageNode, true, 'clock and refresh updates must preserve the visible Activity message row');
+  assert.equal(result.activityLiveStability.childListMutations, 0, JSON.stringify(result.activityLiveStability));
+  assert.ok(result.activityLiveStability.messageCount > 0, JSON.stringify(result.activityLiveStability));
+  assert.equal(result.activityLiveStability.frozen, true, JSON.stringify(result.activityLiveStability));
+  assert.equal(result.activityLiveStability.resumed, true, JSON.stringify(result.activityLiveStability));
+  assert.ok(result.activityLiveStability.messageAfterResume.length > 0, JSON.stringify(result.activityLiveStability));
   assert.deepEqual(result.responsive.map(item => item.name), [
     'window-640x720',
     'css-320-zoom-200',

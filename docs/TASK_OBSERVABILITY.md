@@ -54,22 +54,26 @@ New writes use only these machine-readable states:
 - `waiting_for_approval`
 - `blocked`
 - `validating`
+- `validation_failed`
+- `inactive`
 - `completed`
 - `failed`
 - `cancelled`
 
-Terminal states are `completed`, `failed`, and `cancelled`. Warning counts are secondary execution metadata and do not replace an explicitly reported `completed` lifecycle state. The shared terminal predicate is used by the tracker and persistence layer so terminal timestamps and progress are not discarded by a different local status list.
+Terminal states are `completed`, `failed`, and `cancelled`. `inactive` is explicitly non-terminal and resumable. Warning counts are secondary execution metadata and do not replace an explicitly reported `completed` lifecycle state. The shared terminal predicate is used by the tracker and persistence layer so terminal timestamps and progress are not discarded by a different local status list.
 
 ### Allowed transitions
 
 | From | Allowed next states |
 | --- | --- |
-| `queued` | `planning`, `running`, `cancelled` |
-| `planning` | `running`, `waiting_for_approval`, `blocked`, `validating`, `completed`, `failed`, `cancelled` |
-| `running` | `planning`, `waiting_for_approval`, `blocked`, `validating`, `completed`, `failed`, `cancelled` |
-| `waiting_for_approval` | `running`, `blocked`, `failed`, `cancelled` |
-| `blocked` | `running`, `waiting_for_approval`, `failed`, `cancelled` |
-| `validating` | `running`, `completed`, `failed`, `cancelled` |
+| `queued` | `planning`, `running`, `inactive`, `cancelled` |
+| `planning` | `running`, `waiting_for_approval`, `blocked`, `validating`, `validation_failed`, `inactive`, `completed`, `failed`, `cancelled` |
+| `running` | `planning`, `waiting_for_approval`, `blocked`, `validating`, `validation_failed`, `inactive`, `completed`, `failed`, `cancelled` |
+| `waiting_for_approval` | `running`, `blocked`, `inactive`, `failed`, `cancelled` |
+| `blocked` | `running`, `waiting_for_approval`, `validating`, `validation_failed`, `inactive`, `failed`, `cancelled` |
+| `validating` | `running`, `validation_failed`, `inactive`, `completed`, `failed`, `cancelled` |
+| `validation_failed` | `planning`, `running`, `blocked`, `validating`, `inactive`, `completed`, `failed`, `cancelled` |
+| `inactive` | `planning`, `running`, `blocked`, `validating` |
 | Any terminal state | no nonterminal transition |
 
 Repeating the same state is idempotent. A stale running or progress update cannot reopen or overwrite a terminal task.
@@ -90,15 +94,22 @@ A terminal snapshot preserves, when available:
 
 ## Inactivity and historical compatibility
 
-Inactivity is a deterministic closure condition, not a separate task state.
+Inactivity is a non-terminal, resumable lifecycle state. A work session that becomes quiescent transitions to `inactive` instead of being rewritten as cancelled or failed simply because no new tool call arrived.
 
-- An inactive task with an unrecovered failure becomes `failed`.
-- An inactive task without recorded failure becomes `cancelled` with `endReason: inactivity_window`.
-- A completed, failed, or cancelled task remains terminal and is not later rewritten by inactivity.
+An inactive snapshot preserves the logical task identity and evidence needed to continue safely:
 
-Historical `working`, `active`, `waiting`, `settling`, `open`, `approval`, `awaiting_approval`, `attention`, `inactive`, and `expired` values remain readable only through normalization. The normalizer uses completion, failure, timestamp, and outcome evidence to map them to the canonical vocabulary. Those aliases are never emitted as new task states.
+- the same `work_id`, title, objective, workspace, and principal binding;
+- task-owned changed files and task-integrity generations;
+- current validation freshness and workspace-generation authority;
+- durable safe workflow evidence receipts and the bounded workflow snapshot;
+- call, success, failure, warning, and last-error counters;
+- an `inactiveAt` timestamp.
 
-Historical records are sanitized before entering the parsed-session cache. Unsafe historical strings therefore cannot remain in memory as an alternate raw representation that can later leak into another projection.
+It does not receive terminal `endedAt`, `completedAt`, or `cancelledAt` timestamps. A valid same `work_id` call from the authorized principal in the bound workspace implicitly resumes the work session into an active state. Resumption recreates live presentation state but does not create a second integrity model or reset authoritative mutation/validation history.
+
+Explicit cancellation, explicit completion, and a true terminal failure remain distinct terminal outcomes and cannot be reopened through inactivity handling.
+
+Historical records that used `inactive`, `expired`, or `endReason: inactivity_window` are normalized to canonical `inactive` when there is no explicit terminal action and completion is not known. Historical terminal records remain terminal. Unsafe historical strings are sanitized before entering the parsed-session cache, so they cannot persist in memory as an alternate raw representation that later leaks into another projection.
 
 ## Explicit cancellation
 
@@ -154,6 +165,7 @@ Each tool invocation owns one stable `operationId`, which is also the activity `
 Audit events with the same operation ID enrich the canonical lifecycle record but do not increment task call counts a second time.
 
 Permitted event data includes bounded category, action, state, title, summary, timing, tool name, workspace-relative target, sanitized resource URI, result status, affected-item count, warning count, normalized error, and allow-listed metadata. Raw arguments, unrestricted command output, file contents, environment values, and raw headers are not part of the dashboard activity projection.
+Workflow observability follows the same projection rule. Task-scoped results may carry the full bounded workflow snapshot, while the dashboard receives only workflow stage, risk level, boundary level, top recommended-action text, fresh/stale evidence counts, and repeat count. Raw evidence receipts are not part of dashboard task records, and recommendation arguments, command output, unrestricted paths, environment values, or secrets are not copied into the UI projection.
 
 ## Completion-summary privacy
 

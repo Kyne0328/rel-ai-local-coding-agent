@@ -70,9 +70,10 @@ function createHarness() {
   advanceToInactivity();
   const inactive = tracker.getToolActivity().lastTask;
   assert.equal(inactive?.taskId, taskId);
-  assert.equal(inactive?.status, 'cancelled', 'a recovered historical failure must not poison inactivity classification');
+  assert.equal(inactive?.status, 'inactive', 'a recovered historical failure must remain resumable after inactivity');
   assert.equal(inactive?.failedToolCallCount, 1);
-  assert.equal(inactive?.terminalReason, 'Task was cancelled after the inactivity window elapsed.');
+  assert.equal(inactive?.endedAt == null, true);
+  assert.ok(inactive?.inactiveAt);
 }
 
 {
@@ -95,8 +96,10 @@ function createHarness() {
   advanceToInactivity();
   const inactive = tracker.getToolActivity().lastTask;
   assert.equal(inactive?.taskId, taskId);
-  assert.equal(inactive?.status, 'failed');
-  assert.equal(inactive?.terminalReason, 'Task became inactive after an unrecovered failure.');
+  assert.equal(inactive?.status, 'inactive');
+  assert.equal(inactive?.resumeStatus, 'planning', 'inactivity must retain the state the task will resume from');
+  assert.equal(inactive?.failedToolCallCount, 1);
+  assert.match(inactive?.errorSummary || '', /Malformed regular expression/);
 }
 
 {
@@ -113,8 +116,9 @@ function createHarness() {
   const status = tracker.getToolActivity();
   assert.equal(status.activeTaskCount, 0, 'status reads must reap an overdue task even when its timer was delayed');
   assert.equal(status.lastTask?.taskId, taskId);
-  assert.equal(status.lastTask?.status, 'cancelled');
-  assert.equal(status.lastTask?.endReason, 'inactivity_window');
+  assert.equal(status.lastTask?.status, 'inactive');
+  assert.equal(status.lastTask?.endReason || '', '');
+  assert.ok(status.lastTask?.inactiveAt);
 }
 
 console.log('Task inactivity recovery tests passed.');

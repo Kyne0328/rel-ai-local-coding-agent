@@ -119,4 +119,4 @@ function statusMapFromOutput(output) {
   return map;
 }
 
-export { INTERNAL_STATUS_MAX_BYTES, gitStatusArgs, parseGitStatus, parseStatusBranchLine, formatGitStatus, statusMapFromOutput };
+export { INTERNAL_STATUS_MAX_BYTES, gitStatusArgs, parseGitStatus,  formatGitStatus, statusMapFromOutput };

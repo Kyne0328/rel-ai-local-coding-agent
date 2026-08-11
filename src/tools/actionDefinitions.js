@@ -62,7 +62,7 @@ const OPERATION_DEFINITION_VALUES = [
     name: "relai_process_start",
     title: "Start Managed Process",
     description: "Start a persistent service, watcher, or interactive program with stable identity, bounded persistent logs, interactive stdin, and workspace/task attribution. One-shot tests, builds, checks, and release gates must use relai_exec or relai_validate with action 'checks' instead.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"command":{"type":"string","minLength":1,"maxLength":20000},"cwd":{"type":"string"},"env":{"type":"object","additionalProperties":{"type":"string"}},"label":{"type":"string","maxLength":120},"kind":{"type":"string","enum":["service","watcher","interactive"]},"purpose":{"type":"string","minLength":1,"maxLength":300},"startupWaitMs":{"type":"number","minimum":0,"maximum":30000},"maxLogBytes":{"type":"number","minimum":65536,"maximum":268435456}},"required":["workspace","command","kind","purpose"],"additionalProperties":false},
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"command":{"type":"string","minLength":1,"maxLength":20000},"cwd":{"type":"string"},"env":{"type":"object","additionalProperties":{"type":"string"}},"label":{"type":"string","maxLength":120},"kind":{"type":"string","enum":["service","watcher","interactive"]},"purpose":{"type":"string","minLength":1,"maxLength":300},"reuseExisting":{"type":"boolean"},"startupWaitMs":{"type":"number","minimum":0,"maximum":30000},"maxLogBytes":{"type":"number","minimum":65536,"maximum":268435456}},"required":["workspace","command","kind","purpose"],"additionalProperties":false},
     handlerName: 'processStart',
     behavior: {"audit":"exec","cache":"workspace"},
   },
@@ -126,7 +126,7 @@ const OPERATION_DEFINITION_VALUES = [
   {
     name: "relai_semantic_search",
     title: "Hybrid Semantic Search",
-    description: "Read-only. Rank local source files with private hashed-vector, lexical, path, and symbol signals. No source text leaves the machine.",
+    description: "Read-only. Rank local source files with persistent Tree-sitter structure, code-graph, Zoekt when available, FTS5 lexical, path, and symbol signals. No neural model is used and no source text leaves the machine.",
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"query":{"type":"string","minLength":1,"maxLength":2000},"maxResults":{"type":"number","minimum":1,"maximum":100},"maxFiles":{"type":"number","minimum":1,"maximum":20000},"pathPrefix":{"type":"string","maxLength":500},"language":{"type":"string","maxLength":80}},"required":["workspace","query"],"additionalProperties":false},
     handlerName: 'semanticSearch',
   },
@@ -174,7 +174,7 @@ const OPERATION_DEFINITION_VALUES = [
     name: "relai_diff",
     title: "Review Local Repo Diff",
     description: "Read-only. Return repository status and current diff as a review artifact. Set redactSensitive:true to omit raw sensitive-file hunks and return metadata-only summaries; .env summaries identify added, removed, and changed key names without values. Pass path to filter to one file.",
-    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"staged":{"type":"boolean"},"path":{"type":"string"},"redactSensitive":{"type":"boolean"},"maxBytes":{"type":"number","minimum":1000,"maximum":5242880}},"required":["workspace"],"additionalProperties":false},
+    inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"staged":{"type":"boolean"},"path":{"type":"string"},"redactSensitive":{"type":"boolean"},"scope":{"type":"string","enum":["task","workspace"]},"maxBytes":{"type":"number","minimum":1000,"maximum":5242880}},"required":["workspace"],"additionalProperties":false},
     handlerName: 'diff',
     groups: ["audit"],
     behavior: {"summary":"diff"},
@@ -235,7 +235,7 @@ const OPERATION_DEFINITION_VALUES = [
   {
     name: "relai_edit",
     title: "Unified Workspace Edit",
-    description: `The one tool for changing files. Use oldText/newText with optional occurrence, replacements:[...] for several exact edits in one file, content for full-file replacement, updateText for patch-shaped changes, or edits:[...] for an atomic batch of up to ${MAX_BATCH_EDITS} files. Use updateText or staged updateText for larger repository-wide changes. Large content stages automatically; explicit stage start/append/commit accepts either content chunks or updateText chunks. expectedSha256 is supported for direct, staged, and batch file edits.`,
+    description: `The one tool for changing files. Use oldText/newText with optional occurrence, replacements:[...] for several exact edits in one file, content for full-file replacement, updateText for patch-shaped changes, or edits:[...] for an atomic batch of up to ${MAX_BATCH_EDITS} files. Keep larger repository-wide changes together as one logical updateText patch; if one request is too large, send staged updateText chunks and commit once instead of splitting the migration into repeated edit batches. Large content stages automatically. expectedSha256 is supported for direct, staged, and batch file edits.`,
     inputSchema: {"type":"object","properties":{"workspace":{"type":"string"},"path":{"type":"string","minLength":1,"maxLength":1000},"oldText":{"type":"string"},"newText":{"type":"string"},"occurrence":{"type":"number","minimum":1,"maximum":1000000},"replacements":{"type":"array","items":{"type":"object","properties":{"oldText":{"type":"string"},"newText":{"type":"string"},"occurrence":{"type":"number","minimum":1,"maximum":1000000}},"required":["oldText","newText"],"additionalProperties":false},"minItems":1,"maxItems":50},"content":{"type":"string"},"expectedSha256":{"type":"string","pattern":"^[a-fA-F0-9]{64}$"},"updateText":{"type":"string"},"envAction":{"type":"string","enum":["list","set","remove","compare"]},"key":{"type":"string","minLength":1,"maxLength":256},"value":{"type":"string","maxLength":65536},"templatePath":{"type":"string"},"edits":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"oldText":{"type":"string"},"newText":{"type":"string"},"occurrence":{"type":"number","minimum":1,"maximum":1000000},"replacements":{"type":"array","items":{"type":"object","properties":{"oldText":{"type":"string"},"newText":{"type":"string"},"occurrence":{"type":"number","minimum":1,"maximum":1000000}},"required":["oldText","newText"],"additionalProperties":false},"minItems":1,"maxItems":50},"content":{"type":"string"},"expectedSha256":{"type":"string","pattern":"^[a-fA-F0-9]{64}$"}},"required":["path"],"additionalProperties":false},"minItems":1,"maxItems":MAX_BATCH_EDITS},"runChecks":{"type":"boolean"},"level":{"type":"string","enum":["quick","standard","release"]},"returnDiff":{"type":"boolean"},"dryRun":{"type":"boolean"},"stage":{"type":"string","enum":["start","append","commit","abort"]},"writeId":{"type":"string","minLength":1,"maxLength":200}},"required":["workspace"],"oneOf":[{"required":["path","oldText","newText"],"not":{"anyOf":[{"required":["replacements"]},{"required":["content"]},{"required":["updateText"]},{"required":["edits"]},{"required":["envAction"]},{"required":["stage"]}]}},{"required":["path","replacements"],"not":{"anyOf":[{"required":["oldText"]},{"required":["content"]},{"required":["updateText"]},{"required":["edits"]},{"required":["envAction"]},{"required":["stage"]}]}},{"required":["path","content"],"not":{"anyOf":[{"required":["oldText"]},{"required":["replacements"]},{"required":["updateText"]},{"required":["edits"]},{"required":["envAction"]},{"required":["stage"]}]}},{"required":["updateText"],"not":{"anyOf":[{"required":["oldText"]},{"required":["replacements"]},{"required":["content"]},{"required":["edits"]},{"required":["envAction"]},{"required":["stage"]}]}},{"required":["edits"],"not":{"anyOf":[{"required":["oldText"]},{"required":["replacements"]},{"required":["content"]},{"required":["updateText"]},{"required":["envAction"]},{"required":["stage"]}]}},{"required":["envAction"],"not":{"anyOf":[{"required":["oldText"]},{"required":["replacements"]},{"required":["content"]},{"required":["updateText"]},{"required":["edits"]},{"required":["stage"]}]}},{"required":["stage"],"not":{"anyOf":[{"required":["oldText"]},{"required":["replacements"]},{"required":["edits"]},{"required":["envAction"]}]}}],"additionalProperties":false},
     handlerName: 'edit',
     behavior: {"audit":"edit","cache":"edit","startsSession":true,"deferStagedSession":true,"sessionWrite":true,"summary":"edit"},
@@ -388,7 +388,7 @@ const PUBLIC_DEFINITION_VALUES = [
     },
     annotations: annotations(false, false, false, false),
     behavior: { taskScope: 'optional', executionClass: 'always_immediate' },
-    dashboard: { category: 'Workflow' }
+    dashboard: { category: 'Workflow', capabilities: ['workflow'] }
   }),
   cloneOperation('relai_repo_snapshot', 'relai_snapshot', 'Repository Snapshot', 'Map repository context.'),
   cloneOperation('relai_read', 'relai_read', 'Read Repository', 'Read files, ranges, or directories.'),
@@ -462,8 +462,8 @@ const PUBLIC_DEFINITION_VALUES = [
     annotations: annotations(true, false, true, false),
     groups: ['audit']
   }),
-  cloneOperation('relai_edit', 'relai_edit', 'Edit Repository', `Apply up to ${MAX_BATCH_EDITS} bounded repository edits.`, { dashboard: { capabilities: ['edit'] } }),
-  cloneOperation('relai_exec', 'relai_exec', 'Run Command', 'Run a bounded command.'),
+  clonePublicEditOperation(),
+  cloneOperation('relai_exec', 'relai_exec', 'Run Command', 'Run a bounded command.', { dashboard: { capabilities: ['execute'] } }),
   define({
     name: 'relai_process',
     title: 'Manage Process',
@@ -479,6 +479,7 @@ const PUBLIC_DEFINITION_VALUES = [
         label: { type: 'string', maxLength: 120 },
         kind: { type: 'string', enum: ['service', 'watcher', 'interactive'] },
         purpose: { type: 'string', minLength: 1, maxLength: 300 },
+        reuseExisting: { type: 'boolean' },
         startupWaitMs: { type: 'number', minimum: 0, maximum: 30000 },
         maxLogBytes: { type: 'number', minimum: 65536, maximum: 268435456 },
         processId: { type: 'string', minLength: 1, maxLength: 200 },
@@ -496,15 +497,16 @@ const PUBLIC_DEFINITION_VALUES = [
       },
       required: ['action'],
       oneOf: [
-        branch('start', ['command', 'kind', 'purpose'], ['processId', 'stdoutOffset', 'stderrOffset', 'maxBytes', 'includeMetadata', 'metadataRevision', 'input', 'graceMs', 'status', 'activeOnly', 'includeTerminal', 'limit']),
-        branch('read', ['processId'], ['command', 'cwd', 'env', 'label', 'kind', 'purpose', 'startupWaitMs', 'maxLogBytes', 'input', 'graceMs', 'status', 'activeOnly', 'includeTerminal', 'limit']),
-        branch('write', ['processId', 'input'], ['command', 'cwd', 'env', 'label', 'kind', 'purpose', 'startupWaitMs', 'maxLogBytes', 'stdoutOffset', 'stderrOffset', 'maxBytes', 'includeMetadata', 'metadataRevision', 'graceMs', 'status', 'activeOnly', 'includeTerminal', 'limit']),
-        branch('stop', ['processId'], ['command', 'cwd', 'env', 'label', 'kind', 'purpose', 'startupWaitMs', 'maxLogBytes', 'stdoutOffset', 'stderrOffset', 'maxBytes', 'includeMetadata', 'metadataRevision', 'input', 'status', 'activeOnly', 'includeTerminal', 'limit']),
-        branch('list', [], ['command', 'cwd', 'env', 'label', 'kind', 'purpose', 'startupWaitMs', 'maxLogBytes', 'processId', 'stdoutOffset', 'stderrOffset', 'maxBytes', 'includeMetadata', 'metadataRevision', 'input', 'graceMs'])
+        branch('start', ['command', 'kind', 'purpose'], ['reuseExisting', 'processId', 'stdoutOffset', 'stderrOffset', 'maxBytes', 'includeMetadata', 'metadataRevision', 'input', 'graceMs', 'status', 'activeOnly', 'includeTerminal', 'limit']),
+        branch('read', ['processId'], ['command', 'cwd', 'env', 'label', 'kind', 'purpose', 'reuseExisting', 'startupWaitMs', 'maxLogBytes', 'input', 'graceMs', 'status', 'activeOnly', 'includeTerminal', 'limit']),
+        branch('write', ['processId', 'input'], ['command', 'cwd', 'env', 'label', 'kind', 'purpose', 'reuseExisting', 'startupWaitMs', 'maxLogBytes', 'stdoutOffset', 'stderrOffset', 'maxBytes', 'includeMetadata', 'metadataRevision', 'graceMs', 'status', 'activeOnly', 'includeTerminal', 'limit']),
+        branch('stop', ['processId'], ['command', 'cwd', 'env', 'label', 'kind', 'purpose', 'reuseExisting', 'startupWaitMs', 'maxLogBytes', 'stdoutOffset', 'stderrOffset', 'maxBytes', 'includeMetadata', 'metadataRevision', 'input', 'status', 'activeOnly', 'includeTerminal', 'limit']),
+        branch('list', [], ['command', 'cwd', 'env', 'label', 'kind', 'purpose', 'reuseExisting', 'startupWaitMs', 'maxLogBytes', 'processId', 'stdoutOffset', 'stderrOffset', 'maxBytes', 'includeMetadata', 'metadataRevision', 'input', 'graceMs'])
       ],
       additionalProperties: false
     },
     annotations: annotations(false, true, false, true),
+    dashboard: { capabilities: ['execute'] },
     behavior: { executionClass: 'persistent_process' }
   }),
   define({
@@ -593,15 +595,15 @@ const PUBLIC_DEFINITION_VALUES = [
       required: ['action'],
       oneOf: [
         branch('diff', [], ['paths', 'confirmation', 'removeUntracked', 'mode', 'maxCandidates', 'planId']),
-        branch('restore', ['paths'], ['staged', 'path', 'redactSensitive', 'maxBytes', 'confirmation', 'removeUntracked', 'mode', 'maxCandidates', 'planId']),
-        branch('reset', ['confirmation'], ['staged', 'path', 'redactSensitive', 'maxBytes', 'paths', 'mode', 'maxCandidates', 'planId']),
-        branch('tidy_plan', [], ['staged', 'path', 'redactSensitive', 'maxBytes', 'paths', 'confirmation', 'removeUntracked', 'planId']),
-        branch('tidy_run', ['planId'], ['staged', 'path', 'redactSensitive', 'maxBytes', 'paths', 'confirmation', 'removeUntracked', 'mode', 'maxCandidates'])
+        branch('restore', ['paths'], ['staged', 'path', 'redactSensitive', 'scope', 'maxBytes', 'confirmation', 'removeUntracked', 'mode', 'maxCandidates', 'planId']),
+        branch('reset', ['confirmation'], ['staged', 'path', 'redactSensitive', 'scope', 'maxBytes', 'paths', 'mode', 'maxCandidates', 'planId']),
+        branch('tidy_plan', [], ['staged', 'path', 'redactSensitive', 'scope', 'maxBytes', 'paths', 'confirmation', 'removeUntracked', 'planId']),
+        branch('tidy_run', ['planId'], ['staged', 'path', 'redactSensitive', 'scope', 'maxBytes', 'paths', 'confirmation', 'removeUntracked', 'mode', 'maxCandidates'])
       ],
       additionalProperties: false
     },
     annotations: annotations(false, true, false, false),
-    dashboard: { capabilities: ['validate', 'recover'] },
+    dashboard: { capabilities: ['review', 'recover'] },
     groups: ['audit', 'cleanup']
   }),
   define({
@@ -698,6 +700,53 @@ function cloneOperation(sourceName, name, title, description, overrides = {}) {
     outputSchema: RESULT_SCHEMA,
     handlerName: 'compactDispatch'
   });
+}
+
+function clonePublicEditOperation() {
+  const source = getOperationDefinition('relai_edit');
+  if (!source) throw new Error('Missing internal operation definition: relai_edit');
+  return cloneOperation('relai_edit', 'relai_edit', 'Edit Repository', source.description, {
+    inputSchema: publicEditInputSchema(source.inputSchema),
+    dashboard: { capabilities: ['edit'] }
+  });
+}
+
+// Connector-side JSON Schema implementations vary in how faithfully they expose
+// non-discriminated oneOf/not branches to a model. Keep structural validation at
+// the MCP boundary, then let the edit planner enforce mode exclusivity before it
+// resolves or writes any path. This produces one actionable runtime error instead
+// of a wrapper-level list of failures from every possible edit form.
+function publicEditInputSchema(inputSchema) {
+  const { oneOf: _oneOf, ...structuralSchema } = inputSchema;
+  const properties = inputSchema.properties || {};
+  const describe = (name, description) => ({ ...properties[name], description });
+  return {
+    ...structuralSchema,
+    description: 'Choose one primary form. Rel.AI validates the selected form before touching the workspace.',
+    properties: {
+      ...properties,
+      workspace: describe('workspace', 'Optional workspace ownership assertion. The work_id already identifies the bound workspace.'),
+      path: describe('path', 'Workspace-relative target path. Required for full-file content and exact replacement forms.'),
+      oldText: describe('oldText', 'Exact non-empty current text to replace. Pair with newText.'),
+      newText: describe('newText', 'Replacement text paired with oldText. An empty string deletes the matched text.'),
+      occurrence: describe('occurrence', 'One-based occurrence to replace when oldText is not unique.'),
+      replacements: describe('replacements', 'Several exact oldText/newText replacements in one file.'),
+      content: describe('content', 'Complete replacement content for one file. Use with path; an empty string creates an empty file.'),
+      expectedSha256: describe('expectedSha256', 'Optional stale-write guard for direct, staged, batch, and environment edits.'),
+      updateText: describe('updateText', 'Git unified diff or structured OpenAI patch text for patch-shaped changes.'),
+      envAction: describe('envAction', 'Secret-safe environment operation: list, set, remove, or compare.'),
+      key: describe('key', 'Environment key used by envAction set or remove.'),
+      value: describe('value', 'Environment value used by envAction set. Values are never returned.'),
+      templatePath: describe('templatePath', 'Public environment template used by envAction compare.'),
+      edits: describe('edits', `Atomic structured batch of up to ${MAX_BATCH_EDITS} file edits.`),
+      runChecks: describe('runChecks', 'Run detected validation checks after a successful edit.'),
+      level: describe('level', 'Validation level used when runChecks is true.'),
+      returnDiff: describe('returnDiff', 'Return a bounded diff after a successful edit.'),
+      dryRun: describe('dryRun', 'Validate and preview the edit without changing files.'),
+      stage: describe('stage', 'Chunked content or updateText lifecycle: start, append, commit, or abort.'),
+      writeId: describe('writeId', 'Opaque staged-write ID returned by stage start.')
+    }
+  };
 }
 
 function annotations(readOnlyHint, destructiveHint, idempotentHint, openWorldHint) {

@@ -1,4 +1,4 @@
 interface:
   display_name: "Rel.AI Debugging"
-  short_description: "Systematic defect isolation and repair"
-  default_prompt: "Use $rel-ai-debugging to reproduce, isolate, fix, and verify the repository defect through Rel.AI."
+  short_description: "Causal defect isolation and repair"
+  default_prompt: "Use $rel-ai-debugging to reproduce the defect, trace its causal path, fix the shared root cause, and prove the targeted regression through Rel.AI."

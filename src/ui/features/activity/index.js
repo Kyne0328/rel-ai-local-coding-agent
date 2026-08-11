@@ -1,16 +1,36 @@
 import { fetchJson } from '../../api.js';
-import { openDrawer } from '../../components/drawer.js';
+import { closeDrawer, openDrawer } from '../../components/drawer.js';
+import { createFilterBar } from '../../components/filter-bar.js';
+import { filterSelectField, openFilterDrawer } from '../../components/filter-drawer.js';
 import { pillHtml } from '../../components/pill.js';
 import { toast } from '../../components/toast.js';
 import { virtualizeTable } from '../../components/table.js';
 import { esc, timeAgo } from '../../utils.js';
-import { getRouteParams, getWorkspaceFilter, navigate, replaceRouteParams, setWorkspaceFilter } from '../../router.js';
+import { getRouteParams, getWorkspaceFilter, navigate, replaceRouteParams, routeHref } from '../../router.js';
 import { activityEventId } from '../../activity-event.js';
 import { copyText } from '../../clipboard.js';
-import { eventTimestampMs, eventTimestampValue } from '../../../taskEvents.js';
+import { eventTimestampValue } from '../../../taskEvents.js';
+import {
+  activityAbsoluteTime,
+  activityActionLabel,
+  activityEntriesFingerprint,
+  activityFilterTransition,
+  activityMessage,
+  activitySessionView,
+  activityStatusGroup,
+  filterActivityEntries,
+  mergeActivityEntries,
+  nextActivityExpiry,
+  parseActivityHistoryResponse,
+  replaceActivityHistory,
+  sortActivityEntries
+} from './model.js';
 
 let _allEntries = [];
 let _paused = false;
+let _pausedEntries = [];
+let _liveEntriesSinceLoad = [];
+let _historyLoading = false;
 let _filterState = { search: '', timeRange: '1h', workspace: '', tool: '', status: '', task: '' };
 let _virtualizer = null;
 let _mountToken = 0;
@@ -18,17 +38,25 @@ let _requestedEventId = '';
 let _requestedEventRoute = '';
 let _openedRequestedEvent = false;
 let _loadError = '';
+let _renderedEntriesFingerprint = '';
+let _nextExpiryAt = Number.POSITIVE_INFINITY;
+let _clockListenerBound = false;
+let _filterOptions = { workspaces: [], tools: [] };
+let _sessionIndex = new Map();
+let _sessionIndexFingerprint = '';
+let _liveSnapshotFingerprint = '';
 
-export function mountActivity(container) {
+export function mountActivity(container, data = {}) {
   const token = ++_mountToken;
+  updateSessionIndex(data.tasks || []);
   const params = getRouteParams();
   _filterState.workspace = getWorkspaceFilter();
   _filterState.task = params.get('task') || '';
   _filterState.tool = params.get('tool') || '';
-  _filterState.status = ['ok', 'error'].includes(params.get('status')) ? params.get('status') : '';
+  _filterState.status = routeStatus(params.get('status'));
   _filterState.search = params.get('search') || '';
   _requestedEventId = params.get('event') || '';
-  const requestedEventRoute = _requestedEventId ? `${_filterState.task}|${_requestedEventId}` : '';
+  const requestedEventRoute = _requestedEventId ? _filterState.task + '|' + _requestedEventId : '';
   if (requestedEventRoute !== _requestedEventRoute) {
     _requestedEventRoute = requestedEventRoute;
     _openedRequestedEvent = false;
@@ -37,22 +65,93 @@ export function mountActivity(container) {
   _filterState.timeRange = ['15m', '1h', '24h', '7d', 'all'].includes(requestedRange) ? requestedRange : '1h';
   _virtualizer?.destroy();
   _virtualizer = null;
+  _allEntries = [];
+  _paused = false;
+  _pausedEntries = [];
+  _liveEntriesSinceLoad = [];
+  _historyLoading = true;
   _loadError = '';
+  _renderedEntriesFingerprint = '';
+  _liveSnapshotFingerprint = '';
+  _nextExpiryAt = Number.POSITIVE_INFINITY;
+  bindClockListener();
   container.innerHTML = '';
   container.appendChild(buildActivity());
-  loadLogs(token);
+  renderFilteredTable();
+  void loadLogs(token, { mode: 'replace' });
+}
+
+export function updateActivityLiveState(data = {}) {
+  const sessionsChanged = updateSessionIndex(data.tasks || []);
+  const liveEntries = Array.isArray(data.auditTail?.entries) ? data.auditTail.entries : [];
+  const liveFingerprint = JSON.stringify(liveEntries);
+  const entriesChanged = liveFingerprint === _liveSnapshotFingerprint ? false : mergeEntries(liveEntries);
+  _liveSnapshotFingerprint = liveFingerprint;
+  if (sessionsChanged && !entriesChanged) {
+    _renderedEntriesFingerprint = '';
+    renderFilteredTable({ rebuildFilterBar: true });
+  }
+  return sessionsChanged || entriesChanged;
+}
+
+function updateSessionIndex(tasks = []) {
+  const next = new Map();
+  for (const task of Array.isArray(tasks) ? tasks : []) {
+    const id = sessionIdentifier(task);
+    if (!id) continue;
+    next.set(id, {
+      id,
+      title: task.title || task.objective || task.currentActivity || 'Work session',
+      workspace: task.workspace || '',
+      status: task.status || ''
+    });
+  }
+  const fingerprint = JSON.stringify([...next.values()].map(item => [item.id, item.title, item.workspace, item.status]));
+  if (fingerprint === _sessionIndexFingerprint) return false;
+  _sessionIndex = next;
+  _sessionIndexFingerprint = fingerprint;
+  return true;
+}
+
+function sessionIdentifier(task = {}) {
+  return String(task.id || task.taskId || task.work_id || '').trim();
 }
 
 export function mergeEntries(entries) {
-  if (_paused || !Array.isArray(entries) || entries.length === 0) return;
-  _allEntries = mergeEntryLists(_allEntries, entries);
+  if (!Array.isArray(entries) || entries.length === 0) return false;
+  if (_historyLoading) _liveEntriesSinceLoad = mergeActivityEntries(_liveEntriesSinceLoad, entries).entries;
+  if (_paused) {
+    _pausedEntries = mergeActivityEntries(_pausedEntries, entries).entries;
+    return false;
+  }
+  const merged = mergeActivityEntries(_allEntries, entries);
+  if (!merged.changed) return false;
+  _allEntries = merged.entries;
   updateFilterOptions();
   renderFilteredTable();
   maybeOpenRequestedEvent();
+  return true;
 }
 
 export function prependEntry(entry) {
-  mergeEntries(entry ? [entry] : []);
+  return mergeEntries(entry ? [entry] : []);
+}
+
+function routeStatus(value) {
+  const status = String(value || '').trim().toLowerCase();
+  if (status === 'ok') return 'succeeded';
+  if (status === 'error') return 'failed';
+  return ['succeeded', 'active', 'failed', 'blocked', 'cancelled', 'other'].includes(status) ? status : '';
+}
+
+function bindClockListener() {
+  if (_clockListenerBound) return;
+  window.addEventListener('relai:clock-tick', event => {
+    const now = Number(event?.detail?.now || Date.now());
+    if (now < _nextExpiryAt) return;
+    renderFilteredTable({ now });
+  });
+  _clockListenerBound = true;
 }
 
 function buildActivity() {
@@ -60,201 +159,302 @@ function buildActivity() {
   root.className = 'section activity-page';
 
   const toolbar = document.createElement('div');
-  toolbar.className = 'activity-toolbar';
-
-  const searchInput = document.createElement('input');
-  searchInput.className = 'activity-search';
-  searchInput.type = 'search';
-  searchInput.placeholder = 'Search tool, workspace, path, or message';
-  searchInput.setAttribute('aria-label', 'Search activity');
-  searchInput.value = _filterState.search || '';
-  let searchTimer;
-  searchInput.addEventListener('input', () => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => {
-      _filterState.search = searchInput.value;
-      syncFilterRoute();
-      renderFilteredTable();
-    }, 160);
-  });
-
-  const timeRange = document.createElement('div');
-  timeRange.className = 'segment-group';
-  timeRange.setAttribute('aria-label', 'Activity time range');
-  for (const range of ['15m', '1h', '24h', '7d', 'All']) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    const selected = range.toLowerCase() === _filterState.timeRange;
-    button.className = `secondary segment-button${selected ? ' active' : ''}`;
-    button.textContent = range;
-    button.setAttribute('aria-pressed', String(selected));
-    button.onclick = () => {
-      timeRange.querySelectorAll('button').forEach(item => {
-        item.classList.remove('active');
-        item.setAttribute('aria-pressed', 'false');
-      });
-      button.classList.add('active');
-      button.setAttribute('aria-pressed', 'true');
-      _filterState.timeRange = range.toLowerCase();
-      syncFilterRoute();
-      renderFilteredTable({ resetHorizontalScroll: true });
-    };
-    timeRange.appendChild(button);
-  }
-
-  const workspaceFilter = createFilterSelect('activityWorkspaceFilter', 'All workspaces', value => {
-    _filterState.workspace = value;
-    setWorkspaceFilter(value);
-  });
-  const toolFilter = createFilterSelect('activityToolFilter', 'All tools', value => {
-    _filterState.tool = value;
-    syncFilterRoute();
-    renderFilteredTable();
-  });
-  const statusFilter = createFilterSelect('activityStatusFilter', 'All statuses', value => {
-    _filterState.status = value;
-    syncFilterRoute();
-    renderFilteredTable();
-  });
-  statusFilter.append(new Option('Successful', 'ok'), new Option('Failed', 'error'));
-  statusFilter.value = _filterState.status;
-
-  const clearButton = document.createElement('button');
-  clearButton.type = 'button';
-  clearButton.id = '__activity-clear-filters';
-  clearButton.className = 'secondary activity-clear-filters';
-  clearButton.textContent = 'Clear filters';
-  clearButton.hidden = !hasActiveFilters();
-  clearButton.onclick = () => {
-    const hadWorkspace = Boolean(_filterState.workspace);
-    _filterState = { search: '', timeRange: '1h', workspace: '', tool: '', status: '', task: '' };
-    if (hadWorkspace) {
-      navigate('activity');
-      return;
-    }
-    searchInput.value = '';
-    workspaceFilter.value = '';
-    toolFilter.value = '';
-    statusFilter.value = '';
-    timeRange.querySelectorAll('button').forEach(button => {
-      const active = button.textContent === '1h';
-      button.classList.toggle('active', active);
-      button.setAttribute('aria-pressed', String(active));
-    });
-    syncFilterRoute();
-    renderFilteredTable();
-  };
-
-  const pauseButton = document.createElement('button');
-  pauseButton.type = 'button';
-  pauseButton.className = `secondary activity-freeze${_paused ? ' active' : ''}`;
-  pauseButton.textContent = _paused ? 'Resume live list' : 'Freeze live list';
-  pauseButton.setAttribute('aria-pressed', String(_paused));
-  pauseButton.title = 'Freeze the table so new events do not shift rows while you read.';
-  pauseButton.onclick = () => {
-    _paused = !_paused;
-    pauseButton.textContent = _paused ? 'Resume live list' : 'Freeze live list';
-    pauseButton.classList.toggle('active', _paused);
-    pauseButton.setAttribute('aria-pressed', String(_paused));
-    toast(_paused ? 'Live activity is frozen.' : 'Live activity resumed.', { variant: _paused ? 'warn' : 'success', duration: 1800 });
-  };
-
-  const summary = document.createElement('div');
-  summary.id = '__activity-filter-summary';
-  summary.className = 'activity-filter-summary';
-  summary.setAttribute('role', 'status');
-  summary.setAttribute('aria-live', 'polite');
-  summary.setAttribute('aria-atomic', 'true');
-  toolbar.append(searchInput, timeRange, workspaceFilter, toolFilter, statusFilter, clearButton, pauseButton, summary);
+  toolbar.id = '__activity-filter-bar';
 
   const tableCard = document.createElement('div');
   tableCard.id = '__activity-table-wrap';
   tableCard.className = 'card activity-event-card';
   tableCard.innerHTML = '<div class="card-head"><h3>Event log</h3><span class="section-action" id="__activity-count">Loading…</span></div><div class="card-body"><div class="table-wrap"><table class="data-table activity-table"><caption class="sr-only">Audit activity log</caption><colgroup><col class="activity-col-time"><col class="activity-col-tool"><col class="activity-col-workspace"><col class="activity-col-status"><col class="activity-col-message"><col class="activity-col-action"></colgroup><thead><tr><th scope="col" class="activity-time-column">Time</th><th scope="col" class="activity-tool-column">Tool</th><th scope="col" class="activity-workspace-column">Workspace</th><th scope="col" class="activity-status-column">Status</th><th scope="col" class="activity-message-column">Message</th><th scope="col" class="activity-action-column"><span class="sr-only">Actions</span></th></tr></thead><tbody id="__activity-tbody"></tbody></table></div></div>';
   root.append(toolbar, tableCard);
+  queueMicrotask(() => renderActivityFilterBar(root));
   return root;
 }
 
-function createFilterSelect(id, allLabel, onChange) {
-  const select = document.createElement('select');
-  select.id = id;
-  select.className = 'activity-filter-select';
-  select.setAttribute('aria-label', allLabel);
-  select.appendChild(new Option(allLabel, ''));
-  select.addEventListener('change', () => onChange(select.value));
-  return select;
+function renderActivityFilterBar(scope = document) {
+  const host = scope.querySelector?.('#__activity-filter-bar') || document.getElementById('__activity-filter-bar');
+  if (!host) return;
+  const filtered = filteredEntries(Date.now());
+  const pause = document.createElement('button');
+  pause.type = 'button';
+  pause.id = '__activity-freeze';
+  pause.className = `secondary activity-freeze${_paused ? ' active' : ''}`;
+  pause.textContent = _paused ? 'Resume live list' : 'Freeze live list';
+  pause.title = 'Freeze the table so new events do not shift rows while you read.';
+  pause.setAttribute('aria-pressed', String(_paused));
+  pause.addEventListener('click', async () => {
+    if (_paused) {
+      await resumeLiveActivity();
+      return;
+    }
+    _paused = true;
+    updatePauseButton();
+    toast('Live activity is frozen. New events will be applied when you resume.', { variant: 'warn', duration: 2200 });
+  });
+
+  let searchTimer;
+  host.replaceChildren(createFilterBar({
+    search: {
+      label: 'Search activity',
+      placeholder: 'Search session, activity, tool, workspace, or path',
+      value: _filterState.search,
+      onInput: value => {
+        window.clearTimeout(searchTimer);
+        searchTimer = window.setTimeout(() => {
+          _filterState.search = value;
+          syncFilterRoute();
+          renderFilteredTable({ preserveFilterBar: true });
+        }, 160);
+      }
+    },
+    filters: activeActivityFilters(),
+    onOpenFilters: openActivityFilters,
+    onClearAll: clearActivityFilters,
+    summary: activityFilterSummary(filtered.length),
+    action: pause
+  }));
 }
 
-async function loadLogs(token) {
+function filteredEntries(now) {
+  return filterActivityEntries(_allEntries, _filterState, now, {
+    sessionTitle: entry => activitySessionView(entry, _sessionIndex).title
+  });
+}
+
+function activeActivityFilters() {
+  const filters = [];
+  const add = (key, label, value, display = value) => {
+    if (!value) return;
+    filters.push({ label, value: display, onRemove: () => removeActivityFilter(key) });
+  };
+  if (_filterState.timeRange !== '1h') add('timeRange', 'Time', _filterState.timeRange, _filterState.timeRange === 'all' ? 'All time' : _filterState.timeRange);
+  add('workspace', 'Workspace', _filterState.workspace);
+  add('tool', 'Tool', _filterState.tool);
+  add('status', 'Status', _filterState.status, statusFilterLabel(_filterState.status));
+  if (_filterState.task) {
+    const session = _sessionIndex.get(_filterState.task);
+    add('task', 'Session', _filterState.task, session?.title || `Session ${_filterState.task.slice(0, 8)}`);
+  }
+  return filters;
+}
+
+function openActivityFilters() {
+  openFilterDrawer({
+    title: 'Activity filters',
+    value: {
+      timeRange: _filterState.timeRange,
+      workspace: _filterState.workspace,
+      tool: _filterState.tool,
+      status: _filterState.status
+    },
+    resetValue: { timeRange: '1h', workspace: '', tool: '', status: '' },
+    renderFields(fields, draft) {
+      fields.append(
+        filterSelectField({
+          label: 'Time range',
+          value: draft.timeRange,
+          options: [
+            { value: '15m', label: 'Last 15 minutes' },
+            { value: '1h', label: 'Last hour' },
+            { value: '24h', label: 'Last 24 hours' },
+            { value: '7d', label: 'Last 7 days' },
+            { value: 'all', label: 'All time' }
+          ],
+          onChange: value => { draft.timeRange = value; }
+        }),
+        filterSelectField({
+          label: 'Workspace',
+          value: draft.workspace,
+          options: activitySelectOptions('All workspaces', _filterOptions.workspaces, draft.workspace),
+          onChange: value => { draft.workspace = value; }
+        }),
+        filterSelectField({
+          label: 'Tool',
+          value: draft.tool,
+          options: activitySelectOptions('All tools', _filterOptions.tools, draft.tool),
+          onChange: value => { draft.tool = value; }
+        }),
+        filterSelectField({
+          label: 'Status',
+          value: draft.status,
+          options: [
+            { value: '', label: 'All statuses' },
+            { value: 'succeeded', label: 'Succeeded' },
+            { value: 'active', label: 'In progress' },
+            { value: 'failed', label: 'Failed' },
+            { value: 'blocked', label: 'Blocked' },
+            { value: 'cancelled', label: 'Cancelled' },
+            { value: 'other', label: 'Other' }
+          ],
+          onChange: value => { draft.status = value; }
+        })
+      );
+    },
+    onApply: applyActivityFilters
+  });
+}
+
+function activitySelectOptions(allLabel, values, selected) {
+  const options = selected && !values.includes(selected) ? [selected, ...values] : values;
+  return [{ value: '', label: allLabel }, ...options.map(value => ({ value, label: value }))];
+}
+
+function applyActivityFilters(draft) {
+  const transition = activityFilterTransition(_filterState, draft);
+  _filterState = transition.filterState;
+  if (transition.workspaceChanged) {
+    navigate('activity', activityRouteParams());
+    return;
+  }
+  syncFilterRoute();
+  renderFilteredTable({ rebuildFilterBar: true, resetHorizontalScroll: true });
+}
+
+function removeActivityFilter(key) {
+  if (key === 'workspace') {
+    _filterState.workspace = '';
+    navigate('activity', activityRouteParams());
+    return;
+  }
+  if (key === 'timeRange') _filterState.timeRange = '1h';
+  else _filterState[key] = '';
+  syncFilterRoute();
+  renderFilteredTable({ rebuildFilterBar: true, resetHorizontalScroll: true });
+}
+
+function clearActivityFilters() {
+  const hadWorkspace = Boolean(_filterState.workspace);
+  _filterState = { search: '', timeRange: '1h', workspace: '', tool: '', status: '', task: '' };
+  if (hadWorkspace) {
+    navigate('activity', activityRouteParams());
+    return;
+  }
+  syncFilterRoute();
+  renderFilteredTable({ rebuildFilterBar: true, resetHorizontalScroll: true });
+}
+
+async function loadLogs(token, options = {}) {
+  const mode = options.mode === 'merge' ? 'merge' : 'replace';
   try {
     const data = await fetchJson('/api/logs?limit=500');
-    if (token !== _mountToken) return;
-    const fallbackEntries = data && Array.isArray(data.entries) ? data.entries : [];
-    _allEntries = mergeEntryLists(Array.isArray(data) ? data : fallbackEntries, _allEntries);
+    if (token !== _mountToken) return false;
+    const parsed = parseActivityHistoryResponse(data);
+    if (!parsed.ok) throw new Error(parsed.error);
+
+    if (mode === 'replace') {
+      const stored = replaceActivityHistory(parsed.entries);
+      _allEntries = mergeActivityEntries(stored, _liveEntriesSinceLoad).entries;
+      _liveEntriesSinceLoad = [];
+    } else {
+      _allEntries = mergeActivityEntries(_allEntries, parsed.entries).entries;
+    }
+    _historyLoading = false;
     _loadError = '';
     updateFilterOptions();
     renderFilteredTable();
     maybeOpenRequestedEvent();
+    return true;
   } catch (error) {
-    if (token !== _mountToken) return;
-    _loadError = error instanceof Error ? error.message : String(error);
-    renderFilteredTable();
+    if (token !== _mountToken) return false;
+    const message = error instanceof Error ? error.message : String(error);
+    if (mode === 'replace') {
+      _historyLoading = false;
+      _loadError = message;
+      _allEntries = mergeActivityEntries([], _liveEntriesSinceLoad).entries;
+      _liveEntriesSinceLoad = [];
+      updateFilterOptions();
+      renderFilteredTable();
+    } else {
+      toast(`Live activity resumed, but stored history could not be refreshed: ${message}`, { variant: 'warn', duration: 3600 });
+    }
+    return false;
   }
 }
 
+async function resumeLiveActivity() {
+  const buffered = _pausedEntries;
+  _paused = false;
+  _pausedEntries = [];
+  const merged = mergeActivityEntries(_allEntries, buffered);
+  if (merged.changed) {
+    _allEntries = merged.entries;
+    updateFilterOptions();
+    renderFilteredTable();
+    maybeOpenRequestedEvent();
+  }
+  updatePauseButton();
+  toast(buffered.length ? 'Buffered activity applied.' : 'Live activity resumed.', { variant: 'success', duration: 2200 });
+  await loadLogs(_mountToken, { mode: 'merge' });
+}
+
+function updatePauseButton() {
+  const button = document.getElementById('__activity-freeze');
+  if (!button) return;
+  button.textContent = _paused ? 'Resume live list' : 'Freeze live list';
+  button.classList.toggle('active', _paused);
+  button.setAttribute('aria-pressed', String(_paused));
+}
+
 function updateFilterOptions() {
-  replaceDynamicOptions('activityWorkspaceFilter', uniqueValues(_allEntries, entry => entry.workspace), 'All workspaces', _filterState.workspace);
-  replaceDynamicOptions('activityToolFilter', uniqueValues(_allEntries, entry => entry.tool || entry.type), 'All tools', _filterState.tool);
+  _filterOptions = {
+    workspaces: uniqueValues(_allEntries, entry => entry.workspace),
+    tools: uniqueValues(_allEntries, toolName)
+  };
 }
 
 function uniqueValues(entries, selector) {
   return [...new Set(entries.map(selector).filter(Boolean).map(String))].sort((left, right) => left.localeCompare(right));
 }
 
-function replaceDynamicOptions(id, values, allLabel, selected) {
-  const select = document.getElementById(id);
-  if (!select) return;
-  const options = selected && !values.includes(selected) ? [selected, ...values] : values;
-  select.innerHTML = '';
-  select.appendChild(new Option(allLabel, ''));
-  for (const value of options) select.appendChild(new Option(value, value));
-  select.value = selected || '';
-}
-
 function renderFilteredTable(options = {}) {
-  const filtered = applyFilters(_allEntries);
+  const now = Number(options.now || Date.now());
+  const filtered = filteredEntries(now);
+  _nextExpiryAt = nextActivityExpiry(_allEntries, _filterState, now);
   renderTable(filtered);
   if (options.resetHorizontalScroll === true) {
     const tableWrap = document.querySelector('#__activity-table-wrap .table-wrap');
     if (tableWrap) tableWrap.scrollLeft = 0;
   }
-  const clearButton = document.getElementById('__activity-clear-filters');
-  if (clearButton) clearButton.hidden = !hasActiveFilters();
-  const summary = document.getElementById('__activity-filter-summary');
-  if (!summary) return;
-  const active = [
-    _filterState.search && `search “${_filterState.search}”`,
-    _filterState.workspace && `workspace ${_filterState.workspace}`,
-    _filterState.tool && `tool ${_filterState.tool}`,
-    _filterState.status && (_filterState.status === 'ok' ? 'successful only' : 'failed only'),
-    _filterState.task && `task ${_filterState.task.slice(0, 8)}`
-  ].filter(Boolean);
-  summary.textContent = _loadError
-    ? `${filtered.length} live event${filtered.length === 1 ? '' : 's'} shown · stored history could not be loaded.`
-    : active.length
-      ? `Showing ${filtered.length} of ${_allEntries.length} events · ${active.join(' · ')}`
-      : `Showing ${filtered.length} events from the selected time range.`;
+  if (options.rebuildFilterBar === true) renderActivityFilterBar();
+  else syncActivityFilterBar(filtered.length);
 }
 
-function syncFilterRoute() {
-  replaceRouteParams({
+function syncActivityFilterBar(filteredCount) {
+  const summary = document.querySelector('#__activity-filter-bar .filter-summary');
+  if (summary) summary.textContent = activityFilterSummary(filteredCount);
+  const clear = document.querySelector('#__activity-filter-bar .filter-clear-button');
+  if (clear) clear.hidden = !hasActiveFilters();
+}
+
+function activityFilterSummary(filteredCount) {
+  if (_historyLoading) return 'Loading stored activity history…';
+  if (_loadError) return `${filteredCount} live event${filteredCount === 1 ? '' : 's'} shown · stored history could not be loaded.`;
+  return `${filteredCount} of ${_allEntries.length} events shown`;
+}
+
+function statusFilterLabel(status) {
+  return {
+    succeeded: 'succeeded',
+    active: 'in progress',
+    failed: 'failed',
+    blocked: 'blocked',
+    cancelled: 'cancelled',
+    other: 'other'
+  }[status] || status;
+}
+
+function activityRouteParams() {
+  return {
+    workspace: _filterState.workspace,
     search: _filterState.search || null,
     time: _filterState.timeRange === '1h' ? null : _filterState.timeRange,
     tool: _filterState.tool || null,
     status: _filterState.status || null,
-    task: _filterState.task || null,
-    event: null
-  });
+    task: _filterState.task || null
+  };
+}
+
+function syncFilterRoute() {
+  replaceRouteParams({ ...activityRouteParams(), event: null });
 }
 
 function hasActiveFilters() {
@@ -268,74 +468,85 @@ function hasActiveFilters() {
   );
 }
 
-function applyFilters(entries) {
-  const now = Date.now();
-  const ranges = { '15m': 15 * 60000, '1h': 60 * 60000, '24h': 24 * 60 * 60000, '7d': 7 * 24 * 60 * 60000 };
-  const rangeMs = ranges[_filterState.timeRange];
-  return sortEntries(entries).filter(entry => {
-    if (rangeMs) {
-      const timestamp = eventTimestampMs(entry);
-      if (!timestamp || now - timestamp > rangeMs) return false;
-    }
-    if (_filterState.search) {
-      const query = _filterState.search.toLowerCase();
-      const haystack = [entry.tool, entry.type, entry.title, entry.operation, activityMessage(entry), entry.path, entry.resourceUri, entry.workspace, entry.category, entry.status]
-        .filter(Boolean).join(' ').toLowerCase();
-      if (!haystack.includes(query)) return false;
-    }
-    if (_filterState.workspace && entry.workspace !== _filterState.workspace) return false;
-    if (_filterState.tool && (entry.tool || entry.type) !== _filterState.tool) return false;
-    if (_filterState.status && (entryFailed(entry) ? 'error' : 'ok') !== _filterState.status) return false;
-    if (_filterState.task && entry.taskId !== _filterState.task) return false;
-    return true;
-  });
-}
-
 function renderTable(entries) {
   const body = document.getElementById('__activity-tbody');
   const count = document.getElementById('__activity-count');
-  if (!body) return;
-  if (count) count.textContent = _loadError
-    ? (entries.length ? `${entries.length} live event${entries.length === 1 ? '' : 's'} · history unavailable` : 'History unavailable')
-    : `${entries.length} event${entries.length === 1 ? '' : 's'}`;
+  if (!body) return false;
+  const fingerprint = JSON.stringify([
+    activityEntriesFingerprint(entries),
+    _sessionIndexFingerprint,
+    _historyLoading,
+    _loadError,
+    _requestedEventId
+  ]);
+  if (_renderedEntriesFingerprint === fingerprint) return false;
+  _renderedEntriesFingerprint = fingerprint;
+
+  if (count) count.textContent = _historyLoading
+    ? 'Loading…'
+    : _loadError
+      ? (entries.length ? `${entries.length} live event${entries.length === 1 ? '' : 's'} · history unavailable` : 'History unavailable')
+      : `${entries.length} event${entries.length === 1 ? '' : 's'}`;
   if (!entries.length) {
-    const emptyMessage = _loadError
-      ? 'Activity history could not be loaded. Live events will appear here when available.'
-      : 'No activity matches these filters.';
-    body.innerHTML = `<tr><td colspan="6"><div class="empty">${esc(emptyMessage)}</div></td></tr>`;
+    const emptyMessage = _historyLoading
+      ? 'Loading activity history…'
+      : _loadError
+        ? 'Activity history could not be loaded. Live events will appear here when available.'
+        : 'No activity matches these filters.';
+    body.innerHTML = `<tr><td colspan="4"><div class="empty">${esc(emptyMessage)}</div></td></tr>`;
     _virtualizer?.destroy();
     _virtualizer = null;
-    return;
+    return true;
   }
   if (_virtualizer) {
     _virtualizer.reinit(entries);
-    return;
+    return true;
   }
-  _virtualizer = virtualizeTable(body, entries, entry => {
-    const status = entry.status || (entryFailed(entry) ? 'failed' : 'succeeded');
-    const message = activityMessage(entry);
-    const timestamp = eventTimestampValue(entry);
-    const absoluteTime = eventTimestampMs(entry) ? new Date(timestamp).toLocaleString() : 'Time unavailable';
-    const row = document.createElement('tr');
-    row.className = 'clickable-row';
-    if (_requestedEventId && activityEventId(entry) === _requestedEventId) row.classList.add('activity-requested-row');
-    row.innerHTML = `
-      <td class="activity-time-column nowrap small" title="${esc(absoluteTime)}" data-clock-relative="${esc(timestamp)}">${esc(timeAgo(timestamp) || '—')}</td>
-      <td class="activity-tool-column truncate mono" title="${esc(entry.title || entry.operation || '')}">${esc(entry.tool || entry.type || 'activity')}</td>
-      <td class="activity-workspace-column truncate">${esc(entry.workspace || '—')}</td>
-      <td class="activity-status-column">${pillHtml(status)}</td>
-      <td class="activity-message-column activity-message-cell">
-        <span class="activity-message-mobile-meta">${pillHtml(status)}<code>${esc(entry.tool || entry.type || 'activity')}</code><span class="activity-message-mobile-time" data-clock-relative="${esc(timestamp)}">${esc(timeAgo(timestamp) || '—')}</span></span>
-        <span class="activity-message-copy"><strong>${esc(entry.title || entry.operation || '')}</strong>${entry.title || entry.operation ? ' · ' : ''}${esc(message)}</span>
-      </td>
-      <td class="activity-action-column"><button class="secondary activity-row-button" type="button" aria-label="Open ${esc(entry.tool || entry.type || 'activity')} event details">›</button></td>`;
-    row.onclick = () => openDetail(entry);
-    row.querySelector('.activity-row-button')?.addEventListener('click', event => {
-      event.stopPropagation();
-      openDetail(entry);
-    });
-    return row;
+  _virtualizer = virtualizeTable(body, entries, renderActivityRow);
+  return true;
+}
+
+function renderActivityRow(entry) {
+  const group = activityStatusGroup(entry);
+  const status = entry.status || (group === 'other' ? 'unknown' : group);
+  const message = activityMessage(entry);
+  const timestamp = eventTimestampValue(entry);
+  const absoluteTime = activityAbsoluteTime(entry);
+  const tool = toolName(entry);
+  const title = entry.title || entry.operation || '';
+  const relativeTime = timeAgo(timestamp) || '—';
+  const row = document.createElement('tr');
+  row.className = 'clickable-row';
+  row.tabIndex = 0;
+  if (_requestedEventId && activityEventId(entry) === _requestedEventId) row.classList.add('activity-requested-row');
+  row.setAttribute('aria-label', activityActionLabel(entry));
+  row.innerHTML = `
+    <td class="activity-time-column nowrap small" title="${esc(absoluteTime)}" data-clock-relative="${esc(timestamp)}">${esc(relativeTime)}</td>
+    <td class="activity-tool-column truncate mono" title="${esc(title)}">${esc(tool)}</td>
+    <td class="activity-workspace-column truncate">${esc(entry.workspace || '—')}</td>
+    <td class="activity-status-column">${pillHtml(status)}</td>
+    <td class="activity-message-column activity-message-cell">
+      <span class="activity-message-mobile-meta">${pillHtml(status)}<code>${esc(tool)}</code><span class="activity-message-mobile-time" data-clock-relative="${esc(timestamp)}">${esc(relativeTime)}</span></span>
+      <span class="activity-message-copy">${esc(message)}</span>
+      ${title ? `<span class="activity-message-title">${esc(title)}</span>` : ''}
+    </td>
+    <td class="activity-action-column"><button class="secondary activity-row-button" type="button" aria-label="${esc(activityActionLabel(entry))}">›</button></td>`;
+  row.onclick = () => openDetail(entry);
+  row.onkeydown = event => {
+    if (event.target !== row) return;
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    openDetail(entry);
+  };
+  row.querySelector('.activity-row-button')?.addEventListener('click', event => {
+    event.stopPropagation();
+    openDetail(entry);
   });
+  return row;
+}
+
+function toolName(entry) {
+  return entry?.tool?.name || entry?.tool || entry?.type || 'activity';
 }
 
 function maybeOpenRequestedEvent() {
@@ -349,44 +560,55 @@ function maybeOpenRequestedEvent() {
 function openDetail(entry) {
   if (!entry) return;
   const content = document.createElement('div');
-  content.className = 'detail-stack';
+  content.className = 'detail-stack activity-detail';
+  const group = activityStatusGroup(entry);
+  const displayStatus = entry.status || (group === 'other' ? 'unknown' : group);
+  const session = activitySessionView(entry, _sessionIndex);
 
   const head = document.createElement('div');
   head.className = 'activity-detail-head';
-  const displayStatus = entry.status || (entryFailed(entry) ? 'failed' : 'succeeded');
-  const eventTime = eventTimestampValue(entry);
-  head.innerHTML = `<div>${pillHtml(displayStatus)}</div><span class="muted">${esc(new Date(eventTime).toLocaleString())}</span>`;
+  head.innerHTML = `<div>${pillHtml(displayStatus)}</div><span class="muted">${esc(activityAbsoluteTime(entry))}</span>`;
   content.appendChild(head);
 
+  if (session.id) {
+    const context = document.createElement('section');
+    context.className = 'activity-detail-section activity-session-context';
+    context.innerHTML = `<h3>Session</h3><strong>${esc(session.title)}</strong><span>${esc([session.workspace, session.shortId].filter(Boolean).join(' · '))}</span><div class="activity-session-actions"><a class="buttonlike secondary" href="${routeHref('tasks', { workspace: session.workspace || entry.workspace, task: session.id })}">Open session</a><a class="buttonlike secondary" href="${routeHref('activity', { workspace: session.workspace || entry.workspace, task: session.id, time: 'all' })}">Show only this session</a></div>`;
+    for (const link of context.querySelectorAll('a')) link.addEventListener('click', closeDrawer);
+    content.appendChild(context);
+  }
+
+  appendReadableSection(content, 'What happened', activityMessage(entry));
+  appendReadableSection(content, 'Target', activityTargetLabel(entry));
+  appendReadableSection(content, 'Result', activityResultText(entry));
+  const error = activityErrorText(entry);
+  if (error) appendReadableSection(content, 'Error', error, 'activity-detail-error');
+
+  const technical = document.createElement('details');
+  technical.className = 'activity-detail-technical';
+  technical.innerHTML = '<summary>Technical details</summary>';
   const fields = [
-    ['Title', entry.title || entry.operation || 'Activity event'],
-    ['Category', entry.category || 'tool'],
+    ['Tool', toolName(entry)],
     ['Action', entry.action || entry.operation || 'execute'],
-    ['Tool', entry.tool || entry.type || 'activity'],
-    ['Workspace', entry.workspace || '—'],
-    ...(entry.path ? [['Path', entry.path]] : []),
-    ...(entry.sessionId ? [['Session', entry.sessionId]] : []),
-    ...(entry.taskId ? [['Task', entry.taskId]] : []),
+    ['Category', entry.category || 'tool'],
+    ['Event ID', entry.eventId || entry.id || '—'],
+    ['Work session ID', entry.taskId || entry.sessionId || '—'],
+    ...(entry.sequence != null ? [['Sequence', entry.sequence]] : [])
   ];
   const fieldGroup = document.createElement('div');
-  fieldGroup.className = 'activity-detail-section';
-  fieldGroup.innerHTML = '<h3>Event</h3>';
+  fieldGroup.className = 'activity-detail-fields';
   for (const [label, value] of fields) {
     const row = document.createElement('div');
     row.className = 'detail-field';
     row.innerHTML = `<span class="detail-field-label">${esc(label)}</span><span>${esc(value)}</span>`;
     fieldGroup.appendChild(row);
   }
-  content.appendChild(fieldGroup);
+  technical.appendChild(fieldGroup);
+  appendRawDetail(technical, 'Raw target', entry.target);
+  appendRawDetail(technical, 'Raw result', entry.result);
+  appendRawDetail(technical, 'Safe metadata', entry.metadata);
+  appendRawDetail(technical, 'Raw error', entry.error);
 
-  appendDetailSection(content, 'Summary', entry.summary || entry.message);
-  appendDetailSection(content, 'Target', entry.target || (entry.path ? { workspaceRelativePath: entry.path } : null));
-  appendDetailSection(content, 'Result', entry.result);
-  appendDetailSection(content, 'Error', entry.error);
-  appendDetailSection(content, 'Safe metadata', entry.metadata);
-
-  const actions = document.createElement('div');
-  actions.className = 'activity-detail-actions';
   const copyButton = document.createElement('button');
   copyButton.type = 'button';
   copyButton.className = 'secondary';
@@ -404,58 +626,56 @@ function openDetail(entry) {
       toast('Clipboard access failed.', { variant: 'error' });
     }
   };
-  actions.appendChild(copyButton);
-  content.appendChild(actions);
-  openDrawer({ title: entry.title || entry.operation || entry.tool || entry.type || 'Activity detail', content });
+  technical.appendChild(copyButton);
+  content.appendChild(technical);
+
+  openDrawer({ title: entry.title || entry.operation || toolName(entry) || 'Activity detail', content });
 }
 
-function appendDetailSection(container, title, value) {
-  if (value === undefined || value === null || value === '') return;
+function appendReadableSection(container, title, value, className = '') {
+  if (!value) return;
   const section = document.createElement('section');
-  section.className = 'activity-detail-section';
+  section.className = ['activity-detail-section', className].filter(Boolean).join(' ');
   const heading = document.createElement('h3');
   heading.textContent = title;
-  section.append(heading, detailPre(typeof value === 'string' ? value : JSON.stringify(value, null, 2)));
+  const copy = document.createElement('p');
+  copy.textContent = value;
+  section.append(heading, copy);
   container.appendChild(section);
 }
 
-function detailPre(text) {
+function appendRawDetail(container, title, value) {
+  if (value === undefined || value === null || value === '') return;
+  if (typeof value === 'object' && Object.keys(value).length === 0) return;
+  const section = document.createElement('section');
+  section.className = 'activity-detail-raw';
+  const heading = document.createElement('h4');
+  heading.textContent = title;
   const pre = document.createElement('pre');
   pre.className = 'detail-pre';
-  pre.textContent = text;
-  return pre;
+  pre.textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+  section.append(heading, pre);
+  container.appendChild(section);
+}
+
+function activityTargetLabel(entry) {
+  if (typeof entry.path === 'string' && entry.path.trim()) return entry.path.trim();
+  if (typeof entry.target === 'string' && entry.target.trim()) return entry.target.trim();
+  return entry.target?.workspaceRelativePath || entry.target?.path || '';
+}
+
+function activityResultText(entry) {
+  if (typeof entry.result === 'string') return entry.result.trim();
+  return String(entry.result?.outcome || entry.result?.summary || '').trim();
+}
+
+function activityErrorText(entry) {
+  if (typeof entry.error === 'string') return entry.error.trim();
+  return String(entry.error?.message || '').trim();
 }
 
 export function sortEntries(entries) {
-  return [...(Array.isArray(entries) ? entries : [])].sort((left, right) => eventTimestampMs(right) - eventTimestampMs(left));
-}
-
-function mergeEntryLists(current, incoming) {
-  const byKey = new Map((Array.isArray(current) ? current : []).map(entry => [entryKey(entry), entry]));
-  for (const entry of Array.isArray(incoming) ? incoming : []) {
-    if (!entry || typeof entry !== 'object') continue;
-    const key = entryKey(entry);
-    byKey.set(key, byKey.has(key) ? { ...byKey.get(key), ...entry } : entry);
-  }
-  return sortEntries([...byKey.values()]).slice(0, 1000);
-}
-
-function activityMessage(entry) {
-  return entry?.summary
-    || entry?.message
-    || entry?.currentActivity
-    || entry?.result?.outcome
-    || entry?.error?.message
-    || entry?.error
-    || entry?.path
-    || entry?.title
-    || entry?.operation
-    || 'No additional details recorded.';
-}
-
-function entryFailed(entry) {
-  const status = String(entry?.status || '').toLowerCase();
-  return entry?.ok === false || ['failed', 'blocked', 'cancelled', 'error'].includes(status);
+  return sortActivityEntries(entries);
 }
 
 function safeEventProjection(entry) {
@@ -468,9 +688,9 @@ function safeEventProjection(entry) {
     timestamp: entry.timestamp || entry.ts,
     category: entry.category,
     action: entry.action,
-    status: entry.status || (entryFailed(entry) ? 'failed' : 'succeeded'),
+    status: entry.status || activityStatusGroup(entry),
     title: entry.title || entry.operation,
-    summary: entry.summary || entry.message,
+    summary: entry.summary || entry.message || activityMessage(entry),
     durationMs: entry.durationMs || entry.ms,
     tool: entry.tool,
     workspace: entry.workspace,
@@ -479,8 +699,4 @@ function safeEventProjection(entry) {
     error: entry.error,
     metadata: entry.metadata
   };
-}
-
-function entryKey(entry) {
-  return entry?.eventId || entry?.id || [entry?.timestamp || entry?.ts || entry?.at || entry?.createdAt || '', entry?.tool || entry?.type || '', entry?.workspace || '', entry?.summary || entry?.message || entry?.error?.message || entry?.error || entry?.path || ''].join('|');
 }

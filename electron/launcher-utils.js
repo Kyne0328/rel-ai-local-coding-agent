@@ -2,10 +2,12 @@ import { importResourceModule, resolveResourcePath } from './resource-path.js';
 import { normalizeNgrokAuthtoken } from './ngrok-token.js';
 
 const connection = await importResourceModule('src/connectionProfile.js');
+const DEFAULT_GATEWAY_ORIGIN = 'https://rel-ai.kynemcp.workers.dev';
 
 function resolveSrcPath() {
   return resolveResourcePath('src');
 }
+
 
 function normalizePort(value, fallback = 3333) {
   const port = Number(value || fallback);
@@ -55,36 +57,49 @@ function normalizeNgrokDomain(value) {
   return domain;
 }
 
+/** @param {unknown} value @param {Record<string, unknown>} [legacy] @returns {'cloud' | 'direct'} */
+function normalizeConnectionMode(value, legacy = {}) {
+  const mode = String(value || '').trim().toLowerCase();
+  if (mode) {
+    if (!['cloud', 'direct'].includes(mode)) throw new Error('Connection mode must be cloud or direct.');
+    return mode;
+  }
+  const hasLegacyNgrok = Boolean(
+    String(legacy.ngrokDomain || '').trim()
+    && String(legacy.ngrokAuthtoken || '').trim()
+  );
+  if (hasLegacyNgrok || String(legacy.tunnelProvider || '').trim() === 'managed-ngrok') return 'direct';
+  return 'cloud';
+}
+
+function normalizeGatewayOrigin(value) {
+  const candidate = String(value || process.env.REL_AI_GATEWAY_ORIGIN || DEFAULT_GATEWAY_ORIGIN).trim();
+  let url;
+  try { url = new URL(candidate); }
+  catch { throw new Error('Gateway origin must be an absolute HTTP(S) URL.'); }
+  const loopback = ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname.toLowerCase());
+  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) {
+    throw new Error('Gateway origin must use HTTPS except for a loopback development fixture.');
+  }
+  url.pathname = '';
+  url.search = '';
+  url.hash = '';
+  return url.origin;
+}
+
 function buildTunnelCommand(domain, port) {
   const safeDomain = normalizeNgrokDomain(domain);
   const safePort = normalizePort(port);
   return `managed ngrok http --url=https://${safeDomain} http://127.0.0.1:${safePort} --config <Rel.AI ngrok.yml> --log=stdout --log-format=logfmt --log-level=info`;
 }
 
-// ChatGPT connects to the plain /mcp endpoint with Authentication: OAuth. The
-// legacy secret-in-URL path has been removed, so this no longer embeds a secret.
 function buildMcpUrl(publicBaseUrl) {
   let base = String(publicBaseUrl || '').trim();
   while (base.endsWith('/')) base = base.slice(0, -1);
   return `${base}/mcp`;
 }
 
-function hasExistingConfig() {
-  const profile = connection.readConnectionProfile();
-  const env = connection.readLaunchEnv();
-  try {
-    normalizePort(profile.port || env.REL_AI_MCP_PORT || 3333);
-    normalizeNgrokDomain(env.REL_AI_MCP_NGROK_DOMAIN || profile.ngrokDomain || stripHttpProtocol(String(profile.publicUrl || '')));
-    normalizeNgrokAuthtoken(env.REL_AI_MCP_NGROK_AUTHTOKEN || profile.ngrokAuthtoken || '');
-  } catch {
-    return false;
-  }
-  return Boolean(profile.port || env.REL_AI_MCP_PORT);
-}
-
-function readGuiConfig() {
-  const profile = connection.readConnectionProfile();
-  const env = connection.readLaunchEnv();
+function legacyConnectionInputs(profile, env) {
   let ngrokDomain = env.REL_AI_MCP_NGROK_DOMAIN || profile.ngrokDomain || '';
   if (!ngrokDomain && profile.publicUrl) {
     let fromUrl = stripHttpProtocol(String(profile.publicUrl));
@@ -92,12 +107,76 @@ function readGuiConfig() {
     ngrokDomain = fromUrl;
   }
   return {
-    port: normalizePort(env.REL_AI_MCP_PORT || profile.port || 3333),
-    ngrokDomain: ngrokDomain ? normalizeNgrokDomain(ngrokDomain) : '',
-    token: env.REL_AI_MCP_TOKEN || '',
+    ngrokDomain,
     ngrokAuthtoken: env.REL_AI_MCP_NGROK_AUTHTOKEN || profile.ngrokAuthtoken || '',
-    publicUrl: profile.publicUrl || (ngrokDomain ? `https://${normalizeNgrokDomain(ngrokDomain)}` : '')
+    tunnelProvider: profile.tunnelProvider || ''
   };
 }
 
-export { resolveSrcPath, normalizePort, normalizeNgrokDomain, normalizeNgrokAuthtoken, buildTunnelCommand, buildMcpUrl, hasExistingConfig, readGuiConfig };
+function hasExistingConfig() {
+  const profile = connection.readConnectionProfile();
+  const env = connection.readLaunchEnv();
+  const legacy = legacyConnectionInputs(profile, env);
+  const explicitMode = String(env.REL_AI_MCP_CONNECTION_MODE || profile.connectionMode || '').trim();
+  let mode;
+  try {
+    mode = normalizeConnectionMode(explicitMode, legacy);
+    normalizePort(profile.port || env.REL_AI_MCP_PORT || 3333);
+    if (mode === 'direct') {
+      normalizeNgrokDomain(legacy.ngrokDomain);
+      normalizeNgrokAuthtoken(legacy.ngrokAuthtoken);
+    } else {
+      normalizeGatewayOrigin(env.REL_AI_GATEWAY_ORIGIN || profile.gatewayOrigin || '');
+    }
+  } catch {
+    return false;
+  }
+  const hasPort = Boolean(profile.port || env.REL_AI_MCP_PORT);
+  if (!hasPort) return false;
+  if (mode === 'cloud') return explicitMode === 'cloud';
+  return true;
+}
+
+function readGuiConfig() {
+  const profile = connection.readConnectionProfile();
+  const env = connection.readLaunchEnv();
+  const legacy = legacyConnectionInputs(profile, env);
+  const connectionMode = normalizeConnectionMode(
+    env.REL_AI_MCP_CONNECTION_MODE || profile.connectionMode || '',
+    legacy
+  );
+  const ngrokDomain = connectionMode === 'direct' && legacy.ngrokDomain
+    ? normalizeNgrokDomain(legacy.ngrokDomain)
+    : String(legacy.ngrokDomain || '').trim();
+  let gatewayOrigin;
+  try { gatewayOrigin = normalizeGatewayOrigin(env.REL_AI_GATEWAY_ORIGIN || profile.gatewayOrigin || ''); }
+  catch (error) {
+    if (connectionMode === 'cloud') throw error;
+    gatewayOrigin = DEFAULT_GATEWAY_ORIGIN;
+  }
+  return {
+    connectionMode,
+    gatewayOrigin,
+    port: normalizePort(env.REL_AI_MCP_PORT || profile.port || 3333),
+    ngrokDomain,
+    token: env.REL_AI_MCP_TOKEN || '',
+    ngrokAuthtoken: legacy.ngrokAuthtoken,
+    publicUrl: connectionMode === 'direct'
+      ? (profile.publicUrl || (ngrokDomain ? `https://${ngrokDomain}` : ''))
+      : ''
+  };
+}
+
+export {
+  DEFAULT_GATEWAY_ORIGIN,
+  resolveSrcPath,
+  normalizePort,
+  normalizeNgrokDomain,
+  normalizeNgrokAuthtoken,
+  normalizeConnectionMode,
+  normalizeGatewayOrigin,
+  buildTunnelCommand,
+  buildMcpUrl,
+  hasExistingConfig,
+  readGuiConfig
+};

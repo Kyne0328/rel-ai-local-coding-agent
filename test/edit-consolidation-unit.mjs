@@ -71,6 +71,30 @@ try {
   assert.equal(stagedCommit.deprecated, undefined);
   assert.equal(fs.readFileSync(path.join(root, 'staged.txt'), 'utf8'), 'chunk-one\nchunk-two\n');
 
+  fs.writeFileSync(path.join(root, 'protected.txt'), 'unchanged\n');
+  await assert.rejects(
+    () => planEdit(workspace, config, {
+      path: 'protected.txt',
+      content: 'replacement\n',
+      oldText: 'unchanged',
+      newText: 'changed'
+    }),
+    /conflicting primary edit forms.*Use exactly one form/i
+  );
+  assert.equal(fs.readFileSync(path.join(root, 'protected.txt'), 'utf8'), 'unchanged\n');
+
+  await assert.rejects(
+    () => planEdit(workspace, config, { path: 'protected.txt' }),
+    /no primary edit forms.*\{ path, content \}/i
+  );
+  assert.equal(fs.readFileSync(path.join(root, 'protected.txt'), 'utf8'), 'unchanged\n');
+
+  await assert.rejects(
+    () => planEdit(workspace, config, { stage: 'start', path: 'never-created.txt' }),
+    /requires exactly one of content or updateText/i
+  );
+  assert.equal(fs.existsSync(path.join(root, 'never-created.txt')), false);
+
   console.log('Unified edit parity tests passed.');
 } finally {
   fs.rmSync(root, { recursive: true, force: true });

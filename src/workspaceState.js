@@ -1,15 +1,18 @@
 
 
-import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { classifyStatusOwnership } from "./repo/gitOps.js";
 import { gitStatusArgs } from "./repo/gitStatus.js";
 import { resolveGitExecutable } from "./gitExecutable.js";
+import { runProcess } from "./process.js";
 
-const configuredWorkspaceStateTtlMs = Number(process.env.REL_AI_MCP_WORKSPACE_STATE_TTL_MS || 1000);
-const WORKSPACE_GIT_STATE_TTL_MS = Number.isFinite(configuredWorkspaceStateTtlMs) ? Math.max(0, configuredWorkspaceStateTtlMs) : 1000;
+const configuredWorkspaceStateTtlMs = Number(process.env.REL_AI_MCP_WORKSPACE_STATE_TTL_MS || 5000);
+const WORKSPACE_GIT_STATE_TTL_MS = Number.isFinite(configuredWorkspaceStateTtlMs) ? Math.max(0, configuredWorkspaceStateTtlMs) : 5000;
 const gitStateCache = new Map();
+const workspaceStateListeners = new Set();
+let workspaceStateVersion = 0;
+let refreshQueue = Promise.resolve();
 
 function buildWorkspaceStates(config, tasks = [], activity = {}) {
   const states = {};
@@ -42,13 +45,33 @@ function workspaceState(alias, workspace, config, tasks, activity) {
 function workspaceGitState(alias, workspace, config) {
   const workspacePath = String(workspace?.path || '');
   const allowed = Array.isArray(workspace.allowedRemotes) && workspace.allowedRemotes.length ? workspace.allowedRemotes : ['origin'];
-  const cacheKey = `${alias}\u0000${workspacePath}\u0000${allowed.join('\u0000')}`;
-  const cached = gitStateCache.get(cacheKey);
-  if (cached && Date.now() - cached.createdAt < WORKSPACE_GIT_STATE_TTL_MS) return cached.value;
+  const cacheKey = workspaceStateCacheKey(alias, workspacePath, allowed);
+  let cached = gitStateCache.get(cacheKey);
+  if (!cached) {
+    cached = {
+      createdAt: Date.now(),
+      refreshing: false,
+      refreshPromise: null,
+      value: baseWorkspaceGitState(workspacePath)
+    };
+    gitStateCache.set(cacheKey, cached);
+    if (cached.value.isGit) scheduleWorkspaceGitStateRefresh(cacheKey, cached, alias, workspace, config, allowed);
+    return cached.value;
+  }
+  if (cached.value.isGit && Date.now() - cached.createdAt >= WORKSPACE_GIT_STATE_TTL_MS) {
+    scheduleWorkspaceGitStateRefresh(cacheKey, cached, alias, workspace, config, allowed);
+  }
+  return cached.value;
+}
 
+function workspaceStateCacheKey(alias, workspacePath, allowed) {
+  return [alias, workspacePath, ...allowed].join('\u0000');
+}
+
+function baseWorkspaceGitState(workspacePath) {
   const exists = Boolean(workspacePath && fs.existsSync(workspacePath));
   const isGit = exists && fs.existsSync(path.join(workspacePath, '.git'));
-  const result = {
+  return {
     exists,
     isGit,
     branch: null,
@@ -60,23 +83,77 @@ function workspaceGitState(alias, workspace, config) {
     remotes: [],
     remoteAvailable: false
   };
-  if (isGit) {
-    const status = runGit(workspacePath, gitStatusArgs());
-    if (status.ok) {
-      const ownership = classifyStatusOwnership({ alias, path: workspacePath }, config, status.stdout);
-      result.branch = ownership.branch;
-      result.ahead = ownership.aheadBehind?.ahead || 0;
-      result.behind = ownership.aheadBehind?.behind || 0;
-      result.changedFileCount = ownership.entries.length;
-      result.sessionChangedFileCount = ownership.sessionChanged.length;
-      result.dirty = ownership.entries.length > 0;
+}
+
+function scheduleWorkspaceGitStateRefresh(cacheKey, cached, alias, workspace, config, allowed) {
+  if (cached.refreshing) return cached.refreshPromise;
+  cached.refreshing = true;
+  const run = () => refreshWorkspaceGitState(cacheKey, cached, alias, workspace, config, allowed);
+  const refreshPromise = refreshQueue.then(run, run);
+  refreshQueue = refreshPromise.catch(() => {});
+  cached.refreshPromise = refreshPromise;
+  return refreshPromise;
+}
+
+async function refreshWorkspaceGitState(cacheKey, cached, alias, workspace, config, allowed) {
+  const workspacePath = String(workspace?.path || '');
+  try {
+    const base = baseWorkspaceGitState(workspacePath);
+    if (!base.isGit) {
+      commitWorkspaceGitState(cacheKey, cached, alias, base);
+      return base;
     }
-    const remotes = runGit(workspacePath, ['remote']);
-    if (remotes.ok) result.remotes = String(remotes.stdout || '').split(/\r?\n/).map(value => value.trim()).filter(Boolean);
-    result.remoteAvailable = allowed.some(remote => result.remotes.includes(remote));
+    const [status, remotes] = await Promise.all([
+      runProcess('git', gitStatusArgs(), { cwd: workspacePath, timeout: 5000, maxOutputBytes: 512 * 1024 }, config),
+      runProcess('git', ['remote'], { cwd: workspacePath, timeout: 5000, maxOutputBytes: 128 * 1024 }, config)
+    ]);
+    const next = { ...base };
+    if (status.exitCode === 0 && !status.stdoutTruncated) {
+      const ownership = classifyStatusOwnership({ alias, path: workspacePath }, config, status.stdout || '');
+      next.branch = ownership.branch;
+      next.ahead = ownership.aheadBehind?.ahead || 0;
+      next.behind = ownership.aheadBehind?.behind || 0;
+      next.changedFileCount = ownership.entries.length;
+      next.sessionChangedFileCount = ownership.sessionChanged.length;
+      next.dirty = ownership.entries.length > 0;
+    }
+    if (remotes.exitCode === 0 && !remotes.stdoutTruncated) {
+      next.remotes = String(remotes.stdout || '').split(/\r?\n/).map(value => value.trim()).filter(Boolean);
+    }
+    next.remoteAvailable = allowed.some(remote => next.remotes.includes(remote));
+    commitWorkspaceGitState(cacheKey, cached, alias, next);
+    return next;
+  } catch (error) {
+    cached.createdAt = Date.now();
+    if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] workspace state refresh (' + alias + '):', error);
+    return cached.value;
+  } finally {
+    cached.refreshing = false;
+    cached.refreshPromise = null;
   }
-  gitStateCache.set(cacheKey, { createdAt: Date.now(), value: result });
-  return result;
+}
+
+function commitWorkspaceGitState(cacheKey, cached, alias, next) {
+  const changed = JSON.stringify(cached.value) !== JSON.stringify(next);
+  cached.value = next;
+  cached.createdAt = Date.now();
+  gitStateCache.set(cacheKey, cached);
+  if (!changed) return;
+  workspaceStateVersion += 1;
+  for (const listener of workspaceStateListeners) {
+    try { listener({ alias, state: next, version: workspaceStateVersion }); }
+    catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] workspace state listener:', error); }
+  }
+}
+
+function onWorkspaceStateChange(listener) {
+  if (typeof listener !== 'function') return () => {};
+  workspaceStateListeners.add(listener);
+  return () => workspaceStateListeners.delete(listener);
+}
+
+function workspaceStateRevision() {
+  return workspaceStateVersion;
 }
 
 function resolveActiveTasks(activity) {
@@ -85,23 +162,5 @@ function resolveActiveTasks(activity) {
   return [];
 }
 
-function runGit(cwd, args) {
-  const executable = resolveGitExecutable();
-  if (!executable) {
-    return { ok: false, stdout: '', stderr: 'Git was not found in a trusted installation directory.' };
-  }
-  const result = spawnSync(executable, args, {
-    cwd,
-    encoding: 'utf8',
-    windowsHide: true,
-    timeout: 5000,
-    maxBuffer: 512 * 1024
-  });
-  return {
-    ok: !result.error && result.status === 0,
-    stdout: result.stdout || '',
-    stderr: result.stderr || ''
-  };
-}
 
-export { buildWorkspaceStates, resolveGitExecutable };
+export { buildWorkspaceStates, onWorkspaceStateChange, workspaceStateRevision, resolveGitExecutable };

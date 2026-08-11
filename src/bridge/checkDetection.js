@@ -10,6 +10,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { discoveryManifestSignature } from "../commandDiscovery.js";
+import { buildCheckCatalog } from "../workflow/checkCatalog.js";
+import { discoverRepositoryTopology } from "../workflow/topology.js";
 
 // Each detection re-reads and re-parses package.json. Cache per (root, level) against
 // the same manifest stat signature command discovery uses, so any manifest edit is
@@ -35,8 +37,22 @@ function detectVerifyChecks(root, level) {
   return [...unique];
 }
 
-function clearCheckDetectionCache() {
-  checkCache.clear();
+function detectVerifyCheckUnits(root, level) {
+  const topology = discoverRepositoryTopology(root);
+  const catalog = buildCheckCatalog(topology);
+  const hasNested = topology.packages.some(pkg => pkg.path !== '.');
+  if (!hasNested) {
+    return detectVerifyChecks(root, level).map((command, index) => {
+      const matched = catalog.find(unit => unit.command === command && unit.cwd === '.');
+      return matched || { id: `legacy:root:${index}`, packageId: '', cwd: '.', command, kind: 'other', level: level === 'quick' ? 'focused' : 'standard', estimatedCost: 'small', source: 'legacy', scopeKey: 'repository' };
+    });
+  }
+  const allowed = level === 'release'
+    ? new Set(['test', 'lint', 'typecheck', 'build', 'dead_code', 'security', 'other'])
+    : level === 'quick' || level === 'focused'
+      ? new Set(['test', 'lint', 'typecheck', 'format', 'other'])
+      : new Set(['test', 'lint', 'typecheck', 'build', 'other']);
+  return catalog.filter(unit => unit.kind !== 'migration' && allowed.has(unit.kind));
 }
 
 function detectPackageJsonChecks(root, level, commands) {
@@ -119,4 +135,4 @@ function shouldRunPackageBuild(root, pkg, scripts, level, currentCommands) {
   return false;
 }
 
-export { detectVerifyChecks, clearCheckDetectionCache };
+export { detectVerifyCheckUnits, detectVerifyChecks,  };

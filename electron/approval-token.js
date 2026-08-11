@@ -1,5 +1,3 @@
-
-
 function createApprovalTokenManager({
   readGuiConfig,
   saveLauncherConfig,
@@ -70,6 +68,8 @@ function createApprovalTokenManager({
 
 function connectionConfig(current, token) {
   return {
+    ...(current.connectionMode ? { connectionMode: current.connectionMode } : {}),
+    ...(current.gatewayOrigin ? { gatewayOrigin: current.gatewayOrigin } : {}),
     port: current.port,
     token,
     ngrokDomain: current.ngrokDomain,

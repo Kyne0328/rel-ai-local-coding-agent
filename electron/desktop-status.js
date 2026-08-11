@@ -5,8 +5,10 @@ const { deriveConnectionState } = await importResourceModule('src/desktopUxContr
 function initialDesktopStatus(version = '') {
   return normalizeDesktopStatus({
     serverRunning: false,
+    connectionMode: '',
     tunnelStatus: 'stopped',
     mcpUrl: '',
+    gateway: null,
     error: '',
     errorCode: '',
     localUrl: '',
@@ -36,8 +38,33 @@ function desktopStatusFailure(errorCode, error, next = {}) {
   };
 }
 
+function safeGatewayDesktopStatus(status = {}, gatewayOrigin = '') {
+  const pairing = status.pairing && typeof status.pairing === 'object'
+    ? {
+        pairingId: String(status.pairing.pairingId || ''),
+        code: String(status.pairing.code || ''),
+        expiresAt: Number(status.pairing.expiresAt || 0) || null
+      }
+    : null;
+  return {
+    state: String(status.state || 'offline'),
+    gatewayOrigin: String(gatewayOrigin || status.gatewayOrigin || ''),
+    principalPaired: status.principalPaired === true,
+    deviceId: String(status.deviceId || ''),
+    pairing,
+    schemaVersion: Number(status.schemaVersion || 0) || null,
+    schemaStatus: String(status.schemaStatus || ''),
+    minimumProtocolVersion: Number(status.minimumProtocolVersion || 0) || null,
+    currentProtocolVersion: Number(status.currentProtocolVersion || 0) || null,
+    lastConnectedAt: Number(status.lastConnectedAt || 0) || null,
+    lastRequestAt: Number(status.lastRequestAt || 0) || null,
+    reconnectAttempt: Math.max(0, Math.floor(Number(status.reconnectAttempt) || 0)),
+    error: String(status.error || '')
+  };
+}
+
 function formatDesktopError(error) {
   return error instanceof Error ? error.message : String(error || 'Unknown error');
 }
 
-export { desktopStatusFailure, initialDesktopStatus, normalizeDesktopStatus };
+export { desktopStatusFailure, initialDesktopStatus, normalizeDesktopStatus, safeGatewayDesktopStatus };

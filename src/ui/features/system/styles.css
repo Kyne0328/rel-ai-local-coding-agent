@@ -1,0 +1,220 @@
+.connection-status-body { display: grid; gap: 18px; }
+.connection-status-copy h2 { font-size: clamp(22px, 3vw, 30px); line-height: 1.15; }
+.connection-status-copy p { margin-top: 6px; color: var(--ui-text-secondary); line-height: 1.55; }
+.connection-primary-action { display: flex; justify-content: flex-start; }
+.connection-support-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.connection-layer-disclosure .connection-path { border-top: 1px solid var(--ui-border-default); }
+.connection-layer-card-head > div { min-width: 0; }
+.chatgpt-setup-guide { display: grid; gap: 14px; }
+.chatgpt-guide-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.chatgpt-guide-heading span { color: var(--ui-text-secondary); font-size: 11px; }
+.chatgpt-setup-guide ol { display: grid; gap: 10px; margin: 0; padding-left: 22px; color: var(--ui-text-secondary); }
+.chatgpt-setup-guide li { padding-left: 4px; line-height: 1.55; }
+.chatgpt-first-prompt { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--ui-border-default); border-radius: var(--radius-md); background: var(--ui-surface-muted); }
+.chatgpt-first-prompt span { color: var(--ui-text-secondary); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.chatgpt-first-prompt code { overflow-wrap: anywhere; white-space: normal; }
+@media (max-width: 640px) {
+  .connection-primary-action > *, .connection-support-row > * { width: 100%; }
+  .chatgpt-guide-heading { align-items: flex-start; flex-direction: column; }
+}
+
+@layer components {
+.connection-page { @apply gap-3; }
+.connection-summary-card.good { border-color: color-mix(in srgb, var(--ui-status-success-foreground) 34%, var(--ui-border-default)); }
+.connection-summary-card.working { border-color: color-mix(in srgb, var(--ui-status-info-foreground) 34%, var(--ui-border-default)); }
+.connection-summary-card.warn { border-color: color-mix(in srgb, var(--ui-status-warning-foreground) 34%, var(--ui-border-default)); }
+.connection-summary-card.bad { border-color: color-mix(in srgb, var(--ui-status-danger-foreground) 34%, var(--ui-border-default)); }
+.connection-stack { @apply flex flex-col gap-4; }
+.connection-summary-title { @apply text-lg; }
+.connector-summary { @apply mt-1 text-[12px]; color: var(--ui-text-secondary); }
+.connection-field { @apply flex flex-col gap-2; }
+.connection-endpoint-row { @apply flex min-w-0 gap-2; }
+.connector-endpoint { @apply flex min-h-[38px] min-w-0 flex-1 items-center overflow-x-auto rounded-lg px-3 text-[11px]; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-default); }
+.connection-layer-heading { @apply mb-2 flex items-end justify-between gap-3; }
+.connection-layer-heading h3 { @apply text-[13px]; }
+.connection-layer-heading p { @apply text-[11px]; color: var(--ui-text-secondary); }
+.connection-path { @apply grid overflow-hidden rounded-xl; grid-template-columns: repeat(4,minmax(0,1fr)); background: var(--ui-surface-primary); border: 1px solid var(--ui-border-default); }
+.connection-path-step { @apply relative min-h-36 border-r p-4 last:border-r-0; border-color: var(--ui-border-default); }
+.connection-path-step::after { content: ""; @apply absolute right-[-6px] top-[34px] z-10 size-3 rotate-45; background: var(--ui-surface-primary); border-right: 1px solid var(--ui-border-default); border-top: 1px solid var(--ui-border-default); }
+.connection-path-step:last-child::after { display: none; }
+.connection-layer-card-head { @apply flex items-start gap-3; }
+.connection-layer-dot { @apply mt-1 size-2 rounded-full; background: var(--ui-text-tertiary); }
+.connection-path-step.ok .connection-layer-dot { background: var(--ui-status-success-foreground); }
+.connection-path-step.working .connection-layer-dot { background: var(--ui-status-info-foreground); }
+.connection-path-step.warn .connection-layer-dot { background: var(--ui-status-warning-foreground); }
+.connection-path-step.bad .connection-layer-dot { background: var(--ui-status-danger-foreground); }
+.connection-layer-card-head h4 { @apply text-[12px]; }
+.connection-layer-state { @apply mt-1 block text-[11px] font-semibold; color: var(--ui-text-secondary); }
+.connection-layer-state.ok { color: var(--ui-status-success-foreground); }
+.connection-layer-state.working { color: var(--ui-status-info-foreground); }
+.connection-layer-state.warn { color: var(--ui-status-warning-foreground); }
+.connection-layer-state.bad { color: var(--ui-status-danger-foreground); }
+.connection-path-step > p { @apply mt-3 text-[11px] leading-5; color: var(--ui-text-secondary); }
+.connection-actions { @apply flex flex-wrap justify-end gap-2; }
+
+.connection-notice { @apply rounded-lg px-3 py-2 text-[11px] leading-5; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-default); color: var(--ui-text-secondary); }
+.connection-notice.warn { background: var(--ui-status-warning-background); border-color: color-mix(in srgb, var(--ui-status-warning-foreground) 28%, transparent); color: var(--ui-status-warning-foreground); }
+.connection-notice.bad { background: var(--ui-status-danger-background); border-color: color-mix(in srgb, var(--ui-status-danger-foreground) 28%, transparent); color: var(--ui-status-danger-foreground); }
+.connector-details > summary { @apply flex min-h-14 cursor-pointer items-center justify-between gap-3 px-4; }
+.connector-details-summary span:first-child { @apply flex flex-col gap-1; }
+.connector-details-summary strong { @apply text-[12px]; }
+.connector-details-summary small { @apply text-[10px]; color: var(--ui-text-secondary); }
+.connection-facts { @apply grid gap-0 overflow-hidden rounded-lg; border: 1px solid var(--ui-border-default); }
+.connection-fact { @apply grid min-h-11 items-center gap-3 border-b px-3 last:border-b-0; grid-template-columns: 150px minmax(0,1fr); border-color: var(--ui-border-subtle); }
+.connection-fact-label { @apply text-[10px] font-bold uppercase tracking-[.08em]; color: var(--ui-text-tertiary); }
+
+.diagnostic-metrics { @apply grid gap-0 overflow-hidden rounded-xl; grid-template-columns: repeat(3,minmax(0,1fr)); background: var(--ui-surface-primary); border: 1px solid var(--ui-border-default); }
+.diagnostic-metrics > * { @apply border-r p-4 last:border-r-0; border-color: var(--ui-border-default); }
+.diagnostic-finding { @apply border-l-[3px] p-3; background: var(--ui-surface-primary); border-top: 1px solid var(--ui-border-subtle); border-right: 1px solid var(--ui-border-subtle); border-bottom: 1px solid var(--ui-border-subtle); border-left-color: var(--ui-status-info-foreground); }
+.diagnostic-finding.warning { border-left-color: var(--ui-status-warning-foreground); }
+.diagnostic-finding.error { border-left-color: var(--ui-status-danger-foreground); }
+.diagnostic-log-grid { @apply grid gap-3; grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
+.diagnostic-log-row { @apply rounded-lg px-3 py-2 text-[11px]; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-subtle); }
+.diagnostic-log-row.info { box-shadow: inset 2px 0 var(--ui-status-info-foreground); }
+.diagnostic-log-row.warning { box-shadow: inset 2px 0 var(--ui-status-warning-foreground); }
+.diagnostic-log-row.error { box-shadow: inset 2px 0 var(--ui-status-danger-foreground); }
+.diagnostic-maintenance-row { @apply flex flex-wrap items-center justify-between gap-3 border-t py-3; border-color: var(--ui-border-subtle); }
+
+.connection-controls-section { @apply mt-2 grid gap-3 border-t pt-4; border-color: var(--ui-border-default); }
+.copy-box { @apply min-h-24 overflow-auto whitespace-pre-wrap break-words rounded-lg p-3 text-[11px] leading-5; background: var(--ui-canvas); border: 1px solid var(--ui-border-default); color: var(--ui-text-primary); }
+.copy-box.approval-token-value { height: var(--control-height); min-height: var(--control-height); overflow-x: auto; overflow-y: hidden; padding-block: 0; white-space: nowrap; word-break: normal; }
+
+.diagnostic-page { @apply flex min-w-0 flex-col gap-3; container-type: inline-size; container-name: diagnostic-page; }
+.diagnostic-page-head { @apply min-w-0 items-start; }
+.diagnostic-page-actions { @apply min-w-0 flex-wrap justify-end; }
+.diagnostic-page-actions button { @apply min-w-0; }
+.diagnostic-live-tail { @apply min-w-0 whitespace-nowrap; }
+.diagnostic-live-tail.active { background: var(--ui-status-info-background); color: var(--ui-action-primary); }
+.diagnostic-summary, .diagnostic-list { @apply flex min-w-0 flex-col gap-3; }
+.diagnostic-metric { @apply flex items-end justify-between gap-3; }
+.diagnostic-metric span { @apply text-[11px] font-semibold; color: var(--ui-text-secondary); }
+.diagnostic-metric strong { @apply text-2xl; }
+.diagnostic-metric.error strong { color: var(--ui-status-danger-foreground); }
+.diagnostic-metric.warning strong { color: var(--ui-status-warning-foreground); }
+.diagnostic-metric.info strong { color: var(--ui-action-primary); }
+.diagnostic-finding { @apply grid gap-4 rounded-xl; grid-template-columns: 96px minmax(0,1fr); }
+.diagnostic-severity { @apply text-[10px] font-bold uppercase tracking-[.08em]; color: var(--ui-status-info-foreground); }
+.diagnostic-finding.warning .diagnostic-severity { color: var(--ui-status-warning-foreground); }
+.diagnostic-finding.error .diagnostic-severity { color: var(--ui-status-danger-foreground); }
+.diagnostic-copy { @apply min-w-0; }
+.diagnostic-code { @apply mb-1 text-[10px] font-semibold; color: var(--ui-text-tertiary); }
+.diagnostic-copy h3 { @apply text-[13px]; }
+.diagnostic-copy p { @apply mt-2 text-[11px] leading-5; color: var(--ui-text-secondary); }
+.diagnostic-copy details { @apply mt-3; }
+.diagnostic-copy summary { @apply cursor-pointer text-[11px] font-semibold; }
+.diagnostic-copy pre { @apply mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-lg p-3 text-[10px]; background: var(--ui-canvas); border: 1px solid var(--ui-border-subtle); }
+.diagnostic-context { @apply mt-3 grid overflow-hidden rounded-lg; border: 1px solid var(--ui-border-subtle); }
+.diagnostic-context-row { @apply grid items-center gap-3 border-b px-3 py-2 last:border-b-0; grid-template-columns: auto auto minmax(0,1fr); border-color: var(--ui-border-subtle); }
+.diagnostic-context-row code, .diagnostic-context-row span, .diagnostic-context-row small { @apply text-[10px]; }
+.diagnostic-context-row small { @apply truncate; color: var(--ui-text-secondary); }
+.diagnostic-log-card .card-head p, .diagnostic-maintenance .card-head p { @apply mt-1 text-[10px] leading-4; color: var(--ui-text-secondary); }
+.diagnostic-log-list { @apply flex max-h-[520px] flex-col gap-2 overflow-auto; }
+.diagnostic-log-row { @apply grid gap-1.5; grid-template-columns: auto auto minmax(0,1fr); }
+.diagnostic-log-row time, .diagnostic-log-row code, .diagnostic-log-row small { @apply text-[10px]; }
+.diagnostic-log-row time { color: var(--ui-text-tertiary); }
+.diagnostic-log-row span { @apply min-w-0 break-words; }
+.diagnostic-log-row small { grid-column: 3; color: var(--ui-text-tertiary); }
+.diagnostic-log-row.info small { color: var(--ui-status-info-foreground); }
+.diagnostic-log-row.warning small { color: var(--ui-status-warning-foreground); }
+.diagnostic-log-row.error small { color: var(--ui-status-danger-foreground); }
+.diagnostic-log-empty { @apply rounded-lg p-4 text-center text-[11px]; background: var(--ui-surface-secondary); color: var(--ui-text-secondary); }
+.diagnostic-clear { @apply flex flex-col gap-1 rounded-xl p-4; background: var(--ui-status-success-background); border: 1px solid color-mix(in srgb, var(--ui-status-success-foreground) 28%, transparent); }
+.diagnostic-clear span { @apply text-[11px]; color: var(--ui-text-secondary); }
+.diagnostic-unavailable { background: var(--ui-status-warning-background); border-color: color-mix(in srgb, var(--ui-status-warning-foreground) 28%, transparent); }
+.diagnostic-maintenance-list { @apply p-0; }
+.diagnostic-maintenance-row { @apply px-4 py-3; }
+.diagnostic-maintenance-row > div { @apply min-w-0; }
+.diagnostic-maintenance-row strong { @apply block text-[12px]; }
+.diagnostic-maintenance-row span { @apply mt-1 block text-[11px] leading-5; color: var(--ui-text-secondary); }
+.diagnostic-reset-form { @apply flex flex-col gap-4; }
+.diagnostic-reset-warning { @apply flex flex-col gap-2 rounded-xl p-4; background: var(--ui-status-danger-background); border: 1px solid color-mix(in srgb, var(--ui-status-danger-foreground) 32%, transparent); }
+.diagnostic-reset-warning span { @apply text-[11px] leading-5; color: var(--ui-text-secondary); }
+}
+
+@media (max-width: 980px) {
+  .diagnostic-log-grid { grid-template-columns: 1fr; }
+  .diagnostic-live-tail { justify-self: start; }
+}
+
+@media (max-width: 980px) {
+  .connection-path { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .connection-path-step:nth-child(2) { border-right: 0; }
+  .connection-path-step:nth-child(-n+2) { border-bottom: 1px solid var(--ui-border-default); }
+  .connection-path-step::after { display: none; }
+}
+
+@media (max-width: 760px) { .diagnostic-metrics { grid-template-columns: 1fr; } }
+
+@media (max-width: 760px) {
+  .connection-path { grid-template-columns: 1fr; }
+  .connection-path-step { border-right: 0; border-bottom: 1px solid var(--ui-border-default); }
+  .connection-path-step:last-child { border-bottom: 0; }
+  .connection-actions { @apply justify-start; }
+}
+
+@media (max-width: 760px) {
+  .diagnostic-page-head { @apply flex-col items-stretch; }
+  .diagnostic-page-actions { @apply justify-start; }
+}
+
+@media (max-width: 520px) { .connection-endpoint-row { @apply flex-col; } }
+
+@container diagnostic-page (max-width: 760px) {
+  .diagnostic-page-head { @apply flex-col items-stretch; }
+  .diagnostic-page-actions { @apply justify-start; }
+  .diagnostic-live-tail { @apply justify-self-start; }
+}
+@container diagnostic-page (max-width: 480px) {
+  .diagnostic-page-actions { @apply grid w-full; grid-template-columns: minmax(0,1fr); }
+  .diagnostic-page-actions button { @apply w-full; }
+  .diagnostic-live-tail { @apply w-full justify-self-stretch; }
+}
+
+@layer components {
+  .diagnostic-log-card, .diagnostic-log-list, .diagnostic-log-row { min-width: 0; }
+  .diagnostic-log-row code { max-width: 15ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .diagnostic-log-row span { overflow-wrap: anywhere; word-break: break-word; }
+}
+
+
+/* Rel.AI Cloud controls belong to the Connection/System feature. */
+.cloud-gateway-settings { display: grid; gap: 12px; }
+.cloud-gateway-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.cloud-gateway-heading > div, .cloud-gateway-card { min-width: 0; }
+.cloud-gateway-stack { display: flex; flex-direction: column; gap: 16px; }
+.cloud-gateway-state { display: grid; gap: 6px; min-width: 0; }
+.cloud-gateway-state > strong { font-size: 14px; }
+.cloud-gateway-state > p { margin: 0; color: var(--ui-text-secondary); font-size: 12px; line-height: 1.55; }
+.cloud-gateway-state.good > strong { color: var(--ui-status-success-foreground); }
+.cloud-gateway-state.warn > strong { color: var(--ui-status-warning-foreground); }
+.cloud-gateway-state.bad > strong { color: var(--ui-status-danger-foreground); }
+.cloud-pairing-state { padding: 16px; border: 1px solid var(--ui-status-info-border); border-radius: var(--radius-lg); background: var(--ui-status-info-background); }
+.cloud-pairing-copy { width: fit-content; max-width: 100%; min-height: 44px; display: flex; align-items: center; gap: 12px; padding: 7px 10px; border: 1px solid var(--ui-status-info-border); border-radius: var(--radius-md); background: var(--ui-surface-primary); color: var(--ui-text-primary); text-align: left; transition: border-color var(--dur) var(--ease), background-color var(--dur) var(--ease); }
+.cloud-pairing-copy:hover { border-color: var(--ui-action-primary); background: var(--ui-surface-secondary); }
+.cloud-pairing-copy > span { flex: none; color: var(--ui-action-primary); font-size: 11px; font-weight: 700; }
+.cloud-pairing-code { width: fit-content; max-width: 100%; overflow-wrap: anywhere; font-size: clamp(20px, 4vw, 30px); font-weight: 800; letter-spacing: .08em; color: var(--ui-text-primary); }
+.cloud-gateway-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.cloud-gateway-actions > .muted { flex: 1 1 280px; }
+.cloud-gateway-fallback { margin-left: auto; }
+.cloud-gateway-fallback > summary { min-height: 38px; display: inline-flex; align-items: center; cursor: pointer; color: var(--ui-text-secondary); font-size: 11px; font-weight: 600; }
+.cloud-gateway-fallback[open] { display: flex; align-items: center; gap: 8px; }
+.cloud-device-section { display: grid; gap: 10px; padding-top: 4px; border-top: 1px solid var(--ui-border-subtle); }
+.cloud-device-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.cloud-device-heading > div { min-width: 0; }
+.cloud-device-heading > span { flex: none; color: var(--ui-text-tertiary); font-size: 11px; }
+.cloud-device-list { display: grid; gap: 8px; }
+.cloud-device-row { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--ui-border-subtle); border-radius: var(--radius-md); background: var(--ui-surface-secondary); }
+.cloud-device-copy { min-width: 0; display: grid; gap: 3px; }
+.cloud-device-copy strong, .cloud-device-copy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cloud-device-copy strong { font-size: 12px; }
+.cloud-device-copy span { color: var(--ui-text-secondary); font-size: 10px; }
+.cloud-recovery-panel { display: grid; gap: 8px; }
+.cloud-recovery-panel .connection-endpoint-row { margin-top: 2px; }
+.direct-connection-controls { margin-top: 12px; }
+@media (max-width: 760px) {
+  .cloud-gateway-heading, .cloud-device-heading { align-items: stretch; flex-direction: column; }
+  .cloud-gateway-fallback { margin-left: 0; }
+  .cloud-device-row { align-items: flex-start; }
+  .cloud-pairing-copy { width: 100%; flex-wrap: wrap; justify-content: space-between; }
+  .cloud-pairing-code { font-size: 20px; }
+}

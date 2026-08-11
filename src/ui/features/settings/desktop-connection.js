@@ -1,8 +1,9 @@
 import { toast } from '../../components/toast.js';
 import { requestDashboardRefresh } from '../../api.js';
 import { markUnsaved } from '../../interaction-safety.js';
-import { header, panel, field, formGrid, numberControl } from './shared.js';
+import { header, panel, field, numberControl } from './shared.js';
 import { esc as escapeHtml } from '../../utils.js';
+import { createChatGptSetupGuide } from './connection-guidance.js';
 
 let state = null;
 let savedConnectionState = null;
@@ -49,8 +50,8 @@ async function loadAndRender(container) {
 function renderBrowserNotice(container) {
   container.innerHTML = '';
   container.appendChild(header(
-    'Connection controls',
-    'Local service credentials and approval-token controls are available only inside the installed Rel.AI desktop app.'
+    'Tunnel and approval controls',
+    'Secure connection credentials and approval-token controls are available inside the installed Rel.AI desktop app.'
   ));
   const notice = panel('Open the installed app');
   notice.body.innerHTML = '<p class="muted">Use the Rel.AI tray icon and choose Settings. The installed app opens this Connection page with secure desktop controls enabled.</p>';
@@ -60,8 +61,8 @@ function renderBrowserNotice(container) {
 function render(container) {
   container.innerHTML = '';
   container.appendChild(header(
-    'Connection controls',
-    'Manage the local service, permanent ngrok endpoint, and approval token. Saving connection credentials restarts the service.'
+    'Tunnel and approval controls',
+    'Manage the secure endpoint and approval token. Saving tunnel credentials restarts the connection.'
   ));
   container.appendChild(connectionPanel(container).el);
   container.appendChild(approvalTokenPanel(container).el);
@@ -69,28 +70,42 @@ function render(container) {
 }
 
 function connectionPanel(container) {
-  const connection = panel('Local service and public endpoint');
+  const connection = panel('Tunnel settings');
+  connection.el.id = 'tunnelSettings';
   const sync = () => syncConnectionDirty(container);
-  const grid = formGrid();
-  grid.append(
-    field('Local service port', numberControl(state.port, value => { state.port = Number(value); sync(); }, { min: 1024, max: 65535 }), 'Use a port from 1024 to 65535.'),
-    field('Permanent ngrok domain', textControl(state.ngrokDomain, value => { state.ngrokDomain = normalizeDomain(value); sync(); }), 'Enter the static domain without http://, https://, or a trailing slash.')
-  );
-  connection.body.appendChild(grid);
+  connection.body.appendChild(field(
+    'Permanent ngrok domain',
+    textControl(state.ngrokDomain, value => { state.ngrokDomain = normalizeDomain(value); sync(); }),
+    'Enter the static domain without http://, https://, or a trailing slash.'
+  ));
   connection.body.appendChild(field(
     'ngrok account key',
     secretControl(state.ngrokAuthtoken, value => { state.ngrokAuthtoken = value.trim(); sync(); }, {
       placeholder: state.ngrokAuthtokenConfigured ? 'Stored — enter a new key to replace it' : 'Enter ngrok account key'
     }),
     state.ngrokAuthtokenConfigured
-      ? 'The stored key is never returned to the renderer. Leave this blank to keep it, or enter a new key to replace it.'
-      : 'The key is sent once to the Electron main process and is not returned to the renderer afterward.'
+      ? 'The stored key is never returned to this screen. Leave this blank to keep it, or enter a new key to replace it.'
+      : 'The key is stored securely after saving and is not shown again.'
   ));
+
+  const advanced = document.createElement('details');
+  advanced.className = 'settings-advanced connection-advanced-settings';
+  advanced.innerHTML = '<summary>Advanced connection settings</summary>';
+  const advancedBody = document.createElement('div');
+  advancedBody.className = 'settings-panel-body';
+  advancedBody.appendChild(field(
+    'Connection port',
+    numberControl(state.port, value => { state.port = Number(value); sync(); }, { min: 1024, max: 65535 }),
+    'Use a port from 1024 to 65535 only when the default conflicts with another application.'
+  ));
+  advanced.appendChild(advancedBody);
+  connection.body.appendChild(advanced);
   return connection;
 }
 
 function approvalTokenPanel(container) {
   const access = panel('Approval token');
+  access.el.id = 'approvalTokenSettings';
   access.body.classList.add('approval-token-settings');
 
   const intro = document.createElement('p');
@@ -151,15 +166,7 @@ function approvalStatusNotice() {
   if (!state.approvalRequired) return null;
   const notice = document.createElement('div');
   notice.className = 'connection-notice warn approval-required-notice connection-auth-recovery';
-  notice.innerHTML = `
-    <strong>Reconnect the existing app from ChatGPT Web.</strong>
-    <ol>
-      <li>Copy the current approval token above.</li>
-      <li>In ChatGPT Web, open <strong>Settings &gt; Apps &gt; Enabled Apps</strong> and select <strong>Rel.AI MCP</strong>.</li>
-      <li>Select <strong>Connect</strong> or <strong>Reconnect</strong> if shown. Otherwise, select Rel.AI MCP in a new chat and ask ChatGPT to use it.</li>
-      <li>When the Rel.AI authorization page opens, paste this token and approve access.</li>
-    </ol>
-    <p>Return to ChatGPT and retry your request. The endpoint is unchanged. Do not delete or recreate the app.</p>`;
+  notice.appendChild(createChatGptSetupGuide({ mode: 'reconnect', compact: true }));
   return notice;
 }
 
@@ -169,16 +176,11 @@ function replacementSuccessNotice() {
   const restartRequired = replacementResult.restartRequired === true;
   const notice = document.createElement('div');
   notice.className = `connection-notice ${restartRequired ? 'warn' : 'ok'} approval-token-success`;
-  notice.innerHTML = `
-    <strong>${restartRequired ? 'Approval token replaced; service restart required.' : 'Approval token replaced and ChatGPT access revoked.'}</strong>
-    <p>${restartRequired ? `${escapeHtml(replacementResult.error || 'Restart the local service before approving ChatGPT again.')} ` : ''}The MCP endpoint is unchanged. Revoked OAuth access tokens: ${numberLabel(revoked.accessTokens)}. Revoked refresh tokens: ${numberLabel(revoked.refreshTokens)}. Preserved ChatGPT client registrations: ${numberLabel(revoked.registeredClientsPreserved)}.</p>
-    <ol>
-      <li>Copy the new approval token above.</li>
-      ${restartRequired ? '<li>Restart the local service from the dashboard or tray.</li>' : ''}
-      <li>In ChatGPT Web, open <strong>Settings &gt; Apps &gt; Enabled Apps</strong> and select the existing <strong>Rel.AI MCP</strong> app.</li>
-      <li>Select <strong>Connect</strong> or <strong>Reconnect</strong> if shown. Otherwise, select the app in a new chat and ask ChatGPT to use it.</li>
-      <li>Paste the new token when the Rel.AI authorization page opens, approve access, then retry your request.</li>
-    </ol>`;
+  const summary = document.createElement('div');
+  summary.innerHTML = `
+    <strong>${restartRequired ? 'Approval token replaced; restart the connection.' : 'Approval token replaced and ChatGPT access revoked.'}</strong>
+    <p>Revoked access tokens: ${numberLabel(revoked.accessTokens)}. Revoked refresh tokens: ${numberLabel(revoked.refreshTokens)}. Preserved client registrations: ${numberLabel(revoked.registeredClientsPreserved)}.</p>`;
+  notice.append(summary, createChatGptSetupGuide({ mode: 'reconnect', compact: true }));
   return notice;
 }
 
@@ -260,8 +262,8 @@ function saveFooter(container) {
   footer.className = 'settings-save-row';
   const message = document.createElement('div');
   message.className = 'muted';
-  message.textContent = 'The approval token is shown only on request. The ngrok account key is write-only and is never returned after saving.';
-  const save = button('Save connection settings and restart', 'primary', () => saveSettings(container, save));
+  message.textContent = 'The approval token is shown only on request. The ngrok account key is never returned after saving.';
+  const save = button('Save tunnel settings and restart connection', 'primary', () => saveSettings(container, save));
   footer.append(message, save);
   return footer;
 }
@@ -327,7 +329,7 @@ async function saveSettings(container, saveButton) {
     return;
   }
   saveButton.disabled = true;
-  saveButton.textContent = 'Saving and restarting…';
+  saveButton.textContent = 'Saving and restarting connection…';
   try {
     await window.relaiDesktop.saveSettings({
       port: state.port,
@@ -335,7 +337,7 @@ async function saveSettings(container, saveButton) {
       ngrokAuthtoken: state.ngrokAuthtoken
     });
     markUnsaved(container, false);
-    toast('Connection settings saved. The local service and public endpoint restarted.', { variant: 'success' });
+    toast('Tunnel settings saved. The connection restarted.', { variant: 'success' });
     requestDashboardRefresh();
     await loadAndRender(container);
   } catch (error) {
@@ -346,7 +348,7 @@ async function saveSettings(container, saveButton) {
 }
 
 function validate() {
-  if (!Number.isInteger(state.port) || state.port < 1024 || state.port > 65535) return 'Enter a local service port from 1024 to 65535.';
+  if (!Number.isInteger(state.port) || state.port < 1024 || state.port > 65535) return 'Enter a connection service port from 1024 to 65535.';
   if (!isValidDomain(state.ngrokDomain)) return 'Enter a valid permanent ngrok domain.';
   if (!state.ngrokAuthtokenConfigured && !state.ngrokAuthtoken) return 'Enter your ngrok account key.';
   if (state.ngrokAuthtoken && (state.ngrokAuthtoken.length < 8 || /\s/.test(state.ngrokAuthtoken))) return 'Enter a valid ngrok account key with no spaces.';

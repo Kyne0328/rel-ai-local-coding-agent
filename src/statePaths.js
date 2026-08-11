@@ -1,1 +1,1 @@
-export { defaultStateDir, getStateDir, statePath } from './stateLayout.js';
+export {  getStateDir,  } from './stateLayout.js';

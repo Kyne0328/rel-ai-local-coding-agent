@@ -32,8 +32,5 @@ function pruneBuckets(now = Date.now()) {
   for (const [key, bucket] of buckets) if (now >= bucket.resetAt) buckets.delete(key);
 }
 
-function resetRequestBudgets() {
-  buckets.clear();
-}
 
-export { consumeRequestBudget, requestSource, resetRequestBudgets };
+export { consumeRequestBudget,   };

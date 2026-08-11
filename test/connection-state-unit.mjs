@@ -21,7 +21,7 @@ assert.equal(connectionSummary(bearerReady).label, 'Ready');
 const bearerLayers = connectionLayerViews(bearerReady);
 assert.equal(bearerLayers.find(layer => layer.key === 'chatgptReadiness')?.label, 'Bearer authorized');
 assert.match(bearerLayers.find(layer => layer.key === 'chatgptReadiness')?.description || '', /OAuth clients still require approval/);
-assert.equal(bearerLayers.find(layer => layer.key === 'mcpClient')?.label, 'No requests yet');
+assert.equal(bearerLayers.find(layer => layer.key === 'mcpClient')?.label, 'Ready');
 
 const active = connectionStateFor({
   ...base,
@@ -61,6 +61,24 @@ const degraded = connectionStateFor({
 assert.equal(connectionSummary(degraded).label, 'Host action required');
 assert.equal(connectionSummary(degraded).tone, 'bad');
 
+const toolRefresh = connectionStateFor({
+  ...base,
+  mcpAuthentication: { status: 'oauth_authorized' },
+  mcpConnection: { status: 'tool_refresh_required' }
+});
+assert.equal(connectionSummary(toolRefresh).label, 'Tool refresh required');
+assert.equal(connectionSummary(toolRefresh).tone, 'warn');
+assert.notEqual(toolRefresh.mcpClient.status, 'reauthentication_required');
+
+const deviceUpdate = connectionStateFor({
+  ...base,
+  mcpAuthentication: { status: 'oauth_authorized' },
+  mcpConnection: { status: 'device_update_required' }
+});
+assert.equal(connectionSummary(deviceUpdate).label, 'Device update required');
+assert.equal(connectionSummary(deviceUpdate).tone, 'warn');
+assert.notEqual(deviceUpdate.mcpClient.status, 'reauthentication_required');
+
 const reauth = connectionStateFor({
   ...base,
   mcpAuthentication: { status: 'authentication_required', oauthApprovalRequired: true },
@@ -70,13 +88,13 @@ assert.equal(isMcpAuthenticationReady(reauth), false);
 assert.equal(connectionSummary(reauth).label, 'Approval required');
 
 assert.deepEqual(connectionLayerViews(recent).map(layer => layer.title), [
-  'Local service',
-  'Public endpoint',
-  'MCP authentication',
-  'MCP activity',
+  'Connection service',
+  'Secure endpoint',
+  'Authorization',
+  'Client and tools',
   'Dashboard updates'
 ]);
-assert.equal(connectionLayerViews(recent).find(layer => layer.key === 'publicEndpoint')?.label, 'Published');
+assert.equal(connectionLayerViews(recent).find(layer => layer.key === 'publicEndpoint')?.label, 'Available');
 
 const legacyReady = connectionStateFor({
   ...base,
@@ -92,7 +110,7 @@ const startingLayers = connectionLayerViews({
   mcpClient: { status: 'reconnecting' },
   dashboardUpdates: { status: 'reconnecting' }
 });
-for (const key of ['localService', 'publicEndpoint', 'chatgptReadiness', 'mcpClient', 'dashboardUpdates']) {
+for (const key of ['localService', 'publicEndpoint', 'chatgptReadiness', 'mcpClient']) {
   assert.equal(startingLayers.find(layer => layer.key === key)?.tone, 'working', `${key} progress must use the information tone`);
 }
 

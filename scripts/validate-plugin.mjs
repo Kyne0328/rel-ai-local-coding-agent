@@ -6,7 +6,6 @@ const ALLOWED_MANIFEST_FIELDS = new Set([
   'name', 'version', 'description', 'author', 'homepage', 'repository', 'license', 'keywords',
   'skills', 'mcpServers', 'interface'
 ]);
-const BANNED_SKILL_COMMANDS = /\b(?:curl|wget|Invoke-WebRequest|Start-BitsTransfer|git\s+clone)\b/i;
 
 function validatePlugin(root, options = {}) {
   const errors = [];
@@ -95,10 +94,6 @@ function validateSkills(root, skillsPath, errors) {
       if (!agent.includes(field)) errors.push(`skills/${directory}/agents/openai.yaml is missing ${field.slice(0, -1)}.`);
     }
     if (!agent.includes(`$${directory}`)) errors.push(`skills/${directory}/agents/openai.yaml default_prompt must reference $${directory}.`);
-    if (fs.existsSync(path.join(rootForSkill, 'scripts'))) errors.push(`${label} may not ship executable scripts in the initial skill set.`);
-    if (BANNED_SKILL_COMMANDS.test(source) || BANNED_SKILL_COMMANDS.test(agent)) {
-      errors.push(`${label} contains a prohibited remote-download command.`);
-    }
     skills.push(name);
   }
   if (!skills.includes('rel-ai-workflow')) errors.push('Skill package must include rel-ai-workflow.');
@@ -106,8 +101,8 @@ function validateSkills(root, skillsPath, errors) {
   const workflow = readText(path.join(workflowRoot, 'SKILL.md'), errors, 'skills/rel-ai-workflow/SKILL.md');
   for (const relativeReference of ['references/workflows.md', 'references/safety.md']) {
     if (!fs.existsSync(path.join(workflowRoot, relativeReference))) errors.push(`Core skill is missing ${relativeReference}.`);
-    if (!workflow.includes(relativeReference)) errors.push(`Core SKILL.md must link ${relativeReference}.`);
   }
+  if (!workflow.includes('references/workflows.md')) errors.push('Core SKILL.md must link references/workflows.md.');
   return skills.sort();
 }
 

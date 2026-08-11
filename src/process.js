@@ -209,32 +209,6 @@ function waitForProcessGroupExit(pid, timeoutMs) {
   });
 }
 
-function waitForProcessExit(target, timeoutMs) {
-  if (!isProcessAlive(target)) return Promise.resolve(true);
-  if (timeoutMs <= 0) return Promise.resolve(!isProcessAlive(target));
-
-  return new Promise(resolve => {
-    let settled = false;
-    const onExit = () => finish(true);
-    const interval = setInterval(() => {
-      if (!isProcessAlive(target)) finish(true);
-    }, 25);
-    const timer = setTimeout(() => finish(!isProcessAlive(target)), timeoutMs);
-
-    target?.once?.('exit', onExit);
-    target?.once?.('close', onExit);
-
-    function finish(exited) {
-      if (settled) return;
-      settled = true;
-      clearInterval(interval);
-      clearTimeout(timer);
-      target?.off?.('exit', onExit);
-      target?.off?.('close', onExit);
-      resolve(exited);
-    }
-  });
-}
 
 function runProcess(command, args, options = {}, config = {}) {
   return new Promise((resolve) => {
@@ -436,12 +410,12 @@ function debugKill(label, error) {
 
 export {
   appendLimited,
-  isProcessAlive,
+
   isProcessTreeAlive,
   killProcessTree,
   runProcess,
-  signalProcessTree,
+
   summarizeCommand,
   terminateProcessTree,
-  waitForProcessExit
+
 };

@@ -1,7 +1,6 @@
 import * as crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
 
-const CONNECTION_STATES = Object.freeze(['stopped', 'starting', 'ready', 'degraded', 'failed']);
 const AUTH_MODES = Object.freeze(['oauth', 'static_bearer', 'local_no_auth']);
 const RECENT_ACTIVITY_MS = 2 * 60 * 1000;
 
@@ -341,4 +340,4 @@ function messageOf(error) {
 
 const mcpConnectionManager = new McpConnectionManager();
 
-export { AUTH_MODES, CONNECTION_STATES, McpConnectionManager, RECENT_ACTIVITY_MS, mcpConnectionManager, redactFields, safeId };
+export {   McpConnectionManager,  mcpConnectionManager,   };

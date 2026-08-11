@@ -30,7 +30,7 @@ assert.equal(getToolDefinitions(config).length, 12);
 const schemas = getToolSchemas(config);
 const publicSchemas = getPublicToolSchemas(config);
 const schemaBytes = bytes(publicSchemas);
-assert.ok(schemaBytes < 29_000, `unified discovery schema is ${schemaBytes} bytes`);
+assert.ok(schemaBytes < 65_536, `unified discovery schema is ${schemaBytes} bytes`);
 assert.deepEqual(
   getPublicToolSchemas({ toolProfile: 'core', workspaces: {} }),
   publicSchemas,
@@ -39,8 +39,8 @@ assert.deepEqual(
 assert.ok(Buffer.byteLength(JSON.stringify(connectorInstructions(config)), 'utf8') < 512);
 
 const manifest = getToolSurfaceManifest(config);
-assert.equal(manifest.schemaVersion, 5);
-assert.equal(manifest.toolSurfaceVersion, 32);
+assert.equal(manifest.schemaVersion, 6);
+assert.equal(manifest.toolSurfaceVersion, 33);
 assert.equal(Object.hasOwn(manifest, 'profile'), false);
 assert.equal(manifest.toolCount, 12);
 assert.deepEqual(manifest.tools.map(item => item.name), expectedTools);
@@ -50,8 +50,15 @@ assert.equal(Object.hasOwn(manifest, 'migration'), false);
 
 for (const schema of schemas) {
   assert.equal(ToolSchema.safeParse(schema).success, true, `${schema.name} must satisfy ToolSchema`);
-  assert.equal(Object.hasOwn(publicSchemas.find(item => item.name === schema.name), 'outputSchema'), false);
+  const publicSchema = publicSchemas.find(item => item.name === schema.name);
+  assert.ok(publicSchema?.outputSchema, `${schema.name} must advertise outputSchema`);
+  assert.equal(publicSchema.outputSchema.type, 'object');
+  assert.equal(publicSchema.outputSchema.additionalProperties, false);
+  assert.deepEqual(publicSchema.outputSchema.required, ['ok']);
 }
+const publicSearchSchema = publicSchemas.find(item => item.name === 'relai_search')?.outputSchema;
+assert.equal(publicSearchSchema?.properties?.neuralEmbeddings?.type, 'boolean', 'semantic search output metadata must remain declared');
+assert.equal(publicSearchSchema?.properties?.originalBytes?.type, 'number', 'compacted tool results must remain valid against the public output schema');
 for (const removed of removedDirectNames) {
   assert.equal(resolveToolOperation(removed, {}), null, `${removed} must not resolve as a public tool`);
   assert.equal(publicSchemas.some(tool => tool.name === removed), false, `${removed} must not be discovered`);
@@ -61,6 +68,11 @@ const schemaByName = new Map(schemas.map(schema => [schema.name, schema]));
 assert.deepEqual(schemaByName.get('relai_work').inputSchema.properties.action.enum, ['begin', 'status', 'finish', 'cancel']);
 assert.deepEqual(schemaByName.get('relai_process').inputSchema.properties.action.enum, ['start', 'read', 'write', 'stop', 'list']);
 assert.ok(schemaByName.get('relai_process').inputSchema.properties.kind.enum.includes('service'));
+const editSchema = schemaByName.get('relai_edit');
+assert.equal(editSchema.inputSchema.oneOf, undefined, 'relai_edit must not expose a non-discriminated oneOf wrapper');
+assert.match(editSchema.description, /oldText\/newText/i);
+assert.match(editSchema.description, /content for full-file replacement/i);
+assert.match(editSchema.inputSchema.properties.content.description, /complete replacement content/i);
 
 await valid('relai_work', { action: 'begin', workspace: 'repo' });
 await invalid('relai_work', { action: 'begin' });
@@ -78,6 +90,18 @@ await invalid('relai_search', { action: 'semantic', work_id: 'work', query: 'nee
 await valid('relai_validate', { action: 'http', work_id: 'work', route: '/health', timeoutMs: 600000 });
 await invalid('relai_validate', { action: 'http', work_id: 'work', route: '/health', level: 'release' });
 await invalid('relai_validate', { action: 'http', work_id: 'work', route: '/health', timeoutMs: 600001 });
+await valid('relai_edit', { work_id: 'work', path: 'README.md', content: '# Replacement\n' });
+await valid('relai_edit', { work_id: 'work', path: 'README.md', oldText: 'before', newText: 'after' });
+await valid('relai_edit', { work_id: 'work', path: 'README.md', replacements: [{ oldText: 'before', newText: 'after' }] });
+await valid('relai_edit', { work_id: 'work', updateText: '*** Begin Patch\n*** End Patch' });
+await valid('relai_edit', { work_id: 'work', edits: [{ path: 'README.md', content: '# Replacement\n' }] });
+await valid('relai_edit', { work_id: 'work', stage: 'start', path: 'README.md', content: '# Chunk\n' });
+await valid('relai_edit', { work_id: 'work', stage: 'append', writeId: 'write', content: '# Chunk\n' });
+await valid('relai_edit', { work_id: 'work', stage: 'commit', writeId: 'write' });
+await valid('relai_edit', { work_id: 'work', path: 'README.md' });
+await invalid('relai_edit', { path: 'README.md', content: '# Missing task\n' });
+await invalid('relai_edit', { work_id: 'work', path: 'README.md', content: 42 });
+await invalid('relai_edit', { work_id: 'work', path: 'README.md', content: '# Replacement\n', overwrite: true });
 
 assert.throws(() => resolveToolOperation('relai_work', { action: 'begin', workspace: 'repo', work_id: 'invalid' }), /Unsupported field 'work_id'/);
 assert.throws(() => resolveToolOperation('relai_work', { action: 'status', title: 'invalid' }), /Unsupported field 'title'/);

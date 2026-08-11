@@ -52,13 +52,14 @@ function renderStatus(container, status = {}) {
       ${pillHtml(view.label, view.tone)}
     </div>
     <p class="muted application-update-copy">${escapeHtml(view.description)}</p>
+    ${supportPolicyHtml(status.supportPolicy)}
     ${progressHtml(state, status.progress)}
     ${status.errorCode ? `<code class="application-update-code">${escapeHtml(status.errorCode)}</code>` : ''}
     <div class="connection-actions application-update-actions">
       ${view.action ? `<button class="${view.action.className}" type="button" data-update-action="${view.action.id}">${escapeHtml(view.action.label)}</button>` : ''}
       ${view.secondary ? `<button class="secondary" type="button" data-update-action="${view.secondary.id}">${escapeHtml(view.secondary.label)}</button>` : ''}
       <a class="buttonlike secondary" href="${RELEASES_URL}" target="_blank" rel="noreferrer">GitHub Releases</a>
-      ${state === 'error' ? '<a class="buttonlike secondary" href="#settings/diagnostics">Open Diagnostics</a>' : ''}
+      ${state === 'error' ? '<a class="buttonlike secondary" href="#diagnostics">Open Diagnostics</a>' : ''}
     </div>`;
   wireActions(container);
 }
@@ -112,6 +113,35 @@ function updateView(state, status, currentVersion, availableVersion) {
     description: 'Rel.AI checks once per day. Downloads and restarts always require your approval.',
     action: { id: 'check', label: 'Check for updates', className: 'secondary' }
   };
+}
+
+function supportPolicyView(policy = {}) {
+  const state = String(policy.state || 'unavailable');
+  const minimumSupported = policy.minimumSupportedVersion ? `v${policy.minimumSupportedVersion}` : 'the supported release';
+  const minimumRecommended = policy.minimumRecommendedVersion ? `v${policy.minimumRecommendedVersion}` : minimumSupported;
+  if (state === 'current') return { label: 'Supported', tone: 'ok', description: `This installation meets the remote support baseline of ${minimumSupported}.` };
+  if (state === 'recommended') return { label: 'Update recommended', tone: 'warn', description: `The remote support policy recommends ${minimumRecommended} or newer.` };
+  if (state === 'deprecated') {
+    const deadline = formatPolicyDate(policy.enforceAfter);
+    return { label: 'Support ending', tone: 'warn', description: deadline
+      ? `This version is below the remote support baseline of ${minimumSupported}. Update before ${deadline}.`
+      : `This version is below the remote support baseline of ${minimumSupported}. Enforcement is not active yet.` };
+  }
+  if (state === 'required') return { label: 'Update required', tone: 'bad', description: `The remote support policy requires ${minimumSupported} or newer. MCP work is paused until the app is updated.` };
+  if (state === 'emergency_blocked') return { label: 'Critical update', tone: 'bad', description: 'This exact application version is remotely blocked for an urgent update. MCP work is paused until the app is updated.' };
+  return { label: 'Policy unavailable', tone: 'warn', description: 'The remote support policy is unavailable or expired. Rel.AI fails open and does not block MCP work.' };
+}
+
+function supportPolicyHtml(policy) {
+  if (!policy || String(policy.state || '') === 'current') return '';
+  const view = supportPolicyView(policy);
+  return `<div class="application-update-policy"><div class="application-update-summary"><div><span class="application-update-label">Update requirement</span><strong>${escapeHtml(policy.minimumSupportedVersion ? `v${policy.minimumSupportedVersion} or newer` : 'Remote requirement')}</strong></div>${pillHtml(view.label, view.tone)}</div><p class="muted application-update-copy">${escapeHtml(view.description)}</p></div>`;
+}
+
+function formatPolicyDate(value) {
+  const timestamp = Date.parse(String(value || ''));
+  if (!Number.isFinite(timestamp)) return '';
+  return new Date(timestamp).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
 function progressHtml(state, progress) {
@@ -179,3 +209,5 @@ function messageOf(error) {
   return error instanceof Error ? error.message : String(error || 'Application update failed.');
 }
 
+
+export { supportPolicyView };

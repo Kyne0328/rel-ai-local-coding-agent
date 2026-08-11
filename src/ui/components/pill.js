@@ -22,17 +22,6 @@ function toneLabel(value, classOverride = '') {
   return OVERRIDE_TONES[classOverride] || statusTone(value);
 }
 
-export function Pill(value, extraClass = '') {
-  const cls = pillClass(value);
-  const el = document.createElement('span');
-  el.className = `status-pill ${cls} ${extraClass}`.trim();
-  el.textContent = String(value || 'unknown');
-  const sr = document.createElement('span');
-  sr.className = 'sr-only';
-  sr.textContent = ` (${toneLabel(value)})`;
-  el.appendChild(sr);
-  return el;
-}
 
 export function pillHtml(value, classOverride = '') {
   const cls = String(classOverride || pillClass(value)).trim();

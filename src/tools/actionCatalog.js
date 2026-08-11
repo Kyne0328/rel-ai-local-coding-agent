@@ -8,7 +8,7 @@ import {
 } from './actionDefinitions.js';
 import { schemaFromDefinition } from './schemaBuilder.js';
 
-const TOOL_SURFACE_VERSION = 32;
+const TOOL_SURFACE_VERSION = 33;
 const ACTION_OPERATIONS = Object.freeze({
   relai_work: Object.freeze({
     begin: operation('relai_begin_work'),
@@ -253,7 +253,7 @@ function catalogApprovalRequirement(publicTool, args = {}) {
 
 export {
   ACTION_OPERATIONS,
-  OPERATION_CAPABILITIES,
+
   TOOL_SURFACE_VERSION,
   catalogApprovalRequirement,
   getCatalogAction,

@@ -1,4 +1,4 @@
 interface:
   display_name: "Rel.AI Development Process"
-  short_description: "Persistent services and interactive programs"
-  default_prompt: "Use $rel-ai-dev-process to manage the requested persistent service, watcher, or interactive program through Rel.AI."
+  short_description: "Persistent runtime lifecycle management"
+  default_prompt: "Use $rel-ai-dev-process only for the requested persistent service, watcher, preview runtime, or interactive program; prove readiness, reuse it efficiently, and stop it when finished."

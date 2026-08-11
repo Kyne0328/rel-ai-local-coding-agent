@@ -75,10 +75,27 @@ assert.equal(
 const electronPkg = JSON.parse(fs.readFileSync(path.join(root, 'electron', 'package.json'), 'utf8'));
 const srcResource = electronPkg.build.extraResources.find((item) => item.from === '../src');
 assert.ok(srcResource, 'electron build must bundle src resources');
-assert.deepEqual(srcResource.filter, ['**/*.js'], 'electron build must package backend JavaScript without the source Tailwind stylesheet');
+assert.deepEqual(srcResource.filter, ['**/*.js'], 'electron build must package backend JavaScript without source Tailwind/build-only assets');
+const binResource = electronPkg.build.extraResources.find((item) => item.from === '../bin');
+assert.ok(binResource, 'electron build must bundle bin runtime resources');
+assert.deepEqual(binResource.filter, ['**/*'], 'electron build must package the complete bin runtime tree');
+const skillsResource = electronPkg.build.extraResources.find((item) => item.from === '../skills');
+assert.ok(skillsResource, 'electron build must bundle the complete built-in skills tree');
+assert.deepEqual(skillsResource.filter, ['**/*'], 'electron built-in skill packaging must include supporting files, not only SKILL.md');
+const rootPackageForRuntime = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+const electronRuntimeExclusions = new Set(['.codex-plugin', 'examples', 'types']);
+const expectedElectronRuntimeDirectories = rootPackageForRuntime.files
+  .filter(value => typeof value === 'string' && value.endsWith('/'))
+  .map(value => value.replace(/\/$/, ''))
+  .filter(value => !electronRuntimeExclusions.has(value));
+const packagedResourceRoots = new Set(electronPkg.build.extraResources
+  .map(item => String(item.from || '').replace(/^\.\.\//, '').replace(/\/$/, '')));
+for (const directory of expectedElectronRuntimeDirectories) {
+  assert.ok(packagedResourceRoots.has(directory), 'Electron packaging omitted root runtime directory: ' + directory);
+}
 assert.equal(fs.existsSync(path.join(root, 'src', 'ui', 'colorTokens.mjs')), true, 'the build-time ESM color manifest must exist');
 assert.equal(fs.existsSync(path.join(root, 'src', 'ui', 'colorTokens.js')), false, 'the removed CommonJS color manifest must not return');
-assert.equal(srcResource.filter.includes('**/*.mjs'), false, 'the build-time color manifest must not be packaged as a runtime backend resource');
+assert.equal(srcResource.filter.includes('**/*.mjs'), false, 'build-time ESM manifests must not be packaged as runtime backend resources');
 for (const renderer of ['status.html', 'wizard.html']) {
   const html = fs.readFileSync(path.join(root, 'electron', 'renderer', renderer), 'utf8');
   assert.ok(html.indexOf('color-tokens.css') < html.indexOf('app.css'), `${renderer} must load canonical color tokens before component styles`);
@@ -115,6 +132,7 @@ assert.ok(electronPkg.build.files.includes('desktop-notifications.js'), 'electro
 assert.ok(electronPkg.build.files.includes('desktop-lifecycle.js'), 'electron build must include desktop lifecycle state and startup ownership');
 assert.ok(electronPkg.build.files.includes('shutdown-coordinator.js'), 'electron build must include coordinated shutdown ownership');
 assert.ok(electronPkg.build.files.includes('controller-runtime.js'), 'electron build must include the active-controller runtime marker');
+assert.ok(electronPkg.build.files.includes('public-connection-runtime.js'), 'electron build must include cloud/direct public connection lifecycle ownership');
 for (const relayFile of ['cloud-relay-state.js', 'cloud-relay-client.js', 'cloud-relay-runtime.js']) {
   assert.equal(electronPkg.build.files.includes(relayFile), false, `electron build must not include removed relay module ${relayFile}`);
 }
@@ -196,7 +214,10 @@ assert.doesNotMatch(dashboardPreload, /desktop:cloud:/, 'removed cloud relay IPC
 assert.doesNotMatch(electronMain, /CloudRelay|cloudRelay|REL_AI_CLOUD/, 'Electron main must use only the managed ngrok connection path');
 assert.match(electronMain, /onStatusChange: taskActivity => setStatus\(\{ taskActivity \}\)/, 'tool activity must be pushed into desktop surfaces');
 assert.match(electronMain, /createApprovalTokenManager/, 'Electron main must delegate token rotation to the secured approval-token manager');
-assert.match(electronMain, /onOAuthAuthorized: \(\) => setStatus\(\{ authenticationRequired: false/, 'successful ChatGPT approval must clear the desktop reapproval state');
+assert.match(electronMain, /createPublicConnectionRuntime/, 'Electron main must delegate cloud/direct public connection lifecycle to one runtime owner');
+assert.match(electronMain, /createGatewayClient/, 'cloud mode must use the authenticated gateway client');
+assert.doesNotMatch(electronMain, /tunnelProcess/, 'Electron main must not retain a second ngrok process owner outside the public connection runtime');
+assert.match(electronMain, /onOAuthAuthorized: \(\) => \{[\s\S]*guiConfig\.connectionMode === 'direct'[\s\S]*setStatus\(\{ authenticationRequired: false/, 'local OAuth approval must clear reapproval only for Direct mode');
 assert.match(desktopSettings, /token: current\.token/, 'ordinary desktop settings saves must preserve the current approval token');
 assert.doesNotMatch(desktopSettings, /token: settings\.approvalToken/, 'ordinary desktop settings saves must not rotate the approval token');
 assert.match(electronMain, /createDashboardWindowManager/, 'Electron must host the dashboard in a dedicated window');
@@ -251,13 +272,13 @@ assert.match(electronMain, /createRecoveryWindowManager/, 'the fallback window m
 assert.match(electronMain, /recoveryWindowManager\.show\(\)/, 'the fallback must remain available for dashboard or service startup failure');
 assert.doesNotMatch(desktopTray, /Connection Recovery|showRecovery/, 'the tray must not expose the fallback as a routine destination');
 assert.match(desktopTray, /Diagnostics/, 'the tray must route routine troubleshooting into dashboard Diagnostics');
-assert.match(electronMain, /openDashboardWindow\('#settings\/diagnostics'\)/, 'tray Diagnostics must deep-link the dashboard');
+assert.match(electronMain, /openDashboardWindow\('#diagnostics'\)/, 'tray Diagnostics must deep-link the dashboard');
 assert.doesNotMatch(dashboardPreloadSurface, /openRecovery|desktop:open-recovery/, 'the routine dashboard bridge must not expose the fallback window');
 assert.equal(fs.existsSync(path.join(root, 'electron', 'renderer', 'settings.html')), false);
 assert.equal(fs.existsSync(path.join(root, 'electron', 'renderer', 'settings.js')), false);
 assert.match(dashboardPreload, /exposeInMainWorld\('relaiDesktop'/, 'the dashboard preload must expose constrained desktop controls');
 assert.match(electronMain, /dashboard\?surface=desktop/, 'the embedded dashboard must identify the desktop surface without a token query');
-assert.match(electronMain, /options\.firstRun \? '#settings\/connection' : ''/, 'first-run desktop setup must hand off directly to Connection');
+assert.match(electronMain, /showDashboardWindow\(''\)/, 'first-run desktop setup must hand off to dashboard Home so Getting started can continue onboarding');
 assert.match(fs.readFileSync(path.join(root, 'electron', 'ipc-handlers.js'), 'utf8'), /firstRun: config\?\.restart !== true/, 'recovery edits must not be treated as fresh first-run setup');
 assert.doesNotMatch(electronMain, /shell\.openExternal\(`http:\/\/127\.0\.0\.1:.*dashboard/, 'Open Dashboard must not launch the system browser');
 

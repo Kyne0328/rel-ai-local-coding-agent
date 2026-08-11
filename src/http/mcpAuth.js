@@ -51,14 +51,12 @@ function unauthorizedMcp(res, baseUrl, req) {
   ));
 }
 
-const isOAuthAuthorized = (req, options) => Boolean(oauthAuthorization(req, options));
-const isMcpAuthorized = (req, options) => Boolean(mcpAuthorization(req, options));
 
 export {
-  bearerToken,
-  isMcpAuthorized,
-  isOAuthAuthorized,
+
+
+
   mcpAuthorization,
-  oauthAuthorization,
+
   unauthorizedMcp
 };

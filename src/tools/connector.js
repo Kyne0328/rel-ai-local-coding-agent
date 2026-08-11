@@ -12,7 +12,10 @@ import {
 function serializeConnectorResult({ publicName, action, operationName, value, args = {}, workId = '' }) {
   const operationResult = compactForConnector(operationName, value, args);
   const publicResult = slimCompactPublicResult(publicName, action, operationResult);
-  return withTaskIdentity(publicResult, workId);
+  const resultWithWorkflow = value?.workflow && publicResult && typeof publicResult === 'object'
+    ? { ...publicResult, workflow: value.workflow }
+    : publicResult;
+  return withTaskIdentity(resultWithWorkflow, workId);
 }
 
 function compactForConnector(name, value, args = {}) {
@@ -67,7 +70,7 @@ function compactForConnector(name, value, args = {}) {
       });
     }
     case 'relai_diff':
-      return pruneEmpty({ ...compactRepositoryState(value), staged: value.staged, path: value.path, diff: value.diff });
+      return pruneEmpty({ ...compactRepositoryState(value), staged: value.staged, path: value.path, reviewScope: value.reviewScope || value.reviewedScope, reviewedScope: value.reviewedScope, reviewHash: value.reviewHash, reviewedFiles: value.reviewedFiles, excludedWorkspaceFiles: value.excludedWorkspaceFiles, diff: value.diff });
     case 'relai_run_checks':
       return pruneEmpty({
         ok: value.ok,
@@ -77,6 +80,9 @@ function compactForConnector(name, value, args = {}) {
         results: Array.isArray(value.results) ? value.results.map(compactCommandResult) : value.results,
         skippedChecks: value.skippedChecks,
         completedUnits: value.completedUnits,
+        executedUnits: value.executedUnits,
+        reusedUnits: value.reusedUnits,
+        reusedChecks: value.reusedChecks,
         totalUnits: value.totalUnits,
         failedCheck: value.failedCheck,
         cancelled: value.cancelled,
@@ -133,6 +139,7 @@ function compactForConnector(name, value, args = {}) {
         manifests: value.manifests,
         discoveredCommands: value.discoveredCommands,
         projectInstructions: value.projectInstructions,
+        workspaceSkills: value.workspaceSkills,
         fileCount: value.fileCount,
         files: files.values,
         returnedFileCount: files.count,

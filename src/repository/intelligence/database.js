@@ -1,0 +1,399 @@
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+
+import { realRootOf } from '../../safety.js';
+import { statePath } from '../../stateLayout.js';
+
+const INDEX_SCHEMA_VERSION = 1;
+
+const SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS index_meta(
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+) STRICT;
+CREATE TABLE IF NOT EXISTS generations(
+  id INTEGER PRIMARY KEY,
+  kind TEXT NOT NULL,
+  status TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  completed_at TEXT,
+  processed_files INTEGER NOT NULL DEFAULT 0,
+  error_message TEXT
+) STRICT;
+CREATE TABLE IF NOT EXISTS files(
+  id INTEGER PRIMARY KEY,
+  path TEXT NOT NULL UNIQUE,
+  language TEXT NOT NULL,
+  is_test INTEGER NOT NULL CHECK(is_test IN (0,1)),
+  size_bytes INTEGER NOT NULL,
+  mtime_ms REAL NOT NULL,
+  content_hash TEXT NOT NULL,
+  parser TEXT NOT NULL,
+  parser_version INTEGER NOT NULL,
+  generation_id INTEGER NOT NULL,
+  parse_error INTEGER NOT NULL DEFAULT 0 CHECK(parse_error IN (0,1))
+) STRICT;
+CREATE TABLE IF NOT EXISTS symbols(
+  id INTEGER PRIMARY KEY,
+  file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  qualified_name TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  start_line INTEGER NOT NULL,
+  start_column INTEGER NOT NULL,
+  end_line INTEGER NOT NULL,
+  end_column INTEGER NOT NULL,
+  provider TEXT NOT NULL,
+  confidence REAL NOT NULL
+) STRICT;
+CREATE TABLE IF NOT EXISTS occurrences(
+  id INTEGER PRIMARY KEY,
+  file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  role TEXT NOT NULL,
+  line INTEGER NOT NULL,
+  column_no INTEGER NOT NULL,
+  end_line INTEGER NOT NULL,
+  end_column INTEGER NOT NULL,
+  enclosing_symbol_id INTEGER REFERENCES symbols(id) ON DELETE SET NULL,
+  provider TEXT NOT NULL,
+  confidence REAL NOT NULL
+) STRICT;
+CREATE TABLE IF NOT EXISTS imports(
+  source_file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+  specifier TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  target_path TEXT,
+  target_file_id INTEGER REFERENCES files(id) ON DELETE SET NULL,
+  provider TEXT NOT NULL,
+  confidence REAL NOT NULL,
+  PRIMARY KEY(source_file_id, specifier, kind)
+) WITHOUT ROWID, STRICT;
+CREATE TABLE IF NOT EXISTS edges(
+  id INTEGER PRIMARY KEY,
+  source_symbol_id INTEGER REFERENCES symbols(id) ON DELETE CASCADE,
+  target_symbol_id INTEGER REFERENCES symbols(id) ON DELETE CASCADE,
+  source_file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+  target_file_id INTEGER REFERENCES files(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  target_name TEXT,
+  provider TEXT NOT NULL,
+  confidence REAL NOT NULL
+) STRICT;
+CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(
+  path UNINDEXED,
+  symbols,
+  terms,
+  tokenize = "unicode61 tokenchars '_$'"
+);
+CREATE INDEX IF NOT EXISTS symbols_name_idx ON symbols(name);
+CREATE INDEX IF NOT EXISTS symbols_qualified_idx ON symbols(qualified_name);
+CREATE INDEX IF NOT EXISTS occurrences_name_idx ON occurrences(name);
+CREATE INDEX IF NOT EXISTS occurrences_file_idx ON occurrences(file_id);
+CREATE INDEX IF NOT EXISTS imports_target_idx ON imports(target_file_id);
+CREATE INDEX IF NOT EXISTS edges_source_idx ON edges(source_symbol_id);
+CREATE INDEX IF NOT EXISTS edges_target_idx ON edges(target_symbol_id);
+CREATE INDEX IF NOT EXISTS files_generation_idx ON files(generation_id);
+`;
+
+function repositoryIndexRoot(config = {}) {
+  return statePath(config, 'repository-intelligence');
+}
+
+function repositoryIndexPath(config, workspace) {
+  const realRoot = realRootOf(workspace.path);
+  const identity = crypto.createHash('sha256').update(realRoot).digest('hex').slice(0, 24);
+  const directory = path.join(repositoryIndexRoot(config), identity);
+  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+  try { fs.chmodSync(directory, 0o700); } catch {}
+  return path.join(directory, 'graph.db');
+}
+
+function openIndexDatabase(file, { readonly = false } = {}) {
+  if (!readonly) {
+    fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+    try { fs.chmodSync(path.dirname(file), 0o700); } catch {}
+  }
+  const db = new DatabaseSync(file, { readOnly: readonly, timeout: 5000 });
+  try {
+    db.enableLoadExtension(false);
+    db.exec('PRAGMA foreign_keys=ON');
+    if (!readonly) {
+      db.exec('PRAGMA journal_mode=WAL');
+      db.exec('PRAGMA synchronous=NORMAL');
+      db.exec('PRAGMA auto_vacuum=INCREMENTAL');
+      try { fs.chmodSync(file, 0o600); } catch {}
+    }
+    return db;
+  } catch (error) {
+    try { db.close(); } catch {}
+    throw error;
+  }
+}
+
+function ensureIndexSchema(db) {
+  const version = metaNumber(db, 'schema_version', 0);
+  if (version > INDEX_SCHEMA_VERSION) {
+    const error = new Error(`Repository Intelligence index schema ${version} is newer than supported schema ${INDEX_SCHEMA_VERSION}.`);
+    error.code = 'INDEX_SCHEMA_FUTURE';
+    throw error;
+  }
+  if (version > 0 && version !== INDEX_SCHEMA_VERSION) resetSchema(db);
+  db.exec(SCHEMA_SQL);
+  setMeta(db, 'schema_version', INDEX_SCHEMA_VERSION);
+}
+
+function resetSchema(db) {
+  db.exec(`
+    DROP TABLE IF EXISTS edges;
+    DROP TABLE IF EXISTS imports;
+    DROP TABLE IF EXISTS occurrences;
+    DROP TABLE IF EXISTS symbols;
+    DROP TABLE IF EXISTS files;
+    DROP TABLE IF EXISTS generations;
+    DROP TABLE IF EXISTS index_meta;
+    DROP TABLE IF EXISTS search_fts;
+  `);
+}
+
+function beginGeneration(db, kind) {
+  const startedAt = new Date().toISOString();
+  const row = db.prepare('INSERT INTO generations(kind, status, started_at) VALUES (?, ?, ?) RETURNING id').get(kind, 'building', startedAt);
+  return Number(row.id);
+}
+
+function finishGeneration(db, generationId, status, processedFiles = 0, errorMessage = null) {
+  db.prepare('UPDATE generations SET status=?, completed_at=?, processed_files=?, error_message=? WHERE id=?')
+    .run(status, new Date().toISOString(), Number(processedFiles || 0), errorMessage == null ? null : String(errorMessage), generationId);
+  if (status === 'committed') setMeta(db, 'current_generation', generationId);
+}
+
+function currentGeneration(db) {
+  const id = metaNumber(db, 'current_generation', 0);
+  if (!id) return null;
+  return db.prepare('SELECT * FROM generations WHERE id=? AND status=?').get(id, 'committed') || null;
+}
+
+function listManifest(db) {
+  return db.prepare('SELECT id, path, language, is_test, size_bytes, mtime_ms, content_hash, parser, parser_version, generation_id, parse_error FROM files ORDER BY path').all()
+    .map(row => ({
+      id: Number(row.id), path: String(row.path), language: String(row.language), test: Number(row.is_test) === 1,
+      sizeBytes: Number(row.size_bytes), mtimeMs: Number(row.mtime_ms), contentHash: String(row.content_hash),
+      parser: String(row.parser), parserVersion: Number(row.parser_version), generationId: Number(row.generation_id), parseError: Number(row.parse_error) === 1
+    }));
+}
+
+function replaceFileFacts(db, generationId, candidate, parsed, parserVersion) {
+  db.prepare(`
+    INSERT INTO files(path, language, is_test, size_bytes, mtime_ms, content_hash, parser, parser_version, generation_id, parse_error)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(path) DO UPDATE SET
+      language=excluded.language, is_test=excluded.is_test, size_bytes=excluded.size_bytes,
+      mtime_ms=excluded.mtime_ms, content_hash=excluded.content_hash, parser=excluded.parser,
+      parser_version=excluded.parser_version, generation_id=excluded.generation_id, parse_error=excluded.parse_error
+  `).run(candidate.path, parsed.language, candidate.test ? 1 : 0, candidate.size, candidate.mtimeMs, candidate.contentHash,
+    parsed.parser, parserVersion, generationId, parsed.parseError ? 1 : 0);
+  const fileId = Number(db.prepare('SELECT id FROM files WHERE path=?').get(candidate.path).id);
+
+  db.prepare('DELETE FROM edges WHERE source_file_id=? OR target_file_id=?').run(fileId, fileId);
+  db.prepare('DELETE FROM occurrences WHERE file_id=?').run(fileId);
+  db.prepare('DELETE FROM imports WHERE source_file_id=?').run(fileId);
+  db.prepare('DELETE FROM symbols WHERE file_id=?').run(fileId);
+  db.prepare('DELETE FROM search_fts WHERE rowid=?').run(fileId);
+
+  const insertSymbol = db.prepare(`
+    INSERT INTO symbols(file_id, name, qualified_name, kind, start_line, start_column, end_line, end_column, provider, confidence)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const symbolIdByQualified = new Map();
+  for (const symbol of parsed.symbols || []) {
+    const info = insertSymbol.run(fileId, symbol.name, symbol.qualifiedName, symbol.kind, symbol.startLine, symbol.startColumn,
+      symbol.endLine, symbol.endColumn, symbol.provider || 'tree-sitter', Number(symbol.confidence || 0.8));
+    symbolIdByQualified.set(symbol.qualifiedName, Number(info.lastInsertRowid));
+  }
+
+  const insertOccurrence = db.prepare(`
+    INSERT INTO occurrences(file_id, name, role, line, column_no, end_line, end_column, enclosing_symbol_id, provider, confidence)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  for (const occurrence of parsed.occurrences || []) {
+    insertOccurrence.run(fileId, occurrence.name, occurrence.role, occurrence.line, occurrence.column, occurrence.endLine, occurrence.endColumn,
+      occurrence.enclosingQualifiedName ? symbolIdByQualified.get(occurrence.enclosingQualifiedName) || null : null,
+      occurrence.provider || 'tree-sitter', Number(occurrence.confidence || 0.82));
+  }
+
+  const insertImport = db.prepare(`
+    INSERT INTO imports(source_file_id, specifier, kind, target_path, target_file_id, provider, confidence)
+    VALUES (?, ?, ?, NULL, NULL, ?, ?)
+  `);
+  for (const item of parsed.imports || []) {
+    insertImport.run(fileId, item.specifier, item.kind || 'import', 'tree-sitter', 0.82);
+  }
+
+  const symbolsText = (parsed.symbols || []).map(item => `${item.name} ${item.qualifiedName}`).join(' ');
+  db.prepare('INSERT INTO search_fts(rowid, path, symbols, terms) VALUES (?, ?, ?, ?)')
+    .run(fileId, candidate.path, symbolsText, parsed.searchText || '');
+  return fileId;
+}
+
+function deleteIndexedPath(db, relativePath) {
+  const row = db.prepare('SELECT id FROM files WHERE path=?').get(relativePath);
+  if (!row) return false;
+  db.prepare('DELETE FROM search_fts WHERE rowid=?').run(Number(row.id));
+  db.prepare('DELETE FROM files WHERE id=?').run(Number(row.id));
+  return true;
+}
+
+function resolveRelationships(db) {
+  db.prepare('UPDATE imports SET target_path=NULL, target_file_id=NULL').run();
+  db.prepare("DELETE FROM edges WHERE type IN ('IMPORTS','CALLS')").run();
+  const files = db.prepare('SELECT id, path FROM files ORDER BY path').all().map(row => ({ id: Number(row.id), path: String(row.path) }));
+  const pathToId = new Map(files.map(file => [file.path, file.id]));
+  const fileById = new Map(files.map(file => [file.id, file]));
+  const suffixIndex = buildImportSuffixIndex(pathToId.keys());
+  const imports = db.prepare('SELECT source_file_id, specifier FROM imports').all();
+  const updateImport = db.prepare('UPDATE imports SET target_path=?, target_file_id=? WHERE source_file_id=? AND specifier=?');
+  const insertEdge = db.prepare(`
+    INSERT INTO edges(source_symbol_id, target_symbol_id, source_file_id, target_file_id, type, target_name, provider, confidence)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const importedIdsBySource = new Map();
+  for (const item of imports) {
+    const sourceId = Number(item.source_file_id);
+    const source = fileById.get(sourceId);
+    if (!source) continue;
+    const targetPath = resolveImportPath(source.path, String(item.specifier), pathToId, suffixIndex);
+    if (!targetPath) continue;
+    const targetId = pathToId.get(targetPath);
+    updateImport.run(targetPath, targetId, source.id, String(item.specifier));
+    insertEdge.run(null, null, source.id, targetId, 'IMPORTS', null, 'tree-sitter', 0.82);
+    if (!importedIdsBySource.has(sourceId)) importedIdsBySource.set(sourceId, new Set());
+    importedIdsBySource.get(sourceId).add(targetId);
+  }
+
+  const symbolsByName = new Map();
+  for (const row of db.prepare('SELECT id, file_id, name FROM symbols ORDER BY name, file_id, id').all()) {
+    const name = String(row.name);
+    if (!symbolsByName.has(name)) symbolsByName.set(name, []);
+    symbolsByName.get(name).push(row);
+  }
+  const callRows = db.prepare(`
+    SELECT o.file_id, o.name, o.enclosing_symbol_id
+    FROM occurrences o
+    WHERE o.role='call'
+  `).all();
+  for (const call of callRows) {
+    const sourceFileId = Number(call.file_id);
+    const targets = symbolsByName.get(String(call.name)) || [];
+    const target = chooseCallTarget(sourceFileId, targets, importedIdsBySource.get(sourceFileId));
+    if (!target) continue;
+    insertEdge.run(call.enclosing_symbol_id == null ? null : Number(call.enclosing_symbol_id), Number(target.id), sourceFileId, Number(target.file_id),
+      'CALLS', String(call.name), 'tree-sitter', targets.length === 1 ? 0.84 : 0.7);
+  }
+}
+
+function chooseCallTarget(sourceFileId, targets, importedIds = new Set()) {
+  if (!targets.length) return null;
+  if (targets.length === 1) return targets[0];
+  const sameFile = targets.filter(target => Number(target.file_id) === sourceFileId);
+  if (sameFile.length === 1) return sameFile[0];
+  const imported = targets.filter(target => importedIds.has(Number(target.file_id)));
+  return imported.length === 1 ? imported[0] : null;
+}
+
+function resolveImportPath(sourcePath, specifier, pathToId, suffixIndex) {
+  const clean = String(specifier || '').replaceAll('\\', '/').replace(/[{}*]/g, '').trim();
+  if (!clean) return null;
+  const extensions = ['.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.py', '.go', '.rs', '.java', '.kt', '.cs', '.c', '.cpp', '.h', '.hpp', '.rb', '.php', '.vue', '.json'];
+  if (clean.startsWith('.')) {
+    const base = path.posix.normalize(path.posix.join(path.posix.dirname(sourcePath), clean));
+    const candidates = [base, ...extensions.map(ext => base + ext), ...extensions.map(ext => path.posix.join(base, `index${ext}`))];
+    return candidates.find(candidate => pathToId.has(candidate)) || null;
+  }
+  const normalized = clean.replace(/^@/, '').replaceAll('.', '/').replace(/^crate\//, '').replace(/^self\//, '').replace(/^\/+/, '');
+  const candidates = [normalized, stripKnownExtension(normalized), `${normalized}/index`];
+  for (const candidate of candidates) {
+    const match = suffixIndex.get(candidate);
+    if (typeof match === 'string') return match;
+  }
+  return null;
+}
+
+function buildImportSuffixIndex(paths) {
+  const index = new Map();
+  for (const filePath of paths) {
+    const withoutExtension = stripKnownExtension(filePath);
+    const parts = withoutExtension.split('/').filter(Boolean);
+    const variants = new Set([filePath, withoutExtension]);
+    if (parts.at(-1) === 'index' && parts.length > 1) variants.add(parts.slice(0, -1).join('/'));
+    for (let offset = 0; offset < parts.length; offset += 1) variants.add(parts.slice(offset).join('/'));
+    for (const key of variants) addUnambiguousSuffix(index, key, filePath);
+  }
+  return index;
+}
+
+function addUnambiguousSuffix(index, key, filePath) {
+  if (!key) return;
+  if (!index.has(key)) index.set(key, filePath);
+  else if (index.get(key) !== filePath) index.set(key, null);
+}
+
+function stripKnownExtension(value) {
+  return String(value || '').replace(/\.(?:jsx?|mjs|cjs|tsx?|py|go|rs|java|kt|cs|c|cpp|h|hpp|rb|php|vue|json)$/i, '');
+}
+function indexStats(db) {
+  const counts = db.prepare(`
+    SELECT count(*) AS files, coalesce(sum(size_bytes),0) AS bytes, coalesce(max(mtime_ms),0) AS newest,
+           coalesce(sum(CASE WHEN parser='tree-sitter' THEN 1 ELSE 0 END),0) AS structural
+    FROM files
+  `).get();
+  const symbolCount = Number(db.prepare('SELECT count(*) AS count FROM symbols').get().count || 0);
+  const occurrenceCount = Number(db.prepare('SELECT count(*) AS count FROM occurrences').get().count || 0);
+  return {
+    fileCount: Number(counts.files || 0), indexedBytes: Number(counts.bytes || 0), newestMtimeMs: Number(counts.newest || 0),
+    structuralFileCount: Number(counts.structural || 0), symbolCount, occurrenceCount
+  };
+}
+
+function checkIndexIntegrity(db) {
+  try {
+    const row = db.prepare('PRAGMA integrity_check').get();
+    const message = String(row?.integrity_check || 'unknown');
+    return { ok: message.toLowerCase() === 'ok', message };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+function setMeta(db, key, value) {
+  db.prepare('INSERT INTO index_meta(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(String(key), String(value));
+}
+
+function metaNumber(db, key, fallback = 0) {
+  try {
+    const row = db.prepare('SELECT value FROM index_meta WHERE key=?').get(String(key));
+    const value = Number(row?.value);
+    return Number.isFinite(value) ? value : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export {
+  INDEX_SCHEMA_VERSION,
+  beginGeneration,
+  checkIndexIntegrity,
+  currentGeneration,
+  deleteIndexedPath,
+  ensureIndexSchema,
+  finishGeneration,
+  indexStats,
+  listManifest,
+  openIndexDatabase,
+  replaceFileFacts,
+  repositoryIndexPath,
+  repositoryIndexRoot,
+  resolveRelationships
+};

@@ -32,7 +32,8 @@
       "entry": [
         "preload.cjs",
         "build/after-pack.js",
-        "scripts/*.js",        "renderer/*.js",
+        "scripts/*.js",
+        "renderer/*.js",
         "renderer/*.css"
       ],
       "project": [
@@ -43,5 +44,8 @@
         "electron-builder"
       ]
     }
-  }
+  },
+  "tags": [
+    "-knipdynamic"
+  ]
 }

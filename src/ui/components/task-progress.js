@@ -4,7 +4,7 @@ const STATIC_PROGRESS_STATES = Object.freeze({
   failed: Object.freeze({ fallback: 'Work session failed', state: 'Failed', className: 'terminal failed' }),
   attention: Object.freeze({ fallback: 'Work session failed', state: 'Failed', className: 'terminal failed' }),
   cancelled: Object.freeze({ fallback: 'Work session cancelled', state: 'Cancelled', className: 'terminal cancelled' }),
-  inactive: Object.freeze({ fallback: 'Work session expired', state: 'Expired', className: 'terminal cancelled' }),
+  inactive: Object.freeze({ fallback: 'Ready to resume', state: 'Inactive', className: 'paused' }),
   expired: Object.freeze({ fallback: 'Work session expired', state: 'Expired', className: 'terminal cancelled' }),
   validation_failed: Object.freeze({ fallback: 'Fix issues and revalidate', state: 'Action required', className: 'paused failed' }),
   blocked: Object.freeze({ fallback: 'Resolve the blocker to continue', state: 'Action required', className: 'paused blocked' }),

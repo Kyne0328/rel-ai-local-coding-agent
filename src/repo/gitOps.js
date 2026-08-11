@@ -1,9 +1,6 @@
 import { readSessionPolicy } from "../policyResolver.js";
-import * as fs from "node:fs";
-import * as path from "node:path";
 import { runProcess, summarizeCommand } from "../process.js";
 import { resolveSafePath, isSecretPath } from "../safety.js";
-import { getStateDir } from '../statePaths.js';
 import { INTERNAL_STATUS_MAX_BYTES, gitStatusArgs, parseGitStatus, formatGitStatus } from "./gitStatus.js";
 
 const DEFAULT_MAX_GIT_OUTPUT_BYTES = 1024 * 1024;
@@ -163,17 +160,7 @@ async function makePatchBackup(workspace, config, operationId, label) {
   return { type: "git-stash", message, sha, ok: stored.exitCode === 0, ...summarizeCommand(stored) };
 }
 
-function tempStateDir(config, workspace, operationId, prefix) {
-  const safeAlias = String(workspace.alias || "workspace").replace(/[^A-Za-z0-9_.-]/g, "_");
-  const base = path.join(getStateDir(config), "fast", safeAlias);
-  fs.mkdirSync(base, { recursive: true, mode: 0o700 });
-  return fs.mkdtempSync(path.join(base, `${prefix}-${operationId}-`));
-}
 
-function tempStatePath(config, workspace, operationId, ext) {
-  const dir = tempStateDir(config, workspace, operationId, "payload");
-  return path.join(dir, `payload${ext}`);
-}
 
 async function inspectPatchPaths(workspace, config, patch, timeoutMs = 120000) {
   const check = await runProcess("git", ["apply", "--check", "--numstat", "-z", "--summary", "--recount", "-"], {
@@ -524,4 +511,4 @@ async function relaiGitDraftPr(workspace, config, args = {}) {
   };
 }
 
-export { workspaceGitStatus, relaiGitCommit, relaiGitPush, relaiGitDraftPr, classifyStatusOwnership, getPatchConfig, patchNumber, patchFlag, assertPatchUpdateSafe, ensureGitRepo, requireCleanGitIfConfigured, shouldMakePatchBackup, makePatchBackup, tempStateDir, tempStatePath, inspectPatchPaths, clampNumber, truncateUtf8, DEFAULT_AGGRESSIVE_MAX_PATCH_BYTES };
+export { workspaceGitStatus, relaiGitCommit, relaiGitPush, relaiGitDraftPr, classifyStatusOwnership,    assertPatchUpdateSafe, ensureGitRepo, requireCleanGitIfConfigured, shouldMakePatchBackup, makePatchBackup,   inspectPatchPaths,    };

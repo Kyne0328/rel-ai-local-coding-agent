@@ -3,6 +3,7 @@ let _es = null;
 let _onEvent = null;
 let _onState = null;
 let _tokenFn = null;
+let _snapshotRevision = '';
 let _reconnectTimer = null;
 let _stopped = true;
 let _visibilityWired = false;
@@ -17,8 +18,9 @@ export function initEvents(onEvent, onState) {
   document.addEventListener('visibilitychange', _handleVisibilityChange);
 }
 
-export function startSSE(tokenFn) {
+export function startSSE(tokenFn, snapshotRevision = '') {
   _tokenFn = tokenFn || _tokenFn;
+  _snapshotRevision = String(snapshotRevision || _snapshotRevision || '');
   _stopped = false;
   if (_es) return;
   _connect();
@@ -54,7 +56,11 @@ function _connect() {
   if (_stopped || _es) return;
   const generation = ++_generation;
   const token = _tokenFn ? _tokenFn() : '';
-  const url = token ? `/events?token=${encodeURIComponent(token)}` : '/events';
+  const params = new URLSearchParams();
+  if (token) params.set('token', token);
+  if (_snapshotRevision) params.set('revision', _snapshotRevision);
+  const query = params.toString();
+  const url = query ? `/events?${query}` : '/events';
   emitState(_retryCount ? 'reconnecting' : 'connecting');
   const source = new EventSource(url, { withCredentials: true });
   _es = source;
@@ -74,6 +80,7 @@ function _connect() {
     if (!isCurrent(source, generation)) return;
     try {
       const data = JSON.parse(event.data);
+      if (data?.snapshot?.revision) _snapshotRevision = String(data.snapshot.revision);
       markLive(source, generation, Date.now());
       _onEvent?.(data);
     } catch (error) {

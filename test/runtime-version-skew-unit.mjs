@@ -12,9 +12,12 @@ const {
 const current = runtimeMetadata();
 const packageVersion = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 assert.equal(current.applicationVersion, packageVersion);
-assert.equal(current.toolSurfaceVersion, 32);
+assert.equal(current.toolSurfaceVersion, 33);
 assert.equal(current.toolCount, 12);
 assert.match(current.manifestHash, /^[A-Za-z0-9_-]{24}$/);
+assert.equal(current.schemaVersion, 6);
+assert.equal(current.deviceProtocolVersion, 1);
+assert.equal(current.minimumCompatibleDeviceProtocol, 1);
 
 const configured = runtimeMetadata({
   toolProfile: 'core',

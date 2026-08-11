@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { discoverRepositoryTopology } from "./workflow/topology.js";
 
 function _discoverNpmScripts(discovered, root) {
   const pkgPath = path.join(root, "package.json");
@@ -54,23 +55,11 @@ function _discoverPython(discovered, root) {
 // snapshot, validation, diagnostics, status, and dashboard paths — several times per
 // tool call. Caching against a stat signature of the manifests keeps discovery honest
 // (any manifest edit changes the signature) while collapsing repeats to seven stats.
-const DISCOVERY_MANIFESTS = [
-  "package.json", "Makefile", "pubspec.yaml", "go.mod", "Cargo.toml",
-  "pyproject.toml", "requirements.txt"
-];
 const DISCOVERY_CACHE_LIMIT = 32;
 const discoveryCache = new Map();
 
 function discoveryManifestSignature(workspacePath) {
-  const root = String(workspacePath || "");
-  return DISCOVERY_MANIFESTS.map((name) => {
-    try {
-      const stat = fs.statSync(path.join(root, name));
-      return `${name}:${stat.mtimeMs}:${stat.size}`;
-    } catch {
-      return `${name}:0:0`;
-    }
-  }).join("|");
+  return discoverRepositoryTopology(String(workspacePath || "")).fingerprint;
 }
 
 function cacheDiscovery(root, signature, value) {
@@ -94,12 +83,19 @@ function discoverCommands(workspacePath) {
   try { _discoverGo(discovered, root); } catch {}
   try { _discoverCargo(discovered, root); } catch {}
   try { _discoverPython(discovered, root); } catch {}
+  try { projectNestedPackageCommands(discovered, discoverRepositoryTopology(root)); } catch {}
   cacheDiscovery(root, signature, discovered);
   return { ...discovered };
 }
 
-function clearCommandDiscoveryCache() {
-  discoveryCache.clear();
+function projectNestedPackageCommands(discovered, topology) {
+  for (const pkg of topology?.packages || []) {
+    if (pkg.path === '.' || pkg.ecosystem !== 'npm') continue;
+    for (const [name, command] of Object.entries(pkg.scripts || {})) {
+      if (typeof command !== 'string' || !command.trim()) continue;
+      discovered[`npm:${pkg.path}:${name}`] = name === 'test' ? 'npm test' : `npm run ${name}`;
+    }
+  }
 }
 
 // A configured command key is "stale" when its saved command string is no longer
@@ -113,4 +109,4 @@ function staleCommandKeys(configured = {}, discovered = {}) {
   });
 }
 
-export { discoverCommands, discoveryManifestSignature, clearCommandDiscoveryCache, staleCommandKeys };
+export { discoverCommands, discoveryManifestSignature,  staleCommandKeys };
