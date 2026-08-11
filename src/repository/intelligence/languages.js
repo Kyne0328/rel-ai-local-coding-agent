@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-const PARSER_VERSION = 22;
+const PARSER_VERSION = 23;
 const MAX_SEARCH_TERMS = 768;
 
 const LANGUAGE_PROFILES = Object.freeze([
@@ -29,7 +29,7 @@ const LANGUAGE_PROFILES = Object.freeze([
   profile('ql', 'tree-sitter-ql.wasm', ['.ql', '.qll']),
   profile('rescript', 'tree-sitter-rescript.wasm', ['.res', '.resi']),
   profile('ruby', 'tree-sitter-ruby.wasm', ['.rb', '.rake', '.gemspec'], ['gemfile', 'rakefile']),
-  profile('rust', 'tree-sitter-rust.wasm', ['.rs']),
+  profile('rust', 'tree-sitter-rust.wasm', ['.rs'], [], 'rust'),
   profile('scala', 'tree-sitter-scala.wasm', ['.scala', '.sc']),
   profile('solidity', 'tree-sitter-solidity.wasm', ['.sol']),
   profile('swift', 'tree-sitter-swift.wasm', ['.swift']),

@@ -1,10 +1,12 @@
 import { javaResolver } from './java.js';
 import { csharpResolver } from './csharp.js';
 import { goResolver } from './go.js';
+import { rustResolver } from './rust.js';
 import { javascriptTypeResolver } from './javascript.js';
 import { pythonResolver } from './python.js';
 
 const RESOLVERS = new Map([
+  ['rust', rustResolver],
   ['go', goResolver],
   ['csharp', csharpResolver],
   ['java', javaResolver],
