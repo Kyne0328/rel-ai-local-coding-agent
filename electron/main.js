@@ -5,15 +5,17 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { importResourceModule } from './resource-path.js';
 import { isPortAvailable, normalizeWizardConfig, saveLauncherConfig } from './launcher-config.js';
+import { createGatewayActions } from './gateway-actions.js';
+import { createDesktopServiceRuntime } from './service-runtime.js';
+import { createSetupWindowManager } from './setup-window.js';
 import { fitWindowToContent, WINDOW_SIZE_LIMITS } from './window-size.js';
-import { localWindowWebPreferences, secureLocalWindow } from './window-security.js';
 import { installLocalProtocol, localRendererUrl, registerLocalScheme } from './local-protocol.js';
 import { registerIpcHandlers } from './ipc-handlers.js';
 import { createTaskActivityRuntime } from './tool-sleep-blocker.js';
 import { createTaskbarCompletionBadge } from './taskbar-completion-badge.js';
 import { createDashboardWindowManager } from './dashboard-window.js';
 import { createDesktopTray } from './desktop-tray.js';
-import { desktopStatusFailure, gatewayAuthorizationRequired, initialDesktopStatus, normalizeDesktopStatus, safeGatewayDesktopStatus } from './desktop-status.js';
+import { desktopStatusFailure, initialDesktopStatus, normalizeDesktopStatus } from './desktop-status.js';
 import { createApprovalTokenManager } from './approval-token.js';
 import { createRecoveryWindowManager } from './recovery-window.js';
 import { createRuntimeLogBuffer } from './runtime-log-buffer.js';
@@ -23,14 +25,13 @@ import { createAppUpdater } from './app-updater.js';
 import { createUpdateSupportPolicy } from './update-support-policy.js';
 import { createDesktopLifecycleManager } from './desktop-lifecycle.js';
 import { createDesktopNotifications } from './desktop-notifications.js';
-import { closeHttpServer, createShutdownCoordinator } from './shutdown-coordinator.js';
-import { STARTUP_BACKGROUND_COLOR } from './startup-background.js';
+import { createShutdownCoordinator } from './shutdown-coordinator.js';
 import { removeControllerRuntimeMarker, writeControllerRuntimeMarker } from './controller-runtime.js';
 import * as managedNgrok from './managed-ngrok.js';
 import { createGatewayClient } from './gateway-client.js';
 import { configureGatewaySafeStorage, createGatewayDeviceIdentityStore } from './gateway-device-identity.js';
 import { createPublicConnectionRuntime } from './public-connection-runtime.js';
-import { hasExistingConfig, readGuiConfig, buildMcpUrl, normalizeNgrokDomain, normalizeNgrokAuthtoken, normalizePort } from './launcher-utils.js';
+import { hasExistingConfig, readGuiConfig } from './launcher-utils.js';
 const { autoUpdater } = electronUpdater;
 const electronRoot = path.dirname(fileURLToPath(import.meta.url));
 const preloadPath = path.join(electronRoot, 'preload.cjs');
@@ -56,9 +57,9 @@ const oauthProvider = await importResourceModule('src/oauthProvider.js');
 const { startHttpServer } = await importResourceModule('src/httpServer.js');
 const { terminateProcessTree } = await importResourceModule('src/process.js');
 const { stopAllManagedProcesses } = await importResourceModule('src/processManager.js');
-const { shutdownTelemetry } = await importResourceModule('src/telemetry.js');let wizardWindow = null, wizardRecoveryMode = false, wizardReturnToFallback = false;
-let httpServer = null, startPromise = null;
-let lifecycleToken = 0, isQuitting = false, appUpdater = null, updateSupportPolicy = null;
+const { shutdownTelemetry } = await importResourceModule('src/telemetry.js');
+let serviceRuntime = null, gatewayActions = null;
+let isQuitting = false, appUpdater = null, updateSupportPolicy = null;
 const diagnosticFiles = createDiagnosticFiles({ app, shell }); let currentStatus = initialDesktopStatus(app.getVersion()); const runtimeLogs = createRuntimeLogBuffer({ filePath: () => diagnosticFiles.serviceLogPath() });
 const desktopNotifications = createDesktopNotifications({
   app, Notification, iconPath: APP_ICON_PATH, isReady: () => app.isReady(), onNotificationClick: focusActiveWindow,
@@ -74,6 +75,14 @@ const recoveryWindowManager = createRecoveryWindowManager({
   isQuitting: () => isQuitting,
   onReady: pushStatus,
   onSecurityError: error => runtimeLogs.append(error.message, { level: 'warning', source: 'electron-security' })
+});
+const setupWindowManager = createSetupWindowManager({
+  BrowserWindow,
+  preloadPath,
+  rendererRoot: RENDERER_ROOT,
+  runtimeLogs,
+  isQuitting: () => isQuitting,
+  recoveryWindowManager
 });
 const gatewayDeviceIdentity = createGatewayDeviceIdentityStore({ safeStorage });
 const publicConnectionRuntime = createPublicConnectionRuntime({
@@ -116,7 +125,7 @@ const publicConnectionRuntime = createPublicConnectionRuntime({
   }),
   stopDirect: child => terminateProcessTree(child, { graceMs: 1000, forceWaitMs: 2000 }),
   onStatus: ({ mode, status }) => {
-    if (mode === 'cloud') applyGatewayStatus(status);
+    if (mode === 'cloud') gatewayActions?.applyStatus(status);
   }
 });
 const dashboardWindowManager = createDashboardWindowManager({
@@ -164,6 +173,39 @@ const toolActivityRuntime = createTaskActivityRuntime({
   onTaskCompleted: task => taskbarCompletionBadge.markCompleted(task),
   onStatusChange: taskActivity => setStatus({ taskActivity })
 });
+gatewayActions = createGatewayActions({
+  publicConnectionRuntime,
+  gatewayDeviceIdentity,
+  shell,
+  dashboardWindowManager,
+  formatDeviceLinkCode,
+  formatRecoveryCode,
+  errorCodes: ERROR_CODES,
+  getCurrentStatus: () => currentStatus,
+  setStatus,
+  launchConfiguredDesktop: options => launchConfiguredDesktop(options),
+  isHttpServerListening: () => serviceRuntime?.isListening() === true
+});
+serviceRuntime = createDesktopServiceRuntime({
+  app,
+  connection,
+  configModule,
+  startHttpServer,
+  stopAllManagedProcesses,
+  dashboardSessions,
+  dashboardWindowManager,
+  toolActivityRuntime,
+  runtimeLogs,
+  approvalTokenManager,
+  publicConnectionRuntime,
+  errorCodes: ERROR_CODES,
+  getRuntimeAccess: updateRuntimeAccess,
+  getCurrentStatus: () => currentStatus,
+  setStatus,
+  replaceCurrentStatus,
+  pushStatus,
+  applyGatewayStatus: gatewayActions.applyStatus
+});
 const desktopLifecycle = createDesktopLifecycleManager({ app,
   onLog: (message, options) => runtimeLogs.append(message, options), errorCodes: ERROR_CODES });
 appUpdater = createAppUpdater({ app, autoUpdater, getTaskActivity: toolActivityRuntime.getStatus,
@@ -182,7 +224,7 @@ const shutdownCoordinator = createShutdownCoordinator({
   closeWindows() {
     dashboardWindowManager.close();
     recoveryWindowManager.close();
-    closeWizard({ returnToFallback: false });
+    setupWindowManager.close({ returnToFallback: false });
   },
   removeRuntimeMarker: removeControllerRuntimeMarker,
   shutdownTelemetry,
@@ -196,9 +238,10 @@ if (!gotLock) {
   app.on('browser-window-created', (_event, win) => taskbarCompletionBadge.apply(win));
   app.on('browser-window-focus', () => taskbarCompletionBadge.clear());
   app.on('second-instance', () => {
-    if (wizardWindow && !wizardWindow.isDestroyed()) {
-      wizardWindow.show();
-      wizardWindow.focus();
+    const setupWindow = setupWindowManager.getWindow();
+    if (setupWindow) {
+      setupWindow.show();
+      setupWindow.focus();
       return;
     }
     focusActiveWindow();
@@ -223,7 +266,7 @@ if (!gotLock) {
     appUpdater.start();
     updateSupportPolicy.start();
     if (hasExistingConfig()) void launchConfiguredDesktop({ background: lifecycleStatus.openedAtLogin });
-    else createWizardWindow();
+    else setupWindowManager.create();
   });
 }
 
@@ -235,57 +278,6 @@ app.on('before-quit', event => {
 });
 
 app.on('window-all-closed', () => {}); // Keep the tray app alive after windows close.
-
-function createWizardWindow(options = {}) {
-  if (wizardWindow && !wizardWindow.isDestroyed()) {
-    wizardWindow.show();
-    wizardWindow.focus();
-    return wizardWindow;
-  }
-
-  wizardRecoveryMode = options.recovery === true;
-  wizardReturnToFallback = wizardRecoveryMode;
-  const wizardRendererUrl = localRendererUrl('wizard.html', wizardRecoveryMode ? { recovery: '1' } : {});  wizardWindow = new BrowserWindow({
-    width: WINDOW_SIZE_LIMITS.wizard.minWidth,
-    height: 620,
-    minWidth: WINDOW_SIZE_LIMITS.wizard.minWidth,
-    minHeight: WINDOW_SIZE_LIMITS.wizard.minHeight,
-    resizable: true, maximizable: true,
-    useContentSize: true,
-    webPreferences: localWindowWebPreferences(preloadPath, 'relai-setup', 'application'),
-    backgroundColor: STARTUP_BACKGROUND_COLOR,
-    title: wizardRecoveryMode ? 'Rel.AI MCP - Connection Recovery' : 'Rel.AI MCP - Setup',
-    autoHideMenuBar: true
-  });
-  installLocalProtocol(wizardWindow.webContents.session.protocol, RENDERER_ROOT);
-  secureLocalWindow(wizardWindow, { allowedUrl: wizardRendererUrl, onError: error => runtimeLogs.append(error.message, { level: 'warning', source: 'electron-security' }) });
-  void wizardWindow.loadURL(wizardRendererUrl).catch(error => {
-    runtimeLogs.append(`Setup renderer failed to load: ${formatError(error)}`, { level: 'error', source: 'electron-renderer' });
-  });
-  wizardWindow.webContents.on('did-finish-load', () => {
-    fitWindowToContent(wizardWindow, { type: 'wizard' });
-  });
-  wizardWindow.on('closed', () => {
-    const returnToFallback = wizardReturnToFallback;
-    wizardWindow = null;
-    wizardRecoveryMode = false;
-    wizardReturnToFallback = false;
-    if (returnToFallback && !isQuitting) recoveryWindowManager.show();
-  });
-  return wizardWindow;
-}
-
-function closeWizard(options = {}) {
-  wizardReturnToFallback = options.returnToFallback === true && wizardRecoveryMode;
-  if (wizardWindow && !wizardWindow.isDestroyed()) wizardWindow.destroy();
-  else {
-    const returnToFallback = wizardReturnToFallback;
-    wizardWindow = null;
-    wizardRecoveryMode = false;
-    wizardReturnToFallback = false;
-    if (returnToFallback && !isQuitting) recoveryWindowManager.show();
-  }
-}
 
 function currentDesktopSettings() {
   return readDesktopSettings({
@@ -314,7 +306,7 @@ function getRecoveryConfig() {
   };
 }
 
-function openRecoverySetup() { recoveryWindowManager.hide(); createWizardWindow({ recovery: true }); return { ok: true }; }
+function openRecoverySetup() { recoveryWindowManager.hide(); setupWindowManager.create({ recovery: true }); return { ok: true }; }
 
 function focusActiveWindow() {
   taskbarCompletionBadge.clear();
@@ -380,178 +372,19 @@ function pushUpdateStatus(status) {
 
 function setStatus(next, options = {}) {
   const previous = currentStatus;
-  currentStatus = normalizeDesktopStatus({ ...currentStatus, ...next }); desktopNotifications.handleDesktopStatusChange(previous, currentStatus); runtimeLogs.recordStatusTransition(previous, currentStatus); pushStatus(options);
+  currentStatus = normalizeDesktopStatus({ ...currentStatus, ...next });
+  desktopNotifications.handleDesktopStatusChange(previous, currentStatus);
+  runtimeLogs.recordStatusTransition(previous, currentStatus);
+  pushStatus(options);
 }
 
-function gatewayStatusForDashboard() {
-  let config = {};
-  try { config = readGuiConfig(); } catch {}
-  const raw = publicConnectionRuntime.gatewaySnapshot() || currentStatus.gateway || {};
-  return {
-    ok: true,
-    connectionMode: String(config.connectionMode || currentStatus.connectionMode || ''),
-    gateway: safeGatewayDesktopStatus(raw, config.gatewayOrigin || raw.gatewayOrigin || '')
-  };
-}
-
-async function beginGatewayPairing(options = {}) {
-  const pairing = await publicConnectionRuntime.gatewayCall('beginPairing', options);
-  return { ok: true, pairing };
-}
-
-async function beginGatewayEnrollment(options = {}) {
-  const enrollment = await publicConnectionRuntime.gatewayCall('beginEnrollment', options);
-  await openGatewayBrowserPath(enrollment?.browserUrl, '/device');
-  return { ok: true, enrollment };
-}
-
-async function openGatewayAccount() {
-  const origin = gatewayBrowserOrigin();
-  const target = new URL('/account', origin);
-  await openGatewayBrowserPath(target.href, '/account');
-  return { ok: true };
-}
-
-function gatewayBrowserOrigin() {
-  const raw = String(readGuiConfig().gatewayOrigin || '').trim();
-  if (!raw) throw new Error('Rel.AI Cloud origin is unavailable.');
-  const origin = new URL(raw);
-  const localHttp = origin.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(origin.hostname);
-  if (origin.protocol !== 'https:' && !localHttp) throw new Error('Rel.AI Cloud browser links must use HTTPS.');
-  return origin;
-}
-
-async function openGatewayBrowserPath(value, expectedPath) {
-  const origin = gatewayBrowserOrigin();
-  const target = new URL(String(value || ''), origin);
-  if (target.origin !== origin.origin || target.pathname !== expectedPath) {
-    throw new Error('Rel.AI Cloud returned an unexpected browser link.');
-  }
-  await shell.openExternal(target.href);
-}
-
-function cancelGatewayPairing() {
-  const status = publicConnectionRuntime.gatewayCall('cancelPairing');
-  return { ok: true, gateway: safeGatewayDesktopStatus(status, readGuiConfig().gatewayOrigin) };
-}
-
-async function listGatewayDevices() {
-  const devices = await publicConnectionRuntime.gatewayCall('listDevices');
-  return { ok: true, devices: Array.isArray(devices) ? devices.map(safeGatewayDevice) : [] };
-}
-
-async function revokeGatewayDevice(deviceId) {
-  const result = await publicConnectionRuntime.gatewayCall('revokeDevice', deviceId);
-  return { ok: result?.ok === true, deviceId: String(result?.deviceId || deviceId), selfRevoked: result?.selfRevoked === true };
-}
-
-async function setGatewayMode(mode) {
-  const current = readGuiConfig();
-  saveLauncherConfig({
-    connectionMode: mode,
-    gatewayOrigin: current.gatewayOrigin,
-    port: current.port,
-    token: current.token,
-    ngrokDomain: current.ngrokDomain,
-    ngrokAuthtoken: current.ngrokAuthtoken
-  });
-  const status = await launchConfiguredDesktop({ restart: true });
-  if (!status.serverRunning) throw new Error(status.error || 'Rel.AI connection mode could not be restarted.');
-  return { ok: true, connectionMode: mode, status: gatewayStatusForDashboard() };
-}
-
-async function getGatewayRecovery() {
-  await gatewayDeviceIdentity.open();
-  const principal = gatewayDeviceIdentity.principalState();
-  if (!principal.principalId || !principal.recoverySecret) throw new Error('No paired Rel.AI recovery code is available on this device.');
-  return { ok: true, recoveryCode: formatRecoveryCode(principal.principalId, principal.recoverySecret) };
-}
-
-async function ensureWizardCloudRuntime() {
-  let current = {};
-  try { current = readGuiConfig(); } catch {}
-  saveLauncherConfig({
-    connectionMode: 'cloud',
-    gatewayOrigin: current.gatewayOrigin,
-    port: current.port || 3333,
-    token: current.token,
-    ngrokDomain: current.ngrokDomain,
-    ngrokAuthtoken: current.ngrokAuthtoken
-  });
-  const runtime = publicConnectionRuntime.snapshot();
-  const restart = Boolean(httpServer?.listening && runtime.mode !== 'cloud');
-  const status = await launchConfiguredDesktop({ restart, background: true });
-  if (!status.serverRunning || publicConnectionRuntime.snapshot().mode !== 'cloud') {
-    throw new Error(status.error || 'Rel.AI Cloud could not be started.');
-  }
-  return status;
-}
-
-async function startWizardCloudEnrollment(options = {}) {
-  await ensureWizardCloudRuntime();
-  return beginGatewayEnrollment(options);
-}
-
-async function startWizardCloudPairing(options = {}) {
-  await ensureWizardCloudRuntime();
-  return beginGatewayPairing(options);
-}
-
-async function recoverWizardCloudIdentity(recoveryCode) {
-  const code = String(recoveryCode || '').trim();
-  if (!code || code.length > 8192) throw new Error('A valid Rel.AI recovery code is required.');
-  return startWizardCloudEnrollment({ recoveryCode: code });
-}
-
-function getWizardCloudStatus() {
-  return gatewayStatusForDashboard();
-}
-
-function cancelWizardCloudPairing() {
-  return cancelGatewayPairing();
-}
-
-async function getWizardRecoveryCode() {
-  return getGatewayRecovery();
-}
-
-async function createWizardDeviceLink() {
-  await gatewayDeviceIdentity.open();
-  const principal = gatewayDeviceIdentity.principalState();
-  if (!principal.principalId) throw new Error('Pair this device with Rel.AI Cloud before creating a link code.');
-  const result = await publicConnectionRuntime.gatewayCall('createDeviceLink');
-  if (!result?.ok || !result.linkCode) throw new Error('A one-time device link code could not be created.');
-  return {
-    ok: true,
-    linkCode: formatDeviceLinkCode(principal.principalId, result.linkCode),
-    expiresAt: Number(result.expiresAt || 0)
-  };
-}
-
-async function getGatewayUsage(month) {
-  try {
-    const usage = await publicConnectionRuntime.gatewayCall('requestUsage', month);
-    return { ok: true, ...usage };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error || '');
-    if (/gateway is not connected|rel\.ai cloud is not connected/i.test(message)) {
-      return { ok: false, errorCode: 'GATEWAY_NOT_CONNECTED', error: 'Rel.AI Cloud is not connected.' };
-    }
-    throw error;
-  }
-}
-
-function safeGatewayDevice(device = {}) {
-  return {
-    deviceId: String(device.deviceId || ''),
-    displayName: String(device.displayName || ''),
-    appVersion: String(device.appVersion || ''),
-    protocolVersion: Number(device.protocolVersion || 0),
-    mcpProtocolVersion: String(device.mcpProtocolVersion || ''),
-    capabilities: device.capabilities && typeof device.capabilities === 'object' ? { ...device.capabilities } : {},
-    lastSeenAt: device.lastSeenAt == null ? null : Number(device.lastSeenAt),
-    revokedAt: device.revokedAt == null ? null : Number(device.revokedAt)
-  };
+function replaceCurrentStatus(next, options = {}) {
+  const previous = currentStatus;
+  currentStatus = normalizeDesktopStatus(next);
+  if (!options.silent) desktopNotifications.handleDesktopStatusChange(previous, currentStatus);
+  runtimeLogs.recordStatusTransition(previous, currentStatus);
+  if (!options.silent) pushStatus();
+  else desktopTray.update();
 }
 
 function publicConnectionLog(source, chunk) {
@@ -559,255 +392,16 @@ function publicConnectionLog(source, chunk) {
   if (entry) recoveryWindowManager.sendLog(entry);
 }
 
-function applyGatewayStatus(status = {}) {
-  const gateway = safeGatewayDesktopStatus(status, status.gatewayOrigin);
-  const mcpUrl = gateway.gatewayOrigin ? buildMcpUrl(gateway.gatewayOrigin) : '';
-  dashboardWindowManager.getWindow()?.webContents.send('desktop:gateway-status', gateway);
-  if (gateway.state === 'connected') {
-    setStatus({
-      connectionMode: 'cloud',
-      gateway,
-      tunnelStatus: 'running',
-      mcpUrl,
-      authenticationRequired: false,
-      error: '',
-      errorCode: ''
-    }, { dashboard: false });
-    return;
-  }
-  if (gateway.state === 'pairing_required' || gateway.state === 'pairing') {
-    setStatus({
-      connectionMode: 'cloud',
-      gateway,
-      tunnelStatus: 'running',
-      mcpUrl,
-      authenticationRequired: true,
-      error: '',
-      errorCode: ''
-    }, { dashboard: false });
-    return;
-  }
-  if (gateway.state === 'device_update_required' || gateway.state === 'error') {
-    setStatus(desktopStatusFailure(
-      ERROR_CODES.PUBLIC_ENDPOINT_FAILED,
-      gateway.error || (gateway.state === 'device_update_required' ? 'Rel.AI Desktop must be updated for the gateway protocol.' : 'Rel.AI gateway connection failed.'),
-      { connectionMode: 'cloud', gateway, serverRunning: true, tunnelStatus: 'failed', mcpUrl, authenticationRequired: false }
-    ), { dashboard: false });
-    return;
-  }
-  setStatus({
-    connectionMode: 'cloud',
-    gateway,
-    tunnelStatus: 'connecting',
-    mcpUrl,
-    authenticationRequired: gatewayAuthorizationRequired(gateway),
-    error: '',
-    errorCode: ''
-  }, { dashboard: false });
+function startServer() {
+  return serviceRuntime.startServer();
 }
 
-async function startServer() {
-  if (httpServer?.listening) {
-    pushStatus();
-    return currentStatus;
-  }
-  if (startPromise) return startPromise;
-  const runToken = ++lifecycleToken;
-  const pendingStart = (async () => {
-    let guiConfig;
-    try {
-      configModule.ensureConfig();
-      guiConfig = readGuiConfig();
-      guiConfig.port = normalizePort(guiConfig.port || 3333);
-      if (guiConfig.connectionMode === 'direct') {
-        guiConfig.ngrokDomain = normalizeNgrokDomain(guiConfig.ngrokDomain || '');
-        guiConfig.ngrokAuthtoken = normalizeNgrokAuthtoken(guiConfig.ngrokAuthtoken || '');
-      }
-      if (!guiConfig.token) {
-        guiConfig.token = connection.generateToken(32);
-        connection.writeLaunchEnv({ REL_AI_MCP_TOKEN: guiConfig.token });
-      }
-    } catch (error) {
-      setStatus(desktopStatusFailure(ERROR_CODES.CONFIGURATION_INVALID, error, { serverRunning: false, tunnelStatus: 'failed', mcpUrl: '' }));
-      return currentStatus;
-    }
-
-    const available = await isPortAvailable(guiConfig.port);
-    if (!available) {
-      setStatus(desktopStatusFailure(ERROR_CODES.LOCAL_PORT_IN_USE, `Port ${guiConfig.port} is already in use.`, { serverRunning: false, tunnelStatus: 'failed', mcpUrl: '' }));
-      return currentStatus;
-    }
-
-    let actualPort;
-    try {
-      httpServer = startHttpServer({
-        host: '127.0.0.1',
-        port: guiConfig.port,
-        token: guiConfig.token,
-        publicUrl: guiConfig.connectionMode === 'direct' ? `https://${guiConfig.ngrokDomain}` : '',
-        exitOnError: false,
-        pickFolder: () => dashboardWindowManager.pickFolder(),
-        openFolder: folderPath => dashboardWindowManager.openFolder(folderPath),
-        getTaskActivity: toolActivityRuntime.getStatus, getDesktopStatus: () => currentStatus, getRuntimeAccess: updateRuntimeAccess,
-        resetTaskActivity: toolActivityRuntime.resetHistory, getRuntimeLogs: runtimeLogs.snapshot, clearRuntimeLogs: runtimeLogs.clear,
-        onOAuthAuthorized: () => {
-          if (guiConfig.connectionMode === 'direct') setStatus({ authenticationRequired: false, error: '', errorCode: '' });
-        }
-      });
-      actualPort = await new Promise((resolve, reject) => {
-        httpServer.once('listening', () => resolve(httpServer.address().port));
-        httpServer.once('error', reject);
-      });
-    } catch (error) {
-      httpServer = null;
-      setStatus(desktopStatusFailure(ERROR_CODES.LOCAL_SERVICE_START_FAILED, error, { serverRunning: false, tunnelStatus: 'failed', mcpUrl: '' }));
-      return currentStatus;
-    }
-
-    const localUrl = `http://127.0.0.1:${actualPort}`;
-    const initialMcpUrl = guiConfig.connectionMode === 'cloud' ? buildMcpUrl(guiConfig.gatewayOrigin) : '';
-    setStatus({
-      serverRunning: true,
-      connectionMode: guiConfig.connectionMode,
-      gateway: guiConfig.connectionMode === 'cloud' ? safeGatewayDesktopStatus({ state: 'connecting', gatewayOrigin: guiConfig.gatewayOrigin }, guiConfig.gatewayOrigin) : null,
-      tunnelStatus: 'connecting',
-      mcpUrl: initialMcpUrl,
-      authenticationRequired: guiConfig.connectionMode === 'cloud' ? false : approvalTokenManager.status().required,
-      error: '',
-      errorCode: '',
-      localUrl
-    });
-
-    if (guiConfig.connectionMode === 'direct') {
-      void completeDirectPublicStart(guiConfig, actualPort, runToken);
-      return currentStatus;
-    }
-
-    let result;
-    try {
-      result = await publicConnectionRuntime.start({ ...guiConfig, port: actualPort });
-    } catch (error) {
-      if (runToken !== lifecycleToken) return currentStatus;
-      setStatus(desktopStatusFailure(ERROR_CODES.PUBLIC_ENDPOINT_FAILED, error, {
-        serverRunning: true,
-        connectionMode: guiConfig.connectionMode,
-        tunnelStatus: 'failed',
-        mcpUrl: guiConfig.connectionMode === 'cloud' ? initialMcpUrl : ''
-      }));
-      return currentStatus;
-    }
-
-    if (runToken !== lifecycleToken) {
-      return currentStatus;
-    }
-
-    if (guiConfig.connectionMode === 'cloud') {
-      connection.writeConnectionProfile({
-        host: '127.0.0.1',
-        port: actualPort,
-        connectionMode: 'cloud',
-        gatewayOrigin: guiConfig.gatewayOrigin,
-        publicUrl: '',
-        tunnelProvider: 'rel-ai-gateway',
-        configPath: configModule.getConfigPath()
-      });
-      if (result.status) applyGatewayStatus(result.status);
-    } else if (result.ok) {
-      const publicBaseUrl = `https://${guiConfig.ngrokDomain}`;
-      const mcpUrl = buildMcpUrl(publicBaseUrl);
-      connection.writeConnectionProfile({
-        host: '127.0.0.1',
-        port: actualPort,
-        connectionMode: 'direct',
-        gatewayOrigin: guiConfig.gatewayOrigin,
-        publicUrl: publicBaseUrl,
-        ngrokDomain: guiConfig.ngrokDomain,
-        tunnelProvider: 'managed-ngrok',
-        configPath: configModule.getConfigPath()
-      });
-      setStatus({ serverRunning: true, connectionMode: 'direct', gateway: null, tunnelStatus: 'running', mcpUrl, authenticationRequired: approvalTokenManager.status().required, error: '', errorCode: '' });
-    } else {
-      setStatus(desktopStatusFailure(ERROR_CODES.PUBLIC_ENDPOINT_FAILED, result.error || 'Tunnel failed before publishing a public URL.', { serverRunning: true, connectionMode: 'direct', gateway: null, tunnelStatus: 'failed', mcpUrl: '' }));
-    }
-
-    return currentStatus;
-  })();
-  startPromise = pendingStart;
-  void pendingStart.then(
-    () => { if (startPromise === pendingStart) startPromise = null; },
-    () => { if (startPromise === pendingStart) startPromise = null; }
-  );
-  return pendingStart;
-}
-
-async function completeDirectPublicStart(guiConfig, actualPort, runToken) {
-  let result;
-  try {
-    result = await publicConnectionRuntime.start({ ...guiConfig, port: actualPort });
-  } catch (error) {
-    if (runToken !== lifecycleToken) return;
-    setStatus(desktopStatusFailure(ERROR_CODES.PUBLIC_ENDPOINT_FAILED, error, {
-      serverRunning: true, connectionMode: 'direct', gateway: null, tunnelStatus: 'failed', mcpUrl: ''
-    }));
-    return;
-  }
-  if (runToken !== lifecycleToken || result.cancelled) return;
-  if (!result.ok) {
-    setStatus(desktopStatusFailure(ERROR_CODES.PUBLIC_ENDPOINT_FAILED, result.error || 'Tunnel failed before publishing a public URL.', {
-      serverRunning: true, connectionMode: 'direct', gateway: null, tunnelStatus: 'failed', mcpUrl: ''
-    }));
-    return;
-  }
-  const publicBaseUrl = `https://${guiConfig.ngrokDomain}`;
-  const mcpUrl = buildMcpUrl(publicBaseUrl);
-  connection.writeConnectionProfile({
-    host: '127.0.0.1', port: actualPort, connectionMode: 'direct', gatewayOrigin: guiConfig.gatewayOrigin,
-    publicUrl: publicBaseUrl, ngrokDomain: guiConfig.ngrokDomain, tunnelProvider: 'managed-ngrok', configPath: configModule.getConfigPath()
-  });
-  setStatus({ serverRunning: true, connectionMode: 'direct', gateway: null, tunnelStatus: 'running', mcpUrl, authenticationRequired: approvalTokenManager.status().required, error: '', errorCode: '' });
-}
-
-async function stopServer(options = {}) {
-  lifecycleToken += 1;
-  const runtimeConfig = configModule.readConfig();
-  const ownedServer = httpServer;
-  httpServer = null;
-  startPromise = null;
-
-  const [managedProcesses, publicConnection, localService] = await Promise.all([
-    stopAllManagedProcesses(runtimeConfig).catch(error => ({ attempted: 0, stopped: 0, orphaned: 1, error: formatError(error) })),
-    publicConnectionRuntime.stop().catch(error => ({ mode: publicConnectionRuntime.snapshot().mode, stopped: false, exited: false, error: formatError(error) })),
-    closeHttpServer(ownedServer)
-  ]);
-
-  if (!options.preserveDashboard) dashboardWindowManager.close();
-  dashboardSessions.clearDashboardSessions();
-  const previousStatus = currentStatus;
-  currentStatus = initialDesktopStatus(app.getVersion());
-  if (!options.silent) desktopNotifications.handleDesktopStatusChange(previousStatus, currentStatus);
-  if (!options.silent) pushStatus();
-  else desktopTray.update();
-  const directExited = publicConnection.mode !== 'direct' || publicConnection.exited !== false;
-  const publicStopped = publicConnection.stopped !== false;
-  return {
-    ...currentStatus,
-    cleanup: {
-      clean: managedProcesses.orphaned === 0 && publicStopped && directExited && localService.closed !== false,
-      managedProcesses,
-      publicConnection,
-      tunnel: publicConnection.mode === 'direct' ? publicConnection : { exited: true, forced: false },
-      localService
-    }
-  };
+function stopServer(options = {}) {
+  return serviceRuntime.stopServer(options);
 }
 
 function buildDashboardConnection() {
-  const port = (httpServer?.listening && httpServer.address()?.port) || readGuiConfig().port || 3333;
-  const token = connection.readLaunchEnv().REL_AI_MCP_TOKEN || readGuiConfig().token || '';
-  const bootstrap = dashboardSessions.createDashboardBootstrap(token);
-  const chrome = dashboardWindowManager.getState();
-  const chromeMode = chrome.customTitleBar ? 'custom' : 'native';
-  return { url: `http://127.0.0.1:${port}/dashboard?surface=desktop&chrome=${chromeMode}&platform=${encodeURIComponent(chrome.platform)}&bootstrap=${encodeURIComponent(bootstrap)}` };
+  return serviceRuntime.buildDashboardConnection();
 }
 
 async function showDashboardWindow(routeHash = '') {
@@ -816,8 +410,8 @@ async function showDashboardWindow(routeHash = '') {
 }
 
 async function openDashboardWindow(routeHash = '') {
-  if (!httpServer?.listening) await startServer();
-  if (!httpServer?.listening) {
+  if (!serviceRuntime.isListening()) await startServer();
+  if (!serviceRuntime.isListening()) {
     recoveryWindowManager.show();
     throw new Error(currentStatus.error || 'Rel.AI connection is not running.');
   }
@@ -870,8 +464,8 @@ registerIpcHandlers({
   clipboard,
   shell,
   saveLauncherConfig,
-  getWizardWindow: () => wizardWindow,
-  closeWizard,
+  getWizardWindow: setupWindowManager.getWindow,
+  closeWizard: setupWindowManager.close,
   getFallbackWindow: recoveryWindowManager.getWindow,
   getDashboardWindow: dashboardWindowManager.getWindow,
   getDashboardWindowState: dashboardWindowManager.getState,
@@ -879,29 +473,29 @@ registerIpcHandlers({
   toggleDashboardMaximize: dashboardWindowManager.toggleMaximize,
   requestDashboardClose: dashboardWindowManager.requestClose,
   getRecoveryConfig,
-  startWizardCloudEnrollment,
-  startWizardCloudPairing,
-  getWizardCloudStatus,
-  cancelWizardCloudPairing,
-  getWizardRecoveryCode,
-  createWizardDeviceLink,
-  recoverWizardCloudIdentity,
+  startWizardCloudEnrollment: gatewayActions.startWizardCloudEnrollment,
+  startWizardCloudPairing: gatewayActions.startWizardCloudPairing,
+  getWizardCloudStatus: gatewayActions.getWizardCloudStatus,
+  cancelWizardCloudPairing: gatewayActions.cancelWizardCloudPairing,
+  getWizardRecoveryCode: gatewayActions.getWizardRecoveryCode,
+  createWizardDeviceLink: gatewayActions.createWizardDeviceLink,
+  recoverWizardCloudIdentity: gatewayActions.recoverWizardCloudIdentity,
   openRecoverySetup,
   startServer,
   stopServer,
   launchConfiguredDesktop,
   openSettingsWindow,
   openDashboardWindow,
-  getGatewayStatus: gatewayStatusForDashboard,
-  beginGatewayEnrollment,
-  beginGatewayPairing,
-  openGatewayAccount,
-  cancelGatewayPairing,
-  listGatewayDevices,
-  revokeGatewayDevice,
-  setGatewayMode,
-  getGatewayRecovery,
-  getGatewayUsage,
+  getGatewayStatus: gatewayActions.statusForDashboard,
+  beginGatewayEnrollment: gatewayActions.beginEnrollment,
+  beginGatewayPairing: gatewayActions.beginPairing,
+  openGatewayAccount: gatewayActions.openAccount,
+  cancelGatewayPairing: gatewayActions.cancelPairing,
+  listGatewayDevices: gatewayActions.listDevices,
+  revokeGatewayDevice: gatewayActions.revokeDevice,
+  setGatewayMode: gatewayActions.setMode,
+  getGatewayRecovery: gatewayActions.getRecovery,
+  getGatewayUsage: gatewayActions.getUsage,
   getDesktopSettings: currentDesktopSettings,
   saveDesktopSettings: updateDesktopSettings,
   replaceApprovalToken: approvalTokenManager.replace,

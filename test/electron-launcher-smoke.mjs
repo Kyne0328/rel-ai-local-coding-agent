@@ -133,6 +133,9 @@ assert.ok(electronPkg.build.files.includes('desktop-lifecycle.js'), 'electron bu
 assert.ok(electronPkg.build.files.includes('shutdown-coordinator.js'), 'electron build must include coordinated shutdown ownership');
 assert.ok(electronPkg.build.files.includes('controller-runtime.js'), 'electron build must include the active-controller runtime marker');
 assert.ok(electronPkg.build.files.includes('public-connection-runtime.js'), 'electron build must include cloud/direct public connection lifecycle ownership');
+assert.ok(electronPkg.build.files.includes('gateway-actions.js'), 'electron build must include gateway account and device action ownership');
+assert.ok(electronPkg.build.files.includes('service-runtime.js'), 'electron build must include local service and public connection startup ownership');
+assert.ok(electronPkg.build.files.includes('setup-window.js'), 'electron build must include setup window lifecycle ownership');
 for (const relayFile of ['cloud-relay-state.js', 'cloud-relay-client.js', 'cloud-relay-runtime.js']) {
   assert.equal(electronPkg.build.files.includes(relayFile), false, `electron build must not include removed relay module ${relayFile}`);
 }
@@ -167,6 +170,7 @@ const dashboardPreload = fs.readFileSync(path.join(root, 'electron', 'preload.cj
 const dashboardPreloadSurface = dashboardPreload.split('} else {', 1)[0];
 const desktopSettings = fs.readFileSync(path.join(root, 'electron', 'desktop-settings.js'), 'utf8');
 const appUpdater = fs.readFileSync(path.join(root, 'electron', 'app-updater.js'), 'utf8');
+const serviceRuntime = fs.readFileSync(path.join(root, 'electron', 'service-runtime.js'), 'utf8');
 const ipcHandlers = fs.readFileSync(path.join(root, 'electron', 'ipc-handlers.js'), 'utf8');
 const ipcSecurity = fs.readFileSync(path.join(root, 'electron', 'ipc-security.js'), 'utf8');
 const windowSecurity = fs.readFileSync(path.join(root, 'electron', 'window-security.js'), 'utf8');
@@ -217,7 +221,7 @@ assert.match(electronMain, /createApprovalTokenManager/, 'Electron main must del
 assert.match(electronMain, /createPublicConnectionRuntime/, 'Electron main must delegate cloud/direct public connection lifecycle to one runtime owner');
 assert.match(electronMain, /createGatewayClient/, 'cloud mode must use the authenticated gateway client');
 assert.doesNotMatch(electronMain, /tunnelProcess/, 'Electron main must not retain a second ngrok process owner outside the public connection runtime');
-assert.match(electronMain, /onOAuthAuthorized: \(\) => \{[\s\S]*guiConfig\.connectionMode === 'direct'[\s\S]*setStatus\(\{ authenticationRequired: false/, 'local OAuth approval must clear reapproval only for Direct mode');
+assert.match(serviceRuntime, /onOAuthAuthorized: \(\) => \{[\s\S]*guiConfig\.connectionMode === 'direct'[\s\S]*setStatus\(\{ authenticationRequired: false/, 'local OAuth approval must clear reapproval only for Direct mode');
 assert.match(desktopSettings, /token: current\.token/, 'ordinary desktop settings saves must preserve the current approval token');
 assert.doesNotMatch(desktopSettings, /token: settings\.approvalToken/, 'ordinary desktop settings saves must not rotate the approval token');
 assert.match(electronMain, /createDashboardWindowManager/, 'Electron must host the dashboard in a dedicated window');
@@ -247,7 +251,7 @@ assert.match(desktopTray, /Restart to install/);
 assert.match(electronMain, /launchConfiguredDesktop\(\{ background: lifecycleStatus\.openedAtLogin \}\)/, 'configured sign-in launches must preserve the background-startup decision');
 assert.match(electronMain, /if \(!options\.background\) await showDashboardWindow/, 'normal launches must open the dashboard while background launches remain tray-only');
 assert.match(electronMain, /createShutdownCoordinator/, 'Electron must coordinate service, process, telemetry, and lifecycle shutdown');
-assert.match(electronMain, /closeWindows\(\) \{[\s\S]*dashboardWindowManager\.close\(\);[\s\S]*recoveryWindowManager\.close\(\);[\s\S]*closeWizard\(\{ returnToFallback: false \}\);/, 'Electron must compose desktop window cleanup at the application root');
+assert.match(electronMain, /closeWindows\(\) \{[\s\S]*dashboardWindowManager\.close\(\);[\s\S]*recoveryWindowManager\.close\(\);[\s\S]*setupWindowManager\.close\(\{ returnToFallback: false \}\);/, 'Electron must compose desktop window cleanup at the application root');
 assert.match(electronMain, /event\.preventDefault\(\)/, 'Electron must delay before-quit until owned runtime cleanup finishes');
 assert.match(electronMain, /await shutdownCoordinator\.prepare\('quit'\)/, 'tray quit must await the same shutdown coordinator');
 assert.match(desktopLifecycle, /setLoginItemSettings/);
@@ -260,16 +264,16 @@ assert.match(dashboardPreload, /desktop:startup:set/);
 assert.match(ipcHandlers, /desktop:lifecycle:get/);
 assert.match(ipcHandlers, /desktop:startup:set/);
 assert.match(electronMain, /function launchConfiguredDesktop\(/, 'desktop startup must have a dashboard-first lifecycle');
-assert.match(electronMain, /const pendingStart = \(async \(\) =>[\s\S]*startPromise = pendingStart;[\s\S]*startPromise === pendingStart/, 'startup promise cleanup must be identity-safe across overlapping restart generations');
-assert.doesNotMatch(electronMain, /if \(runToken !== lifecycleToken\) \{\s*await publicConnectionRuntime\.stop/, 'a stale startup completion must not stop the current public connection generation');
+assert.match(serviceRuntime, /const pendingStart = start\(runToken\);[\s\S]*startPromise = pendingStart;[\s\S]*startPromise === pendingStart/, 'startup promise cleanup must be identity-safe across overlapping restart generations');
+assert.doesNotMatch(serviceRuntime, /if \(runToken !== lifecycleToken\) \{\s*await publicConnectionRuntime\.stop/, 'a stale startup completion must not stop the current public connection generation');
 assert.match(electronMain, /function focusActiveWindow\(\)/, 'single-instance and notification focus must prefer the active application window');
 assert.doesNotMatch(electronMain, /dashboardWindow\.hide\(\).*showFallbackRecovery/s, 'fallback recovery must never hide a healthy dashboard');
 assert.match(electronMain, /recoveryWindowManager\.hide\(\)/, 'a successfully opened dashboard must dismiss the fallback window');
 assert.doesNotMatch(electronMain, /settings\.html|options\.edit/, 'the removed compatibility settings renderer must not be reachable');
-assert.match(electronMain, /getTaskActivity: toolActivityRuntime\.getStatus/, 'the web dashboard must receive the shared task model');
-assert.match(electronMain, /getDesktopStatus: \(\) => currentStatus/, 'the dashboard payload must receive live Electron connection state');
-assert.match(electronMain, /getRuntimeLogs: runtimeLogs\.snapshot/, 'the dashboard diagnostics endpoint must receive sanitized desktop logs');
-assert.match(electronMain, /clearRuntimeLogs: runtimeLogs\.clear/, 'the dashboard must be able to clear only the runtime log buffer');
+assert.match(serviceRuntime, /getTaskActivity: toolActivityRuntime\.getStatus/, 'the web dashboard must receive the shared task model');
+assert.match(serviceRuntime, /getDesktopStatus: getCurrentStatus/, 'the dashboard payload must receive live Electron connection state');
+assert.match(serviceRuntime, /getRuntimeLogs: runtimeLogs\.snapshot/, 'the dashboard diagnostics endpoint must receive sanitized desktop logs');
+assert.match(serviceRuntime, /clearRuntimeLogs: runtimeLogs\.clear/, 'the dashboard must be able to clear only the runtime log buffer');
 assert.match(electronMain, /createRecoveryWindowManager/, 'the fallback window must be isolated behind a dedicated manager');
 assert.match(electronMain, /recoveryWindowManager\.show\(\)/, 'the fallback must remain available for dashboard or service startup failure');
 assert.doesNotMatch(desktopTray, /Connection Recovery|showRecovery/, 'the tray must not expose the fallback as a routine destination');
@@ -279,7 +283,7 @@ assert.doesNotMatch(dashboardPreloadSurface, /openRecovery|desktop:open-recovery
 assert.equal(fs.existsSync(path.join(root, 'electron', 'renderer', 'settings.html')), false);
 assert.equal(fs.existsSync(path.join(root, 'electron', 'renderer', 'settings.js')), false);
 assert.match(dashboardPreload, /exposeInMainWorld\('relaiDesktop'/, 'the dashboard preload must expose constrained desktop controls');
-assert.match(electronMain, /dashboard\?surface=desktop/, 'the embedded dashboard must identify the desktop surface without a token query');
+assert.match(serviceRuntime, /dashboard\?surface=desktop/, 'the embedded dashboard must identify the desktop surface without a token query');
 assert.match(electronMain, /showDashboardWindow\(''\)/, 'first-run desktop setup must hand off to dashboard Home so Getting started can continue onboarding');
 assert.match(fs.readFileSync(path.join(root, 'electron', 'ipc-handlers.js'), 'utf8'), /firstRun: config\?\.restart !== true/, 'recovery edits must not be treated as fresh first-run setup');
 assert.doesNotMatch(electronMain, /shell\.openExternal\(`http:\/\/127\.0\.0\.1:.*dashboard/, 'Open Dashboard must not launch the system browser');
