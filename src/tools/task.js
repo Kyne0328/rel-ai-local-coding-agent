@@ -28,7 +28,6 @@ function taskBootstrapFromSnapshot(snapshot, mode = 'compact') {
     manifests: snapshot.manifests,
     discoveredCommands: snapshot.discoveredCommands,
     projectInstructions: snapshot.projectInstructions,
-    workspaceSkills: snapshot.workspaceSkills,
     fileCount: snapshot.fileCount,
     files: snapshot.files,
     truncated: snapshot.truncated,

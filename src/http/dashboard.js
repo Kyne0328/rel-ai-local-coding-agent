@@ -16,7 +16,7 @@ import { resolveRequireHttpToken } from "./auth.js";
 import { readTaskHistory, readTaskHistorySession } from "../taskHistoryStore.js";
 import { onToolActivity } from "../toolActivity.js";
 import { buildDashboardPayload, mergeDashboardActivity } from "./dashboardData.js";
-import { handleOpenFolder, handlePickFolder, handleSkillsGet, handleSkillsPost, handleWorkspaceChecks, workspacePathPreflight } from "./dashboardActions.js";
+import { handleOpenFolder, handlePickFolder, handleWorkspaceChecks, workspacePathPreflight } from "./dashboardActions.js";
 import { sendJson, sendHtml, sendSse, readJsonBody, contentTypeForStaticAsset, jsonForHtmlScript } from "./io.js";
 import { mcpConnectionManager } from '../mcp/connectionManager.js';
 import { buildToolManifest } from '../mcp/toolManifest.js';
@@ -389,4 +389,4 @@ const handleReadiness = (ctx) => sendJson(ctx.res, 200, release.releaseReadiness
 
 const configCache = { path: "", mtimeMs: -1, value: null };
 
-export { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handleApiSettingsGet, handleApiTools, handleOnboardingStatus, handleConnection, handleDashboardV10, handleTaskSession, handleApiLogs, handleHealthMonitor, handleAliasDiagnostics, handleReleaseNotes, handleCautionSummary, handleReadiness, handleWorkspacePreflight, handleEvents, handleOnboardingComplete, handleApiSettingsPost, handleApiWorkspaces, handlePickFolder, handleOpenFolder, handleSkillsGet, handleSkillsPost, handleWorkspaceChecks };
+export { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handleApiSettingsGet, handleApiTools, handleOnboardingStatus, handleConnection, handleDashboardV10, handleTaskSession, handleApiLogs, handleHealthMonitor, handleAliasDiagnostics, handleReleaseNotes, handleCautionSummary, handleReadiness, handleWorkspacePreflight, handleEvents, handleOnboardingComplete, handleApiSettingsPost, handleApiWorkspaces, handlePickFolder, handleOpenFolder, handleWorkspaceChecks };

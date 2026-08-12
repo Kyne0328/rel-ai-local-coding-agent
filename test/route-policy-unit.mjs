@@ -6,8 +6,6 @@ assert.equal(canonicalPathFor('settings/diagnostics'), 'diagnostics');
 assert.equal(canonicalPathFor('settings/general'), 'settings');
 assert.equal(canonicalPathFor('settings/dashboard'), 'settings/advanced');
 assert.equal(canonicalPathFor('settings/desktop'), 'settings/application');
-assert.equal(canonicalPathFor('settings/skills'), 'skills');
-assert.equal(canonicalPathFor('skills'), 'skills');
 assert.equal(canonicalPathFor('missing'), 'home');
 assert.equal(canonicalPathFor('tools'), 'tools');
 assert.equal(canonicalPathFor('settings/advanced'), 'settings/advanced');

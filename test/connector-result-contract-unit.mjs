@@ -24,7 +24,7 @@ const cases = [
   }, { guidanceMode: 'none' }),
   fixture('relai_snapshot', 'relai_snapshot', '', 'relai_repo_snapshot', 'work_snapshot', {
     ok: true, workspace: 'repo', fileCount: 700, files: ['src/index.js', 'src/other.js'], skipped: [], truncated: false,
-    manifests: ['package.json'], discoveredCommands: {}, projectInstructions: {}, workspaceSkills: [], hints: [], git: {}, recommendedFlow: []
+    manifests: ['package.json'], discoveredCommands: {}, projectInstructions: {}, hints: [], git: {}, recommendedFlow: []
   }, {
     ok: true, workspace: 'repo', manifests: ['package.json'], discoveredCommands: {}, projectInstructions: {},
     fileCount: 700, files: ['src/index.js', 'src/other.js'], returnedFileCount: 2, omittedFiles: 0, skippedCount: 0, truncated: false,

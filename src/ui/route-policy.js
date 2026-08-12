@@ -9,7 +9,6 @@ const CANONICAL_PATHS = new Set([
   'diagnostics',
   'usage',
   'settings',
-  'settings/skills',
   'settings/application',
   'settings/advanced',
   'settings/about'
@@ -18,7 +17,6 @@ const CANONICAL_PATHS = new Set([
 const LEGACY_PATHS = new Map([
   ['system', 'connection'],
   ['connector', 'connection'],
-  ['skills', 'settings/skills'],
   ['settings/connection', 'connection'],
   ['settings/connector', 'connection'],
   ['settings/diagnostics', 'diagnostics'],

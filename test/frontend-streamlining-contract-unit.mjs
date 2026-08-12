@@ -17,7 +17,7 @@ assert.deepEqual(WORK_NAV_ITEMS.map(item => item.id), ['home', 'tasks', 'workspa
 assert.deepEqual(SYSTEM_NAV_ITEMS.map(item => item.id), ['connection', 'processes', 'diagnostics', 'tools', 'usage']);
 assert.deepEqual(APPLICATION_NAV_ITEMS.map(item => item.id), ['system', 'settings']);
 assert.deepEqual(MOBILE_NAV_ITEMS.map(item => item.id), ['home', 'tasks', 'workspaces', 'system', 'settings']);
-assert.deepEqual(SETTINGS_NAV_ITEMS.map(item => item.label), ['Preferences', 'Skills', 'Application', 'Advanced', 'About']);
+assert.deepEqual(SETTINGS_NAV_ITEMS.map(item => item.label), ['Preferences', 'Application', 'Advanced', 'About']);
 assert.equal(desktopNavigationOwner('connection'), 'system');
 assert.equal(desktopNavigationOwner('diagnostics'), 'system');
 assert.equal(desktopNavigationOwner('system'), 'system');
@@ -26,8 +26,6 @@ assert.equal(desktopNavigationOwner('settings'), 'settings');
 assert.equal(canonicalPathFor('settings/connection'), 'connection');
 assert.equal(canonicalPathFor('settings/diagnostics'), 'diagnostics');
 assert.equal(canonicalPathFor('settings/tools-validation'), 'home');
-assert.equal(canonicalPathFor('settings/skills'), 'settings/skills');
-assert.equal(canonicalPathFor('skills'), 'settings/skills');
 assert.equal(normalizeRouteKey('activity?status=succeeded'), 'activity?status=succeeded');
 assert.equal(normalizeRouteKey('activity?status=active'), 'activity?status=active');
 assert.equal(normalizeRouteKey('activity?status=failed'), 'activity?status=failed');
@@ -101,7 +99,6 @@ for (const featureStyle of [
   'src/ui/features/home/styles.css',
   'src/ui/features/onboarding/styles.css',
   'src/ui/features/settings/styles.css',
-  'src/ui/features/skills/styles.css',
   'src/ui/features/system/styles.css',
   'src/ui/features/sessions/styles.css',
   'src/ui/features/activity/styles.css',

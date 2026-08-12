@@ -61,7 +61,7 @@ System owns Connection, Processes, Diagnostics, Tools, and Usage through its sec
 
 ### Mobile navigation
 
-The compact navigation keeps the top-level destinations that fit the narrow layout; System subpages and Skills remain reachable through their owning surfaces and the command palette.
+The compact navigation keeps the top-level destinations that fit the narrow layout; System subpages remain reachable through their owning surfaces and the command palette.
 
 ## Route policy
 
@@ -72,7 +72,6 @@ The compact navigation keeps the top-level destinations that fit the narrow layo
 Settings remains focused on application preferences rather than duplicating feature controls:
 
 - **Preferences** — theme, density, notifications.
-- **Skills** — install, inspect, remove, and assign reusable skills.
 - **Application** — launch-at-sign-in, lifecycle state, updates.
 - **Advanced** — expert safeguards and resource limits.
 - **About** — version, project, repository, and license information.

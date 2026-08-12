@@ -391,7 +391,6 @@ function resolveManagedWorktree(config, input) {
     defaultBaseBranch: source.defaultBaseBranch || 'main',
     allowedRemotes: source.allowedRemotes || ['origin'],
     repoSlug: source.repoSlug || '',
-    skills: Array.isArray(source.skills) ? [...source.skills] : [],
     context: source.context || {},
     validationRules: source.validationRules || {},
     managedWorktree: true,

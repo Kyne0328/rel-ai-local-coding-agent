@@ -2,13 +2,11 @@ import { mountGeneral } from './general.js';
 import { mountApplication } from './application.js';
 import { mountAdvanced } from './advanced.js';
 import { mountAbout } from './about.js';
-import { mountSkills } from '../skills/index.js';
 import { SETTINGS_NAV_ITEMS } from '../../navigation-catalog.js';
 import { navigate, routeHref } from '../../router.js';
 
 const MOUNTS = {
   preferences: mountGeneral,
-  skills: mountSkills,
   application: mountApplication,
   advanced: mountAdvanced,
   about: mountAbout

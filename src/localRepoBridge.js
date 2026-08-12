@@ -19,7 +19,6 @@ import { relaiResetWorkspace, relaiRestorePaths } from "./bridge/restore.js";
 import { workspaceTidyPlan, workspaceTidyRun as relaiWorkspaceTidyRun } from "./bridge/tidy.js";
 import { relaiApplyPatch, normalizeOpenAIPatchFormat } from "./bridge/patch.js";
 import { readProjectInstructions } from "./projectInstructions.js";
-import { resolveWorkspaceSkills } from "./skillLibrary.js";
 import { STAGED_WRITE_BYTE_THRESHOLD, STAGED_WRITE_LINE_THRESHOLD, workspaceWriteGuidance, analyzeFileShape, fileWriteGuidance } from "./bridge/writeGuidance.js";
 
 const DEFAULT_MAX_READ_BYTES = 1024 * 1024;
@@ -41,7 +40,6 @@ async function repoSnapshot(workspace, config, args = {}) {
   const manifests = readManifests(workspace.path);
   const discoveredCommands = discoverCommands(workspace.path);
   const projectInstructions = readProjectInstructions(workspace, { targetPath: args.instructionPath });
-  const workspaceSkills = resolveWorkspaceSkills(config, workspace);
   const git = await gitSummary;
   return {
     ok: true,
@@ -53,7 +51,6 @@ async function repoSnapshot(workspace, config, args = {}) {
     manifestContents: manifests,
     discoveredCommands,
     projectInstructions,
-    workspaceSkills,
     fileCount: tree.files.length,
     effectiveMaxEntries: maxEntries,
     budgetMultiplied: effectiveDefault !== configuredDefault,

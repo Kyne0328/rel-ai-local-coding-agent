@@ -41,7 +41,7 @@ package.json
 - `rel-ai-verification` - risk-based completion evidence using the smallest meaningful non-overlapping checks for the changed boundary.
 - `rel-ai-dev-process` - persistent development servers, watchers, preview runtimes, and interactive programs.
 
-The built-in set is Rel.AI's development-methodology layer. Framework, language, database, deployment, UI/UX, security-domain, and other specialist expertise belongs in user-installed skills rather than an ever-growing built-in catalog.
+The built-in set is Rel.AI's development-methodology layer. Framework, language, database, deployment, UI/UX, security-domain, and other specialist expertise stays outside this intentionally small built-in catalog; the desktop application does not currently provide a user-managed skill installation flow.
 
 ## Build and verify
 
@@ -55,24 +55,10 @@ npm run test:plugin
 
 `npm run test:plugin` creates the real `npm pack` artifact, extracts it, validates every packaged skill and dependency, installs it temporarily, starts the extracted MCP server, verifies source/package `tools/list` parity, performs a repository read, executes consolidated validation and process-list calls with one `work_id`, and removes the complete installation.
 
-## Built-in and user-installed skills
+## Built-in skills
 
 Built-in skills ship with the Rel.AI plugin and update with the application/plugin version. `skills/PROVENANCE.md` records their first-party ownership and design influences, while plugin validation checks their packaged structure and declared metadata.
 
-The desktop application also owns a separate user-managed skill library under the Rel.AI state directory. In **Settings > Skills**, users can add a public GitHub repository, preview every detected `SKILL.md` or `skill.md`, choose **Select all** or individual skills, and install only the selected packages.
+The desktop application does not currently expose a user-managed skill library or per-workspace skill assignments. Repository snapshots and work-session bootstraps therefore do not inject separately installed skill packages.
 
-The desktop skill library has three scopes:
-
-- **Built-in** - skills shipped with Rel.AI.
-- **Installed** - skills added by the user from GitHub and stored centrally by Rel.AI.
-- **Workspace enabled** - the built-in or installed skill IDs selected for a configured workspace.
-
-One installed skill may be enabled for multiple workspaces. Enabling a skill does not copy it into the project repository; workspace configuration stores the selected skill IDs and Rel.AI resolves them from the central library. Reinstalling the same GitHub skill refreshes its central copy. Automatic skill updates and private-GitHub authentication are not part of the first implementation.
-
-## Runtime context behavior
-
-Bundling or installing skills does not change the public MCP tool surface. Rel.AI continues to expose one complete 12-tool capability surface.
-
-For a workspace, the repository snapshot and work-session bootstrap include the `SKILL.md` content of the skills enabled for that workspace. Supporting files stay progressively available through MCP resources using `relai://skill/<skill-id>/file/<relative-path>`, so references, scripts, and data files do not have to be copied into the repository or loaded into every bootstrap response.
-
-Direct HTTP and stdio clients remain usable without enabling workspace skills.
+Bundled workflow skills remain part of the plugin package without adding skill-management operations to the public Rel.AI MCP tool surface.

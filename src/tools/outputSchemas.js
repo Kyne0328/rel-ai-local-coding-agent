@@ -149,7 +149,6 @@ const FIELD_SCHEMAS = Object.freeze({
   checks: { type: ['object', 'array'], additionalProperties: true, items: STRING },
   skippedChecks: ARRAY,
   projectInstructions: OBJECT,
-  workspaceSkills: ARRAY,
   repository: OBJECT,
   runtime: OBJECT,
   repositoryRuntime: OBJECT,
@@ -334,7 +333,7 @@ const FIELD_SCHEMAS = Object.freeze({
 
 const TOOL_FIELDS = Object.freeze({
   relai_begin_work: ['ok', 'workspace', 'work_id', 'status', 'identity', 'title', 'objective', 'workspaceBinding', 'bootstrap', 'nextAction'],
-  relai_repo_snapshot: ['ok', 'workspace', 'work_id', 'root', 'toolMode', 'trustedLocalAgent', 'manifests', 'manifestContents', 'discoveredCommands', 'projectInstructions', 'workspaceSkills', 'fileCount', 'effectiveMaxEntries', 'budgetMultiplied', 'files', 'returnedFileCount', 'omittedFiles', 'skipped', 'skippedCount', 'truncated', 'hints', 'git', 'recommendedFlow', 'writeGuidance', 'operationJournal', 'repository', 'changedFiles', 'next'],
+  relai_repo_snapshot: ['ok', 'workspace', 'work_id', 'root', 'toolMode', 'trustedLocalAgent', 'manifests', 'manifestContents', 'discoveredCommands', 'projectInstructions', 'fileCount', 'effectiveMaxEntries', 'budgetMultiplied', 'files', 'returnedFileCount', 'omittedFiles', 'skipped', 'skippedCount', 'truncated', 'hints', 'git', 'recommendedFlow', 'writeGuidance', 'operationJournal', 'repository', 'changedFiles', 'next'],
   relai_read: ['ok', 'workspace', 'work_id', 'items', 'skipped', 'truncated'],
   relai_search: ['ok', 'workspace', 'work_id', 'pattern', 'glob', 'fixed', 'ignoreCase', 'matches', 'matchCount', 'mode', 'effectiveMode', 'autoTier', 'selectionStrategy', 'contextBefore', 'contextAfter', 'groupByFile', 'mergeOverlaps', 'maxFiles', 'maxRangesPerFile', 'maxRangeLines', 'files', 'results', 'resultCount', 'returnedFileCount', 'returnedRangeCount', 'contextMatchCount', 'returnedBytes', 'maxBytes', 'omittedFiles', 'omittedRanges', 'truncated', 'contextTruncated', 'next'],
   relai_code_inspect: ['ok', 'workspace', 'work_id', 'action', 'index', 'query', 'strategy', 'semanticEmbeddings', 'files', 'matchCount', 'symbol', 'definitions', 'definitionCount', 'references', 'items', 'referenceCount', 'callCount', 'calls', 'seeds', 'maxDepth', 'impactedPaths', 'impactedPathCount', 'affectedTests', 'importEdges', 'definitionPaths', 'directCallers', 'importers', 'indirectImpact', 'relatedSymbols', 'uiSurfaces', 'registrationSurfaces', 'recommendedReadOrder', 'architecture', 'relationshipTypes', 'modules', 'entryPoints', 'hotspots', 'layers', 'communities', 'languages', 'diagnosticCommands', 'validationCommands', 'configuredTestCommands', 'diagnosticsExecuted', 'summary', 'truncated', 'next'],

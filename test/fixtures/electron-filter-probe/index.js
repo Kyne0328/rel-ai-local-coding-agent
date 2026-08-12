@@ -210,69 +210,6 @@ app.whenReady().then(async () => {
       };
     })()`);
 
-    const skills = await win.webContents.executeJavaScript(`(async () => {
-      const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-      const originalFetch = window.fetch.bind(window);
-      const calls = [];
-      const alpha = { id: 'github:example/skills:skills/alpha', key: 'skills/alpha', scope: 'installed', name: 'alpha', description: 'Alpha browser fixture skill.', repository: 'example/skills', repositoryUrl: 'https://github.com/example/skills', skillPath: 'skills/alpha' };
-      const beta = { id: 'github:example/skills:skills/beta', key: 'skills/beta', scope: 'installed', name: 'beta', description: 'Beta browser fixture skill.', repository: 'example/skills', repositoryUrl: 'https://github.com/example/skills', skillPath: 'skills/beta' };
-      const builtin = { id: 'builtin:rel-ai-workflow', scope: 'built-in', name: 'rel-ai-workflow', description: 'Built-in browser fixture skill.', skillPath: 'rel-ai-workflow' };
-      const response = value => new Response(JSON.stringify(value), { status: 200, headers: { 'Content-Type': 'application/json' } });
-      window.fetch = async (input, options = {}) => {
-        const url = typeof input === 'string' ? input : input?.url || '';
-        if (url.includes('/api/skills') && options.method === 'POST') {
-          const body = JSON.parse(options.body || '{}');
-          calls.push(body);
-          if (body.action === 'preview_github') return response({ ok: true, repository: 'example/skills', repositoryUrl: 'https://github.com/example/skills', revision: 'fixture', skills: [alpha, beta] });
-          if (body.action === 'install_github') return response({ ok: true, builtIn: [builtin], installed: [alpha], workspaces: [{ alias: 'app', skills: [] }], installedNow: [alpha], missing: [] });
-          if (body.action === 'set_workspace_skills') return response({ ok: true, builtIn: [builtin], installed: [alpha], workspaces: [{ alias: 'app', skills: body.skills }] });
-        }
-        return originalFetch(input, options);
-      };
-      try {
-        location.hash = '#settings/skills';
-        const started = Date.now();
-        while (!document.querySelector('[data-skill-github-form]') && Date.now() - started < 5000) await delay(30);
-        const input = document.querySelector('input[name="repositoryUrl"]');
-        input.value = 'https://github.com/example/skills';
-        document.querySelector('[data-skill-github-form]').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-        const previewStarted = Date.now();
-        while (document.querySelectorAll('[data-preview-skill]').length !== 2 && Date.now() - previewStarted < 5000) await delay(30);
-        let selectAll = document.querySelector('[data-skill-select-all]');
-        const selectAllInitially = selectAll?.checked === true;
-        selectAll.click(); await delay(20);
-        const selectAllCleared = document.querySelectorAll('[data-preview-skill]:checked').length === 0;
-        selectAll = document.querySelector('[data-skill-select-all]');
-        selectAll.click(); await delay(20);
-        const betaInput = [...document.querySelectorAll('[data-preview-skill]')].find(item => item.value === 'skills/beta');
-        betaInput.click(); await delay(20);
-        const selectedBeforeInstall = [...document.querySelectorAll('[data-preview-skill]:checked')].map(item => item.value);
-        document.querySelector('[data-install-selected]').click();
-        const installedStarted = Date.now();
-        while (!document.querySelector('.skill-library-row')?.textContent.includes('alpha') && Date.now() - installedStarted < 5000) await delay(30);
-        const installedVisible = [...document.querySelectorAll('.skill-library-row')].some(row => row.textContent.includes('alpha'));
-        [...document.querySelectorAll('[data-skill-scope]')].find(button => button.textContent.trim() === 'Workspace enabled')?.click();
-        await delay(40);
-        const alphaWorkspace = [...document.querySelectorAll('[data-workspace-skill]')].find(item => item.value === alpha.id);
-        alphaWorkspace.click();
-        document.querySelector('[data-save-workspace-skills]').click();
-        const savedStarted = Date.now();
-        while (!calls.some(call => call.action === 'set_workspace_skills') && Date.now() - savedStarted < 5000) await delay(30);
-        const installCall = calls.find(call => call.action === 'install_github');
-        const workspaceCall = calls.find(call => call.action === 'set_workspace_skills');
-        return {
-          selectAllInitially,
-          selectAllCleared,
-          selectedBeforeInstall,
-          installedVisible,
-          installKeys: installCall?.selectedKeys || [],
-          workspace: workspaceCall?.workspace || '',
-          workspaceSkills: workspaceCall?.skills || []
-        };
-      } finally {
-        window.fetch = originalFetch;
-      }
-    })()`);
     await win.webContents.executeJavaScript(`location.hash = '#workspaces'`);
     await waitFor(win, `document.querySelector('.workspace-validation-preferences input[type="checkbox"]') && document.querySelector('.workspace-grid')`);
     const workspaces = await win.webContents.executeJavaScript(`(async () => {
@@ -408,7 +345,7 @@ app.whenReady().then(async () => {
       debuggerAttached = false;
     }
 
-    fs.writeFileSync(outputPath, JSON.stringify({ shared, activityApplied, taskChip, escapeFocus, mobileDrawer, diagnostics, tools, settings, skills, workspaces, connection, usage, responsive, zoom200At420, forcedColors, failures }, null, 2));
+    fs.writeFileSync(outputPath, JSON.stringify({ shared, activityApplied, taskChip, escapeFocus, mobileDrawer, diagnostics, tools, settings, workspaces, connection, usage, responsive, zoom200At420, forcedColors, failures }, null, 2));
   } catch (error) {
     fs.writeFileSync(outputPath, JSON.stringify({ error: error?.stack || String(error), failures }, null, 2));
     process.exitCode = 1;
