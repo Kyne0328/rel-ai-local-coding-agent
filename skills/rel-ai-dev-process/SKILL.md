@@ -10,7 +10,7 @@ Use runtime workflow guidance before starting another process. If `relai_process
 
 Use this process flow: `start with explicit purpose -> determine readiness -> inspect incremental output -> interact only if required -> reuse process -> stop when no longer needed`.
 
-1. Confirm the command is genuinely persistent or interactive. One-shot commands belong in `relai_exec` or `relai_validate`.
+1. Confirm the command is genuinely persistent or interactive. Do not trigger for tests, builds, linters, source checks, release gates, or other one-shot commands; those belong in `relai_exec` or `relai_validate`.
 2. Start it with `relai_process` action `start`, an explicit `kind` (`service`, `watcher`, or `interactive`), and a concrete `purpose` explaining why persistence is needed.
 3. Determine readiness from startup output or a bounded HTTP probe before treating the process as usable.
 4. Read logs incrementally with stdout/stderr offsets. Reuse `metadataRevision` after the first read so unchanged process metadata is not returned repeatedly.
