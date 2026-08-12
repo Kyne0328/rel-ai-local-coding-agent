@@ -23,25 +23,13 @@ import { buildToolManifest } from '../mcp/toolManifest.js';
 import { readMcpAuthenticationStatus } from '../mcp/authenticationStatus.js';
 import { WORK_NAV_ITEMS, APPLICATION_NAV_ITEMS, MOBILE_NAV_ITEMS } from '../ui/navigation-catalog.js';
 import { onWorkspaceStateChange, workspaceStateRevision } from '../workspaceState.js';
+import { readCachedStaticAsset } from './dashboardAssets.js';
 
 const DASHBOARD_SHARED_MODULES = Object.freeze({
   '/public/analyticsFailureCategory.js': Object.freeze(['src', 'analyticsFailureCategory.js']),
   '/public/taskEvents.js': Object.freeze(['src', 'taskEvents.js']),
   '/public/taskState.js': Object.freeze(['src', 'taskState.js'])
 });
-const STATIC_ASSET_CACHE = new Map();
-
-function readCachedStaticAsset(filePath) {
-  const stat = fs.statSync(filePath);
-  const signature = `${stat.size}:${Math.trunc(stat.mtimeMs)}`;
-  const cached = STATIC_ASSET_CACHE.get(filePath);
-  if (cached?.signature === signature) return cached.content;
-  const content = fs.readFileSync(filePath);
-  STATIC_ASSET_CACHE.set(filePath, { signature, content });
-  if (STATIC_ASSET_CACHE.size > 128) STATIC_ASSET_CACHE.delete(STATIC_ASSET_CACHE.keys().next().value);
-  return content;
-}
-
 function renderDashboardNav(items) {
   return items.map((item) => `<a href="${item.href}" data-nav-id="${item.id}" aria-label="${item.label}" title="${item.label}"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">${item.icon}</svg><span class="nav-label">${item.label}</span></a>`).join("");
 }
