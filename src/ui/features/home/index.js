@@ -447,7 +447,7 @@ function workspaceSummaryCard(workspaces) {
         <div><strong>${esc(ws.alias || 'workspace')}</strong><div class="compact-workspace-path">${esc(ws.path || '')}</div></div>
         ${pillHtml(hasValidation(ws) ? 'ready' : 'not configured')}
       </div>`).join('')
-    : `<div class="empty">No workspaces configured. <a href="${routeMetadata('workspaces').href}">Add your first repository.</a></div>`;
+    : `<div class="empty">No workspaces configured. <a class="buttonlike secondary compact-button" href="${routeMetadata('workspaces').href}">Add your first repository</a></div>`;
   card.appendChild(body);
   return card;
 }
