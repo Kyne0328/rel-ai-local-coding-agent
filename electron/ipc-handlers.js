@@ -1,14 +1,9 @@
-import { MAX_CLIPBOARD_TEXT_BYTES, createWindowGuards, isAllowedNgrokUrl, logIpcFailure } from './ipc-security.js';
-import { registerDesktopSettingsIpc, registerDiagnosticsIpc, registerGatewayIpc, registerUpdaterIpc } from './ipc-handlers-dashboard.js';
+import { MAX_CLIPBOARD_TEXT_BYTES, createWindowGuards, logIpcFailure } from './ipc-security.js';
+import { registerAnalyticsIpc, registerDesktopSettingsIpc, registerDiagnosticsIpc, registerUpdaterIpc } from './ipc-handlers-dashboard.js';
 
 function registerIpcHandlers(deps) {
   const { isSenderWindow, windowOnly, allowedWindows } = createWindowGuards(deps.BrowserWindow);
-  const dashboardOnly = (event, action) => windowOnly(
-    event,
-    deps.getDashboardWindow,
-    'Secured dashboard controls',
-    action
-  );
+  const dashboardOnly = (event, action) => windowOnly(event, deps.getDashboardWindow, 'Secured dashboard controls', action);
 
   registerSetupIpc({
     ipcMain: deps.ipcMain,
@@ -16,16 +11,9 @@ function registerIpcHandlers(deps) {
     getWizardWindow: deps.getWizardWindow,
     closeWizard: deps.closeWizard,
     getRecoveryConfig: deps.getRecoveryConfig,
-    startWizardCloudEnrollment: deps.startWizardCloudEnrollment,
-    startWizardCloudPairing: deps.startWizardCloudPairing,
-    getWizardCloudStatus: deps.getWizardCloudStatus,
-    cancelWizardCloudPairing: deps.cancelWizardCloudPairing,
-    getWizardRecoveryCode: deps.getWizardRecoveryCode,
-    createWizardDeviceLink: deps.createWizardDeviceLink,
-    recoverWizardCloudIdentity: deps.recoverWizardCloudIdentity,
+    setTunnelApiKey: deps.setTunnelApiKey,
     saveLauncherConfig: deps.saveLauncherConfig,
-    launchConfiguredDesktop: deps.launchConfiguredDesktop,
-    shell: deps.shell
+    launchConfiguredDesktop: deps.launchConfiguredDesktop
   });
   registerRecoveryIpc({
     ipcMain: deps.ipcMain,
@@ -56,27 +44,12 @@ function registerIpcHandlers(deps) {
     requestDashboardClose: deps.requestDashboardClose,
     openSettingsWindow: deps.openSettingsWindow
   });
-  registerGatewayIpc({
-    ipcMain: deps.ipcMain,
-    dashboardOnly,
-    getGatewayStatus: deps.getGatewayStatus,
-    beginGatewayEnrollment: deps.beginGatewayEnrollment,
-    beginGatewayPairing: deps.beginGatewayPairing,
-    openGatewayAccount: deps.openGatewayAccount,
-    cancelGatewayPairing: deps.cancelGatewayPairing,
-    listGatewayDevices: deps.listGatewayDevices,
-    revokeGatewayDevice: deps.revokeGatewayDevice,
-    setGatewayMode: deps.setGatewayMode,
-    getGatewayRecovery: deps.getGatewayRecovery,
-    getGatewayUsage: deps.getGatewayUsage,
-    getLocalUsage: deps.getLocalUsage
-  });
+  registerAnalyticsIpc({ ipcMain: deps.ipcMain, dashboardOnly, getLocalUsage: deps.getLocalUsage });
   registerDesktopSettingsIpc({
     ipcMain: deps.ipcMain,
     dashboardOnly,
     getDesktopSettings: deps.getDesktopSettings,
     saveDesktopSettings: deps.saveDesktopSettings,
-    replaceApprovalToken: deps.replaceApprovalToken,
     getLifecycleStatus: deps.getLifecycleStatus,
     setLaunchAtLogin: deps.setLaunchAtLogin,
     getNotificationsEnabled: deps.getNotificationsEnabled,
@@ -111,84 +84,30 @@ function registerIpcHandlers(deps) {
   });
 }
 
-function registerSetupIpc({
-  ipcMain,
-  windowOnly,
-  getWizardWindow,
-  closeWizard,
-  getRecoveryConfig,
-  startWizardCloudEnrollment,
-  startWizardCloudPairing,
-  getWizardCloudStatus,
-  cancelWizardCloudPairing,
-  getWizardRecoveryCode,
-  createWizardDeviceLink,
-  recoverWizardCloudIdentity,
-  saveLauncherConfig,
-  launchConfiguredDesktop,
-  shell
-}) {
-  ipcMain.handle('wizard:done', (event, config) => windowOnly(event, getWizardWindow, 'Setup completion', async () => {
+function registerSetupIpc({ ipcMain, windowOnly, getWizardWindow, closeWizard, getRecoveryConfig, setTunnelApiKey, saveLauncherConfig, launchConfiguredDesktop }) {
+  ipcMain.handle('wizard:done', (event, config = {}) => windowOnly(event, getWizardWindow, 'Setup completion', async () => {
+    const apiKey = String(config.tunnelApiKey || '').trim();
+    if (apiKey) setTunnelApiKey(apiKey);
     saveLauncherConfig(config);
     closeWizard({ returnToFallback: false });
-    await launchConfiguredDesktop({ restart: config?.restart === true, firstRun: config?.restart !== true });
-    return { ok: true };
+    const status = await launchConfiguredDesktop({ restart: config?.restart === true, firstRun: config?.restart !== true });
+    return { ok: status?.serverRunning === true, status };
   }));
   ipcMain.handle('wizard:cancel', event => windowOnly(event, getWizardWindow, 'Setup cancellation', () => {
     closeWizard({ returnToFallback: true });
     return { ok: true };
   }));
   ipcMain.handle('recovery:get-config', event => windowOnly(event, getWizardWindow, 'Recovery configuration', getRecoveryConfig));
-  ipcMain.handle('wizard:cloud-enroll', event => windowOnly(event, getWizardWindow, 'Rel.AI account enrollment', startWizardCloudEnrollment));
-  ipcMain.handle('wizard:cloud-pair', event => windowOnly(event, getWizardWindow, 'Cloud pairing', startWizardCloudPairing));
-  ipcMain.handle('wizard:cloud-status', event => windowOnly(event, getWizardWindow, 'Cloud pairing status', getWizardCloudStatus));
-  ipcMain.handle('wizard:cloud-cancel', event => windowOnly(event, getWizardWindow, 'Cloud pairing cancellation', cancelWizardCloudPairing));
-  ipcMain.handle('wizard:cloud-recovery-get', event => windowOnly(event, getWizardWindow, 'Cloud recovery code', getWizardRecoveryCode));
-  ipcMain.handle('wizard:cloud-link-create', event => windowOnly(event, getWizardWindow, 'Cloud device link code', createWizardDeviceLink));
-  ipcMain.handle('wizard:cloud-recover', (event, recoveryCode) => windowOnly(event, getWizardWindow, 'Cloud identity recovery', () => recoverWizardCloudIdentity(recoveryCode))); 
-  ipcMain.handle('url:open-link', (event, value) => windowOnly(event, getWizardWindow, 'External setup links', async () => {
-    const target = String(value || '').trim();
-    if (!isAllowedNgrokUrl(target)) throw new Error('Only approved ngrok setup links can be opened from the setup wizard.');
-    await shell.openExternal(target);
-    return { ok: true };
-  }));
 }
 
-function registerRecoveryIpc({
-  ipcMain,
-  windowOnly,
-  getFallbackWindow,
-  openRecoverySetup,
-  openDashboardWindow,
-  getNotificationsEnabled,
-  setNotificationsEnabled
-}) {
+function registerRecoveryIpc({ ipcMain, windowOnly, getFallbackWindow, openRecoverySetup, openDashboardWindow, getNotificationsEnabled, setNotificationsEnabled }) {
   ipcMain.handle('recovery:open-setup', event => windowOnly(event, getFallbackWindow, 'Connection recovery', openRecoverySetup));
   ipcMain.handle('url:open-dashboard', event => windowOnly(event, getFallbackWindow, 'Dashboard opening', openDashboardWindow));
-  ipcMain.handle('notifications:get-enabled', event => windowOnly(
-    event,
-    getFallbackWindow,
-    'Notification preferences',
-    () => ({ ok: true, enabled: getNotificationsEnabled() })
-  ));
-  ipcMain.handle('notifications:set-enabled', (event, enabled) => windowOnly(
-    event,
-    getFallbackWindow,
-    'Notification preferences',
-    () => ({ ok: true, enabled: setNotificationsEnabled(enabled) })
-  ));
+  ipcMain.handle('notifications:get-enabled', event => windowOnly(event, getFallbackWindow, 'Notification preferences', () => ({ ok: true, enabled: getNotificationsEnabled() })));
+  ipcMain.handle('notifications:set-enabled', (event, enabled) => windowOnly(event, getFallbackWindow, 'Notification preferences', () => ({ ok: true, enabled: setNotificationsEnabled(enabled) })));
 }
 
-function registerServiceIpc({
-  ipcMain,
-  windowOnly,
-  isSenderWindow,
-  getFallbackWindow,
-  getDashboardWindow,
-  startServer,
-  stopServer,
-  launchConfiguredDesktop
-}) {
+function registerServiceIpc({ ipcMain, windowOnly, isSenderWindow, getFallbackWindow, getDashboardWindow, startServer, stopServer, launchConfiguredDesktop }) {
   ipcMain.handle('server:start', event => windowOnly(event, getFallbackWindow, 'Service startup', startServer));
   ipcMain.handle('server:stop', event => windowOnly(event, getFallbackWindow, 'Service shutdown', stopServer));
   ipcMain.on('desktop:restart-service', event => {
@@ -197,22 +116,11 @@ function registerServiceIpc({
   });
   ipcMain.on('desktop:stop-service', event => {
     if (!isSenderWindow(event, getDashboardWindow)) return;
-    setImmediate(() => {
-      Promise.resolve(stopServer()).catch(logIpcFailure);
-    });
+    setImmediate(() => Promise.resolve(stopServer()).catch(logIpcFailure));
   });
 }
 
-function registerDashboardWindowIpc({
-  ipcMain,
-  dashboardOnly,
-  getCurrentStatus,
-  getDashboardWindowState,
-  minimizeDashboardWindow,
-  toggleDashboardMaximize,
-  requestDashboardClose,
-  openSettingsWindow
-}) {
+function registerDashboardWindowIpc({ ipcMain, dashboardOnly, getCurrentStatus, getDashboardWindowState, minimizeDashboardWindow, toggleDashboardMaximize, requestDashboardClose, openSettingsWindow }) {
   ipcMain.handle('desktop:get-status', event => dashboardOnly(event, getCurrentStatus));
   ipcMain.handle('desktop:window:get-state', event => dashboardOnly(event, getDashboardWindowState));
   ipcMain.handle('desktop:window:minimize', event => dashboardOnly(event, minimizeDashboardWindow));
@@ -221,42 +129,21 @@ function registerDashboardWindowIpc({
   ipcMain.handle('desktop:open-settings', event => dashboardOnly(event, openSettingsWindow));
 }
 
-function registerSharedUtilityIpc({
-  ipcMain,
-  BrowserWindow,
-  clipboard,
-  allowedWindows,
-  isSenderWindow,
-  getWizardWindow,
-  getFallbackWindow,
-  getDashboardWindow,
-  fitWindowToContent
-}) {
-  ipcMain.handle('url:copy', (event, value) => allowedWindows(
-    event,
-    [getWizardWindow, getFallbackWindow, getDashboardWindow],
-    'Clipboard access',
-    () => {
-      const text = String(value || '').split('\u0000').join('');
-      if (Buffer.byteLength(text, 'utf8') > MAX_CLIPBOARD_TEXT_BYTES) {
-        throw new Error('Clipboard text exceeds the 64 KiB safety limit.');
-      }
-      clipboard.writeText(text);
-      return { ok: true };
-    }
-  ));
+function registerSharedUtilityIpc({ ipcMain, BrowserWindow, clipboard, allowedWindows, isSenderWindow, getWizardWindow, getFallbackWindow, getDashboardWindow, fitWindowToContent }) {
+  ipcMain.handle('url:copy', (event, value) => allowedWindows(event, [getWizardWindow, getFallbackWindow, getDashboardWindow], 'Clipboard access', () => {
+    const text = String(value || '').split('\u0000').join('');
+    if (Buffer.byteLength(text, 'utf8') > MAX_CLIPBOARD_TEXT_BYTES) throw new Error('Clipboard text exceeds the 64 KiB safety limit.');
+    clipboard.writeText(text);
+    return { ok: true };
+  }));
   ipcMain.on('window:fit-content', (event, payload = {}) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) return;
     const isWizard = isSenderWindow(event, getWizardWindow);
     const isFallback = isSenderWindow(event, getFallbackWindow);
     if (!isWizard && !isFallback) return;
-    fitWindowToContent(win, {
-      type: isWizard ? 'wizard' : 'status',
-      width: Number(payload.width),
-      height: Number(payload.height)
-    });
+    fitWindowToContent(win, { type: isWizard ? 'wizard' : 'status', width: Number(payload.width), height: Number(payload.height) });
   });
 }
 
-export { MAX_CLIPBOARD_TEXT_BYTES, isAllowedNgrokUrl, registerIpcHandlers };
+export { MAX_CLIPBOARD_TEXT_BYTES, registerIpcHandlers };

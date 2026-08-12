@@ -15,8 +15,7 @@ const generationOptions = {
   key: Buffer.from('contract-key'),
   token: 'token-a',
   host: '127.0.0.1',
-  port: 3333,
-  publicUrl: 'https://example.ngrok.app'
+  port: 3333
 };
 try {
   assert.deepEqual(readRegistry({ stateDir: worktreeState }), { worktrees: {} });

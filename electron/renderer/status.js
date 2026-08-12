@@ -1,7 +1,8 @@
 let currentStatus = {
   serverRunning: false,
   tunnelStatus: 'stopped',
-  mcpUrl: '',
+  tunnelId: '',
+  localMcpUrl: '',
   error: '',
   localUrl: '',
   version: '',
@@ -24,18 +25,18 @@ function requestWindowFit() {
 }
 
 function connectionView(status) {
-  if (status.serverRunning && status.tunnelStatus === 'running' && status.mcpUrl) {
+  if (status.serverRunning && status.tunnelStatus === 'running') {
     return {
       key: 'ready', badge: 'Ready', eyebrow: 'Connection ready',
       title: 'Rel.AI is available to ChatGPT.',
-      description: 'The endpoint is authenticated and reachable. Rel.AI reports exact tool activity, but it cannot observe ChatGPT reasoning or infer when the overall chat request is finished.'
+      description: 'The local MCP service and OpenAI Secure MCP Tunnel are ready. Rel.AI reports exact tool activity, but it cannot observe ChatGPT reasoning or infer when the overall chat request is finished.'
     };
   }
   if (status.serverRunning && status.tunnelStatus === 'connecting') {
     return {
       key: 'connecting', badge: 'Connecting', eyebrow: 'Secure connection',
-      title: 'Publishing the ChatGPT endpoint…',
-      description: 'The local service is running while Rel.AI prepares the secure public tunnel.'
+      title: 'Connecting OpenAI Secure MCP Tunnel…',
+      description: 'The local service is running while Rel.AI establishes the outbound tunnel.'
     };
   }
   if (status.error || status.tunnelStatus === 'failed') {
@@ -169,13 +170,13 @@ function renderEndpoint(view) {
   const copyButton = document.getElementById('copyBtn');
   const wrap = document.getElementById('endpointWrap');
   wrap.classList.toggle('compact', view.key === 'working' || view.key === 'waiting' || view.key === 'settling');
-  if (currentStatus.mcpUrl) {
-    endpoint.textContent = currentStatus.mcpUrl;
+  if (currentStatus.tunnelId) {
+    endpoint.textContent = currentStatus.tunnelId;
     endpoint.className = 'endpoint-box';
     copyButton.disabled = false;
   } else {
-    endpoint.textContent = 'Waiting for a secure endpoint…';
-    if (view.key === 'stopped') endpoint.textContent = 'Start the service to create a secure endpoint.';
+    endpoint.textContent = 'Waiting for tunnel configuration…';
+    if (view.key === 'stopped') endpoint.textContent = 'Configure a Secure MCP Tunnel, then start the service.';
     endpoint.className = 'endpoint-box empty';
     copyButton.disabled = true;
   }
@@ -189,7 +190,7 @@ function renderConnectionHealth() {
   const publicState = publicHealthState(currentStatus.tunnelStatus);
   setHealthCard('publicHealthCard', publicState);
   document.getElementById('publicHealthState').textContent = tunnelLabel(currentStatus.tunnelStatus);
-  document.getElementById('tunnelDetail').textContent = tunnelDetail(publicState, currentStatus.mcpUrl);
+  document.getElementById('tunnelDetail').textContent = tunnelDetail(publicState, currentStatus.tunnelId);
 }
 
 function publicHealthState(tunnelStatus) {
@@ -199,10 +200,10 @@ function publicHealthState(tunnelStatus) {
   return 'offline';
 }
 
-function tunnelDetail(publicState, mcpUrl) {
-  if (mcpUrl) return 'HTTPS MCP ready';
-  if (publicState === 'connecting') return 'Publishing tunnel';
-  return 'Not available';
+function tunnelDetail(publicState, tunnelId) {
+  if (publicState === 'ready' && tunnelId) return tunnelId;
+  if (publicState === 'connecting') return 'Connecting to OpenAI';
+  return tunnelId || 'Not configured';
 }
 
 function setHealthCard(id, state) {
@@ -242,7 +243,7 @@ function renderLastTask() {
 function renderError(view) {
   const failed = view.key === 'failed';
   document.getElementById('errorPanel').hidden = !failed;
-  document.getElementById('errorMessage').textContent = currentStatus.error || 'The public tunnel did not become ready.';
+  document.getElementById('errorMessage').textContent = currentStatus.error || 'OpenAI Secure MCP Tunnel did not become ready.';
 }
 
 function renderControls() {
@@ -336,8 +337,9 @@ function diagnosticSummary() {
   const lines = [
     `Rel.AI MCP ${versionLabel}`.trim(),
     `Local service: ${currentStatus.localUrl || serviceState}`,
-    `Public tunnel: ${tunnelLabel(currentStatus.tunnelStatus)}`,
-    `MCP endpoint: ${currentStatus.mcpUrl || 'unavailable'}`,
+    `Secure tunnel: ${tunnelLabel(currentStatus.tunnelStatus)}`,
+    `Tunnel ID: ${currentStatus.tunnelId || 'not configured'}`,
+    `Local MCP: ${currentStatus.localMcpUrl || 'unavailable'}`,
     `Task activity: ${activity.state || 'idle'} · ${taskCount} open task(s) · ${activity.activeCalls || 0} active call(s)`
   ];
   if (currentStatus.errorCode) lines.push(`Error code: ${currentStatus.errorCode}`);
@@ -411,7 +413,7 @@ function initDisclosures() {
 }
 
 function tunnelLabel(status) {
-  if (status === 'running') return 'Available';
+  if (status === 'running') return 'Connected';
   if (status === 'connecting') return 'Connecting';
   if (status === 'failed') return 'Failed';
   return 'Offline';
@@ -436,7 +438,7 @@ async function withBusy(button, label, action) {
 
 function bindEvents() {
   document.getElementById('copyBtn').addEventListener('click', () => {
-    if (currentStatus.mcpUrl) runAsync(copyWithFeedback(document.getElementById('copyBtn'), currentStatus.mcpUrl, 'Endpoint copied'));
+    if (currentStatus.tunnelId) runAsync(copyWithFeedback(document.getElementById('copyBtn'), currentStatus.tunnelId, 'Tunnel ID copied'));
   });
   document.getElementById('serverToggleBtn').addEventListener('click', () => {
     const button = document.getElementById('serverToggleBtn');

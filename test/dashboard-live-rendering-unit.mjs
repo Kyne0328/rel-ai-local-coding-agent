@@ -10,7 +10,6 @@ const dashboard = read('public/dashboard.js');
 const api = read('src/ui/api.js');
 const system = read('src/ui/features/system/index.js');
 const connector = read('src/ui/features/settings/connector.js');
-const cloudGateway = read('src/ui/features/settings/cloud-gateway.js');
 const desktopConnection = read('src/ui/features/settings/desktop-connection.js');
 const home = read('src/ui/features/home/index.js');
 
@@ -59,13 +58,13 @@ async function exerciseSyncLiveView(updateBehavior) {
 }
 
 assert.match(dashboard, /module\.updateSystemLiveState\(root, currentSection\(\), data\)/);
-assert.match(dashboard, /route === 'connection'/);
+assert.match(dashboard, /connection: element => mountSystemRoute\(element, 'connection'\)/);
 assert.doesNotMatch(dashboard, /settings\/connection/);
 assert.match(system, /updateConnectorLiveState\(content, dashboardState\)/);
 assert.match(connector, /export function updateConnectorLiveState/);
-assert.match(connector, /replaceRegion\(page, '\.connection-summary-card'/);
-assert.match(connector, /replaceRegion\(page, '\.connection-layer-disclosure'/);
-assert.match(connector, /replaceRegion\(page, '\.connection-guide-region'/);
+assert.match(connector, /replaceRegion\(page,\s*'\.connection-summary-card'/);
+assert.match(connector, /replaceRegion\(page,\s*'\.connection-layer-disclosure'/);
+assert.match(connector, /replaceRegion\(page,\s*'\.connection-guide-region'/);
 assert.match(home, /export function updateHomeLiveState/);
 assert.match(home, /syncHomeRegion/);
 assert.match(home, /function syncHomeClockText/, 'Home live regions must neutralize clock-only text before structural comparison');
@@ -85,14 +84,6 @@ assert.equal(dashboard.includes('return updateHomeLiveState(root, data);'), true
 assert.equal(dashboard.includes('module.updateTaskSessions(root, data)'), true);
 assert.equal(dashboard.includes('module.updateActivityLiveState(data)'), true, 'Activity live updates must receive the full dashboard snapshot for session correlation');
 assert.equal(dashboard.includes('module.updateSystemLiveState(root, currentSection(), data)'), true);
-assert.match(dashboard, /function applyGatewayStatusSnapshot/);
-assert.doesNotMatch(
-  functionSource(dashboard, 'applyGatewayStatusSnapshot'),
-  /renderViewIfChanged|rerender|syncLiveView/,
-  'gateway status pushes must not structurally remount the active or unrelated route'
-);
-assert.match(functionSource(dashboard, 'applyGatewayStatusSnapshot'), /updateLiveView/);
-
 {
   const supported = await exerciseSyncLiveView(true);
   assert.deepEqual(supported.calls.map(call => call[0]), ['update']);
@@ -141,7 +132,6 @@ const reconcileSessionsSource = functionSource(sessions, 'reconcileSessionRows')
 assert.match(reconcileSessionsSource, /body\.children\[index\]/, 'keyed reconciliation must compare against the current DOM child after a row replacement');
 assert.doesNotMatch(reconcileSessionsSource, /let cursor/, 'keyed reconciliation must not retain a cursor that can become detached by replaceWith');
 assert.match(connector, /export function updateConnectorLiveState/);
-assert.match(connector, /updateCloudGatewayLiveState/);
 assert.match(connector, /connector-technical-details/);
 for (const moduleSource of [home, processes, connector]) {
   assert.match(moduleSource, /isEqualNode/, 'live region updaters must preserve unchanged DOM nodes');
@@ -164,8 +154,7 @@ assert.match(refreshSource, /options\.render !== false[\s\S]*syncLiveView\(hydra
 
 assert.match(api, /export function requestDashboardRefresh\(options = \{\}\)/, 'dashboard refresh helper must accept refresh intent');
 assert.match(api, /structural: options\.structural === true/, 'dashboard refresh helper must default structural intent to false');
-assert.match(cloudGateway, /setGatewayMode\(mode\)[\s\S]{0,400}requestDashboardRefresh\(\{ structural: true \}\)/, 'Cloud/direct switching must structurally refresh provider-specific controls');
-assert.match(desktopConnection, /saveSettings\([\s\S]*requestDashboardRefresh\(\{ structural: true \}\)/, 'endpoint and ngrok credential changes must structurally refresh the Connection route');
-assert.match(functionSource(dashboard, 'viewFingerprint'), /connectionMode: desktop\.connectionMode/, 'connection mode must participate in structural refresh fingerprinting');
+assert.match(desktopConnection, /saveSettings\([\s\S]*requestDashboardRefresh\(\{ structural: true \}\)/, 'Secure tunnel configuration changes must structurally refresh the Connection route');
+assert.match(functionSource(dashboard, 'viewFingerprint'), /tunnelId: desktop\.tunnelId/, 'the configured Secure MCP Tunnel must participate in structural refresh fingerprinting');
 
 console.log('Dashboard live rendering contracts passed.');

@@ -2,60 +2,48 @@
 
 ## Purpose
 
-This document describes the production desktop experience after the frontend streamlining cutover. It defines visible navigation, route ownership, setup behavior, shared filters, responsive rules, and implementation boundaries.
+This document defines the current production desktop experience after the Secure MCP Tunnel hard cutover: navigation, setup behavior, Connection ownership, shared filters, responsive rules, and renderer boundaries.
 
 Source development and packaging instructions live in [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## Product entry path
 
-Rel.AI is an installed desktop application. The normal user path is:
+Rel.AI is an installed desktop application. The normal path is:
 
 1. Open Rel.AI MCP.
-2. Complete the three-step setup wizard when required.
-3. Add a workspace from Workspaces.
-4. Connect ChatGPT from Connection.
-5. Work through Overview, Sessions, Workspaces, and Activity.
+2. Enter the OpenAI Secure MCP Tunnel ID and runtime API key when setup is required.
+3. Start the secure connection.
+4. Add a repository under **Workspaces**.
+5. Create or reconnect the Rel.AI MCP integration in ChatGPT through the Tunnel connection option.
+6. Work through Overview, Sessions, Workspaces, Activity, and System.
 
 The dashboard is the routine application surface. The separate status window is recovery-only.
 
 ## First-run wizard
 
-The Electron wizard owns initial Cloud account sign-in and explicit Advanced legacy recovery/Direct fallback. It remains exactly three steps.
+The wizard is intentionally small. It owns only the connection values required to start Rel.AI:
 
-### Step 1: Sign in
+- Tunnel ID;
+- write-only runtime API key;
+- advanced local port when the default conflicts; and
+- the action that saves configuration and starts the connection.
 
-The normal path opens browser-based Rel.AI account sign-in or account creation and approves this computer. It does not ask for a local port, ngrok credentials, a device pairing code, or the Direct approval token. Advanced setup retains legacy identity migration and Direct connection fields.
-
-### Step 2: Secure this device
-
-The desktop creates its own cryptographic device identity locally. The private key stays on this computer, while the Rel.AI account is the recovery path for adding replacement or additional account-based devices.
-
-### Step 3: Connect ChatGPT
-
-The wizard confirms the Cloud/Direct connection mode, then opens the dashboard on the canonical **Connection** route. Public setup copy must not expose source-development files, commands, diagnostic URLs, private keys, recovery secrets, or pairing poll tokens.
+It does not expose source-development files, shell commands, diagnostic URLs, internal bearer tokens, or provider selection. Existing valid configuration may bypass the wizard and open the dashboard directly.
 
 ## Overview setup checklist
 
-Browser-style onboarding has been removed from the production path.
+Overview shows only unfinished product work:
 
-Overview renders `desktopSetupItems({ hasWorkspace, chatgptReady })` and shows only unfinished work:
+- choose a workspace;
+- configure the secure tunnel;
+- connect ChatGPT; and
+- send a safe first Rel.AI request.
 
-- Add a workspace.
-- Connect ChatGPT.
-
-The checklist:
-
-- appears after active session information;
-- has one primary action and an optional secondary action;
-- can be dismissed;
-- persists dismissal and completion state;
-- disappears when all setup work is complete.
-
-The readiness card must not repeat warnings already represented by the checklist.
+The checklist has one current action, supports dismissal, persists completion state, and disappears when setup is complete. It must not duplicate warnings already owned by Connection.
 
 ## Navigation ownership
 
-`src/ui/navigation-catalog.js` is the single source of route labels, descriptions, groups, icons, and command-palette destinations.
+`src/ui/navigation-catalog.js` is the source of route labels, descriptions, groups, icons, and command-palette destinations.
 
 ### Work
 
@@ -69,242 +57,97 @@ The readiness card must not repeat warnings already represented by the checklist
 1. System — `#system`
 2. Settings — `#settings`
 
-System owns the runtime destinations through its secondary rail: Connection (`#connection`), Processes (`#processes`), Diagnostics (`#diagnostics`), Tools (`#tools`), and Usage (`#usage`). Direct hashes remain canonical so contextual links can open the exact System page without an extra navigation step.
+System owns Connection, Processes, Diagnostics, Tools, and Usage through its secondary rail. Direct hashes remain canonical for contextual navigation.
 
 ### Mobile navigation
 
-The mobile navigation contains exactly:
-
-1. Overview
-2. Sessions
-3. Workspaces
-4. Activity
-5. Settings
-
-System destinations and Skills remain reachable through the command palette and related page actions on narrow screens. Skills opens inside Settings; System destinations open inside the System secondary rail.
+The compact navigation keeps the top-level destinations that fit the narrow layout; System subpages and Skills remain reachable through their owning surfaces and the command palette.
 
 ## Route policy
 
-`src/ui/route-policy.js` owns canonical route normalization and route parameter allowlists.
-
-Legacy hashes may redirect for compatibility, but removed routes must never appear as visible navigation destinations. Important redirects include:
-
-- `#skills` → `#settings/skills`
-- `#settings/connection` → `#connection`
-- `#settings/diagnostics` → `#diagnostics`
-- `#settings/general` → `#settings`
-- `#settings/dashboard` → `#settings/advanced`
-- `#settings/desktop` → `#settings/application`
-
-`src/ui/features/system/index.js` mounts Connection, Processes, Diagnostics, Tools, and Usage inside the shared System rail.
+`src/ui/route-policy.js` owns canonical route normalization and allowed route parameters. Compatibility redirects may remain for removed dashboard hashes, but deleted connection modes must not return as visible destinations.
 
 ## Settings ownership
 
-Settings contains five focused categories.
+Settings remains focused on application preferences rather than duplicating feature controls:
 
-### Preferences
+- **Preferences** — theme, density, notifications.
+- **Skills** — install, inspect, remove, and assign reusable skills.
+- **Application** — launch-at-sign-in, lifecycle state, updates.
+- **Advanced** — expert safeguards and resource limits.
+- **About** — version, project, repository, and license information.
 
-- theme;
-- interface density;
-- desktop notifications.
-
-### Skills
-
-- install and remove reusable skills;
-- inspect built-in and installed skills;
-- assign available skills to configured workspaces.
-
-### Application
-
-- launch at sign-in;
-- lifecycle and recovery state;
-- application updates.
-
-### Advanced
-
-- patch safeguards;
-- resource limits;
-- other expert controls that do not belong to a feature page.
-
-### About
-
-- application version;
-- project and repository information;
-- license information.
-
-Workspace validation display is not a global Settings concern. It is owned by Workspaces and preserves the `productUx.showAutomaticValidation` preference.
+The Secure MCP Tunnel configuration lives on **Connection**, not in generic Settings.
 
 ## Shared ChatGPT guidance
 
-Connection guidance distinguishes the default Cloud flow from Advanced Direct recovery. Cloud setup uses the stable gateway endpoint, browser-based Rel.AI account sign-in, device approval, and OAuth. Direct setup uses the managed-ngrok endpoint and local approval-token OAuth. Tool refresh, OAuth reauthentication, and device update states must never be presented as interchangeable recovery actions.
+`src/ui/features/settings/connection-guidance.js` owns the canonical create/reconnect guidance. It must describe only OpenAI Secure MCP Tunnel:
 
-Both modes include the same safe first read-only request.
+- create a tunnel and runtime API key;
+- save the Tunnel ID and key in Rel.AI;
+- wait for Connected;
+- associate ChatGPT's Rel.AI MCP integration with that tunnel; and
+- send the safe first read-only request.
+
+Transport recovery, application updates, tool-schema refresh, and repository work completion are separate concepts and must not be presented as interchangeable actions.
 
 ## Connection page
 
-Connection is status-first.
+Connection is status-first. It renders:
 
-The page renders:
+1. local connection health;
+2. Secure MCP Tunnel health;
+3. the configured Tunnel ID where useful;
+4. one primary recovery/setup action;
+5. quiet refresh and Diagnostics actions;
+6. expandable connection layers; and
+7. the tunnel settings form with a write-only replacement runtime key.
 
-1. one status-first connection summary;
-2. the active Cloud or Direct endpoint when relevant;
-3. one primary next action;
-4. quiet Refresh status and Diagnostics actions;
-5. expandable connection layers;
-6. Cloud pairing/device/recovery controls when Cloud is selected;
-7. Advanced Direct controls only when Direct is selected;
-8. synchronization guidance that keeps tool refresh, OAuth reauthentication, and device compatibility separate.
+The advanced port control stays collapsed because most users never need it.
 
 ### Connection layers
 
-The expandable layer disclosure contains five independent concerns:
+The shared disclosure separates:
 
 1. Connection service
-2. Secure endpoint / public connection
-3. Authorization
+2. Secure tunnel
+3. Authentication
 4. Client and tools
 5. Dashboard updates
 
-The disclosure opens automatically when the connection is unhealthy.
-
-### Cloud controls
-
-Cloud controls own pairing, paired-device state, recovery, revocation, and schema/device synchronization. Passive status must not expose principal identifiers, private keys, recovery secrets, pairing poll tokens, or OAuth bearer material.
-
-### Advanced Direct controls
-
-Direct controls own the local port, static ngrok domain/account key, and approval-token replacement. Replacing the Direct token revokes Direct OAuth state but preserves the registered app/endpoint where possible; it is not a Cloud schema-refresh operation.
+The disclosure may open automatically when an unhealthy layer needs attention.
 
 ## Shared filter system
 
-Activity, Tools, and Diagnostics use:
+Activity, Tools, and Diagnostics use the shared filter bar/drawer components. Search remains visible, filters open in a drawer or narrow-screen sheet, active filters render as removable chips, Clear all resets the current view, and result summaries use live status semantics.
 
-- `src/ui/components/filter-bar.js`
-- `src/ui/components/filter-drawer.js`
-- `src/ui/components/filter-controls.css`
-
-### Filter bar contract
-
-- search remains visible;
-- Filters shows the number of active non-search filters;
-- active filters appear as removable chips;
-- Clear all removes search and filters;
-- a live result summary uses `role="status"`;
-- operational actions are passed separately from filter state.
-
-### Filter drawer contract
-
-- edits are stored in a draft;
-- Apply commits the draft;
-- Reset restores defaults;
-- Cancel closes without applying;
-- the desktop layout uses a side drawer;
-- screens at or below 520 px use a bottom sheet.
-
-### Activity
-
-Visible controls:
-
-- search;
-- Filters;
-- Freeze or Resume live list.
-
-Drawer controls:
-
-- time range;
-- workspace;
-- tool;
-- status.
-
-Task scope appears as a removable chip. Workspace changes navigate through the router because they change the data scope. Other filters update the current route without remounting.
-
-### Tools
-
-Visible controls:
-
-- search;
-- Filters.
-
-The drawer contains one capability selector with live counts for All, Inspect, Edit, Validate, Git, and Recover.
-
-### Diagnostics
-
-Visible controls:
-
-- search;
-- Filters;
-- live-tail toggle.
-
-Drawer controls:
-
-- scope: All diagnostics, Findings, Service log, Failed activity;
-- severity;
-- source.
-
-Source is disabled when Findings is selected. Findings and logs keep separate counts.
+Feature-specific filters remain owned by their feature rather than duplicated in global state.
 
 ## Overview hierarchy
 
 Overview prioritizes:
 
 1. active work-session information;
-2. unfinished setup checklist;
+2. unfinished setup;
 3. compact connection readiness;
-4. attention items not already represented by setup;
-5. supporting workspace and activity information.
-
-The compact readiness card links to Connection rather than repeating endpoint and approval controls.
+4. attention items not already represented by setup; and
+5. supporting workspace/activity information.
 
 ## Styling ownership
 
-`src/ui/styles/app.css` owns the shared Tailwind entry and base application styles.
+`src/ui/styles/app.css` is the shared generated-style entry. Feature styles live with their owning feature under `src/ui/features/` or `src/ui/components/`. `public/dashboard.css` is generated and must be rebuilt after source style changes.
 
-Feature ownership is split into:
+## Responsive and accessibility behavior
 
-- `src/ui/features/home/styles.css`
-- `src/ui/features/onboarding/styles.css`
-- `src/ui/features/settings/styles.css`
-- `src/ui/features/system/styles.css`
-- `src/ui/components/filter-controls.css`
-
-Generated `public/dashboard.css` must be rebuilt after source style changes.
-
-## Responsive behavior
-
-- Desktop uses the sidebar and Settings rail.
-- Narrow screens use the five-item bottom navigation.
-- Search and filter controls wrap without horizontal overflow.
-- Filter drawers become bottom sheets at 520 px and below.
+- Controls wrap without horizontal overflow.
+- Drawers become bottom sheets on narrow screens where defined.
 - Cards and tables retain meaningful labels and touch targets.
 - Fixed elements account for safe-area insets.
-
-## Accessibility
-
-Required behavior includes:
-
-- current navigation uses `aria-current`;
-- drawer focus is contained and restored on close;
-- route changes are announced;
-- filter summaries use live status semantics;
-- row actions have distinguishable labels;
-- setup headings receive focus after wizard transitions;
-- color is never the only status signal.
+- Current navigation uses `aria-current`.
+- Dialog/drawer focus is contained and restored.
+- Route changes and live summaries are announced.
+- Color is never the only status signal.
 
 ## Test ownership
 
-Tests protect behavior and meaningful regressions rather than source wording.
-
-Required contracts include:
-
-- navigation and route structure;
-- three-step wizard behavior;
-- Electron-first public product scanner;
-- shared filter semantics and responsive bottom sheet;
-- Activity history and route transitions;
-- Connection create and reconnect guidance;
-- Settings ownership;
-- generated CSS and mobile navigation;
-- browser acceptance for representative routes.
-
-The smallest non-overlapping set should cover each risk. Existing tests should be consolidated or replaced when architecture changes make literal assertions stale.
-
+Tests protect behavior rather than historical source wording. Required contracts include navigation, tunnel-only setup, Electron-first public product copy, Connection create/reconnect guidance, sender-constrained IPC, shared filters, generated CSS, and representative browser acceptance. Obsolete transport-specific tests should be replaced rather than kept as dead compatibility coverage.

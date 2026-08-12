@@ -26,7 +26,7 @@ assertSafeControllerOperation({ operation: 'package', targetPaths: [target] });
 assertSafeBuilderArgs(options.builderArgs);
 
 const generateColorTokens = path.join(root, 'scripts', 'generate-color-tokens.mjs');
-const verifyNgrok = path.join(root, 'scripts', 'verify-ngrok-seed.mjs');
+const verifyTunnelClient = path.join(root, 'scripts', 'verify-tunnel-client.mjs');
 const verifyZoekt = path.join(root, 'scripts', 'verify-zoekt-seed.mjs');
 const tailwindCli = packageBin(path.join(root, 'node_modules', '@tailwindcss', 'cli'), 'tailwindcss');
 const electronBuilderCli = packageBin(path.join(electronRoot, 'node_modules', 'electron-builder'), 'electron-builder');
@@ -41,7 +41,7 @@ runNode('dashboard CSS build', tailwindCli, [
   '-o', path.join(root, 'public', 'dashboard.css'),
   '--minify'
 ]);
-runNode('ngrok seed verification', verifyNgrok, [], { env: platformEnvironment });
+runNode('OpenAI tunnel-client verification', verifyTunnelClient, [], { env: { ...platformEnvironment, TUNNEL_CLIENT_PLATFORMS: platform } });
 runNode('Zoekt seed verification', verifyZoekt, [], { env: platformEnvironment });
 
 if (mode === 'unpacked') {

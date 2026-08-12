@@ -50,7 +50,7 @@ function createRuntimeLogBuffer({ maxEntries = 200, now = () => new Date().toISO
       return;
     }
     if (current.serverRunning && !previous.serverRunning) append('Local service started.', { source: 'local-service' });
-    if (current.tunnelStatus === 'running' && previous.tunnelStatus !== 'running') append('Public endpoint is available.', { source: 'ngrok' });
+    if (current.tunnelStatus === 'running' && previous.tunnelStatus !== 'running') append('OpenAI Secure MCP Tunnel is connected.', { source: 'openai-tunnel' });
     if (!current.serverRunning && previous.serverRunning) append('Local service stopped.', { source: 'local-service' });
   }
 

@@ -1,82 +1,30 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
+import { readMcpAuthenticationStatus } from '../src/mcp/authenticationStatus.js';
 
-const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-mcp-auth-status-'));
-const previousStateDir = process.env.REL_AI_MCP_STATE_DIR;
-process.env.REL_AI_MCP_STATE_DIR = stateRoot;
+const now = Date.now();
 
-try {
-  const oauth = await import('../src/oauthProvider.js');
-  const { createLocalAdminPolicy } = await import('../src/mcp/authorizationPolicy.js');
-  const { readMcpAuthenticationStatus } = await import('../src/mcp/authenticationStatus.js');
-  const now = Date.now();
+const awaiting = readMcpAuthenticationStatus({}, { staticBearerConfigured: true });
+assert.equal(awaiting.status, 'awaiting_authentication');
+assert.equal(awaiting.staticBearerConfigured, true);
 
-  const approvalRequired = oauth.createEmptyOAuthStore();
-  approvalRequired.approvalRequiredAt = now;
-  oauth.writeOAuthStore(approvalRequired);
+const bearer = readMcpAuthenticationStatus({
+  lastAuthenticatedAt: new Date(now + 1).toISOString(),
+  lastAuthMode: 'static_bearer'
+}, { staticBearerConfigured: true });
+assert.equal(bearer.status, 'bearer_authorized');
+assert.equal(bearer.authMode, 'static_bearer');
+assert.equal(bearer.staticBearerConfigured, true);
 
-  const required = readMcpAuthenticationStatus({});
-  assert.equal(required.status, 'authentication_required');
-  assert.equal(required.oauthApprovalRequired, true);
+const local = readMcpAuthenticationStatus({
+  lastAuthenticatedAt: new Date(now + 2).toISOString(),
+  lastAuthMode: 'local_no_auth'
+});
+assert.equal(local.status, 'local_authorized');
+assert.equal(local.authMode, 'local_no_auth');
 
-  const bearer = readMcpAuthenticationStatus({
-    lastAuthenticatedAt: new Date(now + 1).toISOString(),
-    lastAuthMode: 'static_bearer'
-  }, { staticBearerConfigured: true });
-  assert.equal(bearer.status, 'bearer_authorized');
-  assert.equal(bearer.oauthApprovalRequired, true, 'bearer success must not erase the separate OAuth approval marker');
-  assert.equal(bearer.staticBearerConfigured, true);
+const failed = readMcpAuthenticationStatus({
+  lastAuthenticationFailureAt: new Date(now + 3).toISOString()
+});
+assert.equal(failed.status, 'authentication_failed');
 
-  const oauthAuthorized = readMcpAuthenticationStatus({
-    lastAuthenticatedAt: new Date(now + 2).toISOString(),
-    lastAuthMode: 'oauth'
-  });
-  assert.equal(oauthAuthorized.status, 'oauth_authorized');
-
-  const failedStore = oauth.createEmptyOAuthStore();
-  oauth.writeOAuthStore(failedStore);
-  const failed = readMcpAuthenticationStatus({
-    lastAuthenticationFailureAt: new Date(now + 3).toISOString()
-  });
-  assert.equal(failed.status, 'authentication_failed');
-
-  const approvedStore = oauth.createEmptyOAuthStore();
-  const issuer = 'https://example.ngrok.app';
-  const clientId = 'relai_client_status_test';
-  approvedStore.lastApprovedAt = now;
-  approvedStore.clients[clientId] = {
-    client_id: clientId,
-    issuer,
-    application_type: 'web',
-    redirect_uris: ['https://chatgpt.com/connector_platform_oauth_redirect'],
-    client_name: 'ChatGPT',
-    grant_types: ['authorization_code', 'refresh_token'],
-    response_types: ['code'],
-    token_endpoint_auth_method: 'none',
-    registered_scope: 'mcp',
-    granted_scope: 'mcp',
-    created_at: now,
-    last_used_at: now
-  };
-  approvedStore.accessTokens[oauth.secretKey('status-access-token')] = {
-    issuer,
-    clientId,
-    scope: 'mcp',
-    resource: `${issuer}/mcp`,
-    authorizationPolicy: createLocalAdminPolicy(),
-    issuedAt: now,
-    expiresAt: now + 60_000
-  };
-  oauth.writeOAuthStore(approvedStore);
-  const approved = readMcpAuthenticationStatus({});
-  assert.equal(approved.status, 'oauth_approved');
-  assert.equal(approved.oauth.activeAccessTokens, 1);
-} finally {
-  if (previousStateDir == null) delete process.env.REL_AI_MCP_STATE_DIR;
-  else process.env.REL_AI_MCP_STATE_DIR = previousStateDir;
-  fs.rmSync(stateRoot, { recursive: true, force: true });
-}
-
-console.log('MCP authentication status keeps OAuth approval and accepted credential evidence separate.');
+console.log('MCP authentication status reflects local bearer evidence only.');

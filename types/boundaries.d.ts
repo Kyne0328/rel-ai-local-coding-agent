@@ -248,28 +248,21 @@ export interface ToolResult extends Record<string, unknown> {
 
 
 export interface LauncherConfigInput {
-  connectionMode?: 'cloud' | 'direct';
-  gatewayOrigin?: string;
   port?: number | string;
-  ngrokDomain?: string;
-  domain?: string;
-  ngrokAuthtoken?: string;
-  ngrokToken?: string;
+  tunnelId?: string;
+  tunnelApiKey?: string;
   token?: string;
 }
 
 export interface LauncherConfig {
-  connectionMode: 'cloud' | 'direct';
-  gatewayOrigin: string;
   port: number;
-  ngrokDomain: string;
-  ngrokAuthtoken: string;
+  tunnelId: string;
   token: string;
 }
 
 export type LocalServiceStatus = 'running' | 'starting' | 'stopped' | 'failed';
 export type PublicEndpointStatus = 'available' | 'connecting' | 'unavailable' | 'disabled';
-export type ChatgptReadinessStatus = 'ready' | 'authentication_required' | 'unavailable';
+export type ChatgptReadinessStatus = 'ready' | 'unavailable';
 export type DashboardUpdateStatus = 'live' | 'connecting' | 'reconnecting' | 'paused' | 'offline';
 export type DesktopErrorCode =
   | 'unknown'
@@ -278,9 +271,8 @@ export type DesktopErrorCode =
   | 'local_service_start_failed'
   | 'local_service_stop_failed'
   | 'local_port_in_use'
+  | 'secure_tunnel_failed'
   | 'public_endpoint_failed'
-  | 'approval_token_required'
-  | 'approval_token_rejected'
   | 'dashboard_unavailable'
   | 'workspace_unavailable'
   | 'settings_save_failed'
@@ -334,89 +326,4 @@ export interface DesktopConnectionState {
   error: null | { code: DesktopErrorCode; message: string };
 }
 
-export interface OAuthAuthorizationStatus {
-  required: boolean;
-  approvalRequiredAt: number | null;
-  lastApprovedAt: number | null;
-  activeAccessTokens: number;
-  activeRefreshTokens: number;
-  registeredClients: number;
-}
-
-export interface ApprovalTokenRevocationSummary {
-  authorizationCodes: number;
-  accessTokens: number;
-  refreshTokens: number;
-  registeredClientsPreserved: number;
-}
-
-export interface ApprovalTokenReplacementResult {
-  ok: true;
-  approvalToken: string;
-  revoked: ApprovalTokenRevocationSummary;
-  authorization: OAuthAuthorizationStatus;
-  status: Record<string, unknown>;
-}
-
-export type GatewayIdempotency = 'read_only' | 'mutating';
-export type GatewayFrameType =
-  | 'challenge'
-  | 'authenticate'
-  | 'authenticated'
-  | 'capabilities'
-  | 'workspaces'
-  | 'request'
-  | 'accepted'
-  | 'result'
-  | 'cancel'
-  | 'heartbeat'
-  | 'usage_request'
-  | 'usage_result'
-  | 'device_link_request'
-  | 'device_link_result'
-  | 'error';
-
-export type GatewayErrorCode =
-  | 'DEVICE_OFFLINE'
-  | 'DEVICE_UPDATE_REQUIRED'
-  | 'WORKSPACE_NOT_AVAILABLE'
-  | 'DEVICE_SELECTION_REQUIRED'
-  | 'PAIRING_REQUIRED'
-  | 'PAIRING_EXPIRED'
-  | 'REQUEST_TIMEOUT'
-  | 'DEVICE_RESPONSE_INVALID'
-  | 'RATE_LIMITED'
-  | 'AMBIGUOUS_RESULT'
-  | 'RESULT_UNAVAILABLE';
-
-export interface GatewayValidationResult {
-  ok: boolean;
-  error?: string;
-}
-
-export interface GatewayRequestClassification {
-  ok: boolean;
-  method?: string;
-  toolName?: string;
-  idempotency?: GatewayIdempotency;
-  idempotent?: boolean;
-  destructive?: boolean;
-  reason?: string;
-}
-
-export interface GatewayDeviceCompatibility {
-  protocolVersion?: number;
-  mcpProtocolVersion?: string;
-}
-
-export interface GatewayCompatibilityResult {
-  ok: boolean;
-  code?: GatewayErrorCode;
-  reason?: string;
-  protocolVersion?: number;
-  mcpProtocolVersion?: string;
-  minimumProtocolVersion?: number;
-  currentProtocolVersion?: number;
-  expectedMcpProtocolVersion?: string;
-}
 

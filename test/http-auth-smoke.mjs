@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import fs from 'node:fs';
-import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -64,7 +63,7 @@ try {
     body: mcpBody(1, 'tools/list')
   });
   assert.equal(challenge.status, 401);
-  assert.match(challenge.headers.get('www-authenticate') || '', /oauth-protected-resource\/mcp/);
+  assert.match(challenge.headers.get('www-authenticate') || '', /Bearer realm="rel-ai-local"/);
 
   session = await createHttpMcpSession(base, { token, clientName: 'relai-http-auth' });
   const listed = await session.request('tools/list');
@@ -195,22 +194,10 @@ try {
   assert.equal(invalidOrigin.status, 403);
   assert.match(await invalidOrigin.text(), /(?:invalid|forbidden) origin/i);
 
-  const uri = 'https://example.com/cb-🎉漢字é';
-  const payload = Buffer.from(JSON.stringify({ application_type: 'web', redirect_uris: [uri] }), 'utf8');
-  const splitAt = payload.indexOf(Buffer.from('🎉', 'utf8')) + 2;
-  const registration = await new Promise((resolve, reject) => {
-    const request = http.request({ host: '127.0.0.1', port, path: '/register', method: 'POST', headers: { 'content-type': 'application/json', 'content-length': payload.length } }, response => {
-      let data = '';
-      response.setEncoding('utf8');
-      response.on('data', chunk => { data += chunk; });
-      response.on('end', () => resolve({ status: response.statusCode, body: JSON.parse(data) }));
-    });
-    request.on('error', reject);
-    request.write(payload.subarray(0, splitAt));
-    setTimeout(() => request.end(payload.subarray(splitAt)), 25);
-  });
-  assert.equal(registration.status, 201);
-  assert.equal(registration.body.redirect_uris[0], uri);
+  for (const removedPath of ['/register', '/authorize', '/token', '/.well-known/oauth-protected-resource/mcp']) {
+    const removed = await fetch(`${base}${removedPath}`, { method: removedPath === '/register' || removedPath === '/token' ? 'POST' : 'GET' });
+    assert.equal(removed.status, 404, `${removedPath} must be removed after the Secure MCP Tunnel hard cut`);
+  }
 
   const withinMcpEnvelope = "x".repeat(8 * 1024 * 1024);
   let withinMcpEnvelopeStatus = 0;

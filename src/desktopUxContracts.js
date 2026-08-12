@@ -2,7 +2,6 @@
 
 const TERMINOLOGY = Object.freeze({
   connection: 'Connection',
-  approvalToken: 'Approval token',
   sessions: 'Sessions',
   activity: 'Activity',
   tools: 'Tools',
@@ -16,9 +15,8 @@ const ERROR_CODES = Object.freeze({
   LOCAL_SERVICE_START_FAILED: 'local_service_start_failed',
   LOCAL_SERVICE_STOP_FAILED: 'local_service_stop_failed',
   LOCAL_PORT_IN_USE: 'local_port_in_use',
+  SECURE_TUNNEL_FAILED: 'secure_tunnel_failed',
   PUBLIC_ENDPOINT_FAILED: 'public_endpoint_failed',
-  APPROVAL_TOKEN_REQUIRED: 'approval_token_required',
-  APPROVAL_TOKEN_REJECTED: 'approval_token_rejected',
   DASHBOARD_UNAVAILABLE: 'dashboard_unavailable',
   WORKSPACE_UNAVAILABLE: 'workspace_unavailable',
   SETTINGS_SAVE_FAILED: 'settings_save_failed',
@@ -42,9 +40,8 @@ const ERROR_GUIDANCE = Object.freeze({
   [ERROR_CODES.LOCAL_SERVICE_START_FAILED]: Object.freeze({ title: 'Connection service could not start', recovery: 'Open Diagnostics, review the service error, and retry after correcting the cause.', actionLabel: 'Open Diagnostics', href: '#diagnostics', retryable: true }),
   [ERROR_CODES.LOCAL_SERVICE_STOP_FAILED]: Object.freeze({ title: 'Connection service could not stop', recovery: 'Retry once. Restart the desktop app if the process remains active.', actionLabel: 'Open Diagnostics', href: '#diagnostics', retryable: true }),
   [ERROR_CODES.LOCAL_PORT_IN_USE]: Object.freeze({ title: 'Connection port is already in use', recovery: 'Choose another connection port or stop the process using the configured port.', actionLabel: 'Open Connection settings', href: '#connection', retryable: true }),
-  [ERROR_CODES.PUBLIC_ENDPOINT_FAILED]: Object.freeze({ title: 'Secure endpoint could not start', recovery: 'Review the ngrok account key and static domain, then restart the connection.', actionLabel: 'Open Connection', href: '#connection', retryable: true }),
-  [ERROR_CODES.APPROVAL_TOKEN_REQUIRED]: Object.freeze({ title: 'Approval is required', recovery: 'Approve the existing ChatGPT app with the current Rel.AI approval token.', actionLabel: 'Open Connection', href: '#connection', retryable: false }),
-  [ERROR_CODES.APPROVAL_TOKEN_REJECTED]: Object.freeze({ title: 'Approval token was rejected', recovery: 'Use the current token from Connection settings and approve the existing ChatGPT app again.', actionLabel: 'Open Connection settings', href: '#connection', retryable: false }),
+  [ERROR_CODES.SECURE_TUNNEL_FAILED]: Object.freeze({ title: 'Secure tunnel could not start', recovery: 'Review the OpenAI tunnel ID and runtime API key, then restart the connection.', actionLabel: 'Open Connection', href: '#connection', retryable: true }),
+  [ERROR_CODES.PUBLIC_ENDPOINT_FAILED]: Object.freeze({ title: 'Secure endpoint could not start', recovery: 'Review the OpenAI Secure MCP Tunnel settings, then restart the connection.', actionLabel: 'Open Connection', href: '#connection', retryable: true }),
   [ERROR_CODES.DASHBOARD_UNAVAILABLE]: Object.freeze({ title: 'Dashboard is unavailable', recovery: 'Retry opening the dashboard. Use the recovery fallback only when the dashboard still cannot load.', actionLabel: 'Retry dashboard', href: '#home', retryable: true }),
   [ERROR_CODES.WORKSPACE_UNAVAILABLE]: Object.freeze({ title: 'Workspace is unavailable', recovery: 'Correct the workspace path or remove the obsolete workspace entry.', actionLabel: 'Open Workspaces', href: '#workspaces', retryable: true }),
   [ERROR_CODES.SETTINGS_SAVE_FAILED]: Object.freeze({ title: 'Settings could not be saved', recovery: 'Review the changed values and retry. Existing saved settings were preserved.', actionLabel: 'Open Settings', href: '#settings', retryable: true }),
@@ -64,7 +61,7 @@ const ERROR_GUIDANCE = Object.freeze({
 const CONNECTION_STATE_VALUES = Object.freeze({
   localService: Object.freeze(['running', 'starting', 'stopped', 'failed']),
   publicEndpoint: Object.freeze(['available', 'connecting', 'unavailable', 'disabled']),
-  chatgptReadiness: Object.freeze(['ready', 'authentication_required', 'unavailable']),
+  chatgptReadiness: Object.freeze(['ready', 'unavailable']),
   dashboardUpdates: Object.freeze(['live', 'connecting', 'reconnecting', 'paused', 'offline'])
 });
 
@@ -75,11 +72,6 @@ const localFailureCodes = new Set([
   ERROR_CODES.LOCAL_SERVICE_STOP_FAILED,
   ERROR_CODES.LOCAL_PORT_IN_USE
 ]);
-const authenticationCodes = new Set([
-  ERROR_CODES.APPROVAL_TOKEN_REQUIRED,
-  ERROR_CODES.APPROVAL_TOKEN_REJECTED
-]);
-
 function normalizeErrorCode(value) {
   const code = String(value || '').trim();
   if (!code) return '';
@@ -109,16 +101,13 @@ function deriveConnectionState(status = {}) {
         : 'stopped';
 
   let publicEndpointStatus = 'disabled';
-  if (status.tunnelStatus === 'running' && status.mcpUrl) publicEndpointStatus = 'available';
+  if (status.tunnelStatus === 'running') publicEndpointStatus = 'available';
   else if (status.tunnelStatus === 'connecting') publicEndpointStatus = 'connecting';
   else if (status.tunnelStatus === 'failed') publicEndpointStatus = 'unavailable';
 
-  let chatgptReadinessStatus = 'unavailable';
-  if (status.authenticationRequired === true || authenticationCodes.has(errorCode)) {
-    chatgptReadinessStatus = 'authentication_required';
-  } else if (localServiceStatus === 'running' && publicEndpointStatus === 'available') {
-    chatgptReadinessStatus = 'ready';
-  }
+  const chatgptReadinessStatus = localServiceStatus === 'running' && publicEndpointStatus === 'available'
+    ? 'ready'
+    : 'unavailable';
 
   const message = String(status.error || '').trim();
   return {

@@ -1,0 +1,24 @@
+{
+  "version": "0.0.11",
+  "license": "Apache-2.0",
+  "source": "https://github.com/openai/tunnel-client",
+  "baseUrl": "https://persistent.oaistatic.com/tunnel-client/v0.0.11",
+  "platforms": {
+    "win32": {
+      "archive": "tunnel-client-v0.0.11-windows-amd64.zip",
+      "archiveSha256": "eb912c86c6ccde90cda805cb17009507176a656725cf86c36fabe1901a12e29b",
+      "archiveEntry": "64/tunnel-client.exe",
+      "file": "tunnel-client.exe",
+      "size": 20798464,
+      "sha256": "7d3c7d492ce84b52835e11865a835a8a5bcd4a669dee84e169aa11b314dc952a"
+    },
+    "linux": {
+      "archive": "tunnel-client-v0.0.11-linux-amd64.zip",
+      "archiveSha256": "29adfe5c1399dfb9fda9383f230c324355912f50dc36e2e416b1f1322317b3c4",
+      "archiveEntry": "64/tunnel-client",
+      "file": "tunnel-client",
+      "size": 20246690,
+      "sha256": "c79ad91d929f50cb1676c4fcbce937c81b1854ec37ca758118c2d78a373c431f"
+    }
+  }
+}

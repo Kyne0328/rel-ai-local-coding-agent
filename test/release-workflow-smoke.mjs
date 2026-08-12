@@ -14,7 +14,7 @@ try {
   verifyReleaseBump();
   verifyPackageContracts();
   verifyWorkflowContracts();
-  verifyNgrokTamperDetection();
+  verifyTunnelClientTamperDetection();
   console.log('Cross-platform release workflow smoke test passed.');
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
@@ -52,20 +52,19 @@ function copyFixture() {
     fs.copyFileSync(source, destination);
   }
 
-  const seedPath = path.join(tmp, 'vendor', 'ngrok', 'win32', 'ngrok.exe');
+  const seedPath = path.join(tmp, 'vendor', 'tunnel-client', 'win32', 'tunnel-client.exe');
   const seedBytes = Buffer.alloc(5 * 1024 * 1024);
   fs.mkdirSync(path.dirname(seedPath), { recursive: true });
   fs.writeFileSync(seedPath, seedBytes);
-  fs.writeFileSync(path.join(tmp, 'vendor', 'ngrok', 'manifest.json'), `${JSON.stringify({
-    schemaVersion: 1,
+  fs.writeFileSync(path.join(tmp, 'vendor', 'tunnel-client', 'manifest.json'), `${JSON.stringify({
     version: 'test',
+    license: 'Apache-2.0',
+    source: 'https://github.com/openai/tunnel-client',
     platforms: {
       win32: {
-        architecture: 'amd64',
-        file: 'ngrok.exe',
+        file: 'tunnel-client.exe',
         size: seedBytes.length,
-        sha256: crypto.createHash('sha256').update(seedBytes).digest('hex'),
-        authenticode: { publisher: 'ngrok, Inc.', issuer: 'DigiCert' }
+        sha256: crypto.createHash('sha256').update(seedBytes).digest('hex')
       }
     }
   }, null, 2)}\n`);
@@ -126,11 +125,11 @@ function verifyPackageContracts() {
   assert.equal(electronPackage.build.appImage.artifactName, 'Rel.AI-MCP-${version}-linux-x64.${ext}');
   assert.equal(electronPackage.build.deb.artifactName, 'Rel.AI-MCP-${version}-linux-x64.${ext}');
   assert.deepEqual(
-    electronPackage.build.win.extraResources.find(resource => resource.to === 'bin/ngrok')?.filter,
+    electronPackage.build.win.extraResources.find(resource => resource.to === 'bin/tunnel-client')?.filter,
     ['manifest.json', 'win32/**']
   );
   assert.deepEqual(
-    electronPackage.build.linux.extraResources.find(resource => resource.to === 'bin/ngrok')?.filter,
+    electronPackage.build.linux.extraResources.find(resource => resource.to === 'bin/tunnel-client')?.filter,
     ['manifest.json', 'linux/**']
   );
 
@@ -172,7 +171,7 @@ function verifyWorkflowContracts() {
   const productionAuditIndex = workflow.indexOf('- name: Audit production dependencies');
   const packagingAuditIndex = workflow.indexOf('- name: Audit packaging dependencies');
   const windowsBuildIndex = workflow.indexOf('- name: Build Windows release');
-  const fetchWindowsSeedIndex = workflow.indexOf('NGROK_PLATFORMS: win32');
+  const fetchWindowsSeedIndex = workflow.indexOf('TUNNEL_CLIENT_PLATFORMS: win32');
   const testsIndex = workflow.indexOf('- name: Run tests');
 
   assert.ok(productionAuditIndex >= 0);
@@ -197,8 +196,8 @@ function verifyWorkflowContracts() {
     /npm run electron:dist:windows/,
     /Build Linux release/,
     /npm run electron:dist:linux/,
-    /NGROK_PLATFORMS: win32/,
-    /NGROK_PLATFORMS: linux/,
+    /TUNNEL_CLIENT_PLATFORMS: win32/,
+    /TUNNEL_CLIENT_PLATFORMS: linux/,
     /npm run verify:packaged -- --platform win32/,
     /npm run verify:packaged -- --platform linux/,
     /npm run verify:fuses -- --platform win32/,
@@ -224,10 +223,8 @@ function verifyWorkflowContracts() {
     /dist\/\*\.AppImage/,
     /dist\/\*\.deb/,
     /CSC_IDENTITY_AUTO_DISCOVERY:\s*'false'/,
-    /Packaged ngrok SHA-256 mismatch/,
-    /Packaged ngrok Authenticode signature is not valid/,
-    /Packaged ngrok publisher mismatch/,
-    /Packaged ngrok certificate issuer mismatch/,
+    /Verify bundled OpenAI tunnel-client/,
+    /verify-tunnel-client\.mjs/,
     /npm run benchmark:observability/,
     /npm run test:observability-browser/,
     /npm run test:native-tasks-release-gate/
@@ -241,21 +238,21 @@ function verifyWorkflowContracts() {
   assert.match(fuseWrapper, /allowBuildCheck: true, platform/);
 }
 
-function verifyNgrokTamperDetection() {
-  const seedPath = path.join(tmp, 'vendor', 'ngrok', 'win32', 'ngrok.exe');
+function verifyTunnelClientTamperDetection() {
+  const seedPath = path.join(tmp, 'vendor', 'tunnel-client', 'win32', 'tunnel-client.exe');
   const original = fs.readFileSync(seedPath);
   const tamperedBytes = Buffer.from(original);
   tamperedBytes[0] = 1;
   fs.writeFileSync(seedPath, tamperedBytes);
   const tampered = runWithEnv('release-check.mjs', { REL_AI_TARGET_PLATFORM: 'win32' });
   assert.notEqual(tampered.status, 0);
-  assert.match(`${tampered.stdout}\n${tampered.stderr}`, /bundled ngrok seed SHA-256 for win32/i);
+  assert.match(`${tampered.stdout}\n${tampered.stderr}`, /bundled OpenAI tunnel-client SHA-256 for win32/i);
 
   fs.writeFileSync(seedPath, original);
   fs.rmSync(seedPath, { force: true });
   const missing = runWithEnv('release-check.mjs', { REL_AI_TARGET_PLATFORM: 'win32' });
   assert.notEqual(missing.status, 0);
-  assert.match(`${missing.stdout}\n${missing.stderr}`, /bundled ngrok seed is missing for win32/i);
+  assert.match(`${missing.stdout}\n${missing.stderr}`, /bundled OpenAI tunnel-client is missing for win32/i);
 }
 
 function run(script, args = []) {

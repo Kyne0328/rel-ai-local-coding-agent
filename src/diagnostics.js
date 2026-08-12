@@ -121,8 +121,24 @@ function aliasFindings(aliasCheck, workspace) {
 
 function connectionFindings(connection, state) {
   const findings = [];
-  if (!connection?.chatgptMcpUrl) findings.push(findingFromCode(ERROR_CODES.PUBLIC_ENDPOINT_FAILED, 'warning', 'The local dashboard works, but ChatGPT cannot reach this machine.', connection));
-  if (connection?.token !== 'set') findings.push(findingFromCode(ERROR_CODES.APPROVAL_TOKEN_REQUIRED, 'error', 'Dashboard and OAuth access are not adequately protected.', connection));
+  const endpointStatus = String(state?.publicEndpoint?.status || '');
+  const tunnelConfigured = Boolean(String(connection?.tunnelId || '').trim());
+  if (endpointStatus === 'unavailable' || endpointStatus === 'disabled' || (!endpointStatus && !tunnelConfigured)) {
+    findings.push(findingFromCode(
+      ERROR_CODES.PUBLIC_ENDPOINT_FAILED,
+      'warning',
+      'The local dashboard works, but the OpenAI Secure MCP Tunnel is not available for ChatGPT requests.',
+      { ...connection, endpointStatus }
+    ));
+  }
+  if (connection?.token !== 'set') {
+    findings.push(findingFromCode(
+      ERROR_CODES.CONFIGURATION_INVALID,
+      'error',
+      'The private local MCP bearer credential is missing.',
+      connection
+    ));
+  }
   const connectionError = state?.error;
   if (connectionError?.message) findings.push(findingFromCode(connectionError.code, 'error', connectionError.message, connectionError));
   return findings;

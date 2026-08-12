@@ -289,11 +289,11 @@ app.whenReady().then(async () => {
       };
     })()`);
     await win.webContents.executeJavaScript(`location.hash = '#activity'`);
-    await waitFor(win, `document.querySelector('.activity-message-cell')`);
+    await waitFor(win, `document.querySelector('.activity-table tbody .clickable-row .activity-message-cell')`);
     const activityMeasurement = await win.webContents.executeJavaScript(`(() => {
       const wrap = document.querySelector('#__activity-table-wrap .table-wrap');
       if (wrap) wrap.scrollLeft = 0;
-      const cell = document.querySelector('.activity-message-cell');
+      const cell = document.querySelector('.activity-table tbody .clickable-row .activity-message-cell');
       const rect = cell?.getBoundingClientRect();
       const wrapRect = wrap?.getBoundingClientRect();
       return {

@@ -52,11 +52,10 @@ try {
     assert.equal(measurement.mainClear, true, `${measurement.route} main scroller overlaps the custom title bar: ${JSON.stringify(measurement)}`);
     assert.equal(measurement.topbarClear, true, `${measurement.route} topbar overlaps the custom title bar: ${JSON.stringify(measurement)}`);
     assert.equal(measurement.titleVisible, true, `${measurement.route} title is clipped under the custom title bar: ${JSON.stringify(measurement)}`);
-    assert.ok(measurement.titleInset >= 8, `${measurement.route} title has insufficient topbar inset: ${JSON.stringify(measurement)}`);
+    assert.ok(measurement.titleInset >= 7.5, `${measurement.route} title has insufficient topbar inset after subpixel rounding: ${JSON.stringify(measurement)}`);
     if (measurement.route === '#usage') {
-      assert.equal(measurement.pairingModalTitle, 'Pairing required');
-      assert.equal(measurement.usageIpcLeak, false, 'Usage IPC must not run while Cloud pairing is required');
-      assert.equal(measurement.inlineUsageError, false, 'Pairing-required Usage must use the modal instead of an inline raw IPC error');
+      assert.equal(measurement.localAnalyticsLoaded, true, 'Analytics must render from the local desktop bridge.');
+      assert.equal(measurement.inlineUsageError, false, 'Local Analytics must not show an unavailable error in the browser probe.');
     }
     if (measurement.route === '#tools') {
       assert.equal(measurement.toolCategories.relai_exec, 'Execute');
@@ -65,7 +64,7 @@ try {
       assert.equal(measurement.toolCategories.relai_changes, 'Review · Recover');
     }
   }
-  console.log('Electron custom-titlebar geometry is clear across Usage, Tools, and Sessions.');
+  console.log('Electron custom-titlebar geometry is clear across Analytics, Tools, and Sessions.');
 } finally {
   if (child && child.exitCode == null) child.kill('SIGKILL');
   if (server.exitCode == null) server.kill('SIGKILL');

@@ -15,82 +15,42 @@ const { readDesktopSettings, saveDesktopSettings } = await import('../electron/d
 
 let notificationsEnabled = true;
 let restarts = 0;
+let storedApiKey = '';
 
 try {
-  saveLauncherConfig({
-    port: 3333,
-    token: 'preserved-token',
-    ngrokDomain: 'example.ngrok-free.dev',
-    ngrokAuthtoken: 'account-key'
-  });
-
-  assert.deepEqual(readDesktopSettings({ approvalRequired: true, notificationsEnabled }), {
+  saveLauncherConfig({ port: 3333, token: 'preserved-token', tunnelId: 'tunnel_example123456' });
+  assert.deepEqual(readDesktopSettings({ tunnelApiKeyConfigured: true, notificationsEnabled }), {
     ok: true,
-    connectionMode: 'direct',
-    gatewayOrigin: 'https://rel-ai.kynemcp.workers.dev',
     port: 3333,
-    approvalToken: 'preserved-token',
-    ngrokDomain: 'example.ngrok-free.dev',
-    ngrokAuthtoken: '',
-    ngrokAuthtokenConfigured: true,
-    approvalRequired: true,
+    tunnelId: 'tunnel_example123456',
+    tunnelApiKey: '',
+    tunnelApiKeyConfigured: true,
     notificationsEnabled: true
   });
 
   const runtimeActions = {
     setNotificationsEnabled(value) { notificationsEnabled = value; },
-    async restartDesktop() {
-      restarts += 1;
-      return { serverRunning: true };
-    }
+    setTunnelApiKey(value) { storedApiKey = value; },
+    async restartDesktop() { restarts += 1; return { serverRunning: true }; }
   };
 
-  const preserveResult = await saveDesktopSettings({
+  const result = await saveDesktopSettings({
     port: 4444,
-    approvalToken: 'must-not-be-used',
-    ngrokDomain: 'updated.ngrok-free.dev',
-    ngrokAuthtoken: '',
+    tunnelId: 'tunnel_replacement123',
+    tunnelApiKey: 'sk-runtime-replacement-123456',
     notificationsEnabled: false
   }, runtimeActions);
-  assert.equal(preserveResult.ok, true);
-  assert.deepEqual(readGuiConfig(), {
-    connectionMode: 'direct',
-    gatewayOrigin: 'https://rel-ai.kynemcp.workers.dev',
-    port: 4444,
-    ngrokDomain: 'updated.ngrok-free.dev',
-    token: 'preserved-token',
-    ngrokAuthtoken: 'account-key',
-    publicUrl: 'https://updated.ngrok-free.dev'
-  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(readGuiConfig(), { port: 4444, token: 'preserved-token', tunnelId: 'tunnel_replacement123' });
+  assert.equal(storedApiKey, 'sk-runtime-replacement-123456');
   assert.equal(notificationsEnabled, false);
-
-  await saveDesktopSettings({
-    port: 4555,
-    ngrokDomain: 'replacement.ngrok-free.dev',
-    ngrokAuthtoken: 'new-account-key'
-  }, runtimeActions);
-  assert.deepEqual(readGuiConfig(), {
-    connectionMode: 'direct',
-    gatewayOrigin: 'https://rel-ai.kynemcp.workers.dev',
-    port: 4555,
-    ngrokDomain: 'replacement.ngrok-free.dev',
-    token: 'preserved-token',
-    ngrokAuthtoken: 'new-account-key',
-    publicUrl: 'https://replacement.ngrok-free.dev'
-  });
-  assert.equal(restarts, 2);
-  assert.equal(readDesktopSettings().ngrokAuthtoken, '');
-  assert.equal(readDesktopSettings().ngrokAuthtokenConfigured, true);
+  assert.equal(restarts, 1);
 
   await assert.rejects(
-    () => saveDesktopSettings({
-      port: 4555,
-      ngrokDomain: 'replacement.ngrok-free.dev',
-      ngrokAuthtoken: ''
-    }, { restartDesktop: async () => ({ serverRunning: false, error: 'restart failed' }) }),
+    () => saveDesktopSettings({}, { setTunnelApiKey() {}, restartDesktop: async () => ({ serverRunning: false, error: 'restart failed' }) }),
     /restart failed/
   );
-  await assert.rejects(() => saveDesktopSettings({}), /restartDesktop is required/);
+  await assert.rejects(() => saveDesktopSettings({}, { setTunnelApiKey() {} }), /restartDesktop is required/);
 } finally {
   if (previousStateDir === undefined) delete process.env.REL_AI_MCP_STATE_DIR;
   else process.env.REL_AI_MCP_STATE_DIR = previousStateDir;
@@ -99,4 +59,4 @@ try {
   fs.rmSync(root, { recursive: true, force: true });
 }
 
-console.log('Desktop settings unit tests passed.');
+console.log('Desktop secure tunnel settings unit tests passed.');

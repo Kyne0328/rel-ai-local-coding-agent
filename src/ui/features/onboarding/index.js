@@ -13,10 +13,8 @@ export function desktopSetupSteps({
   hasWorkspace = false,
   endpointReady = false,
   chatgptReady = false,
-  firstRequestObserved = false,
-  connectionMode = 'direct'
+  firstRequestObserved = false
 } = {}) {
-  const cloud = connectionMode === 'cloud';
   const requestUnlocked = hasWorkspace && endpointReady && chatgptReady;
   return [
     {
@@ -30,21 +28,17 @@ export function desktopSetupSteps({
     },
     {
       id: 'connection',
-      title: cloud ? 'Connect this computer' : 'Make this computer reachable',
-      description: cloud
-        ? 'Rel.AI Cloud provides the secure path ChatGPT uses to reach this computer.'
-        : 'Configure the secure HTTPS endpoint ChatGPT uses to reach Rel.AI on this computer.',
+      title: 'Configure the secure tunnel',
+      description: 'Save this computer’s OpenAI Secure MCP Tunnel ID and runtime API key, then keep Rel.AI running until the tunnel reports Connected.',
       href: routeMetadata('connection').href,
-      action: cloud ? 'Set up device connection' : 'Set up secure endpoint',
+      action: 'Set up secure tunnel',
       complete: endpointReady,
       locked: !hasWorkspace
     },
     {
       id: 'chatgpt',
       title: 'Connect ChatGPT',
-      description: cloud
-        ? 'Plus or Pro: open Plugins in ChatGPT (sidebar or Settings → Plugins), add Rel.AI MCP, and choose Connect. Business, Enterprise, or Edu: use the Rel.AI app your workspace provides under Apps. Enter the pairing code from Connection when asked.'
-        : 'Create or reconnect the Rel.AI MCP app in ChatGPT, then approve it with the token shown in Connection.',
+      description: 'Create or reconnect the Rel.AI MCP integration in ChatGPT using the Tunnel connection option associated with this computer’s Secure MCP Tunnel.',
       href: routeMetadata('connection').href,
       action: 'Connect ChatGPT',
       complete: chatgptReady,

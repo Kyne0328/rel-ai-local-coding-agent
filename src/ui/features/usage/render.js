@@ -2,14 +2,9 @@ import { routeHref } from '../../router.js';
 import { deltaFor } from './range-model.js';
 
 export function renderUsage(content, { bounds, current, previous, allCurrent }) {
-  const local = current.source === 'local';
   const scopeCopy = current.kind === 'workspace'
-    ? (local
-      ? `Showing device-local aggregate tool activity attributed to ${current.label}. No repository paths or tool result bodies are stored in analytics.`
-      : `Showing exact tool activity attributed to ${current.label}${current.deviceId ? ' on the selected device' : ''}. Transport byte totals remain principal-wide and are not mixed into workspace cards.`)
-    : (local
-      ? 'This view uses privacy-safe aggregates recorded on this device. Prompts, repository contents, paths, command output, and tool result bodies are not stored in analytics.'
-      : 'Counts and byte totals are recorded by the Rel.AI gateway from authenticated MCP traffic. They do not represent ChatGPT model-token usage or billing.');
+    ? `Showing device-local aggregate tool activity attributed to ${current.label}. No repository paths or tool result bodies are stored in analytics.`
+    : 'This view uses privacy-safe aggregates recorded on this device. Prompts, repository contents, paths, command output, and tool result bodies are not stored in analytics.';
   const fallback = current.usedMonthlyFallback && current.points.every(point => point.toolCalls === 0 && point.requests === 0)
     ? '<p class="usage-series-note">This month includes legacy monthly totals recorded before hourly trends were available. Trend lines begin with newly bucketed activity.</p>' : '';
   content.innerHTML = `
@@ -32,7 +27,7 @@ function analyticsMetrics(scope, previous) {
   const values = key => scope.points.map(point => pointMetric(point, key));
   const compare = (key, options = {}) => scope.usedMonthlyFallback ? null : deltaFor(scope, previous, key, options);
   const metric = (label, key, value, detail, options = {}) => ({ label, value, detail, delta: compare(key, options), values: values(options.sparkKey || key), tone: options.metricTone || '' });
-  if (scope.kind !== 'workspace' && scope.source === 'local') return [
+  if (scope.kind !== 'workspace') return [
     metric('Tool calls', 'toolCalls', integer(scope.toolCalls), 'Completed local invocations', { neutral: true }),
     metric('Successful', 'successes', integer(scope.successes), 'Completed successfully'),
     metric('Success rate', 'successRate', percent(scope.successRate), `${integer(scope.completed)} completed outcomes`, { rate: true, sparkKey: 'successRate' }),
@@ -47,14 +42,6 @@ function analyticsMetrics(scope, previous) {
     metric('Success rate', 'successRate', percent(scope.successRate), `${integer(scope.completed)} completed outcomes`, { rate: true, sparkKey: 'successRate' }),
     metric('Execution time', 'executionMs', duration(scope.executionMs), 'Completed tool duration', { neutral: true }),
     metric('Avg tool time', 'averageDuration', duration(scope.averageDuration), scope.completed ? 'Per completed tool call' : 'No completed outcomes', { inverse: true, sparkKey: 'averageDuration' })
-  ];
-  return [
-    metric('MCP requests', 'requests', integer(scope.requests), 'Authenticated requests', { neutral: true }),
-    metric('Tool calls', 'toolCalls', integer(scope.toolCalls), 'Exact invocations', { neutral: true }),
-    metric('Success rate', 'successRate', percent(scope.successRate), `${integer(scope.completed)} completed outcomes`, { rate: true, sparkKey: 'successRate' }),
-    metric('Failed', 'failures', integer(scope.failures), scope.failures ? 'Needs attention' : 'No recorded failures', { inverse: true, metricTone: scope.failures ? 'bad' : 'good' }),
-    metric('Avg tool time', 'averageDuration', duration(scope.averageDuration), scope.completed ? 'Per completed tool call' : 'No completed outcomes', { inverse: true, sparkKey: 'averageDuration' }),
-    metric('Active days', 'activeDays', integer(scope.activeDays), 'UTC days with activity', { neutral: true, sparkKey: 'toolCalls' })
   ];
 }
 
@@ -99,9 +86,8 @@ function pointMetric(point,key) {
 }
 
 function transportFacts(scope, all) {
-  if(scope.kind==='workspace') return `<div class="usage-fact-strip">${fact('Workspace share',percent(all.toolCalls?scope.toolCalls/all.toolCalls*100:0),'of observed tool calls')}${fact('Completed outcomes',integer(scope.completed),'successes + failures')}${fact('Source',scope.source==='local'?'This device':'Rel.AI Cloud',scope.source==='local'?'aggregate-only local data':'principal-wide Cloud data')}</div>`;
-  if(scope.source==='local') return `<div class="usage-fact-strip">${fact('Storage','Local aggregate','no prompts, paths, or result bodies')}${fact('Completed outcomes',integer(scope.completed),'duration denominator')}${fact('Scope','This device','Cloud transport bytes kept separate')}</div>`;
-  return `<div class="usage-fact-strip">${fact('Data sent',bytes(scope.requestBytes),'authenticated MCP payload bytes')}${fact('Data returned',bytes(scope.resultBytes),'gateway response bytes')}${fact('Completed outcomes',integer(scope.completed),'duration denominator')}</div>`;
+  if(scope.kind==='workspace') return `<div class="usage-fact-strip">${fact('Workspace share',percent(all.toolCalls?scope.toolCalls/all.toolCalls*100:0),'of observed tool calls')}${fact('Completed outcomes',integer(scope.completed),'successes + failures')}${fact('Source','This device','aggregate-only local data')}</div>`;
+  return `<div class="usage-fact-strip">${fact('Storage','Local aggregate','no prompts, paths, or result bodies')}${fact('Completed outcomes',integer(scope.completed),'duration denominator')}${fact('Scope','This device','local MCP activity only')}</div>`;
 }
 function fact(label,value,detail){return `<div><span>${esc(label)}</span><strong>${esc(value)}</strong><small>${esc(detail)}</small></div>`;}
 function outcomesSection(scope){return `<section class="card usage-visual-card"><div class="card-head"><div><h3>Outcomes</h3><p>Terminal outcomes for completed tool calls.</p></div><strong class="usage-visual-value">${percent(scope.successRate)}</strong></div><div class="card-body usage-outcomes"><progress class="usage-outcome-progress" max="${Math.max(1,scope.completed)}" value="${scope.successes}">${percent(scope.successRate)}</progress><div class="usage-outcome-legend">${legend('Successful',scope.successes,'good')}${legend('Failed',scope.failures,'bad')}</div></div></section>`;}
@@ -138,7 +124,6 @@ function breakdownRow(row,key){const label=key==='device'?(row.displayName||shor
 function finite(values){return (values||[]).map(Number).map(value=>Number.isFinite(value)&&value>=0?value:0);}
 function integer(value){return Math.floor(Number(value)||0).toLocaleString();}
 function percent(value){const n=Number(value)||0;return `${n.toFixed(n>=10?1:2)}%`;}
-function bytes(value){const n=Number(value)||0;if(n<1024)return `${Math.floor(n).toLocaleString()} B`;const units=['KiB','MiB','GiB','TiB'];let amount=n,unit=-1;do{amount/=1024;unit+=1;}while(amount>=1024&&unit<units.length-1);return `${amount>=100?amount.toFixed(0):amount>=10?amount.toFixed(1):amount.toFixed(2)} ${units[unit]}`;}
 function duration(value){const ms=Number(value)||0;if(ms<1000)return `${Math.floor(ms).toLocaleString()} ms`;const sec=ms/1000;if(sec<60)return `${sec.toFixed(sec>=10?1:2)} s`;const min=sec/60;if(min<60)return `${min.toFixed(min>=10?1:2)} min`;return `${(min/60).toFixed(2)} h`;}
 function shortId(value){const text=String(value||'');return text.length>12?`${text.slice(0,8)}…${text.slice(-4)}`:text;}
 function esc(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);}

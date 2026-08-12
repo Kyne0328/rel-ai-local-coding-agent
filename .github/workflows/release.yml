@@ -10,6 +10,7 @@ on:
       - electron/**
       - scripts/**
       - vendor/zoekt/**
+      - vendor/tunnel-client/**
       - src/repository/intelligence/**
       - .github/workflows/release.yml
   workflow_dispatch:
@@ -114,11 +115,11 @@ jobs:
         run: npm run audit:production
       - name: Audit packaging dependencies
         run: npm run audit:packaging
-      - name: Fetch bundled ngrok seed binary
+      - name: Fetch OpenAI tunnel-client
         shell: pwsh
         env:
-          NGROK_PLATFORMS: win32
-        run: pwsh scripts/fetch-ngrok.ps1
+          TUNNEL_CLIENT_PLATFORMS: win32
+        run: node scripts/fetch-tunnel-client.mjs
       - name: Build bundled Zoekt binaries
         shell: pwsh
         env:
@@ -154,32 +155,15 @@ jobs:
       - name: Verify hardened Electron fuses
         shell: pwsh
         run: npm run verify:fuses -- --platform win32 '${{ steps.unpacked.outputs.path }}/Rel.AI MCP.exe'
-      - name: Verify bundled ngrok provenance
+      - name: Verify bundled OpenAI tunnel-client
         shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $packageDirectory = '${{ steps.unpacked.outputs.path }}'
-          $ngrokManifest = Get-Content 'vendor/ngrok/manifest.json' -Raw | ConvertFrom-Json
-          $ngrokSpec = $ngrokManifest.platforms.win32
-          $ngrokPath = Resolve-Path (Join-Path $packageDirectory "resources/bin/ngrok/win32/$($ngrokSpec.file)")
-          $ngrokHash = (Get-FileHash -LiteralPath $ngrokPath -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($ngrokHash -ne [string]$ngrokSpec.sha256) {
-            throw "Packaged ngrok SHA-256 mismatch. Expected $($ngrokSpec.sha256), got $ngrokHash."
-          }
-          $ngrokSignature = Get-AuthenticodeSignature -LiteralPath $ngrokPath
-          if ($ngrokSignature.Status -ne 'Valid') {
-            throw "Packaged ngrok Authenticode signature is not valid: $($ngrokSignature.Status)."
-          }
-          if (-not $ngrokSignature.SignerCertificate.Subject.Contains([string]$ngrokSpec.authenticode.publisher, [System.StringComparison]::OrdinalIgnoreCase)) {
-            throw "Packaged ngrok publisher mismatch: $($ngrokSignature.SignerCertificate.Subject)."
-          }
-          if (-not $ngrokSignature.SignerCertificate.Issuer.Contains([string]$ngrokSpec.authenticode.issuer, [System.StringComparison]::OrdinalIgnoreCase)) {
-            throw "Packaged ngrok certificate issuer mismatch: $($ngrokSignature.SignerCertificate.Issuer)."
-          }
+        env:
+          TUNNEL_CLIENT_PLATFORMS: win32
+        run: node scripts/verify-tunnel-client.mjs
       - name: Verify packaged application layout
         shell: pwsh
         run: npm run verify:packaged -- --platform win32 --dir '${{ steps.unpacked.outputs.path }}'
-      - name: Verify packaged OAuth and MCP connector flow
+      - name: Verify packaged bearer-authenticated MCP flow
         shell: pwsh
         run: npm run test:connector-acceptance -- --dir '${{ steps.unpacked.outputs.path }}'
       - name: Generate CycloneDX SBOM
@@ -226,10 +210,10 @@ jobs:
         run: node electron/node_modules/electron/install.js
       - name: Verify Electron test binary
         run: test -x electron/node_modules/electron/dist/electron
-      - name: Fetch bundled ngrok seed binary
+      - name: Fetch OpenAI tunnel-client
         env:
-          NGROK_PLATFORMS: linux
-        run: bash scripts/fetch-ngrok.sh
+          TUNNEL_CLIENT_PLATFORMS: linux
+        run: node scripts/fetch-tunnel-client.mjs
       - name: Build bundled Zoekt binaries
         env:
           ZOEKT_PLATFORMS: linux
@@ -257,7 +241,7 @@ jobs:
         run: npm run verify:fuses -- --platform linux '${{ steps.unpacked.outputs.path }}/rel-ai-mcp'
       - name: Verify packaged application layout
         run: npm run verify:packaged -- --platform linux --dir '${{ steps.unpacked.outputs.path }}'
-      - name: Verify packaged OAuth and MCP connector flow
+      - name: Verify packaged bearer-authenticated MCP flow
         run: npm run test:connector-acceptance -- --dir '${{ steps.unpacked.outputs.path }}'
       - name: Smoke-test Linux desktop startup under Xvfb
         shell: bash

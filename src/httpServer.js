@@ -9,9 +9,8 @@ import { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handle
 import { handleApiHistoryReset } from "./http/dashboardHistory.js";
 import { handleApiDiagnostics, handleApiDiagnosticsReset } from "./http/dashboardDiagnostics.js";
 import { handleApiProcessStop } from "./http/dashboardProcesses.js";
-import { handleOauthProtectedResource, handleOauthMetadata, handleRegister, handleAuthorizeGet, handleAuthorizePost, handleToken, getMcpAccess, oauthWellKnownPaths } from "./http/mcp.js";
+import { getMcpAccess } from "./http/mcp.js";
 import { handleMcpGetDiagnostic, handleMcpStreamable, handleMcpDelete, handleMcpRecovery, handleMcpConnectionState, shutdownMcpTransport } from "./http/mcpTransport.js";
-import { resolveBaseUrl } from "./http/auth.js";
 import { initializeTelemetry, shutdownTelemetry } from "./telemetry.js";
 import { stopAllManagedProcesses, pruneManagedProcesses } from "./processManager.js";
 import { pruneNativeToolTasks } from './mcp/nativeToolTasks.js';
@@ -32,7 +31,6 @@ function startHttpServer(options = {}) {
   const host = options.host || process.env.REL_AI_MCP_HOST || savedProfile.host || "127.0.0.1";
   const port = Number(options.port ?? process.env.REL_AI_MCP_PORT ?? 3333);
   const token = options.token || process.env.REL_AI_MCP_TOKEN || launchEnv.REL_AI_MCP_TOKEN || "";
-  const publicUrl = connection.normalizePublicUrl(options.publicUrl || process.env.REL_AI_MCP_PUBLIC_URL || launchEnv.REL_AI_MCP_PUBLIC_URL || savedProfile.publicUrl || "");
   const allowNoAuth = Boolean(options.allowNoAuth || process.env.REL_AI_MCP_ALLOW_NO_AUTH === "1");
   // connection.json is global state the desktop app and the ChatGPT connector read to
   // find the live server. A second instance (a test, a benchmark, a manual
@@ -54,7 +52,7 @@ function startHttpServer(options = {}) {
   ensureConfig();
   const runtimeConfig = readConfig();
   const manifest = buildToolManifest(runtimeConfig);
-  const generations = resolveConnectionGenerations(runtimeConfig, { token, host, port, publicUrl });
+  const generations = resolveConnectionGenerations(runtimeConfig, { token, host, port });
   mcpConnectionManager.configure({
     serverInstanceId: SERVER_INSTANCE_ID,
     credentialGeneration: generations.credentialGeneration,
@@ -74,7 +72,7 @@ function startHttpServer(options = {}) {
 
   const server = http.createServer(async (req, res) => {
     try {
-      await routeRequest(req, res, { token, allowNoAuth, maxBodyBytes, host, port, publicUrl, pickFolder, openFolder, getTaskActivity, getDesktopStatus, getRuntimeAccess, resetTaskActivity, getRuntimeLogs, clearRuntimeLogs });
+      await routeRequest(req, res, { token, allowNoAuth, maxBodyBytes, host, port, pickFolder, openFolder, getTaskActivity, getDesktopStatus, getRuntimeAccess, resetTaskActivity, getRuntimeLogs, clearRuntimeLogs });
     } catch (error) {
       const status = Number(error?.status || 500);
       const code = error?.errorCode || errorCodeForRequest(req);
@@ -122,17 +120,12 @@ function startHttpServer(options = {}) {
       if (previousPort && previousPort !== actualPort) {
         console.error(`[rel-ai-mcp] Notice: repointing the saved connector profile from port ${previousPort} to ${actualPort}. Start with --no-profile-write to leave it untouched.`);
       }
-      connection.writeConnectionProfile({ host, port: actualPort, publicUrl, configPath: getConfigPath() });
+      connection.writeConnectionProfile({ host, port: actualPort, configPath: getConfigPath() });
     }
-    const summary = connection.buildConnectionSummary({ host, port: actualPort, publicUrl, token, includeTokenInUrls: false });
+    const summary = connection.buildConnectionSummary({ host, port: actualPort, token, includeTokenInUrls: false, tunnelId: savedProfile.tunnelId || '' });
     console.error(`[rel-ai-mcp] Dashboard: ${summary.dashboardUrl}`);
-    if (publicUrl) {
-      console.error(`[rel-ai-mcp] ChatGPT MCP URL: ${summary.chatgptMcpUrl}`);
-      console.error("[rel-ai-mcp] ChatGPT Auth: OAuth (sign in with your approval token)");
-    } else {
-      console.error("[rel-ai-mcp] No public URL configured. Open the Rel.AI MCP desktop app to set your ngrok domain and start the tunnel.");
-      console.error(`[rel-ai-mcp] Local ChatGPT-style URL for diagnostics only: ${summary.chatgptMcpUrl}`);
-    }
+    console.error(`[rel-ai-mcp] Local MCP: ${summary.localMcpUrl}`);
+    console.error('[rel-ai-mcp] ChatGPT connectivity is provided only by OpenAI Secure MCP Tunnel.');
     if (!token) {
       console.error("[rel-ai-mcp] Notice: HTTP auth is disabled. Use only on a trusted local network.");
     }
@@ -159,10 +152,9 @@ const NOT_FOUND_PAYLOAD = {
     updateSettingsApi: "POST /api/settings", diagnosticsResetApi: "POST /api/diagnostics/reset", updateWorkspacesApi: "POST /api/workspaces",
     healthMonitorApi: "GET /api/health-monitor", readinessApi: "GET /api/readiness",
     workspacePreflightApi: "GET /api/workspace/preflight?workspace=...", events: "GET /events",
-    streamableHttp: "POST /mcp (MCP 2026-07-28; Authentication: OAuth, or Bearer token)",
+    streamableHttp: "POST /mcp (MCP 2026-07-28; Authentication: private Bearer token)",
     mcpConnectionApi: "GET /api/mcp/connection",
-    mcpRecoveryApi: "POST /api/mcp/recovery",
-    oauthDiscovery: 'GET /.well-known/oauth-protected-resource/mcp'
+    mcpRecoveryApi: "POST /api/mcp/recovery"
   }
 };
 
@@ -200,7 +192,8 @@ function blockMcpForRuntimeAccess(res, ae, getRuntimeAccess) {
 async function dispatchGet(ctx) {
   if (await tryExactGet(ctx)) return true;
   if (await tryPrefixGet(ctx)) return true;
-  return tryOAuthOrMcpGet(ctx);
+  if (ctx.mcpAccess.kind === 'streamable-http') { await handleMcpGetDiagnostic(ctx); return true; }
+  return false;
 }
 
 async function tryExactGet(ctx) {
@@ -214,15 +207,6 @@ async function tryExactGet(ctx) {
 async function tryPrefixGet(ctx) {
   const p = ctx.p;
   if (p.startsWith("/ui/") || p.startsWith("/public/")) { handleStaticAsset(ctx); return true; }
-  return false;
-}
-
-async function tryOAuthOrMcpGet(ctx) {
-  const wellKnown = oauthWellKnownPaths(resolveBaseUrl(ctx.options));
-  if (ctx.p === wellKnown.protectedResource) { await handleOauthProtectedResource(ctx); return true; }
-  if (ctx.p === wellKnown.authorizationServer || ctx.p === wellKnown.openidConfiguration) { await handleOauthMetadata(ctx); return true; }
-  if (ctx.p === "/authorize") { await handleAuthorizeGet(ctx); return true; }
-  if (ctx.mcpAccess.kind === "streamable-http") { await handleMcpGetDiagnostic(ctx); return true; }
   return false;
 }
 
@@ -251,7 +235,8 @@ const GET_ROUTES = {
 
 async function dispatchPost(ctx) {
   if (await tryExactPost(ctx)) return true;
-  return tryOAuthOrMcpPost(ctx);
+  if (ctx.mcpAccess.kind === 'streamable-http') { await handleMcpStreamable(ctx); return true; }
+  return false;
 }
 
 async function tryExactPost(ctx) {
@@ -260,14 +245,6 @@ async function tryExactPost(ctx) {
   if (!entry.auth(ctx)) return true;
   await entry.handler(ctx);
   return true;
-}
-
-async function tryOAuthOrMcpPost(ctx) {
-  if (ctx.p === "/register") { await handleRegister(ctx); return true; }
-  if (ctx.p === "/authorize") { await handleAuthorizePost(ctx); return true; }
-  if (ctx.p === "/token") { await handleToken(ctx); return true; }
-  if (ctx.mcpAccess.kind === "streamable-http") { await handleMcpStreamable(ctx); return true; }
-  return false;
 }
 
 const POST_ROUTES = {

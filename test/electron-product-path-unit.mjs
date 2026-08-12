@@ -29,8 +29,6 @@ const documentOnlyPatterns = [
   /separate ngrok download/i
 ];
 const sharedPublicPatterns = [
-  /\blocal service\b/i,
-  /\blocal port\b/i,
   /\bpublic endpoint\b/i,
   /\bbrowser dashboard\b/i
 ];
@@ -58,11 +56,11 @@ assert.equal(fs.existsSync(path.join(root, 'docs/DEVELOPMENT.md')), true, 'techn
 const publicJourney = publicDocuments.map(read).join('\n');
 for (const outcome of [
   /Install Rel\.AI MCP/i,
-  /sign in (?:to|with) (?:your )?Rel\.AI account|sign in or create (?:an )?account/i,
-  /Plus or Pro[\s\S]*Plugins/i,
-  /Business, Enterprise, or Edu[\s\S]*Apps/i,
+  /create an OpenAI Secure MCP Tunnel/i,
+  /Tunnel[\s\S]{0,40}connection option/i,
   /add (?:a|your first) workspace/i,
-  /Advanced Direct/i,
+  /OpenAI Secure MCP Tunnel/i,
+  /runtime API key/i,
   /(?:troubleshoot|diagnostics).*(?:in Rel\.AI|Connection|Diagnostics)/is
 ]) {
   assert.match(publicJourney, outcome, `public documentation must cover the Electron user outcome: ${outcome}`);

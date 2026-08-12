@@ -7,7 +7,7 @@ import { workspaceMenuHtml } from '../src/ui/components/workspace-menu.js';
 import { canonicalPathFor, normalizeRouteKey } from '../src/ui/route-policy.js';
 import { chatGptFirstPrompt, chatGptGuideSteps } from '../src/ui/features/settings/connection-guidance.js';
 import { connectionLayerViews } from '../src/ui/connection-state.js';
-import { connectionGuideMode, connectionPrimaryAction } from '../src/ui/features/settings/connector.js';
+import { connectionPrimaryAction } from '../src/ui/features/settings/connector.js';
 import { desktopSetupItems } from '../src/ui/features/onboarding/index.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -33,18 +33,14 @@ assert.equal(normalizeRouteKey('activity?status=active'), 'activity?status=activ
 assert.equal(normalizeRouteKey('activity?status=failed'), 'activity?status=failed');
 assert.equal(normalizeRouteKey('activity?status=other'), 'activity?status=other');
 
-const createSteps = chatGptGuideSteps({ mode: 'create', endpointAvailable: true, developerModeRequired: true }).join(' ');
-assert.match(createSteps, /Plus or Pro.*Plugins/i);
-assert.match(createSteps, /Business, Enterprise, or Edu.*workspace Apps/i);
-assert.match(createSteps, /OAuth/);
-assert.match(createSteps, /refresh or scan/i);
-assert.match(createSteps, /approval token/i);
-assert.match(createSteps, /enable.*select Rel\.AI MCP/i);
-const reconnectSteps = chatGptGuideSteps({ mode: 'reconnect' }).join(' ');
-assert.match(reconnectSteps, /Plus or Pro.*Plugins/i);
-assert.match(reconnectSteps, /existing Rel\.AI MCP integration/);
-assert.match(reconnectSteps, /endpoint is unchanged/i);
-assert.match(reconnectSteps, /do not delete or recreate/i);
+const createSteps = chatGptGuideSteps({ mode: 'create', tunnelId: 'tunnel_example123456' }).join(' ');
+assert.match(createSteps, /Secure MCP Tunnel/i);
+assert.match(createSteps, /runtime API key/i);
+assert.match(createSteps, /Tunnel connection option/i);
+assert.match(createSteps, /tunnel_example123456/i);
+const reconnectSteps = chatGptGuideSteps({ mode: 'reconnect', tunnelId: 'tunnel_example123456' }).join(' ');
+assert.match(reconnectSteps, /existing Rel\.AI MCP app\/plugin/i);
+assert.match(reconnectSteps, /tunnel_example123456/i);
 const firstPrompt = chatGptFirstPrompt();
 assert.match(firstPrompt, /start a work session/i);
 assert.match(firstPrompt, /snapshot/i);
@@ -63,47 +59,28 @@ for (const scenario of [
 const readyConnection = {
   localService: { status: 'running' },
   publicEndpoint: { status: 'available' },
-  chatgptReadiness: { status: 'oauth_authorized' },
+  chatgptReadiness: { status: 'ready' },
   mcpClient: { status: 'idle' },
   dashboardUpdates: { status: 'live' }
 };
 assert.deepEqual(
   connectionLayerViews(readyConnection).map(layer => layer.title),
-  ['Connection service', 'Secure endpoint', 'Authorization', 'Client and tools', 'Dashboard updates']
+  ['Local MCP service', 'OpenAI Secure MCP Tunnel', 'ChatGPT transport', 'MCP activity', 'Dashboard updates']
 );
 assert.deepEqual(
-  connectionPrimaryAction({ chatgptMcpUrl: '' }, { ...readyConnection, publicEndpoint: { status: 'disabled' } }),
-  { kind: 'control', target: 'tunnelSettings', label: 'Configure tunnel' }
+  connectionPrimaryAction({ ...readyConnection, publicEndpoint: { status: 'disabled' } }),
+  { kind: 'control', label: 'Configure secure tunnel' }
 );
 assert.deepEqual(
-  connectionPrimaryAction(
-    { chatgptMcpUrl: 'https://example.ngrok-free.dev/mcp' },
-    { ...readyConnection, chatgptReadiness: { status: 'authentication_required' } }
-  ),
-  { kind: 'control', target: 'approvalTokenSettings', label: 'Review approval token' }
-);
-assert.deepEqual(
-  connectionPrimaryAction({ chatgptMcpUrl: 'https://example.ngrok-free.dev/mcp' }, readyConnection),
+  connectionPrimaryAction(readyConnection),
   { kind: 'route', href: '#tasks', label: 'Open work sessions' }
 );
-assert.equal(connectionGuideMode({ ...readyConnection, chatgptReadiness: { status: 'awaiting_authentication' } }), 'create');
-assert.equal(connectionGuideMode({ ...readyConnection, chatgptReadiness: { status: 'authentication_required' } }), 'reconnect');
-assert.equal(connectionGuideMode(readyConnection), null);
 
 const wizard = read('electron/renderer/wizard.html');
-assert.equal((wizard.match(/data-step="\d+"/g) || []).length, 3);
-assert.doesNotMatch(wizard, /data-step="[45]"/);
-assert.match(wizard, /Connect ChatGPT/);
-assert.match(wizard, /Sign in or create account/);
-assert.match(wizard, /Plus or Pro[\s\S]*Plugins/i);
-assert.match(wizard, /Business, Enterprise, or Edu[\s\S]*workspace Apps/i);
-assert.match(wizard, /Secure this device/);
-assert.match(wizard, /Continue to dashboard/);
-assert.match(wizard, /Advanced setup and recovery/);
-assert.match(wizard, /Direct connection/);
-assert.match(wizard, /id="advancedSetup"/);
-assert.match(wizard, /id="directNgrokTokenInput"/);
-assert.match(wizard, /id="directDomainInput"/);
+assert.match(wizard, /OpenAI Secure MCP Tunnel/);
+assert.match(wizard, /id="tunnelIdInput"/);
+assert.match(wizard, /id="tunnelApiKeyInput"/);
+assert.doesNotMatch(wizard, /ngrok|Cloud gateway|Direct connection|approval token/i);
 
 assert.equal(fs.existsSync(path.join(root, 'src/ui/features/settings/tools-validation.js')), false);
 assert.match(workspaceMenuHtml([], ''), /aria-label="Workspace scope: All workspaces"/);

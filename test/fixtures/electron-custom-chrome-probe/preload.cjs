@@ -9,8 +9,21 @@ contextBridge.exposeInMainWorld('relaiDesktop', {
   onWindowState: noListener,
   onStatus: noListener,
   getStatus: async () => null,
-  onGatewayStatus: noListener,
-  getGatewayStatus: async () => ({ ok: true, connectionMode: 'cloud', gateway: { state: 'pairing_required', principalPaired: false } }),
-  getGatewayUsage: async () => { throw new Error('USAGE_IPC_SHOULD_NOT_RUN_WHILE_PAIRING_REQUIRED'); },
-  getLocalUsage: async () => { throw new Error('LOCAL_USAGE_IPC_SHOULD_NOT_RUN_WHILE_CLOUD_PAIRING_REQUIRED'); }
+  getLocalUsage: async month => ({
+    ok: true,
+    source: 'local',
+    month,
+    totals: { requests: 0, toolCalls: 0, successes: 0, failures: 0, requestBytes: 0, resultBytes: 0, executionMs: 0, activeDays: 0 },
+    tools: [],
+    devices: [],
+    workspaces: [],
+    workspaceDimensions: [],
+    workspaceTools: [],
+    series: [],
+    toolSeries: [],
+    workspaceSeries: [],
+    workspaceToolSeries: [],
+    failureCategories: [],
+    failureCategorySeries: []
+  })
 });

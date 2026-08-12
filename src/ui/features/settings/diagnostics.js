@@ -355,7 +355,7 @@ function openFullResetDialog(container) {
   form.innerHTML = `
     <div class="diagnostic-reset-warning">
       <strong>Clear all diagnostic data?</strong>
-      <span>This removes stored Sessions and Activity history plus the persistent sanitized service log. Workspace configuration, repositories, connection settings, and approval tokens are not changed.</span>
+      <span>This removes stored Sessions and Activity history plus the persistent sanitized service log. Workspace configuration, repositories, connection settings, and tunnel credentials are not changed.</span>
     </div>
     <label for="diagnosticResetConfirmation">Type RESET to continue</label>
     <input id="diagnosticResetConfirmation" name="confirmation" autocomplete="off" spellcheck="false" placeholder="RESET">

@@ -8,7 +8,6 @@ import { getVersion } from './version.js';
 import { getToolSurfaceManifest } from './tools/schema.js';
 import { allWorkspaceAliases, resolveWorkspace } from './config.js';
 import { buildToolManifest } from './mcp/toolManifest.js';
-import { GATEWAY_PROTOCOL_VERSION, MINIMUM_GATEWAY_PROTOCOL_VERSION } from './gateway/protocol.js';
 
 const PROTOCOL_VERSION = MCP_PROTOCOL_VERSION;
 function runtimeMetadata() {
@@ -22,9 +21,7 @@ function runtimeMetadata() {
     toolSurfaceVersion: surface.toolSurfaceVersion,
     toolCount: manifest.activeToolCount,
     manifestHash: manifest.version,
-    schemaVersion: manifest.schemaVersion,
-    deviceProtocolVersion: GATEWAY_PROTOCOL_VERSION,
-    minimumCompatibleDeviceProtocol: MINIMUM_GATEWAY_PROTOCOL_VERSION
+    schemaVersion: manifest.schemaVersion
   });
 }
 
@@ -71,8 +68,6 @@ function readRepositoryMetadata(root, alias = '') {
       toolCount: release.toolCount,
       manifestHash: release.manifestHash,
       schemaVersion: release.schemaVersion,
-      deviceProtocolVersion: release.deviceProtocolVersion,
-      minimumCompatibleDeviceProtocol: release.minimumCompatibleDeviceProtocol,
       releaseManifestPath: releasePath
     });
   } catch {
@@ -104,8 +99,6 @@ function assessRuntimeCompatibility(runtime, repository, options = {}) {
   compareField(differences, 'toolCount', runtime.toolCount, repository.toolCount);
   compareField(differences, 'manifestHash', runtime.manifestHash, repository.manifestHash);
   compareField(differences, 'schemaVersion', runtime.schemaVersion, repository.schemaVersion);
-  compareField(differences, 'deviceProtocolVersion', runtime.deviceProtocolVersion, repository.deviceProtocolVersion);
-  compareField(differences, 'minimumCompatibleDeviceProtocol', runtime.minimumCompatibleDeviceProtocol, repository.minimumCompatibleDeviceProtocol);
 
   if (differences.length === 0) {
     return {
@@ -179,9 +172,7 @@ function normalizeMetadata(value) {
     toolSurfaceVersion: Number(value.toolSurfaceVersion || 0),
     toolCount: Number(value.toolCount || 0),
     manifestHash: String(value.manifestHash || ''),
-    schemaVersion: Number(value.schemaVersion || 0),
-    deviceProtocolVersion: Number(value.deviceProtocolVersion || 0),
-    minimumCompatibleDeviceProtocol: Number(value.minimumCompatibleDeviceProtocol || 0)
+    schemaVersion: Number(value.schemaVersion || 0)
   };
 }
 

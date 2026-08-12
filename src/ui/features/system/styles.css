@@ -177,7 +177,7 @@
 }
 
 
-/* Rel.AI Cloud controls belong to the Connection/System feature. */
+/* Connection controls belong to the Connection/System feature. */
 .cloud-gateway-settings { display: grid; gap: 12px; }
 .cloud-gateway-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .cloud-gateway-heading > div, .cloud-gateway-card { min-width: 0; }

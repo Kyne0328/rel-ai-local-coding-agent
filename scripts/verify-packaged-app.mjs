@@ -31,7 +31,7 @@ if (browserSpecificSnapshotEnabled) {
   assert.ok(fs.statSync(browserSnapshot).isFile() && fs.statSync(browserSnapshot).size > 0, 'browser_v8_context_snapshot.bin must be a non-empty file when its fuse is enabled.');
 }
 
-const ngrokRelativePath = `resources/bin/ngrok/${spec.ngrokDirectory}/${spec.ngrokFile}`;
+const tunnelClientRelativePath = `resources/bin/tunnel-client/${spec.tunnelClientDirectory}/${spec.tunnelClientFile}`;
 const sourceZoektManifest = JSON.parse(fs.readFileSync(path.join(root, 'vendor', 'zoekt', 'manifest.json'), 'utf8'));
 const sourceTreeSitterManifest = JSON.parse(fs.readFileSync(path.join(root, 'vendor', 'tree-sitter', 'manifest.json'), 'utf8'));
 const sourceZoektSpec = sourceZoektManifest.platforms?.[platform];
@@ -42,12 +42,9 @@ const requiredFiles = [
   spec.executableName,
   'resources/app.asar',
   'resources/src/httpServer.js',
-  'resources/public/oauth.css',
   'resources/src/tools/actionCatalog.js',
   'resources/src/config.js',
   'resources/src/mcpServer.js',
-  'resources/src/gateway/localExecution.js',
-  'resources/src/gateway/protocol.js',
   'resources/node_modules/@modelcontextprotocol/server/package.json',
   'resources/node_modules/@modelcontextprotocol/node/package.json',
   'resources/node_modules/@modelcontextprotocol/core/package.json',
@@ -60,19 +57,20 @@ const requiredFiles = [
   'resources/node_modules/hono/package.json',
   'resources/node_modules/zod/package.json',
   'resources/node_modules/web-tree-sitter/package.json',
-  'resources/node_modules/web-tree-sitter/web-tree-sitter.js',
-  'resources/node_modules/web-tree-sitter/web-tree-sitter.wasm',
+  'resources/node_modules/web-tree-sitter/tree-sitter.js',
+  'resources/node_modules/web-tree-sitter/tree-sitter.wasm',
   'resources/node_modules/tree-sitter-wasms/package.json',
   'resources/node_modules/tree-sitter-wasms/out/tree-sitter-javascript.wasm',
   'resources/vendor/tree-sitter/manifest.json',
   'resources/bin/rel-ai-mcp-http.js',
   'resources/public/dashboard.js',
+  'resources/public/dashboard.css',
   'resources/package.json',
   'resources/CHANGELOG.md',
   'resources/LICENSE',
   'resources/NOTICE',
-  'resources/bin/ngrok/manifest.json',
-  ngrokRelativePath,
+  'resources/bin/tunnel-client/manifest.json',
+  tunnelClientRelativePath,
   'resources/bin/zoekt/manifest.json',
   'resources/bin/zoekt/LICENSE',
   zoektSearchRelativePath,
@@ -85,13 +83,13 @@ for (const relativePath of requiredFiles) {
   assert.ok(fs.statSync(file).isFile(), `Packaged application entry is not a file: ${relativePath}`);
   assert.ok(fs.statSync(file).size > 0, `Packaged application file is empty: ${relativePath}`);
 }
-assertExecutable(path.join(packageDirectory, ngrokRelativePath), platform);
+assertExecutable(path.join(packageDirectory, tunnelClientRelativePath), platform);
 assertExecutable(path.join(packageDirectory, zoektSearchRelativePath), platform);
 assertExecutable(path.join(packageDirectory, zoektIndexRelativePath), platform);
 
 const asarPath = path.join(packageDirectory, 'resources', 'app.asar');
 const asarEntries = new Set(listPackage(asarPath).map(entry => entry.replaceAll('\\', '/').replace(/^\//, '')));
-for (const relativePath of ['preload.cjs', 'startup-background.js', 'gateway-client.js', 'gateway-device-identity.js', 'gateway-state.js', 'public-connection-runtime.js', 'renderer/app.css', 'renderer/color-tokens.css', 'renderer/status.html', 'renderer/wizard.html']) {
+for (const relativePath of ['preload.cjs', 'startup-background.js', 'secure-tunnel-runtime.js', 'tunnel-credentials.js', 'renderer/app.css', 'renderer/color-tokens.css', 'renderer/status.html', 'renderer/wizard.html']) {
   assert.ok(asarEntries.has(relativePath), `Packaged ASAR is missing: ${relativePath}`);
 }
 
@@ -131,12 +129,12 @@ for (const grammar of Object.values(sourceTreeSitterManifest.grammars || {})) {
   assert.equal(crypto.createHash('sha256').update(sourceBytes).digest('hex'), grammar.sha256, `Vendored Tree-sitter grammar checksum mismatch: ${grammar.file}`);
   assert.equal(crypto.createHash('sha256').update(packagedBytes).digest('hex'), grammar.sha256, `Packaged vendored Tree-sitter grammar checksum mismatch: ${grammar.file}`);
 }
-const ngrokManifest = JSON.parse(fs.readFileSync(path.join(packageDirectory, 'resources', 'bin', 'ngrok', 'manifest.json'), 'utf8'));
-const ngrokSpec = ngrokManifest.platforms[platform];
-assert.ok(ngrokSpec, `Packaged ngrok manifest does not support ${platform}.`);
-const packagedNgrok = fs.readFileSync(path.join(packageDirectory, ngrokRelativePath));
-assert.equal(packagedNgrok.length, ngrokSpec.size, 'Packaged ngrok size does not match the provenance manifest.');
-assert.equal(crypto.createHash('sha256').update(packagedNgrok).digest('hex'), ngrokSpec.sha256, 'Packaged ngrok SHA-256 does not match the provenance manifest.');
+const tunnelManifest = JSON.parse(fs.readFileSync(path.join(packageDirectory, 'resources', 'bin', 'tunnel-client', 'manifest.json'), 'utf8'));
+const tunnelSpec = tunnelManifest.platforms[platform];
+assert.ok(tunnelSpec, `Packaged OpenAI tunnel-client manifest does not support ${platform}.`);
+const packagedTunnelClient = fs.readFileSync(path.join(packageDirectory, tunnelClientRelativePath));
+assert.equal(packagedTunnelClient.length, tunnelSpec.size, 'Packaged OpenAI tunnel-client size does not match the provenance manifest.');
+assert.equal(crypto.createHash('sha256').update(packagedTunnelClient).digest('hex'), tunnelSpec.sha256, 'Packaged OpenAI tunnel-client SHA-256 does not match the provenance manifest.');
 const packagedZoektManifest = JSON.parse(fs.readFileSync(path.join(packageDirectory, 'resources', 'bin', 'zoekt', 'manifest.json'), 'utf8'));
 assert.deepEqual(packagedZoektManifest, sourceZoektManifest, 'Packaged Zoekt provenance manifest must match the reviewed source manifest.');
 for (const [key, relativePath] of [['search', zoektSearchRelativePath], ['index', zoektIndexRelativePath]]) {
@@ -151,21 +149,21 @@ for (const [key, relativePath] of [['search', zoektSearchRelativePath], ['index'
 const packagedTypeScript = collectFiles(path.join(packageDirectory, 'resources', 'node_modules')).filter(file => /\.(?:ts|cts|mts)$/i.test(file));
 assert.deepEqual(packagedTypeScript, [], 'Packaged runtime dependencies must exclude TypeScript sources and declarations.');
 
-const forbiddenGatewayRuntimePaths = [
+const forbiddenLegacyTransportPaths = [
+  'resources/bin/ngrok',
   'resources/gateway',
-  'resources/gateway/node_modules',
   'resources/node_modules/wrangler',
   'resources/node_modules/@cloudflare',
   'resources/node_modules/miniflare'
 ];
-for (const relativePath of forbiddenGatewayRuntimePaths) {
-  assert.equal(fs.existsSync(path.join(packageDirectory, relativePath)), false, `Packaged desktop must exclude gateway Worker/tooling path: ${relativePath}`);
+for (const relativePath of forbiddenLegacyTransportPaths) {
+  assert.equal(fs.existsSync(path.join(packageDirectory, relativePath)), false, `Packaged desktop must exclude obsolete transport path: ${relativePath}`);
 }
 const packagedFiles = collectFiles(packageDirectory);
 for (const sensitiveName of ['privateJwk', 'recoverySecret']) {
   assert.equal(packagedFiles.some(file => file.toLowerCase().includes(sensitiveName.toLowerCase())), false, `Packaged desktop must not contain secret-state file names matching ${sensitiveName}.`);
 }
-assert.equal(fs.existsSync(path.join(packageDirectory, 'resources', '.env')), false, 'REL_AI_GATEWAY_ORIGIN and other runtime configuration must not be materialized in a packaged .env file.');
+assert.equal(fs.existsSync(path.join(packageDirectory, 'resources', '.env')), false, 'Runtime credentials must not be materialized in the packaged application.');
 
 function collectFiles(directory) {
   const files = [];

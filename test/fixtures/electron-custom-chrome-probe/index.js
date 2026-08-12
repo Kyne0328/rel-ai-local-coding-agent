@@ -39,7 +39,7 @@ app.whenReady().then(async () => {
       await waitFor(win, `document.querySelector('#pageTitle')?.textContent.trim() === ${JSON.stringify(expectedTitle)} && document.querySelector('#routeRoot')?.children.length > 0`);
       if (route === 'tools') await waitFor(win, `document.querySelectorAll('.tool-card').length === 12`);
       if (route === 'usage') {
-        await waitFor(win, `document.querySelector('#__relai-modal-title')?.textContent === 'Pairing required'`);
+        await waitFor(win, `document.body.innerText.includes('Tool calls') && !document.querySelector('[data-usage-unavailable]')`);
       }
       measurements.push(await win.webContents.executeJavaScript(`(() => {
         const titlebar = document.getElementById('windowTitlebar').getBoundingClientRect();
@@ -57,8 +57,7 @@ app.whenReady().then(async () => {
           topbarTop: topbar.top,
           titleTop: title.top,
           titleInset: title.top - topbar.top,
-          pairingModalTitle: document.querySelector('#__relai-modal-title')?.textContent || '',
-          usageIpcLeak: document.body.innerText.includes('USAGE_IPC_SHOULD_NOT_RUN_WHILE_PAIRING_REQUIRED'),
+          localAnalyticsLoaded: location.hash !== '#usage' || document.body.innerText.includes('Tool calls'),
           inlineUsageError: Boolean(document.querySelector('[data-usage-unavailable]')),
           toolCategories: location.hash === '#tools' ? Object.fromEntries([...document.querySelectorAll('.tool-card')].map(card => [card.querySelector('code')?.textContent || '', card.querySelector('.tool-capability')?.textContent || ''])) : {},
           titleVisible: title.top >= titlebar.bottom - 0.5,

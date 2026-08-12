@@ -8,7 +8,6 @@ const contracts = [
   ['../src/config.js', { ensureConfig: 'function', getConfigPath: 'function', readConfig: 'function' }],
   ['../src/toolActivity.js', { onToolActivity: 'function', getToolActivity: 'function', resetToolActivity: 'function' }],
   ['../src/http/dashboardSessions.js', { clearDashboardSessions: 'function', createDashboardBootstrap: 'function' }],
-  ['../src/oauthProvider.js', { authorizationStatus: 'function', revokeAuthorizations: 'function' }],
   ['../src/durableState.js', { readJsonFile: 'function', writeJsonAtomic: 'function' }],
   ['../src/desktopUxContracts.js', { deriveConnectionState: 'function', ERROR_CODES: 'object' }],
   ['../src/diagnostics.js', { sanitizeDiagnosticValue: 'function' }],

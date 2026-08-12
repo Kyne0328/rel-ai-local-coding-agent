@@ -43,8 +43,6 @@ const allowlist = [
   { file: 'README.md', pattern: /Advanced connection settings/i },
   { file: 'README.md', pattern: /Preferences, Application, Advanced, and About/i },
   { file: 'README.md', pattern: /advanced port setting/i },
-  { file: 'README.md', pattern: /Advanced(?: fallback|\s*>\s*Direct| Direct)/i },
-  { file: 'docs/SECURITY.md', pattern: /Advanced Direct/i },
   { file: 'docs/WORKFLOW_RELIABILITY.md', pattern: /cannot widen access or bypass a denial/i }
 ];
 

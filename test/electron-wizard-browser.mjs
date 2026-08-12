@@ -12,68 +12,32 @@ const ipc = read('electron/ipc-handlers.js');
 const main = read('electron/main.js');
 const css = read('electron/renderer/app.css');
 
-assert.match(html, /<strong>Sign in<\/strong>/);
-assert.match(html, /<strong>Secure device<\/strong>/);
-assert.match(html, /<strong>Connect ChatGPT<\/strong>/);
-assert.match(html, /Sign in or create account/);
-assert.match(html, /Plus or Pro[\s\S]*Plugins/i);
-assert.match(html, /Business, Enterprise, or Edu[\s\S]*workspace Apps/i);
-assert.doesNotMatch(html, /<strong>Welcome<\/strong>|<strong>Local service<\/strong>|<strong>Secure connection<\/strong>|<strong>Launch<\/strong>/);
+assert.match(html, /OpenAI Secure MCP Tunnel/);
+assert.match(html, /id="tunnelIdInput"/);
+assert.match(html, /id="tunnelApiKeyInput"/);
+assert.match(html, /id="portInput"/);
+assert.match(html, /id="connectBtn"/);
+assert.match(html, /id="cancelWizardBtn"/);
+assert.match(html, /operating system credential store/i);
+assert.doesNotMatch(html, /Cloudflare|Rel\.AI Cloud|ngrok|Direct connection|pairing code|approval token|Rel\.AI account/i);
 
-const cloudStart = html.indexOf('data-cloud-flow');
-const advancedStart = html.indexOf('id="advancedSetup"');
-assert.ok(cloudStart >= 0 && advancedStart > cloudStart, 'Cloud flow must render before Advanced setup');
-const normalCloudHtml = html.slice(cloudStart, advancedStart);
-for (const hiddenInfrastructure of ['Cloudflare', 'ngrok account key', 'Local service port', 'Approval token', 'API key']) {
-  assert.equal(normalCloudHtml.includes(hiddenInfrastructure), false, 'normal Cloud onboarding must hide ' + hiddenInfrastructure);
-}
+assert.match(js, /validTunnelId/);
+assert.match(js, /\^tunnel_/);
+assert.match(js, /validPort/);
+assert.match(js, /wizardDone\(\{ tunnelId, tunnelApiKey, port, restart: recoveryMode \}\)/);
+assert.match(js, /tunnelStatus !== 'running'/);
+assert.match(js, /getRecoveryConfig/);
+assert.match(js, /Stored securely — leave blank to keep it/);
+assert.doesNotMatch(js, /cloud|ngrok|pairing|approvalToken|connectionMode/i);
 
-for (const id of ['connectChatgptBtn', 'pairingCode', 'pairingExpiry', 'continueSecurityBtn', 'finishCloudBtn', 'advancedSetup', 'directPortInput', 'directNgrokTokenInput', 'directDomainInput', 'launchDirectBtn', 'recoveryCodeInput', 'recoverIdentityBtn', 'createLinkCodeBtn', 'linkCodeOutput', 'linkCodeValue']) {
-  assert.match(html, new RegExp('id=["\\\']' + id + '["\\\']'), 'wizard must expose ' + id);
-}
-assert.match(html, /Rel\.AI account/i);
-assert.match(html, /legacy pairing code/i);
-assert.match(html, /Plus or Pro[\s\S]*Plugins/i, 'Plus and Pro onboarding must direct users to ChatGPT Plugins');
-assert.match(html, /Business, Enterprise, or Edu[\s\S]*workspace Apps/i, 'managed plans must retain workspace Apps guidance');
-assert.match(html, /private key[^<]*(?:never leaves|stays on) this (?:computer|device)/i);
-assert.match(html, /recovery code/i);
-assert.match(html, /account is the recovery path/i);
-assert.match(html, /Direct connection/i);
-assert.match(html, /ngrok account key/i, 'Advanced Direct flow must retain ngrok controls');
-
-for (const api of ['startCloudEnrollment', 'getCloudSetupStatus', 'cancelCloudPairing', 'createWizardDeviceLink', 'recoverCloudIdentity']) {
-  assert.match(preload, new RegExp(api), 'wizard preload must expose ' + api);
-  assert.match(js, new RegExp('electronAPI\\.' + api), 'wizard must use ' + api);
-}
-assert.match(preload, /getWizardRecoveryCode/, 'legacy recovery read remains available for backward compatibility');
-assert.match(ipc, /wizard:cloud-enroll/);
-assert.match(ipc, /wizard:cloud-status/);
-assert.match(ipc, /wizard:cloud-cancel/);
-assert.match(ipc, /wizard:cloud-recovery-get/);
-assert.match(ipc, /wizard:cloud-link-create/);
-assert.match(ipc, /wizard:cloud-recover/);
-assert.match(main, /startWizardCloudEnrollment/);
-assert.match(main, /recoverWizardCloudIdentity/);
-
-assert.match(js, /connectionMode:\s*['"]cloud['"]/);
-assert.match(js, /connectionMode:\s*['"]direct['"]/);
-assert.match(js, /restart:\s*true/, 'switching to Direct from an active Cloud setup must restart only the public connection mode');
-assert.match(js, /ngrokAuthtoken/);
-assert.match(js, /ngrokDomain/);
-assert.match(js, /isValidPort/);
-assert.match(js, /isValidNgrokKey/);
-assert.match(js, /isValidDomain/);
-assert.match(main, /showDashboardWindow\(''\)/, 'finished first-run setup must open the dashboard Home route so the Getting started guide can continue the handoff');
-
-assert.match(js, /pairing.*expires/i);
-assert.match(js, /setInterval|setTimeout/, 'wizard must refresh pairing expiry/status while visible');
-assert.match(js, /state\.cloudConnected/);
-assert.match(js, /startCloudEnrollment/);
-assert.doesNotMatch(js, /showRecoveryBtn/);
-assert.doesNotMatch(js, /privateJwk|encryptedPrivateKey|privateKey/);
-
-assert.match(css, /\.wizard-cloud-/);
-assert.match(css, /\.wizard-advanced-/);
+for (const api of ['wizardDone', 'closeWizard', 'getRecoveryConfig']) assert.match(preload, new RegExp(`\\b${api}\\b`));
+for (const removed of ['startCloudEnrollment', 'getGatewayUsage', 'replaceApprovalToken', 'openExternal']) assert.doesNotMatch(preload, new RegExp(`\\b${removed}\\b`));
+assert.match(ipc, /'wizard:done'/);
+assert.match(ipc, /setTunnelApiKey/);
+assert.match(ipc, /saveLauncherConfig/);
+assert.doesNotMatch(ipc, /wizard:cloud|desktop:gateway|approval-token|url:open-link/);
+assert.match(main, /showDashboardWindow\(''\)/, 'Successful setup must hand off to dashboard Home.');
+assert.match(css, /\.wizard-/);
 assert.match(css, /@media \(max-width: 620px\)[\s\S]*\.wizard-/);
 
-console.log('Cloud-first wizard, Advanced Direct, recovery, and dashboard-handoff contracts passed.');
+console.log('Secure MCP Tunnel wizard contracts passed.');

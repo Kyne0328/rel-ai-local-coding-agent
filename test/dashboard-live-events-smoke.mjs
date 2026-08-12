@@ -159,7 +159,8 @@ try {
   desktopStatus = {
     ...desktopStatus,
     tunnelStatus: 'running',
-    mcpUrl: 'https://example.ngrok-free.dev/mcp'
+    tunnelId: 'tunnel_12345678',
+    tunnelHealthUrl: 'http://127.0.0.1:49876'
   };
   const finishStatus = beginConnectorToolCall({
     scopeId: 'dashboard-live-events-status-test',
@@ -171,7 +172,8 @@ try {
   finishStatus({ ok: true });
   const desktopUpdated = await stream.nextDashboardEvent();
   assert.equal(desktopUpdated.desktopStatus?.tunnelStatus, 'running');
-  assert.equal(desktopUpdated.desktopStatus?.mcpUrl, 'https://example.ngrok-free.dev/mcp');
+  assert.equal(desktopUpdated.desktopStatus?.tunnelId, 'tunnel_12345678');
+  assert.equal(desktopUpdated.desktopStatus?.mcpUrl || '', '');
   assert.equal(desktopUpdated.connectionState?.publicEndpoint?.status, 'available');
   assert.equal(desktopUpdated.connectionState?.chatgptReadiness?.status, 'ready');
   assert.equal(desktopUpdated.mcpConnection?.activityStatus, 'no_requests');

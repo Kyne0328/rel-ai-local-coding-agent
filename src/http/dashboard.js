@@ -113,9 +113,9 @@ function handleConnection(ctx) {
     ...connection.buildConnectionSummary({
       host: latestProfile.host || ctx.options.host,
       port: latestProfile.port || ctx.options.port,
-      publicUrl: latestProfile.publicUrl || ctx.options.publicUrl,
       token: ctx.options.token,
-      tunnelProvider: latestProfile.tunnelProvider || "none",
+      tunnelId: latestProfile.tunnelId || '',
+      tunnelProvider: 'openai-secure-mcp',
       showToken: false,
       includeTokenInUrls: false
     }),

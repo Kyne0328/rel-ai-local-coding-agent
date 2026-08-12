@@ -4,7 +4,6 @@ import { fileURLToPath } from 'node:url';
 import {
   renderDashboardTokenCss,
   renderElectronTokenCss,
-  renderOauthCss,
   renderColorReferenceSvg
 } from '../src/ui/colorTokens.mjs';
 
@@ -12,7 +11,6 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outputs = [
   ['src/ui/styles/color-tokens.css', renderDashboardTokenCss()],
   ['electron/renderer/color-tokens.css', renderElectronTokenCss()],
-  ['public/oauth.css', renderOauthCss()],
   ['docs/color-system-reference.svg', renderColorReferenceSvg()]
 ];
 const check = process.argv.includes('--check');

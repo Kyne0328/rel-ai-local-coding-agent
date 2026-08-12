@@ -1,11 +1,9 @@
 import { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage, powerSaveBlocker, Notification, dialog, screen, protocol, safeStorage, systemPreferences } from 'electron';
 import electronUpdater from 'electron-updater';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { importResourceModule } from './resource-path.js';
 import { isPortAvailable, normalizeWizardConfig, saveLauncherConfig } from './launcher-config.js';
-import { createGatewayActions } from './gateway-actions.js';
 import { createDesktopServiceRuntime } from './service-runtime.js';
 import { createSetupWindowManager } from './setup-window.js';
 import { fitWindowToContent, WINDOW_SIZE_LIMITS } from './window-size.js';
@@ -16,7 +14,6 @@ import { createTaskbarCompletionBadge } from './taskbar-completion-badge.js';
 import { createDashboardWindowManager } from './dashboard-window.js';
 import { createDesktopTray } from './desktop-tray.js';
 import { desktopStatusFailure, initialDesktopStatus, normalizeDesktopStatus } from './desktop-status.js';
-import { createApprovalTokenManager } from './approval-token.js';
 import { createRecoveryWindowManager } from './recovery-window.js';
 import { createRuntimeLogBuffer } from './runtime-log-buffer.js';
 import { createDiagnosticFiles } from './diagnostic-files.js';
@@ -27,20 +24,14 @@ import { createDesktopLifecycleManager } from './desktop-lifecycle.js';
 import { createDesktopNotifications } from './desktop-notifications.js';
 import { createShutdownCoordinator } from './shutdown-coordinator.js';
 import { removeControllerRuntimeMarker, writeControllerRuntimeMarker } from './controller-runtime.js';
-import * as managedNgrok from './managed-ngrok.js';
-import { createGatewayClient } from './gateway-client.js';
-import { configureGatewaySafeStorage, createGatewayDeviceIdentityStore } from './gateway-device-identity.js';
-import { createPublicConnectionRuntime } from './public-connection-runtime.js';
-import { hasExistingConfig, readGuiConfig } from './launcher-utils.js';
+import { configureTunnelSafeStorage, createTunnelCredentialStore } from './tunnel-credentials.js';
+import { createSecureTunnelRuntime } from './secure-tunnel-runtime.js';
+import { hasExistingConfig } from './launcher-utils.js';
 const { autoUpdater } = electronUpdater;
 const electronRoot = path.dirname(fileURLToPath(import.meta.url));
 const preloadPath = path.join(electronRoot, 'preload.cjs');
 const APP_ICON_PATH = path.join(electronRoot, 'build', 'icon.png');
 const RENDERER_ROOT = path.join(electronRoot, 'renderer');
-
-function gatewayDeviceDisplayName() {
-  return String(os.hostname() || '').trim() || 'Rel.AI device';
-}
 
 registerLocalScheme(protocol);
 app.setName('Rel.AI MCP');
@@ -50,22 +41,20 @@ const connection = await importResourceModule('src/connectionProfile.js');
 const toolActivity = await importResourceModule('src/toolActivity.js');
 const dashboardSessions = await importResourceModule('src/http/dashboardSessions.js');
 const configModule = await importResourceModule('src/config.js');
-const { createGatewayLocalExecutor } = await importResourceModule('src/gateway/localExecution.js');
-const { formatDeviceLinkCode, formatRecoveryCode } = await importResourceModule('src/gateway/protocol.js');
 const { ERROR_CODES } = await importResourceModule('src/desktopUxContracts.js');
-const oauthProvider = await importResourceModule('src/oauthProvider.js');
 const { startHttpServer } = await importResourceModule('src/httpServer.js');
 const { terminateProcessTree } = await importResourceModule('src/process.js');
 const { stopAllManagedProcesses } = await importResourceModule('src/processManager.js');
+const { readLocalUsageSnapshot } = await importResourceModule('src/localAnalytics.js');
 const { shutdownTelemetry } = await importResourceModule('src/telemetry.js');
-let serviceRuntime = null, gatewayActions = null;
+let serviceRuntime = null;
 let isQuitting = false, appUpdater = null, updateSupportPolicy = null;
 const diagnosticFiles = createDiagnosticFiles({ app, shell }); let currentStatus = initialDesktopStatus(app.getVersion()); const runtimeLogs = createRuntimeLogBuffer({ filePath: () => diagnosticFiles.serviceLogPath() });
 const desktopNotifications = createDesktopNotifications({
   app, Notification, iconPath: APP_ICON_PATH, isReady: () => app.isReady(), onNotificationClick: focusActiveWindow,
   onLog: (message, options) => runtimeLogs.append(message, options)
 });
-const approvalTokenManager = createApprovalTokenManager({ readGuiConfig, saveLauncherConfig, generateToken: connection.generateToken, oauthProvider, restartDesktop: () => launchConfiguredDesktop({ restart: true }) });
+const tunnelCredentials = createTunnelCredentialStore({ safeStorage });
 const recoveryWindowManager = createRecoveryWindowManager({
   BrowserWindow,
   preloadPath,
@@ -84,48 +73,13 @@ const setupWindowManager = createSetupWindowManager({
   isQuitting: () => isQuitting,
   recoveryWindowManager
 });
-const gatewayDeviceIdentity = createGatewayDeviceIdentityStore({ safeStorage });
-const publicConnectionRuntime = createPublicConnectionRuntime({
-  createGatewayConnection({ config, onStatus }) {
-    return createGatewayClient({
-      gatewayOrigin: config.gatewayOrigin,
-      identity: gatewayDeviceIdentity,
-      appVersion: app.getVersion(),
-      displayName: gatewayDeviceDisplayName(),
-      getWorkspaces: () => configModule.allWorkspaceAliases(configModule.readConfig()),
-      onStatus,
-      onRequest: request => {
-        const runtimeAccess = updateRuntimeAccess();
-        if (runtimeAccess.blocked) {
-          return { ok: false, error: { code: 'UPDATE_REQUIRED', message: runtimeAccess.message } };
-        }
-        const principalId = String(gatewayDeviceIdentity.snapshot().principalId || '');
-        if (!principalId) {
-          return { ok: false, error: { code: 'PAIRING_REQUIRED', message: 'This Rel.AI device is not paired with ChatGPT.' } };
-        }
-        const execute = createGatewayLocalExecutor({
-          gatewayOrigin: config.gatewayOrigin,
-          pairedPrincipalId: principalId,
-          config: configModule.readConfig()
-        });
-        return execute(request);
-      }
-    });
-  },
-  prepareDirect: config => managedNgrok.prepareManagedNgrok({
-    authtoken: config.ngrokAuthtoken,
-    onLog: chunk => publicConnectionLog('ngrok', chunk)
-  }),
-  startDirect: (config, { onProcess } = {}) => managedNgrok.startManagedNgrokTunnel({
-    domain: config.ngrokDomain,
-    port: config.port,
-    timeoutMs: 30000,
-    onLog: chunk => publicConnectionLog('ngrok', chunk),
-    onProcess
-  }),
-  stopDirect: child => terminateProcessTree(child, { graceMs: 1000, forceWaitMs: 2000 }),
-  onStatus: ({ mode, status }) => {
-    if (mode === 'cloud') gatewayActions?.applyStatus(status);
+const secureTunnelRuntime = createSecureTunnelRuntime({
+  stopProcess: terminateProcessTree,
+  onLog: chunk => publicConnectionLog('openai-tunnel', chunk),
+  onStatus: status => {
+    if (status.state === 'running') setStatus({ tunnelStatus: 'running', tunnelId: status.tunnelId, tunnelHealthUrl: status.healthUrl, error: '', errorCode: '' }, { dashboard: false });
+    else if (status.state === 'connecting') setStatus({ tunnelStatus: 'connecting', tunnelId: status.tunnelId, error: '', errorCode: '' }, { dashboard: false });
+    else if (status.state === 'failed') setStatus({ tunnelStatus: 'failed', tunnelId: status.tunnelId, error: status.error, errorCode: ERROR_CODES.SECURE_TUNNEL_FAILED }, { dashboard: false });
   }
 });
 const dashboardWindowManager = createDashboardWindowManager({
@@ -173,19 +127,6 @@ const toolActivityRuntime = createTaskActivityRuntime({
   onTaskCompleted: task => taskbarCompletionBadge.markCompleted(task),
   onStatusChange: taskActivity => setStatus({ taskActivity })
 });
-gatewayActions = createGatewayActions({
-  publicConnectionRuntime,
-  gatewayDeviceIdentity,
-  shell,
-  dashboardWindowManager,
-  formatDeviceLinkCode,
-  formatRecoveryCode,
-  errorCodes: ERROR_CODES,
-  getCurrentStatus: () => currentStatus,
-  setStatus,
-  launchConfiguredDesktop: options => launchConfiguredDesktop(options),
-  isHttpServerListening: () => serviceRuntime?.isListening() === true
-});
 serviceRuntime = createDesktopServiceRuntime({
   app,
   connection,
@@ -196,15 +137,14 @@ serviceRuntime = createDesktopServiceRuntime({
   dashboardWindowManager,
   toolActivityRuntime,
   runtimeLogs,
-  approvalTokenManager,
-  publicConnectionRuntime,
+  secureTunnelRuntime,
+  tunnelCredentials,
   errorCodes: ERROR_CODES,
   getRuntimeAccess: updateRuntimeAccess,
   getCurrentStatus: () => currentStatus,
   setStatus,
   replaceCurrentStatus,
-  pushStatus,
-  applyGatewayStatus: gatewayActions.applyStatus
+  pushStatus
 });
 const desktopLifecycle = createDesktopLifecycleManager({ app,
   onLog: (message, options) => runtimeLogs.append(message, options), errorCodes: ERROR_CODES });
@@ -248,7 +188,7 @@ if (!gotLock) {
   });
 
   app.whenReady().then(async () => {
-    const basicPasswordStoreEnabled = configureGatewaySafeStorage({
+    const basicPasswordStoreEnabled = configureTunnelSafeStorage({
       safeStorage,
       platform: process.platform,
       passwordStore: app.commandLine.getSwitchValue('password-store')
@@ -256,7 +196,7 @@ if (!gotLock) {
     if (basicPasswordStoreEnabled) {
       runtimeLogs.append('The explicitly requested basic Linux password store is not backed by an OS keyring.', {
         level: 'warning',
-        source: 'gateway-identity'
+        source: 'tunnel-credentials'
       });
     }
     writeControllerRuntimeMarker(app);
@@ -281,7 +221,7 @@ app.on('window-all-closed', () => {}); // Keep the tray app alive after windows 
 
 function currentDesktopSettings() {
   return readDesktopSettings({
-    approvalRequired: approvalTokenManager.status().required,
+    tunnelApiKeyConfigured: tunnelCredentials.status().apiKeyConfigured,
     notificationsEnabled: desktopNotifications.getPreferences().enabled
   });
 }
@@ -289,20 +229,18 @@ function currentDesktopSettings() {
 function updateDesktopSettings(settings) {
   return saveDesktopSettings(settings, {
     setNotificationsEnabled: desktopNotifications.setEnabled,
+    setTunnelApiKey: tunnelCredentials.setApiKey,
     restartDesktop: () => launchConfiguredDesktop({ restart: true })
   });
 }
 
 function getRecoveryConfig() {
-  const settings = currentDesktopSettings(), token = settings.approvalToken || connection.generateToken(32);
+  const settings = currentDesktopSettings();
   return {
     ok: true,
-    connectionMode: settings.connectionMode,
-    gatewayOrigin: settings.gatewayOrigin,
     port: settings.port,
-    token,
-    ngrokDomain: settings.ngrokDomain,
-    ngrokAuthtoken: settings.ngrokAuthtoken
+    tunnelId: settings.tunnelId,
+    tunnelApiKeyConfigured: settings.tunnelApiKeyConfigured
   };
 }
 
@@ -473,32 +411,16 @@ registerIpcHandlers({
   toggleDashboardMaximize: dashboardWindowManager.toggleMaximize,
   requestDashboardClose: dashboardWindowManager.requestClose,
   getRecoveryConfig,
-  startWizardCloudEnrollment: gatewayActions.startWizardCloudEnrollment,
-  startWizardCloudPairing: gatewayActions.startWizardCloudPairing,
-  getWizardCloudStatus: gatewayActions.getWizardCloudStatus,
-  cancelWizardCloudPairing: gatewayActions.cancelWizardCloudPairing,
-  getWizardRecoveryCode: gatewayActions.getWizardRecoveryCode,
-  createWizardDeviceLink: gatewayActions.createWizardDeviceLink,
-  recoverWizardCloudIdentity: gatewayActions.recoverWizardCloudIdentity,
+  setTunnelApiKey: tunnelCredentials.setApiKey,
   openRecoverySetup,
   startServer,
   stopServer,
   launchConfiguredDesktop,
   openSettingsWindow,
   openDashboardWindow,
-  getGatewayStatus: gatewayActions.statusForDashboard,
-  beginGatewayEnrollment: gatewayActions.beginEnrollment,
-  beginGatewayPairing: gatewayActions.beginPairing,
-  openGatewayAccount: gatewayActions.openAccount,
-  cancelGatewayPairing: gatewayActions.cancelPairing,
-  listGatewayDevices: gatewayActions.listDevices,
-  revokeGatewayDevice: gatewayActions.revokeDevice,
-  setGatewayMode: gatewayActions.setMode,
-  getGatewayRecovery: gatewayActions.getRecovery,
-  getGatewayUsage: gatewayActions.getUsage,
   getDesktopSettings: currentDesktopSettings,
   saveDesktopSettings: updateDesktopSettings,
-  replaceApprovalToken: approvalTokenManager.replace,
+  getLocalUsage: month => readLocalUsageSnapshot(configModule.readConfig(), month),
   getUpdateStatus: combinedUpdateStatus,
   checkForUpdates: checkApplicationUpdates,
   downloadUpdate: downloadApplicationUpdate,
