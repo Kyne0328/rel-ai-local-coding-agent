@@ -6,6 +6,7 @@ import path from 'node:path';
 
 import { callTool as rawCallTool } from '../src/tools.js';
 import { resetToolActivity } from '../src/toolActivity.js';
+import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
 
 const callTool = (name, args, context = {}) => rawCallTool(name, args, { principal: 'local:trusted', ...context });
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-edit-run-checks-'));
@@ -64,6 +65,7 @@ try {
   assert.equal(completion.validationStatus, 'passed');
 
 } finally {
+  repositoryIntelligence.shutdown();
   resetToolActivity();
   if (previousConfig == null) delete process.env.REL_AI_MCP_CONFIG;
   else process.env.REL_AI_MCP_CONFIG = previousConfig;

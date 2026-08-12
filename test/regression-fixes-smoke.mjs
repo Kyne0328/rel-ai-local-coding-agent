@@ -72,8 +72,8 @@ function read(rel) {
   assert.match(read('README.md'), /Plus or Pro[\s\S]*Plugins/i);
   assert.match(read('README.md'), /Business, Enterprise, or Edu[\s\S]*workspace.*Apps/i);
   assert.doesNotMatch(read('docs/ONE_CLICK_SETUP.md'), /removed tools[^\n]*relai_apply_update/);
-  assert.match(read('electron/renderer/status.html'), /Secure endpoint|Public endpoint/);
-  assert.match(read('electron/renderer/status.js'), /Publishing (?:secure endpoint|tunnel)/);
+  assert.match(read('electron/renderer/status.html'), /Secure MCP Tunnel|Secure tunnel/);
+  assert.match(read('electron/renderer/status.js'), /Connecting OpenAI Secure MCP Tunnel/);
   assert.doesNotMatch(read('electron/main.js'), /killOrphanedNgrok\(\)/);
 }
 

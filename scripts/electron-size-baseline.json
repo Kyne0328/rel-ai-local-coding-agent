@@ -1,12 +1,12 @@
 {
   "schemaVersion": 2,
-  "capturedAt": "2026-08-10",
+  "capturedAt": "2026-08-12",
   "platform": "win32",
   "architecture": "x64",
   "electronVersion": "43.2.0",
   "policy": "strict",
   "tolerancePercent": 3,
-  "notes": "Baseline refreshed from the measured 0.25.0 Windows release build after Repository Intelligence added pinned Zoekt and the complete Tree-sitter WASM runtime payload.",
+  "notes": "Measured 0.25.0 Windows release baseline with the platform-neutral Tree-sitter and generated dashboard CSS budgets refreshed after the Repository Intelligence language expansion.",
   "metrics": {
     "installerBytes": 135564771,
     "portableBytes": 120884288,
@@ -17,7 +17,7 @@
     "localesBytes": 566095,
     "tunnelClientBytes": 20798464,
     "zoektBytes": 53307392,
-    "treeSitterBytes": 52036637,
-    "dashboardCssBytes": 164176
+    "treeSitterBytes": 72352700,
+    "dashboardCssBytes": 179154
   }
 }

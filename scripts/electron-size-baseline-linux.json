@@ -1,24 +1,24 @@
 {
   "schemaVersion": 2,
-  "capturedAt": "2026-08-10",
+  "capturedAt": "2026-08-12",
   "platform": "linux",
   "architecture": "x64",
   "electronVersion": "43.2.0",
   "policy": "strict",
   "tolerancePercent": 5,
-  "provisional": true,
-  "notes": "Repository Intelligence baseline with the complete Tree-sitter WASM runtime payload. Unpacked component deltas use measured Windows packaging plus exact Linux Zoekt sizes; AppImage/DEB values remain provisional compression estimates because the Windows build host has no WSL/Docker. Replace with the first measured Linux CI report.",
+  "provisional": false,
+  "notes": "Measured Linux CI baseline after the Repository Intelligence language expansion and packaged application slimming. This replaces the provisional cross-platform estimate with actual AppImage, DEB, unpacked, resource, Tree-sitter, and dashboard CSS measurements.",
   "metrics": {
-    "appImageBytes": 154365877,
-    "debBytes": 121962951,
-    "unpackedBytes": 439627368,
-    "resourcesBytes": 161145125,
-    "appAsarBytes": 5753177,
+    "appImageBytes": 149760812,
+    "debBytes": 115924244,
+    "unpackedBytes": 437312989,
+    "resourcesBytes": 158808218,
+    "appAsarBytes": 1713653,
     "packagedDependencyBytes": 1107372,
     "localesBytes": 556772,
     "tunnelClientBytes": 20246690,
     "zoektBytes": 51319080,
-    "treeSitterBytes": 52036637,
-    "dashboardCssBytes": 164176
+    "treeSitterBytes": 72352700,
+    "dashboardCssBytes": 179154
   }
 }

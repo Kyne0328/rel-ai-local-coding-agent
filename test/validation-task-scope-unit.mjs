@@ -8,6 +8,7 @@ import { callTool as rawCallTool } from '../src/tools.js';
 import { readConfig } from '../src/config.js';
 import { readValidationPlan } from '../src/bridge/validationPlan.js';
 import { resetToolActivity } from '../src/toolActivity.js';
+import { repositoryIntelligence } from '../src/repository/intelligence/service.js';
 
 const callTool = (name, args, context = {}) => rawCallTool(name, args, { principal: 'local:trusted', ...context });
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-validation-task-scope-'));
@@ -71,6 +72,7 @@ try {
   assert.deepEqual(plan.changedFiles, ['src/task-owned.js']);
   assert.equal(plan.recommended, 'focused');
 } finally {
+  repositoryIntelligence.shutdown();
   resetToolActivity();
   if (previousConfig == null) delete process.env.REL_AI_MCP_CONFIG;
   else process.env.REL_AI_MCP_CONFIG = previousConfig;
