@@ -7,7 +7,6 @@ The dashboard uses a feature-first structure. Each user-facing capability owns i
 - `home/` owns the overview experience.
 - `sessions/` owns session history and active operation views.
 - `workspaces/` owns workspace rendering, actions, forms, repair flows, recent-workspace state, and feature styling.
-- `skills/` owns the reusable skill library, GitHub installation, and per-workspace skill assignment.
 - `activity/` owns activity history and filtering.
 - `settings/` owns application preference and configuration panels.
 - `tools/` owns the tool reference experience.

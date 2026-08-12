@@ -14,7 +14,7 @@ assert.deepEqual(WORK_NAV_ITEMS.map(item => item.label), ['Overview', 'Sessions'
 assert.deepEqual(SYSTEM_NAV_ITEMS.map(item => item.label), ['Connection', 'Processes', 'Diagnostics', 'Tools', 'Analytics']);
 assert.deepEqual(APPLICATION_NAV_ITEMS.map(item => item.label), ['System', 'Settings']);
 assert.deepEqual(MOBILE_NAV_ITEMS.map(item => item.label), ['Overview', 'Sessions', 'Workspaces', 'System', 'Settings']);
-assert.deepEqual(SETTINGS_NAV_ITEMS.map(item => item.label), ['Preferences', 'Skills', 'Application', 'Advanced', 'About']);
+assert.deepEqual(SETTINGS_NAV_ITEMS.map(item => item.label), ['Preferences', 'Application', 'Advanced', 'About']);
 
 for (const code of [ERROR_CODES.CONFIGURATION_INVALID, ERROR_CODES.LOCAL_PORT_IN_USE, ERROR_CODES.SECURE_TUNNEL_FAILED, ERROR_CODES.PUBLIC_ENDPOINT_FAILED]) assert.equal(errorGuidance(code).href, '#connection');
 assert.equal(errorGuidance(ERROR_CODES.DIAGNOSTICS_UNAVAILABLE).href, '#connection');

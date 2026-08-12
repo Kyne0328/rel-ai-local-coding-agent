@@ -255,7 +255,6 @@ function normalizeWorkspace(workspace) {
     defaultBaseBranch: workspace.defaultBaseBranch || "main",
     allowedRemotes: Array.isArray(workspace.allowedRemotes) ? workspace.allowedRemotes : ["origin"],
     repoSlug: workspace.repoSlug || "",
-    skills: normalizeStringList(workspace.skills),
     context: normalizeContextConfig(workspace.context),
     validationRules: workspace.validationRules && typeof workspace.validationRules === "object" ? workspace.validationRules : {}
   };
@@ -444,7 +443,6 @@ function resolveWorkspace(config, alias) {
     defaultBaseBranch: entry.defaultBaseBranch || "main",
     allowedRemotes: entry.allowedRemotes || ["origin"],
     repoSlug: entry.repoSlug || "",
-    skills: normalizeStringList(entry.skills),
     context: normalizeContextConfig(entry.context),
     validationRules: entry.validationRules && typeof entry.validationRules === "object" ? entry.validationRules : {},
     ...(entry.managedWorktree ? {
@@ -523,7 +521,6 @@ function publicConfigSummary(config) {
         defaultBaseBranch: entry.defaultBaseBranch || "main",
         allowedRemotes: entry.allowedRemotes || ["origin"],
         repoSlug: entry.repoSlug || "",
-        skills: normalizeStringList(entry.skills),
         context: normalizeContextConfig(entry.context),
         discoveredCommands: discovered,
         validationCommands,

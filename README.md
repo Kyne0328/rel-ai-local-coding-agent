@@ -189,7 +189,6 @@ It exposes the things that matter during real repository work:
 - **Sessions** — active and historical objectives with task status and completion state.
 - **Activity** — individual Rel.AI tool events and recorded results.
 - **Processes** — long-running development processes and bounded output.
-- **Skills** — built-in, installed, and workspace-enabled workflow instructions.
 - **Connection** — Secure MCP Tunnel state, local MCP health, recovery, and ChatGPT connection guidance.
 - **Usage** — locally observed request, tool, outcome, duration, and workspace aggregates.
 - **Diagnostics and settings** — application health, updates, notification preferences, recovery guidance, and additional controls.
@@ -230,11 +229,11 @@ The surface is intentionally consolidated. Rel.AI does not need a public tool fo
 
 See [MCP protocol policy](docs/MCP_PROTOCOL_POLICY.md) and [Architecture](docs/ARCHITECTURE.md) for the current protocol and ownership model.
 
-## Skills extend behavior without bloating the connector
+## Bundled workflow skills
 
-Rel.AI supports built-in and installed skills for reusable debugging, planning, verification, investigation, and development workflows. Skills can be enabled per workspace so project-specific instructions remain scoped to the repositories that need them.
+Rel.AI ships six first-party workflow skills for work-session orchestration, planning, investigation, debugging, verification, and persistent development processes. They are versioned with the plugin and provide reusable operating guidance without adding skill-management controls to the desktop app or public MCP tool surface.
 
-This keeps specialized workflow knowledge out of the public MCP tool count while still giving ChatGPT reusable operating guidance. Packaged desktop builds include the runtime skill assets required by the app.
+The desktop application does not currently provide user-installed or per-workspace skill management.
 
 ## Usage and privacy
 

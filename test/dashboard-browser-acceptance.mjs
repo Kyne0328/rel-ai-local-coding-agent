@@ -94,12 +94,12 @@ try {
   assert.equal(result.initial.reducedMotion, true);
   assert.equal(result.liveToolUpdate.received, true, JSON.stringify(result.liveToolUpdate));
   assert.equal(result.liveToolUpdate.sameRouteNode, true, 'an MCP tool request must not remount the active dashboard route');
-  assert.deepEqual(result.navigationInteractions.map(item => item.hash), ['#workspaces', '#settings', '#settings/skills', '#settings/application', '#settings/advanced', '#settings/about']);
+  assert.deepEqual(result.navigationInteractions.map(item => item.hash), ['#workspaces', '#settings', '#settings/application', '#settings/advanced', '#settings/about']);
   for (const interaction of result.navigationInteractions) {
     assert.equal(interaction.hitTarget.ownsControl, true, `${interaction.selector} is covered by another element`);
     assert.equal(interaction.opened, true, `${interaction.selector} did not open ${interaction.hash}`);
   }
-  assert.deepEqual(result.passiveRouteStability.map(item => item.route), ['settings', 'diagnostics', 'workspaces', 'skills', 'tools']);
+  assert.deepEqual(result.passiveRouteStability.map(item => item.route), ['settings', 'diagnostics', 'workspaces', 'tools']);
   for (const route of result.passiveRouteStability) {
     assert.equal(route.sameRouteNode, true, `MCP activity remounted #${route.route}: ${JSON.stringify(route)}`);
     assert.equal(route.loadingSeen, false, `MCP activity exposed a loading placeholder on #${route.route}: ${JSON.stringify(route)}`);

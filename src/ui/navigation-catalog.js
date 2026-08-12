@@ -2,7 +2,6 @@ const ICONS = Object.freeze({
   home: '<path d="M3 3h8v8H3zM13 3h8v5h-8zM13 10h8v11h-8zM3 13h8v8H3z" />',
   tasks: '<path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5" />',
   workspaces: '<path d="M3 7.5V19a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7l-2-3H5a2 2 0 0 0-2 2v2.5Z" />',
-  skills: '<path d="M5 4h6a3 3 0 0 1 3 3v13a3 3 0 0 0-3-3H5zM19 4h-5a3 3 0 0 0-3 3v13a3 3 0 0 1 3-3h5z" />',
   activity: '<path d="M3 12h4l2.3-6 4.2 12 2.3-6H21" />',
   connection: '<path d="M8.5 15.5 15.5 8.5M7 7h.01M17 17h.01M4 12a8 8 0 1 1 16 0 8 8 0 0 1-16 0Z" />',
   processes: '<rect x="3" y="4" width="18" height="16" rx="2" /><path d="m7 9 3 3-3 3M13 15h4" />',
@@ -34,7 +33,7 @@ export const SYSTEM_NAV_ITEMS = Object.freeze([
 
 export const APPLICATION_NAV_ITEMS = Object.freeze([
   route('system', 'System', 'connection', 'Manage connection, runtime processes, diagnostics, tools, and analytics.', 'Application'),
-  route('settings', 'Settings', 'settings', 'Configure preferences, skills, application behavior, and advanced safeguards.', 'Application')
+  route('settings', 'Settings', 'settings', 'Configure preferences, application behavior, and advanced safeguards.', 'Application')
 ]);
 
 export const DESKTOP_NAV_ITEMS = Object.freeze([...WORK_NAV_ITEMS, ...APPLICATION_NAV_ITEMS]);
@@ -42,7 +41,6 @@ export const MOBILE_NAV_ITEMS = Object.freeze([...DESKTOP_NAV_ITEMS]);
 
 export const SETTINGS_NAV_ITEMS = Object.freeze([
   route('preferences', 'Preferences', 'settings', 'Control appearance, density, and desktop notifications.', 'Settings'),
-  route('skills', 'Skills', 'settings/skills', 'Install reusable skills and choose which workspaces use them.', 'Settings'),
   route('application', 'Application', 'settings/application', 'Manage startup, recovery, and application updates.', 'Settings'),
   route('advanced', 'Advanced', 'settings/advanced', 'Manage patch safeguards and resource limits.', 'Settings'),
   route('about', 'About', 'settings/about', 'View application, developer, repository, and license information.', 'Settings')

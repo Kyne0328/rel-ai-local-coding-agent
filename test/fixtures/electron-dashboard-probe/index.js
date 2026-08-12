@@ -113,7 +113,6 @@ app.whenReady().then(async () => {
     { hash: 'settings', ready: `document.querySelector('.settings-shell') && !document.querySelector('.settings-loading')` },
     { hash: 'diagnostics', ready: `document.querySelector('.diagnostic-page') && !document.querySelector('[data-copy-report]')?.disabled` },
     { hash: 'workspaces', ready: `document.querySelector('.workspace-validation-preferences')` },
-    { hash: 'skills', ready: `document.querySelector('.skills-page') && !document.querySelector('.settings-loading')` },
     { hash: 'tools', ready: `document.querySelector('.tools-section') && document.getElementById('toolsCount')?.textContent.trim() !== 'Loading…'` }
   ]) {
     passiveRouteStability.push(await measurePassiveRouteStability(win, passiveMcpSession, navigationCounts, route));
@@ -397,7 +396,6 @@ async function exerciseNavigationControls(win, failures) {
   const scenarios = [
     { selector: '.nav a[data-nav-id="workspaces"]', hash: '#workspaces', ready: `document.querySelector('.workspace-validation-preferences')` },
     { selector: '.application-nav a[data-nav-id="settings"]', hash: '#settings', ready: `document.querySelector('.settings-shell') && !document.querySelector('.settings-loading')` },
-    { selector: '.settings-nav-button[data-sub-page="skills"]', hash: '#settings/skills', ready: `document.querySelector('.skills-page') && !document.querySelector('.settings-loading')` },
     { selector: '.settings-nav-button[data-sub-page="application"]', hash: '#settings/application', ready: `document.querySelector('.settings-shell') && !document.querySelector('.settings-loading')` },
     { selector: '.settings-nav-button[data-sub-page="advanced"]', hash: '#settings/advanced', ready: `document.querySelector('.settings-shell') && !document.querySelector('.settings-loading')` },
     { selector: '.settings-nav-button[data-sub-page="about"]', hash: '#settings/about', ready: `document.querySelector('.settings-shell') && !document.querySelector('.settings-loading')` }

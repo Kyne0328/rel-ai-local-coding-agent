@@ -140,7 +140,6 @@ function compactForConnector(name, value, args = {}) {
         manifests: value.manifests,
         discoveredCommands: value.discoveredCommands,
         projectInstructions: value.projectInstructions,
-        workspaceSkills: value.workspaceSkills,
         fileCount: value.fileCount,
         files: files.values,
         returnedFileCount: files.count,

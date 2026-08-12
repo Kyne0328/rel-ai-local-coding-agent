@@ -5,7 +5,7 @@ import { setBaseHeaders, sendJson } from "./http/io.js";
 import { ERROR_CODES, errorPayload } from "./desktopUxContracts.js";
 import { errorCodeForRequest, isLoopbackHost } from './http/serverPolicy.js';
 import { isDashboardAuthorized } from "./http/auth.js";
-import { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handleApiSettingsGet, handleApiTools, handleOnboardingStatus, handleConnection, handleDashboardV10, handleTaskSession, handleApiLogs, handleHealthMonitor, handleAliasDiagnostics, handleReleaseNotes, handleCautionSummary, handleReadiness, handleWorkspacePreflight, handleEvents, handleOnboardingComplete, handleApiSettingsPost, handleApiWorkspaces, handlePickFolder, handleOpenFolder, handleSkillsGet, handleSkillsPost, handleWorkspaceChecks } from "./http/dashboard.js";
+import { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handleApiSettingsGet, handleApiTools, handleOnboardingStatus, handleConnection, handleDashboardV10, handleTaskSession, handleApiLogs, handleHealthMonitor, handleAliasDiagnostics, handleReleaseNotes, handleCautionSummary, handleReadiness, handleWorkspacePreflight, handleEvents, handleOnboardingComplete, handleApiSettingsPost, handleApiWorkspaces, handlePickFolder, handleOpenFolder, handleWorkspaceChecks } from "./http/dashboard.js";
 import { handleApiHistoryReset } from "./http/dashboardHistory.js";
 import { handleApiDiagnostics, handleApiDiagnosticsReset } from "./http/dashboardDiagnostics.js";
 import { handleApiProcessStop } from "./http/dashboardProcesses.js";
@@ -217,7 +217,6 @@ const GET_ROUTES = {
   "/favicon.ico": { auth: authNone, handler: handleFavicon },
   "/health": { auth: authNone, handler: handleHealth },
   "/api/settings": { auth: authDashboard, handler: handleApiSettingsGet },
-  "/api/skills": { auth: authDashboard, handler: handleSkillsGet },
   "/api/tools": { auth: authDashboard, handler: handleApiTools },
   "/api/onboarding/status": { auth: authDashboard, handler: handleOnboardingStatus },
   "/api/connection": { auth: authDashboard, handler: handleConnection },
@@ -252,7 +251,6 @@ async function tryExactPost(ctx) {
 const POST_ROUTES = {
   "/api/onboarding/complete": { auth: authDashboard, handler: handleOnboardingComplete },
   "/api/settings": { auth: authDashboard, handler: handleApiSettingsPost },
-  "/api/skills": { auth: authDashboard, handler: handleSkillsPost },
   "/api/workspaces": { auth: authDashboard, handler: handleApiWorkspaces },
   "/api/history/reset": { auth: authDashboard, handler: handleApiHistoryReset },
   "/api/diagnostics/reset": { auth: authDashboard, handler: handleApiDiagnosticsReset },
