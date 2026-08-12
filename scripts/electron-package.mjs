@@ -26,6 +26,7 @@ assertSafeControllerOperation({ operation: 'package', targetPaths: [target] });
 assertSafeBuilderArgs(options.builderArgs);
 
 const generateColorTokens = path.join(root, 'scripts', 'generate-color-tokens.mjs');
+const fetchTunnelClient = path.join(root, 'scripts', 'fetch-tunnel-client.mjs');
 const verifyTunnelClient = path.join(root, 'scripts', 'verify-tunnel-client.mjs');
 const verifyZoekt = path.join(root, 'scripts', 'verify-zoekt-seed.mjs');
 const tailwindCli = packageBin(path.join(root, 'node_modules', '@tailwindcss', 'cli'), 'tailwindcss');
@@ -41,6 +42,7 @@ runNode('dashboard CSS build', tailwindCli, [
   '-o', path.join(root, 'public', 'dashboard.css'),
   '--minify'
 ]);
+ensureTunnelClient(platform);
 runNode('OpenAI tunnel-client verification', verifyTunnelClient, [], { env: { ...platformEnvironment, TUNNEL_CLIENT_PLATFORMS: platform } });
 runNode('Zoekt seed verification', verifyZoekt, [], { env: platformEnvironment });
 
@@ -394,6 +396,19 @@ function architectureArgs(spec) {
 
 function readVersion() {
   return JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
+}
+
+function ensureTunnelClient(targetPlatform) {
+  const manifestPath = path.join(root, 'vendor', 'tunnel-client', 'manifest.json');
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  const spec = manifest.platforms?.[targetPlatform];
+  if (!spec?.file) throw new Error(`Unsupported tunnel-client platform: ${targetPlatform}`);
+  const executable = path.join(root, 'vendor', 'tunnel-client', targetPlatform, spec.file);
+  if (fs.existsSync(executable)) return;
+  console.log(`[electron-package] OpenAI tunnel-client is missing for ${targetPlatform}; fetching the pinned ${manifest.version} artifact.`);
+  runNode('OpenAI tunnel-client fetch', fetchTunnelClient, [], {
+    env: { ...platformEnvironment, TUNNEL_CLIENT_PLATFORMS: targetPlatform }
+  });
 }
 
 function packageBin(packageRoot, binName) {
