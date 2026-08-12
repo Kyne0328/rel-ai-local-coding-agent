@@ -1,6 +1,6 @@
 import * as crypto from "node:crypto";
 import * as zlib from "node:zlib";
-import { ERROR_CODES, errorPayload } from "../desktopUxContracts.js";
+import { ERROR_CODES } from "../desktopUxContracts.js";
 
 function isAuthorized(req, options) {
   if (!options.token && options.allowNoAuth) return true;
@@ -14,16 +14,6 @@ function timingSafeEqual(a, b) {
   const right = Buffer.from(String(b));
   if (left.length !== right.length) return false;
   return crypto.timingSafeEqual(left, right);
-}
-
-function unauthorized(res, options = {}) {
-  const code = options.rejected === true
-    ? ERROR_CODES.APPROVAL_TOKEN_REJECTED
-    : ERROR_CODES.APPROVAL_TOKEN_REQUIRED;
-  sendJson(res, 401, errorPayload(
-    code,
-    "Unauthorized. Send Authorization: Bearer <REL_AI_MCP_TOKEN>."
-  ));
 }
 
 function requestError(message, status = 400) {
@@ -213,4 +203,4 @@ function jsonForHtmlScript(value) {
   return JSON.stringify(value).replaceAll("<", String.raw`\u003c`).replaceAll(">", String.raw`\u003e`).replaceAll("&", String.raw`\u0026`);
 }
 
-export { isAuthorized, timingSafeEqual, unauthorized, readRawBody, readJsonBody, readFormOrJsonBody, setBaseHeaders, sendJson, sendSse, sendHtml, contentTypeForStaticAsset, jsonForHtmlScript };
+export { isAuthorized, timingSafeEqual, readRawBody, readJsonBody, readFormOrJsonBody, setBaseHeaders, sendJson, sendSse, sendHtml, contentTypeForStaticAsset, jsonForHtmlScript };

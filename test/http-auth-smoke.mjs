@@ -49,6 +49,12 @@ try {
   await waitForHealth();
   assert.equal((await fetch(`${base}/health`)).status, 200);
   assert.equal((await fetch(`${base}/dashboard`)).status, 401);
+  const unauthorizedDashboard = await fetch(`${base}/api/settings`);
+  const unauthorizedDashboardBody = await unauthorizedDashboard.json();
+  assert.equal(unauthorizedDashboard.status, 401);
+  assert.equal(unauthorizedDashboardBody.errorCode, 'dashboard_unavailable');
+  assert.match(unauthorizedDashboardBody.error || '', /Dashboard authorization expired/i);
+  assert.doesNotMatch(unauthorizedDashboardBody.error || '', /Bearer|REL_AI_MCP_TOKEN/i);
   assert.equal((await fetch(`${base}/dashboard`, { headers: { authorization: `Bearer ${token}` } })).status, 200);
   assert.equal((await fetch(`${base}/api/settings`, { headers: { authorization: `Bearer ${token}` } })).status, 200);
 

@@ -1,7 +1,7 @@
 import * as http from "node:http";
 import { URL } from "node:url";
 import * as connection from "./connectionProfile.js";
-import { setBaseHeaders, sendJson, unauthorized } from "./http/io.js";
+import { setBaseHeaders, sendJson } from "./http/io.js";
 import { ERROR_CODES, errorPayload } from "./desktopUxContracts.js";
 import { errorCodeForRequest, isLoopbackHost } from './http/serverPolicy.js';
 import { isDashboardAuthorized } from "./http/auth.js";
@@ -143,12 +143,10 @@ function startHttpServer(options = {}) {
 
 function authDashboard(ctx) {
   if (isDashboardAuthorized(ctx.req, ctx.parsed, ctx.options, ctx.res)) return true;
-  const suppliedCredential = Boolean(
-    ctx.req.headers.authorization
-    || ctx.parsed.searchParams.get("token")
-    || ctx.parsed.searchParams.get("bootstrap")
-  );
-  unauthorized(ctx.res, { rejected: suppliedCredential });
+  sendJson(ctx.res, 401, errorPayload(
+    ERROR_CODES.DASHBOARD_UNAVAILABLE,
+    'Dashboard authorization expired. Reopen the dashboard from the Rel.AI desktop app.'
+  ), ctx.ae);
   return false;
 }
 function authNone() { return true; }

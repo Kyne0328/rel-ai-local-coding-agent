@@ -25,4 +25,16 @@ function safeOrigin(value) {
   return safeUrl(value)?.origin || '';
 }
 
-export { normalizeRouteHash, safeOrigin, safeUrl, validateConnection };
+function planDashboardNavigation(current, target, options = {}) {
+  const sameDashboard = Boolean(current && current.origin === target.origin && current.pathname === target.pathname);
+  const authRefreshRequired = Boolean(
+    sameDashboard
+    && options.nextAuthGeneration
+    && options.currentAuthGeneration
+    && options.nextAuthGeneration !== options.currentAuthGeneration
+  );
+  if (authRefreshRequired && !options.requestedHash && current?.hash) target.hash = current.hash;
+  return { sameDashboard, authRefreshRequired };
+}
+
+export { normalizeRouteHash, planDashboardNavigation, safeOrigin, safeUrl, validateConnection };

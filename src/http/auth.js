@@ -51,7 +51,7 @@ function hasDashboardQueryToken(parsed, options) {
 
 function isDashboardAuthorized(req, parsed, options, res) {
   if (isAuthorized(req, options) || hasDashboardQueryToken(parsed, options)) return true;
-  if (dashboardSessions.validateDashboardSession(req, options.token)) return true;
+  if (dashboardSessions.validateDashboardSession(req, options.token, res)) return true;
   const bootstrap = parsed.searchParams.get("bootstrap");
   if (!bootstrap) return false;
   const sessionId = dashboardSessions.consumeDashboardBootstrap(bootstrap, options.token);
