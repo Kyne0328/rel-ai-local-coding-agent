@@ -71,6 +71,7 @@
       "app-updater.js",
       "app-updater-events.js",
       "app-updater-state.js",
+      "app-updater-status.js",
       "update-version.js",
       "update-support-policy.js",
       "ipc-security.js",
