@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import http from 'node:http';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -324,9 +325,53 @@ async function availablePort() {
 }
 
 async function freshFetch(input, init = {}) {
+  const target = new URL(input);
+  const method = String(init.method || 'GET').toUpperCase();
   const headers = new Headers(init.headers || {});
   headers.set('connection', 'close');
-  return fetch(input, { ...init, headers });
+  headers.set('accept-encoding', 'identity');
+  const body = init.body == null ? null : Buffer.from(String(init.body), 'utf8');
+  if (body && !headers.has('content-length')) headers.set('content-length', String(body.length));
+
+  return new Promise((resolve, reject) => {
+    const request = http.request(target, {
+      method,
+      headers: Object.fromEntries(headers.entries()),
+      agent: false
+    }, response => {
+      const chunks = [];
+      response.on('data', chunk => chunks.push(chunk));
+      response.on('error', reject);
+      response.on('end', () => {
+        const responseBody = Buffer.concat(chunks);
+        const responseHeaders = new Headers();
+        for (const [name, value] of Object.entries(response.headers)) {
+          if (Array.isArray(value)) {
+            for (const item of value) responseHeaders.append(name, item);
+          } else if (value != null) {
+            responseHeaders.set(name, String(value));
+          }
+        }
+        const status = Number(response.statusCode || 0);
+        resolve({
+          status,
+          ok: status >= 200 && status < 300,
+          headers: responseHeaders,
+          text: async () => responseBody.toString('utf8'),
+          json: async () => JSON.parse(responseBody.toString('utf8'))
+        });
+      });
+    });
+    request.on('error', error => {
+      const code = String(error?.code || '').trim();
+      reject(new Error(
+        `Local HTTP request ${method} ${target.pathname} failed${code ? ` (${code})` : ''}: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error }
+      ));
+    });
+    if (body) request.write(body);
+    request.end();
+  });
 }
 
 async function waitForHealth() {
