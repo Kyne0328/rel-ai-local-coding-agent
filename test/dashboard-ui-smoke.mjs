@@ -23,6 +23,7 @@ assert.match(shell, /WORK_NAV_ITEMS, APPLICATION_NAV_ITEMS, MOBILE_NAV_ITEMS/);
 assert.match(shell, /aria-label="\$\{item\.label\}" title="\$\{item\.label\}"/);
 assert.doesNotMatch(shell, /const PRIMARY_NAV_ITEMS|const SECONDARY_NAV_ITEMS/);
 assert.match(router, /routeMetadata\(path\)/);
+assert.match(router, /document\.getElementById\('pageTitle'\)\?\.focus\(\{ preventScroll: true \}\)/);
 assert.match(dashboard, /features\/system\/index\.js/);
 assert.match(dashboard, /mountSettings\(element, settingsSubPage\(\)\)/);
 assert.doesNotMatch(dashboard, /settings\/connection|settings\/diagnostics/);

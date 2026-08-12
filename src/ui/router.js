@@ -110,11 +110,12 @@ function _route() {
     return;
   }
   const id = routeKey.split(/[/?]/)[0] || 'home';
+  const shouldFocusHeading = _currentRouteKey !== null;
   _currentRouteKey = routeKey;
   try { localStorage.setItem('relai_dashboard_route', routeKey); } catch {}
   _updatePageIdentity(id);
   _updateNavActive(id);
-  _mount(id);
+  _mount(id, { focusHeading: shouldFocusHeading });
   window.dispatchEvent(new CustomEvent('relai:route-change', { detail: { section: id, params: getRouteParams() } }));
 }
 
@@ -170,10 +171,10 @@ function _mount(id, options = {}) {
   try {
     result = mount ? mount(_container) : null;
   } catch (error) {
-    finishMount(generation, view);
+    finishMount(generation, view, options.focusHeading === true);
     throw error;
   }
-  return Promise.resolve(result).finally(() => finishMount(generation, view));
+  return Promise.resolve(result).finally(() => finishMount(generation, view, options.focusHeading === true));
 }
 
 function captureViewState() {
@@ -192,11 +193,12 @@ function pageScroller() {
   return document.documentElement.dataset.windowChrome === 'custom' && main ? main : window;
 }
 
-function finishMount(generation, view) {
+function finishMount(generation, view, focusHeading = false) {
   if (generation !== _mountGeneration || !_container) return;
   if (!view) {
     _container.style.minHeight = '';
     _container.removeAttribute('aria-busy');
+    if (focusHeading) document.getElementById('pageTitle')?.focus({ preventScroll: true });
     announceRouteMounted();
     return;
   }
