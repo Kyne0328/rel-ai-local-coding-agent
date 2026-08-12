@@ -32,6 +32,13 @@ try {
   const names = list.result.tools.map(item => item.name).sort((a, b) => a.localeCompare(b));
   const expected = [...expectedToolNames].sort((a, b) => a.localeCompare(b));
   if (JSON.stringify(names) !== JSON.stringify(expected)) throw new Error(`Unexpected tool list: ${names.join(', ')}`);
+  for (const tool of list.result.tools) {
+    if (tool.inputSchema?.oneOf) throw new Error(`${tool.name} must expose a flat connector input schema`);
+  }
+  const workTool = list.result.tools.find(item => item.name === 'relai_work');
+  for (const field of ['workspace', 'objective', 'bootstrap', 'summary', 'work_id']) {
+    if (!workTool.inputSchema?.properties?.[field]) throw new Error(`relai_work schema should expose ${field}`);
+  }
   const editTool = list.result.tools.find(item => item.name === 'relai_edit');
   if (!editTool.inputSchema?.properties?.content || !editTool.inputSchema?.properties?.replacements || !editTool.inputSchema?.properties?.edits) {
     throw new Error('relai_edit schema should expose content, replacement arrays, and batch edits');
@@ -43,6 +50,10 @@ try {
   const readTool = list.result.tools.find(item => item.name === 'relai_read');
   if (!readTool.inputSchema?.properties?.startLine || !readTool.inputSchema?.properties?.endLine || !readTool.inputSchema?.properties?.guidanceMode) {
     throw new Error('relai_read schema should expose bounded line ranges and guidance mode');
+  }
+  const execTool = list.result.tools.find(item => item.name === 'relai_exec');
+  for (const field of ['command', 'executable', 'argv', 'input', 'work_id']) {
+    if (!execTool.inputSchema?.properties?.[field]) throw new Error(`relai_exec schema should expose ${field}`);
   }
   for (const longRunning of ['relai_exec', 'relai_validate']) {
     const tool = list.result.tools.find(item => item.name === longRunning);

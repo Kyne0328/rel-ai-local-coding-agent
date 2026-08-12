@@ -9,7 +9,11 @@ const PUBLIC_INPUT_DESCRIPTIONS = Object.freeze({
 });
 
 function compactPublicInputSchema(name, inputSchema) {
-  const { allOf: _runtimeGuards, ...schema } = inputSchema || {};
+  // Keep the connector-facing object flat. OpenAI's MCP importer projects each
+  // top-level oneOf branch as a complete argument object, so branches that only
+  // carry required/const constraints hide the shared top-level properties. The
+  // executable schema and operation dispatcher still enforce those constraints.
+  const { allOf: _runtimeGuards, oneOf: _runtimeVariants, ...schema } = inputSchema || {};
   return stripPublicDescriptions(schema, PUBLIC_INPUT_DESCRIPTIONS[name] || new Set());
 }
 

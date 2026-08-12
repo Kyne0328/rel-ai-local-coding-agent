@@ -20,7 +20,7 @@ const config = {
 try {
   const status = await relaiStatus(config);
   assert.equal(status.workspaceCount, 4);
-  assert.equal(status.toolSurface.toolSurfaceVersion, 36);
+  assert.equal(status.toolSurface.toolSurfaceVersion, 37);
   assert.equal(status.toolSurface.toolCount, 12);
   assert.deepEqual(status.toolSurface.deprecations, []);
   assert.deepEqual(status.workspaceAliases, ['api', 'app', 'worker', 'zebra']);
