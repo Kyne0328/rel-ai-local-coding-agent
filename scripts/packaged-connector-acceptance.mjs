@@ -79,7 +79,7 @@ try {
   child.stderr.on('data', chunk => { stderr += String(chunk || ''); });
   await waitForHealth();
 
-  const challenge = await fetch(`${base}/mcp`, {
+  const challenge = await freshFetch(`${base}/mcp`, {
     method: 'POST',
     headers: mcpHeaders(),
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} })
@@ -205,7 +205,7 @@ try {
   assert.equal(rejected.result?.isError, true);
   assert.equal(rejected.result?.structuredContent?.errorCode, 'INVALID_TASK_STATE');
 
-  const chatGptInitializeResponse = await fetch(`${base}/mcp`, {
+  const chatGptInitializeResponse = await freshFetch(`${base}/mcp`, {
     method: 'POST',
     headers: mcpHeaders('', primarySession),
     body: JSON.stringify({
@@ -225,7 +225,7 @@ try {
   assert.equal(chatGptInitialize.result?.serverInfo?.name, 'rel-ai-mcp');
   assert.equal(chatGptInitializeResponse.headers.get('mcp-session-id'), null);
 
-  const chatGptInitializedResponse = await fetch(`${base}/mcp`, {
+  const chatGptInitializedResponse = await freshFetch(`${base}/mcp`, {
     method: 'POST',
     headers: {
       ...mcpHeaders('', primarySession),
@@ -236,7 +236,7 @@ try {
   assert.equal(chatGptInitializedResponse.status, 202);
   assert.equal(await chatGptInitializedResponse.text(), '');
 
-  const chatGptToolsResponse = await fetch(`${base}/mcp`, {
+  const chatGptToolsResponse = await freshFetch(`${base}/mcp`, {
     method: 'POST',
     headers: {
       ...mcpHeaders('', primarySession),
@@ -248,7 +248,7 @@ try {
   assert.equal(chatGptToolsResponse.status, 200, JSON.stringify(chatGptTools));
   assert.equal(chatGptTools.result?.tools?.length, toolCount);
 
-  const chatGptStatusResponse = await fetch(`${base}/mcp`, {
+  const chatGptStatusResponse = await freshFetch(`${base}/mcp`, {
     method: 'POST',
     headers: mcpHeaders('', primarySession),
     body: JSON.stringify({
@@ -263,7 +263,7 @@ try {
   assert.equal(chatGptStatus.result?.isError, false, JSON.stringify(chatGptStatus));
   assert.equal(chatGptStatus.result?.structuredContent?.ok, true);
 
-  const initializeInsideModernEnvelope = await fetch(`${base}/mcp`, {
+  const initializeInsideModernEnvelope = await freshFetch(`${base}/mcp`, {
     method: 'POST',
     headers: mcpHeaders('initialize', primarySession),
     body: JSON.stringify({ jsonrpc: '2.0', id: 32, method: 'initialize', params: {
@@ -274,7 +274,7 @@ try {
   assert.equal((await readMcpResponse(initializeInsideModernEnvelope)).error?.code, -32601);
 
   for (const removedPath of ['/register', '/authorize', '/token', '/.well-known/oauth-protected-resource/mcp', '/sse', '/messages']) {
-    const response = await fetch(`${base}${removedPath}`);
+    const response = await freshFetch(`${base}${removedPath}`);
     assert.equal(response.status, 404, `${removedPath} must remain removed`);
   }
 
@@ -293,7 +293,7 @@ function runGit(...args) {
 }
 
 async function dashboard() {
-  const response = await fetch(`${base}/api/dashboard/v10`, {
+  const response = await freshFetch(`${base}/api/dashboard/v10`, {
     headers: { authorization: `Bearer ${localBearerToken}` }
   });
   assert.equal(response.status, 200);
@@ -323,6 +323,12 @@ async function availablePort() {
   return port;
 }
 
+async function freshFetch(input, init = {}) {
+  const headers = new Headers(init.headers || {});
+  headers.set('connection', 'close');
+  return fetch(input, { ...init, headers });
+}
+
 async function waitForHealth() {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
@@ -330,7 +336,7 @@ async function waitForHealth() {
       throw new Error(`Packaged server exited before becoming healthy (code ${child.exitCode}). stderr:\n${stderr}`);
     }
     try {
-      const response = await fetch(`${base}/health`);
+      const response = await freshFetch(`${base}/health`);
       if (response.ok) return;
     } catch {}
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -356,7 +362,7 @@ async function initializeMcp(bearerToken, clientVersion) {
     discovery: null,
     closed: false
   };
-  const response = await fetch(`${base}/mcp`, {
+  const response = await freshFetch(`${base}/mcp`, {
     method: 'POST',
     headers: mcpHeaders('server/discover', session),
     body: mcpBody(session, 10, 'server/discover', {})
@@ -383,7 +389,7 @@ async function mcp(session, id, method, params) {
       : ['tasks/get', 'tasks/update', 'tasks/cancel'].includes(method)
         ? String(params?.taskId || '')
       : '';
-  const response = await fetch(`${base}/mcp`, {
+  const response = await freshFetch(`${base}/mcp`, {
     method: 'POST',
     headers: mcpHeaders(method, session, name),
     body: mcpBody(session, id, method, params)

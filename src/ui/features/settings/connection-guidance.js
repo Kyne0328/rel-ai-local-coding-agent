@@ -10,15 +10,15 @@ export function chatGptGuideSteps({ mode = 'create', tunnelId = '' } = {}) {
   if (mode === 'reconnect') {
     return [
       'Keep Rel.AI running and confirm OpenAI Secure MCP Tunnel shows Connected on the Connection page.',
-      'In ChatGPT, open your existing Rel.AI MCP app/plugin and reconnect or refresh it if ChatGPT asks.',
-      tunnel ? `Confirm the ChatGPT integration is associated with tunnel ${tunnel}.` : 'Confirm the ChatGPT integration is associated with this computer’s Secure MCP Tunnel.',
+      'In ChatGPT Web, Plus or Pro users should open Plugins; Business, Enterprise, or Edu users should open the Rel.AI app under workspace Apps. Select the existing Rel.AI MCP integration.',
+      tunnel ? `Reconnect the existing integration to tunnel ${tunnel}; do not delete or recreate the app.` : 'Reconnect the existing integration to this computer’s Secure MCP Tunnel; do not delete or recreate the app.',
       'Return to the chat, select Rel.AI MCP, and retry the request.'
     ];
   }
   return [
     'Create an OpenAI Secure MCP Tunnel for this computer and a runtime API key in OpenAI Platform.',
     'Save the tunnel ID and runtime key in Rel.AI Connection settings, then keep Rel.AI running until the tunnel reports Connected.',
-    tunnel ? `In ChatGPT, create/add the Rel.AI MCP integration using the Tunnel connection option and select or enter ${tunnel}.` : 'In ChatGPT, create/add the Rel.AI MCP integration using the Tunnel connection option and select this computer’s tunnel.',
+    tunnel ? `In ChatGPT Web, Plus or Pro users should open Plugins; Business, Enterprise, or Edu users should use the Rel.AI app under workspace Apps. Create/add Rel.AI MCP with the Tunnel connection option and select or enter ${tunnel}.` : 'In ChatGPT Web, Plus or Pro users should open Plugins; Business, Enterprise, or Edu users should use the Rel.AI app under workspace Apps. Create/add Rel.AI MCP with the Tunnel connection option and select this computer’s tunnel.',
     'Enable Rel.AI MCP in the chat, then send the safe first request below.'
   ];
 }
