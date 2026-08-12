@@ -3,7 +3,7 @@ import { runProcess, summarizeCommand } from '../process.js';
 import { selectValidationLevel } from '../validationStrategy.js';
 import { resolvePolicy } from '../policyResolver.js';
 import { clampNumber } from './limits.js';
-import { getCurrentTaskAbortSignal, getCurrentToolActivityContext, updateCurrentToolActivity } from '../toolActivity.js';
+import { getCurrentTaskAbortSignal, getCurrentToolActivityContext } from '../toolActivity.js';
 import { readTaskIntegrity, readWorkspaceIntegrity, taskOwnedChangedFiles } from '../taskIntegrity.js';
 import { readRecentWorkflowEvidence, recordWorkflowEvidence } from '../taskHistoryStore.js';
 import { buildWorkflowEvidenceReceipt, checkEvidenceReusable } from '../workflow/evidence.js';
@@ -14,6 +14,7 @@ import { createValidationFingerprint, createValidationPlan, readValidationPlan }
 import { runSpan } from '../telemetry.js';
 import { nativeToolTaskSignal } from '../mcp/nativeToolTasks.js';
 import { hasRequestedChecks, normalizeVerifyChecks } from './validationChecks.js';
+import { noChecksValidationResult } from './validationNoChecks.js';
 import {
   boundCheckOutput,
   checkResultStatus,
@@ -62,38 +63,10 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
   const policy = resolvePolicy(workspace, config);
 
   if (checks.length === 0) {
-    const validationFingerprint = (await createValidationFingerprint(workspace, config)).fingerprint;
-    updateCurrentToolActivity({
-      status: 'validating',
-      operation: `No ${level} validation commands were detected`,
-      currentStage: 'Validation not run',
-      currentActivity: 'No validation checks were detected.',
-      progress: { mode: 'indeterminate', label: 'No validation checks detected' },
-      activity: {
-        category: 'validation',
-        status: 'running',
-        summary: 'No validation checks were detected.',
-        metadata: { checkCount: 0, skippedCount: skippedChecks.length }
-      }
+    return noChecksValidationResult(workspace, config, {
+      level, skippedChecks, aliasNormalizations, validationLevel,
+      validationLevelReason, changedFiles, policy
     });
-    return {
-      ok: false,
-      workspace: workspace.alias,
-      level,
-      checks: [],
-      commands: [],
-      results: [],
-      skippedChecks,
-      aliasNormalizations,
-      validationLevel,
-      validationLevelReason,
-      changedFiles,
-      policy,
-      validated: false,
-      validationStatus: 'not_run',
-      validationFingerprint,
-      message: 'Validation status: NOT RUN. No validation checks were detected or executed. This is not a passed validation. Define a check/test/build script or pass an explicit check.'
-    };
   }
 
   const stopOnFailure = args.stopOnFailure !== false;
@@ -240,11 +213,4 @@ async function relaiVerify(workspace, config, args = {}, context = {}) {
 }
 
 // Re-exported so config summaries, diagnostics, and tests keep a single import site.
-export {
-  relaiVerify,
-  hasRequestedChecks,
-
-
-
-
-};
+export { relaiVerify, hasRequestedChecks };
