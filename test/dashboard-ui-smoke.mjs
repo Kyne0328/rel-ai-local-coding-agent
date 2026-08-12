@@ -12,6 +12,8 @@ const shell = read('src/http/dashboard.js');
 const dashboard = read('public/dashboard.js');
 const router = read('src/ui/router.js');
 const settings = read('src/ui/features/settings/index.js');
+const settingsShared = read('src/ui/features/settings/shared.js');
+const settingsAbout = read('src/ui/features/settings/about.js');
 
 assert.deepEqual(DESKTOP_NAV_ITEMS.map(item => item.id), ['home', 'tasks', 'workspaces', 'activity', 'system', 'settings']);
 assert.deepEqual(MOBILE_NAV_ITEMS.map(item => item.id), ['home', 'tasks', 'workspaces', 'system', 'settings']);
@@ -29,6 +31,8 @@ assert.match(dashboard, /mountSettings\(element, settingsSubPage\(\)\)/);
 assert.doesNotMatch(dashboard, /settings\/connection|settings\/diagnostics/);
 assert.match(settings, /mountApplication/);
 assert.match(settings, /mountSkills/);
+assert.match(settingsShared, /<h2>\$\{esc\(title\)\}<\/h2>/, 'Settings pages must continue the shell H1 with an H2');
+assert.match(settingsAbout, /document\.createElement\('h4'\)/, 'About product identity must remain below the panel H3');
 assert.match(read('src/ui/features/system/index.js'), /SYSTEM_NAV_ITEMS/);
 assert.equal(fs.existsSync(path.join(root, 'src/ui/features/settings/tools-validation.js')), false);
 assert.equal(typeof mergeActivityEntries, 'function');

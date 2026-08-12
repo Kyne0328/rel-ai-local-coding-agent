@@ -42,13 +42,13 @@
 .settings-nav-button { @apply w-full text-left; }
 .settings-loading, .connection-loading { @apply py-3 text-[12px]; color: var(--ui-text-secondary); }
 .settings-header { @apply flex flex-col gap-1; }
-.settings-header h3 { @apply text-[16px] font-bold; }
+.settings-header h2 { @apply text-[16px] font-bold; }
 .settings-header p { @apply max-w-4xl text-[12px] leading-5; color: var(--ui-text-secondary); }
 .settings-panel-body { @apply grid gap-4; }
 .about-product { @apply flex min-w-0 items-center gap-4 rounded-xl p-4; background: var(--ui-surface-secondary); border: 1px solid var(--ui-border-default); }
 .about-product img { @apply size-12 shrink-0 object-contain; }
 .about-product div { @apply min-w-0; }
-.about-product h2 { @apply text-[16px] font-bold; }
+.about-product h4 { @apply text-[16px] font-bold; }
 .about-product p { @apply mt-1 text-[11px]; color: var(--ui-text-secondary); }
 .about-detail-row { @apply flex-wrap; }
 .about-detail-value { @apply min-w-0 max-w-full text-right text-[12px]; overflow-wrap: anywhere; }

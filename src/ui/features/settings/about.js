@@ -30,7 +30,7 @@ function productSummary(metadata) {
   logo.alt = '';
   logo.setAttribute('aria-hidden', 'true');
   const copy = document.createElement('div');
-  const name = document.createElement('h2');
+  const name = document.createElement('h4');
   name.textContent = metadata.name;
   const version = document.createElement('p');
   version.textContent = `Version ${metadata.version}`;

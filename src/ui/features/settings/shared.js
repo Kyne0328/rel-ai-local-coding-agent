@@ -29,7 +29,7 @@ export function header(title, body) {
   const wrapper = document.createElement('div');
   wrapper.className = 'settings-header';
   const description = body ? `<p>${esc(body)}</p>` : '';
-  wrapper.innerHTML = `<h3>${esc(title)}</h3>${description}`;
+  wrapper.innerHTML = `<h2>${esc(title)}</h2>${description}`;
   return wrapper;
 }
 
