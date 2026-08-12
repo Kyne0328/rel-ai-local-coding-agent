@@ -19,8 +19,8 @@ export function desktopSetupSteps({
   return [
     {
       id: 'workspace',
-      title: 'Choose a workspace',
-      description: 'Add the local project folder ChatGPT is allowed to inspect and update.',
+      title: 'Add a workspace',
+      description: 'Choose the local repository Rel.AI may expose to ChatGPT and give it a short workspace alias.',
       href: routeMetadata('workspaces').href,
       action: hasWorkspace ? 'Workspace added' : 'Add workspace',
       complete: hasWorkspace,
@@ -28,8 +28,8 @@ export function desktopSetupSteps({
     },
     {
       id: 'connection',
-      title: 'Configure the secure tunnel',
-      description: 'Save this computer’s OpenAI Secure MCP Tunnel ID and runtime API key, then keep Rel.AI running until the tunnel reports Connected.',
+      title: 'Connect this computer',
+      description: 'In OpenAI Platform, get the Tunnel ID from Organization settings → Tunnels and a restricted runtime key from Organization settings → API Keys, then start the secure connection.',
       href: routeMetadata('connection').href,
       action: 'Set up secure tunnel',
       complete: endpointReady,
@@ -37,8 +37,8 @@ export function desktopSetupSteps({
     },
     {
       id: 'chatgpt',
-      title: 'Connect ChatGPT',
-      description: 'Create or reconnect the Rel.AI MCP integration in ChatGPT using the Tunnel connection option associated with this computer’s Secure MCP Tunnel.',
+      title: 'Add Rel.AI to ChatGPT',
+      description: 'Create or reconnect Rel.AI MCP with Connection set to Tunnel, select this computer’s tunnel, and set Authentication to No authentication — not OAuth.',
       href: routeMetadata('connection').href,
       action: 'Connect ChatGPT',
       complete: chatgptReady,
@@ -79,7 +79,7 @@ export function createDesktopSetupChecklist(options = {}) {
       </div>
       <button class="secondary compact-button" type="button" data-dismiss-setup>Dismiss guide</button>
     </div>
-    <div class="desktop-setup-intro">Rel.AI works on this computer. ChatGPT can only use it after you allow a workspace, establish the secure connection, and authorize the Rel.AI app.</div>`;
+    <div class="desktop-setup-intro"><strong>How setup works:</strong> choose a repository, connect this computer through OpenAI Secure MCP Tunnel, add Rel.AI MCP in ChatGPT with <b>Tunnel + No authentication</b>, then send one read-only request to confirm the full path.</div>`;
 
   const body = document.createElement('div');
   body.className = 'card-body desktop-setup-items';

@@ -15,19 +15,72 @@
       <div class="wizard-cloud-hero">
         <span class="wizard-eyebrow">OpenAI Secure MCP Tunnel</span>
         <h1>Connect this computer to ChatGPT</h1>
-        <p>ChatGPT reaches this computer through your OpenAI Secure MCP Tunnel while Rel.AI keeps repository access and tool execution on this device.</p>
+        <p>Rel.AI keeps repositories and tool execution on this computer. OpenAI Secure MCP Tunnel gives ChatGPT a private route to the local MCP service.</p>
       </div>
+
+      <section class="wizard-platform-guide" aria-labelledby="platformGuideTitle">
+        <header class="wizard-platform-guide-head">
+          <div>
+            <strong id="platformGuideTitle">Get the two OpenAI values first</strong>
+            <span>You only need a Tunnel ID and a restricted runtime API key for this computer.</span>
+          </div>
+          <span class="wizard-step-badge">2 values</span>
+        </header>
+        <ol class="wizard-platform-steps">
+          <li>
+            <div class="wizard-platform-step-copy">
+              <strong>Create or select a Secure MCP Tunnel</strong>
+              <span>OpenAI Platform → Organization settings → Tunnels. Copy the ID that starts with <code>tunnel_</code>.</span>
+            </div>
+            <div class="wizard-copy-row">
+              <code>https://platform.openai.com/settings/organization/tunnels</code>
+              <button class="secondary wizard-copy-button" type="button" aria-label="Copy OpenAI Tunnels URL" data-copy-value="https://platform.openai.com/settings/organization/tunnels">Copy URL</button>
+            </div>
+          </li>
+          <li>
+            <div class="wizard-platform-step-copy">
+              <strong>Create a restricted runtime API key</strong>
+              <span>OpenAI Platform → Organization settings → API Keys. Give the key Tunnel permissions for <b>Read</b> and <b>Use</b>, then copy it while it is visible.</span>
+            </div>
+            <div class="wizard-copy-row">
+              <code>https://platform.openai.com/settings/organization/api-keys</code>
+              <button class="secondary wizard-copy-button" type="button" aria-label="Copy OpenAI API Keys URL" data-copy-value="https://platform.openai.com/settings/organization/api-keys">Copy URL</button>
+            </div>
+          </li>
+        </ol>
+      </section>
+
       <div class="wizard-cloud-card wizard-security-card">
-        <label><span>Tunnel ID</span><input id="tunnelIdInput" type="text" autocomplete="off" spellcheck="false" placeholder="tunnel_…" /></label>
-        <label><span>Runtime API key</span><input id="tunnelApiKeyInput" type="password" autocomplete="off" spellcheck="false" placeholder="Paste the runtime key for this tunnel" /></label>
-        <p class="wizard-chatgpt-path">Create the tunnel and a runtime key in OpenAI Platform first. The runtime key is encrypted with your operating system credential store and is never shown again.</p>
+        <div class="wizard-field-group">
+          <label for="tunnelIdInput"><span>Tunnel ID</span></label>
+          <input id="tunnelIdInput" type="text" autocomplete="off" spellcheck="false" placeholder="tunnel_…" aria-describedby="tunnelIdHelp" />
+          <p class="wizard-field-help" id="tunnelIdHelp">Use the tunnel assigned to this computer. The ID begins with <code>tunnel_</code>.</p>
+        </div>
+
+        <div class="wizard-field-group">
+          <label for="tunnelApiKeyInput"><span>Runtime API key</span></label>
+          <input id="tunnelApiKeyInput" type="password" autocomplete="off" spellcheck="false" placeholder="Paste the restricted runtime key" aria-describedby="runtimeKeyHelp" />
+          <p class="wizard-field-help" id="runtimeKeyHelp">This key runs the OpenAI tunnel client. Rel.AI encrypts it with the operating system credential store and never shows the saved value again.</p>
+        </div>
+
+        <div class="wizard-chatgpt-path">
+          <strong>What you will choose in ChatGPT next</strong>
+          <p>Create or reconnect the Rel.AI MCP app/plugin with the same tunnel.</p>
+          <div class="wizard-choice-row" aria-label="ChatGPT connection settings">
+            <span>Connection: <b>Tunnel</b></span>
+            <span>Authentication: <b>No authentication</b></span>
+          </div>
+          <span>Do not choose OAuth for the Rel.AI tunnel connection. Rel.AI handles its private local bearer credential internally.</span>
+        </div>
+
         <details class="wizard-advanced-card">
           <summary>Advanced local settings</summary>
           <div class="wizard-advanced-content">
-            <label><span>Local connection port</span><input id="portInput" type="number" min="1024" max="65535" value="3333" /></label>
+            <label for="portInput"><span>Local connection port</span></label>
+            <input id="portInput" type="number" min="1024" max="65535" value="3333" />
           </div>
         </details>
-        <p class="wizard-inline-error" id="setupError" role="alert"></p>
+        <p class="wizard-inline-error" id="setupError" role="alert" aria-live="polite"></p>
         <button class="primary wizard-main-action" id="connectBtn" type="button">Start secure connection</button>
       </div>
       <div class="wizard-actions"><button class="secondary" id="cancelWizardBtn" type="button">Cancel</button></div>

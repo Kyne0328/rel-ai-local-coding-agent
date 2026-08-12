@@ -13,6 +13,21 @@ function validTunnelId(value) {
   return /^tunnel_[A-Za-z0-9_-]{8,200}$/.test(String(value || '').trim());
 }
 
+async function copySetupValue(button) {
+  const value = String(button?.dataset?.copyValue || '').trim();
+  if (!value) return;
+  const previous = button.textContent;
+  try {
+    await window.electronAPI.copyText(value);
+    button.textContent = 'Copied';
+    setTimeout(() => {
+      if (button.isConnected) button.textContent = previous;
+    }, 1200);
+  } catch (error) {
+    setError(`Could not copy the OpenAI Platform URL: ${messageOf(error)}`);
+  }
+}
+
 async function connect() {
   const tunnelId = $('tunnelIdInput').value.trim();
   const tunnelApiKey = $('tunnelApiKeyInput').value.trim();
@@ -20,7 +35,7 @@ async function connect() {
   setError();
   if (!validTunnelId(tunnelId)) return setError('Enter a valid OpenAI Secure MCP Tunnel ID beginning with tunnel_.');
   if (!validPort(port)) return setError('Local connection port must be between 1024 and 65535.');
-  if (!tunnelApiKey && !$('tunnelApiKeyInput').dataset.configured) return setError('Enter the OpenAI tunnel runtime API key.');
+  if (!tunnelApiKey && !$('tunnelApiKeyInput').dataset.configured) return setError('Enter the OpenAI tunnel runtime API key from Organization settings → API Keys.');
 
   const button = $('connectBtn');
   button.disabled = true;
@@ -55,4 +70,5 @@ function messageOf(error) {
 
 $('connectBtn').addEventListener('click', connect);
 $('cancelWizardBtn').addEventListener('click', () => window.electronAPI.closeWizard());
+document.querySelectorAll('[data-copy-value]').forEach(button => button.addEventListener('click', () => copySetupValue(button)));
 void loadExistingSettings();
