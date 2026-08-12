@@ -30,6 +30,9 @@ assert.match(usageData, /desktop\.getLocalUsage/);
 assert.doesNotMatch(`${usageSource}\n${usageData}`, /getGatewayUsage|connectionMode|pairing_required|cloudUsageAvailability/i);
 assert.doesNotMatch(`${usageSource}\n${usageData}`, /fetch\(|DASHBOARD_DATA_URL|auditTail|taskActivity/);
 assert.match(usageSource, /Privacy-safe aggregate MCP activity recorded only on this device/i);
+assert.match(usageSource, /data-usage-status role="status" aria-live="polite" aria-atomic="true"/);
+assert.doesNotMatch(usageSource, /data-usage-content aria-live=/);
+assert.match(usageSource, /Analytics updated for \$\{bounds\.label\}/);
 
 for (const label of ['Tool calls', 'Successful', 'Failed', 'Execution time', 'Avg tool time', 'Active days']) {
   assert.match(usageCombined, new RegExp(label), `Analytics must render ${label}.`);
