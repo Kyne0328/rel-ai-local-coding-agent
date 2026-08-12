@@ -37,6 +37,9 @@ assert.doesNotMatch(usageRender, /function esc\(/);
 assert.match(usageSource, /data-usage-status role="status" aria-live="polite" aria-atomic="true"/);
 assert.doesNotMatch(usageSource, /data-usage-content aria-live=/);
 assert.match(usageSource, /Analytics updated for \$\{bounds\.label\}/);
+assert.match(usageRender, /aria-pressed="\$\{i \? 'false' : 'true'\}"/);
+assert.match(usageRender, /setAttribute\('aria-pressed', String\(active\)\)/);
+assert.match(usageRender, /aria-label="\$\{esc\(metricLabel\)\} activity trend"/);
 
 for (const label of ['Tool calls', 'Successful', 'Failed', 'Execution time', 'Avg tool time', 'Active days']) {
   assert.match(usageCombined, new RegExp(label), `Analytics must render ${label}.`);
