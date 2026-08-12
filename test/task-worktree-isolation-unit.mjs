@@ -27,6 +27,7 @@ const readNormalized = target => fs.readFileSync(target, 'utf8').replaceAll('\r\
 
 try {
   git('init');
+  git('config', 'core.autocrlf', 'true');
   write('a.txt', 'a0\n');
   write('b.txt', 'b0\n');
   git('add', '-A');
@@ -61,9 +62,9 @@ try {
 
   const taskB = await ensureTaskWorktree(workspace, config, 'task-b');
   assert.notEqual(taskA.path, taskB.path);
-  assert.equal(readNormalized(path.join(taskA.path, 'a.txt')), 'a0\nsource dirty baseline\n');
-  assert.equal(readNormalized(path.join(taskA.path, 'baseline.txt')), 'baseline untracked\n');
-  assert.equal(readNormalized(path.join(taskB.path, 'a.txt')), 'a0\nsource dirty baseline\n');
+  assert.equal(fs.readFileSync(path.join(taskA.path, 'a.txt'), 'utf8'), fs.readFileSync(path.join(repo, 'a.txt'), 'utf8'));
+  assert.equal(fs.readFileSync(path.join(taskA.path, 'baseline.txt'), 'utf8'), fs.readFileSync(path.join(repo, 'baseline.txt'), 'utf8'));
+  assert.equal(fs.readFileSync(path.join(taskB.path, 'a.txt'), 'utf8'), fs.readFileSync(path.join(repo, 'a.txt'), 'utf8'));
 
   fs.writeFileSync(path.join(taskA.path, 'a.txt'), 'a0\nsource dirty baseline\ntask a\n');
   fs.writeFileSync(path.join(taskB.path, 'b.txt'), 'b0\ntask b\n');
@@ -71,14 +72,14 @@ try {
   const integratedA = await integrateTaskWorktree(workspace, config, 'task-a');
   assert.equal(integratedA.integrated, true);
   assert.deepEqual(integratedA.changedFiles, ['a.txt']);
-  assert.equal(readNormalized(path.join(repo, 'a.txt')), 'a0\nsource dirty baseline\ntask a\n');
+  assert.equal(fs.readFileSync(path.join(repo, 'a.txt'), 'utf8'), 'a0\nsource dirty baseline\ntask a\n');
   assert.equal(readNormalized(path.join(repo, 'baseline.txt')), 'baseline untracked\n');
   assert.equal(managedTaskWorktreeEntry(config, 'repo', 'task-a'), null);
 
   const integratedB = await integrateTaskWorktree(workspace, config, 'task-b');
   assert.equal(integratedB.integrated, true);
   assert.deepEqual(integratedB.changedFiles, ['b.txt']);
-  assert.equal(readNormalized(path.join(repo, 'b.txt')), 'b0\ntask b\n');
+  assert.equal(fs.readFileSync(path.join(repo, 'b.txt'), 'utf8'), 'b0\ntask b\n');
 
   const taskC = await ensureTaskWorktree(workspace, config, 'task-c');
   const taskD = await ensureTaskWorktree(workspace, config, 'task-d');

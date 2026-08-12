@@ -102,6 +102,14 @@ async function workspaceSnapshotCommit(workspace, config) {
     }, config);
     if (initialize.exitCode !== 0) throw new Error(`Could not initialize isolated task baseline: ${initialize.stderr || initialize.stdout || initialize.exitCode}`);
 
+    const trackedFilesResult = await runProcess('git', ['ls-files', '-z'], {
+      cwd: workspace.path, timeout: 30000, maxOutputBytes: 16 * 1024 * 1024
+    }, config);
+    if (trackedFilesResult.exitCode !== 0 || trackedFilesResult.stdoutTruncated) {
+      throw new Error(`Could not inspect tracked files for task isolation: ${trackedFilesResult.stderr || trackedFilesResult.stdout || 'output exceeded limit'}`);
+    }
+    const trackedFiles = String(trackedFilesResult.stdout || '').split('\0').map(item => item.trim()).filter(Boolean);
+
     const tracked = await runProcess('git', ['add', '-u', '--', '.'], { cwd: workspace.path, timeout: 120000, env }, config);
     if (tracked.exitCode !== 0) throw new Error(`Could not snapshot tracked workspace changes: ${tracked.stderr || tracked.stdout || tracked.exitCode}`);
 
@@ -135,7 +143,7 @@ async function workspaceSnapshotCommit(workspace, config) {
     if (commitResult.exitCode !== 0) throw new Error(`Could not create isolated task baseline commit: ${commitResult.stderr || commitResult.stdout || commitResult.exitCode}`);
     const commit = String(commitResult.stdout || '').trim();
     if (!commit) throw new Error('Could not create isolated task baseline commit.');
-    return { commit, head, branch, excludedSensitive };
+    return { commit, head, branch, excludedSensitive, overlayFiles: [...new Set([...trackedFiles, ...safeUntracked])] };
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
@@ -160,6 +168,12 @@ async function ensureTaskWorktree(workspace, config, taskId) {
   if (created?.ok === false) {
     throw taskError('TASK_WORKTREE_CREATE_FAILED', `Could not create an isolated working copy for this task: ${created.git?.stderr || created.git?.stdout || 'git worktree add failed'}`);
   }
+  try {
+    overlayWorkspaceFileBytes(workspace.path, created.path, baseline.overlayFiles || []);
+  } catch (error) {
+    await discardFailedTaskWorktree(created, config);
+    throw taskError('TASK_WORKTREE_CREATE_FAILED', `Could not preserve the source workspace bytes in the isolated task copy: ${error instanceof Error ? error.message : String(error)}`);
+  }
   const registry = readRegistry(config);
   const entry = registry.worktrees?.[created.alias];
   if (!entry) throw taskError('TASK_WORKTREE_CREATE_FAILED', 'The isolated task worktree was created but could not be registered.');
@@ -169,6 +183,31 @@ async function ensureTaskWorktree(workspace, config, taskId) {
   entry.baselineExcludedSensitive = baseline.excludedSensitive;
   writeRegistry(config, registry);
   return entry;
+}
+
+function overlayWorkspaceFileBytes(sourceRoot, targetRoot, files) {
+  for (const relativePath of files) {
+    const source = path.join(sourceRoot, relativePath);
+    const target = path.join(targetRoot, relativePath);
+    let stat;
+    try { stat = fs.lstatSync(source); } catch { continue; }
+    if (!stat.isFile()) continue;
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.copyFileSync(source, target);
+  }
+}
+
+async function discardFailedTaskWorktree(entry, config) {
+  await runProcess('git', ['worktree', 'remove', '--force', entry.path], { cwd: entry.sourcePath, timeout: 120000 }, config).catch(() => {});
+  const registry = readRegistry(config);
+  if (registry.worktrees?.[entry.alias]) {
+    delete registry.worktrees[entry.alias];
+    writeRegistry(config, registry);
+  }
+  if (entry.branch) {
+    await runProcess('git', ['branch', '-D', entry.branch], { cwd: entry.sourcePath, timeout: 30000 }, config).catch(() => {});
+  }
+  await runProcess('git', ['worktree', 'prune'], { cwd: entry.sourcePath, timeout: 60000 }, config).catch(() => {});
 }
 
 async function taskExecutionWorkspace(workspace, config, taskId, operationName) {
@@ -269,6 +308,12 @@ async function integrateTaskWorktree(workspace, config, taskId) {
     }
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+
+  try {
+    overlayWorkspaceFileBytes(entry.path, workspace.path, changedFiles);
+  } catch (error) {
+    throw integrationError('TASK_INTEGRATION_FAILED', `Task changes were applied, but Rel.AI could not preserve their exact file bytes in the shared workspace. The isolated worktree was preserved. ${error instanceof Error ? error.message : String(error)}`);
   }
 
   const registry = readRegistry(config);

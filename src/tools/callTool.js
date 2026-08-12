@@ -348,7 +348,15 @@ function logicalWorkspaceResult(value, logicalArgs, executionArgs) {
   const logical = String(logicalArgs?.workspace || '').trim();
   const physical = String(executionArgs?.workspace || '').trim();
   if (!logical || !physical || logical === physical || value.workspace == null) return value;
-  return { ...value, workspace: logical };
+  if (typeof value.workspace === 'string') {
+    return value.workspace === physical ? { ...value, workspace: logical } : value;
+  }
+  if (value.workspace && typeof value.workspace === 'object' && !Array.isArray(value.workspace)) {
+    return String(value.workspace.alias || '') === physical
+      ? { ...value, workspace: { ...value.workspace, alias: logical } }
+      : value;
+  }
+  return value;
 }
 
 function hasWorkspaceChanges(value) {
