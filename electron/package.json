@@ -51,6 +51,7 @@
       "ngrok-token.js",
       "managed-ngrok.js",
       "ipc-handlers.js",
+      "ipc-handlers-dashboard.js",
       "launcher-config.js",
       "resource-path.js",
       "window-size.js",

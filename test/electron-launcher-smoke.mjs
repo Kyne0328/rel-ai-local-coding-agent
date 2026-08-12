@@ -172,6 +172,7 @@ const desktopSettings = fs.readFileSync(path.join(root, 'electron', 'desktop-set
 const appUpdater = fs.readFileSync(path.join(root, 'electron', 'app-updater.js'), 'utf8');
 const serviceRuntime = fs.readFileSync(path.join(root, 'electron', 'service-runtime.js'), 'utf8');
 const ipcHandlers = fs.readFileSync(path.join(root, 'electron', 'ipc-handlers.js'), 'utf8');
+const dashboardIpcHandlers = fs.readFileSync(path.join(root, 'electron', 'ipc-handlers-dashboard.js'), 'utf8');
 const ipcSecurity = fs.readFileSync(path.join(root, 'electron', 'ipc-security.js'), 'utf8');
 const windowSecurity = fs.readFileSync(path.join(root, 'electron', 'window-security.js'), 'utf8');
 const appUpdaterEvents = fs.readFileSync(path.join(root, 'electron', 'app-updater-events.js'), 'utf8');
@@ -261,8 +262,8 @@ assert.match(desktopLifecycle, /previousVersion/);
 assert.match(desktopLifecycle, /desktop-lifecycle\.json/);
 assert.match(dashboardPreload, /desktop:lifecycle:get/);
 assert.match(dashboardPreload, /desktop:startup:set/);
-assert.match(ipcHandlers, /desktop:lifecycle:get/);
-assert.match(ipcHandlers, /desktop:startup:set/);
+assert.match(dashboardIpcHandlers, /desktop:lifecycle:get/);
+assert.match(dashboardIpcHandlers, /desktop:startup:set/);
 assert.match(electronMain, /function launchConfiguredDesktop\(/, 'desktop startup must have a dashboard-first lifecycle');
 assert.match(serviceRuntime, /const pendingStart = start\(runToken\);[\s\S]*startPromise = pendingStart;[\s\S]*startPromise === pendingStart/, 'startup promise cleanup must be identity-safe across overlapping restart generations');
 assert.doesNotMatch(serviceRuntime, /if \(runToken !== lifecycleToken\) \{\s*await publicConnectionRuntime\.stop/, 'a stale startup completion must not stop the current public connection generation');
