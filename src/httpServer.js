@@ -3,6 +3,7 @@ import { URL } from "node:url";
 import * as connection from "./connectionProfile.js";
 import { setBaseHeaders, sendJson, unauthorized } from "./http/io.js";
 import { ERROR_CODES, errorPayload } from "./desktopUxContracts.js";
+import { errorCodeForRequest, isLoopbackHost } from './http/serverPolicy.js';
 import { isDashboardAuthorized } from "./http/auth.js";
 import { handleFavicon, handleHealth, handleStaticAsset, handleDashboard, handleApiSettingsGet, handleApiTools, handleOnboardingStatus, handleConnection, handleDashboardV10, handleTaskSession, handleApiLogs, handleHealthMonitor, handleAliasDiagnostics, handleReleaseNotes, handleCautionSummary, handleReadiness, handleWorkspacePreflight, handleEvents, handleOnboardingComplete, handleApiSettingsPost, handleApiWorkspaces, handlePickFolder, handleOpenFolder, handleSkillsGet, handleSkillsPost, handleWorkspaceChecks } from "./http/dashboard.js";
 import { handleApiHistoryReset } from "./http/dashboardHistory.js";
@@ -284,18 +285,5 @@ const POST_ROUTES = {
   "/api/processes/stop": { auth: authDashboard, handler: handleApiProcessStop },
   "/api/mcp/recovery": { auth: authDashboard, handler: handleMcpRecovery }
 };
-
-function isLoopbackHost(host) {
-  return ['127.0.0.1', 'localhost', '::1', '[::1]'].includes(String(host || '').toLowerCase());
-}
-
-function errorCodeForRequest(req) {
-  const path = String(req?.url || '').split('?')[0];
-  if (path === '/api/settings') return ERROR_CODES.SETTINGS_SAVE_FAILED;
-  if (path === '/api/workspaces' || path.startsWith('/api/workspace/')) return ERROR_CODES.WORKSPACE_UNAVAILABLE;
-  if (path === '/api/diagnostics/reset' || path === '/api/history/reset') return ERROR_CODES.STATE_RESET_FAILED;
-  if (path === '/api/diagnostics') return ERROR_CODES.DIAGNOSTICS_UNAVAILABLE;
-  return ERROR_CODES.UNKNOWN;
-}
 
 export { startHttpServer };
