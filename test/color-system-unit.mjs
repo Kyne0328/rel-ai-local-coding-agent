@@ -123,6 +123,7 @@ assert.doesNotMatch(generatorSource, /createRequire|\brequire\s*\(/);
 assert.doesNotMatch(generatorSource, /LEGACY_ALIASES/);
 
 const dashboardCss = read('src/ui/styles/app.css');
+const systemCss = read('src/ui/features/system/styles.css');
 assert.match(dashboardCss, /\.status-pill\.open, \.status-pill\.working, \.status-pill\.waiting[\s\S]*--ui-status-info-foreground/);
 assert.match(dashboardCss, /\.status-pill\.warn, \.status-pill\.incomplete[\s\S]*--ui-status-warning-foreground/);
 assert.doesNotMatch(dashboardCss, /\.status-pill\.warn[^{]*\.status-pill\.working/);
@@ -190,14 +191,14 @@ for (const [tone, statuses] of Object.entries(statusExpectations)) {
   }
 }
 
-assert.match(dashboardCss, /\.diagnostic-finding\.warning[^}]*--ui-status-warning-foreground/);
-assert.match(dashboardCss, /\.diagnostic-finding\.error[^}]*--ui-status-danger-foreground/);
-assert.match(dashboardCss, /\.diagnostic-log-row\.info[^}]*--ui-status-info-foreground/);
-assert.match(dashboardCss, /\.diagnostic-log-row\.warning[^}]*--ui-status-warning-foreground/);
-assert.match(dashboardCss, /\.diagnostic-log-row\.error[^}]*--ui-status-danger-foreground/);
+assert.match(systemCss, /\.diagnostic-finding\.warning[^}]*--ui-status-warning-foreground/);
+assert.match(systemCss, /\.diagnostic-finding\.error[^}]*--ui-status-danger-foreground/);
+assert.match(systemCss, /\.diagnostic-log-row\.info[^}]*--ui-status-info-foreground/);
+assert.match(systemCss, /\.diagnostic-log-row\.warning[^}]*--ui-status-warning-foreground/);
+assert.match(systemCss, /\.diagnostic-log-row\.error[^}]*--ui-status-danger-foreground/);
 assert.match(dashboardCss, /\.dot\.neutral[^}]*--ui-status-neutral-foreground/);
-assert.match(dashboardCss, /\.connection-summary-card\.working[^}]*--ui-status-info-foreground/);
-assert.match(dashboardCss, /\.connection-path-step\.working \.connection-layer-dot[^}]*--ui-status-info-foreground/);
-assert.match(dashboardCss, /\.connection-layer-state\.working[^}]*--ui-status-info-foreground/);
+assert.match(systemCss, /\.connection-summary-card\.working[^}]*--ui-status-info-foreground/);
+assert.match(systemCss, /\.connection-path-step\.working \.connection-layer-dot[^}]*--ui-status-info-foreground/);
+assert.match(systemCss, /\.connection-layer-state\.working[^}]*--ui-status-info-foreground/);
 
 console.log('ESM color-system hard-cutover, contrast, exhaustive status-tone mapping, and raw-color checks passed.');
