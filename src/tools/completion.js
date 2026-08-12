@@ -5,6 +5,7 @@ import { readTaskIntegrity, readWorkspaceIntegrity } from '../taskIntegrity.js';
 import { createValidationFingerprint } from '../bridge/validationPlan.js';
 import { sanitizeCompletionSummary } from '../taskObservability.js';
 import { getCurrentToolActivityContext, requestCurrentTaskCompletion, taskError, normalizeTaskId } from '../toolActivity.js';
+import { integrateTaskWorktree, managedTaskWorktreeEntry, resolveManagedWorktree } from '../worktreeManager.js';
 
 async function completeTask(config, args = {}) {
   const workspace = resolveWorkspace(config, args.workspace);
@@ -13,6 +14,8 @@ async function completeTask(config, args = {}) {
     throw taskError('TASK_ID_REQUIRED', 'relai_finish_work requires the work_id returned by relai_begin_work.');
   }
   const context = requireMatchingTaskContext(requestedTaskId);
+  const isolationEntry = managedTaskWorktreeEntry(config, workspace.alias, requestedTaskId);
+  const validationWorkspace = isolationEntry ? resolveManagedWorktree(config, isolationEntry.alias) : workspace;
   const previous = readTaskHistorySession(config, requestedTaskId);
   if (previous?.completionKnown === true || previous?.status === 'completed') {
     return finalizeDuplicateCompletion(config, workspace, context, previous);
@@ -67,7 +70,7 @@ async function completeTask(config, args = {}) {
   if (authority.validationResult === 'passed') {
     const workspaceState = readWorkspaceIntegrity(config, workspace.alias);
     const validatedWorkspaceGeneration = Number(authority.validatedWorkspaceGeneration || 0);
-    if (Number(workspaceState.generation || 0) > validatedWorkspaceGeneration) {
+    if (!isolationEntry && Number(workspaceState.generation || 0) > validatedWorkspaceGeneration) {
       const error = taskError(
         'TASK_PERSISTENCE_CONFLICT',
         'Work-session completion is paused because another work session changed the shared workspace after this work session was validated. Re-run validation for this work_id against the current workspace state.',
@@ -84,7 +87,7 @@ async function completeTask(config, args = {}) {
     }
     const validatedFingerprint = String(authority.validatedRepositoryFingerprint || authority.validationFingerprint || '');
     if (validatedFingerprint) {
-      const currentFingerprint = await createValidationFingerprint(workspace, config);
+      const currentFingerprint = await createValidationFingerprint(validationWorkspace, config);
       if (currentFingerprint.fingerprint !== validatedFingerprint) {
         throw taskError(
           'TASK_REVALIDATION_REQUIRED',
@@ -101,6 +104,8 @@ async function completeTask(config, args = {}) {
     }
   }
 
+  await integrateTaskWorktree(workspace, config, requestedTaskId);
+  if (isolationEntry?.alias) clearSessionPolicy(config, isolationEntry.alias, requestedTaskId);
   return finalizeValidatedTask(config, workspace, {
     summary,
     validationStatus: authority.validationResult === 'passed' ? 'passed' : 'not_required',
@@ -153,8 +158,14 @@ function finalizeValidatedTask(config, workspace, options = {}) {
   };
 }
 
-function finalizeValidationResult(config, workspace, validationResult, summary) {
-  const completion = finalizeValidatedTask(config, workspace, {
+async function finalizeValidationResult(config, workspace, validationResult, summary) {
+  const sourceWorkspace = workspace.sourceAlias ? resolveWorkspace(config, workspace.sourceAlias) : workspace;
+  const context = getCurrentToolActivityContext();
+  const taskId = normalizeTaskId(context?.taskId);
+  const isolationEntry = taskId ? managedTaskWorktreeEntry(config, sourceWorkspace.alias, taskId) : null;
+  if (taskId) await integrateTaskWorktree(sourceWorkspace, config, taskId);
+  if (isolationEntry?.alias && taskId) clearSessionPolicy(config, isolationEntry.alias, taskId);
+  const completion = finalizeValidatedTask(config, sourceWorkspace, {
     summary,
     validationStatus: 'passed',
     validationLevel: validationResult.validationLevel,
