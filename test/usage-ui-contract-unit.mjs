@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildUsageModel, currentUsageMonth } from '../src/ui/features/usage/index.js';
 import { analyticsBounds, analyticsRangeScope } from '../src/ui/features/usage/range-model.js';
+import { loadAnalyticsData } from '../src/ui/features/usage/data.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
@@ -14,7 +15,8 @@ const ipc = read('electron/ipc-handlers-dashboard.js');
 const usageSource = read('src/ui/features/usage/index.js');
 const usageRender = read('src/ui/features/usage/render.js');
 const usageRange = read('src/ui/features/usage/range-model.js');
-const usageCombined = `${usageSource}\n${usageRender}\n${usageRange}`;
+const usageData = read('src/ui/features/usage/data.js');
+const usageCombined = `${usageSource}\n${usageRender}\n${usageRange}\n${usageData}`;
 
 assert.match(navigationCatalog, /route\(['"]usage['"], ['"]Analytics['"]/);
 assert.match(navigationCatalog, /stored on this device/i);
@@ -24,9 +26,9 @@ assert.doesNotMatch(preload, /getGatewayUsage|desktop:gateway:usage/);
 assert.match(ipc, /desktop:analytics:local/);
 assert.match(ipc, /Analytics month must use YYYY-MM/);
 assert.doesNotMatch(ipc, /gateway/i);
-assert.match(usageSource, /desktop\.getLocalUsage/);
-assert.doesNotMatch(usageSource, /getGatewayUsage|connectionMode|pairing_required|cloudUsageAvailability/i);
-assert.doesNotMatch(usageSource, /fetch\(|DASHBOARD_DATA_URL|auditTail|taskActivity/);
+assert.match(usageData, /desktop\.getLocalUsage/);
+assert.doesNotMatch(`${usageSource}\n${usageData}`, /getGatewayUsage|connectionMode|pairing_required|cloudUsageAvailability/i);
+assert.doesNotMatch(`${usageSource}\n${usageData}`, /fetch\(|DASHBOARD_DATA_URL|auditTail|taskActivity/);
 assert.match(usageSource, /Privacy-safe aggregate MCP activity recorded only on this device/i);
 
 for (const label of ['Tool calls', 'Successful', 'Failed', 'Execution time', 'Avg tool time', 'Active days']) {
@@ -73,5 +75,23 @@ const ranged = analyticsRangeScope([buildUsageModel({
 assert.equal(ranged.toolCalls, 2);
 assert.equal(ranged.averageDuration, 50);
 assert.deepEqual(ranged.failureCategories, [{ category: 'policy', failures: 1 }]);
+
+const loaded = await loadAnalyticsData({
+  desktop: { getLocalUsage: async () => ({
+    ok: true,
+    source: 'local',
+    month: '2026-08',
+    totals: { requests: 2, toolCalls: 2, successes: 2, failures: 0, requestBytes: 0, resultBytes: 0, executionMs: 120, activeDays: 1 },
+    tools: [], devices: [], workspaces: [{ workspace: 'repo', toolCalls: 2, successes: 2, failures: 0, executionMs: 120 }],
+    workspaceDimensions: [{ deviceId: 'local', displayName: 'This device', workspace: 'repo', workspaceKey: 'local::repo', toolCalls: 2, successes: 2, failures: 0, executionMs: 120 }],
+    workspaceTools: [],
+    series: [{ hour: '2026-08-08T10', requests: 2, toolCalls: 2, successes: 2, failures: 0, requestBytes: 0, resultBytes: 0, executionMs: 120 }],
+    toolSeries: [], workspaceSeries: [{ hour: '2026-08-08T10', deviceId: 'local', workspace: 'repo', workspaceKey: 'local::repo', toolCalls: 2, successes: 2, failures: 0, executionMs: 120 }], workspaceToolSeries: []
+  }) },
+  range: '24h',
+  now: new Date('2026-08-08T12:00:00.000Z')
+});
+assert.equal(loaded.current.toolCalls, 2);
+assert.equal(loaded.current.workspaces[0].workspace, 'repo');
 
 console.log('Local analytics UI and privacy contracts passed.');

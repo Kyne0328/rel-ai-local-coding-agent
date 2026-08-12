@@ -64,11 +64,12 @@ function wireTimeline(content, scope) {
 }
 
 function timeline(values) {
-  const data = finite(values); const width = 720; const height = 180;
+  const data = finite(values); const width = 720; const height = 180; const baseline = height - 12;
   if (!data.length || data.every(value => value === 0)) return '<div class="usage-chart-empty">No bucketed activity in this range yet.</div>';
   const max = Math.max(...data, 1);
-  const points = data.map((value, i) => `${data.length === 1 ? width/2 : i/(data.length-1)*width},${height-12-value/max*(height-32)}`).join(' ');
-  return `<svg class="usage-timeline-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="Activity trend"><line x1="0" y1="${height-12}" x2="${width}" y2="${height-12}" class="usage-chart-axis"/><polyline points="${points}" class="usage-chart-line" fill="none" vector-effect="non-scaling-stroke"/></svg>`;
+  const points = data.map((value, i) => `${data.length === 1 ? width/2 : i/(data.length-1)*width},${baseline-value/max*(height-32)}`).join(' ');
+  const area = `0,${baseline} ${points} ${width},${baseline}`;
+  return `<div class="usage-timeline-plot"><svg class="usage-timeline-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="Activity trend"><line x1="0" y1="${height*.28}" x2="${width}" y2="${height*.28}" class="usage-chart-grid"/><line x1="0" y1="${height*.52}" x2="${width}" y2="${height*.52}" class="usage-chart-grid"/><line x1="0" y1="${height*.76}" x2="${width}" y2="${height*.76}" class="usage-chart-grid"/><polygon points="${area}" class="usage-chart-area"/><line x1="0" y1="${baseline}" x2="${width}" y2="${baseline}" class="usage-chart-axis"/><polyline points="${points}" class="usage-chart-line" fill="none" vector-effect="non-scaling-stroke"/></svg><div class="usage-timeline-scale"><span>Earlier</span><span>Now</span></div></div>`;
 }
 
 function sparkline(values, tone='') {
