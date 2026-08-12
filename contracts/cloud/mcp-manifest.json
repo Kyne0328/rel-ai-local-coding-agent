@@ -3,7 +3,7 @@
   "disabledToolCount": 0,
   "externallyVisibleToolCount": 12,
   "filteredToolCount": 0,
-  "hash": "Nj3ZBr2scwan0BTm96l4EY2MoHSdDmTR3Iz3claasqs",
+  "hash": "NcjQHHry2Wr0bysrJPS4e_ZuI3ZRwWL2YRe-V-eLoOI",
   "instructions": "Start each objective with relai_work action begin and pass its work_id to later calls. Inspect relevant files before editing; use bounded reads and commands. Validate after changes. On edit failure, follow recovery guidance and retry; report unavailable only after a separate availability check fails. Never bypass approval, workspace, task, or destructive-operation safeguards. Report only checks actually run. Finish with relai_work action finish after review.",
   "schemaVersion": 7,
   "serverInfo": {
@@ -161,125 +161,6 @@
       },
       "inputSchema": {
         "additionalProperties": false,
-        "allOf": [
-          {
-            "if": {
-              "anyOf": [
-                {
-                  "required": [
-                    "maxBytes"
-                  ]
-                },
-                {
-                  "required": [
-                    "path"
-                  ]
-                },
-                {
-                  "required": [
-                    "redactSensitive"
-                  ]
-                },
-                {
-                  "required": [
-                    "staged"
-                  ]
-                }
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "diff"
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "required": [
-                "paths"
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "restore"
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "anyOf": [
-                {
-                  "required": [
-                    "confirmation"
-                  ]
-                },
-                {
-                  "required": [
-                    "removeUntracked"
-                  ]
-                }
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "reset"
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "anyOf": [
-                {
-                  "required": [
-                    "maxCandidates"
-                  ]
-                },
-                {
-                  "required": [
-                    "mode"
-                  ]
-                }
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "tidy_plan"
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "required": [
-                "planId"
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "tidy_run"
-                  ]
-                }
-              }
-            }
-          }
-        ],
         "oneOf": [
           {
             "properties": {
@@ -287,7 +168,6 @@
                 "const": "diff"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -304,7 +184,6 @@
                 "const": "restore"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -322,7 +201,6 @@
                 "const": "reset"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -340,7 +218,6 @@
                 "const": "tidy_plan"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -357,7 +234,6 @@
                 "const": "tidy_run"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -431,7 +307,6 @@
             "type": "boolean"
           },
           "work_id": {
-            "description": "Opaque ID returned when a repository work session begins.",
             "maxLength": 200,
             "minLength": 1,
             "type": "string"
@@ -449,340 +324,12 @@
       "name": "relai_changes",
       "outputSchema": {
         "additionalProperties": false,
+        "patternProperties": {
+          "^(?:ok|workspace|work_id|staged|redactSensitive|path|reviewScope|reviewedScope|reviewHash|reviewedFiles|excludedWorkspaceFiles|status|branch|aheadBehind|statusEntries|sessionChangedFiles|baselineChangedFiles|untrackedSessionFiles|untrackedBaselineFiles|baselineSource|diff|sensitiveReview|sensitiveValuesReturned|exitCode|stderr|truncated|originalBytes|processId|duplicate|mode|check|durationMs|diagnosticCount|validationStatus|completionKnown|message|error|errorCode|level|summary|nextAction|stdout|results|workflow|errorDetails|title|recovery|paths|command|commandSummary|cwd|shell|stdoutBytes|stderrBytes|stdoutTruncated|stderrTruncated|timedOut|cancelled|terminationConfirmed|forcedTermination|signal|removeUntracked|reset|clean|operation|planId|expiresAt|ttlSeconds|candidateCount|skippedCount|candidates|skipped|reason|next|changed|changedFiles|appliedCount|applied|refused)$": {}
+        },
         "properties": {
-          "aheadBehind": {
-            "additionalProperties": true,
-            "type": [
-              "object",
-              "null"
-            ]
-          },
-          "applied": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "appliedCount": {
-            "type": "number"
-          },
-          "baselineChangedFiles": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "baselineSource": {
-            "type": "string"
-          },
-          "branch": {
-            "type": "string"
-          },
-          "cancelled": {
-            "type": "boolean"
-          },
-          "candidateCount": {
-            "type": "number"
-          },
-          "candidates": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "changed": {
-            "type": "boolean"
-          },
-          "changedFiles": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "check": {
-            "type": "string"
-          },
-          "clean": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "command": {
-            "type": "string"
-          },
-          "commandSummary": {
-            "type": "string"
-          },
-          "completionKnown": {
-            "type": "boolean"
-          },
-          "cwd": {
-            "type": "string"
-          },
-          "diagnosticCount": {
-            "type": "number"
-          },
-          "diff": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "duplicate": {
-            "type": "boolean"
-          },
-          "durationMs": {
-            "type": "number"
-          },
-          "error": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object",
-              "null"
-            ]
-          },
-          "errorCode": {
-            "type": "string"
-          },
-          "errorDetails": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "excludedWorkspaceFiles": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "exitCode": {
-            "type": [
-              "number",
-              "null"
-            ]
-          },
-          "expiresAt": {
-            "type": "string"
-          },
-          "forcedTermination": {
-            "type": "boolean"
-          },
-          "level": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          },
-          "mode": {
-            "type": "string"
-          },
-          "next": {
-            "type": "string"
-          },
-          "nextAction": {
-            "type": "string"
-          },
           "ok": {
             "type": "boolean"
-          },
-          "operation": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "originalBytes": {
-            "type": "number"
-          },
-          "path": {
-            "type": "string"
-          },
-          "paths": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "planId": {
-            "type": "string"
-          },
-          "processId": {
-            "type": "string"
-          },
-          "reason": {
-            "type": "string"
-          },
-          "recovery": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "redactSensitive": {
-            "type": "boolean"
-          },
-          "refused": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "removeUntracked": {
-            "type": "boolean"
-          },
-          "reset": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "results": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "reviewHash": {
-            "type": "string"
-          },
-          "reviewScope": {
-            "type": "string"
-          },
-          "reviewedFiles": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "reviewedScope": {
-            "type": "string"
-          },
-          "sensitiveReview": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "sensitiveValuesReturned": {
-            "type": "boolean"
-          },
-          "sessionChangedFiles": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "shell": {
-            "type": "string"
-          },
-          "signal": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "skipped": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "skippedCount": {
-            "type": "number"
-          },
-          "staged": {
-            "type": "boolean"
-          },
-          "status": {
-            "type": "string"
-          },
-          "statusEntries": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "stderr": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "stderrBytes": {
-            "type": "number"
-          },
-          "stderrTruncated": {
-            "type": "boolean"
-          },
-          "stdout": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "stdoutBytes": {
-            "type": "number"
-          },
-          "stdoutTruncated": {
-            "type": "boolean"
-          },
-          "summary": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "terminationConfirmed": {
-            "type": "boolean"
-          },
-          "timedOut": {
-            "type": "boolean"
-          },
-          "title": {
-            "type": "string"
-          },
-          "truncated": {
-            "type": "boolean"
-          },
-          "ttlSeconds": {
-            "type": "number"
-          },
-          "untrackedBaselineFiles": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "untrackedSessionFiles": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "validationStatus": {
-            "type": "string"
-          },
-          "work_id": {
-            "type": "string"
-          },
-          "workflow": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "workspace": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object",
-              "null"
-            ]
           }
         },
         "required": [
@@ -811,25 +358,21 @@
         "summary": "edit",
         "taskScope": "required"
       },
-      "description": "The one tool for changing files. Use oldText/newText with optional occurrence, replacements:[...] for several exact edits in one file, content for full-file replacement, updateText for patch-shaped changes, or edits:[...] for an atomic batch of up to 100 files. Keep larger repository-wide changes together as one logical updateText patch; if one request is too large, send staged updateText chunks and commit once instead of splitting the migration into repeated edit batches. Large content stages automatically. expectedSha256 is supported for direct, staged, and batch file edits.",
+      "description": "Edit files with oldText/newText, patch text, batches, or content for full-file replacement.",
       "execution": {
         "executionClass": "bounded_synchronous",
         "taskSupport": "forbidden"
       },
       "inputSchema": {
         "additionalProperties": false,
-        "description": "Choose one primary form. Rel.AI validates the selected form before touching the workspace.",
         "properties": {
           "content": {
-            "description": "Complete replacement content for one file. Use with path; an empty string creates an empty file.",
             "type": "string"
           },
           "dryRun": {
-            "description": "Validate and preview the edit without changing files.",
             "type": "boolean"
           },
           "edits": {
-            "description": "Atomic structured batch of up to 100 file edits.",
             "items": {
               "additionalProperties": false,
               "properties": {
@@ -891,7 +434,6 @@
             "type": "array"
           },
           "envAction": {
-            "description": "Secret-safe environment operation: list, set, remove, or compare.",
             "enum": [
               "list",
               "set",
@@ -901,18 +443,15 @@
             "type": "string"
           },
           "expectedSha256": {
-            "description": "Optional stale-write guard for direct, staged, batch, and environment edits.",
             "pattern": "^[a-fA-F0-9]{64}$",
             "type": "string"
           },
           "key": {
-            "description": "Environment key used by envAction set or remove.",
             "maxLength": 256,
             "minLength": 1,
             "type": "string"
           },
           "level": {
-            "description": "Validation level used when runChecks is true.",
             "enum": [
               "quick",
               "standard",
@@ -921,27 +460,22 @@
             "type": "string"
           },
           "newText": {
-            "description": "Replacement text paired with oldText. An empty string deletes the matched text.",
             "type": "string"
           },
           "occurrence": {
-            "description": "One-based occurrence to replace when oldText is not unique.",
             "maximum": 1000000,
             "minimum": 1,
             "type": "number"
           },
           "oldText": {
-            "description": "Exact non-empty current text to replace. Pair with newText.",
             "type": "string"
           },
           "path": {
-            "description": "Workspace-relative target path. Required for full-file content and exact replacement forms.",
             "maxLength": 1000,
             "minLength": 1,
             "type": "string"
           },
           "replacements": {
-            "description": "Several exact oldText/newText replacements in one file.",
             "items": {
               "additionalProperties": false,
               "properties": {
@@ -968,15 +502,12 @@
             "type": "array"
           },
           "returnDiff": {
-            "description": "Return a bounded diff after a successful edit.",
             "type": "boolean"
           },
           "runChecks": {
-            "description": "Run detected validation checks after a successful edit.",
             "type": "boolean"
           },
           "stage": {
-            "description": "Chunked content or updateText lifecycle: start, append, commit, or abort.",
             "enum": [
               "start",
               "append",
@@ -986,30 +517,24 @@
             "type": "string"
           },
           "templatePath": {
-            "description": "Public environment template used by envAction compare.",
             "type": "string"
           },
           "updateText": {
-            "description": "Git unified diff or structured OpenAI patch text for patch-shaped changes.",
             "type": "string"
           },
           "value": {
-            "description": "Environment value used by envAction set. Values are never returned.",
             "maxLength": 65536,
             "type": "string"
           },
           "work_id": {
-            "description": "Opaque ID returned when a repository work session begins.",
             "maxLength": 200,
             "minLength": 1,
             "type": "string"
           },
           "workspace": {
-            "description": "Optional workspace ownership assertion. The work_id already identifies the bound workspace.",
             "type": "string"
           },
           "writeId": {
-            "description": "Opaque staged-write ID returned by stage start.",
             "maxLength": 200,
             "minLength": 1,
             "type": "string"
@@ -1023,291 +548,12 @@
       "name": "relai_edit",
       "outputSchema": {
         "additionalProperties": false,
+        "patternProperties": {
+          "^(?:ok|workspace|work_id|dryRun|operationId|operation|path|changed|changedFiles|oldSha256|newSha256|shaMismatch|replacements|verified|bytes|plannerPath|plannerReason|result|writeId|chunks|cleared|staged|editCount|appliedCount|preflightAtomic|rollbackAtomic|batchInputBytes|replacementCount|snapshotBytes|resultDetailsCompacted|rollback|preflight|results|touchedPaths|patchBytes|sourceFormat|converted|backup|verify|apply|check|diagnostics|checks|diff|summary|validationStatus|error|next|truncated|originalBytes|processId|status|duplicate|mode|exitCode|durationMs|diagnosticCount|completionKnown|message|errorCode|level|nextAction|stdout|stderr|workflow|errorDetails|title|recovery)$": {}
+        },
         "properties": {
-          "appliedCount": {
-            "type": "number"
-          },
-          "apply": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "backup": {
-            "additionalProperties": true,
-            "type": [
-              "object",
-              "string",
-              "null"
-            ]
-          },
-          "batchInputBytes": {
-            "type": "number"
-          },
-          "bytes": {
-            "type": "number"
-          },
-          "changed": {
-            "type": "boolean"
-          },
-          "changedFiles": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "check": {
-            "type": "string"
-          },
-          "checks": {
-            "additionalProperties": true,
-            "items": {
-              "type": "string"
-            },
-            "type": [
-              "object",
-              "array"
-            ]
-          },
-          "chunks": {
-            "type": "number"
-          },
-          "cleared": {
-            "type": "boolean"
-          },
-          "completionKnown": {
-            "type": "boolean"
-          },
-          "converted": {
-            "type": "boolean"
-          },
-          "diagnosticCount": {
-            "type": "number"
-          },
-          "diagnostics": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "diff": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "dryRun": {
-            "type": "boolean"
-          },
-          "duplicate": {
-            "type": "boolean"
-          },
-          "durationMs": {
-            "type": "number"
-          },
-          "editCount": {
-            "type": "number"
-          },
-          "error": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object",
-              "null"
-            ]
-          },
-          "errorCode": {
-            "type": "string"
-          },
-          "errorDetails": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "exitCode": {
-            "type": [
-              "number",
-              "null"
-            ]
-          },
-          "level": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          },
-          "mode": {
-            "type": "string"
-          },
-          "newSha256": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "next": {
-            "type": "string"
-          },
-          "nextAction": {
-            "type": "string"
-          },
           "ok": {
             "type": "boolean"
-          },
-          "oldSha256": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "operation": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "operationId": {
-            "type": "string"
-          },
-          "originalBytes": {
-            "type": "number"
-          },
-          "patchBytes": {
-            "type": "number"
-          },
-          "path": {
-            "type": "string"
-          },
-          "plannerPath": {
-            "type": "string"
-          },
-          "plannerReason": {
-            "type": "string"
-          },
-          "preflight": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "preflightAtomic": {
-            "type": "boolean"
-          },
-          "processId": {
-            "type": "string"
-          },
-          "recovery": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "replacementCount": {
-            "type": "number"
-          },
-          "replacements": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "result": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "resultDetailsCompacted": {
-            "type": "boolean"
-          },
-          "results": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "rollback": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "rollbackAtomic": {
-            "type": "boolean"
-          },
-          "shaMismatch": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "snapshotBytes": {
-            "type": "number"
-          },
-          "sourceFormat": {
-            "type": "string"
-          },
-          "staged": {
-            "type": "boolean"
-          },
-          "status": {
-            "type": "string"
-          },
-          "stderr": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "stdout": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "summary": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "title": {
-            "type": "string"
-          },
-          "touchedPaths": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "truncated": {
-            "type": "boolean"
-          },
-          "validationStatus": {
-            "type": "string"
-          },
-          "verified": {
-            "type": "boolean"
-          },
-          "verify": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "work_id": {
-            "type": "string"
-          },
-          "workflow": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "workspace": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object",
-              "null"
-            ]
-          },
-          "writeId": {
-            "type": "string"
           }
         },
         "required": [
@@ -1336,14 +582,14 @@
         "summary": "",
         "taskScope": "required"
       },
-      "description": "Run a one-shot workspace command. Prefer executable + argv (+ optional input) whenever shell features are not required. Use command only when the operation intentionally needs shell syntax such as pipes, redirection, environment expansion, or shell built-ins. Direct mode avoids PowerShell/cmd/bash reparsing and preserves quotes, backticks, dollar signs, JSON, and multiline script text exactly.",
+      "description": "Run one-shot workspace commands. Prefer executable + argv for shell-free execution; use command only for shell syntax.",
       "execution": {
         "executionClass": "bounded_synchronous",
         "taskSupport": "forbidden"
       },
       "inputSchema": {
         "additionalProperties": false,
-        "description": "Choose exactly one execution mode. Prefer direct executable + argv mode by default; choose command only when shell parsing is deliberately needed.",
+        "description": "Choose one mode. Prefer direct executable + argv mode by default; use command only for deliberate shell parsing.",
         "oneOf": [
           {
             "not": {
@@ -1367,7 +613,6 @@
             },
             "properties": {
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -1386,7 +631,6 @@
             },
             "properties": {
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -1400,7 +644,7 @@
         ],
         "properties": {
           "argv": {
-            "description": "Literal argument array passed directly to executable without shell parsing. Keep each logical argument as its own item.",
+            "description": "Arguments passed without shell parsing; keep each logical argument separate.",
             "items": {
               "maxLength": 20000,
               "type": "string"
@@ -1409,47 +653,42 @@
             "type": "array"
           },
           "command": {
-            "description": "Shell command string. Use only when shell syntax is intentionally required. Do not embed JavaScript, Python, JSON, patches, or other quote-sensitive multiline scripts here when direct mode can run them.",
+            "description": "Shell command. Use only for shell syntax. Do not embed JavaScript, Python, JSON, patches, or multiline scripts.",
             "maxLength": 20000,
             "minLength": 1,
             "type": "string"
           },
           "cwd": {
-            "description": "Optional workspace-relative working directory.",
             "type": "string"
           },
           "env": {
             "additionalProperties": {
               "type": "string"
             },
-            "description": "Optional environment variables supplied directly to the child process.",
             "type": "object"
           },
           "executable": {
-            "description": "Executable to launch directly with shell:false, for example node, python, git, or an absolute executable path. Preferred for scripts and structured arguments.",
+            "description": "Executable launched with shell:false; preferred for structured arguments.",
             "maxLength": 1000,
             "minLength": 1,
             "type": "string"
           },
           "input": {
-            "description": "Optional literal UTF-8 stdin for direct mode. Prefer this for multiline scripts or structured text so quotes, backticks, dollar signs, and newlines are preserved exactly.",
+            "description": "Literal stdin for multiline scripts or structured text; preserves quote-sensitive content.",
             "maxLength": 1048576,
             "type": "string"
           },
           "maxOutputBytes": {
-            "description": "Maximum captured stdout/stderr bytes before output is truncated.",
             "maximum": 16777216,
             "minimum": 1000,
             "type": "number"
           },
           "timeoutMs": {
-            "description": "Maximum operation runtime in milliseconds.",
             "maximum": 86400000,
             "minimum": 1000,
             "type": "number"
           },
           "work_id": {
-            "description": "Opaque ID returned when a repository work session begins.",
             "maxLength": 200,
             "minLength": 1,
             "type": "string"
@@ -1466,182 +705,12 @@
       "name": "relai_exec",
       "outputSchema": {
         "additionalProperties": false,
+        "patternProperties": {
+          "^(?:ok|workspace|work_id|command|commandSummary|cwd|shell|durationMs|exitCode|stdout|stderr|stdoutBytes|stderrBytes|stdoutTruncated|stderrTruncated|timedOut|cancelled|terminationConfirmed|forcedTermination|signal|error|environmentKeys|changedFiles|changedFilesTruncated|mutationTracking|truncated|originalBytes|processId|status|duplicate|mode|check|diagnosticCount|validationStatus|completionKnown|message|errorCode|level|summary|nextAction|results|workflow|errorDetails|title|recovery)$": {}
+        },
         "properties": {
-          "cancelled": {
-            "type": "boolean"
-          },
-          "changedFiles": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "changedFilesTruncated": {
-            "type": "boolean"
-          },
-          "check": {
-            "type": "string"
-          },
-          "command": {
-            "type": "string"
-          },
-          "commandSummary": {
-            "type": "string"
-          },
-          "completionKnown": {
-            "type": "boolean"
-          },
-          "cwd": {
-            "type": "string"
-          },
-          "diagnosticCount": {
-            "type": "number"
-          },
-          "duplicate": {
-            "type": "boolean"
-          },
-          "durationMs": {
-            "type": "number"
-          },
-          "environmentKeys": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "error": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object",
-              "null"
-            ]
-          },
-          "errorCode": {
-            "type": "string"
-          },
-          "errorDetails": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "exitCode": {
-            "type": [
-              "number",
-              "null"
-            ]
-          },
-          "forcedTermination": {
-            "type": "boolean"
-          },
-          "level": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          },
-          "mode": {
-            "type": "string"
-          },
-          "mutationTracking": {
-            "type": "string"
-          },
-          "nextAction": {
-            "type": "string"
-          },
           "ok": {
             "type": "boolean"
-          },
-          "originalBytes": {
-            "type": "number"
-          },
-          "processId": {
-            "type": "string"
-          },
-          "recovery": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "results": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "shell": {
-            "type": "string"
-          },
-          "signal": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "status": {
-            "type": "string"
-          },
-          "stderr": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "stderrBytes": {
-            "type": "number"
-          },
-          "stderrTruncated": {
-            "type": "boolean"
-          },
-          "stdout": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "stdoutBytes": {
-            "type": "number"
-          },
-          "stdoutTruncated": {
-            "type": "boolean"
-          },
-          "summary": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "terminationConfirmed": {
-            "type": "boolean"
-          },
-          "timedOut": {
-            "type": "boolean"
-          },
-          "title": {
-            "type": "string"
-          },
-          "truncated": {
-            "type": "boolean"
-          },
-          "validationStatus": {
-            "type": "string"
-          },
-          "work_id": {
-            "type": "string"
-          },
-          "workflow": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "workspace": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object",
-              "null"
-            ]
           }
         },
         "required": [
@@ -1854,98 +923,6 @@
       },
       "inputSchema": {
         "additionalProperties": false,
-        "allOf": [
-          {
-            "if": {
-              "required": [
-                "maxResults"
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "architecture",
-                    "impact",
-                    "references",
-                    "related",
-                    "symbol",
-                    "trace"
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "required": [
-                "symbol"
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "impact",
-                    "references",
-                    "related",
-                    "symbol",
-                    "trace"
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "required": [
-                "query"
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "related"
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "required": [
-                "maxDepth"
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "impact",
-                    "trace"
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "required": [
-                "paths"
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "impact"
-                  ]
-                }
-              }
-            }
-          }
-        ],
         "oneOf": [
           {
             "properties": {
@@ -1953,7 +930,6 @@
                 "const": "symbol"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -1971,7 +947,6 @@
                 "const": "references"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -2001,7 +976,6 @@
                 "const": "related"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -2030,7 +1004,6 @@
                 "const": "impact"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -2047,7 +1020,6 @@
                 "const": "trace"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -2065,7 +1037,6 @@
                 "const": "diagnostics"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -2082,7 +1053,6 @@
                 "const": "architecture"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -2141,7 +1111,6 @@
             "type": "string"
           },
           "work_id": {
-            "description": "Opaque ID returned when a repository work session begins.",
             "maxLength": 200,
             "minLength": 1,
             "type": "string"
@@ -2159,350 +1128,12 @@
       "name": "relai_inspect",
       "outputSchema": {
         "additionalProperties": false,
+        "patternProperties": {
+          "^(?:ok|workspace|work_id|action|index|query|strategy|semanticEmbeddings|files|matchCount|symbol|definitions|definitionCount|references|items|referenceCount|callCount|calls|seeds|maxDepth|impactedPaths|impactedPathCount|affectedTests|importEdges|definitionPaths|directCallers|importers|indirectImpact|relatedSymbols|uiSurfaces|registrationSurfaces|recommendedReadOrder|architecture|relationshipTypes|modules|entryPoints|hotspots|layers|communities|languages|diagnosticCommands|validationCommands|configuredTestCommands|diagnosticsExecuted|summary|truncated|next|originalBytes|processId|status|duplicate|mode|check|exitCode|durationMs|diagnosticCount|validationStatus|completionKnown|message|error|errorCode|level|nextAction|stdout|stderr|results|workflow|errorDetails|title|recovery)$": {}
+        },
         "properties": {
-          "action": {
-            "type": "string"
-          },
-          "affectedTests": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "architecture": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "callCount": {
-            "type": "number"
-          },
-          "calls": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "check": {
-            "type": "string"
-          },
-          "communities": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "completionKnown": {
-            "type": "boolean"
-          },
-          "configuredTestCommands": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "definitionCount": {
-            "type": "number"
-          },
-          "definitionPaths": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "definitions": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "diagnosticCommands": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "diagnosticCount": {
-            "type": "number"
-          },
-          "diagnosticsExecuted": {
-            "type": "boolean"
-          },
-          "directCallers": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "duplicate": {
-            "type": "boolean"
-          },
-          "durationMs": {
-            "type": "number"
-          },
-          "entryPoints": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "error": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object",
-              "null"
-            ]
-          },
-          "errorCode": {
-            "type": "string"
-          },
-          "errorDetails": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "exitCode": {
-            "type": [
-              "number",
-              "null"
-            ]
-          },
-          "files": {
-            "items": {
-              "additionalProperties": true,
-              "type": [
-                "string",
-                "object"
-              ]
-            },
-            "type": "array"
-          },
-          "hotspots": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "impactedPathCount": {
-            "type": "number"
-          },
-          "impactedPaths": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "importEdges": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "importers": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "index": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "indirectImpact": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "items": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "languages": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "layers": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "level": {
-            "type": "string"
-          },
-          "matchCount": {
-            "type": "number"
-          },
-          "maxDepth": {
-            "type": "number"
-          },
-          "message": {
-            "type": "string"
-          },
-          "mode": {
-            "type": "string"
-          },
-          "modules": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "next": {
-            "type": "string"
-          },
-          "nextAction": {
-            "type": "string"
-          },
           "ok": {
             "type": "boolean"
-          },
-          "originalBytes": {
-            "type": "number"
-          },
-          "processId": {
-            "type": "string"
-          },
-          "query": {
-            "type": "string"
-          },
-          "recommendedReadOrder": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "recovery": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "referenceCount": {
-            "type": "number"
-          },
-          "references": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "registrationSurfaces": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "relatedSymbols": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "relationshipTypes": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "results": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "seeds": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "semanticEmbeddings": {
-            "type": "boolean"
-          },
-          "status": {
-            "type": "string"
-          },
-          "stderr": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "stdout": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "strategy": {
-            "type": "string"
-          },
-          "summary": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "symbol": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "truncated": {
-            "type": "boolean"
-          },
-          "uiSurfaces": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "validationCommands": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "validationStatus": {
-            "type": "string"
-          },
-          "work_id": {
-            "type": "string"
-          },
-          "workflow": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "workspace": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object",
-              "null"
-            ]
           }
         },
         "required": [
@@ -2531,7 +1162,7 @@
         "summary": "",
         "taskScope": "required"
       },
-      "description": "Manage persistent development services, watchers, and interactive programs. For start, prefer executable + argv (+ optional initial input) so arguments bypass PowerShell/cmd/bash reparsing; use command only when shell syntax such as pipes, redirection, expansion, or built-ins is deliberately required. Use relai_exec or relai_validate for one-shot tests, builds, and checks.",
+      "description": "Manage persistent services, watchers, and interactive programs. Prefer executable + argv; use relai_exec or relai_validate for one-shot work.",
       "execution": {
         "actions": [
           {
@@ -2680,204 +1311,6 @@
       },
       "inputSchema": {
         "additionalProperties": false,
-        "allOf": [
-          {
-            "if": {
-              "anyOf": [
-                {
-                  "required": [
-                    "argv"
-                  ]
-                },
-                {
-                  "required": [
-                    "command"
-                  ]
-                },
-                {
-                  "required": [
-                    "cwd"
-                  ]
-                },
-                {
-                  "required": [
-                    "env"
-                  ]
-                },
-                {
-                  "required": [
-                    "executable"
-                  ]
-                },
-                {
-                  "required": [
-                    "kind"
-                  ]
-                },
-                {
-                  "required": [
-                    "label"
-                  ]
-                },
-                {
-                  "required": [
-                    "maxLogBytes"
-                  ]
-                },
-                {
-                  "required": [
-                    "purpose"
-                  ]
-                },
-                {
-                  "required": [
-                    "reuseExisting"
-                  ]
-                },
-                {
-                  "required": [
-                    "startupWaitMs"
-                  ]
-                }
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "start"
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "required": [
-                "input"
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "start",
-                    "write"
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "anyOf": [
-                {
-                  "required": [
-                    "includeMetadata"
-                  ]
-                },
-                {
-                  "required": [
-                    "maxBytes"
-                  ]
-                },
-                {
-                  "required": [
-                    "metadataRevision"
-                  ]
-                },
-                {
-                  "required": [
-                    "stderrOffset"
-                  ]
-                },
-                {
-                  "required": [
-                    "stdoutOffset"
-                  ]
-                }
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "read"
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "required": [
-                "processId"
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "read",
-                    "stop",
-                    "write"
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "required": [
-                "graceMs"
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "stop"
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "anyOf": [
-                {
-                  "required": [
-                    "activeOnly"
-                  ]
-                },
-                {
-                  "required": [
-                    "includeTerminal"
-                  ]
-                },
-                {
-                  "required": [
-                    "limit"
-                  ]
-                },
-                {
-                  "required": [
-                    "status"
-                  ]
-                }
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "list"
-                  ]
-                }
-              }
-            }
-          }
-        ],
         "oneOf": [
           {
             "oneOf": [
@@ -2921,7 +1354,6 @@
                 "const": "start"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -2940,7 +1372,6 @@
                 "const": "read"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -2958,7 +1389,6 @@
                 "const": "write"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -2977,7 +1407,6 @@
                 "const": "stop"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -2995,7 +1424,6 @@
                 "const": "list"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -3022,7 +1450,6 @@
             "type": "boolean"
           },
           "argv": {
-            "description": "Literal arguments passed directly to executable without shell parsing.",
             "items": {
               "maxLength": 20000,
               "type": "string"
@@ -3031,7 +1458,6 @@
             "type": "array"
           },
           "command": {
-            "description": "Shell command string for start. Use only when shell syntax is deliberately required.",
             "maxLength": 20000,
             "minLength": 1,
             "type": "string"
@@ -3046,7 +1472,6 @@
             "type": "object"
           },
           "executable": {
-            "description": "Executable to launch directly with shell:false. Preferred for persistent process startup.",
             "maxLength": 1000,
             "minLength": 1,
             "type": "string"
@@ -3063,7 +1488,6 @@
             "type": "boolean"
           },
           "input": {
-            "description": "For direct start, optional initial UTF-8 stdin written without closing the persistent stdin stream. For write, UTF-8 input sent to the running process.",
             "maxLength": 1048576,
             "type": "string"
           },
@@ -3138,7 +1562,6 @@
             "type": "number"
           },
           "work_id": {
-            "description": "Opaque ID returned when a repository work session begins.",
             "maxLength": 200,
             "minLength": 1,
             "type": "string"
@@ -3156,224 +1579,12 @@
       "name": "relai_process",
       "outputSchema": {
         "additionalProperties": false,
+        "patternProperties": {
+          "^(?:ok|work_id|processId|pid|workspace|workspaceId|label|kind|purpose|metadataRevision|commandSummary|cwd|status|reused|readiness|lifecycle|originatingTaskId|workSessionId|startedAt|endedAt|exitCode|signal|stdoutBytes|stderrBytes|stdoutRetainedFromOffset|stderrRetainedFromOffset|environmentKeys|stdoutTail|stderrTail|error|truncated|originalBytes|duplicate|mode|check|durationMs|diagnosticCount|validationStatus|completionKnown|message|errorCode|level|summary|nextAction|stdout|stderr|results|workflow|errorDetails|title|recovery|acceptedBytes|processes|count)$": {}
+        },
         "properties": {
-          "acceptedBytes": {
-            "type": "number"
-          },
-          "check": {
-            "type": "string"
-          },
-          "commandSummary": {
-            "type": "string"
-          },
-          "completionKnown": {
-            "type": "boolean"
-          },
-          "count": {
-            "type": "number"
-          },
-          "cwd": {
-            "type": "string"
-          },
-          "diagnosticCount": {
-            "type": "number"
-          },
-          "duplicate": {
-            "type": "boolean"
-          },
-          "durationMs": {
-            "type": "number"
-          },
-          "endedAt": {
-            "type": [
-              "string",
-              "number",
-              "null"
-            ]
-          },
-          "environmentKeys": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "error": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object",
-              "null"
-            ]
-          },
-          "errorCode": {
-            "type": "string"
-          },
-          "errorDetails": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "exitCode": {
-            "type": [
-              "number",
-              "null"
-            ]
-          },
-          "kind": {
-            "type": "string"
-          },
-          "label": {
-            "type": "string"
-          },
-          "level": {
-            "type": "string"
-          },
-          "lifecycle": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          },
-          "metadataRevision": {
-            "type": "string"
-          },
-          "mode": {
-            "type": "string"
-          },
-          "nextAction": {
-            "type": "string"
-          },
           "ok": {
             "type": "boolean"
-          },
-          "originalBytes": {
-            "type": "number"
-          },
-          "originatingTaskId": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "pid": {
-            "type": [
-              "number",
-              "null"
-            ]
-          },
-          "processId": {
-            "type": "string"
-          },
-          "processes": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "purpose": {
-            "type": "string"
-          },
-          "readiness": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "recovery": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "results": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "reused": {
-            "type": "boolean"
-          },
-          "signal": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "startedAt": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          },
-          "stderr": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "stderrBytes": {
-            "type": "number"
-          },
-          "stderrRetainedFromOffset": {
-            "type": "number"
-          },
-          "stderrTail": {
-            "type": "string"
-          },
-          "stdout": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "stdoutBytes": {
-            "type": "number"
-          },
-          "stdoutRetainedFromOffset": {
-            "type": "number"
-          },
-          "stdoutTail": {
-            "type": "string"
-          },
-          "summary": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "title": {
-            "type": "string"
-          },
-          "truncated": {
-            "type": "boolean"
-          },
-          "validationStatus": {
-            "type": "string"
-          },
-          "workSessionId": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "work_id": {
-            "type": "string"
-          },
-          "workflow": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "workspace": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object",
-              "null"
-            ]
-          },
-          "workspaceId": {
-            "type": "string"
           }
         },
         "required": [
@@ -3494,139 +1705,6 @@
       },
       "inputSchema": {
         "additionalProperties": false,
-        "allOf": [
-          {
-            "if": {
-              "anyOf": [
-                {
-                  "required": [
-                    "addAll"
-                  ]
-                },
-                {
-                  "required": [
-                    "maxBytes"
-                  ]
-                },
-                {
-                  "required": [
-                    "message"
-                  ]
-                },
-                {
-                  "required": [
-                    "paths"
-                  ]
-                },
-                {
-                  "required": [
-                    "sensitiveAuthorization"
-                  ]
-                }
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "commit"
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "anyOf": [
-                {
-                  "required": [
-                    "dryRun"
-                  ]
-                },
-                {
-                  "required": [
-                    "timeoutMs"
-                  ]
-                }
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "commit",
-                    "push"
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "anyOf": [
-                {
-                  "required": [
-                    "branch"
-                  ]
-                },
-                {
-                  "required": [
-                    "remote"
-                  ]
-                },
-                {
-                  "required": [
-                    "setUpstream"
-                  ]
-                }
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "push"
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "anyOf": [
-                {
-                  "required": [
-                    "base"
-                  ]
-                },
-                {
-                  "required": [
-                    "body"
-                  ]
-                },
-                {
-                  "required": [
-                    "head"
-                  ]
-                },
-                {
-                  "required": [
-                    "title"
-                  ]
-                }
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "draft_pr"
-                  ]
-                }
-              }
-            }
-          }
-        ],
         "oneOf": [
           {
             "properties": {
@@ -3634,7 +1712,6 @@
                 "const": "commit"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -3652,7 +1729,6 @@
                 "const": "push"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -3669,7 +1745,6 @@
                 "const": "draft_pr"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -3779,7 +1854,6 @@
             "type": "string"
           },
           "work_id": {
-            "description": "Opaque ID returned when a repository work session begins.",
             "maxLength": 200,
             "minLength": 1,
             "type": "string"
@@ -3797,219 +1871,12 @@
       "name": "relai_publish",
       "outputSchema": {
         "additionalProperties": false,
+        "patternProperties": {
+          "^(?:ok|workspace|work_id|dryRun|message|addAll|paths|sensitiveAuthorization|statusBefore|add|commit|statusAfter|secretStagedFiles|unauthorizedSecretPaths|indexRestored|error|truncated|originalBytes|processId|status|duplicate|mode|check|exitCode|durationMs|diagnosticCount|validationStatus|completionKnown|errorCode|level|summary|nextAction|stdout|stderr|results|workflow|errorDetails|title|recovery|remote|branch|setUpstream|push|base|head|body|changedFiles|changedFileCount|emptyDiff|draftOnly|remoteChanged|warning|diff)$": {}
+        },
         "properties": {
-          "add": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "addAll": {
-            "type": "boolean"
-          },
-          "base": {
-            "type": "string"
-          },
-          "body": {
-            "type": "string"
-          },
-          "branch": {
-            "type": "string"
-          },
-          "changedFileCount": {
-            "type": "number"
-          },
-          "changedFiles": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "check": {
-            "type": "string"
-          },
-          "commit": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "completionKnown": {
-            "type": "boolean"
-          },
-          "diagnosticCount": {
-            "type": "number"
-          },
-          "diff": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "draftOnly": {
-            "type": "boolean"
-          },
-          "dryRun": {
-            "type": "boolean"
-          },
-          "duplicate": {
-            "type": "boolean"
-          },
-          "durationMs": {
-            "type": "number"
-          },
-          "emptyDiff": {
-            "type": "boolean"
-          },
-          "error": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object",
-              "null"
-            ]
-          },
-          "errorCode": {
-            "type": "string"
-          },
-          "errorDetails": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "exitCode": {
-            "type": [
-              "number",
-              "null"
-            ]
-          },
-          "head": {
-            "type": "string"
-          },
-          "indexRestored": {
-            "type": "boolean"
-          },
-          "level": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          },
-          "mode": {
-            "type": "string"
-          },
-          "nextAction": {
-            "type": "string"
-          },
           "ok": {
             "type": "boolean"
-          },
-          "originalBytes": {
-            "type": "number"
-          },
-          "paths": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "processId": {
-            "type": "string"
-          },
-          "push": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "recovery": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "remote": {
-            "type": "string"
-          },
-          "remoteChanged": {
-            "type": "boolean"
-          },
-          "results": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "secretStagedFiles": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "sensitiveAuthorization": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "setUpstream": {
-            "type": "boolean"
-          },
-          "status": {
-            "type": "string"
-          },
-          "statusAfter": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "statusBefore": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "stderr": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "stdout": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "summary": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "title": {
-            "type": "string"
-          },
-          "truncated": {
-            "type": "boolean"
-          },
-          "unauthorizedSecretPaths": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "validationStatus": {
-            "type": "string"
-          },
-          "warning": {
-            "type": "string"
-          },
-          "work_id": {
-            "type": "string"
-          },
-          "workflow": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "workspace": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object",
-              "null"
-            ]
           }
         },
         "required": [
@@ -4126,7 +1993,6 @@
             "type": "number"
           },
           "work_id": {
-            "description": "Opaque ID returned when a repository work session begins.",
             "maxLength": 200,
             "minLength": 1,
             "type": "string"
@@ -4143,136 +2009,12 @@
       "name": "relai_read",
       "outputSchema": {
         "additionalProperties": false,
+        "patternProperties": {
+          "^(?:ok|workspace|work_id|items|skipped|truncated|originalBytes|processId|status|duplicate|mode|check|exitCode|durationMs|diagnosticCount|validationStatus|completionKnown|message|error|errorCode|level|summary|nextAction|stdout|stderr|results|workflow|errorDetails|title|recovery)$": {}
+        },
         "properties": {
-          "check": {
-            "type": "string"
-          },
-          "completionKnown": {
-            "type": "boolean"
-          },
-          "diagnosticCount": {
-            "type": "number"
-          },
-          "duplicate": {
-            "type": "boolean"
-          },
-          "durationMs": {
-            "type": "number"
-          },
-          "error": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object",
-              "null"
-            ]
-          },
-          "errorCode": {
-            "type": "string"
-          },
-          "errorDetails": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "exitCode": {
-            "type": [
-              "number",
-              "null"
-            ]
-          },
-          "items": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "level": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          },
-          "mode": {
-            "type": "string"
-          },
-          "nextAction": {
-            "type": "string"
-          },
           "ok": {
             "type": "boolean"
-          },
-          "originalBytes": {
-            "type": "number"
-          },
-          "processId": {
-            "type": "string"
-          },
-          "recovery": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "results": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "skipped": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "status": {
-            "type": "string"
-          },
-          "stderr": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "stdout": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "summary": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "title": {
-            "type": "string"
-          },
-          "truncated": {
-            "type": "boolean"
-          },
-          "validationStatus": {
-            "type": "string"
-          },
-          "work_id": {
-            "type": "string"
-          },
-          "workflow": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "workspace": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object",
-              "null"
-            ]
           }
         },
         "required": [
@@ -4377,113 +2119,6 @@
       },
       "inputSchema": {
         "additionalProperties": false,
-        "allOf": [
-          {
-            "if": {
-              "anyOf": [
-                {
-                  "required": [
-                    "contextAfter"
-                  ]
-                },
-                {
-                  "required": [
-                    "contextBefore"
-                  ]
-                },
-                {
-                  "required": [
-                    "fixed"
-                  ]
-                },
-                {
-                  "required": [
-                    "glob"
-                  ]
-                },
-                {
-                  "required": [
-                    "groupByFile"
-                  ]
-                },
-                {
-                  "required": [
-                    "ignoreCase"
-                  ]
-                },
-                {
-                  "required": [
-                    "maxBytes"
-                  ]
-                },
-                {
-                  "required": [
-                    "maxRangeLines"
-                  ]
-                },
-                {
-                  "required": [
-                    "maxRangesPerFile"
-                  ]
-                },
-                {
-                  "required": [
-                    "mergeOverlaps"
-                  ]
-                },
-                {
-                  "required": [
-                    "mode"
-                  ]
-                },
-                {
-                  "required": [
-                    "pattern"
-                  ]
-                }
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "text"
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "anyOf": [
-                {
-                  "required": [
-                    "language"
-                  ]
-                },
-                {
-                  "required": [
-                    "pathPrefix"
-                  ]
-                },
-                {
-                  "required": [
-                    "query"
-                  ]
-                }
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "semantic"
-                  ]
-                }
-              }
-            }
-          }
-        ],
         "oneOf": [
           {
             "properties": {
@@ -4496,7 +2131,6 @@
                 "type": "number"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -4519,7 +2153,6 @@
                 "type": "number"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -4618,7 +2251,6 @@
             "type": "string"
           },
           "work_id": {
-            "description": "Opaque ID returned when a repository work session begins.",
             "maxLength": 200,
             "minLength": 1,
             "type": "string"
@@ -4636,232 +2268,18 @@
       "name": "relai_search",
       "outputSchema": {
         "additionalProperties": false,
+        "patternProperties": {
+          "^(?:ok|workspace|work_id|pattern|glob|fixed|ignoreCase|matches|matchCount|mode|effectiveMode|autoTier|selectionStrategy|contextBefore|contextAfter|groupByFile|mergeOverlaps|maxFiles|maxRangesPerFile|maxRangeLines|files|results|resultCount|returnedFileCount|returnedRangeCount|contextMatchCount|returnedBytes|maxBytes|omittedFiles|omittedRanges|truncated|contextTruncated|next|originalBytes|processId|status|duplicate|check|exitCode|durationMs|diagnosticCount|validationStatus|completionKnown|message|error|errorCode|level|summary|nextAction|stdout|stderr|workflow|errorDetails|title|recovery|query|strategy|privacy|fingerprint|cacheHit|neuralEmbeddings)$": {}
+        },
         "properties": {
-          "autoTier": {
-            "type": "string"
-          },
-          "cacheHit": {
-            "type": "boolean"
-          },
-          "check": {
-            "type": "string"
-          },
-          "completionKnown": {
-            "type": "boolean"
-          },
-          "contextAfter": {
-            "type": "number"
-          },
-          "contextBefore": {
-            "type": "number"
-          },
-          "contextMatchCount": {
-            "type": "number"
-          },
-          "contextTruncated": {
-            "type": "boolean"
-          },
-          "diagnosticCount": {
-            "type": "number"
-          },
-          "duplicate": {
-            "type": "boolean"
-          },
-          "durationMs": {
-            "type": "number"
-          },
-          "effectiveMode": {
-            "type": "string"
-          },
-          "error": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object",
-              "null"
-            ]
-          },
-          "errorCode": {
-            "type": "string"
-          },
-          "errorDetails": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "exitCode": {
-            "type": [
-              "number",
-              "null"
-            ]
-          },
-          "files": {
-            "items": {
-              "additionalProperties": true,
-              "type": [
-                "string",
-                "object"
-              ]
-            },
-            "type": "array"
-          },
-          "fingerprint": {
-            "type": "string"
-          },
-          "fixed": {
-            "type": "boolean"
-          },
-          "glob": {
-            "type": "string"
-          },
-          "groupByFile": {
-            "type": "boolean"
-          },
-          "ignoreCase": {
-            "type": "boolean"
-          },
-          "level": {
-            "type": "string"
-          },
-          "matchCount": {
-            "type": "number"
-          },
-          "matches": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "maxBytes": {
-            "type": "number"
-          },
-          "maxFiles": {
-            "type": "number"
-          },
-          "maxRangeLines": {
-            "type": "number"
-          },
-          "maxRangesPerFile": {
-            "type": "number"
-          },
-          "mergeOverlaps": {
-            "type": "boolean"
-          },
-          "message": {
-            "type": "string"
-          },
-          "mode": {
-            "type": "string"
-          },
           "neuralEmbeddings": {
             "type": "boolean"
-          },
-          "next": {
-            "type": "string"
-          },
-          "nextAction": {
-            "type": "string"
           },
           "ok": {
             "type": "boolean"
           },
-          "omittedFiles": {
-            "type": "number"
-          },
-          "omittedRanges": {
-            "type": "number"
-          },
           "originalBytes": {
             "type": "number"
-          },
-          "pattern": {
-            "type": "string"
-          },
-          "privacy": {
-            "type": "string"
-          },
-          "processId": {
-            "type": "string"
-          },
-          "query": {
-            "type": "string"
-          },
-          "recovery": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "resultCount": {
-            "type": "number"
-          },
-          "results": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "returnedBytes": {
-            "type": "number"
-          },
-          "returnedFileCount": {
-            "type": "number"
-          },
-          "returnedRangeCount": {
-            "type": "number"
-          },
-          "selectionStrategy": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          },
-          "stderr": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "stdout": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "strategy": {
-            "type": "string"
-          },
-          "summary": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "title": {
-            "type": "string"
-          },
-          "truncated": {
-            "type": "boolean"
-          },
-          "validationStatus": {
-            "type": "string"
-          },
-          "work_id": {
-            "type": "string"
-          },
-          "workflow": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "workspace": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object",
-              "null"
-            ]
           }
         },
         "required": [
@@ -4907,7 +2325,6 @@
             "type": "number"
           },
           "work_id": {
-            "description": "Opaque ID returned when a repository work session begins.",
             "maxLength": 200,
             "minLength": 1,
             "type": "string"
@@ -4924,235 +2341,12 @@
       "name": "relai_snapshot",
       "outputSchema": {
         "additionalProperties": false,
+        "patternProperties": {
+          "^(?:ok|workspace|work_id|root|toolMode|trustedLocalAgent|manifests|manifestContents|discoveredCommands|projectInstructions|workspaceSkills|fileCount|effectiveMaxEntries|budgetMultiplied|files|returnedFileCount|omittedFiles|skipped|skippedCount|truncated|hints|git|recommendedFlow|writeGuidance|operationJournal|repository|changedFiles|next|originalBytes|processId|status|duplicate|mode|check|exitCode|durationMs|diagnosticCount|validationStatus|completionKnown|message|error|errorCode|level|summary|nextAction|stdout|stderr|results|workflow|errorDetails|title|recovery)$": {}
+        },
         "properties": {
-          "budgetMultiplied": {
-            "type": "boolean"
-          },
-          "changedFiles": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "check": {
-            "type": "string"
-          },
-          "completionKnown": {
-            "type": "boolean"
-          },
-          "diagnosticCount": {
-            "type": "number"
-          },
-          "discoveredCommands": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "duplicate": {
-            "type": "boolean"
-          },
-          "durationMs": {
-            "type": "number"
-          },
-          "effectiveMaxEntries": {
-            "type": "number"
-          },
-          "error": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object",
-              "null"
-            ]
-          },
-          "errorCode": {
-            "type": "string"
-          },
-          "errorDetails": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "exitCode": {
-            "type": [
-              "number",
-              "null"
-            ]
-          },
-          "fileCount": {
-            "type": "number"
-          },
-          "files": {
-            "items": {
-              "additionalProperties": true,
-              "type": [
-                "string",
-                "object"
-              ]
-            },
-            "type": "array"
-          },
-          "git": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "hints": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "level": {
-            "type": "string"
-          },
-          "manifestContents": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "manifests": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "message": {
-            "type": "string"
-          },
-          "mode": {
-            "type": "string"
-          },
-          "next": {
-            "type": "string"
-          },
-          "nextAction": {
-            "type": "string"
-          },
           "ok": {
             "type": "boolean"
-          },
-          "omittedFiles": {
-            "type": "number"
-          },
-          "operationJournal": {
-            "additionalProperties": true,
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": [
-              "object",
-              "array"
-            ]
-          },
-          "originalBytes": {
-            "type": "number"
-          },
-          "processId": {
-            "type": "string"
-          },
-          "projectInstructions": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "recommendedFlow": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "recovery": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "repository": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "results": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "returnedFileCount": {
-            "type": "number"
-          },
-          "root": {
-            "type": "string"
-          },
-          "skipped": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "skippedCount": {
-            "type": "number"
-          },
-          "status": {
-            "type": "string"
-          },
-          "stderr": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "stdout": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "summary": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "title": {
-            "type": "string"
-          },
-          "toolMode": {
-            "type": "string"
-          },
-          "truncated": {
-            "type": "boolean"
-          },
-          "trustedLocalAgent": {
-            "type": "boolean"
-          },
-          "validationStatus": {
-            "type": "string"
-          },
-          "work_id": {
-            "type": "string"
-          },
-          "workflow": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "workspace": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object",
-              "null"
-            ]
-          },
-          "workspaceSkills": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "writeGuidance": {
-            "additionalProperties": true,
-            "type": "object"
           }
         },
         "required": [
@@ -5274,125 +2468,6 @@
       },
       "inputSchema": {
         "additionalProperties": false,
-        "allOf": [
-          {
-            "if": {
-              "anyOf": [
-                {
-                  "required": [
-                    "check"
-                  ]
-                },
-                {
-                  "required": [
-                    "checks"
-                  ]
-                },
-                {
-                  "required": [
-                    "checksText"
-                  ]
-                },
-                {
-                  "required": [
-                    "complete"
-                  ]
-                },
-                {
-                  "required": [
-                    "fullOutput"
-                  ]
-                },
-                {
-                  "required": [
-                    "summary"
-                  ]
-                }
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "checks"
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "anyOf": [
-                {
-                  "required": [
-                    "level"
-                  ]
-                },
-                {
-                  "required": [
-                    "stopOnFailure"
-                  ]
-                }
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "checks",
-                    "diagnostics"
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "anyOf": [
-                {
-                  "required": [
-                    "command"
-                  ]
-                },
-                {
-                  "required": [
-                    "commands"
-                  ]
-                },
-                {
-                  "required": [
-                    "maxResults"
-                  ]
-                }
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "diagnostics"
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "required": [
-                "route"
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "http"
-                  ]
-                }
-              }
-            }
-          }
-        ],
         "oneOf": [
           {
             "properties": {
@@ -5400,7 +2475,6 @@
                 "const": "checks"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -5417,7 +2491,6 @@
                 "const": "diagnostics"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -5439,7 +2512,6 @@
                 "type": "number"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -5533,7 +2605,6 @@
             "type": "number"
           },
           "work_id": {
-            "description": "Opaque ID returned when a repository work session begins.",
             "maxLength": 200,
             "minLength": 1,
             "type": "string"
@@ -5551,243 +2622,12 @@
       "name": "relai_validate",
       "outputSchema": {
         "additionalProperties": false,
+        "patternProperties": {
+          "^(?:ok|workspace|work_id|duplicate|level|checks|commands|results|skippedChecks|completedUnits|executedUnits|reusedUnits|reusedChecks|totalUnits|failedCheck|cancelled|summary|validated|validationStatus|validationLevel|validationLevelReason|validationFingerprint|validationAt|completionKnown|completionSource|endReason|planId|planSelection|planCreatedAt|fullOutput|changedFiles|aliasNormalizations|policy|message|nextAction|truncated|originalBytes|processId|status|mode|check|exitCode|durationMs|diagnosticCount|error|errorCode|stdout|stderr|workflow|errorDetails|title|recovery|diagnostics|route|reachable|statusCode|finalUrl|responseBytes)$": {}
+        },
         "properties": {
-          "aliasNormalizations": {
-            "type": "number"
-          },
-          "cancelled": {
-            "type": "boolean"
-          },
-          "changedFiles": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "check": {
-            "type": "string"
-          },
-          "checks": {
-            "additionalProperties": true,
-            "items": {
-              "type": "string"
-            },
-            "type": [
-              "object",
-              "array"
-            ]
-          },
-          "commands": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "completedUnits": {
-            "type": "number"
-          },
-          "completionKnown": {
-            "type": "boolean"
-          },
-          "completionSource": {
-            "type": "string"
-          },
-          "diagnosticCount": {
-            "type": "number"
-          },
-          "diagnostics": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "duplicate": {
-            "type": "boolean"
-          },
-          "durationMs": {
-            "type": "number"
-          },
-          "endReason": {
-            "type": "string"
-          },
-          "error": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object",
-              "null"
-            ]
-          },
-          "errorCode": {
-            "type": "string"
-          },
-          "errorDetails": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "executedUnits": {
-            "type": "number"
-          },
-          "exitCode": {
-            "type": [
-              "number",
-              "null"
-            ]
-          },
-          "failedCheck": {
-            "type": "string"
-          },
-          "finalUrl": {
-            "type": "string"
-          },
-          "fullOutput": {
-            "type": "boolean"
-          },
-          "level": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          },
-          "mode": {
-            "type": "string"
-          },
-          "nextAction": {
-            "type": "string"
-          },
           "ok": {
             "type": "boolean"
-          },
-          "originalBytes": {
-            "type": "number"
-          },
-          "planCreatedAt": {
-            "type": "string"
-          },
-          "planId": {
-            "type": "string"
-          },
-          "planSelection": {
-            "type": "string"
-          },
-          "policy": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "processId": {
-            "type": "string"
-          },
-          "reachable": {
-            "type": "boolean"
-          },
-          "recovery": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "responseBytes": {
-            "type": "number"
-          },
-          "results": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "reusedChecks": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "reusedUnits": {
-            "type": "number"
-          },
-          "route": {
-            "type": "string"
-          },
-          "skippedChecks": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "status": {
-            "type": "string"
-          },
-          "statusCode": {
-            "type": [
-              "number",
-              "null"
-            ]
-          },
-          "stderr": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "stdout": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "summary": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "title": {
-            "type": "string"
-          },
-          "totalUnits": {
-            "type": "number"
-          },
-          "truncated": {
-            "type": "boolean"
-          },
-          "validated": {
-            "type": "boolean"
-          },
-          "validationAt": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "validationFingerprint": {
-            "type": "string"
-          },
-          "validationLevel": {
-            "type": "string"
-          },
-          "validationLevelReason": {
-            "type": "string"
-          },
-          "validationStatus": {
-            "type": "string"
-          },
-          "work_id": {
-            "type": "string"
-          },
-          "workflow": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "workspace": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object",
-              "null"
-            ]
           }
         },
         "required": [
@@ -5917,109 +2757,6 @@
       },
       "inputSchema": {
         "additionalProperties": false,
-        "allOf": [
-          {
-            "if": {
-              "anyOf": [
-                {
-                  "required": [
-                    "bootstrap"
-                  ]
-                },
-                {
-                  "required": [
-                    "instructionPath"
-                  ]
-                },
-                {
-                  "required": [
-                    "objective"
-                  ]
-                },
-                {
-                  "required": [
-                    "title"
-                  ]
-                }
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "begin"
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "required": [
-                "maxBytes"
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "status"
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "required": [
-                "work_id"
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "cancel",
-                    "finish",
-                    "status"
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "required": [
-                "summary"
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "finish"
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "required": [
-                "reason"
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "cancel"
-                  ]
-                }
-              }
-            }
-          }
-        ],
         "oneOf": [
           {
             "properties": {
@@ -6038,7 +2775,6 @@
                 "const": "status"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -6054,7 +2790,6 @@
                 "const": "finish"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -6072,7 +2807,6 @@
                 "const": "cancel"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -6131,7 +2865,6 @@
             "type": "string"
           },
           "work_id": {
-            "description": "Opaque ID returned when a repository work session begins.",
             "maxLength": 200,
             "minLength": 1,
             "type": "string"
@@ -6148,240 +2881,12 @@
       "name": "relai_work",
       "outputSchema": {
         "additionalProperties": false,
+        "patternProperties": {
+          "^(?:ok|workspace|work_id|status|identity|title|objective|workspaceBinding|bootstrap|nextAction|truncated|originalBytes|processId|duplicate|mode|check|exitCode|durationMs|diagnosticCount|validationStatus|completionKnown|message|error|errorCode|level|summary|stdout|stderr|results|workflow|errorDetails|recovery|version|workspaceAliases|workspaceCount|toolSurface|tools|toolGroups|scripts|ci|runtime|repositoryRuntime|runtimeCompatibility|repository|readiness|state|endReason|completionSource|validationLevel|validationAt|validationFingerprint|changedFiles|terminalReason|endedAt|cancelledAt|progress)$": {}
+        },
         "properties": {
-          "bootstrap": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "cancelledAt": {
-            "type": [
-              "string",
-              "number",
-              "null"
-            ]
-          },
-          "changedFiles": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "check": {
-            "type": "string"
-          },
-          "ci": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "completionKnown": {
-            "type": "boolean"
-          },
-          "completionSource": {
-            "type": "string"
-          },
-          "diagnosticCount": {
-            "type": "number"
-          },
-          "duplicate": {
-            "type": "boolean"
-          },
-          "durationMs": {
-            "type": "number"
-          },
-          "endReason": {
-            "type": "string"
-          },
-          "endedAt": {
-            "type": [
-              "string",
-              "number",
-              "null"
-            ]
-          },
-          "error": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object",
-              "null"
-            ]
-          },
-          "errorCode": {
-            "type": "string"
-          },
-          "errorDetails": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "exitCode": {
-            "type": [
-              "number",
-              "null"
-            ]
-          },
-          "identity": {
-            "type": "string"
-          },
-          "level": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          },
-          "mode": {
-            "type": "string"
-          },
-          "nextAction": {
-            "type": "string"
-          },
-          "objective": {
-            "type": "string"
-          },
           "ok": {
             "type": "boolean"
-          },
-          "originalBytes": {
-            "type": "number"
-          },
-          "processId": {
-            "type": "string"
-          },
-          "progress": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "readiness": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "recovery": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "repository": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "repositoryRuntime": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "results": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "runtime": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "runtimeCompatibility": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "scripts": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "state": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          },
-          "stderr": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "stdout": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "summary": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "terminalReason": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "toolGroups": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "toolSurface": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "tools": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "truncated": {
-            "type": "boolean"
-          },
-          "validationAt": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "validationFingerprint": {
-            "type": "string"
-          },
-          "validationLevel": {
-            "type": "string"
-          },
-          "validationStatus": {
-            "type": "string"
-          },
-          "version": {
-            "type": "string"
-          },
-          "work_id": {
-            "type": "string"
-          },
-          "workflow": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "workspace": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object",
-              "null"
-            ]
-          },
-          "workspaceAliases": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "workspaceBinding": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "workspaceCount": {
-            "type": "number"
           }
         },
         "required": [
@@ -6492,63 +2997,6 @@
       },
       "inputSchema": {
         "additionalProperties": false,
-        "allOf": [
-          {
-            "if": {
-              "anyOf": [
-                {
-                  "required": [
-                    "base"
-                  ]
-                },
-                {
-                  "required": [
-                    "branch"
-                  ]
-                },
-                {
-                  "required": [
-                    "name"
-                  ]
-                }
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "create"
-                  ]
-                }
-              }
-            }
-          },
-          {
-            "if": {
-              "anyOf": [
-                {
-                  "required": [
-                    "alias"
-                  ]
-                },
-                {
-                  "required": [
-                    "force"
-                  ]
-                }
-              ]
-            },
-            "then": {
-              "properties": {
-                "action": {
-                  "enum": [
-                    "remove"
-                  ]
-                }
-              }
-            }
-          }
-        ],
         "oneOf": [
           {
             "properties": {
@@ -6556,7 +3004,6 @@
                 "const": "create"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -6574,7 +3021,6 @@
                 "const": "list"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -6591,7 +3037,6 @@
                 "const": "remove"
               },
               "work_id": {
-                "description": "Opaque ID returned when a repository work session begins.",
                 "maxLength": 200,
                 "minLength": 1,
                 "type": "string"
@@ -6635,7 +3080,6 @@
             "type": "string"
           },
           "work_id": {
-            "description": "Opaque ID returned when a repository work session begins.",
             "maxLength": 200,
             "minLength": 1,
             "type": "string"
@@ -6653,172 +3097,12 @@
       "name": "relai_worktree",
       "outputSchema": {
         "additionalProperties": false,
+        "patternProperties": {
+          "^(?:ok|work_id|id|alias|sourceAlias|sourcePath|path|branch|base|owningTaskId|createdAt|startedAt|git|truncated|originalBytes|workspace|processId|status|duplicate|mode|check|exitCode|durationMs|diagnosticCount|validationStatus|completionKnown|message|error|errorCode|level|summary|nextAction|stdout|stderr|results|workflow|errorDetails|title|recovery|worktrees|count|removedPath|branchPreserved)$": {}
+        },
         "properties": {
-          "alias": {
-            "type": "string"
-          },
-          "base": {
-            "type": "string"
-          },
-          "branch": {
-            "type": "string"
-          },
-          "branchPreserved": {
-            "type": "boolean"
-          },
-          "check": {
-            "type": "string"
-          },
-          "completionKnown": {
-            "type": "boolean"
-          },
-          "count": {
-            "type": "number"
-          },
-          "createdAt": {
-            "type": "string"
-          },
-          "diagnosticCount": {
-            "type": "number"
-          },
-          "duplicate": {
-            "type": "boolean"
-          },
-          "durationMs": {
-            "type": "number"
-          },
-          "error": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object",
-              "null"
-            ]
-          },
-          "errorCode": {
-            "type": "string"
-          },
-          "errorDetails": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "exitCode": {
-            "type": [
-              "number",
-              "null"
-            ]
-          },
-          "git": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "id": {
-            "type": "string"
-          },
-          "level": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          },
-          "mode": {
-            "type": "string"
-          },
-          "nextAction": {
-            "type": "string"
-          },
           "ok": {
             "type": "boolean"
-          },
-          "originalBytes": {
-            "type": "number"
-          },
-          "owningTaskId": {
-            "type": "string"
-          },
-          "path": {
-            "type": "string"
-          },
-          "processId": {
-            "type": "string"
-          },
-          "recovery": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "removedPath": {
-            "type": "string"
-          },
-          "results": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "sourceAlias": {
-            "type": "string"
-          },
-          "sourcePath": {
-            "type": "string"
-          },
-          "startedAt": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          },
-          "stderr": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "stdout": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "summary": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object"
-            ]
-          },
-          "title": {
-            "type": "string"
-          },
-          "truncated": {
-            "type": "boolean"
-          },
-          "validationStatus": {
-            "type": "string"
-          },
-          "work_id": {
-            "type": "string"
-          },
-          "workflow": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "workspace": {
-            "additionalProperties": true,
-            "type": [
-              "string",
-              "object",
-              "null"
-            ]
-          },
-          "worktrees": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array"
           }
         },
         "required": [
@@ -6829,5 +3113,5 @@
       "title": "Manage Worktree"
     }
   ],
-  "version": "Nj3ZBr2scwan0BTm96l4EY2M"
+  "version": "NcjQHHry2Wr0bysrJPS4e_Zu"
 }
