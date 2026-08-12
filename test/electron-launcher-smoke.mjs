@@ -273,6 +273,7 @@ assert.match(electronMain, /recoveryWindowManager\.hide\(\)/, 'a successfully op
 assert.doesNotMatch(electronMain, /settings\.html|options\.edit/, 'the removed compatibility settings renderer must not be reachable');
 assert.match(serviceRuntime, /getTaskActivity: toolActivityRuntime\.getStatus/, 'the web dashboard must receive the shared task model');
 assert.match(serviceRuntime, /getDesktopStatus: getCurrentStatus/, 'the dashboard payload must receive live Electron connection state');
+assert.match(serviceRuntime, /authGeneration:\s*lifecycleToken/, 'dashboard bootstrap URLs must identify the local service auth generation so a preserved window can reauthenticate after restart');
 assert.match(serviceRuntime, /getRuntimeLogs: runtimeLogs\.snapshot/, 'the dashboard diagnostics endpoint must receive sanitized desktop logs');
 assert.match(serviceRuntime, /clearRuntimeLogs: runtimeLogs\.clear/, 'the dashboard must be able to clear only the runtime log buffer');
 assert.match(electronMain, /createRecoveryWindowManager/, 'the fallback window must be isolated behind a dedicated manager');

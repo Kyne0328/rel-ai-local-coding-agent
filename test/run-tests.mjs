@@ -15,6 +15,7 @@ const files = [
   'connector-result-contract-unit.mjs',
   'desktop-lifecycle-unit.mjs',
   'desktop-settings-unit.mjs',
+  'dashboard-session-unit.mjs',
   'durable-state-unit.mjs',
   'electron-updater-config-unit.mjs',
   'update-support-policy-unit.mjs',

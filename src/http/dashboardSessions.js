@@ -32,13 +32,15 @@ function consumeDashboardBootstrap(code, staticToken) {
   return sessionId;
 }
 
-function validateDashboardSession(req, staticToken) {
+function validateDashboardSession(req, staticToken, res) {
   prune();
   const sessionId = cookieValue(req?.headers?.cookie, COOKIE_NAME);
   if (!sessionId) return false;
   const record = sessions.get(sessionId);
-  if (!record || record.expiresAt < Date.now()) return false;
-  return safeEqual(record.tokenHash, hashToken(staticToken));
+  if (!record || record.expiresAt < Date.now() || !safeEqual(record.tokenHash, hashToken(staticToken))) return false;
+  record.expiresAt = Date.now() + SESSION_TTL_MS;
+  setDashboardSessionCookie(res, sessionId);
+  return true;
 }
 
 function setDashboardSessionCookie(res, sessionId) {

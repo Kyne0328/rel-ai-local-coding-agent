@@ -3,7 +3,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath, URL } from 'node:url';
-import { normalizeRouteHash, safeOrigin, safeUrl, validateConnection } from './dashboard-window-navigation.js';
+import { normalizeRouteHash, planDashboardNavigation, safeOrigin, safeUrl, validateConnection } from './dashboard-window-navigation.js';
 import { DASHBOARD_WINDOW_LIMITS, dashboardWindowState, restoreDashboardBounds } from './dashboard-window-bounds.js';
 import { localWindowWebPreferences } from './window-security.js';
 import { STARTUP_BACKGROUND_COLOR } from './startup-background.js';
@@ -23,26 +23,30 @@ function createDashboardWindowManager(deps) {
   const statePath = path.join(userDataPath, 'dashboard-window-state.json');
   let dashboardWindow = null;
   let dashboardOrigin = '';
+  let dashboardAuthGeneration = '';
   let persistTimer = null;
 
   async function open(routeHash = '') {
     const connection = await getConnection();
     const target = validateConnection(connection);
+    const authGeneration = String(connection?.authGeneration ?? '');
     const requestedHash = routeHash ? normalizeRouteHash(routeHash) : '';
     if (requestedHash) target.hash = requestedHash;
     dashboardOrigin = target.origin;
     const win = getOrCreateWindow();
     const current = safeUrl(win.webContents.getURL());
-    const sameDashboard = Boolean(current && current.origin === target.origin && current.pathname === target.pathname);
-    if (!sameDashboard) {
+    const { sameDashboard, authRefreshRequired } = planDashboardNavigation(current, target, { requestedHash, currentAuthGeneration: dashboardAuthGeneration, nextAuthGeneration: authGeneration });
+    if (!sameDashboard || authRefreshRequired) {
       try {
         await win.loadURL(target.href);
+        if (authGeneration) dashboardAuthGeneration = authGeneration;
       } catch (error) {
         if (!isAbortedNavigationError(error)) throw error;
       }
     } else if (requestedHash && current.hash !== requestedHash) {
       await navigateDashboardHash(win, requestedHash);
     }
+    if (!dashboardAuthGeneration && authGeneration) dashboardAuthGeneration = authGeneration;
     win.show();
     win.focus();
     return win;

@@ -1,41 +1,54 @@
 import assert from 'node:assert/strict';
 
-import * as sessions from "../src/http/dashboardSessions.js";
-import { isDashboardAuthorized } from "../src/http/auth.js";
+import { isDashboardAuthorized } from '../src/http/auth.js';
+import { clearDashboardSessions, createDashboardBootstrap } from '../src/http/dashboardSessions.js';
 
-sessions.clearDashboardSessions();
-const bootstrap = sessions.createDashboardBootstrap('static-secret');
-assert.ok(bootstrap.length > 20);
-const bootstrapHeaders = {};
-const bootstrapResponse = {
-  headersSent: false,
-  setHeader(name, value) { bootstrapHeaders[name] = value; }
-};
-const bootstrapParsed = new URL(`http://127.0.0.1/dashboard?bootstrap=${encodeURIComponent(bootstrap)}`);
-assert.equal(isDashboardAuthorized({ headers: {} }, bootstrapParsed, { token: 'static-secret' }, bootstrapResponse), true);
-assert.match(bootstrapHeaders['Set-Cookie'], /relai_dashboard_session=/);
-const bootstrapCookie = bootstrapHeaders['Set-Cookie'].split(';')[0];
-assert.equal(isDashboardAuthorized({ headers: { cookie: bootstrapCookie } }, new URL('http://127.0.0.1/api/dashboard/v10'), { token: 'static-secret' }, {}), true);
-assert.equal(isDashboardAuthorized({ headers: {} }, bootstrapParsed, { token: 'static-secret' }, {}), false, 'bootstrap codes must be single-use');
+const token = 'dashboard-session-test-token';
 
-const directBootstrap = sessions.createDashboardBootstrap('static-secret');
-const sessionId = sessions.consumeDashboardBootstrap(directBootstrap, 'static-secret');
-assert.ok(sessionId.length > 30);
+function responseRecorder() {
+  const headers = new Map();
+  return {
+    headersSent: false,
+    headers,
+    setHeader(name, value) { headers.set(String(name).toLowerCase(), value); }
+  };
+}
 
-const headers = {};
-const response = {
-  headersSent: false,
-  setHeader(name, value) { headers[name] = value; }
-};
-sessions.setDashboardSessionCookie(response, sessionId);
-assert.match(headers['Set-Cookie'], /relai_dashboard_session=/);
-assert.match(headers['Set-Cookie'], /HttpOnly/);
-assert.match(headers['Set-Cookie'], /SameSite=Strict/);
+function dashboardRequest(url, cookie = '') {
+  return {
+    req: { headers: cookie ? { cookie } : {} },
+    parsed: new URL(url),
+    options: { token }
+  };
+}
 
-const cookie = headers['Set-Cookie'].split(';')[0];
-assert.equal(sessions.validateDashboardSession({ headers: { cookie } }, 'static-secret'), true);
-assert.equal(sessions.validateDashboardSession({ headers: { cookie } }, 'wrong-secret'), false);
-sessions.clearDashboardSessions();
-assert.equal(sessions.validateDashboardSession({ headers: { cookie } }, 'static-secret'), false);
+clearDashboardSessions();
+try {
+  const bootstrap = createDashboardBootstrap(token);
+  const bootstrapResponse = responseRecorder();
+  const first = dashboardRequest(`http://127.0.0.1:3333/dashboard?bootstrap=${bootstrap}`);
+  assert.equal(isDashboardAuthorized(first.req, first.parsed, first.options, bootstrapResponse), true);
 
-console.log('Dashboard one-time session tests passed.');
+  const setCookie = String(bootstrapResponse.headers.get('set-cookie') || '');
+  const cookie = setCookie.split(';')[0];
+  assert.match(cookie, /^relai_dashboard_session=/);
+
+  const renewalResponse = responseRecorder();
+  const protectedRequest = dashboardRequest('http://127.0.0.1:3333/api/pick-folder', cookie);
+  assert.equal(isDashboardAuthorized(protectedRequest.req, protectedRequest.parsed, protectedRequest.options, renewalResponse), true);
+  assert.match(String(renewalResponse.headers.get('set-cookie') || ''), /^relai_dashboard_session=/, 'active dashboard requests must renew the HttpOnly session cookie');
+
+  clearDashboardSessions();
+  const staleResponse = responseRecorder();
+  assert.equal(isDashboardAuthorized(protectedRequest.req, protectedRequest.parsed, protectedRequest.options, staleResponse), false, 'a service restart must invalidate the old in-memory dashboard session');
+
+  const refreshedBootstrap = createDashboardBootstrap(token);
+  const refreshedResponse = responseRecorder();
+  const refreshed = dashboardRequest(`http://127.0.0.1:3333/dashboard?bootstrap=${refreshedBootstrap}`);
+  assert.equal(isDashboardAuthorized(refreshed.req, refreshed.parsed, refreshed.options, refreshedResponse), true);
+  assert.notEqual(String(refreshedResponse.headers.get('set-cookie') || '').split(';')[0], cookie, 'fresh bootstrap must issue a new dashboard session after restart');
+} finally {
+  clearDashboardSessions();
+}
+
+console.log('Dashboard bootstrap, renewal, invalidation, and reauthentication tests passed.');

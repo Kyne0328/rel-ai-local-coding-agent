@@ -150,7 +150,10 @@ function createDesktopServiceRuntime(deps) {
     const bootstrap = dashboardSessions.createDashboardBootstrap(token);
     const chrome = dashboardWindowManager.getState();
     const chromeMode = chrome.customTitleBar ? 'custom' : 'native';
-    return { url: `http://127.0.0.1:${port}/dashboard?surface=desktop&chrome=${chromeMode}&platform=${encodeURIComponent(chrome.platform)}&bootstrap=${encodeURIComponent(bootstrap)}` };
+    return {
+      url: `http://127.0.0.1:${port}/dashboard?surface=desktop&chrome=${chromeMode}&platform=${encodeURIComponent(chrome.platform)}&bootstrap=${encodeURIComponent(bootstrap)}`,
+      authGeneration: lifecycleToken
+    };
   }
 
   return { startServer, stopServer, isListening, buildDashboardConnection };

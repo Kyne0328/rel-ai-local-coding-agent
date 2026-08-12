@@ -17,6 +17,8 @@ let permissionCheck = null;
 let openHandler = null;
 let dashboardLoadError = null;
 const webContentsEvents = new Map();
+let dashboardAuthGeneration = 1;
+let dashboardBootstrap = 'one-time-code';
 const workArea = { x: 0, y: 0, width: 1366, height: 728 };
 const fakeScreen = {
   getPrimaryDisplay: () => ({ workArea }),
@@ -111,7 +113,8 @@ const dependencies = {
   isQuitting: () => false,
   onLoadError: error => { dashboardLoadError = error; },
   getConnection: async () => ({
-    url: 'http://127.0.0.1:3333/dashboard?surface=desktop&bootstrap=one-time-code'
+    url: `http://127.0.0.1:3333/dashboard?surface=desktop&bootstrap=${dashboardBootstrap}`,
+    authGeneration: dashboardAuthGeneration
   })
 };
 
@@ -170,6 +173,19 @@ try {
   assert.equal(win.loadCount, initialLoadCount, 'same-document route changes must not reload the dashboard');
   assert.equal(win.webContents.url.endsWith('#connection'), true);
   assert.match(win.executedScripts.at(-1) || '', /location\.hash/);
+
+  dashboardAuthGeneration += 1;
+  dashboardBootstrap = 'post-restart-code';
+  const beforeAuthRefresh = win.loadCount;
+  const refreshedAfterRestart = await manager.open();
+  assert.equal(refreshedAfterRestart, win);
+  assert.equal(win.loadCount, beforeAuthRefresh + 1, 'a new local-service auth generation must reload the one-time dashboard bootstrap');
+  assert.equal(new URL(win.webContents.url).searchParams.get('bootstrap'), 'post-restart-code');
+  assert.equal(win.webContents.url.endsWith('#connection'), true, 'authenticated reload must preserve the active dashboard route');
+  const afterAuthRefresh = win.loadCount;
+  await manager.open();
+  assert.equal(win.loadCount, afterAuthRefresh, 'reopening within the same auth generation must not reload the dashboard');
+
   assert.deepEqual(manager.getState(), {
     platform: 'win32', customTitleBar: true, controls: 'custom',
     maximized: false, minimized: false, fullScreen: false
