@@ -18,7 +18,7 @@ npm ci --ignore-scripts
 npm ci --prefix electron
 ```
 
-Fetch and verify the packaged OpenAI tunnel client when the binary is absent:
+Electron packaging automatically fetches the pinned OpenAI tunnel client when the target-platform binary is absent, then verifies its size and SHA-256 before packaging. You can also prefetch and verify it explicitly:
 
 ```powershell
 npm run fetch:tunnel-client

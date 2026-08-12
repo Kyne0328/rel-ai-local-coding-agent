@@ -4,6 +4,7 @@ import fs from 'node:fs';
 const electronPackage = JSON.parse(fs.readFileSync(new URL('../electron/package.json', import.meta.url), 'utf8'));
 const main = fs.readFileSync(new URL('../electron/main.js', import.meta.url), 'utf8');
 const rootPackage = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+const electronPackager = fs.readFileSync(new URL('../scripts/electron-package.mjs', import.meta.url), 'utf8');
 
 assert.ok(electronPackage.build.files.includes('secure-tunnel-runtime.js'));
 assert.ok(electronPackage.build.files.includes('tunnel-credentials.js'));
@@ -18,4 +19,7 @@ assert.equal(rootPackage.scripts['fetch:ngrok'], undefined);
 assert.equal(rootPackage.scripts['verify:ngrok'], undefined);
 assert.equal(rootPackage.scripts['gateway:acceptance'], undefined);
 assert.equal(rootPackage.scripts['fetch:tunnel-client'], 'node scripts/fetch-tunnel-client.mjs');
+assert.match(electronPackager, /ensureTunnelClient\(platform\)/);
+assert.match(electronPackager, /OpenAI tunnel-client is missing.*fetching the pinned/);
+assert.match(electronPackager, /OpenAI tunnel-client verification/);
 console.log('secure-tunnel-packaging-contract-unit: ok');
