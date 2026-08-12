@@ -16,7 +16,7 @@ const buffer = createRuntimeLogBuffer({
 
 try {
   buffer.append('first');
-  buffer.append('Authorization: Bearer secret-token', { source: 'ngrok', code: 'public_endpoint_failed' });
+  buffer.append('Authorization: Bearer secret-token', { source: 'openai-tunnel', code: 'public_endpoint_failed' });
   buffer.append('{"token":"secret-token"}', { level: 'error' });
   buffer.append('fourth');
 
@@ -45,7 +45,7 @@ try {
   transitions.recordStatusTransition({}, { error: 'token=secret-token', errorCode: 'local_port_in_use' });
   const messages = transitions.snapshot().entries.map(entry => entry.message);
   assert.ok(messages.includes('Local service started.'));
-  assert.ok(messages.includes('Public endpoint is available.'));
+  assert.ok(messages.includes('OpenAI Secure MCP Tunnel is connected.'));
   assert.ok(messages.includes('Local service stopped.'));
   assert.doesNotMatch(JSON.stringify(messages), /secret-token/);
 

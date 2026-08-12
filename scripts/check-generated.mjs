@@ -5,15 +5,10 @@ import { runNpm } from './npm-cli.mjs';
 const generated = [
   'src/ui/styles/color-tokens.css',
   'electron/renderer/color-tokens.css',
-  'public/oauth.css',
-  'docs/color-system-reference.svg',
-  'contracts/cloud/mcp-manifest.json'
+  'docs/color-system-reference.svg'
 ];
 const dashboardCssPath = new URL('../public/dashboard.css', import.meta.url);
 const dashboardCssBefore = readIfExists(dashboardCssPath);
-
-const cloudContract = runNpm(['run', 'verify:cloud-contract'], { stdio: 'inherit' });
-if (cloudContract.status !== 0) process.exit(cloudContract.status || 1);
 
 const generation = runNpm(['run', 'build:css'], { stdio: 'inherit' });
 if (generation.status !== 0) process.exit(generation.status || 1);

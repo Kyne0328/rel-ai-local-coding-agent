@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
@@ -12,7 +11,6 @@ import {
   CLIENT_INFO_META_KEY,
   PROTOCOL_VERSION_META_KEY
 } from '@modelcontextprotocol/server';
-import { ALL_CAPABILITIES } from '../src/mcp/authorizationPolicy.js';
 import { resolveCurrentUnpacked } from './current-unpacked.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -30,8 +28,7 @@ const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-packaged-connector-
 const workspace = path.join(sandbox, 'workspace');
 const stateDir = path.join(sandbox, 'state');
 const configPath = path.join(sandbox, 'config.json');
-const approvalToken = 'packaged-connector-approval-token';
-const redirectUri = 'https://chatgpt.com/connector_platform_oauth_redirect';
+const localBearerToken = 'packaged-connector-local-bearer-token';
 const port = await availablePort();
 const base = `http://127.0.0.1:${port}`;
 let child;
@@ -76,23 +73,11 @@ try {
       ...process.env,
       REL_AI_MCP_CONFIG: configPath,
       REL_AI_MCP_STATE_DIR: stateDir,
-      REL_AI_MCP_TOKEN: approvalToken
+      REL_AI_MCP_TOKEN: localBearerToken
     }
   });
   child.stderr.on('data', chunk => { stderr += String(chunk || ''); });
   await waitForHealth();
-
-  const expectedOauthCss = fs.readFileSync(path.join(resources, 'public', 'oauth.css'), 'utf8');
-  const oauthCss = await fetch(`${base}/public/oauth.css`);
-  assert.equal(oauthCss.status, 200);
-  assert.match(oauthCss.headers.get('content-type') || '', /^text\/css(?:;\s*charset=utf-8)?$/i);
-  const servedOauthCss = await oauthCss.text();
-  assert.equal(servedOauthCss, expectedOauthCss);
-  assert.doesNotMatch(servedOauthCss, /[A-Za-z]:\\|file:\/\/|\/home\/|\/Users\//);
-  assert.equal((await fetch(`${base}/public/oauth-missing.css`)).status, 404);
-  const invalidAuthorize = await fetch(`${base}/authorize`);
-  assert.equal(invalidAuthorize.status, 400);
-  assert.match(await invalidAuthorize.text(), /href="\/public\/oauth\.css"/);
 
   const challenge = await fetch(`${base}/mcp`, {
     method: 'POST',
@@ -100,35 +85,10 @@ try {
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} })
   });
   assert.equal(challenge.status, 401);
-  assert.match(challenge.headers.get('www-authenticate') || '', /resource_metadata=/);
+  assert.match(challenge.headers.get('www-authenticate') || '', /^Bearer\s+realm="rel-ai-local"$/i);
+  assert.match(await challenge.text(), /private Rel\.AI bearer token/i);
 
-  const registration = await fetch(`${base}/register`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      client_name: 'Packaged ChatGPT Acceptance',
-      redirect_uris: [redirectUri]
-    })
-  });
-  assert.equal(registration.status, 201);
-  const client = await registration.json();
-  assert.ok(client.client_id);
-  assert.equal(client.application_type, 'web');
-
-  const pkce = pkcePair();
-  const code = await authorize(client.client_id, pkce.challenge);
-  const tokenResponse = await postForm('/token', {
-    grant_type: 'authorization_code',
-    code,
-    redirect_uri: redirectUri,
-    client_id: client.client_id,
-    code_verifier: pkce.verifier
-  });
-  assert.equal(tokenResponse.status, 200);
-  const tokens = await tokenResponse.json();
-  assert.ok(tokens.access_token);
-
-  primarySession = await initializeMcp(tokens.access_token, '1.0.0');
+  primarySession = await initializeMcp(localBearerToken, '1.0.0');
   const discovered = primarySession.discovery;
   assert.ok(discovered.result?.supportedVersions?.includes(mcpProtocolVersion));
   assert.ok(discovered.result?.capabilities?.tools);
@@ -153,8 +113,8 @@ try {
   assert.equal(surface.toolSurfaceVersion, toolSurfaceVersion);
   assert.equal(surface.toolCount, toolCount);
   const surfaceByName = new Map(surface.tools.map(tool => [tool.name, tool]));
-  assert.equal(surfaceByName.get('relai_exec').executionClass, 'native_task_eligible');
-  assert.equal(surfaceByName.get('relai_exec').taskSupport, 'optional');
+  assert.equal(surfaceByName.get('relai_exec').executionClass, 'bounded_synchronous');
+  assert.equal(surfaceByName.get('relai_exec').taskSupport, 'forbidden');
   assert.equal(surfaceByName.get('relai_process').executionClass, 'persistent_process');
   assert.equal(surfaceByName.get('relai_process').taskSupport, 'forbidden');
   assert.deepEqual(surface.compatibilityAliases, {});
@@ -206,7 +166,7 @@ try {
     check: 'npm run check',
     complete: true,
     summary: 'Packaged ESM connector accepted after guarded write, validation, activity inspection, and reconnect verification.'
-  }, { expectNativeTask: true });
+  });
   assert.equal(completed.validationStatus, 'passed');
   assert.equal(completed.completionKnown, true);
   assert.equal(completed.completionSource, 'relai_run_checks');
@@ -223,12 +183,12 @@ try {
     .map(item => ({ tool: item.tool, publicTool: item.publicTool, action: item.action })) || [];
   for (const expectedTool of ['relai_snapshot', 'relai_read', 'relai_edit', 'relai_work', 'relai_validate']) {
     assert.ok(
-      completedDashboard.auditTail?.entries?.some(item => item.taskId === taskId && item.tool === expectedTool),
+      completedDashboard.auditTail?.entries?.some(item => item.taskId === taskId && (item.publicTool || item.tool) === expectedTool),
       `dashboard activity is missing ${expectedTool}: ${JSON.stringify(packagedAuditTools)}`
     );
   }
 
-  reconnectSession = await initializeMcp(tokens.access_token, '2.0.0');
+  reconnectSession = await initializeMcp(localBearerToken, '2.0.0');
   const reconnected = reconnectSession.discovery;
   assert.ok(reconnected.result?.supportedVersions?.includes(mcpProtocolVersion));
   assert.ok(reconnected.result?.capabilities?.tools);
@@ -313,12 +273,12 @@ try {
   assert.equal(initializeInsideModernEnvelope.status, 400);
   assert.equal((await readMcpResponse(initializeInsideModernEnvelope)).error?.code, -32601);
 
-  for (const removedPath of ['/sse', '/messages']) {
+  for (const removedPath of ['/register', '/authorize', '/token', '/.well-known/oauth-protected-resource/mcp', '/sse', '/messages']) {
     const response = await fetch(`${base}${removedPath}`);
     assert.equal(response.status, 404, `${removedPath} must remain removed`);
   }
 
-  console.log('Packaged connector acceptance passed: OAuth, strict MCP 2026-07-28 discovery, stateless ChatGPT initialization, adaptive direct/native execution, release/tool versions, guarded write attribution, validation, dashboard history, reconnect persistence, and removed routes verified.');
+  console.log('Packaged connector acceptance passed: bearer authentication, strict MCP 2026-07-28 discovery, stateless ChatGPT initialization, adaptive direct/native execution, release/tool versions, guarded write attribution, validation, dashboard history, reconnect persistence, and removed routes verified.');
 } finally {
   if (reconnectSession) await closeMcpSession(reconnectSession).catch(() => {});
   if (primarySession && !primarySession.closed) await closeMcpSession(primarySession).catch(() => {});
@@ -334,7 +294,7 @@ function runGit(...args) {
 
 async function dashboard() {
   const response = await fetch(`${base}/api/dashboard/v10`, {
-    headers: { authorization: `Bearer ${approvalToken}` }
+    headers: { authorization: `Bearer ${localBearerToken}` }
   });
   assert.equal(response.status, 200);
   const payload = await response.json();
@@ -364,71 +324,18 @@ async function availablePort() {
 }
 
 async function waitForHealth() {
-  const deadline = Date.now() + 7000;
+  const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
+    if (child?.exitCode != null) {
+      throw new Error(`Packaged server exited before becoming healthy (code ${child.exitCode}). stderr:\n${stderr}`);
+    }
     try {
       const response = await fetch(`${base}/health`);
       if (response.ok) return;
     } catch {}
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise(resolve => setTimeout(resolve, 100));
   }
-  throw new Error(`Packaged server did not become healthy. stderr:\n${stderr}`);
-}
-
-function pkcePair() {
-  const verifier = crypto.randomBytes(32).toString('base64url');
-  return {
-    verifier,
-    challenge: crypto.createHash('sha256').update(verifier).digest('base64url')
-  };
-}
-
-async function authorize(clientId, challenge) {
-  const state = crypto.randomBytes(8).toString('hex');
-  const query = new URLSearchParams({
-    response_type: 'code',
-    client_id: clientId,
-    redirect_uri: redirectUri,
-    code_challenge: challenge,
-    code_challenge_method: 'S256',
-    scope: 'mcp',
-    state
-  });
-  const page = await fetch(`${base}/authorize?${query}`);
-  assert.equal(page.status, 200);
-  const response = await postForm('/authorize', {
-    response_type: 'code',
-    client_id: clientId,
-    redirect_uri: redirectUri,
-    code_challenge: challenge,
-    code_challenge_method: 'S256',
-    scope: 'mcp',
-    state,
-    capability: ALL_CAPABILITIES,
-    workspace: 'acceptance',
-    dashboard_token: approvalToken
-  }, true);
-  assert.equal(response.status, 303);
-  const location = new URL(response.headers.get('location') || '');
-  assert.equal(location.origin + location.pathname, redirectUri);
-  assert.equal(location.searchParams.get('state'), state);
-  const code = location.searchParams.get('code');
-  assert.ok(code);
-  return code;
-}
-
-async function postForm(pathname, values, manual = false) {
-  const body = new URLSearchParams();
-  for (const [key, value] of Object.entries(values)) {
-    const items = Array.isArray(value) ? value : [value];
-    for (const item of items) body.append(key, String(item));
-  }
-  return fetch(`${base}${pathname}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body,
-    redirect: manual ? 'manual' : 'follow'
-  });
+  throw new Error(`Packaged server did not become healthy within 30 seconds. stderr:\n${stderr}`);
 }
 
 function mcpHeaders(method, session = null, name = '') {
@@ -437,13 +344,13 @@ function mcpHeaders(method, session = null, name = '') {
     accept: 'application/json, text/event-stream',
     ...(method ? { 'mcp-protocol-version': mcpProtocolVersion, 'mcp-method': method } : {}),
     ...(name ? { 'mcp-name': name } : {}),
-    ...(session?.accessToken ? { authorization: `Bearer ${session.accessToken}` } : {})
+    ...(session?.bearerToken ? { authorization: `Bearer ${session.bearerToken}` } : {})
   };
 }
 
-async function initializeMcp(accessToken, clientVersion) {
+async function initializeMcp(bearerToken, clientVersion) {
   const session = {
-    accessToken,
+    bearerToken,
     clientInfo: { name: 'packaged-chatgpt-acceptance', version: clientVersion },
     clientCapabilities: { extensions: { 'io.modelcontextprotocol/tasks': { revision: mcpProtocolVersion } } },
     discovery: null,

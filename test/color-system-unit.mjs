@@ -8,7 +8,6 @@ import {
   semanticEntries,
   renderDashboardTokenCss,
   renderElectronTokenCss,
-  renderOauthCss,
   renderColorReferenceSvg,
   contrastRatio
 } from '../src/ui/colorTokens.mjs';
@@ -66,7 +65,6 @@ for (const themeName of THEME_NAMES) {
 
 assert.equal(read('src/ui/styles/color-tokens.css'), renderDashboardTokenCss(), 'dashboard color tokens must match the ESM manifest');
 assert.equal(read('electron/renderer/color-tokens.css'), renderElectronTokenCss(), 'Electron color tokens must match the ESM manifest');
-assert.equal(read('public/oauth.css'), renderOauthCss(), 'OAuth CSS must match the ESM manifest');
 assert.equal(read('docs/color-system-reference.svg'), renderColorReferenceSvg(), 'the color reference SVG must match the ESM manifest');
 
 const legacyProperties = [
@@ -90,7 +88,7 @@ for (const relativePath of [
   }
 }
 
-const authoredUiFiles = ['src/oauthProvider.js', 'src/http/auth.js', 'electron/dashboard-window.js'];
+const authoredUiFiles = ['src/http/auth.js', 'electron/dashboard-window.js'];
 function collectUiFiles(relativeDirectory) {
   const directory = path.join(root, relativeDirectory);
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
@@ -142,15 +140,8 @@ for (const relativePath of ['electron/renderer/status.html', 'electron/renderer/
   assert.ok(html.indexOf('color-tokens.css') < html.indexOf('app.css'), `${relativePath} must load generated tokens before component CSS`);
 }
 
-const oauthProvider = read('src/oauthProvider.js');
 const auth = read('src/http/auth.js');
-assert.match(oauthProvider, /href="\/public\/oauth\.css"/);
-assert.match(oauthProvider, /class="oauth-page"/);
-assert.match(oauthProvider, /class="oauth-card"/);
-assert.doesNotMatch(oauthProvider, /oauthPageCss|ui\/colorTokens/);
-assert.match(auth, /href="\/public\/oauth\.css"/);
-assert.match(auth, /oauth-error-page/);
-assert.doesNotMatch(auth, /oauthErrorPageCss|ui\/colorTokens/);
+assert.doesNotMatch(auth, /oauth|public\/oauth\.css/i, 'local dashboard authorization must not restore the removed OAuth UI');
 const dashboardWindow = read('electron/dashboard-window.js');
 const startupBackground = read('electron/startup-background.js');
 assert.doesNotMatch(dashboardWindow, /colorTokens|getTheme\('dark'\)/);

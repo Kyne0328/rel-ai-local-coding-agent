@@ -11,8 +11,8 @@ assert.deepEqual(electronPlatformSpec('win32'), {
   builderFlag: '--win',
   unpackedDirectory: 'win-unpacked',
   executableName: 'Rel.AI MCP.exe',
-  ngrokDirectory: 'win32',
-  ngrokFile: 'ngrok.exe',
+  tunnelClientDirectory: 'win32',
+  tunnelClientFile: 'tunnel-client.exe',
   markerName: 'current-unpacked.json'
 });
 assert.deepEqual(electronPlatformSpec('linux'), {
@@ -20,8 +20,8 @@ assert.deepEqual(electronPlatformSpec('linux'), {
   builderFlag: '--linux',
   unpackedDirectory: 'linux-unpacked',
   executableName: 'rel-ai-mcp',
-  ngrokDirectory: 'linux',
-  ngrokFile: 'ngrok',
+  tunnelClientDirectory: 'linux',
+  tunnelClientFile: 'tunnel-client',
   markerName: 'current-unpacked-linux.json'
 });
 

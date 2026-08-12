@@ -7,7 +7,7 @@ This document owns source development, build, test, packaging, and local protoco
 - Node.js 24
 - npm 11
 - Electron and MCP versions pinned by the repository manifests
-- Windows PowerShell for the Windows ngrok seed helper
+- the pinned OpenAI tunnel-client artifact for the target platform
 
 The root package and Electron package have separate lockfiles. Keep both synchronized when dependencies change.
 
@@ -18,11 +18,11 @@ npm ci --ignore-scripts
 npm ci --prefix electron
 ```
 
-Fetch and verify the packaged ngrok seed when the binary is absent:
+Fetch and verify the packaged OpenAI tunnel client when the binary is absent:
 
 ```powershell
-npm run fetch:ngrok
-npm run verify:ngrok
+npm run fetch:tunnel-client
+npm run verify:tunnel-client
 ```
 
 ## Run from source
@@ -47,7 +47,7 @@ Dashboard CSS is generated from `src/ui/styles/app.css` and its feature imports:
 npm run build:css
 ```
 
-Color tokens are generated for dashboard, Electron, OAuth, and documentation surfaces:
+Color tokens are generated for dashboard, Electron, and documentation surfaces:
 
 ```powershell
 npm run generate:color-tokens
@@ -104,13 +104,9 @@ Keep route metadata centralized. Compatibility redirects may remain in `route-po
 - `electron/ipc-handlers.js` validates renderer requests and sender ownership.
 - the dashboard is the routine application surface; the status window is recovery-only.
 
-The wizard must remain a three-step installed-app flow:
+The wizard owns the minimal installed-app connection setup: Tunnel ID, write-only runtime API key, optional advanced local port, and a single action to start the secure connection.
 
-1. Secure connection
-2. Local security
-3. Launch
-
-Developer-only file paths, commands, and loopback URLs must not appear in that flow.
+Developer-only file paths, commands, and diagnostic URLs must not appear in that flow.
 
 ## Configuration
 

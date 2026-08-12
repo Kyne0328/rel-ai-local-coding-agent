@@ -7,39 +7,32 @@ function readDesktopSettings(runtimeState = {}) {
     config = readGuiConfig();
   } catch (error) {
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] read gui config:', error);
-    config = { connectionMode: 'cloud', gatewayOrigin: '', port: 3333, token: '', ngrokDomain: '', ngrokAuthtoken: '' };
+    config = { port: 3333, token: '', tunnelId: '' };
   }
   return {
     ok: true,
-    connectionMode: String(config.connectionMode || 'cloud'),
-    gatewayOrigin: String(config.gatewayOrigin || ''),
     port: Number(config.port || 3333),
-    approvalToken: String(config.token || ''),
-    ngrokDomain: String(config.ngrokDomain || ''),
-    ngrokAuthtoken: '',
-    ngrokAuthtokenConfigured: Boolean(String(config.ngrokAuthtoken || '').trim()),
-    approvalRequired: runtimeState.approvalRequired === true,
+    tunnelId: String(config.tunnelId || ''),
+    tunnelApiKey: '',
+    tunnelApiKeyConfigured: runtimeState.tunnelApiKeyConfigured === true,
     notificationsEnabled: runtimeState.notificationsEnabled !== false
   };
 }
 
 async function saveDesktopSettings(settings = {}, runtimeActions = {}) {
-  const { setNotificationsEnabled = () => true, restartDesktop } = runtimeActions;
+  const { setNotificationsEnabled = () => true, setTunnelApiKey, restartDesktop } = runtimeActions;
   if (typeof restartDesktop !== 'function') throw new TypeError('restartDesktop is required.');
+  if (typeof setTunnelApiKey !== 'function') throw new TypeError('setTunnelApiKey is required.');
 
   const current = readGuiConfig();
-  const replacementAccountKey = String(settings.ngrokAuthtoken || '').trim();
+  const replacementApiKey = String(settings.tunnelApiKey || '').trim();
+  if (replacementApiKey) setTunnelApiKey(replacementApiKey);
   saveLauncherConfig({
-    connectionMode: settings.connectionMode || current.connectionMode,
-    gatewayOrigin: settings.gatewayOrigin || current.gatewayOrigin,
     port: settings.port ?? current.port,
-    token: current.token,
-    ngrokDomain: settings.ngrokDomain ?? current.ngrokDomain,
-    ngrokAuthtoken: replacementAccountKey || current.ngrokAuthtoken
+    tunnelId: settings.tunnelId ?? current.tunnelId,
+    token: current.token
   });
-  if (typeof settings.notificationsEnabled === 'boolean') {
-    setNotificationsEnabled(settings.notificationsEnabled);
-  }
+  if (typeof settings.notificationsEnabled === 'boolean') setNotificationsEnabled(settings.notificationsEnabled);
   const status = await restartDesktop();
   if (!status.serverRunning) throw new Error(status.error || 'Desktop settings were saved, but the service did not restart.');
   return { ok: true, status };

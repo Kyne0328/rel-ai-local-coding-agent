@@ -48,8 +48,8 @@
       "main.js",
       "preload.cjs",
       "launcher-utils.js",
-      "ngrok-token.js",
-      "managed-ngrok.js",
+      "secure-tunnel-runtime.js",
+      "tunnel-credentials.js",
       "ipc-handlers.js",
       "ipc-handlers-dashboard.js",
       "launcher-config.js",
@@ -64,7 +64,6 @@
       "startup-background.js",
       "desktop-tray.js",
       "desktop-status.js",
-      "approval-token.js",
       "recovery-window.js",
       "window-security.js",
       "local-protocol.js",
@@ -82,13 +81,8 @@
       "desktop-lifecycle.js",
       "shutdown-coordinator.js",
       "controller-runtime.js",
-      "gateway-state.js",
-      "gateway-client.js",
-      "public-connection-runtime.js",
-      "gateway-actions.js",
       "service-runtime.js",
       "setup-window.js",
-      "gateway-device-identity.js",
       "renderer/**",
       "build/icon.png",
       "!**/*.map"
@@ -185,8 +179,8 @@
       "icon": "build/icon.png",
       "extraResources": [
         {
-          "from": "../vendor/ngrok",
-          "to": "bin/ngrok",
+          "from": "../vendor/tunnel-client",
+          "to": "bin/tunnel-client",
           "filter": [
             "manifest.json",
             "win32/**"
@@ -229,8 +223,8 @@
       },
       "extraResources": [
         {
-          "from": "../vendor/ngrok",
-          "to": "bin/ngrok",
+          "from": "../vendor/tunnel-client",
+          "to": "bin/tunnel-client",
           "filter": [
             "manifest.json",
             "linux/**"

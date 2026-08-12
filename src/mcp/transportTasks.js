@@ -58,7 +58,6 @@ async function handleTransportTaskRequest(config, message, options = {}) {
     return handleTaskProtocolRequest(config, message, options.principal, capabilities);
   }
   if (method !== 'tools/call' || message.id == null) return null;
-  if (options.transportType === 'gateway') return null;
 
   const name = String(message.params?.name || '');
   const definition = getToolDefinition(name, config, message.params?.arguments || {});

@@ -57,7 +57,7 @@ function tryParseJsonOrNull(raw) {
   try { return JSON.parse(raw); } catch { return null; }
 }
 
-// OAuth /token uses application/x-www-form-urlencoded; /register and some clients use
+// Some local form endpoints and clients use application/x-www-form-urlencoded; other clients use
 // JSON. Parse by content-type, with a best-effort fallback for unlabeled JSON bodies.
 async function readFormOrJsonBody(req, maxBytes) {
   const raw = await readRawBody(req, maxBytes);

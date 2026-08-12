@@ -372,8 +372,8 @@ function desktopSetupState(data = {}) {
     hasWorkspace: workspaces.length > 0,
     endpointReady: state.localService?.status === 'running' && state.publicEndpoint?.status === 'available',
     chatgptReady: isMcpAuthenticationReady(state),
-    firstRequestObserved: hasObservedMcpRequest(mcpConnection) || Boolean(data.desktopStatus?.gateway?.lastRequestAt),
-    connectionMode: state.mode || data.desktopStatus?.connectionMode || 'direct',
+    firstRequestObserved: hasObservedMcpRequest(mcpConnection),
+    connectionMode: 'secure_tunnel',
     workspaceAlias: workspaces[0]?.alias || 'myapp'
   };
 }

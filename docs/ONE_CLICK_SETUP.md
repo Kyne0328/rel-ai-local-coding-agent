@@ -1,43 +1,40 @@
 # Rel.AI MCP One-Click Setup
 
-This guide covers the packaged desktop application. The normal setup path is Rel.AI Cloud and keeps coding execution on your computer.
+This guide covers the packaged desktop application. Rel.AI uses one supported ChatGPT transport: **OpenAI Secure MCP Tunnel**. Repository access and tool execution stay on the computer running Rel.AI.
 
 ## Before you begin
 
-For the normal Cloud setup you need:
+You need:
 
 - the Rel.AI MCP desktop application;
-- a ChatGPT workspace/plan that can use the required custom MCP app; and
+- an OpenAI Secure MCP Tunnel created for this computer;
+- a runtime API key for that tunnel;
+- a ChatGPT plan/workspace that can use the required MCP integration; and
 - at least one local repository folder you are willing to configure as a Rel.AI workspace.
-
-Ngrok credentials are needed only for **Advanced Direct connection**.
 
 ## Install and first run
 
 1. Install or launch the appropriate Rel.AI MCP desktop package.
-2. The first-run wizard opens the three-step Cloud flow: **Sign in**, **Secure device**, **Connect ChatGPT**.
-3. Choose **Sign in or create account**. Continue in your browser, sign in to Rel.AI or create an account, and approve this computer.
-4. Continue to **Secure this device**. Rel.AI creates a cryptographic device identity locally; its private key stays on this computer.
-5. Continue to **Connect ChatGPT**. For **Plus or Pro**, open **Plugins** from the sidebar or **Settings > Plugins**, add Rel.AI MCP, and choose **Connect**. For **Business, Enterprise, or Edu**, open the Rel.AI app provided under workspace **Apps**.
-6. When authorization opens, sign in with the same Rel.AI account. The normal account flow does not ask you to enter a desktop pairing code.
-7. Finish setup and add a workspace from **Workspaces**.
+2. In the setup wizard, enter the OpenAI **Tunnel ID** and **runtime API key** for this computer.
+3. Keep the default local connection port unless it conflicts with another local application.
+4. Choose **Start secure connection**. Rel.AI starts its private local MCP service and the bundled OpenAI tunnel client.
+5. Open **Workspaces**, add a repository folder, and give it a short alias such as `myapp`.
+6. In ChatGPT, create or reconnect the Rel.AI MCP integration using the **Tunnel** connection option and associate it with this computer's tunnel.
+7. Enable Rel.AI MCP in the chat and send a read-only first request.
 
-Legacy identity migration and Direct connection remain under **Advanced setup and recovery** rather than the normal first-run path.
+The runtime API key is encrypted through Electron `safeStorage` and is write-only after it is saved. Rel.AI does not require a second public transport account or a public URL entered by the user.
 
 ## What stays local
 
 ```text
 ChatGPT
-  -> Rel.AI Cloud MCP/OAuth gateway
-  -> authenticated principal + selected paired device
-  -> outbound Rel.AI desktop connection
-  -> local MCP execution
+  -> OpenAI Secure MCP Tunnel
+  -> bundled tunnel-client
+  -> private local Rel.AI MCP service
   -> configured local workspace
 ```
 
-Repository files, absolute workspace paths, commands, Git operations, tests, builds, managed processes, and workspace configuration remain on the selected desktop. The gateway owns identity, OAuth, device routing, bounded request coordination, schema observation, and aggregate usage.
-
-Hosted routing and persistence are implementation details of the private Rel.AI Cloud service; the public desktop does not store or expose that server-side design.
+Repository files, absolute workspace paths, commands, Git operations, tests, builds, managed processes, workspace configuration, task history, and local analytics remain on this computer. The tunnel is transport only; it does not become the authority for repository work.
 
 ## Add your first workspace
 
@@ -54,49 +51,24 @@ Use a read-only first request before allowing edits:
 Use Rel.AI MCP on workspace "myapp". Call relai_work with action "begin", retain the returned work_id, then call relai_snapshot with that work_id. Do not modify files yet.
 ```
 
-## Secure this device
-
-Each Cloud desktop owns a P-256 device key pair. Electron encrypts the private key with `safeStorage`; the gateway verifies the corresponding public identity during challenge authentication.
-
-### Account recovery and new computers
-
-For current account-based installations, your Rel.AI account is the recovery path for adding a replacement or additional computer. Each computer signs in independently and receives its own device identity.
-
-### Legacy identity migration
-
-Older accountless installations can migrate their existing Rel.AI identity from **Advanced setup and recovery** by using a legacy recovery code or a one-time device-link code from an already paired computer. Those mechanisms are migration tools, not the normal setup flow for new account-based devices.
-
-### Lost device
-
-Use your Rel.AI account/device management flow to revoke a lost or retired device. Revocation is separate from OAuth reauthentication and tool-schema refresh.
-
 ## Connection and Usage
 
-**Connection** is the routine status/recovery surface. It owns Cloud/Direct mode, device controls, recovery, and independent tool/auth/device synchronization states. Gateway status updates refresh only the affected Connection region and do not restart the desktop connection or remount unrelated dashboard pages.
+**Connection** shows the configured tunnel ID, whether the runtime key is stored, local MCP health, Secure MCP Tunnel health, and recovery actions. Saving connection settings restarts only the Rel.AI connection service and tunnel client; it does not restart unrelated developer processes.
 
-**Usage** loads one selected UTC month from Rel.AI Cloud on demand. It reports exact Rel.AI gateway traffic/execution aggregates, not ChatGPT model-token or billing estimates. The current implementation has no automatic deletion/retention window for those monthly aggregate rows.
+**Usage** is built from locally observed Rel.AI activity. It is not ChatGPT model-token or billing accounting.
 
 ## Application updates
 
-Installed Windows builds check for updates periodically. Update discovery, download, and restart-to-install remain explicit user actions, and restart-to-install is blocked while Rel.AI work is active. Application update availability is independent from live OAuth, tool-schema, and device-compatibility state.
-
-## Advanced: Direct connection
-
-Direct mode preserves the managed-ngrok fallback. Configure it only when you deliberately want a personal secure connection:
-
-1. Open Advanced Direct setup from the wizard or **Connection**.
-2. Choose the desktop connection port.
-3. Enter the ngrok account key and static domain.
-4. Rel.AI starts the same local MCP server plus the bundled managed ngrok agent.
-5. In ChatGPT, add the Direct MCP from **Plugins** on Plus/Pro, or from workspace **Apps** on managed plans, then configure the Direct `/mcp` URL with OAuth.
-6. Approve the local OAuth page with the Direct Rel.AI approval token.
-
-Legacy configurations containing ngrok values migrate to Direct mode rather than being discarded. Switching to Cloud preserves those Direct settings.
+Installed Windows builds check for updates periodically. Update discovery, download, and restart-to-install remain explicit user actions, and restart-to-install is blocked while Rel.AI work is active. Application update state is independent from tunnel connectivity and repository task completion.
 
 ## Troubleshooting
 
-For Cloud sign-in or authorization failures, keep the desktop running, retry the browser sign-in with the same Rel.AI account, and confirm the computer is approved. A `device_update_required` state must be resolved by updating the desktop; a `tool_refresh_required` state is handled through the current ChatGPT app refresh/review flow, not by rotating the Direct token.
+If the tunnel does not connect:
 
-For Direct mode, confirm the configured port is free, the ngrok account key is valid, and the static domain is not already owned by another running agent.
+1. confirm the Tunnel ID starts with `tunnel_` and belongs to the intended OpenAI Secure MCP Tunnel;
+2. replace the runtime API key in **Connection** if the saved key was revoked or replaced;
+3. confirm the configured local port is available;
+4. keep Rel.AI running while ChatGPT reconnects to the tunnel; and
+5. open **Diagnostics** for the sanitized local service and tunnel logs.
 
-Open **Diagnostics** for stable error codes and sanitized local-service logs. Diagnostic exports redact OAuth/bearer credentials, approval material, API keys, ngrok keys, and similarly named secret fields.
+Diagnostic exports redact bearer credentials, API keys, passwords, authorization headers, and similarly named secret fields. Do not post tunnel runtime keys or repository credentials in public issues.

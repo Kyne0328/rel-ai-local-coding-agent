@@ -19,7 +19,6 @@ import { buildToolManifest } from '../mcp/toolManifest.js';
 import { handleTransportTaskRequest } from '../mcp/transportTasks.js';
 import { createRelaiMcpServer } from '../mcpServer.js';
 import { runSpan } from '../telemetry.js';
-import { resolveBaseUrl } from './auth.js';
 import { mcpAuthorization, unauthorizedMcp } from './mcpAuth.js';
 import { readJsonBody, readRawBody, sendJson } from './io.js';
 
@@ -34,7 +33,7 @@ function getCoreNodeHandler() {
   coreHandler = createMcpHandler(
     context => {
       const authInfo = context.authInfo || {};
-      const authMode = String(authInfo.authMode || 'oauth');
+      const authMode = String(authInfo.authMode || 'static_bearer');
       return createRelaiMcpServer({
         publicHttpOnly: true,
         transportType: 'streamable-http',
@@ -64,11 +63,10 @@ async function handleMcpDelete(ctx) {
 }
 
 async function handleMcpStreamable(ctx) {
-  const baseUrl = resolveBaseUrl(ctx.options);
   const authorizationResult = mcpAuthorization(ctx.req, ctx.options);
   if (!authorizationResult) {
     mcpConnectionManager.noteAuthenticationFailure('invalid_or_missing_bearer');
-    unauthorizedMcp(ctx.res, baseUrl, ctx.req);
+    unauthorizedMcp(ctx.res);
     return;
   }
   if (!validateTransportOrigin(ctx)) return;
@@ -203,7 +201,7 @@ function runMcpRequestSpan(config, details, callback) {
   return runSpan(config, 'relai.mcp.request', {
     'mcp.protocol.version': String(details.protocolVersion || ''),
     'mcp.method': String(details.method || ''),
-    'oauth.client_id': String(details.principalId || '')
+    'mcp.client_id': String(details.principalId || '')
   }, callback, { carrier: details.headers });
 }
 
@@ -223,9 +221,8 @@ function acquirePrincipalRequest(principalId) {
 }
 
 async function handleUnsupportedHttpMethod(ctx) {
-  const baseUrl = resolveBaseUrl(ctx.options);
   if (!mcpAuthorization(ctx.req, ctx.options)) {
-    unauthorizedMcp(ctx.res, baseUrl, ctx.req);
+    unauthorizedMcp(ctx.res);
     return;
   }
   ctx.res.setHeader('allow', 'POST');
@@ -368,16 +365,11 @@ function validateTransportOrigin(ctx) {
 function transportSecurityOptions(ctx) {
   const allowedHostnames = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
   const allowedOriginHostnames = new Set(allowedHostnames);
-  for (const value of [
-    resolveBaseUrl(ctx.options),
-    `http://${ctx.options.host || '127.0.0.1'}:${ctx.options.port || 3333}`
-  ]) {
-    try {
-      const url = new URL(value);
-      allowedHostnames.add(url.hostname);
-      allowedOriginHostnames.add(url.hostname);
-    } catch {}
-  }
+  try {
+    const localUrl = new URL(`http://${ctx.options.host || '127.0.0.1'}:${ctx.options.port || 3333}`);
+    allowedHostnames.add(localUrl.hostname);
+    allowedOriginHostnames.add(localUrl.hostname);
+  } catch {}
   return {
     allowedHostnames: [...allowedHostnames],
     allowedOriginHostnames: [...allowedOriginHostnames]

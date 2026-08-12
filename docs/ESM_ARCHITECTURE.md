@@ -7,7 +7,7 @@ Rel.AI MCP uses ECMAScript Modules for all first-party application, CLI, server,
 ```text
 Root package (ESM)
 ├── bin/                         CLI, stdio MCP, HTTP MCP, and diagnostics entry points
-├── src/                         backend, OAuth, tools/resources, telemetry, tasks, processes, and dashboard server
+├── src/                         backend, MCP authorization, tools/resources, telemetry, tasks, processes, and dashboard server
 ├── scripts/                     build, package, release, and verification programs
 ├── test/                        ESM unit, integration, contract, and smoke tests
 └── electron/ (ESM package)
@@ -38,7 +38,6 @@ src/ui/colorTokens.mjs
 → scripts/generate-color-tokens.mjs
 → src/ui/styles/color-tokens.css
 → electron/renderer/color-tokens.css
-→ public/oauth.css
 → docs/color-system-reference.svg
 ```
 
@@ -77,7 +76,7 @@ Only canonical dashboard routes are supported. Removed or unknown routes fall ba
 2. Run `npm ci` and `npm ci --prefix electron`.
 3. Run `npm run verify:color-tokens` before any generation step.
 4. Run `npm run test:all` and `npm run release:check`.
-5. Fetch and verify the platform ngrok seed.
+5. Fetch and verify the platform OpenAI tunnel-client artifact.
 6. Build and inspect the unpacked Electron application.
 7. Run packaged backend connector acceptance.
 8. Build the installer and portable executable from the exact release commit.
@@ -89,7 +88,7 @@ Only canonical dashboard routes are supported. Removed or unknown routes fall ba
 1. Build or install the candidate from the exact release commit.
 2. Stop the old Rel.AI process without terminating unrelated tasks or deleting local configuration.
 3. Start the candidate and confirm its reported application version, protocol version, tool-surface version, and tool count.
-4. Reconnect the ChatGPT app through OAuth. This release intentionally requires new issuer-bound registration and approval rather than preserving incompatible registrations.
+4. Reconnect the ChatGPT integration to the configured OpenAI Secure MCP Tunnel and confirm the tunnel reports Connected.
 5. Execute a complete task: start, resolve a workspace, read source, perform a guarded write, validate, inspect activity, complete, then verify history after reconnect.
 6. Keep the previous executable available until this workflow passes.
 
@@ -97,6 +96,6 @@ Only canonical dashboard routes are supported. Removed or unknown routes fall ba
 
 - Stop the candidate process.
 - Restore the prior installed release or executable without modifying workspace repositories.
-- Restore the prior connector registration when protocol compatibility permits; otherwise reconnect the prior endpoint explicitly.
+- Restore the prior application version and reconnect it to the intended tunnel if connection metadata changed.
 - Revert release commits in reverse order rather than mixing ESM and CommonJS implementations.
 - Never restore deleted compatibility wrappers as an emergency fallback. If the preload boundary blocks a release, retain only the tested `preload.cjs` boundary and report the release blocker.

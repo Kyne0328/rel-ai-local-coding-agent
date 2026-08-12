@@ -16,7 +16,7 @@
     "appAsarBytes": 5753177,
     "packagedDependencyBytes": 1107372,
     "localesBytes": 556772,
-    "ngrokBytes": 32903330,
+    "tunnelClientBytes": 20246690,
     "zoektBytes": 51319080,
     "treeSitterBytes": 52036637,
     "dashboardCssBytes": 164176

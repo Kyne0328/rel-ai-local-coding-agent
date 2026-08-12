@@ -8,7 +8,7 @@ import { resolveConnectionGenerations } from '../src/mcp/connectionGenerations.j
 import { runtimeMetadata } from '../src/runtimeCompatibility.js';
 
 const neutralManifest = buildToolManifest({});
-assert.equal(neutralManifest.schemaVersion, 7, 'gateway-visible MCP contract must use schema version 7');
+assert.equal(neutralManifest.schemaVersion, 7, 'public MCP contract must use schema version 7');
 assert.equal(typeof neutralManifest.instructions, 'string');
 assert.match(neutralManifest.instructions, /Start each objective/);
 assert.ok(neutralManifest.tools.every(tool => tool.outputSchema), 'every canonical tool must include its output schema');
@@ -29,32 +29,28 @@ try {
     key: Buffer.from('unit-test-key'),
     token: 'token-a',
     host: '127.0.0.1',
-    port: 3333,
-    publicUrl: 'https://example.ngrok.app'
+    port: 3333
   });
   const stable = resolveConnectionGenerations({}, {
     file: generationFile,
     key: Buffer.from('unit-test-key'),
     token: 'token-a',
     host: '127.0.0.1',
-    port: 3333,
-    publicUrl: 'https://example.ngrok.app'
+    port: 3333
   });
   const rotated = resolveConnectionGenerations({}, {
     file: generationFile,
     key: Buffer.from('unit-test-key'),
     token: 'token-b',
     host: '127.0.0.1',
-    port: 3333,
-    publicUrl: 'https://example.ngrok.app'
+    port: 3333
   });
   const reconfigured = resolveConnectionGenerations({}, {
     file: generationFile,
     key: Buffer.from('unit-test-key'),
     token: 'token-b',
     host: '127.0.0.1',
-    port: 4444,
-    publicUrl: 'https://example.ngrok.app'
+    port: 4444
   });
   assert.deepEqual(stable, first);
   assert.equal(rotated.credentialGeneration, first.credentialGeneration + 1);
@@ -117,17 +113,17 @@ assert.equal(manager.snapshot().metrics.requestsSucceeded, 1, 'duplicate complet
 now += 60_001;
 assert.equal(manager.snapshot().activityStatus, 'idle');
 
-const failedId = manager.beginRequest({ principal: 'oauth-client', method: 'tools/call', authMode: 'oauth' });
+const failedId = manager.beginRequest({ principal: 'local-bearer-client', method: 'tools/call', authMode: 'static_bearer' });
 assert.equal(manager.snapshot().activityStatus, 'active');
 manager.finishRequest(failedId, { ok: false });
 assert.equal(manager.snapshot().activityStatus, 'request_failed');
 assert.equal(manager.snapshot().metrics.requestsFailed, 1);
-assert.equal(manager.snapshot().lastAuthMode, 'oauth');
+assert.equal(manager.snapshot().lastAuthMode, 'static_bearer');
 
 const changedManifest = { ...neutralManifest, version: 'changed-manifest', hash: 'changed-manifest-hash' };
 assert.equal(await manager.observeManifest(changedManifest, 'tools/call'), true);
 assert.equal(manager.snapshot().status, 'ready');
-assert.equal(manager.snapshot().toolManifestVersion, changedManifest.version, 'Direct mode must continue sourcing schema state from its locally observed manifest.');
+assert.equal(manager.snapshot().toolManifestVersion, changedManifest.version, 'The local MCP runtime must continue sourcing schema state from its observed manifest.');
 assert.equal(manager.snapshot().metrics.toolManifestChanges, 1);
 assert.equal(await manager.observeManifest(changedManifest, 'tools/list'), false);
 

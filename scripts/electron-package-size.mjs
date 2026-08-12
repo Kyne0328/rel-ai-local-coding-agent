@@ -70,7 +70,7 @@ function buildPackageSizeReport(options) {
     appAsarBytes: fileSize(asarPath),
     packagedDependencyBytes: asar.nodeModulesBytes,
     localesBytes: sumFileSizes(localeFiles),
-    ngrokBytes: fileSize(path.join(resourcesDir, 'bin', 'ngrok', spec.ngrokDirectory, spec.ngrokFile)),
+    tunnelClientBytes: fileSize(path.join(resourcesDir, 'bin', 'tunnel-client', spec.tunnelClientDirectory, spec.tunnelClientFile)),
     zoektBytes: sumFileSizes(listFiles(path.join(resourcesDir, 'bin', 'zoekt', platform))),
     treeSitterBytes: sumFileSizes(listFiles(path.join(resourcesDir, 'node_modules', 'web-tree-sitter')))
       + sumFileSizes(listFiles(path.join(resourcesDir, 'node_modules', 'tree-sitter-wasms')))

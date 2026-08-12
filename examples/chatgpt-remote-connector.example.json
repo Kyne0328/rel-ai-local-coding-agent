@@ -1,10 +1,10 @@
 {
   "name": "Rel.AI MCP",
   "description": "Single-workflow local repo bridge for ChatGPT: snapshot, read, deterministic write, verify, diff, and reset.",
-  "server_url": "https://your-domain.example.com/mcp",
-  "auth": {
-    "type": "oauth",
-    "note": "ChatGPT discovers the OAuth endpoints via /.well-known/oauth-protected-resource. Sign in with your Rel.AI approval token (REL_AI_MCP_TOKEN)."
+  "connection": {
+    "type": "openai-secure-mcp-tunnel",
+    "tunnel_id": "tunnel_REPLACE_ME",
+    "note": "Create or reconnect the Rel.AI MCP integration in ChatGPT using the Tunnel connection option. Keep the tunnel runtime API key in the Rel.AI desktop app; do not put it in this file."
   },
-  "recommended_first_prompt": "Use Rel.AI MCP tools directly. Call relai_snapshot for the workspace. Do not use file search. Do not modify files yet."
+  "recommended_first_prompt": "Use Rel.AI MCP on the configured workspace. Start a work session, snapshot the repository, and inspect it before modifying files."
 }

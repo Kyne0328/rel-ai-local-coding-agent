@@ -4,7 +4,5 @@
   "protocolVersion": "2026-07-28",
   "toolSurfaceVersion": 36,
   "toolCount": 12,
-  "manifestHash": "H1wVB2E8JMe8VGJ4vO7WFvvG",
-  "deviceProtocolVersion": 1,
-  "minimumCompatibleDeviceProtocol": 1
+  "manifestHash": "H1wVB2E8JMe8VGJ4vO7WFvvG"
 }

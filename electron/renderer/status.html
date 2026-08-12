@@ -31,17 +31,17 @@
     <div class="status-copy">
       <div class="eyebrow" id="statusEyebrow">Connection status</div>
       <h1 class="status-title" id="statusTitle">Starting Rel.AI…</h1>
-      <p class="status-description" id="statusDescription">Preparing the local service and secure public tunnel.</p>
+      <p class="status-description" id="statusDescription">Preparing the local service and OpenAI Secure MCP Tunnel.</p>
       <div class="task-meta" id="taskMeta" hidden></div>
 
       <div class="endpoint-wrap" id="endpointWrap">
-        <div class="eyebrow">ChatGPT MCP endpoint</div>
-        <div class="endpoint-box empty" id="mcpUrl">Waiting for a secure endpoint…</div>
+        <div class="eyebrow">OpenAI Secure MCP Tunnel</div>
+        <div class="endpoint-box empty" id="mcpUrl">Waiting for tunnel configuration…</div>
       </div>
 
       <div class="status-primary-row">
         <button class="primary" id="dashboardBtn" type="button">Open dashboard</button>
-        <button class="secondary" id="copyBtn" type="button" disabled>Copy endpoint</button>
+        <button class="secondary" id="copyBtn" type="button" disabled>Copy tunnel ID</button>
         <button class="secondary" id="settingsBtn" type="button">Edit connection</button>
       </div>
     </div>
@@ -55,7 +55,7 @@
     </article>
     <article class="app-card status-health-card" id="publicHealthCard">
       <span class="health-dot" aria-hidden="true"></span>
-      <div><div class="health-label">Public endpoint</div><strong id="publicHealthState">Offline</strong></div>
+      <div><div class="health-label">Secure tunnel</div><strong id="publicHealthState">Offline</strong></div>
       <span class="health-detail" id="tunnelDetail">Not connected</span>
     </article>
   </section>
@@ -111,10 +111,10 @@
   <details class="app-card status-details" data-disclosure="chatgpt-setup">
     <summary>Connect to ChatGPT <span aria-hidden="true">⌄</span></summary>
     <ol class="guide-list">
-      <li>Wait until the public endpoint is available.</li>
-      <li>On Plus or Pro, open <strong>Plugins</strong> from the ChatGPT sidebar or <strong>Settings &gt; Plugins</strong>. On a managed workspace, use <strong>Workspace settings &gt; Apps</strong>.</li>
-      <li>Paste the endpoint and choose <strong>OAuth</strong>.</li>
-      <li>Approve using your Rel.AI approval token.</li>
+      <li>Wait until OpenAI Secure MCP Tunnel is connected.</li>
+      <li>In ChatGPT, open the surface where you add your Rel.AI MCP integration.</li>
+      <li>Choose the <strong>Tunnel</strong> connection option and select or enter this computer's tunnel ID.</li>
+      <li>Keep Rel.AI running while ChatGPT uses this computer.</li>
     </ol>
   </details>
 </main>

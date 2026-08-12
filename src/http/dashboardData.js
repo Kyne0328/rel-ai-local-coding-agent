@@ -24,14 +24,13 @@ function buildDashboardPayload(config, options = {}, requireHttpToken = false) {
   const connectionSummary = connection.buildConnectionSummary({
     host: profile.host || options.host || '127.0.0.1',
     port: profile.port || options.port || 3333,
-    publicUrl: profile.publicUrl || options.publicUrl || '',
     token: '',
-    tunnelProvider: profile.tunnelProvider || 'none'
+    tunnelId: profile.tunnelId || '',
+    tunnelProvider: 'openai-secure-mcp'
   });
   const connectionStateInput = desktopStatus || {
     serverRunning: true,
-    tunnelStatus: connectionSummary.chatgptMcpUrl ? 'running' : 'stopped',
-    mcpUrl: connectionSummary.chatgptMcpUrl || ''
+    tunnelStatus: profile.tunnelId ? 'connecting' : 'stopped'
   };
   const limit = Math.max(Number(options.limit || 100), 200);
   const base = productUx.dashboardData(config, { limit });

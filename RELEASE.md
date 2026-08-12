@@ -1,6 +1,6 @@
 # Release process
 
-Rel.AI MCP uses a strict release path so a tag cannot ship mismatched versions, protocol behavior, documentation, or packaged runtime files.
+Rel.AI MCP uses a strict release path so a tag cannot ship mismatched versions, protocol behavior, tunnel-client bytes, documentation, or runtime files.
 
 ## 1. Validate source
 
@@ -13,74 +13,63 @@ npm run audit:packaging
 npm run benchmark:observability
 ```
 
-`test:all` builds the dashboard CSS, performs JavaScript checks, runs ESLint with zero warnings, type-checks module boundaries, verifies release consistency, and executes the curated release-critical regression suite. CI and release packaging use Node.js 24.
+`test:all` builds generated UI assets, performs syntax/lint/type/dependency checks, verifies release consistency, and executes the curated release-critical regression suite. CI and packaging use Node.js 24.
 
-When working through Rel.AI itself, use:
-
-```text
-relai_work action=status
-relai_validate action=checks level=release
-relai_changes action=diff
-```
+When working through Rel.AI itself, use the task-aware validation and diff tools so the evidence remains associated with the current work session.
 
 ## 2. Verify the MCP contract
 
-The release must retain one 12-tool compact surface for stdio and HTTP/OAuth clients, with the count and manifest hash derived from the registered schema rather than duplicated constants.
+The release retains one 12-tool surface for stdio and private HTTP clients.
 
 Required invariants:
 
-- MCP protocol handling is provided by `@modelcontextprotocol/server` and `@modelcontextprotocol/node`.
-- HTTP MCP is exposed only at `POST /mcp`.
-- Legacy MCP `/sse` and `/messages` routes remain absent.
-- HTTP and stdio advertise native Tasks support, but return a native task only when the current request advertises `io.modelcontextprotocol/tasks`.
-- Clients without Tasks support receive bounded synchronous results for safe eligible operations; no request may run indefinitely or continue as hidden background work.
-- Repository work sessions, native MCP Tasks, and managed processes retain separate identifiers and lifecycle semantics.
-- `relai_work` with `action=begin` creates a new opaque `work_id`.
-- Every later task-scoped call requires the exact ID.
-- Transport, conversation, workspace, and timestamp inference remain absent.
-- `relai_edit` is the only file-change tool.
-- `relai_publish` with `action=draft_pr` prepares local text only and does not contact a hosting provider.
+- modern protocol behavior targets `2026-07-28`;
+- HTTP MCP is exposed only at `POST /mcp`;
+- local HTTP MCP requires the private bearer token except in explicit local-only test mode;
+- removed `/register`, `/authorize`, `/token`, `/sse`, and `/messages` routes remain absent;
+- HTTP may retain the tested stateless `2025-11-25` ChatGPT initialization compatibility flow;
+- native Tasks are returned only when the current request advertises the capability;
+- repository work sessions, native MCP Tasks, and managed processes retain separate identifiers;
+- task-scoped calls require the exact `work_id` created by `relai_work action=begin`;
+- transport or conversation identity never substitutes for work-session ownership;
+- `relai_edit` is the repository file-change surface; and
+- publishing actions remain explicit.
 
-The native Tasks source release gate is `npm run test:native-tasks-release-gate`. It covers both transport capability matrices, lifecycle and persistence, authorization, synchronous limits, cancellation cleanup, process separation, public surface, dashboard states, and ChatGPT-compatible fallback. The complete packaged gate additionally requires `verify:packaged` and `test:connector-acceptance`. See `docs/NATIVE_TASKS_RELEASE_GATE.md`.
+The native Tasks source gate is `npm run test:native-tasks-release-gate`.
 
-## 3. Build and verify the desktop package
+## 3. Verify the tunnel component
 
 ```bash
-npm run fetch:ngrok
-npm run verify:ngrok
-npm run electron:build
-npm run verify:packaged
-npm run test:connector-acceptance
+npm run fetch:tunnel-client
+npm run verify:tunnel-client
 ```
 
-The ngrok fetch is accepted only when it matches `vendor/ngrok/manifest.json`; Windows verification also requires the declared version and a valid upstream Authenticode identity. `verify:packaged` checks the unpacked application layout and packaged ngrok hash without launching the Electron executable. `test:connector-acceptance` launches only the packaged Node backend from `resources/` and verifies the actual packaged OAuth and MCP stack:
+`vendor/tunnel-client/manifest.json` pins the reviewed OpenAI tunnel-client version, source, license, per-platform URL, file size, and SHA-256. Fetch and verification fail closed when the downloaded or extracted bytes differ from the manifest.
 
-- OAuth discovery and dynamic client registration;
-- authorization-code flow with PKCE S256;
-- tool and resource discovery;
-- explicit task start and several task-scoped calls;
-- explicit completion;
-- reconnect followed by rejection of a completed task ID;
-- absence of legacy `/sse` and `/messages` routes.
+The application packages only the target platform's binary under `resources/bin/tunnel-client/`. Packaged verification hashes those bytes again.
 
-This automated check does not control the logged-in ChatGPT web UI. Before publishing, use a disposable Windows environment to create or reconnect the real ChatGPT app, approve it through OAuth, select it in a chat, and run one read-only workspace task.
+## 4. Build and verify the desktop package
 
-## 4. Review breaking changes
+Windows:
 
-For 0.22.0 and later, release notes must state that the hard cutover:
+```bash
+npm run electron:build:windows
+npm run verify:packaged -- --platform win32
+npm run test:connector-acceptance
+npm run verify:fuses -- --platform win32
+```
 
-- ignores removed configuration properties instead of migrating them;
-- deletes old task-history session files on first current-version access;
-- removes MCP `/sse` and `/messages`;
-- requires standards-compliant MCP initialization fields;
-- requires explicit `work_id` on task-scoped calls;
-- packages MCP SDK runtime dependencies.
+Linux is built and verified in its native release job with the corresponding Linux platform arguments.
 
-Historical release-specific notices belong in `CHANGELOG.md`; do not add per-version release-note documents under `docs/`.
+`test:connector-acceptance` launches only the isolated packaged Node backend. It verifies bearer-authenticated MCP discovery, tool/resource contracts, a guarded repository mutation, validation, dashboard history, reconnect persistence, ChatGPT-compatible stateless initialization, and the absence of removed routes. It does not need a production tunnel credential and does not pretend to prove external ChatGPT account state.
 
-## 5. Version and changelog
+## 5. Review breaking changes
 
-Use the release helper so all version surfaces move together:
+Release notes for the Secure MCP Tunnel hard cutover must clearly state that the previous connection transports and local OAuth authorization flow were removed. Historical release-specific behavior belongs in `CHANGELOG.md`; do not preserve obsolete runtime paths only to avoid documenting a breaking change.
+
+## 6. Version and changelog
+
+Use the release helper so version surfaces move together:
 
 ```bash
 npm run release:bump -- <next-version> --date <YYYY-MM-DD> --no-changelog
@@ -92,50 +81,41 @@ Then add the dated changelog section and run:
 npm run release:check
 ```
 
-The synchronized surfaces are:
+The synchronized surfaces include the root and Electron package manifests/lockfiles, Electron status version, release metadata, plugin metadata where applicable, and changelog.
 
-- root `package.json` and `package-lock.json`;
-- Electron `package.json` and `package-lock.json`;
-- Electron status version badge;
-- `CHANGELOG.md`.
+## 7. Package-size and artifact gates
 
-## 6. Package-size baseline
-
-A release package-size report requires final installer and portable artifacts:
+Build final artifacts and enforce the committed size policy:
 
 ```bash
-npm run electron:dist
-npm run electron:size
+npm run electron:dist:windows
+npm run electron:size:windows
+npm run verify:updater-artifacts
+npm run generate:sbom
 ```
 
-The size gate is blocking. It requires the exact canonical installer and portable filenames, rejects packaged source CSS, source maps, unsupported locales, missing metrics, and any measured value more than the documented 3% tolerance above the accepted baseline. Update `scripts/electron-size-baseline.json` only from a reviewed final release candidate with an explicit explanation for every increase.
+Release publication requires canonical filenames, matching versions, updater SHA-512 integrity, SHA-256 coverage, SBOM generation, and GitHub attestations.
 
-## 7. Manual release checks
+## 8. Manual release checks
 
-Use a disposable Windows VM or dedicated release machine for operations that affect installed applications:
+Use a disposable Windows VM or dedicated release machine for operations that affect installed applications or require external credentials:
 
 - NSIS install and uninstall;
-- first-run rendering and real ngrok publication;
-- real ChatGPT UI connection and app selection;
-- approval-token replacement and existing-app reapproval;
-- update from the previous published release.
+- first-run Secure MCP Tunnel configuration;
+- real Tunnel ID/runtime API key connection and reconnect after restart;
+- real ChatGPT Tunnel integration and one read-only workspace request;
+- tool-schema refresh/review after a deliberate schema change;
+- update from the previous published release; and
+- light/dark, narrow-layout, and accessibility review.
 
-Do not run installer lifecycle tests on a developer machine that is hosting active Rel.AI work.
+Do not run installer lifecycle tests on the developer machine hosting the active Rel.AI connector.
 
-## 8. Publish
+## 9. Publish
 
-Pushing the version commit to `main` triggers `.github/workflows/release.yml`. The workflow builds the installer and portable executable and publishes:
+Pushing the version commit to `main` triggers `.github/workflows/release.yml`. The workflow builds platform release artifacts, verifies them, prepares checksums and SBOM evidence, and publishes only after the blocking jobs pass.
 
-- `Rel.AI-MCP-Setup-<version>.exe`;
-- `Rel.AI-MCP-Portable-<version>.exe`;
-- `Rel.AI-MCP-Setup-<version>.exe.blockmap`;
-- `latest.yml`;
-- the CycloneDX SBOM;
-- the strict package-size report;
-- `SHA256SUMS.txt`.
+Rel.AI-owned Windows artifacts currently disable certificate auto-discovery and are covered by SHA-256 plus GitHub attestations. The packaged OpenAI tunnel-client bytes must match the reviewed provenance manifest.
 
-The workflow requires exact release-asset basenames, matching release versions, nonempty and byte-correct SHA-512 updater metadata, and SHA-256 coverage. Rel.AI-owned Windows artifacts are currently published unsigned with certificate auto-discovery disabled. SHA-256 binds every published asset to `SHA256SUMS.txt`; the packaged ngrok bytes must also match the reviewed manifest and retain ngrok's valid upstream Authenticode signature.
+Scan the installer, portable executable, unpacked Rel.AI executable, and extracted tunnel client as separate samples before broad distribution. A malware/Trojan classification blocks publication pending investigation. See `docs/ANTIVIRUS_FALSE_POSITIVES.md` for component-level handling.
 
-Scan the installer, portable executable, unpacked Rel.AI executable, and bundled ngrok executable as separate samples before broad distribution. A Trojan or malware classification on a Rel.AI-owned executable blocks publication until investigated. Generic PUA/PUP labels limited to the authentic ngrok component require documented vendor submission and review; do not evade them through renaming, repacking, or post-install downloads. See `docs/ANTIVIRUS_FALSE_POSITIVES.md`.
-
-A local release-preparation commit must not be pushed until all automated and manual checks required for the candidate are complete.
+A release-preparation commit must not be pushed until the automated gates and the manual/external checks required for that candidate are complete.

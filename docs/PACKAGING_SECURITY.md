@@ -1,48 +1,49 @@
 # Packaging Security Policy
 
-Rel AI MCP separates runtime dependency security from release-tool dependency security and treats the bundled tunnel agent as an explicit release component.
+Rel.AI MCP separates runtime dependency security from release-tool dependency security and treats the bundled OpenAI tunnel client as an explicit reviewed release component.
 
 ## Required gates
 
 - `npm run audit:production` must pass with no high-severity production vulnerabilities in either package.
-- `npm run audit:packaging` is a blocking, fail-closed Electron build-tool audit. It accepts only the documented advisory URL and package set, only when every affected lockfile node is dev, peer, or optional build tooling, and only until the policy expiration date.
-- Every packaged build must pass layout verification, connector acceptance, and Electron fuse verification.
-- Release artifacts must be generated from a clean output directory.
-- Published Windows builds currently disable certificate auto-discovery and are intentionally unsigned until a trusted Windows code-signing certificate is configured.
-- Every published Rel.AI executable must be covered by `SHA256SUMS.txt`; bundled ngrok must retain its valid upstream Authenticode signature and match the pinned manifest.
+- `npm run audit:packaging` is a blocking, fail-closed Electron build-tool audit with only the repository's documented temporary exception policy.
+- Every packaged build must pass layout verification, packaged MCP acceptance, and Electron fuse verification.
+- Release artifacts are generated from a clean output directory.
+- Published Windows builds currently disable certificate auto-discovery and remain unsigned until a trusted Windows code-signing certificate is configured.
+- Every published Rel.AI executable is covered by `SHA256SUMS.txt`.
+- The bundled OpenAI `tunnel-client` must match the reviewed manifest exactly.
 
-## Bundled ngrok policy
+## Bundled OpenAI tunnel-client policy
 
-Rel.AI keeps a one-installer user experience: ngrok remains embedded in the application package. It is not hidden, renamed to evade detection, packed again, or downloaded silently after installation.
+Rel.AI keeps the tunnel runtime inside the application package so the installed desktop does not depend on a separate tunnel-client installation.
 
-`vendor/ngrok/manifest.json` pins the reviewed ngrok version, distribution URL, exact size, and SHA-256. Windows release preparation also verifies the upstream Authenticode publisher and certificate issuer. The same manifest is packaged with the application, checked against the packaged binary, and represented in the CycloneDX SBOM.
+`vendor/tunnel-client/manifest.json` pins the reviewed version, source repository, license, per-platform release URL, exact file size, and SHA-256. `scripts/fetch-tunnel-client.mjs` fetches only the pinned archive for supported platforms and refuses bytes that do not match the manifest. `scripts/verify-tunnel-client.mjs` verifies the extracted binary before packaging.
 
-The writable managed copy is replaced whenever it differs from the packaged hash. ngrok update checks and remote management are disabled, so executable bytes change only through a reviewed Rel.AI release. This deterministic component lifecycle improves incident analysis and antivirus false-positive submissions without requiring users to install ngrok separately.
+The same manifest and platform binary are copied outside ASAR under `resources/bin/tunnel-client/`. `scripts/verify-packaged-app.mjs` rechecks the packaged size and SHA-256. Runtime code does not accept a renderer-supplied executable path and does not silently replace the binary after installation; upgrades arrive through reviewed Rel.AI releases.
 
 ## Antivirus classification
 
-Tunneling agents may receive generic PUA, PUP, or capability-based classifications even when their signature and provenance are valid. A detection is not bypassed or suppressed in product code. The exact release candidate is inspected component-by-component, and incorrect detections are submitted to the relevant antivirus vendor before broad distribution.
+A tunneling executable may receive capability-based or potentially-unwanted classifications because tunneling can also be abused by unrelated software. Rel.AI does not hide, rename, custom-pack, or download the executable after installation to evade scanners.
+
+A malware or Trojan classification on any exact release candidate remains a publication blocker until the bytes and component attribution are investigated. Generic capability-based findings limited to a manifest-matching upstream tunnel client may be handled through the documented vendor false-positive process, but they are never described as guaranteed harmless solely because other scanners are clean.
 
 See [ANTIVIRUS_FALSE_POSITIVES.md](ANTIVIRUS_FALSE_POSITIVES.md) for the release decision and submission procedure.
 
 ## Known electron-builder v26 advisory cluster
 
-The release toolchain pins electron-builder 26.15.3. Its lockfile currently reports one inherited brace-expansion denial-of-service advisory across 16 development-only archive, glob, and installer packages. npm's forced remediation proposes an incompatible builder downgrade, so it is not used.
+The release toolchain pins electron-builder 26.15.3. Its lockfile currently has a documented, expiry-bound build-tool advisory exception. `scripts/packaging-audit-policy.json` restricts that exception by advisory, package set, dependency role, and expiration date. A new advisory, new package, critical finding, runtime-reachable node, malformed policy, or expired policy fails publication.
 
-`scripts/packaging-audit-policy.json` limits the temporary acceptance to advisory `GHSA-mh99-v99m-4gvg`, the exact reviewed package set, and build-only lockfile nodes. The exception expires on 2026-08-31. Any new package, advisory URL, critical finding, runtime-reachable node, malformed policy, or expired policy fails publication. Production dependency audits remain separate and must report zero high-severity findings.
+Production dependency audits remain separate and must report zero high-severity findings.
 
 ## Release controls
 
-The release pipeline mitigates packaging-tool risk through:
+The release pipeline relies on:
 
-- trusted repository inputs only;
-- clean dependency installation from lockfiles;
+- trusted repository inputs and lockfile-based dependency installation;
 - clean artifact directories;
-- an expiry-bound and package-scoped build-tool audit exception;
-- pinned and authenticated ngrok provenance;
-- disabled ngrok self-update and remote management;
+- an expiry-bound build-tool audit exception;
+- pinned OpenAI tunnel-client provenance and packaged hash verification;
 - hardened Electron fuses;
-- packaged-layout and connector-flow validation;
-- component-level hash verification and upstream ngrok signature verification;
-- exact canonical release filenames, updater SHA-512 verification, SHA-256 coverage, SBOM generation, and GitHub artifact attestations;
-- explicit unsigned-build configuration for Rel.AI-owned executables until trusted code signing is introduced.
+- packaged-layout and bearer-authenticated MCP acceptance;
+- exact canonical release filenames and updater SHA-512 verification;
+- SHA-256 coverage, CycloneDX SBOM generation, and GitHub artifact attestations; and
+- explicit unsigned-build configuration for Rel.AI-owned Windows executables until trusted code signing is introduced.

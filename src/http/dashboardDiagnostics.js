@@ -15,17 +15,16 @@ function handleApiDiagnostics(ctx) {
   const connectionSummary = connection.buildConnectionSummary({
     host: profile.host || ctx.options.host || '127.0.0.1',
     port: profile.port || ctx.options.port || 3333,
-    publicUrl: profile.publicUrl || ctx.options.publicUrl || '',
     token: ctx.options.token,
-    tunnelProvider: profile.tunnelProvider || 'none',
+    tunnelId: profile.tunnelId || '',
+    tunnelProvider: 'openai-secure-mcp',
     showToken: false,
     includeTokenInUrls: false
   });
   const desktopStatus = typeof ctx.options.getDesktopStatus === 'function' ? ctx.options.getDesktopStatus() : null;
   const connectionState = desktopStatus?.connectionState || deriveConnectionState(desktopStatus || {
     serverRunning: true,
-    tunnelStatus: connectionSummary.chatgptMcpUrl ? 'running' : 'stopped',
-    mcpUrl: connectionSummary.chatgptMcpUrl || ''
+    tunnelStatus: profile.tunnelId ? 'connecting' : 'stopped'
   });
   const activity = typeof ctx.options.getTaskActivity === 'function' ? ctx.options.getTaskActivity() : {};
   const runtimeLogs = typeof ctx.options.getRuntimeLogs === 'function'

@@ -1,36 +1,4 @@
-function registerGatewayIpc({
-  ipcMain,
-  dashboardOnly,
-  getGatewayStatus,
-  beginGatewayEnrollment,
-  beginGatewayPairing,
-  openGatewayAccount,
-  cancelGatewayPairing,
-  listGatewayDevices,
-  revokeGatewayDevice,
-  setGatewayMode,
-  getGatewayRecovery,
-  getGatewayUsage,
-  getLocalUsage
-}) {
-  ipcMain.handle('desktop:gateway:get', event => dashboardOnly(event, getGatewayStatus));
-  ipcMain.handle('desktop:gateway:enroll', event => dashboardOnly(event, beginGatewayEnrollment));
-  ipcMain.handle('desktop:gateway:pair', event => dashboardOnly(event, beginGatewayPairing));
-  ipcMain.handle('desktop:gateway:account-open', event => dashboardOnly(event, openGatewayAccount));
-  ipcMain.handle('desktop:gateway:pair-cancel', event => dashboardOnly(event, cancelGatewayPairing));
-  ipcMain.handle('desktop:gateway:devices', event => dashboardOnly(event, listGatewayDevices));
-  ipcMain.handle('desktop:gateway:device-revoke', (event, request = {}) => dashboardOnly(event, () => {
-    const deviceId = String(request.deviceId || '').trim();
-    if (!/^[0-9a-f-]{36}$/i.test(deviceId)) throw new Error('A valid gateway device ID is required.');
-    return revokeGatewayDevice(deviceId);
-  }));
-  ipcMain.handle('desktop:gateway:mode-set', (event, request = {}) => dashboardOnly(event, () => {
-    const mode = String(request.mode || '').trim();
-    if (!['cloud', 'direct'].includes(mode)) throw new Error('Gateway mode must be cloud or direct.');
-    return setGatewayMode(mode);
-  }));
-  ipcMain.handle('desktop:gateway:recovery-get', event => dashboardOnly(event, getGatewayRecovery));
-  ipcMain.handle('desktop:gateway:usage', (event, month) => dashboardOnly(event, () => getGatewayUsage(normalizeAnalyticsMonth(month))));
+function registerAnalyticsIpc({ ipcMain, dashboardOnly, getLocalUsage }) {
   ipcMain.handle('desktop:analytics:local', (event, month) => dashboardOnly(event, () => getLocalUsage(normalizeAnalyticsMonth(month))));
 }
 
@@ -39,7 +7,6 @@ function registerDesktopSettingsIpc({
   dashboardOnly,
   getDesktopSettings,
   saveDesktopSettings,
-  replaceApprovalToken,
   getLifecycleStatus,
   setLaunchAtLogin,
   getNotificationsEnabled,
@@ -49,7 +16,6 @@ function registerDesktopSettingsIpc({
 }) {
   ipcMain.handle('desktop:settings:get', event => dashboardOnly(event, getDesktopSettings));
   ipcMain.handle('desktop:settings:save', (event, settings) => dashboardOnly(event, () => saveDesktopSettings(settings)));
-  ipcMain.handle('desktop:approval-token:replace', (event, request) => dashboardOnly(event, () => replaceApprovalToken(request)));
   ipcMain.handle('desktop:lifecycle:get', event => dashboardOnly(event, getLifecycleStatus));
   ipcMain.handle('desktop:startup:set', (event, enabled) => dashboardOnly(event, () => setLaunchAtLogin(enabled)));
   ipcMain.handle('desktop:notifications:get', event => dashboardOnly(event, () => ({ ok: true, enabled: getNotificationsEnabled() })));
@@ -76,4 +42,4 @@ function normalizeAnalyticsMonth(month) {
   return value;
 }
 
-export { registerDesktopSettingsIpc, registerDiagnosticsIpc, registerGatewayIpc, registerUpdaterIpc };
+export { registerAnalyticsIpc, registerDesktopSettingsIpc, registerDiagnosticsIpc, registerUpdaterIpc };

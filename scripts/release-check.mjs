@@ -54,29 +54,29 @@ function assertJsonVersion(relativePath, version) {
   }
 }
 
-function assertNgrokSeed() {
+function assertTunnelClient() {
   const platform = String(process.env.REL_AI_TARGET_PLATFORM || (process.platform === 'win32' ? 'win32' : '')).trim();
   if (!platform) return;
-  const manifestPath = rel('vendor', 'ngrok', 'manifest.json');
+  const manifestPath = rel('vendor', 'tunnel-client', 'manifest.json');
   if (!fs.existsSync(manifestPath)) {
-    fail(`ngrok provenance manifest is missing: ${path.relative(root, manifestPath)}`);
+    fail(`OpenAI tunnel-client provenance manifest is missing: ${path.relative(root, manifestPath)}`);
     return;
   }
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   const spec = manifest.platforms?.[platform];
   if (!spec) {
-    fail(`ngrok provenance manifest has no entry for ${platform}`);
+    fail(`OpenAI tunnel-client provenance manifest has no entry for ${platform}`);
     return;
   }
-  const seedPath = rel('vendor', 'ngrok', platform, spec.file);
-  if (!fs.existsSync(seedPath)) {
-    fail(`bundled ngrok seed is missing for ${platform}: ${path.relative(root, seedPath)}`);
+  const binaryPath = rel('vendor', 'tunnel-client', platform, spec.file);
+  if (!fs.existsSync(binaryPath)) {
+    fail(`bundled OpenAI tunnel-client is missing for ${platform}: ${path.relative(root, binaryPath)}`);
     return;
   }
-  const bytes = fs.readFileSync(seedPath);
+  const bytes = fs.readFileSync(binaryPath);
   const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
-  expectEqual(bytes.length, Number(spec.size), `bundled ngrok seed size for ${platform}`);
-  expectEqual(sha256, String(spec.sha256).toLowerCase(), `bundled ngrok seed SHA-256 for ${platform}`);
+  expectEqual(bytes.length, Number(spec.size), `bundled OpenAI tunnel-client size for ${platform}`);
+  expectEqual(sha256, String(spec.sha256).toLowerCase(), `bundled OpenAI tunnel-client SHA-256 for ${platform}`);
 }
 
 const packageJson = readJson('package.json');
@@ -87,7 +87,7 @@ assertJsonVersion('package.json', version);
 assertJsonVersion('package-lock.json', version);
 assertJsonVersion(path.join('electron', 'package.json'), version);
 assertJsonVersion(path.join('electron', 'package-lock.json'), version);
-assertNgrokSeed();
+assertTunnelClient();
 
 const statusHtml = read(path.join('electron', 'renderer', 'status.html'));
 expect(statusHtml.includes(`id="appVersion">v${version}</span>`), `electron/renderer/status.html must display v${version}`);
@@ -118,16 +118,13 @@ if (!fs.existsSync(releaseManifestPath)) {
   expectEqual(releaseManifest.applicationVersion, version, 'release-manifest.json applicationVersion');
   expectEqual(releaseManifest.protocolVersion, '2026-07-28', 'release-manifest.json protocolVersion');
   expect(Number.isInteger(releaseManifest.toolCount) && releaseManifest.toolCount > 0, 'release-manifest.json toolCount must be a positive integer');
-  expect(Number.isInteger(releaseManifest.deviceProtocolVersion) && releaseManifest.deviceProtocolVersion > 0, 'release-manifest.json deviceProtocolVersion must be a positive integer');
-  expect(Number.isInteger(releaseManifest.minimumCompatibleDeviceProtocol) && releaseManifest.minimumCompatibleDeviceProtocol > 0, 'release-manifest.json minimumCompatibleDeviceProtocol must be a positive integer');
-  expect(releaseManifest.minimumCompatibleDeviceProtocol <= releaseManifest.deviceProtocolVersion, 'minimumCompatibleDeviceProtocol cannot exceed deviceProtocolVersion');
   expect(/^[A-Za-z0-9_-]{24}$/.test(String(releaseManifest.manifestHash || '')), 'release-manifest.json manifestHash must be a 24-character base64url digest');
 
   const runtimeMetadataPath = rel('src', 'runtimeCompatibility.js');
   if (fs.existsSync(runtimeMetadataPath)) {
     const { runtimeMetadata } = await import(`${pathToFileURL(runtimeMetadataPath).href}?releaseCheck=${Date.now()}`);
     const runtime = runtimeMetadata();
-    for (const field of ['applicationVersion', 'protocolVersion', 'toolSurfaceVersion', 'toolCount', 'manifestHash', 'schemaVersion', 'deviceProtocolVersion', 'minimumCompatibleDeviceProtocol']) {
+    for (const field of ['applicationVersion', 'protocolVersion', 'toolSurfaceVersion', 'toolCount', 'manifestHash', 'schemaVersion']) {
       expectEqual(releaseManifest[field], runtime[field], `release-manifest.json ${field}`);
     }
   }

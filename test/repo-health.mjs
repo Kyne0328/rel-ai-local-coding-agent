@@ -99,7 +99,8 @@ const sourceLineBudgets = {
   // One registration file composes eight narrow capability groups and the exact 33-channel contract.
   'electron/ipc-handlers.js': 300,
   'electron/launcher-config.js': 100,
-  'electron/ngrok-token.js': 30,
+  'electron/secure-tunnel-runtime.js': 250,
+  'electron/tunnel-credentials.js': 140,
   'electron/window-size.js': 100,
   'electron/resource-path.js': 50,
   'src/ui/workspace-input.js': 60,

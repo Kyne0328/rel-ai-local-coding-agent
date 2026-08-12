@@ -109,7 +109,7 @@ Raw `#hex`, `rgb()`, and `rgba()` values are prohibited in:
 
 - `src/ui/styles/app.css`;
 - `electron/renderer/app.css`;
-- `src/oauthProvider.js`;
+- `electron/renderer/wizard.html`;
 - `src/http/auth.js`; and
 - `electron/dashboard-window.js`.
 

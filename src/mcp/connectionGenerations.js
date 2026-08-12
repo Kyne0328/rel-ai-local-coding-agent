@@ -11,8 +11,7 @@ function resolveConnectionGenerations(config, options = {}) {
   const credentialFingerprint = fingerprint(key, `credential\0${String(options.token || '')}`);
   const configurationFingerprint = fingerprint(key, `configuration\0${stableJson({
     host: String(options.host || ''),
-    port: Number(options.port || 0),
-    publicUrl: String(options.publicUrl || '')
+    port: Number(options.port || 0)
   })}`);
   const previous = readState(file);
   const next = {

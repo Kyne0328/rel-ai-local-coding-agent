@@ -82,14 +82,14 @@ The repository remains the source of truth throughout the task. If the workspace
 
 ## Start using Rel.AI
 
-The normal path is designed around the desktop app, a Rel.AI account, and Rel.AI Cloud. You do not need an ngrok account for the default setup.
+Rel.AI uses one connection model: **OpenAI Secure MCP Tunnel**. Repository files and tool execution stay on the computer running Rel.AI; the tunnel provides the private transport ChatGPT uses to reach its local MCP service.
 
 1. **Install Rel.AI MCP** from the [Releases page](https://github.com/Kyne0328/rel-ai-mcp/releases). Current desktop packaging targets Windows and Linux.
-2. **Sign in to Rel.AI.** The first-run wizard opens your browser so you can sign in or create an account and approve this computer.
-3. **Secure the device.** Rel.AI creates a device identity locally; the private key stays on this computer.
-4. **Add Rel.AI in ChatGPT.** On Plus or Pro, open **Plugins** from the sidebar or **Settings > Plugins**, add Rel.AI MCP, and choose **Connect**. On Business, Enterprise, or Edu, open the Rel.AI app provided under workspace **Apps**. When authorization opens, sign in with the same Rel.AI account; the normal account flow does not ask for a device pairing code.
-5. **Add a workspace.** Pick a repository folder and give it a short alias such as `myapp`.
-6. **Use that alias in ChatGPT.** Rel.AI resolves the local repository from the configured workspace rather than accepting an arbitrary filesystem path from the Cloud.
+2. **Create an OpenAI Secure MCP Tunnel** for this computer and create a runtime API key for that tunnel in OpenAI Platform.
+3. **Configure Rel.AI.** Enter the tunnel ID and runtime API key in the first-run wizard. Rel.AI encrypts the runtime key with Electron `safeStorage` and supervises the bundled OpenAI tunnel client.
+4. **Add a workspace.** Pick a repository folder and give it a short alias such as `myapp`.
+5. **Connect ChatGPT.** Create or reconnect the Rel.AI MCP integration using ChatGPT's **Tunnel** connection option and associate it with this computer's tunnel.
+6. **Use the workspace alias.** Rel.AI resolves repository access locally from the configured alias; ChatGPT does not need the absolute path on your computer.
 
 A useful first request is intentionally read-only:
 
@@ -103,7 +103,7 @@ Then move into a real implementation loop:
 Use Rel.AI MCP on workspace "myapp". Implement this change, run the smallest validation that proves it, review the task diff, and do not push unless I ask.
 ```
 
-See [One-click setup](docs/ONE_CLICK_SETUP.md) for the installed-app walkthrough and [Connecting to ChatGPT](docs/CONNECTING_TO_CHATGPT.md) for pairing, reconnects, recovery, and Advanced Direct.
+See [One-click setup](docs/ONE_CLICK_SETUP.md) for the installed-app walkthrough and [Connecting to ChatGPT](docs/CONNECTING_TO_CHATGPT.md) for tunnel setup, reconnects, and recovery.
 
 ## What Rel.AI gives ChatGPT
 
@@ -145,38 +145,25 @@ Rel.AI can review task changes, commit scoped work, push to configured remotes, 
 
 ## Local execution is the point
 
-Rel.AI Cloud makes a local computer reachable to ChatGPT without moving the development environment into the Cloud.
+OpenAI Secure MCP Tunnel gives ChatGPT a private route to the Rel.AI process without moving the development environment away from the computer that owns the repository.
 
 ```text
-                 public side                    local side
-
-ChatGPT ── OAuth / MCP ──► Rel.AI Cloud ──► paired desktop ──► workspace
-                           identity              device key       files
-                           routing               MCP runtime      Git
-                           coordination          processes        checks
-                           usage metadata        activity         builds
+ChatGPT
+   │
+   ▼
+OpenAI Secure MCP Tunnel
+   │
+   ▼
+bundled tunnel-client
+   │  Authorization: Bearer <local secret>
+   ▼
+127.0.0.1:<port>/mcp
+   │
+   ▼
+Rel.AI MCP → configured workspace → files / Git / commands / checks
 ```
 
-**Rel.AI Cloud routes work. Your desktop executes it.**
-
-Rel.AI Cloud authenticates and routes approved connections to paired desktops. Its hosted implementation, persistence model, production configuration, abuse controls, and deployment architecture are intentionally maintained outside this public repository. The desktop remains the authority for repository files, absolute paths, commands, Git operations, tests, builds, managed processes, and workspace configuration.
-
-The public repository contains only the client behavior and compatibility contract needed to connect safely to that service; knowing the endpoint or protocol does not grant hosted access.
-
-## One ChatGPT connection, more than one computer
-
-Rel.AI Cloud models computers as separate devices instead of assuming that one ChatGPT connection always points at one permanent machine.
-
-Each paired desktop has its own local P-256 device identity. That lets Rel.AI support the real case where the same person works from a home PC, a school/work machine, or a replacement device without treating those machines as interchangeable execution environments.
-
-Rel.AI can:
-
-- sign another desktop in to the same Rel.AI account while keeping a distinct device identity;
-- approve new account-based devices independently;
-- migrate an older accountless identity with legacy recovery or one-time link proof;
-- list and revoke paired devices;
-- keep device compatibility separate from OAuth reauthentication;
-- keep ChatGPT tool refresh separate from both.
+The tunnel runtime API key is used by the bundled tunnel client to operate the configured OpenAI tunnel. The separate Rel.AI bearer token authenticates only the loopback tunnel-client-to-MCP hop and is not displayed as the ChatGPT credential. Repository paths, commands, Git operations, tests, builds, managed processes, and workspace configuration remain local.
 
 A reconnect restores transport. It does not rewrite repository history or pretend an interrupted mutation finished successfully.
 
@@ -184,7 +171,7 @@ A reconnect restores transport. It does not rewrite repository history or preten
 
 Rel.AI separates **connection recovery** from **work recovery**.
 
-A Cloud WebSocket reconnect or a Direct/ngrok reconnect is allowed to restore connectivity. It is not allowed to restart unrelated managed developer processes just to make the connection look healthy, and it is not allowed to convert uncertain repository work into a successful task result.
+A Secure MCP Tunnel reconnect is allowed to restore connectivity. It is not allowed to restart unrelated managed developer processes just to make the connection look healthy, and it is not allowed to convert uncertain repository work into a successful task result.
 
 If the outcome of a mutation is uncertain, Rel.AI can preserve read access while blocking new mutations or completion until the work state is reconciled. Recovery avoids automatically replaying destructive Git operations such as resets, cleans, restores, or pushes.
 
@@ -203,8 +190,8 @@ It exposes the things that matter during real repository work:
 - **Activity** — individual Rel.AI tool events and recorded results.
 - **Processes** — long-running development processes and bounded output.
 - **Skills** — built-in, installed, and workspace-enabled workflow instructions.
-- **Connection** — Cloud/Direct state, paired devices, authorization, recovery, and synchronization guidance.
-- **Usage** — Rel.AI-observed request, tool, byte, duration, device, and workspace aggregates.
+- **Connection** — Secure MCP Tunnel state, local MCP health, recovery, and ChatGPT connection guidance.
+- **Usage** — locally observed request, tool, outcome, duration, and workspace aggregates.
 - **Diagnostics and settings** — application health, updates, notification preferences, recovery guidance, and additional controls.
 
 Rel.AI records observable tool activity and results. It does not claim access to ChatGPT's private reasoning.
@@ -221,7 +208,7 @@ Important controls include:
 - **Stale-write checks** — exact replacements can fail closed when the target changed underneath the task.
 - **Task ownership** — a repository objective is bound to a `work_id`, not inferred from a WebSocket, OAuth grant, ChatGPT thread, or managed process ID.
 - **Git boundaries** — pushes are limited to configured remotes and sensitive staged paths require narrower authorization.
-- **Device identity** — Electron protects the local Cloud private key with `safeStorage`; the gateway receives the public identity required for challenge verification.
+- **Tunnel credential storage** — Electron protects the OpenAI tunnel runtime API key with `safeStorage`; the local MCP bearer token remains private to this computer.
 - **Renderer isolation** — privileged desktop actions cross constrained, sender-owned Electron IPC channels.
 - **Updater integrity** — release verification, checksums, package policy, and Electron fuses are part of the desktop security boundary.
 
@@ -229,27 +216,17 @@ Only configure repositories you trust ChatGPT and Rel.AI to inspect, execute, an
 
 Read [Security](docs/SECURITY.md) for the detailed authentication, workspace, Electron, updater, and remaining trust boundaries.
 
-## Cloud when you want convenience. Direct when you want the tunnel.
+## One secure connection model
 
-Rel.AI Cloud is the default connection model. **Advanced Direct** preserves the personal managed-ngrok path for users who deliberately want it.
+Rel.AI intentionally has one supported ChatGPT transport: **OpenAI Secure MCP Tunnel**. There is no provider switch or fallback transport to keep synchronized.
 
-| | Rel.AI Cloud | Advanced Direct |
-| --- | --- | --- |
-| Best fit | Normal setup and multi-device use | Personal tunnel control |
-| Public endpoint | Rel.AI Cloud MCP/OAuth gateway | Your managed ngrok HTTPS endpoint |
-| Rel.AI account | Required | Not required for the local Direct path |
-| ngrok account | Not required | Required |
-| Authorization | OAuth + Rel.AI account sign-in | OAuth + local Direct approval token |
-| Device recovery | Account-based device approval and revocation | Direct configuration remains local |
-| Repository execution | Selected desktop | Selected desktop |
-
-Switching modes does not move repository execution into the Cloud. Cloud and Direct configuration remain separate so one does not destroy the other.
+The desktop owns the local MCP process, tunnel-client child process, tunnel health state, encrypted runtime key, and local bearer credential. ChatGPT owns the remote tunnel association. This keeps transport recovery separate from repository task ownership and makes connection behavior deterministic across restarts.
 
 ## Small public tool surface, broad workflow
 
 The current release exposes **12 public MCP tools** through one canonical action catalog and targets MCP protocol `2026-07-28`.
 
-The surface is intentionally consolidated. Rel.AI does not need a public tool for every internal operation when one coherent capability can own the contract. That keeps schemas, authorization, task behavior, output validation, dashboard metadata, and gateway generation aligned around a smaller interface while still supporting repository inspection, search, edits, execution, processes, validation, review, Git operations, recovery, and work-session lifecycle.
+The surface is intentionally consolidated. Rel.AI does not need a public tool for every internal operation when one coherent capability can own the contract. That keeps schemas, authorization, task behavior, output validation, and dashboard metadata aligned around a smaller interface while still supporting repository inspection, search, edits, execution, processes, validation, review, Git operations, recovery, and work-session lifecycle.
 
 See [MCP protocol policy](docs/MCP_PROTOCOL_POLICY.md) and [Architecture](docs/ARCHITECTURE.md) for the current protocol and ownership model.
 
@@ -261,9 +238,9 @@ This keeps specialized workflow knowledge out of the public MCP tool count while
 
 ## Usage and privacy
 
-The Usage view measures **Rel.AI-observed gateway activity**, not ChatGPT model tokens or ChatGPT billing. It can report request counts, tool calls, outcomes, bytes, execution duration, active days, devices, tools, and workspace aggregates for the selected month.
+The Usage view measures **locally observed Rel.AI activity**, not ChatGPT model tokens or ChatGPT billing. It can report request counts, tool calls, outcomes, execution duration, active days, tools, and workspace aggregates from local Rel.AI records.
 
-Repository contents and command execution remain on the selected desktop. Keep pairing codes, recovery codes, OAuth credentials, Direct approval tokens, ngrok account keys, repository credentials, and other secrets out of public issues and unreviewed diagnostic exports.
+Repository contents and command execution remain on the selected desktop. Keep tunnel runtime API keys, local bearer credentials, repository credentials, and other secrets out of public issues and unreviewed diagnostic exports.
 
 ## Build Rel.AI from source
 
@@ -292,8 +269,8 @@ See [Development](docs/DEVELOPMENT.md) for source architecture, generated assets
 
 | If you want to... | Read |
 | --- | --- |
-| install and pair the desktop app | [One-click setup](docs/ONE_CLICK_SETUP.md) |
-| understand reconnects, OAuth, tool refresh, or Direct mode | [Connecting to ChatGPT](docs/CONNECTING_TO_CHATGPT.md) |
+| install and configure the desktop app | [One-click setup](docs/ONE_CLICK_SETUP.md) |
+| understand the Secure MCP Tunnel, reconnects, or ChatGPT setup | [Connecting to ChatGPT](docs/CONNECTING_TO_CHATGPT.md) |
 | understand who owns what at runtime | [Architecture](docs/ARCHITECTURE.md) |
 | inspect the desktop interaction model | [Desktop UX architecture](docs/DESKTOP_UX_ARCHITECTURE.md) |
 | audit authentication and local trust boundaries | [Security](docs/SECURITY.md) |
@@ -317,7 +294,7 @@ For connection or repository-work problems:
 2. Review [One-click setup](docs/ONE_CLICK_SETUP.md) and [Connecting to ChatGPT](docs/CONNECTING_TO_CHATGPT.md).
 3. If the problem is reproducible, [open a GitHub issue](https://github.com/Kyne0328/rel-ai-mcp/issues) with the smallest safe reproduction and sanitized diagnostics.
 
-Never include pairing codes, recovery codes, OAuth credentials, Direct approval tokens, ngrok account keys, repository secrets, or private keys in a public issue.
+Never include tunnel runtime API keys, local bearer credentials, repository secrets, or private keys in a public issue.
 
 ## License and attribution
 

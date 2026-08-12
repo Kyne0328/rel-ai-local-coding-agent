@@ -1,76 +1,54 @@
 # Connecting Rel.AI MCP to ChatGPT
 
-Rel.AI exposes one canonical 12-tool MCP surface. The normal desktop connection is **Rel.AI Cloud**; **Direct** remains an Advanced fallback for users who deliberately want a personal ngrok endpoint. In both modes repository files, Git operations, commands, validation, builds, and managed processes execute on the selected local desktop.
+Rel.AI exposes one canonical 12-tool MCP surface through **OpenAI Secure MCP Tunnel**. Repository files, Git operations, commands, validation, builds, and managed processes execute on the computer running Rel.AI.
 
-## Rel.AI Cloud — default
+## Configure the tunnel
 
-1. Open Rel.AI MCP and sign in to your Rel.AI account. On first run, the wizard opens your browser so you can sign in or create an account and approve this computer.
-2. Continue through **Secure this device** so the computer has its own local device identity.
-3. In ChatGPT, use the connection path for your plan: **Plus or Pro** — open **Plugins** from the sidebar or **Settings > Plugins**, add Rel.AI MCP, and choose **Connect**; **Business, Enterprise, or Edu** — open the Rel.AI app provided under your workspace **Apps**. Enable Developer mode or obtain workspace approval when your plan/workspace requires it.
-4. When Rel.AI authorization opens, sign in with the same Rel.AI account. The normal account flow does not ask for a desktop pairing code.
-5. Return to Rel.AI and wait for **Connected**.
-6. Add at least one local workspace before asking ChatGPT to inspect repository files.
+1. Create an OpenAI Secure MCP Tunnel for this computer and create a runtime API key for it in OpenAI Platform.
+2. Open Rel.AI MCP and enter the **Tunnel ID** and **runtime API key** in the first-run wizard or **Connection** page.
+3. Keep Rel.AI running until Connection reports the Secure MCP Tunnel as **Connected**.
+4. Add at least one local workspace before asking ChatGPT to inspect repository files.
 
-Cloud setup does not require an ngrok account, a connection port, or the Direct approval token.
+Rel.AI encrypts the saved runtime API key with Electron `safeStorage`. The key is never returned to the renderer after storage; entering a new value replaces it.
 
-## Device identity and recovery
+## Connect ChatGPT
 
-Each account-based desktop has its own device identity. Each desktop generates a P-256 key pair; the private key is encrypted locally through Electron `safeStorage`, while the gateway receives only the public identity needed for challenge verification.
+Create or reconnect the Rel.AI MCP integration in ChatGPT using the **Tunnel** connection option and associate it with the Tunnel ID shown in Rel.AI. If the integration already exists, reconnect or refresh it rather than creating a second copy unless you deliberately want a separate tunnel association.
 
-Your Rel.AI account is the normal recovery path for adding another or replacement computer. Device management can list paired devices and revoke a lost or retired device. Older accountless installations can use **Advanced setup and recovery** to migrate an existing identity with a legacy recovery code or one-time device-link code.
-
-Workspace folders remain computer-specific. Signing another desktop in does not upload or copy repository paths or files from the first computer.
-
-## Verify the connection safely
-
-Start with a read-only request:
+After enabling Rel.AI MCP in a chat, start with a read-only request:
 
 ```text
 Use Rel.AI MCP on workspace "myapp". Call relai_work with action "begin", retain the returned work_id, then call relai_snapshot with that work_id. Do not modify files yet.
 ```
 
-Each independent repository objective receives its own principal-bound `work_id`. Transport connections, ChatGPT conversation identity, device identity, and repository name do not replace that work-session boundary.
+Each independent repository objective receives its own principal-bound `work_id`. Tunnel connectivity, ChatGPT conversation identity, and repository name do not replace that work-session boundary.
 
-## Tool refresh, reauthentication, and desktop updates
+## Authentication boundary
 
-These are independent states:
+The private local MCP service requires a bearer credential. The bundled tunnel client injects that bearer header when it forwards MCP traffic to Rel.AI. ChatGPT does not receive or need the local Rel.AI bearer token.
 
-- `tool_refresh_required`: the current OAuth grant has not observed the current Rel.AI tool manifest through `tools/list`. This is advisory for an otherwise compatible request.
-- `reauthentication_required`: OAuth authorization must be restored.
-- `device_update_required`: the selected desktop gateway protocol is incompatible; the gateway blocks forwarding until the desktop is updated.
-
-Rel.AI can prove which manifest it serves and when a grant requests that manifest. It cannot force ChatGPT to replace its host-side cached app definition or prove that an administrator/user accepted refreshed actions. Use the current ChatGPT app-management refresh/review flow when Rel.AI reports a stale tool snapshot.
-
-## Usage
-
-The top-level **Usage** page loads one UTC month on demand from Rel.AI Cloud. It shows exact gateway-observed request, tool-call, outcome, byte, duration, active-day, device, tool, and workspace aggregates. These values are not ChatGPT model-token or billing estimates.
-
-The gateway persists monthly aggregate usage. The current implementation does not define an automatic deletion/retention window for those aggregate rows.
-
-## Advanced: Direct connection
-
-Direct mode retains the managed-ngrok + local OAuth architecture:
-
-1. Open **Connection** and choose the Advanced Direct setup.
-2. Configure the desktop connection port, ngrok account key, and static ngrok domain.
-3. Rel.AI starts the same local MCP service plus the bundled managed ngrok agent.
-4. In ChatGPT, add the Direct MCP using the plan-appropriate surface: **Plugins** for Plus/Pro, or the workspace **Apps** surface for managed plans, then configure the Direct `/mcp` endpoint with OAuth.
-5. Approve the local Rel.AI authorization page with the Direct approval token.
-
-Legacy ngrok configurations migrate to Direct mode. Switching to Cloud preserves Direct settings so the fallback remains reversible.
-
-Replacing the Direct approval token revokes current Direct OAuth access/refresh state while preserving the registered app where possible. Reconnect the existing app with the replacement token; do not treat Direct token rotation as a Cloud schema refresh.
+The public Rel.AI runtime no longer exposes a local OAuth authorization server. `/register`, `/authorize`, `/token`, legacy `/sse`, and legacy `/messages` are not supported connection paths.
 
 ## MCP protocol requirement
 
-Modern MCP behavior targets `2026-07-28`. HTTP also retains the SDK-supported stateless ChatGPT `2025-11-25` initialize flow. Rel.AI does not issue `MCP-Session-Id`; legacy `/sse`, `/messages`, JSON-RPC batches, removed tool aliases, and initialize-based stdio are not supported.
+Modern MCP behavior targets `2026-07-28`. HTTP also retains the SDK-supported stateless ChatGPT `2025-11-25` initialize flow. Rel.AI does not issue `MCP-Session-Id`; JSON-RPC batches, removed tool aliases, and initialize-based stdio are not supported.
 
 Native MCP Tasks are negotiated independently through `io.modelcontextprotocol/tasks`. Clients without Tasks support receive bounded synchronous execution for eligible operations.
 
+## Reconnects and tool changes
+
+A tunnel reconnect restores transport only. It does not select a workspace, infer a `work_id`, replay an uncertain mutation, or mark repository work complete.
+
+When the public tool schema changes, use the current ChatGPT integration refresh/review flow so ChatGPT observes the current Rel.AI tool surface. Application updates, tunnel connectivity, and host-side tool refresh are separate states.
+
 ## Troubleshooting
 
-If Cloud sign-in or authorization fails, keep the desktop running, retry the browser sign-in with the same Rel.AI account, and confirm the computer is approved. If Rel.AI reports `device_update_required`, update the desktop first. If ChatGPT shows old tools while Rel.AI reports `tool_refresh_required`, refresh/review the existing app definition in ChatGPT rather than rotating credentials.
+If ChatGPT cannot reach Rel.AI:
+
+- confirm Rel.AI shows the Secure MCP Tunnel as Connected;
+- confirm ChatGPT is associated with the same Tunnel ID shown in Rel.AI;
+- replace the tunnel runtime API key in **Connection** if it was revoked;
+- confirm the local connection port is available; and
+- open **Diagnostics** for sanitized tunnel and local-service logs.
 
 If a workspace cannot be found, confirm its alias under **Workspaces**, then retry a read-only `relai_work begin` + `relai_snapshot` request. Opening `/mcp` in a normal browser is not a connection test; MCP clients use `POST /mcp`.
-
-For Direct failures, verify the connection port is free, the ngrok account key is valid, and the configured static domain is available to the current agent.

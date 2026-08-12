@@ -11,10 +11,9 @@
 # Registered local Git worktrees are runtime-owned and must not dirty the source worktree.
 /.relai-worktrees
 /node_modules
-# ngrok seed binaries — fetched at build time via scripts/fetch-ngrok.*, never committed.
-/vendor/ngrok/win32/ngrok.exe
-/vendor/ngrok/darwin/ngrok
-/vendor/ngrok/linux/ngrok
+# OpenAI tunnel-client binaries are fetched from pinned official archives at build time.
+/vendor/tunnel-client/win32/tunnel-client.exe
+/vendor/tunnel-client/linux/tunnel-client
 # Zoekt binaries are built from pinned upstream source at build time; provenance is committed, binaries are not.
 /vendor/zoekt/win32/zoekt.exe
 /vendor/zoekt/win32/zoekt-index.exe

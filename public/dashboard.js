@@ -177,25 +177,6 @@ function initDesktopBridge() {
   void initWindowChrome(desktop).catch(debugError);
   desktop.onStatus(applyDesktopStatus);
   desktop.getStatus().then(applyDesktopStatus).catch(debugError);
-  if (desktop.onGatewayStatus) {
-    desktop.onGatewayStatus(applyGatewayStatusSnapshot);
-    desktop.getGatewayStatus?.().then(result => applyGatewayStatusSnapshot(result?.gateway)).catch(debugError);
-  }
-}
-
-function applyGatewayStatusSnapshot(gateway) {
-  if (!gateway || typeof gateway !== 'object') return false;
-  const current = getStore();
-  const data = {
-    ...current,
-    desktopStatus: { ...(current.desktopStatus || {}), gateway: { ...gateway } }
-  };
-  initStore(data);
-  const route = currentRoutePath();
-  if (_routerReady && (route === 'system' || route === 'connection')) {
-    void updateLiveView(data).catch(debugError);
-  }
-  return true;
 }
 
 function applyDesktopStatus(status) {
@@ -399,23 +380,14 @@ function viewFingerprint(data = {}) {
   const config = data.config || {};
   const desktop = data.desktopStatus || {};
   const desktopState = {
-    connectionMode: desktop.connectionMode,
     serverRunning: desktop.serverRunning,
     starting: desktop.starting,
     tunnelStatus: desktop.tunnelStatus,
-    mcpUrl: desktop.mcpUrl,
-    authenticationRequired: desktop.authenticationRequired,
+    tunnelId: desktop.tunnelId,
+    tunnelHealthUrl: desktop.tunnelHealthUrl,
+    localMcpUrl: desktop.localMcpUrl,
     errorCode: desktop.errorCode,
-    error: desktop.error,
-    gateway: desktop.gateway ? {
-      state: desktop.gateway.state,
-      schemaStatus: desktop.gateway.schemaStatus,
-      principalPaired: desktop.gateway.principalPaired,
-      deviceId: desktop.gateway.deviceId,
-      lastConnectedAt: desktop.gateway.lastConnectedAt,
-      reconnectAttempt: desktop.gateway.reconnectAttempt,
-      error: desktop.gateway.error
-    } : null
+    error: desktop.error
   };
   let payload;
   switch (currentSection()) {

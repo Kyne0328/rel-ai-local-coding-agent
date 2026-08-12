@@ -9,57 +9,34 @@ import { ERROR_CODES, TERMINOLOGY, deriveConnectionState, errorGuidance, errorPa
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 
-assert.deepEqual(TERMINOLOGY, {
-  connection: 'Connection',
-  approvalToken: 'Approval token',
-  sessions: 'Sessions',
-  activity: 'Activity',
-  tools: 'Tools',
-  workspace: 'Workspace'
-});
-assert.deepEqual(WORK_NAV_ITEMS.map(item => item.label), ['Overview', 'Sessions', 'Workspaces', 'Activity']);
-assert.deepEqual(SYSTEM_NAV_ITEMS.map(item => item.label), ['Connection', 'Processes', 'Diagnostics', 'Tools', 'Usage']);
+assert.deepEqual(TERMINOLOGY, { connection: 'Connection', sessions: 'Sessions', activity: 'Activity', tools: 'Tools', workspace: 'Workspace' });
+assert.deepEqual(WORK_NAV_ITEMS.map(item => item.label), ['Overview', 'Sessions', 'Workspaces', 'Tool Activity']);
+assert.deepEqual(SYSTEM_NAV_ITEMS.map(item => item.label), ['Connection', 'Processes', 'Diagnostics', 'Tools', 'Analytics']);
 assert.deepEqual(APPLICATION_NAV_ITEMS.map(item => item.label), ['System', 'Settings']);
-assert.deepEqual(MOBILE_NAV_ITEMS.map(item => item.label), ['Overview', 'Sessions', 'Workspaces', 'Activity', 'Settings']);
+assert.deepEqual(MOBILE_NAV_ITEMS.map(item => item.label), ['Overview', 'Sessions', 'Workspaces', 'System', 'Settings']);
 assert.deepEqual(SETTINGS_NAV_ITEMS.map(item => item.label), ['Preferences', 'Skills', 'Application', 'Advanced', 'About']);
 
-for (const code of [
-  ERROR_CODES.CONFIGURATION_INVALID,
-  ERROR_CODES.LOCAL_PORT_IN_USE,
-  ERROR_CODES.PUBLIC_ENDPOINT_FAILED,
-  ERROR_CODES.APPROVAL_TOKEN_REQUIRED,
-  ERROR_CODES.APPROVAL_TOKEN_REJECTED
-]) assert.equal(errorGuidance(code).href, '#connection');
+for (const code of [ERROR_CODES.CONFIGURATION_INVALID, ERROR_CODES.LOCAL_PORT_IN_USE, ERROR_CODES.SECURE_TUNNEL_FAILED, ERROR_CODES.PUBLIC_ENDPOINT_FAILED]) assert.equal(errorGuidance(code).href, '#connection');
 assert.equal(errorGuidance(ERROR_CODES.DIAGNOSTICS_UNAVAILABLE).href, '#connection');
 assert.equal(errorGuidance(ERROR_CODES.UPDATE_FAILED).href, '#diagnostics');
 assert.equal(errorPayload(ERROR_CODES.WORKSPACE_UNAVAILABLE, 'missing').recovery.href, '#workspaces');
 
-const running = deriveConnectionState({
-  serverRunning: true,
-  tunnelStatus: 'running',
-  mcpUrl: 'https://example.ngrok-free.dev/mcp',
-  dashboardUpdateStatus: 'live'
-});
+const running = deriveConnectionState({ serverRunning: true, tunnelStatus: 'running', tunnelId: 'tunnel_12345678', dashboardUpdateStatus: 'live' });
 assert.equal(running.localService.status, 'running');
 assert.equal(running.publicEndpoint.status, 'available');
 assert.equal(running.chatgptReadiness.status, 'ready');
-
-const ready = {
-  ...running,
-  chatgptReadiness: { status: 'oauth_authorized' },
-  mcpClient: { status: 'idle' }
-};
-assert.deepEqual(connectionLayerViews(ready).map(layer => layer.title), ['Connection service', 'Secure endpoint', 'Authorization', 'Client and tools', 'Dashboard updates']);
+const ready = { ...running, mcpClient: { status: 'idle' } };
+assert.deepEqual(connectionLayerViews(ready).map(layer => layer.title), ['Local MCP service', 'OpenAI Secure MCP Tunnel', 'ChatGPT transport', 'MCP activity', 'Dashboard updates']);
 assert.equal(connectionSummary(ready).tone, 'ok');
 
 const wizard = read('electron/renderer/wizard.html');
-assert.equal((wizard.match(/data-step="\d+"/g) || []).length, 3);
-assert.match(wizard, /Connect ChatGPT/);
-assert.match(wizard, /Secure this device/);
-assert.match(wizard, /Ready/);
+assert.match(wizard, /OpenAI Secure MCP Tunnel/);
+assert.match(wizard, /id="tunnelIdInput"/);
+assert.match(wizard, /id="tunnelApiKeyInput"/);
+assert.match(wizard, /id="connectBtn"/);
+assert.doesNotMatch(wizard, /ngrok|Cloud gateway|approval token|pairing code/i);
 assert.match(read('electron/window-security.js'), /contextIsolation: true/);
 assert.match(read('electron/window-security.js'), /sandbox: true/);
-assert.doesNotMatch(read('src/ui/features/settings/index.js'), /connection|diagnostics|tools-validation/i);
+assert.doesNotMatch(read('src/ui/features/settings/index.js'), /settings\/connection|settings\/diagnostics|tools-validation/i);
 
-console.log('Desktop UX contracts passed.');
-
+console.log('Tunnel-only desktop UX contracts passed.');

@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 // Terminating a spawned child process across platforms.
 //
-// On Windows the ngrok agent can outlive a plain child.kill(), so the whole
+// On Windows a managed child process can outlive a plain child.kill(), so the whole
 // process tree is killed via taskkill; POSIX gets a normal SIGTERM.
 function logKillDebug(label, error) {
   if (process.env.REL_AI_MCP_DEBUG) console.error(label, error);
