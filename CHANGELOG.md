@@ -3,6 +3,7 @@
 ## [0.25.0] — 2026-08-08
 
 ### ChatGPT connection reliability
+- **Keep every tool argument visible after tunnel import.** Publish flat connector-facing input objects for all 12 tools while retaining strict action and variant validation inside Rel.AI, preventing OpenAI's MCP importer from dropping shared fields such as `workspace`, `objective`, `command`, and `summary` from sparse `oneOf` branches.
 - **Accept interoperable OAuth client registration.** Support and validate standard authorization-code, refresh-token, response-type, and public-client metadata while ignoring safe unknown Dynamic Client Registration fields.
 - **Complete authorization back in ChatGPT.** Return successful local and cloud authorization form submissions with a `303 See Other` callback while preserving the authorization code and OAuth state.
 - **Make pairing codes easy to copy.** Provide accessible copy actions with progress and success feedback in both the setup wizard and Connection settings.

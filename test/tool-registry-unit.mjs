@@ -40,7 +40,7 @@ assert.ok(Buffer.byteLength(JSON.stringify(connectorInstructions(config)), 'utf8
 
 const manifest = getToolSurfaceManifest(config);
 assert.equal(manifest.schemaVersion, 7);
-assert.equal(manifest.toolSurfaceVersion, 36);
+assert.equal(manifest.toolSurfaceVersion, 37);
 assert.equal(Object.hasOwn(manifest, 'profile'), false);
 assert.equal(manifest.toolCount, 12);
 assert.deepEqual(manifest.tools.map(item => item.name), expectedTools);
@@ -56,10 +56,20 @@ for (const schema of schemas) {
   assert.equal(publicSchema.outputSchema.additionalProperties, false);
   assert.deepEqual(publicSchema.outputSchema.required, ['ok']);
 }
+for (const schema of publicSchemas) {
+  assert.equal(schema.inputSchema.oneOf, undefined, `${schema.name} must expose a flat connector input schema`);
+}
+const publicWorkSchema = publicSchemas.find(item => item.name === 'relai_work')?.inputSchema;
+for (const field of ['workspace', 'title', 'objective', 'bootstrap', 'instructionPath', 'summary', 'reason', 'work_id']) {
+  assert.ok(publicWorkSchema?.properties?.[field], `relai_work connector schema must expose ${field}`);
+}
 const publicSearchSchema = publicSchemas.find(item => item.name === 'relai_search')?.outputSchema;
 assert.equal(publicSearchSchema?.properties?.neuralEmbeddings?.type, 'boolean', 'semantic search output metadata must remain declared');
 assert.equal(publicSearchSchema?.properties?.originalBytes?.type, 'number', 'compacted tool results must remain valid against the public output schema');
 const publicExecSchema = publicSchemas.find(item => item.name === 'relai_exec');
+for (const field of ['command', 'executable', 'argv', 'input', 'cwd', 'env', 'timeoutMs', 'maxOutputBytes', 'work_id']) {
+  assert.ok(publicExecSchema?.inputSchema?.properties?.[field], `relai_exec connector schema must expose ${field}`);
+}
 assert.match(publicExecSchema?.description || '', /Prefer executable \+ argv/i, 'ChatGPT discovery must prefer shell-free direct execution before trying a shell command');
 assert.match(publicExecSchema?.inputSchema?.description || '', /Prefer direct executable \+ argv mode by default/i);
 assert.match(publicExecSchema?.inputSchema?.properties?.command?.description || '', /Do not embed JavaScript, Python, JSON, patches/i);

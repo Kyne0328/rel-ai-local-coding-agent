@@ -65,7 +65,7 @@ try {
   const discovery = client.discovery;
   assert.equal(discovery.response.status, 200);
   assert.deepEqual(discovery.body.result?.supportedVersions, [MCP_VERSION]);
-  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolSurfaceVersion, 36);
+  assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolSurfaceVersion, 37);
   assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.toolCount, 12);
   assert.equal(discovery.body.result?.capabilities?.experimental?.relai?.statelessRequestModel, true);
   assert.deepEqual(
@@ -118,6 +118,14 @@ try {
   assert.equal(status.body.result?.isError, false, JSON.stringify(status.body));
   assert.equal(status.body.result?.structuredContent?.ok, true);
 
+  const missingWorkspace = await client.request('tools/call', {
+    name: 'relai_work',
+    arguments: { action: 'begin' }
+  });
+  assert.equal(missingWorkspace.response.status, 200, JSON.stringify(missingWorkspace.body));
+  assert.equal(missingWorkspace.body.result?.isError, true, JSON.stringify(missingWorkspace.body));
+  assert.match(missingWorkspace.body.result?.structuredContent?.error || '', /Missing required field 'workspace'/);
+
   const started = await client.request('tools/call', {
     name: 'relai_work',
     arguments: { action: 'begin', workspace: root, bootstrap: 'none' }
@@ -126,6 +134,13 @@ try {
   assert.equal(started.body.result?.isError, false, JSON.stringify(started.body));
   const workId = started.body.result?.structuredContent?.work_id;
   assert.match(workId || '', /^[0-9a-f-]{36}$/i, 'HTTP Apps transport must start work from a configured workspace path');
+  const missingExecMode = await client.request('tools/call', {
+    name: 'relai_exec',
+    arguments: { work_id: workId }
+  });
+  assert.equal(missingExecMode.response.status, 200, JSON.stringify(missingExecMode.body));
+  assert.equal(missingExecMode.body.result?.isError, true, JSON.stringify(missingExecMode.body));
+  assert.match(missingExecMode.body.result?.structuredContent?.error || '', /command or executable/i);
   const cancelled = await client.request('tools/call', {
     name: 'relai_work',
     arguments: { action: 'cancel', work_id: workId, reason: 'HTTP begin regression completed.' }
@@ -163,7 +178,7 @@ try {
   const surface = await client.request('resources/read', { uri: 'relai://server/tool-surface' });
   assert.ok(surface.body.result?.contents, JSON.stringify(surface.body));
   const manifest = JSON.parse(surface.body.result.contents[0].text);
-  assert.equal(manifest.toolSurfaceVersion, 36);
+  assert.equal(manifest.toolSurfaceVersion, 37);
   assert.equal(Object.hasOwn(manifest, 'profile'), false);
   assert.equal(manifest.toolCount, 12);
   const surfaceByName = new Map(manifest.tools.map(tool => [tool.name, tool]));
