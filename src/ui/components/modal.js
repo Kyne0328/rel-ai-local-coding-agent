@@ -6,6 +6,7 @@ let _cleanup = null;
 let _onClose = null;
 
 export function openModal({ title, content, onClose, escDisabled = false } = {}) {
+  if (content != null && !(content instanceof Node)) throw new TypeError('Modal content must be a DOM Node.');
   closeModal();
   _opener = document.activeElement;
   _onClose = typeof onClose === 'function' ? onClose : null;
@@ -26,13 +27,7 @@ export function openModal({ title, content, onClose, escDisabled = false } = {})
   titleElement.textContent = title || '';
   dialog.appendChild(titleElement);
 
-  if (typeof content === 'string') {
-    const wrapper = document.createElement('div');
-    wrapper.innerHTML = content;
-    dialog.appendChild(wrapper);
-  } else if (content instanceof Node) {
-    dialog.appendChild(content);
-  }
+  if (content instanceof Node) dialog.appendChild(content);
 
   backdrop.appendChild(dialog);
   document.body.appendChild(backdrop);

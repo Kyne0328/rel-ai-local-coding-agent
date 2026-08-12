@@ -4,6 +4,7 @@ let _drawerOpener = null;
 let _drawerCleanup = null;
 
 export function openDrawer({ title, content, onClose, panelClass = '' } = {}) {
+  if (content != null && !(content instanceof Node)) throw new TypeError('Drawer content must be a DOM Node.');
   closeDrawer();
   _drawerOpener = document.activeElement;
 
@@ -33,8 +34,7 @@ export function openDrawer({ title, content, onClose, panelClass = '' } = {}) {
 
   const body = document.createElement('div');
   body.className = 'drawer-body';
-  if (typeof content === 'string') body.innerHTML = content;
-  else if (content instanceof Node) body.appendChild(content);
+  if (content instanceof Node) body.appendChild(content);
 
   panel.append(head, body);
   backdrop.appendChild(panel);
