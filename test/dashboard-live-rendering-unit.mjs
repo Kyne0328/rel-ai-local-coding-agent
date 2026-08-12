@@ -67,6 +67,8 @@ assert.match(connector, /replaceRegion\(page,\s*'\.connection-layer-disclosure'/
 assert.match(connector, /replaceRegion\(page,\s*'\.connection-guide-region'/);
 assert.match(home, /export function updateHomeLiveState/);
 assert.match(home, /syncHomeRegion/);
+assert.match(functionSource(home, 'updateHomeLiveState'), /overviewState\(data\)/, 'Home live updates must derive data without rebuilding the full overview tree');
+assert.doesNotMatch(functionSource(home, 'updateHomeLiveState'), /buildOverview\(/, 'Home live updates must not build a detached full overview tree');
 assert.match(home, /function syncHomeClockText/, 'Home live regions must neutralize clock-only text before structural comparison');
 assert.match(functionSource(home, 'syncHomeRegion'), /syncHomeClockText/, 'Home region equality must ignore clock-only text changes');
 const sessions = read('src/ui/features/sessions/index.js');
