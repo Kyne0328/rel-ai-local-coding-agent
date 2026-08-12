@@ -129,12 +129,17 @@
 .usage-timeline-head { @apply items-start gap-4; }
 .usage-timeline-head p { @apply m-0 mt-1 text-[11px]; color: var(--ui-text-secondary); }
 .usage-chart-switch { @apply flex flex-wrap justify-end gap-1; }
+.usage-chart-switch button { min-height: 44px; }
 .usage-chart-switch button.active { border-color: var(--ui-action-primary); color: var(--ui-action-primary); background: var(--ui-action-secondary); }
 .usage-timeline-body { min-height: 190px; }
+.usage-timeline-plot { @apply overflow-hidden rounded-xl border px-3 pb-2 pt-1; border-color: var(--ui-border-subtle); background: linear-gradient(180deg, color-mix(in srgb, var(--ui-action-primary) 5%, var(--ui-surface-secondary)), var(--ui-surface-primary)); }
 .usage-timeline-svg { width: 100%; height: 180px; color: var(--ui-action-primary); }
 .usage-chart-line { stroke: currentColor; stroke-width: 2; }
+.usage-chart-area { fill: currentColor; opacity: .08; }
+.usage-chart-grid { stroke: var(--ui-border-subtle); stroke-width: 1; stroke-dasharray: 4 6; }
 .usage-chart-axis { stroke: var(--ui-border-default); stroke-width: 1; }
-.usage-chart-empty { @apply grid min-h-[180px] place-items-center text-[11px]; color: var(--ui-text-tertiary); }
+.usage-timeline-scale { @apply flex items-center justify-between text-[9px] font-medium; color: var(--ui-text-tertiary); }
+.usage-chart-empty { @apply grid min-h-[180px] place-items-center rounded-xl border border-dashed text-[11px]; color: var(--ui-text-tertiary); border-color: var(--ui-border-subtle); }
 @media (max-width: 1180px) {
   .usage-metrics { grid-template-columns: repeat(3,minmax(0,1fr)); }
   .usage-metric, .usage-metric:nth-child(4n), .usage-metric:nth-child(6n) { border-right: 1px solid var(--ui-border-default); border-bottom: 1px solid var(--ui-border-default); }
