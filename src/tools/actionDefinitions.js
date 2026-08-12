@@ -467,7 +467,7 @@ const PUBLIC_DEFINITION_VALUES = [
   define({
     name: 'relai_process',
     title: 'Manage Process',
-    description: 'Manage persistent development services, watchers, and interactive programs. For start, prefer executable + argv (+ optional initial input) so arguments bypass PowerShell/cmd/bash reparsing; use command only when shell syntax such as pipes, redirection, expansion, or built-ins is deliberately required. Use relai_exec or relai_validate for one-shot tests, builds, and checks.',
+    description: 'Manage persistent services, watchers, and interactive programs. Prefer executable + argv; use relai_exec or relai_validate for one-shot work.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -721,7 +721,7 @@ function clonePublicExecOperation() {
     'relai_exec',
     'relai_exec',
     'Run Command',
-    'Run a one-shot workspace command. Prefer executable + argv (+ optional input) whenever shell features are not required. Use command only when the operation intentionally needs shell syntax such as pipes, redirection, environment expansion, or shell built-ins. Direct mode avoids PowerShell/cmd/bash reparsing and preserves quotes, backticks, dollar signs, JSON, and multiline script text exactly.',
+    'Run one-shot workspace commands. Prefer executable + argv for shell-free execution; use command only for shell syntax.',
     {
       inputSchema: publicExecInputSchema(source.inputSchema),
       dashboard: { capabilities: ['execute'] }
@@ -734,13 +734,13 @@ function publicExecInputSchema(inputSchema) {
   const describe = (name, description) => ({ ...properties[name], description });
   return {
     ...inputSchema,
-    description: 'Choose exactly one execution mode. Prefer direct executable + argv mode by default; choose command only when shell parsing is deliberately needed.',
+    description: 'Choose one mode. Prefer direct executable + argv mode by default; use command only for deliberate shell parsing.',
     properties: {
       ...properties,
-      command: describe('command', 'Shell command string. Use only when shell syntax is intentionally required. Do not embed JavaScript, Python, JSON, patches, or other quote-sensitive multiline scripts here when direct mode can run them.'),
-      executable: describe('executable', 'Executable to launch directly with shell:false, for example node, python, git, or an absolute executable path. Preferred for scripts and structured arguments.'),
-      argv: describe('argv', 'Literal argument array passed directly to executable without shell parsing. Keep each logical argument as its own item.'),
-      input: describe('input', 'Optional literal UTF-8 stdin for direct mode. Prefer this for multiline scripts or structured text so quotes, backticks, dollar signs, and newlines are preserved exactly.'),
+      command: describe('command', 'Shell command. Use only for shell syntax. Do not embed JavaScript, Python, JSON, patches, or multiline scripts.'),
+      executable: describe('executable', 'Executable launched with shell:false; preferred for structured arguments.'),
+      argv: describe('argv', 'Arguments passed without shell parsing; keep each logical argument separate.'),
+      input: describe('input', 'Literal stdin for multiline scripts or structured text; preserves quote-sensitive content.'),
       cwd: describe('cwd', 'Optional workspace-relative working directory.'),
       env: describe('env', 'Optional environment variables supplied directly to the child process.'),
       timeoutMs: describe('timeoutMs', 'Maximum operation runtime in milliseconds.'),
@@ -751,7 +751,7 @@ function publicExecInputSchema(inputSchema) {
 function clonePublicEditOperation() {
   const source = getOperationDefinition('relai_edit');
   if (!source) throw new Error('Missing internal operation definition: relai_edit');
-  return cloneOperation('relai_edit', 'relai_edit', 'Edit Repository', source.description, {
+  return cloneOperation('relai_edit', 'relai_edit', 'Edit Repository', 'Edit files with oldText/newText, patch text, batches, or content for full-file replacement.', {
     inputSchema: publicEditInputSchema(source.inputSchema),
     dashboard: { capabilities: ['edit'] }
   });
