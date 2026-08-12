@@ -1,4 +1,5 @@
 import { routeHref } from '../../router.js';
+import { esc } from '../../utils.js';
 import { deltaFor } from './range-model.js';
 
 export function renderUsage(content, { bounds, current, previous, allCurrent }) {
@@ -127,4 +128,3 @@ function integer(value){return Math.floor(Number(value)||0).toLocaleString();}
 function percent(value){const n=Number(value)||0;return `${n.toFixed(n>=10?1:2)}%`;}
 function duration(value){const ms=Number(value)||0;if(ms<1000)return `${Math.floor(ms).toLocaleString()} ms`;const sec=ms/1000;if(sec<60)return `${sec.toFixed(sec>=10?1:2)} s`;const min=sec/60;if(min<60)return `${min.toFixed(min>=10?1:2)} min`;return `${(min/60).toFixed(2)} h`;}
 function shortId(value){const text=String(value||'');return text.length>12?`${text.slice(0,8)}…${text.slice(-4)}`:text;}
-function esc(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);}
