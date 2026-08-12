@@ -7,10 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { relaiApplyPatch, relaiDiff, relaiGitCommit, relaiGitDraftPr, relaiGitPush, relaiRestorePaths, workspaceWrite } from '../src/localRepoBridge.js';
 import { workspaceGitStatus } from "../src/repo/gitOps.js";
 import { writeSessionPolicy } from "../src/policyResolver.js";
-
-const GIT_EXECUTABLE = process.platform === 'win32'
-  ? String.raw`C:\Program Files\Git\cmd\git.exe`
-  : '/usr/bin/git';
+import { GIT_EXECUTABLE } from './helpers/git-executable.mjs';
 
 function git(args, options = {}) {
   return execFileSync(GIT_EXECUTABLE, args, options);

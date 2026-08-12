@@ -5,12 +5,10 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { relaiApplyPatch } from "../src/localRepoBridge.js";
-const gitExecutable = process.platform === 'win32'
-  ? String.raw`C:\Program Files\Git\cmd\git.exe`
-  : '/usr/bin/git';
+import { GIT_EXECUTABLE } from './helpers/git-executable.mjs';
 
 function git(args, options = {}) {
-  return execFileSync(gitExecutable, args, options);
+  return execFileSync(GIT_EXECUTABLE, args, options);
 }
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'rel-ai-patch-smoke-'));

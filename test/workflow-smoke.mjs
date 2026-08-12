@@ -4,17 +4,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MCP_VERSION, startMcpClient, structuredContentOf } from './helpers/mcp-client.mjs';
+import { GIT_EXECUTABLE } from './helpers/git-executable.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'rel-ai-mcp-workflow-'));
 const workspace = path.join(temp, 'workspace');
 const stateDir = path.join(temp, 'state');
-const gitExecutable = process.platform === 'win32'
-  ? String.raw`C:\Program Files\Git\cmd\git.exe`
-  : '/usr/bin/git';
-
 function git(args, options = {}) {
-  return execFileSync(gitExecutable, args, options);
+  return execFileSync(GIT_EXECUTABLE, args, options);
 }
 
 fs.mkdirSync(path.join(workspace, 'src'), { recursive: true });
