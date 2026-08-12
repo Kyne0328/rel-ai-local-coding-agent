@@ -10,15 +10,17 @@ export function chatGptGuideSteps({ mode = 'create', tunnelId = '' } = {}) {
   if (mode === 'reconnect') {
     return [
       'Keep Rel.AI running and confirm OpenAI Secure MCP Tunnel shows Connected on the Connection page.',
-      'In ChatGPT Web, Plus or Pro users should open Plugins; Business, Enterprise, or Edu users should open the Rel.AI app under workspace Apps. Select the existing Rel.AI MCP integration.',
-      tunnel ? `Reconnect the existing integration to tunnel ${tunnel}; do not delete or recreate the app.` : 'Reconnect the existing integration to this computer’s Secure MCP Tunnel; do not delete or recreate the app.',
-      'Return to the chat, select Rel.AI MCP, and retry the request.'
+      'In ChatGPT, open the existing Rel.AI MCP plugin/app instead of creating a duplicate.',
+      tunnel ? `Reconnect it with Connection set to Tunnel and select ${tunnel}.` : 'Reconnect it with Connection set to Tunnel and select this computer’s Secure MCP Tunnel.',
+      'Set Authentication to No authentication. Do not choose OAuth for the Rel.AI tunnel connection.',
+      'Return to the chat, enable Rel.AI MCP, and retry the request.'
     ];
   }
   return [
-    'Create an OpenAI Secure MCP Tunnel for this computer and a runtime API key in OpenAI Platform.',
-    'Save the tunnel ID and runtime key in Rel.AI Connection settings, then keep Rel.AI running until the tunnel reports Connected.',
-    tunnel ? `In ChatGPT Web, Plus or Pro users should open Plugins; Business, Enterprise, or Edu users should use the Rel.AI app under workspace Apps. Create/add Rel.AI MCP with the Tunnel connection option and select or enter ${tunnel}.` : 'In ChatGPT Web, Plus or Pro users should open Plugins; Business, Enterprise, or Edu users should use the Rel.AI app under workspace Apps. Create/add Rel.AI MCP with the Tunnel connection option and select this computer’s tunnel.',
+    'In OpenAI Platform, create or select a Secure MCP Tunnel under Organization settings → Tunnels and copy its tunnel_ ID.',
+    'Under Organization settings → API Keys, create a restricted runtime key with Tunnel Read and Use permissions.',
+    'Save the Tunnel ID and runtime key in Rel.AI Connection settings, then keep Rel.AI running until the tunnel reports Connected.',
+    tunnel ? `In ChatGPT, create/add Rel.AI MCP with Connection set to Tunnel, select ${tunnel}, and set Authentication to No authentication.` : 'In ChatGPT, create/add Rel.AI MCP with Connection set to Tunnel, select this computer’s tunnel, and set Authentication to No authentication.',
     'Enable Rel.AI MCP in the chat, then send the safe first request below.'
   ];
 }
@@ -30,7 +32,7 @@ export function createChatGptSetupGuide(options = {}) {
   const title = mode === 'reconnect' ? 'Reconnect ChatGPT' : 'Connect ChatGPT';
   const steps = chatGptGuideSteps({ mode, tunnelId: options.tunnelId });
   guide.innerHTML = `
-    <div class="chatgpt-guide-heading"><strong>${escapeHtml(title)}</strong><span>OpenAI Secure MCP Tunnel is the only supported connection path.</span></div>
+    <div class="chatgpt-guide-heading"><strong>${escapeHtml(title)}</strong><span>Use Tunnel + No authentication. Rel.AI handles the local bearer credential.</span></div>
     <ol>${steps.map(step => `<li>${escapeHtml(step)}</li>`).join('')}</ol>
     <div class="chatgpt-first-prompt"><span>Safe first request</span><code>${escapeHtml(chatGptFirstPrompt(options.workspaceAlias))}</code></div>`;
   return guide;

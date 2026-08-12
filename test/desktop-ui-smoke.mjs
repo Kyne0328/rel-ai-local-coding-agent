@@ -55,10 +55,15 @@ assert.match(wizardHtml, /id="tunnelApiKeyInput"/);
 assert.match(wizardHtml, /id="portInput"/);
 assert.match(wizardHtml, /id="connectBtn"/);
 assert.match(wizardHtml, /operating system credential store/i);
+assert.match(wizardHtml, /Organization settings → Tunnels/);
+assert.match(wizardHtml, /Organization settings → API Keys/);
+assert.match(wizardHtml, /No authentication/);
+assert.match(wizardHtml, /Do not choose OAuth/i);
 assert.doesNotMatch(wizardHtml, /ngrok|Cloudflare|Rel\.AI Cloud|approval token|pairing code|Direct connection/i);
 assert.match(wizardJs, /validTunnelId/);
 assert.match(wizardJs, /wizardDone\(\{ tunnelId, tunnelApiKey, port, restart: recoveryMode \}\)/);
 assert.match(wizardJs, /getRecoveryConfig/);
+assert.match(wizardJs, /copyText\(value\)/);
 assert.doesNotMatch(wizardJs, /ngrok|gateway|approvalToken|connectionMode/i);
 
 assert.match(statusHtml, /Dashboard recovery fallback/);
