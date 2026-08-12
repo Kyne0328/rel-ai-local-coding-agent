@@ -25,6 +25,8 @@ Use `relai_process` action `start` only for a program that must persist or accep
 
 Tests, builds, linters, source checks, package gates, and release validation are one-shot work and use `relai_exec` or `relai_validate`.
 
+For a browser-rendered local app, retain the development-server `processId`, then create a task-scoped `relai_ui` session against its loopback port. Start with an accessibility snapshot when locating controls, prefer semantic targets for interaction, capture a screenshot when visual evidence matters, inspect console/network failures when relevant, and stop the UI session before the persistent service is no longer needed.
+
 Retain `processId`. Read logs with byte offsets and reuse `metadataRevision` after the first read to avoid unchanged metadata. Stop the process when it is no longer required. A process handle is separate from `work_id` and native MCP Task IDs.
 
 ## Worktrees
@@ -41,4 +43,4 @@ Use returned error codes, recovery data, and current status. Re-read after hash 
 
 ## Public tool surface
 
-Rel.AI exposes the complete 12-tool capability surface. Exact action contracts and action-level execution metadata are available through `relai://server/tool-surface`.
+Rel.AI exposes the complete 13-tool capability surface. Exact action contracts and action-level execution metadata are available through `relai://server/tool-surface`.

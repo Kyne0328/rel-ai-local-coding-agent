@@ -115,6 +115,7 @@
     "build:css": "npm run generate:color-tokens && npx @tailwindcss/cli -i ./src/ui/styles/app.css -o ./public/dashboard.css --minify",
     "watch:css": "npm run generate:color-tokens && npx @tailwindcss/cli -i ./src/ui/styles/app.css -o ./public/dashboard.css --watch",
     "test:custom-chrome-browser": "node test/electron-custom-chrome-browser.mjs",
+    "test:web-automation": "node test/web-automation-contract-unit.mjs && node test/web-automation-relai-browser.mjs",
     "fetch:zoekt": "pwsh scripts/fetch-zoekt.ps1",
     "verify:zoekt": "node scripts/verify-zoekt-seed.mjs",
     "verify:tree-sitter-assets": "node scripts/verify-tree-sitter-assets.mjs",
@@ -156,6 +157,7 @@
     "@opentelemetry/resources": "^2.10.0",
     "@opentelemetry/sdk-trace-node": "^2.10.0",
     "@opentelemetry/semantic-conventions": "^1.43.0",
+    "playwright-core": "^1.62.1",
     "tree-sitter-wasms": "^0.1.13",
     "web-tree-sitter": "^0.25.10"
   },
@@ -166,6 +168,7 @@
     "@opentelemetry/resources",
     "@opentelemetry/sdk-trace-node",
     "@opentelemetry/semantic-conventions",
+    "playwright-core",
     "tree-sitter-wasms",
     "web-tree-sitter"
   ],
@@ -180,6 +183,7 @@
     "@opentelemetry/resources",
     "@opentelemetry/sdk-trace-node",
     "@opentelemetry/semantic-conventions",
+    "playwright-core",
     "tree-sitter-wasms",
     "web-tree-sitter"
   ]

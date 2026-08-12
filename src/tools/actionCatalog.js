@@ -8,7 +8,7 @@ import {
 } from './actionDefinitions.js';
 import { schemaFromDefinition } from './schemaBuilder.js';
 
-const TOOL_SURFACE_VERSION = 37;
+const TOOL_SURFACE_VERSION = 39;
 const ACTION_OPERATIONS = Object.freeze({
   relai_work: Object.freeze({
     begin: operation('relai_begin_work'),
@@ -39,6 +39,18 @@ const ACTION_OPERATIONS = Object.freeze({
     write: operation('relai_process_write'),
     stop: operation('relai_process_stop'),
     list: operation('relai_process_list')
+  }),
+  relai_ui: Object.freeze({
+    start: operation('relai_ui', true),
+    navigate: operation('relai_ui', true),
+    snapshot: operation('relai_ui', true),
+    interact: operation('relai_ui', true),
+    screenshot: operation('relai_ui', true),
+    console: operation('relai_ui', true),
+    network: operation('relai_ui', true),
+    viewport: operation('relai_ui', true),
+    reload: operation('relai_ui', true),
+    stop: operation('relai_ui', true)
   }),
   relai_worktree: Object.freeze({
     create: operation('relai_worktree_create'),
@@ -94,6 +106,7 @@ const OPERATION_CAPABILITIES = Object.freeze({
   relai_process_start: 'process:manage',
   relai_process_write: 'process:manage',
   relai_process_stop: 'process:manage',
+  relai_ui: 'process:manage',
   relai_git_push: 'git:publish'
 });
 

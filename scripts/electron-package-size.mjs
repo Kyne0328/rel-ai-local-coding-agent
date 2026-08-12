@@ -69,6 +69,7 @@ function buildPackageSizeReport(options) {
     resourcesBytes: sumFileSizes(listFiles(resourcesDir)),
     appAsarBytes: fileSize(asarPath),
     packagedDependencyBytes: asar.nodeModulesBytes,
+    webAutomationBytes: sumFileSizes(listFiles(path.join(resourcesDir, 'node_modules', 'playwright-core'))),
     localesBytes: sumFileSizes(localeFiles),
     tunnelClientBytes: fileSize(path.join(resourcesDir, 'bin', 'tunnel-client', spec.tunnelClientDirectory, spec.tunnelClientFile)),
     zoektBytes: sumFileSizes(listFiles(path.join(resourcesDir, 'bin', 'zoekt', platform))),

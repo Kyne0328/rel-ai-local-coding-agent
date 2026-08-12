@@ -12,6 +12,7 @@ import { relaiCodeInspect } from '../bridge/codeIntelligence.js';
 import { relaiExec } from '../bridge/exec.js';
 import { startTask, taskBootstrapFromSnapshot } from './task.js';
 import { startManagedProcess, readManagedProcess, writeManagedProcess, stopManagedProcess, listManagedProcesses } from '../processManager.js';
+import { runUiAction } from '../webAutomationManager.js';
 import { createManagedWorktree, listManagedWorktrees, removeManagedWorktree } from '../worktreeManager.js';
 import { relaiSemanticSearch } from '../bridge/semanticSearch.js';
 import { repositoryIntelligence } from '../repository/intelligence/service.js';
@@ -61,6 +62,7 @@ const HANDLERS = Object.freeze({
   processWrite: (config, args, context) => writeManagedProcess(config, args, context),
   processStop: (config, args, context) => stopManagedProcess(config, args, context),
   processList: (config, args, context) => listManagedProcesses(config, args, context),
+  ui: inWorkspace((workspace, config, args, context) => runUiAction(workspace, config, args, context)),
   worktreeCreate: inWorkspace((workspace, config, args, context) => createManagedWorktree(workspace, config, args, context)),
   worktreeList: (config, args, context) => listManagedWorktrees(config, args, context),
   worktreeRemove: inWorkspace((workspace, config, args, context) => removeManagedWorktree(workspace, config, args, context)),

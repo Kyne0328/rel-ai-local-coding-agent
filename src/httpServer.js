@@ -13,6 +13,7 @@ import { getMcpAccess } from "./http/mcp.js";
 import { handleMcpGetDiagnostic, handleMcpStreamable, handleMcpDelete, handleMcpRecovery, handleMcpConnectionState, shutdownMcpTransport } from "./http/mcpTransport.js";
 import { initializeTelemetry, shutdownTelemetry } from "./telemetry.js";
 import { stopAllManagedProcesses, pruneManagedProcesses } from "./processManager.js";
+import { stopAllUiSessions } from './webAutomationManager.js';
 import { pruneNativeToolTasks } from './mcp/nativeToolTasks.js';
 import { ensureConfig, getConfigPath, readConfig } from './config.js';
 import { buildToolManifest } from './mcp/toolManifest.js';
@@ -86,6 +87,7 @@ function startHttpServer(options = {}) {
       shutdownMcpTransport(),
       mcpConnectionManager.shutdown('http_server_closed'),
       stopAllManagedProcesses(runtimeConfig),
+      stopAllUiSessions(),
       shutdownTelemetry()
     ]);
   });
