@@ -47,7 +47,7 @@ Rel.AI is built around four product rules rather than a collection of unrelated 
 | **03** | **Evidence beats progress** | A successful command or a 100% UI indicator is not proof that the change is valid. Rel.AI tracks current validation evidence against the files the task actually changed. |
 | **04** | **Publishing is separate** | Editing code does not silently become committing or pushing code. Review, commit, push, and PR-draft work remain explicit Git actions with repository policy around them. |
 
-Those four rules are the reason Rel.AI behaves differently from a simple filesystem connector or unrestricted command bridge.
+Those four rules are the reason Rel.AI behaves differently from a simple filesystem connector or open-ended command bridge.
 
 ## One task, end to end
 
@@ -205,7 +205,7 @@ It exposes the things that matter during real repository work:
 - **Skills** — built-in, installed, and workspace-enabled workflow instructions.
 - **Connection** — Cloud/Direct state, paired devices, authorization, recovery, and synchronization guidance.
 - **Usage** — Rel.AI-observed request, tool, byte, duration, device, and workspace aggregates.
-- **Diagnostics and settings** — application health, updates, notification preferences, recovery guidance, and advanced controls.
+- **Diagnostics and settings** — application health, updates, notification preferences, recovery guidance, and additional controls.
 
 Rel.AI records observable tool activity and results. It does not claim access to ChatGPT's private reasoning.
 
@@ -216,7 +216,7 @@ Rel.AI MCP is a **trusted local coding bridge, not a sandbox**. It assumes you d
 Important controls include:
 
 - **Workspace containment** — traversal, absolute-path injection, and symlink escape are blocked.
-- **Sensitive-path handling** — credential-bearing and secret-like content receives stricter operation-aware policy rather than unrestricted raw reads and writes.
+- **Sensitive-path handling** — credential-bearing and secret-like content receives stricter operation-aware policy rather than direct raw reads and writes.
 - **Bounded data movement** — reads, snapshots, diffs, process output, and request bodies have limits.
 - **Stale-write checks** — exact replacements can fail closed when the target changed underneath the task.
 - **Task ownership** — a repository objective is bound to a `work_id`, not inferred from a WebSocket, OAuth grant, ChatGPT thread, or managed process ID.
