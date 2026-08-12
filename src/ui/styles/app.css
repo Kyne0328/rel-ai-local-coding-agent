@@ -201,6 +201,7 @@
     grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
     max-width: 100vw;
     overflow-x: clip;
+    transition: grid-template-columns var(--dur) var(--ease);
   }
 
   .sidebar {
@@ -210,25 +211,38 @@
     background: var(--ui-surface-primary);
     border-right: 1px solid var(--ui-border-default);
     box-shadow: var(--ui-shadow-sidebar);
+    transition: width var(--dur) var(--ease), padding var(--dur) var(--ease);
   }
 
-  .brand { @apply mb-5 flex items-center gap-3 border-b pb-4; border-color: var(--ui-border-default); }
+  .brand { @apply mb-5 flex items-center justify-between gap-2 border-b pb-4; border-color: var(--ui-border-default); }
+  .brand-identity { @apply flex min-w-0 items-center gap-3; }
+  .brand-copy { @apply min-w-0; }
   .brand .logo { @apply grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl; background: var(--ui-status-info-background); border: 1px solid color-mix(in srgb, var(--ui-action-primary) 38%, transparent); }
   .brand img { @apply size-8 object-contain; }
-  .brand strong { @apply block text-[15px] font-bold; }
-  .brand span { @apply mt-0.5 block text-[11px]; color: var(--ui-text-tertiary); }
+  .brand strong { @apply block truncate text-[15px] font-bold; }
+  .brand span { @apply mt-0.5 block truncate text-[11px]; color: var(--ui-text-tertiary); }
+  .sidebar-toggle { @apply size-11 min-h-11 shrink-0 rounded-lg p-0; background: transparent; border-color: transparent; color: var(--ui-text-secondary); }
+  .sidebar-toggle:hover { color: var(--ui-text-primary); background: var(--ui-surface-secondary); border-color: var(--ui-border-subtle); }
+  .sidebar-toggle svg { @apply size-4 fill-none stroke-current; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; transition: transform var(--dur) var(--ease); }
 
   .nav, .secondary-nav { @apply flex flex-col gap-1; }
   .secondary-nav { @apply mt-3 border-t pt-3; border-color: var(--ui-border-default); }
   .sidebar-group-label { @apply px-2 text-[10px] font-bold uppercase tracking-[.08em]; color: var(--ui-text-tertiary); }
-  .nav a, .secondary-nav a, .mobile-nav a {
+  .nav a, .secondary-nav a, .mobile-nav a, .sidebar-accordion > summary {
     @apply flex min-h-11 items-center gap-3 rounded-lg px-3 text-[13px] font-semibold transition-colors;
     color: var(--ui-text-secondary);
     border: 1px solid transparent;
   }
-  .nav a:hover, .secondary-nav a:hover, .mobile-nav a:hover { color: var(--ui-text-primary); background: var(--ui-surface-secondary); border-color: var(--ui-border-subtle); }
-  .nav a.active, .secondary-nav a.active, .mobile-nav a.active { color: var(--ui-text-primary); background: var(--ui-status-info-background); border-color: color-mix(in srgb, var(--ui-action-primary) 48%, transparent); }
+  .nav a:hover, .secondary-nav a:hover, .mobile-nav a:hover, .sidebar-accordion > summary:hover { color: var(--ui-text-primary); background: var(--ui-surface-secondary); border-color: var(--ui-border-subtle); }
+  .nav a.active, .secondary-nav a.active, .mobile-nav a.active, .sidebar-accordion > summary.active { color: var(--ui-text-primary); background: var(--ui-status-info-background); border-color: color-mix(in srgb, var(--ui-action-primary) 48%, transparent); }
   .nav-icon { @apply size-4 shrink-0 fill-none stroke-current; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .sidebar-accordion { @apply min-w-0; }
+  .sidebar-accordion > summary { @apply cursor-pointer list-none; }
+  .sidebar-accordion > summary::-webkit-details-marker { display: none; }
+  .sidebar-accordion-chevron { @apply ml-auto size-3.5 shrink-0 fill-none stroke-current; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; transition: transform var(--dur-fast) var(--ease); }
+  .sidebar-accordion[open] > summary .sidebar-accordion-chevron { transform: rotate(90deg); }
+  .sidebar-subnav { @apply flex flex-col gap-1 py-1 pl-3; }
+  .sidebar-subnav a { @apply text-[12px]; }
   .sidebar-note { @apply mt-auto border-t pt-4 text-[11px] leading-5; color: var(--ui-text-tertiary); border-color: var(--ui-border-default); }
 
   .main {
@@ -512,6 +526,21 @@
 :root[data-density="compact"] .data-table td { height: 46px; }
 :root[data-density="compact"] .topbar { min-height: 66px; }
 
+:root[data-sidebar="collapsed"] { --sidebar-width: 82px; }
+:root[data-sidebar="collapsed"] .sidebar { padding-inline: 10px; }
+:root[data-sidebar="collapsed"] .brand { @apply flex-col; }
+:root[data-sidebar="collapsed"] .brand-identity { @apply justify-center; }
+:root[data-sidebar="collapsed"] .brand-copy,
+:root[data-sidebar="collapsed"] .nav-label,
+:root[data-sidebar="collapsed"] .sidebar-note,
+:root[data-sidebar="collapsed"] .sidebar-group-label,
+:root[data-sidebar="collapsed"] .sidebar-accordion-chevron { display: none; }
+:root[data-sidebar="collapsed"] .nav a,
+:root[data-sidebar="collapsed"] .secondary-nav a,
+:root[data-sidebar="collapsed"] .sidebar-accordion > summary { @apply justify-center px-2; }
+:root[data-sidebar="collapsed"] .sidebar-subnav { @apply pl-0; }
+:root[data-sidebar="collapsed"] .nav-icon { @apply size-5; }
+:root[data-sidebar="collapsed"] .sidebar-toggle svg { transform: rotate(180deg); }
 
 
 @media (max-width: 1250px) {
@@ -526,11 +555,13 @@
 @media (max-width: 980px) {
   :root { --sidebar-width: 82px; }
   .sidebar { padding-inline: 10px; }
-  .brand { @apply justify-center; }
-  .brand > div:last-child, .nav-label, .sidebar-note, .sidebar-group-label { @apply hidden; }
-  .nav a, .secondary-nav a { @apply justify-center px-2; }
-  .nav a:focus-visible, .secondary-nav a:focus-visible { @apply flex-col gap-1 py-2; }
-  .nav a:focus-visible .nav-label, .secondary-nav a:focus-visible .nav-label {
+  .brand { @apply flex-col; }
+  .brand-identity { @apply justify-center; }
+  .brand-copy, .nav-label, .sidebar-note, .sidebar-group-label, .sidebar-accordion-chevron, .sidebar-toggle { @apply hidden; }
+  .nav a, .secondary-nav a, .sidebar-accordion > summary { @apply justify-center px-2; }
+  .sidebar-subnav { @apply pl-0; }
+  .nav a:focus-visible, .secondary-nav a:focus-visible, .sidebar-accordion > summary:focus-visible { @apply flex-col gap-1 py-2; }
+  .nav a:focus-visible .nav-label, .secondary-nav a:focus-visible .nav-label, .sidebar-accordion > summary:focus-visible .nav-label {
     display: block;
     max-width: 100%;
     font-size: 10px;

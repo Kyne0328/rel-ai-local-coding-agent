@@ -120,13 +120,21 @@ function _route() {
 }
 
 function _updateNavActive(id) {
-  document.querySelectorAll('.nav a, .mobile-nav a, .secondary-nav a').forEach(anchor => {
+  const owner = desktopNavigationOwner(id);
+  const path = currentRoutePath();
+  document.querySelectorAll('.nav a, .mobile-nav a, .secondary-nav a, .sidebar-subnav a').forEach(anchor => {
     const href = anchor.getAttribute('href') || '';
-    const target = anchor.dataset.navId || href.replace(/^#/, '').split(/[/?]/)[0];
-    const active = target === desktopNavigationOwner(id);
+    const targetPath = normalizeRouteKey(href.replace(/^#/, '').split('?')[0]);
+    const target = anchor.dataset.navId || targetPath.split('/')[0];
+    const active = anchor.closest('.sidebar-subnav') ? targetPath === path : target === owner;
     anchor.classList.toggle('active', active);
     if (active) anchor.setAttribute('aria-current', 'page');
     else anchor.removeAttribute('aria-current');
+  });
+  document.querySelectorAll('[data-nav-accordion]').forEach(details => {
+    const active = details.dataset.navAccordion === owner;
+    details.querySelector(':scope > summary')?.classList.toggle('active', active);
+    if (active) details.open = true;
   });
 }
 
