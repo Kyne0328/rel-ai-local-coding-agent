@@ -57,6 +57,7 @@
       "tool-sleep-blocker.js",
       "taskbar-completion-badge.js",
       "dashboard-window.js",
+      "dashboard-window-navigation.js",
       "dashboard-window-bounds.js",
       "window-chrome.js",
       "startup-background.js",
