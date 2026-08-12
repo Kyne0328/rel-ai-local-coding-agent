@@ -6,10 +6,7 @@ import { execFileSync } from 'node:child_process';
 
 import { workspaceTidyPlan, workspaceTidyRun } from "../src/localRepoBridge.js";
 import { writeSessionPolicy } from "../src/policyResolver.js";
-
-const GIT_EXECUTABLE = process.platform === 'win32'
-  ? String.raw`C:\Program Files\Git\cmd\git.exe`
-  : '/usr/bin/git';
+import { GIT_EXECUTABLE } from './helpers/git-executable.mjs';
 
 function git(args, cwd) {
   execFileSync(GIT_EXECUTABLE, args, { cwd, stdio: 'pipe' });

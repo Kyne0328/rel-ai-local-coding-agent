@@ -7,16 +7,13 @@ import { execFileSync } from 'node:child_process';
 import { relaiStatus } from "../src/tools/status.js";
 import { relaiGitCommit } from "../src/repo/gitOps.js";
 import { writeSessionPolicy } from "../src/policyResolver.js";
-
-const gitExecutable = process.platform === 'win32'
-  ? String.raw`C:\Program Files\Git\cmd\git.exe`
-  : '/usr/bin/git';
+import { GIT_EXECUTABLE } from './helpers/git-executable.mjs';
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-status-contract-'));
 const repo = path.join(temp, 'repo');
 fs.mkdirSync(repo, { recursive: true });
 
 function git(args) {
-  return execFileSync(gitExecutable, args, { cwd: repo, encoding: 'utf8' });
+  return execFileSync(GIT_EXECUTABLE, args, { cwd: repo, encoding: 'utf8' });
 }
 
 try {
@@ -59,8 +56,8 @@ try {
     dryRun: true
   });
   assert.equal(commitPlan.ok, true);
-  assert.equal(commitPlan.status.deprecated, undefined, 'internal commit status must use the shared core without legacy metadata');
-  assert.equal(commitPlan.status.branch, 'main');
+  assert.equal(commitPlan.statusBefore.deprecated, undefined, 'internal commit status must use the shared core without legacy metadata');
+  assert.equal(commitPlan.statusBefore.branch, 'main');
 
   console.log('Combined workspace and repository status contract passed.');
 } finally {

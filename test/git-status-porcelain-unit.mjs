@@ -7,15 +7,12 @@ import path from 'node:path';
 import { workspaceGitStatus } from "../src/repo/gitOps.js";
 import { relaiDiff } from "../src/bridge/review.js";
 import { writeSessionPolicy, captureBaselineDirty } from "../src/policyResolver.js";
-
-const gitExecutable = process.platform === 'win32'
-  ? String.raw`C:\Program Files\Git\cmd\git.exe`
-  : '/usr/bin/git';
+import { GIT_EXECUTABLE } from './helpers/git-executable.mjs';
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-status-z-'));
 const stateDir = path.join(root, '.state');
 const workspace = { alias: 'repo', path: root };
 const config = { stateDir };
-const git = (args) => execFileSync(gitExecutable, args, { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
+const git = (args) => execFileSync(GIT_EXECUTABLE, args, { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
 
 try {
   git(['init', '-q']);

@@ -8,6 +8,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { GIT_EXECUTABLE } from './helpers/git-executable.mjs';
 
 const callTool = (name, args, context = {}) => rawCallTool(name, args, { principal: 'local:trusted', ...context });
 
@@ -17,12 +18,8 @@ const nested = path.join(workspace, 'nested');
 const stateDir = path.join(temp, 'state');
 const configPath = path.join(temp, 'config.json');
 const previousConfig = process.env.REL_AI_MCP_CONFIG;
-const gitExecutable = process.platform === 'win32'
-  ? String.raw`C:\Program Files\Git\cmd\git.exe`
-  : '/usr/bin/git';
-
 function git(args) {
-  return execFileSync(gitExecutable, args, { cwd: workspace, stdio: 'pipe' });
+  return execFileSync(GIT_EXECUTABLE, args, { cwd: workspace, stdio: 'pipe' });
 }
 
 function quote(value) {

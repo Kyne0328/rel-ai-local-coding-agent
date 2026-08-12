@@ -5,32 +5,23 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 import { classifyFiles, selectValidationLevel } from "../src/validationStrategy.js";
-const GIT_EXECUTABLE = process.platform === 'win32'
-  ? String.raw`C:\Program Files\Git\cmd\git.exe`
-  : '/usr/bin/git';
+import { GIT_EXECUTABLE } from './helpers/git-executable.mjs';
 
 const classificationCases = [
-  { name: 'no changes', files: [], level: 'focused', reason: /no changed files/ },
-  { name: 'single documentation file', files: ['README.md'], level: 'minimal', reason: /single low-risk/ },
-  { name: 'single source file', files: ['src/foo.js'], level: 'focused', reason: /single source/ },
-  { name: 'package manifest', files: ['package.json'], level: 'extended', reason: /config or CI/ },
-  { name: 'CI workflow', files: ['.github/workflows/ci.yml'], level: 'extended' },
-  { name: 'server source', files: ['src/server.js'], level: 'broad', reason: /HTTP, core operator/ },
-  { name: 'UI source', files: ['src/ui/foo.js'], level: 'broad' },
-  { name: 'HTML source', files: ['index.html'], level: 'broad' },
-  { name: 'CSS source', files: ['styles.css'], level: 'broad' },
-  { name: 'six files across two directories', files: ['a/1.js', 'a/2.js', 'a/3.js', 'b/1.js', 'b/2.js', 'b/3.js'], level: 'broad', reason: /multiple directories/ },
-  { name: 'five files across two directories', files: ['a/1.js', 'a/2.js', 'a/3.js', 'b/1.js', 'b/2.js'], level: 'focused' },
-  { name: 'six files in one directory', files: ['a/1.js', 'a/2.js', 'a/3.js', 'a/4.js', 'a/5.js', 'a/6.js'], level: 'focused' },
-  { name: 'config rule outranks source', files: ['src/foo.js', 'config.json'], level: 'extended' },
-  { name: 'HTML rule across multiple files', files: ['src/foo.js', 'index.html'], level: 'broad' },
-  {
-    name: 'custom threshold',
-    files: ['a/1.js', 'a/2.js', 'b/1.js', 'b/2.js'],
-    config: { validationRules: { broadMultiDirThreshold: 4 } },
-    level: 'broad',
-    reason: /4 files across multiple directories/
-  },
+  { name: 'no changes', files: [], level: 'focused', boundary: 'file', risk: 'low', reason: /no changed files/ },
+  { name: 'single documentation file', files: ['README.md'], level: 'minimal', boundary: 'file', risk: 'low', reason: /file boundary with low risk/ },
+  { name: 'single source file', files: ['src/foo.js'], level: 'focused', boundary: 'package', risk: 'medium', reason: /package boundary with medium risk/ },
+  { name: 'package manifest', files: ['package.json'], level: 'broad', boundary: 'repository', risk: 'high', reason: /repository boundary with high risk/ },
+  { name: 'CI workflow', files: ['.github/workflows/ci.yml'], level: 'extended', boundary: 'release', risk: 'high' },
+  { name: 'server source', files: ['src/server.js'], level: 'focused', boundary: 'package', risk: 'medium' },
+  { name: 'UI source', files: ['src/ui/foo.js'], level: 'focused', boundary: 'package', risk: 'medium' },
+  { name: 'HTML source', files: ['index.html'], level: 'focused', boundary: 'file', risk: 'medium' },
+  { name: 'CSS source', files: ['styles.css'], level: 'focused', boundary: 'file', risk: 'medium' },
+  { name: 'six files across two directories', files: ['a/1.js', 'a/2.js', 'a/3.js', 'b/1.js', 'b/2.js', 'b/3.js'], level: 'broad', boundary: 'repository', risk: 'medium' },
+  { name: 'five files across two directories', files: ['a/1.js', 'a/2.js', 'a/3.js', 'b/1.js', 'b/2.js'], level: 'broad', boundary: 'repository', risk: 'medium' },
+  { name: 'six files in one directory', files: ['a/1.js', 'a/2.js', 'a/3.js', 'a/4.js', 'a/5.js', 'a/6.js'], level: 'focused', boundary: 'package', risk: 'medium' },
+  { name: 'configuration change raises risk', files: ['src/foo.js', 'config.json'], level: 'broad', boundary: 'package', risk: 'high' },
+  { name: 'mixed root and package source', files: ['src/foo.js', 'index.html'], level: 'focused', boundary: 'package', risk: 'medium' },
   {
     name: 'custom path rule',
     files: ['src/payments/api.js'],
@@ -49,25 +40,25 @@ const classificationCases = [
     name: 'non-matching custom rule falls through',
     files: ['package.json'],
     config: { validationRules: { customRules: [{ level: 'broad', pattern: 'src/payments/' }] } },
-    level: 'extended'
+    level: 'broad',
+    boundary: 'repository',
+    risk: 'high'
   },
   {
     name: 'invalid custom level is ignored',
     files: ['src/foo.js'],
     config: { validationRules: { customRules: [{ level: 'invalid', pattern: 'src/' }] } },
-    level: 'focused'
-  },
-  {
-    name: 'custom top-directory threshold',
-    files: ['a/1.js', 'a/2.js', 'a/3.js', 'b/1.js', 'b/2.js', 'b/3.js'],
-    config: { validationRules: { broadMultiDirTopDirs: 3 } },
-    level: 'focused'
+    level: 'focused',
+    boundary: 'package',
+    risk: 'medium'
   }
 ];
 
 for (const testCase of classificationCases) {
   const result = classifyFiles(testCase.files, testCase.config);
   assert.equal(result.level, testCase.level, `${testCase.name}: ${result.reason}`);
+  if (testCase.boundary) assert.equal(result.boundary, testCase.boundary, `${testCase.name} boundary`);
+  if (testCase.risk) assert.equal(result.risk, testCase.risk, `${testCase.name} risk`);
   if (testCase.reason) assert.match(result.reason, testCase.reason, testCase.name);
 }
 
@@ -95,16 +86,16 @@ try {
   git(['add', '.'], repo);
   git(['commit', '-m', 'init'], repo);
 
-  assertDetected('package.json', '{}', 'extended', { stage: true });
-  assertDetected('src/ui/dashboard.js', 'export default {};', 'broad');
-  assertDetected('CHANGELOG.md', '# changes', 'minimal');
+  assertDetected('package.json', '{}', 'broad', { stage: true });
+  assertDetected('src/ui/dashboard.js', 'export default {};', 'focused');
+  assertDetected('CHANGELOG.md', '# changes', 'extended');
 
   resetRepo();
   for (const file of ['a/1.js', 'a/2.js', 'a/3.js', 'b/1.js', 'b/2.js', 'b/3.js']) write(file, 'x');
-  assert.equal(selectValidationLevel(repo, {}, null).level, 'broad');
+  assert.equal(selectValidationLevel(repo, {}, null).level, 'focused');
   const taskScoped = selectValidationLevel(repo, {}, null, ['src/task-owned.js']);
   assert.equal(taskScoped.level, 'focused');
-  assert.equal(taskScoped.reason, 'single source file');
+  assert.equal(taskScoped.reason, 'package boundary with medium risk');
   assert.deepEqual(taskScoped.changedFiles, ['src/task-owned.js']);
 } finally {
   fs.rmSync(repo, { recursive: true, force: true });

@@ -3,10 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-
-const GIT_EXECUTABLE = process.platform === 'win32'
-  ? String.raw`C:\Program Files\Git\cmd\git.exe`
-  : '/usr/bin/git';
+import { GIT_EXECUTABLE } from './helpers/git-executable.mjs';
 
 function git(args, options = {}) {
   return execFileSync(GIT_EXECUTABLE, args, options);
