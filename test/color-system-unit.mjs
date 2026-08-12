@@ -127,6 +127,8 @@ assert.match(dashboardCss, /\.status-pill\.warn, \.status-pill\.incomplete[\s\S]
 assert.doesNotMatch(dashboardCss, /\.status-pill\.warn[^{]*\.status-pill\.working/);
 assert.match(dashboardCss, /button\.primary[\s\S]*--ui-action-primary-foreground/);
 assert.match(dashboardCss, /button:disabled[\s\S]*--ui-text-disabled/);
+assert.doesNotMatch(systemCss, /--ui-surface-muted/, 'System UI must not reference an undefined semantic surface token');
+assert.match(systemCss, /\.chatgpt-first-prompt[^{]*\{[^}]*--ui-surface-secondary/s, 'ChatGPT first-prompt guidance must use a defined semantic surface token');
 
 const electronCss = read('electron/renderer/app.css');
 assert.match(electronCss, /button\.primary[\s\S]*--ui-action-primary-foreground/);

@@ -74,7 +74,13 @@ function timeline(values, metricLabel = 'Tool calls') {
   const max = Math.max(...data, 1);
   const points = data.map((value, i) => `${data.length === 1 ? width/2 : i/(data.length-1)*width},${baseline-value/max*(height-32)}`).join(' ');
   const area = `0,${baseline} ${points} ${width},${baseline}`;
-  return `<div class="usage-timeline-plot"><svg class="usage-timeline-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="${esc(metricLabel)} activity trend"><line x1="0" y1="${height*.28}" x2="${width}" y2="${height*.28}" class="usage-chart-grid"/><line x1="0" y1="${height*.52}" x2="${width}" y2="${height*.52}" class="usage-chart-grid"/><line x1="0" y1="${height*.76}" x2="${width}" y2="${height*.76}" class="usage-chart-grid"/><polygon points="${area}" class="usage-chart-area"/><line x1="0" y1="${baseline}" x2="${width}" y2="${baseline}" class="usage-chart-axis"/><polyline points="${points}" class="usage-chart-line" fill="none" vector-effect="non-scaling-stroke"/></svg><div class="usage-timeline-scale"><span>Earlier</span><span>Now</span></div></div>`;
+  const latest = data.at(-1) || 0;
+  const peak = Math.max(...data);
+  const peakIndex = data.indexOf(peak);
+  const bucketsAgo = Math.max(0, data.length - 1 - peakIndex);
+  const trend = latest > data[0] ? 'increasing' : latest < data[0] ? 'decreasing' : 'steady';
+  const summary = `${metricLabel} trend. Peak ${formatChartValue(peak, metricLabel)} ${bucketsAgo ? `${bucketsAgo} buckets ago` : 'in the latest bucket'}. Latest ${formatChartValue(latest, metricLabel)}. Overall trend ${trend}.`;
+  return `<div class="usage-timeline-plot"><svg class="usage-timeline-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="${esc(summary)}"><line x1="0" y1="${height*.28}" x2="${width}" y2="${height*.28}" class="usage-chart-grid"/><line x1="0" y1="${height*.52}" x2="${width}" y2="${height*.52}" class="usage-chart-grid"/><line x1="0" y1="${height*.76}" x2="${width}" y2="${height*.76}" class="usage-chart-grid"/><polygon points="${area}" class="usage-chart-area"/><line x1="0" y1="${baseline}" x2="${width}" y2="${baseline}" class="usage-chart-axis"/><polyline points="${points}" class="usage-chart-line" fill="none" vector-effect="non-scaling-stroke"/></svg><div class="usage-timeline-scale"><span>Earlier</span><span>Now</span></div></div>`;
 }
 
 function sparkline(values, tone='') {
@@ -127,6 +133,11 @@ function activityBarsSection(title,description,rows,key){const visible=[...rows]
 function bar(row,key,max){const label=key==='workspace'?(row.workspace||'Unattributed'):(row.tool||'Unknown tool');const inner=`<span class="usage-bar-label" title="${esc(label)}">${esc(label)}</span><progress max="${max}" value="${row.toolCalls}">${integer(row.toolCalls)}</progress><strong>${integer(row.toolCalls)}</strong>`;return key==='workspace'&&row.workspace?`<a class="usage-bar-row usage-bar-link" href="${routeHref('usage',{workspace:row.workspace})}">${inner}</a>`:`<div class="usage-bar-row">${inner}</div>`;}
 function breakdownSection(title,description,rows,key){const body=rows.length?`<div class="usage-table-wrap"><table class="usage-table"><thead><tr><th scope="col">${esc(title.slice(0,-1))}</th><th scope="col">Tool calls</th><th scope="col">Successful</th><th scope="col">Failed</th><th scope="col">Execution time</th></tr></thead><tbody>${rows.map(row=>breakdownRow(row,key)).join('')}</tbody></table></div>`:'<div class="usage-breakdown-empty">No recorded activity for this range.</div>';return `<section class="card usage-breakdown"><div class="card-head"><div><h3>${esc(title)}</h3><p>${esc(description)}</p></div></div><div class="card-body">${body}</div></section>`;}
 function breakdownRow(row,key){const label=key==='device'?(row.displayName||shortId(row.deviceId)||'Unknown device'):(row[key]||'Unknown');return `<tr><th scope="row">${esc(label)}</th><td>${integer(row.toolCalls)}</td><td>${integer(row.successes)}</td><td>${integer(row.failures)}</td><td>${duration(row.executionMs)}</td></tr>`;}
+function formatChartValue(value, metricLabel) {
+  if (metricLabel === 'Success rate') return percent(value);
+  if (/duration/i.test(metricLabel)) return duration(value);
+  return integer(value);
+}
 function finite(values){return (values||[]).map(Number).map(value=>Number.isFinite(value)&&value>=0?value:0);}
 function integer(value){return Math.floor(Number(value)||0).toLocaleString();}
 function percent(value){const n=Number(value)||0;return `${n.toFixed(n>=10?1:2)}%`;}

@@ -10,8 +10,8 @@
 .chatgpt-guide-heading span { max-width: 520px; color: var(--ui-text-secondary); font-size: 12px; line-height: 1.5; }
 .chatgpt-setup-guide ol { display: grid; gap: 10px; margin: 0; padding-left: 22px; color: var(--ui-text-secondary); font-size: 12px; }
 .chatgpt-setup-guide li { padding-left: 4px; line-height: 1.6; }
-.chatgpt-first-prompt { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--ui-border-default); border-radius: var(--radius-md); background: var(--ui-surface-muted); }
-.chatgpt-first-prompt span { color: var(--ui-text-secondary); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.chatgpt-first-prompt { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--ui-border-default); border-radius: var(--radius-md); background: var(--ui-surface-secondary); }
+.chatgpt-first-prompt span { color: var(--ui-text-secondary); font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .chatgpt-first-prompt code { overflow-wrap: anywhere; white-space: normal; font-size: 12px; line-height: 1.6; }
 @media (max-width: 640px) {
   .connection-primary-action > *, .connection-support-row > * { width: 100%; }
@@ -58,10 +58,10 @@
 .connector-details > summary { @apply flex min-h-14 cursor-pointer items-center justify-between gap-3 px-4; }
 .connector-details-summary span:first-child { @apply flex flex-col gap-1; }
 .connector-details-summary strong { @apply text-[12px]; }
-.connector-details-summary small { @apply text-[10px]; color: var(--ui-text-secondary); }
+.connector-details-summary small { @apply text-[11px]; color: var(--ui-text-secondary); }
 .connection-facts { @apply grid gap-0 overflow-hidden rounded-lg; border: 1px solid var(--ui-border-default); }
 .connection-fact { @apply grid min-h-11 items-center gap-3 border-b px-3 last:border-b-0; grid-template-columns: 150px minmax(0,1fr); border-color: var(--ui-border-subtle); }
-.connection-fact-label { @apply text-[10px] font-bold uppercase tracking-[.08em]; color: var(--ui-text-tertiary); }
+.connection-fact-label { @apply text-[11px] font-bold uppercase tracking-[.06em]; color: var(--ui-text-tertiary); }
 
 .diagnostic-metrics { @apply grid gap-0 overflow-hidden rounded-xl; grid-template-columns: repeat(3,minmax(0,1fr)); background: var(--ui-surface-primary); border: 1px solid var(--ui-border-default); }
 .diagnostic-metrics > * { @apply border-r p-4 last:border-r-0; border-color: var(--ui-border-default); }
@@ -93,24 +93,24 @@
 .diagnostic-metric.warning strong { color: var(--ui-status-warning-foreground); }
 .diagnostic-metric.info strong { color: var(--ui-action-primary); }
 .diagnostic-finding { @apply grid gap-4 rounded-xl; grid-template-columns: 96px minmax(0,1fr); }
-.diagnostic-severity { @apply text-[10px] font-bold uppercase tracking-[.08em]; color: var(--ui-status-info-foreground); }
+.diagnostic-severity { @apply text-[11px] font-bold uppercase tracking-[.06em]; color: var(--ui-status-info-foreground); }
 .diagnostic-finding.warning .diagnostic-severity { color: var(--ui-status-warning-foreground); }
 .diagnostic-finding.error .diagnostic-severity { color: var(--ui-status-danger-foreground); }
 .diagnostic-copy { @apply min-w-0; }
-.diagnostic-code { @apply mb-1 text-[10px] font-semibold; color: var(--ui-text-tertiary); }
+.diagnostic-code { @apply mb-1 text-[11px] font-semibold; color: var(--ui-text-tertiary); }
 .diagnostic-copy h3 { @apply text-[13px]; }
 .diagnostic-copy p { @apply mt-2 text-[11px] leading-5; color: var(--ui-text-secondary); }
 .diagnostic-copy details { @apply mt-3; }
 .diagnostic-copy summary { @apply cursor-pointer text-[11px] font-semibold; }
-.diagnostic-copy pre { @apply mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-lg p-3 text-[10px]; background: var(--ui-canvas); border: 1px solid var(--ui-border-subtle); }
+.diagnostic-copy pre { @apply mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-lg p-3 text-[11px]; background: var(--ui-canvas); border: 1px solid var(--ui-border-subtle); }
 .diagnostic-context { @apply mt-3 grid overflow-hidden rounded-lg; border: 1px solid var(--ui-border-subtle); }
 .diagnostic-context-row { @apply grid items-center gap-3 border-b px-3 py-2 last:border-b-0; grid-template-columns: auto auto minmax(0,1fr); border-color: var(--ui-border-subtle); }
-.diagnostic-context-row code, .diagnostic-context-row span, .diagnostic-context-row small { @apply text-[10px]; }
+.diagnostic-context-row code, .diagnostic-context-row span, .diagnostic-context-row small { @apply text-[11px]; }
 .diagnostic-context-row small { @apply truncate; color: var(--ui-text-secondary); }
-.diagnostic-log-card .card-head p, .diagnostic-maintenance .card-head p { @apply mt-1 text-[10px] leading-4; color: var(--ui-text-secondary); }
+.diagnostic-log-card .card-head p, .diagnostic-maintenance .card-head p { @apply mt-1 text-[11px] leading-5; color: var(--ui-text-secondary); }
 .diagnostic-log-list { @apply flex max-h-[520px] flex-col gap-2 overflow-auto; }
 .diagnostic-log-row { @apply grid gap-1.5; grid-template-columns: auto auto minmax(0,1fr); }
-.diagnostic-log-row time, .diagnostic-log-row code, .diagnostic-log-row small { @apply text-[10px]; }
+.diagnostic-log-row time, .diagnostic-log-row code, .diagnostic-log-row small { @apply text-[11px]; }
 .diagnostic-log-row time { color: var(--ui-text-tertiary); }
 .diagnostic-log-row span { @apply min-w-0 break-words; }
 .diagnostic-log-row small { grid-column: 3; color: var(--ui-text-tertiary); }
@@ -196,7 +196,7 @@
 .cloud-gateway-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .cloud-gateway-actions > .muted { flex: 1 1 280px; }
 .cloud-gateway-fallback { margin-left: auto; }
-.cloud-gateway-fallback > summary { min-height: 38px; display: inline-flex; align-items: center; cursor: pointer; color: var(--ui-text-secondary); font-size: 11px; font-weight: 600; }
+.cloud-gateway-fallback > summary { min-height: 44px; display: inline-flex; align-items: center; cursor: pointer; color: var(--ui-text-secondary); font-size: 11px; font-weight: 600; }
 .cloud-gateway-fallback[open] { display: flex; align-items: center; gap: 8px; }
 .cloud-device-section { display: grid; gap: 10px; padding-top: 4px; border-top: 1px solid var(--ui-border-subtle); }
 .cloud-device-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
@@ -207,7 +207,7 @@
 .cloud-device-copy { min-width: 0; display: grid; gap: 3px; }
 .cloud-device-copy strong, .cloud-device-copy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cloud-device-copy strong { font-size: 12px; }
-.cloud-device-copy span { color: var(--ui-text-secondary); font-size: 10px; }
+.cloud-device-copy span { color: var(--ui-text-secondary); font-size: 11px; }
 .cloud-recovery-panel { display: grid; gap: 8px; }
 .cloud-recovery-panel .connection-endpoint-row { margin-top: 2px; }
 .direct-connection-controls { margin-top: 12px; }

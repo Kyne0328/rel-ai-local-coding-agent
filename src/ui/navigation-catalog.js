@@ -38,13 +38,7 @@ export const APPLICATION_NAV_ITEMS = Object.freeze([
 ]);
 
 export const DESKTOP_NAV_ITEMS = Object.freeze([...WORK_NAV_ITEMS, ...APPLICATION_NAV_ITEMS]);
-export const MOBILE_NAV_ITEMS = Object.freeze([
-  WORK_NAV_ITEMS[0],
-  WORK_NAV_ITEMS[1],
-  WORK_NAV_ITEMS[2],
-  APPLICATION_NAV_ITEMS[0],
-  APPLICATION_NAV_ITEMS[1]
-]);
+export const MOBILE_NAV_ITEMS = Object.freeze([...DESKTOP_NAV_ITEMS]);
 
 export const SETTINGS_NAV_ITEMS = Object.freeze([
   route('preferences', 'Preferences', 'settings', 'Control appearance, density, and desktop notifications.', 'Settings'),

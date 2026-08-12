@@ -9,7 +9,7 @@ const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const filterCss = read('src/ui/components/filter-controls.css');
 const appCss = read('src/ui/styles/app.css');
 
-assert.deepEqual(MOBILE_NAV_ITEMS.map(item => item.id), ['home', 'tasks', 'workspaces', 'system', 'settings']);
+assert.deepEqual(MOBILE_NAV_ITEMS.map(item => item.id), ['home', 'tasks', 'workspaces', 'activity', 'system', 'settings']);
 assert.equal(MOBILE_NAV_ITEMS.find(item => item.id === 'system')?.href, '#connection');
 assert.match(filterCss, /@media \(max-width: 760px\)/);
 assert.match(filterCss, /@media \(max-width: 520px\)/);
@@ -44,5 +44,12 @@ assert.match(workspaceCss, /\.workspace-validation-head\s*\{/);
 assert.match(systemCss, /\.diagnostic-log-row\s*\{[^}]*min-width:\s*0/s);
 assert.match(systemCss, /\.diagnostic-log-row code\s*\{[^}]*max-width:/s);
 assert.match(appCss, /:root\[data-window-chrome="custom"\] \.toast-region\s*\{[^}]*top:\s*calc\(var\(--window-titlebar-height\) \+ 96px\)/s);
+assert.match(appCss, /\.mobile-nav\s*\{[^}]*grid-template-columns:\s*repeat\(6,minmax\(52px,1fr\)\)/s, 'mobile navigation must remain a single row with all primary destinations');
+assert.doesNotMatch(appCss, /@media \(max-width: 420px\)[\s\S]{0,500}grid-template-columns:\s*repeat\(3/, 'small mobile layouts must not restore the two-row navigation');
+assert.match(filterCss, /\.filter-chip\s*\{[^}]*min-height:\s*44px/s, 'filter chips must meet the touch-target baseline');
+assert.match(activityCss, /\.activity-row-button\s*\{[^}]*size-11/s, 'Activity row actions must meet the touch-target baseline');
+const toastSource = read('src/ui/components/toast.js');
+assert.match(toastSource, /error:\s*\{[^}]*duration:\s*0/s, 'error notifications must remain visible until dismissed by default');
+assert.match(toastSource, /toast-dismiss/, 'notifications must expose a manual dismiss control');
 
 console.log('Accessibility and responsive ownership contracts passed.');

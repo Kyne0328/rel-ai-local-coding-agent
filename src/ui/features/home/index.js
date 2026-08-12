@@ -131,7 +131,7 @@ function resolveBridgeState({ findings, connectionState }) {
     tone: 'good',
     kicker: 'Connection ready',
     title: 'Rel.AI is available to ChatGPT.',
-    description: 'The secure MCP endpoint is authenticated and reachable. Rel.AI reports observed tool calls exactly; it does not infer ChatGPT\'s private reasoning or claim that the overall chat request is finished.'
+    description: 'The secure MCP endpoint is authenticated and reachable.'
   };
 }
 
@@ -349,7 +349,6 @@ export function homeAnalyticsHtml(scope = {}) {
     <div class="card-head home-analytics-head">
       <div>
         <div class="home-analytics-title-row"><h3>${esc(heading)}</h3><span>Last 24 hours</span></div>
-        <p>Private aggregate MCP activity stored only on this device.</p>
       </div>
       <a class="buttonlike secondary compact-button" href="${href}">View analytics</a>
     </div>
@@ -364,7 +363,7 @@ export function homeAnalyticsHtml(scope = {}) {
         <div class="home-analytics-pulse-head"><div><span>Activity pulse</span><strong>${esc(contextSummary)}</strong></div><small>UTC · hourly buckets</small></div>
         ${homeAnalyticsPulse(scope.points)}
       </div>
-      <div class="home-analytics-foot"><span>${esc(failureSummary)}</span><span>Prompts, paths, and result bodies are not stored.</span></div>
+      <div class="home-analytics-foot"><span>${esc(failureSummary)}</span><details class="home-analytics-privacy"><summary>Privacy</summary><p>Prompts, paths, and result bodies are not stored.</p></details></div>
     </div>`;
 }
 
@@ -389,7 +388,14 @@ function homeAnalyticsPulse(points = []) {
   const max = Math.max(...values, 1);
   const pointsValue = values.map((value, index) => `${values.length === 1 ? width / 2 : index / (values.length - 1) * width},${baseline - value / max * (height - 28)}`).join(' ');
   const area = `0,${baseline} ${pointsValue} ${width},${baseline}`;
-  return `<div class="home-analytics-chart"><svg class="home-analytics-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="Tool-call activity over the last 24 hours"><line x1="0" y1="${height * .32}" x2="${width}" y2="${height * .32}" class="home-analytics-gridline"/><line x1="0" y1="${height * .62}" x2="${width}" y2="${height * .62}" class="home-analytics-gridline"/><polygon points="${area}" class="home-analytics-area"/><polyline points="${pointsValue}" class="home-analytics-line" fill="none" vector-effect="non-scaling-stroke"/></svg><div class="home-analytics-scale"><span>24h ago</span><span>Now</span></div></div>`;
+  const total = values.reduce((sum, value) => sum + value, 0);
+  const latest = values.at(-1) || 0;
+  const peak = Math.max(...values);
+  const peakIndex = values.indexOf(peak);
+  const hoursAgo = Math.max(0, values.length - 1 - peakIndex);
+  const trend = latest > values[0] ? 'increasing' : latest < values[0] ? 'decreasing' : 'steady';
+  const summary = `Tool-call activity over the last 24 hours. ${formatInteger(total)} total calls. Peak ${formatInteger(peak)} ${pluralLabel(peak, 'call')} ${hoursAgo ? `${hoursAgo} ${pluralLabel(hoursAgo, 'hour')} ago` : 'in the latest hour'}. Latest hour ${formatInteger(latest)} ${pluralLabel(latest, 'call')}. Overall trend ${trend}.`;
+  return `<div class="home-analytics-chart"><svg class="home-analytics-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="${esc(summary)}"><line x1="0" y1="${height * .32}" x2="${width}" y2="${height * .32}" class="home-analytics-gridline"/><line x1="0" y1="${height * .62}" x2="${width}" y2="${height * .62}" class="home-analytics-gridline"/><polygon points="${area}" class="home-analytics-area"/><polyline points="${pointsValue}" class="home-analytics-line" fill="none" vector-effect="non-scaling-stroke"/></svg><div class="home-analytics-scale"><span>24h ago</span><span>Now</span></div></div>`;
 }
 
 function analyticsContextSummary(scope = {}) {
