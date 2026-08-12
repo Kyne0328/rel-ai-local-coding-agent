@@ -21,18 +21,18 @@ export function mountHome(container, data) {
 export function updateHomeLiveState(container, data = {}) {
   const current = container.querySelector('.section');
   if (!current) return false;
-  const next = buildOverview(data);
-  syncHomeRegion(current, next, '[data-home-live-activity]', '[data-home-live-connection]');
-  syncHomeRegion(current, next, '[data-home-live-connection]', '.layout-grid');
-  syncHomeRegion(current, next, '[data-home-live-attention]', '[data-home-analytics]');
-  syncHomeRegion(current, next, '[data-home-live-sessions]');
+  const state = overviewState(data);
+  const attention = buildAttention(state.workspaces, state.findings, state.effectiveEndpoint);
+  syncHomeRegion(current, taskActivityCard(data.taskActivity, state.tasks[0]), '[data-home-live-activity]', '[data-home-live-connection]');
+  syncHomeRegion(current, connectionHero(state.bridgeState), '[data-home-live-connection]', '.layout-grid');
+  syncHomeRegion(current, attention.length ? attentionCard(attention) : null, '[data-home-live-attention]', '[data-home-analytics]');
+  syncHomeRegion(current, recentTasksCard(state.tasks), '[data-home-live-sessions]');
   refreshHomeAnalyticsAfterTaskBoundary(current, data);
   return true;
 }
 
-function syncHomeRegion(current, next, selector, beforeSelector = '') {
+function syncHomeRegion(current, nextNode, selector, beforeSelector = '') {
   const currentNode = current.querySelector(selector);
-  const nextNode = next.querySelector(selector);
   if (currentNode && nextNode) {
     syncHomeClockText(currentNode, nextNode);
     if (!currentNode.isEqualNode(nextNode)) currentNode.replaceWith(nextNode);
@@ -66,7 +66,7 @@ function clockIdentity(node) {
   ].join('|');
 }
 
-function buildOverview(data) {
+function overviewState(data = {}) {
   const config = data.config || {};
   const health = data.health || {};
   const connection = data.connection || {};
@@ -78,8 +78,17 @@ function buildOverview(data) {
   const endpoint = String(connection.chatgptMcpUrl || '');
   const connectionState = connectionStateFor(data);
   const effectiveEndpoint = connectionState.publicEndpoint?.status === 'available' ? endpoint : '';
-  const bridgeState = resolveBridgeState({ endpoint: effectiveEndpoint, workspaces, findings, connectionState });
+  return {
+    workspaces,
+    tasks,
+    findings,
+    effectiveEndpoint,
+    bridgeState: resolveBridgeState({ endpoint: effectiveEndpoint, workspaces, findings, connectionState })
+  };
+}
 
+function buildOverview(data) {
+  const { workspaces, tasks, findings, effectiveEndpoint, bridgeState } = overviewState(data);
   const root = document.createElement('div');
   root.className = 'section';
   const taskCard = taskActivityCard(data.taskActivity, tasks[0]);
