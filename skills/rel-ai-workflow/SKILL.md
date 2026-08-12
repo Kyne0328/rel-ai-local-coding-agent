@@ -9,9 +9,9 @@ This is the routing skill and the only work-session owner for a repository objec
 
 ## Runtime-calibrated workflow
 
-Call `relai_work` with `action: "begin"` once. After each successful work-scoped call, treat `workflow.recommendedActions` as the runtime-calibrated default for what is useful next and `workflow.avoidActions` as a guard against redundant or over-broad work. Hard runtime errors, authorization, containment, task integrity, and completion gates remain authoritative.
+Call `relai_work` with `action: "begin"` exactly once. After each successful work-scoped call, treat `workflow.recommendedActions` as the runtime-calibrated default for what is useful next and `workflow.avoidActions` as a guard against redundant or over-broad work. Hard runtime errors, authorization, containment, task integrity, and completion gates remain authoritative.
 
-Do not mechanically execute every possible stage. Choose the shortest path that proves the user's objective:
+Do not mechanically execute every possible stage. Choose the shortest sufficient path that proves the user's objective:
 
 - Documentation: `begin -> targeted read -> edit -> task-owned review if useful -> finish`.
 - Bugfix: `begin -> reproduce/inspect -> coherent fix -> directly affected check -> task-owned review -> finish`.
@@ -30,11 +30,11 @@ If fresh evidence already proves a recommendation, use the next distinct recomme
 - Persistent service, watcher, preview runtime, or interactive CLI: use `rel-ai-dev-process`.
 - Completion proof, release readiness, or explicit final verification: use `rel-ai-verification`.
 
-Specialists return conclusions to this workflow instead of reopening the objective or repeating evidence that is still sufficient and current.
+Specialists return conclusions to this workflow instead of reopening the objective or repeating evidence that is still sufficient and current. Invoking every specialist for every objective is an anti-pattern.
 
 ## Tool shape
 
-Use `relai_edit` for repository changes. Use `relai_exec` for bounded one-shot commands and `relai_validate` for validation or HTTP probes. Use `relai_process` only for persistent services, watchers, previews, or interactive programs. Use `relai_changes` for task-owned review and widen to workspace scope only when the objective requires it.
+Use `relai_edit` for repository changes. Tests, builds, linters, source checks, and release gates are one-shot commands; run them with `relai_exec` or `relai_validate` as appropriate. Use `relai_process` only for persistent services, watchers, previews, or interactive programs. Use `relai_changes` for task-owned review and widen to workspace scope only when the objective requires it.
 
 Rel.AI exposes the complete 12-tool capability surface. Use the `relai://server/tool-surface` resource when exact action fields, execution classes, or native Task eligibility are needed; do not copy full schemas into skill instructions.
 
