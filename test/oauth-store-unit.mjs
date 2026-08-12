@@ -66,6 +66,8 @@ try {
     scope: 'mcp'
   }, { issuer });
   assert.equal(genuinelyUnknown.error, 'invalid_client');
+  assert.match(genuinelyUnknown.error_description, /needs to be authorized again/);
+  assert.match(genuinelyUnknown.error_description, /current approval token from Rel\.AI Settings > Connection/);
   assert.equal(genuinelyUnknown.storeError, undefined);
 
   directory = useState('truncated');

@@ -163,7 +163,11 @@ try {
 
   const invalidAuthorize = await fetch(`${base}/authorize`);
   assert.equal(invalidAuthorize.status, 400);
-  assert.match(await invalidAuthorize.text(), /href="\/public\/oauth\.css"/);
+  const invalidAuthorizeHtml = await invalidAuthorize.text();
+  assert.match(invalidAuthorizeHtml, /href="\/public\/oauth\.css"/);
+  assert.match(invalidAuthorizeHtml, /This ChatGPT connection needs to be authorized again\./);
+  assert.match(invalidAuthorizeHtml, /current approval token from Rel\.AI Settings &gt; Connection/);
+  assert.match(invalidAuthorizeHtml, /If you replaced the approval token, use the new token\./);
 
   const challenge = await fetch(`${base}/mcp`, { method: 'POST' });
   assert.equal(challenge.status, 401);
