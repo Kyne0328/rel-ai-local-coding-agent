@@ -722,7 +722,7 @@ function clonePublicExecOperation() {
     'relai_exec',
     'relai_exec',
     'Run Command',
-    'Run one-shot workspace commands. Prefer executable + argv for shell-free execution; use command only for shell syntax.',
+    'Run one-shot workspace commands. Prefer executable + argv for direct invocation; use command only when command-line syntax is required.',
     {
       inputSchema: publicExecInputSchema(source.inputSchema),
       dashboard: { capabilities: ['execute'] }
