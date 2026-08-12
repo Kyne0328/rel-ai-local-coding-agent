@@ -776,7 +776,7 @@ function validateAuthorizationRequest(query = {}, options = {}) {
   const recoveredRegistration = client ? null : recoverableMissingClient(query, issuer, store);
   if (recoveredRegistration) client = recoveredRegistration;
   if (!client || (client.legacy_registration !== true && client.issuer !== issuer)) {
-    return oauthError('invalid_client', 'Unknown client_id for this issuer. Register the affected client again.', false, {
+    return oauthError('invalid_client', 'This ChatGPT connection needs to be authorized again. Reconnect the Rel.AI connector in ChatGPT, then enter the current approval token from Rel.AI Settings > Connection. If you replaced the approval token, use the new token.', false, {
       recovery: {
         reason: client ? 'issuer_changed' : 'registration_missing',
         affectedClientId: clientId,
