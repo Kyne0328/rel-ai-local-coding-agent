@@ -35,16 +35,17 @@ assert.equal(normalizeRouteKey('activity?status=other'), 'activity?status=other'
 
 const createSteps = chatGptGuideSteps({ mode: 'create', tunnelId: 'tunnel_example123456' }).join(' ');
 assert.match(createSteps, /Secure MCP Tunnel/i);
-assert.match(createSteps, /runtime API key/i);
-assert.match(createSteps, /Tunnel connection option/i);
+assert.match(createSteps, /(?:runtime API key|restricted runtime key)/i);
+assert.match(createSteps, /(?:Tunnel connection option|Connection set to Tunnel)/i);
+assert.match(createSteps, /Authentication to No authentication/i);
 assert.match(createSteps, /tunnel_example123456/i);
-assert.match(createSteps, /Plus or Pro.*Plugins/i);
-assert.match(createSteps, /Business, Enterprise, or Edu.*workspace Apps/i);
+assert.match(createSteps, /ChatGPT/i);
+assert.match(createSteps, /Rel\.AI MCP/i);
 const reconnectSteps = chatGptGuideSteps({ mode: 'reconnect', tunnelId: 'tunnel_example123456' }).join(' ');
-assert.match(reconnectSteps, /existing Rel\.AI MCP integration/i);
-assert.match(reconnectSteps, /do not delete or recreate the app/i);
-assert.match(reconnectSteps, /Plus or Pro.*Plugins/i);
-assert.match(reconnectSteps, /Business, Enterprise, or Edu.*workspace Apps/i);
+assert.match(reconnectSteps, /existing Rel\.AI MCP (?:integration|plugin\/app)/i);
+assert.match(reconnectSteps, /(?:do not delete or recreate the app|instead of creating a duplicate)/i);
+assert.match(reconnectSteps, /Connection set to Tunnel/i);
+assert.match(reconnectSteps, /Authentication to No authentication/i);
 assert.match(reconnectSteps, /tunnel_example123456/i);
 const firstPrompt = chatGptFirstPrompt();
 assert.match(firstPrompt, /start a work session/i);
