@@ -53,24 +53,28 @@ function metricHtml(metric) {
 
 function timelineSection(scope) {
   const switches = [['toolCalls', 'Tool calls'], ['failures', 'Errors'], ['successRate', 'Success rate'], ['averageDuration', 'Avg duration']];
-  return `<section class="card usage-timeline-card" data-usage-timeline><div class="card-head usage-timeline-head"><div><h3>Activity over time</h3><p>Privacy-safe aggregate trend for the selected range.</p></div><div class="usage-chart-switch" role="group" aria-label="Chart metric">${switches.map(([key,label], i) => `<button type="button" class="secondary compact-button${i ? '' : ' active'}" data-usage-chart="${key}">${label}</button>`).join('')}</div></div><div class="card-body usage-timeline-body" data-usage-chart-body>${timeline(scope.points.map(point => pointMetric(point, 'toolCalls')))}</div></section>`;
+  return `<section class="card usage-timeline-card" data-usage-timeline><div class="card-head usage-timeline-head"><div><h3>Activity over time</h3><p>Privacy-safe aggregate trend for the selected range.</p></div><div class="usage-chart-switch" role="group" aria-label="Chart metric">${switches.map(([key,label], i) => `<button type="button" class="secondary compact-button${i ? '' : ' active'}" data-usage-chart="${key}" aria-pressed="${i ? 'false' : 'true'}">${label}</button>`).join('')}</div></div><div class="card-body usage-timeline-body" data-usage-chart-body>${timeline(scope.points.map(point => pointMetric(point, 'toolCalls')), 'Tool calls')}</div></section>`;
 }
 
 function wireTimeline(content, scope) {
   const body = content.querySelector('[data-usage-chart-body]');
   content.querySelectorAll('[data-usage-chart]').forEach(button => button.addEventListener('click', () => {
-    content.querySelectorAll('[data-usage-chart]').forEach(item => item.classList.toggle('active', item === button));
-    if (body) body.innerHTML = timeline(scope.points.map(point => pointMetric(point, button.dataset.usageChart)));
+    content.querySelectorAll('[data-usage-chart]').forEach(item => {
+      const active = item === button;
+      item.classList.toggle('active', active);
+      item.setAttribute('aria-pressed', String(active));
+    });
+    if (body) body.innerHTML = timeline(scope.points.map(point => pointMetric(point, button.dataset.usageChart)), button.textContent.trim());
   }));
 }
 
-function timeline(values) {
+function timeline(values, metricLabel = 'Tool calls') {
   const data = finite(values); const width = 720; const height = 180; const baseline = height - 12;
   if (!data.length || data.every(value => value === 0)) return '<div class="usage-chart-empty">No bucketed activity in this range yet.</div>';
   const max = Math.max(...data, 1);
   const points = data.map((value, i) => `${data.length === 1 ? width/2 : i/(data.length-1)*width},${baseline-value/max*(height-32)}`).join(' ');
   const area = `0,${baseline} ${points} ${width},${baseline}`;
-  return `<div class="usage-timeline-plot"><svg class="usage-timeline-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="Activity trend"><line x1="0" y1="${height*.28}" x2="${width}" y2="${height*.28}" class="usage-chart-grid"/><line x1="0" y1="${height*.52}" x2="${width}" y2="${height*.52}" class="usage-chart-grid"/><line x1="0" y1="${height*.76}" x2="${width}" y2="${height*.76}" class="usage-chart-grid"/><polygon points="${area}" class="usage-chart-area"/><line x1="0" y1="${baseline}" x2="${width}" y2="${baseline}" class="usage-chart-axis"/><polyline points="${points}" class="usage-chart-line" fill="none" vector-effect="non-scaling-stroke"/></svg><div class="usage-timeline-scale"><span>Earlier</span><span>Now</span></div></div>`;
+  return `<div class="usage-timeline-plot"><svg class="usage-timeline-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="${esc(metricLabel)} activity trend"><line x1="0" y1="${height*.28}" x2="${width}" y2="${height*.28}" class="usage-chart-grid"/><line x1="0" y1="${height*.52}" x2="${width}" y2="${height*.52}" class="usage-chart-grid"/><line x1="0" y1="${height*.76}" x2="${width}" y2="${height*.76}" class="usage-chart-grid"/><polygon points="${area}" class="usage-chart-area"/><line x1="0" y1="${baseline}" x2="${width}" y2="${baseline}" class="usage-chart-axis"/><polyline points="${points}" class="usage-chart-line" fill="none" vector-effect="non-scaling-stroke"/></svg><div class="usage-timeline-scale"><span>Earlier</span><span>Now</span></div></div>`;
 }
 
 function sparkline(values, tone='') {
