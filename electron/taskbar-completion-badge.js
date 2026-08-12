@@ -4,7 +4,8 @@ const MAX_BADGE_COUNT = 99;
 const MAX_SEEN_TASKS = 256;
 const BADGE_SIZE = 16;
 const BADGE_SCALE_FACTORS = Object.freeze([1, 1.25, 1.5, 1.75, 2, 2.5, 3]);
-const FALLBACK_BADGE_COLOR = Object.freeze([23, 105, 194, 255]);
+const BADGE_TEXT_COLOR = Object.freeze([255, 255, 255, 255]);
+const BADGE_SHADOW_COLOR = Object.freeze([0, 0, 0, 180]);
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const DIGIT_BITMAPS = Object.freeze({
   0: ['11111', '10001', '10011', '10101', '11001', '10001', '11111'],
@@ -25,8 +26,7 @@ function createTaskbarCompletionBadge(options = {}) {
     nativeImage,
     platform = process.platform,
     getWindow = () => null,
-    isApplicationOpen = () => false,
-    getBadgeColor = () => FALLBACK_BADGE_COLOR
+    isApplicationOpen = () => false
   } = options;
   const usesWindowOverlay = platform === 'win32';
   const usesApplicationBadge = (platform === 'linux' || platform === 'darwin')
@@ -94,18 +94,11 @@ function createTaskbarCompletionBadge(options = {}) {
     if (!win || win.isDestroyed?.() || typeof win.setOverlayIcon !== 'function') return false;
     knownWindows.add(win);
     if (count === 0) return clearWindowOverlay(win);
-    const image = createBadgeImage(nativeImage, count, currentBadgeColor());
+    const image = createBadgeImage(nativeImage, count);
     if (!image || image.isEmpty?.()) return false;
     const noun = count === 1 ? 'task' : 'tasks';
     win.setOverlayIcon(image, String(count) + ' completed ' + noun + ' waiting to be viewed');
     return true;
-  }
-  function currentBadgeColor() {
-    try {
-      return normalizeBadgeColor(getBadgeColor());
-    } catch {
-      return [...FALLBACK_BADGE_COLOR];
-    }
   }
 
   function remember(taskId) {
@@ -127,29 +120,26 @@ function createTaskbarCompletionBadge(options = {}) {
   return { apply, clear, getStatus: snapshot, markCompleted };
 }
 
-function createBadgeImage(nativeImage, count, badgeColor = FALLBACK_BADGE_COLOR) {
+function createBadgeImage(nativeImage, count) {
   if (!nativeImage || typeof nativeImage.createFromBuffer !== 'function') {
     throw new TypeError('Electron nativeImage with PNG buffer support is required.');
   }
-  const image = nativeImage.createFromBuffer(createBadgePng(count, BADGE_SIZE, badgeColor), { scaleFactor: 1 });
+  const image = nativeImage.createFromBuffer(createBadgePng(count, BADGE_SIZE), { scaleFactor: 1 });
   if (typeof image.addRepresentation !== 'function') return image;
   for (const scaleFactor of BADGE_SCALE_FACTORS.slice(1)) {
     image.addRepresentation({
       scaleFactor,
-      buffer: createBadgePng(count, Math.round(BADGE_SIZE * scaleFactor), badgeColor)
+      buffer: createBadgePng(count, Math.round(BADGE_SIZE * scaleFactor))
     });
   }
   return image;
 }
 
-function createBadgePng(count, size = BADGE_SIZE, badgeColor = FALLBACK_BADGE_COLOR) {
+function createBadgePng(count, size = BADGE_SIZE) {
   const pixelSize = Math.max(BADGE_SIZE, Math.round(Number(size) || BADGE_SIZE));
   const label = String(Math.min(MAX_BADGE_COUNT, Math.max(1, Number(count) || 1)));
-  const background = normalizeBadgeColor(badgeColor);
-  const foreground = badgeTextColor(background);
   const pixels = Buffer.alloc(pixelSize * pixelSize * 4);
-  drawCircle(pixels, pixelSize, background);
-  drawLabel(pixels, label, pixelSize, foreground);
+  drawLabel(pixels, label, pixelSize);
   const scanlines = Buffer.alloc((pixelSize * 4 + 1) * pixelSize);
   for (let y = 0; y < pixelSize; y += 1) {
     const rowStart = y * (pixelSize * 4 + 1);
@@ -168,32 +158,39 @@ function createBadgePng(count, size = BADGE_SIZE, badgeColor = FALLBACK_BADGE_CO
     pngChunk('IEND', Buffer.alloc(0))
   ]);
 }
-
-function drawCircle(pixels, size, color) {
-  const scale = size / BADGE_SIZE;
-  const center = size / 2;
-  for (let y = 0; y < size; y += 1) {
-    for (let x = 0; x < size; x += 1) {
-      const distance = Math.hypot(x + 0.5 - center, y + 0.5 - center) / scale;
-      const coverage = Math.min(1, 7.5 - distance);
-      if (coverage <= 0) continue;
-      setPixel(pixels, size, x, y, [
-        color[0],
-        color[1],
-        color[2],
-        Math.round(color[3] * coverage)
-      ]);
-    }
-  }
-}
-function drawLabel(pixels, label, size, color) {
-  const scale = size / BADGE_SIZE;
+function drawLabel(pixels, label, size) {
+  const representationScale = size / BADGE_SIZE;
   const glyphWidth = 5;
   const glyphHeight = 7;
   const spacing = 1;
-  const totalWidth = label.length * glyphWidth + (label.length - 1) * spacing;
-  const startX = (BADGE_SIZE - totalWidth) / 2;
-  const startY = (BADGE_SIZE - glyphHeight) / 2;
+  const glyphScale = label.length === 1 ? 1.35 : 1;
+  const pixelScale = representationScale * glyphScale;
+  const totalWidth = (label.length * glyphWidth + (label.length - 1) * spacing) * pixelScale;
+  const startX = Math.max(0, size - totalWidth - 1.25 * representationScale);
+  const startY = 1.25 * representationScale;
+
+  drawGlyphs(pixels, label, size, {
+    glyphWidth,
+    glyphHeight,
+    spacing,
+    pixelScale,
+    startX: startX + 0.6 * representationScale,
+    startY: startY + 0.7 * representationScale,
+    color: BADGE_SHADOW_COLOR
+  });
+  drawGlyphs(pixels, label, size, {
+    glyphWidth,
+    glyphHeight,
+    spacing,
+    pixelScale,
+    startX,
+    startY,
+    color: BADGE_TEXT_COLOR
+  });
+}
+
+function drawGlyphs(pixels, label, size, options) {
+  const { glyphWidth, glyphHeight, spacing, pixelScale, startX, startY, color } = options;
   for (let index = 0; index < label.length; index += 1) {
     const glyph = DIGIT_BITMAPS[label[index]];
     for (let y = 0; y < glyphHeight; y += 1) {
@@ -202,55 +199,14 @@ function drawLabel(pixels, label, size, color) {
         fillLogicalPixel(
           pixels,
           size,
-          (startX + index * (glyphWidth + spacing) + x) * scale,
-          (startY + y) * scale,
-          scale,
+          startX + (index * (glyphWidth + spacing) + x) * pixelScale,
+          startY + y * pixelScale,
+          pixelScale,
           color
         );
       }
     }
   }
-}
-
-function normalizeBadgeColor(value) {
-  if (Array.isArray(value) && value.length >= 3) {
-    return [
-      clampColor(value[0]),
-      clampColor(value[1]),
-      clampColor(value[2]),
-      value.length > 3 ? clampColor(value[3]) : 255
-    ];
-  }
-  const hex = String(value || '').trim().replace(/^#/, '');
-  if (/^[0-9a-f]{6}(?:[0-9a-f]{2})?$/i.test(hex)) {
-    return [
-      Number.parseInt(hex.slice(0, 2), 16),
-      Number.parseInt(hex.slice(2, 4), 16),
-      Number.parseInt(hex.slice(4, 6), 16),
-      hex.length === 8 ? Number.parseInt(hex.slice(6, 8), 16) : 255
-    ];
-  }
-  return [...FALLBACK_BADGE_COLOR];
-}
-
-function badgeTextColor(background) {
-  const [red, green, blue] = normalizeBadgeColor(background);
-  const luminance = relativeLuminance(red, green, blue);
-  const whiteContrast = 1.05 / (luminance + 0.05);
-  const blackContrast = (luminance + 0.05) / 0.05;
-  return blackContrast >= whiteContrast ? [0, 0, 0, 255] : [255, 255, 255, 255];
-}
-
-function relativeLuminance(red, green, blue) {
-  const linear = value => {
-    const channel = value / 255;
-    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
-  };
-  return 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue);
-}
-
-function clampColor(value) {
-  return Math.max(0, Math.min(255, Math.round(Number(value) || 0)));
 }
 
 function fillLogicalPixel(pixels, size, x, y, scale, rgba) {
@@ -259,17 +215,28 @@ function fillLogicalPixel(pixels, size, x, y, scale, rgba) {
   const right = Math.min(size, Math.ceil(x + scale));
   const bottom = Math.min(size, Math.ceil(y + scale));
   for (let pixelY = top; pixelY < bottom; pixelY += 1) {
-    for (let pixelX = left; pixelX < right; pixelX += 1) setPixel(pixels, size, pixelX, pixelY, rgba);
+    const coverageY = Math.max(0, Math.min(pixelY + 1, y + scale) - Math.max(pixelY, y));
+    for (let pixelX = left; pixelX < right; pixelX += 1) {
+      const coverageX = Math.max(0, Math.min(pixelX + 1, x + scale) - Math.max(pixelX, x));
+      blendPixel(pixels, size, pixelX, pixelY, rgba, coverageX * coverageY);
+    }
   }
 }
 
-function setPixel(pixels, size, x, y, rgba) {
+function blendPixel(pixels, size, x, y, rgba, coverage = 1) {
   if (x < 0 || x >= size || y < 0 || y >= size) return;
   const offset = (y * size + x) * 4;
-  pixels[offset] = rgba[0];
-  pixels[offset + 1] = rgba[1];
-  pixels[offset + 2] = rgba[2];
-  pixels[offset + 3] = rgba[3];
+  const sourceAlpha = (rgba[3] / 255) * Math.max(0, Math.min(1, coverage));
+  const destinationAlpha = pixels[offset + 3] / 255;
+  const outputAlpha = sourceAlpha + destinationAlpha * (1 - sourceAlpha);
+  if (outputAlpha <= 0) return;
+  for (let channel = 0; channel < 3; channel += 1) {
+    const source = rgba[channel] / 255;
+    const destination = pixels[offset + channel] / 255;
+    const output = (source * sourceAlpha + destination * destinationAlpha * (1 - sourceAlpha)) / outputAlpha;
+    pixels[offset + channel] = Math.round(output * 255);
+  }
+  pixels[offset + 3] = Math.round(outputAlpha * 255);
 }
 
 function pngChunk(type, data) {
@@ -292,4 +259,4 @@ function crc32(buffer) {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
-export { MAX_BADGE_COUNT, badgeTextColor, createBadgeImage, createTaskbarCompletionBadge, normalizeBadgeColor };
+export { MAX_BADGE_COUNT, createBadgeImage, createTaskbarCompletionBadge };

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage, powerSaveBlocker, Notification, dialog, screen, protocol, safeStorage, systemPreferences } from 'electron';
+import { app, BrowserWindow, ipcMain, Tray, Menu, clipboard, shell, nativeImage, powerSaveBlocker, Notification, dialog, screen, protocol, safeStorage } from 'electron';
 import electronUpdater from 'electron-updater';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -97,7 +97,6 @@ const dashboardWindowManager = createDashboardWindowManager({
 const taskbarCompletionBadge = createTaskbarCompletionBadge({
   app,
   nativeImage, platform: process.platform,
-  getBadgeColor: () => systemPreferences.getAccentColor(),
   getWindow: () => dashboardWindowManager.getWindow() || BrowserWindow.getAllWindows().find(win => !win.isDestroyed()) || null,
   isApplicationOpen: () => BrowserWindow.getAllWindows().some(win => !win.isDestroyed() && win.isVisible() && win.isFocused())
 }); const desktopTray = createDesktopTray({

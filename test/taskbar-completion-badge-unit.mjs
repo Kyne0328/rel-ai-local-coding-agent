@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { MAX_BADGE_COUNT, badgeTextColor, createBadgeImage, createTaskbarCompletionBadge, normalizeBadgeColor } from '../electron/taskbar-completion-badge.js';
+import { MAX_BADGE_COUNT, createBadgeImage, createTaskbarCompletionBadge } from '../electron/taskbar-completion-badge.js';
 
 const overlays = [];
 const images = [];
@@ -81,15 +81,8 @@ const direct = createBadgeImage(nativeImage, 7);
 assert.ok(direct);
 assert.equal(direct.isEmpty(), false);
 
-assert.deepEqual(normalizeBadgeColor('5aa6ffff'), [90, 166, 255, 255], 'Electron RGBA accent colors must map directly into badge pixels');
-assert.deepEqual(normalizeBadgeColor('#1769c2'), [23, 105, 194, 255]);
-assert.deepEqual(normalizeBadgeColor('invalid'), [23, 105, 194, 255], 'invalid accent values must use the Rel.AI blue fallback');
-assert.deepEqual(badgeTextColor('#f0c000ff'), [0, 0, 0, 255], 'light accent colors need dark numerals');
-assert.deepEqual(badgeTextColor('#1769c2ff'), [255, 255, 255, 255], 'dark accent colors need white numerals');
-const bufferCountBeforeAccent = badgeBuffers.length;
-createBadgeImage(nativeImage, 7, '5aa6ffff');
-assert.ok(badgeBuffers.length > bufferCountBeforeAccent, 'custom system accent must render through the badge image path');
-assert.notEqual(Buffer.compare(badgeBuffers[bufferCountBeforeAccent - 1], badgeBuffers[bufferCountBeforeAccent]), 0, 'different badge colors must produce different PNGs');
+const repeated = createBadgeImage(nativeImage, 7);
+assert.equal(Buffer.compare(direct.buffer, repeated.buffer), 0, 'the same unread count must render a stable taskbar badge image');
 
 const linuxBadgeCounts = [];
 const linuxBadge = createTaskbarCompletionBadge({
