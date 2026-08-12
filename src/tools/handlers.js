@@ -39,7 +39,7 @@ const startTaskHandler = inWorkspace(async (workspace, config, args) => {
 
 function scheduleIntelligenceWarmup(workspace, config) {
   void Promise.resolve()
-    .then(() => repositoryIntelligence.ensure(workspace, config))
+    .then(() => repositoryIntelligence.ensure(workspace, config, { watch: false }))
     .catch(() => {});
 }
 
