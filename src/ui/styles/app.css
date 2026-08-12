@@ -610,7 +610,6 @@
 
 
 .sessions-history-card .card-head p { margin: .35rem 0 0; color: var(--ui-text-secondary); font-size: .75rem; }
-.sessions-history-card .card-head p { margin: .35rem 0 0; color: var(--ui-text-secondary); font-size: .75rem; }
 .runtime-identifier { display: inline-flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: .4rem; color: var(--ui-text-secondary); font-size: .7rem; }
 .runtime-identifier > span { font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
 .runtime-identifier code { min-width: 0; overflow-wrap: anywhere; color: var(--ui-text-primary); text-transform: none; letter-spacing: normal; }
