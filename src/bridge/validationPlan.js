@@ -43,7 +43,12 @@ async function createValidationPlan(workspace, config, args = {}) {
   let impact = { affectedTests: [], impactedPaths: [] };
   if (changedFiles.length) {
     try {
-      impact = await relaiCodeInspect(workspace, config, { action: 'impact', paths: changedFiles, maxResults: 200, maxDepth: 3 });
+      impact = await relaiCodeInspect(
+        workspace,
+        config,
+        { action: 'impact', paths: changedFiles, maxResults: 200, maxDepth: 3 },
+        { watch: false }
+      );
     } catch {}
   }
   const topology = discoverRepositoryTopology(workspace.path);

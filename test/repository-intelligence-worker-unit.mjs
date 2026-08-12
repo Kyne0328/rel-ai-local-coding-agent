@@ -23,6 +23,8 @@ try {
   assert.equal(initial.scanMode, 'full');
   assert.equal(initial.runtimeStatus, 'ready');
   assert.ok(initial.sourceFileCount >= 2);
+  assert.equal(repositoryIntelligence.status(workspace, config).watching, true,
+    'interactive Repository Intelligence should retain live workspace watching');
 
   assert.equal(evictIdleRepositoryWorkers('test idle eviction'), 1);
   const afterEvictionStatus = repositoryIntelligence.status(workspace, config);

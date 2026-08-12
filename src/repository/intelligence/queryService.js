@@ -23,7 +23,7 @@ async function queryCodeInspect(workspace, config, args = {}, options = {}) {
   if (!['symbol', 'references', 'related', 'impact', 'trace', 'diagnostics', 'architecture'].includes(action)) {
     throw new Error('relai_code_inspect action must be one of: symbol, references, related, impact, trace, diagnostics, architecture.');
   }
-  const index = await ensureRepositoryIndex(workspace, config, { maxFiles: args.maxFiles, signal: options.signal });
+  const index = await ensureRepositoryIndex(workspace, config, { maxFiles: args.maxFiles, signal: options.signal, watch: options.watch });
   const maxResults = Math.floor(clampNumber(args.maxResults, 1, 1000, DEFAULT_MAX_RESULTS));
   const db = openIndexDatabase(repositoryIndexPath(config, workspace), { readonly: true });
   try {
@@ -82,7 +82,7 @@ async function querySemanticSearch(workspace, config, args = {}, options = {}) {
   const query = String(args.query || '').trim();
   if (!query) throw new Error('relai_semantic_search requires query.');
   const maxResults = Math.floor(clampNumber(args.maxResults, 1, 100, 20));
-  const index = await ensureRepositoryIndex(workspace, config, { maxFiles: args.maxFiles, signal: options.signal });
+  const index = await ensureRepositoryIndex(workspace, config, { maxFiles: args.maxFiles, signal: options.signal, watch: options.watch });
   const db = openIndexDatabase(repositoryIndexPath(config, workspace), { readonly: true });
   try {
     const candidateLimit = Math.min(MAX_QUERY_CANDIDATES, maxResults * 20);
