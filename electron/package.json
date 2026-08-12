@@ -135,6 +135,7 @@
           "@hono/node-server/**",
           "hono/**",
           "zod/**",
+          "playwright-core/**",
           "web-tree-sitter/**",
           "tree-sitter-wasms/**",
           "!**/*.map",

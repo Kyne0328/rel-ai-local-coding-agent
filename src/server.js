@@ -5,6 +5,7 @@ import { createTaskAwareStdioTransport } from './mcp/transportTasks.js';
 import { createRelaiMcpServer, SERVER_INSTANCE_ID } from './mcpServer.js';
 import { pruneNativeToolTasks } from './mcp/nativeToolTasks.js';
 import { stopAllManagedProcesses, pruneManagedProcesses } from './processManager.js';
+import { stopAllUiSessions } from './webAutomationManager.js';
 import { initializeTelemetry, shutdownTelemetry } from './telemetry.js';
 
 function main() {
@@ -16,6 +17,7 @@ function main() {
   pruneNativeToolTasks(config);
   const cleanup = async () => {
     await stopAllManagedProcesses(config).catch(() => {});
+    await stopAllUiSessions().catch(() => {});
     await shutdownTelemetry().catch(() => {});
   };
   process.once('SIGINT', () => { void cleanup().finally(() => process.exit(0)); });

@@ -41,6 +41,7 @@ const files = [
   'edit-run-checks-completion-unit.mjs',
   'exec-dirty-mutation-unit.mjs',
   'tool-output-validation-unit.mjs',
+  'web-automation-contract-unit.mjs',
   'window-security-unit.mjs'
 ];
 

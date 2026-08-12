@@ -8,21 +8,43 @@ const MAX_TOOL_RESULT_BYTES = Number(
 const MAX_TOOL_TEXT_BYTES = Number(process.env.REL_AI_MCP_MAX_TOOL_TEXT_BYTES || DEFAULT_MAX_TOOL_TEXT_BYTES);
 
 function toolResult(payload, isError) {
-  const serialized = JSON.stringify(payload);
+  const imageContent = toolImageContent(payload);
+  const structuredPayload = imageContent ? withoutImageData(payload) : payload;
+  const serialized = JSON.stringify(structuredPayload);
   const bytes = Buffer.byteLength(serialized, 'utf8');
   const structuredContent = bytes > MAX_TOOL_RESULT_BYTES
-    ? compactToolResult(payload, bytes)
-    : payload;
-  const text = conciseToolResultText(payload, {
+    ? compactToolResult(structuredPayload, bytes)
+    : structuredPayload;
+  const text = conciseToolResultText(structuredPayload, {
     isError: Boolean(isError),
     originalBytes: bytes,
     structuredTruncated: bytes > MAX_TOOL_RESULT_BYTES
   });
   return {
-    content: [{ type: 'text', text: truncateUtf8Head(text, MAX_TOOL_TEXT_BYTES) }],
+    content: [
+      { type: 'text', text: truncateUtf8Head(text, MAX_TOOL_TEXT_BYTES) },
+      ...(imageContent ? [imageContent] : [])
+    ],
     structuredContent,
     isError: Boolean(isError)
   };
+}
+
+function toolImageContent(payload) {
+  const image = payload?.image;
+  if (!image || typeof image !== 'object' || Array.isArray(image)) return null;
+  const data = typeof image.data === 'string' ? image.data : '';
+  const mimeType = typeof image.mimeType === 'string' ? image.mimeType : '';
+  if (!data || !/^image\/[A-Za-z0-9.+-]+$/.test(mimeType)) return null;
+  return { type: 'image', data, mimeType };
+}
+
+function withoutImageData(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return payload;
+  const image = payload.image && typeof payload.image === 'object' && !Array.isArray(payload.image)
+    ? Object.fromEntries(Object.entries(payload.image).filter(([key]) => key !== 'data'))
+    : payload.image;
+  return { ...payload, image };
 }
 
 function conciseToolResultText(payload, options = {}) {

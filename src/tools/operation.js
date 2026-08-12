@@ -22,6 +22,7 @@ function describeToolOperation(name, args = {}) {
     case 'relai_process_write': return `Sending input to managed process ${args.processId || ''}`.trim();
     case 'relai_process_stop': return `Stopping managed process ${args.processId || ''}`.trim();
     case 'relai_process_list': return workspace ? `Listing managed processes in ${workspace}` : 'Listing managed processes';
+    case 'relai_ui': return `Testing local UI (${String(args.action || 'session')})${suffix}`;
     case 'relai_worktree_create': return `Creating managed worktree ${args.name || ''}${suffix}`.trim();
     case 'relai_worktree_list': return workspace ? `Listing managed worktrees for ${workspace}` : 'Listing managed worktrees';
     case 'relai_worktree_remove': return `Removing managed worktree ${args.alias || ''}${suffix}`.trim();
