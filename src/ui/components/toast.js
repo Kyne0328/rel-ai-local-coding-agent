@@ -1,8 +1,8 @@
 const TOAST_VARIANTS = Object.freeze({
-  info: { symbol: 'i', label: 'Information', role: 'status' },
-  success: { symbol: '✓', label: 'Success', role: 'status' },
-  warn: { symbol: '!', label: 'Warning', role: 'status' },
-  error: { symbol: '×', label: 'Error', role: 'alert' }
+  info: { symbol: 'i', label: 'Information', role: 'status', duration: 5000 },
+  success: { symbol: '✓', label: 'Success', role: 'status', duration: 4000 },
+  warn: { symbol: '!', label: 'Warning', role: 'status', duration: 8000 },
+  error: { symbol: '×', label: 'Error', role: 'alert', duration: 0 }
 });
 
 let _region = null;
@@ -16,9 +16,10 @@ function getRegion() {
   return _region;
 }
 
-export function toast(message, { variant = 'info', duration = 4000 } = {}) {
+export function toast(message, { variant = 'info', duration } = {}) {
   const tone = Object.hasOwn(TOAST_VARIANTS, variant) ? variant : 'info';
   const metadata = TOAST_VARIANTS[tone];
+  const effectiveDuration = Number.isFinite(duration) ? Math.max(0, duration) : metadata.duration;
   const element = document.createElement('div');
   element.className = `toast toast-${tone}`;
   element.setAttribute('role', metadata.role);
@@ -33,8 +34,21 @@ export function toast(message, { variant = 'info', duration = 4000 } = {}) {
   copy.textContent = String(message || '');
   copy.setAttribute('aria-label', `${metadata.label}: ${String(message || '')}`);
 
-  element.append(marker, copy);
+  const dismiss = document.createElement('button');
+  dismiss.type = 'button';
+  dismiss.className = 'toast-dismiss';
+  dismiss.setAttribute('aria-label', `Dismiss ${metadata.label.toLowerCase()} notification`);
+  dismiss.textContent = '×';
+  let timer = null;
+  const remove = () => {
+    if (timer) clearTimeout(timer);
+    timer = null;
+    element.remove();
+  };
+  dismiss.addEventListener('click', remove, { once: true });
+
+  element.append(marker, copy, dismiss);
   getRegion().appendChild(element);
-  if (duration > 0) setTimeout(() => element.remove(), duration);
+  if (effectiveDuration > 0) timer = setTimeout(remove, effectiveDuration);
   return element;
 }

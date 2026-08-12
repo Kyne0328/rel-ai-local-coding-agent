@@ -1,32 +1,32 @@
 .usage-page { @apply grid gap-3; }
 .usage-toolbar { @apply items-start; }
 .usage-toolbar-controls { @apply flex flex-wrap items-end gap-2; }
-.usage-month-control { @apply grid gap-1 text-[11px] font-semibold; color: var(--ui-text-secondary); }
+.usage-month-control { @apply grid gap-1 text-[12px] font-semibold; color: var(--ui-text-secondary); }
 .usage-month-control input { min-width: 154px; }
 .usage-content, .usage-overview { @apply grid gap-3; }
 .usage-loading { @apply rounded-xl border p-5 text-[12px]; color: var(--ui-text-secondary); border-color: var(--ui-border-default); background: var(--ui-surface-primary); }
 .usage-month-summary { @apply flex items-start justify-between gap-5 rounded-xl border p-4; border-color: var(--ui-border-default); background: var(--ui-surface-primary); }
 .usage-month-summary > div { @apply grid min-w-0 gap-1; }
 .usage-month-summary strong { @apply text-[17px]; }
-.usage-month-summary p { @apply m-0 max-w-[560px] text-[11px] leading-5; color: var(--ui-text-secondary); }
+.usage-month-summary p { @apply m-0 max-w-[560px] text-[12px] leading-5; color: var(--ui-text-secondary); }
 .usage-metrics { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); border: 1px solid var(--ui-border-default); border-radius: var(--radius-lg); overflow: hidden; background: var(--ui-surface-primary); }
 .usage-metric { @apply grid min-w-0 gap-1 p-4; border-right: 1px solid var(--ui-border-default); border-bottom: 1px solid var(--ui-border-default); }
 .usage-metric:nth-child(6n) { border-right: 0; }
 .usage-metric:nth-last-child(-n+6) { border-bottom: 0; }
-.usage-metric span { @apply text-[10px] font-semibold uppercase tracking-[0.04em]; color: var(--ui-text-tertiary); }
-.usage-metric strong { @apply truncate text-[18px] font-extrabold; color: var(--ui-text-primary); }
-.usage-breakdown .card-head p { @apply m-0 mt-1 text-[11px]; color: var(--ui-text-secondary); }
+.usage-metric span { @apply text-[11px] font-semibold uppercase tracking-[0.04em]; color: var(--ui-text-tertiary); }
+.usage-metric strong { @apply text-[18px] font-extrabold; overflow-wrap: anywhere; color: var(--ui-text-primary); }
+.usage-breakdown .card-head p { @apply m-0 mt-1 text-[12px]; color: var(--ui-text-secondary); }
 .usage-table-wrap { @apply w-full overflow-x-auto; }
 .usage-table { width: 100%; min-width: 680px; border-collapse: collapse; }
-.usage-table th, .usage-table td { @apply border-b px-3 py-2.5 text-left text-[11px]; border-color: var(--ui-border-subtle); }
-.usage-table thead th { @apply text-[10px] font-semibold uppercase tracking-[0.04em]; color: var(--ui-text-tertiary); }
+.usage-table th, .usage-table td { @apply border-b px-3 py-2.5 text-left text-[12px]; border-color: var(--ui-border-subtle); }
+.usage-table thead th { @apply text-[11px] font-semibold uppercase tracking-[0.04em]; color: var(--ui-text-tertiary); }
 .usage-table tbody th { @apply max-w-[320px] truncate font-semibold; color: var(--ui-text-primary); }
 .usage-table td { color: var(--ui-text-secondary); }
 .usage-table tbody tr:last-child th, .usage-table tbody tr:last-child td { border-bottom: 0; }
-.usage-breakdown-empty { @apply rounded-lg border border-dashed px-4 py-5 text-center text-[11px]; color: var(--ui-text-tertiary); border-color: var(--ui-border-default); }
+.usage-breakdown-empty { @apply rounded-lg border border-dashed px-4 py-5 text-center text-[12px]; color: var(--ui-text-tertiary); border-color: var(--ui-border-default); }
 .usage-unavailable { @apply grid gap-2 rounded-xl border p-5; border-color: var(--ui-border-default); background: var(--ui-surface-primary); }
 .usage-unavailable strong { @apply text-[14px]; }
-.usage-unavailable p { @apply m-0 text-[11px] leading-5; color: var(--ui-text-secondary); }
+.usage-unavailable p { @apply m-0 text-[12px] leading-5; color: var(--ui-text-secondary); }
 .usage-unavailable button { @apply mt-1 justify-self-start; }
 @media (max-width: 760px) {
   .usage-toolbar-controls { @apply w-full items-stretch; }
@@ -40,19 +40,19 @@
   .usage-toolbar-controls button { @apply w-full; }
 }
 
-.usage-workspace-control { @apply grid min-w-[190px] gap-1 text-[11px] font-semibold; color: var(--ui-text-secondary); }
+.usage-workspace-control { @apply grid min-w-[190px] gap-1 text-[12px] font-semibold; color: var(--ui-text-secondary); }
 .usage-workspace-control select { width: 100%; min-width: 190px; }
-.usage-month-summary small { @apply text-[10px]; color: var(--ui-text-tertiary); }
+.usage-month-summary small { @apply text-[11px]; color: var(--ui-text-tertiary); }
 .usage-metric { position: relative; }
-.usage-metric small { @apply truncate text-[10px]; color: var(--ui-text-tertiary); }
+.usage-metric small { @apply text-[11px]; overflow-wrap: anywhere; color: var(--ui-text-tertiary); }
 .usage-metric > i { position: absolute; left: 16px; right: 16px; bottom: 0; height: 2px; border-radius: 999px; background: var(--ui-action-primary); opacity: .45; }
 .usage-metric.good > i { background: var(--ui-status-success-foreground); }
 .usage-metric.bad > i { background: var(--ui-status-danger-foreground); opacity: .8; }
 .usage-fact-strip { @apply grid overflow-hidden rounded-xl border; grid-template-columns: repeat(3,minmax(0,1fr)); border-color: var(--ui-border-default); background: var(--ui-surface-primary); }
 .usage-fact-strip > div { @apply grid min-w-0 gap-1 border-r px-4 py-3 last:border-r-0; border-color: var(--ui-border-default); }
-.usage-fact-strip span { @apply text-[10px] font-semibold uppercase tracking-[.04em]; color: var(--ui-text-tertiary); }
-.usage-fact-strip strong { @apply truncate text-[13px]; }
-.usage-fact-strip small { @apply truncate text-[10px]; color: var(--ui-text-tertiary); }
+.usage-fact-strip span { @apply text-[11px] font-semibold uppercase tracking-[.04em]; color: var(--ui-text-tertiary); }
+.usage-fact-strip strong { @apply text-[13px]; overflow-wrap: anywhere; }
+.usage-fact-strip small { @apply text-[11px]; overflow-wrap: anywhere; color: var(--ui-text-tertiary); }
 .usage-visual-grid { @apply grid gap-3; grid-template-columns: minmax(0,.8fr) minmax(0,1.2fr); }
 .usage-visual-card { min-width: 0; }
 .usage-visual-value { @apply text-[20px] font-extrabold; }
@@ -61,22 +61,22 @@
 .usage-outcome-progress { height: 8px; }
 .usage-outcome-legend { @apply grid gap-2; grid-template-columns: repeat(2,minmax(0,1fr)); }
 .usage-outcome-legend > div { @apply flex items-center justify-between gap-3 rounded-lg border px-3 py-2; border-color: var(--ui-border-subtle); background: var(--ui-surface-secondary); }
-.usage-outcome-legend span { @apply flex min-w-0 items-center gap-2 text-[11px]; color: var(--ui-text-secondary); }
+.usage-outcome-legend span { @apply flex min-w-0 items-center gap-2 text-[12px]; color: var(--ui-text-secondary); }
 .usage-outcome-legend i { @apply size-2 shrink-0 rounded-full; background: var(--ui-text-tertiary); }
 .usage-outcome-legend .good i { background: var(--ui-status-success-foreground); }
 .usage-outcome-legend .bad i { background: var(--ui-status-danger-foreground); }
 .usage-workspace-summary { @apply grid gap-3; grid-template-columns: repeat(2,minmax(0,1fr)); }
 .usage-workspace-summary > div { @apply grid min-w-0 gap-1 rounded-lg border p-3; border-color: var(--ui-border-subtle); background: var(--ui-surface-secondary); }
-.usage-workspace-summary span { @apply text-[10px] font-semibold uppercase tracking-[.04em]; color: var(--ui-text-tertiary); }
+.usage-workspace-summary span { @apply text-[11px] font-semibold uppercase tracking-[.04em]; color: var(--ui-text-tertiary); }
 .usage-workspace-summary strong { @apply text-[18px] font-extrabold; }
-.usage-workspace-summary small { @apply text-[10px]; color: var(--ui-text-tertiary); }
+.usage-workspace-summary small { @apply text-[11px]; color: var(--ui-text-tertiary); }
 .usage-bar-list { @apply grid gap-2; }
-.usage-bar-row { @apply grid min-w-0 items-center gap-3 rounded-lg px-2 py-2 text-[11px]; grid-template-columns: minmax(100px,180px) minmax(100px,1fr) auto; color: var(--ui-text-secondary); }
+.usage-bar-row { @apply grid min-w-0 items-center gap-3 rounded-lg px-2 py-2 text-[12px]; grid-template-columns: minmax(100px,180px) minmax(100px,1fr) auto; color: var(--ui-text-secondary); }
 .usage-bar-row:hover { background: var(--ui-surface-secondary); color: var(--ui-text-primary); }
 .usage-bar-row.active { background: var(--ui-status-info-background); color: var(--ui-text-primary); }
 .usage-bar-label { @apply truncate font-semibold; }
 .usage-bar-row progress { height: 7px; }
-.usage-bar-row strong { @apply min-w-8 text-right text-[11px]; color: var(--ui-text-primary); }
+.usage-bar-row strong { @apply min-w-8 text-right text-[12px]; color: var(--ui-text-primary); }
 .usage-bar-link { text-decoration: none; }
 @media (max-width: 760px) {
   .usage-workspace-control { @apply min-w-0 flex-1; }
@@ -92,21 +92,21 @@
 
 
 /* Analytics visualizer */
-.usage-range-control { @apply grid min-w-[150px] gap-1 text-[11px] font-semibold; color: var(--ui-text-secondary); }
+.usage-range-control { @apply grid min-w-[150px] gap-1 text-[12px] font-semibold; color: var(--ui-text-secondary); }
 .usage-range-control select { min-width: 150px; }
 .usage-custom-range { @apply flex items-end gap-2; }
 .usage-custom-range[hidden] { display: none; }
-.usage-custom-range label { @apply grid gap-1 text-[11px] font-semibold; color: var(--ui-text-secondary); }
+.usage-custom-range label { @apply grid gap-1 text-[12px] font-semibold; color: var(--ui-text-secondary); }
 .usage-custom-range input { min-width: 132px; }
-.usage-series-note { @apply m-0 rounded-lg border px-3 py-2 text-[11px]; color: var(--ui-text-secondary); border-color: var(--ui-border-subtle); background: var(--ui-surface-secondary); }
+.usage-series-note { @apply m-0 rounded-lg border px-3 py-2 text-[12px]; color: var(--ui-text-secondary); border-color: var(--ui-border-subtle); background: var(--ui-surface-secondary); }
 .usage-metric { min-height: 112px; padding-bottom: 8px; }
 .usage-metric > i { display: none; }
 .usage-metric-value { @apply flex min-w-0 items-baseline justify-between gap-2; }
 .usage-metric-value strong { @apply min-w-0; }
-.usage-delta { @apply shrink-0 text-[10px] font-semibold; color: var(--ui-text-tertiary); }
+.usage-delta { @apply shrink-0 text-[11px] font-semibold; color: var(--ui-text-tertiary); }
 .usage-delta.good { color: var(--ui-status-success-foreground); }
 .usage-delta.bad { color: var(--ui-status-danger-foreground); }
-.usage-metric-detail { @apply block truncate; }
+.usage-metric-detail { @apply block; overflow-wrap: anywhere; }
 .usage-sparkline { width: 100%; height: 28px; margin-top: auto; color: var(--ui-action-primary); }
 .usage-sparkline polyline { stroke: currentColor; stroke-width: 1.5; }
 .usage-sparkline.good { color: var(--ui-status-success-foreground); }
@@ -114,7 +114,7 @@
 .usage-sparkline-empty { display: block; height: 28px; }
 .usage-timeline-card { min-width: 0; }
 .usage-timeline-head { @apply items-start gap-4; }
-.usage-timeline-head p { @apply m-0 mt-1 text-[11px]; color: var(--ui-text-secondary); }
+.usage-timeline-head p { @apply m-0 mt-1 text-[12px]; color: var(--ui-text-secondary); }
 .usage-chart-switch { @apply flex flex-wrap justify-end gap-1; }
 .usage-chart-switch button { min-height: 44px; }
 .usage-chart-switch button.active { border-color: var(--ui-action-primary); color: var(--ui-action-primary); background: var(--ui-action-secondary); }
@@ -125,8 +125,8 @@
 .usage-chart-area { fill: currentColor; opacity: .08; }
 .usage-chart-grid { stroke: var(--ui-border-subtle); stroke-width: 1; stroke-dasharray: 4 6; }
 .usage-chart-axis { stroke: var(--ui-border-default); stroke-width: 1; }
-.usage-timeline-scale { @apply flex items-center justify-between text-[9px] font-medium; color: var(--ui-text-tertiary); }
-.usage-chart-empty { @apply grid min-h-[180px] place-items-center rounded-xl border border-dashed text-[11px]; color: var(--ui-text-tertiary); border-color: var(--ui-border-subtle); }
+.usage-timeline-scale { @apply flex items-center justify-between text-[10px] font-medium; color: var(--ui-text-tertiary); }
+.usage-chart-empty { @apply grid min-h-[180px] place-items-center rounded-xl border border-dashed text-[12px]; color: var(--ui-text-tertiary); border-color: var(--ui-border-subtle); }
 @media (max-width: 1180px) {
   .usage-metrics { grid-template-columns: repeat(3,minmax(0,1fr)); }
   .usage-metric:nth-child(3n) { border-right: 0; }

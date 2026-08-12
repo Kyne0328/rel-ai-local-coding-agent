@@ -52,9 +52,9 @@
 .desktop-setup-state {
   flex: 0 0 auto;
   color: var(--ui-text-tertiary);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
-  letter-spacing: .08em;
+  letter-spacing: .06em;
   text-transform: uppercase;
 }
 .desktop-setup-item.current .desktop-setup-state { color: var(--ui-action-primary); }
@@ -69,8 +69,8 @@
   border-radius: var(--radius-md);
   background: var(--ui-surface-secondary);
 }
-.desktop-first-request span { color: var(--ui-text-tertiary); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-.desktop-first-request code { overflow-wrap: anywhere; white-space: normal; color: var(--ui-text-secondary); font-size: 11px; line-height: 1.6; }
+.desktop-first-request span { color: var(--ui-text-tertiary); font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.desktop-first-request code { overflow-wrap: anywhere; white-space: normal; color: var(--ui-text-secondary); font-size: 12px; line-height: 1.6; }
 @media (max-width: 640px) {
   .desktop-setup-head { gap: 10px; }
   .desktop-setup-item { grid-template-columns: auto minmax(0, 1fr); }

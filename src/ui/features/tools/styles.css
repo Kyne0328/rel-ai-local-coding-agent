@@ -8,17 +8,17 @@
 
 .tool-card { @apply min-h-[190px] gap-3; }
 .tool-card-head { @apply flex items-center justify-between gap-3; }
-.tool-capability { @apply text-[10px] font-bold uppercase tracking-[.08em]; color: var(--ui-text-secondary); }
-.tool-parameter-count { @apply text-[10px]; color: var(--ui-text-tertiary); }
+.tool-capability { @apply text-[11px] font-bold uppercase tracking-[.06em]; color: var(--ui-text-secondary); }
+.tool-parameter-count { @apply text-[11px]; color: var(--ui-text-tertiary); }
 .tool-card-title { @apply grid gap-1; }
 .tool-card-title h3 { @apply text-[14px]; }
 .tool-card-title code { @apply w-fit max-w-full break-words text-[11px]; color: var(--ui-text-secondary); }
 .tool-card p { @apply m-0 text-[12px] leading-5; color: var(--ui-text-secondary); }
 .tool-parameters { @apply mt-auto border-t pt-3; border-color: var(--ui-border-default); }
-.tool-parameters summary { @apply cursor-pointer text-[11px] font-semibold; color: var(--ui-text-secondary); }
+.tool-parameters summary { @apply flex min-h-11 cursor-pointer items-center text-[12px] font-semibold; color: var(--ui-text-secondary); }
 .tool-parameter-list { @apply flex flex-wrap gap-1.5 pt-2; }
-.tool-parameter-list code { @apply rounded-md px-2 py-1 text-[10px]; background: var(--ui-surface-secondary); }
-.tool-parameters-empty { @apply mt-auto border-t pt-3 text-[11px]; border-color: var(--ui-border-default); color: var(--ui-text-tertiary); }
+.tool-parameter-list code { @apply rounded-md px-2 py-1 text-[11px]; background: var(--ui-surface-secondary); }
+.tool-parameters-empty { @apply mt-auto border-t pt-3 text-[12px]; border-color: var(--ui-border-default); color: var(--ui-text-tertiary); }
 .capability-edit .tool-capability { color: var(--ui-action-primary); }
 .capability-validate .tool-capability { color: var(--ui-status-success-foreground); }
 .capability-git .tool-capability { color: var(--ui-text-primary); }

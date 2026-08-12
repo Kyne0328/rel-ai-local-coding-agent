@@ -29,6 +29,8 @@ assert.match(html, /Active workspaces/);
 assert.match(html, />2</);
 assert.match(html, /Activity pulse/);
 assert.match(html, /home-analytics-area/);
+assert.match(html, /Latest hour 10 calls/);
+assert.match(html, /Overall trend increasing/);
 assert.match(html, /may include recovered work/);
 assert.match(html, /Prompts, paths, and result bodies are not stored/);
 
