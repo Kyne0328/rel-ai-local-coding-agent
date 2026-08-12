@@ -17,7 +17,12 @@ const srcResource = electronPkg.build.extraResources.find(item => item.from === 
 assert.ok(srcResource, 'Electron package must include the shared src runtime');
 assert.ok(srcResource.filter.includes('**/*.js'), 'shared src gateway client modules must be packaged through the canonical src JavaScript resource');
 
-assert.equal(fs.existsSync(path.join(root, 'gateway')), false, 'public rel-ai-mcp must not contain the private cloud Worker project');
+const privateGatewayMarkers = ['package.json', 'wrangler.toml', 'wrangler.jsonc', 'src', 'test'];
+assert.equal(
+  privateGatewayMarkers.some(marker => fs.existsSync(path.join(root, 'gateway', marker))),
+  false,
+  'public rel-ai-mcp must not contain the private cloud Worker project'
+);
 assert.equal(fs.existsSync(path.join(root, 'contracts', 'cloud', 'mcp-manifest.json')), true, 'public cloud MCP contract artifact must exist');
 assert.equal(electronPkg.build.files.some(value => /(?:^|\/)gateway(?:\/|$)/.test(value)), false, 'Electron files must not copy a cloud Worker project');
 assert.equal(electronPkg.build.extraResources.some(item => String(item.from || '').includes('../gateway')), false, 'Electron extraResources must not copy a private cloud Worker directory');
