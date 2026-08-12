@@ -71,6 +71,8 @@ try {
   const plan = readValidationPlan(readConfig(), validation.planId, { alias: 'app', path: workspacePath });
   assert.deepEqual(plan.changedFiles, ['src/task-owned.js']);
   assert.equal(plan.recommended, 'focused');
+  assert.equal(repositoryIntelligence.status({ alias: 'app', path: workspacePath }, readConfig()).watching, false,
+    'validation impact analysis must not start a live repository watcher');
 } finally {
   repositoryIntelligence.shutdown();
   resetToolActivity();

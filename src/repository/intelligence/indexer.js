@@ -19,7 +19,7 @@ async function ensureRepositoryIndex(workspace, config = {}, options = {}) {
   throwIfAborted(options.signal);
   const databaseFile = repositoryIndexPath(config, workspace);
   const state = runtimeState(databaseFile);
-  ensureWorkspaceWatcher(workspace, databaseFile, state);
+  if (options.watch !== false) ensureWorkspaceWatcher(workspace, databaseFile, state);
   const now = Date.now();
   if (state.metadata && !state.dirty && now - state.lastFullScanAt < RECONCILE_INTERVAL_MS && options.force !== true) {
     return decorateMetadata(state, { ...state.metadata, cacheHit: true, checkedAt: new Date().toISOString() });
@@ -76,12 +76,13 @@ function repositoryIndexStatus(workspace, config = {}) {
   const databaseFile = repositoryIndexPath(config, workspace);
   const state = runtimeStates.get(databaseFile);
   if (!state) {
-    return { status: 'idle', dirty: true, active: false, pendingPathCount: 0, lastError: null, lastFullScanAt: null, lastReconciledAt: null, metadata: null };
+    return { status: 'idle', dirty: true, active: false, watching: false, pendingPathCount: 0, lastError: null, lastFullScanAt: null, lastReconciledAt: null, metadata: null };
   }
   return {
     status: state.status,
     dirty: state.dirty,
     active: activeBuilds.has(databaseFile),
+    watching: Boolean(state.watcher),
     pendingPathCount: state.pendingPaths.size,
     lastError: state.lastError,
     lastFullScanAt: isoTime(state.lastFullScanAt),
