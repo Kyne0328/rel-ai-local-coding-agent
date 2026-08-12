@@ -395,13 +395,18 @@ async function measurePassiveRouteStability(win, mcpSession, navigationCounts, r
 async function exerciseNavigationControls(win, failures) {
   const scenarios = [
     { selector: '.nav a[data-nav-id="workspaces"]', hash: '#workspaces', ready: `document.querySelector('.workspace-validation-preferences')` },
-    { selector: '.application-nav a[data-nav-id="settings"]', hash: '#settings', ready: `document.querySelector('.settings-shell') && !document.querySelector('.settings-loading')` },
-    { selector: '.settings-nav-button[data-sub-page="application"]', hash: '#settings/application', ready: `document.querySelector('.settings-shell') && !document.querySelector('.settings-loading')` },
-    { selector: '.settings-nav-button[data-sub-page="advanced"]', hash: '#settings/advanced', ready: `document.querySelector('.settings-shell') && !document.querySelector('.settings-loading')` },
-    { selector: '.settings-nav-button[data-sub-page="about"]', hash: '#settings/about', ready: `document.querySelector('.settings-shell') && !document.querySelector('.settings-loading')` }
+    { opener: '[data-nav-accordion="system"] > summary', selector: '[data-nav-accordion="system"] .sidebar-subnav a[data-nav-id="connection"]', hash: '#connection', ready: `document.querySelector('.system-shell')` },
+    { opener: '[data-nav-accordion="settings"] > summary', selector: '[data-nav-accordion="settings"] .sidebar-subnav a[data-nav-id="preferences"]', hash: '#settings', ready: `document.querySelector('.settings-shell') && !document.querySelector('.settings-loading')` },
+    { selector: '[data-nav-accordion="settings"] .sidebar-subnav a[data-nav-id="application"]', hash: '#settings/application', ready: `document.querySelector('.settings-shell') && !document.querySelector('.settings-loading')` },
+    { selector: '[data-nav-accordion="settings"] .sidebar-subnav a[data-nav-id="advanced"]', hash: '#settings/advanced', ready: `document.querySelector('.settings-shell') && !document.querySelector('.settings-loading')` },
+    { selector: '[data-nav-accordion="settings"] .sidebar-subnav a[data-nav-id="about"]', hash: '#settings/about', ready: `document.querySelector('.settings-shell') && !document.querySelector('.settings-loading')` }
   ];
   const results = [];
   for (const scenario of scenarios) {
+    if (scenario.opener) {
+      await win.webContents.executeJavaScript(`document.querySelector(${JSON.stringify(scenario.opener)})?.click()`);
+      await waitFor(win, `document.querySelector(${JSON.stringify(scenario.opener)})?.parentElement?.open === true`);
+    }
     const hitTarget = await win.webContents.executeJavaScript(`(() => {
       const control = document.querySelector(${JSON.stringify(scenario.selector)});
       if (!control) return null;

@@ -21,7 +21,7 @@ import { sendJson, sendHtml, sendSse, readJsonBody, contentTypeForStaticAsset, j
 import { mcpConnectionManager } from '../mcp/connectionManager.js';
 import { buildToolManifest } from '../mcp/toolManifest.js';
 import { readMcpAuthenticationStatus } from '../mcp/authenticationStatus.js';
-import { WORK_NAV_ITEMS, APPLICATION_NAV_ITEMS, MOBILE_NAV_ITEMS } from '../ui/navigation-catalog.js';
+import { WORK_NAV_ITEMS, APPLICATION_NAV_ITEMS, MOBILE_NAV_ITEMS, SETTINGS_NAV_ITEMS, SYSTEM_NAV_ITEMS } from '../ui/navigation-catalog.js';
 import { onWorkspaceStateChange, workspaceStateRevision } from '../workspaceState.js';
 import { readCachedStaticAsset } from './dashboardAssets.js';
 
@@ -32,6 +32,13 @@ const DASHBOARD_SHARED_MODULES = Object.freeze({
 });
 function renderDashboardNav(items) {
   return items.map((item) => `<a href="${item.href}" data-nav-id="${item.id}" aria-label="${item.label}" title="${item.label}"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">${item.icon}</svg><span class="nav-label">${item.label}</span></a>`).join("");
+}
+
+function renderDashboardAccordion(parent, items) {
+  return `<details class="sidebar-accordion" data-nav-accordion="${parent.id}">
+    <summary aria-label="${parent.label}" title="${parent.label}"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">${parent.icon}</svg><span class="nav-label">${parent.label}</span><svg class="sidebar-accordion-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg></summary>
+    <nav class="sidebar-subnav" aria-label="${parent.label} navigation">${renderDashboardNav(items)}</nav>
+  </details>`;
 }
 
 async function handleFavicon(ctx) {
@@ -322,15 +329,19 @@ function renderDashboardHtml(options, nonce) {
 ${renderDashboardWindowTitlebar()}
 <a href="#main" class="skip-link">Skip to content</a><div class="sr-only" id="routeAnnouncer" role="status" aria-live="polite" aria-atomic="true"></div>
 <div class="app-shell">
-  <aside class="sidebar">
-    <div class="brand"><div class="logo"><img src="/public/assets/relai-logo.png" alt="Rel.AI logo"></div><div><strong>Rel.AI MCP</strong><span>workspace control</span></div></div>
+  <aside class="sidebar" id="desktopSidebar">
+    <div class="brand">
+      <div class="brand-identity"><div class="logo"><img src="/public/assets/relai-logo.png" alt="Rel.AI logo"></div><div class="brand-copy"><strong>Rel.AI MCP</strong><span>workspace control</span></div></div>
+      <button class="sidebar-toggle" id="sidebarToggle" type="button" aria-controls="desktopSidebar" aria-expanded="true" aria-label="Minimize sidebar" title="Minimize sidebar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 7-5 5 5 5" /></svg></button>
+    </div>
     <div class="sidebar-group">
       <div class="sidebar-group-label">Work</div>
       <nav class="nav" aria-label="Work navigation">${renderDashboardNav(WORK_NAV_ITEMS)}</nav>
     </div>
     <div class="sidebar-group secondary-nav">
       <div class="sidebar-group-label">Application</div>
-      <nav class="nav application-nav" aria-label="Application navigation">${renderDashboardNav(APPLICATION_NAV_ITEMS)}</nav>
+      ${renderDashboardAccordion(APPLICATION_NAV_ITEMS[0], SYSTEM_NAV_ITEMS)}
+      ${renderDashboardAccordion(APPLICATION_NAV_ITEMS[1], SETTINGS_NAV_ITEMS)}
     </div>
     <div class="sidebar-note">This dashboard mirrors live MCP state.</div>
   </aside>

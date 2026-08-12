@@ -57,11 +57,11 @@ The checklist has one current action, supports dismissal, persists completion st
 1. System — `#system`
 2. Settings — `#settings`
 
-System owns Connection, Processes, Diagnostics, Tools, and Usage through its secondary rail. Direct hashes remain canonical for contextual navigation.
+System owns Connection, Processes, Diagnostics, Tools, and Usage through the desktop sidebar accordion. Settings uses the same desktop pattern; their in-page rails remain as a responsive fallback below the full desktop layout. Direct hashes remain canonical for contextual navigation.
 
 ### Mobile navigation
 
-The compact navigation keeps the top-level destinations that fit the narrow layout; System subpages remain reachable through their owning surfaces and the command palette.
+The compact navigation keeps the top-level destinations available in the desktop navigation model; System subpages remain reachable through their owning surface and the command palette.
 
 ## Route policy
 

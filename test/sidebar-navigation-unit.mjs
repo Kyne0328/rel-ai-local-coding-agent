@@ -1,0 +1,37 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { SETTINGS_NAV_ITEMS, SYSTEM_NAV_ITEMS } from '../src/ui/navigation-catalog.js';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
+
+for (const item of [...SYSTEM_NAV_ITEMS, ...SETTINGS_NAV_ITEMS]) {
+  assert.ok(item.icon, `${item.label} must keep an icon for the collapsed sidebar`);
+}
+
+const shell = read('src/http/dashboard.js');
+const bootstrap = read('src/http/dashboardShellChrome.js');
+const sidebar = read('src/ui/sidebar.js');
+const router = read('src/ui/router.js');
+const appCss = read('src/ui/styles/app.css');
+const settingsCss = read('src/ui/features/settings/styles.css');
+
+assert.match(shell, /renderDashboardAccordion\(APPLICATION_NAV_ITEMS\[0\], SYSTEM_NAV_ITEMS\)/);
+assert.match(shell, /renderDashboardAccordion\(APPLICATION_NAV_ITEMS\[1\], SETTINGS_NAV_ITEMS\)/);
+assert.match(shell, /id="sidebarToggle"[\s\S]*aria-controls="desktopSidebar"/);
+assert.match(bootstrap, /relai_sidebar_collapsed/);
+assert.match(sidebar, /localStorage\.setItem\(SIDEBAR_STORAGE_KEY/);
+assert.match(sidebar, /aria-expanded/);
+assert.match(sidebar, /other\.open = false/);
+assert.match(router, /anchor\.closest\('\.sidebar-subnav'\)/);
+assert.match(router, /details\.dataset\.navAccordion === owner/);
+assert.match(router, /if \(active\) details\.open = true/);
+assert.match(appCss, /:root\[data-sidebar="collapsed"\]\s*\{\s*--sidebar-width:\s*82px;/);
+assert.match(appCss, /:root\[data-sidebar="collapsed"\][\s\S]*\.nav-icon\s*\{[^}]*size-5/s);
+assert.match(appCss, /\.sidebar-accordion > summary/);
+assert.match(appCss, /\.sidebar-subnav/);
+assert.match(settingsCss, /@media \(min-width: 981px\)[\s\S]*\.settings-rail\s*\{\s*display:\s*none;/s);
+
+console.log('Sidebar accordion and collapsed navigation contracts passed.');

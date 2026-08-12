@@ -12,8 +12,10 @@ import { initWindowChrome } from './ui/window-chrome.js';
 import { createDashboardClock } from './ui/clock.js';
 import { createSnapshotGate } from './ui/snapshot-order.js';
 import { initUpdateAvailableModal } from './ui/update-available-modal.js';
+import { initSidebar } from './ui/sidebar.js';
 
 initUiPreferences();
+initSidebar();
 
 const launchParams = new URLSearchParams(location.search);
 const urlToken = launchParams.get('token') || '';
