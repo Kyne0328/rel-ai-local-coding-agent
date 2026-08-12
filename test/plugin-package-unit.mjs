@@ -16,6 +16,8 @@ const packDir = path.join(temp, 'pack');
 const extractDir = path.join(temp, 'extract');
 const installDir = path.join(temp, 'installed', 'rel-ai-mcp');
 const expectedSkills = ['rel-ai-debugging', 'rel-ai-dev-process', 'rel-ai-investigation', 'rel-ai-planning', 'rel-ai-verification', 'rel-ai-workflow'];
+const MAX_COMPRESSED_PLUGIN_BYTES = 15_000_000;
+const MAX_UNPACKED_PLUGIN_BYTES = 120_000_000;
 fs.mkdirSync(packDir, { recursive: true });
 fs.mkdirSync(extractDir, { recursive: true });
 
@@ -41,8 +43,8 @@ try {
   const parsedMetadata = JSON.parse(packed.stdout);
   const metadata = Array.isArray(parsedMetadata) ? parsedMetadata[0] : Object.values(parsedMetadata)[0];
   assert.ok(metadata?.filename, `npm pack returned no artifact metadata: ${packed.stdout}`);
-  assert.ok(Number(metadata.size) < 6_000_000, `compressed plugin package is ${metadata.size} bytes`);
-  assert.ok(Number(metadata.unpackedSize) < 35_000_000, `unpacked plugin package is ${metadata.unpackedSize} bytes`);
+  assert.ok(Number(metadata.size) < MAX_COMPRESSED_PLUGIN_BYTES, `compressed plugin package is ${metadata.size} bytes`);
+  assert.ok(Number(metadata.unpackedSize) < MAX_UNPACKED_PLUGIN_BYTES, `unpacked plugin package is ${metadata.unpackedSize} bytes`);
   const artifact = path.join(packDir, metadata.filename);
   assert.ok(fs.existsSync(artifact), 'npm pack artifact must exist');
 
@@ -60,7 +62,7 @@ try {
   ];
   const packedFiles = new Set(metadata.files.map(item => item.path.replaceAll('\\', '/')));
   for (const relative of expected) assert.ok(packedFiles.has(relative), `artifact missing ${relative}`);
-  for (const dependency of ['@modelcontextprotocol/server', '@opentelemetry/api']) {
+  for (const dependency of ['@modelcontextprotocol/server', '@opentelemetry/api', 'tree-sitter-wasms', 'web-tree-sitter']) {
     assert.ok(
       fs.existsSync(path.join(builtRoot, 'node_modules', dependency, 'package.json')),
       `artifact must bundle runtime dependency ${dependency}`
