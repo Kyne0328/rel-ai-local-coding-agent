@@ -33,7 +33,6 @@ async function callTool(name, args = {}, context = {}) {
   const publicArgs = args || {};
   let requestedTaskId = '';
   let effectiveArgs = publicArgs;
-  let runtimeArgs = effectiveArgs;
   let operationName = String(name || '');
   let workspaceResolution, knownTask = null;
   let finishActivity = null;
@@ -105,9 +104,7 @@ async function callTool(name, args = {}, context = {}) {
     const execution = await executeToolCall({
       config, name, executionName: operationName, effectiveArgs, context, finishActivity, definition, started
     });
-    runtimeArgs = execution.executionArgs || effectiveArgs;
-    const rawValue = execution.value;
-    const value = logicalWorkspaceResult(rawValue, effectiveArgs, runtimeArgs);
+    const value = execution.value;
     sessionStart = execution.sessionStart;
     const valueOk = value?.ok !== false;
     if (!valueOk) analyticsFailureCode = analyticsErrorCodeFromValue(value);
@@ -120,8 +117,8 @@ async function callTool(name, args = {}, context = {}) {
       metadata: { ...extraAudit, internalOperation: operationName, publicAction: resolved.action || undefined }
     });
     applyCautionAudit(extraAudit, operationName, effectiveArgs || {}, value, config);
-    invalidateSessionCacheForCall(config, operationName, runtimeArgs || {});
-    signalRepositoryIntelligenceMutation(config, operationName, runtimeArgs || {}, rawValue);
+    invalidateSessionCacheForCall(config, operationName, effectiveArgs || {});
+    signalRepositoryIntelligenceMutation(config, operationName, effectiveArgs || {}, value);
     const workId = finishActivity?.taskId || requestedTaskId;
     const evidenceDraft = workId ? buildWorkflowEvidenceReceipt({
       tool: operationName,
@@ -341,22 +338,6 @@ function signalRepositoryIntelligenceMutation(config, operationName, args, value
     const workspace = resolveWorkspace(config, alias);
     repositoryIntelligence.noteMutation(workspace, config, broadMutation ? [] : (changedFiles.length ? changedFiles : restoreMutation));
   } catch {}
-}
-
-function logicalWorkspaceResult(value, logicalArgs, executionArgs) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
-  const logical = String(logicalArgs?.workspace || '').trim();
-  const physical = String(executionArgs?.workspace || '').trim();
-  if (!logical || !physical || logical === physical || value.workspace == null) return value;
-  if (typeof value.workspace === 'string') {
-    return value.workspace === physical ? { ...value, workspace: logical } : value;
-  }
-  if (value.workspace && typeof value.workspace === 'object' && !Array.isArray(value.workspace)) {
-    return String(value.workspace.alias || '') === physical
-      ? { ...value, workspace: { ...value.workspace, alias: logical } }
-      : value;
-  }
-  return value;
 }
 
 function hasWorkspaceChanges(value) {
