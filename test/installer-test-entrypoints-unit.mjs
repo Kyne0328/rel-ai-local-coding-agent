@@ -50,6 +50,11 @@ assert.match(packageWrapper, /--prepackaged', prepackaged/);
 assert.match(packageWrapper, /--prepackaged', portablePrepackaged/);
 assert.match(packageWrapper, /await Promise\.all/);
 assert.match(packageWrapper, /fs\.cpSync\(prepackaged, portablePrepackaged/);
+assert.match(
+  packageWrapper,
+  /fs\.cpSync\(prepackaged, unpackedPath, \{[\s\S]*?verbatimSymlinks:\s*spec\.platform === 'darwin'[\s\S]*?\}\);/,
+  'promoting a macOS app must preserve relative framework symlinks so the copied bundle remains valid after staging is removed'
+);
 assert.match(packageWrapper, /nsis-output/);
 assert.match(packageWrapper, /portable-output/);
 assert.match(packageWrapper, /linux-output/);
