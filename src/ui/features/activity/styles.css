@@ -88,12 +88,15 @@
   .activity-session-actions { @apply grid; grid-template-columns: minmax(0,1fr); }
 }
 
-@media (max-width: 240px) {
+@media (max-width: 420px) {
   .activity-table .activity-col-time,
   .activity-table .activity-col-action,
   .activity-table .activity-time-column,
   .activity-table .activity-action-column { display: none; }
   .activity-col-message { width: 100%; }
+}
+
+@media (max-width: 240px) {
   .activity-message-mobile-meta { flex-wrap: wrap; gap: 4px; }
   .activity-page .data-table th, .activity-page .data-table td { padding-inline: 6px; }
 }
