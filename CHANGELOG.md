@@ -9,6 +9,7 @@
 ### Search and contract reliability
 - **Bound broad repository searches by useful output instead of exhaustive counting.** Stop streamed text search after one additional visible match proves `maxResults` is truncated, extend the search budget to 25 seconds, and return useful partial matches instead of failing the whole call when that budget is reached. Truncated observability reports `matchCount` as an explicit lower bound (`at least N`) rather than implying an exact total.
 - **Refresh stale Secure Tunnel, runtime-surface, and Activity contract tests.** Keep tests aligned with the current Tunnel + No authentication workflow, canonical release-manifest tool metadata, and the current live Activity controller/CSS contract.
+- **Keep discovery tests on canonical MCP metadata.** Remove the last dependencies on the deleted cloud contract manifest and hard-coded 37/12 surface values so command/process guidance, status metadata, and stdio discovery follow the current public schema and include newly added tools such as `relai_ui` automatically.
 
 ### MCP startup reliability
 - **Keep stdio discovery off execution-only dependency paths.** Load tool execution, managed-process cleanup, browser automation, and workspace-status/Repository Intelligence modules only when those capabilities are actually used, so initial MCP discovery and `tools/list` no longer eagerly initialize Playwright or SQLite-backed repository intelligence.

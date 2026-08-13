@@ -5,12 +5,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { startMcpClient } from './helpers/mcp-client.mjs';
+import { activeToolCount, activeToolNames } from './helpers/tool-surface.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const expectedNames = [
-  'relai_work', 'relai_snapshot', 'relai_read', 'relai_search', 'relai_inspect', 'relai_edit',
-  'relai_exec', 'relai_process', 'relai_worktree', 'relai_validate', 'relai_changes', 'relai_publish'
-];
 const variants = [
   { name: 'canonical', extra: {} },
   { name: 'stale-profile-field', extra: { toolProfile: 'core' } }
@@ -31,15 +28,15 @@ for (const variant of variants) {
   try {
     client.initialize(1);
     const discovery = await client.waitFor(1);
-    assert.equal(discovery.result?.capabilities?.experimental?.relai?.toolCount, 12);
+    assert.equal(discovery.result?.capabilities?.experimental?.relai?.toolCount, activeToolCount);
     client.send(2, 'tools/list', {});
     const response = await client.waitFor(2);
     const names = response.result?.tools?.map(tool => tool.name) || [];
-    assert.deepEqual(names, expectedNames);
+    assert.deepEqual(names, activeToolNames);
   } finally {
     await client.close();
     fs.rmSync(temp, { recursive: true, force: true });
   }
 }
 
-console.log('The unified 12-tool MCP surface is always discovered; stale profile fields have no effect.');
+console.log(`The unified ${activeToolCount}-tool MCP surface is always discovered; stale profile fields have no effect.`);

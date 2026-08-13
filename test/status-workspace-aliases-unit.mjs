@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { relaiStatus } from "../src/tools/status.js";
+import { getToolSurfaceManifest } from '../src/tools/schema.js';
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-status-aliases-'));
 const previousStateDir = process.env.REL_AI_MCP_STATE_DIR;
 process.env.REL_AI_MCP_STATE_DIR = stateDir;
@@ -20,9 +21,10 @@ const config = {
 try {
   const status = await relaiStatus(config);
   assert.equal(status.workspaceCount, 4);
-  assert.equal(status.toolSurface.toolSurfaceVersion, 37);
-  assert.equal(status.toolSurface.toolCount, 12);
-  assert.deepEqual(status.toolSurface.deprecations, []);
+  const expectedSurface = getToolSurfaceManifest();
+  assert.equal(status.toolSurface.toolSurfaceVersion, expectedSurface.toolSurfaceVersion);
+  assert.equal(status.toolSurface.toolCount, expectedSurface.toolCount);
+  assert.deepEqual(status.toolSurface.deprecations, expectedSurface.deprecations);
   assert.deepEqual(status.workspaceAliases, ['api', 'app', 'worker', 'zebra']);
   assert.equal(status.workspace, null);
   assert.equal(status.runtimeCompatibility.status, 'repository_unavailable');
