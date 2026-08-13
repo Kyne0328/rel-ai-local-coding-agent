@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.25.1] — 2026-08-13
+
+### Process reliability
+- **Preserve empty managed-process lists through connector compaction so relai_process list satisfies its output contract when no managed process is running.**
+- **Add regression coverage for the empty process-list contract.**
+
+Bump root/electron/status UI/lockfiles to 0.25.1.
+
 ## [0.25.0] — 2026-08-08
 
 ### ChatGPT connection reliability
