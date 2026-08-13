@@ -125,11 +125,11 @@ function compactForConnector(name, value, args = {}) {
         mutationTracking: value.changedFiles?.length ? value.mutationTracking : undefined
       });
     case 'relai_process_list':
-      return pruneEmpty({
+      return {
         ok: value.ok,
         processes: Array.isArray(value.processes) ? value.processes.map(compactProcessMetadata) : value.processes,
         count: value.count
-      });
+      };
     case 'relai_process_read':
       return pruneEmpty({ ...compactProcessMetadata(value), stdout: value.stdout, stderr: value.stderr });
     case 'relai_repo_snapshot': {

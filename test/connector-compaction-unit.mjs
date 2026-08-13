@@ -247,6 +247,13 @@ const processList = compactForConnector('relai_process_list', {
 assert.equal(processList.processes[0].commandSummary, undefined);
 assert.equal(processList.processes[0].workspaceId, undefined);
 assert.equal(processList.processes[0].kind, 'service');
+const emptyProcessList = compactForConnector('relai_process_list', {
+  ok: true,
+  count: 0,
+  processes: []
+}, {});
+assert.deepEqual(emptyProcessList.processes, [], 'empty process lists must preserve the required processes array');
+assert.equal(emptyProcessList.count, 0);
 const processDelta = compactForConnector('relai_process_read', {
   ok: true,
   processId: 'proc_example',
