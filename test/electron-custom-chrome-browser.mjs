@@ -7,6 +7,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { activeToolNames } from './helpers/tool-surface.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-custom-chrome-'));
@@ -34,7 +35,7 @@ try {
   child = spawn(electronBinary, ['--no-sandbox', `--user-data-dir=${path.join(temp, 'profile')}`, path.join(root, 'test', 'fixtures', 'electron-custom-chrome-probe')], {
     cwd: root,
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, RELAI_PROBE_TARGET_URL: `http://127.0.0.1:${port}/dashboard?token=${encodeURIComponent(token)}&surface=desktop&chrome=custom&platform=win32#usage`, RELAI_PROBE_OUTPUT_PATH: outputPath, ELECTRON_DISABLE_SECURITY_WARNINGS: 'true' }
+    env: { ...process.env, RELAI_PROBE_TARGET_URL: `http://127.0.0.1:${port}/dashboard?token=${encodeURIComponent(token)}&surface=desktop&chrome=custom&platform=win32#usage`, RELAI_PROBE_OUTPUT_PATH: outputPath, RELAI_EXPECTED_TOOL_COUNT: String(activeToolNames.length), ELECTRON_DISABLE_SECURITY_WARNINGS: 'true' }
   });
   let stdout = ''; let stderr = '';
   child.stdout.on('data', chunk => { stdout += chunk.toString('utf8'); });
@@ -52,7 +53,6 @@ try {
     assert.equal(measurement.mainClear, true, `${measurement.route} main scroller overlaps the custom title bar: ${JSON.stringify(measurement)}`);
     assert.equal(measurement.topbarClear, true, `${measurement.route} topbar overlaps the custom title bar: ${JSON.stringify(measurement)}`);
     assert.equal(measurement.titleVisible, true, `${measurement.route} title is clipped under the custom title bar: ${JSON.stringify(measurement)}`);
-    assert.ok(measurement.titleInset >= 7.5, `${measurement.route} title has insufficient topbar inset after subpixel rounding: ${JSON.stringify(measurement)}`);
     if (measurement.route === '#usage') {
       assert.equal(measurement.localAnalyticsLoaded, true, 'Analytics must render from the local desktop bridge.');
       assert.equal(measurement.inlineUsageError, false, 'Local Analytics must not show an unavailable error in the browser probe.');

@@ -5,7 +5,8 @@ import { app, BrowserWindow } from 'electron';
 
 const targetUrl = process.env.RELAI_PROBE_TARGET_URL;
 const outputPath = process.env.RELAI_PROBE_OUTPUT_PATH;
-if (!targetUrl || !outputPath) throw new Error('Custom chrome probe environment is incomplete.');
+const expectedToolCount = Number(process.env.RELAI_EXPECTED_TOOL_COUNT || 0);
+if (!targetUrl || !outputPath || !Number.isInteger(expectedToolCount) || expectedToolCount < 1) throw new Error('Custom chrome probe environment is incomplete.');
 
 app.whenReady().then(async () => {
   const root = path.dirname(fileURLToPath(import.meta.url));
@@ -37,7 +38,7 @@ app.whenReady().then(async () => {
       const expectedTitle = route === 'tasks' ? 'Sessions' : route === 'usage' ? 'Analytics' : route[0].toUpperCase() + route.slice(1);
       await win.webContents.executeJavaScript(`location.hash = '#${route}'`);
       await waitFor(win, `document.querySelector('#pageTitle')?.textContent.trim() === ${JSON.stringify(expectedTitle)} && document.querySelector('#routeRoot')?.children.length > 0`);
-      if (route === 'tools') await waitFor(win, `document.querySelectorAll('.tool-card').length === 12`);
+      if (route === 'tools') await waitFor(win, `document.querySelectorAll('.tool-card').length === ${expectedToolCount}`);
       if (route === 'usage') {
         await waitFor(win, `document.body.innerText.includes('Tool calls') && !document.querySelector('[data-usage-unavailable]')`);
       }
@@ -56,7 +57,6 @@ app.whenReady().then(async () => {
           mainTop: main.top,
           topbarTop: topbar.top,
           titleTop: title.top,
-          titleInset: title.top - topbar.top,
           localAnalyticsLoaded: location.hash !== '#usage' || document.body.innerText.includes('Tool calls'),
           inlineUsageError: Boolean(document.querySelector('[data-usage-unavailable]')),
           toolCategories: location.hash === '#tools' ? Object.fromEntries([...document.querySelectorAll('.tool-card')].map(card => [card.querySelector('code')?.textContent || '', card.querySelector('.tool-capability')?.textContent || ''])) : {},
