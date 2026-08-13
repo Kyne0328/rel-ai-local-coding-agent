@@ -106,8 +106,8 @@ try {
   assert.equal(result.connection.detailsDisclosure, true);
   assert.ok(['A', 'BUTTON'].includes(result.connection.primaryTag));
   assert.ok(result.connection.navigationLabels.includes('Work navigation'));
-  assert.ok(result.connection.navigationLabels.includes('Application navigation'));
   assert.ok(result.connection.navigationLabels.includes('System navigation'));
+  assert.ok(result.connection.navigationLabels.includes('Settings navigation'));
   assert.equal(result.usage.overviewVisible, true);
   assert.equal(result.usage.localAggregate, true);
   assert.equal(result.usage.modalVisible, false);
