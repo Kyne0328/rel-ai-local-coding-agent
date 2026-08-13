@@ -329,7 +329,11 @@ function promoteReleaseOutput({ stagingRoot, destinationRoot, spec, requiredArti
     console.warn(`[electron-package] Existing dist/${spec.unpackedDirectory} is locked and was preserved. Current unpacked output will be written to ${path.relative(root, unpackedPath)}. ${messageOf(error)}`);
   }
   fs.mkdirSync(path.dirname(unpackedPath), { recursive: true });
-  fs.cpSync(prepackaged, unpackedPath, { recursive: true, force: true });
+  fs.cpSync(prepackaged, unpackedPath, {
+    recursive: true,
+    force: true,
+    verbatimSymlinks: spec.platform === 'darwin'
+  });
 
   const marker = {
     schemaVersion: 2,
