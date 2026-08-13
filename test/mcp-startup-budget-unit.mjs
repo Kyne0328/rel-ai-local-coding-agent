@@ -10,7 +10,11 @@ import { startMcpClient } from './helpers/mcp-client.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-startup-budget-'));
 const configPath = path.join(temp, 'config.json');
-const coldBudgetMs = Number(process.env.REL_AI_MCP_COLD_START_BUDGET_MS || 1500);
+// Cold discovery includes OS process creation. Windows process startup has materially
+// higher variance than POSIX hosts, so keep a platform-specific ceiling while the
+// warm in-process tools/list budget remains strict and platform-independent.
+const defaultColdBudgetMs = process.platform === 'win32' ? 3500 : 1500;
+const coldBudgetMs = Number(process.env.REL_AI_MCP_COLD_START_BUDGET_MS || defaultColdBudgetMs);
 const warmListBudgetMs = Number(process.env.REL_AI_MCP_WARM_LIST_BUDGET_MS || 20);
 fs.writeFileSync(configPath, JSON.stringify({
   version: 3,

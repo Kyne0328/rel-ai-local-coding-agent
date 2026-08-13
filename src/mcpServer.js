@@ -9,11 +9,10 @@ import {
 } from './mcp/protocol.js';
 import { toolResult } from './mcp/results.js';
 import { PUBLIC_MCP_SERVER_INSTRUCTIONS } from './mcp/serverInstructions.js';
-import { invokeRelaiTool } from './mcp/toolInvocation.js';
 import { validateToolOutput } from './tools/outputValidation.js';
 import { packageMetadata as pkg } from './packageMetadata.js';
 import { listResources, readResource, resourceCacheHint } from './resources.js';
-import { getPublicToolSchemas, getToolSurfaceManifest } from './tools.js';
+import { getPublicToolSchemas, getToolSurfaceManifest } from './tools/schema.js';
 
 const MCP_SERVER_INFO = Object.freeze({
   name: pkg.name,
@@ -82,15 +81,18 @@ function createRelaiMcpServer(options = {}) {
 }
 
 function registerTool(server, config, definition, requestStateCodec, options) {
-  server.registerTool(definition.name, toolRegistration(definition), async (args, context) => invokeRelaiTool({
-    config,
-    name: definition.name,
-    args: args || {},
-    context: toolContext(context, options),
-    approvalContext: context,
-    requestStateCodec,
-    validateOutput: output => validateToolOutput(config, definition.name, args || {}, output)
-  }));
+  server.registerTool(definition.name, toolRegistration(definition), async (args, context) => {
+    const { invokeRelaiTool } = await import('./mcp/toolInvocation.js');
+    return invokeRelaiTool({
+      config,
+      name: definition.name,
+      args: args || {},
+      context: toolContext(context, options),
+      approvalContext: context,
+      requestStateCodec,
+      validateOutput: output => validateToolOutput(config, definition.name, args || {}, output)
+    });
+  });
 }
 
 function toolRegistration(definition) {

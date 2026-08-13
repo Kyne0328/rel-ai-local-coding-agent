@@ -2,8 +2,7 @@ import * as path from 'node:path';
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import { readConfig, publicConfigSummary, allWorkspaceAliases, resolveWorkspace } from "./config.js";
-import { getToolSurfaceManifest } from "./tools.js";
-import { workspaceProfile, workspaceTree, workspaceInspect, workspaceList } from "./tools/status.js";
+import { getToolSurfaceManifest } from "./tools/schema.js";
 import { packageMetadata as pkg } from './packageMetadata.js';
 import { MCP_PROTOCOL_VERSION } from './mcp/protocol.js';
 
@@ -33,14 +32,15 @@ function listResources() {
   };
 }
 
-function readResource(uri) {
+async function readResource(uri) {
   const config = readConfig();
   const parsed = parseRelaiUri(uri);
-  if (parsed.kind === 'server' && parsed.name === 'help') return contents(uri, MIME_MARKDOWN, helpMarkdown(config), config);
   if (parsed.kind === 'server' && parsed.name === 'config') return contents(uri, MIME_JSON, publicConfigSummary(config), config);
   if (parsed.kind === 'server' && parsed.name === 'tool-surface') return contents(uri, MIME_JSON, getToolSurfaceManifest(config), config);
-  if (parsed.kind === 'server' && parsed.name === 'workspaces') return contents(uri, MIME_JSON, workspaceList(config), config);
-  if (parsed.kind === 'workspace') {
+  if (parsed.kind === 'server' || parsed.kind === 'workspace') {
+    const { workspaceProfile, workspaceTree, workspaceInspect, workspaceList } = await import('./tools/status.js');
+    if (parsed.kind === 'server' && parsed.name === 'help') return contents(uri, MIME_MARKDOWN, helpMarkdown(config, workspaceList(config)), config);
+    if (parsed.kind === 'server' && parsed.name === 'workspaces') return contents(uri, MIME_JSON, workspaceList(config), config);
     const args = { workspace: parsed.workspace, maxEntries: 800 };
     if (parsed.name === 'inspect') return contents(uri, MIME_JSON, workspaceInspect(config, args), config);
     if (parsed.name === 'profile') return contents(uri, MIME_JSON, workspaceProfile(config, args), config);
@@ -105,8 +105,8 @@ function stableJson(value) {
   return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
 }
 
-function helpMarkdown(config) {
-  const workspaces = workspaceList(config).workspaces.map(item => `- ${item.alias}: ${item.path}`).join('\n') || '- No workspaces are configured yet.';
+function helpMarkdown(config, workspaceSummary) {
+  const workspaces = (workspaceSummary?.workspaces || []).map(item => `- ${item.alias}: ${item.path}`).join('\n') || '- No workspaces are configured yet.';
   return `# Rel.AI MCP connector
 
 Rel.AI targets MCP ${MCP_PROTOCOL_VERSION}. Every request carries its own protocol version, client identity, and capabilities; no MCP transport session is created or used as task identity.
