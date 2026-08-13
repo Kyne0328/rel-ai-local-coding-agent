@@ -185,7 +185,7 @@ app.whenReady().then(async () => {
     })()`);
 
     await win.webContents.executeJavaScript(`location.hash = '#settings'`);
-    await waitFor(win, `document.querySelectorAll('.settings-nav-button').length === 5 && document.querySelector('.appearance-preview')`);
+    await waitFor(win, `document.querySelectorAll('.settings-nav-button').length === 4 && document.querySelector('.appearance-preview')`);
     const settings = await win.webContents.executeJavaScript(`(async () => {
       const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       const order = [...document.querySelectorAll('.settings-nav-button')].map(button => button.textContent.trim());
