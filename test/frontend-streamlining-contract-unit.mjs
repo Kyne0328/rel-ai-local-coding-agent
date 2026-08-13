@@ -16,7 +16,7 @@ const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 assert.deepEqual(WORK_NAV_ITEMS.map(item => item.id), ['home', 'tasks', 'workspaces', 'activity']);
 assert.deepEqual(SYSTEM_NAV_ITEMS.map(item => item.id), ['connection', 'processes', 'diagnostics', 'tools', 'usage']);
 assert.deepEqual(APPLICATION_NAV_ITEMS.map(item => item.id), ['system', 'settings']);
-assert.deepEqual(MOBILE_NAV_ITEMS.map(item => item.id), ['home', 'tasks', 'workspaces', 'system', 'settings']);
+assert.deepEqual(MOBILE_NAV_ITEMS.map(item => item.id), ['home', 'tasks', 'workspaces', 'activity', 'system', 'settings']);
 assert.deepEqual(SETTINGS_NAV_ITEMS.map(item => item.label), ['Preferences', 'Application', 'Advanced', 'About']);
 assert.equal(desktopNavigationOwner('connection'), 'system');
 assert.equal(desktopNavigationOwner('diagnostics'), 'system');
@@ -90,7 +90,7 @@ assert.equal(fs.existsSync(path.join(root, 'src/ui/features/settings/tools-valid
 assert.match(workspaceMenuHtml([], ''), /aria-label="Workspace scope: All workspaces"/);
 assert.match(read('src/ui/features/settings/diagnostics.js'), /value: 'all', label: 'Everything'/);
 const appCss = read('src/ui/styles/app.css');
-assert.match(appCss, /mobile-nav[^}]*grid-template-columns:\s*repeat\(5,minmax\(0,1fr\)\)/s, 'five top-level mobile destinations must share one row before the compact breakpoint');
+assert.match(appCss, /mobile-nav[^}]*grid-template-columns:\s*repeat\(6,minmax\(52px,1fr\)\)/s, 'six top-level mobile destinations must share the responsive navigation row');
 for (const selector of ['.settings-shell', '.connection-page', '.tools-grid', '.diagnostic-page', '.workspace-grid', '.processes-card']) {
   assert.doesNotMatch(appCss, new RegExp(selector.replace('.', '\\.')), `app.css still owns feature selector ${selector}`);
 }
