@@ -36,10 +36,9 @@ import {
   failNativeToolTask,
   nativeToolTaskSignal
 } from './nativeToolTasks.js';
-import { approvalRequirement } from './approval.js';
 import { createRelaiRequestStateCodec } from './context.js';
-import { invokeRelaiTool } from './toolInvocation.js';
-import { getToolDefinition, getToolSchemas } from '../tools.js';
+import { catalogApprovalRequirement, resolveToolOperation } from '../tools/actionCatalog.js';
+import { getToolSchemas } from '../tools/schema.js';
 import { validateToolOutput } from '../tools/outputValidation.js';
 import { principalIdentity } from './principal.js';
 import { MCP_SERVER_INFO } from '../mcpServer.js';
@@ -60,7 +59,7 @@ async function handleTransportTaskRequest(config, message, options = {}) {
   if (method !== 'tools/call' || message.id == null) return null;
 
   const name = String(message.params?.name || '');
-  const definition = getToolDefinition(name, config, message.params?.arguments || {});
+  const definition = transportToolDefinition(name, message.params?.arguments || {});
   if (!shouldInterceptTool(definition, message.params?.arguments)) return null;
 
   const validated = await validateToolArguments(config, name, message.params?.arguments);
@@ -120,7 +119,16 @@ async function handleTransportTaskRequest(config, message, options = {}) {
 function shouldInterceptTool(definition, args = {}) {
   return definition?.behavior?.executionClass === 'native_task_eligible'
     && definition?.behavior?.longRunning === true
-    && !approvalRequirement(definition.name, args || {});
+    && !catalogApprovalRequirement(definition.name, args || {});
+}
+
+function transportToolDefinition(name, args = {}) {
+  const resolution = resolveToolOperation(name, args);
+  if (!resolution) return null;
+  return {
+    name: String(name || ''),
+    behavior: resolution.catalogEntry?.behavior || resolution.definition?.behavior || null
+  };
 }
 
 function isTransportTaskRequestCandidate(config, message) {
@@ -130,7 +138,7 @@ function isTransportTaskRequestCandidate(config, message) {
   if (method !== 'tools/call') return false;
   const name = String(message?.params?.name || '');
   try {
-    const definition = getToolDefinition(name, config, message?.params?.arguments || {});
+    const definition = transportToolDefinition(name, message?.params?.arguments || {});
     return shouldInterceptTool(definition, message?.params?.arguments);
   } catch {
     // Invalid tool arguments belong to the SDK's normal schema-validation path.
@@ -251,6 +259,7 @@ function startNativeToolExecution(config, message, args, options) {
 }
 
 async function executeToolResult(config, name, args, options = {}) {
+  const { invokeRelaiTool } = await import('./toolInvocation.js');
   return invokeRelaiTool({
     config,
     name,
