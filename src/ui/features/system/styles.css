@@ -101,7 +101,7 @@
 .diagnostic-copy h3 { @apply text-[13px]; }
 .diagnostic-copy p { @apply mt-2 text-[11px] leading-5; color: var(--ui-text-secondary); }
 .diagnostic-copy details { @apply mt-3; }
-.diagnostic-copy summary { @apply cursor-pointer text-[11px] font-semibold; }
+.diagnostic-copy summary { @apply flex min-h-11 cursor-pointer items-center text-[11px] font-semibold; }
 .diagnostic-copy pre { @apply mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-lg p-3 text-[11px]; background: var(--ui-canvas); border: 1px solid var(--ui-border-subtle); }
 .diagnostic-context { @apply mt-3 grid overflow-hidden rounded-lg; border: 1px solid var(--ui-border-subtle); }
 .diagnostic-context-row { @apply grid items-center gap-3 border-b px-3 py-2 last:border-b-0; grid-template-columns: auto auto minmax(0,1fr); border-color: var(--ui-border-subtle); }

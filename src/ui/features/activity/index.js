@@ -538,9 +538,7 @@ function renderActivityRow(entry) {
   const relativeTime = timeAgo(timestamp) || '—';
   const row = document.createElement('tr');
   row.className = 'clickable-row';
-  row.tabIndex = 0;
   if (_requestedEventId && activityEventId(entry) === _requestedEventId) row.classList.add('activity-requested-row');
-  row.setAttribute('aria-label', activityActionLabel(entry));
   row.innerHTML = `
     <td class="activity-time-column nowrap small" title="${esc(absoluteTime)}" data-clock-relative="${esc(timestamp)}">${esc(relativeTime)}</td>
     <td class="activity-tool-column truncate mono" title="${esc(title)}">${esc(tool)}</td>
@@ -553,12 +551,6 @@ function renderActivityRow(entry) {
     </td>
     <td class="activity-action-column"><button class="secondary activity-row-button" type="button" aria-label="${esc(activityActionLabel(entry))}">›</button></td>`;
   row.onclick = () => openDetail(entry);
-  row.onkeydown = event => {
-    if (event.target !== row) return;
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    event.preventDefault();
-    openDetail(entry);
-  };
   row.querySelector('.activity-row-button')?.addEventListener('click', event => {
     event.stopPropagation();
     openDetail(entry);

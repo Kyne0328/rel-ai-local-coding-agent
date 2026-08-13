@@ -12,6 +12,7 @@ const system = read('src/ui/features/system/index.js');
 const connector = read('src/ui/features/settings/connector.js');
 const desktopConnection = read('src/ui/features/settings/desktop-connection.js');
 const home = read('src/ui/features/home/index.js');
+const diagnostics = read('src/ui/features/settings/diagnostics.js');
 
 function functionSource(source, name) {
   const asyncStart = source.indexOf(`async function ${name}`);
@@ -127,8 +128,15 @@ assert.doesNotMatch(sessionFactsSource, /risk/, 'session row facts must not surf
 assert.doesNotMatch(functionSource(sessions, 'workflowTechnicalHtml'), /risk/, 'session details must not surface workflow risk labels');
 assert.doesNotMatch(functionSource(sessions, 'updateTaskSessions'), /mountTasks\(detached|sessions-history-card[^\n]*replaceWith/, 'session live updates must not rebuild or replace the complete history card');
 assert.match(processes, /export function updateProcessesLiveState/);
-assert.match(processes, /function syncProcessClockText/, 'Process live updates must neutralize clock-only text before equality checks');
 assert.match(functionSource(processes, 'updateProcessesLiveState'), /syncProcessClockText/, 'Process list equality must ignore live elapsed text changes');
+assert.match(functionSource(processes, 'updateProcessesLiveState'), /reconcileProcessList/, 'Process live updates must reconcile the existing list instead of replacing it wholesale');
+assert.match(processes, /function copyProcessDisclosureState/, 'Process live updates must preserve output disclosure state');
+assert.match(processes, /function captureProcessFocus/, 'Process live updates must preserve focused process controls');
+assert.doesNotMatch(functionSource(processes, 'updateProcessesLiveState'), /currentList\.replaceWith\(nextList\)/, 'Process live updates must not replace the whole process list');
+assert.match(diagnostics, /function syncDiagnosticRegions/, 'Diagnostics live updates must reconcile stable report regions');
+assert.match(diagnostics, /data-diagnostic-region="maintenance"/, 'Diagnostics maintenance controls must live in a stable region');
+assert.match(diagnostics, /function copyDiagnosticDisclosureState/, 'Diagnostics must preserve technical disclosure state when a changed region is replaced');
+assert.doesNotMatch(functionSource(diagnostics, 'renderCurrentReport'), /root\.innerHTML\s*=/, 'Diagnostics live updates must not remount the whole report');
 assert.match(sessions, /renderSessionRows\(body, \[\.\.\._sessionsById\.values\(\)\], scopeKey\)/, 'Show more must render the latest live session snapshot instead of the mount-time data object');
 const reconcileSessionsSource = functionSource(sessions, 'reconcileSessionRows');
 assert.match(reconcileSessionsSource, /body\.children\[index\]/, 'keyed reconciliation must compare against the current DOM child after a row replacement');

@@ -14,7 +14,7 @@
 .process-meta { flex-wrap: wrap; margin-top: .75rem; color: var(--ui-text-secondary); font-size: .8rem; }
 .process-meta span + span::before { content: '·'; margin-right: .65rem; }
 .process-output { margin-top: .8rem; }
-.process-output summary { cursor: pointer; color: var(--ui-text-secondary); font-size: .82rem; }
+.process-output summary { display: flex; min-height: 44px; align-items: center; cursor: pointer; color: var(--ui-text-secondary); font-size: .82rem; }
 .process-output-block { margin-top: .65rem; }
 .process-output-block > span { display: block; margin-bottom: .25rem; color: var(--ui-text-secondary); font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; }
 .process-output-block pre { max-height: 14rem; overflow: auto; margin: 0; padding: .75rem; border: 1px solid var(--ui-border-subtle); border-radius: .55rem; background: var(--ui-surface-secondary); white-space: pre-wrap; word-break: break-word; font-size: .76rem; }
