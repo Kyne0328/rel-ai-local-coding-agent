@@ -14,7 +14,7 @@ import {
 const config = { workspaces: {} };
 const expectedTools = [
   'relai_work', 'relai_snapshot', 'relai_read', 'relai_search', 'relai_inspect', 'relai_edit',
-  'relai_exec', 'relai_process', 'relai_worktree', 'relai_validate', 'relai_changes', 'relai_publish'
+  'relai_exec', 'relai_process', 'relai_ui', 'relai_worktree', 'relai_validate', 'relai_changes', 'relai_publish'
 ];
 const removedDirectNames = [
   'relai_begin_work', 'relai_repo_snapshot', 'relai_code_inspect', 'relai_process_start',
@@ -25,7 +25,7 @@ const removedDirectNames = [
 
 assert.deepEqual(TOOL_NAMES, expectedTools);
 assert.deepEqual(getDefinitionMetadata(config).map(item => item.name), expectedTools);
-assert.equal(getToolDefinitions(config).length, 12);
+assert.equal(getToolDefinitions(config).length, expectedTools.length);
 
 const schemas = getToolSchemas(config);
 const publicSchemas = getPublicToolSchemas(config);
@@ -40,9 +40,9 @@ assert.ok(Buffer.byteLength(JSON.stringify(connectorInstructions(config)), 'utf8
 
 const manifest = getToolSurfaceManifest(config);
 assert.equal(manifest.schemaVersion, 7);
-assert.equal(manifest.toolSurfaceVersion, 37);
+assert.equal(manifest.toolSurfaceVersion, 39);
 assert.equal(Object.hasOwn(manifest, 'profile'), false);
-assert.equal(manifest.toolCount, 12);
+assert.equal(manifest.toolCount, expectedTools.length);
 assert.deepEqual(manifest.tools.map(item => item.name), expectedTools);
 assert.deepEqual(manifest.deprecations, []);
 assert.deepEqual(manifest.compatibilityAliases, {});
