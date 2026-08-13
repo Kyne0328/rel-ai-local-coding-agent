@@ -49,9 +49,9 @@ function read(rel) {
   const guidance = read('src/ui/features/settings/connection-guidance.js');
   assert.match(connector, /createChatGptSetupGuide/);
   assert.match(connector, /connectionGuideMode/);
-  assert.match(guidance, /Plus or Pro.*Plugins/i);
-  assert.match(guidance, /Business, Enterprise, or Edu.*workspace Apps/i);
-  assert.match(guidance, /do not delete or recreate the app/i);
+  assert.match(guidance, /Connection set to Tunnel/i);
+  assert.match(guidance, /Authentication to No authentication/i);
+  assert.match(guidance, /existing Rel\.AI MCP plugin\/app instead of creating a duplicate/i);
 }
 
 // Dashboard tool metadata stays internally consistent; workspace cards do not
@@ -69,8 +69,8 @@ function read(rel) {
 // Audit-fix smoke guards for docs, UI copy, and tunnel process safety.
 {
   assert.doesNotMatch(read('README.md'), /Settings -> Connector/);
-  assert.match(read('README.md'), /Plus or Pro[\s\S]*Plugins/i);
-  assert.match(read('README.md'), /Business, Enterprise, or Edu[\s\S]*workspace.*Apps/i);
+  assert.match(read('README.md'), /Tunnel[\s\S]*Authentication[\s\S]*No authentication/i);
+  assert.match(read('README.md'), /existing integration instead of creating a duplicate/i);
   assert.doesNotMatch(read('docs/ONE_CLICK_SETUP.md'), /removed tools[^\n]*relai_apply_update/);
   assert.match(read('electron/renderer/status.html'), /Secure MCP Tunnel|Secure tunnel/);
   assert.match(read('electron/renderer/status.js'), /Connecting OpenAI Secure MCP Tunnel/);
