@@ -61,13 +61,13 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
 
     <label for="workspacePathInput">Project folder</label>
     <div class="ws-form-row">
-      <input class="ws-form-path" id="workspacePathInput" name="path" value="${esc(ws.path || '')}" placeholder="Absolute path to the project" autocomplete="off">
+      <input class="ws-form-path" id="workspacePathInput" name="path" type="text" value="${esc(ws.path || '')}" placeholder="Absolute path to the project" autocomplete="off">
       <button type="button" class="secondary" data-browse>Browse…</button>
     </div>
     <div class="ws-form-status" data-path-status aria-live="polite"></div>
 
     <label for="workspaceAliasInput">Workspace name</label>
-    <input id="workspaceAliasInput" name="alias" value="${esc(ws.alias || '')}" placeholder="for example employee-api" autocomplete="off">
+    <input id="workspaceAliasInput" name="alias" type="text" value="${esc(ws.alias || '')}" placeholder="for example employee-api" autocomplete="off">
     <div class="ws-form-help">Use 1–80 letters, numbers, dots, underscores, or dashes. This is the name used in ChatGPT prompts.</div>
     <div class="ws-form-conflict" data-conflict hidden role="alert"></div>
 
@@ -78,14 +78,14 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
       </summary>
       <div class="ws-form-advanced-body">
         <label for="workspaceProtectedInput">Protected branches</label>
-        <input id="workspaceProtectedInput" name="protected" value="${esc((ws.protectedBranches?.length ? ws.protectedBranches : ['main', 'master']).join(', '))}" autocomplete="off">
+        <input id="workspaceProtectedInput" name="protected" type="text" value="${esc((ws.protectedBranches?.length ? ws.protectedBranches : ['main', 'master']).join(', '))}" autocomplete="off">
         <div class="ws-form-help">Rel.AI treats these branches as protected during Git operations.</div>
 
         <label for="workspaceBaseInput">Default base branch</label>
-        <input id="workspaceBaseInput" name="base" value="${esc(ws.defaultBaseBranch || 'main')}" autocomplete="off">
+        <input id="workspaceBaseInput" name="base" type="text" value="${esc(ws.defaultBaseBranch || 'main')}" autocomplete="off">
 
         <label for="workspaceRemotesInput">Allowed remotes</label>
-        <input id="workspaceRemotesInput" name="remotes" value="${esc((ws.allowedRemotes?.length ? ws.allowedRemotes : ['origin']).join(', '))}" autocomplete="off">
+        <input id="workspaceRemotesInput" name="remotes" type="text" value="${esc((ws.allowedRemotes?.length ? ws.allowedRemotes : ['origin']).join(', '))}" autocomplete="off">
         <div class="ws-form-help">Only these Git remote names can be used for publishing operations.</div>
       </div>
     </details>
@@ -106,6 +106,7 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
   const syncDirty = () => markUnsaved(form, formSnapshot(form) !== initialState);
   let modal = null;
   let aliasEdited = Boolean(isEdit || aliasInput.value.trim());
+  let pathValidationGeneration = 0;
 
   const suggestAlias = () => {
     if (aliasEdited) return;
@@ -122,15 +123,23 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
     submitBtn.disabled = Boolean(message);
     return message;
   };
-  const runValidate = debounce(async () => {
-    const info = await validatePath(pathInput.value.trim());
+  const validateCurrentPath = async (value, generation) => {
+    const info = await validatePath(value);
+    if (generation !== pathValidationGeneration || pathInput.value.trim() !== value) return null;
     renderPathStatus(statusEl, info);
+    return info;
+  };
+  const runValidate = debounce((value, generation) => {
+    void validateCurrentPath(value, generation);
   }, 350);
 
   pathInput.addEventListener('input', () => {
+    const value = pathInput.value.trim();
+    const generation = ++pathValidationGeneration;
     suggestAlias();
     syncConflicts();
-    runValidate();
+    if (!value) renderPathStatus(statusEl, null);
+    else runValidate(value, generation);
   });
   aliasInput.addEventListener('input', () => {
     aliasEdited = Boolean(aliasInput.value.trim());
@@ -138,7 +147,10 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
   });
   form.addEventListener('input', syncDirty);
   form.addEventListener('change', syncDirty);
-  if (pathInput.value.trim()) runValidate();
+  if (pathInput.value.trim()) {
+    const value = pathInput.value.trim();
+    runValidate(value, ++pathValidationGeneration);
+  }
   syncConflicts();
 
   browseBtn.addEventListener('click', async () => {
@@ -159,7 +171,8 @@ export async function openWorkspaceForm({ mode = 'add', workspace = null, onSave
       suggestAlias();
       syncDirty();
       syncConflicts();
-      renderPathStatus(statusEl, await validatePath(res.path));
+      const value = pathInput.value.trim();
+      await validateCurrentPath(value, ++pathValidationGeneration);
     } else if (res?.error) {
       toast('Could not open folder picker: ' + res.error, { variant: 'error' });
     }

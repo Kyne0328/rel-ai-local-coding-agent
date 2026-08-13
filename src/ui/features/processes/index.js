@@ -53,9 +53,41 @@ export function updateProcessesLiveState(container, data = {}) {
   const nextList = next?.querySelector('[data-process-list]');
   if (currentList && nextList) {
     syncProcessClockText(currentList, nextList);
-    if (!currentList.isEqualNode(nextList)) currentList.replaceWith(nextList);
+    if (!currentList.isEqualNode(nextList)) reconcileProcessList(currentList, nextList);
   }
   return true;
+}
+
+function reconcileProcessList(currentList, nextList) {
+  const currentRows = new Map(
+    [...currentList.children]
+      .filter(node => node.matches?.('.process-row'))
+      .map(node => [node.dataset.processId || '', node])
+  );
+  const desired = [...nextList.children];
+  for (let index = 0; index < desired.length; index += 1) {
+    const nextNode = desired[index];
+    let currentNode = currentList.children[index] || null;
+    if (nextNode.matches?.('.process-row')) {
+      const matchingRow = currentRows.get(nextNode.dataset.processId || '');
+      if (matchingRow) {
+        if (matchingRow !== currentNode) currentList.insertBefore(matchingRow, currentNode);
+        currentNode = matchingRow;
+        syncProcessClockText(currentNode, nextNode);
+        if (!currentNode.isEqualNode(nextNode)) {
+          const focusState = captureProcessFocus(currentNode);
+          copyProcessDisclosureState(currentNode, nextNode);
+          currentNode.replaceWith(nextNode);
+          restoreProcessFocus(nextNode, focusState);
+        }
+        continue;
+      }
+    }
+    if (currentNode?.isEqualNode(nextNode)) continue;
+    if (currentNode) currentNode.replaceWith(nextNode);
+    else currentList.appendChild(nextNode);
+  }
+  while (currentList.children.length > desired.length) currentList.lastElementChild?.remove();
 }
 
 function syncProcessClockText(currentList, nextList) {
@@ -67,6 +99,32 @@ function syncProcessClockText(currentList, nextList) {
     const nextClock = nextClocks[index];
     if (processClockIdentity(currentClock) === processClockIdentity(nextClock)) nextClock.textContent = currentClock.textContent;
   }
+}
+
+function copyProcessDisclosureState(currentRow, nextRow) {
+  const currentOutput = currentRow.querySelector('.process-output');
+  const nextOutput = nextRow.querySelector('.process-output');
+  if (currentOutput && nextOutput) nextOutput.open = currentOutput.open;
+}
+
+function captureProcessFocus(row) {
+  const active = document.activeElement;
+  if (!active || !row.contains(active)) return null;
+  if (active.matches('[data-stop-process]')) return { kind: 'stop' };
+  if (active.matches('[data-copy-value]')) return { kind: 'copy', value: active.dataset.copyValue || '' };
+  if (active.matches('.process-output > summary')) return { kind: 'summary' };
+  if (active.matches('.process-output pre')) return { kind: 'output', value: active.getAttribute('aria-label') || '' };
+  return null;
+}
+
+function restoreProcessFocus(row, state) {
+  if (!state) return;
+  let target = null;
+  if (state.kind === 'stop') target = row.querySelector('[data-stop-process]');
+  else if (state.kind === 'copy') target = [...row.querySelectorAll('[data-copy-value]')].find(node => node.dataset.copyValue === state.value);
+  else if (state.kind === 'summary') target = row.querySelector('.process-output > summary');
+  else if (state.kind === 'output') target = [...row.querySelectorAll('.process-output pre')].find(node => node.getAttribute('aria-label') === state.value);
+  target?.focus({ preventScroll: true });
 }
 
 function processClockIdentity(node) {

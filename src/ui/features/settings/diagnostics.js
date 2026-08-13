@@ -72,12 +72,66 @@ function renderCurrentReport(container) {
   const root = container.querySelector('#diagnosticSummary');
   if (!root || !currentReport) return;
   const view = filteredDiagnosticView(currentReport);
-  root.innerHTML = renderReport(currentReport, view);
+  syncDiagnosticRegions(root, renderReport(currentReport, view));
   bindMaintenance(root, container);
   const summary = container.querySelector('#diagnosticFilterHost .filter-summary');
   if (summary) summary.textContent = filterSummary(view);
   const clear = container.querySelector('#diagnosticFilterHost .filter-clear-button');
   if (clear) clear.hidden = !hasDiagnosticFilters();
+}
+
+function syncDiagnosticRegions(root, markup) {
+  const detached = document.createElement('div');
+  detached.innerHTML = markup;
+  const desired = [...detached.children];
+  for (let index = 0; index < desired.length; index += 1) {
+    const nextRegion = desired[index];
+    const currentRegion = root.children[index] || null;
+    if (currentRegion?.dataset.diagnosticRegion === nextRegion.dataset.diagnosticRegion) {
+      if (currentRegion.isEqualNode(nextRegion)) continue;
+      const state = captureDiagnosticInteraction(currentRegion);
+      copyDiagnosticDisclosureState(currentRegion, nextRegion);
+      currentRegion.replaceWith(nextRegion);
+      restoreDiagnosticFocus(nextRegion, state);
+      continue;
+    }
+    if (currentRegion) currentRegion.replaceWith(nextRegion);
+    else root.appendChild(nextRegion);
+  }
+  while (root.children.length > desired.length) root.lastElementChild?.remove();
+}
+
+function copyDiagnosticDisclosureState(currentRegion, nextRegion) {
+  for (const currentDetail of currentRegion.querySelectorAll('details[data-diagnostic-detail]')) {
+    const key = currentDetail.dataset.diagnosticDetail;
+    const nextDetail = [...nextRegion.querySelectorAll('details[data-diagnostic-detail]')]
+      .find(node => node.dataset.diagnosticDetail === key);
+    if (nextDetail) nextDetail.open = currentDetail.open;
+  }
+}
+
+function captureDiagnosticInteraction(region) {
+  const active = document.activeElement;
+  if (!active || !region.contains(active)) return null;
+  if (active.matches('[data-reset-target]')) return { kind: 'reset', value: active.dataset.resetTarget || '' };
+  if (active.matches('[data-reset-all]')) return { kind: 'reset-all' };
+  if (active.matches('[data-diagnostic-action]')) return { kind: 'action', value: active.dataset.diagnosticAction || '' };
+  const detail = active.closest?.('details[data-diagnostic-detail]');
+  if (detail && active.matches('summary')) return { kind: 'detail', value: detail.dataset.diagnosticDetail || '' };
+  return null;
+}
+
+function restoreDiagnosticFocus(region, state) {
+  if (!state) return;
+  let target = null;
+  if (state.kind === 'reset') target = [...region.querySelectorAll('[data-reset-target]')].find(node => node.dataset.resetTarget === state.value);
+  else if (state.kind === 'reset-all') target = region.querySelector('[data-reset-all]');
+  else if (state.kind === 'action') target = [...region.querySelectorAll('[data-diagnostic-action]')].find(node => node.dataset.diagnosticAction === state.value);
+  else if (state.kind === 'detail') {
+    const detail = [...region.querySelectorAll('details[data-diagnostic-detail]')].find(node => node.dataset.diagnosticDetail === state.value);
+    target = detail?.querySelector('summary') || null;
+  }
+  target?.focus({ preventScroll: true });
 }
 
 function bindHeaderActions(container) {
@@ -315,7 +369,8 @@ function bindMaintenance(root, container) {
   for (const button of root.querySelectorAll('[data-reset-target]')) {
     button.onclick = () => resetDiagnosticData(button, container);
   }
-  root.querySelector('[data-reset-all]')?.addEventListener('click', () => openFullResetDialog(container));
+  const resetAll = root.querySelector('[data-reset-all]');
+  if (resetAll) resetAll.onclick = () => openFullResetDialog(container);
 }
 
 async function resetDiagnosticData(button, container) {
@@ -422,10 +477,10 @@ function matchesSearch(values) {
 
 function renderReport(report, view) {
   const body = view.findings.length
-    ? `<div class="diagnostic-list">${view.findings.map(findingCard).join('')}</div>`
+    ? `<div class="diagnostic-list" data-diagnostic-region="findings">${view.findings.map(findingCard).join('')}</div>`
     : view.totalFindings === 0
-      ? '<div class="diagnostic-clear"><strong>All clear</strong><span>No blocking errors or warnings were found.</span></div>'
-      : '<div class="diagnostic-log-empty"><strong>No findings match the current filters.</strong></div>';
+      ? '<div class="diagnostic-clear" data-diagnostic-region="findings"><strong>All clear</strong><span>No blocking errors or warnings were found.</span></div>'
+      : '<div class="diagnostic-log-empty" data-diagnostic-region="findings"><strong>No findings match the current filters.</strong></div>';
   return summaryCards(countFindings(view.findings))
     + body
     + logsHtml(report.logs || {}, view)
@@ -433,7 +488,7 @@ function renderReport(report, view) {
 }
 
 function summaryCards(summary) {
-  return `<div class="diagnostic-metrics">
+  return `<div class="diagnostic-metrics" data-diagnostic-region="metrics">
     ${metric('Blocking', summary.blocking, 'error')}
     ${metric('Warnings', summary.warnings, 'warning')}
     ${metric('Recommendations', summary.recommendations, 'info')}
@@ -456,7 +511,7 @@ function metric(label, count, severity) {
 
 function findingCard(finding) {
   const action = finding.action?.href
-    ? `<a class="buttonlike secondary compact-button" href="${esc(finding.action.href)}">${esc(finding.action.label || 'Open')}</a>`
+    ? `<a class="buttonlike secondary compact-button" data-diagnostic-action="${esc(finding.code)}" href="${esc(finding.action.href)}">${esc(finding.action.label || 'Open')}</a>`
     : '';
   return `<article class="diagnostic-finding ${esc(finding.severity)}">
     <div class="diagnostic-severity">${esc(finding.severity)}</div>
@@ -467,7 +522,7 @@ function findingCard(finding) {
       <p><strong>Recommended action:</strong> ${esc(finding.recommendation)}</p>
       ${findingContext(finding.context)}
       ${action}
-      <details><summary>Technical details</summary><pre>${esc(JSON.stringify(finding.details || {}, null, 2))}</pre></details>
+      <details data-diagnostic-detail="${esc(finding.code)}"><summary>Technical details</summary><pre>${esc(JSON.stringify(finding.details || {}, null, 2))}</pre></details>
     </div>
   </article>`;
 }
@@ -485,7 +540,7 @@ function findingContext(entries) {
 function logsHtml(logs, view) {
   const runtime = logs.runtime || { available: false, entries: [] };
   const runtimeEmpty = runtime.available ? 'No service messages match the current filters.' : 'Service logs are available in the desktop app.';
-  return `<div class="diagnostic-log-grid">
+  return `<div class="diagnostic-log-grid" data-diagnostic-region="logs">
     ${logPanel('Service log', view.runtime, runtimeEmpty, runtime.available, runtime.persistent ? 'Persistent sanitized log' : '')}
     ${logPanel('Failed activity', view.failed, 'No failed activity matches the current filters.', true, '')}
   </div>`;
@@ -514,7 +569,7 @@ function logRow(entry) {
 }
 
 function maintenanceHtml(maintenance) {
-  return `<section class="card diagnostic-maintenance">
+  return `<section class="card diagnostic-maintenance" data-diagnostic-region="maintenance">
     <div class="card-head"><div><h3>Local diagnostic data</h3><p>Clear only the data no longer needed for troubleshooting. Repository files and connection credentials are never removed here.</p></div></div>
     <div class="card-body diagnostic-maintenance-list">
       ${maintenanceRow('Session and activity history', 'Removes stored Sessions and Activity entries. Active tool calls are protected.', 'history', maintenance.history, 'Clear history')}

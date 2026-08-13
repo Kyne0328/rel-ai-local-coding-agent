@@ -26,12 +26,16 @@ for (const feature of ['sessions', 'activity', 'workspaces', 'tools', 'processes
 const activitySource = read('src/ui/features/activity/index.js');
 const activityCss = read('src/ui/features/activity/styles.css');
 const sessionsCss = read('src/ui/features/sessions/styles.css');
+const processesCss = read('src/ui/features/processes/styles.css');
+const workspaceForm = read('src/ui/features/workspaces/form.js');
 assert.match(activityCss, /\.activity-col-tool\s*\{[^}]*width:/s, 'Activity must preserve the dedicated Tool column');
 assert.match(activityCss, /\.activity-col-workspace\s*\{[^}]*width:/s, 'Activity must preserve the dedicated Workspace column');
 assert.match(activityCss, /\.activity-col-action\s*\{[^}]*width:/s, 'Activity must preserve the row action column');
 assert.match(activityCss, /@media \(max-width: 760px\)[\s\S]*activity-message-mobile-meta[\s\S]*display:/, 'narrow Activity layouts must preserve status and time inside the message cell');
 assert.doesNotMatch(activitySource, /activity-session-column">Session/, 'Activity must not replace the original table columns with a Session column');
-assert.match(activitySource, /if \(event\.target !== row\) return;/, 'nested Activity controls must not bubble keyboard activation into the event-row dialog action');
+assert.doesNotMatch(activitySource, /row\.tabIndex\s*=\s*0/, 'Activity rows must not duplicate the action button as a keyboard focus target');
+assert.doesNotMatch(activitySource, /row\.onkeydown/, 'Activity keyboard activation must use the native row action button');
+assert.match(activitySource, /activity-row-button/, 'Activity rows must retain a native focusable action control');
 assert.match(sessionsCss, /grid-template-columns:\s*auto minmax\(0,1fr\) auto 18px/, 'Session rows must use the simplified four-column layout');
 assert.match(sessionsCss, /\.task-row-facts\s*\{/, 'Session exception facts must have a quiet secondary style');
 assert.match(sessionsCss, /\.task-detail-technical\s*\{/, 'technical session metadata must be visually secondary and collapsible');
@@ -48,6 +52,13 @@ assert.match(appCss, /\.mobile-nav\s*\{[^}]*grid-template-columns:\s*repeat\(6,m
 assert.doesNotMatch(appCss, /@media \(max-width: 420px\)[\s\S]{0,500}grid-template-columns:\s*repeat\(3/, 'small mobile layouts must not restore the two-row navigation');
 assert.match(filterCss, /\.filter-chip\s*\{[^}]*min-height:\s*44px/s, 'filter chips must meet the touch-target baseline');
 assert.match(activityCss, /\.activity-row-button\s*\{[^}]*size-11/s, 'Activity row actions must meet the touch-target baseline');
+assert.match(processesCss, /\.process-output summary\s*\{[^}]*min-height:\s*44px/s, 'process output disclosures must meet the touch-target baseline');
+assert.match(systemCss, /\.diagnostic-copy summary\s*\{[^}]*min-h-11/s, 'diagnostic detail disclosures must meet the touch-target baseline');
+assert.match(workspaceForm, /pathValidationGeneration/, 'workspace preflight validation must reject stale async results');
+assert.match(workspaceForm, /generation !== pathValidationGeneration/, 'workspace preflight results must be generation guarded');
+for (const name of ['path', 'alias', 'protected', 'base', 'remotes']) {
+  assert.match(workspaceForm, new RegExp(`name="${name}"[^>]*type="text"|type="text"[^>]*name="${name}"`), `workspace ${name} input must declare type=text explicitly`);
+}
 const toastSource = read('src/ui/components/toast.js');
 assert.match(toastSource, /error:\s*\{[^}]*duration:\s*0/s, 'error notifications must remain visible until dismissed by default');
 assert.match(toastSource, /toast-dismiss/, 'notifications must expose a manual dismiss control');
