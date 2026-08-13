@@ -18,6 +18,17 @@ function renderDashboardShellBootstrap() {
 } catch {}`;
 }
 
+function renderDashboardNav(items) {
+  return items.map((item) => `<a href="${item.href}" data-nav-id="${item.id}" aria-label="${item.label}" title="${item.label}"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">${item.icon}</svg><span class="nav-label">${item.label}</span></a>`).join('');
+}
+
+function renderDashboardAccordion(parent, items) {
+  return `<details class="sidebar-accordion" data-nav-accordion="${parent.id}">
+    <summary aria-label="${parent.label}" title="${parent.label}"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">${parent.icon}</svg><span class="nav-label">${parent.label}</span><svg class="sidebar-accordion-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg></summary>
+    <nav class="sidebar-subnav" aria-label="${parent.label} navigation">${renderDashboardNav(items)}</nav>
+  </details>`;
+}
+
 function renderDashboardWindowTitlebar() {
   return `<header class="window-titlebar" id="windowTitlebar" aria-label="Application title bar">
   <div class="window-titlebar-identity" aria-hidden="true"><img src="/public/assets/relai-logo.png" alt=""><strong>Rel.AI MCP</strong><span id="windowContext">Overview</span></div>
@@ -30,4 +41,4 @@ function renderDashboardWindowTitlebar() {
 </header>`;
 }
 
-export { renderDashboardShellBootstrap, renderDashboardWindowTitlebar };
+export { renderDashboardAccordion, renderDashboardNav, renderDashboardShellBootstrap, renderDashboardWindowTitlebar };

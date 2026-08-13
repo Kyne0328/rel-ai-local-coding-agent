@@ -15,6 +15,9 @@
 - **Keep stdio discovery off execution-only dependency paths.** Load tool execution, managed-process cleanup, browser automation, and workspace-status/Repository Intelligence modules only when those capabilities are actually used, so initial MCP discovery and `tools/list` no longer eagerly initialize Playwright or SQLite-backed repository intelligence.
 - **Measure cold startup with a platform-realistic budget.** Preserve the strict in-process `tools/list` latency budget while allowing Windows cold-process startup variance in the dedicated benchmark; the native-task release gate continues to verify real stdio discovery end to end.
 
+### Repository maintainability
+- **Restore architecture-budget compliance without weakening the guard.** Separate the internal operation-definition data from public tool composition, move dashboard navigation rendering into the dashboard shell/chrome owner, and remove two unreferenced legacy request-budget/process-kill modules. Repo-health and frontend acceptance remain green after the split.
+
 Bump root/electron/status UI/lockfiles to 0.25.1.
 
 ## [0.25.0] — 2026-08-08
