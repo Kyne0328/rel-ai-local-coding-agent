@@ -44,7 +44,7 @@ try {
   const scoped = await relaiSearch(workspace, config, { pattern: 'alphaThing', glob: 'src/*.js' });
   assert.deepEqual(scoped.matches.map((m) => m.path).sort(), ['src/alpha.js', 'src/beta.js']);
 
-  // maxResults caps matches but reports the real total.
+  // maxResults caps matches and stops after one additional visible match proves truncation.
   const capped = await relaiSearch(workspace, config, { pattern: 'alphaThing', ignoreCase: true, maxResults: 1 });
   assert.equal(capped.matches.length, 1);
   assert.equal(capped.truncated, true);
@@ -78,7 +78,7 @@ try {
   assert.equal(line1Match.text, 'function alphaThing() {', 'line 1 text should match expected clean text');
 
   // Search output larger than the generic 1 MiB process cap must preserve the
-  // earliest match and report the complete visible match count.
+  // earliest match without scanning the rest of a broad result set.
   const overflowDir = path.join(wsRoot, 'overflow');
   fs.mkdirSync(overflowDir, { recursive: true });
   const overflowLineCount = 12000;
@@ -94,7 +94,7 @@ try {
     maxResults: 1
   });
   assert.equal(overflow.matches[0]?.path, 'overflow/000-early.txt', 'large search must retain the earliest match');
-  assert.equal(overflow.matchCount, overflowLineCount + 1, 'large search must count every visible match');
+  assert.equal(overflow.matchCount, 2, 'large search must stop after one extra match proves truncation');
   assert.equal(overflow.truncated, true);
 
   console.log('Search tool unit test passed.');

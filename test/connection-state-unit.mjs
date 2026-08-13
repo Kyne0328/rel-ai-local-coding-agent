@@ -9,23 +9,21 @@ const base = {
   }
 };
 
-const bearerReady = connectionStateFor({
+const ready = connectionStateFor({
   ...base,
-  mcpAuthentication: { status: 'bearer_authorized', oauthApprovalRequired: true },
+  mcpAuthentication: { status: 'bearer_authorized' },
   mcpConnection: { status: 'ready', activityStatus: 'no_requests' }
 });
-assert.equal(bearerReady.chatgptReadiness.status, 'bearer_authorized');
-assert.equal(bearerReady.mcpClient.status, 'no_requests');
-assert.equal(isMcpAuthenticationReady(bearerReady), true);
-assert.equal(connectionSummary(bearerReady).label, 'Ready');
-const bearerLayers = connectionLayerViews(bearerReady);
-assert.equal(bearerLayers.find(layer => layer.key === 'chatgptReadiness')?.label, 'Bearer authorized');
-assert.match(bearerLayers.find(layer => layer.key === 'chatgptReadiness')?.description || '', /OAuth clients still require approval/);
-assert.equal(bearerLayers.find(layer => layer.key === 'mcpClient')?.label, 'Ready');
+assert.equal(ready.chatgptReadiness.status, 'ready');
+assert.equal(ready.mcpClient.status, 'no_requests');
+assert.equal(isMcpAuthenticationReady(ready), true);
+assert.equal(connectionSummary(ready).label, 'Ready');
+const readyLayers = connectionLayerViews(ready);
+assert.equal(readyLayers.find(layer => layer.key === 'chatgptReadiness')?.label, 'Ready');
+assert.equal(readyLayers.find(layer => layer.key === 'mcpClient')?.label, 'Ready');
 
 const active = connectionStateFor({
   ...base,
-  mcpAuthentication: { status: 'oauth_authorized' },
   mcpConnection: { status: 'ready', activityStatus: 'active', activeRequestCount: 1, lastRequestMethod: 'tools/call' }
 });
 assert.equal(connectionSummary(active).label, 'Active now');
@@ -33,7 +31,6 @@ assert.equal(connectionSummary(active).tone, 'working');
 
 const recent = connectionStateFor({
   ...base,
-  mcpAuthentication: { status: 'oauth_authorized' },
   mcpConnection: { status: 'ready', activityStatus: 'recent', lastRequestMethod: 'tools/list', lastSuccessfulRequestAt: '2026-08-01T04:00:00.000Z' }
 });
 assert.equal(connectionSummary(recent).label, 'Recently active');
@@ -41,77 +38,47 @@ assert.equal(connectionSummary(recent).tone, 'ok');
 
 const failed = connectionStateFor({
   ...base,
-  mcpAuthentication: { status: 'bearer_authorized' },
   mcpConnection: { status: 'ready', activityStatus: 'request_failed', lastRequestMethod: 'tools/call' }
 });
 assert.equal(connectionSummary(failed).label, 'Last request failed');
 
-const mismatch = connectionStateFor({
+const legacyClientState = connectionStateFor({
   ...base,
-  mcpAuthentication: { status: 'oauth_authorized' },
   mcpConnection: { status: 'capability_mismatch' }
 });
-assert.equal(connectionSummary(mismatch).label, 'Tool mismatch');
+assert.equal(legacyClientState.mcpClient.status, 'no_requests');
+assert.equal(connectionSummary(legacyClientState).label, 'Ready');
 
-const degraded = connectionStateFor({
-  ...base,
-  mcpAuthentication: { status: 'oauth_authorized' },
-  mcpConnection: { status: 'degraded' }
-});
-assert.equal(connectionSummary(degraded).label, 'Host action required');
-assert.equal(connectionSummary(degraded).tone, 'bad');
-
-const toolRefresh = connectionStateFor({
-  ...base,
-  mcpAuthentication: { status: 'oauth_authorized' },
-  mcpConnection: { status: 'tool_refresh_required' }
-});
-assert.equal(connectionSummary(toolRefresh).label, 'Tool refresh required');
-assert.equal(connectionSummary(toolRefresh).tone, 'warn');
-assert.notEqual(toolRefresh.mcpClient.status, 'reauthentication_required');
-
-const deviceUpdate = connectionStateFor({
-  ...base,
-  mcpAuthentication: { status: 'oauth_authorized' },
-  mcpConnection: { status: 'device_update_required' }
-});
-assert.equal(connectionSummary(deviceUpdate).label, 'Device update required');
-assert.equal(connectionSummary(deviceUpdate).tone, 'warn');
-assert.notEqual(deviceUpdate.mcpClient.status, 'reauthentication_required');
-
-const reauth = connectionStateFor({
-  ...base,
-  mcpAuthentication: { status: 'authentication_required', oauthApprovalRequired: true },
+const unavailable = connectionStateFor({
+  connectionState: {
+    localService: { status: 'running' },
+    publicEndpoint: { status: 'unavailable' },
+    dashboardUpdates: { status: 'live' }
+  },
   mcpConnection: { status: 'ready', activityStatus: 'no_requests' }
 });
-assert.equal(isMcpAuthenticationReady(reauth), false);
-assert.equal(connectionSummary(reauth).label, 'Approval required');
+assert.equal(unavailable.chatgptReadiness.status, 'unavailable');
+assert.equal(isMcpAuthenticationReady(unavailable), false);
+assert.equal(connectionSummary(unavailable).label, 'Needs attention');
 
 assert.deepEqual(connectionLayerViews(recent).map(layer => layer.title), [
-  'Connection service',
-  'Secure endpoint',
-  'Authorization',
-  'Client and tools',
+  'Local MCP service',
+  'OpenAI Secure MCP Tunnel',
+  'ChatGPT transport',
+  'MCP activity',
   'Dashboard updates'
 ]);
-assert.equal(connectionLayerViews(recent).find(layer => layer.key === 'publicEndpoint')?.label, 'Available');
-
-const legacyReady = connectionStateFor({
-  ...base,
-  mcpAuthentication: { status: 'oauth_approved' },
-  mcpConnection: { status: 'ready' }
-});
-assert.equal(legacyReady.mcpClient.status, 'no_requests');
+assert.equal(connectionLayerViews(recent).find(layer => layer.key === 'publicEndpoint')?.label, 'Connected');
 
 const startingLayers = connectionLayerViews({
   localService: { status: 'starting' },
   publicEndpoint: { status: 'connecting' },
-  chatgptReadiness: { status: 'awaiting_authentication' },
-  mcpClient: { status: 'reconnecting' },
+  chatgptReadiness: { status: 'unavailable' },
+  mcpClient: { status: 'starting' },
   dashboardUpdates: { status: 'reconnecting' }
 });
-for (const key of ['localService', 'publicEndpoint', 'chatgptReadiness', 'mcpClient']) {
+for (const key of ['localService', 'publicEndpoint', 'mcpClient']) {
   assert.equal(startingLayers.find(layer => layer.key === key)?.tone, 'working', `${key} progress must use the information tone`);
 }
 
-console.log('Connection state separates MCP authentication from stateless request activity.');
+console.log('Connection state reflects Secure MCP Tunnel readiness and stateless request activity.');

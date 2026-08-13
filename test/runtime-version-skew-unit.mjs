@@ -11,19 +11,18 @@ const {
 
 const current = runtimeMetadata();
 const packageVersion = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
+const releaseManifest = JSON.parse(fs.readFileSync(new URL('../release-manifest.json', import.meta.url), 'utf8'));
 assert.equal(current.applicationVersion, packageVersion);
-assert.equal(current.toolSurfaceVersion, 37);
-assert.equal(current.toolCount, 12);
+assert.equal(current.toolSurfaceVersion, releaseManifest.toolSurfaceVersion);
+assert.equal(current.toolCount, releaseManifest.toolCount);
 assert.match(current.manifestHash, /^[A-Za-z0-9_-]{24}$/);
-assert.equal(current.schemaVersion, 7);
-assert.equal(current.deviceProtocolVersion, 1);
-assert.equal(current.minimumCompatibleDeviceProtocol, 1);
+assert.equal(current.schemaVersion, releaseManifest.schemaVersion);
 
 const configured = runtimeMetadata({
   toolProfile: 'core',
   workspaces: { repo: { path: process.cwd() }, another: { path: os.tmpdir() } }
 });
-assert.equal(configured.toolCount, 12, 'stale profile configuration must not reduce the public surface');
+assert.equal(configured.toolCount, current.toolCount, 'stale profile configuration must not reduce the public surface');
 assert.equal(configured.manifestHash, current.manifestHash, 'configuration fields must not change the runtime manifest hash');
 
 const equal = assessRuntimeCompatibility(current, { ...current, source: 'repository' });
