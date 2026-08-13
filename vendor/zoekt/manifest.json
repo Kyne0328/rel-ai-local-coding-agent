@@ -15,6 +15,14 @@
     "linuxAmd64": {
       "url": "https://go.dev/dl/go1.25.9.linux-amd64.tar.gz",
       "sha256": "00859d7bd6defe8bf84d9db9e57b9a4467b2887c18cd93ae7460e713db774bc1"
+    },
+    "darwinAmd64": {
+      "url": "https://go.dev/dl/go1.25.9.darwin-amd64.tar.gz",
+      "sha256": "92cb78fba4796e218c1accb0ea0a214ef2094c382049a244ad6505505d015fbe"
+    },
+    "darwinArm64": {
+      "url": "https://go.dev/dl/go1.25.9.darwin-arm64.tar.gz",
+      "sha256": "9528be7329b9770631a6bd09ca2f3a73ed7332bec01d87435e75e92d8f130363"
     }
   },
   "platforms": {
@@ -42,6 +50,36 @@
         "file": "zoekt-index",
         "size": 21016724,
         "sha256": "46c28827eca5492b5db55b440ed567d5a962f80221084116da8538cbc56192a9"
+      }
+    },
+    "darwin": {
+      "architectures": {
+        "x64": {
+          "architecture": "amd64",
+          "search": {
+            "file": "zoekt",
+            "size": 32412224,
+            "sha256": "4c95292a4758ebd5e1ddd330cf5aa12515c7b2ab774e7f5cfcc9c1a9a3384764"
+          },
+          "index": {
+            "file": "zoekt-index",
+            "size": 22787760,
+            "sha256": "1339e8bbb981f977736ead5bb2e635df784878bad2c325e15361f2fb000685dd"
+          }
+        },
+        "arm64": {
+          "architecture": "arm64",
+          "search": {
+            "file": "zoekt",
+            "size": 31393618,
+            "sha256": "afb244f4e38c24ba1924a58be4688355ba2c603a0b15f76f85594e3fe02c85ae"
+          },
+          "index": {
+            "file": "zoekt-index",
+            "size": 22049314,
+            "sha256": "30d6705d182ee12bfae2e3488a33c2d2840fb179a26727c3e31f7d2d1fb60825"
+          }
+        }
       }
     }
   }

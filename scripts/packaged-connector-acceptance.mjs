@@ -13,15 +13,19 @@ import {
   PROTOCOL_VERSION_META_KEY
 } from '@modelcontextprotocol/server';
 import { resolveCurrentUnpacked } from './current-unpacked.mjs';
+import { electronPlatformSpec, normalizeElectronArch, normalizeElectronPlatform } from './electron-platform.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const releaseManifest = JSON.parse(fs.readFileSync(path.join(root, 'release-manifest.json'), 'utf8'));
 const { applicationVersion, protocolVersion: mcpProtocolVersion, toolSurfaceVersion, toolCount } = releaseManifest;
+const platform = normalizeElectronPlatform(process.env.REL_AI_TARGET_PLATFORM || process.platform);
+const targetArch = normalizeElectronArch(process.env.REL_AI_TARGET_ARCH || process.arch);
+const platformSpec = electronPlatformSpec(platform, targetArch);
 const directoryArgument = process.argv.indexOf('--dir');
 const packageDirectory = directoryArgument >= 0
   ? path.resolve(root, String(process.argv[directoryArgument + 1] || ''))
-  : resolveCurrentUnpacked(root, { allowBuildCheck: true });
-const resources = path.join(packageDirectory, 'resources');
+  : resolveCurrentUnpacked(root, { allowBuildCheck: true, platform });
+const resources = path.join(packageDirectory, platformSpec.resourcesDirectory || 'resources');
 const packagedServer = path.join(resources, 'bin', 'rel-ai-mcp-http.js');
 assert.equal(fs.existsSync(packagedServer), true, `Packaged backend is missing from ${packageDirectory}. Build the unpacked app before connector acceptance.`);
 

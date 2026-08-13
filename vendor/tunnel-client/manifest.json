@@ -19,6 +19,26 @@
       "file": "tunnel-client",
       "size": 20246690,
       "sha256": "c79ad91d929f50cb1676c4fcbce937c81b1854ec37ca758118c2d78a373c431f"
+    },
+    "darwin": {
+      "architectures": {
+        "x64": {
+          "archive": "tunnel-client-v0.0.11-darwin-amd64.zip",
+          "archiveSha256": "a48c8a37983d9bf9442309cb661cd2f14d7321cfacf72375d7fa31a6a7420db0",
+          "archiveEntry": "64/tunnel-client",
+          "file": "tunnel-client",
+          "size": 20794544,
+          "sha256": "e5ad5013e43d517a201e23cddff5fa3becf4dc6b1278aca8883b3aa00e16851d"
+        },
+        "arm64": {
+          "archive": "tunnel-client-v0.0.11-darwin-arm64.zip",
+          "archiveSha256": "3685443b057614ff932d2d477dab94be2082e60bcf4e8b4e378bebc89121b714",
+          "archiveEntry": "64/tunnel-client",
+          "file": "tunnel-client",
+          "size": 19429170,
+          "sha256": "a916406d4fd5506aab9a593808ebd10ab23aa7d11e1675d33612632b9ead7e51"
+        }
+      }
     }
   }
 }

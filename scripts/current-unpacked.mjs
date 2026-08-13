@@ -47,7 +47,8 @@ function resolveCurrentUnpackedFromDist(distRoot, options = {}) {
     ? candidates.sort((left, right) => fs.statSync(right).mtimeMs - fs.statSync(left).mtimeMs)[0]
     : candidates[0];
   if (candidate) return candidate;
-  throw new Error(`No current ${platform} unpacked application was found. Run npm run electron:dist${platform === 'linux' ? ':linux' : ''}${options.allowBuildCheck ? ` or npm run electron:build${platform === 'linux' ? ':linux' : ''}` : ''}.`);
+  const scriptSuffix = platform === 'linux' ? ':linux' : platform === 'darwin' ? ':mac' : '';
+  throw new Error(`No current ${platform} unpacked application was found. Run npm run electron:dist${scriptSuffix}${options.allowBuildCheck ? ` or npm run electron:build${scriptSuffix}` : ''}.`);
 }
 
 function assertContained(parent, candidate, markerPath) {
@@ -75,7 +76,7 @@ function platformArgument(argv) {
   const index = argv.indexOf('--platform');
   if (index < 0) return process.platform;
   const value = argv[index + 1];
-  if (!value || value.startsWith('--')) throw new Error('--platform requires win32 or linux.');
+  if (!value || value.startsWith('--')) throw new Error('--platform requires win32, linux, or darwin.');
   return value;
 }
 

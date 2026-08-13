@@ -10,6 +10,7 @@ const ci = read('.github/workflows/ci.yml');
 const release = read('.github/workflows/release.yml');
 const testRunner = read('test/run-tests.mjs');
 const electronPackage = JSON.parse(read('electron/package.json'));
+const nsisUninstallerTemplate = read('electron/node_modules/app-builder-lib/templates/nsis/uninstaller.nsh');
 
 for (const [name, command] of Object.entries(packageJson.scripts || {})) {
   assert.doesNotMatch(command, /installed-app-smoke|test:installed|\/S\b|--uninstall|uninstall/i,
@@ -18,8 +19,10 @@ for (const [name, command] of Object.entries(packageJson.scripts || {})) {
 
 assert.equal(packageJson.scripts['electron:build'], 'node scripts/electron-package.mjs --mode unpacked --platform win32');
 assert.equal(packageJson.scripts['electron:build:linux'], 'node scripts/electron-package.mjs --mode unpacked --platform linux');
+assert.equal(packageJson.scripts['electron:build:mac'], 'node scripts/electron-package.mjs --mode unpacked --platform darwin');
 assert.equal(packageJson.scripts['electron:dist'], 'node scripts/electron-package.mjs --mode release --platform win32');
 assert.equal(packageJson.scripts['electron:dist:linux'], 'node scripts/electron-package.mjs --mode release --platform linux');
+assert.equal(packageJson.scripts['electron:dist:mac'], 'node scripts/electron-package.mjs --mode release --platform darwin');
 const packageWrapper = read('scripts/electron-package.mjs');
 const cleanScript = read('scripts/clean.mjs');
 assert.match(packageWrapper, /assertSafeControllerOperation/);
@@ -30,8 +33,11 @@ assert.match(packageWrapper, /packageBin\(path\.join\(root, 'node_modules', '@ta
 assert.doesNotMatch(packageWrapper, /npmCommand|npxCommand|npm\.cmd|npx\.cmd|shell:\s*true/i);
 assert.match(packageWrapper, /packageWindowsRelease/);
 assert.match(packageWrapper, /packageLinuxRelease/);
+assert.match(packageWrapper, /packageMacRelease/);
 assert.match(packageWrapper, /Electron Windows release staging/);
 assert.match(packageWrapper, /Electron Linux release staging/);
+assert.match(packageWrapper, /Electron macOS release staging/);
+assert.match(packageWrapper, /DMG artifact packaging/);
 assert.match(packageWrapper, /NSIS artifact packaging/);
 assert.match(packageWrapper, /portable artifact packaging/);
 assert.match(packageWrapper, /AppImage and DEB artifact packaging/);
@@ -78,6 +84,15 @@ assert.equal(electronPackage.scripts?.postinstall, 'node node_modules/electron/i
 assert.equal(electronPackage.devDependencies.electron, '43.2.0',
   'Electron runtime provisioning must remain pinned to the package version under test');
 assert.deepEqual(electronPackage.build.linux.target, ['AppImage', 'deb']);
+assert.deepEqual(electronPackage.build.mac.target, ['dmg']);
+assert.equal(electronPackage.build.mac.identity, null, 'macOS builds remain unsigned until signing is implemented as a separate release improvement');
+assert.equal(electronPackage.build.dmg.artifactName, 'Rel.AI-MCP-${version}-mac-${arch}.${ext}');
+assert.equal(electronPackage.build.nsis.deleteAppDataOnUninstall, false,
+  'normal uninstall must not enable electron-builder app-data deletion');
+assert.match(nsisUninstallerTemplate, /\$\{GetOptions\}\s+\$R0\s+"--delete-app-data"/,
+  'the pinned assisted uninstaller must keep data deletion behind an explicit command-line trigger');
+assert.match(nsisUninstallerTemplate, /!ifdef DELETE_APP_DATA_ON_UNINSTALL[\s\S]*StrCpy \$isDeleteAppData "1"/,
+  'the pinned assisted uninstaller must require the build-time delete-data define before implicit app-data deletion');
 assert.equal(electronPackage.homepage, 'https://github.com/Kyne0328/rel-ai-mcp');
 assert.equal(electronPackage.build.linux.maintainer, 'Kyne <Kyne0328@users.noreply.github.com>');
 assert.equal(electronPackage.build.appImage.artifactName, 'Rel.AI-MCP-${version}-linux-x64.${ext}');
@@ -95,6 +110,16 @@ assert.doesNotMatch(ci, /--no-sandbox/);
 assert.doesNotMatch(ci, /test:installed|REL_AI_SMOKE_INSTALLER|uninstall|Setup.*\.exe/i);
 assert.match(release, /Build Windows release/);
 assert.match(release, /Build Linux release/);
+assert.match(release, /Build macOS release/);
+assert.match(release, /runs-on: \$\{\{ matrix\.runner \}\}/);
+assert.match(release, /runner: macos-15-intel/);
+assert.match(release, /runner: macos-15/);
+assert.match(release, /npm run electron:dist:mac/);
+assert.match(release, /REL_AI_TARGET_ARCH: \$\{\{ matrix\.arch \}\}/);
+assert.match(release, /macos-release-\$\{\{ needs\.preflight\.outputs\.version \}\}-\$\{\{ matrix\.arch \}\}/);
+assert.match(release, /Rel\.AI-MCP-\$\{\{ needs\.preflight\.outputs\.version \}\}-mac-\$\{\{ matrix\.arch \}\}\.dmg/);
+assert.match(release, /Download macOS release bundles/);
+assert.match(release, /dist\/\*\.dmg/);
 assert.match(release, /Verify Linux DEB upgrade metadata/);
 assert.match(release, /dpkg-deb --field "\$deb" Package/);
 assert.match(release, /rel-ai-mcp-launcher/);

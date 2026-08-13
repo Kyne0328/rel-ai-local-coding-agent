@@ -110,8 +110,10 @@ function verifyPackageContracts() {
 
   assert.equal(rootPackage.scripts['electron:build'], 'node scripts/electron-package.mjs --mode unpacked --platform win32');
   assert.equal(rootPackage.scripts['electron:build:linux'], 'node scripts/electron-package.mjs --mode unpacked --platform linux');
+  assert.equal(rootPackage.scripts['electron:build:mac'], 'node scripts/electron-package.mjs --mode unpacked --platform darwin');
   assert.equal(rootPackage.scripts['electron:dist'], 'node scripts/electron-package.mjs --mode release --platform win32');
   assert.equal(rootPackage.scripts['electron:dist:linux'], 'node scripts/electron-package.mjs --mode release --platform linux');
+  assert.equal(rootPackage.scripts['electron:dist:mac'], 'node scripts/electron-package.mjs --mode release --platform darwin');
   assert.equal(rootPackage.scripts['electron:size'], 'node scripts/electron-package-size.mjs --dir dist --platform win32 --baseline scripts/electron-size-baseline.json --strict');
   assert.equal(rootPackage.scripts['electron:size:linux'], 'node scripts/electron-package-size.mjs --dir dist --platform linux --baseline scripts/electron-size-baseline-linux.json --strict');
   assert.equal(rootPackage.scripts['test:installed'], undefined);
@@ -120,6 +122,10 @@ function verifyPackageContracts() {
   assert.deepEqual(electronPackage.build.electronLanguages, ['en-US']);
   assert.deepEqual(electronPackage.build.win.target, ['nsis', 'portable']);
   assert.deepEqual(electronPackage.build.linux.target, ['AppImage', 'deb']);
+  assert.deepEqual(electronPackage.build.mac.target, ['dmg']);
+  assert.equal(electronPackage.build.mac.identity, null);
+  assert.equal(electronPackage.build.dmg.artifactName, 'Rel.AI-MCP-${version}-mac-${arch}.${ext}');
+  assert.equal(electronPackage.build.nsis.deleteAppDataOnUninstall, false);
   assert.equal(electronPackage.build.linux.maintainer, 'Kyne <Kyne0328@users.noreply.github.com>');
   assert.equal(electronPackage.build.linux.executableName, 'rel-ai-mcp');
   assert.equal(electronPackage.build.appImage.artifactName, 'Rel.AI-MCP-${version}-linux-x64.${ext}');
@@ -139,8 +145,11 @@ function verifyPackageContracts() {
     /assertSupportedBuildHost/,
     /packageWindowsRelease/,
     /packageLinuxRelease/,
+    /packageMacRelease/,
     /Electron Windows release staging/,
     /Electron Linux release staging/,
+    /Electron macOS release staging/,
+    /DMG artifact packaging/,
     /NSIS artifact packaging/,
     /portable artifact packaging/,
     /AppImage and DEB artifact packaging/,
@@ -185,6 +194,7 @@ function verifyWorkflowContracts() {
     /preflight:/,
     /windows:/,
     /linux:/,
+    /mac:/,
     /publish:/,
     /needs:\s+preflight/,
     /needs:[\s\S]*- windows[\s\S]*- linux/,
@@ -196,6 +206,13 @@ function verifyWorkflowContracts() {
     /npm run electron:dist:windows/,
     /Build Linux release/,
     /npm run electron:dist:linux/,
+    /Build macOS release/,
+    /runs-on: \$\{\{ matrix\.runner \}\}/,
+    /runner: macos-15-intel/,
+    /runner: macos-15/,
+    /npm run electron:dist:mac/,
+    /TUNNEL_CLIENT_PLATFORMS: darwin/,
+    /REL_AI_TARGET_ARCH: \$\{\{ matrix\.arch \}\}/,
     /TUNNEL_CLIENT_PLATFORMS: win32/,
     /TUNNEL_CLIENT_PLATFORMS: linux/,
     /npm run verify:packaged -- --platform win32/,
@@ -211,10 +228,13 @@ function verifyWorkflowContracts() {
     /Rel\.AI-MCP-Portable-\$\{\{ needs\.preflight\.outputs\.version \}\}\.exe/,
     /Rel\.AI-MCP-\$\{\{ needs\.preflight\.outputs\.version \}\}-linux-x64\.AppImage/,
     /Rel\.AI-MCP-\$\{\{ needs\.preflight\.outputs\.version \}\}-linux-x64\.deb/,
+    /Rel\.AI-MCP-\$\{\{ needs\.preflight\.outputs\.version \}\}-mac-\$\{\{ matrix\.arch \}\}\.dmg/,
     /latest-linux\.yml/,
     /electron-size-report-linux\.json/,
     /Download Windows release bundle/,
     /Download Linux release bundle/,
+    /Download macOS release bundles/,
+    /merge-multiple: true/,
     /npm run prepare:release-assets/,
     /release-assets\.txt/,
     /SHA256SUMS\.txt/,
@@ -222,6 +242,7 @@ function verifyWorkflowContracts() {
     /Attest release SBOM/,
     /dist\/\*\.AppImage/,
     /dist\/\*\.deb/,
+    /dist\/\*\.dmg/,
     /CSC_IDENTITY_AUTO_DISCOVERY:\s*'false'/,
     /Verify bundled OpenAI tunnel-client/,
     /verify-tunnel-client\.mjs/,
