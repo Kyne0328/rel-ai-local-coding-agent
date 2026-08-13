@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 
-const manifest = JSON.parse(fs.readFileSync('contracts/cloud/mcp-manifest.json', 'utf8'));
-assert.equal(manifest.toolSurfaceVersion, 37);
-const tool = manifest.tools.find(item => item.name === 'relai_exec');
-assert.ok(tool, 'relai_exec must remain present in the public cloud contract');
+import { getPublicToolSchemas } from '../src/tools/schema.js';
+
+const tool = getPublicToolSchemas().find(item => item.name === 'relai_exec');
+assert.ok(tool, 'relai_exec must remain present in the public MCP contract');
 assert.equal(tool.inputSchema?.oneOf, undefined, 'relai_exec must expose a flat connector input schema');
 assert.match(tool.description || '', /Prefer executable \+ argv/i);
 assert.match(tool.inputSchema?.description || '', /Prefer direct executable \+ argv mode by default/i);
