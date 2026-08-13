@@ -18,6 +18,8 @@ function prepareReleaseAssets(directory = path.join(root, 'dist')) {
     names.linuxAppImage,
     names.linuxDeb,
     names.linuxMetadata,
+    names.macDmgX64,
+    names.macDmgArm64,
     names.sbom,
     names.sizeReport,
     names.linuxSizeReport
@@ -59,7 +61,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const directoryIndex = process.argv.indexOf('--dir');
     const directory = directoryIndex >= 0 ? path.resolve(root, String(process.argv[directoryIndex + 1] || '')) : path.join(root, 'dist');
     const result = prepareReleaseAssets(directory);
-    console.log(`Prepared and verified ${result.assets.length} Windows and Linux release assets for ${result.version}.`);
+    console.log(`Prepared and verified ${result.assets.length} Windows, Linux, and macOS release assets for ${result.version}.`);
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;

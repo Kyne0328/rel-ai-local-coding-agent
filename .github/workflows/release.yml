@@ -288,12 +288,97 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  mac:
+    name: Build macOS release (${{ matrix.arch }})
+    needs: preflight
+    if: needs.preflight.outputs.publish == 'true'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: macos-15-intel
+          - arch: arm64
+            runner: macos-15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            electron/package-lock.json
+      - name: Install project dependencies
+        run: npm ci --ignore-scripts
+      - name: Install Electron dependencies
+        run: npm ci
+        working-directory: electron
+      - name: Fetch OpenAI tunnel-client
+        env:
+          TUNNEL_CLIENT_PLATFORMS: darwin
+          REL_AI_TARGET_ARCH: ${{ matrix.arch }}
+        run: node scripts/fetch-tunnel-client.mjs
+      - name: Build bundled Zoekt binaries
+        env:
+          ZOEKT_PLATFORMS: darwin
+          REL_AI_TARGET_ARCH: ${{ matrix.arch }}
+        run: bash scripts/fetch-zoekt.sh
+      - name: Verify generated color assets
+        run: npm run verify:color-tokens
+      - name: Run Electron platform regression tests
+        run: |
+          node test/electron-platform-unit.mjs
+          node test/current-unpacked-unit.mjs
+          node test/installer-test-entrypoints-unit.mjs
+      - name: Build macOS release
+        env:
+          REL_AI_TARGET_ARCH: ${{ matrix.arch }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run electron:dist:mac
+      - name: Resolve current unpacked application
+        id: unpacked
+        env:
+          REL_AI_TARGET_ARCH: ${{ matrix.arch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_directory="$(node scripts/current-unpacked.mjs --platform darwin)"
+          test -n "$package_directory"
+          test -d "$package_directory"
+          echo "path=$package_directory" >> "$GITHUB_OUTPUT"
+      - name: Verify hardened Electron fuses
+        env:
+          REL_AI_TARGET_ARCH: ${{ matrix.arch }}
+        run: npm run verify:fuses -- --platform darwin '${{ steps.unpacked.outputs.path }}/Rel.AI MCP.app/Contents/MacOS/Rel.AI MCP'
+      - name: Verify packaged application layout
+        env:
+          REL_AI_TARGET_ARCH: ${{ matrix.arch }}
+        run: npm run verify:packaged -- --platform darwin --dir '${{ steps.unpacked.outputs.path }}'
+      - name: Verify packaged bearer-authenticated MCP flow
+        env:
+          REL_AI_TARGET_PLATFORM: darwin
+          REL_AI_TARGET_ARCH: ${{ matrix.arch }}
+        run: npm run test:connector-acceptance -- --dir '${{ steps.unpacked.outputs.path }}'
+      - name: Upload macOS release bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: macos-release-${{ needs.preflight.outputs.version }}-${{ matrix.arch }}
+          path: dist/Rel.AI-MCP-${{ needs.preflight.outputs.version }}-mac-${{ matrix.arch }}.dmg
+          if-no-files-found: error
+          retention-days: 7
+
   publish:
     name: Publish combined release
     needs:
       - preflight
       - windows
       - linux
+      - mac
     if: needs.preflight.outputs.publish == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -317,6 +402,12 @@ jobs:
         with:
           name: linux-release-${{ needs.preflight.outputs.version }}
           path: dist
+      - name: Download macOS release bundles
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: macos-release-${{ needs.preflight.outputs.version }}-*
+          path: dist
+          merge-multiple: true
       - name: Prepare release assets
         run: npm run prepare:release-assets
       - name: Prepare release notes
@@ -348,6 +439,7 @@ jobs:
             dist/*.blockmap
             dist/*.AppImage
             dist/*.deb
+            dist/*.dmg
             dist/latest.yml
             dist/latest-linux.yml
             dist/SHA256SUMS.txt
@@ -359,6 +451,7 @@ jobs:
             dist/*.exe
             dist/*.AppImage
             dist/*.deb
+            dist/*.dmg
           sbom-path: dist/sbom.cdx.json
       - name: Publish GitHub release
         shell: bash

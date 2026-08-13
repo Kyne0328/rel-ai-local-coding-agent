@@ -9,6 +9,8 @@ try {
   testWindows(root);
   fs.rmSync(path.join(root, 'dist'), { recursive: true, force: true });
   testLinux(root);
+  fs.rmSync(path.join(root, 'dist'), { recursive: true, force: true });
+  testMac(root);
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }
@@ -64,9 +66,33 @@ function testLinux(testRoot) {
   assert.equal(resolveCurrentUnpacked(testRoot, { platform: 'linux' }), preferred);
 }
 
-function createExecutable(directory, name) {
-  fs.mkdirSync(directory, { recursive: true });
-  fs.writeFileSync(path.join(directory, name), 'binary', { mode: 0o755 });
+function testMac(testRoot) {
+  const dist = path.join(testRoot, 'dist');
+  const versioned = path.join(dist, 'unpacked-builds', 'darwin-build-1');
+  createExecutable(versioned, 'Rel.AI MCP.app/Contents/MacOS/Rel.AI MCP');
+  fs.writeFileSync(path.join(dist, 'current-unpacked-mac-arm64.json'), `${JSON.stringify({
+    schemaVersion: 2,
+    platform: 'darwin',
+    relativePath: 'unpacked-builds/darwin-build-1'
+  }, null, 2)}\n`);
+  const previous = process.env.REL_AI_TARGET_ARCH;
+  process.env.REL_AI_TARGET_ARCH = 'arm64';
+  try {
+    assert.equal(resolveCurrentUnpacked(testRoot, { platform: 'darwin' }), versioned);
+    fs.rmSync(path.join(dist, 'current-unpacked-mac-arm64.json'));
+    const preferred = path.join(dist, 'mac-arm64');
+    createExecutable(preferred, 'Rel.AI MCP.app/Contents/MacOS/Rel.AI MCP');
+    assert.equal(resolveCurrentUnpacked(testRoot, { platform: 'darwin' }), preferred);
+  } finally {
+    if (previous === undefined) delete process.env.REL_AI_TARGET_ARCH;
+    else process.env.REL_AI_TARGET_ARCH = previous;
+  }
 }
 
-console.log('Windows and Linux unpacked package resolution and containment tests passed.');
+function createExecutable(directory, name) {
+  const file = path.join(directory, name);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, 'binary', { mode: 0o755 });
+}
+
+console.log('Windows, Linux, and macOS unpacked package resolution and containment tests passed.');

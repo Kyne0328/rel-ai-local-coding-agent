@@ -8,7 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const platformIndex = args.indexOf('--platform');
 if (platformIndex >= 0 && (!args[platformIndex + 1] || args[platformIndex + 1].startsWith('--'))) {
-  throw new Error('--platform requires win32 or linux.');
+  throw new Error('--platform requires win32, linux, or darwin.');
 }
 const platform = normalizeElectronPlatform(platformIndex >= 0 ? args[platformIndex + 1] : process.platform);
 if (platformIndex >= 0) args.splice(platformIndex, 2);

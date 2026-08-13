@@ -4,7 +4,7 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { assertSafeControllerOperation } from './active-controller-guard.mjs';
-import { electronPlatformSpec, normalizeElectronPlatform } from './electron-platform.mjs';
+import { electronPlatformSpec, normalizeElectronArch, normalizeElectronPlatform } from './electron-platform.mjs';
 import { invalidateDerivedReleaseEvidence, releaseArtifactNames } from './release-artifacts.mjs';
 import { writeWindowsUpdaterConfig } from './electron-updater-config.mjs';
 
@@ -19,8 +19,9 @@ if (!['unpacked', 'release'].includes(mode)) {
 }
 
 const platform = normalizeElectronPlatform(options.platform || 'win32');
-const platformSpec = electronPlatformSpec(platform);
-assertSupportedBuildHost(platformSpec);
+const targetArch = normalizeElectronArch(process.env.REL_AI_TARGET_ARCH || process.arch);
+const platformSpec = electronPlatformSpec(platform, targetArch);
+assertSupportedBuildHost(platformSpec, targetArch);
 const target = mode === 'release' ? path.join(root, 'dist') : path.join(root, 'dist', 'build-check');
 assertSafeControllerOperation({ operation: 'package', targetPaths: [target] });
 assertSafeBuilderArgs(options.builderArgs);
@@ -31,7 +32,7 @@ const verifyTunnelClient = path.join(root, 'scripts', 'verify-tunnel-client.mjs'
 const verifyZoekt = path.join(root, 'scripts', 'verify-zoekt-seed.mjs');
 const tailwindCli = packageBin(path.join(root, 'node_modules', '@tailwindcss', 'cli'), 'tailwindcss');
 const electronBuilderCli = packageBin(path.join(electronRoot, 'node_modules', 'electron-builder'), 'electron-builder');
-const platformEnvironment = { ...process.env, REL_AI_TARGET_PLATFORM: platform };
+const platformEnvironment = { ...process.env, REL_AI_TARGET_PLATFORM: platform, REL_AI_TARGET_ARCH: targetArch };
 
 if (mode === 'unpacked') {
   runNode('unpacked output cleanup', path.join(root, 'scripts', 'clean.mjs'), ['--electron']);
@@ -42,8 +43,8 @@ runNode('dashboard CSS build', tailwindCli, [
   '-o', path.join(root, 'public', 'dashboard.css'),
   '--minify'
 ]);
-ensureTunnelClient(platform);
-runNode('OpenAI tunnel-client verification', verifyTunnelClient, [], { env: { ...platformEnvironment, TUNNEL_CLIENT_PLATFORMS: platform } });
+ensureTunnelClient(platform, targetArch);
+runNode('OpenAI tunnel-client verification', verifyTunnelClient, [], { env: { ...platformEnvironment, TUNNEL_CLIENT_PLATFORMS: platform, REL_AI_TARGET_ARCH: targetArch } });
 runNode('Zoekt seed verification', verifyZoekt, [], { env: platformEnvironment });
 
 if (mode === 'unpacked') {
@@ -69,6 +70,10 @@ console.log(`Electron ${platform} ${mode} package completed without launching or
 async function packageRelease(electronBuilder, builderArgs, spec) {
   if (spec.platform === 'win32') {
     await packageWindowsRelease(electronBuilder, builderArgs, spec);
+    return;
+  }
+  if (spec.platform === 'darwin') {
+    await packageMacRelease(electronBuilder, builderArgs, spec);
     return;
   }
   await packageLinuxRelease(electronBuilder, builderArgs, spec);
@@ -205,6 +210,65 @@ async function packageLinuxRelease(electronBuilder, builderArgs, spec) {
   }
 }
 
+async function packageMacRelease(electronBuilder, builderArgs, spec) {
+  const releaseStartedAt = Date.now();
+  const stagingRoot = fs.mkdtempSync(path.join(os.tmpdir(), `rel-ai-mcp-macos-${targetArch}-release-`));
+  const stagingOutputArg = `--config.directories.output=${stagingRoot}`;
+  const prepackaged = path.join(stagingRoot, spec.unpackedDirectory);
+  const artifactOutput = path.join(stagingRoot, '.artifact-targets', 'mac-output');
+  const environment = {
+    ...process.env,
+    REL_AI_TARGET_PLATFORM: spec.platform,
+    REL_AI_TARGET_ARCH: targetArch,
+    CSC_IDENTITY_AUTO_DISCOVERY: 'false',
+    ELECTRON_BUILDER_COMPRESSION_LEVEL: RELEASE_ARCHIVE_COMPRESSION_LEVEL
+  };
+  let completed = false;
+  try {
+    const stagingStartedAt = Date.now();
+    runNode('Electron macOS release staging', electronBuilder, [
+      spec.builderFlag,
+      ...architectureArgs(spec),
+      '--dir',
+      stagingOutputArg,
+      '--publish', 'never',
+      ...builderArgs
+    ], { cwd: electronRoot, env: environment });
+    assertPrepackagedApp(prepackaged, spec);
+    console.log(`[electron-package] Shared macOS ${targetArch} unpacked application prepared in ${formatDuration(Date.now() - stagingStartedAt)}.`);
+
+    const artifactStartedAt = Date.now();
+    runNode('DMG artifact packaging', electronBuilder, [
+      spec.builderFlag, 'dmg',
+      ...architectureArgs(spec),
+      '--prepackaged', prepackaged,
+      `--config.directories.output=${artifactOutput}`,
+      '--publish', 'never',
+      ...builderArgs
+    ], { cwd: electronRoot, env: environment });
+    console.log(`[electron-package] macOS ${targetArch} DMG completed in ${formatDuration(Date.now() - artifactStartedAt)}.`);
+
+    const version = readVersion();
+    const canonical = releaseArtifactNames(version);
+    const dmg = targetArch === 'arm64' ? canonical.macDmgArm64 : canonical.macDmgX64;
+    const requiredArtifacts = [dmg];
+    collectArtifactFiles(artifactOutput, stagingRoot, requiredArtifacts);
+    removeDirectory(path.join(stagingRoot, '.artifact-targets'));
+
+    const promoted = promoteReleaseOutput({
+      stagingRoot,
+      destinationRoot: path.join(root, 'dist'),
+      spec,
+      requiredArtifacts
+    });
+    console.log(`Current macOS ${targetArch} unpacked application: ${path.relative(root, promoted.unpackedPath)}`);
+    console.log(`[electron-package] macOS ${targetArch} release packaging completed in ${formatDuration(Date.now() - releaseStartedAt)}.`);
+    completed = true;
+  } finally {
+    finishStaging(stagingRoot, completed);
+  }
+}
+
 function collectArtifactFiles(sourceDirectory, destinationDirectory, names) {
   for (const name of names) {
     const source = path.join(sourceDirectory, name);
@@ -315,6 +379,9 @@ function isPlatformReleaseArtifact(name, platform) {
   if (platform === 'win32') {
     return /(?:\.exe|\.exe\.blockmap|^latest\.ya?ml$)/i.test(name) || isBuilderDiagnosticArtifact(name);
   }
+  if (platform === 'darwin') {
+    return new RegExp(`-mac-${targetArch}\\.dmg$`, 'i').test(name) || isBuilderDiagnosticArtifact(name);
+  }
   return /(?:\.AppImage|\.deb|^latest-linux\.ya?ml$)/i.test(name) || isBuilderDiagnosticArtifact(name);
 }
 
@@ -360,23 +427,23 @@ function assertSafeBuilderArgs(args) {
   if (conflict) throw new Error(`Builder argument ${conflict} is controlled by the guarded packaging workflow.`);
 }
 
-function assertSupportedBuildHost(spec) {
+function assertSupportedBuildHost(spec, architecture) {
   if (process.platform !== spec.platform) {
     throw new Error(`${spec.platform} Electron packaging must run on a ${spec.platform} build host. Current host: ${process.platform}.`);
   }
-  if (process.arch !== 'x64') {
-    throw new Error(`Rel.AI Electron packaging currently supports x64 build hosts only. Current architecture: ${process.arch}.`);
+  if (spec.platform !== 'darwin' && (process.arch !== 'x64' || architecture !== 'x64')) {
+    throw new Error(`Rel.AI ${spec.platform} packaging currently supports x64 only. Host architecture: ${process.arch}; target: ${architecture}.`);
   }
 }
 
 function assertPrepackagedApp(directory, spec) {
   const executable = path.join(directory, spec.executableName);
-  const resources = path.join(directory, 'resources');
+  const resources = path.join(directory, spec.resourcesDirectory || 'resources');
   if (!fs.existsSync(executable) || !fs.statSync(executable).isFile()) {
     throw new Error(`Release staging did not produce ${executable}.`);
   }
-  if (spec.platform === 'linux' && (fs.statSync(executable).mode & 0o111) === 0) {
-    throw new Error(`Release staging produced a non-executable Linux binary: ${executable}.`);
+  if (spec.platform !== 'win32' && (fs.statSync(executable).mode & 0o111) === 0) {
+    throw new Error(`Release staging produced a non-executable ${spec.platform} binary: ${executable}.`);
   }
   if (!fs.existsSync(resources) || !fs.statSync(resources).isDirectory()) {
     throw new Error(`Release staging did not produce ${resources}.`);
@@ -391,23 +458,26 @@ function assertWindowsUpdaterConfig(directory) {
 }
 
 function architectureArgs(spec) {
-  return spec.platform === 'linux' ? ['--x64'] : [];
+  if (spec.platform === 'linux') return ['--x64'];
+  if (spec.platform === 'darwin') return [`--${targetArch}`];
+  return [];
 }
 
 function readVersion() {
   return JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
 }
 
-function ensureTunnelClient(targetPlatform) {
+function ensureTunnelClient(targetPlatform, architecture) {
   const manifestPath = path.join(root, 'vendor', 'tunnel-client', 'manifest.json');
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  const spec = manifest.platforms?.[targetPlatform];
-  if (!spec?.file) throw new Error(`Unsupported tunnel-client platform: ${targetPlatform}`);
+  const platformManifest = manifest.platforms?.[targetPlatform];
+  const spec = platformManifest?.architectures?.[architecture] || platformManifest;
+  if (!spec?.file) throw new Error(`Unsupported tunnel-client platform/architecture: ${targetPlatform}/${architecture}`);
   const executable = path.join(root, 'vendor', 'tunnel-client', targetPlatform, spec.file);
   if (fs.existsSync(executable)) return;
   console.log(`[electron-package] OpenAI tunnel-client is missing for ${targetPlatform}; fetching the pinned ${manifest.version} artifact.`);
   runNode('OpenAI tunnel-client fetch', fetchTunnelClient, [], {
-    env: { ...platformEnvironment, TUNNEL_CLIENT_PLATFORMS: targetPlatform }
+    env: { ...platformEnvironment, TUNNEL_CLIENT_PLATFORMS: targetPlatform, REL_AI_TARGET_ARCH: architecture }
   });
 }
 

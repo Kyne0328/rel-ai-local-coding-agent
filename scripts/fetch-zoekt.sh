@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the exact Linux Zoekt binaries declared in vendor/zoekt/manifest.json.
+# Build the exact Linux or macOS Zoekt binaries declared in vendor/zoekt/manifest.json.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -9,31 +9,71 @@ go_version="$(node -p "require('$manifest').toolchain.goVersion")"
 commit="$(node -p "require('$manifest').upstream.commit")"
 repo="$(node -p "require('$manifest').upstream.repository")"
 
-if [[ "${ZOEKT_PLATFORMS:-linux}" != "linux" ]]; then
-  echo 'fetch-zoekt.sh supports ZOEKT_PLATFORMS=linux only.' >&2
+host_os="$(uname -s)"
+default_platform="linux"
+[[ "$host_os" == "Darwin" ]] && default_platform="darwin"
+target_platform="${ZOEKT_PLATFORMS:-$default_platform}"
+if [[ "$target_platform" != "linux" && "$target_platform" != "darwin" ]]; then
+  echo 'fetch-zoekt.sh supports one target: ZOEKT_PLATFORMS=linux or darwin.' >&2
   exit 1
 fi
+
+normalize_arch() {
+  case "$1" in
+    x64|X64|amd64|AMD64|x86_64|X86_64) echo x64 ;;
+    arm64|ARM64|aarch64|AARCH64) echo arm64 ;;
+    *) echo "Unsupported architecture: $1" >&2; exit 1 ;;
+  esac
+}
+
+target_arch="$(normalize_arch "${REL_AI_TARGET_ARCH:-$(uname -m)}")"
+if [[ "$target_platform" == "linux" && "$target_arch" != "x64" ]]; then
+  echo 'Rel.AI Linux Zoekt packaging currently supports x64 only.' >&2
+  exit 1
+fi
+
+manifest_value() {
+  local expression="$1"
+  node -p "const m=require('$manifest'); $expression"
+}
+
+target_spec="m.platforms['$target_platform'].architectures?.['$target_arch'] || m.platforms['$target_platform']"
+go_arch="$(manifest_value "($target_spec).architecture")"
+
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'; else shasum -a 256 "$1" | awk '{print $1}'; fi
+}
+
+file_size() {
+  if [[ "$host_os" == "Darwin" ]]; then stat -f '%z' "$1"; else stat -c '%s' "$1"; fi
+}
 
 resolve_go() {
   if command -v go >/dev/null 2>&1 && go version | grep -q "^go version go${go_version} "; then
     command -v go
     return
   fi
-  local tool_root="${TMPDIR:-/tmp}/relai-go-${go_version}"
-  local go_bin="$tool_root/go/bin/go"
-  if [[ -x "$go_bin" ]]; then
-    echo "$go_bin"
-    return
+  local toolchain_key
+  if [[ "$host_os" == "Darwin" ]]; then
+    case "$(normalize_arch "$(uname -m)")" in
+      x64) toolchain_key=darwinAmd64 ;;
+      arm64) toolchain_key=darwinArm64 ;;
+    esac
+  else
+    toolchain_key=linuxAmd64
   fi
-  local url sha archive actual
-  url="$(node -p "require('$manifest').toolchain.linuxAmd64.url")"
-  sha="$(node -p "require('$manifest').toolchain.linuxAmd64.sha256")"
-  archive="${TMPDIR:-/tmp}/relai-go-${go_version}-linux-amd64.tar.gz"
+  local url sha tool_root go_bin archive actual
+  url="$(manifest_value "m.toolchain.$toolchain_key.url")"
+  sha="$(manifest_value "m.toolchain.$toolchain_key.sha256")"
+  tool_root="${TMPDIR:-/tmp}/relai-go-${go_version}-${toolchain_key}"
+  go_bin="$tool_root/go/bin/go"
+  if [[ -x "$go_bin" ]]; then echo "$go_bin"; return; fi
+  archive="${TMPDIR:-/tmp}/relai-go-${go_version}-${toolchain_key}.tar.gz"
   if [[ ! -f "$archive" ]]; then
     echo "GET $url" >&2
     curl -fsSL "$url" -o "$archive"
   fi
-  actual="$(sha256sum "$archive" | awk '{print $1}')"
+  actual="$(sha256_file "$archive")"
   [[ "$actual" == "$sha" ]] || { echo "Go archive SHA-256 mismatch. Expected $sha, got $actual." >&2; exit 1; }
   rm -rf "$tool_root"
   mkdir -p "$tool_root"
@@ -65,10 +105,10 @@ NODE
 assert_artifact() {
   local file="$1" key="$2"
   local expected_size expected_sha actual_size actual_sha
-  expected_size="$(node -p "require('$manifest').platforms.linux.$key.size")"
-  expected_sha="$(node -p "require('$manifest').platforms.linux.$key.sha256")"
-  actual_size="$(stat -c '%s' "$file")"
-  actual_sha="$(sha256sum "$file" | awk '{print $1}')"
+  expected_size="$(manifest_value "($target_spec).$key.size")"
+  expected_sha="$(manifest_value "($target_spec).$key.sha256")"
+  actual_size="$(file_size "$file")"
+  actual_sha="$(sha256_file "$file")"
   [[ "$actual_size" == "$expected_size" ]] || { echo "$(basename "$file") size mismatch. Expected $expected_size, got $actual_size." >&2; exit 1; }
   [[ "$actual_sha" == "$expected_sha" ]] || { echo "$(basename "$file") SHA-256 mismatch. Expected $expected_sha, got $actual_sha." >&2; exit 1; }
 }
@@ -83,9 +123,10 @@ git -C "$source_root" checkout --quiet FETCH_HEAD
 [[ "$(git -C "$source_root" rev-parse HEAD)" == "$commit" ]] || { echo 'Zoekt commit mismatch.' >&2; exit 1; }
 apply_patch "$source_root"
 
-export GOTOOLCHAIN=local CGO_ENABLED=0 GOOS=linux GOARCH=amd64
-search_name="$(node -p "require('$manifest').platforms.linux.search.file")"
-index_name="$(node -p "require('$manifest').platforms.linux.index.file")"
+export GOTOOLCHAIN=local CGO_ENABLED=0
+export GOOS="$target_platform" GOARCH="$go_arch"
+search_name="$(manifest_value "($target_spec).search.file")"
+index_name="$(manifest_value "($target_spec).index.file")"
 (
   cd "$source_root"
   "$go_bin" build -trimpath -ldflags='-s -w -buildid=' -o "$tmp/$search_name" ./cmd/zoekt
@@ -93,8 +134,8 @@ index_name="$(node -p "require('$manifest').platforms.linux.index.file")"
 )
 assert_artifact "$tmp/$search_name" search
 assert_artifact "$tmp/$index_name" index
-mkdir -p "$base/linux"
-cp -f "$tmp/$search_name" "$base/linux/$search_name"
-cp -f "$tmp/$index_name" "$base/linux/$index_name"
-chmod +x "$base/linux/$search_name" "$base/linux/$index_name"
-echo "Zoekt linux binaries verified from $commit."
+mkdir -p "$base/$target_platform"
+cp -f "$tmp/$search_name" "$base/$target_platform/$search_name"
+cp -f "$tmp/$index_name" "$base/$target_platform/$index_name"
+chmod +x "$base/$target_platform/$search_name" "$base/$target_platform/$index_name"
+echo "Zoekt $target_platform/$target_arch binaries verified from $commit."

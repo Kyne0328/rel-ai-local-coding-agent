@@ -57,26 +57,35 @@ function assertJsonVersion(relativePath, version) {
 function assertTunnelClient() {
   const platform = String(process.env.REL_AI_TARGET_PLATFORM || (process.platform === 'win32' ? 'win32' : '')).trim();
   if (!platform) return;
+  const targetArch = normalizeArch(process.env.REL_AI_TARGET_ARCH || process.arch);
   const manifestPath = rel('vendor', 'tunnel-client', 'manifest.json');
   if (!fs.existsSync(manifestPath)) {
     fail(`OpenAI tunnel-client provenance manifest is missing: ${path.relative(root, manifestPath)}`);
     return;
   }
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  const spec = manifest.platforms?.[platform];
+  const platformSpec = manifest.platforms?.[platform];
+  const spec = platformSpec?.architectures?.[targetArch] || platformSpec;
   if (!spec) {
-    fail(`OpenAI tunnel-client provenance manifest has no entry for ${platform}`);
+    fail(`OpenAI tunnel-client provenance manifest has no entry for ${platform}/${targetArch}`);
     return;
   }
   const binaryPath = rel('vendor', 'tunnel-client', platform, spec.file);
   if (!fs.existsSync(binaryPath)) {
-    fail(`bundled OpenAI tunnel-client is missing for ${platform}: ${path.relative(root, binaryPath)}`);
+    fail(`bundled OpenAI tunnel-client is missing for ${platform}/${targetArch}: ${path.relative(root, binaryPath)}`);
     return;
   }
   const bytes = fs.readFileSync(binaryPath);
   const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
-  expectEqual(bytes.length, Number(spec.size), `bundled OpenAI tunnel-client size for ${platform}`);
-  expectEqual(sha256, String(spec.sha256).toLowerCase(), `bundled OpenAI tunnel-client SHA-256 for ${platform}`);
+  expectEqual(bytes.length, Number(spec.size), `bundled OpenAI tunnel-client size for ${platform}/${targetArch}`);
+  expectEqual(sha256, String(spec.sha256).toLowerCase(), `bundled OpenAI tunnel-client SHA-256 for ${platform}/${targetArch}`);
+}
+
+function normalizeArch(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (['x64', 'amd64', 'x86_64'].includes(normalized)) return 'x64';
+  if (['arm64', 'aarch64'].includes(normalized)) return 'arm64';
+  return normalized;
 }
 
 const packageJson = readJson('package.json');

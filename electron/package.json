@@ -242,6 +242,36 @@
         }
       ]
     },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.developer-tools",
+      "identity": null,
+      "extraResources": [
+        {
+          "from": "../vendor/tunnel-client",
+          "to": "bin/tunnel-client",
+          "filter": [
+            "manifest.json",
+            "darwin/**"
+          ]
+        },
+        {
+          "from": "../vendor/zoekt",
+          "to": "bin/zoekt",
+          "filter": [
+            "manifest.json",
+            "LICENSE",
+            "darwin/**"
+          ]
+        }
+      ]
+    },
+    "dmg": {
+      "artifactName": "Rel.AI-MCP-${version}-mac-${arch}.${ext}"
+    },
     "appImage": {
       "artifactName": "Rel.AI-MCP-${version}-linux-x64.${ext}"
     },
@@ -260,7 +290,8 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Rel.AI MCP",
-      "runAfterFinish": true
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
     },
     "portable": {
       "artifactName": "Rel.AI-MCP-Portable-${version}.${ext}"

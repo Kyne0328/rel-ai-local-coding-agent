@@ -17,6 +17,8 @@ function releaseArtifactNames(version) {
     linuxAppImage: `Rel.AI-MCP-${normalizedVersion}-linux-x64.AppImage`,
     linuxDeb: `Rel.AI-MCP-${normalizedVersion}-linux-x64.deb`,
     linuxMetadata: 'latest-linux.yml',
+    macDmgX64: `Rel.AI-MCP-${normalizedVersion}-mac-x64.dmg`,
+    macDmgArm64: `Rel.AI-MCP-${normalizedVersion}-mac-arm64.dmg`,
     checksums: 'SHA256SUMS.txt',
     sbom: 'sbom.cdx.json',
     sizeReport: 'electron-size-report.json',
