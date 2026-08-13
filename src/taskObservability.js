@@ -341,6 +341,13 @@ function targetForTool(args = {}, value = {}) {
   });
 }
 
+function searchMatchCountText(value) {
+  const count = Number(value?.matchCount);
+  if (!Number.isFinite(count)) return '';
+  const qualifier = value?.truncated === true ? 'at least ' : '';
+  return `${qualifier}${count} match${count === 1 ? '' : 'es'}`;
+}
+
 function resultForTool(name, args, value, ok, error = null) {
   const changed = changedFiles(value);
   const affectedItemCount = affectedCount(value, args, changed);
@@ -349,7 +356,7 @@ function resultForTool(name, args, value, ok, error = null) {
     ? 'Final validation required'
     : ok ? 'Completed successfully' : 'Failed';
   if (name === 'relai_read' && affectedItemCount) outcome = `Read ${affectedItemCount} item${affectedItemCount === 1 ? '' : 's'}`;
-  else if (name === 'relai_search' && Number.isFinite(value?.matchCount)) outcome = `Found ${value.matchCount} match${value.matchCount === 1 ? '' : 'es'}`;
+  else if (name === 'relai_search' && Number.isFinite(value?.matchCount)) outcome = `Found ${searchMatchCountText(value)}`;
   else if (changed.length) outcome = `Updated ${changed.length} file${changed.length === 1 ? '' : 's'}`;
   else if (/checks|diagnostics/.test(name) && value?.validationStatus) outcome = `Validation ${value.validationStatus}`;
   else if (/git_commit/.test(name) && value?.commit) outcome = `Created commit ${cleanText(value.commit, 20)}`;
@@ -368,7 +375,7 @@ function summaryForTool(name, args, value, error, operation, result) {
     ? `Read ${result.affectedItemCount} repository item${result.affectedItemCount === 1 ? '' : 's'}.`
     : 'Read repository content.';
   if (name === 'relai_search') return Number.isFinite(value?.matchCount)
-    ? `Searched the repository and found ${value.matchCount} match${value.matchCount === 1 ? '' : 'es'}.`
+    ? `Searched the repository and found ${searchMatchCountText(value)}.`
     : 'Searched repository content.';
   if (name === 'relai_edit') {
     const count = changedFiles(value).length || pathCount(args);

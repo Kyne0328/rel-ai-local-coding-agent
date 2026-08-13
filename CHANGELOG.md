@@ -6,6 +6,10 @@
 - **Preserve empty managed-process lists through connector compaction so relai_process list satisfies its output contract when no managed process is running.**
 - **Add regression coverage for the empty process-list contract.**
 
+### Search and contract reliability
+- **Bound broad repository searches by useful output instead of exhaustive counting.** Stop streamed text search after one additional visible match proves `maxResults` is truncated, extend the search budget to 25 seconds, and return useful partial matches instead of failing the whole call when that budget is reached. Truncated observability reports `matchCount` as an explicit lower bound (`at least N`) rather than implying an exact total.
+- **Refresh stale Secure Tunnel, runtime-surface, and Activity contract tests.** Keep tests aligned with the current Tunnel + No authentication workflow, canonical release-manifest tool metadata, and the current live Activity controller/CSS contract.
+
 Bump root/electron/status UI/lockfiles to 0.25.1.
 
 ## [0.25.0] — 2026-08-08

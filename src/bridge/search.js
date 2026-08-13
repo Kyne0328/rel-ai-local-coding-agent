@@ -10,12 +10,12 @@ import { resolveSearchPlan } from './searchPlanner.js';
 import { cachedSearchGraphContext } from '../repository/intelligence/contextPlanner.js';
 const DEFAULT_MAX_RESULTS = 200;
 const MAX_LINE_CHARS = 400;
-const SEARCH_TIMEOUT_MS = 15000;
+const SEARCH_TIMEOUT_MS = 25_000;
 const MAX_STDERR_BYTES = 64 * 1024;
 
 // Stream git grep output instead of buffering it through runProcess. Broad searches
 // can exceed the generic process-output cap; streaming preserves the earliest
-// matches while still counting every visible result with bounded memory use.
+// matches and stops once maxResults + 1 visible matches prove the response is truncated.
 async function relaiSearch(workspace, config, args = {}) {
   const pattern = String(args.pattern || "");
   if (!pattern.trim()) throw new Error("relai_search requires a non-empty pattern.");
@@ -44,7 +44,7 @@ async function relaiSearch(workspace, config, args = {}) {
     ...(glob ? { glob } : {}),
     matches: result.matches,
     matchCount: result.matchCount,
-    truncated: result.matchCount > result.matches.length
+    truncated: result.truncated === true || result.matchCount > result.matches.length
   };
   const searchPlan = resolveSearchPlan(args, result);
   if (searchPlan.effectiveMode === "compact") {
@@ -55,9 +55,11 @@ async function relaiSearch(workspace, config, args = {}) {
         effectiveMode: "compact",
         autoTier: searchPlan.autoTier
       } : {}),
-      next: result.matches.length
-        ? "Read only the relevant ranges with relai_read { paths, startLine, endLine }."
-        : "No matches. Try a shorter pattern, ignoreCase:true, or relai_snapshot for the file list."
+      next: result.timedOut && result.matches.length
+        ? "Search reached its time budget and returned partial results. Narrow the pattern or glob if more coverage is needed."
+        : result.matches.length
+          ? "Read only the relevant ranges with relai_read { paths, startLine, endLine }."
+          : "No matches. Try a shorter pattern, ignoreCase:true, or relai_snapshot for the file list."
     };
   }
   const cachedGraph = searchPlan.requestedMode === "auto"
@@ -77,13 +79,15 @@ async function relaiSearch(workspace, config, args = {}) {
       prioritizeFiles: searchPlan.requestedMode === "auto",
       workflowContext
     }),
-    next: result.matches.length
-      ? searchPlan.requestedMode === "auto"
-        ? graphPrioritized
-          ? "Adaptive context is graph-prioritized using the cached structural index. Use relai_read only when a wider range or complete file is needed."
-          : "Adaptive context is included for prioritized matches. Use relai_read only when a wider range or complete file is needed."
-        : "Context is included. Use relai_read only when a wider range or complete file is needed."
-      : "No matches. Try a shorter pattern, ignoreCase:true, or relai_snapshot for the file list."
+    next: result.timedOut && result.matches.length
+      ? "Search reached its time budget and returned partial context. Narrow the pattern or glob if more coverage is needed."
+      : result.matches.length
+        ? searchPlan.requestedMode === "auto"
+          ? graphPrioritized
+            ? "Adaptive context is graph-prioritized using the cached structural index. Use relai_read only when a wider range or complete file is needed."
+            : "Adaptive context is included for prioritized matches. Use relai_read only when a wider range or complete file is needed."
+          : "Context is included. Use relai_read only when a wider range or complete file is needed."
+        : "No matches. Try a shorter pattern, ignoreCase:true, or relai_snapshot for the file list."
   };
 }
 
@@ -109,18 +113,31 @@ function runGitGrep(workspace, gitArgs, maxResults) {
       const match = parseGitGrepLine(line);
       if (!match || isSecretPath(match.path)) return;
       matchCount += 1;
-      if (matches.length < maxResults) matches.push(match);
+      if (matches.length < maxResults) {
+        matches.push(match);
+        return;
+      }
+      killProcessTree(child);
+      finish({
+        exitCode: 0,
+        signal: "SIGKILL",
+        matches,
+        matchCount,
+        truncated: true,
+        stderr: stderr.trim()
+      });
     }
 
     function consumeChunk(text, flush = false) {
+      if (settled) return;
       pending += text;
       let newlineIndex = pending.indexOf("\n");
-      while (newlineIndex >= 0) {
+      while (!settled && newlineIndex >= 0) {
         consumeLine(pending.slice(0, newlineIndex));
         pending = pending.slice(newlineIndex + 1);
         newlineIndex = pending.indexOf("\n");
       }
-      if (flush && pending) {
+      if (!settled && flush && pending) {
         consumeLine(pending);
         pending = "";
       }
@@ -128,11 +145,14 @@ function runGitGrep(workspace, gitArgs, maxResults) {
 
     let timer = setTimeout(() => {
       killProcessTree(child);
+      const hasPartialResults = matches.length > 0;
       finish({
-        exitCode: -1,
-        signal: "SIGTERM",
+        exitCode: hasPartialResults ? 0 : -1,
+        signal: "SIGKILL",
         matches,
         matchCount,
+        truncated: hasPartialResults,
+        timedOut: true,
         stderr: appendLimited(stderr, `\n[rel-ai-mcp timed out after ${SEARCH_TIMEOUT_MS}ms]\n`, MAX_STDERR_BYTES).trim(),
         error: `Timed out after ${SEARCH_TIMEOUT_MS}ms`
       });
