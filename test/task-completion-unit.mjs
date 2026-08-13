@@ -323,15 +323,16 @@ try {
     () => callTool('relai_work', { action: 'finish',
       workspace: 'app',
       work_id: externalMutationTaskId,
-      summary: 'External overlap must be caught during isolated-task integration.'
+      summary: 'External mutation must require another validation.'
     }, { publicHttpOnly: true }),
-    error => error?.code === 'TASK_INTEGRATION_CONFLICT' && /safely preserved/i.test(error.message)
+    error => error?.code === 'TASK_REVALIDATION_REQUIRED' && /content changed after/i.test(error.message)
   );
-  fs.rmSync(path.join(workspace, 'src', 'external-fingerprint.js'), { force: true });
-  const externalRecovery = await callTool('relai_work', { action: 'finish',
+  const externalRecovery = await callTool('relai_validate', { action: 'checks',
     workspace: 'app',
     work_id: externalMutationTaskId,
-    summary: 'Integrated after the conflicting external file was removed.'
+    level: 'standard',
+    complete: true,
+    summary: 'Revalidated after an externally observed content mutation.'
   }, { publicHttpOnly: true });
   assert.equal(externalRecovery.completionKnown, true);
 

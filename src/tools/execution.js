@@ -1,31 +1,19 @@
 
 
-import { resolveWorkspace } from "../config.js";
 import { runWithToolActivity, updateCurrentToolActivity } from "../toolActivity.js";
-import { taskExecutionWorkspace } from "../worktreeManager.js";
 import { runWorkspaceOperation } from "../workspaceOperationQueue.js";
 import { maybeStartSession } from "./session.js";
 import { runSpan, addSpanEvent, setSpanAttributes } from "../telemetry.js";
 
 async function executeToolCall({ config, name, executionName = name, effectiveArgs, context, finishActivity, definition, started }) {
   let sessionStart = { started: false, alias: '' };
-  let executionArgs = effectiveArgs;
-  const integratesTask = executionName === 'relai_finish_work'
-    || (executionName === 'relai_run_checks' && effectiveArgs?.complete === true);
   const value = await runWithToolActivity(finishActivity, () => runSpan(config,
     executionName === 'relai_begin_work' ? 'relai.logical_task.start' : 'relai.tool.call',
     spanAttributes(name, effectiveArgs, context, finishActivity),
     () => runWorkspaceOperation(executionName === 'relai_cancel_work' ? '' : effectiveArgs?.workspace, async () => {
-      const logicalWorkspace = effectiveArgs?.workspace ? resolveWorkspace(config, effectiveArgs.workspace) : null;
-      const runtimeWorkspace = logicalWorkspace
-        ? await taskExecutionWorkspace(logicalWorkspace, config, finishActivity?.taskId, executionName)
-        : null;
-      executionArgs = runtimeWorkspace && runtimeWorkspace.alias !== logicalWorkspace?.alias
-        ? { ...(effectiveArgs || {}), workspace: runtimeWorkspace.alias }
-        : effectiveArgs;
-      sessionStart = maybeStartSession(config, executionName, executionArgs || {}, { taskId: finishActivity?.taskId });
+      sessionStart = maybeStartSession(config, executionName, effectiveArgs || {}, { taskId: finishActivity?.taskId });
       if (typeof definition?.handler !== 'function') throw new Error(`Tool '${name}' has no executable handler.`);
-      const result = await definition.handler(config, executionArgs || {}, {
+      const result = await definition.handler(config, effectiveArgs || {}, {
         connector: Boolean(context?.publicHttpOnly),
         taskId: finishActivity?.taskId,
         requestHeaders: context?.requestHeaders || {},
@@ -42,8 +30,8 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
       });
       return result;
     }, {
-      mode: integratesTask ? 'write' : (definition?.annotations?.readOnlyHint === true ? 'read' : 'write'),
-      scope: integratesTask || definition?.behavior?.concurrencyScope === 'workspace' ? 'workspace' : 'task',
+      mode: definition?.annotations?.readOnlyHint === true ? 'read' : 'write',
+      scope: definition?.behavior?.concurrencyScope === 'workspace' ? 'workspace' : 'task',
       taskId: finishActivity?.taskId,
       onWait: (waitMs, details) => {
         addSpanEvent('workspace.queue.admitted', {
@@ -63,7 +51,7 @@ async function executeToolCall({ config, name, executionName = name, effectiveAr
         }
       }
     }), { carrier: context?.requestHeaders || {} }));
-  return { value, sessionStart, executionArgs };
+  return { value, sessionStart };
 }
 
 function spanAttributes(name, args, context, activity) {
