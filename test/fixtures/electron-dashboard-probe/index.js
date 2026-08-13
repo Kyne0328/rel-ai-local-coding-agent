@@ -340,8 +340,20 @@ app.whenReady().then(async () => {
 });
 
 async function measurePassiveRouteStability(win, mcpSession, navigationCounts, route) {
-  await win.webContents.executeJavaScript(`location.hash = ${JSON.stringify(`#${route.hash}`)}`);
-  await waitFor(win, route.ready);
+  await win.webContents.executeJavaScript(`(() => {
+    window.removeEventListener('relai:route-mounted', window.__relaiPassiveRouteMountListener);
+    window.__relaiPassiveRouteMounted = false;
+    const expectedPath = ${JSON.stringify(route.hash)};
+    window.__relaiPassiveRouteMountListener = event => {
+      if (event.detail?.path !== expectedPath) return;
+      window.__relaiPassiveRouteMounted = true;
+      window.removeEventListener('relai:route-mounted', window.__relaiPassiveRouteMountListener);
+      window.__relaiPassiveRouteMountListener = null;
+    };
+    window.addEventListener('relai:route-mounted', window.__relaiPassiveRouteMountListener);
+    location.hash = ${JSON.stringify(`#${route.hash}`)};
+  })()`);
+  await waitFor(win, `window.__relaiPassiveRouteMounted === true && (${route.ready})`);
   const beforeNavigation = { ...navigationCounts };
   const captured = await win.webContents.executeJavaScript(`(() => {
     const routeRoot = document.getElementById('routeRoot');
