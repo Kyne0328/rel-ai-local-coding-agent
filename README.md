@@ -88,7 +88,7 @@ Rel.AI uses one connection model: **OpenAI Secure MCP Tunnel**. Repository files
 2. **Create an OpenAI Secure MCP Tunnel** for this computer and create a runtime API key for that tunnel in OpenAI Platform.
 3. **Configure Rel.AI.** Enter the tunnel ID and runtime API key in the first-run wizard. Rel.AI encrypts the runtime key with Electron `safeStorage` and supervises the bundled OpenAI tunnel client.
 4. **Add a workspace.** Pick a repository folder and give it a short alias such as `myapp`.
-5. **Connect ChatGPT.** Plus or Pro users should open **Plugins**; Business, Enterprise, or Edu users should use the Rel.AI app under **workspace Apps**. Create the Rel.AI MCP integration with ChatGPT's **Tunnel** connection option, or reconnect the existing integration without deleting or recreating it, and associate it with this computer's tunnel.
+5. **Connect ChatGPT.** Create/add Rel.AI MCP with ChatGPT's **Tunnel** connection option, select this computer's Secure MCP Tunnel, and set **Authentication** to **No authentication**. If Rel.AI MCP already exists in ChatGPT, reconnect that existing integration instead of creating a duplicate.
 6. **Use the workspace alias.** Rel.AI resolves repository access locally from the configured alias; ChatGPT does not need the absolute path on your computer.
 
 A useful first request is intentionally read-only:
