@@ -247,6 +247,7 @@
     },
     "deb": {
       "artifactName": "Rel.AI-MCP-${version}-linux-x64.${ext}",
+      "packageName": "rel-ai-mcp-launcher",
       "packageCategory": "devel",
       "priority": "optional"
     },

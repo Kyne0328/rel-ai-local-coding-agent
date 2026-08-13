@@ -88,7 +88,7 @@ assert.deepEqual(detectUpdateSupport({ app: { ...supportApp, isPackaged: false }
 assert.match(detectUpdateSupport({ app: supportApp, platform: 'win32', env: { PORTABLE_EXECUTABLE_DIR: 'C:\\Portable' } }).reason, /Portable builds/);
 assert.equal(detectUpdateSupport({ app: supportApp, platform: 'win32', env: {} }).supported, true);
 assert.equal(detectUpdateSupport({ app: supportApp, platform: 'linux', env: { APPIMAGE: '/opt/Rel.AI-MCP.AppImage' } }).supported, true);
-assert.match(detectUpdateSupport({ app: supportApp, platform: 'linux', env: {} }).reason, /DEB installations/);
+assert.match(detectUpdateSupport({ app: supportApp, platform: 'linux', env: {} }).reason, /install a newer Rel\.AI MCP DEB over the current installation to upgrade it/);
 assert.match(detectUpdateSupport({ app: supportApp, platform: 'darwin', env: {} }).reason, /not available/);
 assert.deepEqual(progressPayload({ percent: 44.44, transferred: -2, total: 100.8, bytesPerSecond: 20.2 }), {
   percent: 44.4,

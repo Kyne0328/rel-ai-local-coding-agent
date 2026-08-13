@@ -82,6 +82,8 @@ assert.equal(electronPackage.homepage, 'https://github.com/Kyne0328/rel-ai-mcp')
 assert.equal(electronPackage.build.linux.maintainer, 'Kyne <Kyne0328@users.noreply.github.com>');
 assert.equal(electronPackage.build.appImage.artifactName, 'Rel.AI-MCP-${version}-linux-x64.${ext}');
 assert.equal(electronPackage.build.deb.artifactName, 'Rel.AI-MCP-${version}-linux-x64.${ext}');
+assert.equal(electronPackage.build.deb.packageName, 'rel-ai-mcp-launcher',
+  'DEB releases must keep the historical package identity so newer versions upgrade existing installations');
 
 assert.match(ci, /Build unpacked Windows application/);
 assert.match(ci, /Build unpacked Linux application/);
@@ -93,6 +95,11 @@ assert.doesNotMatch(ci, /--no-sandbox/);
 assert.doesNotMatch(ci, /test:installed|REL_AI_SMOKE_INSTALLER|uninstall|Setup.*\.exe/i);
 assert.match(release, /Build Windows release/);
 assert.match(release, /Build Linux release/);
+assert.match(release, /Verify Linux DEB upgrade metadata/);
+assert.match(release, /dpkg-deb --field "\$deb" Package/);
+assert.match(release, /rel-ai-mcp-launcher/);
+assert.match(release, /dpkg-deb --field "\$deb" Version/);
+assert.match(release, /dpkg-deb --field "\$deb" Architecture/);
 assert.match(release, /Verify packaged application layout/);
 assert.match(release, /Verify Electron test binary/);
 assert.match(release, /sudo chown root:root "\$sandbox_helper"/);
