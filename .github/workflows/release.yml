@@ -228,6 +228,17 @@ jobs:
           node test/installer-test-entrypoints-unit.mjs
       - name: Build Linux release
         run: npm run electron:dist:linux
+      - name: Verify Linux DEB upgrade metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          version='${{ needs.preflight.outputs.version }}'
+          deb="dist/Rel.AI-MCP-${version}-linux-x64.deb"
+          test -f "$deb"
+          test "$(dpkg-deb --field "$deb" Package)" = 'rel-ai-mcp-launcher'
+          test "$(dpkg-deb --field "$deb" Version)" = "$version"
+          test "$(dpkg-deb --field "$deb" Architecture)" = 'amd64'
+          dpkg --compare-versions "$(dpkg-deb --field "$deb" Version)" eq "$version"
       - name: Resolve current unpacked application
         id: unpacked
         shell: bash

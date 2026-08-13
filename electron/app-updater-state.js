@@ -43,7 +43,7 @@ function detectUpdateSupport({ app, platform, env }) {
   }
   if (platform === 'linux') {
     if (!env.APPIMAGE) {
-      return { supported: false, reason: 'Automatic updates are available for the Linux AppImage. DEB installations must be updated manually.' };
+      return { supported: false, reason: 'Automatic updates are available for the Linux AppImage. For DEB installations, install a newer Rel.AI MCP DEB over the current installation to upgrade it while keeping your existing Rel.AI settings.' };
     }
     return { supported: true, reason: '' };
   }
