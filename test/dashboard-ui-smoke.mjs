@@ -9,6 +9,7 @@ import { normalizeRouteKey } from '../src/ui/route-policy.js';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const shell = read('src/http/dashboard.js');
+const shellChrome = read('src/http/dashboardShellChrome.js');
 const dashboard = read('public/dashboard.js');
 const router = read('src/ui/router.js');
 const settings = read('src/ui/features/settings/index.js');
@@ -25,7 +26,7 @@ assert.equal(DESKTOP_NAV_ITEMS.find(item => item.id === 'system')?.href, '#conne
 assert.equal(normalizeRouteKey('system'), 'connection');
 assert.deepEqual(SETTINGS_NAV_ITEMS.map(item => item.id), ['preferences', 'application', 'advanced', 'about']);
 assert.match(shell, /WORK_NAV_ITEMS, APPLICATION_NAV_ITEMS, MOBILE_NAV_ITEMS/);
-assert.match(shell, /aria-label="\$\{item\.label\}" title="\$\{item\.label\}"/);
+assert.match(shellChrome, /aria-label="\$\{item\.label\}" title="\$\{item\.label\}"/);
 assert.doesNotMatch(shell, /const PRIMARY_NAV_ITEMS|const SECONDARY_NAV_ITEMS/);
 assert.match(router, /routeMetadata\(path\)/);
 assert.match(router, /document\.getElementById\('pageTitle'\)\?\.focus\(\{ preventScroll: true \}\)/);

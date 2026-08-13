@@ -9,7 +9,7 @@ import * as configEditor from "../configEditor.js";
 import { packageMetadata as pkg, resolvePackagePath } from '../packageMetadata.js';
 import * as connection from "../connectionProfile.js";
 import { ERROR_CODES, errorPayload } from "../desktopUxContracts.js";
-import { renderDashboardShellBootstrap, renderDashboardWindowTitlebar } from "./dashboardShellChrome.js";
+import { renderDashboardAccordion, renderDashboardNav, renderDashboardShellBootstrap, renderDashboardWindowTitlebar } from "./dashboardShellChrome.js";
 import { getOnboardingStatus, writeOnboardingState } from "../onboardingState.js";
 import { getVersion } from "../version.js";
 import { resolveRequireHttpToken } from "./auth.js";
@@ -30,17 +30,6 @@ const DASHBOARD_SHARED_MODULES = Object.freeze({
   '/public/taskEvents.js': Object.freeze(['src', 'taskEvents.js']),
   '/public/taskState.js': Object.freeze(['src', 'taskState.js'])
 });
-function renderDashboardNav(items) {
-  return items.map((item) => `<a href="${item.href}" data-nav-id="${item.id}" aria-label="${item.label}" title="${item.label}"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">${item.icon}</svg><span class="nav-label">${item.label}</span></a>`).join("");
-}
-
-function renderDashboardAccordion(parent, items) {
-  return `<details class="sidebar-accordion" data-nav-accordion="${parent.id}">
-    <summary aria-label="${parent.label}" title="${parent.label}"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">${parent.icon}</svg><span class="nav-label">${parent.label}</span><svg class="sidebar-accordion-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg></summary>
-    <nav class="sidebar-subnav" aria-label="${parent.label} navigation">${renderDashboardNav(items)}</nav>
-  </details>`;
-}
-
 async function handleFavicon(ctx) {
   try {
     const content = readCachedStaticAsset(resolvePackagePath('public', 'assets', 'favicon.ico'));
