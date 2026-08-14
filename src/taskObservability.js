@@ -488,6 +488,7 @@ function sanitizeActivityEventRecord(event) {
   if (value.error != null) value.error = typeof value.error === 'object'
     ? normalizeActivityError(value.error)
     : sanitizeDisplayText(value.error, MAX_SUMMARY_LENGTH);
+  if (value.tool && typeof value.tool === 'object') value.tool = sanitizeStructuredValue(value.tool, 0);
   if (value.target && typeof value.target === 'object') value.target = sanitizeStructuredValue(value.target, 0);
   if (value.result && typeof value.result === 'object') value.result = sanitizeStructuredValue(value.result, 0);
   value.metadata = sanitizeActivityMetadata(value.metadata || {}) || {};

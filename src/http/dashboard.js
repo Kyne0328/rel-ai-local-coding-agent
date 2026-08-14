@@ -193,6 +193,7 @@ function readConfigCached() {
 
 const DASHBOARD_SNAPSHOT_COALESCE_MS = 350;
 const DASHBOARD_SNAPSHOT_MAX_WAIT_MS = 1200;
+const dashboardPayloadCache = { signature: '', payload: null };
 
 function statSignature(file) {
   try {
@@ -212,12 +213,51 @@ function dashboardSourceRevision(options = {}, configOverride = null) {
   const signature = [
     statSignature(getConfigPath()),
     statSignature(config?.auditLogPath),
-    JSON.stringify(taskActivity),
-    JSON.stringify(desktopStatus),
+    taskActivityRevision(taskActivity),
+    desktopStatusRevision(desktopStatus),
     String(mcpConnectionManager.snapshot().revision),
     String(workspaceStateRevision())
   ].join('|');
   return crypto.createHash('sha256').update(signature).digest('base64url');
+}
+
+function taskActivityRevision(activity = null) {
+  if (!activity) return '0';
+  const explicit = Number(activity.revision);
+  if (Number.isFinite(explicit)) return String(explicit);
+  return JSON.stringify([
+    activity.state || '',
+    Number(activity.activeCalls || 0),
+    Number(activity.activeTaskCount || 0),
+    activity.taskId || '',
+    activity.lastTask?.updatedAt || activity.lastTask?.completedAt || ''
+  ]);
+}
+
+function desktopStatusRevision(status = null) {
+  if (!status) return '0';
+  return JSON.stringify([
+    status.serverRunning === true,
+    status.starting === true,
+    status.tunnelStatus || '',
+    status.tunnelId || '',
+    status.tunnelHealthUrl || '',
+    status.localMcpUrl || '',
+    status.localUrl || '',
+    status.mcpUrl || '',
+    status.errorCode || '',
+    status.error || '',
+    status.connectionState?.overall || status.connectionState?.status || ''
+  ]);
+}
+
+function dashboardStreamPayload(signature, options) {
+  if (dashboardPayloadCache.signature === signature && dashboardPayloadCache.payload) return dashboardPayloadCache.payload;
+  const config = readConfigCached();
+  const payload = buildDashboardPayload(config, { ...options, limit: 100, snapshotRevision: signature }, false);
+  dashboardPayloadCache.signature = signature;
+  dashboardPayloadCache.payload = payload;
+  return payload;
 }
 
 function requestedDashboardRevision(req) {
@@ -242,8 +282,7 @@ function openDashboardEvents(res, req, options) {
       const signature = dashboardSourceRevision(options);
       if (!force && signature === lastSignature) return;
       lastSignature = signature;
-      const config = readConfigCached();
-      const payload = buildDashboardPayload(config, { ...options, limit: 100, snapshotRevision: signature }, false);
+      const payload = dashboardStreamPayload(signature, options);
       sendSse(res, 'dashboard', payload, { id: `${payload.snapshot.streamId}:${payload.snapshot.sequence}` });
     } catch (error) {
       sendSse(res, 'error', errorPayload(

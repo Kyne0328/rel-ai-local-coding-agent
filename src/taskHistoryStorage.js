@@ -1,5 +1,5 @@
 import { getStateDir } from './statePaths.js';
-import { readJsonFile, writeJsonAtomic } from './durableState.js';
+import { readJsonFile, writeJsonAtomic, writeJsonAtomicAsync } from './durableState.js';
 
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
@@ -8,7 +8,9 @@ import { normalizeTaskProgress, sanitizeTaskRecord } from './taskObservability.j
 const MAX_SESSIONS = 500;
 const HISTORY_FORMAT_MARKER = '.task-history-v3';
 const MAX_PARSED_CACHE_ENTRIES = 2 * MAX_SESSIONS;
+const DIRECTORY_METADATA_RESCAN_MS = 5000;
 const parsedCache = new Map();
+const directoryMetadataCache = new Map();
 
 function getTaskHistoryDir(config = {}) {
   return path.join(getStateDir(config), 'sessions');
@@ -47,9 +49,7 @@ function sessionMetadata(directory, names) {
 }
 
 function listSessions(directory, limit = MAX_SESSIONS) {
-  const names = sessionFileNames(directory);
-  if (!names) return [];
-  return sessionMetadata(directory, names)
+  return cachedSessionMetadata(directory)
     .slice(0, limit)
     .map(item => readCachedSession(item.file, item.identity))
     .filter(session => session && session.id);
@@ -79,21 +79,34 @@ function writeSession(directory, session) {
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
   const target = sessionPath(directory, sanitized.id);
   writeJsonAtomic(target, sanitized, { mode: 0o600, spacing: 0 });
-  parsedCache.delete(target);
+  rememberWrittenSession(directory, target, sanitized);
+}
+
+async function writeSessionAsync(directory, session) {
+  if (!session?.id) return;
+  const sanitized = normalizeStoredSession(session);
+  await fs.promises.mkdir(directory, { recursive: true, mode: 0o700 });
+  const target = sessionPath(directory, sanitized.id);
+  await writeJsonAtomicAsync(target, sanitized, { mode: 0o600, spacing: 0, durable: false });
+  rememberWrittenSession(directory, target, sanitized);
 }
 
 function removeSession(directory, id) {
   const file = sessionPath(directory, id);
   fs.rmSync(file, { force: true });
   parsedCache.delete(file);
+  const cached = directoryMetadataCache.get(directory);
+  if (cached) cached.items.delete(path.basename(file));
 }
 
 function pruneSessions(directory, limit = MAX_SESSIONS) {
-  const names = sessionFileNames(directory);
-  if (!names || names.length <= limit) return;
-  for (const item of sessionMetadata(directory, names).slice(limit)) {
+  const metadata = cachedSessionMetadata(directory);
+  if (metadata.length <= limit) return;
+  const cached = directoryMetadataCache.get(directory);
+  for (const item of metadata.slice(limit)) {
     fs.rmSync(item.file, { force: true });
     parsedCache.delete(item.file);
+    cached?.items.delete(item.name);
   }
 }
 
@@ -101,6 +114,7 @@ function clearTaskHistory(config) {
   const directory = getTaskHistoryDir(config);
   fs.rmSync(directory, { recursive: true, force: true });
   clearCachedDirectory(directory);
+  closeDirectoryMetadataCache(directory);
 }
 
 function clearCachedDirectory(directory) {
@@ -121,6 +135,71 @@ function readCachedSession(file, identity) {
     parsedCache.delete(file);
   }
   return session;
+}
+
+function cachedSessionMetadata(directory) {
+  let cached = directoryMetadataCache.get(directory);
+  if (cached && !cached.dirty && Date.now() - cached.checkedAt < DIRECTORY_METADATA_RESCAN_MS) return orderedMetadata(cached.items.values());
+  const names = sessionFileNames(directory);
+  if (!names) return [];
+  const items = new Map(sessionMetadata(directory, names).map(item => [item.name, item]));
+  if (!cached) {
+    cached = { items, dirty: false, watcher: null, checkedAt: Date.now() };
+    directoryMetadataCache.set(directory, cached);
+    watchSessionDirectory(directory, cached);
+  } else {
+    cached.items = items;
+    cached.dirty = false;
+    cached.checkedAt = Date.now();
+  }
+  return orderedMetadata(items.values());
+}
+
+function orderedMetadata(items) {
+  return [...items].sort((left, right) => {
+    if (left.mtimeNs === right.mtimeNs) return left.name.localeCompare(right.name);
+    return left.mtimeNs > right.mtimeNs ? -1 : 1;
+  });
+}
+
+function watchSessionDirectory(directory, cached) {
+  try {
+    cached.watcher = fs.watch(directory, { persistent: false }, (_event, filename) => {
+      const name = String(filename || '');
+      if (!name || name.endsWith('.tmp') || name.endsWith('.old')) return;
+      const current = fileMetadata(path.join(directory, name), name);
+      const known = cached.items.get(name);
+      if (current?.identity === known?.identity) return;
+      cached.dirty = true;
+    });
+    cached.watcher.on('error', () => { cached.dirty = true; });
+  } catch {
+    cached.watcher = null;
+    cached.dirty = true;
+  }
+}
+
+function rememberWrittenSession(directory, target, session) {
+  const metadata = fileMetadata(target, path.basename(target));
+  if (!metadata) {
+    parsedCache.delete(target);
+    const cached = directoryMetadataCache.get(directory);
+    if (cached) cached.dirty = true;
+    return;
+  }
+  parsedCache.set(target, { identity: metadata.identity, session });
+  trimParsedCache();
+  const cached = directoryMetadataCache.get(directory);
+  if (cached) {
+    cached.items.set(metadata.name, metadata);
+    cached.checkedAt = Date.now();
+  }
+}
+
+function closeDirectoryMetadataCache(directory) {
+  const cached = directoryMetadataCache.get(directory);
+  try { cached?.watcher?.close(); } catch {}
+  directoryMetadataCache.delete(directory);
 }
 
 function trimParsedCache() {
@@ -159,6 +238,7 @@ function safeReadJson(file) {
 
 function resetTaskHistoryCaches() {
   parsedCache.clear();
+  for (const directory of [...directoryMetadataCache.keys()]) closeDirectoryMetadataCache(directory);
 }
 
-export { MAX_SESSIONS, clearTaskHistory, ensureCurrentHistory, getTaskHistoryDir, listSessions, pruneSessions, readSession, removeSession, resetTaskHistoryCaches, writeSession };
+export { MAX_SESSIONS, clearTaskHistory, ensureCurrentHistory, getTaskHistoryDir, listSessions, pruneSessions, readSession, removeSession, resetTaskHistoryCaches, writeSession, writeSessionAsync };

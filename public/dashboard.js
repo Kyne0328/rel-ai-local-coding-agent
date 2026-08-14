@@ -391,19 +391,20 @@ function viewFingerprint(data = {}) {
     errorCode: desktop.errorCode,
     error: desktop.error
   };
+  const liveRevision = data.snapshot?.revision || data.taskActivity?.revision || data.generatedAt || '';
   let payload;
   switch (currentSection()) {
     case 'activity':
       payload = route;
       break;
     case 'tasks':
-      payload = [route, data.tasks || [], data.taskActivity || {}];
+      payload = [route, liveRevision];
       break;
     case 'workspaces':
-      payload = [route, config.workspaces || [], data.workspaceStates || {}, data.health || {}];
+      payload = [route, liveRevision];
       break;
     case 'processes':
-      payload = [route, data.managedProcesses || []];
+      payload = [route, liveRevision];
       break;
     case 'tools':
     case 'reference':
@@ -419,7 +420,7 @@ function viewFingerprint(data = {}) {
       payload = [route, data.application || {}, config, data.connectionState || {}, data.mcpAuthentication || {}, data.mcpConnection || {}, desktopState];
       break;
     default:
-      payload = [route, config.workspaces || [], data.tasks || [], data.taskActivity || {}, data.health || {}, data.connectionState || {}, data.mcpAuthentication || {}, data.mcpConnection || {}, desktopState];
+      payload = [route, liveRevision, data.connectionState?.status || data.connectionState?.overall || '', data.mcpAuthentication?.status || '', data.mcpConnection?.revision || '', desktopState];
   }
   return JSON.stringify(payload);
 }

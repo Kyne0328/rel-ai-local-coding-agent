@@ -4,9 +4,13 @@ import { DEFAULT_TASK_IDLE_MS } from './toolActivity.js';
 import { completeProgress, normalizeTaskProgress, sanitizeActivityEventRecord, sanitizeDisplayText, sanitizeTaskRecord, sanitizeTaskRecordForProjection } from './taskObservability.js';
 import { isTerminalTaskStatus } from './taskState.js';
 import { clamp, cleanTaskId, eventIdentityKey, eventTime, eventTimestampMs, isoTimestamp, isCurrentTaskEvent, operationForTool, terminalTaskTimestamp, timestampMs, unique } from './taskEvents.js';
-import { MAX_SESSIONS, clearTaskHistory, ensureCurrentHistory, getTaskHistoryDir, listSessions, pruneSessions, readSession, removeSession, writeSession } from './taskHistoryStorage.js';
+import { MAX_SESSIONS, clearTaskHistory as clearStoredTaskHistory, ensureCurrentHistory, getTaskHistoryDir, listSessions, pruneSessions, readSession, removeSession, writeSession, writeSessionAsync } from './taskHistoryStorage.js';
 const STORE_VERSION = 3;
 const MAX_SESSION_EVENTS = 200;
+const TASK_HISTORY_FLUSH_MS = 75;
+const TASK_HISTORY_PRUNE_DELAY_MS = 1500;
+const pendingSessions = new Map();
+const pendingPrunes = new Map();
 let activityPersistenceBound = false;
 
 function recordTaskHistoryEvent(config, event) {
@@ -14,9 +18,8 @@ function recordTaskHistoryEvent(config, event) {
   ensureCurrentHistory(config);
   const directory = getTaskHistoryDir(config);
   const taskId = cleanTaskId(event.taskId);
-  const session = applyEvent(readSession(directory, taskId) || emptySession(taskId), event);
-  writeSession(directory, session);
-  pruneSessions(directory, MAX_SESSIONS);
+  const session = applyEvent(readWorkingSession(directory, taskId) || emptySession(taskId), event);
+  persistSession(directory, session);
   return publicSession(session);
 }
 
@@ -25,20 +28,20 @@ function bindTaskHistoryActivityPersistence(onActivity, getConfig) {
   activityPersistenceBound = true;
   onActivity((activity) => {
     try {
-      recordTaskActivityEvent(getConfig(), activity);
+      recordTaskActivityEvent(getConfig(), activity, { defer: true });
     } catch (error) {
-      if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] live task history write:', error);
+      if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] live task history stage:', error);
     }
   });
 }
 
-function recordTaskActivityEvent(config, activity = {}) {
+function recordTaskActivityEvent(config, activity = {}, options = {}) {
   const task = activity.task && typeof activity.task === 'object' ? activity.task : null;
   const taskId = cleanTaskId(task?.taskId || task?.id || activity.taskId);
   if (!taskId) return null;
   ensureCurrentHistory(config);
   const directory = getTaskHistoryDir(config);
-  const existing = readSession(directory, taskId) || emptySession(taskId);
+  const existing = readWorkingSession(directory, taskId) || emptySession(taskId);
   const event = activity.activityEvent || null;
   const events = upsertActivityEvent(existing.events || [], event);
   const startedAt = task?.startedAtIso || task?.createdAt || isoTimestamp(task?.startedAt) || existing.startedAt || null;
@@ -80,47 +83,46 @@ function recordTaskActivityEvent(config, activity = {}) {
     errorSummary: task?.errorSummary || existing.errorSummary || '',
     events
   };
-  writeSession(directory, session);
-  pruneSessions(directory, MAX_SESSIONS);
+  persistSession(directory, session, options);
   return publicSession(session);
 }
 
-function recordWorkflowSnapshot(config, taskId, workflow) {
+function recordWorkflowSnapshot(config, taskId, workflow, options = {}) {
   const id = cleanTaskId(taskId);
   if (!id || !workflow || typeof workflow !== 'object') return null;
   ensureCurrentHistory(config);
   const directory = getTaskHistoryDir(config);
-  const session = readSession(directory, id);
+  const session = readWorkingSession(directory, id);
   if (!session) return null;
   const safe = JSON.parse(JSON.stringify(workflow));
   const next = { ...session, workflow: safe };
-  writeSession(directory, next);
+  persistSession(directory, next, options);
   return safe;
 }
-function recordWorkflowEvidence(config, taskId, receipt) {
+function recordWorkflowEvidence(config, taskId, receipt, options = {}) {
   const id = cleanTaskId(taskId);
   if (!id || !receipt || typeof receipt !== 'object') return null;
   ensureCurrentHistory(config);
   const directory = getTaskHistoryDir(config);
-  const session = readSession(directory, id);
+  const session = readWorkingSession(directory, id);
   if (!session) return null;
   const evidence = [...(Array.isArray(session.workflowEvidence) ? session.workflowEvidence : []), receipt].slice(-100);
   const next = { ...session, workflowEvidence: evidence };
-  writeSession(directory, next);
+  persistSession(directory, next, options);
   return receipt;
 }
 
-function recordWorkflowState(config, taskId, { receipt = null, workflow = null } = {}) {
+function recordWorkflowState(config, taskId, { receipt = null, workflow = null } = {}, options = {}) {
   const id = cleanTaskId(taskId);
   if (!id || (!receipt && !workflow)) return null;
   ensureCurrentHistory(config);
   const directory = getTaskHistoryDir(config);
-  const session = readSession(directory, id);
+  const session = readWorkingSession(directory, id);
   if (!session) return null;
   const next = { ...session };
   if (receipt && typeof receipt === 'object') next.workflowEvidence = [...(Array.isArray(session.workflowEvidence) ? session.workflowEvidence : []), receipt].slice(-100);
   if (workflow && typeof workflow === 'object') next.workflow = JSON.parse(JSON.stringify(workflow));
-  writeSession(directory, next);
+  persistSession(directory, next, options);
   return workflow || receipt;
 }
 
@@ -129,7 +131,7 @@ function readRecentWorkflowEvidence(config, taskId, limit = 50) {
   if (!id) return [];
   try {
     ensureCurrentHistory(config);
-    const session = readSession(getTaskHistoryDir(config), id);
+    const session = readWorkingSession(getTaskHistoryDir(config), id);
     const evidence = Array.isArray(session?.workflowEvidence) ? session.workflowEvidence : [];
     return evidence.slice(-clamp(limit, 1, 100)).map(item => ({ ...item }));
   } catch {
@@ -147,7 +149,7 @@ function readTaskHistorySessionRecord(config, taskId, options = {}) {
   try {
     ensureCurrentHistory(config);
     const directory = getTaskHistoryDir(config);
-    const session = readSession(directory, id);
+    const session = readWorkingSession(directory, id);
     if (!session) return null;
     const activeIds = options.activeTaskIds instanceof Set
       ? options.activeTaskIds
@@ -155,7 +157,7 @@ function readTaskHistorySessionRecord(config, taskId, options = {}) {
     const reconciled = options.reconcileInactive === true
       ? reconcileInactiveStoredSession(session, activeIds)
       : session;
-    if (reconciled !== session) writeSession(directory, reconciled);
+    if (reconciled !== session) persistSession(directory, reconciled, { defer: true });
     return sanitizeTaskRecord(reconciled);
   } catch (error) {
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] task history session read:', error);
@@ -172,10 +174,15 @@ function readTaskHistory(config, activity = {}, options = {}) {
   try {
     ensureCurrentHistory(config);
     persisted = listSessions(directory, MAX_SESSIONS).map(session => {
-      const reconciled = reconcileInactiveStoredSession(session, activeIds);
-      if (reconciled !== session) writeSession(directory, reconciled);
+      const current = readPendingSession(directory, session.id) || session;
+      const reconciled = reconcileInactiveStoredSession(current, activeIds);
+      if (reconciled !== current) persistSession(directory, reconciled, { defer: true });
       return reconciled;
     });
+    const persistedIds = new Set(persisted.map(session => session.id));
+    for (const session of pendingSessionsForDirectory(directory)) {
+      if (!persistedIds.has(session.id)) persisted.push(session);
+    }
   } catch (error) {
     if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] session history read:', error);
   }
@@ -453,6 +460,120 @@ function publicSession(session) {
   };
 }
 
+function pendingSessionKey(directory, id) {
+  return `${directory}\u0000${id}`;
+}
+
+function readPendingSession(directory, id) {
+  return pendingSessions.get(pendingSessionKey(directory, id))?.session || null;
+}
+
+function readWorkingSession(directory, id) {
+  return readPendingSession(directory, id) || readSession(directory, id);
+}
+
+function pendingSessionsForDirectory(directory) {
+  const prefix = `${directory}\u0000`;
+  return [...pendingSessions.entries()]
+    .filter(([key]) => key.startsWith(prefix))
+    .map(([, entry]) => entry.session)
+    .filter(Boolean);
+}
+
+function persistSession(directory, session, options = {}) {
+  if (!session?.id) return;
+  const key = pendingSessionKey(directory, session.id);
+  if (options.defer !== true) {
+    const pending = pendingSessions.get(key);
+    if (pending?.timer) clearTimeout(pending.timer);
+    if (!pending?.writing) pendingSessions.delete(key);
+    writeSession(directory, session);
+    scheduleTaskHistoryPrune(directory);
+    return;
+  }
+
+  let pending = pendingSessions.get(key);
+  if (!pending) {
+    pending = { directory, session, timer: null, writing: false, version: 0, persistedVersion: 0, promise: Promise.resolve() };
+    pendingSessions.set(key, pending);
+  }
+  pending.session = session;
+  pending.version += 1;
+  schedulePendingSessionFlush(key, pending);
+}
+
+function schedulePendingSessionFlush(key, pending, delay = TASK_HISTORY_FLUSH_MS) {
+  if (pending.timer || pending.writing) return;
+  pending.timer = setTimeout(() => {
+    pending.timer = null;
+    void flushPendingSession(key, pending);
+  }, delay);
+  pending.timer.unref?.();
+}
+
+async function flushPendingSession(key, pending) {
+  if (pending.writing) return pending.promise;
+  pending.writing = true;
+  const version = pending.version;
+  const snapshot = pending.session;
+  let succeeded = false;
+  pending.promise = writeSessionAsync(pending.directory, snapshot)
+    .then(() => { succeeded = true; })
+    .catch(error => {
+      if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] deferred task history write:', error);
+    })
+    .finally(() => {
+      pending.writing = false;
+      if (!succeeded) {
+        schedulePendingSessionFlush(key, pending, 1000);
+        return;
+      }
+      pending.persistedVersion = version;
+      scheduleTaskHistoryPrune(pending.directory);
+      if (pending.version > version) schedulePendingSessionFlush(key, pending, 0);
+      else pendingSessions.delete(key);
+    });
+  return pending.promise;
+}
+
+function scheduleTaskHistoryPrune(directory) {
+  if (pendingPrunes.has(directory)) return;
+  const timer = setTimeout(() => {
+    pendingPrunes.delete(directory);
+    try { pruneSessions(directory, MAX_SESSIONS); }
+    catch (error) { if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] task history prune:', error); }
+  }, TASK_HISTORY_PRUNE_DELAY_MS);
+  timer.unref?.();
+  pendingPrunes.set(directory, timer);
+}
+
+async function flushTaskHistoryPersistence() {
+  while (pendingSessions.size > 0) {
+    const entries = [...pendingSessions.entries()];
+    for (const [key, pending] of entries) {
+      if (pending.timer) {
+        clearTimeout(pending.timer);
+        pending.timer = null;
+      }
+      await flushPendingSession(key, pending);
+    }
+  }
+}
+
+function clearTaskHistory(config) {
+  const directory = getTaskHistoryDir(config);
+  const prefix = `${directory}\u0000`;
+  for (const [key, pending] of [...pendingSessions.entries()]) {
+    if (!key.startsWith(prefix)) continue;
+    if (pending.timer) clearTimeout(pending.timer);
+    pendingSessions.delete(key);
+  }
+  const pruneTimer = pendingPrunes.get(directory);
+  if (pruneTimer) clearTimeout(pruneTimer);
+  pendingPrunes.delete(directory);
+  clearStoredTaskHistory(config);
+}
+
 function emptySession(id) {
   return {
     version: STORE_VERSION,
@@ -509,4 +630,4 @@ function isStoredSessionNoise(session, activeIds) {
   return Boolean(endedAt && Date.now() - endedAt > DEFAULT_TASK_IDLE_MS);
 }
 
-export { bindTaskHistoryActivityPersistence, clearTaskHistory, getTaskHistoryDir, readRecentWorkflowEvidence, readTaskHistory, readTaskHistorySession, readTaskHistorySessionRecord, recordTaskActivityEvent, recordTaskHistoryEvent, recordWorkflowEvidence, recordWorkflowSnapshot, recordWorkflowState };
+export { bindTaskHistoryActivityPersistence, clearTaskHistory, flushTaskHistoryPersistence, getTaskHistoryDir, readRecentWorkflowEvidence, readTaskHistory, readTaskHistorySession, readTaskHistorySessionRecord, recordTaskActivityEvent, recordTaskHistoryEvent, recordWorkflowEvidence, recordWorkflowSnapshot, recordWorkflowState };

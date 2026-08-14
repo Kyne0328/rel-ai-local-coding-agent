@@ -69,13 +69,13 @@ async function handleApiDiagnosticsReset(ctx) {
   }
 
   const result = { ok: true, target, history: null, runtimeLogs: null };
-  if (target === 'history' || target === 'all') result.history = clearHistory(ctx);
+  if (target === 'history' || target === 'all') result.history = await clearHistory(ctx);
   if (target === 'runtime_logs' || target === 'all') result.runtimeLogs = ctx.options.clearRuntimeLogs();
   result.message = resetMessage(target);
   sendJson(ctx.res, 200, result, ctx.ae);
 }
 
-function clearHistory(ctx) {
+async function clearHistory(ctx) {
   if (typeof ctx.options.resetTaskActivity === 'function') {
     const reset = ctx.options.resetTaskActivity();
     if (reset?.ok === false) {
@@ -85,7 +85,7 @@ function clearHistory(ctx) {
       throw error;
     }
   }
-  const cleared = clearAuditHistory(readConfig());
+  const cleared = await clearAuditHistory(readConfig());
   return { removedFiles: cleared.removedFiles, removedBytes: cleared.removedBytes };
 }
 

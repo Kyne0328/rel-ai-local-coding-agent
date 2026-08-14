@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { DurableStateError, readJsonFile, writeJsonAtomic } from '../src/durableState.js';
+import { DurableStateError, readJsonFile, writeJsonAtomic, writeJsonAtomicAsync } from '../src/durableState.js';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'relai-durable-state-'));
 const file = path.join(root, 'state.json');
@@ -25,6 +25,10 @@ try {
   assert.deepEqual(recovered, { revision: 1, value: 'first' });
   assert.equal(recovery.reason, 'malformed_json');
   assert.deepEqual(readJsonFile(file), recovered, 'backup recovery must restore the primary record');
+
+  await writeJsonAtomicAsync(file, { revision: 3, value: 'async' }, { backup: true, durable: false });
+  assert.deepEqual(readJsonFile(file), { revision: 3, value: 'async' });
+  assert.deepEqual(readJsonFile(`${file}.bak`), recovered, 'async atomic writes must preserve the previous record when backup is requested');
 
   fs.writeFileSync(file, '{}', 'utf8');
   assert.throws(

@@ -28,6 +28,7 @@ function createToolActivityTracker(options = {}) {
   let activeToolCalls = 0;
   let activeConnectorCalls = 0;
   let lastTask = null;
+  let revision = 0;
 
   function beginConnectorToolCall(details = {}) {
     if (details.trackTask === false) return beginObservedToolCall(details);
@@ -549,7 +550,7 @@ function createToolActivityTracker(options = {}) {
       durationMs: Math.max(0, inactiveAt - task.startedAt),
       activeCalls: 0,
       currentOperations: [],
-      events: task.events.map(cloneActivityEvent)
+      events: task.events
     });
     notify('inactive', task, { task: lastTask });
   }
@@ -600,7 +601,7 @@ function createToolActivityTracker(options = {}) {
       completedAtIso: new Date(completedAt).toISOString(),
       durationMs: Math.max(0, completedAt - task.startedAt),
       terminalReason: 'Task completion was accepted explicitly.',
-      events: task.events.map(cloneActivityEvent)
+      events: task.events
     });
     notify('completed', task, { task: lastTask, endReason: lastTask.endReason });
   }
@@ -634,6 +635,7 @@ function createToolActivityTracker(options = {}) {
     return {
       state: activeToolCalls > 0 ? 'working' : tasks.length ? 'waiting' : 'idle',
       completionKnown: false,
+      revision,
       activeConnectorCalls,
       activeCalls: activeToolCalls,
       activeTaskCount: tasks.length,
@@ -683,7 +685,7 @@ function createToolActivityTracker(options = {}) {
       correlation: { ...task.correlation },
       principalFingerprint: task.principalFingerprint,
       currentOperations,
-      events: task.events.map(cloneActivityEvent),
+      events: task.events,
       createdAt: new Date(task.createdAt).toISOString(),
       startedAt: task.startedAt,
       startedAtIso: new Date(task.startedAt).toISOString(),
@@ -705,9 +707,8 @@ function createToolActivityTracker(options = {}) {
       taskActiveCalls: task.activeCalls,
       taskCalls: task.calls,
       taskFailures: task.failures,
-      task: taskSnapshot(task),
       ...extras
-    });
+    }, task.id);
   }
 
   function notifyObserved(phase, extras = {}) {
@@ -721,13 +722,17 @@ function createToolActivityTracker(options = {}) {
     });
   }
 
-  function emitActivity(extras = {}) {
+  function emitActivity(extras = {}, eventTaskId = '') {
+    revision += 1;
     const status = getToolActivity();
+    const eventTask = extras.task || (eventTaskId ? status.tasks.find(task => task.id === eventTaskId) : null);
     const snapshot = Object.freeze({
+      revision,
       activeConnectorCalls,
       activeCalls: status.activeCalls,
       activeTaskCount: status.activeTaskCount,
       tasks: status.tasks,
+      ...(eventTask ? { task: eventTask } : {}),
       ...extras
     });
     for (const listener of listeners) {
@@ -748,6 +753,7 @@ function createToolActivityTracker(options = {}) {
     activeToolCalls = 0;
     activeConnectorCalls = 0;
     lastTask = null;
+    revision += 1;
   }
 
   return {
@@ -796,7 +802,7 @@ function formatWait(waitMs) {
 
 function cloneActivityEvent(activity) {
   if (!activity) return null;
-  return JSON.parse(JSON.stringify(sanitizeActivityEventRecord(activity)));
+  return sanitizeActivityEventRecord(activity);
 }
 
 function runWithToolActivity(activity, callback) {

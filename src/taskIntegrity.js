@@ -11,6 +11,7 @@ const LOCK_STALE_MS = 30_000;
 const LOCK_TIMEOUT_MS = 5_000;
 const LOCK_WAIT_MS = 10;
 const lockSleeper = new Int32Array(new SharedArrayBuffer(4));
+const integrityCache = new Map();
 const CODE_MUTATING_TOOLS = new Set([
   'relai_edit',
   'relai_tidy_run',
@@ -39,6 +40,7 @@ function recordTaskIntegrityEvent(config, event = {}) {
   if (!taskId || !workspaceAlias || Number(event.taskIdentityVersion || 0) < 2) return null;
 
   try {
+    if (!integrityEventRequiresPersistence(event)) return readIntegrityProjection(config, taskId, workspaceAlias);
     return withIntegrityLock(config, () => {
       let authority = readJson(taskFile(config, taskId));
       if (!authority) {
@@ -138,6 +140,34 @@ function applyIntegrityEvent(authority, workspaceState, workspace, event) {
     );
   }
 
+  return integrityProjection(authority, workspaceState);
+}
+
+function integrityEventRequiresPersistence(event) {
+  const tool = clean(event?.tool);
+  const changedFiles = exactChangedFiles(event);
+  const mutation = eventMutatedCode(event) && (event?.ok !== false || changedFiles.length > 0);
+  return tool === 'relai_begin_work'
+    || mutation
+    || Boolean(clean(event?.validationStatus))
+    || REPOSITORY_RECONCILE_TOOLS.has(tool)
+    || event?.completionKnown === true;
+}
+
+function readIntegrityProjection(config, taskId, workspaceAlias) {
+  const authority = readJson(taskFile(config, taskId));
+  if (!authority) {
+    throw new TaskIntegrityError(
+      'TASK_INTEGRITY_STATE_MISSING',
+      `Authoritative integrity state is missing for logical task '${taskId}'. Start a new logical task rather than reconstructing safety state from audit history.`
+    );
+  }
+  const workspace = clean(authority.workspace || workspaceAlias);
+  const workspaceState = readJson(workspaceFile(config, workspace)) || createWorkspaceState(workspace);
+  return integrityProjection(authority, workspaceState);
+}
+
+function integrityProjection(authority, workspaceState) {
   return {
     taskMutationGeneration: authority.mutationGeneration,
     taskValidatedMutationGeneration: authority.latestValidatedMutationGeneration,
@@ -303,14 +333,31 @@ function withIntegrityLock(config, callback) {
 }
 
 function readJson(file) {
-  return readJsonFile(file, {
+  const identity = fileIdentity(file);
+  const cached = integrityCache.get(file);
+  if (identity && cached?.identity === identity) return cached.value;
+  const value = readJsonFile(file, {
     backup: true,
-    validate: value => Boolean(value && typeof value === 'object' && !Array.isArray(value))
+    validate: item => Boolean(item && typeof item === 'object' && !Array.isArray(item))
   });
+  if (value && identity) integrityCache.set(file, { identity, value });
+  else if (!value) integrityCache.delete(file);
+  return value;
 }
 
 function writeJson(file, value) {
   writeJsonAtomic(file, value, { mode: 0o600, backup: true });
+  const identity = fileIdentity(file);
+  if (identity) integrityCache.set(file, { identity, value });
+}
+
+function fileIdentity(file) {
+  try {
+    const stat = fs.statSync(file, { bigint: true });
+    return `${stat.mtimeNs}:${stat.size}`;
+  } catch {
+    return '';
+  }
 }
 
 function digest(value) {

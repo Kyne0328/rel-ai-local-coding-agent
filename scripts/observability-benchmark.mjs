@@ -5,8 +5,9 @@ import { performance } from 'node:perf_hooks';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createToolActivityTracker } from '../src/toolActivity.js';
-import { recordTaskActivityEvent, readTaskHistory } from '../src/taskHistoryStore.js';
+import { flushTaskHistoryPersistence, recordTaskActivityEvent, readTaskHistory } from '../src/taskHistoryStore.js';
 import { buildDashboardPayload } from '../src/http/dashboardData.js';
+import { flushLocalAnalytics, recordLocalToolOutcome } from '../src/localAnalytics.js';
 import { sanitizeDisplayText } from '../src/taskObservability.js';
 import { createDashboardClock } from '../src/ui/clock.js';
 
@@ -31,19 +32,24 @@ const metrics = [];
 const tracker = createToolActivityTracker({ idleMs: 60_000 });
 let activityEvents = 0;
 let persistenceWrites = 0;
+let analyticsWrites = 0;
 let pendingPublication = false;
 let snapshotPublications = 0;
 let publicationTimer = null;
 const originalRename = fs.renameSync;
+const originalAsyncRename = fs.promises.rename;
 fs.renameSync = function patchedRename(source, target) {
-  if (String(source).includes(`${path.sep}sessions${path.sep}`) && String(source).endsWith('.tmp') && String(target).endsWith('.json')) {
-    persistenceWrites += 1;
-  }
+  if (String(source).includes(`${path.sep}sessions${path.sep}`) && String(source).endsWith('.tmp') && String(target).endsWith('.json')) persistenceWrites += 1;
   return originalRename.call(fs, source, target);
+};
+fs.promises.rename = async function patchedAsyncRename(source, target) {
+  if (String(source).includes(`${path.sep}sessions${path.sep}`) && String(source).endsWith('.tmp') && String(target).endsWith('.json')) persistenceWrites += 1;
+  if (String(target).includes(`${path.sep}analytics${path.sep}local${path.sep}`) && String(source).endsWith('.tmp') && String(target).endsWith('.json')) analyticsWrites += 1;
+  return originalAsyncRename.call(fs.promises, source, target);
 };
 const unsubscribe = tracker.onToolActivity(event => {
   activityEvents += 1;
-  recordTaskActivityEvent(config, event);
+  recordTaskActivityEvent(config, event, { defer: true });
   if (!pendingPublication) {
     pendingPublication = true;
     publicationTimer = setTimeout(() => {
@@ -73,9 +79,10 @@ try {
     finish({ ok: true, activity: { summary: `Read benchmark file ${index}` } });
   }
   await delay(DASHBOARD_SNAPSHOT_COALESCE_MS + 20);
+  await flushTaskHistoryPersistence();
   const afterStorage = directoryBytes(historyDirectory);
   addMetric('activity_events_per_100_tool_calls', '100 serial task-scoped tool calls with one progress update each', null, activityEvents - eventBaseline, 0, 305, '<=');
-  addMetric('persistence_writes_per_100_tool_calls', 'same workload; atomic history temp writes', null, persistenceWrites - writeBaseline, 0, 305, '<=');
+  addMetric('persistence_writes_per_100_tool_calls', 'same workload; coalesced async atomic history writes', null, persistenceWrites - writeBaseline, 0, 10, '<=');
   addMetric('snapshot_publications_per_100_tool_calls', '100 ms canonical snapshot coalescer under serial burst', null, snapshotPublications - publicationBaseline, 0, 5, '<=');
   addMetric('queue_wait_events_per_100_tool_calls', 'serial uncontended workspace workload', null, 0, 0, 0, '<=');
   addMetric('task_history_storage_growth_bytes', '100 task-scoped calls', null, afterStorage - beforeStorage, 0, 2 * 1024 * 1024, '<=');
@@ -104,6 +111,16 @@ try {
     sanitizeDisplayText(`Completed ${index}. Authorization: Bearer synthetic-${index} password=synthetic-${index} tokenizer safe.`, 500);
   }
   addMetric('sanitization_10000_summaries_ms', '10,000 credential-like completion strings', null, round(performance.now() - sanitizerStart), 0, 250, '<=');
+
+  const analyticsWriteBaseline = analyticsWrites;
+  const analyticsStart = performance.now();
+  for (let index = 0; index < 1000; index += 1) {
+    recordLocalToolOutcome(config, { tool: 'relai_read', workspace: 'app', ok: true, durationMs: 4 + (index % 5) });
+  }
+  const analyticsHotPathMs = performance.now() - analyticsStart;
+  await flushLocalAnalytics(config);
+  addMetric('local_analytics_hot_path_1000_calls_ms', '1,000 in-memory local analytics updates before asynchronous persistence', null, round(analyticsHotPathMs), 0, 150, '<=');
+  addMetric('local_analytics_persistence_writes_per_1000_calls', 'same workload; coalesced monthly analytics persistence', null, analyticsWrites - analyticsWriteBaseline, 0, 2, '<=');
 
   const activitySnapshot = tracker.getToolActivity();
   const tasks = readTaskHistory(config, activitySnapshot, { limit: 500 });
@@ -172,7 +189,10 @@ try {
 } finally {
   if (publicationTimer) clearTimeout(publicationTimer);
   unsubscribe();
+  await flushTaskHistoryPersistence();
+  await flushLocalAnalytics(config);
   fs.renameSync = originalRename;
+  fs.promises.rename = originalAsyncRename;
   fs.rmSync(temp, { recursive: true, force: true });
 }
 

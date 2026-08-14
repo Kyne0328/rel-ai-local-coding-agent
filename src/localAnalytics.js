@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import * as crypto from 'node:crypto';
 import { statePath } from './stateLayout.js';
+import { writeTextAtomicAsync } from './durableState.js';
 import { failureCategoryFromCode, normalizeFailureCategory } from './analyticsFailureCategory.js';
 
 const SCHEMA_VERSION = 1;
@@ -9,6 +9,10 @@ const MAX_FILE_BYTES = 4 * 1024 * 1024;
 const MAX_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 const LOCAL_DEVICE_ID = 'local-device';
 const LOCAL_DEVICE_NAME = 'This device';
+const ANALYTICS_FLUSH_DELAY_MS = 250;
+const ANALYTICS_FLUSH_MAX_WAIT_MS = 1000;
+const documentCache = new Map();
+const writeStates = new Map();
 
 function recordLocalToolOutcome(config = {}, event = {}) {
   try {
@@ -57,7 +61,7 @@ function recordLocalToolOutcome(config = {}, event = {}) {
       incrementFailureCategory(hourly.failureCategories, category);
       if (workspace) incrementWorkspaceFailureCategory(hourly.workspaceFailureCategories, workspace, category);
     }
-    writeDocument(config, document);
+    scheduleDocumentWrite(config, document);
     return true;
   } catch {
     return false;
@@ -145,26 +149,87 @@ function readLocalUsageSnapshot(config = {}, requestedMonth = '') {
 
 function readDocument(config, month) {
   const file = analyticsPath(config, month);
+  const cached = documentCache.get(file);
+  if (cached) return cached;
+  let document;
   try {
     const stat = fs.statSync(file);
-    if (!stat.isFile() || stat.size > MAX_FILE_BYTES) return emptyDocument(month);
-    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-    if (parsed?.schemaVersion !== SCHEMA_VERSION || parsed?.month !== month) return emptyDocument(month);
-    return sanitizeDocument(parsed, month);
+    if (!stat.isFile() || stat.size > MAX_FILE_BYTES) document = emptyDocument(month);
+    else {
+      const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+      document = parsed?.schemaVersion === SCHEMA_VERSION && parsed?.month === month
+        ? sanitizeDocument(parsed, month)
+        : emptyDocument(month);
+    }
   } catch {
-    return emptyDocument(month);
+    document = emptyDocument(month);
   }
+  documentCache.set(file, document);
+  return document;
 }
 
-function writeDocument(config, document) {
+function scheduleDocumentWrite(config, document) {
   const file = analyticsPath(config, document.month);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const temp = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`;
-  try {
-    fs.writeFileSync(temp, `${JSON.stringify(document)}\n`, { encoding: 'utf8', mode: 0o600 });
-    fs.renameSync(temp, file);
-  } finally {
-    try { if (fs.existsSync(temp)) fs.unlinkSync(temp); } catch {}
+  documentCache.set(file, document);
+  let state = writeStates.get(file);
+  if (!state) {
+    state = { document, version: 0, persistedVersion: 0, timer: null, writing: false, firstQueuedAt: 0, promise: Promise.resolve() };
+    writeStates.set(file, state);
+  }
+  state.document = document;
+  state.version += 1;
+  const now = Date.now();
+  if (!state.firstQueuedAt) state.firstQueuedAt = now;
+  if (state.timer) clearTimeout(state.timer);
+  if (state.writing) return;
+  const remaining = Math.max(0, ANALYTICS_FLUSH_MAX_WAIT_MS - (now - state.firstQueuedAt));
+  state.timer = setTimeout(() => {
+    state.timer = null;
+    void flushDocumentWrite(file, state);
+  }, Math.min(ANALYTICS_FLUSH_DELAY_MS, remaining));
+  state.timer.unref?.();
+}
+
+async function flushDocumentWrite(file, state) {
+  if (!state || state.writing || state.persistedVersion >= state.version) return state?.promise || Promise.resolve();
+  state.writing = true;
+  const version = state.version;
+  const document = state.document;
+  let succeeded = false;
+  state.promise = writeTextAtomicAsync(file, `${JSON.stringify(document)}\n`, { mode: 0o600, durable: false })
+    .then(() => { succeeded = true; })
+    .catch(error => {
+      if (process.env.REL_AI_MCP_DEBUG) console.error('[rel-ai-mcp] deferred local analytics write:', error);
+    })
+    .finally(() => {
+      state.writing = false;
+      if (succeeded) {
+        state.persistedVersion = version;
+        state.firstQueuedAt = 0;
+      }
+      if (state.persistedVersion < state.version && !state.timer) {
+        state.firstQueuedAt ||= Date.now();
+        state.timer = setTimeout(() => {
+          state.timer = null;
+          void flushDocumentWrite(file, state);
+        }, succeeded ? 0 : 1000);
+        state.timer.unref?.();
+      }
+    });
+  return state.promise;
+}
+
+async function flushLocalAnalytics(config = null) {
+  const prefix = config ? `${statePath(config, 'analytics', 'local')}${path.sep}` : '';
+  const entries = [...writeStates.entries()].filter(([file]) => !prefix || file.startsWith(prefix));
+  for (const [file, state] of entries) {
+    while (state.persistedVersion < state.version) {
+      if (state.timer) {
+        clearTimeout(state.timer);
+        state.timer = null;
+      }
+      await flushDocumentWrite(file, state);
+    }
   }
 }
 
@@ -228,4 +293,4 @@ function monthKey(date) { return `${date.getUTCFullYear()}-${String(date.getUTCM
 function hourKey(date) { return `${monthKey(date)}-${String(date.getUTCDate()).padStart(2, '0')}T${String(date.getUTCHours()).padStart(2, '0')}`; }
 function normalizeMonth(value) { const text = String(value || '').trim(); return /^\d{4}-(0[1-9]|1[0-2])$/.test(text) ? text : ''; }
 
-export { recordLocalToolOutcome, readLocalUsageSnapshot };
+export { flushLocalAnalytics, recordLocalToolOutcome, readLocalUsageSnapshot };
